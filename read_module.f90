@@ -424,8 +424,7 @@ contains
     use pseudo_tm_info, ONLY: pseudo
     use input_module, ONLY: io_assign, io_close
     use mesh, ONLY: siesta
-    use pseudo_atom_info, ONLY: paos, val, flag_default_cutoffs, allocate_val, local_and_vkb, &
-         pseudo_type, pao_cutoff_energies, pao_cutoff_radii, allocate_vkb
+    use pseudo_atom_info, ONLY: val, allocate_val, local_and_vkb, allocate_vkb
     
     implicit none
 
@@ -569,7 +568,6 @@ contains
     use spline_module, ONLY: spline
     use radial_xc, ONLY: flag_functional_type, init_xc, functional_lda_pz81, functional_gga_pbe96, &
          functional_description
-    use write, ONLY: hamann_input_array
     use pseudo_atom_info, ONLY: local_and_vkb, val
     
     implicit none
@@ -708,7 +706,7 @@ contains
     use species_module, ONLY: n_species
     use pseudo_atom_info, ONLY: paos, allocate_pao, allocate_pao_z, flag_default_cutoffs, val
     use pseudo_tm_info, ONLY: pseudo
-    use write, ONLY: pte
+    use periodic_table, ONLY: pte
 
     implicit none
 
@@ -716,7 +714,7 @@ contains
     integer :: i_species
 
     ! Local variabls
-    integer :: j, i_highest_occ, this_l, number_of_this_l
+    integer :: j, i_highest_occ, this_l, number_of_this_l, i_end
     integer :: i_shell, ell, en, n_paos, n_shells, ell_hocc, max_zeta, n_pol_zeta
     integer, dimension(0:4) :: count_func
     logical :: flag_confine
@@ -866,14 +864,13 @@ contains
        !
        ! And again for unoccupied (polarisation) shells
        !
-       if(paos%flag_perturb_polarise.AND.paos%n_shells>val%n_occ) then
-          i_shell = paos%n_shells
-          call set_polarisation
-          paos%nzeta(i_shell) = paos%nzeta(paos%polarised_shell)
-          write(*,fmt='(2i3,2i7, "  perturbed polarisation state")') paos%n(i_shell), &
-               paos%l(i_shell), paos%npao(i_shell) - paos%l(i_shell), paos%nzeta(i_shell)
-       else
-          do i_shell = val%n_occ+1,paos%n_shells
+       if(paos%n_shells>val%n_occ) then
+          if(paos%flag_perturb_polarise) then
+             i_end = paos%n_shells - 1
+          else
+             i_end = paos%n_shells
+          end if
+          do i_shell = val%n_occ+1,i_end
              if(paos%l(i_shell)>pseudo(i_species)%lmax) then
                 write(*,fmt='(4x,"Max l value from pseudopotential: ",i2)') pseudo(i_species)%lmax
                 write(*,fmt='(4x,"Max l value specified for PAO   : ",i2)') paos%l(i_shell)
@@ -892,6 +889,14 @@ contains
                   paos%npao(i_shell) - paos%l(i_shell) - 1, &
                   paos%nzeta(i_shell)
           end do
+          ! Add perturbative polarisation shell if selected
+          if(paos%flag_perturb_polarise) then
+             i_shell = paos%n_shells
+             call set_polarisation
+             paos%nzeta(i_shell) = paos%nzeta(paos%polarised_shell)
+             write(*,fmt='(2i3,2i7, "  perturbed polarisation state")') paos%n(i_shell), &
+                  paos%l(i_shell), paos%npao(i_shell) - paos%l(i_shell), paos%nzeta(i_shell)
+          end if
        end if
        if(flag_confine) then
           write(*,fmt='("Using exponential confinement for PAOs")')
@@ -1073,7 +1078,7 @@ contains
     use input_module, ONLY: io_assign, io_close
     use pseudo_tm_info, ONLY: alloc_pseudo_info, pseudo, rad_alloc
     use spline_module, ONLY: spline
-    use write, ONLY: pte
+    use periodic_table, ONLY: pte
     
     implicit none
 

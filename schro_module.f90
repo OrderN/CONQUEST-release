@@ -19,238 +19,59 @@ contains
     use GenComms, ONLY: cq_abort
     use radial_xc, ONLY: get_vxc
     use input_module, ONLY: io_assign, io_close
-    use write, ONLY: write_pao_plot, pte
+    use write, ONLY: write_pao_plot
+    use periodic_table, ONLY: pte
     use units, ONLY: HaToeV
     
     implicit none
 
     integer :: i_species
 
-    integer :: ell, en, i, j, k, zeta, n_shells, i_shell, grid_size, n_val, lun, nrc
+    integer :: ell, en, i, j, k, zeta, i_shell, grid_size, n_val, lun, nrc
     real(double), allocatable, dimension(:) :: psi_reg, x_reg, vha, vxc, vha_reg, psi, atomic_rho, &
          small_cutoff, large_cutoff, cutoffs, vha_conf
     real(double) :: energy, max_cutoff, small_energy, large_energy, dot_p, alpha_hamann
     real(double) :: radius_small, radius_med, radius_large, sum_small, sum_large, orig_dr
-    real(double), dimension(3) :: scaling
-    !logical :: flag_plot = .true.
     
-    ! The default cutoff radii are based on energies which scale by ten
-    scaling(1) = one
-    do zeta = 2,3
-       scaling(zeta) = ten*scaling(zeta-1)
-    end do
     write(*,fmt='(/"Generating PAOs for ",a2/)') pte(pseudo(i_species)%z)
+    !
+    ! Create mesh
+    !
     nmesh = local_and_vkb%ngrid
-    alpha_hamann = 0.01_double*log(local_and_vkb%rr(101)/local_and_vkb%rr(1))
-    write(*,fmt='(/"Mesh parameters"/2x,"Alpha from Hamann table: ",f12.9)') alpha_hamann
-    write(*,fmt='(2x,"Default alpha:           ",f12.9)') alpha
-    write(*,fmt='(2x,"Default beta:            ",f12.9)') beta
-    if(abs(alpha-alpha_hamann)>1e-6_double) then ! Arbitrary?
-       alpha = alpha_hamann
-    end if
     call make_mesh(i_species)
-    !allocate(psi_reg(nmesh_reg))
-    allocate(vha(nmesh),vxc(nmesh),vha_conf(nmesh))
-    allocate(psi(nmesh),atomic_rho(nmesh))
-    ! We need max cutoff to work out largest PAO radius (for neutral atom)
-    max_cutoff = zero
+    !
+    ! Allocate and zero
+    !
+    allocate(vha(nmesh), vxc(nmesh), vha_conf(nmesh), psi(nmesh), atomic_rho(nmesh))
     atomic_rho = zero
     vha = zero
     vxc = zero
-    ! Find VHa and VXC for atom to screen the semi-local potentials
+    ! 
+    ! Potentials: Hartree and XC; add and remove PCC charge if used
+    !
     call radial_hartree(nmesh,local_and_vkb%charge,vha)
-    if(pseudo(i_species)%flag_pcc) & 
-         local_and_vkb%charge = local_and_vkb%charge + local_and_vkb%pcc
+    if(pseudo(i_species)%flag_pcc) local_and_vkb%charge = local_and_vkb%charge + local_and_vkb%pcc
     call get_vxc(nmesh,rr,local_and_vkb%charge,vxc)
-    if(pseudo(i_species)%flag_pcc) & 
-         local_and_vkb%charge = local_and_vkb%charge - local_and_vkb%pcc
-    ! Polarisation will be done separately at the end
-    n_shells = val%n_occ
-    ! Find energy of valence states without confinement
-    if(iprint>2) write(*,fmt='(2x,"Finding unconfined energies for valence states")')
-    do i_shell = 1, val%n_occ
-       if(iprint>2) write(*,fmt='(2x,"n=",i2," l=",i2)') val%n(i_shell), val%l(i_shell)
-       radius_large = rr(nmesh)
-       ell = val%l(i_shell)
-       en = val%npao(i_shell)
-       large_energy = val%en_ps(i_shell)
-       call find_eigenstate_and_energy_vkb(i_species,en,ell,radius_large, psi,large_energy,vha,vxc)
-       val%en_pao(i_shell) = large_energy
-    end do
-    if(iprint>0) then
-       write(*,fmt='(2x,"Unconfined valence state energies (Ha)")')
-       write(*,fmt='(2x,"  n  l         AE energy        PAO energy")')
-       do i_shell = 1, val%n_occ
-          ell = val%l(i_shell)
-          en = val%n(i_shell)
-          write(*,fmt='(2x,2i3,2f18.10)') en, ell, val%en_ps(i_shell), &
-               val%en_pao(i_shell)
-       end do
-    end if
+    if(pseudo(i_species)%flag_pcc) local_and_vkb%charge = local_and_vkb%charge - local_and_vkb%pcc
+    !
+    ! Find energies of valence states without confinement
+    !
+    call find_unconfined_valence_states(i_species,psi,vha,vxc,nmesh)
+    !
     ! Find default radii or radii from cutoffs
-    write(*,fmt='(/2x,"Setting cutoff radii"/)')
-    if(flag_default_cutoffs) then ! Work out radii
-       if(paos%flag_cutoff==pao_cutoff_energies.OR.paos%flag_cutoff==pao_cutoff_default) then
-          write(*,fmt='(4x,"Default cutoffs, shells share energy shifts")')
-       else if(paos%flag_cutoff==pao_cutoff_radii) then
-          write(*,fmt='(4x,"Default cutoffs, averaging radii over shells")')
-       end if
-       call find_default_cutoffs(i_species,vha,vxc)
-    else if(paos%flag_cutoff==pao_cutoff_energies) then ! Work out radii from energy shifts
-       write(*,fmt='(4x,"User-specified energy shifts")')
-       write(*,fmt='(4x,"  n  l  z  delta E (Ha)  delta E (eV)")')
-       do i_shell = 1,val%n_occ
-          ell = paos%l(i_shell)
-          en = paos%n(i_shell)
-          do zeta = 1,paos%nzeta(i_shell)
-             write(*,fmt='(4x,3i3,x,2f13.8)') en, ell, zeta, paos%energy(zeta,i_shell), &
-                  paos%energy(zeta,i_shell)*HaToeV
-             en = paos%npao(i_shell)
-             !if(iprint>2) write(*,*) '# shell, n, l, zeta: ',i_shell, ell, en, zeta
-             call find_radius_from_energy(i_species,en, ell, paos%cutoff(zeta,i_shell), &
-                  val%en_ps(i_shell) + paos%energy(zeta,i_shell), vha, vxc, .false.)
-             ! Now ensure that we have exact cutoff - effectively round up (2+ not 1+)
-             grid_size = 2+floor(paos%cutoff(zeta,i_shell)/delta_r_reg)
-             paos%cutoff(zeta,i_shell) = delta_r_reg*real(grid_size-1,double)
-             !if(iprint>2) write(*,*) '# Setting cutoff to ',paos%cutoff(zeta,i_shell)
-          end do
-       end do
-       do i_shell = val%n_occ+1,paos%n_shells
-          if(i_shell>val%n_occ+1) write(*,fmt='(2x,"Dangerous to set unoccupied shell radii via energy !")')
-          if(paos%inner(i_shell)>0) then
-             do zeta = 1,paos%nzeta(i_shell)
-                paos%cutoff(zeta,i_shell) = paos%cutoff(zeta,paos%inner(i_shell))
-             end do
-          else
-             do zeta = 1,paos%nzeta(i_shell)
-                paos%cutoff(zeta,i_shell) = paos%cutoff(zeta,i_shell-1)
-             end do
-          end if
-       end do
-    else ! Radii
-       write(*,fmt='(4x,"User-specified radii")')          
-    end if
-    write(*,fmt='(/4x,"Cutoff radii for PAOs")')
-    write(*,fmt='(4x,"  n  l  z        R (bohr)")')
-    do i_shell = 1,paos%n_shells
-       ell = paos%l(i_shell)
-       en = paos%n(i_shell)
-       if(paos%flag_perturb_polarise.AND.i_shell==paos%n_shells) then
-          if(en<3) en = en+1
-          do zeta = 1,paos%nzeta(i_shell)
-             write(*,fmt='(4x,3i3,f12.4)') en,ell,zeta,paos%cutoff(zeta,i_shell)
-          end do
-       else
-          do zeta = 1,paos%nzeta(i_shell)
-             write(*,fmt='(4x,3i3,f12.4)') en,ell,zeta,paos%cutoff(zeta,i_shell)
-          end do
-       end if
-    end do
+    !
+    call set_radii(i_species,vha,vxc,nmesh)
+    !
     ! Solve for PAOs
+    !
     write(*,fmt='(/2x,"Solving for PAOs")')
-    do i_shell = 1,paos%n_shells
-       ell = paos%l(i_shell)
-       en = paos%npao(i_shell)
-       do zeta = 1,paos%nzeta(i_shell)
-          allocate(paos%psi(zeta,i_shell)%f(nmesh))
-          !write(*,*) '# Occ for shell: ',paos%occ(i_shell)
-          if(paos%flag_perturb_polarise.AND.i_shell==paos%n_shells) then ! Polarisation functions
-             ! NB we pass l-1 here as we need to perturb the shell below
-             ell = paos%l(i_shell)-1 !i_shell-1)
-             ! npao is only used to determine nodes - so here we need npao of the shell below
-             en = paos%npao(i_shell)!i_shell-1)
-             if(iprint>2) write(*,fmt='(2x,"Perturbative polarisation")')
-             if(iprint>2) write(*,fmt='(2x,"Species ",i2," n=",i2," l=",i2," zeta=",i2, " Rc=",f4.1," bohr")') &
-                  i_species, en, ell, zeta, paos%cutoff(zeta,i_shell)
-             if(zeta>1.AND.paos%flag_zetas==1) then
-                if(iprint>2) write(*,fmt='(2x,"Using split-norm approach for multiple zetas")')
-                call find_split_norm(en,ell+1,paos%cutoff(zeta,i_shell),&
-                     paos%psi(zeta,i_shell)%f,paos%psi(1,i_shell)%f)
-             else
-                ! Set radius of polarisation PAO
-                paos%cutoff(zeta,i_shell) = paos%cutoff(zeta,i_shell-1)
-                call find_polarisation(i_species,en,ell,paos%cutoff(zeta,i_shell),&
-                     paos%psi(zeta,i_shell-1)%f,paos%psi(zeta,i_shell)%f,&
-                     paos%energy(zeta,i_shell-1),vha,vxc)
-             end if
-          else if(i_shell>val%n_occ) then  ! Polarisation shells
-             !else if(i_shell==paos%n_shells) then
-             if(iprint>2) write(*,fmt='(2x,"Species ",i2," n=",i2," l=",i2," zeta=",i2, " Rc=",f4.1," bohr pol")') &
-                  i_species, en, ell, zeta, paos%cutoff(zeta,i_shell)!, &
-             !paos%energy(1,val%n_occ)
-             !if(iprint>2) write(*,*) '# Species, n, l, zeta, cutoff: ',i_species, en, ell, zeta, &
-             !     paos%cutoff(zeta,i_shell)," pol ",paos%energy(1,val%n_occ)
-             if(zeta>1.AND.paos%flag_zetas==1) then
-                if(iprint>2) write(*,fmt='(2x,"Using split-norm approach for multiple zetas")')
-                call find_split_norm(en,ell,paos%cutoff(zeta,i_shell),&
-                     paos%psi(zeta,i_shell)%f,paos%psi(1,i_shell)%f)
-             else
-                paos%energy(zeta,i_shell) = one!zero !paos%energy(1,val%n_occ)
-                call find_eigenstate_and_energy_vkb(i_species,en,ell,paos%cutoff(zeta,i_shell),&
-                     paos%psi(zeta,i_shell)%f,paos%energy(zeta,i_shell), &
-                     vha,vxc,paos%width(i_shell),paos%prefac(i_shell))
-                if(paos%inner(i_shell)>0) then
-                   ! Dot product of two
-                   dot_p = zero
-                   do i=1,nmesh
-                      dot_p = dot_p + rr(i)**(2*ell+2)*paos%psi(zeta,i_shell)%f(i)* &
-                           paos%psi(1,paos%inner(i_shell))%f(i)*drdi(i)
-                   end do
-                   write(*,fmt='(2x,"Orthogonalising to semi-core; overlap is ",f10.5)') dot_p
-                   ! Orthgonalise
-                   paos%psi(zeta,i_shell)%f = paos%psi(zeta,i_shell)%f - &
-                        dot_p * paos%psi(1,paos%inner(i_shell))%f
-                   ! Check
-                   dot_p = zero
-                   do i=1,nmesh
-                      dot_p = dot_p + rr(i)**(2*ell+2)*paos%psi(zeta,i_shell)%f(i)* &
-                           paos%psi(1,paos%inner(i_shell))%f(i)*drdi(i)
-                   end do
-                   if(abs(dot_p)>RD_ERR) write(*,fmt='(2x,"Warning: following orthogonalisation, overlap is ",f10.5)') dot_p
-                end if
-             end if
-          else
-             if(iprint>2) write(*,fmt='(2x,"Species ",i2," n=",i2," l=",i2," zeta=",i2, " Rc=",f4.1," bohr")') &
-                  i_species, en, ell, zeta, paos%cutoff(zeta,i_shell)
-             !if(iprint>2) write(*,*) '# Species, n, l, zeta, cutoff: ',i_species, en, ell, zeta, &
-             !     paos%cutoff(zeta,i_shell)
-             if(zeta>1.AND.paos%flag_zetas==1) then
-                if(iprint>2) write(*,fmt='(2x,"Using split-norm approach for multiple zetas")')
-                call find_split_norm(en,ell,paos%cutoff(zeta,i_shell),&
-                     paos%psi(zeta,i_shell)%f,paos%psi(1,i_shell)%f)
-             else
-                large_energy = val%en_ps(i_shell) + paos%energy(zeta,i_shell)
-                call find_eigenstate_and_energy_vkb(i_species,en,ell,paos%cutoff(zeta,i_shell),&
-                     paos%psi(zeta,i_shell)%f,large_energy, vha,vxc,&
-                     paos%width(i_shell),paos%prefac(i_shell))
-                if(iprint>2) write(*,fmt='(2x,"Final energy shift required: ",f10.5," Ha")') &
-                     large_energy - val%en_ps(i_shell)
-                paos%energy(zeta,i_shell) = large_energy
-                ! Orthogonalise to semi-core state
-                if(paos%inner(i_shell)>0) then
-                   ! Dot product of two
-                   dot_p = zero
-                   do i=1,nmesh
-                      dot_p = dot_p + rr(i)**(2*ell+2)*paos%psi(zeta,i_shell)%f(i)* &
-                           paos%psi(1,val%inner(i_shell))%f(i)*drdi(i)
-                   end do
-                   write(*,fmt='(2x,"Orthogonalising to semi-core; overlap is ",f10.5)') dot_p
-                   ! Orthgonalise
-                   paos%psi(zeta,i_shell)%f = paos%psi(zeta,i_shell)%f - &
-                        dot_p * paos%psi(1,val%inner(i_shell))%f
-                   ! Check
-                   dot_p = zero
-                   do i=1,nmesh
-                      dot_p = dot_p + rr(i)**(2*ell+2)*paos%psi(zeta,i_shell)%f(i)* &
-                           paos%psi(1,val%inner(i_shell))%f(i)*drdi(i)
-                   end do
-                   if(abs(dot_p)>RD_ERR) write(*,fmt='(2x,"Warning: following orthogonalisation, overlap is ",f10.5)') dot_p
-                end if
-             end if
-          end if
-          if(paos%cutoff(zeta,i_shell)>max_cutoff) max_cutoff = paos%cutoff(zeta,i_shell)
-       end do
-    end do
+    if(paos%flag_zetas==1.and.iprint>2) write(*,fmt='(2x,"Using split-norm approach for multiple zetas")')
+    call solve_for_occupied_paos(i_species,vha,vxc,nmesh)
+    if(paos%n_shells>val%n_occ) &
+         call solve_for_polarisation(i_species,vha,vxc,nmesh)
+    !
+    ! Interpolation
+    ! 
     write(*,fmt='(/2x,"Interpolating onto regular mesh")')
     do i_shell = 1,paos%n_shells
        ell = paos%l(i_shell)
@@ -279,10 +100,9 @@ contains
                 psi = psi * rr
              end do
           end if
-          ! Allocate regular mesh
+          ! Accumulate atomic charge density
           if(zeta==1.AND.i_shell<=val%n_shells) atomic_rho = atomic_rho + val%occ(i_shell)*psi*psi
           ! Interpolate
-          !if(iprint>2) write(*,*) '# interpolate ',nmesh_reg, nmesh
           call convert_r_to_i(paos%cutoff(zeta,i_shell),nrc)
           call new_interpolate(rmesh_reg,paos%psi_reg(zeta,i_shell)%f,nmesh_reg,&
                rr,paos%psi(zeta,i_shell)%f,nrc-1,zero)!nmesh,zero)
@@ -358,6 +178,7 @@ contains
     ! Local - the radius is taken as largest PAO for compatibility with NA
     if(iprint>1) write(*,fmt='(/4x,"Local potential")')
     !if(iprint>2) write(*,*) '# Local'
+    max_cutoff = maxval(paos%cutoff)
     call convert_r_to_i(max_cutoff,nrc)
     grid_size = max_cutoff/delta_r_reg + 1
     call rad_alloc(pseudo(i_species)%vlocal,grid_size)
@@ -426,6 +247,277 @@ contains
     write(*,fmt='(/2x,"Finished ",a2)') pte(pseudo(i_species)%z)
   end subroutine make_paos
 
+  ! Solve for the unconfined (atomic) pseudo-functions
+  subroutine find_unconfined_valence_states(i_species,psi,vha,vxc,nmesh)
+
+    use datatypes
+    use mesh, ONLY: rr
+    
+    implicit none
+
+    ! Passed variables
+    integer :: i_species, nmesh
+    real(double), dimension(nmesh) :: psi, vha, vxc
+
+    ! Local variables
+    integer :: i_shell, ell, en
+    real(double) :: radius_large, large_energy
+    
+    if(iprint>2) write(*,fmt='(2x,"Finding unconfined energies for valence states")')
+    do i_shell = 1, val%n_occ
+       if(iprint>2) write(*,fmt='(2x,"n=",i2," l=",i2)') val%n(i_shell), val%l(i_shell)
+       radius_large = rr(nmesh)
+       ell = val%l(i_shell)
+       en = val%npao(i_shell)
+       large_energy = val%en_ps(i_shell)
+       call find_eigenstate_and_energy_vkb(i_species,en,ell,radius_large, psi,large_energy,vha,vxc)
+       val%en_pao(i_shell) = large_energy
+    end do
+    if(iprint>0) then
+       write(*,fmt='(2x,"Unconfined valence state energies (Ha)")')
+       write(*,fmt='(2x,"  n  l         AE energy        PAO energy")')
+       do i_shell = 1, val%n_occ
+          ell = val%l(i_shell)
+          en = val%n(i_shell)
+          write(*,fmt='(2x,2i3,2f18.10)') en, ell, val%en_ps(i_shell), &
+               val%en_pao(i_shell)
+       end do
+    end if
+    return
+  end subroutine find_unconfined_valence_states
+
+  ! Set radii of PAOs following user settings
+  subroutine set_radii(i_species,vha,vxc,nmesh)
+
+    use datatypes
+    use mesh, ONLY: rr, delta_r_reg
+    use units, ONLY: HaToeV
+    
+    implicit none
+
+    ! Passed variables
+    integer :: i_species, nmesh
+    real(double), dimension(nmesh) :: vha, vxc
+
+    ! Local variables
+    integer :: i_shell, ell, en, zeta, grid_size
+    
+    write(*,fmt='(/2x,"Setting cutoff radii"/)')
+    if(flag_default_cutoffs) then ! Work out radii
+       if(paos%flag_cutoff==pao_cutoff_energies.OR.paos%flag_cutoff==pao_cutoff_default) then
+          write(*,fmt='(4x,"Default cutoffs, shells share energy shifts")')
+       else if(paos%flag_cutoff==pao_cutoff_radii) then
+          write(*,fmt='(4x,"Default cutoffs, averaging radii over shells")')
+       end if
+       call find_default_cutoffs(i_species,vha,vxc)
+    else if(paos%flag_cutoff==pao_cutoff_energies) then ! Work out radii from energy shifts
+       write(*,fmt='(4x,"User-specified energy shifts")')
+       write(*,fmt='(4x,"  n  l  z  delta E (Ha)  delta E (eV)")')
+       do i_shell = 1,val%n_occ
+          ell = paos%l(i_shell)
+          en = paos%n(i_shell)
+          do zeta = 1,paos%nzeta(i_shell)
+             write(*,fmt='(4x,3i3,x,2f13.8)') en, ell, zeta, paos%energy(zeta,i_shell), &
+                  paos%energy(zeta,i_shell)*HaToeV
+             en = paos%npao(i_shell)
+             !if(iprint>2) write(*,*) '# shell, n, l, zeta: ',i_shell, ell, en, zeta
+             call find_radius_from_energy(i_species,en, ell, paos%cutoff(zeta,i_shell), &
+                  val%en_ps(i_shell) + paos%energy(zeta,i_shell), vha, vxc, .false.)
+             ! Now ensure that we have exact cutoff - effectively round up (2+ not 1+)
+             grid_size = 2+floor(paos%cutoff(zeta,i_shell)/delta_r_reg)
+             paos%cutoff(zeta,i_shell) = delta_r_reg*real(grid_size-1,double)
+             !if(iprint>2) write(*,*) '# Setting cutoff to ',paos%cutoff(zeta,i_shell)
+          end do
+       end do
+       do i_shell = val%n_occ+1,paos%n_shells
+          if(i_shell>val%n_occ+1) write(*,fmt='(2x,"Dangerous to set unoccupied shell radii via energy !")')
+          if(paos%inner(i_shell)>0) then
+             do zeta = 1,paos%nzeta(i_shell)
+                paos%cutoff(zeta,i_shell) = paos%cutoff(zeta,paos%inner(i_shell))
+             end do
+          else
+             do zeta = 1,paos%nzeta(i_shell)
+                paos%cutoff(zeta,i_shell) = paos%cutoff(zeta,i_shell-1)
+             end do
+          end if
+       end do
+    else ! Radii
+       write(*,fmt='(4x,"User-specified radii")')          
+    end if
+    write(*,fmt='(/4x,"Cutoff radii for PAOs")')
+    write(*,fmt='(4x,"  n  l  z        R (bohr)")')
+    do i_shell = 1,paos%n_shells
+       ell = paos%l(i_shell)
+       en = paos%n(i_shell)
+       if(paos%flag_perturb_polarise.AND.i_shell==paos%n_shells) then
+          if(en<3) en = en+1
+          do zeta = 1,paos%nzeta(i_shell)
+             write(*,fmt='(4x,3i3,f12.4)') en,ell,zeta,paos%cutoff(zeta,i_shell)
+          end do
+       else
+          do zeta = 1,paos%nzeta(i_shell)
+             write(*,fmt='(4x,3i3,f12.4)') en,ell,zeta,paos%cutoff(zeta,i_shell)
+          end do
+       end if
+    end do
+    return
+  end subroutine set_radii
+
+  ! Find the occupied (non-polarisation) PAOs
+  subroutine solve_for_occupied_paos(i_species,vha,vxc,nmesh)
+
+    use datatypes
+    use numbers, ONLY: zero, RD_ERR
+    use mesh, ONLY: rr, delta_r_reg, drdi
+    use units, ONLY: HaToeV
+    
+    implicit none
+
+    ! Passed variables
+    integer :: i_species, nmesh
+    real(double), dimension(nmesh) :: vha, vxc
+
+    ! Local variables
+    integer :: i, i_shell, ell, en, zeta
+    real(double) :: large_energy, dot_p
+
+    do i_shell = 1,val%n_occ
+       ell = paos%l(i_shell)
+       en = paos%npao(i_shell)
+       do zeta = 1,paos%nzeta(i_shell)
+          allocate(paos%psi(zeta,i_shell)%f(nmesh))
+          if(iprint>2) write(*,fmt='(2x,"Species ",i2," n=",i2," l=",i2," zeta=",i2, " Rc=",f4.1," bohr")') &
+               i_species, en, ell, zeta, paos%cutoff(zeta,i_shell)
+          if(zeta>1.AND.paos%flag_zetas==1) then
+             if(iprint>2) write(*,fmt='(2x,"Using split-norm approach for multiple zetas")')
+             call find_split_norm(en,ell,paos%cutoff(zeta,i_shell),&
+                  paos%psi(zeta,i_shell)%f,paos%psi(1,i_shell)%f)
+          else
+             large_energy = val%en_ps(i_shell) + paos%energy(zeta,i_shell)
+             call find_eigenstate_and_energy_vkb(i_species,en,ell,paos%cutoff(zeta,i_shell),&
+                  paos%psi(zeta,i_shell)%f,large_energy, vha,vxc,&
+                  paos%width(i_shell),paos%prefac(i_shell))
+             if(iprint>2) write(*,fmt='(2x,"Final energy shift required: ",f10.5," Ha")') &
+                  large_energy - val%en_ps(i_shell)
+             paos%energy(zeta,i_shell) = large_energy
+             ! Orthogonalise to semi-core state
+             if(paos%inner(i_shell)>0) then
+                ! Dot product of two
+                dot_p = zero
+                do i=1,nmesh
+                   dot_p = dot_p + rr(i)**(2*ell+2)*paos%psi(zeta,i_shell)%f(i)* &
+                        paos%psi(1,val%inner(i_shell))%f(i)*drdi(i)
+                end do
+                write(*,fmt='(2x,"Orthogonalising to semi-core; overlap is ",f10.5)') dot_p
+                ! Orthgonalise
+                paos%psi(zeta,i_shell)%f = paos%psi(zeta,i_shell)%f - &
+                     dot_p * paos%psi(1,val%inner(i_shell))%f
+                ! Check
+                dot_p = zero
+                do i=1,nmesh
+                   dot_p = dot_p + rr(i)**(2*ell+2)*paos%psi(zeta,i_shell)%f(i)* &
+                        paos%psi(1,val%inner(i_shell))%f(i)*drdi(i)
+                end do
+                if(abs(dot_p)>RD_ERR) write(*,fmt='(2x,"Warning: following orthogonalisation, overlap is ",f10.5)') dot_p
+             end if ! Inner shell orthogonalisation
+          end if ! Split-norm or confined state
+       end do ! zeta = 1, paos%nzeta
+    end do ! i_shell = 1,paos%n_shells
+    return
+  end subroutine solve_for_occupied_paos
+
+  ! Solve for polarisation (unoccupied) shells
+  subroutine solve_for_polarisation(i_species,vha,vxc,nmesh)
+
+    use datatypes
+    use numbers, ONLY: zero, one
+    use mesh, ONLY: rr, delta_r_reg, drdi
+    use units, ONLY: HaToeV
+    
+    implicit none
+
+    ! Passed variables
+    integer :: i_species, nmesh
+    real(double), dimension(nmesh) :: vha, vxc
+
+    ! Local variables
+    integer :: i, i_shell, ell, en, zeta, i_end
+    real(double) :: large_energy, dot_p
+
+    !
+    ! If perturbative polarisation is selected, it is the last shell
+    !
+    if(paos%flag_perturb_polarise) then
+       i_end = paos%n_shells-1
+    else
+       i_end = paos%n_shells
+    end if
+    !
+    ! Empty shells, solved for confined atom
+    !
+    do i_shell = val%n_occ+1,i_end
+       ell = paos%l(i_shell)
+       en = paos%npao(i_shell)
+       do zeta = 1,paos%nzeta(i_shell)
+          allocate(paos%psi(zeta,i_shell)%f(nmesh))
+          if(iprint>2) write(*,fmt='(2x,"Species ",i2," n=",i2," l=",i2," zeta=",i2, " Rc=",f4.1," bohr pol")') &
+               i_species, en, ell, zeta, paos%cutoff(zeta,i_shell)!, &
+          if(zeta>1.AND.paos%flag_zetas==1) then
+             if(iprint>2) write(*,fmt='(2x,"Using split-norm approach for multiple zetas")')
+             call find_split_norm(en,ell,paos%cutoff(zeta,i_shell),&
+                  paos%psi(zeta,i_shell)%f,paos%psi(1,i_shell)%f)
+          else
+             paos%energy(zeta,i_shell) = one
+             call find_eigenstate_and_energy_vkb(i_species,en,ell,paos%cutoff(zeta,i_shell),&
+                  paos%psi(zeta,i_shell)%f,paos%energy(zeta,i_shell), &
+                  vha,vxc,paos%width(i_shell),paos%prefac(i_shell))
+             if(paos%inner(i_shell)>0) then
+                ! Dot product of two
+                dot_p = zero
+                do i=1,nmesh
+                   dot_p = dot_p + rr(i)**(2*ell+2)*paos%psi(zeta,i_shell)%f(i)* &
+                        paos%psi(1,paos%inner(i_shell))%f(i)*drdi(i)
+                end do
+                write(*,fmt='(2x,"Orthogonalising to semi-core; overlap is ",f10.5)') dot_p
+                ! Orthgonalise
+                paos%psi(zeta,i_shell)%f = paos%psi(zeta,i_shell)%f - &
+                     dot_p * paos%psi(1,paos%inner(i_shell))%f
+             end if
+          end if
+       end do
+    end do
+    !
+    ! If perturbative polarisation is selected, it is the last shell
+    !
+    if(paos%flag_perturb_polarise) then       
+       i_shell = paos%n_shells
+       ell = paos%l(i_shell)
+       en = paos%npao(i_shell)
+       do zeta = 1,paos%nzeta(i_shell)
+          allocate(paos%psi(zeta,i_shell)%f(nmesh))
+          ! NB we pass l-1 here as we need to perturb the shell below
+          ell = paos%l(i_shell)-1
+          en = paos%npao(i_shell)
+          if(iprint>2) then
+             write(*,fmt='(2x,"Perturbative polarisation")')
+             write(*,fmt='(2x,"Species ",i2," n=",i2," l=",i2," zeta=",i2, " Rc=",f4.1," bohr")') &
+                  i_species, en, ell, zeta, paos%cutoff(zeta,i_shell)
+          end if
+          if(zeta>1.AND.paos%flag_zetas==1) then
+             call find_split_norm(en,ell+1,paos%cutoff(zeta,i_shell),&
+                  paos%psi(zeta,i_shell)%f,paos%psi(1,i_shell)%f)
+          else
+             ! Set radius of polarisation PAO
+             paos%cutoff(zeta,i_shell) = paos%cutoff(zeta,i_shell-1)
+             call find_polarisation(i_species,en,ell,paos%cutoff(zeta,i_shell),&
+                  paos%psi(zeta,i_shell-1)%f,paos%psi(zeta,i_shell)%f,&
+                  paos%energy(zeta,i_shell-1),vha,vxc)
+          end if
+       end do
+    end if ! paos%flag_perturb_polarise
+    return
+  end subroutine solve_for_polarisation
+  
   ! For the default basis, find the cutoff radii for all shells (based on energies)
   subroutine find_default_cutoffs(i_species,vha,vxc)
 
@@ -447,8 +539,6 @@ contains
     real(double), dimension(:), allocatable :: psi
 
     ! Find the cutoffs for the valence shells first
-    !allocate(psi(nmesh))
-    !psi = zero
     allocate(large_cutoff(val%n_occ),small_cutoff(val%n_occ))
     large_cutoff = zero
     small_cutoff = zero
@@ -577,7 +667,8 @@ contains
     ! Local variables
     real(double) :: g_temp, dy_L, dy_R
     real(double), dimension(:), allocatable :: f, potential, psi
-    integer :: classical_tp, i, n_crossings, n_nodes, n_loop, loop, nmax, n_kink, n_nodes_lower, n_nodes_upper
+    integer :: classical_tp, i, n_crossings, n_nodes, n_loop, loop, nmax
+    integer :: j, n_kink, n_nodes_lower, n_nodes_upper
     real(double) :: fac, norm, d_energy, r_lower, r_upper, df_cusp, cusp_psi, tol
     real(double) :: l_l_plus_one, alpha_sq_over_four, xkap
     real(double) :: gin, gout, gsgin, gsgout, xin, xout

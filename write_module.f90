@@ -3,21 +3,6 @@ module write
 
   implicit none
 
-  character(len=2), dimension(103) :: pte = &
-       (/  "H ", "He", "Li", "Be", "B ", "C ", "N ", "O ", "F ", "Ne", &
-         "Na", "Mg", "Al", "Si", "P ", "S ", "Cl", "Ar", "K ", "Ca", &
-         "Sc", "Ti", "V ", "Cr", "Mn", "Fe", "Co", "Ni", "Cu", "Zn", &
-         "Ga", "Ge", "As", "Se", "Br", "Kr", "Rb", "Sr", "Y ", "Zr", &
-         "Nb", "Mo", "Tc", "Ru", "Rh", "Pd", "Ag", "Cd", "In", "Sn", &
-         "Sb", "Te", "I ", "Xe", "Cs", "Ba", "La", "Ce", "Pr", "Nd", &
-         "Pm", "Sm", "Eu", "Gd", "Tb", "Dy", "Ho", "Er", "Tm", "Yb", &
-         "Lu", "Hf", "Ta", "W ", "Re", "Os", "Ir", "Pt", "Au", "Hg", &
-         "Tl", "Pb", "Bi", "Po", "At", "Rn", "Fr", "Ra", "Ac", "Th", &
-         "Pa", "U ", "Np", "Pu", "Am", "Cm", "Bk", "Cf", "Es", "Fm", &
-         "Md", "No", "Lr"/)
-
-  character(len=132), dimension(:), allocatable :: hamann_input_array
-  
 contains
 
   subroutine write_header(i_species)
@@ -27,7 +12,7 @@ contains
     use input_module, ONLY: io_assign, io_close
     use pseudo_tm_info, ONLY: alloc_pseudo_info, pseudo, rad_alloc
     use pseudo_atom_info, ONLY: paos, val
-    use periodic_table, ONLY: atomic_mass
+    use periodic_table, ONLY: atomic_mass, pte
     use radial_xc, ONLY: flag_functional_type, functional_lda_pz81, functional_gga_pbe96, functional_description
     
     implicit none
@@ -123,7 +108,7 @@ contains
     use mesh, ONLY: nmesh_reg, rmesh_reg
     use pseudo_atom_info, ONLY: paos, val
     use pseudo_tm_info, ONLY: pseudo
-    !use schro, ONLY: val
+    use periodic_table, ONLY: pte
     
     implicit none
 
@@ -177,6 +162,7 @@ contains
     use input_module, ONLY: io_assign, io_close
     use pseudo_tm_info, ONLY: alloc_pseudo_info, pseudo, rad_alloc
     use global_module, ONLY: flag_pcc_global
+    use periodic_table, ONLY: pte
     
     implicit none
 
@@ -231,6 +217,7 @@ contains
     use datatypes
     use input_module, ONLY: io_assign, io_close
     use pseudo_tm_info, ONLY: pseudo
+    use periodic_table, ONLY: pte
     
     implicit none
 
