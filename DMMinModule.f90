@@ -161,6 +161,8 @@ contains
   !!    Added dump of K matrix
   !!   2018/01/22 tsuyoshi (with dave)
   !!    Initial changes for atom updates
+  !!   2019/05/27 tsuyoshi 
+  !!    Debug for spin=2, propagateL (not propagateX)
   !!  SOURCE
   !!
   subroutine FindMinDM(n_L_iterations, vary_mu, tolerance, inode, &
@@ -296,10 +298,10 @@ contains
                    end if
                 else
                    call dump_matrix2('X',matX(1),Lrange)
-                   if(nspin==2) call dump_matrix2('X_2',matX(2),LSrange)
+                   if(nspin==2) call dump_matrix2('X_2',matX(2),Lrange)
                    if (integratorXL.EQ.'velocityVerlet') then
                       call dump_matrix2('Xvel',matXvel(1),Lrange)
-                      if(nspin==2) call dump_matrix2('Xvel_2',matXvel(2),LSrange)
+                      if(nspin==2) call dump_matrix2('Xvel_2',matXvel(2),Lrange)
                    end if
                 endif
                 ! When dissipation applies
