@@ -1067,6 +1067,7 @@ contains
       case('svr')
         if (present(second_call)) then
           call thermo%v_rescale(velocity)
+          call thermo%get_thermostat_energy
         else
           call thermo%get_svr_thermo_sf(MDtimestep)
         end if
@@ -1127,6 +1128,7 @@ contains
             call baro%integrate_box(thermo)
             call thermo%get_svr_thermo_sf(MDtimestep/two, baro)
             call thermo%v_rescale(velocity)
+            call thermo%get_thermostat_energy
             call baro%scale_box_velocity(thermo)
           end select
         else

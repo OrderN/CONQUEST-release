@@ -122,6 +122,7 @@ module md_control
     integer             :: n_ys         ! Yoshida-Suzuki order
     integer             :: n_mts_nhc    ! number of time steps for NHC
     real(double)        :: e_thermostat ! energy of thermostat
+    real(double)        :: e_barostat   ! energy of barostat (for NPT SVR)
     real(double)        :: e_nhc_ion    ! energy of ionic NHC thermostats
     real(double)        :: e_nhc_cell   ! energy of cell NHC thermostats
     real(double)        :: ke_nhc_ion   ! ke of ionic NHC thermostats
@@ -292,6 +293,7 @@ contains
     th%thermo_type = thermo_type
     th%baro_type = baro_type
     th%cell_nhc = md_cell_nhc
+    th%e_thermostat = zero
 
     if (leqi(baro_type, 'none')) then
       md_cell_constraint = 'fixed'
@@ -323,7 +325,6 @@ contains
       ! Parrinello-Rahman NPH dynamics with a SVR thermostat (barostat 
       ! is initialised AFTER thermostat)
       flag_extended_system = .false.
-      th%e_thermostat = zero ! this is *NOT* reset every step
     case('nhc')
       call th%init_nhc(dt)
     case default
@@ -722,7 +723,8 @@ contains
       ke = th%ke_ions
       if (present(baro)) then
         call baro%get_barostat_energy
-        ke = ke + baro%e_barostat
+        th%e_barostat = baro%e_barostat ! save for computing e_thermostat
+        ke = ke + th%e_barostat
       end if
       temp_fac = th%ke_target/th%ndof/ke
 
@@ -1128,7 +1130,7 @@ contains
       th%e_thermostat = th%ke_nhc_ion + th%pe_nhc_ion + &
                         th%ke_nhc_cell + th%pe_nhc_cell
 
-      if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) then
+      if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 2) then
         write(io_lun,'(4x,"ke_nhc_ion: ",e16.8)') th%ke_nhc_ion
         write(io_lun,'(4x,"pe_nhc_ion: ",e16.8)') th%pe_nhc_ion
         if (th%cell_nhc) then
@@ -1156,6 +1158,12 @@ contains
     case('svr')
       th%e_thermostat = th%e_thermostat - &
                         th%ke_ions * (th%lambda**2 - one) * th%dt
+      if (.not. leqi(th%baro_type, 'none')) then
+        th%e_thermostat = th%e_thermostat - &
+                          th%e_barostat * (th%lambda**2 - one) * th%dt
+      end if
+      if (inode==ionode .and. iprint_MD > 2) &
+        write(io_lun,'(4x,"ke_svr:     ",e16.8)') th%e_thermostat
     case default
       th%e_thermostat = zero
     end select
