@@ -800,7 +800,7 @@ contains
 
        ! Compute and print the conserved quantity and its components
        if (leqi(thermo%thermo_type, 'nhc')) call thermo%get_thermostat_energy
-       if (leqi(baro%baro_type, 'ssm')) call baro%get_barostat_energy(final_call)
+       if (leqi(baro%baro_type, 'pr')) call baro%get_barostat_energy(final_call)
        call mdl%get_cons_qty
        call mdl%print_md_energy()
 
@@ -876,6 +876,8 @@ contains
   !!    Made BerendsenEquil work with NVT ensemble.
   !!   2019/04/09 zamaan
   !!    Removed unnecessary references to stress tensor
+  !!   2019/05/22 14:44 dave & tsuyoshi
+  !!    Tweak for initial velocities
   !!  SOURCE
   !!  
   subroutine init_ensemble(baro, thermo, mdl, md_ndof, nequil, second_call)
@@ -930,12 +932,9 @@ contains
         call read_velocity(ion_velocity, file_velocity)
       else
         if(temp_ion > RD_ERR) then
-          if (inode == ionode) then
-            call init_velocity(ni_in_cell, temp_ion, ion_velocity)
-          end if
+           call init_velocity(ni_in_cell, temp_ion, ion_velocity)
         end if
       end if
-      call gcopy(ion_velocity, 3, ni_in_cell)
     end if
 
     select case(md_ensemble)
@@ -1058,6 +1057,7 @@ contains
       select case(thermo%thermo_type)
       case('nhc')
         call thermo%integrate_nhc(baro, velocity, mdl%ion_kinetic_energy)
+        if (present(second_call)) call thermo%get_thermostat_energy
       case('berendsen')
         if (present(second_call)) then
           call thermo%v_rescale(velocity)
@@ -1073,7 +1073,7 @@ contains
      end select
    case('nph')
       select case(baro%baro_type)
-      case('ssm')
+      case('pr')
         if (present(second_call)) then
           call baro%couple_box_particle_velocity(thermo, velocity)
           call thermo%get_temperature_and_ke(baro, velocity, &
@@ -1103,7 +1103,7 @@ contains
       case('mttk')
         call baro%propagate_npt_mttk(thermo, mdl%ion_kinetic_energy, &
                                      velocity)
-      case('ssm')
+      case('pr')
         if (present(second_call)) then
           call baro%couple_box_particle_velocity(thermo, velocity)
           call thermo%get_temperature_and_ke(baro, velocity, &
@@ -1112,22 +1112,41 @@ contains
           call baro%integrate_box(thermo)
           select case(thermo%thermo_type)
           case('nhc')
+            call baro%couple_box_particle_velocity(thermo, velocity)
+            call thermo%get_temperature_and_ke(baro, velocity, &
+                 mdl%ion_kinetic_energy)
+            call baro%get_pressure_and_stress
+            call baro%integrate_box(thermo)
             call thermo%integrate_nhc(baro, velocity, mdl%ion_kinetic_energy)
+            call thermo%get_thermostat_energy
           case('svr')
+            call thermo%get_temperature_and_ke(baro, velocity, &
+                 mdl%ion_kinetic_energy)
+            call baro%get_pressure_and_stress
+            call baro%couple_box_particle_velocity(thermo, velocity)
+            call baro%integrate_box(thermo)
             call thermo%get_svr_thermo_sf(MDtimestep/two, baro)
             call thermo%v_rescale(velocity)
-          case default
-            call cq_abort('Thermostat type must be "nhc" or "svr"')
+            call baro%scale_box_velocity(thermo)
           end select
         else
           select case(thermo%thermo_type)
           case('nhc')
             call thermo%integrate_nhc(baro, velocity, mdl%ion_kinetic_energy)
+            call thermo%get_temperature_and_ke(baro, velocity, &
+                 mdl%ion_kinetic_energy)
+            call baro%get_pressure_and_stress
+            call baro%integrate_box(thermo)
+            call baro%couple_box_particle_velocity(thermo, velocity)
           case('svr')
             call thermo%get_svr_thermo_sf(MDtimestep/two, baro)
             call thermo%v_rescale(velocity)
-          case default
-            call cq_abort('Thermostat type must be "nhc" or "svr"')
+            call baro%scale_box_velocity(thermo)
+            call thermo%get_temperature_and_ke(baro, velocity, &
+                 mdl%ion_kinetic_energy)
+            call baro%get_pressure_and_stress
+            call baro%integrate_box(thermo)
+            call baro%couple_box_particle_velocity(thermo, velocity)
           end select
           call thermo%get_temperature_and_ke(baro, velocity, &
                mdl%ion_kinetic_energy)
@@ -1140,44 +1159,44 @@ contains
   end subroutine integrate_pt
 !!*****
 
-  !!****m* control/update_pos_and_box *
-  !!  NAME
-  !!   update_pos_and_box
-  !!  PURPOSE
-  !!   Perform the (modified) velocity Verlet position and box updates, &
-  !!   depending on the ensemble and integrator
-  !!  AUTHOR
-  !!   Zamaan Raza
-  !!  CREATION DATE
-  !!   2018/08/11 10:27
-  !!  SOURCE
-  !!  
-  subroutine update_pos_and_box(baro, nequil, flag_movable)
+!!****m* control/update_pos_and_box *
+!!  NAME
+!!   update_pos_and_box
+!!  PURPOSE
+!!   Perform the (modified) velocity Verlet position and box updates, &
+!!   depending on the ensemble and integrator
+!!  AUTHOR
+!!   Zamaan Raza
+!!  CREATION DATE
+!!   2018/08/11 10:27
+!!  SOURCE
+!!  
+subroutine update_pos_and_box(baro, nequil, flag_movable)
 
-    use Integrators,   only: vVerlet_r_dt
-    use io_module,     only: leqi
-    use GenComms,      only: inode, ionode
-    use global_module, only: iprint_MD
-    use md_control,    only: type_thermostat, type_barostat, ion_velocity, &
-                             md_baro_type
+  use Integrators,   only: vVerlet_r_dt
+  use io_module,     only: leqi
+  use GenComms,      only: inode, ionode
+  use global_module, only: iprint_MD
+  use md_control,    only: type_thermostat, type_barostat, ion_velocity, &
+                           md_baro_type
 
-    ! passed variables
-    type(type_barostat), intent(inout)  :: baro
-    integer, intent(in)                 :: nequil
-    logical, dimension(:), intent(in)   :: flag_movable
+  ! passed variables
+  type(type_barostat), intent(inout)  :: baro
+  integer, intent(in)                 :: nequil
+  logical, dimension(:), intent(in)   :: flag_movable
 
-    ! local variables
+  ! local variables
 
     if (inode==ionode .and. iprint_MD > 1) &
-      write(io_lun,'(2x,a)') "Welcome to update_pos_and_box"
+        write(io_lun,'(2x,a)') "Welcome to update_pos_and_box"
 
-    if (leqi(md_ensemble, 'npt')) then
-      if (leqi(md_baro_type, "berendsen") .or. nequil > 0) then
+  if (leqi(md_ensemble, 'npt')) then
+    if (leqi(md_baro_type, "berendsen") .or. nequil > 0) then
         call vVerlet_r_dt(MDtimestep,ion_velocity,flag_movable)
       else
         ! Modified velocity Verlet position step for NPT ensemble
         select case(md_baro_type)
-        case('ssm')
+        case('pr')
           call baro%propagate_box_ssm
           call vVerlet_r_dt(MDtimestep,ion_velocity,flag_movable)
           call baro%propagate_box_ssm

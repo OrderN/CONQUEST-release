@@ -114,9 +114,6 @@ module md_control
     logical             :: cell_nhc     ! separate NHC for cell?
     real(double)        :: lambda       ! velocity scaling factor
 
-    ! Stochastic velocity rescaling (SVR) variables
-    integer             :: rng_seed
-
     ! Weak coupling thermostat variables
     real(double)        :: tau_T        ! temperature coupling time period
 
@@ -239,6 +236,7 @@ module md_control
       procedure, public   :: propagate_box_mttk
       procedure, public   :: dump_baro_state
       procedure, public   :: update_cell
+      procedure, public   :: scale_box_velocity
 
       procedure, private  :: update_G_box
       procedure, private  :: propagate_eps_lin
@@ -271,8 +269,6 @@ contains
   !!  
   subroutine init_thermo(th, thermo_type, baro_type, dt, ndof, tau_T, ke_ions)
 
-    use move_atoms,       only: ran2
-
     ! passed variables
     class(type_thermostat), intent(inout) :: th
     character(*), intent(in)              :: thermo_type, baro_type
@@ -297,18 +293,26 @@ contains
     th%baro_type = baro_type
     th%cell_nhc = md_cell_nhc
 
-    if (leqi(baro_type, 'none')) md_cell_constraint = 'fixed'
+    if (leqi(baro_type, 'none')) then
+      md_cell_constraint = 'fixed'
+      th%cell_nhc = .false.
+    end if
     select case(md_cell_constraint)
     case('fixed')
       th%cell_ndof = 0
-      th%cell_nhc = .false.
     case('volume')
       th%cell_ndof = 1
     case('xyz')
       th%cell_ndof = 3
     case default
-      call cq_abort('MD.CellConstraint must be "volume" or "xyz"')
+      call cq_abort('MD.CellConstraint must be "fixed", "volume" or "xyz"')
     end select
+
+    ! For NPT stochastic velocity rescaling we also need to thermostat the box
+    if (leqi(th%baro_type, 'svr')) then
+      th%ke_target = th%ke_target +  &
+                     half*th%cell_ndof*fac_Kelvin2Hartree*th%T_ext
+    end if
 
     select case(th%thermo_type)
     case('none')
@@ -320,17 +324,10 @@ contains
       ! is initialised AFTER thermostat)
       flag_extended_system = .false.
       th%e_thermostat = zero ! this is *NOT* reset every step
-      ! Initialise the rng
-      th%rng_seed = 0
-      do i=1,30
-        call ran2(dummy_rn,th%rng_seed)
-      end do
     case('nhc')
       call th%init_nhc(dt)
-    case('ssm')
-      call th%init_nhc(dt)
     case default
-      call cq_abort("Unknown thermostat type")
+      call cq_abort("MD.ThermoType must be 'none', 'berendsen', 'svr' or 'nhc'")
     end select
 
     if (inode==ionode .and. iprint_MD > 1) then
@@ -689,11 +686,15 @@ contains
   !!    Zamaan Raza 
   !!  CREATION DATE
   !!   2019/04/19
+  !!  MODIFICATION HISTORY
+  !!   2019/05/21 zamaan
+  !!    Replaced all calls to old RNG with new
   !!  SOURCE
   !!  
   subroutine get_svr_thermo_sf(th, dt, baro)
 
-    use move_atoms,    only: box_muller, ran2
+    use GenComms,      only: gsum, my_barrier
+    use rng,           only: type_rng
 
     ! Passed variables
     class(type_thermostat), intent(inout)   :: th
@@ -701,56 +702,48 @@ contains
     type(type_barostat), intent(inout), optional :: baro
 
     ! Local variables
-    real(double)    :: ke, rn1, rn2, alpha_sq, exp_dt_tau, r1, &
-                       sum_ri_sq, temp_fac
-    integer         :: i, n_bm_calls
-    logical         :: odd
+    type(type_rng)  :: myrng
+    real(double)    :: ke, rn, alpha_sq, exp_dt_tau, r1, sum_ri_sq, temp_fac
+    integer         :: i, ndof
 
-    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 1) &
-      write(io_lun,'(2x,a)') "get_svr_thermo_sf"
+    th%lambda = zero
+    ! We need to guarantee that the generated random numbers are consistent on
+    ! all processes, so only doing this part on ionode, the gsumming the scaling
+    ! factor - zamaan
+    if (inode==ionode) then
+      if (flag_MDdebug .and. iprint_MD > 1) &
+        write(io_lun,'(2x,a)') "get_svr_thermo_sf"
 
-    ! Box-Muller transform generates two normally distributed random numbers
-    ! from two uniformly distributed random numbers, so we need to work out 
-    ! how many times to call it. There may be a better way of doing this.
-    ! - zamaan
-    if (modulo(th%ndof,2) == 0) then
-      n_bm_calls = (th%ndof + th%cell_ndof)/2
-      odd = .false.
-    else
-      n_bm_calls = (th%ndof + th%cell_ndof - 1)/2
-      odd = .true.
-    end if
+      call myrng%init_rng
+      call myrng%init_normal(one, zero)
+      ndof = th%ndof + th%cell_ndof
 
-    exp_dt_tau = exp(-dt/th%tau_T)
-    ke = th%ke_ions
-    if (present(baro)) then
-      call baro%get_barostat_energy
-      ke = ke + baro%e_barostat
-    end if
-    temp_fac = th%ke_target/th%ndof/ke
-
-    ! sum can be replaced by a single number drawn from a gamma distribution
-    sum_ri_sq = zero
-    do i=1,n_bm_calls
-      call box_muller(th%rng_seed, one, zero, rn1, rn2)
-      if (i == 1) then
-        r1 = rn1
-        sum_ri_sq = sum_ri_sq + r1*r1
-      else
-        sum_ri_sq = sum_ri_sq + rn1*rn1
+      exp_dt_tau = exp(-dt/th%tau_T)
+      ke = th%ke_ions
+      if (present(baro)) then
+        call baro%get_barostat_energy
+        ke = ke + baro%e_barostat
       end if
-      sum_ri_sq = sum_ri_sq + rn2*rn2
-    end do
-    if (odd) then
-      call box_muller(th%rng_seed, one, zero, rn1, rn2)
-      sum_ri_sq = sum_ri_sq + rn1*rn1
-    end if
+      temp_fac = th%ke_target/th%ndof/ke
 
-    alpha_sq = exp_dt_tau + temp_fac * (one - exp_dt_tau) * sum_ri_sq + &
-               two*sqrt(exp_dt_tau) * sqrt(temp_fac*(one - exp_dt_tau)) * r1
-    th%lambda = sqrt(alpha_sq)
+      ! sum can be replaced by a single number drawn from a gamma distribution
+      sum_ri_sq = zero
+      r1 = myrng%rng_normal()
+      sum_ri_sq = sum_ri_sq + r1*r1
+      do i=1,ndof-1
+        rn = myrng%rng_normal()
+        sum_ri_sq = sum_ri_sq + rn*rn
+      end do
+
+      alpha_sq = exp_dt_tau + temp_fac * (one - exp_dt_tau) * sum_ri_sq + &
+                 two*sqrt(exp_dt_tau) * sqrt(temp_fac*(one - exp_dt_tau)) * r1
+      th%lambda = sqrt(alpha_sq)
+    end if
+    call gsum(th%lambda)
+    call my_barrier
 
   end subroutine get_svr_thermo_sf
+  !!***
 
   !!****m* md_control/v_rescale *
   !!  NAME
@@ -1119,8 +1112,7 @@ contains
           real(th%cell_ndof, double)*th%T_ext*fac_Kelvin2Hartree*th%eta_cell(1)
       else
         th%ke_nhc_ion = half*th%m_nhc(1)*th%v_eta(1)**2
-        th%pe_nhc_ion = real((th%ndof+th%cell_ndof), double) * &
-                        th%T_ext*fac_Kelvin2Hartree*th%eta(1)
+        th%pe_nhc_ion = real(th%ndof, double)*th%T_ext*fac_Kelvin2Hartree*th%eta(1)
       end if
 
       do k=2,th%n_nhc
@@ -1275,14 +1267,10 @@ contains
       baro%box_mass = &
         (baro%ndof+baro%cell_ndof)*temp_ion*fac_Kelvin2Hartree/omega_P**2
 
-      select case(baro_type)
-      case('ssm')
+      if (leqi(baro%baro_type, 'pr')) then
         if (leqi(md_cell_constraint, 'xyz')) &
           baro%box_mass = baro%box_mass/three
-      case('iisvr')
-        if (leqi(md_cell_constraint, 'xyz')) &
-          baro%box_mass = baro%box_mass/three
-      end select
+      end if
     else
       baro%box_mass = md_box_mass
     end if
@@ -1320,7 +1308,7 @@ contains
       baro%c4 = baro%c2/20.0_double
       baro%c6 = baro%c4/42.0_double
       baro%c8 = baro%c6/72.0_double
-    case('ssm')
+    case('pr')
       flag_extended_system = .true.
       baro%append = .false.
       if (leqi(md_cell_constraint, 'volume')) then
@@ -1335,7 +1323,7 @@ contains
       call baro%get_barostat_energy
       baro%odnf = one + three/baro%ndof
     case default
-      call cq_abort("Invalid barostat type")
+      call cq_abort("MD.BaroType must be 'none', 'berendsen', 'mttk' or 'pr'")
     end select
 
     if (inode==ionode .and. iprint_MD > 1) then
@@ -1579,7 +1567,7 @@ contains
       select case(baro%baro_type)
       case('mttk')
         baro%e_barostat = half*baro%box_mass*baro%v_eps**2
-      case('ssm')
+      case('pr')
         if (leqi(md_cell_constraint, 'volume')) then
           baro%e_barostat = three*half*baro%box_mass*baro%v_eps**2
         else
@@ -1628,7 +1616,7 @@ contains
     case('mttk')
       baro%G_eps = (two*baro%odnf*th%ke_ions + &
                     three*(baro%P_int - baro%P_ext)*baro%volume)/baro%box_mass
-    case('ssm')
+    case('pr')
       if (leqi(md_cell_constraint, 'volume')) then
         baro%G_eps = (two*th%ke_ions/md_ndof_ions + &
                      (baro%P_int - baro%P_ext)*baro%volume)/baro%box_mass
@@ -1649,7 +1637,7 @@ contains
       select case(baro%baro_type)
       case('mttk')
         write(io_lun,'(2x,a,e16.8)') "G_eps: ", baro%G_eps
-      case('ssm')
+      case('pr')
         if (leqi(md_cell_constraint, 'volume')) then
           write(io_lun,'(2x,a,e16.8)') "G_eps: ", baro%G_eps
         else
@@ -1823,6 +1811,33 @@ contains
     end if
 
   end subroutine apply_box_drag
+  !!***
+
+  !!****m* md_control/scale_box_velocity *
+  !!  NAME
+  !!   scale_box_velocity
+  !!  PURPOSE
+  !!   Scale the box velocity during SVR NPT dynamics
+  !!  AUTHOR
+  !!   Zamaan Raza
+  !!  CREATION DATE
+  !!   2019/05/17
+  !!  SOURCE
+  !!  
+  subroutine scale_box_velocity(baro, th)
+
+    ! passed variables
+    class(type_barostat), intent(inout)   :: baro
+    type(type_thermostat), intent(in)     :: th
+
+    ! local variables
+    integer :: i
+
+    do i=1,3
+      baro%v_h(i,i) = baro%v_h(i,i)*th%lambda
+    end do
+
+  end subroutine scale_box_velocity
   !!***
 
   !!****m* md_control/update_vscale_fac *
