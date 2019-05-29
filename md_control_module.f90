@@ -634,7 +634,7 @@ contains
     th%T_int = KE/fac_Kelvin2Hartree/md_ndof_ions
     KE = half*KE
     th%ke_ions = KE
-    trace = baro%ke_stress(1,1) + baro%ke_stress(2,2) + baro%ke_stress(3,3)
+!    trace = baro%ke_stress(1,1) + baro%ke_stress(2,2) + baro%ke_stress(3,3)
 
     if (present(final_call)) then
       if (inode==ionode .and. iprint_MD > 1) then
@@ -1394,9 +1394,7 @@ contains
 
     ! Get the static stress from the global variable
     baro%static_stress = zero
-    do i=1,3
-      baro%static_stress(i,i) = -stress(i,i) ! note the sign convention!!
-    end do
+    baro%static_stress = -stress ! note the sign convention!!
 
     if (present(final_call)) then
       if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) then
