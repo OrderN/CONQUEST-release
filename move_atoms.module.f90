@@ -1633,7 +1633,6 @@ contains
     real(double), dimension(:), allocatable :: store_density
     real(double) :: k3_old, k3_local, kmin_old
     real(double), dimension(:,:), allocatable :: config_start
-    real(double), dimension(:), allocatable :: start_x, start_y, start_z
     real(double)  :: orcellx, orcelly, orcellz
 
     real(double) :: dx, dy, dz, d
@@ -1644,7 +1643,6 @@ contains
     integer :: mat_SFcoeff_old, mat_K_old
     ! for debugging
 
-    allocate(start_x(ni_in_cell), start_y(ni_in_cell), start_z(ni_in_cell))
     allocate(config_start(3,ni_in_cell+1))
 
     if (inode==ionode .and. iprint_MD > 2) &
@@ -1662,9 +1660,6 @@ contains
     ! Unnecessary and over cautious !
 
     config_start = config
-    start_x = x_atom_cell
-    start_y = y_atom_cell
-    start_z = z_atom_cell
 
     k0 = zero
 
@@ -1709,9 +1704,7 @@ contains
        call update_H(fixed_potential)
        !Update start_x,start_y & start_z
        call update_vector_indices(config_start)
-       call update_start_xyz(start_x,start_y,start_z)
-       if (iprint_MD>2) call print_displacement(orcellx, orcelly, orcellz, &
-                                                start_x, start_y, start_z)
+       call update_vector_indices(config)
 
        ! Write out atomic positions
        if (iprint_MD > 2) then
@@ -1808,9 +1801,7 @@ contains
     call update_H(fixed_potential)
 
     call update_vector_indices(config_start)
-    call update_start_xyz(start_x,start_y,start_z)
-    if (iprint_MD>2) call print_displacement(orcellx, orcelly, orcellz, &
-                                             start_x, start_y, start_z)
+    call update_vector_indices(config)
 
     if (iprint_MD > 2) then
        call write_atomic_positions("UpdatedAtoms_tmp.dat", trim(pdb_template))
@@ -1928,9 +1919,7 @@ contains
        call update_H(fixed_potential)
 
        call update_vector_indices(config_start)
-       call update_start_xyz(start_x,start_y,start_z)
-       if (iprint_MD>2) call print_displacement(orcellx, orcelly, orcellz, &
-                                                start_x, start_y, start_z)
+       call update_vector_indices(config)
 
        if (iprint_MD > 2) then
           call write_atomic_positions("UpdatedAtoms_tmp.dat", &
@@ -1974,8 +1963,8 @@ contains
             en_conv * enthalpy_out, en_units(energy_units)
     end if
 
+    deallocate(config_start)
     if (inode==ionode) write (io_lun,*) "Get out of safemin_full !" !db
-    deallocate(start_x, start_y, start_z, config_start)
     call stop_timer(tmr_std_moveatoms)
     return
   end subroutine safemin_full

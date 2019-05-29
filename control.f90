@@ -386,6 +386,10 @@ contains
        iter = iter + 1
        dE = energy0 - energy1
        !if(myid==0) write(io_lun,6) for_conv*max, en_units(energy_units), d_units(dist_units)
+       if (inode==ionode) then
+          write(io_lun,'(2x,"CG - Iter: ",i4," MaxF: ",f12.8, " E: ", e16.8, " dE: ",f12.8)') &
+          iter, max, energy1, en_conv*dE
+       end if
        if (myid == 0) write (io_lun, 4) en_conv*dE, en_units(energy_units)
        if (myid == 0) write (io_lun, 5) for_conv*sqrt(g0/ni_in_cell), &
                                         en_units(energy_units),       &
@@ -2392,7 +2396,7 @@ end subroutine write_md_data
     logical        :: done
     type(cq_timer) :: tmr_l_iter
     real(double), allocatable, dimension(:,:) :: cg, force, force_old, &
-                                                 config, config_old
+                                                 config
     real(double), dimension(3) :: one_plus_strain, strain, cell_ref
 
     if (inode==ionode .and. iprint_MD > 2) &
@@ -2402,7 +2406,6 @@ end subroutine write_md_data
     allocate(force(3,ni_in_cell+1), STAT=stat)
     allocate(force_old(3,ni_in_cell+1), STAT=stat)
     allocate(config(3,ni_in_cell+1), STAT=stat)
-    allocate(config_old(3,ni_in_cell+1), STAT=stat)
     length = 3*(ni_in_cell+1)
     call reg_alloc_mem(area_general, 5*length, type_dbl)
 
@@ -2441,7 +2444,6 @@ end subroutine write_md_data
       call start_timer(tmr_l_iter, WITH_LEVEL) ! Construct ratio for conjugacy
       ! Construct the vector to optimise (config) and its force vector (force)
       call cq_to_vector(force, config, cell_ref, press)
-      config_old = config
       gg = zero
       gg1 = zero
       do j = 1, ni_in_cell+1 ! extra row for cell "force"
@@ -2479,11 +2481,11 @@ end subroutine write_md_data
         cg(i,ni_in_cell+1) = gamma*cg(i,ni_in_cell+1) + force(i,ni_in_cell+1)
       end do
       ! For the ions
-      do j=1,ni_in_cell
+      do j=1,ni_in_cell+1
         jj = id_glob(j)
-        cg(1,j) = gamma*cg(1,j) + force(1,jj)
-        cg(2,j) = gamma*cg(2,j) + force(2,jj)
-        cg(3,j) = gamma*cg(3,j) + force(3,jj)
+        do i=1,3
+          cg(i,j) = gamma*cg(i,j) + force(i,jj)
+        end do
       end do
       force_old = force
       ! Minimise in this direction
@@ -2508,19 +2510,22 @@ end subroutine write_md_data
         end do
       end do
       ! Output and energy changes
-      iter = iter + 1
       dH = enthalpy0 - enthalpy1
       if (inode==ionode) then
-          write(io_lun,'(4x,"Force Residual:     ",f20.10," ",a2,"/",a2)') &
-            for_conv*sqrt(g0/ni_in_cell), en_units(energy_units), & 
-            d_units(dist_units)
-          write(io_lun,'(4x,"Maximum force:      ",f20.10)') max
-          write(io_lun,'(4x,"Force tolerance:    ",f20.10)') MDcgtol
-          write(io_lun,'(4x,"Enthalpy change:    ",f20.10," ",a2)') &
-            en_conv*dH, en_units(energy_units)
-          write(io_lun,'(4x,"Enthalpy tolerance: ",f20.10)') &
-            enthalpy_tolerance
-          write(io_lun,'(4x,"Stress:             ",3f10.6)') stress
+          write(io_lun,'(2x,"CG - Iter: ",i4," MaxF: ",f12.8," H: ", e16.8," dH: ",f12.8)') &
+            iter, max, enthalpy1, en_conv*dH
+          if (iprint_MD > 1) then
+            write(io_lun,'(4x,"Force Residual:     ",f20.10," ",a2,"/",a2)') &
+              for_conv*sqrt(g0/ni_in_cell), en_units(energy_units), & 
+              d_units(dist_units)
+            write(io_lun,'(4x,"Maximum force:      ",f20.10)') max
+            write(io_lun,'(4x,"Force tolerance:    ",f20.10)') MDcgtol
+            write(io_lun,'(4x,"Enthalpy change:    ",f20.10," ",a2)') &
+              en_conv*dH, en_units(energy_units)
+            write(io_lun,'(4x,"Enthalpy tolerance: ",f20.10)') &
+              enthalpy_tolerance
+            write(io_lun,'(4x,"Stress:             ",3f10.6)') stress
+          end if
       end if
 
       enthalpy0 = enthalpy1
@@ -2533,6 +2538,7 @@ end subroutine write_md_data
         done = .true.
         if (inode==ionode) then
           write(io_lun,fmt='(a)') "Convergence thresholds reached"
+          write(io_lun, fmt='(4x,"Iteration           ",i20)') iter
           write(io_lun, fmt='(4x,"Maximum force:      ",f20.10)') max
           write(io_lun, fmt='(4x,"Force tolerance:    ",f20.10)') MDcgtol
           write(io_lun, fmt='(4x,"Enthalpy change:    ",f20.10)') dH
@@ -2542,12 +2548,13 @@ end subroutine write_md_data
       end if
 
       call dump_pos_and_matrices
+      iter = iter + 1
       call stop_print_timer(tmr_l_iter, "a CG iteration", IPRINT_TIME_THRES1)
       if (.not. done) call check_stop(done, iter)
     end do
     ! Output final positions
     !    if(myid==0) call write_positions(parts)
-    deallocate(config, config_old, force, force_old, cg, STAT=stat)
+    deallocate(config, force, force_old, cg, STAT=stat)
     if (stat /= 0) &
       call cq_abort("Error deallocating vectors in control: ", &
                    ni_in_cell,stat)
