@@ -2521,19 +2521,24 @@ contains
           write(lun,'(2i8,3e20.12)') id_global, ni, ion_velocity(1:3,ni)
       end do
 
-      ! Write the extended system variables
-      if (flag_extended_system) then
-        if (leqi(th%thermo_type, 'nhc')) then
-          write(lun,th%nhc_fmt2) th%eta
-          write(lun,th%nhc_fmt2) th%v_eta
-          write(lun,th%nhc_fmt2) th%G_nhc
-          if (th%cell_nhc) then
-            write(lun,th%nhc_fmt2) th%eta_cell
-            write(lun,th%nhc_fmt2) th%v_eta_cell
-            write(lun,th%nhc_fmt2) th%G_nhc_cell
-          end if
+      ! Write the thermostat and barostat variables
+      select case(th%thermo_type)
+      case('nhc')
+        write(lun,th%nhc_fmt2) th%eta
+        write(lun,th%nhc_fmt2) th%v_eta
+        write(lun,th%nhc_fmt2) th%G_nhc
+        if (th%cell_nhc) then
+          write(lun,th%nhc_fmt2) th%eta_cell
+          write(lun,th%nhc_fmt2) th%v_eta_cell
+          write(lun,th%nhc_fmt2) th%G_nhc_cell
         end if
+      case('svr')
+        ! SVR thermostat is a running total, so if we will need the
+        ! last value for a restart
+        write(lun,'(e20.12)') th%e_thermostat 
+      end select
 
+      if (flag_extended_system) then
         if (leqi(baro%baro_type, 'mttk')) then
           write(lun,'(3e20.12)') baro%lat_ref(1,:)
           write(lun,'(3e20.12)') baro%lat_ref(2,:)
@@ -2613,19 +2618,22 @@ contains
       end do
       if (flag_read_velocity) ion_velocity = v
 
-      ! Read the extended system variables
-      if (flag_extended_system) then
-        if (leqi(th%thermo_type, 'nhc')) then
-          read(lun,*) th%eta
-          read(lun,*) th%v_eta
-          read(lun,*) th%G_nhc
-          if (th%cell_nhc) then
-            read(lun,*) th%eta_cell
-            read(lun,*) th%v_eta_cell
-            read(lun,*) th%G_nhc_cell
-          end if
+      ! Read the themrostat and barostat variables
+      select case(th%thermo_type)
+      case('nhc')
+        read(lun,*) th%eta
+        read(lun,*) th%v_eta
+        read(lun,*) th%G_nhc
+        if (th%cell_nhc) then
+          read(lun,*) th%eta_cell
+          read(lun,*) th%v_eta_cell
+          read(lun,*) th%G_nhc_cell
         end if
+      case('svr')
+        read(lun,*) th%e_thermostat
+      end select
 
+      if (flag_extended_system) then
         if (leqi(baro%baro_type, 'mttk')) then
           read(lun,*) baro%lat_ref(1,:)
           read(lun,*) baro%lat_ref(2,:)
