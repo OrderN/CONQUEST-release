@@ -293,10 +293,6 @@ contains
     th%baro_type = baro_type
     th%cell_nhc = md_cell_nhc
 
-    if (leqi(baro_type, 'none')) then
-      md_cell_constraint = 'fixed'
-      th%cell_nhc = .false.
-    end if
     select case(md_cell_constraint)
     case('fixed')
       th%cell_ndof = 0
@@ -308,11 +304,18 @@ contains
       call cq_abort('MD.CellConstraint must be "fixed", "volume" or "xyz"')
     end select
 
-    ! For NPT stochastic velocity rescaling we also need to thermostat the box
-    if (leqi(th%baro_type, 'svr')) then
+    select case(th%baro_type)
+    case('none')
+      md_cell_constraint = 'fixed'
+      th%cell_nhc = .false.
+    case('pr')
+      ! For NPT stochastic velocity rescaling we also need to thermostat the box
       th%ke_target = th%ke_target +  &
                      half*th%cell_ndof*fac_Kelvin2Hartree*th%T_ext
-    end if
+    case('berendsen')
+    case('default')
+      call cq_abort('Incompatible barostat')
+    end select
 
     select case(th%thermo_type)
     case('none')

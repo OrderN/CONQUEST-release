@@ -214,12 +214,13 @@ if not opts.compare:
   ax1.plot(data['time'][opts.nskip:], data['pe'][opts.nskip:], 'r-', label='Potential energy')
   ax1a = ax1.twinx()
   ax1a.plot(data['time'][opts.nskip:], data['ke'][opts.nskip:], 'b-', label='Kinetic energy')
-  if cq_params['MD.Ensemble'][2] == 't':
-    if extended_system:
-      ax1a.plot(data['time'][opts.nskip:], data['nhc'][opts.nskip:], 'g-', label='NHC energy')
+  if cq_params['MD.Thermostat'] == 'nhc':
+    ax1a.plot(data['time'][opts.nskip:], data['thermostat'][opts.nskip:], 'g-', label='Thermostat energy')
+  if cq_params['MD.Thermostat'] == 'svr':
+    ax1a.plot(data['time'][opts.nskip:], data['thermostat'][opts.nskip:], 'g-', label='Thermostat energy')
   if cq_params['MD.Ensemble'][1] == 'p':
     if extended_system:
-      ax1a.plot(data['time'][opts.nskip:], data['box'][opts.nskip:], 'c-', label='Box energy')
+      ax1a.plot(data['time'][opts.nskip:], data['box'][opts.nskip:], 'c-', label='Barostat energy')
     ax1a.plot(data['time'][opts.nskip:], data['pV'][opts.nskip:], 'm-', label='pV')
   ax2.plot(data['time'][opts.nskip:], data['H\''][opts.nskip:])
   ax2.plot((opts.nskip,data['time'][-1]), (avg['H\''],avg['H\'']), '-',
