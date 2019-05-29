@@ -87,7 +87,7 @@ module md_model
     real(double), pointer                   :: lambda   ! velocity scaling fac
     real(double), pointer                   :: tau_T    ! T coupling period
     integer, pointer                        :: n_nhc
-    real(double), pointer                   :: nhc_energy
+    real(double), pointer                   :: e_thermostat
     real(double), pointer                   :: nhc_cell_energy
     real(double), pointer                   :: nhc_ion_energy
     real(double), pointer, dimension(:)     :: eta
@@ -104,7 +104,7 @@ module md_model
     real(double), pointer, dimension(:,:)   :: stress
     real(double), pointer, dimension(:,:)   :: static_stress
     real(double), pointer, dimension(:,:)   :: ke_stress
-    real(double), pointer                   :: box_kinetic_energy
+    real(double), pointer                   :: e_barostat
     real(double), pointer                   :: m_box
     real(double), pointer                   :: eps
     real(double), pointer                   :: v_eps
@@ -177,7 +177,7 @@ contains
     mdl%lambda        => thermo%lambda
     mdl%tau_T         => thermo%tau_T
     mdl%n_nhc         => thermo%n_nhc
-    mdl%nhc_energy    => thermo%e_nhc
+    mdl%e_thermostat    => thermo%e_thermostat
     mdl%nhc_ion_energy  => thermo%e_nhc_ion
     mdl%nhc_cell_energy => thermo%e_nhc_cell
     mdl%eta           => thermo%eta
@@ -194,7 +194,7 @@ contains
     mdl%P_ext         => baro%P_ext
     mdl%volume        => baro%volume
     mdl%PV            => baro%PV
-    mdl%box_kinetic_energy => baro%ke_box
+    mdl%e_barostat => baro%e_barostat
     mdl%baro_type     => baro%baro_type
     mdl%static_stress => baro%static_stress
     mdl%ke_stress     => baro%ke_stress
@@ -229,16 +229,20 @@ contains
     case("nve")
       mdl%h_prime = mdl%ion_kinetic_energy + mdl%dft_total_energy
     case("nvt")
-      if (leqi(mdl%thermo_type, 'nhc')) then
+      select case(mdl%thermo_type)
+      case('nhc')
         mdl%h_prime = mdl%ion_kinetic_energy + mdl%dft_total_energy + &
-                      mdl%nhc_energy
-      else
+                      mdl%e_thermostat
+      case('svr')
+        mdl%h_prime = mdl%ion_kinetic_energy + mdl%dft_total_energy + &
+                      mdl%e_thermostat
+      case default
         mdl%h_prime = mdl%ion_kinetic_energy + mdl%dft_total_energy
-      end if
+      end select
     case("nph")
       if (flag_extended_system) then
         mdl%h_prime = mdl%ion_kinetic_energy + mdl%dft_total_energy + &
-                      mdl%box_kinetic_energy + mdl%PV
+                      mdl%e_barostat + mdl%PV
       else
         mdl%h_prime = mdl%ion_kinetic_energy + mdl%dft_total_energy + mdl%PV
       end if
@@ -247,10 +251,10 @@ contains
         select case(mdl%thermo_type)
         case('nhc')
           mdl%h_prime = mdl%ion_kinetic_energy + mdl%dft_total_energy + &
-                        mdl%nhc_energy + mdl%box_kinetic_energy + mdl%PV
+                        mdl%e_thermostat + mdl%e_barostat + mdl%PV
         case('svr')
           mdl%h_prime = mdl%ion_kinetic_energy + mdl%dft_total_energy + &
-                        mdl%box_kinetic_energy + mdl%PV
+                        mdl%e_thermostat + mdl%e_barostat + mdl%PV
         end select
       else
         mdl%h_prime = mdl%ion_kinetic_energy + mdl%dft_total_energy + mdl%PV
@@ -289,22 +293,29 @@ contains
         mdl%dft_total_energy
       select case(mdl%ensemble)
       case('nvt')
-        if (flag_extended_system) & 
+        select case(mdl%thermo_type)
+        case('nhc')
           write (io_lun, '(4x,"Nose-Hoover energy      : ",f15.8)') &
-            mdl%nhc_energy
+            mdl%e_thermostat
+        case('svr')
+          write (io_lun, '(4x,"SVR energy              : ",f15.8)') &
+            mdl%e_thermostat
+        end select
       case('npt')
-        if (flag_extended_system) then
-          if (mdl%nequil < 1) then
-            if (leqi(mdl%thermo_type, 'nhc')) then
-              write (io_lun, '(4x,"Nose-Hoover energy      : ",f15.8)') &
-                mdl%nhc_energy
-            end if
-            write (io_lun, '(4x,"Box kinetic energy      : ",f15.8)') &
-              mdl%box_kinetic_energy
-            write (io_lun, '(4x,"PV                      : ",f15.8)') &
-              mdl%PV
-          end if
+        if (flag_extended_system .and. mdl%nequil < 1) then
+          select case(mdl%thermo_type)
+          case('nhc')
+            write (io_lun, '(4x,"Nose-Hoover energy      : ",f15.8)') &
+              mdl%e_thermostat
+          case('svr')
+            write (io_lun, '(4x,"SVR energy              : ",f15.8)') &
+              mdl%e_thermostat
+          end select
+          write (io_lun, '(4x,"Box kinetic energy      : ",f15.8)') &
+            mdl%e_barostat
         end if
+        write (io_lun, '(4x,"PV                      : ",f15.8)') &
+          mdl%PV
       end select
     end if
   end subroutine print_md_energy
@@ -349,32 +360,14 @@ contains
         case ('nve')
           write(lun,'(a10,3a18,2a12)') "step", "pe", "ke", "H'", "T", "P"
         case ('nvt')
-          if (flag_extended_system .or. md_berendsen_equil > 0) then
-            write(lun,'(a10,4a18,2a12)') "step", "pe", "ke", "nhc", "H'", "T", "P"
-          else
-            write(lun,'(a10,3a16,2a12)') "step", "pe", "ke", "H'", "T", "P"
-          end if
+          write(lun,'(a10,4a18,2a12)') "step", "pe", "ke", "thermostat", &
+            "H'", "T", "P"
         case ('nph')
-          if (flag_extended_system .or. md_berendsen_equil > 0) then
-            write(lun,'(a10,5a18,2a12,a16)') "step", "pe", "ke", "box", &
-              "pV", "H'", "T", "P", "V"
-          else
-            write(lun,'(a10,4a18,2a12,a16)') "step", "pe", "ke", "pV", &
-              "H'", "T", "P", "V"
-          end if
+          write(lun,'(a10,5a18,2a12,a16)') "step", "pe", "ke", "barostat", &
+            "pV", "H'", "T", "P", "V"
         case ('npt')
-          if (flag_extended_system .or. md_berendsen_equil > 0) then
-            if (leqi(mdl%thermo_type, 'nhc')) then
-              write(lun,'(a10,6a18,2a12,a16)') "step", "pe", "ke", "nhc", &
-                "box", "pV", "H'", "T", "P", "V"
-            else
-              write(lun,'(a10,5a18,2a12,a16)') "step", "pe", "ke", "box", &
-                "pV", "H'", "T", "P", "V"
-            end if
-          else
-            write(lun,'(a10,4a18,2a12,a16)') "step", "pe", "ke", "pV", &
-              "H'", "T", "P", "V"
-          end if
+          write(lun,'(a10,6a18,2a12,a16)') "step", "pe", "ke", "thermostat", &
+            "barostat", "pV", "H'", "T", "P", "V"
         end select
       end if
       select case (mdl%ensemble)
@@ -382,61 +375,19 @@ contains
         write(lun,'(i10,3e18.8,2f12.4)') mdl%step, mdl%dft_total_energy, &
           mdl%ion_kinetic_energy, mdl%h_prime, mdl%T_int, P_GPa
       case ('nvt')
-        if (flag_extended_system) then
-          if (nequil > 0) then
-            write(lun,'(i10,4e18.8,2f12.4)') mdl%step, mdl%dft_total_energy, &
-              mdl%ion_kinetic_energy, zero, mdl%h_prime, mdl%T_int, &
-              P_GPa
-          else
-            write(lun,'(i10,4e18.8,2f12.4)') mdl%step, mdl%dft_total_energy, &
-              mdl%ion_kinetic_energy, mdl%nhc_energy, mdl%h_prime, mdl%T_int, &
-              P_GPa
-          end if
-        else
-          write(lun,'(i10,3e18.8,2f12.4)') mdl%step, mdl%dft_total_energy, &
-            mdl%ion_kinetic_energy, mdl%h_prime, mdl%T_int, P_GPa
-        end if
+        write(lun,'(i10,4e18.8,2f12.4)') mdl%step, mdl%dft_total_energy, &
+          mdl%ion_kinetic_energy, mdl%e_thermostat, mdl%h_prime, mdl%T_int, &
+          P_GPa
       case ('nph')
-        if (flag_extended_system) then
-          if (nequil > 0) then
-            write(lun,'(i10,5e18.8,2f12.4,e16.8)') mdl%step, &
-              mdl%dft_total_energy, mdl%ion_kinetic_energy, zero, &
-              mdl%PV, mdl%h_prime, mdl%T_int, P_GPa, mdl%volume
-          else
-            write(lun,'(i10,5e18.8,2f12.4,e16.8)') mdl%step, &
-              mdl%dft_total_energy, mdl%ion_kinetic_energy, &
-              mdl%box_kinetic_energy, mdl%PV, mdl%h_prime, mdl%T_int, P_GPa, &
-              mdl%volume
-          end if
-        else
-          write(lun,'(i10,4e18.8,2f12.4,e16.8)') mdl%step, &
-            mdl%dft_total_energy, mdl%ion_kinetic_energy, mdl%PV, &
-            mdl%h_prime, mdl%T_int, P_GPa, mdl%volume
-        end if
+        write(lun,'(i10,5e18.8,2f12.4,e16.8)') mdl%step, &
+          mdl%dft_total_energy, mdl%ion_kinetic_energy, &
+          mdl%e_barostat, mdl%PV, mdl%h_prime, mdl%T_int, P_GPa, &
+          mdl%volume
       case ('npt')
-        if (flag_extended_system) then
-          if (leqi(mdl%thermo_type, 'nhc')) then
-            if (nequil > 0) then
-              write(lun,'(i10,6e18.8,2f12.4,e16.8)') mdl%step, &
-                mdl%dft_total_energy, mdl%ion_kinetic_energy, zero, zero, &
-                mdl%PV, mdl%h_prime, mdl%T_int, P_GPa, mdl%volume
-            else
-              write(lun,'(i10,6e18.8,2f12.4,e16.8)') mdl%step, &
-                mdl%dft_total_energy, mdl%ion_kinetic_energy, mdl%nhc_energy, &
-                mdl%box_kinetic_energy, mdl%PV, mdl%h_prime, mdl%T_int, &
-                P_GPa, mdl%volume
-            end if
-          else
-            write(lun,'(i10,5e18.8,2f12.4,e16.8)') mdl%step, &
-              mdl%dft_total_energy, mdl%ion_kinetic_energy, &
-              mdl%box_kinetic_energy, mdl%PV, mdl%h_prime, mdl%T_int, P_GPa, &
-              mdl%volume
-          end if
-        else
-          write(lun,'(i10,4e18.8,2f12.4,e16.8)') mdl%step, &
-            mdl%dft_total_energy, mdl%ion_kinetic_energy, mdl%PV, &
-            mdl%h_prime, mdl%T_int, P_GPa, mdl%volume
-        end if
+        write(lun,'(i10,6e18.8,2f12.4,e16.8)') mdl%step, &
+          mdl%dft_total_energy, mdl%ion_kinetic_energy, mdl%e_thermostat, &
+          mdl%e_barostat, mdl%PV, mdl%h_prime, mdl%T_int, &
+          P_GPa, mdl%volume
       end select
       call io_close(lun)
     end if

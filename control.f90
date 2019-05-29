@@ -799,8 +799,8 @@ contains
        end if
 
        ! Compute and print the conserved quantity and its components
-       if (leqi(thermo%thermo_type, 'nhc')) call thermo%get_nhc_energy
-       if (leqi(baro%baro_type, 'pr')) call baro%get_box_energy(final_call)
+       if (leqi(thermo%thermo_type, 'nhc')) call thermo%get_thermostat_energy
+       if (leqi(baro%baro_type, 'pr')) call baro%get_barostat_energy(final_call)
        call mdl%get_cons_qty
        call mdl%print_md_energy()
 
@@ -1057,7 +1057,7 @@ contains
       select case(thermo%thermo_type)
       case('nhc')
         call thermo%integrate_nhc(baro, velocity, mdl%ion_kinetic_energy)
-        if (present(second_call)) call thermo%get_nhc_energy
+        if (present(second_call)) call thermo%get_thermostat_energy
       case('berendsen')
         if (present(second_call)) then
           call thermo%v_rescale(velocity)
@@ -1067,6 +1067,7 @@ contains
       case('svr')
         if (present(second_call)) then
           call thermo%v_rescale(velocity)
+          call thermo%get_thermostat_energy
         else
           call thermo%get_svr_thermo_sf(MDtimestep)
         end if
@@ -1105,6 +1106,11 @@ contains
                                      velocity)
       case('pr')
         if (present(second_call)) then
+          call baro%couple_box_particle_velocity(thermo, velocity)
+          call thermo%get_temperature_and_ke(baro, velocity, &
+               mdl%ion_kinetic_energy)
+          call baro%get_pressure_and_stress
+          call baro%integrate_box(thermo)
           select case(thermo%thermo_type)
           case('nhc')
             call baro%couple_box_particle_velocity(thermo, velocity)
@@ -1113,7 +1119,7 @@ contains
             call baro%get_pressure_and_stress
             call baro%integrate_box(thermo)
             call thermo%integrate_nhc(baro, velocity, mdl%ion_kinetic_energy)
-            call thermo%get_nhc_energy
+            call thermo%get_thermostat_energy
           case('svr')
             call thermo%get_temperature_and_ke(baro, velocity, &
                  mdl%ion_kinetic_energy)
@@ -1122,6 +1128,7 @@ contains
             call baro%integrate_box(thermo)
             call thermo%get_svr_thermo_sf(MDtimestep/two, baro)
             call thermo%v_rescale(velocity)
+            call thermo%get_thermostat_energy
             call baro%scale_box_velocity(thermo)
           end select
         else
@@ -1143,10 +1150,15 @@ contains
             call baro%integrate_box(thermo)
             call baro%couple_box_particle_velocity(thermo, velocity)
           end select
+          call thermo%get_temperature_and_ke(baro, velocity, &
+               mdl%ion_kinetic_energy)
+          call baro%get_pressure_and_stress
+          call baro%integrate_box(thermo)
+          call baro%couple_box_particle_velocity(thermo, velocity)
         end if
       end select
-   end select
-end subroutine integrate_pt
+    end select
+  end subroutine integrate_pt
 !!*****
 
 !!****m* control/update_pos_and_box *
@@ -1200,56 +1212,56 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
       call vVerlet_r_dt(MDtimestep,ion_velocity,flag_movable)
     end if
 
-end subroutine update_pos_and_box
-!!*****
+  end subroutine update_pos_and_box
+  !!*****
 
-!!****m* control/write_md_data *
-!!  NAME
-!!   write_md_data
-!!  PURPOSE
-!!   Write MD data to various files at the end of an ionic step
-!!  AUTHOR
-!!   Zamaan Raza
-!!  CREATION DATE
-!!   2018/08/11 10:27
-!!  SOURCE
-!!  
-subroutine write_md_data(iter, thermo, baro, mdl, nequil)
+  !!****m* control/write_md_data *
+  !!  NAME
+  !!   write_md_data
+  !!  PURPOSE
+  !!   Write MD data to various files at the end of an ionic step
+  !!  AUTHOR
+  !!   Zamaan Raza
+  !!  CREATION DATE
+  !!   2018/08/11 10:27
+  !!  SOURCE
+  !!  
+  subroutine write_md_data(iter, thermo, baro, mdl, nequil)
 
-  use GenComms,      only: inode, ionode
-  use io_module,     only: write_xsf
-  use global_module, only: iprint_MD, flag_baroDebug, flag_thermoDebug
-  use md_model,      only: type_md_model, md_tdep
-  use md_control,    only: type_barostat, type_thermostat, &
-                           write_md_checkpoint, flag_write_xsf, &
-                           md_thermo_file, md_baro_file, &
-                           md_trajectory_file, md_frames_file, &
-                           md_stats_file
+    use GenComms,      only: inode, ionode
+    use io_module,     only: write_xsf
+    use global_module, only: iprint_MD, flag_baroDebug, flag_thermoDebug
+    use md_model,      only: type_md_model, md_tdep
+    use md_control,    only: type_barostat, type_thermostat, &
+                             write_md_checkpoint, flag_write_xsf, &
+                             md_thermo_file, md_baro_file, &
+                             md_trajectory_file, md_frames_file, &
+                             md_stats_file
 
-  ! Passed variables
-  type(type_barostat), intent(inout)    :: baro
-  type(type_thermostat), intent(inout)  :: thermo
-  type(type_md_model), intent(inout)    :: mdl
-  integer, intent(in)                   :: iter, nequil
+    ! Passed variables
+    type(type_barostat), intent(inout)    :: baro
+    type(type_thermostat), intent(inout)  :: thermo
+    type(type_md_model), intent(inout)    :: mdl
+    integer, intent(in)                   :: iter, nequil
 
     if (inode==ionode .and. iprint_MD > 1) &
-        write(io_lun,'(2x,a)') "Welcome to write_md_data"
+      write(io_lun,'(2x,a)') "Welcome to write_md_data"
 
-  call write_md_checkpoint(thermo, baro)
-  call mdl%dump_stats(md_stats_file, nequil)
-  if (inode == ionode .and. mod(iter, MDfreq) == 0) then
-    call mdl%dump_frame(md_frames_file)
-    if (md_tdep) call mdl%dump_tdep
-  end if
-  if (flag_write_xsf) call write_xsf(md_trajectory_file, iter)
-  if (flag_thermoDebug) &
-    call thermo%dump_thermo_state(iter, md_thermo_file)
-  if (flag_baroDebug) &
-    call baro%dump_baro_state(iter, md_baro_file)
-  mdl%append = .true.
+    call write_md_checkpoint(thermo, baro)
+    call mdl%dump_stats(md_stats_file, nequil)
+    if (inode == ionode .and. mod(iter, MDfreq) == 0) then
+      call mdl%dump_frame(md_frames_file)
+      if (md_tdep) call mdl%dump_tdep
+    end if
+    if (flag_write_xsf) call write_xsf(md_trajectory_file, iter)
+    if (flag_thermoDebug) &
+      call thermo%dump_thermo_state(iter, md_thermo_file)
+    if (flag_baroDebug) &
+      call baro%dump_baro_state(iter, md_baro_file)
+    mdl%append = .true.
 
-end subroutine write_md_data
-!!*****
+  end subroutine write_md_data
+  !!*****
 
   !!****f* control/dummy_run *
   !! PURPOSE
