@@ -54,6 +54,7 @@ module md_control
   use species_module,   only: species, mass
   use GenComms,         only: inode, ionode, cq_abort
   use input_module,     only: leqi
+  use rng,              only: type_rng
 
   implicit none
 
@@ -142,6 +143,7 @@ module md_control
     real(double), dimension(:), allocatable :: G_nhc_cell
     real(double), dimension(:), allocatable :: m_nhc_cell
     real(double), dimension(:), allocatable :: dt_ys  ! Yoshida-Suzuki time steps
+    type(type_rng)      :: myrng
 
     contains
 
@@ -328,6 +330,8 @@ contains
       ! Parrinello-Rahman NPH dynamics with a SVR thermostat (barostat 
       ! is initialised AFTER thermostat)
       flag_extended_system = .false.
+      call th%myrng%init_rng ! Initialise random number generator
+      call th%myrng%init_normal(one, zero)
     case('nhc')
       call th%init_nhc(dt)
     case default
@@ -706,7 +710,6 @@ contains
     type(type_barostat), intent(inout), optional :: baro
 
     ! Local variables
-    type(type_rng)  :: myrng
     real(double)    :: ke, rn, alpha_sq, exp_dt_tau, r1, sum_ri_sq, temp_fac
     integer         :: i, ndof
 
@@ -718,8 +721,6 @@ contains
       if (flag_MDdebug .and. iprint_MD > 1) &
         write(io_lun,'(2x,a)') "get_svr_thermo_sf"
 
-      call myrng%init_rng
-      call myrng%init_normal(one, zero)
       ndof = th%ndof + th%cell_ndof
 
       exp_dt_tau = exp(-dt/th%tau_T)
@@ -733,10 +734,10 @@ contains
 
       ! sum can be replaced by a single number drawn from a gamma distribution
       sum_ri_sq = zero
-      r1 = myrng%rng_normal()
+      r1 = th%myrng%rng_normal()
       sum_ri_sq = sum_ri_sq + r1*r1
       do i=1,ndof-1
-        rn = myrng%rng_normal()
+        rn = th%myrng%rng_normal()
         sum_ri_sq = sum_ri_sq + rn*rn
       end do
 
