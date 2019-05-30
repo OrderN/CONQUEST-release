@@ -1,3 +1,8 @@
+! Interface to FFTW
+!
+! Modifications
+! 2019/05/29 16:54 dave
+!  Added real-to-real (i.e. cosine and sine) transforms
 module fft_interface_module
 
   use datatypes
@@ -6,12 +11,17 @@ module fft_interface_module
 
   integer, parameter   :: FFTW_FORWARD  = -1
   integer, parameter   :: FFTW_BACKWARD = +1
+  integer, parameter   :: FFTW_REDFT01  = 4
+  integer, parameter   :: FFTW_REDFT10  = 5
+  integer, parameter   :: FFTW_RODFT00  = 7
   integer, parameter   :: FFTW_ESTIMATE = 64 
 
   integer(wide), save :: planx_for, planx_rev
   integer(wide), save :: plany_for, plany_rev
   integer(wide), save :: planz_for, planz_rev
   integer(wide), save :: plan3_for, plan3_rev
+  integer(wide), save :: cos_plan_for, cos_plan_rev
+  integer(wide), save :: sin_plan
 
 contains
 
@@ -193,5 +203,97 @@ contains
     return
   end subroutine fft3_dest_wrapper
 
+  subroutine cosft_init_wrapper( len )
+    
+    use datatypes
+
+    implicit none
+
+    integer,intent(in)   :: len
+    real(double) :: dummy
+
+    ! for forward
+    call dfftw_plan_r2r_1d( cos_plan_for, len, dummy, dummy, FFTW_REDFT01, FFTW_ESTIMATE )
+    ! for reverse
+    call dfftw_plan_r2r_1d( cos_plan_rev, len, dummy, dummy, FFTW_REDFT10, FFTW_ESTIMATE )
+
+    return
+  end subroutine cosft_init_wrapper
+
+  subroutine cosft_exec_wrapper( data, len, isign )
+    
+    use datatypes
+
+    implicit none
+
+    integer, intent(in) :: len, isign
+    real(double), intent(inout) :: data(len)
+
+    if( isign==-1 ) then ! forward
+       call dfftw_execute_r2r( cos_plan_for, data, data )
+    end if
+    if( isign==+1 ) then ! reverse
+       call dfftw_execute_r2r( cos_plan_rev, data, data )
+       data = data/real(2*len,double)
+    end if
+
+    return
+  end subroutine cosft_exec_wrapper
+
+  subroutine cosft_dest_wrapper( )
+    
+    use datatypes
+
+    implicit none
+
+    call dfftw_destroy_plan( cos_plan_for )
+    call dfftw_destroy_plan( cos_plan_rev )
+
+    return
+  end subroutine cosft_dest_wrapper
+
+  subroutine sinft_init_wrapper( len )
+    
+    use datatypes
+
+    implicit none
+
+    integer,intent(in)   :: len
+    real(double) :: dummy
+
+    ! for forward & reverse
+    call dfftw_plan_r2r_1d( sin_plan, len, dummy, dummy, FFTW_RODFT00, FFTW_ESTIMATE )
+
+    return
+  end subroutine sinft_init_wrapper
+
+  ! For the sine transform, the forward and reverse are the same except for a scaling factor
+  subroutine sinft_exec_wrapper( data, len, isign )
+    
+    use datatypes
+
+    implicit none
+
+    integer, intent(in) :: len, isign
+    real(double), intent(inout) :: data(len)
+
+    call dfftw_execute_r2r( sin_plan, data, data )
+    if( isign==+1 ) then ! reverse
+       data = data/real(2*len+2,double)
+    end if
+
+    return
+  end subroutine sinft_exec_wrapper
+
+  subroutine sinft_dest_wrapper( )
+    
+    use datatypes
+
+    implicit none
+
+    call dfftw_destroy_plan( sin_plan )
+
+    return
+  end subroutine sinft_dest_wrapper
 
 end module fft_interface_module
