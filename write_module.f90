@@ -47,10 +47,12 @@ contains
     end select
     write(lun,fmt='((a)," basis set with ",(a)," functional")') trim(pte(pseudo(i_species)%z)), trim(functional_description)
     ! Loop over l
-    !write(lun,fmt='("  n  l zetas  other")') 
+    !write(lun,fmt='("  n  l zetas  other")')
+    paos%total_paos = 0
     do i_shell=1,paos%n_shells
        ell = paos%l(i_shell)
        en = paos%n(i_shell)
+       paos%total_paos = paos%total_paos + paos%nzeta(i_shell)
        if(paos%flag_perturb_polarise.AND.i_shell==paos%n_shells) then
           if(en<3) en = en+1 ! OK - should an O polarised shell be 3d ?!
           write(lun,fmt='("n =",i2,", l =",i2,",",i2," zetas, perturbative polarisation shell")') &
@@ -92,6 +94,7 @@ contains
     ! Self energy ?
     write(lun,fmt='(f18.10,20x,"# Self energy")') 0.0_double
     ! Lmax, no of nl orbitals BASIS
+    paos%lmax = maxval(paos%l)
     write(lun,fmt='(2i4,20x,"# Lmax for basis, no of orbitals")') paos%lmax, paos%total_paos
     ! Lmax, no of projectors
     write(lun,fmt='(2i4,20x,"# Lmax for projectors, no of proj")') pseudo(i_species)%lmax,pseudo(i_species)%n_pjnl
@@ -200,7 +203,7 @@ contains
        write(lun,fmt='(2f17.11)') real(j-1,double)*pseudo(i_species)%vlocal%delta,pseudo(i_species)%vlocal%f(j)
     end do
     ! Partial Core Correction
-    if(flag_pcc_global) then
+    if(pseudo(i_species)%flag_pcc) then
        write(lun,fmt='("# Core:__________________________")')       
        write(lun,fmt='(i4,2f16.12,"  # npts, delta, cutoff")') &
             pseudo(i_species)%chpcc%n, pseudo(i_species)%chpcc%delta, pseudo(i_species)%chpcc%cutoff

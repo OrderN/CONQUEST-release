@@ -89,42 +89,31 @@ contains
     end if
   end subroutine make_mesh
 
-  ! Create the regular mesh
-  subroutine make_mesh_reg(cutoff,n_points,reg_cutoff)
+  ! Create the regular mesh - use spacing from input
+  subroutine make_mesh_reg(cutoff)
 
     use numbers
     use datatypes
     
     implicit none
 
-    integer, OPTIONAL :: n_points
     real(double) :: cutoff
-    real(double), OPTIONAL :: reg_cutoff
 
-    integer :: i, n_use
+    integer :: i
     
     if(allocated(rmesh_reg)) deallocate(rmesh_reg)
-    if(PRESENT(n_points)) then
-       n_use = n_points
-       if(PRESENT(reg_cutoff)) then
-          reg_cutoff = delta_r_reg*real(n_points-1,double)
-       !else
-       !   write(*,*) '# WARNING: using regular mesh without changing final cutoff'
-       end if
-    else
-       n_use = cutoff/delta_r_reg + 1 !nmesh_reg
-    end if
-    allocate(rmesh_reg(n_use))
+    nmesh_reg = floor(cutoff/delta_r_reg) + 1
+    allocate(rmesh_reg(nmesh_reg))
     rmesh_reg = zero
-    !delta_r_reg = cutoff/real(n_use-1)
-    do i=1,n_use
+    do i=1,nmesh_reg
        rmesh_reg(i) = real(i-1,double)*delta_r_reg
     end do
+    write(*,*) 'Regular mesh: ',nmesh_reg, cutoff,rmesh_reg(nmesh_reg)
     return
   end subroutine make_mesh_reg
 
   ! New polynomial interpolation following NR
-  subroutine new_interpolate(x_reg,y_reg,n_reg,x_irreg,y_irreg,n_irreg,max_bc)
+  subroutine new_interpolate(y_reg,n_reg,x_irreg,y_irreg,n_irreg,max_bc)
 
     use numbers
     use GenComms, ONLY: cq_abort
@@ -133,7 +122,7 @@ contains
     implicit none
 
     integer :: n_reg
-    real(double), dimension(n_reg) :: x_reg, y_reg
+    real(double), dimension(n_reg) :: y_reg
     integer :: n_irreg
     real(double), dimension(n_irreg) :: x_irreg, y_irreg
     real(double), OPTIONAL :: max_bc ! Apply BC at cutoff
@@ -144,7 +133,7 @@ contains
 
     ! Loop over regular mesh
     do i=1,n_reg-1
-       r = x_reg(i)
+       r = rmesh_reg(i)
        ! Convert r into grid point
        call convert_r_to_i(r,nr)
        if(nr<1) write(*,*) 'Error: ',r,nr
@@ -217,7 +206,7 @@ contains
   
   ! interpolate from a logarithmic to even mesh
   ! Uses Lagrange polynomials for now
-  subroutine interpolate(x,y_reg,n_reg,y,n_irreg,max_bc)
+  subroutine interpolate(y_reg,n_reg,y,n_irreg,max_bc)
 
     use numbers
     use GenComms, ONLY: cq_abort
@@ -226,7 +215,7 @@ contains
     implicit none
 
     integer :: n_reg
-    real(double), dimension(n_reg) :: x, y_reg
+    real(double), dimension(n_reg) :: y_reg
     integer :: n_irreg
     real(double), dimension(n_irreg) :: y
     real(double), OPTIONAL :: max_bc ! Apply BC at cutoff
@@ -238,7 +227,7 @@ contains
     ! We have function y on mesh r as input (r will be the logarithmic mesh defined in this module)
     ! We want to output y_reg on mesh x (likely to be regular)
 
-    if(x(2)<rr(1)) call cq_abort("Interpolation out of range: ",x(2),rr(1))
+    if(rmesh_reg(2)<rr(1)) call cq_abort("Interpolation out of range: ",rmesh_reg(2),rr(1))
     ! If BC specified at rmax, then only loop to n_reg-1
     if(PRESENT(max_bc)) then
        if(iprint>5) write(*,fmt='("Interpolating with boundary condition: ",f18.10)') max_bc
@@ -252,18 +241,18 @@ contains
     imin = 1
     imax = n_irreg
     do n=2,nmax
-       if(x(n)>rr(n_irreg)) then
-          if(abs(x(n)-rr(n_irreg))<1e-6_double) then
+       if(rmesh_reg(n)>rr(n_irreg)) then
+          if(abs(rmesh_reg(n)-rr(n_irreg))<1e-6_double) then
              y_reg(n) = y(n_irreg)
              cycle
           else
-             call cq_abort("Interpolation out of range: ",x(n),rr(n_irreg))
+             call cq_abort("Interpolation out of range: ",rmesh_reg(n),rr(n_irreg))
           end if
        end if
        ! Find points r which bracket x
        ! Start point
        do i=imin,n_irreg
-          if(rr(i)>x(n)) exit
+          if(rr(i)>rmesh_reg(n)) exit
        end do
        imin = i-1
        imax = i
@@ -281,7 +270,7 @@ contains
        ! Lagrangian interpolation
        if(mod(n_poly_lag,2)==1) then
           n_start = imin - n_poly_lag/2
-       else if(x(n)-rr(imin)<rr(imax)-x(n)) then
+       else if(rmesh_reg(n)-rr(imin)<rr(imax)-rmesh_reg(n)) then
           n_start = imin - n_poly_lag/2
        else
           n_start = imax - n_poly_lag/2
@@ -294,7 +283,7 @@ contains
           this_term = y(j)
           do m=n_start,n_start + n_poly_lag
              if(m==j) cycle
-             this_term = this_term*(x(n) - rr(m))/(rr(j) - rr(m))
+             this_term = this_term*(rmesh_reg(n) - rr(m))/(rr(j) - rr(m))
           end do
           interp = interp + this_term
        end do
@@ -307,7 +296,7 @@ contains
        this_term = y_reg(j)
        do m= 2, 2 + n_poly_lag
           if(m==j) cycle
-          this_term = this_term*(zero - x(m))/(x(j) - x(m))
+          this_term = this_term*(zero - rmesh_reg(m))/(rmesh_reg(j) - rmesh_reg(m))
        end do
        interp = interp + this_term
     end do
