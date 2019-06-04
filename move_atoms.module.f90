@@ -2943,6 +2943,84 @@ contains
   end subroutine update_atom_coord
   !!***
 
+  !!****f* move_atoms/update_r_atom_cell *
+  !!  
+  !!  NAME 
+  !!   update_r_atom_cell
+  !!  USAGE
+  !!
+  !!  PURPOSE
+  !!   Updates the x/y/z_atom_cell in global_module after atom movement
+  !!   Adapted from update_atom_coord
+  !!
+  !!  INPUTS
+  !!
+  !!  USES
+  !!   global_module
+  !!  AUTHOR
+  !!   Zamaan Raza
+  !!  CREATION DATE
+  !!   2019/06/04
+  !!  MODIFICATION HISTORY
+  !!
+  !!  SOURCE
+  !!
+  subroutine update_r_atom_cell
+    
+    use datatypes
+    use global_module, only: x_atom_cell, y_atom_cell, z_atom_cell,   &
+                             id_glob, atom_coord, ni_in_cell, io_lun, &
+                             iprint_MD, IPRINT_TIME_THRES2, id_glob_inv
+    use dimens,        only: r_super_x, r_super_y, r_super_z
+    use group_module,  only: parts
+    use timer_module
+    use GenComms, only: inode, ionode
+    
+    implicit none
+
+    integer        :: ni, id_global
+    real(double)   :: dx, dy, dz
+    type(cq_timer) :: tmr_l_tmp1
+    
+    call start_timer(tmr_std_indexing)    ! NOTE: This will be annotated in area 8
+    call start_timer(tmr_l_tmp1, WITH_LEVEL)
+    dx = r_super_x / parts%ngcellx
+    dy = r_super_y / parts%ngcelly
+    dz = r_super_z / parts%ngcellz
+
+    do id_global = 1, ni_in_cell
+       ni = id_glob_inv(id_global)
+       if (iprint_MD > 3) then
+          if (floor(atom_coord(1,id_global)/dx) /= &
+              floor(x_atom_cell(ni)/dx)) then
+             write (io_lun, *) inode, id_global, &
+                               ' Partition boundary crossed in x ! ', &
+                               dx, atom_coord(1,id_global), x_atom_cell(ni)
+          end if
+          if (floor(atom_coord(2,id_global)/dy) /= &
+              floor(y_atom_cell(ni)/dy)) then
+             write (io_lun, *) inode, id_global, &
+                               'Partition boundary crossed in y ! ', &
+                               dy, atom_coord(2,id_global), y_atom_cell(ni)
+          end if
+          if (floor(atom_coord(3,id_global)/dz) /= &
+              floor(z_atom_cell(ni)/dz)) then
+             write (io_lun, *) inode, id_global, &
+                               'Partition boundary crossed in z ! ', &
+                               dz, atom_coord(3,id_global), z_atom_cell(ni)
+          end if
+       end if
+       x_atom_cell(ni) = atom_coord(1,id_global)
+       y_atom_cell(ni) = atom_coord(2,id_global)
+       z_atom_cell(ni) = atom_coord(3,id_global)
+    end do
+    call stop_print_timer(tmr_l_tmp1, "coordinates update", &
+                          IPRINT_TIME_THRES2)
+    call stop_timer(tmr_std_indexing)
+    return
+  end subroutine update_r_atom_cell
+  !!***
+
   !!****f*  move_atoms/init_velocity *
   !!
   !!  NAME 
