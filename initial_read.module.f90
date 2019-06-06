@@ -148,6 +148,9 @@ contains
   !!    Added test for missing coordinate file name
   !!   2018/09/06 16:45 nakata
   !!    Changed to allow to use MSSFs larger than single-zeta size (i.e., not minimal)
+  !!   2019/06/06 17:30 jack poulton and nakata
+  !!    Changed to allow SZP-MSSFs with flag_MSSF_nonminimal when checking the number of MSSFs
+  !!    Added MSSF_nonminimal_species
   !!  SOURCE
   !!
   subroutine read_and_write(start, start_L, inode, ionode,          &
@@ -205,8 +208,9 @@ contains
     use constraint_module,      only: flag_RigidBonds,constraints
     use support_spec_format,    only: flag_one_to_one, symmetry_breaking, read_option
     use multisiteSF_module,     only: flag_LFD_ReadTVEC, &
-                                      flag_MSSF_nonminimal, &  !nonmin_mssf
-                                      MSSF_nonminimal_offset   !nonmin_mssf
+                                      flag_MSSF_nonminimal, &   !nonmin_mssf
+                                      MSSF_nonminimal_offset, & !nonmin_mssf
+                                      MSSF_nonminimal_species   !nonmin_mssf
     use pao_format
 
     implicit none
@@ -223,7 +227,7 @@ contains
     character(len=80) :: atom_coord_file
     character(len=80) :: part_coord_file
 
-    integer      :: i, ierr, nnd, np, ni, ind_part, j, acz, prncpl
+    integer      :: i, ierr, nnd, np, ni, ind_part, j, acz, prncpl, prncpl0
     integer      :: ncf_tmp, stat
     integer      :: count_SZ, count_SZP
     real(double) :: ecore_tmp
@@ -356,7 +360,7 @@ contains
        end if
        ! Check symmetry-breaking for contracted SFs
        if (.not.flag_one_to_one) then
-          do i = 1, 1, n_species
+          do i = 1, n_species
              count_SZ  = 0
              count_SZP = 0
              do j = 0, pao(i)%greatest_angmom
@@ -365,7 +369,9 @@ contains
                    occ_n(:) = zero
                    do acz = 1, pao(i)%angmom(j)%n_zeta_in_angmom
                       prncpl = pao(i)%angmom(j)%prncpl(acz)
+                      if (acz.ne.1 .and. prncpl.ne.prncpl0) count_SZP = count_SZP + (2*j+1)
                       occ_n(prncpl) = occ_n(prncpl) + pao(i)%angmom(j)%occ(acz)
+                      prncpl0 = prncpl
                    enddo
                    do prncpl = 1, 8
                       if (occ_n(prncpl).gt.zero) count_SZ = count_SZ + (2*j+1)
@@ -373,21 +379,38 @@ contains
                 endif
              enddo
              if (flag_Multisite) then
-                ! multi-site SFs are symmetry-breaking usually.
-                ! multi-site SFs should be in SingleZeta-size in default.
-                ! If the user wants to increase the number of the multi-site SFs, 
+                ! multi-site SFs (MSSFs) are symmetry-breaking usually.
+                ! The default of the number of the MSSFs is SingleZeta-size.
+                ! SZP-size MSSFs with flag_MSSF_nonminimal is also available.
+                ! If the user wants to use the other number of MSSFs, 
                 ! the user must provide the initial SFcoeffmatrix or the trial vectors for the LFD method. 
-                !if (count_SZ.ne.nsf_species(i)) then
-                 !if (.not.flag_LFD_ReadTVEC .and. .not.read_option) then
-                if (count_SZ.ne.nsf_species(i) .and. .not.flag_MSSF_nonminimal) then 
-                   if(inode==ionode) then
-                      write(io_lun,fmt='("You have a major problem with your multi-site support functions.")')
-                      write(io_lun,'(A,I3,A,I3)') "Number of multi-site SFs", nsf_species(i), &
-                           " is not equal to single-zeta size", count_SZ
-                      !write(io_lun,'(A/A)') "You must provide initial SFcoeffmatrix or trial vectors for the LFD method,", &
-                         !                      "or fix Atom.NumberOfSupports
+                if (nsf_species(i).eq.count_SZ) then
+                   MSSF_nonminimal_species(i) = 1   ! SZ-size MSSF
+                else
+                   if (.not.flag_MSSF_nonminimal) then
+                      if(inode==ionode) write(io_lun,'(A/A,I3,A,I3/2A)') &
+                      "You have a major problem with your multi-site support functions.",&
+                      "Number of multi-site SFs", nsf_species(i), &
+                      " is not equal to single-zeta (SZ) size", count_SZ, &
+                      "You need to set Multisite.nonminimal to be .true. or ",&
+                      "set Atom.NumberOfSupports to be SZ size."
+                      call cq_abort("Multi-site support function error for species ",i)
+                   else if (nsf_species(i).eq.count_SZP) then
+                      MSSF_nonminimal_species(i) = 2   ! SZP-size MSSF
+                   else if (nsf_species(i).ne.count_SZP) then
+                      MSSF_nonminimal_species(i) = 3   ! other size
+                      if (.not.flag_LFD_ReadTVEC .and. .not.read_option) then
+                         if (inode==ionode) write(io_lun,'(A/A,I3,A,I3,A,I3/A/A/A/A)') &
+                         "You have a major problem with your multi-site support functions.",&
+                         "Number of multi-site SFs", nsf_species(i), &
+                         " is not equal to single-zeta (SZ) size", count_SZ, " nor single-zeta plus polarisation (SZP) size", count_SZP, &
+                         "Since the automatic setting of the trial vectors in the local filter diagonalisation method is ",&
+                         "avaialble only for SZ or SZP size,",&
+                         "you need to provide initial SFcoeffmatrix or trial vectors for the LFD method, ",&
+                         "or change Atom.NumberOfSupports to be SZ or SZP size."
+                         call cq_abort("Multi-site support function error for species ",i)
+                      endif
                    endif
-                   call cq_abort("Multi-site support function error for species ",i)
                 endif
              else 
                 ! If number of support functions is less than total number of ang. mom. components (ignoring
@@ -2062,20 +2085,23 @@ contains
 !!    - Added RadiusAtomf, RadiusMS and RadiusLD
 !!   2017/04/05 18:00 nakata
 !!    - Added charge_up and charge_dn
+!!   2019/06/06 18:00 nakata
+!!    - Added MSSF_nonminimal_species
 !!  SOURCE
 !!
   subroutine allocate_species_vars
 
-    use dimens,         only: RadiusSupport, RadiusAtomf, RadiusMS, RadiusLD, &
-                              NonLocalFactor, InvSRange, atomicnum
-    use memory_module,  only: reg_alloc_mem, type_dbl
-    use species_module, only: n_species, nsf_species, nlpf_species, npao_species, natomf_species, &
-                              charge, charge_up, charge_dn
-    use species_module, only: mass, non_local_species, ps_file, ch_file, phi_file 
-    use species_module, only: species_label, species_file, type_species
-    use global_module,  only: area_general
-    use GenComms,       only: cq_abort
-    use blip,           only: blip_info
+    use dimens,             only: RadiusSupport, RadiusAtomf, RadiusMS, RadiusLD, &
+                                  NonLocalFactor, InvSRange, atomicnum
+    use memory_module,      only: reg_alloc_mem, type_dbl
+    use species_module,     only: n_species, nsf_species, nlpf_species, npao_species, natomf_species, &
+                                  charge, charge_up, charge_dn
+    use species_module,     only: mass, non_local_species, ps_file, ch_file, phi_file 
+    use species_module,     only: species_label, species_file, type_species
+    use global_module,      only: area_general
+    use GenComms,           only: cq_abort
+    use blip,               only: blip_info
+    use multisiteSF_module, only: MSSF_nonminimal_species
 
     implicit none
 
@@ -2151,6 +2177,9 @@ contains
     call reg_alloc_mem(area_general,n_species,type_dbl)
     allocate(species_file(n_species),STAT=stat)
     if(stat/=0) call cq_abort("Error allocating species_file in allocate_species_vars: ",            n_species,stat)
+    call reg_alloc_mem(area_general,n_species,type_dbl)
+    allocate(MSSF_nonminimal_species(n_species),STAT=stat)
+    if(stat/=0) call cq_abort("Error allocating MSSF_nonminimal_species in allocate_species_vars: ", n_species,stat)
     call reg_alloc_mem(area_general,n_species,type_dbl)
     !
     call stop_timer(tmr_std_allocation)
