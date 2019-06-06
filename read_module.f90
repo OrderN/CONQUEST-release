@@ -93,7 +93,7 @@ contains
     use pseudo_atom_info, ONLY: paos, flag_use_Vl, val, deltaE_large_radius, deltaE_small_radius, &
          flag_default_cutoffs, pao_cutoff_energies, pao_cutoff_radii, pao_cutoff_default
     use units, ONLY: HaToeV
-    use mesh, ONLY: mesh_type, hamann, siesta, alpha, beta, nmesh_reg, delta_r_reg
+    use mesh, ONLY: mesh_type, hamann, siesta, alpha, beta, delta_r_reg
 
     ! Passed variables
     integer :: species

@@ -13,7 +13,7 @@ contains
     use datatypes
     use numbers
     use pseudo_tm_info, ONLY: pseudo
-    use mesh, ONLY: nmesh, make_mesh, rr, make_mesh_reg
+    use mesh, ONLY: nmesh, make_mesh, rr
     use global_module, ONLY: iprint
     use GenComms, ONLY: cq_abort
     use radial_xc, ONLY: get_vxc
@@ -23,13 +23,11 @@ contains
     
     implicit none
 
+    ! Passed variables
     integer :: i_species
 
-    integer :: ell, en, i, j, k, zeta, i_shell, grid_size, n_val, lun, nrc
-    real(double), allocatable, dimension(:) :: psi_reg, x_reg, vha, vxc, vha_reg, psi, atomic_rho, &
-         small_cutoff, large_cutoff, cutoffs, vha_conf
-    real(double) :: energy, max_cutoff, small_energy, large_energy, dot_p, alpha_hamann
-    real(double) :: radius_small, radius_med, radius_large, sum_small, sum_large, orig_dr
+    ! Local variables
+    real(double), allocatable, dimension(:) :: vha, vxc, atomic_rho, vha_conf
     
     write(*,fmt='(/"Generating PAOs for ",a2/)') pte(pseudo(i_species)%z)
     !
@@ -71,11 +69,6 @@ contains
     ! Interpolation
     ! 
     write(*,fmt='(/2x,"Interpolating onto regular mesh")')
-    !
-    ! Make mesh
-    !
-    max_cutoff = maxval(paos%cutoff)
-    call make_mesh_reg(max_cutoff)
     !
     ! Interpolate PAOs
     !
@@ -170,13 +163,11 @@ contains
              write(*,fmt='(4x,3i3,x,2f13.8)') en, ell, zeta, paos%energy(zeta,i_shell), &
                   paos%energy(zeta,i_shell)*HaToeV
              en = paos%npao(i_shell)
-             !if(iprint>2) write(*,*) '# shell, n, l, zeta: ',i_shell, ell, en, zeta
              call find_radius_from_energy(i_species,en, ell, paos%cutoff(zeta,i_shell), &
                   val%en_ps(i_shell) + paos%energy(zeta,i_shell), vha, vxc, .false.)
-             ! Now ensure that we have exact cutoff - effectively round up (2+ not 1+)
-             grid_size = 2+floor(paos%cutoff(zeta,i_shell)/delta_r_reg)
-             paos%cutoff(zeta,i_shell) = delta_r_reg*real(grid_size-1,double)
-             !if(iprint>2) write(*,*) '# Setting cutoff to ',paos%cutoff(zeta,i_shell)
+             ! Set cutoff to the first regular mesh point BEYOND the actual cutoff
+             grid_size = 1+floor(paos%cutoff(zeta,i_shell)/delta_r_reg)
+             paos%cutoff(zeta,i_shell) = delta_r_reg*real(grid_size,double)
           end do
        end do
        do i_shell = val%n_occ+1,paos%n_shells
@@ -392,7 +383,7 @@ contains
 
     use datatypes
     use numbers
-    use mesh, ONLY: nmesh, rr, delta_r_reg, rmesh_reg, new_interpolate
+    use mesh, ONLY: nmesh, rr, delta_r_reg, interpolate, make_mesh_reg, convert_r_to_i
     use pseudo_tm_info, ONLY: pseudo
     use write, ONLY: write_pao_plot
 
@@ -402,26 +393,25 @@ contains
     integer :: i_species
 
     ! Local variables
-    integer :: i_shell, en, ell, zeta, nmesh_pao
+    integer :: i_shell, en, ell, zeta, nmesh_pao, nrc
  
     do i_shell = 1,paos%n_shells
        ell = paos%l(i_shell)
        en = paos%n(i_shell)
        do zeta = 1,paos%nzeta(i_shell)
+          write(*,*) 'Interpolate PAOs ',ell,en,zeta,paos%cutoff(zeta,i_shell)
+          call convert_r_to_i(paos%cutoff(zeta,i_shell),nrc)
+          paos%cutoff(zeta,i_shell) = rr(nrc-1)
           nmesh_pao = floor(paos%cutoff(zeta,i_shell)/delta_r_reg) + 1
           allocate(paos%psi_reg(zeta,i_shell)%f(nmesh_pao), paos%psi_reg(zeta,i_shell)%x(nmesh_pao))
-          paos%psi_reg(zeta,i_shell)%x = rmesh_reg(1:nmesh_pao)
-          paos%psi_reg(zeta,i_shell)%delta = delta_r_reg
+          call make_mesh_reg(paos%psi_reg(zeta,i_shell)%x,nmesh_pao,paos%cutoff(zeta,i_shell))
+          paos%psi_reg(zeta,i_shell)%delta = paos%cutoff(zeta,i_shell)/real(nmesh_pao-1,double)
           paos%psi_reg(zeta,i_shell)%n = nmesh_pao
           ! Interpolate
-          call new_interpolate(paos%psi_reg(zeta,i_shell)%f,nmesh_pao,&
-               rr,paos%psi(zeta,i_shell)%f,nmesh,zero)
-          !call interpolate(paos%psi_reg(zeta,i_shell)%f,nmesh_reg,&
-          !     paos%psi(zeta,i_shell)%f,nmesh,zero)
-          !if(flag_plot_output) call write_pao_plot(pseudo(i_species)%z,rmesh_reg(1:nmesh_pao), &
-          !     paos%psi_reg(zeta,i_shell)%f, nmesh_pao, en,ell,zeta)
-          if(flag_plot_output) call write_pao_plot(pseudo(i_species)%z,rr(1:nmesh), &
-               paos%psi(zeta,i_shell)%f, nmesh, en,ell,zeta)
+          call interpolate(paos%psi_reg(zeta,i_shell)%x,paos%psi_reg(zeta,i_shell)%f,nmesh_pao,&
+               rr(1:nrc-1),paos%psi(zeta,i_shell)%f(1:nrc-1),nrc-1,zero)
+          if(flag_plot_output) call write_pao_plot(pseudo(i_species)%z,paos%psi_reg(zeta,i_shell)%x, &
+               paos%psi_reg(zeta,i_shell)%f, nmesh_pao,"PAO", en,ell,zeta)
        end do
     end do
   end subroutine interpolate_paos
@@ -431,8 +421,9 @@ contains
 
     use datatypes
     use numbers
-    use mesh, ONLY: nmesh, rr, delta_r_reg, convert_r_to_i, new_interpolate
+    use mesh, ONLY: nmesh, rr, delta_r_reg, interpolate, make_mesh_reg, convert_r_to_i
     use pseudo_tm_info, ONLY: pseudo, rad_alloc
+    use write, ONLY: write_pao_plot
 
     implicit none
 
@@ -441,31 +432,50 @@ contains
     real(double), dimension(nmesh) :: vha_conf
 
     ! Local variables
-    integer :: i_shell, en, ell, zeta, nmesh_pot, i, j, k, nrc
+    integer :: i_shell, en, ell, zeta, nmesh_pot, i, j, k, nrc, istart
     real(double) :: max_cutoff
+    real(double), allocatable, dimension(:) :: x_reg
 
+    !
     ! Kleinman-Bylander projectors
+    !
     j = 0
     if(iprint>1) write(*,fmt='(/4x,"VKB projectors")')
-    nmesh_pot = floor(local_and_vkb%r_vkb/delta_r_reg) + 1 ! +2 in original: why?!
     do ell = 0, pseudo(i_species)%lmax
        do i=1,local_and_vkb%n_proj(ell)
           j = j+1
-          call rad_alloc(pseudo(i_species)%pjnl(j),nmesh_pot)
-          pseudo(i_species)%pjnl(j)%delta = delta_r_reg
-          ! Scale by r**(l+1)
+          ! Scale projector by r**(l+1)
           do k=0,ell
              local_and_vkb%projector(:,i,ell) = local_and_vkb%projector(:,i,ell)/rr
           end do
-          ! Grid point, projector, ell
-          call new_interpolate(pseudo(i_species)%pjnl(j)%f,nmesh_pot, &
-               rr,local_and_vkb%projector(:,i,ell),local_and_vkb%ngrid_vkb,zero)
-          !call interpolate(pseudo(i_species)%pjnl(j)%f,grid_size, &
-          !     local_and_vkb%projector(:,i,ell),local_and_vkb%ngrid_vkb,zero)
-          pseudo(i_species)%pjnl(j)%cutoff = delta_r_reg*real(nmesh_pot-1,double) !local_and_vkb%r_vkb
+          ! Find actual cutoff: two successive points with magnitude less than RD_ERR
+          ! We may want to start this somewhere r=0.1 to avoid errors
+          nrc = local_and_vkb%ngrid_vkb
+          call convert_r_to_i(0.1_double,istart)
+          do k = istart, local_and_vkb%ngrid_vkb-1
+             if(abs(local_and_vkb%projector(k,i,ell))<RD_ERR.AND.&
+                  abs(local_and_vkb%projector(k+1,i,ell))<RD_ERR) then
+                nrc = k
+                exit
+             end if
+          end do
+          ! Create regular mesh
+          pseudo(i_species)%pjnl(j)%cutoff = rr(nrc)
+          nmesh_pot = floor(rr(nrc)/delta_r_reg) + 1 ! +2 in original: why?!
+          allocate(x_reg(nmesh_pot))
+          call make_mesh_reg(x_reg,nmesh_pot,rr(nrc))
+          call rad_alloc(pseudo(i_species)%pjnl(j),nmesh_pot)
+          pseudo(i_species)%pjnl(j)%delta = rr(nrc)/real(nmesh_pot-1,double)
+          call interpolate(x_reg,pseudo(i_species)%pjnl(j)%f,nmesh_pot, &
+               rr(1:nrc),local_and_vkb%projector(1:nrc,i,ell),nrc,zero)
+          if(flag_plot_output) call write_pao_plot(pseudo(i_species)%z,x_reg, &
+               pseudo(i_species)%pjnl(j)%f,nmesh_pot,"KB",ell=ell,zeta=i)
+          deallocate(x_reg)
        end do
     end do
+    !
     ! Partial core charge
+    !
     if(pseudo(i_species)%flag_pcc) then
        if(iprint>1) write(*,fmt='(/4x,"Partial core correction")')
        ! Find core charge cutoff
@@ -479,32 +489,46 @@ contains
           end if
        end do
        nmesh_pot = floor(pseudo(i_species)%chpcc%cutoff/delta_r_reg) + 1 ! 2 in original?
+       allocate(x_reg(nmesh_pot))
        call rad_alloc(pseudo(i_species)%chpcc,nmesh_pot)
-       call new_interpolate(pseudo(i_species)%chpcc%f,nmesh_pot, &
+       pseudo(i_species)%chpcc%delta = pseudo(i_species)%chpcc%cutoff/real(nmesh_pot-1,double)
+       call make_mesh_reg(x_reg,nmesh_pot,pseudo(i_species)%chpcc%cutoff)
+       call interpolate(x_reg,pseudo(i_species)%chpcc%f,nmesh_pot, &
             rr,local_and_vkb%pcc,local_and_vkb%ngrid,zero)
-       !call interpolate(pseudo(i_species)%chpcc%f,nmesh_pot, &
-       !     local_and_vkb%pcc,local_and_vkb%ngrid,zero)
-       pseudo(i_species)%chpcc%delta = delta_r_reg
-       pseudo(i_species)%chpcc%cutoff = delta_r_reg*real(nmesh_pot-1,double)
+       if(flag_plot_output) call write_pao_plot(pseudo(i_species)%z,x_reg, &
+            pseudo(i_species)%chpcc%f,nmesh_pot,"PCC")
+       deallocate(x_reg)
     end if
+    !
     ! Local - the radius is taken as largest PAO for compatibility with NA
+    !
     if(iprint>1) write(*,fmt='(/4x,"Local potential")')
     max_cutoff = maxval(paos%cutoff)
     nmesh_pot = max_cutoff/delta_r_reg + 1
+    allocate(x_reg(nmesh_pot))
     call rad_alloc(pseudo(i_species)%vlocal,nmesh_pot)
-    pseudo(i_species)%vlocal%delta = delta_r_reg
     pseudo(i_species)%vlocal%cutoff = max_cutoff
-    call convert_r_to_i(pseudo(i_species)%vlocal%cutoff,nrc)
-    !write(*,*) 'nrc, rr, cutoff: ',nrc,rr(nrc-1),rr(nrc),pseudo(i_species)%vlocal%cutoff
-    call new_interpolate(pseudo(i_species)%vlocal%f,nmesh_pot, &
-         rr,local_and_vkb%local,local_and_vkb%ngrid,-pseudo(i_species)%zval/pseudo(i_species)%vlocal%cutoff)!local_and_vkb%local(nrc-1))
-    ! Neutral atom potential
+    pseudo(i_species)%vlocal%delta = max_cutoff/real(nmesh_pot-1,double)
+    call make_mesh_reg(x_reg,nmesh_pot,pseudo(i_species)%vlocal%cutoff)
+    !
+    ! Interpolate using exact value of local potential at cutoff: -Z/r
+    !
+    call interpolate(x_reg,pseudo(i_species)%vlocal%f,nmesh_pot, &
+         rr,local_and_vkb%local,local_and_vkb%ngrid,-pseudo(i_species)%zval/pseudo(i_species)%vlocal%cutoff)
+    if(flag_plot_output) call write_pao_plot(pseudo(i_species)%z,x_reg, &
+         pseudo(i_species)%vlocal%f,nmesh_pot,"Vlocal")
+    !
+    ! Neutral atom potential - same mesh as local
+    !
     if(iprint>1) write(*,fmt='(/4x,"Neutral atom potential")')
     call rad_alloc( pseudo(i_species)%vna, nmesh_pot )
-    pseudo(i_species)%vna%delta = delta_r_reg
-    pseudo(i_species)%vna%cutoff = max_cutoff
-    call new_interpolate(pseudo(i_species)%vna%f,pseudo(i_species)%vna%n,&
+    pseudo(i_species)%vna%delta = pseudo(i_species)%vlocal%delta
+    pseudo(i_species)%vna%cutoff = pseudo(i_species)%vlocal%cutoff
+    call interpolate(x_reg,pseudo(i_species)%vna%f,pseudo(i_species)%vna%n,&
          rr,vha_conf,nmesh,zero)
+    if(flag_plot_output) call write_pao_plot(pseudo(i_species)%z,x_reg, &
+         pseudo(i_species)%vna%f,nmesh_pot,"VNA")
+    deallocate(x_reg)
     return
   end subroutine interpolate_potentials
   
@@ -513,7 +537,7 @@ contains
 
     use datatypes
     use numbers
-    use mesh, ONLY: nmesh, rr, delta_r_reg
+    use mesh, ONLY: nmesh, rr, delta_r_reg, convert_r_to_i
     use units, ONLY: HaToeV
     
     implicit none
@@ -540,8 +564,6 @@ contains
        call find_radius_from_energy(i_species,paos%npao(i_shell), paos%l(i_shell), &
             large_cutoff(i_shell), val%en_ps(i_shell)+deltaE_large_radius, vha, vxc, .false.)
        ! Round to grid step
-       grid_size = 2+floor(large_cutoff(i_shell)/delta_r_reg)
-       large_cutoff(i_shell) = delta_r_reg*real(grid_size-1,double)
        if(val%semicore(i_shell)==0) then
           write(*,fmt='(4x,2i3,2f13.8," (large radius)")') paos%n(i_shell), paos%l(i_shell), &
                deltaE_large_radius, deltaE_large_radius*HaToeV
@@ -549,13 +571,9 @@ contains
                deltaE_small_radius, deltaE_small_radius*HaToeV
           call find_radius_from_energy(i_species,paos%npao(i_shell), paos%l(i_shell), &
                small_cutoff(i_shell), val%en_ps(i_shell)+deltaE_small_radius, vha, vxc, .false.)
-          !write(*,*) '# Cutoffs: ',large_cutoff, small_cutoff
-          grid_size = 2+floor(small_cutoff(i_shell)/delta_r_reg)
-          small_cutoff(i_shell) = delta_r_reg*real(grid_size-1,double)
        else
           write(*,fmt='(4x,2i3,2f13.8," (only radius)")') paos%n(i_shell), paos%l(i_shell), &
                deltaE_large_radius, deltaE_large_radius*HaToeV
-          !write(*,*) '# Cutoff: ',large_cutoff
           small_cutoff(i_shell) = large_cutoff(i_shell)
        end if
     end do
@@ -569,9 +587,11 @@ contains
              paos%cutoff(2,i_shell) = small_cutoff(i_shell)
           else if(paos%nzeta(i_shell)==3) then
              paos%cutoff(2,i_shell) = half*(large_cutoff(i_shell) + small_cutoff(i_shell))
+             ! Locate nearest logarithmic grid point
+             call convert_r_to_i(paos%cutoff(2,i_shell),grid_size)
+             paos%cutoff(2,i_shell) = rr(grid_size-1)
              paos%cutoff(3,i_shell) = small_cutoff(i_shell)
           end if
-          !write(*,*) '# Cutoffs: ',paos%cutoff(:,i_shell)
        end do
        ! Set polarisation radii
        if(paos%n_shells>val%n_occ) then ! Polarisation
@@ -582,7 +602,6 @@ contains
              paos%cutoff(2,paos%n_shells)=paos%cutoff(2,paos%n_shells-1)
              paos%cutoff(3,paos%n_shells)=paos%cutoff(3,paos%n_shells-1)
           end if
-          !write(*,*) '# Cutoffs: ',paos%cutoff(:,paos%n_shells)
        end if
     else if(paos%flag_cutoff==pao_cutoff_radii) then ! Same radius for all l/n shells
        ! Sum over radii of different shells, excluding polarisation
@@ -600,12 +619,12 @@ contains
        average_large = average_large/real(n_shells_average, double)
        average_small = average_small/real(n_shells_average, double)
        ! Round to grid step
-       grid_size = 2+floor(average_large/delta_r_reg)
-       average_large = delta_r_reg*real(grid_size-1,double)
-       grid_size = 2+floor(average_small/delta_r_reg)
-       average_small = delta_r_reg*real(grid_size-1,double)
-       grid_size = 2+floor((average_large+average_small)/(two*delta_r_reg))
-       average_mid = delta_r_reg*real(grid_size-1,double)      
+       call convert_r_to_i(average_large,grid_size)
+       average_large = rr(grid_size-1)
+       call convert_r_to_i(average_small,grid_size)
+       average_small = rr(grid_size-1)
+       call convert_r_to_i(half*(average_large+average_small),grid_size)
+       average_mid = rr(grid_size-1)
        ! Set radii for all shells
        do i_shell = 1, val%n_occ
           if(val%semicore(i_shell)==1) then
@@ -645,7 +664,7 @@ contains
     use datatypes
     use numbers
     use GenComms, ONLY: cq_abort
-    use mesh, ONLY: rr, rr_squared, nmesh, alpha, make_mesh, beta, sqrt_rr, drdi, drdi_squared, convert_r_to_i
+    use mesh, ONLY: rr, rr_squared, nmesh, alpha, make_mesh, beta, sqrt_rr, drdi, drdi_squared
     use pseudo_tm_info, ONLY: pseudo
     
     implicit none
@@ -792,7 +811,7 @@ contains
     nmax = nmax - 1
     ! NEW !
     write(*,*) 'Rc and rr(nmax) are: ',Rc,rr(nmax)
-    !Rc = rr(nmax)
+    Rc = rr(nmax)
     ! NEW !
     if(abs(energy)<RD_ERR) then
        energy = half*(e_lower+e_upper)

@@ -108,7 +108,6 @@ contains
     use numbers, ONLY: two, zero
     use species_module, ONLY: n_species
     use input_module, ONLY: io_assign, io_close
-    use mesh, ONLY: nmesh_reg, rmesh_reg
     use pseudo_atom_info, ONLY: paos, val
     use pseudo_tm_info, ONLY: pseudo
     use periodic_table, ONLY: pte
@@ -215,7 +214,7 @@ contains
     return
   end subroutine write_pseudopotential
 
-  subroutine write_pao_plot(z,r,pao,n_mesh,en,ell,zeta)
+  subroutine write_pao_plot(z,r,pao,n_mesh,tag,en,ell,zeta)
 
     use datatypes
     use input_module, ONLY: io_assign, io_close
@@ -225,15 +224,21 @@ contains
     implicit none
 
     ! Passed variables
-    integer :: z, n_mesh, ell, en, zeta
+    integer :: z, n_mesh
+    integer, optional :: ell, en, zeta
     real(double), dimension(n_mesh) :: r, pao
+    character(len=*) :: tag
 
     ! Local variables
     character(len=80) :: filename
     character(len=10) :: digitstr = "0123456789"
     integer :: lun,i
 
-    filename = trim(pte(z))//"PAO_n_"//digitstr(en+1:en+1)//"_l_"//digitstr(ell+1:ell+1)//"_zeta_"//digitstr(zeta+1:zeta+1)//".dat"
+    filename = trim(pte(z))//tag
+    if(present(en)) filename = trim(filename)//"_n_"//digitstr(en+1:en+1)
+    if(present(ell)) filename = trim(filename)//"_l_"//digitstr(ell+1:ell+1)
+    if(present(zeta)) filename = trim(filename)//"_zeta_"//digitstr(zeta+1:zeta+1)
+    filename = trim(filename)//".dat"
     call io_assign(lun)
     open(unit=lun, file=filename)
     do i=1,n_mesh
