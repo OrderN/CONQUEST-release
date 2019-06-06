@@ -140,6 +140,8 @@
 !!    Added enthalpy and stress tolerances for cell optimisation
 !!   2019/03/28 zamaan
 !!    Added flag_stress and flag_full_stress
+!!   2019/05/21 zamaan
+!!    Added RNG seed
 !!  SOURCE
 !!
 module global_module
@@ -176,6 +178,8 @@ module global_module
   logical :: restart_LorK, restart_rho, restart_T, restart_X
 
   integer :: global_maxatomspart ! Maximum atoms per partition, if exceeded, triggers partitioning refinement
+
+  integer :: rng_seed
 
   integer :: load_balance
   logical :: many_processors ! Selects appropriate algorithm for partitioning
