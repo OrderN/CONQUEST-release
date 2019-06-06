@@ -1602,7 +1602,8 @@ contains
                               ni_in_cell, rcellx, rcelly, rcellz,     &
                               flag_self_consistent,                   &
                               IPRINT_TIME_THRES1, flag_pcc_global,    &
-                              flag_LmatrixReuse, flag_SFcoeffReuse
+                              flag_LmatrixReuse, flag_SFcoeffReuse,   &
+                              atom_coord
     use minimise,       only: get_E_and_F, sc_tolerance, L_tolerance, &
                               n_L_iterations
     use GenComms,       only: inode, ionode, cq_abort
@@ -1635,6 +1636,7 @@ contains
     real(double), dimension(:), allocatable :: store_density
     real(double) :: k3_old, k3_local, kmin_old
     real(double), dimension(:,:), allocatable :: config_start
+    real(double), dimension(3,ni_in_cell) :: dummy
     real(double)  :: orcellx, orcelly, orcellz
 
     real(double) :: dx, dy, dz, d
@@ -1693,20 +1695,19 @@ contains
        if (ionode==inode) write(io_lun,*) "CG: 1st stage"
 
        if (flag_SFcoeffReuse) then
-          call update_pos_and_matrices(updateSFcoeff,force(:,1:ni_in_cell))
+          call update_pos_and_matrices(updateSFcoeff, force(:,1:ni_in_cell))
        else
-          call update_pos_and_matrices(updateLorK,force(:,1:ni_in_cell))
+          call update_pos_and_matrices(updateLorK, force(:,1:ni_in_cell))
        end if
 
        if (inode==ionode .and. iprint_MD>2) then
+          write(io_lun,'(4x,a)') "atom_coord:"
           do i=1,ni_in_cell
-             write (io_lun,*) 'Position: ', i, x_atom_cell(i), y_atom_cell(i), z_atom_cell(i)
+             write (io_lun,'(6x,i8,3f16.8)') i, atom_coord(:,i)
+             ! write (io_lun,*) 'Position: ', i, x_atom_cell(i), y_atom_cell(i), z_atom_cell(i)
           end do
        end if
        call update_H(fixed_potential)
-       !Update start_x,start_y & start_z
-       call update_vector_indices(config_start)
-       call update_vector_indices(config)
 
        ! Write out atomic positions
        if (iprint_MD > 2) then
@@ -1795,15 +1796,13 @@ contains
     endif
 
     if (inode == ionode .and. iprint_MD > 1) then
+       write(io_lun,'(4x,a)') "atom_coord:"
        do i=1,ni_in_cell
-          write (io_lun,*) 'Position: ', i, &
-                           x_atom_cell(i), y_atom_cell(i), z_atom_cell(i)
+          write (io_lun,'(6x,i8,3f16.8)') i, atom_coord(:,i)
+          ! write (io_lun,*) 'Position: ', i, x_atom_cell(i), y_atom_cell(i), z_atom_cell(i)
        end do
     end if
     call update_H(fixed_potential)
-
-    call update_vector_indices(config_start)
-    call update_vector_indices(config)
 
     if (iprint_MD > 2) then
        call write_atomic_positions("UpdatedAtoms_tmp.dat", trim(pdb_template))
@@ -1908,20 +1907,19 @@ contains
 
        write (io_lun,*) "CG: 3rd stage"
        if(flag_SFcoeffReuse) then
-          call update_pos_and_matrices(updateSFcoeff,force(:,1:ni_in_cell))
+          call update_pos_and_matrices(updateSFcoeff, force(:,1:ni_in_cell))
        else
-          call update_pos_and_matrices(updateLorK,force(:,1:))
+          call update_pos_and_matrices(updateLorK, force(:,1:ni_in_cell))
        endif
 
        if (inode == ionode .and. iprint_MD > 2) then
+          write(io_lun,'(4x,a)') "atom_coord:"
           do i=1,ni_in_cell
-             write (io_lun,*) 'Position: ', i, x_atom_cell(i), y_atom_cell(i), z_atom_cell(i)
+             write (io_lun,'(6x,i8,3f16.8)') i, atom_coord(:,i)
+             ! write (io_lun,*) 'Position: ', i, x_atom_cell(i), y_atom_cell(i), z_atom_cell(i)
           end do
        end if
        call update_H(fixed_potential)
-
-       call update_vector_indices(config_start)
-       call update_vector_indices(config)
 
        if (iprint_MD > 2) then
           call write_atomic_positions("UpdatedAtoms_tmp.dat", &
@@ -3428,6 +3426,7 @@ contains
                                dz, atom_coord(3,id_global), z_atom_cell(ni)
           end if
        end if
+       write(io_lun,*) id_global, ni
        x_atom_cell(ni) = atom_coord(1,id_global)
        y_atom_cell(ni) = atom_coord(2,id_global)
        z_atom_cell(ni) = atom_coord(3,id_global)
@@ -4305,9 +4304,8 @@ contains
 
     use numbers
     use GenComms,      only: inode, ionode
-    use global_module, only: x_atom_cell, y_atom_cell, z_atom_cell, &
-                             rcellx, rcelly, rcellz, ni_in_cell, &
-                             iprint_MD, id_glob_inv
+    use global_module, only: rcellx, rcelly, rcellz, ni_in_cell, &
+                             iprint_MD, id_glob_inv, atom_coord
 
     implicit none
 
@@ -4332,12 +4330,14 @@ contains
     rcelly = (one + config(2,ni_in_cell+1))*cell_ref(2)
     rcellz = (one + config(3,ni_in_cell+1))*cell_ref(3)
     do i=1,ni_in_cell
-      ! i = id_glob_inv(i_global) 
-      x_atom_cell(i) = config(1,i)*rcellx
-      y_atom_cell(i) = config(2,i)*rcelly
-      z_atom_cell(i) = config(3,i)*rcellz
+      atom_coord(1,i) = config(1,i)*rcellx
+      atom_coord(2,i) = config(2,i)*rcelly
+      atom_coord(3,i) = config(3,i)*rcellz
     end do
 
+    ! Now we've changed atom_coord, we want these changes to be reflected
+    ! in x/y/z_atom_cell
+    call update_r_atom_cell
     call rescale_grids_and_density(orcellx, orcelly, orcellz)
 
   end subroutine vector_to_cq
@@ -4369,9 +4369,8 @@ contains
   subroutine cq_to_vector(force, config, cell_ref, target_press)
  
     use numbers
-    use global_module, only: x_atom_cell, y_atom_cell, z_atom_cell, &
-                             rcellx, rcelly, rcellz, ni_in_cell, &
-                             iprint_MD, id_glob
+    use global_module, only: rcellx, rcelly, rcellz, ni_in_cell, &
+                             iprint_MD, id_glob, atom_coord
     use GenComms,      only: inode, ionode
     use force_module,  only: stress, tot_force
 
@@ -4383,7 +4382,7 @@ contains
     real(double), intent(in)                  :: target_press
 
     ! local variables
-    integer                     :: i, j, i_global
+    integer                     :: i, i_global
     real(double)                :: vol
     real(double), dimension(3)  :: one_plus_strain
 
@@ -4400,16 +4399,12 @@ contains
         -(stress(i,i) + target_press*vol)/one_plus_strain(i)
     end do
     do i=1,ni_in_cell
-      ! i_global = id_glob(i)
-      config(1,i) = x_atom_cell(i)/rcellx
-      config(2,i) = y_atom_cell(i)/rcelly
-      config(3,i) = z_atom_cell(i)/rcellz
+      config(1,i) = atom_coord(1,i)/rcellx
+      config(2,i) = atom_coord(2,i)/rcelly
+      config(3,i) = atom_coord(3,i)/rcellz
       force(1,i) = tot_force(1,i)*rcellx
       force(2,i) = tot_force(2,i)*rcelly
       force(3,i) = tot_force(3,i)*rcellz
-!      force(1,i) = tot_force(1,i-1)/rcellx
-!      force(2,i) = tot_force(2,i-1)/rcelly
-!      force(3,i) = tot_force(3,i-1)/rcellz
     end do
 
     if (inode==ionode .and. iprint_MD>1) then
@@ -4428,59 +4423,6 @@ contains
 
   end subroutine cq_to_vector
   !!***
-
-  !!****f* move_atoms/update_vector_indices *
-  !!
-  !!  NAME 
-  !!   update_vector_indices
-  !!  USAGE
-  !! 
-  !!  PURPOSE
-  !!   When atoms are moved in safemin_full, the indices for the force and 
-  !!   config vectors may change. This sub ensures that they are consistent.
-  !!   Adapted from update_start_xyz.
-  !!  INPUTS
-  !! 
-  !!  USES
-  !! 
-  !!  AUTHOR
-  !!   Zamaan Raza
-  !!  CREATION DATE
-  !!   2019/02/07
-  !!  MODIFICATION HISTORY
-  !!
-  !!  SOURCE
-  !!
-  subroutine update_vector_indices(vector)
-
-    use datatypes
-    use GenComms,       only: inode, ionode
-    use global_module,  only: ni_in_cell, id_glob, id_glob_inv, iprint_MD
-
-    implicit none
-
-    ! passed variables
-    real(double), dimension(:,:), intent(inout) :: vector
-
-    ! local variables
-    real(double), dimension(:,:), allocatable :: v_tmp
-    integer :: i, i_old, id_global
-
-    if (inode==ionode .and. iprint_MD > 2) &
-      write(io_lun,'(2x,a)') "move_atoms/update_vector_indices"
-
-    allocate(v_tmp(3,ni_in_cell+1))
-
-    v_tmp = vector
-    do i=1,ni_in_cell
-      id_global = id_glob(i)
-      i_old = id_glob_inv(id_global)
-      vector(:,i) = v_tmp(:,i_old)
-    end do
-
-    deallocate(v_tmp)
-
-  end subroutine update_vector_indices
 
   !!****f* move_atoms/enthalpy *
   !!
@@ -4528,58 +4470,6 @@ contains
     end if
 
   end function enthalpy
-  !!***
-
-  !!****f* move_atoms/print_displacement *
-  !!
-  !!  NAME 
-  !!   print_displacement
-  !!  USAGE
-  !! 
-  !!  PURPOSE
-  !!   Print the atomic displacements during geometry optimisation
-  !!  INPUTS
-  !! 
-  !!  USES
-  !! 
-  !!  AUTHOR
-  !!   Zamaan Raza
-  !!  CREATION DATE
-  !!   2019/02/13
-  !!  MODIFICATION HISTORY
-  !!
-  !!  SOURCE
-  subroutine print_displacement(orcellx, orcelly, orcellz, &
-                                start_x, start_y, start_z)
-
-    use datatypes
-    use GenComms,       only: inode, ionode
-    use global_module,  only: iprint_MD, x_atom_cell, y_atom_cell, &
-                              z_atom_cell, rcellx, rcelly, rcellz, ni_in_cell
-
-    ! passed variables
-    real(double), dimension(:), intent(in)  :: start_x, start_y, start_z
-    real(double), intent(in)  :: orcellx, orcelly, orcellz
-
-    ! local variables
-    real(double)  :: dx, dy, dz
-    integer       :: i
-
-    if (inode==ionode) then
-      write(io_lun,'(4x,a)') "Change in cell dimensions:"
-      write(io_lun,'(4x,a4,f16.8)') 'a', rcellx - orcellx
-      write(io_lun,'(4x,a4,f16.8)') 'b', rcelly - orcelly
-      write(io_lun,'(4x,a4,f16.8)') 'c', rcellz - orcellz
-      write(io_lun,'(4x,a8,a16)') 'atom', 'displacement'
-      do i=1,ni_in_cell
-        dx = x_atom_cell(i) - start_x(i)
-        dy = y_atom_cell(i) - start_y(i)
-        dz = z_atom_cell(i) - start_z(i)
-        write(io_lun,'(4x,i8,f16.8)') i, sqrt(dx**2 + dy**2 + dz**2)
-      end do
-    end if
-
-  end subroutine print_displacement
   !!***
 
 end module move_atoms

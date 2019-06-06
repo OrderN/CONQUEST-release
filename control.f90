@@ -2476,15 +2476,9 @@ end subroutine write_md_data
         write (io_lun,'(4x,"CG iteration: ",i5," Gamma: ",f12.6)') iter, gamma
       ggold = gg
       ! Build search direction
-      ! For the lattice
-      do i=1,3
-        cg(i,ni_in_cell+1) = gamma*cg(i,ni_in_cell+1) + force(i,ni_in_cell+1)
-      end do
-      ! For the ions
       do j=1,ni_in_cell+1
-        jj = id_glob(j)
         do i=1,3
-          cg(i,j) = gamma*cg(i,j) + force(i,jj)
+          cg(i,j) = gamma*cg(i,j) + force(i,j)
         end do
       end do
       force_old = force
