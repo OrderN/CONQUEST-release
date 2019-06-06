@@ -2293,21 +2293,22 @@ end subroutine write_md_data
       ! If the force convergence criterion has been met after this step,
       ! we can assume the ionic positions are correct, THEN check cell
       ! convergence
-        if (abs(max) < MDcgtol) then
-          if (abs(dH)<enthalpy_tolerance .and. max_stress < cell_stress_tol) then
-            done_cell = .true.
-            if (inode==ionode) then
-              write (io_lun, &
-                fmt='(4x,"Maximum force below threshold: ",f12.5)') max
-              write (io_lun, &
-                fmt='(4x,"Enthalpy change below threshold: ",f20.10)') &
-                  enthalpy_tolerance*enthalpy_tolerance
-              write(io_lun, &
-                fmt='(4x,"Stress change below threshold:   ",f20.10)') &
-                  max_stress
-            end if
+      if (abs(dH) < enthalpy_tolerance) then
+        if (abs(max) < MDcgtol .and. max_stress < cell_stress_tol) then
+          if (inode==ionode) then
+            write (io_lun, &
+              fmt='(4x,"Maximum force below threshold: ",f12.5)') max
+            write (io_lun, &
+              fmt='(4x,"Enthalpy change below threshold: ",f20.10)') &
+                enthalpy_tolerance*enthalpy_tolerance
+            write(io_lun, &
+              fmt='(4x,"Stress change below threshold:   ",f20.10)') &
+                max_stress
           end if
         end if
+      else
+        continue
+      end if
 
       call stop_print_timer(tmr_l_iter, "a CG iteration", IPRINT_TIME_THRES1)
       if (.not. done_cell) call check_stop(done_cell, iter_cell)
