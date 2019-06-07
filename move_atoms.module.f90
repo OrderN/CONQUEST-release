@@ -3426,7 +3426,6 @@ contains
                                dz, atom_coord(3,id_global), z_atom_cell(ni)
           end if
        end if
-       write(io_lun,*) id_global, ni
        x_atom_cell(ni) = atom_coord(1,id_global)
        y_atom_cell(ni) = atom_coord(2,id_global)
        z_atom_cell(ni) = atom_coord(3,id_global)
