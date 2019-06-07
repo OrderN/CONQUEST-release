@@ -4447,7 +4447,7 @@ contains
 
     use datatypes
     use GenComms,       only: inode, ionode
-    use global_module,  only: rcellx, rcelly, rcellz, iprint_MD
+    use global_module,  only: rcellx, rcelly, rcellz, iprint_MD, flag_MDdebug
 
     implicit none
 
@@ -4461,12 +4461,15 @@ contains
     pv = p*(rcellx*rcelly*rcellz)
     h = e + pv
 
-    if (inode==ionode .and. iprint_MD > 1) then
-      write(io_lun,'(4x,"energy   = ",f16.8)') e
-      write(io_lun,'(4x,"P        = ",f16.8)') p
-      write(io_lun,'(4x,"V        = ",f16.8)') rcellx*rcelly*rcellz
-      write(io_lun,'(4x,"PV       = ",f16.8)') pv
-      write(io_lun,'(4x,"enthalpy = ",f16.8)') h
+    if (inode==ionode .and. iprint_MD > 2) then
+      write(io_lun,'(2x,a)') "move_atoms/enthalpy"
+      if (flag_MDdebug) then
+        write(io_lun,'(4x,"energy   = ",f16.8)') e
+        write(io_lun,'(4x,"P        = ",f16.8)') p
+        write(io_lun,'(4x,"V        = ",f16.8)') rcellx*rcelly*rcellz
+        write(io_lun,'(4x,"PV       = ",f16.8)') pv
+        write(io_lun,'(4x,"enthalpy = ",f16.8)') h
+      end if 
     end if
 
   end function enthalpy
