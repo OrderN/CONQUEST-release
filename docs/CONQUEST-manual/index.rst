@@ -15,6 +15,7 @@ diagonalisation mode or linear scaling, with a variety of basis sets.
    input-output
    important
    errors
+   input_tags
 
 Indices and tables
 ==================
