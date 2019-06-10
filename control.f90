@@ -119,6 +119,9 @@ contains
 !!    Removed redundant ewald use
 !!   2017/08/29 jack baker & dave
 !!    Added cell optimisation controls
+!!   2019/06/10 zamaan
+!!    Added two new methods for relaxation of both cell and ionic
+!!    coordinates.
 !!  SOURCE
 !!
   subroutine control_run(fixed_potential, vary_mu, total_energy)
@@ -303,6 +306,11 @@ contains
     ! Find energy and forces
     call get_E_and_F(fixed_potential, vary_mu, energy0, .true., .true.)
     call dump_pos_and_matrices
+    call get_maxf(max)
+    if (inode==ionode) then
+      write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," E: ", &
+        e16.8," dE: ",f12.8)') 0, max, energy0, dE
+    end if
 
     iter = 1
     ggold = zero
@@ -376,12 +384,7 @@ contains
        if (flag_write_xsf) call write_xsf('trajectory.xsf', iter)
        ! Analyse forces
        g0 = dot(length, tot_force, 1, tot_force, 1)
-       max = zero
-       do i = 1, ni_in_cell
-          do k = 1, 3
-             if (abs(tot_force(k,i)) > max) max = abs(tot_force(k,i))
-          end do
-       end do
+       call get_maxf(max)
        ! Output and energy changes
        iter = iter + 1
        dE = energy0 - energy1
@@ -412,6 +415,7 @@ contains
                      iter
        end if
        if (abs(max) < MDcgtol) then
+          write(io_lun,'(2x,a,i4,a)') "GeomOpt converged in ", iter, " iterations"
           done = .true.
           if (myid == 0) &
                write (io_lun, fmt='(4x,"Maximum force below threshold: ",f12.5)') &
@@ -1773,12 +1777,18 @@ end subroutine write_md_data
     energy1 = energy0
 
     press = target_pressure/fac_HaBohr32GPa
-    if (inode==ionode) write(io_lun,*) "###", target_pressure, press
     enthalpy0 = enthalpy(energy0, press)
     enthalpy1 = enthalpy0
     dH = zero
-    if (inode==ionode) write(io_lun,'(2x,a,f20.10)') "Initial enthalpy is ", &
-                                                     enthalpy0
+    max_stress = zero
+    do i=1,3
+      stress_diff = abs(press + stress(i,i))/volume
+      if (stress_diff > max_stress) max_stress = stress_diff
+    end do
+    if (inode==ionode) then
+      write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxStr: ",f12.8," H: ", &
+        e16.8," dH: ",f12.8)') 0, max_stress, enthalpy0, zero
+    end if
 
     call dump_pos_and_matrices(index=0,MDstep=iter)
     do while (.not. done)
@@ -1900,6 +1910,9 @@ end subroutine write_md_data
        ! Second exit is if the desired energy tolerence has ben reached
        ! Will replace with stress tolerance when more reliable
        if (abs(dH)<enthalpy_tolerance .and. max_stress < cell_stress_tol) then
+          if (inode==ionode) &
+               write(io_lun,'(2x,a,i4,a)') "GeomOpt converged in ", &
+               iter, " iterations"
           done = .true.
           if (myid == 0 .and. iprint_gen > 0) &
                write (io_lun, fmt='(4x,"Enthalpy change below threshold: ",f20.10)') &
@@ -2116,16 +2129,19 @@ end subroutine write_md_data
     ! Find energy and forces
     call get_E_and_F(fixed_potential, vary_mu, energy0, .true., .true.)
     call dump_pos_and_matrices
+    call get_maxf(max)
+    press = target_pressure/fac_HaBohr32GPa
+    enthalpy0 = enthalpy(energy0, press)
+    dH = zero
+    if (inode==ionode) then
+      write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," H: ", &
+        e16.8," dH: ",f12.8)') 0, max, enthalpy0, dH
+    end if
 
    if (inode == ionode .and. iprint_gen > 0) then
      write (io_lun, fmt='(/4x,"Starting full cell optimisation"/)')
      write(io_lun,*)  "Initial cell dims", rcellx, rcelly, rcellz
    end if
-
-    press = target_pressure/fac_HaBohr32GPa
-    enthalpy0 = enthalpy(energy0, press)
-!    enthalpy1 = enthalpy0
-    dH = zero
 
     iter = 1
     iter_cell = 1
@@ -2205,12 +2221,7 @@ end subroutine write_md_data
         if (flag_write_xsf) call write_xsf('trajectory.xsf', iter)
         ! Analyse forces
         g0 = dot(length, tot_force, 1, tot_force, 1)
-        max = zero
-        do i = 1, ni_in_cell
-          do k = 1, 3
-            if (abs(tot_force(k,i)) > max) max = abs(tot_force(k,i))
-          end do
-        end do
+        call get_maxf(max)
         ! Output and energy changes
         enthalpy0 = enthalpy(energy0, press)
         enthalpy1 = enthalpy(energy1, press)
@@ -2353,9 +2364,8 @@ end subroutine write_md_data
         if (abs(max) < MDcgtol .and. max_stress < cell_stress_tol) then
           done_cell = .true.
           if (inode==ionode) then
-            write(io_lun,'(a,i4,a,i4,a)') "Converged in ", iter-iter_cell," &
-              ionic steps and ", iter_cell, " cell steps"
-            write(io_lun,'(a,i4,a,i4,a)') "Converged in ", iter, "iterations"
+            write(io_lun,'(2x,a,i4,a,i4,a)') "GeomOpt converged in ", &
+              iter-iter_cell," ionic steps and ", iter_cell, " cell steps"
             write(io_lun, fmt='(4x,"Maximum force:      ",f20.10)') max
             write(io_lun, fmt='(4x,"Force tolerance:    ",f20.10)') MDcgtol
             write(io_lun, fmt='(4x,"Enthalpy change:    ",f20.10)') dH
@@ -2497,7 +2507,12 @@ end subroutine write_md_data
     ! Find energy and forces
     call get_E_and_F(fixed_potential, vary_mu, energy0, .true., .true.)
     call dump_pos_and_matrices
+    call get_maxf(max)
     enthalpy0 = enthalpy(energy0, press)
+    if (inode==ionode) then
+      write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," H: ", &
+        e16.8," dH: ",f12.8)') 0, max, enthalpy0, zero
+    end if
 
     iter = 1
     ggold = zero
@@ -2562,12 +2577,7 @@ end subroutine write_md_data
 
       ! Analyse forces and stress
       g0 = dot(length, force, 1, force, 1)
-      max = zero
-      do i=1,ni_in_cell
-        do k=1,3
-          if (abs(tot_force(k,i)) > max) max = abs(tot_force(k,i))
-        end do
-      end do
+      call get_maxf(max)
       volume = rcellx*rcelly*rcellx
       max_stress = zero
       do i=1,3
@@ -2607,7 +2617,7 @@ end subroutine write_md_data
         if (abs(max) < MDcgtol .and. max_stress < cell_stress_tol) then
           done = .true.
           if (inode==ionode) then
-            write(io_lun,'(a,i4,a,i4,a)') "Converged in ", iter, "iterations"
+            write(io_lun,'(2x,a,i4,a)') "GeomOpt converged in ", iter, " iterations"
             write(io_lun, fmt='(4x,"Maximum force:      ",f20.10)') max
             write(io_lun, fmt='(4x,"Force tolerance:    ",f20.10)') MDcgtol
             write(io_lun, fmt='(4x,"Enthalpy change:    ",f20.10)') dH
@@ -2635,6 +2645,47 @@ end subroutine write_md_data
     call reg_dealloc_mem(area_general, 5*length, type_dbl)
 
   end subroutine full_cg_run_single_vector
+  !!***
+
+  !!****f* control/get_maxf *
+  !!
+  !!  NAME
+  !!   get_maxf
+  !!  USAGE
+  !!
+  !!  PURPOSE
+  !!   Find the maximum component of force in tot_force
+  !!  INPUTS
+  !!
+  !!  USES
+  !!
+  !!  AUTHOR
+  !!   Z Raza
+  !!  CREATION DATE
+  !!   2019/06/07
+  !!  MODIFICATION HISTORY
+  !!
+  !!  SOURCE
+  subroutine get_maxf(maxf)
+
+    use numbers
+    use force_module,  only: tot_force
+    use global_module, only: ni_in_cell
+
+    ! Passed varaibles
+    real(double), intent(out) :: maxf
+
+    ! local variables
+    integer      :: i,k
+
+    maxf = zero
+    do i=1,ni_in_cell
+      do k=1,3
+        if (abs(tot_force(k,i)) > maxf) maxf = abs(tot_force(k,i))
+      end do
+    end do
+
+  end subroutine get_maxf
   !!***
 
 end module control

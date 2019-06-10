@@ -1655,7 +1655,7 @@ contains
     call start_timer(tmr_std_moveatoms)
 
     h0 = total_enthalpy
-    if (inode == ionode .and. iprint_MD > 0) &
+    if (inode == ionode .and. iprint_MD > 1) &
          write (io_lun, &
          fmt='(4x,"In safemin_full, initial enthalpy is ",f20.10," ",a2)') &
          en_conv * enthalpy_in, en_units(energy_units)
@@ -1869,11 +1869,11 @@ contains
                write (io_lun, &
                fmt='(4x,"In safemin_full, second interpolation step is ", f15.10)') kmin
           if(kmin<k1.OR.kmin>k3) then
-             if(inode == ionode .and. iprint_MD > 0) &
+             if(inode == ionode .and. iprint_MD > 1) &
                   write(io_lun,*) 'Second interpolation outside limits: ',k1,k3,kmin
              dH = h0 - enthalpy_out
              kmin = kmin_old
-             if (inode == ionode .and. iprint_MD > 0) then
+             if (inode == ionode .and. iprint_MD > 1) then
                 write (io_lun, &
                      fmt='(4x,"In safemin_full, exit after ",i4," &
                      &iterations with enthlapy ",f20.10," ",a2)') &
@@ -1887,7 +1887,7 @@ contains
           end if
        else
           dH = h0 - enthalpy_out
-          if (inode == ionode .and. iprint_MD > 0) then
+          if (inode == ionode .and. iprint_MD > 1) then
              write (io_lun, &
                   fmt='(4x,"In safemin_full, exit after ",i4," &
                   &iterations with enthalpy ",f20.10," ",a2)') &
@@ -1896,8 +1896,8 @@ contains
              write (io_lun, fmt='(/4x,"Final enthalpy: ",f20.10," ",a2)') &
                   en_conv * enthalpy_out, en_units(energy_units)
           end if
-          if (inode==ionode) write (io_lun,'(2x,a)') &
-            "Get out of safemin_full!" 
+          if (inode==ionode .and. iprint_MD > 1) &
+            write (io_lun,'(2x,a)') "Get out of safemin_full!" 
           return
        end if
 
@@ -1953,7 +1953,7 @@ contains
     end if
     dH = h0 - enthalpy_out
 7   format(4x,3f15.8)
-    if (inode==ionode .and. iprint_MD > 0) then
+    if (inode==ionode .and. iprint_MD > 1) then
        write (io_lun, &
             fmt='(4x,"In safemin_full, exit after ",i4," &
             &iterations with enthalpy ",f20.10," ",a2)') &
