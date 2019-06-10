@@ -96,6 +96,12 @@ module io_module
   !Maximum of wallclock time (in seconds): See subroutine 'check_stop' 2018.Jan.17 TM 
   real(double)      :: time_max =zero
    
+  !Name and Format of  MatrixFile used in store_matrix
+  logical          :: flag_MatrixFile_RankFromZero  ! Starting from 0 in ##### (*matrix2.i**.p#####)
+  logical          :: flag_MatrixFile_BinaryFormat  ! Binary or Ascii
+  logical          :: flag_MatrixFile_BinaryFormat_Grab ! Binary or Ascii for reading
+  logical          :: flag_MatrixFile_BinaryFormat_Dump ! Binary or Ascii for writing
+
   ! RCS tag for object file identification 
   character(len=80), save, private :: &
        RCSid = "$Id$"
@@ -151,6 +157,8 @@ contains
   !!    Added experimental backtrace
   !!   2018/01/22 tsuyoshi (with dave)
   !!    Allocate atom_coord_diff for all calculations
+  !!   2019/04/04 14:17 dave
+  !!    Correct bug in wrapping with non-fractional coordinates and Angstroms
   !!  SOURCE
   !!
   subroutine read_atomic_positions(filename)
@@ -440,6 +448,10 @@ second:   do
                 atom_coord(1,i) = x
                 atom_coord(2,i) = y
                 atom_coord(3,i) = z
+                !2010.06.25 TM (Angstrom Units in coords file, but not pdb)
+                ! 2019/04/04 14:16 dave
+                ! Moved here so that distances are corrected *before* wrapping below
+                if(dist_units == ang) atom_coord(:,i)=atom_coord(:,i)*AngToBohr
              end if
              ! Wrap coordinates
              cell(1) = r_super_x
@@ -470,10 +482,6 @@ second:   do
                        i,atom_coord(1:3,i), species_glob(i), &
                        flag_move_atom(1:3,i)
           end do
-          !2010.06.25 TM (Angstrom Units in coords file, but not pdb)
-             if(.not.flag_fractional_atomic_coords .and. dist_units == ang) &
-              atom_coord(:,:)=atom_coord(:,:)*AngToBohr
-          !2010.06.25 TM (Angstrom Units in coords file, but not pdb)
           call io_close(lun)
        end if pdb
     end if
@@ -2949,25 +2957,41 @@ second:   do
   !! CREATION DATE 
   !!   2015/07/02 17:21
   !! MODIFICATION HISTORY
+  !!   2017/11/09 16:00 nakata
+  !!    Added atomf to find whether the PDOS is with PAOs or MSSFs
+  !!   2018/09/19 18:00 nakata
+  !!    Corrected the order of dimension of pDOS
+  !!   2018/09/19 18:30 nakata
+  !!    Added orbital angular momentum resolved DOS (pDOS_angmom)
+  !!   2018/10/22 14:22 dave & jsb
+  !!    Adding (l,m)-projected DOS
   !! SOURCE
   !!
-  subroutine dump_projected_DOS(pDOS,Ef)
+  subroutine dump_projected_DOS(pDOS,Ef,pDOS_angmom,Nangmom)
 
     use datatypes
-    use global_module, only: n_DOS, E_DOS_max, E_DOS_min, sigma_DOS, nspin
+    use global_module, only: n_DOS, E_DOS_max, E_DOS_min, sigma_DOS, flag_pDOS_angmom, &
+                             nspin, atomf, sf, ni_in_cell, flag_pDOS_lm
     use primary_module,  only: bundle
 
     ! Passed variables
-    real(double), dimension(n_DOS,nspin,bundle%n_prim) :: pDOS
+    real(double), dimension(n_DOS,bundle%n_prim,nspin) :: pDOS
     real(double), dimension(nspin) :: Ef
+    real(double), OPTIONAL, dimension(:,:,:,:,:) :: pDOS_angmom ! bin, atom, l, m, spin
+    integer, OPTIONAL :: Nangmom
 
     ! Local variables
-    integer :: lun, i, iprim
+    integer :: lun, i, j, k, iprim, natom, tmp_col
     real(double) :: dE, thisE
-    character(len=50) :: filename
+    character(len=50) :: filename, fmt_DOS
+    character(len=200) :: colstr
 
-    do iprim = 1,bundle%n_prim
-       write(filename,'("Atom",I0.7,"DOS.dat")') bundle%ig_prim(iprim)
+    if (atomf==sf) natom = bundle%n_prim
+    if (atomf/=sf) natom = ni_in_cell
+
+    do iprim = 1,natom
+       if (atomf==sf) write(filename,'("Atom",I0.7,"DOS.dat")') bundle%ig_prim(iprim)
+       if (atomf/=sf) write(filename,'("Atom",I0.7,"DOS.dat")') iprim ! iprim is equal to global ID if atomf = paof (MSSFs)
        ! Open file
        call io_assign (lun)
        open (unit = lun, file = filename)
@@ -2980,18 +3004,78 @@ second:   do
                Ef(1:nspin),E_DOS_min,E_DOS_max, n_DOS
        end if
        write(lun,fmt='(2x,"# Broadening: ",f12.5)') sigma_DOS
+       ! Indicate columns
+       if(flag_PDOS_angmom) then
+          if(flag_pDOS_lm) then
+             colstr = "  #     Energy     |   Total pDOS   |    l=0, m= 0   |    l=1, m=-1   |&
+                  &    l=1, m= 0   |    l=1, m= 1   |    l=2, m=-2   |    l=2, m=-1   |&
+                  &    l=2, m= 0   |    l=2, m= 1   |    l=2, m= 2   "
+          else
+             colstr = "  #     Energy     |   Total pDOS   |      l=0       |      l=1       |&
+                  &      l=2       "
+          end if
+       else
+          colstr =    "  #     Energy     |   Total pDOS    "
+       end if
+       write(lun,fmt='(a)') colstr
        dE = (E_DOS_max - E_DOS_min)/real(n_DOS - 1,double)
        thisE = E_DOS_min
        if(nspin==1) then
-          do i=1,n_DOS
-             write(lun,fmt='(2f17.10)') thisE,pDOS(i,1,iprim)
-             thisE = thisE + dE
-          end do
+          if (flag_PDOS_angmom) then
+             if(flag_pDOS_lm) then
+                tmp_col = 0
+                do i=1,Nangmom
+                   tmp_col = tmp_col + 2*i-1  ! Because i is l+1 
+                end do
+                write(fmt_DOS,*) tmp_col+2 ! NB this is number of columns in format
+                fmt_DOS = '('//trim(adjustl(fmt_DOS))//'f17.10)'
+                do i=1,n_DOS
+                   write(lun,fmt_DOS) thisE,pDOS(i,iprim,1),((pDOS_angmom(i,iprim,j,k,1),k=1,2*j-1),j=1,Nangmom)
+                   thisE = thisE + dE
+                end do
+             else
+                write(fmt_DOS,*) Nangmom+2 ! NB this is number of columns in format
+                fmt_DOS = '('//trim(adjustl(fmt_DOS))//'f17.10)'
+                do i=1,n_DOS
+                   write(lun,fmt_DOS) thisE,pDOS(i,iprim,1),(pDOS_angmom(i,iprim,j,1,1),j=1,Nangmom)
+                   thisE = thisE + dE
+                end do
+             end if
+          else
+             do i=1,n_DOS
+                write(lun,fmt='(2f17.10)') thisE,pDOS(i,iprim,1)
+                thisE = thisE + dE
+             end do
+          endif
        else if(nspin==2) then
-          do i=1,n_DOS
-             write(lun,fmt='(3f17.10)') thisE,pDOS(i,iprim,1),-pDOS(i,iprim,2)
-             thisE = thisE + dE
-          end do
+          if (flag_PDOS_angmom) then
+             if(flag_pDOS_lm) then
+                tmp_col = 0
+                do i=1,Nangmom
+                   tmp_col = tmp_col + 2*i-1  ! Because i is l+1 
+                end do
+                write(fmt_DOS,*) tmp_col*2+3
+                fmt_DOS = '('//trim(adjustl(fmt_DOS))//'f17.10)'
+                do i=1,n_DOS
+                   write(lun,fmt_DOS) thisE,pDOS(i,iprim,1),((pDOS_angmom(i,iprim,j,k,1),k=1,2*j-1),j=1,Nangmom), &
+                        -pDOS(i,iprim,2),((-pDOS_angmom(i,iprim,j,k,2),k=1,2*j-1),j=1,Nangmom)
+                   thisE = thisE + dE
+                end do
+             else
+                write(fmt_DOS,*) Nangmom*2+3 ! Total number of columns
+                fmt_DOS = '('//trim(adjustl(fmt_DOS))//'f17.10)'
+                do i=1,n_DOS
+                   write(lun,fmt_DOS) thisE,pDOS(i,iprim,1),(pDOS_angmom(i,iprim,j,1,1),j=1,Nangmom), &
+                        -pDOS(i,iprim,2),(-pDOS_angmom(i,iprim,j,1,2),j=1,Nangmom)
+                   thisE = thisE + dE
+                end do
+             end if
+          else
+             do i=1,n_DOS
+                write(lun,fmt='(3f17.10)') thisE,pDOS(i,iprim,1),-pDOS(i,iprim,2)
+                thisE = thisE + dE
+             end do
+          end if
        end if
        call io_close (lun)
     end do

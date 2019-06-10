@@ -1068,7 +1068,8 @@ contains
          flag_exx, exx_scf, flag_out_wf, wf_self_con, &
          flag_write_DOS, flag_neutral_atom, &
          atomf, sf, flag_LFD, nspin_SF, flag_diagonalisation, &
-         atom_coord, atom_coord_diff, rcellx, rcelly, rcellz
+         atom_coord, atom_coord_diff, rcellx, rcelly, rcellz, &
+         ne_in_cell
     use ion_electrostatic,   only: ewald, screened_ion_interaction
     use S_matrix_module,     only: get_S_matrix
     use GenComms,            only: my_barrier,end_comms,inode,ionode, &
@@ -1200,7 +1201,6 @@ contains
        if (read_option) then
           if(.not.flag_MDold) then
              if (inode == ionode) write (io_lun,*) 'Read supp_pao coefficients from SFcoeff files'
-
              call grab_matrix2('SFcoeff',inode,nfile,Info)
              call my_barrier()
              call Matrix_CommRebuild(Info,SFcoeff_range,SFcoeff_trans,matSFcoeff(1),nfile)
@@ -1380,11 +1380,12 @@ contains
             H_on_atomfns(1), inode, ionode,  &
             maxngrid)
        electrons_tot = spin_factor * sum(electrons)
+       density = density * ne_in_cell/electrons_tot
        if (inode == ionode .and. iprint_init > 1) &
             write (io_lun, *) 'In initial_H, electrons: ', electrons_tot
-       ! if flag_LFD=T, update SF-PAO coefficients with the obtained density
+       ! if flag_LFD=T, update SF-PAO coefficients with the obtained density unless they have been read
        ! and update S with the coefficients
-       if (flag_LFD) then
+       if ((.NOT.read_option).AND.flag_LFD) then
           call initial_SFcoeff(.false., .true., fixed_potential, .false.)
           call get_S_matrix(inode, ionode, build_AtomF_matrix=.false.)
        endif

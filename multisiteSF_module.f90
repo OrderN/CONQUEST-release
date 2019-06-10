@@ -1170,6 +1170,10 @@ contains
 !!  CREATION DATE
 !!   2017/01/08
 !!  MODIFICATION HISTORY
+!!   2018/10/08 07:59 dave
+!!    Adding recv_part variable to count partitions received from processes
+!!    to follow update of multiplies (to conform to MPI standard for
+!!    tags)
 !!
 !!  SOURCE
 !!
@@ -1220,6 +1224,8 @@ contains
     integer :: offset,sends,i,j
     integer, dimension(MPI_STATUS_SIZE) :: mpi_stat
 
+    integer, allocatable, dimension(:) :: recv_part
+
     logical flag,call_flag
     real(double) :: t0,t1
 
@@ -1233,6 +1239,9 @@ contains
     ! Allocate memory for the elements
     allocate(ibpart_rem(a_b_c%parts%mx_mem_grp*a_b_c%bmat(1)%mx_abs),STAT=stat)
     if(stat/=0) call cq_abort('LFD_make_Subspace_halo: error allocating ibpart_rem')
+    allocate(recv_part(0:a_b_c%comms%inode),STAT=stat)
+    if(stat/=0) call cq_abort('LFD_make_Subspace_halo: error allocating recv_part')
+    recv_part = zero
     call stop_timer(tmr_std_allocation)
 
     sends = 0
@@ -1275,6 +1284,7 @@ contains
              ipart = a_b_c%parts%i_cc2seq(ind_part)
              !write(io_lun,*) myid,' Alloc b_rem part: ',ipart
              nnode = a_b_c%comms%neigh_node_list(kpart)
+             recv_part(nnode) = recv_part(nnode)+1
              !write(io_lun,*) myid,' Alloc b_rem node: ',nnode
              !write(io_lun,*) myid,' Alloc b_rem icc: ',a_b_c%parts%i_cc2node(ind_part)
              !write(io_lun,*) myid,' Alloc b_rem alloc: ',allocated(b_rem)
@@ -1287,7 +1297,7 @@ contains
              allocate(b_rem(lenb_rem))
              call prefetch(kpart,a_b_c%ahalo,a_b_c%comms,a_b_c%bmat,icall,&  
                   n_cont,part_array,a_b_c%bindex,b_rem,lenb_rem,b,myid,ilen2,&
-                  mx_msg_per_part,a_b_c%parts,a_b_c%prim,a_b_c%gcs)
+                  mx_msg_per_part,a_b_c%parts,a_b_c%prim,a_b_c%gcs,(recv_part(nnode)-1)*2)
              !write(io_lun,*) 'b_rem: ',lenb_rem
              ! Now point the _rem variables at the appropriate parts of 
              ! the array where we will receive the data
@@ -1316,6 +1326,7 @@ contains
           ipart = a_b_c%parts%i_cc2seq(ind_part)
           !write(io_lun,*) myid,' Alloc b_rem part: ',ipart
           nnode = a_b_c%comms%neigh_node_list(kpart)
+          recv_part(nnode) = recv_part(nnode)+1
           !write(io_lun,*) myid,' Alloc b_rem node: ',nnode
           !write(io_lun,*) myid,' Alloc b_rem icc: ',a_b_c%parts%i_cc2node(ind_part)
           !write(io_lun,*) myid,' Alloc b_rem alloc: ',allocated(b_rem)
@@ -1330,7 +1341,7 @@ contains
           call stop_timer(tmr_std_allocation)
           call prefetch(kpart,a_b_c%ahalo,a_b_c%comms,a_b_c%bmat,icall,& 
                n_cont,part_array,a_b_c%bindex,b_rem,lenb_rem,b,myid,ilen2,&
-               mx_msg_per_part,a_b_c%parts,a_b_c%prim,a_b_c%gcs)
+               mx_msg_per_part,a_b_c%parts,a_b_c%prim,a_b_c%gcs,(recv_part(nnode)-1)*2)
           lenb_rem = size(b_rem)
           !write(io_lun,*) 'b_rem: ',lenb_rem
           ! Now point the _rem variables at the appropriate parts of the array 
@@ -1386,6 +1397,8 @@ contains
     if(stat/=0) call cq_abort('LFD_make_Subspace_halo: error deallocating nreqs')
     deallocate(ibpart_rem,STAT=stat)
     if(stat/=0) call cq_abort('LFD_make_Subspace_halo: error deallocating ibpart_rem')
+    deallocate(recv_part,STAT=stat)
+    if(stat/=0) call cq_abort('LFD_make_Subspace_halo: error deallocating recv_part')
     !deallocate(b_rem,STAT=stat)
     !if(stat/=0) call cq_abort('LFD_make_Subspace_halo: error deallocating b_rem')
     call stop_timer(tmr_std_allocation)

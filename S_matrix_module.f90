@@ -121,6 +121,8 @@ contains
 !!    Introduce PAO->SF transformation for contracted SFs (AtomF_to_SF_transform)
 !!   2017/01/17 19:00 nakata
 !!    Added optional passed variable rebuild_Spao
+!!   2019/01/31 16:00 nakata
+!!    Moved dump_matrix(NSmatrix) from sub:get_H_matrix and made it optional
 !!  TODO
 !!    
 !!  SOURCE
@@ -182,7 +184,10 @@ contains
 
     if (flag_do_SFtransform) call AtomF_to_SF_transform(matS, matSatomf, 1, Srange)
 
-    call dump_matrix("NS1",matS,inode)
+    ! dump S-matrix if required
+    if (iprint_ops > 3) then
+       call dump_matrix("NS", matS, inode)
+    end if
 
     ! get the new InvS matrix
     call  Iter_Hott_InvS(iprint_ops, InvSMaxSteps, &

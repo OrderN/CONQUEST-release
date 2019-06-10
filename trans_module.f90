@@ -27,6 +27,8 @@
 !!    Added ROBODoc header and RCS Id and Log tags and cq_abort
 !!   24/06/2002 dave
 !!    Changed index_transpose to give exact array size and added RCS static tag
+!!   2018/10/03 16:52 dave
+!!    Fixing MPI tags to obey the standard
 !!***
 module trans_module
 
@@ -175,6 +177,8 @@ contains
 !!    Added ROBODoc header and cq_abort
 !!   2008/02/11 17:07 dave
 !!    Added full set of requests passed in from trans_ini for non-blocking sends
+!!   2018/10/03 16:53 dave
+!!    Changing MPI tags to 1 and 2 (all that we need)
 !!  SOURCE
 !!
   subroutine send_pair_info(mynode,pairsind,trans,nreq)
@@ -194,11 +198,12 @@ contains
 
     ! Local variables
     integer(integ) :: nr,nnd_rem,tag,ierr,nn,irc
+
+    tag = 0
     ! Send pairs data to halo nodes
     do nr=1,trans%n_rem_node
        nnd_rem=trans%list_rem_node(nr)
        if(nnd_rem/=mynode) then
-          tag=(nnd_rem-1)*mx_msg_per_part
           call MPI_issend(pairsind(4*(trans%i_pair_addr(nr)-1)+1), &
                4*trans%n_pair(nr), &
                MPI_INTEGER,nnd_rem-1,tag+1,MPI_COMM_WORLD,nreq(2*nr-1),ierr)
@@ -238,6 +243,8 @@ contains
 !!    Changed copy of ind to give array dimensions explicitly
 !!   2006/09/07 11:51 dave
 !!    Added halo_rem to use the halo of the transposed matrix
+!!   2018/10/03 16:53 dave
+!!    Changing MPI tags to 1 and 2 (all that we need)
 !!  SOURCE
 !!
   subroutine index_transpose(mx_iprim,mynode,data,halo, &
@@ -271,6 +278,7 @@ contains
     integer(integ), pointer :: ipart_b_rem(:),iseq_b_rem(:)
 
     ind = 0
+    tag = 0
     do nr=1,data%n_rem_node  ! Loop over relevant remote nodes
        ipart_a_rem => ind(1:data%n_pair(nr))
        iseq_a_rem  => ind(data%n_pair(nr)+1:2*data%n_pair(nr))
@@ -282,7 +290,6 @@ contains
        ipart_b_rem = 0
        iseq_a_rem = 0
        iseq_b_rem = 0
-       tag = (mynode-1)*mx_msg_per_part
        if(nnd_rem/=mynode) then
           call MPI_recv(ind,4*data%n_pair(nr),MPI_INTEGER,&
                nnd_rem-1,tag+1,MPI_COMM_WORLD,nrstat,ierr)

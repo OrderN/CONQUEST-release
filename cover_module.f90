@@ -843,6 +843,9 @@ contains
 !!    Added timer
 !!   2018/07/04 08:47 dave
 !!    Added members logical to be consistent with allocate
+!!   2018/09/06 10:35 dave
+!!    Tidying and bug fix: members was bracketing ALL variables and
+!!    stat wasn't initialised  
 !!  SOURCE
 !!
   subroutine deallocate_cs(set,members)
@@ -862,6 +865,7 @@ contains
     ! Local variables
     integer :: stat,irc,ierr
 
+    stat = 0
     call start_timer(tmr_std_allocation)
     call reg_dealloc_mem(area_index,2*set%mx_gcover,type_int)
     call reg_dealloc_mem(area_index,3*set%mx_gcover,type_int)
@@ -869,13 +873,13 @@ contains
     if(ASSOCIATED(set%iprim_group)) then
        call reg_dealloc_mem(area_index,size(set%iprim_group),type_int)
        deallocate(set%iprim_group,STAT=stat)
+       if(stat/=0) call cq_abort('deallocate_cs: error(1)')
     endif
-    if(stat/=0) call cq_abort('deallocate_cs: error(1)')
+    deallocate(set%ncover_rem, set%inv_lab_cover, set%lab_cover,set%lab_cell, STAT=stat)
+    if(stat/=0) call cq_abort('deallocate_cs: error(2)')
     if(members) then
-       deallocate(set%ncover_rem,set%zcover,set%ycover,set%xcover, &
-            set%lab_cover,set%lab_cell,set%icover_ibeg,set%n_ing_cover, &
-            STAT=stat)
-       if(stat/=0) call cq_abort('deallocate_cs: error(2)')
+       deallocate(set%zcover,set%ycover,set%xcover, set%icover_ibeg,set%n_ing_cover, STAT=stat)
+       if(stat/=0) call cq_abort('deallocate_cs: error(3)')
     endif
     call stop_timer(tmr_std_allocation)
     return

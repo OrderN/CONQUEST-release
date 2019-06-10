@@ -204,13 +204,13 @@ contains
     use pseudo_tm_module,       only: init_pseudo_tm
     use input_module,           only: fdf_string, fdf_out, io_close, leqi
     use force_module,           only: tot_force
-    !use DiagModule,             only: diagon
     use constraint_module,      only: flag_RigidBonds,constraints
     use support_spec_format,    only: flag_one_to_one, symmetry_breaking, read_option
     use multisiteSF_module,     only: flag_LFD_ReadTVEC, &
                                       flag_MSSF_nonminimal, &   !nonmin_mssf
                                       MSSF_nonminimal_offset, & !nonmin_mssf
                                       MSSF_nonminimal_species   !nonmin_mssf
+    use md_control,             only: md_position_file
     use pao_format
 
     implicit none
@@ -260,7 +260,7 @@ contains
     if (.not. flag_MDcontinue) then
       call read_atomic_positions(trim(atom_coord_file))
     else
-      call read_atomic_positions('cq.position')
+      call read_atomic_positions(md_position_file)
     end if
     if(iprint_init>4) call print_process_info()
     ! By now, we'll have unit cell sizes and grid cutoff
@@ -663,6 +663,8 @@ contains
   !!    Reading atomic spins: small tweak to test on net spin (uses abs and RD_ERR)
   !!   2017/10/24 zamaan
   !!    added thermostat flags for refactored NVT
+  !!   2017/11/13 18:15 nakata
+  !!    Added flag_normalise to normalise each eigenstate of PDOS
   !!   2018/01/19 dave
   !!    Added test for lmax_ps and NA projector functions
   !!   2018/01/22 tsuyoshi (with dave)
@@ -686,6 +688,19 @@ contains
   !!    flag_InitialAtomicSpin now comes from density_module (not global)
   !!   2018/07/16 16:02 dave
   !!    Bug fix: only read RadiusMS when flag_Multisite is true
+  !!   2018/07/16 17:09 dave
+  !!    Adding zero T requirement for flag_quench_MD as well as FIRE
+  !!   2018/09/19 18:30 nakata
+  !!    Added flag_pDOS_angmom for orbital angular momentum resolved PDOS
+  !!   2018/10/22 14:26 dave & jsb
+  !!    Added flag_PDOS_lm for (l,m) projected DOS
+  !!   2018/10/30 11:52 dave
+  !!    added flag_PDOS_include_semicore to allow inclusion/exclusion of semi-core states from PDOS
+  !!   2019/03/28 zamaan
+  !!    Added flag_stress and flag_full_stress to toggle calculation of stress
+  !!    and off-diagonal elements respectively
+  !!   2019/05/21 zamaan
+  !!    Added flag for RNG seed
   !!  TODO
   !!   Fix reading of start flags (change to block ?) 10/05/2002 dave
   !!   Fix rigid shift 10/05/2002 dave
@@ -743,10 +758,12 @@ contains
                              flag_exx, exx_alpha, exx_scf, exx_scf_tol, exx_siter,         &
                              flag_out_wf,flag_out_wf_by_kp,max_wf,out_wf,wf_self_con, flag_fire_qMD, &
                              flag_write_DOS, flag_write_projected_DOS, &
+                             flag_normalise_pDOS, flag_pDOS_angmom, flag_pDOS_lm, &
                              E_DOS_min, E_DOS_max, sigma_DOS, n_DOS, E_wf_min, E_wf_max, flag_wf_range_Ef, &
                              mx_temp_matrices, flag_neutral_atom, flag_diagonalisation, &
                              flag_SpinDependentSF, flag_Multisite, flag_LFD, flag_SFcoeffReuse, &
-                             flag_opt_cell, cell_constraint_flag, cell_en_tol
+                             flag_opt_cell, cell_constraint_flag, cell_en_tol, &
+                             flag_stress, flag_full_stress, rng_seed
     use dimens, only: r_super_x, r_super_y, r_super_z, GridCutoff,    &
                       n_grid_x, n_grid_y, n_grid_z, r_h, r_c,         &
                       RadiusSupport, RadiusAtomf, RadiusMS, RadiusLD, &
@@ -763,6 +780,7 @@ contains
                               species_file, species_from_files
     use GenComms,   only: gcopy, my_barrier, cq_abort, inode, ionode
     !use DiagModule, only: diagon
+    use DiagModule,             only: flag_pDOS_include_semicore
     use energy,     only: flag_check_Diag
     use DMMin,      only: maxpulayDMM, maxpulaystepDMM, minpulaystepDMM, &
                           LinTol_DMM, n_dumpL
@@ -798,7 +816,10 @@ contains
                                  flag_which_force, TF_direction, &
                                  TF_atom_moved, TF_delta
     use io_module, only: pdb_format, pdb_altloc, append_coords,  &
-                         pdb_output, banner, get_file_name, time_max
+                         pdb_output, banner, get_file_name, time_max, &
+                         flag_MatrixFile_RankFromZero, flag_MatrixFile_BinaryFormat, &
+                         flag_MatrixFile_BinaryFormat_Grab, flag_MatrixFile_BinaryFormat_Dump
+
     use group_module,     only: part_method, HILBERT, PYTHON
     use energy,           only: flag_check_DFT
     use H_matrix_module,  only: locps_output, locps_choice
@@ -833,7 +854,7 @@ contains
                           md_thermo_type, md_bulkmod_est, md_box_mass, &
                           flag_write_xsf, md_cell_nhc, md_nhc_cell_mass, &
                           md_calc_xlmass, md_berendsen_equil, &
-                          md_omega_t, md_omega_p, md_tau_T_equil, md_tau_P_equil
+                          md_tau_T_equil, md_tau_P_equil, md_p_drag, md_t_drag
     use md_model,   only: md_tdep
     use move_atoms,         only: threshold_resetCD, flag_stop_on_empty_bundle
     use Integrators, only: fire_alpha0, fire_f_inc, fire_f_dec, fire_f_alpha, fire_N_min, &
@@ -976,6 +997,8 @@ contains
        locps_choice  = fdf_integer('IO.LocalPotChoice',   8     )
        atomch_output = fdf_boolean('IO.AtomChargeOutput',.false.)
        !
+       ! Seed for RNG
+       rng_seed      = fdf_integer('General.RNGSeed', -1)
        !
        tmp = fdf_string(8,'General.MemoryUnits','MB')
        if( leqi(tmp(1:2),     'kB') ) then
@@ -1328,6 +1351,16 @@ contains
                 charge(i) = zero
              endif
           enddo
+  
+        ! At present, we cannot use neutral atom potential for ghost atoms.
+        !    2018/Sep/26   Tsuyoshi Miyazaki
+        ! Fixed for Neutral Atom Potential  2018/Nov/16  TM
+        !   but not for neutral atom projectors ...   
+         if(flag_neutral_atom_projector) then
+           if(inode==ionode) write(io_lun,'(10x,A)') &
+             'Now, we cannot use neutral atom projector for ghost atoms. Please set General.NeutralAtomProjector as false.'
+           call cq_abort("Error: Neutral Atom Projector cannot be used for ghost atom, at present.")
+         endif
        endif
 !!$        
 !!$        
@@ -1425,6 +1458,8 @@ contains
        cell_constraint_flag  = fdf_string(20,'AtomMove.OptCell.Constraint','none')
        cell_en_tol           = fdf_double('AtomMove.OptCell.EnTol',0.00001_double)
        flag_stop_on_empty_bundle = fdf_boolean('AtomMove.StopOnEmptyBundle',.false.)
+       flag_stress           = fdf_boolean('AtomMove.CalcStress', .true.)
+       flag_full_stress      = fdf_boolean('AtomMove.FullStress', .false.)
        !
        flag_vary_basis       = fdf_boolean('minE.VaryBasis', .false.)
        if(.NOT.flag_vary_basis) then
@@ -1468,6 +1503,12 @@ contains
 !!$
 !!$
 !!$
+       ! Name and Format of Matrix Files  (see store_matrix)
+         flag_MatrixFile_RankFromZero = fdf_boolean('IO.MatrixFile.RankFromZero', .true.)
+         flag_MatrixFile_BinaryFormat = fdf_boolean('IO.MatrixFile.BinaryFormat', .true.)
+         flag_MatrixFile_BinaryFormat_Grab = fdf_boolean('IO.MatrixFile.BinaryFormat.Grab', flag_MatrixFile_BinaryFormat)
+         flag_MatrixFile_BinaryFormat_Dump = fdf_boolean('IO.MatrixFile.BinaryFormat.Dump', flag_MatrixFile_BinaryFormat)
+ 
        ! read wavefunction output flags
        mx_temp_matrices = fdf_integer('General.MaxTempMatrices',100)
        flag_out_wf=fdf_boolean('IO.outputWF',.false.)
@@ -1510,6 +1551,22 @@ contains
              E_DOS_max = fdf_double('IO.max_DOS_E',zero)
              sigma_DOS = fdf_double('IO.sigma_DOS',0.001_double)
              n_DOS = fdf_integer('IO.n_DOS',201)
+             flag_normalise_pDOS = fdf_boolean('IO.normalise_PDOS',.true.)
+             flag_pDOS_angmom = fdf_boolean('IO.PDOS_Angmom',.false.)
+             flag_pDOS_lm = fdf_boolean('IO.PDOS_lm_resolved',.false.)
+             flag_pDOS_include_semicore = fdf_boolean('IO.PDOS_include_semicore',.true.)
+             if(flag_pDOS_lm.AND.(.NOT.flag_pDOS_angmom)) then
+                if(inode==ionode) write(io_lun,'(2x,"Setting IO.PDOS_Angmom T as (l,m)-resolved PDOS requested")')
+                flag_pDOS_angmom = .true.
+             end if
+             if (.not.flag_write_projected_DOS) then
+                flag_normalise_pDOS = .false.
+                flag_pDOS_angmom = .false.
+             endif
+             if (flag_pDOS_angmom .and. flag_basis_set==blips) then
+                flag_pDOS_angmom = .false.
+                if(inode==ionode) write(io_lun,'(2x,"Setting IO.PDOS_Angmom F as using blips")')
+             endif               
           else
              flag_write_DOS = .false.
              if(inode==ionode) write(io_lun,'(2x,"Setting IO.writeDOS F as solving O(N)")')
@@ -1655,6 +1712,9 @@ contains
           fire_max_step      = fdf_double ('AtomMove.FireMaxStep',2.0_double)
           fire_N_below_thresh= fdf_integer('AtomMove.FireNBelowThresh',3)
           temp_ion           = fdf_double ('AtomMove.IonTemperature',0.0_double)
+       else if(flag_quench_MD) then
+          temp_ion           = fdf_double ('AtomMove.IonTemperature',0.0_double)
+          fire_alpha0        = fdf_double ('AtomMove.QMDAlpha',0.5_double)
        else
           temp_ion           = fdf_double ('AtomMove.IonTemperature',300.0_double)
        end if
@@ -1976,21 +2036,27 @@ contains
        endif ! Constraints
 
        md_ensemble        = fdf_string(3, 'MD.Ensemble', 'nve')
-       md_calc_xlmass     = fdf_boolean('MD.CalculateXLMass', .false.)
+       md_calc_xlmass     = fdf_boolean('MD.CalculateXLMass', .true.)
 
        ! Thermostat
-       md_thermo_type     = fdf_string(20, 'MD.Thermostat', 'nhc')
-       if (leqi(md_thermo_type, 'berendsen')) then
-         md_tau_T           = fdf_double('MD.tauT', one)
-       else
-         md_tau_T           = fdf_double('MD.tauT', one)
-       end if
+       select case(md_ensemble)
+       case('nve')
+         md_thermo_type     = fdf_string(20, 'MD.Thermostat', 'none')
+         md_baro_type       = fdf_string(20, 'MD.Barostat', 'none')
+       case('nvt') 
+         md_thermo_type     = fdf_string(20, 'MD.Thermostat', 'nhc')
+         md_baro_type       = fdf_string(20, 'MD.Barostat', 'none')
+       case('npt')
+         md_thermo_type     = fdf_string(20, 'MD.Thermostat', 'nhc')
+         md_baro_type       = fdf_string(20, 'MD.Barostat', 'iso-ssm')
+       end select
+       md_tau_T           = fdf_double('MD.tauT', -one)
        md_tau_T_equil     = fdf_double('MD.tauTEquil', one)
-       md_omega_t         = fdf_double('MD.OmegaT', 500.0_double)
        md_n_nhc           = fdf_integer('MD.nNHC', 5) 
        md_n_ys            = fdf_integer('MD.nYoshida', 1)
        md_n_mts           = fdf_integer('MD.nMTS', 1)
        flag_thermoDebug   = fdf_boolean('MD.ThermoDebug',.false.)
+       md_t_drag          = fdf_double('MD.TDrag', zero)
        allocate(md_nhc_mass(md_n_nhc)) 
        allocate(md_nhc_cell_mass(md_n_nhc)) 
        md_nhc_mass = one
@@ -2005,21 +2071,16 @@ contains
        call fdf_endblock
 
        ! Barostat
-       md_baro_type       = fdf_string(20, 'MD.Barostat', 'None')
        md_target_press    = fdf_double('MD.TargetPressure', zero)
        md_box_mass        = fdf_double('MD.BoxMass', one)
-       if (leqi(md_baro_type, 'berendsen')) then
-         md_tau_P           = fdf_double('MD.tauP', 10.0_double)
-       else
-         md_tau_P           = fdf_double('MD.tauP', 100.0_double)
-       end if
+       md_tau_P           = fdf_double('MD.tauP', -one)
        md_tau_P_equil     = fdf_double('MD.tauPEquil', 100.0_double)
-       md_omega_p         = fdf_double('MD.OmegaP', 100.0_double)
-       md_bulkmod_est     = fdf_double('MD.BulkModulusEst', one)
-       md_cell_nhc        = fdf_boolean('MD.CellNHC', .false.)
+       md_bulkmod_est     = fdf_double('MD.BulkModulusEst', 100.0_double)
+       md_cell_nhc        = fdf_boolean('MD.CellNHC', .true.)
        flag_baroDebug     = fdf_boolean('MD.BaroDebug',.false.)
        md_berendsen_equil = fdf_integer('MD.BerendsenEquil', 0)
        md_tdep            = fdf_boolean('MD.TDEP', .false.)
+       md_p_drag          = fdf_double('MD.PDrag', zero)
 
     else
        call cq_abort("Old-style CQ input no longer supported: please convert")

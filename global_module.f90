@@ -124,12 +124,22 @@
 !!    Adding variables for cell optimisation
 !!   2017/10/20 09:19 dave
 !!    Moved fire variables to Integrators_module
+!!   2017/11/13 18:15 nakata
+!!    Added a flag to normalise pDOS
 !!   2017/12/05 09:59 dave with TM & NW (MIZUHO)
 !!    Added new function type - NA projector function (napf)
 !!   2018/04/25 10:00 zamaan
 !!    Added target attribute to rcellx, x_atom_cell etc.
 !!   2018/05/17 12:51 dave with Ayako Nakata
 !!    Changed flag_readAtomicSpin to flag_InitialAtomicSpin (more descriptive) and moved to density_module
+!!   2018/09/19 18:30 nakata
+!!    Added a flag for orbital angular momentum resolved PDOS
+!!   2018/10/22 14:25 dave & jsb
+!!    Adding (l,m)-projection for PDOS
+!!   2019/03/28 zamaan
+!!    Added flag_stress and flag_full_stress
+!!   2019/05/21 zamaan
+!!    Added RNG seed
 !!  SOURCE
 !!
 module global_module
@@ -167,12 +177,15 @@ module global_module
 
   integer :: global_maxatomspart ! Maximum atoms per partition, if exceeded, triggers partitioning refinement
 
+  integer :: rng_seed
+
   integer :: load_balance
   logical :: many_processors ! Selects appropriate algorithm for partitioning
 
   character(len=20), save :: runtype ! What type of run is it ?
 
-
+  logical :: flag_stress   ! Compute the stress tensor?
+  logical :: flag_full_stress ! Compute the off-diagonal elements?
   logical :: flag_opt_cell ! optimize the simulation cell?
   ! specify sim cell dims/ratios of dims to be held constant.
   character(len=20), save :: cell_constraint_flag
@@ -350,8 +363,8 @@ module global_module
   ! it more properly applies to matrices (specifically how many temporary matrices we can store)
   integer :: mx_temp_matrices                   ! Defaults to 100; used in mult_module (immi)
   
-  ! DOS output
-  logical :: flag_write_DOS, flag_write_projected_DOS
+  ! DOS output (NB Maybe move these into DiagModule and revisit names)
+  logical :: flag_write_DOS, flag_write_projected_DOS, flag_normalise_pDOS, flag_pDOS_angmom, flag_pDOS_lm
   real(double) :: E_DOS_min, E_DOS_max, sigma_DOS
   integer :: n_DOS
 

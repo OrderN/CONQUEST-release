@@ -18,6 +18,8 @@
 !!    Changed for output to file not stdout
 !!   2015/05/01 09:15 dave and sym
 !!    Implementing stress (added Hartree stress as module variable)
+!!   2019/04/08 zamaan
+!!    Added off diagonal elements of hartree stress 
 !!  SOURCE
 !!
 module hartree_module
@@ -29,7 +31,7 @@ module hartree_module
   implicit none
 
   ! We have this here since hartree_module is used by force_module, so we can't have it here
-  real(double), dimension(3) :: Hartree_stress
+  real(double), dimension(3,3) :: Hartree_stress
 
   ! RCS tag for object file identification
   character(len=80), save, private :: &
@@ -101,7 +103,7 @@ contains
                              one_over_grid_point_volume, n_grid_z
     use fft_module,    only: fft3, hartree_factor, z_columns_node, i0, recip_vector
     use GenComms,      only: gsum,  inode, cq_abort
-    use global_module, only: area_SC
+    use global_module, only: area_SC, flag_full_stress, flag_stress
     use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_dbl
 
     implicit none
@@ -111,17 +113,17 @@ contains
     real(double) :: energy
     real(double), dimension(size), intent(in)  :: chden
     real(double), dimension(size), intent(out) :: potential
-    real(double), dimension(3) :: chden_str_r, chden_str_i
+    real(double), dimension(3,3) :: chden_str_r, chden_str_i
     real(double), dimension(size), OPTIONAL :: chden2
-    real(double), dimension(3), OPTIONAL :: stress2
+    real(double), dimension(3,3), OPTIONAL :: stress2
 
     ! Local variables
-    integer :: i, stat, direction
+    integer :: i, stat, dir1, dir2
 
     complex(double_cplx), allocatable, dimension(:) :: chdenr
     complex(double_cplx), allocatable, dimension(:) :: str_chdenr
 
-    real(double) :: dumi, dumr, rp, ip, rv2, rp2, ip2
+    real(double) :: dumi, dumr, rp, ip, rp2, ip2, rv2
     ! refcoul is energy of two electrons seperated by one unit of distance.
     real(double), parameter :: refcoul = one
     ! harcon is the constant needed for energy and potential. It assumes that
@@ -157,30 +159,52 @@ contains
        dumi = ip * hartree_factor(i) 
        energy = energy + dumr * rp + dumi * ip
        chdenr(i) = cmplx(dumr, dumi, double_cplx)
-       if(second_stress) then
-          rp2 = real(str_chdenr(i),double)
-          ip2 = aimag(str_chdenr(i))
+       if (flag_stress) then
+         if(second_stress) then
+            rp2 = real(str_chdenr(i),double)
+            ip2 = aimag(str_chdenr(i))
+         end if
        end if
        ! SYM 2014/09/08 15:41 Hartree stress calculate and accumulate
-       do direction = 1,3
-          rv2 = recip_vector(i,direction)*recip_vector(i,direction)
-          chden_str_r(direction) = dumr * rv2 * hartree_factor(i)
-          chden_str_i(direction) = dumi * rv2 * hartree_factor(i)
-          Hartree_stress(direction) = Hartree_stress(direction) + rp*chden_str_r(direction) + ip*chden_str_i(direction)
-          if(second_stress) stress2(direction) = stress2(direction) + rp2*chden_str_r(direction) + ip2*chden_str_i(direction)
-       end do
+       if (flag_stress) then
+         do dir1 = 1,3
+            if (flag_full_stress) then
+               do dir2 = 1,3
+                 rv2 = recip_vector(i,dir1)*recip_vector(i,dir2)
+                 chden_str_r(dir1,dir2) = dumr * rv2 * hartree_factor(i)
+                 chden_str_i(dir1,dir2) = dumi * rv2 * hartree_factor(i)
+                 Hartree_stress(dir1,dir2) = Hartree_stress(dir1,dir2) + &
+                   rp*chden_str_r(dir1,dir2) + ip*chden_str_i(dir1,dir2)
+                 if (second_stress) stress2(dir1,dir2) = stress2(dir1,dir2) + &
+                   rp2*chden_str_r(dir1,dir2) + ip2*chden_str_i(dir1,dir2)
+               end do
+            else
+               rv2 = recip_vector(i,dir1)*recip_vector(i,dir1)
+               chden_str_r(dir1,dir1) = dumr * rv2 * hartree_factor(i)
+               chden_str_i(dir1,dir1) = dumi * rv2 * hartree_factor(i)
+               Hartree_stress(dir1,dir1) = Hartree_stress(dir1,dir1) + &
+                 rp*chden_str_r(dir1,dir1) + ip*chden_str_i(dir1,dir1)
+               if (second_stress) stress2(dir1,dir1) = stress2(dir1,dir1) + &
+                 rp2*chden_str_r(dir1,dir1) + ip2*chden_str_i(dir1,dir1)
+            end if
+         end do
+       end if
     end do
     call fft3(potential, chdenr, size, +1)
     ! Sum over processes
     call gsum(energy)
-    call gsum(Hartree_stress,3)
+    if (flag_stress) call gsum(Hartree_stress,3,3)
     ! Scale
     potential = potential*harcon
     energy = energy * grid_point_volume*half* harcon 
-    Hartree_stress(1:3) = Hartree_stress(1:3)* harcon *grid_point_volume/(two*pi*two*pi)
-    if(second_stress) then
-       call gsum(stress2,3)
-       stress2(1:3) = stress2(1:3)*two* harcon *grid_point_volume/(two*pi*two*pi)
+    if (flag_stress) then
+      Hartree_stress(1:3,1:3) = Hartree_stress(1:3,1:3) * harcon * &
+                                grid_point_volume/(two*pi*two*pi)
+      if(second_stress) then
+         call gsum(stress2,3,3)
+         stress2(1:3,1:3) = stress2(1:3,1:3) * two * harcon * &
+                            grid_point_volume/(two*pi*two*pi)
+      end if
     end if
     deallocate(chdenr, STAT=stat)
     if (stat /= 0) &

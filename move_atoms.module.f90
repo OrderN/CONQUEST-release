@@ -50,6 +50,10 @@
 !!    fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
 !!   2018/07/16 16:32 dave
 !!    Added user-control flag_stop_on_empty_bundle
+!!   2018/09/07 tsuyoshi
+!!    introduced flag_debug_move_atoms for debugging
+!!   2019/05/21 zamaan
+!!    Removed old RNG, replaced calls with new one from rng module
 !!  SOURCE
 !!
 module move_atoms
@@ -61,6 +65,7 @@ module move_atoms
                                     tmr_std_indexing, &
                                     tmr_std_allocation
 
+  logical :: flag_debug_move_atoms = .false.
 
   ! Useful physical constants
   real(double), parameter:: amu = 1.660566e-27_double
@@ -2941,11 +2946,11 @@ contains
   !!****f*  move_atoms/init_velocity *
   !!
   !!  NAME 
-  !!   pulay_relax
+  !!   init_velocity
   !!  USAGE
   !!   
   !!  PURPOSE
-  !!   Performs pulay relaxation
+  !!   Initialise ionic velocities for MD via normal distribution
   !!  INPUTS
   !!   ni_in_cell : no. of atoms in the cell
   !!   velocity(3, ni_in_cell) : velocity in (fs * Ha/bohr)/amu unit
@@ -2957,92 +2962,79 @@ contains
   !!  CREATION DATE
   !!   2010/6/30 
   !!  MODIFICATION HISTORY
-  !!    
+  !!   2019/05/21 zamaan
+  !!    Replaced old rng calls with new one from rng module
+  !!   2019/05/22 14:40 dave & tsuyoshi
+  !!    Moved ionode criterion for generation of velocities from init_ensemble
+  !!   2019/05/23 zamaan
+  !!    Zeroed COM velocity after initialisation
   !!  SOURCE
   !!
   subroutine init_velocity(ni_in_cell, temp, velocity)
-    use datatypes, only: double
-    use numbers, only: three,two,twopi, zero, one, RD_ERR, half
+
+    use datatypes,      only: double
+    use numbers,        only: three,two,twopi, zero, one, RD_ERR, half, three_halves
     use species_module, only: species, mass
-    use global_module, only: id_glob_inv, flag_move_atom, species_glob
-    use GenComms, only: cq_abort
+    use global_module,  only: id_glob_inv, flag_move_atom, species_glob, &
+                              iprint_MD, flag_FixCOM
+    use GenComms,       only: cq_abort, inode, ionode, gcopy
+    use rng,            only: type_rng
+
     implicit none
+
     integer,intent(in) :: ni_in_cell
     real(double),intent(in) :: temp
     real(double),intent(out):: velocity(3,ni_in_cell)
-    integer, parameter :: initial_roulette=30
-    integer :: ii, iroulette , ia, iglob
+    integer :: dir, ia, iglob
     real(double) :: xx, yy, zz, u0, ux, uy, uz, v0
     real(double) :: massa, KE
     integer :: speca
-   
-    KE = zero
-    write(io_lun,*) ' Welcome to init_velocity', ' fac = ',fac
-    velocity(:,:) = zero
-    iroulette=0
-    do ii=1,initial_roulette
-       call ran2(xx,iroulette)
-    enddo
-  
-    !  We would like to use the order of global labelling in the following.
-    !(since we use random numbers, the order of atoms is probably relevant
-    ! if we want to have a same distribution of velocities as in other codes.)
-    
-    do iglob=1,ni_in_cell
-       ia= id_glob_inv(iglob)
-       !speca= species_glob(iglob) 
-       speca= species(ia)
-       massa= mass(speca)
-       if(ia < 1 .or. ia > ni_in_cell) &
-            call cq_abort('ERROR in init_velocity : ia,iglob ',ia,iglob)
 
-       !call ran2(u0,iroulette)
-       call ran2(ux,iroulette)
-       call ran2(uy,iroulette)
-       call ran2(uz,iroulette)
+    type(type_rng) :: myrng
 
-       !write(*,1) u0,ux,uy,uz
-       !1 format(' u0,ux,uy,uz = ',f12.5)
+    if (inode == ionode) then
+       KE = zero
+       if(iprint_MD > 2) write(io_lun,'(2x,a,f16.8)') ' Welcome to init_velocity, fac = ',fac
+       velocity(:,:) = zero
+       call myrng%init_rng
+       call myrng%init_normal(one, zero)
 
-       xx = twopi*ux
-       yy = twopi*uy
-       zz = twopi*uz
-       ! -- (Important Notes) ----
-       ! it is tricky, but velocity is in the unit, bohr/fs, transforming from
-       ! (fs * Har/bohr)/ amu, with the factor (fac) defined in the beginning of 
-       ! this module.  This factor comes from that v is calculated as (dt*F/mass), 
-       ! and we want to express dt in femtosecond, force in Hartree/bohr, 
-       ! and m in atomic mass units. 
-       ! (it should be equivalent to express dt and m in atomic units, I think.)
-       ! Kinetic Energy is calculated as m/2*v^2 *fac in Hartree unit, and
-       ! Positions are calculated as v*dt in bohr unit. (m in amu, dt in fs)
+       !  We would like to use the order of global labelling in the following.
+       !(since we use random numbers, the order of atoms is probably relevant
+       ! if we want to have a same distribution of velocities as in other codes.)
 
-       v0 = sqrt(temp*fac_Kelvin2Hartree/(massa*fac)) 
+       do iglob=1,ni_in_cell
+          ia= id_glob_inv(iglob)
+          speca= species(ia)
+          massa= mass(speca)
+          if(ia < 1 .or. ia > ni_in_cell) &
+               call cq_abort('ERROR in init_velocity : ia,iglob ',ia,iglob)
 
-       call ran2(u0,iroulette)
-       if(u0 >= one)  call cq_abort('ERROR in init_velocity 1',u0)
-       if(u0 < RD_ERR)  call cq_abort('ERROR in init_velocity 2',u0)
-       velocity(1,ia) = v0* sqrt(-two*log(u0))*cos(xx)
-       call ran2(u0,iroulette)
-       if(u0 >= one)  call cq_abort('ERROR in init_velocity 1',u0)
-       if(u0 < RD_ERR)  call cq_abort('ERROR in init_velocity 2',u0)
-       velocity(2,ia) = v0* sqrt(-two*log(u0))*cos(yy)
-       call ran2(u0,iroulette)
-       if(u0 >= one)  call cq_abort('ERROR in init_velocity 1',u0)
-       if(u0 < RD_ERR)  call cq_abort('ERROR in init_velocity 2',u0)
-       velocity(3,ia) = v0* sqrt(-two*log(u0))*cos(zz)
-       KE = KE + half *(velocity(1,ia)**2 + velocity(2,ia)**2 + &
-                        velocity(3,ia)**2) * massa * fac
-       !ORI if(flag_move_atom(1,ia)) velocity(1,ia) = v0*cos(xx)
-       !ORI if(flag_move_atom(2,ia)) velocity(2,ia) = v0*cos(yy)
-       !ORI if(flag_move_atom(3,ia)) velocity(3,ia) = v0*cos(zz)
-    enddo
-    KE = KE/(three/two)
-    KE = KE/dfloat(ni_in_cell)/fac_Kelvin2Hartree
-    write(io_lun,*) ' init_velocity: Kinetic Energy in K = ',KE
-
+          ! -- (Important Notes) ----
+          ! it is tricky, but velocity is in the unit, bohr/fs, transforming from
+          ! (fs * Har/bohr)/ amu, with the factor (fac) defined in the beginning of 
+          ! this module.  This factor comes from that v is calculated as (dt*F/mass), 
+          ! and we want to express dt in femtosecond, force in Hartree/bohr, 
+          ! and m in atomic mass units. 
+          ! (it should be equivalent to express dt and m in atomic units, I think.)
+          ! Kinetic Energy is calculated as m/2*v^2 *fac in Hartree unit, and
+          ! Positions are calculated as v*dt in bohr unit. (m in amu, dt in fs)
+          v0 = sqrt(temp*fac_Kelvin2Hartree/(massa*fac)) 
+          do dir=1,3
+             u0 = myrng%rng_normal()
+             velocity(dir,ia) = v0 * u0
+             KE = KE + half * massa * fac * velocity(dir,ia)**2
+          end do
+       enddo
+       if (flag_FixCOM) call zero_COM_velocity(velocity)
+       KE = KE*three_halves
+       KE = KE/(real(ni_in_cell,double)*fac_Kelvin2Hartree)
+       if(iprint_MD > 2) write(io_lun,*) ' init_velocity: Kinetic Energy in K = ',KE
+    end if
+    call gcopy(velocity, 3, ni_in_cell)
     return
   end subroutine init_velocity
+  !!***
 
   ! --------------------------------------------------------------------
   ! Subroutine wrap_xyz_atom_cell
@@ -3242,52 +3234,6 @@ contains
   end subroutine check_move_atoms
   !!***
 
-  ! =====================================================================
-  !   sbrt ran2: generates uniform random numbers in the
-  !   interval [0,1]. Following Numerical Recipes, 1st edition,
-  !   page 197.
-  ! ---------------------------------------------------------------------
-  subroutine ran2(x,idum)
-
-    use numbers, only: double
-    use GenComms, only: cq_abort
-
-    implicit none
-    integer, parameter :: m=714025,ia=1366,ic=150889
-    real(double), parameter :: rm=1.0_double/m
-
-    integer,save :: ir(97) !! I add save statement 13/1/2000 TM
-    integer,save :: iff=0
-    integer,save :: j,iy   !! I add save statement 13/1/2000 TM
-    integer :: idum
-    real(double) :: x
-
-!    data iff/0/
-
-    if((idum.lt.0).or.(iff.eq.0)) then
-      iff=1
-      idum=mod(ic-idum,m)
-      do j=1,97
-        idum=mod(ia*idum+ic,m)
-        ir(j)=idum
-      enddo
-      idum=mod(ia*idum+ic,m)
-      iy=idum
-    endif
-!       write(*,11) idum,iy,iff,m,j,1+(97*iy)/m
-    j=1+(97*iy)/m
- 11 format('idum,iy,iff,m,old j,new j in ran2= ',6i12)
-    if ((j > 97) .or. (j < 1)) &
-         call cq_abort("Error in ran2 for index j (outside bounds 1-97): ", j)
-    iy=ir(j)
-    x=iy*rm
-    idum=mod(ia*idum+ic,m)
-    ir(j)=idum
-    return
-  end subroutine ran2
-  !!***
-
-
   !!****f* move_atoms/update_cell_dims *
   !!  NAME
   !!   update_cell_dims
@@ -3470,6 +3416,8 @@ contains
   !!  CREATION DATE
   !!   2017/Nov/12
   !!  MODIFICATION
+  !!   2018/Sep/07  tsuyoshi
+  !!       added calling ReportUpdateMatrix when flag_debug_move_atoms is true.
   !!
   !!  SOURCE
   !!
@@ -3485,7 +3433,7 @@ contains
                              matrix_scale, matrix_transpose, matSFcoeff_tran
   use matrix_data,     only: Lrange, Hrange, Srange, SFcoeff_range
   use store_matrix,    only: matrix_store_global, InfoMatrixFile, grab_InfoMatGlobal, grab_matrix2
-  use UpdateInfo_module, only: Matrix_CommRebuild
+  use UpdateInfo_module, only: Matrix_CommRebuild, Report_UpdateMatrix
 
   implicit none
   integer, intent(in) :: update_method
@@ -3504,6 +3452,9 @@ contains
  ! for extrapolation, we need to prepare multiple InfoGlob and Info.
   type(matrix_store_global) :: InfoGlob
   type(InfoMatrixFile),pointer :: Info(:)
+
+ !Switch on Debugging
+ !  flag_debug_move_atoms = .true.
 
   real(double), dimension(3,ni_in_cell) :: velocity_global
   integer :: i
@@ -3619,11 +3570,13 @@ contains
      call grab_matrix2('L',inode,nfile,Info)
      call my_barrier()
      call Matrix_CommRebuild(Info,Lrange,L_trans,matL(1),nfile,symm)
+      if(flag_debug_move_atoms) call Report_UpdateMatrix("Lmat")
      ! DRB 2017/05/09 now extended to spin systems
      if(nspin==2) then
        call grab_matrix2('L2',inode,nfile,Info)
        call my_barrier()
        call Matrix_CommRebuild(Info,Lrange,L_trans,matL(2),nfile,symm)
+        if(flag_debug_move_atoms) call Report_UpdateMatrix("L2  ")
      end if
   endif
 
@@ -3631,10 +3584,12 @@ contains
      call grab_matrix2('K',inode,nfile,Info)
      call my_barrier()
      call Matrix_CommRebuild(Info,Hrange,H_trans,matK(1),nfile)
+      if(flag_debug_move_atoms) call Report_UpdateMatrix("Kmat")
      if(nspin==2) then
        call grab_matrix2('K2',inode,nfile,Info)
        call my_barrier()
        call Matrix_CommRebuild(Info,Hrange,H_trans,matK(2),nfile)
+        if(flag_debug_move_atoms) call Report_UpdateMatrix("K2  ")
      end if
   endif
 
@@ -3642,11 +3597,13 @@ contains
      call grab_matrix2('S',inode,nfile,Info)
      call my_barrier()
      call Matrix_CommRebuild(Info,Srange,S_trans,matS,nfile)
+      if(flag_debug_move_atoms) call Report_UpdateMatrix("Smat")
      ! If we introduce spin-dependent support ...
      !if(nspin==2) then
      !  call grab_matrix2('S2',inode,nfile,Info)
      !  call my_barrier()
      !  call Matrix_CommRebuild(Info,Srange,S_trans,matS(2),nfile,symm)
+     !   if(flag_debug_move_atoms) call Report_UpdateMatrix("S2  ")
      !end if
   endif
 
@@ -3658,10 +3615,12 @@ contains
      call grab_matrix2('SFcoeff',inode,nfile,Info)
      call my_barrier()
      call Matrix_CommRebuild(Info,SFcoeff_range,SFcoeff_trans,matSFcoeff(1),nfile)
+      if(flag_debug_move_atoms) call Report_UpdateMatrix("SFc1")
      if(nspin_SF==2) then
       call grab_matrix2('SFcoeff2',inode,nfile,Info)
       call my_barrier()
       call Matrix_CommRebuild(Info,SFcoeff_range,SFcoeff_trans,matSFcoeff(2),nfile)
+       if(flag_debug_move_atoms) call Report_UpdateMatrix("SFc2")
      end if
 
      do spin_SF = 1,nspin_SF
@@ -3669,6 +3628,9 @@ contains
       call matrix_transpose(matSFcoeff(spin_SF), matSFcoeff_tran(spin_SF))
      enddo
   endif
+
+ !Switch off Debugging
+ !  flag_debug_move_atoms = .false.
 
  return
  end subroutine update_pos_and_matrices

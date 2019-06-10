@@ -112,36 +112,36 @@ contains
   end subroutine vVerlet_r_dt
   !*****
 
-  !****f* Integrators/vVerlet_r_dt
-  ! PURPOSE
-  !   Evolve particle velocities by dt/2 via velocity Verlet
-  !    v(t+dt/2) = v(t) + (dt/2)*a(t)
-  !   When quenched-MD applies, calculate inner product v*f
-  !   If v*f < 0, set v = 0
-  !
-  !   Note that the initial velocity is defined as v(0), NOT v(-dt/2)
-  !   any longer as in velocityVerlet at move_atoms.module
-  ! USAGE
-  !   call vVerlet_v_dthalf(dt,v,f,flag_movable,second_call)
-  ! INPUTS
-  !   double dt           : MD time step
-  !   double v            : velocities at t+dt/2
-  !   double force        : forces at t
-  !   logical flag_movable: flag to tell if atoms are movable
-  !   logical second_call : tell this is the 2nd call
-  ! OUTPUT
-  !   real(double), v: half-a-step evolved particle velocities
-  ! AUTHOR
-  !   M.Arita
-  ! CREATION DATE
-  !   2014/02/03
-  ! MODIFICATION HISTORY
-  ! SOURCE
-  !
+  !!****f* Integrators/vVerlet_r_dt
+  !!  PURPOSE
+  !!    Evolve particle velocities by dt/2 via velocity Verlet
+  !!     v(t+dt/2) = v(t) + (dt/2)*a(t)
+  !!    When quenched-MD applies, calculate inner product v*f
+  !!    If v*f < 0, set v = 0
+  !! 
+  !!    Note that the initial velocity is defined as v(0), NOT v(-dt/2)
+  !!    any longer as in velocityVerlet at move_atoms.module
+  !!  USAGE
+  !!    call vVerlet_v_dthalf(dt,v,f,flag_movable,second_call)
+  !!  INPUTS
+  !!    double dt           : MD time step
+  !!    double v            : velocities at t+dt/2
+  !!    double force        : forces at t
+  !!    logical flag_movable: flag to tell if atoms are movable
+  !!    logical second_call : tell this is the 2nd call
+  !!  OUTPUT
+  !!    real(double), v: half-a-step evolved particle velocities
+  !!  AUTHOR
+  !!    M.Arita
+  !!  CREATION DATE
+  !!    2014/02/03
+  !!  MODIFICATION HISTORY
+  !!  SOURCE
+  !! 
   subroutine vVerlet_v_dthalf(dt,v,f,flag_movable,second_call)
    ! Module usage
-   use numbers, ONLY: half,zero
-   use global_module, ONLY: ni_in_cell,id_glob,flag_quench_MD, flag_MDdebug, io_lun
+   use numbers, ONLY: half,zero, one
+   use global_module, ONLY: ni_in_cell,id_glob,flag_quench_MD, flag_MDdebug, io_lun, iprint_MD
    use species_module, oNLY: species,mass
    use move_atoms, ONLY: fac
    use GenComms, only: inode,ionode
@@ -155,51 +155,90 @@ contains
    logical,optional :: second_call
    ! local variables
    integer :: atom,speca,gatom,k,ibeg_atom
-   real(double) :: vf,massa
-   logical :: flagx,flagy,flagz
+   real(double) :: vf,massa,ff,scale_fac
+   logical :: flag_first
 
+   flag_first=.true.
+   if(present(second_call)) flag_first = .false.
    if (inode==ionode .and. flag_MDdebug) write(io_lun,*) "Welcome to vVerlet_v_dthalf"
    ibeg_atom=1
-   ! for quenched-MD
-   if (present(second_call) .AND. flag_quench_MD) then
-     do atom = 1, ni_in_cell
-       speca = species(atom)
-       massa = mass(speca)*fac
-       gatom = id_glob(atom)
-       do k = 1, 3
-         if (.NOT.flag_movable(ibeg_atom+k-1)) cycle
-         !OLD vf = v(k,atom)+f(k,gatom)
-         vf = v(k,atom)*f(k,gatom)
-         if (vf.LT.0) v(k,atom) = zero
-         v(k,atom) = v(k,atom) + half*dt*f(k,gatom)/massa
-       enddo
-     enddo
-   ! otherwise
-   else
-     do atom = 1, ni_in_cell
-       speca = species(atom)
-       massa = mass(speca)*fac
-       gatom = id_glob(atom)
-       do k = 1, 3
-         if (.NOT.flag_movable(ibeg_atom+k-1)) cycle
-         v(k,atom) = v(k,atom) + half*dt*f(k,gatom)/massa
-       enddo
-       ibeg_atom = ibeg_atom + 3
-!      flagx = flag_move_atom(1,gatom)
-!      flagy = flag_move_atom(2,gatom)
-!      flagz = flag_move_atom(3,gatom)
-!      ! X
-!      if (flagx) v(1,atom) = v(1,atom) + dt*half*f(1,gatom)/massa
-!      ! Y
-!      if (flagy) v(2,atom) = v(2,atom) + dt*half*f(2,gatom)/massa
-!      ! Z
-!      if (flagz) v(3,atom) = v(3,atom) + dt*half*f(3,gatom)/massa
-     enddo
+   ! For quenched-MD
+   ! 2018/07/16 DRB It seems that zeroing velocities after either call is more efficient
+   if(flag_quench_MD.and.flag_first) then
+      ! Alternative implementation: update v
+      do atom = 1, ni_in_cell
+         speca = species(atom)
+         massa = fac ! MDMin routine sets all masses = 1
+         gatom = id_glob(atom)
+         do k = 1, 3
+            !if (.NOT.flag_movable(ibeg_atom+k-1)) cycle
+            v(k,atom) = v(k,atom) + half*dt*f(k,gatom)/massa
+         enddo
+         ibeg_atom = ibeg_atom + 3
+      enddo
+      ! Accumulate system-wide F.v and set v=0 if F.v<0
+      vf = zero
+      ff = zero
+      do atom = 1, ni_in_cell
+         gatom = id_glob(atom)
+         do k = 1, 3
+            !if (.NOT.flag_movable(ibeg_atom+k-1)) cycle
+            vf = vf + v(k,atom)*f(k,gatom)
+            ff = ff + f(k,gatom)*f(k,gatom)
+         enddo
+         ibeg_atom = ibeg_atom + 3
+      enddo
+      scale_fac = vf/ff
+      ibeg_atom=1
+      ! Now zero or update
+      if(vf<zero) then
+         if(inode==ionode.AND.iprint_MD>2) write(io_lun,fmt='(2x,"In quenched MD, zeroing velocities")')
+         v(:,:) = zero
+      else
+         do atom = 1, ni_in_cell
+            speca = species(atom)
+            massa = fac ! MDMin routine sets all masses = 1
+            gatom = id_glob(atom)
+            do k = 1, 3
+               !if (.NOT.flag_movable(ibeg_atom+k-1)) cycle
+               ! Original
+               !v(k,atom) = v(k,atom) + half*dt*f(k,gatom)/massa
+               ! Alternative ! Hack by DRB - choose proportion of force direction to add
+               v(k,atom) = (one - fire_alpha0)*v(k,atom) + fire_alpha0*f(k,gatom)*scale_fac
+            enddo
+            ibeg_atom = ibeg_atom + 3
+         enddo
+      end if
+      ! Alternative implementation: update v
+      do atom = 1, ni_in_cell
+         speca = species(atom)
+         massa = fac ! MDMin routine sets all masses = 1
+         gatom = id_glob(atom)
+         do k = 1, 3
+            !if (.NOT.flag_movable(ibeg_atom+k-1)) cycle
+            v(k,atom) = v(k,atom) + half*dt*f(k,gatom)/massa
+         enddo
+         ibeg_atom = ibeg_atom + 3
+      enddo
+   ! Ordinary MD update
+   else if(.NOT.flag_quench_MD) then
+      do atom = 1, ni_in_cell
+         speca = species(atom)
+         massa = mass(speca)*fac
+         if(flag_quench_MD) massa = fac
+         gatom = id_glob(atom)
+         do k = 1, 3
+            if (.NOT.flag_movable(ibeg_atom+k-1)) cycle
+            v(k,atom) = v(k,atom) + half*dt*f(k,gatom)/massa
+         enddo
+         ibeg_atom = ibeg_atom + 3
+      enddo
    endif
 
    return
   end subroutine vVerlet_v_dthalf
-
+  !!***
+  
 !!****f* Integrators/fire_qMD
 !! PURPOSE
 !!   performs structure optimisation via (modified) FIRE quenched MD
@@ -352,8 +391,8 @@ contains
           gatom = id_glob(atom)
           do k = 1, 3
              ! Normally FIRE sets v to zero if P<0
-             !v(k,atom) = 0.0_double
-             v(k,atom) = dt * f(k,gatom) ! 2014/08/01 SA
+             v(k,atom) = 0.0_double
+             !v(k,atom) = dt * f(k,gatom) ! 2014/08/01 SA
           end do
        end do
        !dt = dt * fire_f_dec
