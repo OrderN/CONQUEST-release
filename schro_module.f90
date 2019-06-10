@@ -106,7 +106,7 @@ contains
     allocate(psi(nmesh))
     psi = zero
     
-    if(iprint>2) write(*,fmt='(2x,"Finding unconfined energies for valence states")')
+    if(iprint>2) write(*,fmt='(/2x,"Finding unconfined energies for valence states")')
     do i_shell = 1, val%n_occ
        if(iprint>2) write(*,fmt='(2x,"n=",i2," l=",i2)') val%n(i_shell), val%l(i_shell)
        radius_large = rr(nmesh)
@@ -117,7 +117,7 @@ contains
        val%en_pao(i_shell) = large_energy
     end do
     if(iprint>0) then
-       write(*,fmt='(2x,"Unconfined valence state energies (Ha)")')
+       write(*,fmt='(/2x,"Unconfined valence state energies (Ha)")')
        write(*,fmt='(2x,"  n  l         AE energy        PAO energy")')
        do i_shell = 1, val%n_occ
           ell = val%l(i_shell)
@@ -186,7 +186,7 @@ contains
        write(*,fmt='(4x,"User-specified radii")')          
     end if
     write(*,fmt='(/4x,"Cutoff radii for PAOs")')
-    write(*,fmt='(4x,"  n  l  z        R (bohr)")')
+    write(*,fmt='(4x,"  n  l  z      R (bohr)")')
     do i_shell = 1,paos%n_shells
        ell = paos%l(i_shell)
        en = paos%n(i_shell)
@@ -399,7 +399,6 @@ contains
        ell = paos%l(i_shell)
        en = paos%n(i_shell)
        do zeta = 1,paos%nzeta(i_shell)
-          write(*,*) 'Interpolate PAOs ',ell,en,zeta,paos%cutoff(zeta,i_shell)
           call convert_r_to_i(paos%cutoff(zeta,i_shell),nrc)
           paos%cutoff(zeta,i_shell) = rr(nrc-1)
           nmesh_pao = floor(paos%cutoff(zeta,i_shell)/delta_r_reg) + 1
@@ -556,8 +555,8 @@ contains
     allocate(large_cutoff(val%n_occ),small_cutoff(val%n_occ))
     large_cutoff = zero
     small_cutoff = zero
-    write(*,fmt='(4x,"Default energy shifts")')
-    write(*,fmt='(4x,"  n  l  delta E (Ha)  delta E (eV)")')
+    write(*,fmt='(/4x,"Default energy shifts")')
+    write(*,fmt='(4x,"  n  l   delta E (Ha) delta E (eV)")')
     ! Loop over valence states, find large/small cutoffs
     do i_shell = 1, val%n_occ !paos%n_shells-1 
        if(iprint>3) write(*,*) '# Finding radius for ',paos%npao(i_shell), paos%l(i_shell)
@@ -810,14 +809,12 @@ contains
     call convert_r_to_i(Rc,nmax)
     nmax = nmax - 1
     ! NEW !
-    write(*,*) 'Rc and rr(nmax) are: ',Rc,rr(nmax)
     Rc = rr(nmax)
     ! NEW !
     if(abs(energy)<RD_ERR) then
        energy = half*(e_lower+e_upper)
     end if
     tol = 1.0e-8_double
-    write(*,*) "# Nmax is ",nmax, flag_confine
     if(flag_confine) then
        delta = 0.01_double
        do i=1,nmax

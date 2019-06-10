@@ -60,13 +60,12 @@ contains
     if(mesh_type==hamann) then
        ! Check consistency of alpha and grid that has been read
        alpha_hamann = 0.01_double*log(local_and_vkb%rr(101)/local_and_vkb%rr(1))
-       write(*,fmt='(/"Mesh parameters"/2x,"Alpha from Hamann table: ",f12.9)') alpha_hamann
-       write(*,fmt='(2x,"Default alpha:           ",f12.9)') alpha
-       write(*,fmt='(2x,"Default beta:            ",f12.9)') beta
+       write(*,fmt='(2x,"Mesh parameters"/4x,"Alpha from Hamann table: ",f12.9)') alpha_hamann
+       write(*,fmt='(4x,"Default alpha:           ",f12.9)') alpha
+       write(*,fmt='(4x,"Default beta:            ",f12.9)') beta
        if(abs(alpha-alpha_hamann)>1e-6_double) then ! Arbitrary?
           alpha = alpha_hamann
        end if
-       if(iprint>3) write(*,fmt='("# Hamann type mesh with alpha, beta, Z: ",3f15.8)') alpha,beta, mesh_z
        do i=1,nmesh
           rr(i) = (beta/mesh_z)*exp(alpha*real(i-1,double))
           rr_squared(i) = rr(i)*rr(i)
