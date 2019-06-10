@@ -403,7 +403,8 @@ contains
                          if (inode==ionode) write(io_lun,'(A/A,I3,A,I3,A,I3/A/A/A/A)') &
                          "You have a major problem with your multi-site support functions.",&
                          "Number of multi-site SFs", nsf_species(i), &
-                         " is not equal to single-zeta (SZ) size", count_SZ, " nor single-zeta plus polarisation (SZP) size", count_SZP, &
+                         " is not equal to single-zeta (SZ) size", count_SZ, &
+                         " nor single-zeta plus polarisation (SZP) size", count_SZP, &
                          "Since the automatic setting of the trial vectors in the local filter diagonalisation method is ",&
                          "avaialble only for SZ or SZP size,",&
                          "you need to provide initial SFcoeffmatrix or trial vectors for the LFD method, ",&
