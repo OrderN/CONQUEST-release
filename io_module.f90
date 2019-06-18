@@ -4108,6 +4108,59 @@ second:   do
   end subroutine write_xsf
   !!***
 
+  !!****f* io_module/write_xyz *
+  !!
+  !!  NAME 
+  !!   write_xyz
+  !!  PURPOSE
+  !!   Writes atomic positions to a .xyz file
+  !!  INPUTS
+  !!   
+  !!  USES
+  !! 
+  !!  AUTHOR
+  !!   Zamaan Raza
+  !!  CREATION DATE
+  !!   2019/02/13
+  !!  MODIFICATION HISTORY
+  !!   
+  !!  SOURCE
+  !!
+  subroutine write_xyz(filename, comment)
+
+    use datatypes
+    use numbers,        only: zero
+    use dimens,         only: r_super_x, r_super_y, r_super_z
+    use global_module,  only: ni_in_cell, iprint_init, atom_coord, &
+                              species_glob
+    use species_module, only: species_label
+    use GenComms,       only: inode, ionode, cq_abort
+    use units,          only: BohrToAng
+    use timer_module
+
+    ! Passed variables
+    character(len=*)  :: filename, comment
+
+    ! Local variables
+    integer                    :: lun, i
+    character(len=2)           :: atom_name
+
+    if(inode==ionode) then
+      if (iprint_init>2) write(io_lun, &
+          '(2x,"Writing atomic positions to ",a,".xyz")') filename
+      call io_assign(lun)
+      open(unit=lun,file=filename)
+      write(lun,fmt='(i8)') ni_in_cell
+      write(lun,'(a)') comment
+      do i=1,ni_in_cell
+        atom_name = adjustr(species_label(species_glob(i))(1:2))
+        write(lun,'(a4,3f16.8)') atom_name, atom_coord(:,i)*BohrToAng
+      end do
+      call io_close(lun)
+    end if
+  end subroutine write_xyz
+  !!***
+
   ! Hopefully we'll never need this kludgy but portable way of flushing buffers !
   !  subroutine force_buffers(lun)
   !

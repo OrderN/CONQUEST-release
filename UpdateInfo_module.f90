@@ -2141,7 +2141,7 @@ contains
                 jcoverx = jcoverx - bundle%nx_origin + BCS_parts%nspanlx + 1
                 jcovery = jcovery - bundle%ny_origin + BCS_parts%nspanly + 1
                 jcoverz = jcoverz - bundle%nz_origin + BCS_parts%nspanlz + 1
-                if (inode==ionode .and. flag_MDdebug) &
+                if (inode==ionode .and. flag_MDdebug .and. iprint_MDdebug > 1) &
                   write (lun_db,*) "jcover in CS:", jcoverx,jcovery,jcoverz
                 ! The followings are NOT the error check. These are the treatment for the case
                 ! where atoms move and get out of CS.
@@ -2172,7 +2172,8 @@ contains
                    if (idglob_jj.EQ.idglob_jjj) then
                       find_jcover = .true.
                       jseq = jjj
-                      if (flag_MDdebug) write (lun_db,*) "idglob_jjj:", idglob_jjj
+                      if (flag_MDdebug .and. iprint_MDdebug > 1) &
+                        write (lun_db,*) "idglob_jjj:", idglob_jjj
                       exit
                    endif
                 enddo !(jjj, n_ing_cover)
@@ -2201,7 +2202,7 @@ contains
                 ibeg_Lij = 0
                 if (j_in_halo.NE.0) &
                      ibeg_Lij = matA_halo%i_h2d((iprim-1)*matA_halo%ni_in_halo+j_in_halo)
-                if (flag_MDdebug) then
+                if (flag_MDdebug .and. iprint_MDdebug > 1) then
                    write (lun_db,*) "id_glob(j) et ibeg_Lij:", idglob_jj, ibeg_Lij
                    write (lun_db,*) ""
                 endif

@@ -1039,7 +1039,7 @@ contains
   !!    Moved from io_module2 to store_matrix
   !!  SOURCE
   !!
-  subroutine grab_matrix2(stub,inode,nfile,Info,n_matrix_in,index_in)
+  subroutine grab_matrix2(stub,inode,nfile,Info,index_in,n_matrix_in)
 
     ! Module usage
     use io_module, ONLY: get_file_name, get_file_name_2rank
@@ -1053,8 +1053,8 @@ contains
     integer :: inode, matA
     character(len=*) :: stub
     type(InfoMatrixFile), pointer :: Info(:)
-    integer, optional :: n_matrix_in
     integer, optional :: index_in
+    integer, optional :: n_matrix_in
 
     ! local variables
     integer :: lun,stat,padzeros,stat_alloc,size,size2,sizeL,i,j,jbeta_alpha,len,ifile,ibeg

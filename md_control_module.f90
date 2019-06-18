@@ -40,6 +40,8 @@
 !!    checkpoint that includes ionic velocities
 !!   2019/05/08 zamaan
 !!    minor changes for heat flux calculations
+!!   2019/02/06 zamaan
+!!    Pressure conversion factor now computed from values from units module
 !!  SOURCE
 !!
 module md_control
@@ -51,11 +53,13 @@ module md_control
   use move_atoms,       only: fac_Kelvin2Hartree
   use species_module,   only: species, mass
   use GenComms,         only: inode, ionode, cq_abort
+  use units,            only: HaToeV, eVToJ, BohrToAng
 
   implicit none
 
   ! Unit conversion factors
-  real(double), parameter :: fac_HaBohr32GPa = 29421.02648438959
+  real(double), parameter :: fac_HaBohr32GPa = (HaToeV*eVToJ*1e21_double)/&
+                                               (BohrToAng**3)
   real(double), parameter :: fac_fs2atu = 41.3413745758
   real(double), parameter :: fac_invcm2hartree = 4.5563352812122295E-6
   real(double), parameter :: fac_thz2hartree = 0.0001519828500716
@@ -72,7 +76,7 @@ module md_control
 
   ! Module variables
   character(20) :: md_thermo_type, md_baro_type
-  real(double)  :: md_tau_T, md_tau_P, md_target_press, md_bulkmod_est, &
+  real(double)  :: md_tau_T, md_tau_P, target_pressure, md_bulkmod_est, &
                    md_box_mass, md_ndof_ions, md_omega_t, md_omega_p, &
                    md_tau_T_equil, md_tau_P_equil, md_p_drag, md_t_drag
   integer       :: md_n_nhc, md_n_ys, md_n_mts, md_berendsen_equil
@@ -1198,7 +1202,7 @@ contains
     baro%c6 = baro%c4/42.0_double
     baro%c8 = baro%c6/72.0_double
 
-    baro%P_ext = md_target_press/fac_HaBohr32GPa
+    baro%P_ext = target_pressure/fac_HaBohr32GPa
     baro%lat_ref = zero
     baro%lat_ref(1,1) = rcellx
     baro%lat_ref(2,2) = rcelly

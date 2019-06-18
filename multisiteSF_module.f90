@@ -57,6 +57,11 @@ module multisiteSF_module
   ! RCS tag for object file identification
   character(len=80), save, private :: RCSid = "$Id$"
 
+  ! Number of MSSFs
+  logical :: flag_MSSF_nonminimal              !nonmin_mssf
+  real(double) :: MSSF_nonminimal_offset       !nonmin_mssf
+  integer, allocatable, dimension(:)  :: MSSF_nonminimal_species ! 1:SZ, 2:SZP, 3:others
+
   ! Smearing MSSF
   logical :: flag_MSSF_smear                                     ! smear MSSF (default=F)
   integer :: MSSF_Smear_type                                     ! smearing-function type (default=1:Fermi-Dirac)
@@ -1010,8 +1015,8 @@ contains
                 NEsub = zero
                 call LFD_make_TVEC(TVEC,NTVEC,len_Sub_i,np,i,atom_i,atom_num,atom_spec,LFDhalo, NEsub, &
                                    len_Sub_i_d,n_naba_i_d,l_k_g,l_k_r2,l_kpao)  
-                if (iprint_basis>=6) call LFD_debug_matrix(lun11,0,np,atom_i,EVAL,TVEC,len_Sub_i,NTVEC, &
-                                                           n_naba_i_d,l_k_g,l_k_r2,l_kpao)           
+                !call LFD_debug_matrix(lun11,0,np,atom_i,EVAL,TVEC,len_Sub_i,NTVEC, &
+                !                                           n_naba_i_d,l_k_g,l_k_r2,l_kpao)
 !
 !               --- (2) make subspaces for atom_i
 !
@@ -1775,6 +1780,8 @@ contains
 !!  CREATION DATE
 !!   2017/01/08
 !!  MODIFICATION HISTORY
+!!   2019/06/06 17:30 jack poulton and nakata
+!!    introduced SZP-MSSFs with automatic setting of trial vectors using offset
 !!
 !!  SOURCE
 !!
@@ -1805,12 +1812,14 @@ contains
     ! Local variables
     integer :: npao_i, &
                k, ist, gcspart, k_in_halo, npao_k, &
-               neigh_global_part, atom_k, neigh_species, prncpl, &
-               kpao, kpao0, ITVEC, count, l1, nacz1, m1, k1, kk
+               neigh_global_part, atom_k, neigh_species, prncpl, prncpl0, &
+               kpao, kpao0, ITVEC, ITVEC0, count, l1, nacz1, m1, k1, kk
     integer, dimension(7) :: tvec_n
     real(double) :: dx,dy,dz,r2,cutoff
     real(double), dimension(7) :: occ_n, max_cutoff_n
     real(double), parameter :: R2_ERR = 1.0e-4_double
+!    real(double) :: MSSF_nonminimal_offset
+
 
     if (iprint_basis>=5.and.inode==ionode) write(io_lun,*) 'We are in sub:LFD_make_TVEC'
 
@@ -1844,8 +1853,10 @@ contains
           if (atom_i.ne.atom_k) call cq_abort("in sub: make_TVEC_LFD, error in finding onsite atom", atom_i)
           if (.not.flag_LFD_ReadTVEC) then
           ! --- make trial vectors by choosing the largest PAO for each L and N
-             kpao = 0
-             ITVEC = 0
+             kpao    = 0
+             ITVEC   = 0
+             ITVEC0  = 0
+             prncpl0 = 0
              do l1 = 0, pao(atom_spec)%greatest_angmom ! Loop L
                 ! check occupancy for each N to distinguish (semicore,valence) or (polarization)
                 occ_n(:) = zero
@@ -1858,30 +1869,59 @@ contains
                 tvec_n(:) = 0
                 do nacz1 = 1, pao(atom_spec)%angmom(l1)%n_zeta_in_angmom
                    prncpl = pao(atom_spec)%angmom(l1)%prncpl(nacz1)
-                   if (occ_n(prncpl).gt.zero) then ! Semicore or Valence PAOs
+                   if (MSSF_nonminimal_species(atom_spec).eq.1) then ! SZ-size MSSFs
+                      ! only for occupied PAOs
+                      if (occ_n(prncpl).gt.zero) then ! Semicore or Valence PAOs
+                         cutoff = pao(atom_spec)%angmom(l1)%zeta(nacz1)%cutoff
+                         if (cutoff.gt.max_cutoff_n(prncpl)) then
+                            max_cutoff_n(prncpl) = cutoff
+                            tvec_n(prncpl) = nacz1 ! Z of the largest PAO for this L and this N
+                         endif
+                      endif
+                   else
+                      ! for all PAOs
                       cutoff = pao(atom_spec)%angmom(l1)%zeta(nacz1)%cutoff
                       if (cutoff.gt.max_cutoff_n(prncpl)) then
                          max_cutoff_n(prncpl) = cutoff
                          tvec_n(prncpl) = nacz1 ! Z of the largest PAO for this L and this N
-                      endif                         
+                      endif
                    endif
                 enddo
                 ! make TVEC
                 do nacz1 = 1, pao(atom_spec)%angmom(l1)%n_zeta_in_angmom
                    prncpl = pao(atom_spec)%angmom(l1)%prncpl(nacz1)
+                   if (nacz1.ne.1 .and. prncpl.ne.prncpl0) ITVEC0 = ITVEC0 + 2*l1 + 1
+                   ! put 1 for the largest PAOs
                    if (nacz1.eq.tvec_n(prncpl)) then
+                      ITVEC = ITVEC0
                       do m1 = -l1,l1
                          ITVEC = ITVEC + 1
                          kpao = kpao + 1
                          TVEC(kpao0+kpao,ITVEC) = one
                       enddo ! m1
+                   else if ( MSSF_nonminimal_species(atom_spec).ne.1 .and. MSSF_nonminimal_offset.ne.zero) then
+                      ITVEC = ITVEC0
+                      do m1 = -l1,l1
+                         ITVEC = ITVEC + 1
+                         kpao = kpao + 1
+                         TVEC(kpao0+kpao,ITVEC) = MSSF_nonminimal_offset
+                      enddo ! m1
                    else
                       kpao = kpao + 2*l1 + 1
                    endif
+                   prncpl0 = prncpl
                 enddo
+                ITVEC0 = ITVEC
              enddo ! l1
-             if (kpao.ne.npao_k) call cq_abort("in sub: make_TVEC_LFD, error in making TVEC 1", kpao, npao_k)
-             if (ITVEC.ne.NTVEC) call cq_abort("in sub: make_TVEC_LFD, error in making TVEC 2", ITVEC, NTVEC)
+             if (kpao.ne.npao_k) write(io_lun,*) "in sub: make_TVEC_LFD, error in making TVEC 2", kpao, npao_k
+             if (ITVEC.ne.NTVEC) write(io_lun,*) "in sub: make_TVEC_LFD, error in making TVEC 3", ITVEC, NTVEC
+             if (kpao.ne.npao_k .or. ITVEC.ne.NTVEC) then
+                write(io_lun,'(A/A/A)') &
+                   " Most of cases, this problem occurs when the number of support function is not set correctly.",&
+                   " Automatic setting of trial vectors is available only when multi-site support functions is in ",&
+                   " single-zeta (SZ) size, or single-zeta plus polarization (SZP) size with flag_MSSF_nonminimal."
+                call cq_abort("Stopped in sub: make_TVEC_LFD")
+             endif
           else
           ! --- read TVEC from input
              do l1 =1, NTVEC
