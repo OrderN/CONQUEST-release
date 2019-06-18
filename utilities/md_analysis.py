@@ -7,7 +7,7 @@ import os.path
 import scipy as sp
 import matplotlib.pyplot as plt
 from frame import Frame
-from md_tools import Pairdist, MSER, VACF, MSD
+from md_tools import Pairdist, MSER, VACF, MSD, autocorr
 from pdb import set_trace
 
 ha2ev = 27.211399
@@ -19,10 +19,13 @@ endframe_re = re.compile('end frame')
 specblock_re = re.compile(r'%block ChemicalSpeciesLabel\n(.*?)\n%endblock',
                           re.M | re.S | re.I)
 
+# files
 cq_input_file = 'Conquest_input'
+statfile = 'md.stats'
+framefile = 'md.frames'
+heatfluxfile = 'md.heatflux'
 
 # Parsing functions
-
 def strip_comments(line, separator):
   for s in separator:
     i = line.find(s)
@@ -81,6 +84,7 @@ def parse_init_config(conf_filename):
         scount[data['species'][i]] = 1
     data['species_count'] = scount
     data['nspecies'] = len(scount.keys())
+    data['volume'] = data['latvec'][0,0]*data['latvec'][1,1]*data['latvec'][2,2]
   return data
 
 def read_stats(stats_file, nstop):
@@ -116,15 +120,11 @@ parser = argparse.ArgumentParser(description='Analyse a Conquest MD \
 parser.add_argument('-c', '--compare', action='store_true', default=False,
                     dest='compare', help='Compare statistics of trajectories \
                     in directories specified by -d')
-parser.add_argument('-d', '--dirs', nargs='+', default='.', dest='dirs',
+parser.add_argument('-d', '--dirs', nargs='+', default=['.',], dest='dirs',
                     action='store', help='Directories to compare')
 parser.add_argument('--description', nargs='+', default='', dest='desc',
                     action='store', help='Description of graph for legend \
                     (only if using --compare)')
-parser.add_argument('-f', '--frames', action='store', dest='framesfile',
-                    default='Frames', help='MD frames file')
-parser.add_argument('-s', '--stats', action='store', dest='statfile',
-                    default='Stats', help='MD statistics file')
 parser.add_argument('--skip', action='store', dest='nskip', default=0,
                     type=int, help='Number of equilibration steps to skip')
 parser.add_argument('--stride', action='store', dest='stride', default=1,
@@ -135,8 +135,14 @@ parser.add_argument('--stop', action='store', dest='nstop', default=-1,
                     type=int, help='Number of last frame in analysis')
 parser.add_argument('--equil', action='store', dest='nequil', default=0, 
                     type=int, help='Number of equilibration steps')
+parser.add_argument('--stats', action='store_true', dest='stats',
+                    help='Plot statistics')
 parser.add_argument('--vacf', action='store_true', dest='vacf', 
                     help='Plot velocity autocorrelation function')
+parser.add_argument('--hfacf', action='store_true', dest='hfacf', 
+                    help='Plot heat flux autocorrelation function')
+parser.add_argument('--acfwindow', action='store', dest='acfwindow', default=0.0, 
+                    type=float, help='window for autocorrelation')
 parser.add_argument('--msd', action='store_true', dest='msd', 
                     help='Plot mean squared deviation')
 parser.add_argument('--rdf', action='store_true', dest='rdf', 
@@ -170,122 +176,123 @@ else:
 if opts.nequil == 0:
   opts.nequil = opts.nskip
 
-if not opts.compare:
-  # Parse the input structure and Conquest_input files
-  cq_params = parse_cq_input(cq_input_file)
-  init_config = parse_init_config(cq_params['IO.Coordinates'])
-  natoms = init_config['natoms']
-  dt = float(cq_params['AtomMove.Timestep'])
-  species = cq_params['species']
-  extended_system = False
-  if 'MD.Thermostat' in cq_params.keys():
-    if cq_params['MD.Thermostat'] == 'nhc':
-      extended_system = True
-    if cq_params['MD.Thermostat'] == 'ssm':
-      extended_system = True
-  if 'MD.Barostat' in cq_params.keys():
-    if cq_params['MD.Barostat'] == 'iso-ssm':
-      extended_system = True
-    if cq_params['MD.Barostat'] == 'ortho-ssm':
-      extended_system = True
-    if cq_params['MD.Barostat'] == 'iso-mttk':
-      extended_system = True
+# Parse the input structure and Conquest_input files
+cq_params = parse_cq_input(os.path.join(opts.dirs[0], cq_input_file))
+init_config = parse_init_config(os.path.join(opts.dirs[0], cq_params['IO.Coordinates']))
+natoms = init_config['natoms']
+dt = float(cq_params['AtomMove.Timestep'])
+species = cq_params['species']
+extended_system = False
+if 'MD.Thermostat' in cq_params.keys():
+  if cq_params['MD.Thermostat'] == 'nhc':
+    extended_system = True
+  if cq_params['MD.Thermostat'] == 'ssm':
+    extended_system = True
+if 'MD.Barostat' in cq_params.keys():
+  if cq_params['MD.Barostat'] == 'iso-ssm':
+    extended_system = True
+  if cq_params['MD.Barostat'] == 'ortho-ssm':
+    extended_system = True
+  if cq_params['MD.Barostat'] == 'iso-mttk':
+    extended_system = True
 
-  # Parse the statistics file
-  nsteps, data = read_stats(opts.statfile,opts.nstop)
-  avg = {}
-  std = {}
-  for key in data:
-    data[key] = sp.array(data[key])
-    avg[key] = sp.mean(data[key][opts.nequil:-1])
-    std[key] = sp.std(data[key][opts.nequil:-1])
-  time = [float(s)*dt for s in data['step']]
-  data['time'] = sp.array(time)
-
-  # Plot the statistics
-  if opts.landscape:
-    fig1, ((ax1, ax2), (ax3, ax4)) = plt.subplots(nrows=2, ncols=2, sharex=True, figsize=(11,7))
-    plt.tight_layout(pad=6.5)
-  else:
-    fig1, (ax1, ax2, ax3, ax4) = plt.subplots(nrows=4, ncols=1, sharex=True, figsize=(7,10))
-
-  ax1.plot(data['time'][opts.nskip:], data['pe'][opts.nskip:], 'r-', label='Potential energy')
-  ax1a = ax1.twinx()
-  ax1a.plot(data['time'][opts.nskip:], data['ke'][opts.nskip:], 'b-', label='Kinetic energy')
-  if cq_params['MD.Ensemble'][2] == 't':
-    if extended_system:
-      ax1a.plot(data['time'][opts.nskip:], data['nhc'][opts.nskip:], 'g-', label='NHC energy')
-  if cq_params['MD.Ensemble'][1] == 'p':
-    if extended_system:
-      ax1a.plot(data['time'][opts.nskip:], data['box'][opts.nskip:], 'c-', label='Box energy')
-    ax1a.plot(data['time'][opts.nskip:], data['pV'][opts.nskip:], 'm-', label='pV')
-  ax2.plot(data['time'][opts.nskip:], data['H\''][opts.nskip:])
-  ax2.plot((opts.nskip,data['time'][-1]), (avg['H\''],avg['H\'']), '-',
-        label=r'$\langle H\' \rangle$ = {0:>12.4f} $\pm$ {1:<12.4f}'.format(avg['H\''], std['H\'']))
-  ax3.plot(data['time'][opts.nskip:], data['T'][opts.nskip:])
-  ax3.plot((opts.nskip,data['time'][-1]), (avg['T'],avg['T']), '-',
-        label=r'$\langle T \rangle$ = {0:>12.4f} $\pm$ {1:<12.4f}'.format(avg['T'], std['T']))
-  ax4.plot(data['time'][opts.nskip:], data['P'][opts.nskip:], 'b-')
-  ax4.plot((opts.nskip,data['time'][-1]), (avg['P'],avg['P']), 'b--',
-        label=r'$\langle P \rangle$ = {0:>12.4f} $\pm$ {1:<12.4f}'.format(avg['P'], std['P']))
-  if cq_params['MD.Ensemble'][1] == 'p':
-    ax4a = ax4.twinx()
-    ax4a.plot(data['time'][opts.nskip:], data['V'][opts.nskip:], 'r-')
-    ax4a.plot((opts.nskip,data['time'][-1]), (avg['V'],avg['V']), 'r--',
-          label=r'$\langle V \rangle$ = {0:>12.4f} $\pm$ {1:<12.4f}'.format(avg['V'], std['V']))
-  ax1.set_ylabel("E (Ha)")
-  ax2.set_ylabel("H$'$ (Ha)")
-  ax3.set_ylabel("T (K)")
-  ax4.set_ylabel("P (GPa)", color='b')
-  if cq_params['MD.Ensemble'][1] == 'p':
-    ax4a.set_ylabel("V ($a_0^3$)", color='r')
-  ax4.set_xlabel("time (fs)")
-  ax1.legend(loc="upper left")
-  ax1a.legend(loc="lower right")
-  ax2.legend()
-  ax3.legend()
-  ax4.legend(loc="upper left")
-  if cq_params['MD.Ensemble'][1] == 'p':
-    ax4a.legend(loc="lower right")
-  plt.xlim((opts.nskip,data['time'][-1]))
-  fig1.subplots_adjust(hspace=0)
-  fig1.savefig("stats.pdf", bbox_inches='tight')
-else:
-  # If we're comparing statistics in several directories, use a simplified plot
-  fig1, (ax1, ax2, ax3) = plt.subplots(nrows=3, ncols=1, sharex=True, figsize=(7,7))
-  ax1a = ax1.twinx()
-  for ind, d in enumerate(opts.dirs):
-    path = os.path.join(d, cq_input_file)
-    cq_params = parse_cq_input(path)
-    path = os.path.join(d, cq_params['IO.Coordinates'])
-    init_config = parse_init_config(path)
-    natoms = init_config['natoms']
-    dt = float(cq_params['AtomMove.Timestep'])
-    species = cq_params['species']
-  
-    path = os.path.join(d, opts.statfile)
-    nsteps, data = read_stats(path,opts.nstop)
+if opts.stats:
+  if not opts.compare:
+    # Parse the statistics file
+    nsteps, data = read_stats(statfile,opts.nstop)
+    avg = {}
+    std = {}
+    for key in data:
+      data[key] = sp.array(data[key])
+      avg[key] = sp.mean(data[key][opts.nequil:-1])
+      std[key] = sp.std(data[key][opts.nequil:-1])
     time = [float(s)*dt for s in data['step']]
     data['time'] = sp.array(time)
 
-    ax1.plot(data['time'][opts.nskip:], data['H\''][opts.nskip:],
-             linewidth=0.5, label=opts.desc[ind])
-    y1,y2 = ax1.get_ylim()
-    ax1a.set_ylim(y1*ha2k,y2*ha2k)
-    ax2.plot(data['time'][opts.nskip:], data['T'][opts.nskip:],
-             linewidth=0.5, label=opts.desc[ind])
-    ax3.plot(data['time'][opts.nskip:], data['P'][opts.nskip:],
-             linewidth=0.5, label=opts.desc[ind])
+    # Plot the statistics
+    if opts.landscape:
+      fig1, ((ax1, ax2), (ax3, ax4)) = plt.subplots(nrows=2, ncols=2, sharex=True, figsize=(11,7))
+      plt.tight_layout(pad=6.5)
+    else:
+      fig1, (ax1, ax2, ax3, ax4) = plt.subplots(nrows=4, ncols=1, sharex=True, figsize=(7,10))
 
-  ax1.set_ylabel("H$'$ (Ha)")
-  ax1a.set_ylabel("H$'$ (K)")
-  ax2.set_ylabel("T (K)")
-  ax3.set_ylabel("P (GPa)")
-  ax3.set_xlabel("time (fs)")
-  ax1.legend()
-  plt.xlim((opts.nskip,data['time'][-1]))
-  fig1.subplots_adjust(hspace=0)
-  fig1.savefig("stats.pdf", bbox_inches='tight')
+    ax1.plot(data['time'][opts.nskip:], data['pe'][opts.nskip:], 'r-', label='Potential energy')
+    ax1a = ax1.twinx()
+    ax1a.plot(data['time'][opts.nskip:], data['ke'][opts.nskip:], 'b-', label='Kinetic energy')
+    if cq_params['MD.Ensemble'][2] == 't':
+      if extended_system:
+        ax1a.plot(data['time'][opts.nskip:], data['nhc'][opts.nskip:], 'g-', label='NHC energy')
+    if cq_params['MD.Ensemble'][1] == 'p':
+      if extended_system:
+        ax1a.plot(data['time'][opts.nskip:], data['box'][opts.nskip:], 'c-', label='Box energy')
+      ax1a.plot(data['time'][opts.nskip:], data['pV'][opts.nskip:], 'm-', label='pV')
+    ax2.plot(data['time'][opts.nskip:], data['H\''][opts.nskip:])
+    ax2.plot((opts.nskip,data['time'][-1]), (avg['H\''],avg['H\'']), '-',
+          label=r'$\langle H\' \rangle$ = {0:>12.4f} $\pm$ {1:<12.4f}'.format(avg['H\''], std['H\'']))
+    ax3.plot(data['time'][opts.nskip:], data['T'][opts.nskip:])
+    ax3.plot((opts.nskip,data['time'][-1]), (avg['T'],avg['T']), '-',
+          label=r'$\langle T \rangle$ = {0:>12.4f} $\pm$ {1:<12.4f}'.format(avg['T'], std['T']))
+    ax4.plot(data['time'][opts.nskip:], data['P'][opts.nskip:], 'b-')
+    ax4.plot((opts.nskip,data['time'][-1]), (avg['P'],avg['P']), 'b--',
+          label=r'$\langle P \rangle$ = {0:>12.4f} $\pm$ {1:<12.4f}'.format(avg['P'], std['P']))
+    if cq_params['MD.Ensemble'][1] == 'p':
+      ax4a = ax4.twinx()
+      ax4a.plot(data['time'][opts.nskip:], data['V'][opts.nskip:], 'r-')
+      ax4a.plot((opts.nskip,data['time'][-1]), (avg['V'],avg['V']), 'r--',
+            label=r'$\langle V \rangle$ = {0:>12.4f} $\pm$ {1:<12.4f}'.format(avg['V'], std['V']))
+    ax1.set_ylabel("E (Ha)")
+    ax2.set_ylabel("H$'$ (Ha)")
+    ax3.set_ylabel("T (K)")
+    ax4.set_ylabel("P (GPa)", color='b')
+    if cq_params['MD.Ensemble'][1] == 'p':
+      ax4a.set_ylabel("V ($a_0^3$)", color='r')
+    ax4.set_xlabel("time (fs)")
+    ax1.legend(loc="upper left")
+    ax1a.legend(loc="lower right")
+    ax2.legend()
+    ax3.legend()
+    ax4.legend(loc="upper left")
+    if cq_params['MD.Ensemble'][1] == 'p':
+      ax4a.legend(loc="lower right")
+    plt.xlim((opts.nskip,data['time'][-1]))
+    fig1.subplots_adjust(hspace=0)
+    fig1.savefig("stats.pdf", bbox_inches='tight')
+  else:
+    # If we're comparing statistics in several directories, use a simplified plot
+    fig1, (ax1, ax2, ax3) = plt.subplots(nrows=3, ncols=1, sharex=True, figsize=(7,7))
+    ax1a = ax1.twinx()
+    for ind, d in enumerate(opts.dirs):
+      path = os.path.join(d, cq_input_file)
+      cq_params = parse_cq_input(path)
+      path = os.path.join(d, cq_params['IO.Coordinates'])
+      init_config = parse_init_config(path)
+      natoms = init_config['natoms']
+      dt = float(cq_params['AtomMove.Timestep'])
+      species = cq_params['species']
+    
+      path = os.path.join(d, opts.statfile)
+      nsteps, data = read_stats(path,opts.nstop)
+      time = [float(s)*dt for s in data['step']]
+      data['time'] = sp.array(time)
+
+      ax1.plot(data['time'][opts.nskip:], data['H\''][opts.nskip:],
+               linewidth=0.5, label=opts.desc[ind])
+      y1,y2 = ax1.get_ylim()
+      ax1a.set_ylim(y1*ha2k,y2*ha2k)
+      ax2.plot(data['time'][opts.nskip:], data['T'][opts.nskip:],
+               linewidth=0.5, label=opts.desc[ind])
+      ax3.plot(data['time'][opts.nskip:], data['P'][opts.nskip:],
+               linewidth=0.5, label=opts.desc[ind])
+
+    ax1.set_ylabel("H$'$ (Ha)")
+    ax1a.set_ylabel("H$'$ (K)")
+    ax2.set_ylabel("T (K)")
+    ax3.set_ylabel("P (GPa)")
+    ax3.set_xlabel("time (fs)")
+    ax1.legend()
+    plt.xlim((opts.nskip,data['time'][-1]))
+    fig1.subplots_adjust(hspace=0)
+    fig1.savefig("stats.pdf", bbox_inches='tight')
 
 # Plot MSER
 if opts.mser_var:
@@ -294,6 +301,53 @@ if opts.mser_var:
   traj.plot_mser(data['step'])
   if opts.dump:
     traj.dump_mser(data['step'])
+
+# Plot heat flux autocorrelation function
+if opts.hfacf:
+  window = int(opts.acfwindow // dt)
+  G = sp.zeros((3,3,window))
+  time = sp.array([float(i)*dt for i in range(window)])
+  nruns = 0
+  for ind, d in enumerate(opts.dirs):
+    path = os.path.join(d, heatfluxfile)
+
+    J = []
+    t = []
+    nsteps = 0
+    with open(path, 'r') as infile:
+      for line in infile:
+        step, Jx, Jy, Jz = line.split()
+        step = int(step)
+        Jx = float(Jx)
+        Jy = float(Jy)
+        Jz = float(Jz)
+        J.append([Jx, Jy, Jz])
+        t.append(step*dt)
+        nsteps += 1
+    J = sp.array(J)
+    t = sp.array(t)
+
+    nwindows = int((nsteps - opts.nskip) // window)
+    for i in range(3):
+      for j in range(3):
+        for k in range(nwindows):
+          nruns += 1
+          start = opts.nskip + k*window
+          finish = opts.nskip + k*window + window
+          G += autocorr(J[start:finish,i],J[start:finish,j])
+  G = G / float(nruns)
+  plt.figure("HFACF")
+  plt.xlabel("t (fs)")
+  plt.ylabel("HFACF")
+  plt.xlim((0, time[-1]))
+  plt.plot(time[:], G[0,0,:], 'r-', label='G_{xx}', linewidth=1.0)
+  plt.plot(time[:], G[1,1,:], 'g-', label='G_{yy}', linewidth=1.0)
+  plt.plot(time[:], G[2,2,:], 'b-', label='G_{zz}', linewidth=1.0)
+  plt.plot(time[:], G[0,1,:], 'r--', label='G_{xy}', linewidth=1.0)
+  plt.plot(time[:], G[0,2,:], 'b--', label='G_{xz}', linewidth=1.0)
+  plt.plot(time[:], G[1,2,:], 'g--', label='G_{yz}', linewidth=1.0)
+  plt.legend(loc='upper right')
+  plt.savefig("hfacf.pdf", bbox_inches='tight')
 
 # Parse the frames file
 if read_frames:
@@ -305,7 +359,7 @@ if read_frames:
   lat = []
   first_frame = True
   done = False
-  with open(opts.framesfile, 'r') as framesfile:
+  with open(framefile, 'r') as framesfile:
     while not done:
       line = framesfile.readline()
       if not line:
