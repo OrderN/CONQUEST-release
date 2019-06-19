@@ -29,6 +29,8 @@
 !!   2018/01/22 12:46 dave
 !!    Completely new approach for Bessel transform and changes to calculate
 !!    general Bessel function for NA projector functions
+!!   2019/06/19 15:32 dave
+!!    Changes to prepare for removal of NR sine/cosine transform routines
 !!  SOURCE
 !!
 module bessel_integrals
@@ -374,14 +376,15 @@ contains
 !!  CREATION DATE
 !!   22/01/18
 !!  MODIFICATION HISTORY
-!!
+!!   2019/06/19 15:29 dave
+!!    Changed to use cosft1 from NR 2nd edition  
 !!  SOURCE
 !!
    subroutine new_bessel_transform_even(n,function_in,npts_in,npts2,rcut,delta_r,function_out)
 
      use datatypes
      use numbers
-     use fft_procedures, only: sinft, cosft
+     use fft_procedures, only: sinft, cosft, cosft1
 
      implicit none
 
@@ -400,7 +403,7 @@ contains
      ! en is found such that n = 2*en
      en = floor(half*n)
      ! Allocate
-     allocate(dummy1(npts2),dummy2(npts2),ess(0:en),coeff_poly(0:poly_order), &
+     allocate(dummy1(npts2+1),dummy2(npts2),ess(0:en),coeff_poly(0:poly_order), &
           coeff_poly1(0:poly_order),prefac(0:en))
      dummy1 = zero
      dummy2 = zero
@@ -411,7 +414,7 @@ contains
         dummy2(i) = r*r*r*delta_r*function_in(i)
      end do
      ! Cosine transform for function
-     call cosft(dummy1,npts2,+1)
+     call cosft1(dummy1,npts2) !,+1)
      ! Sine transform for first derivative (for polynomial fitting)
      call sinft(dummy2,npts2)
      dummy2 = -one*dummy2
@@ -492,6 +495,8 @@ contains
 !!  CREATION DATE
 !!   22/01/18
 !!  MODIFICATION HISTORY
+!!   2019/06/19 15:29 dave
+!!    Changed to use cosft1 from NR 2nd edition  
 !!
 !!  SOURCE
 !!
@@ -499,7 +504,7 @@ contains
 
      use datatypes
      use numbers
-     use fft_procedures, only: sinft, cosft
+     use fft_procedures, only: sinft, cosft, cosft1
 
      implicit none
 
@@ -518,7 +523,7 @@ contains
      ! en is found such that 2*en+1
      en = floor(half*n)
      ! Allocate
-     allocate(dummy1(npts2),dummy2(npts2),ess(0:en),coeff_poly(0:poly_order), &
+     allocate(dummy1(npts2),dummy2(npts2+1),ess(0:en),coeff_poly(0:poly_order), &
           coeff_poly1(0:poly_order),prefac(0:en))
      dummy1 = zero
      dummy2 = zero
@@ -531,7 +536,7 @@ contains
      ! Sine transform for function
      call sinft(dummy1,npts2)
      ! Cosine transform for first derivative (for polynomial fitting)
-     call cosft(dummy2,npts2,+1)
+     call cosft1(dummy2,npts2) !,+1)
      ! Set k-space interval
      dk = twopi/(rcut+delta_r)
      dk2 = dk*dk
