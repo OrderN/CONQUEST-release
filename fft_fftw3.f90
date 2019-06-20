@@ -11,8 +11,7 @@ module fft_interface_module
 
   integer, parameter   :: FFTW_FORWARD  = -1
   integer, parameter   :: FFTW_BACKWARD = +1
-  integer, parameter   :: FFTW_REDFT01  = 4
-  integer, parameter   :: FFTW_REDFT10  = 5
+  integer, parameter   :: FFTW_REDFT00  = 3
   integer, parameter   :: FFTW_RODFT00  = 7
   integer, parameter   :: FFTW_ESTIMATE = 64 
 
@@ -213,9 +212,9 @@ contains
     real(double) :: dummy
 
     ! for forward
-    call dfftw_plan_r2r_1d( cos_plan_for, len, dummy, dummy, FFTW_REDFT01, FFTW_ESTIMATE )
+    call dfftw_plan_r2r_1d( cos_plan_for, len, dummy, dummy, FFTW_REDFT00, FFTW_ESTIMATE )
     ! for reverse
-    call dfftw_plan_r2r_1d( cos_plan_rev, len, dummy, dummy, FFTW_REDFT10, FFTW_ESTIMATE )
+    call dfftw_plan_r2r_1d( cos_plan_rev, len, dummy, dummy, FFTW_REDFT00, FFTW_ESTIMATE )
 
     return
   end subroutine cosft_init_wrapper
@@ -234,7 +233,7 @@ contains
     end if
     if( isign==+1 ) then ! reverse
        call dfftw_execute_r2r( cos_plan_rev, data, data )
-       data = data/real(2*len,double)
+       data = data/real(2*(len-1),double)
     end if
 
     return
