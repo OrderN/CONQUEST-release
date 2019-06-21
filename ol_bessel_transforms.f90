@@ -621,7 +621,7 @@ contains
      ! en is found such that n = 2*en
      en = floor(half*n)
      ! Allocate
-     allocate(dummy1(npts2),dummy2(npts2),ess(0:en),coeff_poly(0:poly_order), &
+     allocate(dummy1(npts2+1),dummy2(npts2),ess(0:en),coeff_poly(0:poly_order), &
           coeff_poly1(0:poly_order),prefac(0:en))
      dummy1 = zero
      dummy2 = zero
@@ -634,20 +634,21 @@ contains
         dummy1(i) = r*r*function_in(i)*delta_r
         dummy2(i-1) = r*r*r*function_in(i)*delta_r
      end do
-     call sinft_init_wrapper(npts2)
-     call cosft_init_wrapper(npts2)
+     call sinft_init_wrapper(npts2-1)
+     call cosft_init_wrapper(npts2+1)
      ! Cosine transform for function
      !call cosft1(dummy1,npts2)
-     call cosft_exec_wrapper(dummy1,npts2,-1)
+     call cosft_exec_wrapper(dummy1,npts2+1,-1)
      ! Sine transform for first derivative (for polynomial fitting)
      !call sinft(dummy2,npts2)
-     call sinft_exec_wrapper(dummy2,npts2,-1)
+     call sinft_exec_wrapper(dummy2,npts2-1,-1)
      ! Adjust the array back and set to zero
      do j=npts2,2,-1
         dummy2(j) = -half*dummy2(j-1)
      end do
      dummy2(1) = zero
      dummy1 = half*dummy1
+     ! Original using sinft
      !dummy2 = -one*dummy2
      ! Set k-space interval - the k-space grid is pi/rcut_large for compatibility
      ! with FFT routines which implicitly double the number of points
@@ -760,7 +761,7 @@ contains
      ! en is found such that 2*en+1
      en = floor(half*n)
      ! Allocate
-     allocate(dummy1(npts2),dummy2(npts2),ess(0:en),coeff_poly(0:poly_order), &
+     allocate(dummy1(npts2),dummy2(npts2+1),ess(0:en),coeff_poly(0:poly_order), &
           coeff_poly1(0:poly_order),prefac(0:en))
      dummy1 = zero
      dummy2 = zero
@@ -770,16 +771,16 @@ contains
         dummy1(i-1) = r*r*delta_r*function_in(i)
         dummy2(i) = r*r*r*delta_r*function_in(i)
      end do
-     call sinft_init_wrapper(npts2)
-     call cosft_init_wrapper(npts2)
+     call sinft_init_wrapper(npts2-1)
+     call cosft_init_wrapper(npts2+1)
      ! Sine transform for function
-     call sinft_exec_wrapper(dummy1,npts2,-1)
+     call sinft_exec_wrapper(dummy1,npts2-1,-1)
      do j=npts2,2,-1
         dummy1(j) = half*dummy1(j-1)
      end do
      dummy1(1) = zero
      ! Cosine transform for first derivative (for polynomial fitting)
-     call cosft_exec_wrapper(dummy2,npts2,-1)
+     call cosft_exec_wrapper(dummy2,npts2+1,-1)
      dummy2 = half*dummy2
      ! Set k-space interval
      dk = twopi/(rcut+delta_r)
