@@ -674,10 +674,6 @@ contains
        if (inode==ionode) &
             write(io_lun,fmt='(4x,"MD run, iteration ",i5)') iter
 
-       call thermo%get_temperature_and_ke(baro, ion_velocity, &
-                                          mdl%ion_kinetic_energy)
-       call baro%get_pressure_and_stress
-
        ! thermostat/barostat (MTTK splitting of Liouvillian)
        call integrate_pt(baro, thermo, mdl, ion_velocity)
 
@@ -798,12 +794,6 @@ contains
          write (io_lun,'(4x,"Energy change           : ",f15.8)') dE
        end if
 
-       ! Compute and print the conserved quantity and its components
-       if (leqi(thermo%thermo_type, 'nhc')) call thermo%get_thermostat_energy
-       if (leqi(baro%baro_type, 'pr')) call baro%get_barostat_energy(final_call)
-       call mdl%get_cons_qty
-       call mdl%print_md_energy()
-
        ! Output positions
        if (inode==ionode .and. iprint_gen > 1) then
           do i = 1, ni_in_cell
@@ -819,6 +809,12 @@ contains
                                           mdl%ion_kinetic_energy, &
                                           final_call)
        call baro%get_pressure_and_stress(final_call)
+
+       ! Compute and print the conserved quantity and its components
+       call thermo%get_thermostat_energy
+       call baro%get_barostat_energy(final_call)
+       call mdl%get_cons_qty
+       call mdl%print_md_energy
  
        if (nequil > 0) then
          nequil = nequil - 1
@@ -1066,10 +1062,8 @@ contains
         end if
       case('svr')
         if (present(second_call)) then
-          call thermo%v_rescale(velocity)
-          call thermo%get_thermostat_energy
-        else
           call thermo%get_svr_thermo_sf(MDtimestep)
+          call thermo%v_rescale(velocity)
         end if
      end select
    case('nph')

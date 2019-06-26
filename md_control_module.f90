@@ -730,7 +730,7 @@ contains
         th%e_barostat = baro%e_barostat ! save for computing e_thermostat
         ke = ke + th%e_barostat
       end if
-      temp_fac = th%ke_target/th%ndof/ke
+      temp_fac = th%ke_target/ndof/ke
 
       ! sum can be replaced by a single number drawn from a gamma distribution
       sum_ri_sq = zero
