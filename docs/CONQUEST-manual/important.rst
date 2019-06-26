@@ -30,3 +30,11 @@ Restarting
 
 Load balancing and partitions
 -----------------------------
+
+Structural Relaxation
+---------------------
+
+.. _molecular-dynamics-topic:
+
+Molecular Dynamics
+------------------

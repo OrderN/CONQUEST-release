@@ -164,9 +164,14 @@ Atomic Specification
 
 ChemicalSpeciesLabel (*block*)
     Lists all atomic species used in the calculation. Format:
-    ``1 atomic_mass1 element_type1 2 atomic_mass2 element_type2 ... n atomic_mass_n_ element_type_n``
-    1 – n are integer numbers used in the coordinate file to identify
-    atomic species (see Section [sec:atomic-positions] for more details).
+    
+    | ``1 atomic_mass1 element_type1``
+    | ``2 atomic_mass2 element_type2``
+    | ``...``
+    | ``n atomic_mass_n_ element_type_n``
+
+    1-–n are integer numbers used in the coordinate file to identify
+    atomic species (see :ref:`coordinate-file` for more details).
 
 %endblock ChemicalSpeciesLabel
     | (don’t forget to end the block)
