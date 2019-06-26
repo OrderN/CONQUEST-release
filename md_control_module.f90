@@ -1161,10 +1161,10 @@ contains
       end if
     case('svr')
       th%e_thermostat = th%e_thermostat - &
-                        th%ke_ions * (th%lambda**2 - one)
+                        th%ke_ions * (one - th%lambda**2)
       if (.not. leqi(th%baro_type, 'none')) then
         th%e_thermostat = th%e_thermostat - &
-                          th%e_barostat * (th%lambda**2 - one)
+                          th%e_barostat * (one - th%lambda**2)
       end if
       if (inode==ionode .and. iprint_MD > 2) &
         write(io_lun,'(4x,"ke_svr:     ",e16.8)') th%e_thermostat
