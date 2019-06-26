@@ -295,7 +295,7 @@ contains
     th%thermo_type = thermo_type
     th%baro_type = baro_type
     th%cell_nhc = md_cell_nhc
-    th%e_thermostat = zero
+    if (.not. flag_MDcontinue) th%e_thermostat = zero
 
     select case(md_cell_constraint)
     case('fixed')
