@@ -41,12 +41,13 @@ directory, along with other parameters needed for compilation.
 * ``SCALAPACK`` (specify the ScaLAPACK library)
 * ``FFT_LIB`` (**we may remove this and require FFTW**)
 * ``XC_LIBRARY`` (choose ``XC_LIBRARY=CQ`` for the internal Conquest
-  library, otherwise ``LibXC_v2`` or ``LibXC`` for LibXC)
+  library, otherwise ``XC_LIBRARY=LibXC_v2`` or ``XC_LIBRARY=LibXC``
+  for LibXC v2.x or higher)
 * Two further options need to be set for LibXC:
 
   + ``XC_LIB`` (specify the XC libraries)
-  + ``XC_COMPFLAGS`` (gives the location of the LibXC include and
-    module files)
+  + ``XC_COMPFLAGS`` (specify the location of the LibXC include and
+    module files, e.g. ``-I/usr/local/include``)
 
 Once these are set, you should make the executable using ``make``.
 
@@ -56,7 +57,8 @@ required for the main code.
 Tutorials
 ---------
 
-We recommend that you work through the Conquest tutorials, in order,
+We recommend that you work through, in order, the tutorials included
+in the distribution in the ``tutorials/`` directory
 to become familiar with the modes of operation of the code.
 
 Where next?
