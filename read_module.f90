@@ -424,7 +424,7 @@ contains
     use pseudo_tm_info, ONLY: pseudo
     use input_module, ONLY: io_assign, io_close
     use mesh, ONLY: siesta
-    use pseudo_atom_info, ONLY: val, allocate_val, local_and_vkb, allocate_vkb
+    use pseudo_atom_info, ONLY: val, allocate_val, local_and_vkb, allocate_vkb, hamann_version
     
     implicit none
 
@@ -455,7 +455,14 @@ contains
     !
     ! Find number of shells and allocate space
     !
-    read(lun,*) char_in,n_shells
+    read(lun,'(a)') line
+    if(len(trim(line))<9) then ! No version string
+       read(line,*) char_in,n_shells
+       hamann_version = 0
+    else
+       read(line,*) char_in,n_shells, hamann_version
+       write(*,*) 'Hamann code version ',hamann_version
+    end if
     if(iprint>4) write(*,fmt='("Reading Hamann output, with ",i3," valence shells")') n_shells
     call allocate_val(n_shells)
     !
@@ -568,7 +575,7 @@ contains
     use spline_module, ONLY: spline
     use radial_xc, ONLY: flag_functional_type, init_xc, functional_lda_pz81, functional_gga_pbe96, &
          functional_description
-    use pseudo_atom_info, ONLY: local_and_vkb, val
+    use pseudo_atom_info, ONLY: local_and_vkb, val, input_file_length
     
     implicit none
 
@@ -591,6 +598,7 @@ contains
     call io_assign(lun)
     open(unit=lun, file=pseudo_file_name, status='old', iostat=ios)
     if ( ios > 0 ) call cq_abort('Error opening Hamann input file: '//pseudo_file_name)
+    input_file_length = 0
     pseudo(i_species)%filename = pseudo_file_name
     a = get_hamann_line(lun)
     read(a,*) sym,z,nc,nv,iexc,file_format
@@ -635,14 +643,17 @@ contains
     !
     ! Projector radii etc
     !
+    local_and_vkb%core_radius = zero
     a = get_hamann_line(lun)
-    do ell = 0, pseudo(i_species)%lmax-1
+    do ell = 0, pseudo(i_species)%lmax
+       read(a,*) en, local_and_vkb%core_radius(ell)
+       write(*,'("l=",i1," core radius ",f6.3," bohr")') ell, local_and_vkb%core_radius(ell)
        a = get_hamann_line(lun)
     end do
     !
-    ! Local potential
+    ! Local potential read above in final step of loop, so leave
     !
-    a = get_hamann_line(lun)
+    !a = get_hamann_line(lun)
     !
     ! Numbers of projectors
     !
@@ -677,12 +688,16 @@ contains
     else
        write(*,fmt='("This pseudopotential does not include partial core corrections"/)') 
     end if
+    ! Last two categories: tests and grid size
+    a = get_hamann_line(lun)
+    a = get_hamann_line(lun)
     call io_close(lun)
   end subroutine read_hamann_input
   
   ! Check for comment markers
   function get_hamann_line(lun)
 
+    use pseudo_atom_info, ONLY: input_file_length, input_file
     implicit none
    
     integer :: lun
@@ -691,9 +706,13 @@ contains
     character(len=80) :: a
 
     read(lun,'(a)') a
+    input_file_length = input_file_length+1
+    input_file(input_file_length) = a
     get_hamann_line = adjustl(a)
     do while(get_hamann_line(1:1).eq.'#')
        read(lun,'(a)') a
+       input_file_length = input_file_length+1
+       input_file(input_file_length) = a
        get_hamann_line = adjustl(a)
     end do
     return

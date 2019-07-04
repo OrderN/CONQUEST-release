@@ -27,13 +27,22 @@ program MakeIonFiles
 
   integer :: i_species
 
+  !
+  ! Initialise
+  !
   call init_comms(myid,numprocs)
   call init_reg_mem
-
+  !
+  ! Output initial information
+  !
   call write_banner
+  !
   ! Load Conquest_input, read general parameters
+  !
   call read_general_input
+  !
   ! Loop over species, read appropriate data and generate PAOs
+  !
   do i_species = 1, n_species
      !
      ! Inputs
@@ -43,7 +52,9 @@ program MakeIonFiles
      ! Setup
      !
      call set_pao_initial(i_species)
+     !
      ! Make PAOs
+     !
      call make_paos(i_species)
      !
      ! Output
@@ -51,6 +62,10 @@ program MakeIonFiles
      call write_header(i_species)
      call write_paos(i_species)
      call write_pseudopotential(i_species)
+     call write_footer(i_species)
+     !
+     ! Deallocate by species
+     !
      call deallocate_val
      call deallocate_pao
      call deallocate_vkb(i_species)

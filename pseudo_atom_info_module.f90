@@ -14,7 +14,8 @@ module pseudo_atom_info
      real(double) :: r_vkb
      real(double), pointer, dimension(:) :: rr, charge, pcc, local
      real(double), pointer, dimension(:,:,:) :: projector ! i, proj, ell
-     real(double), pointer, dimension(:,:) :: semilocal_potential  
+     real(double), pointer, dimension(:,:) :: semilocal_potential
+     real(double), dimension(0:6) :: core_radius ! We won't go to l=6 but want to store easily
   end type potential_vkb
 
   type radial_table
@@ -61,6 +62,9 @@ module pseudo_atom_info
   integer, parameter :: pao_cutoff_radii = 2
   integer, parameter :: pao_cutoff_default = 3 ! This will be set properly at some point
   
+  character(len=80), dimension(50) :: input_file ! Store input file and append at end of ion file
+  integer :: input_file_length
+  integer :: hamann_version
 
 contains
 

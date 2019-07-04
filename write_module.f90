@@ -8,34 +8,62 @@ contains
   subroutine write_header(i_species)
 
     use datatypes
-    use species_module, ONLY: n_species
     use input_module, ONLY: io_assign, io_close
-    use pseudo_tm_info, ONLY: alloc_pseudo_info, pseudo, rad_alloc
-    use pseudo_atom_info, ONLY: paos, val
+    use pseudo_tm_info, ONLY: pseudo
+    use pseudo_atom_info, ONLY: paos, val, local_and_vkb, hamann_version
     use periodic_table, ONLY: atomic_mass, pte
     use radial_xc, ONLY: flag_functional_type, functional_lda_pz81, functional_gga_pbe96, functional_description
+    use datestamp, ONLY: datestr, commentver
     
     implicit none
 
     integer :: i_species
     
-    integer :: lun, i, ell, en, i_shell
+    integer :: lun, i, ell, en, i_shell, ma, mi, po
     character(len=80) :: filename
     character(len=2) :: string_xc
+    character(len=10) :: today, the_time
+    character(len=1), dimension(4) :: ang_mom = (/ "s", "p", "d", "f"/)
     
     call io_assign(lun)
     filename = trim(pte(pseudo(i_species)%z))//"CQ.ion"
     open(unit=lun, file=filename)
     ! Tag preamble
     write(lun,fmt='("<preamble>")')
+    write(lun,fmt='("<Code_and_file_information>")')
+    ! Version
+    write(lun,fmt='(14x,a)') commentver
+    ! Date and time
+    call date_and_time(today, the_time)
+    write(lun,fmt='(2x,"Date generated        : ",a4,"/",a2,"/",a2," at ",a2,":",a2)') &
+         today(1:4), today(5:6), today(7:8), the_time(1:2), the_time(3:4)
+    write(lun,fmt='("</Code_and_file_information>")')
     write(lun,fmt='("<Conquest_pseudopotential_info>")')
-    write(lun,fmt='("")') ! Type - Hamann ONCV or Siesta TM
-    write(lun,fmt='("")') ! Some PS identifier?
-    write(lun,fmt='("")') ! Core radii
-    write(lun,fmt='("")') ! Date of generation, version of PAO code
-    write(lun,fmt='("")') ! XC functional
+    if(hamann_version>0) then
+       ma = (hamann_version/100)
+       hamann_version = hamann_version - ma*100
+       mi = (hamann_version/10)
+       hamann_version = hamann_version - mi*10
+       po = hamann_version
+       write(lun,fmt='(2x,"Hamann code version   : v",i1,".",i1,".",i1)') ma, mi, po
+    endif
+    write(lun,fmt='(2x,"Hamann input file name: ",a," (appended at end of file)")') trim(pseudo(i_species)%filename)
+    write(lun,fmt='(2x,"Core radii (bohr)     :")',advance='no')
+    do ell=0,pseudo(i_species)%lmax
+       write(lun,fmt='(x,"l=",i1,f6.3)',advance='no') ell,local_and_vkb%core_radius(ell)
+    end do
+    write(lun,fmt='(x)')
+    write(lun,fmt='(2x,i1," valence shells      :")',advance='no') val%n_occ
+    do i=1,val%n_occ
+       write(lun,fmt='(x,i1,a1)',advance='no') val%n(i),ang_mom(val%l(i)+1)
+    end do
+    write(lun,fmt='(x)')    
+    write(lun,fmt='(2x,"XC functional code    : ",i7)') flag_functional_type
+    write(lun,fmt='(2x,"XC description        : ",a)') trim(functional_description(1:80))
+    if(pseudo(i_species)%flag_pcc) &
+         write(lun,fmt='(2x,"Includes partial core corrections")')
     write(lun,fmt='("</Conquest_pseudopotential_info>")')
-    write(lun,fmt='("<Conquest_basis_specs>")')
+    write(lun,fmt='("<Conquest_basis_info>")')
     ! Give XC functional and seet functional label for later
     select case(flag_functional_type)
     case (functional_lda_pz81)
@@ -70,7 +98,7 @@ contains
        write(lun,fmt='(3x,"Radii: ",5f6.2)') (paos%cutoff(i,i_shell),i=1,paos%nzeta(i_shell))
     end do
     ! Give details of zetas, radii, semi-core, occupation
-    write(lun,fmt='("</Conquest_basis_specs>")')
+    write(lun,fmt='("</Conquest_basis_info>")')
     write(lun,fmt='("<pseudopotential_header>")')
     ! Write symbol, functional, relativistic, PCC (pcec or nc)
     if(pseudo(i_species)%flag_pcc) then
@@ -105,8 +133,7 @@ contains
   subroutine write_paos(i_species)
 
     use datatypes
-    use numbers, ONLY: two, zero
-    use species_module, ONLY: n_species
+    use numbers, ONLY: zero
     use input_module, ONLY: io_assign, io_close
     use pseudo_atom_info, ONLY: paos, val
     use pseudo_tm_info, ONLY: pseudo
@@ -160,10 +187,8 @@ contains
 
     use datatypes
     use numbers, ONLY: two, fourpi
-    use species_module, ONLY: n_species
     use input_module, ONLY: io_assign, io_close
-    use pseudo_tm_info, ONLY: alloc_pseudo_info, pseudo, rad_alloc
-    use global_module, ONLY: flag_pcc_global
+    use pseudo_tm_info, ONLY: pseudo
     use periodic_table, ONLY: pte
     
     implicit none
@@ -214,6 +239,34 @@ contains
     return
   end subroutine write_pseudopotential
 
+  subroutine write_footer(i_species)
+
+    use datatypes
+    use input_module, ONLY: io_assign, io_close
+    use pseudo_atom_info, ONLY: input_file_length, input_file
+    use pseudo_tm_info, ONLY: pseudo
+    use periodic_table, ONLY: pte
+    
+    implicit none
+
+    integer :: i_species
+
+    integer :: lun, i
+    character(len=80) :: filename
+    
+    ! Open file
+    call io_assign(lun)
+    filename = trim(pte(pseudo(i_species)%z))//"CQ.ion"
+    open(unit=lun, file=filename,position="append")
+    write(lun,fmt='("<pseudopotential_input_file>")')
+    do i=1,input_file_length
+       write(lun,fmt='(a)') input_file(i)
+    end do
+    write(lun,fmt='("</pseudopotential_input_file>")')
+    call io_close(lun)
+    return
+  end subroutine write_footer
+  
   subroutine write_pao_plot(z,r,pao,n_mesh,tag,en,ell,zeta)
 
     use datatypes
