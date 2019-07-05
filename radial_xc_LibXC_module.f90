@@ -7,7 +7,7 @@ module radial_xc
   implicit none
 
   ! Numerical flag choosing functional type
-  integer, allocatable, dimension(:) :: flag_functional_type
+  integer :: flag_functional_type
   character(len=120)  :: functional_description  ! DRB lengthened to contain LibXC names
   integer, parameter :: functional_lda_pz81        = 1
   integer, parameter :: functional_lda_gth96       = 2
@@ -24,34 +24,20 @@ module radial_xc
  
   
   ! LibXC variables
-  integer, allocatable, dimension(:) :: n_xc_terms
-  integer, allocatable, dimension(:,:) :: i_xc_family
-  type(xc_f90_pointer_t), dimension(:,:), allocatable :: xc_func, xc_info
-  logical, allocatable, dimension(:) :: flag_use_libxc
+  integer :: n_xc_terms
+  integer, dimension(2) :: i_xc_family
+  type(xc_f90_pointer_t), dimension(2) :: xc_func, xc_info
+  logical :: flag_use_libxc
 
 contains
 
-  ! Allocate variables for XC storage
-  subroutine alloc_xc(n_species)
-
-    implicit none
-
-    integer :: n_species
-    
-    allocate(flag_functional_type(n_species),n_xc_terms(n_species),i_xc_family(2,n_species), &
-         xc_func(2,n_species),xc_info(2,n_species),flag_use_libxc(n_species))
-    return
-  end subroutine alloc_xc
-  
-  subroutine init_xc(species)
+  subroutine init_xc
 
     use global_module, ONLY : nspin, flag_dft_d2, iprint
     use GenComms, ONLY : inode, ionode, cq_abort
     use numbers
     
     implicit none
-
-    integer :: species
 
     ! Local variables
     integer :: vmajor, vminor, vmicro, i, j
@@ -61,11 +47,11 @@ contains
     type(xc_f90_pointer_t) :: temp_xc_info
 
     ! Test for LibXC or CQ
-    if(flag_functional_type(species)<0) then
+    if(flag_functional_type<0) then
        ! --------------------------
        ! LibXC functional specified
        ! --------------------------
-       flag_use_libxc(species) = .true.
+       flag_use_libxc = .true.
        call xc_f90_version(vmajor, vminor, vmicro)
        if(inode==ionode.AND.iprint>0) then
           if(vmajor>2) then
@@ -75,13 +61,13 @@ contains
           end if
        end if
        ! Identify the functional
-       if(-flag_functional_type(species)<1000) then ! Only exchange OR combined exchange-correlation
-          n_xc_terms(species) = 1
-          xcpart(1) = -flag_functional_type(species)
+       if(-flag_functional_type<1000) then ! Only exchange OR combined exchange-correlation
+          n_xc_terms = 1
+          xcpart(1) = -flag_functional_type
        else ! Separate the two parts
-          n_xc_terms(species) = 2
+          n_xc_terms = 2
           ! Make exchange first, correlation second for consistency
-          i = floor(-flag_functional_type(species)/1000.0_double)
+          i = floor(-flag_functional_type/1000.0_double)
           ! Temporary init to find exchange or correlation
           if(nspin==1) then
              call xc_f90_func_init(temp_xc_func, temp_xc_info, i, XC_UNPOLARIZED)
@@ -91,26 +77,26 @@ contains
           select case(xc_f90_info_kind(temp_xc_info))
           case(XC_EXCHANGE)
              xcpart(1) = i
-             xcpart(2) = -flag_functional_type(species) - xcpart(1)*1000
+             xcpart(2) = -flag_functional_type - xcpart(1)*1000
           case(XC_CORRELATION)
              xcpart(2) = i
-             xcpart(1) = -flag_functional_type(species) - xcpart(2)*1000
+             xcpart(1) = -flag_functional_type - xcpart(2)*1000
           end select
           call xc_f90_func_end(temp_xc_func)
        end if
        ! Now initialise and output
-       do i=1,n_xc_terms(species)
+       do i=1,n_xc_terms
           if(nspin==1) then
-             call xc_f90_func_init(xc_func(i,species), xc_info(i,species), xcpart(i), XC_UNPOLARIZED)
+             call xc_f90_func_init(xc_func(i), xc_info(i), xcpart(i), XC_UNPOLARIZED)
           else if(nspin==2) then
-             call xc_f90_func_init(xc_func(i,species), xc_info(i,species), xcpart(i), XC_POLARIZED)
+             call xc_f90_func_init(xc_func(i), xc_info(i), xcpart(i), XC_POLARIZED)
           end if
           ! Consistent threshold with Conquest
-          !if(vmajor>2) call xc_f90_func_set_dens_threshold(xc_func(i,species),RD_ERR)
-          call xc_f90_info_name(xc_info(i,species), name)
-          i_xc_family(i,species) = xc_f90_info_family(xc_info(i,species))
+          !if(vmajor>2) call xc_f90_func_set_dens_threshold(xc_func(i),RD_ERR)
+          call xc_f90_info_name(xc_info(i), name)
+          i_xc_family(i) = xc_f90_info_family(xc_info(i))
           if(inode==ionode) then
-             select case(xc_f90_info_kind(xc_info(i,species)))
+             select case(xc_f90_info_kind(xc_info(i)))
              case (XC_EXCHANGE)
                 write(kind, '(a)') 'an exchange functional'
              case (XC_CORRELATION)
@@ -123,7 +109,7 @@ contains
                 write(kind, '(a)') 'of unknown kind'
              end select
 
-             select case (i_xc_family(i,species))
+             select case (i_xc_family(i))
              case (XC_FAMILY_LDA);
                 write(family,'(a)') "LDA"
              case (XC_FAMILY_GGA);
@@ -144,10 +130,10 @@ contains
                         " family and is defined in the reference(s):")') &
                         trim(name), trim(kind), trim(family)
                    j = 0
-                   call xc_f90_info_refs(xc_info(i,species), j, ref)
+                   call xc_f90_info_refs(xc_info(i), j, ref)
                    do while(j >= 0)
                       write(*, '(a,i1,2a)') '[', j, '] ', trim(ref)
-                      call xc_f90_info_refs(xc_info(i,species), j, ref)
+                      call xc_f90_info_refs(xc_info(i), j, ref)
                    end do
                 else
                    write(*,'("The functional ", a, " is ", a, ", and it belongs to the ", a, &
@@ -167,17 +153,17 @@ contains
        ! -----------------------------
        flag_use_libxc = .false.
        if(nspin==2) then ! Check for spin-compatible functionals
-          if ( flag_functional_type(species) == functional_lda_pz81       .or. &
-               flag_functional_type(species) == functional_lda_gth96     ) then
+          if ( flag_functional_type == functional_lda_pz81       .or. &
+               flag_functional_type == functional_lda_gth96     ) then
              if (inode == ionode) &
                   write (*,'(/,a,/)') &
                   '*** WARNING: the chosen xc-functional is not &
                   &implemented for spin polarised calculation, &
                   &reverting to LDA-PW92. ***'
-             flag_functional_type(species) = functional_lda_pw92
+             flag_functional_type = functional_lda_pw92
           end if
        end if
-       select case(flag_functional_type(species))
+       select case(flag_functional_type)
        case (functional_lda_pz81)
           functional_description = 'LDA PZ81'
           if(flag_dft_d2) call cq_abort("DFT-D2 only compatible with PBE and rPBE")
@@ -209,7 +195,7 @@ contains
   end subroutine init_xc
   !!***
 
-  subroutine get_vxc(n_tot,rr,rho,i_species,vxc,exc)
+  subroutine get_vxc(n_tot,rr,rho,vxc,exc)
 
     use datatypes
     use numbers
@@ -219,7 +205,7 @@ contains
     implicit none
 
     ! Passed variables
-    integer :: n_tot, i_species
+    integer :: n_tot
     real(double), dimension(n_tot) :: rho, rr,vxc
     real(double), OPTIONAL :: exc
     real(double), allocatable, dimension(:) :: exc_array
@@ -237,19 +223,19 @@ contains
     end if
     vxc = zero
     ! Choose LibXC or Conquest
-    if(flag_use_libxc(i_species)) then
+    if(flag_use_libxc) then
        allocate(drho_dr(n_tot),sigma(n_tot),vrho(n_tot),vsigma(n_tot),loc_rho(n_tot),d2term(n_tot))
        ! Make derivatives
        loc_rho = rho/(four*pi)
        call make_derivatives(loc_rho, drho_dr, sigma)
-       do n=1,n_xc_terms(i_species)
+       do n=1,n_xc_terms
           ! Call routine
-          select case (i_xc_family(n,i_species))
+          select case (i_xc_family(n))
           case(XC_FAMILY_LDA)
-             call xc_f90_lda_exc_vxc(xc_func(n,i_species),n_tot,loc_rho(1),exc_array(1),vrho(1))
+             call xc_f90_lda_exc_vxc(xc_func(n),n_tot,loc_rho(1),exc_array(1),vrho(1))
              vxc = vxc + vrho
           case(XC_FAMILY_GGA)
-             call xc_f90_gga_exc_vxc(xc_func(n,i_species),n_tot,loc_rho(1),sigma(1),exc_array(1),vrho(1),vsigma(1))
+             call xc_f90_gga_exc_vxc(xc_func(n),n_tot,loc_rho(1),sigma(1),exc_array(1),vrho(1),vsigma(1))
              vxc = vxc + vrho
              d2term = zero
              vsigma = vsigma*two*drho_dr
@@ -265,7 +251,7 @@ contains
        end do
        deallocate(drho_dr,sigma,vrho,vsigma)
     else
-       select case(flag_functional_type(i_species))
+       select case(flag_functional_type)
        case(functional_lda_pz81)
           if(flag_energy) then
              call vxc_pz_ca(n_tot, rr, rho, vxc, exc_array)

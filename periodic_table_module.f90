@@ -24,4 +24,17 @@ module periodic_table
        209.99_double,222.02_double,223.02_double,226.03_double,227.03_double,232.04_double, &
        231.04_double,238.03_double,237.05_double,244.06_double/)
   
+  character(len=2), dimension(103) :: pte = &
+       (/  "H ", "He", "Li", "Be", "B ", "C ", "N ", "O ", "F ", "Ne", &
+         "Na", "Mg", "Al", "Si", "P ", "S ", "Cl", "Ar", "K ", "Ca", &
+         "Sc", "Ti", "V ", "Cr", "Mn", "Fe", "Co", "Ni", "Cu", "Zn", &
+         "Ga", "Ge", "As", "Se", "Br", "Kr", "Rb", "Sr", "Y ", "Zr", &
+         "Nb", "Mo", "Tc", "Ru", "Rh", "Pd", "Ag", "Cd", "In", "Sn", &
+         "Sb", "Te", "I ", "Xe", "Cs", "Ba", "La", "Ce", "Pr", "Nd", &
+         "Pm", "Sm", "Eu", "Gd", "Tb", "Dy", "Ho", "Er", "Tm", "Yb", &
+         "Lu", "Hf", "Ta", "W ", "Re", "Os", "Ir", "Pt", "Au", "Hg", &
+         "Tl", "Pb", "Bi", "Po", "At", "Rn", "Fr", "Ra", "Ac", "Th", &
+         "Pa", "U ", "Np", "Pu", "Am", "Cm", "Bk", "Cf", "Es", "Fm", &
+         "Md", "No", "Lr"/)
+
 end module periodic_table
