@@ -1781,6 +1781,7 @@ end subroutine write_md_data
     enthalpy1 = enthalpy0
     dH = zero
     max_stress = zero
+    volume = rcellx*rcelly*rcellz
     do i=1,3
       stress_diff = abs(press + stress(i,i))/volume
       if (stress_diff > max_stress) max_stress = stress_diff
