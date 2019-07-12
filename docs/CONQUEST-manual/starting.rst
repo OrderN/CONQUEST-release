@@ -4,10 +4,15 @@
 Getting started
 ===============
 
-Installation
-------------
+You will need to download and compile the code before you can use it;
+we do not supply binaries.
 
-Conquest can be cloned from GitHub:
+Downloading
+-----------
+
+CONQUEST is accessed from `the GitHub repository
+<https://github.com/OrderN/CONQUEST-release/>`_;
+it can be cloned:
 
 ``git clone https://github.com/OrderN/CONQUEST-release destination-directory``
 
@@ -15,6 +20,9 @@ Alternatively, it can be downloaded from GitHub as a zip file and
 unpacked:
 
 `<https://github.com/OrderN/CONQUEST-release/archive/master.zip>`_
+
+Compiling
+---------
 
 Once you have the distribution, you will need to compile the main
 Conquest code (found in the ``src/`` directory), along with the ion file

@@ -3,8 +3,10 @@
 CONQUEST: a local orbital, large-scale DFT code
 ===============================================
 
-CONQUEST is a massively parallel DFT code, using a local orbital basis
-to represent the Kohn-Sham eigenstates or the density matrix.  The code can find the ground
+CONQUEST is a massively parallel density functional theory (DFT) code, using a local orbital basis
+to represent the Kohn-Sham eigenstates or the density matrix.
+CONQUEST can be applied to atoms, molecules, liquids and solids, but
+is particularly efficient for large systems.  The code can find the ground
 state using exact diagonalisation of the Hamiltonian or via a linear
 scaling approach.  The code has demonstrated scaling to over 2,000,000
 atoms and 200,000 cores when using linear scaling.
