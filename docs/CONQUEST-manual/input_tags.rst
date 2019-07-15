@@ -77,7 +77,8 @@ General.MemoryUnits (*string*) kB/MB/GB
     *default*: MB
 
 General.PartitionMethod (*string*) File/Hilbert
-    Chooses method for partitioning (read from file or use dynamic partitioner based on Hilbert curve)
+    Chooses method for partitioning (read from file or use dynamic partitioner
+    based on Hilbert curve)
 
     *default*: Hilbert
 
@@ -91,12 +92,14 @@ General.PartitionMethod (*string*) File/Hilbert
        Sec. [sec:parall-issu])
 
 General.LoadBalance (*string*) partitions/atoms
-    Applies to Hilbert above; chooses whether to distribute atoms or partitions evenly between processors (you are *strongly* recommended to use atoms)
+    Applies to Hilbert above; chooses whether to distribute atoms or partitions
+    evenly between processors (you are *strongly* recommended to use atoms)
 
     *default*: atoms
 
 General.ManyProcessors (*boolean*)
-    Applies to Hilbert above; chooses method for parallelising Hilbert curve work; “many” processors here probably means more than two
+    Applies to Hilbert above; chooses method for parallelising Hilbert curve work;
+    “many” processors here probably means more than two
 
     *default*: T
 
@@ -107,7 +110,7 @@ General.MaxAtomsPartition (*integer*)
 
     *default*: 34
 
-General.NPartitionsX/Y/Z (*integer*)
+General.NPartitions[X/Y/Z] (*integer*)
     Allows the user to specify the number of partitions in x, y and z
     directions
 
@@ -321,59 +324,90 @@ N.B. At beta release, these levels of output are still being tuned;
 level 0 is reliable, and generally fairly minimal.
 
 IO.Iprint (*integer*)
-    | The amount of information printed out to the output file
-    | *default*: 0
-    | The larger the value the more detailed the output is. 0 Basic information
-    about the system and the run 1 Breakdown of energies, and details of the SCF
-    cycle 2 Matrix range info, matrix multiplication details (covering set), partition
-    details and general parallelisation info. 3 Subroutines called, messages upon
-    entering/quitting subroutines 4 Details including internal variables of
-    subroutines 5 Don’t do this.
+    The amount of information printed out to the output file
+    The larger the value the more detailed the output is.
+
+    | 0 Basic information about the system and the run
+    | 1 Breakdown of energies, and details of the SCF cycle
+    | 2 Matrix range info, matrix multiplication details (covering set), partitiondetails and general parallelisation info.
+    | 3 Subroutines called, messages upon entering/quitting subroutines
+    | 4 Details including internal variables of subroutines
+    | 5 Don’t do this.
+
+
+    *default*: 0
 
 IO.Iprint_init (*integer*)
     The initialisation process
 
+    *default*: value of ``IO.Iprint``
+
 IO.Iprint\_mat (*integer*)
     Matrix operations
+
+    *default*: value of ``IO.Iprint``
 
 IO.Iprint\_ops (*integer*)
     Creation of operators H and S
 
+    *default*: value of ``IO.Iprint``
+
 IO.Iprint\_DM (*integer*)
     Density matrix
+
+    *default*: value of ``IO.Iprint``
 
 IO.Iprint\_SC (*integer*)
     Self-consistency
 
+    *default*: value of ``IO.Iprint``
+
 IO.Iprint\_minE (*integer*)
     Energy minimisation
+
+    *default*: value of ``IO.Iprint``
 
 IO.Iprint\_MD (*integer*)
     Molecular dynamics
 
+    *default*: value of ``IO.Iprint``
+
 IO.Iprint\_index (*integer*)
     Indexing routines
+
+    *default*: value of ``IO.Iprint``
 
 IO.Iprint\_gen (*integer*)
     General (not covered by other areas)
 
+    *default*: value of ``IO.Iprint``
+
 IO.Iprint\_pseudo (*integer*)
     Pseudopotentials
+
+    *default*: value of ``IO.Iprint``
 
 IO.Iprint\_basis (*integer*)
     Basis set
 
+    *default*: value of ``IO.Iprint``
+
 IO.Iprint\_intgn (*integer*)
     Integration on the grid (not used at present)
 
+    *default*: value of ``IO.Iprint``
+
 IO.Iprint\_time (*integer*)
     Timing information
+
+    *default*: value of ``IO.Iprint``
 
 Basis Set
 ---------
 
 Basis.BasisSet (*string*)
     values: blips/PAOs
+
     Selects the basis set in which to expand the support functions (localised orbitals).
 
     Options:
@@ -491,22 +525,14 @@ Grid.GridCutoff (*real*)
 
     Default: 20 Ha.
 
-Grid.PointsAlongX (*integer*)
-
-Grid.PointsAlongY (*integer*)
-
-Grid.PointsAlongZ (*integer*)
+Grid.PointsAlong[X/Y/Z] (*integer*)
     Grid points along x (y,z). Overwrites the values set by **Grid.GridCutoff**.
     The default FFT code requires that the number of grid points have prime
     factors of 2, 3 or 5
 
     *default*: 0
 
-Grid.InBlockX (*integer*)
-
-Grid.InBlockY (*integer*)
-
-Grid.InBlockZ (*integer*)
+Grid.InBlock[X/Y/Z] (*integer*)
     This is the size of a grid point block (i.e., how many grid points are in one
     block in the x (y,z) direction), which must be 3, 4 or 5
 
@@ -620,6 +646,7 @@ SC.ReadAtomicDensityFile (*string*)
 
 SC.AtomicDensityFlag (*string*)
     values: pao/read
+
     Flag determining how atomic densities should be found
 
     *default*: pao
@@ -651,6 +678,7 @@ Density Matrix
 
 DM.SolutionMethod (*string*)
     values: ordern/diagon
+
     Selects the method for finding the ground state density matrix. This can currently
     be either diagonalisation (diagon: minimising the energy with respect to the
     density matrix elements) or an O(N) method (ordern a combination of the
@@ -734,58 +762,61 @@ DM.mu (*real*)
 Diagonalisation
 ---------------
 
-Diag.NumKpts
-    | :math:`<n>`
-    | Number of all k-points. No symmetry is applied.
+Diag.NumKpts (*integer*)
+    Number of all k-points. No symmetry is applied.
 
-%block Diag.Kpoints
-    |  
-    | Lists fractional coordinates and weights of all k-points: ``x_fract y_fract z_fract weight``
-    | Generates the Monkhorst-Pack mesh, an equally spaced mesh of k-points.
+    *default*:
 
-Diag.MPMesh
-    | T/F
-    | Switches on/off the Monkhorst-Pack mesh. Note: if this keyword is present in the input file, the keyword **Diag.NumKpts** and the block **Kpoints** will be ignored.
+Diag.Kpoints (*block*) 
+    Lists fractional coordinates and weights of all k-points: ``x_fract y_fract z_fract weight``
+    Generates the Monkhorst-Pack mesh, an equally spaced mesh of k-points.
 
-Diag.MPMeshX
-    | :math:`<n>`
+    *default*:
 
-Diag.MPMeshY
-    | :math:`<n>`
+Diag.MPMesh (*boolean*)
+    Switches on/off the Monkhorst-Pack mesh. Note: if this keyword is present in
+    the input file, the keyword **Diag.NumKpts** and the block **Kpoints** will
+    be ignored.
 
-Diag.MPMeshZ
-    | :math:`<n>`
-    | Specifies the number n of k-points along the x(y,z) axis.
-    | *default*: 1
+    *default*:
 
-Diag.ProcRows
-    | :math:`<n>`
+Diag.MPMesh[X/Y/Z] (*integer*)
+    Specifies the number n of k-points along the x(y,z) axis.
 
-Diag.ProcCols
-    | :math:`<n>`
+    *default*: 1
 
-Diag.BlockSizeR
-    | :math:`<n>`
+Diag.ProcRows (*integer*)
 
-Diag.BlockSizeC
-    | :math:`<n>`
-    | R ... rows, C ... columns
-    | These are ScaLAPACK parameters, and can be set heuristically by the code. Blocks are sub-divisions of matrices, used to divide up the matrices between processors. The block sizes need to be factors of the square matrix size (i.e. :math:`\sum_{\mathrm{atoms}}\mathrm{NSF(atom)}`). A value of 64 is considered optimal by the ScaLAPACK user’s guide. The rows and columns need to multiply together to be less than or equal to the number of processors.
-    | If ProcRows :math:`\times` ProcCols :math:`<` number of processors, some processors will be left idle.
+    *default*:
 
-Diag.MPShiftX
-    | :math:`<f>`
+Diag.ProcCols (*integer*)
 
-Diag.MPShiftY
-    | :math:`<f>`
+    *default*:
 
-Diag.MPShiftZ
-    | :math:`<f>`
-    | Specifies the shift *s* of k-points along the x(y,z) axis, in fractional coordinates. Default is 0.0 (no shift).
+Diag.BlockSizeR (*integer*)
 
-Diag.SmearingType
-    | :math:`<n>`
-    | Specifies the type of smearing used
+    *default*:
+
+Diag.BlockSizeC (*integer*)
+    R ... rows, C ... columns
+    These are ScaLAPACK parameters, and can be set heuristically by the code. Blocks
+    are sub-divisions of matrices, used to divide up the matrices between processors.
+    The block sizes need to be factors of the square matrix size
+    (i.e. :math:`\sum_{\mathrm{atoms}}\mathrm{NSF(atom)}`). A value of 64 is considered
+    optimal by the ScaLAPACK user’s guide. The rows and columns need to multiply
+    together to be less than or equal to the number of processors. If ProcRows
+    :math:`\times` ProcCols :math:`<` number of processors, some processors will be left idle.
+
+    *default*:
+
+Diag.MPShift[X/Y/Z] (*real*)
+    Specifies the shift *s* of k-points along the x(y,z) axis, in fractional
+    coordinates.
+
+    *default*: 0.0
+
+Diag.SmearingType (*integer*)
+    Specifies the type of smearing used
 
     +-----+---------------------+
     | 0   | Fermi-Dirac         |
@@ -795,51 +826,60 @@ Diag.SmearingType
 
     *default*: 0
 
-Diag.kT
-    | :math:`<f>`
-    | Smearing temperature
-    | *default*: 0.001
+Diag.kT (*real*)
+    Smearing temperature
 
-Diag.MPOrder
-    | :math:`<n>`
-    | Order of Bessel function approximation to delta-function used in Methfessel-Paxton smearing
-    | *default*: 0
+    *default*: 0.001
 
-Diag.GaussianHeight
-    | :math:`<f>`
-    | The height of Gaussian function used to determine the width of Methfessel-Paxton approximation to delta-function (see section [sec:methf-paxt-smear])
-    | *default*: 0.1
+Diag.MPOrder (*integer*)
+    Order of Bessel function approximation to delta-function used in Methfessel-Paxton smearing
 
-Diag.EfStepFiness
-    | :math:`<f>`
-    | Parameter controlling the finness of the Fermi energy search step used in Methfessel-Paxton smearing method (see section [sec:methf-paxt-smear])
-    | *default*: 1.0
+    *default*: 0
 
-Diag.NElecLess
-    | :math:`<f>`
-    | The number of electrons to subtract from the total number of electrons in each spin channel, which gives the starting point for searching the lower bound for Fermi energy. Used in Methfessel-Paxton smearing method (see section [sec:methf-paxt-smear])
-    | *default*: 10.0
+Diag.GaussianHeight (*real*)
+    The height of Gaussian function used to determine the width of Methfessel-Paxton
+     approximation to delta-function (see section [sec:methf-paxt-smear])
 
-Diag.KProcGroups
-    | :math:`<n>`
-    | Number of k-point processor groups for k-point parallelisation (see section [sec:scal-proc-grid])
-    | *default*: 1
+    *default*: 0.1
 
-Diag.ProcRows
-    | :math:`<n>`
-    | Number of rows in the processor grid for SCALAPACK within each k-point processor group (see section [sec:scal-proc-grid])
-    | *default*: Determined automatically by
+Diag.EfStepFiness (*real*)
+    Parameter controlling the finness of the Fermi energy search step used in
+    Methfessel-Paxton smearing method (see section [sec:methf-paxt-smear])
 
-Diag.ProcCols
-    | :math:`<n>`
-    | Number of columns in the processor grid for SCALAPACK within each k-point processor group (see section [sec:scal-proc-grid])
-    | *default*: Determined automatically by
+    *default*: 1.0
+
+Diag.NElecLess (*Real*)
+    The number of electrons to subtract from the total number of electrons in each
+    spin channel, which gives the starting point for searching the lower bound for
+    Fermi energy. Used in Methfessel-Paxton smearing method
+    (see section [sec:methf-paxt-smear])
+
+    *default*: 10.0
+
+Diag.KProcGroups (*integer*)
+    Number of k-point processor groups for k-point parallelisation
+    (see section [sec:scal-proc-grid])
+
+    *default*: 1
+
+Diag.ProcRows (*integer*)
+    Number of rows in the processor grid for SCALAPACK within each k-point processor
+    group (see section [sec:scal-proc-grid])
+
+    *default*: Determined automatically
+
+Diag.ProcCols (*integer*)
+    Number of columns in the processor grid for SCALAPACK within each k-point
+    processor group (see section [sec:scal-proc-grid])
+
+    *default*: Determined automatically
 
 Moving Atoms
 ------------
-AtomMove.TypeOfRun
-    | static/cg/md
-    | Options:
+AtomMove.TypeOfRun (*string*)
+    values: static/cg/md
+
+    Options:
 
     static — Single point calculation
 
@@ -849,85 +889,95 @@ AtomMove.TypeOfRun
 
     *default*: static
 
-AtomMove.NumSteps
-    | :math:`<n>`
-    | Maximum number of steps for a structure optimisation or molecular dynamics run
-    | *default*: 100
+AtomMove.NumSteps (*integer*)
+    Maximum number of steps for a structure optimisation or molecular dynamics run
 
-AtomMove.MaxForceTol
-    | :math:`<f>`
-    | The structure optimisation will stop when the maximum force component is less than **MD.MaxForceTol**
-    | *default*: 0.0005 Ha/bohr
+    *default*: 100
 
-AtomMove.Timestep
-    | :math:`<f>`
-    | Time step for molecular dynamics
-    | *default*: 0.5
+AtomMove.MaxForceTol (*real*)
+    The structure optimisation will stop when the maximum force component is less
+    than **MD.MaxForceTol**
 
-AtomMove.AppendCoords
-    | T/F
-    | Chooses whether to append coordinates to ``UpdatedAtoms.dat`` during atomic movement (T) or to overwrite (F)
-    | *default*: T
+    *default*: 0.0005 Ha/bohr
 
-AtomMove.OutputFreq
-    | :math:`<n>`
-    | Frequency of output of information. *Not properly implemented*
-    | *default*: 50
+AtomMove.Timestep (*real*)
+    Time step for molecular dynamics
 
-AtomMove.WriteXSF
-    | T/F
-    | Write atomic coordinates to ``trajectory.xsf`` for ``AtomMove.TypeOfRun = md`` or ``cg``, every ``AtomMove.OutputFreq`` steps
-    | *default*: F
+    *default*: 0.5
 
-AtomMove.TestForces
-    | T/F
-    | Flag for testing forces with comparison of analytic and numerical calculations. Can produce *large* amounts of output
-    | *default*: F
+AtomMove.AppendCoords (*boolean*)
+    Chooses whether to append coordinates to ``UpdatedAtoms.dat`` during atomic
+    movement (T) or to overwrite (F)
 
-AtomMove.TestAllForces
-    | T/F
-    | Switch to test *all* force contributions or not
-    | *default*: F
+    *default*: T
 
-AtomMove.OptCell
-    | T/F
-    | Turns on conjugate gradient relaxation of the simulation box dimensions a, b and c. Note that AtomMove.TypeOfRun must also be set to cg.
-    | *default*: false
+AtomMove.OutputFreq (*integer*)
+    Frequency of output of information. *Not properly implemented*
 
-AtomMove.OptCell.EnTol: < f >
-    | Sets the energy tolerance to terminate the conjugate gradient relaxation.
-    | *default*: 1E-05 Ha
+    *default*: 50
 
-AtomMove.OptCell.Constraint
-    | *string*
-    | Applies a constraint to the relaxation.
-    |
-    | none: Unconstrained relaxation.
-    |
-    | *Fixing a single cell dimension:*
-    |
-    | a: Fix the x-dimension of the simulation box
-    |
-    | b: Fix the y-dimension of the simulation box
-    |
-    | c: Fix the z-dimension of the simulation box
-    |
-    | *Fixing multiple cell dimensions:*
-    |
-    | any combination of the above separated by a space character. e.g: "a b" fixes both the x and y dimensions of the simulation box
-    |
-    | *Fixing Ratios:*
-    |
-    | Any combination of a, b or c separated by a "/" character. e.g "c/a" fixes
-    | the initial ratio of the z-dimension to the x-direction.
-    |
-    | *Global scaling factor:*
-    |
-    | volume: minimize the total energy by scaling each simulation box dimension by the same global scaling factor. Search directions are set by the mean stress.
+AtomMove.WriteXSF *(boolean*)
+    Write atomic coordinates to ``trajectory.xsf`` for ``AtomMove.TypeOfRun = md`` or ``cg``,
+    every ``AtomMove.OutputFreq`` steps
 
-AtomMove.TestSpecificForce
-    | :math:`<n>`
-    | Label for which force contribution to test. Note that for PAOs non-local Pulay and Hellman-Feynman forces are found together as part of the HF calculation; :math:`\phi` Pulay refers to changes in :math:`\phi(\mathbf{r})` when atoms move, while S Pulay refers to changes in S when atoms move; see Sec. [sec:forces] and references therein for more information. Options:
+    *default*: F
+
+AtomMove.TestForces (*boolean*)
+    Flag for testing forces with comparison of analytic and numerical calculations.
+    Can produce *large* amounts of output
+
+    *default*: F
+
+AtomMove.TestAllForces (*boolean*)
+    Switch to test *all* force contributions or not
+
+    *default*: F
+
+AtomMove.OptCell (*boolean*)
+    Turns on conjugate gradient relaxation of the simulation box dimensions a, b
+    and c. Note that AtomMove.TypeOfRun must also be set to cg.
+
+    *default*: F
+
+AtomMove.OptCell.EnTol (*real*)
+    Sets the energy tolerance to terminate the conjugate gradient relaxation.
+
+    *default*: 1\ :math:`\times`\ 10\ :math:`^{-5}`
+
+AtomMove.OptCell.Constraint (*string*)
+    Applies a constraint to the relaxation.
+
+    none: Unconstrained relaxation.
+
+    *Fixing a single cell dimension:*
+
+    a: Fix the x-dimension of the simulation box
+
+    b: Fix the y-dimension of the simulation box
+
+    c: Fix the z-dimension of the simulation box
+
+    *Fixing multiple cell dimensions:*
+
+    any combination of the above separated by a space character. e.g: "a b" fixes
+    both the x and y dimensions of the simulation box
+
+    *Fixing Ratios:*
+
+    Any combination of a, b or c separated by a "/" character. e.g "c/a" fixes
+    the initial ratio of the z-dimension to the x-direction.
+
+    *Global scaling factor:*
+
+    volume: minimize the total energy by scaling each simulation box dimension by
+    the same global scaling factor. Search directions are set by the mean stress.
+
+AtomMove.TestSpecificForce (*integer*)
+    Label for which force contribution to test. Note that for PAOs non-local Pulay
+    and Hellman-Feynman forces are found together as part of the HF calculation;
+    :math:`\phi` Pulay refers to changes in :math:`\phi(\mathbf{r})` when atoms move,
+    while S Pulay refers to changes in S when atoms move; see Sec. [sec:forces] and
+    references therein for more information. Options:
 
     1 Total
     2 Total Hellman-Feynman
@@ -940,103 +990,113 @@ AtomMove.TestSpecificForce
 
     *default*: 1
 
-AtomMove.TestForceDirection
-    | :math:`<n>`
-    | Direction in which atom will be moved (1=x; 2=y; 3=z)
-    | *default*: 1
+AtomMove.TestForceDirection (*integer*)
+    Direction in which atom will be moved (1=x; 2=y; 3=z)
 
-AtomMove.TestForceAtom
-    | :math:`<n>`
-    | Atom to move
-    | *default*: 1
+    *default*: 1
 
-AtomMove.TestForceDelta: :math:`<f>`
-    | Distance atom will be moved for numerical evaluation of force *default*: 10\ :math:`^{-5}` bohr
+AtomMove.TestForceAtom (*integer*)
+    Atom to move
 
-AtomMove.RestartRun
-    | T/F
-    | Selects MD restart run (in the case of F, MD step is reset)
-    | *default*: F
+    *default*: 1
 
-AtomMove.ReuseL
-    | T/F
-    | Selects the use of L-matrix in MD run
-    | *default*: F
+AtomMove.TestForceDelta (*real*)
+    Distance atom will be moved for numerical evaluation of force
 
-AtomMove.ReuseInvS
-    | T/F
-    | Selects the use of T-matrix in MD run
-    | *default*: F
+    *default*: 10\ :math:`^{-5}` bohr
 
-AtomMove.SkipEarlyDM
-    | T/F
-    | Selects the skip of earlyDM calculation in MD run
-    | *default*: F
+AtomMove.RestartRun (*boolean*)
+    Selects MD restart run (in the case of F, MD step is reset)
 
-AtomMove.McWeenyFreq
-    | :math:`<N>`
-    | Number of steps to apply to McWeeny calculation (with “AtomMove.ReuseL T”)
+    *default*: F
 
-AtomMove.ExtendedLagrangian
-    | T/F
-    | Selects XL-BOMD (with “AtomMove.ReuseL T”)
-    | *default*: F
+AtomMove.ReuseL (*boolean*)
+    Selects the use of L-matrix in MD run
 
-AtomMove.FixCentreOfMass
-    | T/F
-    | Remove the centre of mass velocity at every time step
-    | *default* T
+    *default*: F
+
+AtomMove.ReuseInvS (*boolean*)
+    Selects the use of T-matrix in MD run
+
+    *default*: F
+
+AtomMove.SkipEarlyDM (*boolean*)
+    Selects the skip of earlyDM calculation in MD run
+
+    *default*: F
+
+AtomMove.McWeenyFreq (*integer*)
+    Number of steps to apply to McWeeny calculation (with “AtomMove.ReuseL T”)
+
+    *default*:
+
+AtomMove.ExtendedLagrangian (*boolean*)
+    Selects XL-BOMD (with “AtomMove.ReuseL T”)
+
+    *default*: F
+
+AtomMove.FixCentreOfMass (*boolean*)
+    Remove the centre of mass velocity at every time step
+
+    *default*: T
 
 
 Molecular Dynamics
 ------------------
 
-MD.Ensemble
-    | nve/nvt/npt
-    | The molecular dynamics ensemble
-    | *default*: nve
+MD.Ensemble (*string*)
+    values: nve/nvt/npt
 
-MD.Thermostat
-    | none/nhc/berendsen
-    | Thermostat type
-    | *default*: none
+    The molecular dynamics ensemble
+
+    *default*: nve
+
+MD.Thermostat (*string*)
+    values: none/nhc/berendsen
+
+    Thermostat type
 
     ``none``
         No thermostat (used for calculating temperature only)
     ``nhc``
-        Nose-Hoover chain
+        Nosé-Hoover chain
     ``berendsen``
         Berendsen weak coupling thermostat
 
-MD.tauT
-    | :math:`<f>`
-    | Coupling time constant for thermostat. Required for Berendsen thermostat, or if ``MD.CalculateXLMass = T``
-    | *default*: 1.0
+    *default*: none
 
-MD.nNHC
-    | :math:`<n>`
-    | Number of Nose-Hoover thermostats in chain
-    | *default*: 5
+MD.tauT (*real*)
+    Coupling time constant for thermostat. Required for Berendsen thermostat, or
+    if ``MD.CalculateXLMass = T``
 
-MD.CellNHC
-    | T/F
-    | Use a separate Nose-Hoover chain for thermostating the unit cell (NPT only)
-    | *default*: F
+    *default*: 1.0
 
-%block MD.NHCMass
-    | :math:`<n1> <n2> <n3> \ldots`
-    | Masses of NHC heat baths
-    | *default*: 1 1 1 1 1
+MD.nNHC (*integer*)
+    Number of Nosé-Hoover thermostats in chain
 
-%block MD.CellNHCMass
-    | :math:`<n1> <n2> <n3> \ldots`
-    | Masses of NHC heat baths for unit cell
-    | *default*: 1 1 1 1 1
+    *default*: 5
 
-MD.Barostat
-    | none/berendsen/iso-mttk/ortho-mttk/mttk
-    | Barostat type
-    | *default*: none
+MD.CellNHC (*boolean*)
+    Use a separate Nosé-Hoover chain for thermostating the unit cell (NPT only)
+
+    *default*: F
+
+MD.NHCMass (*blocks*)
+    :math:`<n1> <n2> <n3> \ldots`
+    Masses of NHC heat baths
+
+    *default*: 1 1 1 1 1
+
+MD.CellNHCMass (*block*)
+    :math:`<n1> <n2> <n3> \ldots`
+    Masses of NHC heat baths for unit cell
+
+    *default*: 1 1 1 1 1
+
+MD.Barostat (*string*)
+    values: none/berendsen/iso-mttk/ortho-mttk/mttk
+
+    Barostat type
 
     ``none``
         No barostat (used for calculating pressure only)
@@ -1047,195 +1107,235 @@ MD.Barostat
     ``ortho-mttk``
         MTTK barostat with orthorhombic cell fluctuations
     ``mttk``
-        MTTK barostat with fully flexible cell (currently discards off-diagonal stress tensor components)
+        MTTK barostat with fully flexible cell (currently discards off-diagonal
+        stress tensor components)
 
-MD.TargetPressure
-    | :math:`<f>`
-    | External pressure for NPT molecular dynamics
+    *default*: none
 
-MD.BulkModulusEst
-    | :math:`<f>`
-    | Bulk modulus estimate for system. Only necessary for Berendsen weak pressure coupling (``MD.Barostat = berendsen`` or ``MD.BerendsenEquil > 0``)
-    | *default*: 100
+MD.TargetPressure (*real*)
+    External pressure for NPT molecular dynamics
 
-MD.tauP
-    | :math:`<f>`
-    | Coupling time constant for barostat. Required for Berendsen barostat, or if MD.CalculateXLMass = T
-    | *default*: 10.0 (Berendsen) or 100.0 (MTTK)
+    *default*:
 
-MD.BoxMass
-    | :math:`<f>`
-    | Mass of box for extended system formalism (MTTK barostats)
-    | *default*: 1
+MD.BulkModulusEst (*real*)
+    Bulk modulus estimate for system. Only necessary for Berendsen weak pressure
+    coupling (``MD.Barostat = berendsen`` or ``MD.BerendsenEquil > 0``)
 
-MD.CalculateXLMass
-    | T/F
-    | Calculate the mass of the extended system components (thermostats, barostat) using the MTTK formulae.
-    | *default*: F
+    *default*: 100
 
-MD.nYoshida
-    | 1/3/5/7/15/25/125/625
-    | Order of Yoshida-Suzuki integration
-    | *default*: 1
+MD.tauP (*real*)
+    Coupling time constant for barostat. Required for Berendsen barostat, or if
+    MD.CalculateXLMass = T
 
-MD.nMTS
-    | :math:`<n>`
-    | Number of time steps in inner loop of MTS scheme
-    | *default*: 1
+    *default*: 10.0 (Berendsen) or 100.0 (MTTK)
 
-MD.BerendsenEquil
-    | :math:`<n>`
-    | Equilibrate the system for :math:`n` steps using Berendsen weak coupling
-    | *default*: 0
+MD.BoxMass (*real*)
+    Mass of box for extended system formalism (MTTK barostats)
 
-MD.ThermoDebug
-    | T/F
-    | Print detailed information about thermostat and extended variables in ``thermostat.dat``
-    | *default*: F
+    *default*: 1
 
-MD.BaroDebug
-    | T/F
-    | Print detailed information about barostat and extended variables in ``barostat.dat``
-    | *default*: F
+MD.CalculateXLMass (*boolean*)
+    Calculate the mass of the extended system components (thermostats, barostat)
+    using the MTTK formulae.
+
+    *default*: F
+
+MD.nYoshida (*integer*)
+    values: 1/3/5/7/15/25/125/625
+
+    Order of Yoshida-Suzuki integration
+
+    *default*: 1
+
+MD.nMTS (*integer*)
+    Number of time steps in inner loop of MTS scheme
+
+    *default*: 1
+
+MD.BerendsenEquil (*integer*)
+    Equilibrate the system for :math:`n` steps using Berendsen weak coupling
+
+    *default*: 0
+
+MD.ThermoDebug (*boolean*)
+    Print detailed information about thermostat and extended variables in ``thermostat.dat``
+
+    *default*: F
+
+MD.BaroDebug (*boolean*)
+    Print detailed information about barostat and extended variables in ``barostat.dat``
+
+    *default*: F
 
 Spin Polarisation
 -----------------
 
-Spin.SpinPolarised
-    | T/F
-    | Determines if the calculation is spin polarised (collinear) or non-spin polarised.
-    | *default*: F
+Spin.SpinPolarised (*boolean*)
+    Determines if the calculation is spin polarised (collinear) or non-spin polarised.
 
-Spin.FixSpin
-    | T/F
-    | Determines if spin populations are to be fixed. Only read if **Spin.FixPolarised** is set.
-    | *default*: F
+    *default*: F
 
-Spin.NeUP
-    | :math:`<f>`
-    | Total number of electrons in spin up channel at start of calculation.
-    | *default*: 0.0
+Spin.FixSpin (*boolean*)
+    Determines if spin populations are to be fixed. Only read if **Spin.FixPolarised** is set.
 
-Spin.NeDN
-    | :math:`<f>`
-    | Total number of electrons in spin down channel at start of calculation.
-    | *default*: 0.0
+    *default*: F
+
+Spin.NeUP (*real*)
+    Total number of electrons in spin up channel at start of calculation.
+
+    *default*: 0.0
+
+Spin.NeDN (*real*)
+    Total number of electrons in spin down channel at start of calculation.
+
+    *default*: 0.0
 
 DeltaSCF
 --------
 
-flag\_DeltaSCF
-    | T/F
-    | Selects delta SCF calculation
+flag\_DeltaSCF (*boolean*)
+    Selects delta SCF calculation
 
-DeltaSCF.SourceLevel
-    | :math:`<N>`
-    | Eigenstate number to remove electron from (source)
+    *default*:
 
-DeltaSCF.TargetLevel
-    | :math:`<N>`
-    | Eigenstate number to promote electron to (target)
+DeltaSCF.SourceLevel (*integer*)
+    Eigenstate number to remove electron from (source)
 
-DeltaSCF.SourceChannel
-    | :math:`<N>`
-    | Spin channel for electron source
+    *default*:
 
-DeltaSCF.TargetChannel
-    | :math:`<N>`
-    | Spin channel for electron target
+DeltaSCF.TargetLevel (*integer*)
+    Eigenstate number to promote electron to (target)
 
-DeltaSCF.SourceNFold
-    | :math:`<N>`
-    | Allows selection of more than one level for excitation source (N-fold)
+    *default*:
 
-DeltaSCF.TargetNFold
-    | :math:`<N>`
-    | Multiplicity of target (N-fold)
+DeltaSCF.SourceChannel (*integer*)
+    Spin channel for electron source
 
-DeltaSCF.LocalExcitation
-    | T/F
-    | Select an excitation localised on a group of atoms
+    *default*:
 
-DeltaSCF.HOMOLimit
-    | :math:`<N>`
-    | How many states down from HOMO to search for localised excitation
+DeltaSCF.TargetChannel (*integer*)
+    Spin channel for electron target
 
-DeltaSCF.LUMOLimit
-    | :math:`<N>`
-    | How many states up from LUMO to search for localised excitation
+    *default*:
 
-DeltaSCF.HOMOThresh
-    | :math:`<f>`
+DeltaSCF.SourceNFold (*integer*)
+    Allows selection of more than one level for excitation source (N-fold)
 
-DeltaSCF.LUMOThresh
-    | :math:`<f>`
-    | Threshold for identifying localised excitation (sum over square moduli of coefficients)
+    *default*:
+
+DeltaSCF.TargetNFold (*integer*)
+    Multiplicity of target (N-fold)
+
+    *default*:
+
+DeltaSCF.LocalExcitation (*boolean*)
+    Select an excitation localised on a group of atoms
+
+    *default*:
+
+DeltaSCF.HOMOLimit (*integer*)
+    How many states down from HOMO to search for localised excitation
+
+    *default*:
+
+DeltaSCF.LUMOLimit (*integer*)
+    How many states up from LUMO to search for localised excitation
+
+    *default*:
+
+DeltaSCF.HOMOThresh (*real*)
+    (*please fill in*)
+
+    *default*:
+
+DeltaSCF.LUMOThresh (*real*)
+    Threshold for identifying localised excitation (sum over square moduli of coefficients)
+
+    *default*:
 
 Constrained DFT (cDFT)
 ----------------------
 
-cDFT.Perform\_cDFT
-    | T/F
-    | Selects cDFT operation
+cDFT.Perform\_cDFT (*boolean*)
+    Selects cDFT operation
 
-cDFT.Type
-    | 1 or 2
-    | Selects constraint to be for absolute charge on groups (1) or difference between two groups (2)
+    *default*:
 
-cDFT.MaxIterations
-    | :math:`<N>`
-    | Maximum iterations permitted
+cDFT.Type (*integer*)
+    values: 1 or 2
 
-cDFT.Tolerance
-    | :math:`<f>`
-    | Tolerance on charge
+    Selects constraint to be for absolute charge on groups (1) or difference between two groups (2)
 
-cDFT.NumberAtomGroups
-    | :math:`<N>`
-    | Number of groups of atoms
+    *default*:
 
-cDFT.AtomGroups
-    | :
-    | Block with each line specifying: Number of atoms, target charge, label for block. For each line, there should be a corresponding block with the appropriate label; the block consists of a list of atom numbers for the atoms in the group
+cDFT.MaxIterations (*integer*)
+    Maximum iterations permitted
+
+    *default*:
+
+cDFT.Tolerance (*real*)
+    Tolerance on charge
+
+    *default*:
+
+cDFT.NumberAtomGroups (*integer*)
+    Number of groups of atoms
+
+    *default*:
+
+cDFT.AtomGroups (*block*)
+    Block with each line specifying: Number of atoms, target charge, label for
+    block. For each line, there should be a corresponding block with the appropriate
+    label; the block consists of a list of atom numbers for the atoms in the group
 
 vdW-DF
 ------
 
-vdWDFT.LDAFunctionalType
-    | *string*
-    | Selects LDA functional to use with vdW-DF
+vdWDFT.LDAFunctionalType (*string*)
+    Selects LDA functional to use with vdW-DF
+
+    *default*:
 
 DFT-D2
 ------
 
-DFT-D2\_range
-    | :math:`<f>`
-    | DFT-D2 cutoff range (bohr)
+DFT-D2\_range (*real*)
+    DFT-D2 cutoff range (bohr)
+
+    *default*:
 
 XL-BOMD
 -------
 
-XL.Kappa
-    | :math:`<f>`
-    | Value of kappa
+XL.Kappa (*real*)
+    Value of kappa
 
-XL.PropagateX
-    | T/F
-    | Selects the corrected XL-BOMD
+    *default*:
 
-XL.PropagateL
-    | T/F
-    | Selects the original XL-BOMD
+XL.PropagateX (*boolean*)
+    Selects the corrected XL-BOMD
 
-XL.Dissipation
-    | T/F
-    | Selects the addition of dissipative force
+    *default*:
 
-XL.MaxDissipation
-    | :math:`<N>`
+XL.PropagateL (*boolean*)
+    Selects the original XL-BOMD
 
-XL.Integrator
-    *string* Selects the Verlet method or velocity Verlet method
+    *default*:
+
+XL.Dissipation (*boolean*)
+    Selects the addition of dissipative force
+
+    *default*:
+
+XL.MaxDissipation (*integer*)
+    (*please fill in*)
+
+    *default*:
+
+XL.Integrator (*string*)
+    Selects the Verlet method or velocity Verlet method
+
+    *default*:
 
 Advanced and obscure tags
 -------------------------
@@ -1273,7 +1373,7 @@ General.MaxTempMatrices (*integer*)
 General.EwaldAccuracy (*real*)
     Accuracy required for Ewald sum
 
-    *default*: 1e-10
+    *default*:1\ :math:`\times`\ 10\ :math:`^{-10}`
 
 General.CheckDFT (*boolean*)
     Calculates DFT energy using output density
@@ -1313,8 +1413,8 @@ Atom.NonLocalFactor  (*real*)
     This is an adjustment factor: the Hamiltonian range is (strictly)
     2 :math:`\times` (support function radius + non-local projector
     radius). However, generally without affecting the results, the
-    Hamiltonian range can be set to 2 :math:`\times` (support function
-    radius + non\_local\_factor\*non-local projector radius). If you
+    Hamiltonian range can be set to 2  :math:`\times` (support function
+    radius + non\_local\_factor\ :math:`\times` non-local projector radius). If you
     have non\_local\_factor = 1.0 then you get the full range, if 0.0
     then the same range as the S matrix.
 
