@@ -329,7 +329,7 @@ IO.Iprint (*integer*)
 
     | 0 Basic information about the system and the run
     | 1 Breakdown of energies, and details of the SCF cycle
-    | 2 Matrix range info, matrix multiplication details (covering set), partitiondetails and general parallelisation info.
+    | 2 Matrix range info, matrix multiplication details (covering set), partition details and general parallelisation info.
     | 3 Subroutines called, messages upon entering/quitting subroutines
     | 4 Details including internal variables of subroutines
     | 5 Don’t do this.
