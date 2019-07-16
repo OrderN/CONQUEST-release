@@ -205,6 +205,15 @@ contains
   end subroutine set_radii
 
   ! Find the occupied (non-polarisation) PAOs
+  !
+  ! Changes
+  !
+  ! 2019/07/15 11:33 dave
+  !  Temporarily remove orthogonalisation to semi-core states
+  !  as this breaks the normalisation.  Longer term: decide it
+  !  the orthogonalisation is really needed (in which case we
+  !  need to normalise again) or not (in which case we leave it
+  !  out).
   subroutine solve_for_occupied_paos(i_species,vha,vxc,atomic_density)
 
     use datatypes
@@ -258,25 +267,25 @@ contains
                 atomic_density = atomic_density + val%occ(i_shell)*psi*psi
              end if
              ! Orthogonalise to semi-core state
-             if(paos%inner(i_shell)>0) then
-                ! Dot product of two
-                dot_p = zero
-                do i=1,nmesh
-                   dot_p = dot_p + rr(i)**(2*ell+2)*paos%psi(zeta,i_shell)%f(i)* &
-                        paos%psi(1,val%inner(i_shell))%f(i)*drdi(i)
-                end do
-                write(*,fmt='(2x,"Orthogonalising to semi-core; overlap is ",f10.5)') dot_p
-                ! Orthgonalise
-                paos%psi(zeta,i_shell)%f = paos%psi(zeta,i_shell)%f - &
-                     dot_p * paos%psi(1,val%inner(i_shell))%f
-                ! Check
-                dot_p = zero
-                do i=1,nmesh
-                   dot_p = dot_p + rr(i)**(2*ell+2)*paos%psi(zeta,i_shell)%f(i)* &
-                        paos%psi(1,val%inner(i_shell))%f(i)*drdi(i)
-                end do
-                if(abs(dot_p)>RD_ERR) write(*,fmt='(2x,"Warning: following orthogonalisation, overlap is ",f10.5)') dot_p
-             end if ! Inner shell orthogonalisation
+             !if(paos%inner(i_shell)>0) then
+             !   ! Dot product of two
+             !   dot_p = zero
+             !   do i=1,nmesh
+             !      dot_p = dot_p + rr(i)**(2*ell+2)*paos%psi(zeta,i_shell)%f(i)* &
+             !           paos%psi(1,val%inner(i_shell))%f(i)*drdi(i)
+             !   end do
+             !   write(*,fmt='(2x,"Orthogonalising to semi-core; overlap is ",f10.5)') dot_p
+             !   ! Orthgonalise
+             !   paos%psi(zeta,i_shell)%f = paos%psi(zeta,i_shell)%f - &
+             !        dot_p * paos%psi(1,val%inner(i_shell))%f
+             !   ! Check
+             !   dot_p = zero
+             !   do i=1,nmesh
+             !      dot_p = dot_p + rr(i)**(2*ell+2)*paos%psi(zeta,i_shell)%f(i)* &
+             !           paos%psi(1,val%inner(i_shell))%f(i)*drdi(i)
+             !   end do
+             !   if(abs(dot_p)>RD_ERR) write(*,fmt='(2x,"Warning: following orthogonalisation, overlap is ",f10.5)') dot_p
+             !end if ! Inner shell orthogonalisation
           end if ! Split-norm or confined state
        end do ! zeta = 1, paos%nzeta
     end do ! i_shell = 1,paos%n_shells
@@ -285,6 +294,15 @@ contains
   end subroutine solve_for_occupied_paos
 
   ! Solve for polarisation (unoccupied) shells
+  !
+  ! Changes
+  !
+  ! 2019/07/15 11:33 dave
+  !  Temporarily remove orthogonalisation to semi-core states
+  !  as this breaks the normalisation.  Longer term: decide it
+  !  the orthogonalisation is really needed (in which case we
+  !  need to normalise again) or not (in which case we leave it
+  !  out).
   subroutine solve_for_polarisation(i_species,vha,vxc)
 
     use datatypes
@@ -330,18 +348,19 @@ contains
              call find_eigenstate_and_energy_vkb(i_species,en,ell,paos%cutoff(zeta,i_shell),&
                   paos%psi(zeta,i_shell)%f,paos%energy(zeta,i_shell), &
                   vha,vxc,paos%width(i_shell),paos%prefac(i_shell))
-             if(paos%inner(i_shell)>0) then
-                ! Dot product of two
-                dot_p = zero
-                do i=1,nmesh
-                   dot_p = dot_p + rr(i)**(2*ell+2)*paos%psi(zeta,i_shell)%f(i)* &
-                        paos%psi(1,paos%inner(i_shell))%f(i)*drdi(i)
-                end do
-                write(*,fmt='(2x,"Orthogonalising to semi-core; overlap is ",f10.5)') dot_p
-                ! Orthgonalise
-                paos%psi(zeta,i_shell)%f = paos%psi(zeta,i_shell)%f - &
-                     dot_p * paos%psi(1,paos%inner(i_shell))%f
-             end if
+             ! Orthogonalise to semi-core state
+             !if(paos%inner(i_shell)>0) then
+             !   ! Dot product of two
+             !   dot_p = zero
+             !   do i=1,nmesh
+             !      dot_p = dot_p + rr(i)**(2*ell+2)*paos%psi(zeta,i_shell)%f(i)* &
+             !           paos%psi(1,paos%inner(i_shell))%f(i)*drdi(i)
+             !   end do
+             !   write(*,fmt='(2x,"Orthogonalising to semi-core; overlap is ",f10.5)') dot_p
+             !   ! Orthgonalise
+             !   paos%psi(zeta,i_shell)%f = paos%psi(zeta,i_shell)%f - &
+             !        dot_p * paos%psi(1,paos%inner(i_shell))%f
+             !end if
           end if
        end do
     end do
@@ -1192,7 +1211,7 @@ contains
     l_half_sq = real(ell+1,double) + half
     l_half_sq = l_half_sq*l_half_sq
     l_l_plus_one = real((ell+2)*(ell+1),double)
-    n_nodes = en - ell - 1 
+    n_nodes = en - ell - 1
     if(iprint>2) write(*,fmt='(2x,"For this polarisation function, we require ",i2," nodes")') n_nodes
     zval = pseudo(i_species)%z
     dx_sq_over_twelve = alpha*alpha/twelve
