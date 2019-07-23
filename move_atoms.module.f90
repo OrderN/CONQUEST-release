@@ -2789,17 +2789,6 @@ contains
     end if
     ! (4) core correction?
     ! (5) Find the Ewald energy for the initial set of atoms
-    if (flag_atomic_stress) then
-      if (.not. flag_heat_flux) then
-        ! haven't found an appropriate place to deallocate this - zamaan
-        allocate(atomic_stress(3,3,ni_in_cell), STAT=stat)
-        if (stat /= 0) &
-          call cq_abort("Error allocating atomic_stress: ", ni_in_cell)
-        call reg_alloc_mem(area_moveatoms, 3*3*ni_in_cell, type_dbl)
-      end if
-      atomic_stress = zero
-      non_atomic_stress = zero
-    end if
     if(flag_neutral_atom) then
        call screened_ion_interaction
     else

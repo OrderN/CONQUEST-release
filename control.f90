@@ -661,10 +661,6 @@ contains
     call baro%get_pressure_and_stress
     call mdl%get_cons_qty
 
-    ! If we need the atomic contributiosn to the ion-ion stress, need to call
-    ! update_H again because the arrays weren't initialised in the first
-    ! instance - zamaan
-    if (flag_heat_flux) call update_H(fixed_potential)
     ! Find energy and forces
     if (flag_fire_qMD) then
        call get_E_and_F(fixed_potential, vary_mu, energy0, .true., .true.)
@@ -1037,24 +1033,7 @@ contains
       end if
     end select
 
-    ! initialise heat flux calculation
-    if (flag_heat_flux) then
-      if (.not. flag_full_stress) then
-        flag_full_stress = .true.
-        if (inode==ionode) write(io_lun,'(2x,a)') &
-          "WARNING: setting AtomMove.FullStress T for heat flux calculation"
-      end if
-      if (.not. flag_atomic_stress) then
-        flag_atomic_stress = .true.
-        if (inode==ionode) write(io_lun,'(2x,a)') &
-          "WARNING: setting AtomMove.AtomicStress T for heat flux calculation"
-      end if
-      allocate(atomic_stress(3,3,ni_in_cell), STAT=stat)
-      atomic_stress = zero
-      if (stat /= 0) &
-        call cq_abort("Error allocating atomic_stress: ", ni_in_cell)
-      call reg_alloc_mem(area_moveatoms, 3*3*ni_in_cell, type_dbl)
-    end if
+    ! N.B. atomic stress is allocated in initialisation_module/initialise! - zamaan
 
     if (flag_MDcontinue) call read_md_checkpoint(thermo, baro)
 

@@ -116,14 +116,19 @@ contains
   subroutine initialise(vary_mu, fixed_potential, mu, total_energy)
 
     use datatypes
+    use numbers
     use global_module,     only: x_atom_cell, y_atom_cell, &
                                  z_atom_cell, ni_in_cell,  &
-                                 flag_only_dispersion, flag_neutral_atom
-    use GenComms,          only: inode, ionode, my_barrier, end_comms
+                                 flag_only_dispersion, flag_neutral_atom, &
+                                 flag_atomic_stress, flag_heat_flux, &
+                                 flag_full_stress, area_moveatoms, &
+                                 atomic_stress, non_atomic_stress
+    use GenComms,          only: inode, ionode, my_barrier, end_comms, &
+                                 cq_abort
     use initial_read,      only: read_and_write
     use ionic_data,        only: get_ionic_data
     use density_module,    only: flag_no_atomic_densities
-    use memory_module,     only: init_reg_mem
+    use memory_module,     only: init_reg_mem, reg_alloc_mem, type_dbl
     use group_module,      only: parts
     use primary_module,    only: bundle
     use cover_module,      only: make_cs, D2_CS
@@ -147,7 +152,7 @@ contains
     type(cq_timer)    :: backtrace_timer
     logical           :: start, start_L
     logical           :: read_phi
-    integer :: lmax_tot
+    integer :: lmax_tot, stat
 
     call init_timing_system(inode)
 
@@ -197,6 +202,29 @@ contains
     call my_barrier()
 
     call initial_phis(read_phi, start, find_chdens, fixed_potential, std_level_loc+1)
+
+    ! ewald/screened_ion force and stress is computed in initial_H, so we
+    ! need to allocate the atomic_stress array here - zamaan
+    if (flag_heat_flux) then
+      if (.not. flag_full_stress) then
+        flag_full_stress = .true.
+        if (inode==ionode) write(io_lun,'(2x,a)') &
+          "WARNING: setting AtomMove.FullStress T for heat flux calculation"
+      end if
+      if (.not. flag_atomic_stress) then
+        flag_atomic_stress = .true.
+        if (inode==ionode) write(io_lun,'(2x,a)') &
+          "WARNING: setting AtomMove.AtomicStress T for heat flux calculation"
+      end if
+    end if
+    if (flag_atomic_stress) then
+      allocate(atomic_stress(3,3,ni_in_cell), STAT=stat)
+      if (stat /= 0) &
+        call cq_abort("Error allocating atomic_stress: ", ni_in_cell)
+      call reg_alloc_mem(area_moveatoms, 3*3*ni_in_cell, type_dbl)
+      atomic_stress = zero
+      non_atomic_stress = zero
+    end if
 
     call initial_H(start, start_L, find_chdens, fixed_potential, &
                    vary_mu, total_energy,std_level_loc+1)
