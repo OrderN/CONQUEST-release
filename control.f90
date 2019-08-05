@@ -308,8 +308,8 @@ contains
     call dump_pos_and_matrices
     call get_maxf(max)
     if (inode==ionode) then
-      write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," E: ", &
-        e16.8," dE: ",f12.8)') 0, max, energy0, dE
+      write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," E: "   e16.8," dE: ",f12.8)') & 
+           0, max, energy0, dE
     end if
 
     iter = 1
@@ -390,8 +390,8 @@ contains
        dE = energy0 - energy1
 
        if (inode==ionode) then
-         write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," E: ", &
-           e16.8," dE: ",f12.8)') iter, max, energy1, en_conv*dE
+         write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," E: "e16.8," dE: ",f12.8)') & 
+              iter, max, energy1, en_conv*dE
          if (iprint_MD > 1) then
            write(io_lun,'(4x,"Force Residual:     ",f20.10," ",a2,"/",a2)') &
              for_conv*sqrt(g0/ni_in_cell), en_units(energy_units), & 
@@ -1786,8 +1786,8 @@ end subroutine write_md_data
       if (stress_diff > max_stress) max_stress = stress_diff
     end do
     if (inode==ionode) then
-      write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxStr: ",f12.8," H: ", &
-        e16.8," dH: ",f12.8)') 0, max_stress, enthalpy0, zero
+      write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxStr: ",f12.8," H: "e16.8," dH: ",f12.8)') &
+           0, max_stress, enthalpy0, zero
     end if
 
     call dump_pos_and_matrices(index=0,MDstep=iter)
@@ -1876,8 +1876,8 @@ end subroutine write_md_data
        reset_iter = reset_iter +1
 
        if (inode==ionode) then
-         write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxStr: ",f12.8," H: ", &
-           e16.8," dH: ",f12.8)') iter, max_stress, enthalpy1, en_conv*dH
+         write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxStr: ",f12.8," H: "e16.8," dH: ",f12.8)') &
+              iter, max_stress, enthalpy1, en_conv*dH
          if (iprint_MD > 1) then
            write(io_lun,'(4x,"Maximum stress         ",3f10.6)') &
              max_stress
@@ -2134,8 +2134,8 @@ end subroutine write_md_data
     enthalpy0 = enthalpy(energy0, press)
     dH = zero
     if (inode==ionode) then
-      write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," H: ", &
-        e16.8," dH: ",f12.8)') 0, max, enthalpy0, dH
+      write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," H: " e16.8," dH: ",f12.8)') & 
+           0, max, enthalpy0, dH
     end if
 
    if (inode == ionode .and. iprint_gen > 0) then
@@ -2231,8 +2231,8 @@ end subroutine write_md_data
         energy0 = energy1
 
         if (inode==ionode) then
-          write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," H: ", &
-            e16.8," dH: ",f12.8)') iter, max, enthalpy1, en_conv*dH
+          write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," H: "e16.8," dH: ",f12.8)') &
+               iter, max, enthalpy1, en_conv*dH
           if (iprint_MD > 1) then
             write(io_lun,'(4x,"Force Residual:     ",f20.10," ",a2,"/",a2)') &
               for_conv*sqrt(g0/ni_in_cell), en_units(energy_units), & 
@@ -2326,8 +2326,8 @@ end subroutine write_md_data
       end do
 
       if (inode==ionode) then
-        write(io_lun,'(2x,"GeomOpt + Iter: ",i4," MaxF: ",f12.8," H: ", &
-          e16.8," dH: ",f12.8)') iter, max, enthalpy1, en_conv*dH
+        write(io_lun,'(2x,"GeomOpt + Iter: ",i4," MaxF: ",f12.8," H: " e16.8," dH: ",f12.8)') &
+             iter, max, enthalpy1, en_conv*dH
         if (iprint_MD > 1) then
           write(io_lun,'(4x,"Force Residual:     ",f20.10," ",a2,"/",a2)') &
             for_conv*sqrt(g0/ni_in_cell), en_units(energy_units), & 
@@ -2510,8 +2510,8 @@ end subroutine write_md_data
     call get_maxf(max)
     enthalpy0 = enthalpy(energy0, press)
     if (inode==ionode) then
-      write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," H: ", &
-        e16.8," dH: ",f12.8)') 0, max, enthalpy0, zero
+      write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," H: "e16.8," dH: ",f12.8)') &
+           0, max, enthalpy0, zero
     end if
 
     iter = 1
@@ -2588,8 +2588,8 @@ end subroutine write_md_data
       ! Output and energy changes
       dH = enthalpy0 - enthalpy1
       if (inode==ionode) then
-        write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," H: ", &
-          e16.8," dH: ",f12.8)') iter, max, enthalpy1, en_conv*dH
+        write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," H: "e16.8," dH: ",f12.8)') &
+             iter, max, enthalpy1, en_conv*dH
         if (iprint_MD > 1) then
           write(io_lun,'(4x,"Force Residual:     ",f20.10," ",a2,"/",a2)') &
             for_conv*sqrt(g0/ni_in_cell), en_units(energy_units), & 
