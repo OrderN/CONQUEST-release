@@ -1218,9 +1218,6 @@ contains
                         ! only accumulate phi-pulay force 3 times in total (not 9)
                         if (flag_full_stress) then
                            if (dir1 == dir2) then
-                              if (isf == 1 .and. i == 1) then
-                                if (inode==ionode) write(*,*) dir1, dir2
-                              end if
                               p_force(dir1, i) = p_force(dir1, i) - &
                                  return_matrix_value(mat_tmp, np, ni, 0, 0, isf, isf, 1)
                            end if
