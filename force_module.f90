@@ -1216,8 +1216,18 @@ contains
                      i = bundle%ig_prim(iprim)
                      do isf = 1, natomf_species(bundle%species(iprim))
                         ! only accumulate phi-pulay force 3 times in total (not 9)
-                        if (dir1 == dir2) p_force(dir1, i) = p_force(dir1, i) - &
+                        if (flag_full_stress) then
+                           if (dir1 == dir2) then
+                              if (isf == 1 .and. i == 1) then
+                                if (inode==ionode) write(*,*) dir1, dir2
+                              end if
+                              p_force(dir1, i) = p_force(dir1, i) - &
+                                 return_matrix_value(mat_tmp, np, ni, 0, 0, isf, isf, 1)
+                           end if
+                        else
+                           p_force(dir1, i) = p_force(dir1, i) - &
                               return_matrix_value(mat_tmp, np, ni, 0, 0, isf, isf, 1)
+                        end if
                         if (flag_stress) then
                           if (flag_full_stress) then
                             PP_stress(dir1,dir2) = PP_stress(dir1,dir2) - &  
@@ -1234,6 +1244,7 @@ contains
                   end do ! ni
                end if ! if the partition has atoms
             end do ! np
+
             call free_temp_matrix(mat_tmp2)
             call stop_timer(tmr_std_matrices)
             t1 = mtime()
