@@ -709,6 +709,9 @@ contains
        if (inode==ionode) &
             write(io_lun,fmt='(4x,"MD run, iteration ",i5)') iter
 
+       if (flag_heat_flux) & 
+         atomic_stress = zero
+
        call thermo%get_temperature_and_ke(baro, ion_velocity, &
                                           mdl%ion_kinetic_energy)
        call baro%get_pressure_and_stress
