@@ -1220,9 +1220,13 @@ contains
                            if (dir1 == dir2) then
                               p_force(dir1, i) = p_force(dir1, i) - &
                                  return_matrix_value(mat_tmp, np, ni, 0, 0, isf, isf, 1)
+                              if(iprint_MD>3) phi_pulay_for(dir1, i) = phi_pulay_for(dir1, i) - &
+                                 return_matrix_value(mat_tmp, np, ni, 0, 0, isf, isf, 1)
                            end if
                         else
                            p_force(dir1, i) = p_force(dir1, i) - &
+                              return_matrix_value(mat_tmp, np, ni, 0, 0, isf, isf, 1)
+                           if(iprint_MD>3) phi_pulay_for(dir1, i) = phi_pulay_for(dir1, i) - &
                               return_matrix_value(mat_tmp, np, ni, 0, 0, isf, isf, 1)
                         end if
                         if (flag_stress) then
@@ -1234,9 +1238,6 @@ contains
                                return_matrix_value(mat_tmp2, np, ni, 0, 0, isf, isf, 1)
                           end if
                         end if
-
-                        if(iprint_MD>3) phi_pulay_for(dir1, i) = phi_pulay_for(dir1, i) - &
-                             return_matrix_value(mat_tmp, np, ni, 0, 0, isf, isf, 1)
                      end do ! isf
                   end do ! ni
                end if ! if the partition has atoms
