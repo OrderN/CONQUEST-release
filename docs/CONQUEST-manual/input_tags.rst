@@ -286,30 +286,6 @@ IO.PdbIn (*boolean*)
 
     *default*: F
 
-IO.PdbAltLoc (*string*)
-    In case of PDB files with multiple locations selects an alternate location.
-    Values: A, B, etc., as listed in the pdb file. Note that if the keyword is present
-    in the input file but no value is given, only the parts of the system without
-    any alternate location specification will be taken into account
-
-    *default*: none
-
-IO.PdbOut (*boolean*)
-    Format of the output coordinate file. Writes a PDB file if set to T. In that
-    case, either the input must be in pdb format or a PDB “template” file needs to
-    be specified (keyword General.PdbTemplate)
-
-    *default*: F
-
-IO.PdbTemplate (*string*)
-    A file used as a template for writing out coordinate files in the PDB format,
-    i.e., the output file will contain the same information as the template, only
-    the atomic coordinates will be overwritten. If the input file is in PDB format,
-    it will also be used as the template, although this can still be
-    overwritten with this keyword
-
-    *default*: coordinate file
-
 Levels of Output
 ----------------
 
@@ -340,208 +316,54 @@ IO.Iprint (*integer*)
 IO.Iprint_init (*integer*)
     The initialisation process
 
-    *default*: value of ``IO.Iprint``
-
 IO.Iprint\_mat (*integer*)
     Matrix operations
-
-    *default*: value of ``IO.Iprint``
 
 IO.Iprint\_ops (*integer*)
     Creation of operators H and S
 
-    *default*: value of ``IO.Iprint``
-
 IO.Iprint\_DM (*integer*)
     Density matrix
-
-    *default*: value of ``IO.Iprint``
 
 IO.Iprint\_SC (*integer*)
     Self-consistency
 
-    *default*: value of ``IO.Iprint``
-
 IO.Iprint\_minE (*integer*)
     Energy minimisation
-
-    *default*: value of ``IO.Iprint``
 
 IO.Iprint\_MD (*integer*)
     Molecular dynamics
 
-    *default*: value of ``IO.Iprint``
-
 IO.Iprint\_index (*integer*)
     Indexing routines
-
-    *default*: value of ``IO.Iprint``
 
 IO.Iprint\_gen (*integer*)
     General (not covered by other areas)
 
-    *default*: value of ``IO.Iprint``
-
 IO.Iprint\_pseudo (*integer*)
     Pseudopotentials
-
-    *default*: value of ``IO.Iprint``
 
 IO.Iprint\_basis (*integer*)
     Basis set
 
-    *default*: value of ``IO.Iprint``
-
 IO.Iprint\_intgn (*integer*)
     Integration on the grid (not used at present)
-
-    *default*: value of ``IO.Iprint``
 
 IO.Iprint\_time (*integer*)
     Timing information
 
-    *default*: value of ``IO.Iprint``
+.. _integration-grid:
 
-Basis Set
----------
-
-Basis.BasisSet (*string*)
-    values: blips/PAOs
-
-    Selects the basis set in which to expand the support functions (localised orbitals).
-
-    Options:
-
-    -  PAOs — Pseudo-atomic orbitals :cite:`d-Artacho1999`
-
-    -  blips (default) — B-splines :cite:`d-Hernandez1997`
-
-    *default*: PAOs
-
-Basis.LoadBlip (*boolean*)
-    Load blip or PAO coefficients from file. If set to T, for blips the code will
-    look for a set of files containing blip coefficients, which is taken to be
-    ``blip_coeffs.nnn``, where ``nnn`` is processor number (padded with zeroes);
-    for PAOs, the code will look for a *single* file which is ``supp_pao.dat``
-    by default, but can be set with ``Basis.SupportPaoFile``
-
-    *default*: F
-
-Basis.SupportPaoFile (*string*)
-    Specifies filename for PAO coefficients
-
-    *default*: ``supp_pao.dat``
-
-Basis.UsePulayForPAOs (*boolean*)
-    Determines whether to use Pulay DIIS for minimisation of PAO basis coefficients
-
-    *default*: F
-
-Basis.PaoKspaceOlGridspace (*real*)
-    Determines the reciprocal-space grid spacing for PAO integrals
-
-    *default*: 0.1
-
-Basis.PaoKspaceOlCutoff (*real*)
-    Determines the cutoff for reciprocal-space grid spacing for PAO integrals
-
-    *default*: 1000.0
-
-Basis.PAOs\_StoreAllAtomsInCell (*boolean*)
-    Determines whether coefficients for all atoms in cell are stored on each
-    processor (improves speed but potentially memory expensive, particularly with
-    large systems) or only local atom coefficients (increases communication overhead)
-
-    *default*: T
-
-Basis.SymmetryBreaking (*boolean*)
-    Determines whether symmetry-breaking assignment of PAOs to support functions
-    is allowed. In general, it is *highly* recommended that all atoms have sufficient
-    support functions to span the space of angular momenta used in PAOs
-    (i.e. :math:`2l+1` support functions for each :math:`l` channel used for PAOs);
-    reducing the number potentially results in symmetry breaking and unphysical behaviour
-
-    *default*: F
-
-Basis.PaoNormFlag (*integer*)
-    Determines whether PAOs are normalised
-
-    *default*: 0
-
-Basis.ReadSupportSpec (*boolean*)
-    Should a file mapping PAOs to support functions *for initialisation of blip
-    coefficients* be read ? See Sec. [sec:other:-basis-spec] for details of file
-
-    *default*: F
-
-Basis.SupportSpecFile (*string*)
-    Name of file to be read (see ``Basis.ReadSupportSpec``)
-
-    *default*: ``support.dat``
-
-Basis.TestBasisGradients (*boolean*)
-    Chooses whether gradients of energy with respect to basis function coefficients
-    should be tested (using numerical vs. analytical gradients). **WARNING :** this
-    produces large amounts of data
-
-    *default*: F
-
-Basis.TestBasisGradTot (*boolean*)
-    Test total gradient ?
-
-    *default*: F
-
-Basis.TestBasisGradBoth (*boolean*)
-    Test both S- and H-derived gradients (i.e. gradients arising from change of
-    S or H when support functions vary) ?
-
-    *default*: F
-
-Basis.TestBasisGrad\_S (*boolean*)
-    Test S-derived gradient ?
-
-    *default*: F
-
-Basis.TestBasisGrad\_H (*boolean*)
-    Test H-derived gradient ?
-
-    *default*: F
-
-Basis.PAOs\_OneToOne (*boolean*)
-    Assign PAOs to individual support functions (implies no support function optimisation)
-
-    *default*: F
-
-.. _integration-grid-spacing:
-
-Integration Grid Spacing
-------------------------
+Integration Grid
+----------------
 
 Grid.GridCutoff (*real*)
-    Defines the spacing of the *integration* grid (though for a blip calculation
+    An energy that defines the spacing of the *integration* grid (though for a blip calculation
     must be at least twice as fine as blip grid, and will be adjusted). Note that
     the value chosen will automatically be forced to be a factor of 3, 4 and 5 only
     (to fit with default FFT routines)
 
     Default: 20 Ha.
-
-Grid.PointsAlong[X/Y/Z] (*integer*)
-    Grid points along x (y,z). Overwrites the values set by **Grid.GridCutoff**.
-    The default FFT code requires that the number of grid points have prime
-    factors of 2, 3 or 5
-
-    *default*: 0
-
-Grid.InBlock[X/Y/Z] (*integer*)
-    This is the size of a grid point block (i.e., how many grid points are in one
-    block in the x (y,z) direction), which must be 3, 4 or 5
-
-    *default*: 4
-
-Grid.ReadBlocks (*boolean*)
-    If specified, the code reads information about blocks from the file make\_blk.dat
-
-    *default*: F
 
 Minimising Energy
 -----------------
@@ -682,7 +504,7 @@ DM.SolutionMethod (*string*)
     Selects the method for finding the ground state density matrix. This can currently
     be either diagonalisation (diagon: minimising the energy with respect to the
     density matrix elements) or an O(N) method (ordern a combination of the
-    techniques of Li et al. :cite:`d-Li1993` and Palser and Manolopoulos :cite:`d-Palser1998`.)
+    techniques of Li et al. :cite:`e-Li1993` and Palser and Manolopoulos :cite:`e-Palser1998`.)
 
     *default*: ordern
 
@@ -1437,6 +1259,207 @@ Atom.SpinNeDn (*real*)
     spin state of atomic densities
 
     *default*: 0.0
+
+.. _advanced_io_general_tags:
+
+I/O General
+***********
+
+IO.Partitions (*string*)
+    Name for file containing distribution of partitions over processors
+    (generated by accompanying utilities)
+
+    *default*: ``make_prt.dat``
+
+IO.TimingOn (*boolean*)
+    Whether time information will be measured and written to output
+
+    *default*: F
+
+IO.TimeAllProcessors (*boolean*)
+    Specifies whether time information will be written for all processors or just
+    for the input/output process (the default)
+
+    *default*: F
+
+IO.WriteTimeFile (*boolean*)
+    Whether time files are written or not. This flag will be ignored if
+    ``IO.TimeAllProcessors`` is true, in which case time files are always written.
+
+    *default*: T
+
+IO.TimeFileRoot (*string*)
+    Root to be used in the time files, with an extension indicating the processor
+    number, e.g. ``.001``
+
+    *default*: ``time``
+
+.. _advanced_io_coord_tags:
+
+I/O Atomic Coordinates
+**********************
+
+IO.PdbAltLoc (*string*)
+    In case of PDB files with multiple locations selects an alternate location.
+    Values: A, B, etc., as listed in the pdb file. Note that if the keyword is present
+    in the input file but no value is given, only the parts of the system without
+    any alternate location specification will be taken into account
+
+    *default*: none
+
+IO.PdbOut (*boolean*)
+    Format of the output coordinate file. Writes a PDB file if set to T. In that
+    case, either the input must be in pdb format or a PDB “template” file needs to
+    be specified (keyword General.PdbTemplate)
+
+    *default*: F
+
+IO.PdbTemplate (*string*)
+    A file used as a template for writing out coordinate files in the PDB format,
+    i.e., the output file will contain the same information as the template, only
+    the atomic coordinates will be overwritten. If the input file is in PDB format,
+    it will also be used as the template, although this can still be
+    overwritten with this keyword
+
+    *default*: coordinate file
+
+.. _advanced_basis_tags:
+
+Basis Set
+*********
+
+Basis.BasisSet (*string*)
+    values: blips/PAOs
+
+    Selects the basis set in which to expand the support functions (localised orbitals).
+
+    Options:
+
+    -  PAOs — Pseudo-atomic orbitals :cite:`e-Artacho1999`
+
+    -  blips (default) — B-splines :cite:`e-Hernandez1997`
+
+    *default*: PAOs
+
+Basis.LoadBlip (*boolean*)
+    Load blip or PAO coefficients from file. If set to T, for blips the code will
+    look for a set of files containing blip coefficients, which is taken to be
+    ``blip_coeffs.nnn``, where ``nnn`` is processor number (padded with zeroes);
+    for PAOs, the code will look for a *single* file which is ``supp_pao.dat``
+    by default, but can be set with ``Basis.SupportPaoFile``
+
+    *default*: F
+
+Basis.SupportPaoFile (*string*)
+    Specifies filename for PAO coefficients
+
+    *default*: ``supp_pao.dat``
+
+Basis.UsePulayForPAOs (*boolean*)
+    Determines whether to use Pulay DIIS for minimisation of PAO basis coefficients
+
+    *default*: F
+
+Basis.PaoKspaceOlGridspace (*real*)
+    Determines the reciprocal-space grid spacing for PAO integrals
+
+    *default*: 0.1
+
+Basis.PaoKspaceOlCutoff (*real*)
+    Determines the cutoff for reciprocal-space grid spacing for PAO integrals
+
+    *default*: 1000.0
+
+Basis.PAOs\_StoreAllAtomsInCell (*boolean*)
+    Determines whether coefficients for all atoms in cell are stored on each
+    processor (improves speed but potentially memory expensive, particularly with
+    large systems) or only local atom coefficients (increases communication overhead)
+
+    *default*: T
+
+Basis.SymmetryBreaking (*boolean*)
+    Determines whether symmetry-breaking assignment of PAOs to support functions
+    is allowed. In general, it is *highly* recommended that all atoms have sufficient
+    support functions to span the space of angular momenta used in PAOs
+    (i.e. :math:`2l+1` support functions for each :math:`l` channel used for PAOs);
+    reducing the number potentially results in symmetry breaking and unphysical behaviour
+
+    *default*: F
+
+Basis.PaoNormFlag (*integer*)
+    Determines whether PAOs are normalised
+
+    *default*: 0
+
+Basis.ReadSupportSpec (*boolean*)
+    Should a file mapping PAOs to support functions *for initialisation of blip
+    coefficients* be read ? See Sec. [sec:other:-basis-spec] for details of file
+
+    *default*: F
+
+Basis.SupportSpecFile (*string*)
+    Name of file to be read (see ``Basis.ReadSupportSpec``)
+
+    *default*: ``support.dat``
+
+Basis.TestBasisGradients (*boolean*)
+    Chooses whether gradients of energy with respect to basis function coefficients
+    should be tested (using numerical vs. analytical gradients). **WARNING :** this
+    produces large amounts of data
+
+    *default*: F
+
+Basis.TestBasisGradTot (*boolean*)
+    Test total gradient ?
+
+    *default*: F
+
+Basis.TestBasisGradBoth (*boolean*)
+    Test both S- and H-derived gradients (i.e. gradients arising from change of
+    S or H when support functions vary) ?
+
+    *default*: F
+
+Basis.TestBasisGrad\_S (*boolean*)
+    Test S-derived gradient ?
+
+    *default*: F
+
+Basis.TestBasisGrad\_H (*boolean*)
+    Test H-derived gradient ?
+
+    *default*: F
+
+Basis.PAOs\_OneToOne (*boolean*)
+    Assign PAOs to individual support functions (implies no support function optimisation)
+
+    *default*: F
+
+.. _advanced_grid_tags:
+
+Integration Grid
+****************
+
+Grid.PointsAlong[X/Y/Z] (*integer*)
+    Grid points along x (y,z). Overwrites the values set by **Grid.GridCutoff**.
+    The default FFT code requires that the number of grid points have prime
+    factors of 2, 3 or 5
+
+    *default*: 0
+
+Grid.InBlock[X/Y/Z] (*integer*)
+    This is the size of a grid point block (i.e., how many grid points are in one
+    block in the x (y,z) direction), which must be a multiple of 2, 3,
+    or 5 (larger values may impact on parallel efficiency).
+
+    *default*: 4
+
+Grid.ReadBlocks (*boolean*)
+    If specified, the code reads information about blocks from the file make\_blk.dat
+
+    *default*: F
+
+
 
 .. bibliography:: references.bib
     :cited:
