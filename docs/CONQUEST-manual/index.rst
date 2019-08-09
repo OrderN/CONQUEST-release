@@ -14,40 +14,60 @@ CONQUEST can perform structural relaxation (including unit cell
 optimisation) and molecular dynamics (in NVE, NVT and NPT ensembles
 with a variety of thermostats).
 
-The main basis set in use in CONQUEST is pseudo-atomic orbitals
-(PAOs).  Using these as the primitive basis set, calculations up to
-several hundred atoms are standard and a thousand atoms is possible.
-To go beyond this with diagonalisation, a composite basis is used,
-where PAOs are combined into a smaller set of support functions
-(multi-site support functions, or MSSF).  With MSSF, calculations on
-10,000-20,000 atoms are possible on HPC platforms.  Beyond this size,
-linear scaling must be used, which requires a further simplification
-of the support functions.
+Documentation
+-------------
 
-CONQUEST is distributed freely, under an MIT licence.  We ask that you
-acknowledge use of the code by citing appropriate papers **more
-details**.  If you have questions or suggestions for developing the
-code, please use the GitHub interface.  The developers cannot
-guarantee to offer support, though we will try to help.
+**Getting Started**
 
+* :doc:`why-conquest`
+* :doc:`faq`
+* :doc:`quick-overview`
+* :doc:`examples`
+* :doc:`installing`
+  
 .. toctree::
    :maxdepth: 1
-   :caption: Contents:
+   :hidden:      
+   :caption: Getting Started
 
-   starting
+   why-conquest
+   faq
+   quick-overview
+   examples
+   installing
+
+**User Guide**
+
+* :doc:`input-output`
+* :doc:`important`
+* :doc:`errors`
+* :doc:`input_tags`
+  
+.. toctree::
+   :maxdepth: 1
+   :hidden:      
+   :caption: User Guide
+
    input-output
    important
    errors
    input_tags
 
-Indices and tables
-==================
+Get in touch
+------------
 
-.. only:: builder_html
+- If you have questions or suggestions for developing the code, please
+  use **what interface**.  The developers cannot guarantee to offer
+  support, though we will try to help. 
+- Report bugs, suggest features or view the source code `on GitHub issues`_.
 
-   * :ref:`genindex`
-   * :ref:`search`
+.. _on GitHub issues: http://github.com/OrderN/CONQUEST-release/issues
 
-.. only:: not builder_html
+License
+-------
 
-   * :ref:`genindex`
+CONQUEST is available freely under the open source `MIT Licence`__.
+We ask that you acknowledge use of the code by citing appropriate
+papers **details**.
+
+__ https://choosealicense.com/licenses/mit/
