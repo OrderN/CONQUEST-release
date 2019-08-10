@@ -96,6 +96,9 @@ module SelfCon
 
   logical, save :: flag_Kerker
   logical, save :: flag_wdmetric
+  logical, save :: flag_newresidual
+  logical, save :: flag_newresid_abs
+
 
   real(double), dimension(2), save :: A ! A(spin) mixing factor for spin
   real(double), save :: q0
@@ -2616,7 +2619,7 @@ contains
                               spin_factor
     use memory_module,  only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use maxima_module,  only: maxngrid
-
+    use density_module, only: density
     implicit none
 
     ! Passed variables
@@ -2628,7 +2631,7 @@ contains
 
     ! Local variables
     integer      :: n_iters, pul_mx, ii, iter, iPulay, stat
-    real(double) :: R0
+    real(double) :: R0, RB, RC
     real(double), dimension(:),     allocatable :: rho_tot
     real(double), dimension(:,:,:), allocatable :: rho_pul
     real(double), dimension(:,:,:), allocatable, target :: R_pul
@@ -2642,8 +2645,8 @@ contains
     integer      :: IterPulayReset = 1
     integer      :: icounter_fail  = 0
     logical      :: reset_Pulay    = .false.
-    integer      :: spin
-    real(double) :: R0_old
+    integer      :: spin, dotn
+    real(double) :: R0_old, RC_old, RB_old
 
     type(cq_timer)    :: backtrace_timer
     integer           :: backtrace_level
@@ -2703,17 +2706,27 @@ contains
                               Rcov_pul, backtrace_level)
 
     ! Evaluate magnitute of residual, note do not include cross terms
-    R0 = zero
+    R0 = zero         !jtlp roughly 02/19
     do spin = 1, nspin
-       R0 = R0 + spin_factor * &
-            dot(n_my_grid_points, R_pul(:,1,spin), 1, R_pul(:,1,spin), 1)
+      R0 = R0 + spin_factor * &
+           dot(n_my_grid_points, R_pul(:,1,spin), 1, R_pul(:,1,spin), 1)
     end do
+    !do spin = 1, nspin
+    !  R0 = R0 + spin_factor * &
+    !      sum( abs(KR_pul(:,1,spin)))
+    !end do
+
     ! cross term
     ! R0 = R0 + two * &
     !      dot(n_my_grid_points, R_pul(:,1,1), 1, R_pul(:,1,nspin), 1)
     call gsum(R0)
-    R0 = sqrt(grid_point_volume * R0) / ne_in_cell
+    R0 = sqrt(grid_point_volume * R0) / ne_in_cell 
 
+    !R0 = grid_point_volume * R0
+    !dotn = dot(n_my_grid_points, density(:,1), 1, density(:,1), 1)
+    !call gsum(dotn)
+    !R0 =  R0 / dotn
+    !R0 = R0 / ne_in_cell
     ! print residual information
     if (inode == ionode) then
        write (io_lun, '(8x,a,i5,a,e12.5)') &
@@ -2745,6 +2758,8 @@ contains
 
     ! Record Pulay Resetting information
     R0_old = R0
+    RC_old = R0
+    RB_old = R0
     IterPulayReset = 1
     icounter_fail = 0
 
@@ -2775,18 +2790,39 @@ contains
                                  Rcov_pul, backtrace_level)
 
        ! Evaluate magnitute of residual, note no cross terms
-       R0 = zero
-       do spin = 1, nspin
-          R0 = R0 + spin_factor * &
-               dot(n_my_grid_points, R_pul(:,iPulay,spin), 1, &
-                   R_pul(:,iPulay,spin), 1)
-       end do
+      R0 = zero                         ! jtlp roughly 02/2019
+      RB = zero
+      RC = zero
+      !do spin = 1, nspin
+       !   R0 = R0 + spin_factor * &
+       !        sum(abs(KR_pul(:,1,spin)))
+       !end do
+      do spin = 1, nspin
+        R0 = R0 + spin_factor * &
+             dot(n_my_grid_points, R_pul(:,iPulay,spin), 1, &
+                 R_pul(:,iPulay,spin), 1)
+      end do
        ! cross term
-       ! R0 = R0 + two * &
+      ! R0 = R0 + two * &
        !      dot(n_my_grid_points, R_pul(:,1,1), 1, R_pul(:,1,nspin), 1)
-       call gsum(R0)
-       R0 = sqrt(grid_point_volume * R0) / ne_in_cell
+      call gsum(R0)
+      R0 = sqrt(grid_point_volume * R0) / ne_in_cell
+!!! Residual Option B                                                                                                                                                                                                                                                         
+      do spin = 1, nspin                                                                                                                                                                                                                                                        
+      RB = RB + spin_factor * &                                                                                                                                                                                                                                              
+         sum(abs(R_pul(:,iPulay,spin)))                                                                                                                                                                                                                                          
+      end do                                                                                                                                                                                                                                                                       
+      call gsum(RB)                                                                                                                                                                                                                                                     
+      RB = grid_point_volume * RB
 
+!!! Residual Option C                                                                                                                           
+      do spin = 1, nspin
+         RC = RC + spin_factor * &
+          sum(abs(R_pul(:,iPulay,spin)))
+      end do
+      call gsum(RC)
+      RC = grid_point_volume * RC / ne_in_cell
+      
 !****lat<$
 !****lat>$
 
@@ -2796,31 +2832,100 @@ contains
                'Pulay iteration ', iter, ' Residual is ', R0
        end if
 
+
+      if (inode == ionode) then
+         write (io_lun, '(8x,a,i5,a,e12.5)') &
+              'Pulay iteration ', iter, ' The absolute new residual option is ', RB
+      end if
+!
+      if (inode == ionode) then
+         write (io_lun, '(8x,a,i5,a,e12.5)') &
+              'Pulay iteration ', iter, ' The relative new residual option  is ', RC
+      end if
+!
+!      if (inode == ionode) then
+!         write (io_lun, '(8x,a,i5,a,e12.5)') &
+!              'Pulay iteration ', iter, ' Residual Option E is ', RE
+!      end if
+
        ! check if they have reached tolerance
-       if (R0 < self_tol .AND. iter >= minitersSC) then ! Passed minimum number of iterations
-          if (inode == ionode) write (io_lun,1) iter
-          done = .true.
-          call deallocate_PulayMiXSC_spin
-          return
-       end if
-       if (R0 < EndLinearMixing) then
-          if (inode == ionode) &
-               write (io_lun, '(8x,"Reached transition to LateSC")')
-          call deallocate_PulayMiXSC_spin
-          return
-       end if
+       if ( .not. flag_newresidual) then  
+          if (R0 < self_tol .AND. iter >= minitersSC) then ! Passed minimum number of iterations
+             if (inode == ionode) write (io_lun,1) iter
+             done = .true.
+             call deallocate_PulayMiXSC_spin
+             return
+          end if
+          if (R0 < EndLinearMixing) then
+             if (inode == ionode) &
+                  write (io_lun, '(8x,"Reached transition to LateSC")')
+             call deallocate_PulayMiXSC_spin
+             return
+          end if
 
-       ! check if Pulay SC needs to be reset
-       if (R0 > R0_old) &
-            icounter_fail = icounter_fail + 1
-       if (icounter_fail > mx_fail) then
-          if (inode == ionode) &
-               write (io_lun, *) ' Pulay iteration is reset !!  at ', iter, &
-                                 ' th iteration'
-          reset_Pulay = .true.
-       end if
-       R0_old = R0
 
+          ! check if Pulay SC needs to be reset
+          if (R0 > R0_old) &
+               icounter_fail = icounter_fail + 1
+          if (icounter_fail > mx_fail) then
+             if (inode == ionode) &
+                  write (io_lun, *) ' Pulay iteration is reset !!  at ', iter, &
+                  ' th iteration'
+             reset_Pulay = .true.
+          end if
+          R0_old = R0
+       end if
+       
+       ! Terminating SC cycle for new absolute residual 
+       if( flag_newresidual .and. flag_newresid_abs) then 
+          if (RB < self_tol .AND. iter >= minitersSC) then ! Passed minimum number of iterations                                                                                                                                                                                
+             if (inode == ionode) write (io_lun,1) iter
+             done = .true.
+             call deallocate_PulayMiXSC_spin
+             return
+          end if
+          if (RB < EndLinearMixing) then
+             if (inode == ionode) &
+                  write (io_lun, '(8x,"Reached transition to LateSC")')
+             call deallocate_PulayMiXSC_spin
+             return
+          end if
+          if (RB > RB_old) &
+               icounter_fail = icounter_fail + 1
+          if (icounter_fail > mx_fail) then
+             if (inode == ionode) &
+                  write (io_lun, *) ' Pulay iteration is reset !!  at ', iter, &
+                  ' th iteration'
+             reset_Pulay = .true.
+          end if
+          RB_old = RB
+       end if 
+
+       ! Terminating SC cycle for new realtive residual 
+        if (flag_newresidual .and. .not. flag_newresid_abs) then
+           if (RC < self_tol .AND. iter >= minitersSC) then ! Passed minimum number of iterations                                                                                                                                                                             
+              if (inode == ionode) write (io_lun,1) iter
+              done = .true.
+              call deallocate_PulayMiXSC_spin
+              return
+           end if
+           if (RC < EndLinearMixing) then
+              if (inode == ionode) &
+                   write (io_lun, '(8x,"Reached transition to LateSC")')
+              call deallocate_PulayMiXSC_spin
+              return
+           end if
+           if (RC > RC_old) &
+               icounter_fail = icounter_fail + 1
+           if (icounter_fail > mx_fail) then
+              if (inode == ionode) &
+                   write (io_lun, *) ' Pulay iteration is reset !!  at ', iter, &
+                   ' th iteration'
+              reset_Pulay = .true.
+           end if
+           RC_old = RC
+       end if
+       
        ! get optimum rho mixed from rho_pul, R_pul and Rcov_pul
        call get_pulay_optimal_rho(iPulay, rho, pul_mx, A, rho_pul, &
                                   R_pul, KR_pul, Rcov_pul, backtrace_level)

@@ -794,9 +794,10 @@ contains
          flag_neutral_atom_projector, maxL_neutral_atom_projector, numN_neutral_atom_projector
     use SelfCon, only: A, flag_linear_mixing, EndLinearMixing, q0, q1,&
                        n_exact, maxitersSC, maxearlySC, maxpulaySC,   &
-                       atomch_output, flag_Kerker, flag_wdmetric, minitersSC
-    use atomic_density,  only: read_atomic_density_file, &
-         atomic_density_method
+                       atomch_output, flag_Kerker, flag_wdmetric, minitersSC, &
+                       flag_newresidual, flag_newresid_abs 
+    use atomic_density, only: read_atomic_density_file, &
+                              atomic_density_method
     use density_module, only: flag_InitialAtomicSpin
     use S_matrix_module, only: InvSTolerance, InvSMaxSteps,&
                                InvSDeltaOmegaTolerance
@@ -1499,6 +1500,10 @@ contains
        minitersSC      = fdf_integer('SC.MinIters',0) ! Changed default 2->0 DRB 2018/02/26
        maxearlySC      = fdf_integer('SC.MaxEarly',3 )
        maxpulaySC      = fdf_integer('SC.MaxPulay',5 )
+       ! New residual flags jtlp 08/2019
+       flag_newresidual = fdf_boolean('SC.NewResidual', .false.)
+       flag_newresid_abs = fdf_boolean('SC.NewResidual.Absoulute', .true.)
+       ! Atomic density
        read_atomic_density_file = &
                        fdf_string(80,'SC.ReadAtomicDensityFile','read_atomic_density.dat')
        ! Read atomic density initialisation flag
