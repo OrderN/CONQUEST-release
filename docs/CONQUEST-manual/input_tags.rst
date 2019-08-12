@@ -9,6 +9,10 @@ where they apply.  For each tag, a default is given.  Types of value
 are specified as: *integer*;
 *real*; *boolean*; or *string* (optA/optB are given for string options).
 
+.. contents:: Areas
+   :depth: 1
+   :local:
+
 .. _input_tags_general:
 
 General
