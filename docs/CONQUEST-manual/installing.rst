@@ -59,13 +59,3 @@ Once these are set, you should make the executable using ``make``.
 
 The ion file generation code is compiled using the same options
 required for the main code.
-
-Where next?
------------
-
-While the tutorials have covered the basic operations of Conquest,
-there are many more subtle questions and issues.  Detailed
-descriptions of the files required and produced by Conquest are given
-in :ref:`input-output`, while the input tags themselves are documented
-in :ref:`input_tags`.  A set of :ref:`important` give more details
-about the operations of the code and the background theory.
