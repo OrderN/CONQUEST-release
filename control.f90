@@ -386,7 +386,6 @@ contains
        g0 = dot(length, tot_force, 1, tot_force, 1)
        call get_maxf(max)
        ! Output and energy changes
-       iter = iter + 1
        dE = energy0 - energy1
 
        if (inode==ionode) then
@@ -406,6 +405,7 @@ contains
          end if
        end if
 
+       iter = iter + 1
        energy0 = energy1
        !energy1 = abs(dE)
        if (iter > MDn_steps) then
@@ -1781,6 +1781,7 @@ end subroutine write_md_data
     enthalpy1 = enthalpy0
     dH = zero
     max_stress = zero
+    volume = rcellx*rcelly*rcellz
     do i=1,3
       stress_diff = abs(press + stress(i,i))/volume
       if (stress_diff > max_stress) max_stress = stress_diff
@@ -1872,7 +1873,6 @@ end subroutine write_md_data
          if (stress_diff > max_stress) max_stress = stress_diff
        end do
 
-       iter = iter + 1
        reset_iter = reset_iter +1
 
        if (inode==ionode) then
@@ -1892,6 +1892,7 @@ end subroutine write_md_data
          end if
        end if
 
+       iter = iter + 1
        if (myid == 0 .and. iprint_MD > 0) then
            write (io_lun, 4) en_conv*dH, en_units(energy_units)
            write (io_lun, 5) dRMSstress, "Ha"
