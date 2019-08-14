@@ -2726,12 +2726,7 @@ contains
     call gsum(RB)
     RB = grid_point_volume * RB
     ! New, relative
-    RC = zero
-    do spin = 1, nspin
-       RC = RC + spin_factor * sum(abs(R_pul(:,iPulay,spin)))
-    end do
-    call gsum(RC)
-    RC = grid_point_volume * RC / ne_in_cell
+    RC = RB / ne_in_cell
 
     ! Set residual
     if ( .not. flag_newresidual) then
@@ -2828,11 +2823,7 @@ contains
        call gsum(RB)
        RB = grid_point_volume * RB
        ! New, relative
-       do spin = 1, nspin
-          RC = RC + spin_factor * sum(abs(R_pul(:,iPulay,spin)))
-       end do
-       call gsum(RC)
-       RC = grid_point_volume * RC / ne_in_cell
+       RC = RB / ne_in_cell
        ! Set residual
        if ( .not. flag_newresidual) then
           R0 = RA
