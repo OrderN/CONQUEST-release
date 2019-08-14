@@ -1501,8 +1501,8 @@ contains
        maxearlySC      = fdf_integer('SC.MaxEarly',3 )
        maxpulaySC      = fdf_integer('SC.MaxPulay',5 )
        ! New residual flags jtlp 08/2019
-       flag_newresidual = fdf_boolean('SC.NewResidual', .false.)
-       flag_newresid_abs = fdf_boolean('SC.NewResidual.TotalAbsolute', .true.)
+       flag_newresidual = fdf_boolean('SC.AbsResidual', .false.)
+       flag_newresid_abs = fdf_boolean('SC.AbsResidual.Fractional', .true.)
        ! Atomic density
        read_atomic_density_file = &
                        fdf_string(80,'SC.ReadAtomicDensityFile','read_atomic_density.dat')

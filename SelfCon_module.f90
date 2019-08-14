@@ -2829,9 +2829,9 @@ contains
           R0 = RA
        else
           if(flag_newresid_abs) then
-             R0 = RB
-          else
              R0 = RC
+          else
+             R0 = RB
           end if
        end if
        ! print residual information
