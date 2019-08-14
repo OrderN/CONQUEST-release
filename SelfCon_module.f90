@@ -2719,27 +2719,20 @@ contains
     call gsum(RA)
     RA = sqrt(grid_point_volume * RA) / ne_in_cell
     ! New, absolute
+    RB = zero
     do spin = 1, nspin
        RB = RB + spin_factor * sum(abs(R_pul(:,iPulay,spin)))
     end do
     call gsum(RB)
     RB = grid_point_volume * RB
     ! New, relative
+    RC = zero
     do spin = 1, nspin
        RC = RC + spin_factor * sum(abs(R_pul(:,iPulay,spin)))
     end do
     call gsum(RC)
     RC = grid_point_volume * RC / ne_in_cell
 
-    ! print residual information
-    if (inode == ionode) then
-       write (io_lun, '(8x,a,i5,a,e12.5)') &
-            'Pulay iteration ', iter, ' Residual is ', RA
-          write (io_lun, '(8x,a,i5,a,e12.5)') &
-               'Pulay iteration ', iter, ' The absolute new residual option is ', RB
-          write (io_lun, '(8x,a,i5,a,e12.5)') &
-               'Pulay iteration ', iter, ' The relative new residual option  is ', RC
-    end if
     ! Set residual
     if ( .not. flag_newresidual) then
        R0 = RA
@@ -2749,6 +2742,18 @@ contains
        else
           R0 = RC
        end if
+    end if
+    ! print residual information
+    if (inode == ionode.AND.iprint_SC>1) then
+       write (io_lun, '(8x,a,i5,a,e12.5)') &
+            'Pulay iteration ', iter, ' RMS residual:             ', RA
+       write (io_lun, '(8x,a,i5,a,e12.5)') &
+            'Pulay iteration ', iter, ' absolute residual (tot) : ', RB
+       write (io_lun, '(8x,a,i5,a,e12.5)') &
+            'Pulay iteration ', iter, ' absolute residual (frac): ', RC
+    else
+       write (io_lun, '(8x,a,i5,a,e12.5)') &
+            'Pulay iteration ', iter, ' residual:             ', R0
     end if
     ! check if they have reached tolerance
     if (R0 < self_tol .AND. iter >= minitersSC) then ! If we've done minimum number
@@ -2828,16 +2833,6 @@ contains
        end do
        call gsum(RC)
        RC = grid_point_volume * RC / ne_in_cell
-
-       ! print residual information
-       if (inode == ionode) then
-          write (io_lun, '(8x,a,i5,a,e12.5)') &
-               'Pulay iteration ', iter, ' Residual is ', RA
-          write (io_lun, '(8x,a,i5,a,e12.5)') &
-               'Pulay iteration ', iter, ' The absolute new residual option is ', RB
-          write (io_lun, '(8x,a,i5,a,e12.5)') &
-               'Pulay iteration ', iter, ' The relative new residual option  is ', RC
-       end if
        ! Set residual
        if ( .not. flag_newresidual) then
           R0 = RA
@@ -2847,6 +2842,18 @@ contains
           else
              R0 = RC
           end if
+       end if
+       ! print residual information
+       if (inode == ionode.AND.iprint_SC>1) then
+          write (io_lun, '(8x,a,i5,a,e12.5)') &
+               'Pulay iteration ', iter, ' RMS residual:             ', RA
+          write (io_lun, '(8x,a,i5,a,e12.5)') &
+               'Pulay iteration ', iter, ' absolute residual (tot) : ', RB
+          write (io_lun, '(8x,a,i5,a,e12.5)') &
+               'Pulay iteration ', iter, ' absolute residual (frac): ', RC
+       else
+          write (io_lun, '(8x,a,i5,a,e12.5)') &
+               'Pulay iteration ', iter, ' residual:             ', R0
        end if
        ! check if they have reached tolerance
        if (R0 < self_tol .AND. iter >= minitersSC) then ! Passed minimum number of iterations
