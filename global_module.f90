@@ -136,6 +136,8 @@
 !!    Added a flag for orbital angular momentum resolved PDOS
 !!   2018/10/22 14:25 dave & jsb
 !!    Adding (l,m)-projection for PDOS
+!!   2019/02/28 zamaan
+!!    Added enthalpy and stress tolerances for cell optimisation
 !!   2019/03/28 zamaan
 !!    Added flag_stress and flag_full_stress
 !!   2019/05/21 zamaan
@@ -187,10 +189,11 @@ module global_module
   logical :: flag_stress   ! Compute the stress tensor?
   logical :: flag_full_stress ! Compute the off-diagonal elements?
   logical :: flag_opt_cell ! optimize the simulation cell?
+  integer :: optcell_method ! method for cell optimiisation 1 = cell, fixed fractional coords, 2 = nested loop cell + geometry optimisation, 3 = single vector full optimisation
   ! specify sim cell dims/ratios of dims to be held constant.
   character(len=20), save :: cell_constraint_flag
   ! Termination condition to exit cell_cg_run
-  real(double) :: cell_en_tol
+  real(double) :: cell_en_tol, cell_stress_tol
 
 
   ! Logical flags controlling run

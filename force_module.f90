@@ -1157,7 +1157,6 @@ contains
        ! Allocate more temporary variables
        tmp_fn2 = allocate_temp_fn_on_grid(atomf)
        gridfunctions(tmp_fn2)%griddata = zero
-       mat_tmp2 = allocate_temp_matrix(aSa_range, 0, atomf, atomf)
        !temp_local = allocate_temp_fn_on_grid(atomf) ! Edited SYM 2014/09/01 17:55 
        ! now for each direction in turn
        do dir1 = 1, 3
@@ -1195,6 +1194,8 @@ contains
                 call get_r_on_atomfns(dir1,tmp_fn,tmp_fn2)
               end if
             end if
+            ! Need to zero mat_tmp2 here because it is accumulating
+            mat_tmp2 = allocate_temp_matrix(aSa_range, 0, atomf, atomf)
             call get_matrix_elements_new(inode-1, rem_bucket(atomf_atomf_rem),&
                                          mat_tmp2, H_on_atomfns(1), tmp_fn2)
             t1 = mtime()
@@ -1214,8 +1215,20 @@ contains
                      !i=index_my_atoms(iprim)
                      i = bundle%ig_prim(iprim)
                      do isf = 1, natomf_species(bundle%species(iprim))
-                        p_force(dir1, i) = p_force(dir1, i) - &
-                             return_matrix_value(mat_tmp, np, ni, 0, 0, isf, isf, 1)
+                        ! only accumulate phi-pulay force 3 times in total (not 9)
+                        if (flag_full_stress) then
+                           if (dir1 == dir2) then
+                              p_force(dir1, i) = p_force(dir1, i) - &
+                                 return_matrix_value(mat_tmp, np, ni, 0, 0, isf, isf, 1)
+                              if(iprint_MD>3) phi_pulay_for(dir1, i) = phi_pulay_for(dir1, i) - &
+                                 return_matrix_value(mat_tmp, np, ni, 0, 0, isf, isf, 1)
+                           end if
+                        else
+                           p_force(dir1, i) = p_force(dir1, i) - &
+                              return_matrix_value(mat_tmp, np, ni, 0, 0, isf, isf, 1)
+                           if(iprint_MD>3) phi_pulay_for(dir1, i) = phi_pulay_for(dir1, i) - &
+                              return_matrix_value(mat_tmp, np, ni, 0, 0, isf, isf, 1)
+                        end if
                         if (flag_stress) then
                           if (flag_full_stress) then
                             PP_stress(dir1,dir2) = PP_stress(dir1,dir2) - &  
@@ -1225,13 +1238,12 @@ contains
                                return_matrix_value(mat_tmp2, np, ni, 0, 0, isf, isf, 1)
                           end if
                         end if
-
-                        if(iprint_MD>3) phi_pulay_for(dir1, i) = phi_pulay_for(dir1, i) - &
-                             return_matrix_value(mat_tmp, np, ni, 0, 0, isf, isf, 1)
                      end do ! isf
                   end do ! ni
                end if ! if the partition has atoms
             end do ! np
+
+            call free_temp_matrix(mat_tmp2)
             call stop_timer(tmr_std_matrices)
             t1 = mtime()
             if (inode == ionode .and. iprint_MD > 3) &
@@ -1242,7 +1254,6 @@ contains
        end do ! dir1
        call free_temp_fn_on_grid(tmp_fn2)
        call free_temp_fn_on_grid(tmp_fn)
-       call free_temp_matrix(mat_tmp2)
        call free_temp_matrix(mat_tmp)
     end if ! if (WhichPulay == BothPulay .OR. WhichPulay == PhiPulay .OR.&
            !  & (WhichPulay == SPulay .AND. flag_basis_set == blips)) then
