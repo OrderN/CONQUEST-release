@@ -434,7 +434,7 @@ contains
 
     use datatypes
     use numbers
-    use spline_module, ONLY: spline,splint,dsplint
+    use spline_module, ONLY: spline,splint,dsplint, spline_new
     use GenComms, ONLY: cq_abort, inode, ionode
     use global_module, ONLY: iprint_SC, area_SC
     use memory_module, ONLY: reg_alloc_mem, type_dbl
@@ -463,7 +463,9 @@ contains
        d_origin = (atomic_density_table(n)%table(2)- atomic_density_table(n)%table(1))/delta_r
        d_end = (atomic_density_table(n)%table(atomic_density_table(n)%length)- &
             atomic_density_table(n)%table(atomic_density_table(n)%length-1))/delta_r
-       call spline( atomic_density_table(n)%length, delta_r, atomic_density_table(n)%table(:),  &
+       !d_origin = 1e30_double
+       !d_end = 1e30_double
+       call spline_new( atomic_density_table(n)%length, delta_r, atomic_density_table(n)%table(:),  &
             d_origin, d_end, atomic_density_table(n)%d2_table(:) )
        if(inode==ionode.AND.iprint_SC>3) then
           write(io_lun,fmt='(10x,"Atomic density for species ",i5)') n

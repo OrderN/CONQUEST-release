@@ -478,7 +478,7 @@ contains
   subroutine radial_read_ascii(op,lun)
 
     use numbers, ONLY: BIG, zero, RD_ERR
-    use spline_module, ONLY: spline
+    use spline_module, ONLY: spline_new
     use global_module, ONLY: iprint_pseudo
     use GenComms, ONLY: myid
 
@@ -523,7 +523,7 @@ contains
     !  ypn= BIG * 1.1
     yp1= (op%f(2)-op%f(1))/delta!zero
     ypn= (op%f(npts)-op%f(npts-1))/delta!zero
-    call spline(op%n, op%delta, op%f, yp1, ypn, op%d2)
+    call spline_new(op%n, op%delta, op%f, yp1, ypn, op%d2)
     return
   end subroutine radial_read_ascii
 !!***
@@ -600,7 +600,7 @@ contains
     use global_module, ONLY: numprocs, iprint_pseudo
     use GenComms, ONLY: inode, ionode, gcopy
     use pao_format, ONLY: species_pao
-    use spline_module, ONLY : spline
+    use spline_module, ONLY : spline_new
     use memory_module, ONLY: reg_alloc_mem, type_dbl    
     use functions, ONLY: erfc
     use input_module, ONLY: io_assign, io_close
@@ -710,7 +710,7 @@ contains
                 ypn = (pao_info%angmom(l)%zeta(nzeta)%table(dummy_rada(i)%n)-&
                      pao_info%angmom(l)%zeta(nzeta)%table(dummy_rada(i)%n-1))/ &
                      dummy_rada(i)%delta
-                call spline(dummy_rada(i)%n,dummy_rada(i)%delta,pao_info%angmom(l)%zeta(nzeta)%table, &
+                call spline_new(dummy_rada(i)%n,dummy_rada(i)%delta,pao_info%angmom(l)%zeta(nzeta)%table, &
                      yp1,ypn,pao_info%angmom(l)%zeta(nzeta)%table2)
              end do
           end if
@@ -777,7 +777,7 @@ contains
              ps_info%vlocal%f(i) = ps_info%vlocal%f(i) + ps_info%zval * erfarg/r
              !write(52,*) r,ps_info%vlocal%f(i), tmpv,ps_info%zval * erfarg/r!,ps_info%zval * derf(a*r)/r
           end do
-          call spline(ps_info%vlocal%n, ps_info%vlocal%delta, ps_info%vlocal%f, zero, zero, ps_info%vlocal%d2)
+          call spline_new(ps_info%vlocal%n, ps_info%vlocal%delta, ps_info%vlocal%f, zero, zero, ps_info%vlocal%d2)
        else
           ps_info%alpha = six * ln10 / (ps_info%chlocal%cutoff ** 2)
        endif
