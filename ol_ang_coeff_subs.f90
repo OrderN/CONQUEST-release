@@ -148,29 +148,28 @@ contains
 !!  CREATION DATE
 !!   24/07/03
 !!  MODIFICATION HISTORY
-!!
+!!   2019/08/16 15:48 dave
+!!    Replace call to spline_ol_intval_new2
 !!  SOURCE
 !!
   subroutine calc_mat_elem_gen(case,sp1,l1,nz1,m1,sp2,l2,nz2,m2,dx,dy,dz,mat_val)
 
     use datatypes
-    use numbers, only: zero
+    use numbers
     use ol_int_datatypes !,ONLY : rad_tables,rad_tables_ke,rad_tables_nlpf_pao,ol_index&
     !&,ol_index_nlpf_pao
-    use pao_array_utility, ONLY: spline_ol_intval_new2
     use GenComms, ONLY: inode, ionode, myid !for debugging purposes
-!    use make_rad_tables, ONLY: get_max_paoparams
 
     implicit none
 
     !routine to evaluate overlap matrix elements for the following cases
     !1 - pao_pao, 2 - pao_ke_pao, 3 - nlpf_pao (specified by case).
     integer, intent(in) :: case,sp1,l1,nz1,m1,sp2,l2,nz2,m2
-    integer count,n_lvals,lmax,nzmax,npts,i,l3
+    integer count,n_lvals,lmax,nzmax,npts,i,l3, j
     real(double), intent(in) :: dx,dy,dz
     real(double), intent(out) :: mat_val
     real(double) :: r, theta, phi, ang_factor, del_x, ind_val
-    !real(double), allocatable, dimension(:) :: radial_table
+    real(double) :: a, b, c, d, r1, r2, r3, r4, rr
     
     !find required set of radial tables through indices
     if(case.lt.3.OR.case==4) then !either case 1 or 2
@@ -196,58 +195,100 @@ contains
     mat_val = 0.0_double ; ind_val = 0.0_double
     if(case.lt.3.OR.case==4) then
        del_x = rad_tables(count)%rad_tbls(1)%del_x
-       do i = 1,n_lvals
-          l3 = rad_tables(count)%l_values(i)
-          call ol_ang_factor_new(l1,l2,l3,m1,m2,theta,phi,ang_factor)
-          !multiply radial table(l3) by the associated angular factor
-          if(case==1) then
-             call spline_ol_intval_new2(r,rad_tables(count)%rad_tbls(i)%&
-                  &arr_vals(1:npts),rad_tables(count)%rad_tbls(i)%&
-                  &arr_vals2(1:npts),npts,del_x,ind_val)
-          else if(case==2) then !case must eq 2
-             call spline_ol_intval_new2(r,rad_tables_ke(count)%rad_tbls(i)%&
-                  &arr_vals(1:npts),rad_tables_ke(count)%rad_tbls(i)%&
-                  &arr_vals2(1:npts),npts,del_x,ind_val)
-          else if(case==4) then
-             call spline_ol_intval_new2(r,rad_tables_paoNApao(count)%rad_tbls(i)%&
-                  &arr_vals(1:npts),rad_tables_paoNApao(count)%rad_tbls(i)%&
-                  &arr_vals2(1:npts),npts,del_x,ind_val)
-          endif
-          mat_val = mat_val + ind_val*ang_factor
-       enddo
+       j = floor(r/del_x) + 1
+       if(j+1<=npts) then
+          rr = real(j,double)*del_x
+          a = (rr - r)/del_x
+          b = one - a
+          c = a * ( a * a - one ) * del_x * del_x / six
+          d = b * ( b * b - one ) * del_x * del_x / six
+          do i = 1,n_lvals
+             l3 = rad_tables(count)%l_values(i)
+             call ol_ang_factor_new(l1,l2,l3,m1,m2,theta,phi,ang_factor)
+             !multiply radial table(l3) by the associated angular factor
+             if(case==1) then
+                r1 = rad_tables(count)%rad_tbls(i)%arr_vals(j)
+                r2 = rad_tables(count)%rad_tbls(i)%arr_vals(j+1)
+                r3 = rad_tables(count)%rad_tbls(i)%arr_vals2(j)
+                r4 = rad_tables(count)%rad_tbls(i)%arr_vals2(j+1)
+             else if(case==2) then
+                r1 = rad_tables_ke(count)%rad_tbls(i)%arr_vals(j)
+                r2 = rad_tables_ke(count)%rad_tbls(i)%arr_vals(j+1)
+                r3 = rad_tables_ke(count)%rad_tbls(i)%arr_vals2(j)
+                r4 = rad_tables_ke(count)%rad_tbls(i)%arr_vals2(j+1)
+             else if(case==4) then
+                r1 = rad_tables_paoNApao(count)%rad_tbls(i)%arr_vals(j)
+                r2 = rad_tables_paoNApao(count)%rad_tbls(i)%arr_vals(j+1)
+                r3 = rad_tables_paoNApao(count)%rad_tbls(i)%arr_vals2(j)
+                r4 = rad_tables_paoNApao(count)%rad_tbls(i)%arr_vals2(j+1)
+             endif
+             ind_val = a*r1 + b*r2 + c*r3 + d*r4
+             mat_val = mat_val + ind_val*ang_factor
+          end do
+       end if
     else if(case==3) then
        del_x = rad_tables_nlpf_pao(count)%rad_tbls(1)%del_x
-       do i = 1,n_lvals
-          l3 = rad_tables_nlpf_pao(count)%l_values(i)
-          call ol_ang_factor_new(l1,l2,l3,m1,m2,theta,phi,ang_factor)
-          !multiply radial table(l3) by the associated angular factor
-          call spline_ol_intval_new2(r,rad_tables_nlpf_pao(count)%rad_tbls(i)%&
-               &arr_vals(1:npts),rad_tables_nlpf_pao(count)%rad_tbls(i)%&
-               &arr_vals2(1:npts),npts,del_x,ind_val)
-          mat_val = mat_val + ind_val*ang_factor
-       enddo
+       j = floor(r/del_x) + 1
+       if(j+1<=npts) then
+          rr = real(j,double)*del_x
+          a = (rr - r)/del_x
+          b = one - a
+          c = a * ( a * a - one ) * del_x * del_x / six
+          d = b * ( b * b - one ) * del_x * del_x / six
+          do i = 1,n_lvals
+             l3 = rad_tables_nlpf_pao(count)%l_values(i)
+             call ol_ang_factor_new(l1,l2,l3,m1,m2,theta,phi,ang_factor)
+             !multiply radial table(l3) by the associated angular factor
+             r1 = rad_tables_nlpf_pao(count)%rad_tbls(i)%arr_vals(j)
+             r2 = rad_tables_nlpf_pao(count)%rad_tbls(i)%arr_vals(j+1)
+             r3 = rad_tables_nlpf_pao(count)%rad_tbls(i)%arr_vals2(j)
+             r4 = rad_tables_nlpf_pao(count)%rad_tbls(i)%arr_vals2(j+1)
+             ind_val = a*r1 + b*r2 + c*r3 + d*r4
+             mat_val = mat_val + ind_val*ang_factor
+          enddo
+       end if
     else if(case==5) then
        del_x = rad_tables_napf_pao(count)%rad_tbls(1)%del_x
-       do i = 1,n_lvals
-          l3 = rad_tables_napf_pao(count)%l_values(i)
-          call ol_ang_factor_new(l1,l2,l3,m1,m2,theta,phi,ang_factor)
-          !multiply radial table(l3) by the associated angular factor
-          call spline_ol_intval_new2(r,rad_tables_napf_pao(count)%rad_tbls(i)%&
-               &arr_vals(1:npts),rad_tables_napf_pao(count)%rad_tbls(i)%&
-               &arr_vals2(1:npts),npts,del_x,ind_val)
-          mat_val = mat_val + ind_val*ang_factor
-       enddo
+       j = floor(r/del_x) + 1
+       if(j+1<=npts) then
+          rr = real(j,double)*del_x
+          a = (rr - r)/del_x
+          b = one - a
+          c = a * ( a * a - one ) * del_x * del_x / six
+          d = b * ( b * b - one ) * del_x * del_x / six
+          do i = 1,n_lvals
+             l3 = rad_tables_napf_pao(count)%l_values(i)
+             call ol_ang_factor_new(l1,l2,l3,m1,m2,theta,phi,ang_factor)
+             !multiply radial table(l3) by the associated angular factor
+             r1 = rad_tables_napf_pao(count)%rad_tbls(i)%arr_vals(j)
+             r2 = rad_tables_napf_pao(count)%rad_tbls(i)%arr_vals(j+1)
+             r3 = rad_tables_napf_pao(count)%rad_tbls(i)%arr_vals2(j)
+             r4 = rad_tables_napf_pao(count)%rad_tbls(i)%arr_vals2(j+1)
+             ind_val = a*r1 + b*r2 + c*r3 + d*r4
+             mat_val = mat_val + ind_val*ang_factor
+          end do
+       end if
     else if(case==6) then
        del_x = rad_tables_paopaoNA(count)%rad_tbls(1)%del_x
-       do i = 1,n_lvals
-          l3 = rad_tables_paopaoNA(count)%l_values(i)
-          call ol_ang_factor_new(l1,l2,l3,m1,m2,theta,phi,ang_factor)
-          !multiply radial table(l3) by the associated angular factor
-          call spline_ol_intval_new2(r,rad_tables_paopaoNA(count)%rad_tbls(i)%&
-               &arr_vals(1:npts),rad_tables_paopaoNA(count)%rad_tbls(i)%&
-               &arr_vals2(1:npts),npts,del_x,ind_val)
-          mat_val = mat_val + ind_val*ang_factor
-       enddo
+       j = floor(r/del_x) + 1
+       if(j+1<=npts) then
+          rr = real(j,double)*del_x
+          a = (rr - r)/del_x
+          b = one - a
+          c = a * ( a * a - one ) * del_x * del_x / six
+          d = b * ( b * b - one ) * del_x * del_x / six
+          do i = 1,n_lvals
+             l3 = rad_tables_paopaoNA(count)%l_values(i)
+             call ol_ang_factor_new(l1,l2,l3,m1,m2,theta,phi,ang_factor)
+             !multiply radial table(l3) by the associated angular factor
+             r1 = rad_tables_paopaoNA(count)%rad_tbls(i)%arr_vals(j)
+             r2 = rad_tables_paopaoNA(count)%rad_tbls(i)%arr_vals(j+1)
+             r3 = rad_tables_paopaoNA(count)%rad_tbls(i)%arr_vals2(j)
+             r4 = rad_tables_paopaoNA(count)%rad_tbls(i)%arr_vals2(j+1)
+             ind_val = a*r1 + b*r2 + c*r3 + d*r4
+             mat_val = mat_val + ind_val*ang_factor
+          end do
+       end if
     endif
   end subroutine calc_mat_elem_gen
 !!***  
@@ -774,21 +815,25 @@ contains
 !!  CREATION DATE
 !!   25/09/03
 !!  MODIFICATION HISTORY
-!!
+!!   2019/08/16 15:57 dave
+!!    Replace spline_ol_intval_new2
 !!  SOURCE
 !!
 
   subroutine evaluate_pao(sp,l,nz,m,x,y,z,pao_val)
+
     use datatypes
-    use pao_format !,ONLY : pao
-    use pao_array_utility ,ONLY : spline_ol_intval_new2
+    use numbers
+    use pao_format, ONLY : pao
+
     implicit none
-    !routine to return value of PAO at given point in space
+
     integer, intent(in) :: sp,l,nz,m
     real(double), intent(in) :: x,y,z
     real(double), intent(out) :: pao_val
     real(double) :: r,theta,phi,del_r,y_val,val
-    integer :: npts
+    integer :: npts, j
+    real(double) :: a, b, c, d, r1, r2, r3, r4, rr
     
     !convert Cartesians into spherical polars
     call convert_basis(x,y,z,r,theta,phi)
@@ -796,9 +841,20 @@ contains
     npts = pao(sp)%angmom(l)%zeta(nz)%length
     del_r = (pao(sp)%angmom(l)%zeta(nz)%cutoff/&
          &(pao(sp)%angmom(l)%zeta(nz)%length-1))
-    
-    call spline_ol_intval_new2(r,pao(sp)%angmom(l)%zeta(nz)%table, &
-         pao(sp)%angmom(l)%zeta(nz)%table2,npts,del_r,pao_val)
+    j = floor(r/del_r) + 1
+    pao_val = zero
+    if(j+1<=npts) then
+       rr = real(j,double)*del_r
+       a = (rr - r)/del_r
+       b = one - a
+       c = a * ( a * a - one ) * del_r * del_r / six
+       d = b * ( b * b - one ) * del_r * del_r / six
+       r1 = pao(sp)%angmom(l)%zeta(nz)%table(j)
+       r2 = pao(sp)%angmom(l)%zeta(nz)%table(j+1)
+       r3 = pao(sp)%angmom(l)%zeta(nz)%table2(j)
+       r4 = pao(sp)%angmom(l)%zeta(nz)%table2(j+1)
+       pao_val = a*r1 + b*r2 + c*r3 + d*r4
+    end if
     !now multiply by value of spherical harmonic
     y_val = re_sph_hrmnc(l,m,theta,phi)
     
@@ -1041,7 +1097,6 @@ contains
     
     use datatypes
     use ol_int_datatypes!, ONLY : ol_index,rad_tables,rad_tables_ke,ol_index_nlpf_pao,rad_tables_nlpf_pao
-    use pao_array_utility, ONLY : spline_ol_intval_new2
     use GenComms, ONLY: inode, ionode, myid !for debugging purposes
     use numbers
     
