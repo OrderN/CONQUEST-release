@@ -379,13 +379,6 @@ contains
                                r2 = atomic_density_table(the_species)%table(j+1)
                                r3 = atomic_density_table(the_species)%d2_table(j)
                                r4 = atomic_density_table(the_species)%d2_table(j+1)
-                               !call splint(step, &
-                               !     atomic_density_table(the_species)%table(:),&
-                               !     atomic_density_table(the_species)%d2_table(:),&
-                               !     atomic_density_table(the_species)%length,&
-                               !     r_from_i, local_density, range_flag)
-                               !if (range_flag) &
-                               !     call cq_abort('set_density: overrun problem')
                                ! Store the density for this grid point
                                local_density = a * r1 + b * r2 + c * r3 + d * r4
                                density_atom(igrid) = density_atom(igrid) + local_density ! both up and down
@@ -638,11 +631,6 @@ contains
                                r3 = pseudo(the_species)%chpcc%d2(j)
                                r4 = pseudo(the_species)%chpcc%d2(j+1)
                                pcc_density = a * r1 + b * r2 + c * r3 + d * r4
-                               !call splint( pcc_step,pseudo(the_species)%&
-                               !     chpcc%f(:), pseudo(the_species)%&
-                               !     chpcc%d2(:), pseudo(the_species)%&
-                               !     chpcc%n, r_from_i,pcc_density,&
-                               !     range_flag)
                                ! recalculate the density for this grid point
                                density_pcc(igrid) = density_pcc(igrid) + pcc_density
                             end if
