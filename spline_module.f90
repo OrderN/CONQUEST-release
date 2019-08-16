@@ -146,7 +146,7 @@ contains
   end subroutine spline
 !!***
 
-subroutine spline_new( n, delta_x, y, yp1, ypn, d2y )
+subroutine spline_new( n, delta_x, y, dy1, dyn, d2y )
 
     use datatypes
     use numbers
@@ -158,51 +158,109 @@ subroutine spline_new( n, delta_x, y, yp1, ypn, d2y )
     ! Passed variables
     integer :: n
 
-    real(double) :: delta_x, yp1, ypn
+    real(double) :: delta_x, dy1, dyn
     real(double), dimension(n) :: y, d2y
 
     ! Local variables
     integer :: i, k, stat, info
-    real(double), dimension(:), allocatable :: b, d, e, dl, du
+    real(double), dimension(:), allocatable :: b, d, e, du
     external :: dptsv, dgtsv
 
-    allocate(b(n), STAT=stat)
+    allocate(b(n), d(n), du(n-1),STAT=stat)
     if (stat /= 0) call cq_abort("spline: Error alloc mem: ", n)
-    call reg_alloc_mem(area_general, n, type_dbl)
-    allocate(d(n), dl(n-1), du(n-1),STAT=stat)
-    if (stat /= 0) call cq_abort("spline: Error alloc mem: ", n)
-    call reg_alloc_mem(area_general, 2*n, type_dbl)
+    call reg_alloc_mem(area_general, 3*n, type_dbl)
+
     b = zero
-    ! Diagonal (d) and sub-diagonal (e) entries in matrix
+    ! Diagonal (d) and sub-diagonal (du) entries in matrix
     d = four
-    dl = one
     du = one
 
-    if ( yp1 .gt. BIG ) then ! lower boundary condition set to 'natural'
+    ! Now set up RHS of linear equation
+    if (dy1 > BIG) then ! lower boundary condition set to 'natural'
        b(1) = zero
        b(n) = zero
-       du(1) = zero
-       dl(n-1) = zero
-    else ! or else to have a specified first derivative
-       b(1) = (six/delta_x) * ((y(2) - y(1))/delta_x - yp1 )
-       b(n) = (six/delta_x) * (ypn - (y(n) - y(n-1))/delta_x )
+    else ! or else to have a specified first derivative: 'clamped'
+       b(1) = (six/delta_x) * ((y(2) - y(1))/delta_x - dy1 )
+       b(n) = (six/delta_x) * (dyn - (y(n) - y(n-1))/delta_x )
        d(1) = two
        d(n) = two
     end if
     do i = 2, n-1
        b(i) = six*(y(i-1) - two*y(i) + y(i+1))/(delta_x * delta_x)
     end do
-    call dgtsv(n, 1, dl, d, du, b, n, info)
+    ! Call if we have general tridiagonal matrix instead of symmetric
+    !call dgtsv(n, 1, dl, d, du, b, n, info)
+    ! Solution of A.x = b is returned in b
+    call dptsv(n, 1, d, du, b, n, info)
     if(info/=0) call cq_abort("spline: error in dptsv, info is ",info)
     d2y = b
-    if(yp1>BIG) then
+    if(dy1 > BIG) then
        d2y(1) = zero
        d2y(n) = zero
     end if
-    deallocate(d,b,dl,du)
+    deallocate(d,b,du)
     return
   end subroutine spline_new
-  
+
+  subroutine spline_nonU_new( n, x, y, dy1, dyn, d2y )
+
+    use datatypes
+    use numbers
+    use GenComms, only: cq_abort
+    use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_dbl
+
+    implicit none
+
+    ! Passed variables
+    integer :: n
+
+    real(double) :: dy1, dyn
+    real(double), dimension(n) :: x, y, d2y
+
+    ! Local variables
+    integer :: i, k, stat, info
+    real(double), dimension(:), allocatable :: b, d, e, du, dl
+    external :: dptsv, dgtsv
+
+    allocate(b(n), d(n), dl(n-1), du(n-1),STAT=stat)
+    if (stat /= 0) call cq_abort("spline: Error alloc mem: ", n)
+    call reg_alloc_mem(area_general, 3*n, type_dbl)
+
+    b = zero
+
+    ! Now set up RHS of linear equation
+    if (dy1 > BIG) then ! lower boundary condition set to 'natural'
+       b(1) = zero
+       b(n) = zero
+       d(1) = four*(x(2) - x(1))
+       d(n) = four*(x(n) - x(n-1))
+    else ! or else to have a specified first derivative: 'clamped'
+       b(1) = six * ( (y(2) - y(1))/(x(2) - x(1)) - dy1 )
+       b(n) = six * ( dyn - (y(n) - y(n-1))/(x(n) - x(n-1)) )
+       d(1) = two*(x(2) - x(1))
+       d(n) = two*(x(n) - x(n-1))
+    end if
+    do i = 2, n-1
+       dl(i-1) = x(i) - x(i-1)
+       d(i)  = two * ( x(i+1) - x(i-1) )
+       du(i) = x(i+1) - x(i)
+       b(i)  = six*(y(i-1) - y(i))/(x(i) - x(i-1)) + &
+            six*(y(i+1) - y(i))/(x(i+1) - x(i))
+    end do
+    du(1) = x(2) - x(1)
+    dl(n-1) = x(n) - x(n-1)
+    ! Solution of A.x = b is returned in b
+    call dgtsv(n, 1, dl, d, du, b, n, info)
+    if(info/=0) call cq_abort("spline: error in dgtsv, info is ",info)
+    d2y = b
+    if(dy1 > BIG) then
+       d2y(1) = zero
+       d2y(n) = zero
+    end if
+    deallocate(d,b,du)
+    return
+  end subroutine spline_nonU_new
+
 ! -----------------------------------------------------------
 ! Subroutine spline_nonU
 ! -----------------------------------------------------------
