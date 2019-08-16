@@ -2264,7 +2264,7 @@ contains
     use species_module, ONLY: n_species
     use pseudo_tm_info, ONLY: rad_func, pseudo, loc_pot, rad_alloc, rad_dealloc
     use atomic_density, ONLY: atomic_density_table
-    use spline_module, ONLY: spline_new
+    use splines, ONLY: spline
     use functions, ONLY: j0
     use pseudopotential_common, ONLY: flag_neutral_atom_projector, maxL_neutral_atom_projector, &
          numN_neutral_atom_projector
@@ -2459,7 +2459,7 @@ contains
           ypn = zero!(pseudo(isp)%chna%f(pseudo(isp)%chna%n)-pseudo(isp)%chna%f(pseudo(isp)%chna%n-1)) &
           !/pseudo(isp)%chna%delta
 
-          call spline_new( pseudo(isp)%chna%n, pseudo(isp)%chna%delta, &
+          call spline( pseudo(isp)%chna%n, pseudo(isp)%chna%delta, &
                pseudo(isp)%chna%f, yp1, ypn, pseudo(isp)%chna%d2 )
 
 
@@ -2571,7 +2571,7 @@ contains
           ypn = (pseudo(isp)%vna%f(pseudo(isp)%vna%n)-pseudo(isp)%vna%f(pseudo(isp)%vna%n-1)) &
                /pseudo(isp)%vna%delta
 
-          call spline_new( pseudo(isp)%vna%n, pseudo(isp)%vna%delta, &
+          call spline( pseudo(isp)%vna%n, pseudo(isp)%vna%delta, &
                pseudo(isp)%vna%f, yp1, ypn, pseudo(isp)%vna%d2 )
 
           !-------------------------------------------------------
@@ -2774,7 +2774,7 @@ contains
                      - paoVNA(isp)%angmom(l)%zeta(n)%table(1)       )/delta
                 ypn = (paoVNA(isp)%angmom(l)%zeta(n)%table(npoint) &
                      - paoVNA(isp)%angmom(l)%zeta(n)%table(npoint-1))/delta
-                call spline_new( npoint, delta, &
+                call spline( npoint, delta, &
                      paoVNA(isp)%angmom(l)%zeta(n)%table, yp1, ypn, &
                      paoVNA(isp)%angmom(l)%zeta(n)%table2 )
                 ! Create paopao: all PAOs on the same grid (for ease of multiplication later)
@@ -2804,7 +2804,7 @@ contains
                      - paopao(isp)%angmom(l)%zeta(n)%table(1)       )/delta
                 ypn = (paopao(isp)%angmom(l)%zeta(n)%table(npoint) &
                      - paopao(isp)%angmom(l)%zeta(n)%table(npoint-1))/delta
-                call spline_new( npoint, delta, &
+                call spline( npoint, delta, &
                      paopao(isp)%angmom(l)%zeta(n)%table, yp1, ypn, &
                      paopao(isp)%angmom(l)%zeta(n)%table2 )
              end do
@@ -2864,7 +2864,7 @@ contains
                   - pseudo(isp)%pjna(i_pjna)%f(1)       )/delta
              ypn = (pseudo(isp)%pjna(i_pjna)%f(npoint) &
                   - pseudo(isp)%pjna(i_pjna)%f(npoint-1))/delta
-             call spline_new( npoint, delta, &
+             call spline( npoint, delta, &
                   pseudo(isp)%pjna(i_pjna)%f, yp1, ypn, &
                   pseudo(isp)%pjna(i_pjna)%d2 )
           end do

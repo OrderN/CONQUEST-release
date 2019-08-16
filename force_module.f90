@@ -3204,7 +3204,7 @@ contains
     use GenComms,            only: my_barrier, cq_abort
     use atomic_density,      only: atomic_density_table
     use pseudo_tm_info,      only: pseudo
-    use spline_module,       only: dsplint
+    use splines,       only: dsplint
     use dimens,              only: grid_point_volume, n_my_grid_points
     use GenBlas,             only: axpy
     use density_module,      only: density, density_scale, density_pcc
@@ -3869,7 +3869,7 @@ contains
     use set_blipgrid_module, only: naba_atoms_of_blocks
     use GenComms,            only: my_barrier, cq_abort
     use pseudo_tm_info,      only: pseudo
-    use spline_module,       only: dsplint
+    use splines,             only: dsplint
     use dimens,              only: grid_point_volume, n_my_grid_points
     use GenBlas,             only: axpy
     use density_module,      only: density, density_scale, density_pcc

@@ -8,7 +8,7 @@ PAO2BLIP_OBJS = blip_pao_values.o\
                 ol_fft_procs.o\
                 ol_int_datatypes.module.o\
                 ol_rad_table_subs.o\
-                ol_spline_subs.o\
+                pao_array_utility_module.o\
                 pao2blip.o\
                 pao_minimisation.module.o \
                 PAO_grid_transform_module.o \

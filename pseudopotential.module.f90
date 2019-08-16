@@ -15,7 +15,7 @@
 !!  USES
 !!   GenBlas, GenComms, atoms, block_module, common, cover_module, datatypes, dimens, 
 !!   global_module, group_module, maxima_module, numbers, primary_module, set_blipgrid_module,
-!!   species_module, spline_module
+!!   species_module, splines
 !!  AUTHOR
 !!   IJB ?
 !!  CREATION DATE
@@ -1173,7 +1173,7 @@ contains
     use datatypes
     use numbers
     use species_module, only:  n_species, species
-    use spline_module, only: spline_new
+    use splines, only: spline
 
     implicit none
 
@@ -1212,7 +1212,7 @@ contains
        d_end = ( local_pseudopotential(n_points_max(n),n) - &
             local_pseudopotential(n_points_max(n)-1,n) ) / &
             delta_r
-       call spline_new( n_points_max(n), delta_r, local_pseudopotential(1,n),  &
+       call spline( n_points_max(n), delta_r, local_pseudopotential(1,n),  &
             d_origin, d_end, d2_local_pseudopotential(1,n) )
        if ( non_local_species(n) ) then
           ! now calculate the second derivatives of these pseudopotentials for
@@ -1226,7 +1226,7 @@ contains
              d_end = ( nl_pseudopotential(n_points_max(n),n_l,n) - &
                   nl_pseudopotential(n_points_max(n)-1,n_l,n) ) / &
                   delta_r
-             call spline_new( n_points_max(n), delta_r, &
+             call spline( n_points_max(n), delta_r, &
                   nl_pseudopotential(1,n_l,n),  &
                   d_origin, d_end, d2_nl_pseudopotential(1,n_l,n) )
           end do

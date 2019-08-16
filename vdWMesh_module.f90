@@ -626,7 +626,7 @@ contains
     use datatypes
     use numbers
     use GenComms,      only: cq_abort
-    use spline_module, only: spline_new, dsplint
+    use splines, only: spline, dsplint
     use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_dbl
 
     implicit none
@@ -662,7 +662,7 @@ contains
 
        ! Set spline interpolation of y(i) in the uniform mesh i
        ! that is treating y(x_i) = y(i), i = 0, ..., n
-       call spline_new(n, one, y, huge(one), huge(one), d2ydi2)
+       call spline(n, one, y, huge(one), huge(one), d2ydi2)
 
        ! Find interpolation at xnew points
        do inew = 1, nnew
@@ -835,7 +835,7 @@ contains
     use datatypes
     use numbers
     use GenComms,      only: cq_abort
-    use spline_module, only: spline_new
+    use splines, only: spline
     use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_dbl
 
     implicit none
@@ -875,7 +875,7 @@ contains
     elseif (ord == 1) then
        if (interpolation_method == 'spline') then
 
-          call spline_new(n, one, y, yp1, ypn, d2ydi2)
+          call spline(n, one, y, yp1, ypn, d2ydi2)
           dydi(1) = y(2) - y(1)   - (two * d2ydi2(1) + d2ydi2(2))   / six
           dydi(n) = y(n) - y(n-1) + (d2ydi2(n-1) + two * d2ydi2(n)) / six
           dydi(2:n-1) = (y(3:n) - y(1:n-2)) / two - &
@@ -988,7 +988,7 @@ contains
     use datatypes
     use numbers
     use GenComms,      only: cq_abort
-    use spline_module, only: spline_new
+    use splines, only: spline
     use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_dbl
 
     implicit none
@@ -1024,7 +1024,7 @@ contains
        ! and y(x) = y(i). So, the integral may be rewritten as
        !   integral = \int di * dxdi * y(i), di = one
        f(1:n) = y(1:n) * xp1(1:n)  ! DRB added limits
-       call spline_new(n, one, f, yp1, ypn, d2fdi2)
+       call spline(n, one, f, yp1, ypn, d2fdi2)
 
        ! the integral is just sum of contributio of integral of each
        ! cubic sections. This is analytic for the spline

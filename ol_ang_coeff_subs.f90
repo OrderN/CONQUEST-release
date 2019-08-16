@@ -142,7 +142,7 @@ contains
 !!   l1,nz1,m1,l2,nz2,m2 relevant PAO angular momenta details
 !!   mat_val ; overlap matrix element
 !!  USES
-!!   ol_int_datatypes, datatypes, cubic_spline_routines, make_rad_tables   
+!!   ol_int_datatypes, datatypes, pao_array_utility, make_rad_tables   
 !!  AUTHOR
 !!   R Choudhury
 !!  CREATION DATE
@@ -157,7 +157,7 @@ contains
     use numbers, only: zero
     use ol_int_datatypes !,ONLY : rad_tables,rad_tables_ke,rad_tables_nlpf_pao,ol_index&
     !&,ol_index_nlpf_pao
-    use cubic_spline_routines, ONLY: spline_ol_intval_new2
+    use pao_array_utility, ONLY: spline_ol_intval_new2
     use GenComms, ONLY: inode, ionode, myid !for debugging purposes
 !    use make_rad_tables, ONLY: get_max_paoparams
 
@@ -768,7 +768,7 @@ contains
 !!   sp,l,nz,m - species no., l ang momentum value, zeta value
 !!   and azimuthal quantum number of specified pao
 !!  USES
-!!   datatypes, pao_format, cubic_spline_routines
+!!   datatypes, pao_format, pao_array_utility
 !!  AUTHOR
 !!   R Choudhury
 !!  CREATION DATE
@@ -781,7 +781,7 @@ contains
   subroutine evaluate_pao(sp,l,nz,m,x,y,z,pao_val)
     use datatypes
     use pao_format !,ONLY : pao
-    use cubic_spline_routines !,ONLY : spline_ol_intval_new2
+    use pao_array_utility ,ONLY : spline_ol_intval_new2
     implicit none
     !routine to return value of PAO at given point in space
     integer, intent(in) :: sp,l,nz,m
@@ -1041,8 +1041,8 @@ contains
     use ol_int_datatypes !,ONLY : ol_index,rad_tables,rad_tables_ke,ol_index_nlpf_pao&
     !&,rad_tables_nlpf_pao
 
-    use spline_module, ONLY: dsplint
-    use cubic_spline_routines, ONLY : spline_ol_intval_new2
+    use splines, ONLY: dsplint
+    use pao_array_utility, ONLY : spline_ol_intval_new2
     use GenComms, ONLY: inode, ionode, myid !for debugging purposes
     implicit none
     !improved routine to evaluate matrix element derivatives for the following cases
@@ -1154,13 +1154,13 @@ contains
     use datatypes
     use GenComms, ONLY: inode, ionode, myid !for debugging purposes
     use ol_int_datatypes !,ONLY : coefficients,
-    !use gaussian_test_routines, ONLY: grad_find_cartesian
-    !use cubic_spline_routines
-    !use spline_module, ONLY: dsplint
+
     implicit none
+
     !routine to construct(the)gradient for (real) PAO matrix elements 
     !in the direction specified by dir
     !have now collected f_r and df_r, next to evaluate the required gradient
+
     integer, intent(in) :: l1,l2,l3,m1,m2,dir
     real(double), intent(in) :: x,y,z,f_r,df_r
     real(double), intent(out) :: grad_val

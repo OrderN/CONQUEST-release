@@ -85,7 +85,7 @@ contains
     use numbers, ONLY: zero, twopi
     use ol_int_datatypes !, ONLY : rad_tables_nlpf_pao
     use bessel_integrals !, ONLY : bessloop, maxtwon, complx_fctr
-    use cubic_spline_routines !, ONLY : matcharrays
+    use pao_array_utility, ONLY : matcharrays
     use GenComms, ONLY: cq_abort
 
     implicit none
@@ -185,7 +185,7 @@ contains
     use numbers, ONLY: zero, twopi
     use ol_int_datatypes , ONLY : rad_tables_paoNApao
     use bessel_integrals !, ONLY : bessloop, maxtwon, complx_fctr
-    use cubic_spline_routines !, ONLY : matcharrays
+    use pao_array_utility, ONLY : matcharrays
     use GenComms, ONLY: cq_abort
 
     implicit none
@@ -284,7 +284,7 @@ contains
     use numbers, ONLY: zero, twopi
     use ol_int_datatypes , ONLY : rad_tables_paopaoNA!, rad_tables_paodpaoNA
     use bessel_integrals !, ONLY : bessloop, maxtwon, complx_fctr
-    use cubic_spline_routines !, ONLY : matcharrays
+    use pao_array_utility, ONLY : matcharrays
     use GenComms, ONLY: cq_abort
 
     implicit none
@@ -395,7 +395,7 @@ contains
     use numbers, ONLY: zero, twopi
     use ol_int_datatypes !, ONLY : rad_tables_napf_pao
     use bessel_integrals !, ONLY : bessloop, maxtwon, complx_fctr
-    use cubic_spline_routines !, ONLY : matcharrays
+    use pao_array_utility, ONLY : matcharrays
     use GenComms, ONLY: cq_abort
 
     implicit none
@@ -532,7 +532,7 @@ contains
     use numbers, ONLY: zero, twopi
     use ol_int_datatypes !,ONLY : rad_tables, rad_tables_ke
     use bessel_integrals !,ONLY : maxtwon,bessloop,complx_fctr,multiply_ksq
-    use cubic_spline_routines !,ONLY : matcharrays
+    use pao_array_utility, ONLY : matcharrays
     use GenComms, ONLY: cq_abort
 
     implicit none
@@ -653,16 +653,17 @@ contains
   subroutine store_supp_ke_tables(npnts, delta_r, num_l, fullradtbl, &
                                   fullradtbl_ke, nsize, count)
     use datatypes
-    !use cubic_spline_routines !,ONLY : spline_new
-    use spline_module, ONLY: spline_nonU_new, spline_new
+    use splines, ONLY: spline_nonU, spline
     use ol_int_datatypes !,ONLY : rad_tables, rad_tables_ke
     use GenComms,       only: cq_abort
     use memory_module,  only: reg_alloc_mem, reg_dealloc_mem, type_dbl
 
     implicit none
+
     !routine to copy the radial table information from the dummy structures
     !fullradtbl and fullradtbl_ke into the storage types defined in ol_int_dataypes.
     !module.f90
+
     integer, intent(in) :: npnts,num_l,count,nsize
     real(double), intent(in) :: delta_r
     real(double), intent(in), dimension(nsize,num_l+1) :: fullradtbl, fullradtbl_ke
@@ -695,19 +696,16 @@ contains
        y2 = 0.0_double
        yp1 = (fullradtbl(2,i)-fullradtbl(1,i))/delta_r
        ypn = (fullradtbl(npnts,i)-fullradtbl(npnts-1,i))/delta_r
-       ! Original
-       !call spline_new(xin,fullradtbl(1:npnts,i),npnts,yp1,ypn,y2)
        ! New call to spline_module routine
-       call spline_nonU_new(npnts,xin,fullradtbl(1:npnts,i),yp1,ypn,y2)
-       !call spline_new(npnts,delta_r,fullradtbl(1:npnts,i),yp1,ypn,y2)
+       call spline_nonU(npnts,xin,fullradtbl(1:npnts,i),yp1,ypn,y2)
+       !call spline(npnts,delta_r,fullradtbl(1:npnts,i),yp1,ypn,y2)
        rad_tables(count)%rad_tbls(i)%arr_vals2(1:npnts) = y2(1:npnts)
        !now pao_ke_pao case
        y2 = 0.0_double
        yp1 = (fullradtbl_ke(2,i)-fullradtbl_ke(1,i))/delta_r
        ypn = (fullradtbl_ke(npnts,i)-fullradtbl_ke(npnts-1,i))/delta_r
-       !call spline_new(xin,fullradtbl_ke(1:npnts,i),npnts,yp1,ypn,y2)
-       call spline_nonU_new(npnts,xin,fullradtbl_ke(1:npnts,i),yp1,ypn,y2)       
-       !call spline_new(npnts,delta_r,fullradtbl_ke(1:npnts,i),yp1,ypn,y2)       
+       call spline_nonU(npnts,xin,fullradtbl_ke(1:npnts,i),yp1,ypn,y2)       
+       !call spline(npnts,delta_r,fullradtbl_ke(1:npnts,i),yp1,ypn,y2)       
        rad_tables_ke(count)%rad_tbls(i)%arr_vals2(1:npnts) = y2(1:npnts)
 
        !RC finished storing arrays of 2nd derivatives
@@ -754,15 +752,18 @@ contains
 !!
 
   subroutine store_nlpf_pao_tables(npnts,delta_r,num_l,fullradtbl,nsize,count)
+
     use datatypes
     use ol_int_datatypes !,ONLY : rad_tables_nlpf_pao
-    !use cubic_spline_routines !,ONLY : spline_new
-    use spline_module, ONLY: spline_nonU_new
+    use splines, ONLY: spline_nonU
     use GenComms,       only: cq_abort
     use memory_module,  only: reg_alloc_mem, reg_dealloc_mem, type_dbl
+
     implicit none
+
     !routine to store the non-local projector function/pao 
     !overlap radial tables in the appropriate derived type.
+
     integer, intent(in) :: npnts,num_l,count,nsize
     real(double), intent(in) :: delta_r
     real(double), intent(in), dimension(nsize,num_l+1) :: fullradtbl
@@ -792,8 +793,7 @@ contains
        y2 = 0.0_double
        yp1 = (fullradtbl(2,i)-fullradtbl(1,i))/delta_r
        ypn = (fullradtbl(npnts,i)-fullradtbl(npnts-1,i))/delta_r
-       !call spline_new(xin,fullradtbl(1:npnts,i),npnts,yp1,ypn,y2)
-       call spline_nonU_new(npnts,xin,fullradtbl(1:npnts,i),yp1,ypn,y2)
+       call spline_nonU(npnts,xin,fullradtbl(1:npnts,i),yp1,ypn,y2)
        rad_tables_nlpf_pao(count)%rad_tbls(i)%arr_vals2(1:npnts) = y2(1:npnts)
        
        !RC finished storing arrays of 2nd derivatives
@@ -810,15 +810,18 @@ contains
   !!***
 
   subroutine store_table(npnts,delta_r,num_l,fullradtbl,nsize,count,rad_table)
+
     use datatypes
     use ol_int_datatypes, ONLY : ol_integral
-    !use cubic_spline_routines !,ONLY : spline_new
-    use spline_module, ONLY: spline_nonU_new
+    use splines, ONLY: spline_nonU
     use GenComms,       only: cq_abort
     use memory_module,  only: reg_alloc_mem, reg_dealloc_mem, type_dbl
+
     implicit none
+
     !routine to store the non-local projector function/pao 
     !overlap radial tables in the appropriate derived type.
+
     integer, intent(in) :: npnts,num_l,count,nsize
     real(double), intent(in) :: delta_r
     real(double), intent(in), dimension(nsize,num_l+1) :: fullradtbl
@@ -849,8 +852,7 @@ contains
        y2 = 0.0_double
        yp1 = (fullradtbl(2,i)-fullradtbl(1,i))/delta_r
        ypn = (fullradtbl(npnts,i)-fullradtbl(npnts-1,i))/delta_r
-       !call spline_new(xin,fullradtbl(1:npnts,i),npnts,yp1,ypn,y2)
-       call spline_nonU_new(npnts,xin,fullradtbl(1:npnts,i),yp1,ypn,y2)
+       call spline_nonU(npnts,xin,fullradtbl(1:npnts,i),yp1,ypn,y2)
        rad_table(count)%rad_tbls(i)%arr_vals2(1:npnts) = y2(1:npnts)
        
        !RC finished storing arrays of 2nd derivatives
@@ -867,15 +869,18 @@ contains
   
   ! Neutral atom Projector functions
   subroutine store_napf_pao_tables(npnts,delta_r,num_l,fullradtbl,nsize,count)
+
     use datatypes
     use ol_int_datatypes !,ONLY : rad_tables_napf_pao
-    !use cubic_spline_routines !,ONLY : spline_new
-    use spline_module, ONLY: spline_nonU_new
+    use splines, ONLY: spline_nonU
     use GenComms,       only: cq_abort
     use memory_module,  only: reg_alloc_mem, reg_dealloc_mem, type_dbl
+
     implicit none
+
     !routine to store the non-local projector function/pao 
     !overlap radial tables in the appropriate derived type.
+
     integer, intent(in) :: npnts,num_l,count,nsize
     real(double), intent(in) :: delta_r
     real(double), intent(in), dimension(nsize,num_l+1) :: fullradtbl
@@ -905,8 +910,7 @@ contains
        y2 = 0.0_double
        yp1 = (fullradtbl(2,i)-fullradtbl(1,i))/delta_r
        ypn = (fullradtbl(npnts,i)-fullradtbl(npnts-1,i))/delta_r
-       !call spline_new(xin,fullradtbl(1:npnts,i),npnts,yp1,ypn,y2)
-       call spline_nonU_new(npnts,xin,fullradtbl(1:npnts,i),yp1,ypn,y2)
+       call spline_nonU(npnts,xin,fullradtbl(1:npnts,i),yp1,ypn,y2)
        rad_tables_napf_pao(count)%rad_tbls(i)%arr_vals2(1:npnts) = y2(1:npnts)
        
        !RC finished storing arrays of 2nd derivatives

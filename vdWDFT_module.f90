@@ -1263,7 +1263,7 @@ contains
 
     use datatypes
     use GenComms,      only: cq_abort
-    use spline_module, only: dsplint
+    use splines, only: dsplint
 
     implicit none
 
@@ -1492,7 +1492,7 @@ contains
   subroutine pofq(q0, p0, dp0dq0)
 
     use numbers
-    use spline_module, only: spline_nonU_new
+    use splines, only: spline_nonU
 
     implicit none
     ! input parameters
@@ -1510,7 +1510,7 @@ contains
        p = zero
        do iq = 1, mq
           p(iq,iq) = one
-          call spline_nonU_new(mq, qmesh, p(:,iq), huge(one), huge(one), &
+          call spline_nonU(mq, qmesh, p(:,iq), huge(one), huge(one), &
                            d2pdq2(:,iq))
        end do
        first_call = .false.
@@ -2328,7 +2328,7 @@ contains
 
     use datatypes
     use numbers
-    use spline_module, only: spline_new
+    use splines, only: spline
     use GenComms,      only: cq_abort
     use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_dbl
 
@@ -2420,9 +2420,9 @@ contains
           dphidrmax = zero
           dphidk0 = zero
           dphidkmax = zero
-          call spline_new(nr, dr, phir(:,iq1,iq2), dphidr0, dphidrmax, &
+          call spline(nr, dr, phir(:,iq1,iq2), dphidr0, dphidrmax, &
                       d2phidr2(:,iq1,iq2))
-          call spline_new(nk, dk, phik(:,iq1,iq2), dphidk0, dphidkmax, &
+          call spline(nk, dk, phik(:,iq1,iq2), dphidk0, dphidkmax, &
                       d2phidk2(:,iq1,iq2))
 
           ! Fill symmetric elements

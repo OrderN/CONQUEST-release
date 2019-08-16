@@ -100,7 +100,7 @@ contains
     use GenComms, ONLY: cq_abort, gcopy
     use global_module, ONLY : iprint_init, area_init
     use numbers, ONLY : zero, one, two, three, four
-    use spline_module, ONLY : spline_new
+    use splines, ONLY : spline
     use pao_format
     use memory_module, ONLY: reg_alloc_mem, type_dbl
     use input_module, ONLY: io_assign, io_close
@@ -245,7 +245,7 @@ contains
                   &pao(n_sp)%angmom(n_am)%zeta(n_zeta)%table(limit-1))/deltar
              
 
-             call spline_new(limit,deltar,pao(n_sp)%angmom(n_am)%zeta(n_zeta)%table,&
+             call spline(limit,deltar,pao(n_sp)%angmom(n_am)%zeta(n_zeta)%table,&
                   yp1,ypn,pao(n_sp)%angmom(n_am)%zeta(n_zeta)%table2)             
           enddo
        enddo

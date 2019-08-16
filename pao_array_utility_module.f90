@@ -2,17 +2,16 @@
 ! ------------------------------------------------------------------------------
 ! $Id$
 ! ------------------------------------------------------------------------------
-! Module cubic_spline_routines
+! Module pao_array_utility
 ! ------------------------------------------------------------------------------
 ! Code area 11: basis functions
 ! ------------------------------------------------------------------------------
 
-!!****h* Conquest/cubic_spline_routines
+!!****h* Conquest/pao_array_utility
 !!  NAME
-!!   cubic_spline_routines
+!!   pao_array_utility
 !!  PURPOSE
-!!   contains routines to do cubic spline interpolations
-!!   and also to reproject an array of given grid spacing onto
+!!   contains routines to reproject an array of given grid spacing onto
 !!   a different grid spacing
 !!  AUTHOR
 !!   R Choudhury
@@ -21,9 +20,11 @@
 !!  MODIFICATION HISTORY
 !!   2008/02/06 08:30 dave
 !!    Changed for output to file not stdout
+!!   2019/08/16 12:12 dave
+!!    Now uses splines, also changed name
 !!  SOURCE
 !!
-module cubic_spline_routines
+module pao_array_utility
    
   use global_module, ONLY: io_lun
 
@@ -36,138 +37,7 @@ module cubic_spline_routines
 !!***
 contains
 
-!!****f* cubic_spline_routines/spline_new *
-!!
-!!  NAME 
-!!   spline_new
-!!  USAGE
-!!   spline_new(x,y,n,yp1,ypn,y2)
-!!  PURPOSE
-!!   creates array of second derivatives of the input argument function
-!!  INPUTS
-!!   x - abscissae of argument function
-!!   y - values of function at abscissae
-!!   n - no of points
-!!   yp1 - 1st derivative at first x
-!!   ypn - 1st derivative at last x
-!!   y2 - array of second derivatives
-!!  USES
-!!   datatypes
-!!  AUTHOR
-!!   Numerical Recipes
-!!  CREATION DATE
-!!   24/07/03
-!!  MODIFICATION HISTORY
-!!
-!!  SOURCE
-!!
-  subroutine spline_new(x,y,n,yp1,ypn,y2)
-
-    use datatypes
-
-    implicit none
-
-    integer, intent(in) ::  n
-    real(double), intent(in) ::  yp1,ypn,x(n),y(n)
-    real(double), intent(out) :: y2(n)
-
-    !takes arrays x(1:n) and y(1:n) and outputs
-    !y2(1:n), the array of 2nd derivatives at
-    !the specified abscissae.  yp1,ypn and values of 2nd
-    !derivative at 1st and last point respectively
-    integer i,k,stat
-    real(double) :: p,qn,sig,un
-    real(double), allocatable :: u(:)
-
-    allocate(u(n), STAT=stat)
-    if (yp1.gt..99e30_double) then
-       y2(1) = 0.0_double
-       u(1) = 0.0_double
-    else
-       y2(1) = -0.5_double
-       u(1) = (3.0_double/(x(2)-x(1)))*((y(2)-y(1))/(x(2)-x(1))-yp1)
-    endif
-    do  i=2,n-1
-       sig = (x(i)-x(i-1))/(x(i+1)-x(i-1))
-       p = sig*y2(i-1)+2._double
-       y2(i) = (sig-1.0_double)/p
-       u(i) = (6.0_double*((y(i+1)-y(i))/(x(i+1)-x(i))-(y(i)-y(i-1))&
-            &/(x(i)-x(i-1)))/(x(i+1)-x(i-1))-sig*u(i-1))/p
-    enddo
-    if(ypn.gt..99e30) then
-       qn = 0.0_double
-       un = 0.0_double
-    else
-       qn = 0.5_double
-       un = (3.0_double/(x(n)-x(n-1)))*(ypn-(y(n)-y(n-1))/(x(n)-x(n-1)))
-    endif
-    y2(n) = (un-qn*u(n-1))/(qn*y2(n-1)+1.0_double)
-    do  k=n-1,1,-1
-       y2(k) = y2(k)*y2(k+1)+u(k)
-    enddo
-    deallocate(u)
-    return
-
-  end subroutine spline_new
-  !!***
-
-!!****f* cubic_spline_routines/splint_new2 *
-!!
-!!  NAME 
-!!   splint_new2
-!!  USAGE
-!!   splint_new2(xa,ya,y2a,n,x,y)
-!!  PURPOSE
-!!   outputs spline interpolated value of a function
-!!   at some specified argument x - uses fact that grid is uniform
-!!  INPUTS
-!!   xa - array of abscissae
-!!   ya - array of function values
-!!   y2a - array of second derivatives
-!!   n - no of points in arrays
-!!   x - value at which function is to be interpolated
-!!   y - value of interpolate function at x.
-!!  USES
-!!   datatypes
-!!  AUTHOR
-!!   Numerical Recipes\R Choudhury
-!!  CREATION DATE
-!!   24/07/03
-!!  MODIFICATION HISTORY
-!!   2007/01/13 09:14 dave
-!!    Tweaked and tidied
-!!  SOURCE
-!!
-  subroutine splint_new2(xa,ya,y2a,n,x,y)
-
-    use datatypes
-    use numbers, ONLY: very_small, one, six
-    use GenComms, ONLY: cq_abort
-
-    implicit none
-
-    integer, intent(in) :: n
-    real(double), intent(in) :: x,xa(n),y2a(n),ya(n)
-    real(double), intent(out) :: y
-
-    integer k,khi,klo
-    real(double) a,b,h,dx
-
-    dx = xa(n)/real(n-1,double)
-    klo = aint(x/dx)+1
-    khi = klo+1
-
-    h = xa(khi)-xa(klo)
-    if (h<very_small) call cq_abort("bad xa input in splint_new")
-    a=(xa(khi)-x)/h
-    b = (x-xa(klo))/h
-    y = a*ya(klo)+b*ya(khi)+(a*(a*a-one)*y2a(klo)+b*(b*b-one)*y2a(khi) )*(h*h)/six
-    return
-
-  end subroutine splint_new2
-!!***
-
-!!****f* cubic_spline_routines/reproject_array *
+!!****f* pao_array_utility/reproject_array *
 !!
 !!  NAME 
 !!   reproject_array
@@ -195,6 +65,8 @@ contains
   subroutine reproject_array(yin,del_old,n_old,yout,del_new,n_new)
 
     use datatypes
+    use numbers
+    use splines, ONLY: spline_nonU
 
     implicit none
 
@@ -203,9 +75,10 @@ contains
     real(double), intent(in), dimension(n_old) :: yin
     real(double), intent(out), dimension(n_new) :: yout
 
-    integer :: i,l,m
+    integer :: i,j,l,m
     real(double), allocatable, dimension(:) :: y2,xin
-    real(double) :: yp1,ypn, x,y
+    real(double) :: yp1,ypn, x,y, xx
+    real(double) :: a, b, c, d, r1, r2, r3, r4
 
     allocate(xin(n_old))
     allocate(y2(n_old))
@@ -219,12 +92,23 @@ contains
     yp1 = (yin(2)-yin(1))/del_old
     ypn = (yin(n_old)-yin(n_old-1))/del_old
 
-    call spline_new(xin,yin,n_old,yp1,ypn,y2)
+    call spline_nonU(n_old,xin,yin,yp1,ypn,y2)
 
     do i=1,n_new
-       x=(i-1)*del_new
-       call splint_new2(xin,yin,y2,n_old,x,y)
-       yout(i) = y
+       x=real(i-1,double)*del_new
+       j = floor(x/del_old) + 1
+       if(j+1<=n_old) then
+          xx = real(j,double)*del_old
+          a = (xx - x)/del_old
+          b = one - a
+          c = a * ( a * a - one ) * del_old * del_old / six
+          d = b * ( b * b - one ) * del_old * del_old / six
+          r1 = yin(j)
+          r2 = yin(j+1)
+          r3 = y2(j)
+          r4 = y2(j+1)
+          yout(i) = a*r1 + b*r2 + c*r3 + d*r4
+       end if
     enddo
     deallocate(xin)
     deallocate(y2)
@@ -232,7 +116,7 @@ contains
   end subroutine reproject_array
 !!***
 
-!!****f* cubic_spline_routines/matcharrays *
+!!****f* pao_array_utility/matcharrays *
 !!
 !!  NAME 
 !!   matcharrays
@@ -288,7 +172,7 @@ contains
   end subroutine matcharrays
 !!***
 
-!!****f* cubic_spline_routines/spline_ol_intval_new2 *
+!!****f* pao_array_utility/spline_ol_intval_new2 *
 !!
 !!  NAME 
 !!   spline_ol_intval_new2
@@ -362,7 +246,7 @@ contains
   end subroutine spline_ol_intval_new2
  !!***
  
-end module cubic_spline_routines
+end module pao_array_utility
 
        
        
