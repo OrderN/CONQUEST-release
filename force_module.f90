@@ -3204,7 +3204,6 @@ contains
     use GenComms,            only: my_barrier, cq_abort
     use atomic_density,      only: atomic_density_table
     use pseudo_tm_info,      only: pseudo
-    use splines,       only: dsplint
     use dimens,              only: grid_point_volume, n_my_grid_points
     use GenBlas,             only: axpy
     use density_module,      only: density, density_scale, density_pcc
@@ -3230,7 +3229,7 @@ contains
     integer        :: i, j, my_block, n, the_species, iatom, spin, spin_2
     integer        :: ix, iy, iz, iblock, ipoint, igrid, stat, dir1, dir2
     integer        :: ipart, jpart, ind_part, ia, ii, icover, ig_atom
-    real(double)   :: derivative, h_energy, rx, ry, rz, r2, r_from_i,  &
+    real(double)   :: derivative, h_energy, rx, ry, rz, rsq, r_from_i,  &
                       x, y, z, step
     real(double)   :: dcellx_block, dcelly_block, dcellz_block
     real(double)   :: dcellx_grid, dcelly_grid, dcellz_grid
@@ -3241,6 +3240,7 @@ contains
                       z_pcc, derivative_pcc, v_pcc, jacobian
     real(double), dimension(3)       :: r, r_1, r_pcc
     real(double), dimension(3,nspin) :: fr_1, fr_pcc
+    real(double) :: a, b, c, d, r1, r2, r3, r4, rr, da, db, dc, dd
     logical        :: range_flag
     type(cq_timer) :: tmr_l_tmp1, tmr_l_tmp2
     type(cq_timer) :: backtrace_timer
@@ -3541,9 +3541,9 @@ contains
                          r(1) = xblock + dx - xatom
                          r(2) = yblock + dy - yatom
                          r(3) = zblock + dz - zatom
-                         r2 = rx * rx + ry * ry + rz * rz
-                         if (r2 < loc_cutoff2) then
-                            r_from_i = sqrt(r2)
+                         rsq = rx * rx + ry * ry + rz * rz
+                         if (rsq < loc_cutoff2) then
+                            r_from_i = sqrt(rsq)
                             if (r_from_i > RD_ERR) then
                                r_1(1) = r(1) / r_from_i
                                r_1(2) = r(2) / r_from_i
@@ -3551,24 +3551,35 @@ contains
                             else
                                r_1 = zero
                             end if
-                            call dsplint(                                       &
-                                 step,                                          &
-                                 atomic_density_table(the_species)%table(:),    &
-                                 atomic_density_table(the_species)%d2_table(:), &
-                                 atomic_density_table(the_species)%length,      &
-                                 r_from_i, v, derivative, range_flag)
-                            if (range_flag) &
-                                 call cq_abort('get_nonSC_force: overrun problem')
-                            ! We assumed the atomic densities were evenly devided in spin channels at
-                            ! start, (in set_density of density module). So we assume the same to be
-                            ! consistent, and then apply density_scale calculated from set_density
-                            ! NB This means that spin_factor cancels out the half for non-spin polarised
-                            do dir1=1,3
-                              do spin = 1, nspin
-                                 fr_1(dir1,spin) = -r_1(dir1) * half * &
-                                   derivative * density_scale(spin)
-                              end do
-                            end do
+                            j = floor(r_from_i/step) + 1
+                            if(j+1<=atomic_density_table(the_species)%length) then
+                               rr = real(j,double) * step
+                               a = ( rr - r_from_i ) / step
+                               b = one - a
+                               c = a * ( a * a - one ) * step * step / six
+                               d = b * ( b * b - one ) * step * step / six
+                               da = -one/step
+                               db =  one/step
+                               dc = -step*(three*a*a - one)/six
+                               dd =  step*(three*b*b - one)/six
+
+                               r1=atomic_density_table(the_species)%table(j)
+                               r2=atomic_density_table(the_species)%table(j+1)
+                               r3=atomic_density_table(the_species)%d2_table(j)
+                               r4=atomic_density_table(the_species)%d2_table(j+1)
+                               v = a*r1 + b*r2 + c*r3 + d*r4
+                               derivative = da*r1 + db*r2 + dc*r3 + dd*r4
+                               ! We assumed the atomic densities were evenly devided in spin channels at
+                               ! start, (in set_density of density module). So we assume the same to be
+                               ! consistent, and then apply density_scale calculated from set_density
+                               ! NB This means that spin_factor cancels out the half for non-spin polarised
+                               do dir1=1,3
+                                  do spin = 1, nspin
+                                     fr_1(dir1,spin) = -r_1(dir1) * half * &
+                                          derivative * density_scale(spin)
+                                  end do
+                               end do
+                            end if
                          else
                             fr_1 = zero
                          end if
@@ -3689,9 +3700,9 @@ contains
                             r(1) = xblock + dx - xatom
                             r(2) = yblock + dy - yatom
                             r(3) = zblock + dz - zatom
-                            r2 = rx * rx + ry * ry + rz * rz
-                            if (r2 < pcc_cutoff2) then
-                               r_from_i = sqrt( r2 )
+                            rsq = rx * rx + ry * ry + rz * rz
+                            if (rsq < pcc_cutoff2) then
+                               r_from_i = sqrt( rsq )
                                if ( r_from_i > RD_ERR ) then
                                   r_pcc(1) = r(1) / r_from_i
                                   r_pcc(2) = r(2) / r_from_i
@@ -3699,26 +3710,36 @@ contains
                                else
                                   r_pcc = zero
                                end if
-                               call dsplint(step_pcc, &
-                                            pseudo(the_species)%chpcc%f(:), &
-                                            pseudo(the_species)%chpcc%d2(:), &
-                                            pseudo(the_species)%chpcc%n, &
-                                            r_from_i, v_pcc, derivative_pcc, &
-                                            range_flag)
-                               if (range_flag) &
-                                    call cq_abort('get_nonSC_force: &
-                                                  &overrun problem')
-                               ! We assumed the atomic densities were
-                               ! evenly devided in spin channels at
-                               ! start, (in set_density of density
-                               ! module). So we assume the same to be
-                               ! consistent, and then apply density_scale
-                               ! calculated from set_density
-                               do spin = 1, nspin
-                                  do dir1 = 1, 3
-                                    fr_pcc(dir1,spin) = r_pcc(dir1) * half * derivative_pcc * density_scale(spin)
+                               j = floor(r_from_i/step_pcc) + 1
+                               if(j+1<=pseudo(the_species)%chpcc%n) then
+                                  rr = real(j,double) * step_pcc
+                                  a = ( rr - r_from_i ) / step_pcc
+                                  b = one - a
+                                  c = a * ( a * a - one ) * step_pcc * step_pcc / six
+                                  d = b * ( b * b - one ) * step_pcc * step_pcc / six
+                                  da = -one/step_pcc
+                                  db =  one/step_pcc
+                                  dc = -step_pcc*(three*a*a - one)/six
+                                  dd =  step_pcc*(three*b*b - one)/six
+
+                                  r1=pseudo(the_species)%chpcc%f(j)
+                                  r2=pseudo(the_species)%chpcc%f(j+1)
+                                  r3=pseudo(the_species)%chpcc%d2(j)
+                                  r4=pseudo(the_species)%chpcc%d2(j+1)
+                                  v_pcc = a*r1 + b*r2 + c*r3 + d*r4
+                                  derivative_pcc = da*r1 + db*r2 + dc*r3 + dd*r4
+                                  ! We assumed the atomic densities were
+                                  ! evenly devided in spin channels at
+                                  ! start, (in set_density of density
+                                  ! module). So we assume the same to be
+                                  ! consistent, and then apply density_scale
+                                  ! calculated from set_density
+                                  do spin = 1, nspin
+                                     do dir1 = 1, 3
+                                        fr_pcc(dir1,spin) = r_pcc(dir1) * half * derivative_pcc * density_scale(spin)
+                                     end do
                                   end do
-                               end do
+                               end if
                             else
                                fr_pcc = zero
                             end if
@@ -3869,7 +3890,6 @@ contains
     use set_blipgrid_module, only: naba_atoms_of_blocks
     use GenComms,            only: my_barrier, cq_abort
     use pseudo_tm_info,      only: pseudo
-    use splines,             only: dsplint
     use dimens,              only: grid_point_volume, n_my_grid_points
     use GenBlas,             only: axpy
     use density_module,      only: density, density_scale, density_pcc
@@ -3895,7 +3915,7 @@ contains
     integer        :: i, j, my_block, n, the_species, iatom, spin
     integer        :: ix, iy, iz, iblock, ipoint, igrid, stat, dir1, dir2
     integer        :: ipart, jpart, ind_part, ia, ii, icover, ig_atom
-    real(double)   :: derivative_pcc, xc_energy, r2,      &
+    real(double)   :: derivative_pcc, xc_energy, rsq,      &
                       r_from_i, x_pcc, y_pcc, z_pcc, step_pcc
     real(double)   :: dcellx_block, dcelly_block, dcellz_block
     real(double)   :: dcellx_grid, dcelly_grid, dcellz_grid
@@ -3903,6 +3923,7 @@ contains
     real(double)   :: xblock, yblock, zblock
     real(double)   :: dx, dy, dz, pcc_cutoff, pcc_cutoff2, electrons, &
                       v_pcc, jacobian
+    real(double) :: a, b, c, d, r1, r2, r3, r4, rr, da, db, dc, dd
     logical        :: range_flag
     type(cq_timer) :: tmr_l_tmp1, tmr_l_tmp2
     ! automatic arrays
@@ -4018,9 +4039,9 @@ contains
                          r(1) = xblock + dx - xatom
                          r(2) = yblock + dy - yatom
                          r(3) = zblock + dz - zatom
-                         r2 = r(1)*r(1) + r(2)*r(2) + r(3)*r(3)
-                         if (r2 < pcc_cutoff2) then
-                            r_from_i = sqrt(r2)
+                         rsq = r(1)*r(1) + r(2)*r(2) + r(3)*r(3)
+                         if (rsq < pcc_cutoff2) then
+                            r_from_i = sqrt(rsq)
                             if (r_from_i > RD_ERR) then
                                do dir1=1,3
                                   r_pcc(dir1) = r(dir1)/r_from_i
@@ -4028,23 +4049,34 @@ contains
                             else
                                r_pcc = zero
                             end if
-                            call dsplint(step_pcc,                        &
-                                         pseudo(the_species)%chpcc%f(:),  &
-                                         pseudo(the_species)%chpcc%d2(:), &
-                                         pseudo(the_species)%chpcc%n,     &
-                                         r_from_i, v_pcc, derivative_pcc, &
-                                         range_flag)
-                            if (range_flag) &
-                                 call cq_abort('get_pcc_force: overrun problem')
-                            ! the factor of half here is because for
-                            ! spin polarised calculations, I have
-                            ! assumed contribution from pcc_density is
-                            ! exactly half of the total in each spin
-                            ! channel.
-                            derivative_pcc = half * derivative_pcc
-                            do dir1=1,3
-                               fr_pcc(dir1) = r_pcc(dir1)*derivative_pcc
-                            end do
+                            j = floor(r_from_i/step_pcc) + 1
+                            if(j+1<=pseudo(the_species)%chpcc%n) then
+                               rr = real(j,double) * step_pcc
+                               a = ( rr - r_from_i ) / step_pcc
+                               b = one - a
+                               c = a * ( a * a - one ) * step_pcc * step_pcc / six
+                               d = b * ( b * b - one ) * step_pcc * step_pcc / six
+                               da = -one/step_pcc
+                               db =  one/step_pcc
+                               dc = -step_pcc*(three*a*a - one)/six
+                               dd =  step_pcc*(three*b*b - one)/six
+
+                               r1=pseudo(the_species)%chpcc%f(j)
+                               r2=pseudo(the_species)%chpcc%f(j+1)
+                               r3=pseudo(the_species)%chpcc%d2(j)
+                               r4=pseudo(the_species)%chpcc%d2(j+1)
+                               v_pcc = a*r1 + b*r2 + c*r3 + d*r4
+                               derivative_pcc = da*r1 + db*r2 + dc*r3 + dd*r4
+                               ! the factor of half here is because for
+                               ! spin polarised calculations, I have
+                               ! assumed contribution from pcc_density is
+                               ! exactly half of the total in each spin
+                               ! channel.
+                               derivative_pcc = half * derivative_pcc
+                               do dir1=1,3
+                                  fr_pcc(dir1) = r_pcc(dir1)*derivative_pcc
+                               end do
+                            end if
                          else
                             fr_pcc = zero
                          end if

@@ -1263,7 +1263,6 @@ contains
 
     use datatypes
     use GenComms,      only: cq_abort
-    use splines, only: dsplint
 
     implicit none
 
@@ -1272,8 +1271,8 @@ contains
     ! result
     real(double), dimension(:,:), intent(out) :: phi
     ! local variables
-    integer      :: iq1, iq2
-    real(double) :: dphidr
+    integer      :: iq1, iq2, j
+    real(double) :: dphidr, a, b, c, d, r1, r2, r3, r4, rr
     logical      :: stat
 
     if (size(phi, 1) < mq .or. size(phi, 2) < mq) &
@@ -1290,9 +1289,20 @@ contains
              ! Use unfiltered kernel
              ! phi(iq1,iq2) = phi_interp(qmesh(iq1)*r, qmesh(iq2)*r)
              ! Use filtered kernel
-             call dsplint(dr, phir(:,iq1,iq2), d2phidr2(:,iq1,iq2), nr, r, &
-                          phi(iq1,iq2), dphidr, stat)
-             phi(iq2,iq1) = phi(iq1,iq2)
+             j = floor(r/dr)+1
+             if(j+1<=nr) then
+                rr = real(j,double)*dr
+                a = (rr - r)/dr
+                b = one - a
+                c = a * ( a * a - one ) * dr * dr / six
+                d = b * ( b * b - one ) * dr * dr / six
+                r1 = phir(j,iq1,iq2)
+                r2 = phir(j+1,iq1,iq2)
+                r3 = d2phidr2(j,iq1,iq2)
+                r4 = d2phidr2(j+1,iq1,iq2)
+                phi(iq1,iq2) = a*r1 + b*r2 + c*r3 + d*r4
+                phi(iq2,iq1) = phi(iq1,iq2)
+             end if
           end do ! iq1
        end do ! iq2
     end if ! (r>=rcut)
@@ -2250,8 +2260,6 @@ contains
        d = (b*b*b - b) * dk*dk / six
        do iq2 = 1, nq
           do iq1 = 1, iq2
-             ! call splint(dk, phik(:,iq1,iq2), d2phidk2(:,iq1,iq2), nk, k, &
-             !             phi(iq1,iq2), dphidk(iq1,iq2), pr)
              phi(iq1,iq2) = &
                   a * phik(ik_lo,iq1,iq2) + b * phik(ik_hi,iq1,iq2) + &
                   c * d2phidk2(ik_lo,iq1,iq2) + d * d2phidk2(ik_hi,iq1,iq2)

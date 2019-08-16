@@ -1033,22 +1033,24 @@ contains
 !!  CREATION DATE
 !!   2003 sometime
 !!  MODIFICATION HISTORY
-!!
+!!   2019/08/16 15:16 dave
+!!    Replace dsplint call
 !!  SOURCE
 !!
   subroutine grad_mat_elem_gen2_prot(dir,case,sp1,l1,nz1,m1,sp2,l2,nz2,m2,x,y,z,grad_valout)
+    
     use datatypes
-    use ol_int_datatypes !,ONLY : ol_index,rad_tables,rad_tables_ke,ol_index_nlpf_pao&
-    !&,rad_tables_nlpf_pao
-
-    use splines, ONLY: dsplint
+    use ol_int_datatypes!, ONLY : ol_index,rad_tables,rad_tables_ke,ol_index_nlpf_pao,rad_tables_nlpf_pao
     use pao_array_utility, ONLY : spline_ol_intval_new2
     use GenComms, ONLY: inode, ionode, myid !for debugging purposes
+    use numbers
+    
     implicit none
+
     !improved routine to evaluate matrix element derivatives for the following cases
     !1 - pao_pao, 2 - pao_ke_pao, 3 - nlpf_pao (specified by case)
     integer, intent(in) :: dir,case,sp1,l1,nz1,m1,sp2,l2,nz2,m2
-    integer :: count,n_lvals,lmax,nzmax,npts,i,l3,l_index,m_index,l,m,ma,mc
+    integer :: count,n_lvals,lmax,nzmax,npts,i,l3,l_index,m_index,l,m,ma,mc, j
     integer :: m1dum,m2dum,l1dum,l2dum
     real(double), intent(in) :: x,y,z
     real(double), intent(out) :: grad_valout
@@ -1057,8 +1059,8 @@ contains
     real(double) :: ang_coeff1,ang_coeff2,out_val,arg,grad1,grad2,dummy,grad_val2
     real(double), parameter :: mintol = 0.000000001_double
     logical :: flag
-    !just coding for the straight pao_pao case for now, first spline out the function 
-    !values that we need
+    real(double) :: a, b, c, d, r1, r2, r3, r4, rr, da, db, dc, dd
+
     if(case.lt.3.OR.case==4.OR.case==7) then !either pao/pao or pao/ke/pao overlap matrix elements
        grad_valout = 0.0_double
        count = ol_index(sp1,sp2,nz1,nz2,l1,l2)
@@ -1068,18 +1070,39 @@ contains
           l3 = rad_tables(count)%l_values(i)
           del_x = rad_tables(count)%rad_tbls(1)%del_x
           npts = rad_tables(count)%rad_tbls(1)%npnts
-          if(case==1) then
-             call dsplint(del_x,rad_tables(count)%rad_tbls(i)%arr_vals(1:npts), &
-                  rad_tables(count)%rad_tbls(i)%arr_vals2(1:npts),npts,r,f_r,df_r,flag)
-          else if(case==2) then
-             call dsplint(del_x,rad_tables_ke(count)%rad_tbls(i)%arr_vals(1:npts), &
-                  rad_tables_ke(count)%rad_tbls(i)%arr_vals2(1:npts),npts,r,f_r,df_r,flag)
-          else if(case==4) then
-             call dsplint(del_x,rad_tables_paoNApao(count)%rad_tbls(i)%arr_vals(1:npts), &
-                  rad_tables_paoNApao(count)%rad_tbls(i)%arr_vals2(1:npts),npts,r,f_r,df_r,flag)
-          endif
-          !have now collected f_r and df_r, next to evaluate the required gradient
-          call construct_gradient(l1,l2,l3,m1,m2,dir,f_r,df_r,x,y,z,grad_val)
+          j = floor(r/del_x) + 1
+          grad_val = zero
+          if(j+1<=npts) then
+             rr = real(j,double)*del_x
+             a = (rr - r)/del_x
+             b = one - a
+             c = a * ( a * a - one ) * del_x * del_x / six
+             d = b * ( b * b - one ) * del_x * del_x / six
+             da = -one/del_x
+             db =  one/del_x
+             dc = -del_x*(three*a*a - one)/six
+             dd =  del_x*(three*b*b - one)/six
+             if(case==1) then
+                r1 = rad_tables(count)%rad_tbls(i)%arr_vals(j)
+                r2 = rad_tables(count)%rad_tbls(i)%arr_vals(j+1)
+                r3 = rad_tables(count)%rad_tbls(i)%arr_vals2(j)
+                r4 = rad_tables(count)%rad_tbls(i)%arr_vals2(j+1)
+             else if(case==2) then
+                r1 = rad_tables_ke(count)%rad_tbls(i)%arr_vals(j)
+                r2 = rad_tables_ke(count)%rad_tbls(i)%arr_vals(j+1)
+                r3 = rad_tables_ke(count)%rad_tbls(i)%arr_vals2(j)
+                r4 = rad_tables_ke(count)%rad_tbls(i)%arr_vals2(j+1)
+             else if(case==4) then
+                r1 = rad_tables_paoNApao(count)%rad_tbls(i)%arr_vals(j)
+                r2 = rad_tables_paoNApao(count)%rad_tbls(i)%arr_vals(j+1)
+                r3 = rad_tables_paoNApao(count)%rad_tbls(i)%arr_vals2(j)
+                r4 = rad_tables_paoNApao(count)%rad_tbls(i)%arr_vals2(j+1)
+             endif
+             f_r = a*r1 + b*r2 + c*r3 + d*r4
+             df_r = da*r1 + db*r2 + dc*r3 + dd*r4
+             !have now collected f_r and df_r, next to evaluate the required gradient
+             call construct_gradient(l1,l2,l3,m1,m2,dir,f_r,df_r,x,y,z,grad_val)
+          end if
           grad_valout = grad_valout+grad_val
        enddo
     else if(case==3) then ! NLPF
@@ -1091,9 +1114,26 @@ contains
           l3 = rad_tables_nlpf_pao(count)%l_values(i)
           del_x = rad_tables_nlpf_pao(count)%rad_tbls(1)%del_x
           npts = rad_tables_nlpf_pao(count)%rad_tbls(1)%npnts
-          call dsplint(del_x,rad_tables_nlpf_pao(count)%rad_tbls(i)%arr_vals(1:npts), &
-                  rad_tables_nlpf_pao(count)%rad_tbls(i)%arr_vals2(1:npts),npts,r,f_r,df_r,flag)
-          call construct_gradient(l1,l2,l3,m1,m2,dir,f_r,df_r,x,y,z,grad_val)
+          j = floor(r/del_x) + 1
+          grad_val = zero
+          if(j+1<=npts) then
+             rr = real(j,double)*del_x
+             a = (rr - r)/del_x
+             b = one - a
+             c = a * ( a * a - one ) * del_x * del_x / six
+             d = b * ( b * b - one ) * del_x * del_x / six
+             da = -one/del_x
+             db =  one/del_x
+             dc = -del_x*(three*a*a - one)/six
+             dd =  del_x*(three*b*b - one)/six
+             r1 = rad_tables_nlpf_pao(count)%rad_tbls(i)%arr_vals(j)
+             r2 = rad_tables_nlpf_pao(count)%rad_tbls(i)%arr_vals(j+1)
+             r3 = rad_tables_nlpf_pao(count)%rad_tbls(i)%arr_vals2(j)
+             r4 = rad_tables_nlpf_pao(count)%rad_tbls(i)%arr_vals2(j+1)
+             f_r = a*r1 + b*r2 + c*r3 + d*r4
+             df_r = da*r1 + db*r2 + dc*r3 + dd*r4
+             call construct_gradient(l1,l2,l3,m1,m2,dir,f_r,df_r,x,y,z,grad_val)
+          end if
           grad_valout = grad_valout+grad_val
        enddo
     else if(case==5) then ! NAPF
@@ -1105,9 +1145,26 @@ contains
           l3 = rad_tables_napf_pao(count)%l_values(i)
           del_x = rad_tables_napf_pao(count)%rad_tbls(1)%del_x
           npts = rad_tables_napf_pao(count)%rad_tbls(1)%npnts
-          call dsplint(del_x,rad_tables_napf_pao(count)%rad_tbls(i)%arr_vals(1:npts), &
-                  rad_tables_napf_pao(count)%rad_tbls(i)%arr_vals2(1:npts),npts,r,f_r,df_r,flag)
-          call construct_gradient(l1,l2,l3,m1,m2,dir,f_r,df_r,x,y,z,grad_val)
+          j = floor(r/del_x) + 1
+          grad_val = zero
+          if(j+1<=npts) then
+             rr = real(j,double)*del_x
+             a = (rr - r)/del_x
+             b = one - a
+             c = a * ( a * a - one ) * del_x * del_x / six
+             d = b * ( b * b - one ) * del_x * del_x / six
+             da = -one/del_x
+             db =  one/del_x
+             dc = -del_x*(three*a*a - one)/six
+             dd =  del_x*(three*b*b - one)/six
+             r1 = rad_tables_napf_pao(count)%rad_tbls(i)%arr_vals(j)
+             r2 = rad_tables_napf_pao(count)%rad_tbls(i)%arr_vals(j+1)
+             r3 = rad_tables_napf_pao(count)%rad_tbls(i)%arr_vals2(j)
+             r4 = rad_tables_napf_pao(count)%rad_tbls(i)%arr_vals2(j+1)
+             f_r = a*r1 + b*r2 + c*r3 + d*r4
+             df_r = da*r1 + db*r2 + dc*r3 + dd*r4
+             call construct_gradient(l1,l2,l3,m1,m2,dir,f_r,df_r,x,y,z,grad_val)
+          end if
           grad_valout = grad_valout+grad_val
        enddo
     else if(case==6) then !either pao/pao or pao/ke/pao overlap matrix elements
@@ -1119,10 +1176,26 @@ contains
           l3 = rad_tables_paopaoNA(count)%l_values(i)
           del_x = rad_tables_paopaoNA(count)%rad_tbls(1)%del_x
           npts = rad_tables_paopaoNA(count)%rad_tbls(1)%npnts
-          call dsplint(del_x,rad_tables_paopaoNA(count)%rad_tbls(i)%arr_vals(1:npts), &
-               rad_tables_paopaoNA(count)%rad_tbls(i)%arr_vals2(1:npts),npts,r,f_r,df_r,flag)
-          !have now collected f_r and df_r, next to evaluate the required gradient
-          call construct_gradient(l1,l2,l3,m1,m2,dir,f_r,df_r,x,y,z,grad_val)
+          j = floor(r/del_x) + 1
+          grad_val = zero
+          if(j+1<=npts) then
+             rr = real(j,double)*del_x
+             a = (rr - r)/del_x
+             b = one - a
+             c = a * ( a * a - one ) * del_x * del_x / six
+             d = b * ( b * b - one ) * del_x * del_x / six
+             da = -one/del_x
+             db =  one/del_x
+             dc = -del_x*(three*a*a - one)/six
+             dd =  del_x*(three*b*b - one)/six
+             r1 = rad_tables_paopaoNA(count)%rad_tbls(i)%arr_vals(j)
+             r2 = rad_tables_paopaoNA(count)%rad_tbls(i)%arr_vals(j+1)
+             r3 = rad_tables_paopaoNA(count)%rad_tbls(i)%arr_vals2(j)
+             r4 = rad_tables_paopaoNA(count)%rad_tbls(i)%arr_vals2(j+1)
+             f_r = a*r1 + b*r2 + c*r3 + d*r4
+             df_r = da*r1 + db*r2 + dc*r3 + dd*r4
+             call construct_gradient(l1,l2,l3,m1,m2,dir,f_r,df_r,x,y,z,grad_val)
+          end if
           grad_valout = grad_valout+grad_val
        enddo
     endif

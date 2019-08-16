@@ -619,6 +619,8 @@ contains
   !! CREATION DATE
   !!   2012/02/28
   !! MODIFICATION HISTORY
+  !!  2019/08/16 15:03 dave
+  !!   Removed call to dsplint
   !! SOURCE
   !!
   function interpolation(nnew, xnew, n, y, x, dx)
@@ -626,8 +628,8 @@ contains
     use datatypes
     use numbers
     use GenComms,      only: cq_abort
-    use splines, only: spline, dsplint
     use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_dbl
+    use splines,       only: spline
 
     implicit none
 
@@ -641,10 +643,11 @@ contains
     ! result
     real(double), dimension(nnew) :: interpolation
     ! local variables
-    integer                    :: i, i1, i2, inew, stat
-    real(double)               :: dy, dydi, iofxnew, ynew
+    integer                    :: i, i1, i2, inew, stat, j
+    real(double)               :: dy, dydi, iofxnew, ynew, rr
     logical                    :: overrun
     real(double), dimension(:), allocatable :: d2ydi2
+    real(double) :: a, b, c, d, r1, r2, r3, r4
 
     allocate(d2ydi2(n), STAT=stat)
     if (stat /= 0) call cq_abort("interpolation: Error alloc mem: ", n)
@@ -677,8 +680,15 @@ contains
           end if
           ! Interpolate y(i) at iofxnew
           ! Notice: iofxnew range is [1:n) but splint expects [0:n-1)
-          call dsplint(one, y, d2ydi2, n, iofxnew - one, ynew, dydi, overrun)
-          interpolation(inew) = ynew
+          j = floor((iofxnew - one)/one) + 1
+          if(j+1<=n) then
+             rr = real(j,double)*one
+             a = (rr - (iofxnew - one))
+             b = one - a
+             c = a * ( a * a - one ) * one * one / six
+             d = b * ( b * b - one ) * one * one / six
+             interpolation(inew) = a*r1 + b*r2 + c*r3 + d*r4
+          end if
        end do ! inew
 
     else if (interpolation_method=='lagrange') then

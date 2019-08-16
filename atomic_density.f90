@@ -379,10 +379,6 @@ contains
                          r3 = pao(n_sp)%angmom(n_am)%zeta(n_zeta)%table2(i)
                          r4 = pao(n_sp)%angmom(n_am)%zeta(n_zeta)%table2(i+1)
                          val = a*r1 + b*r2 + c*r3 + d*r4
-                         !call splint(pao_deltar,pao(n_sp)%angmom(n_am)%zeta(n_zeta)%table(:), &
-                         !      pao(n_sp)%angmom(n_am)%zeta(n_zeta)%table2(:), &
-                         !      pao(n_sp)%angmom(n_am)%zeta(n_zeta)%length, &
-                         !      r,val,range_flag)
                          atomic_density_table(n_sp)%table(nt) = atomic_density_table(n_sp)%table(nt) + &
                               &one_over_four_pi * pao(n_sp)%angmom(n_am)%occ(n_zeta) * &
                               &(rn_am * val )**2
@@ -432,13 +428,15 @@ contains
 !!    Fixed over-run problem with splining
 !!   2008/05/23 ast
 !!    Added timers
+!!   2019/08/16 14:36 dave
+!!    Removed dsplint and output of derivative (unnecessary)
 !!  SOURCE
 !!
   subroutine spline_atomic_density(n_species)
 
     use datatypes
     use numbers
-    use splines, ONLY: spline, dsplint
+    use splines, ONLY: spline
     use GenComms, ONLY: cq_abort, inode, ionode
     use global_module, ONLY: iprint_SC, area_SC
     use memory_module, ONLY: reg_alloc_mem, type_dbl
@@ -475,23 +473,7 @@ contains
           write(io_lun,fmt='(10x,"Atomic density for species ",i5)') n
           do i=1,atomic_density_table(n)%length
              r = real(i-1,double)*delta_r
-             if(r < atomic_density_table(n)%cutoff) then   !TM
-!                call splint(delta_r,atomic_density_table(n)%table(:), & 
-!                     atomic_density_table(n)%d2_table(:), &
-!                     atomic_density_table(n)%length, & 
-!                     r,local_density,range_flag)
-                call dsplint(delta_r,atomic_density_table(n)%table(:), & 
-                     atomic_density_table(n)%d2_table(:), &
-                     atomic_density_table(n)%length, & 
-                     r,local_density,derivative,range_flag)
-                write(io_lun,fmt='(10x,3f20.12)') r,local_density,derivative
-             else                                                    !TM
-                write(io_lun,fmt='(10x,"r in spline_atomic_density > cutoff  ",2f20.12)') &
-                     r, atomic_density_table(n)%cutoff
-                write(io_lun,fmt='(10x,3f20.12)') r, &                                   !TM
-                     atomic_density_table(n)%table(atomic_density_table(n)%length), & !TM
-                     atomic_density_table(n)%d2_table(atomic_density_table(n)%length) !TM
-             endif                                                   !TM
+             write(io_lun,fmt='(10x,2f20.12)') r,atomic_density_table(n)%table(i)
           end do
        end if
     end do
