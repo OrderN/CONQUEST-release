@@ -674,6 +674,14 @@ contains
        if (inode==ionode) &
             write(io_lun,fmt='(4x,"MD run, iteration ",i5)') iter
 
+       call thermo%get_temperature_and_ke(baro, ion_velocity, &
+
+                                          mdl%ion_kinetic_energy)
+
+       call baro%get_pressure_and_stress
+
+
+
        ! thermostat/barostat (MTTK splitting of Liouvillian)
        call integrate_pt(baro, thermo, mdl, ion_velocity)
 
@@ -739,6 +747,10 @@ contains
           call dump_pos_and_matrices(index=0,MDstep=iter,velocity=ion_velocity)
           call vVerlet_v_dthalf(MDtimestep,ion_velocity,tot_force,flag_movable,second_call)
        end if
+       ! Update DFT energy
+
+       mdl%dft_total_energy = energy1
+
        ! Rescale the ionic positions for the berendsen barostat AFTER the 
        ! velocity updates to avoid rescaling velocities
        if (leqi(md_ensemble, 'npt')) then
@@ -755,6 +767,12 @@ contains
        !! For Debuggging !!
 
        ! thermostat/barostat (MTTK splitting of Liouvillian)
+       call mdl%get_cons_qty
+
+       write(io_lun,*) 'KE, PE, Etherm, Hprimt: ',mdl%ion_kinetic_energy, &
+
+            mdl%dft_total_energy, mdl%e_thermostat, mdl%e_thermostat_next, mdl%h_prime
+
        call integrate_pt(baro, thermo, mdl, ion_velocity, second_call)
 
        ! Constrain velocity
@@ -763,7 +781,6 @@ contains
        !%%! END of Evolve atoms
 
        ! Print out energy
-       mdl%dft_total_energy = energy1
        if (inode==ionode) then
          write(io_lun,'(4x,"***MD step ",i6," KE: ",f18.8," &
                        &IntEnergy: ",f20.8," TotalEnergy: ",f20.8)') &
@@ -794,6 +811,24 @@ contains
          write (io_lun,'(4x,"Energy change           : ",f15.8)') dE
        end if
 
+       ! Compute and print the conserved quantity and its components
+
+       if (leqi(thermo%thermo_type, 'nhc')) call thermo%get_thermostat_energy
+
+       if (leqi(baro%baro_type, 'pr')) call baro%get_barostat_energy(final_call)
+
+       !call mdl%get_cons_qty
+
+       write(io_lun,*) 'KE, PE, Etherm, Hprimt: ',mdl%ion_kinetic_energy, &
+
+            mdl%dft_total_energy, mdl%e_thermostat, mdl%e_thermostat_next, mdl%h_prime
+
+       call mdl%print_md_energy()
+
+       !mdl%e_thermostat = mdl%e_thermostat_next
+
+
+
        ! Output positions
        if (inode==ionode .and. iprint_gen > 1) then
           do i = 1, ni_in_cell
@@ -809,12 +844,6 @@ contains
                                           mdl%ion_kinetic_energy, &
                                           final_call)
        call baro%get_pressure_and_stress(final_call)
-
-       ! Compute and print the conserved quantity and its components
-       call thermo%get_thermostat_energy
-       call baro%get_barostat_energy(final_call)
-       call mdl%get_cons_qty
-       call mdl%print_md_energy
  
        if (nequil > 0) then
          nequil = nequil - 1
@@ -1062,8 +1091,13 @@ contains
         end if
       case('svr')
         if (present(second_call)) then
-          call thermo%get_svr_thermo_sf(MDtimestep)
           call thermo%v_rescale(velocity)
+
+          call thermo%get_thermostat_energy
+
+        else
+
+          call thermo%get_svr_thermo_sf(MDtimestep)
         end if
      end select
    case('nph')
