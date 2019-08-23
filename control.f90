@@ -675,7 +675,7 @@ contains
             write(io_lun,fmt='(4x,"MD run, iteration ",i5)') iter
 
        ! thermostat/barostat (MTTK splitting of Liouvillian)
-       call integrate_pt(baro, thermo, mdl, iter, ion_velocity)
+       call integrate_pt(baro, thermo, mdl, ion_velocity)
 
        !! For Debuggging !!
        !     call dump_pos_and_matrices(index=1,MDstep=i_first)
@@ -1022,7 +1022,7 @@ contains
   !!   2018/04/23 11:49
   !!  SOURCE
   !!  
-  subroutine integrate_pt(baro, thermo, mdl, iter, velocity, second_call)
+  subroutine integrate_pt(baro, thermo, mdl, velocity, second_call)
 
     use numbers
     use global_module,    only: iprint_MD
@@ -1035,7 +1035,6 @@ contains
     type(type_barostat), intent(inout)          :: baro
     type(type_thermostat), intent(inout)        :: thermo
     type(type_md_model), intent(inout)          :: mdl
-    integer, intent(in)                         :: iter
     real(double), dimension(:,:), intent(inout) :: velocity
     logical, optional                           :: second_call
 
