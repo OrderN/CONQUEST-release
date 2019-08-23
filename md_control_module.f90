@@ -117,6 +117,7 @@ module md_control
 
     ! Weak coupling thermostat variables
     real(double)        :: tau_T        ! temperature coupling time period
+    real(double)        :: thermo_freq  ! how often to rescale the velocity
 
     ! Nose-Hoover chain thermostat variables
     integer             :: n_nhc        ! number of Nose-Hoover heat baths
@@ -334,6 +335,7 @@ contains
       ! Parrinello-Rahman NPH dynamics with a SVR thermostat (barostat 
       ! is initialised AFTER thermostat)
       flag_extended_system = .false.
+      th%thermo_freq = int(th%tau_T)
       call th%myrng%init_rng ! Initialise random number generator
       call th%myrng%init_normal(one, zero)
     case('nhc')
@@ -1169,10 +1171,9 @@ contains
 
       th%e_thermostat = th%e_thermostat - &
                         th%ke_ions * (th%lambda**2 - one) * th%dt! * half
-
       if (.not. leqi(th%baro_type, 'none')) then
         th%e_thermostat = th%e_thermostat - &
-                          th%e_barostat * (th%lambda**2 - one) * th%dt
+                          th%e_barostat * (one - th%lambda**2)
       end if
       if (inode==ionode .and. iprint_MD > 2) &
         write(io_lun,'(4x,"ke_svr:     ",e16.8)') th%e_thermostat
