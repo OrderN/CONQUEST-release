@@ -124,8 +124,6 @@ module md_control
     integer             :: n_ys         ! Yoshida-Suzuki order
     integer             :: n_mts_nhc    ! number of time steps for NHC
     real(double)        :: e_thermostat ! energy of thermostat
-    real(double)        :: e_thermostat_next
-
     real(double)        :: e_barostat   ! energy of barostat (for NPT SVR)
     real(double)        :: e_nhc_ion    ! energy of ionic NHC thermostats
     real(double)        :: e_nhc_cell   ! energy of cell NHC thermostats
@@ -299,8 +297,6 @@ contains
     th%baro_type = baro_type
     th%cell_nhc = md_cell_nhc
     if (.not. flag_MDcontinue) th%e_thermostat = zero
-    th%e_thermostat_next = zero
-
 
     select case(md_cell_constraint)
     case('fixed')
@@ -736,8 +732,7 @@ contains
         th%e_barostat = baro%e_barostat ! save for computing e_thermostat
         ke = ke + th%e_barostat
       end if
-      temp_fac = th%ke_target/th%ndof/ke
-
+      temp_fac = th%ke_target/ndof/ke
 
       ! sum can be replaced by a single number drawn from a gamma distribution
       sum_ri_sq = zero
@@ -1167,10 +1162,8 @@ contains
         call io_close(lun)
       end if
     case('svr')
-      !th%e_thermostat_next = th%e_thermostat - &
-
       th%e_thermostat = th%e_thermostat - &
-                        th%ke_ions * (th%lambda**2 - one) * th%dt! * half
+                        th%ke_ions * (th%lambda**2 - one) * th%dt
       if (.not. leqi(th%baro_type, 'none')) then
         th%e_thermostat = th%e_thermostat - &
                           th%e_barostat * (one - th%lambda**2)
