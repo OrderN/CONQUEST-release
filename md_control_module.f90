@@ -38,6 +38,8 @@
 !!   2018/08/12 zamaan
 !!    Removed read/write_thermo/baro_checkpoint, replaced with a unified &
 !!    checkpoint that includes ionic velocities
+!!   2019/02/06 zamaan
+!!    Pressure conversion factor now computed from values from units module
 !!   2019/04/23 zamaan
 !!    Implemented stochastic velocity scaling MD, Bussi et al., J. Chem.
 !!    Phys. 126, 014101 (2007) (NVT) and Bussi et al., J. Chem. Phys.
@@ -55,6 +57,7 @@ module md_control
   use GenComms,         only: inode, ionode, cq_abort
   use input_module,     only: leqi
   use rng,              only: type_rng
+  use units,            only: HaToeV, eVToJ, BohrToAng
 
   implicit none
 
@@ -63,7 +66,8 @@ module md_control
   character(20) :: md_cell_constraint
 
   ! Unit conversion factors
-  real(double), parameter :: fac_HaBohr32GPa = 29421.02648438959
+  real(double), parameter :: fac_HaBohr32GPa = (HaToeV*eVToJ*1e21_double)/&
+                                               (BohrToAng**3)
   real(double), parameter :: fac_fs2atu = 41.3413745758
   real(double), parameter :: fac_invcm2hartree = 4.5563352812122295E-6
   real(double), parameter :: fac_thz2hartree = 0.0001519828500716
@@ -79,7 +83,7 @@ module md_control
 
   ! Module variables
   character(20) :: md_thermo_type, md_baro_type
-  real(double)  :: md_tau_T, md_tau_P, md_target_press, md_bulkmod_est, &
+  real(double)  :: md_tau_T, md_tau_P, target_pressure, md_bulkmod_est, &
                    md_box_mass, md_ndof_ions, md_omega_t, md_omega_p, &
                    md_tau_T_equil, md_tau_P_equil, md_p_drag, md_t_drag
   integer       :: md_n_nhc, md_n_ys, md_n_mts, md_berendsen_equil
@@ -1290,7 +1294,13 @@ contains
       baro%box_mass = md_box_mass
     end if
 
-    baro%P_ext = md_target_press/fac_HaBohr32GPa
+    ! constants for polynomial expanion
+    baro%c2 = one/6.0_double
+    baro%c4 = baro%c2/20.0_double
+    baro%c6 = baro%c4/42.0_double
+    baro%c8 = baro%c6/72.0_double
+
+    baro%P_ext = target_pressure/fac_HaBohr32GPa
     baro%lat_ref = zero
     baro%lat_ref(1,1) = rcellx
     baro%lat_ref(2,2) = rcelly
