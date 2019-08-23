@@ -88,6 +88,7 @@ module md_model
     real(double), pointer                   :: tau_T    ! T coupling period
     integer, pointer                        :: n_nhc
     real(double), pointer                   :: e_thermostat
+    real(double), pointer                   :: e_thermostat_next
     real(double), pointer                   :: nhc_cell_energy
     real(double), pointer                   :: nhc_ion_energy
     real(double), pointer, dimension(:)     :: eta
@@ -178,6 +179,7 @@ contains
     mdl%tau_T         => thermo%tau_T
     mdl%n_nhc         => thermo%n_nhc
     mdl%e_thermostat    => thermo%e_thermostat
+    mdl%e_thermostat_next    => thermo%e_thermostat_next
     mdl%nhc_ion_energy  => thermo%e_nhc_ion
     mdl%nhc_cell_energy => thermo%e_nhc_cell
     mdl%eta           => thermo%eta
