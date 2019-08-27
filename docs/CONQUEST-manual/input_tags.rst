@@ -168,6 +168,14 @@ General.MaxTime (*real*)
 
     *default*: 0.0
 
+General.RNGSeed (*integer*)
+    Seed for the random number generator. If less than 0, a random seed will be
+    generated, otherwise the specified seed is used, and the same
+    sequence of random numbers will be generated every time. Useful for
+    reproducing MD runs.
+
+    *default*: -1
+
 .. _input_tags_atomic_spec:
 
 Atomic Specification
@@ -731,6 +739,16 @@ AtomMove.Timestep (*real*)
 
     *default*: 0.5
 
+AtomMove.IonTemperature (*real*)
+    Initial temperature for molecular dynamics
+
+    *default*: none
+
+AtomMove.ReadVelocity (*boolean*)
+    Read velocity from file ``velocity.dat``
+
+    *default*: F
+
 AtomMove.AppendCoords (*boolean*)
     Chooses whether to append coordinates to ``UpdatedAtoms.dat`` during atomic
     movement (T) or to overwrite (F)
@@ -759,16 +777,54 @@ AtomMove.TestAllForces (*boolean*)
 
     *default*: F
 
+AtomMove.CalcStress (*boolean*)
+    Toggle calculation of the stress tensor. Switching off can improve performace.
+
+    *default*: T
+
+AtomMove.FullStress (*boolean*)
+    Toggle calculation of the off-diagonal elements of the stress tensor, which
+    can be expensive, but is required for calculating certain properties.
+
+    *default*: F
+
+AtomMove.AtomicStress (*boolean*)
+    Toggle calculation of atomic contributions to the stress tensor. Used in
+    heat flux/thermal conductivity calculations. Significantly increases
+    memory demands.
+
+    *default*: F
+
 AtomMove.OptCell (*boolean*)
     Turns on conjugate gradient relaxation of the simulation box dimensions a, b
     and c. Note that AtomMove.TypeOfRun must also be set to cg.
 
     *default*: F
 
-AtomMove.OptCell.EnTol (*real*)
-    Sets the energy tolerance to terminate the conjugate gradient relaxation.
+AtomMove.OptCellMethod (*integer*)
+    Cell optimisation method.
+    1. fixed fractional coordinates
+    2. double loop - inner: full atomic cg optimisation, outer: single cell
+    steepest descent step. Generally only useful for systems that are extremely
+    problematic to relax
+    3. simultaneous cell and atomic conjugate gradients relaxation
 
-    *default*: 1\ :math:`\times`\ 10\ :math:`^{-5}`
+    *default*: 1
+
+AtomMove.EnthalpyTolerance (*real*)
+    Enthalpy tolerance for cell optimisation
+
+    *default*: 1\ :math:`\times`\ 10\ :math:`^{-5}` Ha/Bohr
+
+AtomMove.StressTolerance (*real*)
+    Stress tolerance for cell optimisation
+
+    *default*: 0.5\ :math:`\times`\ 10\ :math:`^{-2}` GPa
+
+AtomMove.TargetPressure (*real*)
+    External pressure for NPT molecular dynamics and cell optimisation
+
+    *default*: 0.0 GPa
 
 AtomMove.OptCell.Constraint (*string*)
     Applies a constraint to the relaxation.
@@ -832,7 +888,11 @@ AtomMove.TestForceDelta (*real*)
     *default*: 10\ :math:`^{-5}` bohr
 
 AtomMove.RestartRun (*boolean*)
-    Selects MD restart run (in the case of F, MD step is reset)
+    Restart a MD run. Note that this will set ``General.LoadL T``,
+    ``AtomMove.MakeInitialChargeFromSC T`` and ``XL.LoadX T`` if using the
+    extended Lagrangian. The atomic coordinates will be read from
+    ``md.positions`` and the velocities and extended system variables from
+    ``md.checkpoint``.
 
     *default*: F
 
@@ -871,7 +931,7 @@ Molecular Dynamics
 ------------------
 
 MD.Ensemble (*string*)
-    values: nve/nvt/npt
+    values: nve/nvt/npt/nph
 
     The molecular dynamics ensemble
 
@@ -888,14 +948,39 @@ MD.Thermostat (*string*)
         Nosé-Hoover chain
     ``berendsen``
         Berendsen weak coupling thermostat
+    ``svr``
+        Stochastic velocity rescaling
+
+    *default*: none
+
+MD.Barostat (*string*)
+    values: none/berendsen/iso-mttk/ortho-mttk/mttk
+
+    Barostat type. The following are the only valid thermostat/barostat
+    combinations for the NPT ensemble: ``berendsen``/ ``berendsen``,
+    ``nhc``/ ``pr``, ``svr``/ ``pr``
+
+    ``none``
+        No barostat (used for calculating pressure only)
+    ``berendsen``
+        Berendsen weak coupling barostat
+    ``pr``
+        Parrinello-Rahman (extended system) barostat
 
     *default*: none
 
 MD.tauT (*real*)
     Coupling time constant for thermostat. Required for Berendsen thermostat, or
-    if ``MD.CalculateXLMass = T``
+    if ``MD.CalculateXLMass = T``. Note that this number means different things
+    for the Berendsen and NHC thermostats.
 
     *default*: 1.0
+
+MD.TDrag (*real*)
+    Add a drag coefficient to the thermostat. The thermostat velocities are
+    reduced by a factor :math:`1 - \tau/D_T` every step.
+
+    *default*: 0.0
 
 MD.nNHC (*integer*)
     Number of Nosé-Hoover thermostats in chain
@@ -905,7 +990,7 @@ MD.nNHC (*integer*)
 MD.CellNHC (*boolean*)
     Use a separate Nosé-Hoover chain for thermostating the unit cell (NPT only)
 
-    *default*: F
+    *default*: T
 
 MD.NHCMass (*blocks*)
     :math:`<n1> <n2> <n3> \ldots`
@@ -919,30 +1004,6 @@ MD.CellNHCMass (*block*)
 
     *default*: 1 1 1 1 1
 
-MD.Barostat (*string*)
-    values: none/berendsen/iso-mttk/ortho-mttk/mttk
-
-    Barostat type
-
-    ``none``
-        No barostat (used for calculating pressure only)
-    ``berendsen``
-        Berendsen weak coupling barostat
-    ``iso-mttk``
-        MTTK barostat with isotropic cell fluctuations
-    ``ortho-mttk``
-        MTTK barostat with orthorhombic cell fluctuations
-    ``mttk``
-        MTTK barostat with fully flexible cell (currently discards off-diagonal
-        stress tensor components)
-
-    *default*: none
-
-MD.TargetPressure (*real*)
-    External pressure for NPT molecular dynamics
-
-    *default*:
-
 MD.BulkModulusEst (*real*)
     Bulk modulus estimate for system. Only necessary for Berendsen weak pressure
     coupling (``MD.Barostat = berendsen`` or ``MD.BerendsenEquil > 0``)
@@ -951,9 +1012,17 @@ MD.BulkModulusEst (*real*)
 
 MD.tauP (*real*)
     Coupling time constant for barostat. Required for Berendsen barostat, or if
-    MD.CalculateXLMass = T
+    MD.CalculateXLMass = T. Note that this number means different things for the
+    Berendsen and Parrinello-Rahman barostats.
 
     *default*: 10.0 (Berendsen) or 100.0 (MTTK)
+
+MD.PDrag (*real*)
+    Add a drag coefficient to the barostat. The barostat velocities are
+    reduced by a factor :math:`1 - \tau/D_P` every step. This is useful
+    when the lattice parameters are varying rapidly.
+
+    *default*: 0.0
 
 MD.BoxMass (*real*)
     Mass of box for extended system formalism (MTTK barostats)
@@ -964,7 +1033,7 @@ MD.CalculateXLMass (*boolean*)
     Calculate the mass of the extended system components (thermostats, barostat)
     using the MTTK formulae.
 
-    *default*: F
+    *default*: T
 
 MD.nYoshida (*integer*)
     values: 1/3/5/7/15/25/125/625
@@ -982,6 +1051,12 @@ MD.BerendsenEquil (*integer*)
     Equilibrate the system for :math:`n` steps using Berendsen weak coupling
 
     *default*: 0
+
+MD.TDEP (*boolean*)
+    Dump data in a format readable by the Temperature Dependent Effective
+    Potential (TDEP) code.
+
+    *default*: F
 
 MD.ThermoDebug (*boolean*)
     Print detailed information about thermostat and extended variables in ``thermostat.dat``

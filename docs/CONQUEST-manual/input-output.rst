@@ -107,4 +107,16 @@ the same format as the input.
 Molecular dynamics
 ++++++++++++++++++
 
-**Please fill in basic details**: full detail elsewhere :ref:`molecular-dynamics-topic`
+A molecular dynamics run will generate a number of additional plain text output
+files:
+
+  * ``md.stats`` --- summarises thermodynamic quantities at each steps
+  * ``md.frames`` --- contains the complete physical state of the system (lattice
+    parameters, atomic positions, velocities, forces, stress).
+  * ``md.checkpoint`` --- data required for MD restart, namely atomic velocities
+    and extended system variables.
+  * ``md.positions`` --- Atomic coordinates saved at the moment of checkpointing
+  * ``trajectory.xsf`` --- atomic coordinates save in .xsf format, which can be
+    visualised using (for example) VMD, if ``AtomMove.WriteXSF`` is true..
+
+Full details are available in :ref:`molecular-dynamics-topic`.
