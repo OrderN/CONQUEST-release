@@ -88,7 +88,6 @@ module md_model
     real(double), pointer                   :: tau_T    ! T coupling period
     integer, pointer                        :: n_nhc
     real(double), pointer                   :: e_thermostat
-    real(double), pointer                   :: e_thermostat_next
     real(double), pointer                   :: nhc_cell_energy
     real(double), pointer                   :: nhc_ion_energy
     real(double), pointer, dimension(:)     :: eta
@@ -179,7 +178,6 @@ contains
     mdl%tau_T         => thermo%tau_T
     mdl%n_nhc         => thermo%n_nhc
     mdl%e_thermostat    => thermo%e_thermostat
-    mdl%e_thermostat_next    => thermo%e_thermostat_next
     mdl%nhc_ion_energy  => thermo%e_nhc_ion
     mdl%nhc_cell_energy => thermo%e_nhc_cell
     mdl%eta           => thermo%eta
@@ -334,7 +332,8 @@ contains
   subroutine dump_stats(mdl, filename, nequil)
 
     use input_module,     only: io_assign, io_close
-    use md_control,       only: fac_HaBohr32GPa, md_berendsen_equil
+    use md_control,       only: md_berendsen_equil
+    use units,            only: HaBohr3ToGPa
 
     ! passed variables
     class(type_md_model), intent(inout)   :: mdl
@@ -349,7 +348,7 @@ contains
       write(io_lun,'(2x,"Writing statistics to ",a)') filename
 
     ! Convert units if necessary
-    P_GPa = mdl%P_int*fac_HaBohr32GPa
+    P_GPa = mdl%P_int*HaBohr3ToGPa
 
     if (inode==ionode) then
       call io_assign(lun)
@@ -493,7 +492,7 @@ contains
  
     use input_module,     only: io_assign, io_close
     use units,            only: HaToEv, BohrToAng
-    use md_control,       only: fac_HaBohr32GPa
+    use md_control,       only: HaBohr3ToGPa
  
     ! passed variables
     class(type_md_model), intent(inout)   :: mdl
@@ -543,8 +542,8 @@ contains
         (mdl%dft_total_energy+mdl%ion_kinetic_energy)*HaToeV, &
         mdl%dft_total_energy*HaToeV, &
         mdl%ion_kinetic_energy*HaToeV, mdl%T_int, mdl%P_int, &
-        mdl%stress(1,1)*fac_HaBohr32GPa, mdl%stress(2,2)*fac_HaBohr32GPa, &
-        mdl%stress(3,3)*fac_HaBohr32GPa, zero, zero, zero
+        mdl%stress(1,1)*HaBohr3ToGPa, mdl%stress(2,2)*HaBohr3ToGPa, &
+        mdl%stress(3,3)*HaBohr3ToGPa, zero, zero, zero
  
       call io_close(lun1)
     end if

@@ -791,8 +791,6 @@ contains
 
        ! thermostat/barostat (MTTK splitting of Liouvillian)
        call mdl%get_cons_qty
-       write(io_lun,*) 'KE, PE, Etherm, Hprimt: ',mdl%ion_kinetic_energy, &
-            mdl%dft_total_energy, mdl%e_thermostat, mdl%e_thermostat_next, mdl%h_prime
        call integrate_pt(baro, thermo, mdl, ion_velocity, second_call)
 
        ! Constrain velocity
@@ -834,11 +832,7 @@ contains
        ! Compute and print the conserved quantity and its components
        if (leqi(thermo%thermo_type, 'nhc')) call thermo%get_thermostat_energy
        if (leqi(baro%baro_type, 'pr')) call baro%get_barostat_energy(final_call)
-       !call mdl%get_cons_qty
-       write(io_lun,*) 'KE, PE, Etherm, Hprimt: ',mdl%ion_kinetic_energy, &
-            mdl%dft_total_energy, mdl%e_thermostat, mdl%e_thermostat_next, mdl%h_prime
        call mdl%print_md_energy()
-       !mdl%e_thermostat = mdl%e_thermostat_next
 
        ! Output positions
        if (inode==ionode .and. iprint_gen > 1) then
@@ -1793,7 +1787,7 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
     use io_module,      only: leqi
     use dimens, ONLY: r_super_x, r_super_y, r_super_z
     use store_matrix,  only: dump_pos_and_matrices
-    use md_control,    only: target_pressure, fac_HaBohr32GPa
+    use md_control,    only: target_pressure
 
     implicit none
 
@@ -1836,7 +1830,7 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
     ggold = zero
     energy1 = energy0
 
-    press = target_pressure/fac_HaBohr32GPa
+    press = target_pressure/HaBohr3ToGPa
     enthalpy0 = enthalpy(energy0, press)
     enthalpy1 = enthalpy0
     dH = zero
@@ -2128,8 +2122,7 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
     use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use timer_module
     use store_matrix,  only: dump_InfoMatGlobal, dump_pos_and_matrices
-    use md_control,    only: flag_write_xsf, target_pressure, &
-                             fac_HaBohr32GPa
+    use md_control,    only: flag_write_xsf, target_pressure
 
     implicit none
 
@@ -2191,7 +2184,7 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
     call get_E_and_F(fixed_potential, vary_mu, energy0, .true., .true.)
     call dump_pos_and_matrices
     call get_maxf(max)
-    press = target_pressure/fac_HaBohr32GPa
+    press = target_pressure/HaBohr3ToGPa
     enthalpy0 = enthalpy(energy0, press)
     dH = zero
     if (inode==ionode) then
@@ -2513,7 +2506,7 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
     use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use timer_module
     use store_matrix,  ONLY: dump_InfoMatGlobal, dump_pos_and_matrices
-    use md_control,    only: flag_write_xsf, target_pressure, fac_HaBohr32GPa
+    use md_control,    only: flag_write_xsf, target_pressure
 
     implicit none
 
@@ -2555,7 +2548,7 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
       write(io_lun,'(4x,"Force tolerance:    ",f20.10)') MDcgtol
       write(io_lun,'(4x,"Enthalpy tolerance: ",f20.10)') enthalpy_tolerance
     end if
-    press = target_pressure/fac_HaBohr32GPa
+    press = target_pressure/HaBohr3ToGPa
     energy0 = total_energy
     enthalpy0 = enthalpy(energy0, press)
     dH = zero

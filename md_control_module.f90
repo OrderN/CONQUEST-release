@@ -57,20 +57,12 @@ module md_control
   use GenComms,         only: inode, ionode, cq_abort
   use input_module,     only: leqi
   use rng,              only: type_rng
-  use units,            only: HaToeV, eVToJ, BohrToAng
+  use units,            only: HaBohr3ToGPa
 
   implicit none
 
   ! Flags
-
   character(20) :: md_cell_constraint
-
-  ! Unit conversion factors
-  real(double), parameter :: fac_HaBohr32GPa = (HaToeV*eVToJ*1e21_double)/&
-                                               (BohrToAng**3)
-  real(double), parameter :: fac_fs2atu = 41.3413745758
-  real(double), parameter :: fac_invcm2hartree = 4.5563352812122295E-6
-  real(double), parameter :: fac_thz2hartree = 0.0001519828500716
 
   ! Files
   character(20) :: md_position_file = 'md.position'
@@ -78,8 +70,8 @@ module md_control
   character(20) :: md_thermo_file = "md.thermostat"
   character(20) :: md_baro_file = "md.barostat"
   character(20) :: md_trajectory_file = "trajectory.xsf"
-  character(20) :: md_frames_file = "Frames"
-  character(20) :: md_stats_file = "Stats"
+  character(20) :: md_frames_file = "md.frames"
+  character(20) :: md_stats_file = "md.stats"
 
   ! Module variables
   character(20) :: md_thermo_type, md_baro_type
@@ -127,7 +119,6 @@ module md_control
     integer             :: n_ys         ! Yoshida-Suzuki order
     integer             :: n_mts_nhc    ! number of time steps for NHC
     real(double)        :: e_thermostat ! energy of thermostat
-    real(double)        :: e_thermostat_next
     real(double)        :: e_barostat   ! energy of barostat (for NPT SVR)
     real(double)        :: e_nhc_ion    ! energy of ionic NHC thermostats
     real(double)        :: e_nhc_cell   ! energy of cell NHC thermostats
@@ -301,7 +292,6 @@ contains
     th%baro_type = baro_type
     th%cell_nhc = md_cell_nhc
     if (.not. flag_MDcontinue) th%e_thermostat = zero
-    th%e_thermostat_next = zero
 
     select case(md_cell_constraint)
     case('fixed')
@@ -1166,7 +1156,6 @@ contains
         call io_close(lun)
       end if
     case('svr')
-      !th%e_thermostat_next = th%e_thermostat - &
       th%e_thermostat = th%e_thermostat - &
                         th%ke_ions * (th%lambda**2 - one) * th%dt! * half
       if (.not. leqi(th%baro_type, 'none')) then
@@ -1300,7 +1289,7 @@ contains
     baro%c6 = baro%c4/42.0_double
     baro%c8 = baro%c6/72.0_double
 
-    baro%P_ext = target_pressure/fac_HaBohr32GPa
+    baro%P_ext = target_pressure/HaBohr3ToGPa
     baro%lat_ref = zero
     baro%lat_ref(1,1) = rcellx
     baro%lat_ref(2,2) = rcelly
@@ -1443,10 +1432,10 @@ contains
       baro%P_int = baro%P_int + baro%total_stress(i,i)
     end do
     baro%P_int = baro%P_int*third
-    baro%PV = baro%volume*baro%P_ext/fac_HaBohr32GPa
+    baro%PV = baro%volume*baro%P_ext/HaBohr3ToGPa
     if (present(final_call)) then
       if (inode==ionode .and. iprint_MD > 1) then
-        write(io_lun,'(4x,"P:  ",f12.6," GPa")') baro%P_int*fac_HaBohr32GPa
+        write(io_lun,'(4x,"P:  ",f12.6," GPa")') baro%P_int*HaBohr3ToGPa
         write(io_lun,'(4x,"PV: ",f12.6," Ha")') baro%PV
       end if
     end if
@@ -1498,7 +1487,7 @@ contains
     real(double), intent(in)                    :: dt
 
     baro%mu = (one - (dt/baro%tau_P)*(baro%P_ext-baro%P_int)* &
-                fac_HaBohr32GPa/baro%bulkmod)**third
+                HaBohr3ToGPa/baro%bulkmod)**third
 
   end subroutine get_berendsen_baro_sf
   !!***
@@ -2350,16 +2339,16 @@ contains
         baro%append = .true.
       end if
       write(lun,'("step    ",i12)') step
-      write(lun,'("P_int   ",f12.4)') baro%P_int*fac_HaBohr32GPa
+      write(lun,'("P_int   ",f12.4)') baro%P_int*HaBohr3ToGPa
       write(lun,'("volume  ",f12.4)') baro%volume
       write(lun,'("static_stress: ",3e16.8)') &
-            baro%static_stress(1,1)*fac_HaBohr32GPa, &
-            baro%static_stress(2,2)*fac_HaBohr32GPa, &
-            baro%static_stress(3,3)*fac_HaBohr32GPa
+            baro%static_stress(1,1)*HaBohr3ToGPa, &
+            baro%static_stress(2,2)*HaBohr3ToGPa, &
+            baro%static_stress(3,3)*HaBohr3ToGPa
       write(lun,'("ke_stress    : ",3e16.8)') &
-            baro%ke_stress(1,1)*fac_HaBohr32GPa, &
-            baro%ke_stress(2,2)*fac_HaBohr32GPa, &
-            baro%ke_stress(3,3)*fac_HaBohr32GPa
+            baro%ke_stress(1,1)*HaBohr3ToGPa, &
+            baro%ke_stress(2,2)*HaBohr3ToGPa, &
+            baro%ke_stress(3,3)*HaBohr3ToGPa
       write(lun,'("cell         : ",3f16.8)') &
             baro%lat(1,1), baro%lat(2,2), baro%lat(3,3)
       if (flag_extended_system) then
