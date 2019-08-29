@@ -175,7 +175,7 @@ contains
           write(lun,fmt='(i4,2f21.16)') paos%psi_reg(zeta,i_shell)%n,paos%psi_reg(zeta,i_shell)%delta, &
                paos%cutoff(zeta,i_shell)
           do i=1,paos%psi_reg(zeta,i_shell)%n
-             write(lun,fmt='(2f16.12)') paos%psi_reg(zeta,i_shell)%x(i), paos%psi_reg(zeta,i_shell)%f(i)
+             write(lun,fmt='(2f17.11)') paos%psi_reg(zeta,i_shell)%x(i), paos%psi_reg(zeta,i_shell)%f(i)
           end do
        end do
     end do
@@ -214,14 +214,14 @@ contains
     end do
     ! VNA
     write(lun,fmt='("# Vna:_______________")')
-    write(lun,fmt='(i4,2f16.12,"  # npts, delta, cutoff")') &
+    write(lun,fmt='(i4,2f17.11,"  # npts, delta, cutoff")') &
          pseudo(i_species)%vna%n, pseudo(i_species)%vna%delta, pseudo(i_species)%vna%cutoff
     do j=1,pseudo(i_species)%vna%n
        write(lun,fmt='(2f17.11)') real(j-1,double)*pseudo(i_species)%vna%delta,pseudo(i_species)%vna%f(j)
     end do
     ! Local charge
     write(lun,fmt='("# Vlocal:_______________________")')
-    write(lun,fmt='(i4,2f16.12,"  # npts, delta, cutoff")') &
+    write(lun,fmt='(i4,2f17.11,"  # npts, delta, cutoff")') &
          pseudo(i_species)%vlocal%n, pseudo(i_species)%vlocal%delta, pseudo(i_species)%vlocal%cutoff
     do j=1,pseudo(i_species)%vlocal%n
        write(lun,fmt='(2f17.11)') real(j-1,double)*pseudo(i_species)%vlocal%delta,pseudo(i_species)%vlocal%f(j)
@@ -229,7 +229,7 @@ contains
     ! Partial Core Correction
     if(pseudo(i_species)%flag_pcc) then
        write(lun,fmt='("# Core:__________________________")')       
-       write(lun,fmt='(i4,2f16.12,"  # npts, delta, cutoff")') &
+       write(lun,fmt='(i4,2f17.11,"  # npts, delta, cutoff")') &
             pseudo(i_species)%chpcc%n, pseudo(i_species)%chpcc%delta, pseudo(i_species)%chpcc%cutoff
        do j=1,pseudo(i_species)%chpcc%n
           write(lun,fmt='(2f17.11)') real(j-1,double)*pseudo(i_species)%chpcc%delta,pseudo(i_species)%chpcc%f(j)/fourpi
