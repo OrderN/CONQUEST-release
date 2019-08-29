@@ -494,24 +494,24 @@
       integer :: nfile,symm
 
       ! Fetches & reconstructs X-matrix
-      call grab_matrix2('X',inode,nfile,Info,index_in=0)
+      call grab_matrix2('X',inode,nfile,Info,index=0)
       call Matrix_CommRebuild(Info,range,trans,matX(1),nfile)
       if(nspin==2) then
-         call grab_matrix2('X_2',inode,nfile,Info,index_in=0)
+         call grab_matrix2('X_2',inode,nfile,Info,index=0)
          call Matrix_CommRebuild(Info,range,trans,matX(2),nfile)
       end if
       ! Fetches & reconstructs Xvel-matrix
       if (integratorXL.EQ.'velocityVerlet') then
-        call grab_matrix2('Xvel',inode,nfile,Info,index_in=0)
+        call grab_matrix2('Xvel',inode,nfile,Info,index=0)
         call Matrix_CommRebuild(Info,range,trans,matXvel(1),nfile)
         if(nspin==2) then
-           call grab_matrix2('Xvel_2',inode,nfile,Info,index_in=0)
+           call grab_matrix2('Xvel_2',inode,nfile,Info,index=0)
            call Matrix_CommRebuild(Info,range,trans,matXvel(2),nfile)
         end if
       endif
       ! Fetches & reconstructs S-matrix
       if (flag_propagateX) then
-        call grab_matrix2('S',inode,nfile,Info,index_in=0)
+        call grab_matrix2('S',inode,nfile,Info,index=0)
         call Matrix_CommRebuild(Info,Srange,S_trans,matS,nfile,symm)
       endif
 
@@ -571,12 +571,12 @@
       endif
       ! Grab X-matrix files
       do istep = 1, maxiters+1
-       call grab_matrix2('X',inode,nfile,Info,index_in=istep)
+       call grab_matrix2('X',inode,nfile,Info,index=istep)
        call Matrix_CommRebuild(Info,range,trans,matX_store(istep,1),nfile)
       enddo
       if(nspin==2) then
        do istep = 1, maxiters+1
-        call grab_matrix2('X2',inode,nfile,Info,index_in=istep)
+        call grab_matrix2('X2',inode,nfile,Info,index=istep)
         call Matrix_CommRebuild(Info,range,trans,matX_store(istep,2),nfile)
        enddo
       endif
@@ -632,11 +632,11 @@
 
       ! Dump X-matrix files
       do istep = 1, maxiters+1
-        call dump_matrix2('X',matX_store(istep,1),range,index_in=istep)
+        call dump_matrix2('X',matX_store(istep,1),range,index=istep)
       enddo
       if(nspin==2) then
        do istep = 1, maxiters+1
-        call dump_matrix2('X2',matX_store(istep,2),range,index_in=istep)
+        call dump_matrix2('X2',matX_store(istep,2),range,index=istep)
        enddo
       endif
 
@@ -753,11 +753,10 @@
       dissipation = zero
       K = maxitersDissipation
       do ispin = 1, nspin
+        len=mat_p(matX(ispin))%length
         do i = 1, K+1
-          do len = 1, mat_p(matX(ispin))%length
-            dissipation(len,ispin) = dissipation(len,ispin) + &
-                                     c(i)*mat_p(matX_store(i,ispin))%matrix(len)
-          enddo
+            dissipation(1:len,ispin) = dissipation(1:len,ispin) + &
+                                     c(i)*mat_p(matX_store(i,ispin))%matrix(1:len)
         enddo
       enddo
       dissipation = dissipation * alpha

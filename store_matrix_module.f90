@@ -35,6 +35,7 @@ module store_matrix
     character(len=80) :: name
     !integer :: inode  ! not necessary 
     integer :: n_prim
+    integer :: n_matrix
     integer :: matrix_size
    ! Size : n_prim
     integer, allocatable :: nsf_spec_i(:)
@@ -49,7 +50,7 @@ module store_matrix
    ! Size : (3, # of j)
     real(double), allocatable :: vec_Rij(:,:)
    ! Size : matrix_size
-    real(double), allocatable :: data_matrix(:)
+    real(double), allocatable :: data_matrix(:,:)
   end type matrix_store
 
 ! matrix_store_global : 
@@ -85,9 +86,13 @@ module store_matrix
 !                                       InfoX10(:)
 !
 !                  2017/11/10 Tsuyoshi Miyazaki 
+!!!!
+!  N_MATRIX should be defined for each i_atom ?????
+!!!!
   type InfoMatrixFile
     integer :: index_node
     integer :: natom_i
+    integer :: n_matrix
     ! Size : natom_i
     integer, pointer :: alpha_i(:)
     integer, pointer :: idglob_i(:)
@@ -149,27 +154,27 @@ contains
 
        if(flag_SFcoeffReuse .or. flag_Multisite) then
         call dump_matrix_update('SFcoeff',matSFcoeff(1),SFcoeff_range,&
-                                 index_in=index_local,iprint_mode=mat,MDstep=MDstep_local)
+                                 index=index_local,iprint_mode=mat,MDstep=MDstep_local)
         if(nspin_SF .eq. 2) call dump_matrix_update('SFcoeff2',matSFcoeff(2),SFcoeff_range,&
-                                 index_in=index_local,iprint_mode=mat,MDstep=MDstep_local)
+                                 index=index_local,iprint_mode=mat,MDstep=MDstep_local)
        endif
 
        if(flag_diagonalisation) then
         if(present(velocity)) then
          call dump_matrix_update('K',matK(1),Hrange,&
-           index_in=index_local,iprint_mode=both,MDstep=MDstep_local,velocity=velocity)
+           index=index_local,iprint_mode=both,MDstep=MDstep_local,velocity=velocity)
         else
-         call dump_matrix_update('K',matK(1),Hrange,index_in=index_local,iprint_mode=both,MDstep=MDstep_local)
+         call dump_matrix_update('K',matK(1),Hrange,index=index_local,iprint_mode=both,MDstep=MDstep_local)
         endif
-         if(nspin .eq. 2) call dump_matrix_update('K2',matK(2),Hrange,index_in=index_local,iprint_mode=mat,MDstep=MDstep_local)
+         if(nspin .eq. 2) call dump_matrix_update('K2',matK(2),Hrange,index=index_local,iprint_mode=mat,MDstep=MDstep_local)
        else
         if(present(velocity)) then
          call dump_matrix_update('L',matL(1),Lrange,&
-           index_in=index_local,iprint_mode=both,MDstep=MDstep_local,velocity=velocity)
+           index=index_local,iprint_mode=both,MDstep=MDstep_local,velocity=velocity)
         else
-         call dump_matrix_update('L',matL(1),Lrange,index_in=index_local,iprint_mode=both,MDstep=MDstep_local)
+         call dump_matrix_update('L',matL(1),Lrange,index=index_local,iprint_mode=both,MDstep=MDstep_local)
         endif
-         if(nspin .eq. 2) call dump_matrix_update('L2',matL(2),Lrange,index_in=index_local,iprint_mode=mat,MDstep=MDstep_local)
+         if(nspin .eq. 2) call dump_matrix_update('L2',matL(2),Lrange,index=index_local,iprint_mode=mat,MDstep=MDstep_local)
        endif
 
 ! Since XLBOMD_module uses the subroutines in this module, we cannot 
@@ -234,7 +239,7 @@ contains
   !!  SOURCE
   !!
 
-   subroutine dump_matrix_update(stub,matA,range,index_in,iprint_mode,MDstep,velocity)
+   subroutine dump_matrix_update(stub,matA,range,index,iprint_mode,MDstep,velocity)
     use GenComms, ONLY: inode, ionode, cq_abort
     use global_module, ONLY: numprocs, id_glob, ni_in_cell
     use io_module, ONLY: get_file_name
@@ -242,13 +247,13 @@ contains
     character(len=*),intent(in) :: stub
     integer,intent(in) :: matA
     integer,intent(in) :: range
-    integer,intent(in), optional :: index_in
+    integer,intent(in), optional :: index
     integer,intent(inout), optional :: iprint_mode
     integer,intent(inout), optional :: MDstep
     real(double), intent(in), optional :: velocity(1:3,ni_in_cell)
     integer :: index_local
 
-    index_local=0; if(present(index_in)) index_local=index_in
+    index_local=0; if(present(index)) index_local=index
     if(.not.present(iprint_mode)) iprint_mode = 0
 
      select case(iprint_mode)
@@ -258,14 +263,14 @@ contains
        else
         call dump_InfoMatGlobal(index_local,MDstep=MDstep)
        endif
-        call dump_matrix2(stub,matA,range,index_local)
+        call dump_matrix2(stub,matA,range,index=index_local)
       case(1)  ! only "*matrix2.dat" will be printed out.
-        call dump_matrix2(stub,matA,range,index_local)
+        call dump_matrix2(stub,matA,range,index=index_local)
       case(2)  ! only "InfoGlobal.dat" will be printed out.
        if(present(velocity)) then
-        call dump_InfoMatGlobal(index_local,velocity=velocity,MDstep=MDstep)
+        call dump_InfoMatGlobal(index=index_local,velocity=velocity,MDstep=MDstep)
        else
-        call dump_InfoMatGlobal(index_local,MDstep=MDstep)
+        call dump_InfoMatGlobal(index=index_local,MDstep=MDstep)
        endif
      end select ! case(iprint_mode)
  
@@ -307,10 +312,12 @@ contains
   !!   2016/10/03 Tsuyoshi Miyazaki
   !!      1. Changed to use the derivative type (matrix_store) for tidying up MD continuation
   !!      2. Moved from io_module2
+  !!   2018/05/29 Tsuyoshi Miyazaki
+  !!      introduced nmatrix for the case of dumping multiple matrices having a same cutoff range
   !!  SOURCE
   !!
 
-   subroutine dump_matrix2(stub,matA,range,index_in)
+   subroutine dump_matrix2(stub,matA,range,index,nmatrix)
     use GenComms, ONLY: inode, ionode, cq_abort
     use global_module, ONLY: numprocs, id_glob
     use io_module, ONLY: get_file_name, get_file_name_2rank
@@ -318,24 +325,35 @@ contains
     character(len=*),intent(in) :: stub
     integer,intent(in) :: matA
     integer,intent(in) :: range
-    integer,optional,intent(in) :: index_in
+    integer,optional,intent(in) :: index
+    integer,optional,intent(in) :: nmatrix
     type(matrix_store):: tmp_matrix_store
+    integer, allocatable:: matrices(:)
 
-    integer :: lun, iprim, nprim, jmax, jj, ibeg, jbeta_alpha, len
+    integer :: lun, iprim, nprim, jmax, jj, ibeg, jbeta_alpha, len, istat
     character(32) :: file_name
-    integer :: index
+    integer :: index_local, nmatrix_local, nn
 
-    index=0; if(present(index_in)) index=index_in
+    index_local=0; if(present(index)) index_local=index
+    nmatrix_local=1; if(present(nmatrix)) nmatrix_local=nmatrix
 
+    ! define matrices   2019/May/28 TM@UCL
+     allocate(matrices(1:nmatrix_local), STAT=istat)
+     if(istat /= 0) call cq_abort("ERROR in allocating matrices in dump_matrix2 ",nmatrix_local,istat)
+    ! At present (2019/05/29), I assume that multiple matrices having the same cutoff range has a contiguous number
+    ! In the future, 
+     do nn = 1, nmatrix_local
+       matrices(nn) = matA + nn-1
+     enddo
     ! set_matrix_store : build tmp_matrix_store
-    call set_matrix_store(stub,matA,range,tmp_matrix_store)
+    call set_matrix_store(stub,matrices,range,nmatrix_local,tmp_matrix_store)
 
     ! Actual Dump (from dump_matrix2)
      ! First, get the name of a file based upon the node ID or rank.
      if(flag_MatrixFile_RankFromZero) then
-      call get_file_name_2rank(stub//'matrix2',file_name,index,myid)
+      call get_file_name_2rank(stub//'matrix2',file_name,index_local,myid)
      else
-      call get_file_name_2rank(stub//'matrix2',file_name,index,inode)
+      call get_file_name_2rank(stub//'matrix2',file_name,index_local,inode)
      endif
      call io_assign(lun)
 
@@ -353,6 +371,8 @@ contains
       ! 4. no. of "neighbour-j x beta" for each "i".
         write (lun) tmp_matrix_store%jmax_i(1:nprim)
         write (lun) tmp_matrix_store%jbeta_max_i(1:nprim)
+      ! 5. no. of matrices whose elements will be printed out
+        write (lun) tmp_matrix_store%n_matrix
 
      !I will change the order of dumping in the following, later.   2016/09/30: TM@UCL
       if(nprim .GT. 0) then
@@ -371,10 +391,11 @@ contains
            len = tmp_matrix_store%matrix_size-tmp_matrix_store%ibeg_data_matrix(iprim)+1
          endif
            ibeg = tmp_matrix_store%ibeg_data_matrix(iprim)
-         do jbeta_alpha = 1, len
-          !write (lun,fmt='(e30.20)') tmp_matrix_store%data_matrix(ibeg+jbeta_alpha-1)
-          write (lun) tmp_matrix_store%data_matrix(ibeg+jbeta_alpha-1)
-         enddo !jbeta_alpha = 1, len
+         do nn=1,tmp_matrix_store%n_matrix
+          do jbeta_alpha = 1, len
+           write (lun) tmp_matrix_store%data_matrix(ibeg+jbeta_alpha-1,nn)
+          enddo !jbeta_alpha = 1, len
+         enddo
        enddo !iprim=1,nprim
       endif  ! (nprim .GT. 0)
     
@@ -393,6 +414,8 @@ contains
       ! 4. no. of "neighbour-j x beta" for each "i".
         write (lun,*) tmp_matrix_store%jmax_i(1:nprim)
         write (lun,*) tmp_matrix_store%jbeta_max_i(1:nprim)
+      ! 5. no. of matrices whose elements will be printed out
+        write (lun,*) tmp_matrix_store%n_matrix
 
      !I will change the order of dumping in the following, later.   2016/09/30: TM@UCL
       if(nprim .GT. 0) then
@@ -411,9 +434,11 @@ contains
            len = tmp_matrix_store%matrix_size-tmp_matrix_store%ibeg_data_matrix(iprim)+1
          endif
            ibeg = tmp_matrix_store%ibeg_data_matrix(iprim)
-         do jbeta_alpha = 1, len
-          write (lun,fmt='(e30.20)') tmp_matrix_store%data_matrix(ibeg+jbeta_alpha-1)
-         enddo !jbeta_alpha = 1, len
+         do nn=1,tmp_matrix_store%n_matrix
+          do jbeta_alpha = 1, len
+           write (lun,fmt='(e30.20)') tmp_matrix_store%data_matrix(ibeg+jbeta_alpha-1,nn)
+          enddo !jbeta_alpha = 1, len
+         enddo
        enddo !iprim=1,nprim
       endif  ! (nprim .GT. 0) 
     
@@ -457,7 +482,7 @@ contains
   !!  SOURCE
   !!
 
-   subroutine set_matrix_store(stub,matA,range,matinfo)
+   subroutine set_matrix_store(stub,matrices,range,nmat,matinfo)
     use numbers
     use global_module, ONLY: id_glob, species_glob, io_lun, sf, nlpf, atomf
     use species_module, ONLY: nsf_species, natomf_species, nlpf_species
@@ -470,16 +495,22 @@ contains
 
     implicit none
     character(len=*),intent(in) :: stub
-    integer,intent(in) :: matA
+    integer,intent(in) :: nmat
+    integer,intent(in) :: matrices(1:nmat)
     integer,intent(in) :: range
     type(matrix_store), intent(out) :: matinfo
     !Local
+    integer :: matA   ! used to be passed variable 
     integer :: nprim, istat
     integer :: np, ni, iprim, atom_num, jmax_i_max
     integer :: ist, n_beta, neigh, gcspart, ibeg, j_global_part, len
     integer :: sf1, sf2  ! 2017/Dec/06 for reading SF_coeff
     integer :: ibeg2, jcount, jst ! 2017/Dec/26 for introducing ibeg_Rij
+    integer :: nn
 
+    !matA
+      matinfo%n_matrix=nmat
+      matA = matrices(1)
     !name & n_prim
       matinfo%name=stub
       matinfo%n_prim=bundle%n_prim
@@ -597,9 +628,15 @@ contains
       endif !(bundle%nm_nodgroup(np).GT.0) then
     enddo !(np)
 
-    allocate(matinfo%data_matrix(matinfo%matrix_size), STAT = istat)
+    ! allocation of the matrix elements 
+    !   2019/05/28 TM @ UCL
+    !   data_matrix(1:matrix_size) ->  data_matrix(1:matrix_size, 1:nmat)
+    allocate(matinfo%data_matrix(matinfo%matrix_size,1:nmat), STAT = istat)
      if(istat .NE. 0) call cq_abort('Allocation 4 in set_matrix_store', istat, matinfo%matrix_size)
-    matinfo%data_matrix(1:matinfo%matrix_size)=mat_p(matA)%matrix(1:matinfo%matrix_size)
+    do nn=1, nmat
+     matA = matrices(nn)
+     matinfo%data_matrix(1:matinfo%matrix_size,nn)=mat_p(matA)%matrix(1:matinfo%matrix_size)
+    enddo
 
     return
    end subroutine set_matrix_store
@@ -1039,7 +1076,7 @@ contains
   !!    Moved from io_module2 to store_matrix
   !!  SOURCE
   !!
-  subroutine grab_matrix2(stub,inode,nfile,Info,index_in,n_matrix_in)
+  subroutine grab_matrix2(stub,inode,nfile,Info,index,n_matrix_in)
 
     ! Module usage
     use io_module, ONLY: get_file_name, get_file_name_2rank
@@ -1053,13 +1090,13 @@ contains
     integer :: inode, matA
     character(len=*) :: stub
     type(InfoMatrixFile), pointer :: Info(:)
-    integer, optional :: index_in
+    integer, optional :: index
     integer, optional :: n_matrix_in
 
     ! local variables
     integer :: lun,stat,padzeros,stat_alloc,size,size2,sizeL,i,j,jbeta_alpha,len,ifile,ibeg
     integer :: nfile, nrest_file, index_file
-    integer :: proc_id, jmax_i_max,ios, index
+    integer :: proc_id, jmax_i_max,ios, index_local
     character(32) :: file_name
     character(80) :: num
 
@@ -1070,7 +1107,7 @@ contains
     max_node = n_proc_old
 
     n_matrix=1; if(present(n_matrix_in)) n_matrix=n_matrix_in
-       index=0; if(present(index_in)) index=index_in
+    index_local=0; if(present(index)) index_local=index
 
     ! Open matrix files to get "natom_i", allocate the arrays of Info,
     ! and read the data.
@@ -1093,7 +1130,7 @@ contains
         index_file=numprocs*(ifile-1)+inode
        endif
 
-        call get_file_name_2rank(stub//'matrix2',file_name,index,index_file)
+        call get_file_name_2rank(stub//'matrix2',file_name,index_local,index_file)
 
         call io_assign(lun)
     
@@ -1144,10 +1181,11 @@ contains
         do i = 1, size
           sizeL = sizeL + Info(ifile)%alpha_i(i)*Info(ifile)%jbeta_max_i(i)
         enddo
-        ! n_matrix depends on nspin
+        ! n_matrix shows the number of matrices in the file 
         n_matrix = 1
+        read (lun) Info(ifile)%n_matrix
         !if (nspin.EQ.2) n_matrix = 2
-        allocate (Info(ifile)%data_Lold(sizeL,n_matrix), STAT=stat_alloc)
+        allocate (Info(ifile)%data_Lold(sizeL,Info(ifile)%n_matrix), STAT=stat_alloc)
         if (stat_alloc.NE.0) call cq_abort('Error allocating data_Lold:', sizeL, n_matrix)
 
         Info(ifile)%ibeg_dataL(1) = 1 ; Info(ifile)%ibeg_Pij(1) = 1
@@ -1184,6 +1222,7 @@ contains
        else
        ! Case 2 : Text Format   old version  -----------------------
         open (lun,file=file_name,status='old',iostat=stat)
+            write(*,*) " Trying to open the ASCII file : ",file_name
         if (stat.NE.0) call cq_abort('Fail in opening ASCII Lmatrix file.')
         ! Get dimension, allocate arrays and store necessary data.
         read (lun,*,iostat=stat) proc_id, Info(ifile)%natom_i
@@ -1229,9 +1268,10 @@ contains
           sizeL = sizeL + Info(ifile)%alpha_i(i)*Info(ifile)%jbeta_max_i(i)
         enddo
         ! n_matrix depends on nspin
+        read (lun,*) Info(ifile)%n_matrix
         n_matrix = 1
         !if (nspin.EQ.2) n_matrix = 2
-        allocate (Info(ifile)%data_Lold(sizeL,n_matrix), STAT=stat_alloc)
+        allocate (Info(ifile)%data_Lold(sizeL,Info(ifile)%n_matrix), STAT=stat_alloc)
         if (stat_alloc.NE.0) call cq_abort('Error allocating data_Lold:', sizeL, n_matrix)
 
         Info(ifile)%ibeg_dataL(1) = 1 ; Info(ifile)%ibeg_Pij(1) = 1
