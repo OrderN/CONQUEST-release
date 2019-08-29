@@ -1,41 +1,6 @@
-.. _important:
+.. _moldyn:
 
-================
-Important Topics
-================
-
-Diagonalisation
-===============
-
-Self-consistency
-================
-
-Basis functions
-===============
-
-Support functions
-=================
-
-Grids and integration
-=====================
-
-Tolerances
-==========
-
-Functionals
-===========
-
-Restarting
-==========
-
-Load balancing and partitions
-=============================
-
-Structural Relaxation
-=====================
-
-.. _molecular-dynamics-topic:
-
+==================
 Molecular Dynamics
 ==================
 
@@ -46,7 +11,8 @@ Self-consistency tolerance is a critical parameter, because it can be
 responsible for "drift" in the conserved quantity of the dynamics if it is not
 tight enough. Although the molecular dynamics integrators used in CONQUEST are
 time reversible, *the SCF procedure is not*. Therefore a tight SCF tolerance
-(``minE.SCTolerance`` for diagonalisation, ``minE.LTolerance`` for order(N)) is
+(``minE.SCTolerance`` for diagonalisation, ``minE.LTolerance`` for
+linear scaling) is
 necessary. In the case of diagonalisation, a value of ``1E-8`` is typically
 enough to negate the drift. However, extended-Lagrangian Born-Oppenheimer MD
 (XL-BOMD), currently only implemented for order(N), essentially makes the SCF
@@ -111,7 +77,7 @@ read using `VMD <https://www.ks.uiuc.edu/Research/vmd/>`_. A small VMD script,
 
 assuming the vmd executable is in your path.
 
-Non-Hamlitonian dynamics
+Non-Hamiltonian dynamics
 ------------------------
 
 Canonical (NVT) ensemble
@@ -155,8 +121,8 @@ couple more flags. ``MD.nNHC`` sets the number of thermostats in the chain (the
 default of 5 is generally sensible), and ``MD.nYoshida`` determines the order of
 Yoshida-Suzuki integration. This is essentially a higher level integration
 scheme that *can* improve energy conservation in cases when rapid changes in the
-Nose-Hoover thermostat velocity is causing integration errors. **Note that
-``MD.tauT`` means something different to the Berendsen case**. A good guess is
+Nose-Hoover thermostat velocity is causing integration errors. **Note that**
+``MD.tauT`` **means something different to the Berendsen case**. A good guess is
 the time period of the highest frequency motion of the system in fs; however, in
 the NVT ensemble, the energy conservation is not very sensitive to this value.
 The NHC masses can also be set manually using the following block.
