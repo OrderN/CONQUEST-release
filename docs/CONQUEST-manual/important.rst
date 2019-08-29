@@ -87,13 +87,17 @@ the X-matrix files. Finally, it will *append* new data to the ``md.stats`` and
    SC.MakeInitialChargeFromK T
    XL.LoadL T
 
-If the calculation ended by hitting the walltime limit, the writing of the
-matrix files may have been interrupted, rendering them unusable. In this case,
-the calculation can be restarted by setting the above flags to ``F`` *after*
-setting ``AtomMove.RestartRun T``. Setting the flag ``General.MaxTime`` to some
-number of seconds less (say 30 minutes) than the calculation wall time limit
-will force the calculation to stop gracefully, preventing the aforementioned
-situation.
+In addition to the files mentioned above, Conquest will try to read the K-matrix
+from ``Kmatrix2.i00.*`` when using diagonalisation or the L-matrix from
+``Lmatrix2.i00.*`` when using order(N), and ``Xmatrix2.i0*.*`` if the
+extended-Lagrangian formalism is used. Note that metadata for these files is
+stored in ``InfoGlobal.i00.dat`` which is also required when restarting. If the
+calculation ended by hitting the walltime limit, the writing of these matrix
+files may have been interrupted, rendering them unusable. In this case, the
+calculation can be restarted by setting the above flags to ``F`` *after* setting
+``AtomMove.RestartRun T``. Setting the flag ``General.MaxTime`` to some number
+of seconds less (say 30 minutes) than the calculation wall time limit will force
+the calculation to stop gracefully, preventing the aforementioned situation.
 
 Visualising the trajectory
 --------------------------
