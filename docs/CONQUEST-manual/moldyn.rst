@@ -4,6 +4,15 @@
 Molecular Dynamics
 ==================
 
+CONQUEST can perform molecular dynamics both when the density matrix is computed
+using diagonalisation and order(N), the latter allowing dynamical simulations of
+(but not limited to) tens of thousands of atoms. The equations of motion are
+integrated using the velocity Verlet method in the case of the microcanonical
+ensemble (NVE), and modifications thereof for the canonical (NVT) and
+isobaric-isothermal (NPT) ensembles, the details of which can be found in
+:ref:`theory-md`. In addition to converging the parameters for the electronic
+structure calculations, the following points must also be considered.
+
 Self-consistency tolerance and XL-BOMD
 --------------------------------------
 
@@ -11,17 +20,16 @@ Self-consistency tolerance is a critical parameter, because it can be
 responsible for "drift" in the conserved quantity of the dynamics if it is not
 tight enough. Although the molecular dynamics integrators used in CONQUEST are
 time reversible, *the SCF procedure is not*. Therefore a tight SCF tolerance
-(``minE.SCTolerance`` for diagonalisation, ``minE.LTolerance`` for
-linear scaling) is
-necessary. In the case of diagonalisation, a value of ``1E-8`` is typically
-enough to negate the drift. However, extended-Lagrangian Born-Oppenheimer MD
-(XL-BOMD), currently only implemented for order(N), essentially makes the SCF
-component of the MD time-reversible by adding the electronic degrees of freedom
-to the Lagrangian, relaxing the constraint on ``minE.LTolerance`` --- although
-it is still somewhat dependent on the ensemble. In the NVE and NVT ensembles, a
-L-tolerance of ``1E-5`` has been found to be sufficient to give good energy
-conservations, decreasing to ``1E-6`` in the NPT ensemble. The following flags
-are required for XL-BOMD:
+(``minE.SCTolerance`` for diagonalisation, ``minE.LTolerance`` for linear
+scaling) is necessary. In the case of diagonalisation, a value of ``1E-7`` is
+typically enough to negate the drift. However, extended-Lagrangian
+Born-Oppenheimer MD (XL-BOMD), currently only implemented for order(N),
+essentially makes the SCF component of the MD time-reversible by adding the
+electronic degrees of freedom to the Lagrangian, relaxing the constraint on
+``minE.LTolerance`` --- although it is still somewhat dependent on the ensemble.
+In the NVE and NVT ensembles, a L-tolerance of ``1E-5`` has been found to be
+sufficient to give good energy conservations, decreasing to ``1E-6`` in the NPT
+ensemble. The following flags are required for XL-BOMD:
 
 ::
 
@@ -76,6 +84,15 @@ read using `VMD <https://www.ks.uiuc.edu/Research/vmd/>`_. A small VMD script,
 ``vmd -e view.vmd``
 
 assuming the vmd executable is in your path.
+
+TDEP output
+-----------
+
+CONQUEST molecular dynamics data can be used to perform lattice dyanmical
+calculations using the `Temperature Dependent Effective Potential (TDEP)
+<https://ollehellman.github.io/index.html>`_ code. Setting the flag ``MD.TDEP
+T`` will make conquest dump configurations, forces and metadata in a format
+readable by TDEP.
 
 Non-Hamiltonian dynamics
 ------------------------
@@ -209,8 +226,8 @@ thermostatted using a separate Nose-Hoover chain to the atoms by default, but
 they can be controlled with the same chain by setting ``MD.CellNHC F``. An *ad
 hoc* drag factor specified by ``MD.PDrag`` reduces the thermostat and cell
 velocities at every timestep to damp out the ringing fluctuations. In this case,
-they are reduced by :math:`10/200 ~ 5%`, which strictly speaking breaks the NPT
-dynamicss, but not significantly, and the stability is significantly improved.
+they are reduced by :math:`10/200 \simeq 5\%`, which strictly speaking breaks the NPT
+dynamics, but not significantly, and the stability is significantly improved.
 
 Note that the NPT ensemble can also be generated correctly by thermostatting
 using the SVR thermostat, although the meaning of the parameter ``MD.tauT`` is

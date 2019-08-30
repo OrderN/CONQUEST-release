@@ -1,117 +1,103 @@
 .. _theory-strucrelax:
 
-=====================
-Structural relaxation
-=====================
+=============================
+Structural relaxation: Theory
+=============================
 
-Structural relaxation includes optimisation of the ionic coordinates,
-optimisation of the simulation cell, and both processes combined in
-some fashion.
+Structural relaxation involves optimisation of the ionic coordinates,
+optimisation of the simulation cell, or both, with respect to the DFT total
+energy or the enthalpy if the cell is not fixed.
 
 Ionic relaxation
 ----------------
 
+Conjugate gradients
+~~~~~~~~~~~~~~~~~~~
+
+The most naive geometry optimisation algorithm is steepest descent: we calculate
+the gradient of the DFT total energy (i.e. the force) and propagate the system
+in the direction of the steepest gradient (the direction of the force vector)
+until the energy stops decreasing. We choose the direction (largest gradient in
+this case) and perform a line search. This will be sufficient if the potential
+energy surface is well-behaved, but in most cases convergence will require many
+iterations. Conjugate gradients is a well-established method the improves upon
+steepest descent in the choice of search direction. Without going into too much
+detail, we choose a new search direction that is orthogonal to all previous
+search directions using the *conjugacy ratio* :math:`\beta`. At iteration
+:math:`n`, it is given by,
+
+.. math::
+   
+    \beta_n = \beta_{n-1} + \frac{\mathbf{f}_n^T\mathbf{f}_n}{\mathbf{f}_{n-1}^T\mathbf{f}_{n-1}}
+
+This is the Fletcher-Reeves formulation; note that :math:`\beta_0 = 0`. We can
+then construct the search direction at step :math:`n`, :math:`D_n`, 
+
+.. math::
+
+   D_n = \beta_n D_{n-1} + \mathbf{f}_n,
+
+and peform the line minimisation in this direction. This process is repeated
+until the maximum force component is below some threshold.
+
+Quenched MD
+~~~~~~~~~~~
+
+The system is propagated in the direction of steepest descent as determined by
+the DFT forces, and the velocity is scaled down as the system approaches its
+zero-temperature equilibrium configuration.
+
+FIRE Quenched MD
+~~~~~~~~~~~~~~~~
+
+The system is propagated using the modified equation of motion :cite:`t2-Bitzek2006`,
+
+.. math::
+
+   \mathbf{\dot{v}}(t) = \mathbf{F}(t)/m -
+   \gamma(t)|\mathbf{v}(t)|[\mathbf{\hat{v}}(t) - \mathbf{\hat{F}}(t)]
+
+which has the effect of introducing an acceleration in a direction that is
+steeper than the current direction of motion. If the power :math:`P(t) =
+\mathbf{F}(t)\cdot\mathbf{v}(t)` is positive then the system is moving
+"downhill" on the potential energy surface, and the stopping criterion is when
+it becomes negative (moving "uphill").
+
 Cell optimisation
 -----------------
 
-Simulation cell optimization is the minimization of the total energy of a
-system of electrons and ions with respect to the lattice vectors. CONQUEST,
-as currently implemented, can only operate with cubic (:math:`a=b=c`),
-tetragonal (:math:`a=b, b\neq c, a\neq c`) and orthorhombic (:math:`a\neq b \neq c`)
-cells. This reduces the complexity of the optimization problem to simply
+When optimising the cell with *fixed fractional ionic coordinates*, the same
+conjugate gradients method is used as above, but minimising the enthalpy with
+respect to the cell vectors.
 
-.. math::
-   
-    min[E_{dft}(a, b, c)]
-
-That is, the values of a, b and c which minimize the the total energy of the
-system as predicted by DFT. Note that we do not include the set of ionic positions,
-:math:`\{\mathbf{R_{I}} \}`, as a variable here and rather work with fixed ionic
-positions.
-
-Unconstrained case
-~~~~~~~~~~~~~~~~~~
-
-The first implementation is of an algorithm which allows a, b and c to vary freely.
-A widely used method of solving this problem is that of non-linear conjugate gradients.
-The algorithm works as follows:
-
-1. Calculate the gradients of the total energy with respect to a, b and c.
-These derrivatives are in this case proportional to the diagonal elements of the
-stress tensor :math:`\sigma_x` :math:`\sigma_y` and :math:`\sigma_z`.
-
-2. Calcuate the conjugacy update parameter for this step, :math:`\beta_n`
-where n is the current step of the algorithm. We use the Flethcher-Reeves version:
-
-.. math::
-   
-    \beta_n = \beta_{n-1} + \frac{\mathbf{\sigma_n^T}\mathbf{\sigma_n}}{\mathbf{\sigma_{n-1}^T}\mathbf{\sigma_{n-1}}}
-
-Note that :math:`\beta_0 = 0`.
-
-3. Build the search directions
-
-.. math::
-
-   D_{j,n} = \beta_n D_{j, n-1} + \sigma_{j,n}
-
-Where D represents the search direction and the indicies j indicate a cartestion
-direction. In this case, j = 1, 2 or 3.
-
-4. Perform line minimizations in these directions:
-
-.. math::
-
-   a_{j,n+1} = a_{j,n} + \alpha_{min} D_{j,n}
-
-Where :math:`a_j` represents a simulation box dimension. e.g. :math:`a_0 = a`,
-:math:`a_1 = b`, :math:`a_3 = c`. :math:`\alpha_{min}` is the value of :math:`\alpha`
-which minimizes the total energy given the set of :math:`a_j`.
-
-Steps 1-4 are repeated until a small energy residual is reached (energy is currently
-used as a surrogate for a stress residual due to known issues).
-
-Constrained case
-~~~~~~~~~~~~~~~~~
-
-The current implementation can handle fixing both one and two dimensions
-of the simulation cell. The opttimiser will then optimise the dimensions which
-are free. What follows is that the vector :math:`\sigma_n` from eq (2) reduces in
-stride to accomodate the change. Then, the number of search directions and line
-minimisations from eqs (3) and (4) is also reduced. This, in turn, reduces the
-complexity of the problem which allows the conjugate gradient algorithm to converge
-to a minumum in less iterations.
-
-It is possible to fix ratios of cell dimensions at their initial ratio set in the
-coordinate file. Say, for example, we wanted to fix the ratio c/a. What this involves
-is appying the constraint
-
-.. math::
-
-   \frac{c_n}{a_n} = \frac{c_{n+1}}{a_{n+1}}
-
-Using the above with eq (4), it can be shown that
-
-.. math::
-
-   c_{n+1} = c_n + \alpha_{min}\frac{c_n}{a_n}D_{n, a}
-
-   .. math::
-
-   a_{n+1} = a_n + \alpha_{min}\frac{a_n}{c_n}D_{n, c}
-
-The third dimension, b, is allowed to vary freely as before.
-All other combinations of ratios follow the same logic and lead to similar expressions.
-
-
-It is possible to scale a.b and c by a global scaling factor by choosing to minimize
-the mean stress :math:`\bar{\sigma_n}`. We then build the single search direction
-:math:`\bar{D_n}` from eq (3) and perfrom the subsequent line minimizations from eq (4)
-using only :math:`\bar{D_n}`.
-
-This approach can be useful optimising cubic phases where
-:math:`\sigma_x  = \sigma_y = \sigma_z` but also when investigating
-volume changes.
-      
 Combined optimisation
 ---------------------
+
+The ionic and cell degrees of freedom can be relaxed simultaneously by combining
+all of their coordinates into a single vector and optimising them with respect
+to the enthalpy of the system. However, this atomic forces and total stresses
+having numerical values of the same order of magnitude, and changes in ionic
+coordinates and cell vectors being of the same order of magnitude. Using the
+method of Pfrommer *et al*. :cite:`t2-Pfrommer1997`, the latter can be enforced
+by using fractional coordinates for the ionic positions, and fractional lattice
+vectors of the form :math:`h = (1 + \epsilon)h_0` where h is the matrix of
+lattice vectors, :math:`h_0` is the matrix for some reference configuration and
+epsilon is the strain matrix. The "fractional" force on the *i*th atom is then
+:math:`\mathbf{F}_i = g\mathbf{f}_i` where :math:`\mathbf{f}_i` is the
+DFT-calculated force multiplied by the metric tensor :math:`g = h^Th`. The
+"fractional" stress is,
+
+.. math::
+
+   f^{(\epsilon)} = -(\sigma + p\Omega)(1 + \epsilon^T)
+
+where :math:`\sigma` is the DFT-calculated stress, :math:`p` is the target
+pressure and :math:`\Omega` is the volume. The resulting vector is optimised
+using the same conjugate gradients algorithm as before, minimising the enthalpy.
+
+
+.. bibliography:: references.bib
+    :cited:
+    :labelprefix: T
+    :keyprefix: t2-
+    :style: unsrt
