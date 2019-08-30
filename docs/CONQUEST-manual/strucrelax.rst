@@ -13,6 +13,34 @@ matrix does not scale well to the kinds of large systems that CONQUEST is
 designed to solve. For pathological cases, a damped MD optimiser is also
 available.
 
+Setting ``AtomMove.WriteXSF T`` for all flavours of optimisation will dump the
+trajectory to the file ``trajectory.xsf``, which can be visualised using `VMD
+<https://www.ks.uiuc.edu/Research/vmd/>`_. Setting ``AtomMove.AppendCoords T``
+will the structure at each step to ``UpdatedAtoms.dat`` in the format of a
+CONQUEST structure input.
+
+For the conjugate gradients relaxations, the progress of the calculation can be
+monitored by searching for the word ``GeomOpt``; grepping will print the
+following:
+
+::
+
+   $ grep GeomOpt Conquest_out
+   GeomOpt - Iter:    0 MaxF:   0.00329282 H:  -0.14168571E+03 dH:   0.00000000
+   GeomOpt - Iter:    1 MaxF:   0.00331536 H:  -0.14168995E+03 dH:   0.00424155
+   GeomOpt - Iter:    2 MaxF:   0.00350781 H:  -0.14168997E+03 dH:   0.00001651
+   GeomOpt - Iter:    3 MaxF:   0.00504075 H:  -0.14169161E+03 dH:   0.00164389
+   GeomOpt - Iter:    4 MaxF:   0.00725611 H:  -0.14169172E+03 dH:   0.00010500
+   GeomOpt - Iter:    5 MaxF:   0.01134145 H:  -0.14169329E+03 dH:   0.00157361
+   GeomOpt - Iter:    6 MaxF:   0.01417229 H:  -0.14169385E+03 dH:   0.00056077
+   GeomOpt - Iter:    7 MaxF:   0.01434628 H:  -0.14169575E+03 dH:   0.00190304
+   GeomOpt - Iter:    8 MaxF:   0.01711197 H:  -0.14170001E+03 dH:   0.00425400
+   GeomOpt - Iter:    9 MaxF:   0.02040556 H:  -0.14170382E+03 dH:   0.00381110
+   GeomOpt - Iter:   10 MaxF:   0.01095167 H:  -0.14170752E+03 dH:   0.00370442
+
+In this example, MaxF is the maximum single force component, H is the enthalpy and dH is the
+change in enthalpy.
+
 .. _sr_ions:
 
 Ionic relaxation
@@ -34,11 +62,7 @@ single component of force* is below this threshold (rather than, for example,
 the force residual). The third flag specifies that the K-matrix (for
 diagonalisation calculations) or L-matrix (for order(N) calculations) from the
 previous step will be used as an initial guess for the SCF cycle after
-propagating the atoms. Setting ``AtomMove.WriteXSF T`` for all flavours of
-optimisation will dump the trajectory to a .xsf file, which can be visualised
-using `VMD <https://www.ks.uiuc.edu/Research/vmd/>`_. Setting
-``AtomMove.AppendCoords T`` will the structure at each step to
-``UpdatedAtoms.dat`` in the format of a CONQUEST structure input.
+propagating the atoms.
 
 If the self-consistency tolerance is too low, the optimisation will fail to
 converge with respect to the force tolerance; this may necessitate a tighter
