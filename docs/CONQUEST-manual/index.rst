@@ -66,6 +66,7 @@ User Guide
 Theory
 ------
 
+* :doc:`theory-strucrelax`
 * :doc:`theory-md`
 
 .. toctree::
@@ -73,6 +74,7 @@ Theory
    :hidden:      
    :caption: Theory
 
+   theory-strucrelax
    theory-md
    
 Get in touch
