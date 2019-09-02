@@ -119,4 +119,4 @@ files:
   * ``trajectory.xsf`` --- atomic coordinates save in .xsf format, which can be
     visualised using (for example) VMD, if ``AtomMove.WriteXSF`` is true..
 
-Full details are available in :ref:`molecular-dynamics-topic`.
+Full details are available in :ref:`moldyn`.
