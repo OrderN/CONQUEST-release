@@ -139,7 +139,7 @@ contains
           !
           if(paos%polarised_n==0.AND.paos%polarised_l==-1) then
              ! Outer-most occupied shell
-             i = val%n_shells
+             i = val%n_occ
              ! If it is l=2 (or more!) then default to one lower
              if(val%l(i)>1) i = i-1
              if(i==0) &
@@ -357,7 +357,8 @@ contains
   ! Find inner shell and set npao
   subroutine set_polarisation
 
-    use pseudo_atom_info, ONLY: paos, val
+    use numbers
+    use pseudo_atom_info, ONLY: paos, val, flag_use_Vl
     
     implicit none
 
@@ -368,7 +369,7 @@ contains
     ! Locate perturbed shell index, if necessary
     !
     if(paos%polarised_shell==0) then
-       do i=val%n_shells,1,-1
+       do i=val%n_occ,1,-1
           if(val%n(i)==paos%polarised_n.AND.val%l(i)==paos%polarised_l) then
              paos%polarised_shell=i
              write(*,fmt='(4x,"Polarising shell ",i3)') i
@@ -383,16 +384,35 @@ contains
     paos%n(paos%n_shells) = max(paos%n(paos%polarised_shell),paos%l(paos%n_shells)+1)
     if(iprint>2) write(*,fmt='("For polarisation, we will perturb shell with n=",i2," and l=",i2)') &
          paos%n(paos%polarised_shell), paos%l(paos%polarised_shell)
+    ! Check for inner shell
+    paos%inner(paos%n_shells) = 0
+    do i=val%n_occ,1,-1
+       if(paos%l(i)==paos%l(paos%n_shells)) paos%inner(paos%n_shells) = i
+    end do
     !
     ! Check whether there is an inner shell
     !
-    if(val%inner(paos%polarised_shell)>0) &
-         call cq_abort("Can't use perturbative polarisation on shell with nodes: ", &
-         paos%polarised_n, paos%polarised_l)
+    !if(val%inner(paos%polarised_shell)>0) &
+    !     call cq_abort("Can't use perturbative polarisation on shell with nodes: ", &
+    !     paos%polarised_n, paos%polarised_l)
     !
     ! Set npao for polarisation - use same as the shell being perturbed
     !
     paos%npao(paos%n_shells) = val%npao(paos%polarised_shell)
+    !
+    ! Checks for perturbing s orbital
+    !
+    ! Li, Be (npao set to one because l=0)
+    if(paos%l(paos%n_shells)==1 .AND. paos%inner(paos%n_shells)==0) paos%npao(paos%n_shells) = 1
+    ! We need sign change if s orbital is outermost and there is a semi-core p orbital
+    if(paos%l(paos%n_shells)==1 .AND. paos%polarised_shell==val%n_occ &
+         .AND. paos%inner(paos%n_shells)>0) paos%pol_pf = -one
+    ! Use Vl if perturbing a p orbital with a valence or semi-core d orbital
+    if(paos%l(paos%n_shells)==2) then
+       do i=1,val%n_occ
+          if(paos%l(i)==2) flag_use_Vl = .true.
+       end do
+    end if
     return
   end subroutine set_polarisation
   
@@ -514,9 +534,9 @@ contains
        ! Check for semi-core state
        if(val%en_ps(i)<energy_semicore) val%semicore(i) = 1
        ! Count occupied states
-       if(val%occ(i)>RD_ERR) n_occ = n_occ + 1
+       if(val%occ(i)>RD_ERR.OR.val%en_ps(i)<-1e-6_double) n_occ = n_occ + 1
     end do
-    if(iprint>3) write(*,fmt='(i2," valence shells, with ",i2," occupied")') n_shells, n_occ
+    if(iprint>3) write(*,fmt='(i2," valence shells, with ",i2," included")') n_shells, n_occ
     val%n_occ = n_occ
     !
     ! Read grid, charge, partial core, local potential, semilocal potentials
