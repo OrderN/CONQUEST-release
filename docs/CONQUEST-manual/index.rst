@@ -41,7 +41,11 @@ User Guide
 ----------
 
 * :doc:`input-output`
-* :doc:`important`
+* :doc:`groundstate`
+* :doc:`convergence`
+* :doc:`basissets`
+* :doc:`strucrelax`
+* :doc:`moldyn`
 * :doc:`errors`
 * :doc:`input_tags`
   
@@ -51,10 +55,26 @@ User Guide
    :caption: User Guide
 
    input-output
-   important
+   groundstate
+   convergence
+   basissets
+   strucrelax
+   moldyn
    errors
    input_tags
 
+Theory
+------
+
+* :doc:`theory-md`
+
+.. toctree::
+   :maxdepth: 1
+   :hidden:      
+   :caption: Theory
+
+   theory-md
+   
 Get in touch
 ------------
 
@@ -65,7 +85,7 @@ Get in touch
 
 .. _on GitHub issues: http://github.com/OrderN/CONQUEST-release/issues
 
-License
+Licence
 -------
 
 CONQUEST is available freely under the open source `MIT Licence`__.
