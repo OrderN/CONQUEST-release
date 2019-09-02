@@ -62,7 +62,8 @@ single component of force* is below this threshold (rather than, for example,
 the force residual). The third flag specifies that the K-matrix (for
 diagonalisation calculations) or L-matrix (for order(N) calculations) from the
 previous step will be used as an initial guess for the SCF cycle after
-propagating the atoms.
+propagating the atoms; this should generally decrease the number of SCF cycles
+per ionic step.
 
 If the self-consistency tolerance is too low, the optimisation will fail to
 converge with respect to the force tolerance; this may necessitate a tighter
