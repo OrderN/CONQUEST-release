@@ -212,6 +212,8 @@ contains
     !TM 2010.Nov.06
     integer                 :: niter = 0
     integer, parameter      :: niter_max = 10
+    !TM 2019/09/02          
+    integer                 :: matStmp(2), nspin_S
 
 !****lat<$
     if (       present(level) ) backtrace_level = level+1
@@ -285,24 +287,25 @@ contains
          !   I also plan to revise the parts calling dump_matrix2 for XLBOMD.
          !2018Feb12 TM@UCL: 
 
+       !Temporary: Smatrix should be spin dependent like Kmatrix or Smatrix
+       !  (while Satomf (PAO) is not spin dependent.)
+       !  (nspin_SF : for spin polarised support functions.) 
+         nspin_S = 1  ! nspin_S = nspin_SF
+         matStmp(1:2)=matS
+       !Temporary: 
+
           if (.NOT. flag_diagonalisation) then 
              ! For XL-BOMD
              if (flag_XLBOMD) then
                 if (flag_propagateX) then
-                   call dump_matrix2('X',matX(1),LSrange)
-                   if(nspin==2) call dump_matrix2('X_2',matX(2),LSrange)
-                   call dump_matrix2('S',matS   ,Srange)
-                   if (integratorXL.EQ.'velocityVerlet') then
-                      call dump_matrix2('Xvel',matXvel(1),LSrange)
-                      if(nspin==2) call dump_matrix2('Xvel_2',matXvel(2),LSrange)
-                   end if
+                   call dump_matrix2('X',matX,LSrange,nspin)
+                   call dump_matrix2('S',matStmp,Srange,nspin_S)
+                   if (integratorXL.EQ.'velocityVerlet') &
+                      call dump_matrix2('Xvel',matXvel,LSrange,nspin)
                 else
-                   call dump_matrix2('X',matX(1),Lrange)
-                   if(nspin==2) call dump_matrix2('X_2',matX(2),Lrange)
-                   if (integratorXL.EQ.'velocityVerlet') then
-                      call dump_matrix2('Xvel',matXvel(1),Lrange)
-                      if(nspin==2) call dump_matrix2('Xvel_2',matXvel(2),Lrange)
-                   end if
+                   call dump_matrix2('X',matX,Lrange,nspin)
+                   if (integratorXL.EQ.'velocityVerlet') &
+                      call dump_matrix2('Xvel',matXvel,Lrange,nspin)
                 endif
                 ! When dissipation applies
                 if (flag_dissipation) call dump_XL()

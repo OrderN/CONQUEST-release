@@ -632,13 +632,14 @@
 
       ! Dump X-matrix files
       do istep = 1, maxiters+1
-        call dump_matrix2('X',matX_store(istep,1),range,index=istep)
+        !call dump_matrix2('X',matX_store(istep,1),range,index=istep)
+        call dump_matrix2('X',matX_store(istep,:),range,nspin,index=istep)
       enddo
-      if(nspin==2) then
-       do istep = 1, maxiters+1
-        call dump_matrix2('X2',matX_store(istep,2),range,index=istep)
-       enddo
-      endif
+      !if(nspin==2) then
+      ! do istep = 1, maxiters+1
+      !  call dump_matrix2('X2',matX_store(istep,2),range,index=istep)
+      ! enddo
+      !endif
 
       return
     end subroutine dump_XL

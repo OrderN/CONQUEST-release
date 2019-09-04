@@ -3567,36 +3567,41 @@ contains
  ! Then, matrices will be read from the corresponding files
  !
   if(flag_L) then
-     call grab_matrix2('L',inode,nfile,Info)
+     !call grab_matrix2('L',inode,nfile,Info)
+     call grab_matrix2('L',inode,nfile,Info,index=0,nspin_in=nspin)
      call my_barrier()
      call Matrix_CommRebuild(Info,Lrange,L_trans,matL(1),nfile,symm)
+     !call Matrix_CommRebuild(Info,Lrange,L_trans,matL,nfile,symm)
       if(flag_debug_move_atoms) call Report_UpdateMatrix("Lmat")
-     ! DRB 2017/05/09 now extended to spin systems
-     if(nspin==2) then
-       call grab_matrix2('L2',inode,nfile,Info)
-       call my_barrier()
-       call Matrix_CommRebuild(Info,Lrange,L_trans,matL(2),nfile,symm)
-        if(flag_debug_move_atoms) call Report_UpdateMatrix("L2  ")
-     end if
+     !! DRB 2017/05/09 now extended to spin systems
+     !if(nspin==2) then
+     !  call grab_matrix2('L2',inode,nfile,Info)
+     !  call my_barrier()
+     !  call Matrix_CommRebuild(Info,Lrange,L_trans,matL(2),nfile,symm)
+     !   if(flag_debug_move_atoms) call Report_UpdateMatrix("L2  ")
+     !end if
   endif
 
   if(flag_K) then
-     call grab_matrix2('K',inode,nfile,Info)
+     !call grab_matrix2('K',inode,nfile,Info)
+     call grab_matrix2('K',inode,nfile,Info,index=0,nspin_in=nspin)
      call my_barrier()
      call Matrix_CommRebuild(Info,Hrange,H_trans,matK(1),nfile)
+     !call Matrix_CommRebuild(Info,Hrange,H_trans,matK,nfile)
       if(flag_debug_move_atoms) call Report_UpdateMatrix("Kmat")
-     if(nspin==2) then
-       call grab_matrix2('K2',inode,nfile,Info)
-       call my_barrier()
-       call Matrix_CommRebuild(Info,Hrange,H_trans,matK(2),nfile)
-        if(flag_debug_move_atoms) call Report_UpdateMatrix("K2  ")
-     end if
+     !if(nspin==2) then
+     !  call grab_matrix2('K2',inode,nfile,Info)
+     !  call my_barrier()
+     !  call Matrix_CommRebuild(Info,Hrange,H_trans,matK(2),nfile)
+     !   if(flag_debug_move_atoms) call Report_UpdateMatrix("K2  ")
+     !end if
   endif
 
   if(flag_S) then
      call grab_matrix2('S',inode,nfile,Info)
      call my_barrier()
-     call Matrix_CommRebuild(Info,Srange,S_trans,matS,nfile)
+     !call Matrix_CommRebuild(Info,Srange,S_trans,matS,nfile)
+     call Matrix_CommRebuild(Info,Srange,S_trans,matS,nfile,nspin)
       if(flag_debug_move_atoms) call Report_UpdateMatrix("Smat")
      ! If we introduce spin-dependent support ...
      !if(nspin==2) then

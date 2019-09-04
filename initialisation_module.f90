@@ -1089,7 +1089,7 @@ contains
     use DFT_D2,              only: dispersion_D2
     use matrix_data,         ONLY: Lrange,Trange,LSrange,SFcoeff_range,Hrange
     use store_matrix,        ONLY: matrix_store_global, grab_InfoMatGlobal, grab_matrix2, &
-         n_matrix,InfoMatrixFile
+         InfoMatrixFile
     use UpdateInfo_module,   ONLY: make_glob2node,Matrix_CommRebuild
     use XLBOMD_module,       ONLY: grab_XXvelS,grab_Xhistories
     use support_spec_format, only: read_option
@@ -1178,8 +1178,6 @@ contains
           if((atom_coord_diff(3,ig)) < -half*rcellz) atom_coord_diff(3,ig)=atom_coord_diff(3,ig)+rcellz
        enddo
 
-       n_matrix = 1
-       if (nspin.EQ.2) n_matrix = 2
        call my_barrier()
     endif
 

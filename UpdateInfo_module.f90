@@ -16,6 +16,9 @@
 !!    Also added the subroutine ReportMatrixUpdate to check the missing pairs.
 !!   2018/10/03 17:10 dave
 !!    Changing MPI tags to conform to standard
+!!   2019/09/02 tsuyoshi
+!!    added nspin in the member of Lmatrix_comm_send and Lmatrix_comm_recv,
+!!    and removed n_matrix
 !!   
 !!  SOURCE
 !!  
@@ -27,6 +30,7 @@ module UpdateInfo_module
   implicit none
 
   type Lmatrix_comm_send
+    integer :: nspin
     integer :: natom_remote
     integer :: nrecv_node
     ! Size : 
@@ -38,6 +42,7 @@ module UpdateInfo_module
   end type Lmatrix_comm_send
 
   type Lmatrix_comm_recv
+    integer :: nspin
     integer :: natom_remote
     integer :: nsend_node
     ! Size : nsend_node
@@ -109,12 +114,17 @@ contains
   !!  SOURCE
   !!
   !subroutine Matrix_CommRebuild(Info,range,matA,nfile)
-  subroutine Matrix_CommRebuild(Info,range,trans,matA,nfile,symm)
+  !subroutine Matrix_CommRebuild(Info,range,trans,matA,nfile,symm)
+  subroutine Matrix_CommRebuild(Info,range,trans,matA,nfile,symm,nspin)
 
+!!!  
+!!!  matA -> matA(1:nspin) 
+!!!    I AM STILL WORKING FOR SPIN_POLARIZED VERSION  !!! (TM 2019/09/02)
+!!!
     ! Module usage
     use mpi
     use datatypes
-    use global_module, ONLY: io_lun,ni_in_cell,nspin,numprocs,glob2node,n_proc_old, iprint_MD
+    use global_module, ONLY: io_lun,ni_in_cell,numprocs,glob2node,n_proc_old, iprint_MD
     use GenComms, ONLY: cq_abort,inode,ionode,gcopy,my_barrier
     use mult_module, ONLY: symmetrise_L,symmetrise_matA
     !use io_module2, ONLY: InfoL
@@ -131,6 +141,7 @@ contains
     ! passed variables
     integer :: range,matA,trans
     integer,optional :: symm
+    integer,optional :: nspin
     type(InfoMatrixFile), pointer :: Info(:)
 
     ! local variables
@@ -150,7 +161,10 @@ contains
                      file_name5,file_name6
     integer :: lun_db,lun_db2,lun_db3,lun_db4,lun_db5,lun_db6
     logical :: flag_tmp = .false.
+    integer :: nspin_local
 
+    !! nspin is introduced!!  2019/09/02  tsuyoshi
+      nspin_local = 1; if(present(nspin)) nspin_local=nspin
     !! --------------- DEBUG --------------- !!
     if (flag_MDdebug) then
       call get_file_name('members',numprocs,inode,file_name)
@@ -185,6 +199,9 @@ contains
     if (numprocs.NE.1) then ! No need for communication when using a single core.
       ! Organise local and remote atoms / Send the size info to remote nodes.
       call alloc_send_array(nfile,LmatrixSend,isend_array,isend2_array,send_array,Info)
+      !setting nspin
+        LmatrixSend%nspin=nspin_local
+        LmatrixRecv%nspin=nspin_local
       call CommMat_send_size(LmatrixSend,isend_array)
       ! Receive the size info and allocate arrays.
       call alloc_recv_array(irecv_array,irecv2_array, &
@@ -632,7 +649,7 @@ contains
     use numbers
     use global_module, ONLY: glob2node,numprocs
     use GenComms, ONLY: inode,cq_abort
-    use store_matrix, ONLY: InfoMatrixFile, deallocate_InfoMatrixFile, n_matrix
+    use store_matrix, ONLY: InfoMatrixFile, deallocate_InfoMatrixFile
     ! db
     use input_module, ONLY: io_assign,io_close
     use io_module, ONLY: get_file_name
@@ -902,7 +919,7 @@ contains
         !ORI nsize_Lmatrix_remote = nsize_Lmatrix_remote + 3 * Info(ifile)%jmax_i(ia) &
         !ORI                        + Info(ifile)%jbeta_max_i(ia) * Info(ifile)%alpha_i(ia)
         nsize_Lmatrix_remote = nsize_Lmatrix_remote + 3 * Info(ifile)%jmax_i(ia) &
-                                + Info(ifile)%jbeta_max_i(ia) * Info(ifile)%alpha_i(ia) * n_matrix
+                                + Info(ifile)%jbeta_max_i(ia) * Info(ifile)%alpha_i(ia) * Info(ifile)%nspin
       enddo
       allocate (isend2_array(2*nsize_jj), STAT=stat_alloc)
       if (stat_alloc.NE.0) call cq_abort('Error allocating isend2_array: ', 2*nsize_jj)
@@ -970,7 +987,7 @@ contains
 
         ! spin dependent
         nsize_Lmatrix_remote = Info(ifile)%alpha_i(ia)*Info(ifile)%jbeta_max_i(ia)
-        do jj = 1, n_matrix
+        do jj = 1, Info(ifile)%nspin
           send_array(ibeg3:ibeg3+nsize_Lmatrix_remote-1) = &
                      Info(ifile)%data_Lold(Info(ifile)%ibeg_dataL(ia) : &
                                             Info(ifile)%ibeg_dataL(ia)+nsize_Lmatrix_remote-1, jj)
@@ -1262,7 +1279,7 @@ contains
     use numbers
     use GenComms, ONLY: cq_abort
     use mpi
-    use store_matrix, ONLY: InfoMatrixFile, n_matrix
+    use store_matrix, ONLY: InfoMatrixFile
     ! db
     use global_module, ONLY: numprocs,io_lun
     use io_module, ONLY: get_file_name
@@ -1291,7 +1308,7 @@ contains
       call io_assign(lun_db)
       !open (lun_db,file=file_name)
       open (lun_db,file=file_name,position='append')
-      write (lun_db,*) "n_matrix:", n_matrix
+      write (lun_db,*) "n_matrix:", Info%nspin
     endif
     !! ---------- DEBUG ---------- !!
 
@@ -1311,7 +1328,7 @@ contains
         !ORI isize  = isize + Info(ifile)%jmax_i(ia)*3 &
         !ORI                + Info(ifile)%alpha_i(ia)*Info(ifile)%jbeta_max_i(ia)
         isize  = isize + Info(ifile)%jmax_i(ia)*3 &
-                       + Info(ifile)%alpha_i(ia)*Info(ifile)%jbeta_max_i(ia)*n_matrix
+                       + Info(ifile)%alpha_i(ia)*Info(ifile)%jbeta_max_i(ia)*Info(ifile)%nspin
       enddo !(i, natom_send)
 
       !! ---------- DEBUG ---------- !!
@@ -1385,7 +1402,6 @@ contains
     use primary_module, ONLY: bundle
     use mpi
     use global_module, ONLY: n_proc_old,glob2node_old
-    use store_matrix, ONLY: n_matrix
     ! db
     use input_module, ONLY: io_assign, io_close
     use io_module, ONLY: get_file_name
@@ -1568,7 +1584,7 @@ contains
 
     !! ---------- DEBUG ---------- !!
     if (flag_MDdebug .AND. iprint_MDdebug.GT.2) then
-      write (lun_db,*) ""
+      write (lun_db,*) "nspin"
       write (lun_db,*) "nsend_node:", LmatrixRecv%nsend_node
       write (lun_db,*) "isort_node(nnd):", isort_node(1:)
       if (LmatrixRecv%natom_remote.GT.0) then
@@ -1673,7 +1689,7 @@ contains
             !ORI LmatrixRecv%ibeg2_recv_array(iprim_remote+1) &
             !ORI     = LmatrixRecv%ibeg2_recv_array(iprim_remote) + njbeta * nalpha
             LmatrixRecv%ibeg2_recv_array(iprim_remote+1) &
-                 = LmatrixRecv%ibeg2_recv_array(iprim_remote) + njbeta * nalpha * n_matrix
+                 = LmatrixRecv%ibeg2_recv_array(iprim_remote) + njbeta * nalpha * LmatrixRecv%nspin
           endif
         enddo !(ia, natom_send_node)
       enddo !(nnd, nsend_node)
@@ -1683,7 +1699,7 @@ contains
     if (flag_MDdebug .AND. iprint_MDdebug.GT.2) then
       if (LmatrixRecv%nsend_node.GT.0) then
         write (lun_db,*) ""
-        write (lun_db,*) "n_matrix  :", n_matrix
+        write (lun_db,*) "nspin  :"
         write (lun_db,*) "nsend_node:", LmatrixRecv%nsend_node
         write (lun_db,*) "natom_send_node:", LmatrixRecv%natom_send_node
         write (lun_db,*) "id_prim_recv(iprim)     :", LmatrixRecv%id_prim_recv(1:)
@@ -1698,8 +1714,8 @@ contains
         write (lun_db,*) "isize2: # of Lialpha,jbeta"
         write (lun_db,*) "isize1, isize2:", isize1, isize2
         write (lun_db,*) "For allocations,"
-        write (lun_db,*) "irecv2_array(isize1*2) & recv_array(3*isize1+isize2*n_matrix)"
-        write (lun_db,*) "Size for allocations:", isize1,'x',2, isize1*3+isize2*n_matrix
+        write (lun_db,*) "irecv2_array(isize1*2) & recv_array(3*isize1+isize2*nspin)"
+        write (lun_db,*) "Size for allocations:", isize1,'x',2, isize1*3+isize2*LmatrixRecv%nspin
       endif
       call io_close(lun_db)
     endif
@@ -1714,8 +1730,8 @@ contains
       if (stat_alloc.NE.0) call cq_abort('Error allocating irecv2_array: ', isize1*2)
       ! Allocation to store rvec_Pij and data_Lold.
       !ORI allocate (recv_array(3*isize1+isize2), STAT=stat_alloc)
-      allocate (recv_array(3*isize1+isize2*n_matrix), STAT=stat_alloc)
-      if (stat_alloc.NE.0) call cq_abort('Error allocating recv_array: ', isize1*3+isize2*n_matrix)
+      allocate (recv_array(3*isize1+isize2*LmatrixRecv%nspin), STAT=stat_alloc)
+      if (stat_alloc.NE.0) call cq_abort('Error allocating recv_array: ', isize1*3+isize2*LmatrixRecv%nspin)
       irecv2_array = 1000 ; recv_array=1000.0_double
     endif
 
@@ -1751,7 +1767,6 @@ contains
     use numbers
     use GenComms, ONLY: cq_abort,myid
     use mpi
-    use store_matrix, ONLY: n_matrix
     ! db
     use global_module, ONLY: numprocs,io_lun
     use io_module, ONLY: get_file_name
@@ -1801,7 +1816,7 @@ contains
         !ORI                   LmatrixRecv%nalpha_prim_recv(iprim_remote)
         isize2 = isize2 + LmatrixRecv%nj_prim_recv(iprim_remote)*3 +   &
                           LmatrixRecv%njbeta_prim_recv(iprim_remote) * &
-                          LmatrixRecv%nalpha_prim_recv(iprim_remote) * n_matrix
+                          LmatrixRecv%nalpha_prim_recv(iprim_remote) * LmatrixRecv%nspin
       enddo !(ia, natom_send)
 
       !! ---------- DEBUG ---------- !!
@@ -2329,7 +2344,6 @@ contains
     use matrix_module, ONLY: matrix_halo
     use matrix_data, ONLY: halo
     use mult_module, ONLY: mat_p
-    use store_matrix, ONLY: n_matrix
     use global_module, ONLY: sf, nlpf, atomf
     use species_module, ONLY: nsf_species, natomf_species, nlpf_species
     ! db
@@ -2598,7 +2612,7 @@ contains
 
         endif !(ibeg_Lij.NE.0)
         ibeg_dataL = ibeg_dataL + len
-        ! ibeg_dataL = ibeg_dataL + len*n_matrix
+        ! ibeg_dataL = ibeg_dataL + len*LmatrixRecv%nspin
       enddo !(jj, nzise1)
     enddo !(iprim_remote, natom_remote)
 
