@@ -36,7 +36,7 @@ The k-points is a way to discretize the integral of the Hamiltonian over the Bri
 
 :: 
 
-   Diag.NumKpts 2
+   Diag.NumKpts 1
    %block Diag.Kpoints
    0.00 0.00 0.00 1.00
    %endblock Diag.Kpoints
