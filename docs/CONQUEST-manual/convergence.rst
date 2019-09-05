@@ -9,12 +9,42 @@ Converging Parameters
 
 Integration Grid
 ----------------
+***************************
+
+To obtain meaningful and accurate results, it is important to choose a fine enough integration grid for a calculation. The higher the ``Grid.GridCutoff``, the finer the grid. 
+
+ ::
+  
+  Grid.GridCutoff E
+
+We can performe a series of computations, say just to calculate the energies of the system ``Atom.MoveRun static`` by varying Grid.GridCutoff from say 100 to 400 Ha to check the convergence. Setting ``Grid.GridCutoff  150`` which is in Hartree is usually sufficient for most calculations, and in any case this will be checked. 
+
+***************************
+
 
 .. _conv_bz:
 
 Brillouin Zone
 --------------
 
+The K-points mesh also needs the convergence test for every property need to be studied. So, it can again be performed by increasing the mesh-points in each direction until you see no changes in that structural or energetic property, say energy convergence. The good starting point can be ``2 2 2`` for every direction. So modify: 
+
+
+ :: 
+
+  Diag.NumKpts n
+
+Or if Monkhorst-Pack mesh then modify nx, ny and nz, say from ``1  1  1`` to ``10  10  10``:
+
+::
+ 
+ Diag.MPMeshX nx
+ Diag.MPMeshY ny
+ Diag.MPMeshZ nz
+
+to check the convergence. 
+
+***************************
 .. _conv_on:
 
 Linear Scaling
