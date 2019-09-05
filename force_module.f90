@@ -611,11 +611,13 @@ contains
                stress(dir1,dir2) = KE_stress(dir1,dir2) + &
                  SP_stress(dir1,dir2) + PP_stress(dir1,dir2) + &
                  NL_stress(dir1,dir2) + GPV_stress(dir1,dir2) + &
-                 XC_stress(dir1,dir2) + Ion_Interaction_stress(dir1,dir2) + &
+                 XC_stress(dir1,dir2) + ion_interaction_stress(dir1,dir2) + &
                  Hartree_stress(dir1,dir2) + loc_HF_stress(dir1,dir2) + &
                  loc_G_stress(dir1,dir2) + pcc_stress(dir1,dir2) + &
                  nonSCF_stress(dir1,dir2)
                if (flag_atomic_stress) then
+                 ! non-atomic ion_interaction_stress added in
+                 ! ion_electrostatic_module - zamaan
                  non_atomic_stress(dir1,dir2) = &
                    non_atomic_stress(dir1,dir2) + GPV_stress(dir1,dir2) + &
                    XC_stress(dir1,dir2) + Hartree_stress(dir1,dir2) + &

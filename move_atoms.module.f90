@@ -2716,8 +2716,6 @@ contains
                                       flag_SFcoeffReuse, flag_diagonalisation, &
                                       ne_spin_in_cell,                 &
                                       ne_in_cell, spin_factor,         &
-                                      atomic_stress, non_atomic_stress,&
-                                      flag_atomic_stress, flag_heat_flux, &
                                       ni_in_cell, area_moveatoms
     use density_module,         only: set_atomic_density,              &
                                       flag_no_atomic_densities,        &

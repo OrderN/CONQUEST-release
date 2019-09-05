@@ -1183,7 +1183,7 @@ contains
                              ! two atoms? - zamaan
                              atomic_stress(dir1,dir2,iatom) = &
                                atomic_stress(dir1,dir2,iatom) - &
-                               (dummy * rij_vec(dir1) * rij_vec(dir2))
+                               (dummy * rij_vec(dir1) * rij_vec(dir2)) * half
                            end if
                          end do ! dir2
                        else
@@ -1780,5 +1780,5 @@ contains
     return
   end subroutine calc_goverlap
 !!***
-  
+
 end module ion_electrostatic

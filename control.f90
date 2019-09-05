@@ -552,7 +552,7 @@ contains
                               flag_move_atom,rcellx, rcelly, rcellz,  &
                               flag_Multisite,flag_SFcoeffReuse, &
                               atom_coord, flag_quench_MD, atomic_stress, &
-                              flag_heat_flux
+                              non_atomic_stress, flag_heat_flux
     use group_module,   only: parts
     use minimise,       only: get_E_and_F
     use move_atoms,     only: velocityVerlet, updateIndices,           &
@@ -709,8 +709,10 @@ contains
        if (inode==ionode) &
             write(io_lun,fmt='(4x,"MD run, iteration ",i5)') iter
 
-       if (flag_heat_flux) & 
+       if (flag_heat_flux) then
          atomic_stress = zero
+         non_atomic_stress = zero
+       end if
 
        call thermo%get_temperature_and_ke(baro, ion_velocity, &
                                           mdl%ion_kinetic_energy)
