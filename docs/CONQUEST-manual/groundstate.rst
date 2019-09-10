@@ -17,16 +17,21 @@ Diagonalisation
 
 Along with linear scaling code in CONQUEST to find out the density matrix, the exact diagonalization can also be performed. This option diagonalizes the Hamiltonian matrix and minimizes the energy with respect to the density matrix elements. It will scale with :math:`N^3`, but will probably be more efficient for systems up to a few hundred atoms. 
 
-The minimal parameters for the diagonalization can be:
+For the diagonalization, the following flag is required:
 
  ::
 
    DM.SolutionMethod diagon
-   Diag.MPMesh T	
-   Diag.MPMeshX 2
-   Diag.MPMeshY 2
-   Diag.MPMeshZ 2
-   Grid.GridCutoff 100 
+   
+ The other flags can be sensitive to the choice of property studied or the elements involved in the diagonalization calculations, e.g.: 
+ 
+ ::
+ 
+    Diag.MPMesh T	
+    Diag.MPMeshX 2
+    Diag.MPMeshY 2
+    Diag.MPMeshZ 2
+    Grid.GridCutoff 100 
 
 The explanation for the above is explained in the following points which need to look at while doing diagonalization calculations:
 
@@ -41,7 +46,7 @@ The k-points is a way to discretize the integral of the Hamiltonian over the Bri
    0.00 0.00 0.00 1.00
    %endblock Diag.Kpoints
 
-Also, as the k-points may be defined either by specifying a list of k-points as described above or by a Monkhorst-Pack (MP) grid in terms of the dimensions of the k-point mesh. An MP grid is thus specified by just three numbers along each axis. 
+Also, as the k-points may be defined either by specifying a list of k-points as described above or by a Monkhorst-Pack (MP) grid in terms of the dimensions of the k-point mesh. An MP grid is thus specified by just three numbers along each axis. By selecting the default option allows k-point sampling through the gamma point.
 
  ::
 
@@ -125,11 +130,11 @@ The Conquest can run in self-consistent and non self-consistent diagonalization 
   minE.SelfConsistent T
   minE.SCTolerance 1E-7
 
-Here, we chose to perform a charge self-consistent calculation, and set the tolerance of the self-consistency (SC) cycle residual to ``1E-7``. This results in an energy convergence of order ``1E-7`` Ha at the end of the cycle.
+Here, we chose to perform a charge self-consistent calculation, and set the tolerance of the self-consistency (SC) cycle residual to ``1E-7`` that means the energy convergence of order ``1E-7`` Ha at the end of the cycle.
 We make sure that the maximum number of self-consistency cycles is high enough by setting ``SC.MaxIters`` to a large value. 
 We can grep "DFT Total Energy" to obtain a summary of total energy convergence during the SC cycle and when charge self-consistency is achieved, "DFT total energy" should equal the "Harris-Foulkes energy" and any discrepancy is a measure of SC cycle energy convergence. 
 
-In non-self-consistent calculation ``minE.SelfConsistent F``, the charge density is constructed as the superposition of atomic densities, self-consistency between density and potential is not sought and the Harris- Foulkes functional is used for the energy. should be fast and run in a few minutes but when high accuracy is needed, self-consistent is recommended. 
+In non-self-consistent calculation ``minE.SelfConsistent F``, the charge density is constructed as the superposition of atomic densities, self-consistency between density and potential is not sought and the Harris- Foulkes functional is used for the energy. It should be fast and run in a few minutes but when high accuracy is needed, self-consistent is recommended. 
 
 Moreover, the Pulay-SCF iterations are effected by mixing parameter in self-consistent calculations.i It is the amount of output charge density which is mixed into new charge density. 
 
