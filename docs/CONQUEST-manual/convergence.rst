@@ -11,13 +11,13 @@ Integration Grid
 ----------------
 ***************************
 
-To obtain meaningful and accurate results, it is important to choose a fine enough integration grid for a calculation. The higher the ``Grid.GridCutoff``, the finer the grid. 
+To obtain meaningful and accurate results, it is important to choose a fine enough integration grid for either the diagonalization or linear scaling calculations. The higher the ``Grid.GridCutoff``, the finer the grid. 
 
  ::
   
   Grid.GridCutoff E
 
-We can performe a series of computations, say just to calculate the energies of the system ``Atom.MoveRun static`` by varying Grid.GridCutoff from say 100 to 400 Ha to check the convergence. Setting ``Grid.GridCutoff  150`` which is in Hartree is usually sufficient for most calculations, and in any case this will be checked. 
+We can perform a series of computations, say just to calculate the energies of the system ``Atom.MoveRun static`` by varying Grid.GridCutoff from say 100 to 400 Ha to check the convergence. Setting ``Grid.GridCutoff`` which is in Hartree should be checked. 
 
 ***************************
 
@@ -27,7 +27,7 @@ We can performe a series of computations, say just to calculate the energies of 
 Brillouin Zone
 --------------
 
-The K-points mesh also needs the convergence test for every property need to be studied. So, it can again be performed by increasing the mesh-points in each direction until you see no changes in that structural or energetic property, say energy convergence. The good starting point can be ``2 2 2`` for every direction. So modify: 
+The K-points mesh also needs the convergence test for every property need to be studied. So, it can again be performed by increasing the mesh-points in each direction until you see no changes in that structural or energetic property, say energy convergence. So, modify: 
 
 
  :: 
