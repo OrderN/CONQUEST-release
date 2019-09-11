@@ -2602,6 +2602,8 @@ contains
   !!  - Added experimental backtrace
   !!   2019/08/13 16:53 jtlp with dave
   !!    Adding new residual definitions
+  !!   2019/09/11 09:52 dave
+  !!    Bug fix to changes in residual calculation
   !! SOURCE
   !!
   subroutine PulayMixSC_spin(done, ndone, self_tol, reset_L, &
@@ -2721,7 +2723,7 @@ contains
     ! New, absolute
     RB = zero
     do spin = 1, nspin
-       RB = RB + spin_factor * sum(abs(R_pul(:,iPulay,spin)))
+       RB = RB + spin_factor * sum(abs(R_pul(:,1,spin)))
     end do
     call gsum(RB)
     RB = grid_point_volume * RB
