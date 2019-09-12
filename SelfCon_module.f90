@@ -2741,16 +2741,18 @@ contains
        end if
     end if
     ! print residual information
-    if (inode == ionode.AND.iprint_SC>1) then
-       write (io_lun, '(8x,a,i5,a,e12.5)') &
-            'Pulay iteration ', iter, ' RMS residual:             ', RA
-       write (io_lun, '(8x,a,i5,a,e12.5)') &
-            'Pulay iteration ', iter, ' absolute residual (tot) : ', RB
-       write (io_lun, '(8x,a,i5,a,e12.5)') &
-            'Pulay iteration ', iter, ' absolute residual (frac): ', RC
-    else
-       write (io_lun, '(8x,a,i5,a,e12.5)') &
-            'Pulay iteration ', iter, ' residual:             ', R0
+    if (inode==ionode) then
+       if (inode == ionode.AND.iprint_SC>1) then
+          write (io_lun, '(8x,a,i5,a,e12.5)') &
+               'Pulay iteration ', iter, ' RMS residual:             ', RA
+          write (io_lun, '(8x,a,i5,a,e12.5)') &
+               'Pulay iteration ', iter, ' absolute residual (tot) : ', RB
+          write (io_lun, '(8x,a,i5,a,e12.5)') &
+               'Pulay iteration ', iter, ' absolute residual (frac): ', RC
+      else
+          write (io_lun, '(8x,a,i5,a,e12.5)') &
+               'Pulay iteration ', iter, ' residual:             ', R0
+      end if
     end if
     ! check if they have reached tolerance
     if (R0 < self_tol .AND. iter >= minitersSC) then ! If we've done minimum number
@@ -2837,16 +2839,18 @@ contains
           end if
        end if
        ! print residual information
-       if (inode == ionode.AND.iprint_SC>1) then
-          write (io_lun, '(8x,a,i5,a,e12.5)') &
-               'Pulay iteration ', iter, ' RMS residual:             ', RA
-          write (io_lun, '(8x,a,i5,a,e12.5)') &
-               'Pulay iteration ', iter, ' absolute residual (tot) : ', RB
-          write (io_lun, '(8x,a,i5,a,e12.5)') &
-               'Pulay iteration ', iter, ' absolute residual (frac): ', RC
-       else
-          write (io_lun, '(8x,a,i5,a,e12.5)') &
-               'Pulay iteration ', iter, ' residual:             ', R0
+       if (inode==ionode) then
+          if (iprint_SC>1) then
+             write (io_lun, '(8x,a,i5,a,e12.5)') &
+                  'Pulay iteration ', iter, ' RMS residual:             ', RA
+             write (io_lun, '(8x,a,i5,a,e12.5)') &
+                  'Pulay iteration ', iter, ' absolute residual (tot) : ', RB
+             write (io_lun, '(8x,a,i5,a,e12.5)') &
+                  'Pulay iteration ', iter, ' absolute residual (frac): ', RC
+          else
+             write (io_lun, '(8x,a,i5,a,e12.5)') &
+                  'Pulay iteration ', iter, ' residual:             ', R0
+          end if
        end if
        ! check if they have reached tolerance
        if (R0 < self_tol .AND. iter >= minitersSC) then ! Passed minimum number of iterations
