@@ -218,6 +218,9 @@ contains
       end if
     end if
     if (flag_atomic_stress) then
+      if (.not. flag_neutral_atom) then
+        call cq_abort("Atomic stress contributions not implemented for Ewald electrostatics (yet). Set General.NeutralAtom T")
+      end if
       allocate(atomic_stress(3,3,ni_in_cell), STAT=stat)
       if (stat /= 0) &
         call cq_abort("Error allocating atomic_stress: ", ni_in_cell)
