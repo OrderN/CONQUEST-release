@@ -2742,7 +2742,7 @@ contains
     end if
     ! print residual information
     if (inode==ionode) then
-       if (inode == ionode.AND.iprint_SC>1) then
+       if (iprint_SC>1) then
           write (io_lun, '(8x,a,i5,a,e12.5)') &
                'Pulay iteration ', iter, ' RMS residual:             ', RA
           write (io_lun, '(8x,a,i5,a,e12.5)') &
