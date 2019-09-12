@@ -767,7 +767,8 @@ contains
                              flag_SpinDependentSF, flag_Multisite, flag_LFD, flag_SFcoeffReuse, &
                              flag_opt_cell, cell_constraint_flag, &
                              cell_en_tol, optcell_method, cell_stress_tol, &
-                             flag_stress, flag_full_stress, rng_seed
+                             flag_stress, flag_full_stress, rng_seed, &
+                             flag_atomic_stress, flag_heat_flux
     use dimens, only: r_super_x, r_super_y, r_super_z, GridCutoff,    &
                       n_grid_x, n_grid_y, n_grid_z, r_h, r_c,         &
                       RadiusSupport, RadiusAtomf, RadiusMS, RadiusLD, &
@@ -859,7 +860,8 @@ contains
                           md_thermo_type, md_bulkmod_est, md_box_mass, &
                           flag_write_xsf, md_cell_nhc, md_nhc_cell_mass, &
                           md_calc_xlmass, md_berendsen_equil, &
-                          md_tau_T_equil, md_tau_P_equil, md_p_drag, md_t_drag
+                          md_tau_T_equil, md_tau_P_equil, md_p_drag, &
+                          md_t_drag
     use md_model,   only: md_tdep
     use move_atoms,         only: threshold_resetCD, &
                                   flag_stop_on_empty_bundle, &
@@ -1470,6 +1472,7 @@ contains
        enthalpy_tolerance    = fdf_double('AtomMove.EnthalpyTolerance', 1.0e-5_double)
        flag_stress           = fdf_boolean('AtomMove.CalcStress', .true.)
        flag_full_stress      = fdf_boolean('AtomMove.FullStress', .false.)
+       flag_atomic_stress    = fdf_boolean('AtomMove.AtomicStress', .false.)
        !
        flag_vary_basis       = fdf_boolean('minE.VaryBasis', .false.)
        if(.NOT.flag_vary_basis) then
@@ -2071,18 +2074,21 @@ contains
        md_n_mts           = fdf_integer('MD.nMTS', 1)
        flag_thermoDebug   = fdf_boolean('MD.ThermoDebug',.false.)
        md_t_drag          = fdf_double('MD.TDrag', zero)
-       allocate(md_nhc_mass(md_n_nhc)) 
-       allocate(md_nhc_cell_mass(md_n_nhc)) 
-       md_nhc_mass = one
-       md_nhc_cell_mass = one
-       if (fdf_block('MD.NHCMass')) then
-         read(unit=input_array(block_start), fmt=*) md_nhc_mass
+       if (leqi(md_thermo_type, 'nhc')) then
+         allocate(md_nhc_mass(md_n_nhc)) 
+         allocate(md_nhc_cell_mass(md_n_nhc)) 
+         md_nhc_mass = one
+         md_nhc_cell_mass = one
+         if (fdf_block('MD.NHCMass')) then
+           read(unit=input_array(block_start), fmt=*) md_nhc_mass
+         end if
+         call fdf_endblock
+         if (fdf_block('MD.CellNHCMass')) then
+           read(unit=input_array(block_start), fmt=*) md_nhc_cell_mass
+         end if
+         call fdf_endblock
        end if
-       call fdf_endblock
-       if (fdf_block('MD.CellNHCMass')) then
-         read(unit=input_array(block_start), fmt=*) md_nhc_cell_mass
-       end if
-       call fdf_endblock
+       flag_heat_flux = fdf_boolean('MD.HeatFlux', .false.)
 
        ! Barostat
        target_pressure    = fdf_double('AtomMove.TargetPressure', zero)
