@@ -123,7 +123,8 @@ module references
       if (inode==ionode) then
         write(io_lun,*)
         write(io_lun,'(2x,a)') "BIBLIOGRAPHY: If you publish results obtained &
-                               &with CONQUEST, please cite the following:"
+                               &with CONQUEST, please consider citing the &
+                               &following:"
         write(io_lun,*)
       end if
 

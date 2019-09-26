@@ -499,7 +499,6 @@ contains
                          HNL_fac, numprocs)
 
     call compile_biblio
-    stop
 !****lat<$
     call stop_backtrace(t=backtrace_timer,who='read_and_write')
 !****lat>$
