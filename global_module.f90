@@ -142,6 +142,8 @@
 !!    Added flag_stress and flag_full_stress
 !!   2019/05/21 zamaan
 !!    Added RNG seed
+!!   2019/07/04 zamaan
+!!    Added dump BibTeX bibliography flag
 !!  SOURCE
 !!
 module global_module
@@ -158,6 +160,7 @@ module global_module
 
   integer :: iprint                 ! Level of output
   integer :: io_lun                 ! Output unit
+  logical :: flag_dump_bib          ! Dump BibTeX bibliography?
   integer, allocatable, dimension(:) :: id_glob      ! global label of atom in sim cell (CC)
   integer, allocatable, dimension(:) :: id_glob_inv  ! gives global number for a CC atom
   integer, dimension(:), allocatable :: species_glob ! gives species 

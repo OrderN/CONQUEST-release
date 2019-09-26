@@ -151,6 +151,8 @@ contains
   !!   2019/06/06 17:30 jack poulton and nakata
   !!    Changed to allow SZP-MSSFs with flag_MSSF_nonminimal when checking the number of MSSFs
   !!    Added MSSF_nonminimal_species
+  !!   2019/07/04 zamaan
+  !!    Added bibliography
   !!  SOURCE
   !!
   subroutine read_and_write(start, start_L, inode, ionode,          &
@@ -210,6 +212,8 @@ contains
                                       flag_MSSF_nonminimal, &   !nonmin_mssf
                                       MSSF_nonminimal_offset, & !nonmin_mssf
                                       MSSF_nonminimal_species   !nonmin_mssf
+    use biblio,                 only: type_bibliography
+    use references,             only: compile_biblio
     use md_control,             only: md_position_file
     use pao_format
 
@@ -236,6 +240,9 @@ contains
 
     ! for checking the sum of electrons of spin channels
     real(double) :: sum_elecN_spin
+
+    ! the bibliography, obviously
+    type(type_bibliography) :: bib
 
 !****lat<$
     call start_backtrace(t=backtrace_timer,who='read_and_write',where=1,level=1)
@@ -491,6 +498,8 @@ contains
          call write_info(titles, mu, vary_mu, find_chdens, read_phi, &
                          HNL_fac, numprocs)
 
+    call compile_biblio
+    stop
 !****lat<$
     call stop_backtrace(t=backtrace_timer,who='read_and_write')
 !****lat>$
@@ -767,7 +776,8 @@ contains
                              flag_SpinDependentSF, flag_Multisite, flag_LFD, flag_SFcoeffReuse, &
                              flag_opt_cell, cell_constraint_flag, &
                              cell_en_tol, optcell_method, cell_stress_tol, &
-                             flag_stress, flag_full_stress, rng_seed
+                             flag_stress, flag_full_stress, rng_seed, &
+                             flag_dump_bib
     use dimens, only: r_super_x, r_super_y, r_super_z, GridCutoff,    &
                       n_grid_x, n_grid_y, n_grid_z, r_h, r_c,         &
                       RadiusSupport, RadiusAtomf, RadiusMS, RadiusLD, &
@@ -998,6 +1008,7 @@ contains
        iprint_exx    = fdf_integer('IO.Iprint_exx',   iprint)
        !
        !
+       flag_dump_bib = fdf_boolean('IO.DumpBibTeX',      .false.)
        flag_dump_L   = fdf_boolean('IO.DumpL',           .true. )
        locps_output  = fdf_boolean('IO.LocalPotOutput',  .false.)
        locps_choice  = fdf_integer('IO.LocalPotChoice',   8     )
