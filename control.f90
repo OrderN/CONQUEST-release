@@ -38,6 +38,10 @@
 !!   2018/07/12 zamaan
 !!    Added SSM integrator, adapted from W. Shinoda et al., PRB 69:134103
 !!    (2004)
+!!   2019/05/09 zamaan
+!!    Renamed init_ensemble to init_md, created new end_md subroutine 
+!!    to deallocate any stray allocated arrays. Added heat flux calculation
+!!    to md_run.
 !!   2019/02/28 zamaan
 !!    2 new subroutines for cell optimisation (double loop and single vector)
 !!  SOURCE
@@ -308,8 +312,8 @@ contains
     call dump_pos_and_matrices
     call get_maxf(max)
     if (inode==ionode) then
-      write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," E: ", &
-        e16.8," dE: ",f12.8)') 0, max, energy0, dE
+      write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," E: "   e16.8," dE: ",f12.8)') & 
+           0, max, energy0, dE
     end if
 
     iter = 1
@@ -386,12 +390,11 @@ contains
        g0 = dot(length, tot_force, 1, tot_force, 1)
        call get_maxf(max)
        ! Output and energy changes
-       iter = iter + 1
        dE = energy0 - energy1
 
        if (inode==ionode) then
-         write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," E: ", &
-           e16.8," dE: ",f12.8)') iter, max, energy1, en_conv*dE
+         write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," E: "e16.8," dE: ",f12.8)') & 
+              iter, max, energy1, en_conv*dE
          if (iprint_MD > 1) then
            write(io_lun,'(4x,"Force Residual:     ",f20.10," ",a2,"/",a2)') &
              for_conv*sqrt(g0/ni_in_cell), en_units(energy_units), & 
@@ -406,6 +409,7 @@ contains
          end if
        end if
 
+       iter = iter + 1
        energy0 = energy1
        !energy1 = abs(dE)
        if (iter > MDn_steps) then
@@ -526,7 +530,9 @@ contains
 !!    which also computes the kinetic stress
 !!   2018/8/11 zamaan
 !!    Moved ionic position and box update to its own subroutine; moved 
-!!    velocity initialisation to init_ensemble
+!!    velocity initialisation to init_md
+!!   2019/05/09 zamaan
+!!    Moved velocity array allocation/deallocation to init_md/end_md
 !!  SOURCE
 !!
   subroutine md_run (fixed_potential, vary_mu, total_energy)
@@ -544,7 +550,9 @@ contains
                               flag_fire_qMD, flag_diagonalisation,    &
                               nspin, flag_thermoDebug, flag_baroDebug,&
                               flag_move_atom,rcellx, rcelly, rcellz,  &
-                              flag_Multisite,flag_SFcoeffReuse, atom_coord, flag_quench_MD
+                              flag_Multisite,flag_SFcoeffReuse, &
+                              atom_coord, flag_quench_MD, atomic_stress, &
+                              non_atomic_stress, flag_heat_flux
     use group_module,   only: parts
     use minimise,       only: get_E_and_F
     use move_atoms,     only: velocityVerlet, updateIndices,           &
@@ -577,7 +585,7 @@ contains
                               md_n_ys, md_n_mts, ion_velocity, lattice_vec, &
                               md_baro_type, target_pressure, md_ndof_ions, &
                               md_berendsen_equil, md_tau_T, md_tau_P, &
-                              md_thermo_type
+                              md_thermo_type, heat_flux
 
     use atoms,          only: distribute_atoms,deallocate_distribute_atom
     use global_module,  only: atom_coord_diff, iprint_MD, area_moveatoms
@@ -617,11 +625,6 @@ contains
 
     n_stop_qMD = 0
     final_call = 1
-    allocate(ion_velocity(3,ni_in_cell), STAT=stat)
-    if (stat /= 0) &
-         call cq_abort("Error allocating velocity in md_run: ", &
-                       ni_in_cell, stat)
-    call reg_alloc_mem(area_moveatoms, 3*ni_in_cell, type_dbl)
     energy0 = zero
     energy1 = zero
     dE = zero
@@ -651,6 +654,13 @@ contains
       write(io_lun,'(4x,"Welcome to md_run. Doing ",i6," steps")') &
             MDn_steps
 
+    ! Thermostat/barostat initialisation
+    call init_md(baro, thermo, mdl, md_ndof, nequil)
+    call thermo%get_temperature_and_ke(baro, ion_velocity, &
+                                      mdl%ion_kinetic_energy)
+    call baro%get_pressure_and_stress
+    call mdl%get_cons_qty
+
     ! Find energy and forces
     if (flag_fire_qMD) then
        call get_E_and_F(fixed_potential, vary_mu, energy0, .true., .true.)
@@ -662,13 +672,6 @@ contains
     ! XL-BOMD
     if (flag_XLBOMD .AND. flag_dissipation .AND. .NOT.flag_MDold) &
       call Ready_XLBOMD()
-
-    ! Thermostat/barostat initialisation
-    call init_ensemble(baro, thermo, mdl, md_ndof, nequil)
-    call thermo%get_temperature_and_ke(baro, ion_velocity, &
-                                      mdl%ion_kinetic_energy)
-    call baro%get_pressure_and_stress
-    call mdl%get_cons_qty
 
     ! Get converted 1-D array for flag_atom_move
     allocate (flag_movable(3*ni_in_cell), STAT=stat)
@@ -695,6 +698,9 @@ contains
        call read_fire(fire_N, fire_N2, fire_P0, MDtimestep, fire_alpha)
     endif
 
+    if (flag_heat_flux) &
+      call get_heat_flux(atomic_stress, ion_velocity, heat_flux)
+
     if (.not. flag_MDcontinue) &
       call write_md_data(i_first-1, thermo, baro, mdl, nequil)
 
@@ -702,6 +708,11 @@ contains
        mdl%step = iter
        if (inode==ionode) &
             write(io_lun,fmt='(4x,"MD run, iteration ",i5)') iter
+
+       if (flag_heat_flux) then
+         atomic_stress = zero
+         non_atomic_stress = zero
+       end if
 
        call thermo%get_temperature_and_ke(baro, ion_velocity, &
                                           mdl%ion_kinetic_energy)
@@ -855,9 +866,13 @@ contains
            if (inode==ionode) &
              write (io_lun, '(4x,a)') "Berendsen equilibration finished, &
                                       &starting extended system dynamics."
-           call init_ensemble(baro, thermo, mdl, md_ndof, nequil, second_call)
+           call init_md(baro, thermo, mdl, md_ndof, nequil, second_call)
          end if
        end if
+
+       ! Compute heat flux
+       if (flag_heat_flux) &
+         call get_heat_flux(atomic_stress, ion_velocity, heat_flux)
 
        ! Write all MD data and checkpoints to disk
        call write_md_data(iter, thermo, baro, mdl, nequil)
@@ -883,15 +898,12 @@ contains
        if (done) exit
     end do ! Main MD loop
 
-    deallocate(ion_velocity, STAT=stat)
-    if (stat /= 0) call cq_abort("Error deallocating velocity in md_run: ", &
-                                 ni_in_cell, stat)
-    call reg_dealloc_mem(area_moveatoms, 3 * ni_in_cell, type_dbl)
+    call end_md(thermo, baro)
     return
   end subroutine md_run
   !!***
 
-  !!****m* control/init_ensemble *
+  !!****m* control/init_md *
   !!  NAME
   !!   integrate_ensemble
   !!  PURPOSE
@@ -909,16 +921,19 @@ contains
   !!    Tweak for initial velocities
   !!  SOURCE
   !!  
-  subroutine init_ensemble(baro, thermo, mdl, md_ndof, nequil, second_call)
+  subroutine init_md(baro, thermo, mdl, md_ndof, nequil, second_call)
 
     use numbers
     use input_module,   only: leqi
     use io_module,      only: read_velocity
     use md_model,       only: type_md_model
     use GenComms,       only: inode, ionode, gcopy
+    use memory_module,  only: reg_alloc_mem, type_dbl
     use global_module,  only: rcellx, rcelly, rcellz, temp_ion, ni_in_cell, &
                               flag_MDcontinue, flag_read_velocity, &
-                              flag_MDdebug, iprint_MD
+                              flag_MDdebug, iprint_MD, flag_atomic_stress, &
+                              atomic_stress, area_moveatoms, &
+                              flag_full_stress, flag_heat_flux
     use move_atoms,     only: init_velocity
     use md_control,     only: type_thermostat, type_barostat, md_tau_T, &
                               md_tau_P, md_n_nhc, md_n_ys, md_n_mts, &
@@ -926,7 +941,7 @@ contains
                               md_thermo_type, md_baro_type, target_pressure, &
                               md_ndof_ions, md_tau_P_equil, md_tau_T_equil, &
                               write_md_checkpoint, read_md_checkpoint, &
-                              flag_extended_system
+                              flag_extended_system, heat_flux
 
     ! passed variableariables
     type(type_barostat), intent(inout)    :: baro
@@ -938,17 +953,17 @@ contains
 
     ! local variables
     character(50) :: file_velocity='velocity.dat'
+    integer       :: stat
 
     if (inode==ionode .and. iprint_MD > 1) &
-      write(io_lun,'(2x,a)') "Welcome to init_ensemble"
+      write(io_lun,'(2x,a)') "Welcome to init_md"
 
-    if (.not. present(second_call)) then
-    ! Initialise the model only once per run
-      lattice_vec = zero
-      lattice_vec(1,1) = rcellx
-      lattice_vec(2,2) = rcelly
-      lattice_vec(3,3) = rcellz
-      call mdl%init_model(md_ensemble, MDtimestep, thermo, baro)
+    if (.not. allocated(ion_velocity)) then
+      allocate(ion_velocity(3,ni_in_cell), STAT=stat)
+      if (stat /= 0) &
+           call cq_abort("Error allocating velocity in init_md: ", &
+                         ni_in_cell, stat)
+      call reg_alloc_mem(area_moveatoms, 3*ni_in_cell, type_dbl)
     end if
 
     if (.not. flag_MDcontinue) then
@@ -962,6 +977,15 @@ contains
            call init_velocity(ni_in_cell, temp_ion, ion_velocity)
         end if
       end if
+    end if
+
+    if (.not. present(second_call)) then
+    ! Initialise the model only once per run
+      lattice_vec = zero
+      lattice_vec(1,1) = rcellx
+      lattice_vec(2,2) = rcelly
+      lattice_vec(3,3) = rcellz
+      call mdl%init_model(md_ensemble, MDtimestep, thermo, baro)
     end if
 
     select case(md_ensemble)
@@ -1013,9 +1037,65 @@ contains
         end if
       end if
     end select
+
+    ! N.B. atomic stress is allocated in initialisation_module/initialise! - zamaan
+
     if (flag_MDcontinue) call read_md_checkpoint(thermo, baro)
 
-  end subroutine init_ensemble
+  end subroutine init_md
+
+  !!****m* md_control/end_md *
+  !!  NAME
+  !!   end_md
+  !!  PURPOSE
+  !!   Deallocate MD arrays that are not deallocated elsewhere
+  !!  AUTHOR
+  !!   Zamaan Raza
+  !!  CREATION DATE
+  !!   2019/05/08
+  !!  SOURCE
+  !!  
+  subroutine end_md(th, baro)
+
+    use GenComms,         only: inode, ionode
+    use global_module,    only: area_moveatoms, atomic_stress, &
+                                flag_atomic_stress, flag_MDdebug, &
+                                iprint_MD, ni_in_cell, area_moveatoms
+    use memory_module,    only: reg_alloc_mem, reg_dealloc_mem, type_dbl
+    use md_control,       only: type_thermostat, type_barostat, &
+                                md_nhc_mass, md_nhc_cell_mass, &
+                                flag_nhc, ion_velocity
+
+    ! passed variables
+    class(type_thermostat), intent(inout)   :: th
+    class(type_barostat), intent(inout)     :: baro
+
+    ! local variables
+    integer :: stat
+
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 2) &
+      write(io_lun,'(2x,a)') "end_md"
+
+    if (flag_nhc) then
+      deallocate(md_nhc_mass, md_nhc_cell_mass) ! allocated in initial_read
+      deallocate(th%eta, th%v_eta, th%G_nhc, th%m_nhc)
+      deallocate(th%eta_cell, th%v_eta_cell, th%G_nhc_cell, th%m_nhc_cell)
+      call reg_dealloc_mem(area_moveatoms, 8*th%n_nhc, type_dbl)
+    end if        
+
+    deallocate(ion_velocity, STAT=stat)
+    if (stat /= 0) call cq_abort("Error deallocating velocity in md_run: ", &
+                                 ni_in_cell, stat)
+    call reg_dealloc_mem(area_moveatoms, 3 * ni_in_cell, type_dbl)
+    if (flag_atomic_stress) then
+      deallocate(atomic_stress, STAT=stat)
+      if (stat /= 0) &
+        call cq_abort("Error deallocating atomic_stress in end_md: ", &
+        ni_in_cell, stat)
+      call reg_dealloc_mem(area_moveatoms, 3*3*ni_in_cell, type_dbl)
+    end if
+
+  end subroutine end_md
 
   !!****m* control/integrate_pt *
   !!  NAME
@@ -1191,6 +1271,48 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
 end subroutine update_pos_and_box
 !!*****
 
+!!****m* control/get_heat_flux *
+!!  NAME
+!!   get_heat_flux
+!!  PURPOSE
+!!   Compute the heat flux according to Green-Kubo formalism as in Carbogno 
+!!   et al. PRL 118, 175901 (2017). Note that in this implementation, we
+!!   ignore the *convective* contribution to the heat flux, so it is only
+!!   applicable to solids! 
+!!      J = sum_i(sigma_i . v_i) 
+!!        sigma_i = stress contribution from atom i
+!!        v_i = velocity of atom i).
+!!  AUTHOR
+!!   Zamaan Raza
+!!  CREATION DATE
+!!   2019/05/08
+!!  SOURCE
+!!  
+subroutine get_heat_flux(atomic_stress, velocity, heat_flux)
+
+  use numbers
+  use GenComms,      only: inode, ionode
+  use global_module, only: iprint_MD, ni_in_cell, flag_heat_flux
+
+  ! Passed variables
+  real(double), dimension(3,3,ni_in_cell), intent(in)   :: atomic_stress
+  real(double), dimension(3,ni_in_cell), intent(in)     :: velocity
+  real(double), dimension(3), intent(out)               :: heat_flux
+
+  ! local variables
+  integer :: i
+
+  if (inode==ionode .and. iprint_MD > 1) &
+    write(io_lun,'(2x,a)') "Welcome to get_heat_flux"
+
+  heat_flux = zero
+  do i=1,ni_in_cell
+    heat_flux = heat_flux + matmul(atomic_stress(:,:,i), velocity(:,i))
+  end do
+
+end subroutine get_heat_flux
+!!*****
+
 !!****m* control/write_md_data *
 !!  NAME
 !!   write_md_data
@@ -1206,13 +1328,14 @@ subroutine write_md_data(iter, thermo, baro, mdl, nequil)
 
   use GenComms,      only: inode, ionode
   use io_module,     only: write_xsf
-  use global_module, only: iprint_MD, flag_baroDebug, flag_thermoDebug
+  use global_module, only: iprint_MD, flag_baroDebug, flag_thermoDebug, &
+                           flag_heat_flux
   use md_model,      only: type_md_model, md_tdep
   use md_control,    only: type_barostat, type_thermostat, &
                            write_md_checkpoint, flag_write_xsf, &
                            md_thermo_file, md_baro_file, &
                            md_trajectory_file, md_frames_file, &
-                           md_stats_file
+                           md_stats_file, md_heat_flux_file
 
   ! Passed variables
   type(type_barostat), intent(inout)    :: baro
@@ -1225,11 +1348,12 @@ subroutine write_md_data(iter, thermo, baro, mdl, nequil)
 
   call write_md_checkpoint(thermo, baro)
   call mdl%dump_stats(md_stats_file, nequil)
-  if (inode == ionode .and. mod(iter, MDfreq) == 0) then
+  if (flag_write_xsf) call write_xsf(md_trajectory_file, iter)
+  if (flag_heat_flux) call mdl%dump_heat_flux(md_heat_flux_file)
+  if (mod(iter, MDfreq) == 0) then
     call mdl%dump_frame(md_frames_file)
     if (md_tdep) call mdl%dump_tdep
   end if
-  if (flag_write_xsf) call write_xsf(md_trajectory_file, iter)
   if (flag_thermoDebug) &
     call thermo%dump_thermo_state(iter, md_thermo_file)
   if (flag_baroDebug) &
@@ -1781,13 +1905,14 @@ end subroutine write_md_data
     enthalpy1 = enthalpy0
     dH = zero
     max_stress = zero
+    volume = rcellx*rcelly*rcellz
     do i=1,3
       stress_diff = abs(press + stress(i,i))/volume
       if (stress_diff > max_stress) max_stress = stress_diff
     end do
     if (inode==ionode) then
-      write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxStr: ",f12.8," H: ", &
-        e16.8," dH: ",f12.8)') 0, max_stress, enthalpy0, zero
+      write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxStr: ",f12.8," H: "e16.8," dH: ",f12.8)') &
+           0, max_stress, enthalpy0, zero
     end if
 
     call dump_pos_and_matrices(index=0,MDstep=iter)
@@ -1872,12 +1997,11 @@ end subroutine write_md_data
          if (stress_diff > max_stress) max_stress = stress_diff
        end do
 
-       iter = iter + 1
        reset_iter = reset_iter +1
 
        if (inode==ionode) then
-         write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxStr: ",f12.8," H: ", &
-           e16.8," dH: ",f12.8)') iter, max_stress, enthalpy1, en_conv*dH
+         write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxStr: ",f12.8," H: "e16.8," dH: ",f12.8)') &
+              iter, max_stress, enthalpy1, en_conv*dH
          if (iprint_MD > 1) then
            write(io_lun,'(4x,"Maximum stress         ",3f10.6)') &
              max_stress
@@ -1892,6 +2016,7 @@ end subroutine write_md_data
          end if
        end if
 
+       iter = iter + 1
        if (myid == 0 .and. iprint_MD > 0) then
            write (io_lun, 4) en_conv*dH, en_units(energy_units)
            write (io_lun, 5) dRMSstress, "Ha"
@@ -2134,8 +2259,8 @@ end subroutine write_md_data
     enthalpy0 = enthalpy(energy0, press)
     dH = zero
     if (inode==ionode) then
-      write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," H: ", &
-        e16.8," dH: ",f12.8)') 0, max, enthalpy0, dH
+      write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," H: " e16.8," dH: ",f12.8)') & 
+           0, max, enthalpy0, dH
     end if
 
    if (inode == ionode .and. iprint_gen > 0) then
@@ -2231,8 +2356,8 @@ end subroutine write_md_data
         energy0 = energy1
 
         if (inode==ionode) then
-          write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," H: ", &
-            e16.8," dH: ",f12.8)') iter, max, enthalpy1, en_conv*dH
+          write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," H: "e16.8," dH: ",f12.8)') &
+               iter, max, enthalpy1, en_conv*dH
           if (iprint_MD > 1) then
             write(io_lun,'(4x,"Force Residual:     ",f20.10," ",a2,"/",a2)') &
               for_conv*sqrt(g0/ni_in_cell), en_units(energy_units), & 
@@ -2326,8 +2451,8 @@ end subroutine write_md_data
       end do
 
       if (inode==ionode) then
-        write(io_lun,'(2x,"GeomOpt + Iter: ",i4," MaxF: ",f12.8," H: ", &
-          e16.8," dH: ",f12.8)') iter, max, enthalpy1, en_conv*dH
+        write(io_lun,'(2x,"GeomOpt + Iter: ",i4," MaxF: ",f12.8," H: " e16.8," dH: ",f12.8)') &
+             iter, max, enthalpy1, en_conv*dH
         if (iprint_MD > 1) then
           write(io_lun,'(4x,"Force Residual:     ",f20.10," ",a2,"/",a2)') &
             for_conv*sqrt(g0/ni_in_cell), en_units(energy_units), & 
@@ -2510,8 +2635,8 @@ end subroutine write_md_data
     call get_maxf(max)
     enthalpy0 = enthalpy(energy0, press)
     if (inode==ionode) then
-      write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," H: ", &
-        e16.8," dH: ",f12.8)') 0, max, enthalpy0, zero
+      write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," H: "e16.8," dH: ",f12.8)') &
+           0, max, enthalpy0, zero
     end if
 
     iter = 1
@@ -2588,8 +2713,8 @@ end subroutine write_md_data
       ! Output and energy changes
       dH = enthalpy0 - enthalpy1
       if (inode==ionode) then
-        write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," H: ", &
-          e16.8," dH: ",f12.8)') iter, max, enthalpy1, en_conv*dH
+        write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," H: "e16.8," dH: ",f12.8)') &
+             iter, max, enthalpy1, en_conv*dH
         if (iprint_MD > 1) then
           write(io_lun,'(4x,"Force Residual:     ",f20.10," ",a2,"/",a2)') &
             for_conv*sqrt(g0/ni_in_cell), en_units(energy_units), & 
