@@ -21,9 +21,9 @@ module biblio
   character(len=*), parameter :: bibtex_file = "conquest.bib"
   character(len=*), parameter :: ref_fmt = '(4x,a," ",i0,", ",i0," (",i0,")")'
   character(len=*), parameter :: doi_fmt = '(4x,"http://dx.doi.org/",a)'
-  character(len=*), parameter :: bib_key_fmt = '("@article{",a,",",a)'
-  character(len=*), parameter :: bib_afield_fmt = '(a," = {{",a,"}},",a)'
-  character(len=*), parameter :: bib_ifield_fmt = '(a," = {",i0,"},",a)'
+  character(len=*), parameter :: bib_key_fmt = '("@article{",a,",")'
+  character(len=*), parameter :: bib_afield_fmt = '(2x,a," = {{",a,"}},")'
+  character(len=*), parameter :: bib_ifield_fmt = '(2x,a," = {",i0,"},")'
   integer, parameter          :: max_refs = 50
 
   type type_reference
@@ -49,6 +49,7 @@ module biblio
 
     type(type_reference), allocatable, dimension(:) :: db
     integer             :: nrefs
+    logical             :: first
 
     contains
 
@@ -107,21 +108,37 @@ module biblio
     !!
     !!  SOURCE
     !!
-    subroutine write_bib(ref, bib_str)
+    subroutine write_bib(ref, first)
+
+      use io_module, only: io_assign, io_close
 
       ! passed variables
       class(type_reference), intent(in) :: ref
-      character(len=1024), intent(out)  :: bib_str
+      logical, intent(inout)            :: first
 
-      write(bib_str,bib_key_fmt) ref%key
-      write(bib_str,bib_afield_fmt) "author", trim(ref%authors), achar(10)
-      write(bib_str,bib_afield_fmt) "title", trim(ref%title), achar(10)
-      write(bib_str,bib_afield_fmt) "journal", trim(ref%journal), achar(10)
-      write(bib_str,bib_ifield_fmt) "year", ref%year, achar(10)
-      write(bib_str,bib_ifield_fmt) "volume", ref%volume, achar(10)
-      write(bib_str,bib_ifield_fmt) "pages", ref%page, achar(10)
-      write(bib_str,bib_afield_fmt) "doi", trim(ref%doi), achar(10)
-      write(bib_str,'("}",a)') achar(10)
+      ! local variables
+      integer :: lun
+      character(len=400)                :: str
+
+      call io_assign(lun) 
+      if (first) then
+        open(unit=lun,file=bibtex_file,status='replace')
+        first = .false.
+      else
+        open(unit=lun,file=bibtex_file,position='append')
+      end if
+
+      write(lun,bib_key_fmt) ref%key
+      write(lun,bib_afield_fmt) "author", trim(ref%authors)
+      write(lun,bib_afield_fmt) "title", trim(ref%title)
+      write(lun,bib_afield_fmt) "journal", trim(ref%journal)
+      write(lun,bib_ifield_fmt) "year", ref%year
+      write(lun,bib_ifield_fmt) "volume", ref%volume
+      write(lun,bib_ifield_fmt) "pages", ref%page
+      write(lun,bib_afield_fmt) "doi", trim(ref%doi)
+      write(lun,'("}")')
+
+      call io_close(lun)
 
     end subroutine write_bib
     !!***
@@ -159,6 +176,7 @@ module biblio
 
       allocate(bib%db(max_refs))
       bib%nrefs = 0
+      bib%first = .true.
 
     end subroutine init_bib
 
@@ -228,6 +246,8 @@ module biblio
 
     subroutine cite(bib, key)
 
+      use global_module, only: flag_dump_bib
+
       ! passed variables
       class(type_bibliography), intent(inout) :: bib
       character(*), intent(in)                :: key
@@ -237,7 +257,7 @@ module biblio
 
       reference = bib%get_ref(key)
       call reference%cite_reference
-
+      if (flag_dump_bib) call reference%write_bib(bib%first)
 
     end subroutine cite
     !!***
