@@ -1,3 +1,17 @@
+!!****h* Conquest/references *
+!!  NAME
+!!   references
+!!  PURPOSE
+!!   Literal data for bibliography generation, plus wrapper for citing all 
+!!   relevant references.
+!!  AUTHOR
+!!   Zamaan Raza
+!!  CREATION DATE
+!!   2019/07/03
+!!  MODIFICATION HISTORY
+!!
+!!  SOURCE
+!!
 module references
 
   use biblio
@@ -6,7 +20,21 @@ module references
 
   contains
 
-    subroutine biblio_data(bib)
+    !!****f* referencds/get_bib_db *
+    !!
+    !!  NAME 
+    !!   compile_biblio
+    !!  PURPOSE
+    !!   Generate a bibliography database
+    !!  AUTHOR
+    !!   Zamaan Raza
+    !!  CREATION DATE
+    !!   2019/07/04
+    !!  MODIFICATION HISTORY
+    !!
+    !!  SOURCE
+    !!
+    subroutine get_bib_db(bib)
 
       ! Passed variables
       type(type_bibliography), intent(inout) :: bib
@@ -88,10 +116,10 @@ module references
 "10.1088/0953-8984/22/7/074207", &
 "CONQUEST order(N) paper")
 
-    end subroutine biblio_data
+    end subroutine get_bib_db
     !!***
 
-    !!****f* biblio/compile_biblio *
+    !!****f* referencds/compile_biblio *
     !!
     !!  NAME 
     !!   compile_biblio
@@ -118,7 +146,7 @@ module references
       type(type_reference)    :: reference
 
       call bib%init_bib
-      call biblio_data(bib)
+      call get_bib_db(bib)
 
       if (inode==ionode) then
         write(io_lun,*)
@@ -143,7 +171,6 @@ module references
       if (flag_XLBOMD)                  call bib%cite("Arita2014")
       if (flag_Multisite)               call bib%cite("Nakata2014")
 
-      write(io_lun,*)
       call bib%close_bib
 
     end subroutine compile_biblio
