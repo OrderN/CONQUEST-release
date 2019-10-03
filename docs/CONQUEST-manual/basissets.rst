@@ -163,8 +163,9 @@ you may need to switch off the preconditinoning procedure for length-scale ill c
 ::
 
 	minE.PreconditionBlips              F 
-	
-	.. _basis_bsse:
+
+
+.. _basis_bsse:
 
 Basis Set Superposition Error
 ----------------------------
