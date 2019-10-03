@@ -136,7 +136,7 @@ The number of support functions can be the size of a minimal basis set, like mul
 	Atom.SupportGridSpacing                    0.3
 	%endblock **
 
-You need *.ion files of SZ basis sets (``minimal`` in the Basis Generation). 
+You need `*`.ion files of SZ basis sets (``minimal`` in the Basis Generation). 
 
 Blip-grid spacing can be determined from the cutoff energy of pseudo wavefunctions in the planewave calculations.
 If you need the cutoff energy :math:`E_{\rm cutoff}` in Hartree, the blip-grid spacing should be 
@@ -163,4 +163,51 @@ you may need to switch off the preconditinoning procedure for length-scale ill c
 ::
 
 	minE.PreconditionBlips              F 
+	
+	.. _basis_bsse:
+
+Basis Set Superposition Error
+----------------------------
+The basis set superposition error (BSSE) arises when the two monomer units come closer and the basis set localized on one unit can act as 
+diffuse functions for the electrons from the other unit, and therefore could be responsible for the overestimation of the binding energy for the interacting systems. 
+
+To correct this BSSE, the Counterpoise (CP) correction method proposed by "Boys and Bernardi" is used where the artificial 
+stabilization is controlled by enabling the atoms to improve their basis sets after borrowing functions of an empty basis set from the ghost atoms. 
+
+Since, the typical interaction energy between two monomers A and B is calculated as:
+
+:math:`E_{AB}^{int} = E_{AB}(AB) - E_A(A) - E_B(B).`
+
+Now, the estimate to the amount of the artificial stabilization of A by the extra basis functions from B is:
+
+:math:`E_{A}^{BSSE} = E_A(AB) - E_A(A),`
+
+where energy of A in its monomer basis is subtracted from energy of A in dimer basis. 
+
+Similarly, for monomer B,
+
+:math:`E_{B}^{BSSE} = E_B(AB) - E_B(B),`
+
+Subtracting the BSSE part of A and B units from the typical interaction energy mentioned above, the counterpoise corrected 
+interaction energy without BSSE :math:`(E_{AB}^{CP})` will be:
+
+:math:`E_{AB}^{CP} = E_{AB}(AB) - E_A(AB) - E_B(AB).`
+
+
+ 
+ 
+Practically, to set up such calculation e.g. to evaluate the energy of A in the dimer basis :math:`(E_A(AB))`, the basis 
+functions from B is placed on atomic centers of B, however with zero nuclear charge and mass.  This could be performed in CONQUEST by specifying negative sign to the 
+corresponding masses for the ghost atoms(B) in the ``block ChemicalSpeciesLabel`` of the input file:
+
+::
+
+ %block ChemicalSpeciesLabel
+   1   1.0100000000 A  A.ion
+   2  -1.0100000000 B  B.ion
+ %endblock
+
+Similarly, separate calculations are performed for monomer B in dimer basis with ghost atoms on A :math:`(E_B(AB))` and 
+also for :math:`E_{AB}(AB)` in complete basis, to get the net interaction energy without BSSE. 
+
 
