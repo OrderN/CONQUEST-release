@@ -704,6 +704,8 @@ contains
   !!    and off-diagonal elements respectively
   !!   2019/05/21 zamaan
   !!    Added flag for RNG seed
+  !!   2019/10/08 nakata
+  !!    Fixed bug for the case when reading only Kmatrix but not SFcoeff (for MSSFs)
   !!  TODO
   !!   Fix reading of start flags (change to block ?) 10/05/2002 dave
   !!   Fix rigid shift 10/05/2002 dave
@@ -1976,6 +1978,10 @@ contains
          find_chdens    = fdf_boolean('SC.MakeInitialChargeFromK',.false.)
          if (flag_XLBOMD) restart_X=fdf_boolean('XL.LoadX', .false.)
        end if
+
+       if (restart_LorK .and. flag_Multisite .and. .not.read_option) then
+          call cq_abort("When L or K matrix is read from files, SFcoeff also must be read from files for multi-site calculation.")
+       endif
 
        if (flag_XLBOMD) then
          kappa=fdf_double('XL.Kappa',2.0_double)
