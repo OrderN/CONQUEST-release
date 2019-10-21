@@ -2715,7 +2715,8 @@ contains
                                       atomf, sf, nspin_SF, flag_LFD,   &
                                       flag_SFcoeffReuse, flag_diagonalisation, &
                                       ne_spin_in_cell,                 &
-                                      ne_in_cell, spin_factor
+                                      ne_in_cell, spin_factor,         &
+                                      ni_in_cell, area_moveatoms
     use density_module,         only: set_atomic_density,              &
                                       flag_no_atomic_densities,        &
                                       density, set_density_pcc,        &
@@ -2726,6 +2727,7 @@ contains
     use functions_on_grid,      ONLY: atomfns, H_on_atomfns
     use XLBOMD_module,          ONLY: get_initialL_XL
     use multisiteSF_module,     ONLY: initial_SFcoeff, flag_LFD_MD_UseAtomicDensity
+    use memory_module,          only: reg_alloc_mem, type_dbl
 
     implicit none
 
@@ -2736,7 +2738,7 @@ contains
     type(cq_timer) :: tmr_l_tmp1
     real(double), dimension(nspin) :: electrons, energy_tmp
     real(double) :: scale
-    integer :: spin_SF, spin
+    integer :: spin_SF, spin, stat
 
     call start_timer(tmr_l_tmp1,WITH_LEVEL)
     ! (0) Pseudopotentials: choose correct form

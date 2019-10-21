@@ -38,6 +38,8 @@
 !!   2018/08/12 zamaan
 !!    Removed read/write_thermo/baro_checkpoint, replaced with a unified &
 !!    checkpoint that includes ionic velocities
+!!   2019/05/08 zamaan
+!!    minor changes for heat flux calculations
 !!   2019/02/06 zamaan
 !!    Pressure conversion factor now computed from values from units module
 !!  SOURCE
@@ -68,8 +70,9 @@ module md_control
   character(20) :: md_thermo_file = "md.thermostat"
   character(20) :: md_baro_file = "md.barostat"
   character(20) :: md_trajectory_file = "trajectory.xsf"
-  character(20) :: md_frames_file = "Frames"
-  character(20) :: md_stats_file = "Stats"
+  character(20) :: md_frames_file = "md.frames"
+  character(20) :: md_stats_file = "md.stats"
+  character(20) :: md_heat_flux_file = "md.heatflux"
 
   ! Module variables
   character(20) :: md_thermo_type, md_baro_type
@@ -77,11 +80,12 @@ module md_control
                    md_box_mass, md_ndof_ions, md_omega_t, md_omega_p, &
                    md_tau_T_equil, md_tau_P_equil, md_p_drag, md_t_drag
   integer       :: md_n_nhc, md_n_ys, md_n_mts, md_berendsen_equil
-  logical       :: flag_write_xsf, md_cell_nhc, md_calc_xlmass
+  logical       :: flag_write_xsf, md_cell_nhc, md_calc_xlmass, flag_nhc
   logical       :: flag_extended_system = .false.
   real(double), dimension(3,3), target      :: lattice_vec
   real(double), dimension(:), allocatable   :: md_nhc_mass, md_nhc_cell_mass
   real(double), dimension(:,:), allocatable, target :: ion_velocity
+  real(double), dimension(3), target        :: heat_flux
 
   !!****s* md_control/type_thermostat
   !!  NAME
@@ -354,6 +358,7 @@ contains
     integer                               :: i
 
     flag_extended_system = .true.
+    flag_nhc = .true.
     th%n_nhc = md_n_nhc
     th%n_ys = md_n_ys
     th%n_mts_nhc = md_n_mts
@@ -911,8 +916,8 @@ contains
     do i_mts=1,th%n_mts_nhc ! MTS loop
       do i_ys=1,th%n_ys     ! Yoshida-Suzuki loop
         if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) then
-          write(io_lun,*) "i_ys  = ", i_ys
-          write(io_lun,*) "dt_ys = ", th%dt_ys(i_ys)
+          write(io_lun,'(4x,a,i8)') "i_ys  = ", i_ys
+          write(io_lun,'(4x,a,i8)') "dt_ys = ", th%dt_ys(i_ys)
         end if
         ! Reverse part of Trotter expansion: update thermostat force/velocity
         call th%propagate_v_eta_lin(th%n_nhc, th%dt_ys(i_ys), quarter)
@@ -1666,7 +1671,7 @@ contains
     end select
 
     if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 4) then
-      write(io_lun,*) "propagate_v_box_lin"
+      write(io_lun,'(2x,a)') "propagate_v_box_lin"
       select case(baro%baro_type)
       case('iso-mttk')
         write(io_lun,'(4x,a,e16.8)') "v_eps       ", baro%v_eps

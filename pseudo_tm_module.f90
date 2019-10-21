@@ -960,6 +960,8 @@ contains
 !!    Debug for ghost atoms
 !!   2019/04/08 zamaan
 !!    Off-diagonal stress tensor elements
+!!   2019/05/08 zamaan
+!!    Added atomic stress contributions
 !!  SOURCE
 !!
   subroutine loc_pp_derivative_tm ( hf_force, density, size )
@@ -969,7 +971,7 @@ contains
     use dimens, only: grid_point_volume, n_my_grid_points
     use global_module, only: rcellx,rcelly,rcellz,id_glob, iprint_pseudo, &
          species_glob, nlpf,ni_in_cell, flag_neutral_atom, dens, &
-         flag_full_stress, flag_stress
+         flag_full_stress, flag_stress, flag_atomic_stress, atomic_stress
     use block_module, only : n_pts_in_block
     use group_module, only : blocks, parts
     use primary_module, only: domain
@@ -1189,6 +1191,12 @@ contains
                                       loc_HF_stress(dir1,dir2) + &
                                       fr_2(dir1) * grid_point_volume * &
                                       r(dir2) * r_from_i
+                                    if (flag_atomic_stress) then
+                                      atomic_stress(dir1,dir2,ig_atom) = &
+                                        atomic_stress(dir1,dir2,ig_atom) + &
+                                        fr_2(dir1) * grid_point_volume * &
+                                        r(dir2) * r_from_i
+                                    end if
                                   end do
                                 else
                                   loc_HF_stress(dir1,dir1) = &
@@ -1235,6 +1243,12 @@ contains
                                       loc_HF_stress(dir1,dir2) + &
                                       fr_2(dir1) * grid_point_volume * &
                                       r(dir2) * r_from_i
+                                    if (flag_atomic_stress) then
+                                      atomic_stress(dir1,dir2,ig_atom) = &
+                                        atomic_stress(dir1,dir2,ig_atom) + &
+                                        fr_2(dir1) * grid_point_volume * &
+                                        r(dir2) * r_from_i
+                                    end if
                                   end do
                                 else
                                   loc_HF_stress(dir1,dir1) = &
@@ -1282,6 +1296,12 @@ contains
                                       loc_HF_stress(dir1,dir2) + &
                                       (fr_1(dir1) * elec_here + fr_2(dir1)) * &
                                       r(dir2) * r_from_i
+                                    if (flag_atomic_stress) then
+                                      atomic_stress(dir1,dir2,ig_atom) = &
+                                        atomic_stress(dir1,dir2,ig_atom) * &
+                                        (fr_1(dir1) * elec_here + fr_2(dir2))*&
+                                        r(dir2) * r_from_i
+                                    end if
                                   end do
                                 else
                                   loc_HF_stress(dir1,dir1) = &
@@ -1333,6 +1353,12 @@ contains
                                       loc_HF_stress(dir1,dir2) + &
                                       fr_2(dir1) * grid_point_volume * &
                                       r(dir2) * r_from_i
+                                    if (flag_atomic_stress) then
+                                      atomic_stress(dir1,dir2,ig_atom) = &
+                                        atomic_stress(dir1,dir2,ig_atom) + &
+                                        fr_2(dir1) * grid_point_volume * &
+                                        r(dir2) * r_from_i
+                                    end if
                                   end do
                                 else
                                   loc_HF_stress(dir1,dir1) = &
