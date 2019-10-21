@@ -654,7 +654,11 @@ contains
       ! Include Ha/cubic bohr to GPa conversion and 1/volume factor
       ! Factor of 1e21 comes from Ang to m (1e30) and Pa to GPa (1e-9) 
       scale = -(HaToeV*eVToJ*1e21_double)/(volume*BohrToAng*BohrToAng*BohrToAng)
-      call print_stress("Total pressure:   ", stress*scale, 0)
+      ! We need pressure in GPa, and only diagonal terms output
+      !call print_stress("Total pressure:   ", stress*scale, 0)
+      if(inode==ionode.AND.iprint_MD>0) &
+           write(io_lun,'(/4x,a18,3f15.8,a4)') "Total pressure:   ",stress(1,1)*scale,&
+           stress(2,2)*scale,stress(3,3)*scale," GPa"
       if (flag_atomic_stress .and. iprint_MD > 2) call check_atomic_stress
     end if
 
@@ -2575,36 +2579,36 @@ contains
       call gsum(KE_stress, 3, 3)
     end if
 
-      call free_temp_matrix(mat_grad_T)
-      call stop_backtrace(t=backtrace_timer,who='get_KE_force',echo=.true.)
+    call free_temp_matrix(mat_grad_T)
+    call stop_backtrace(t=backtrace_timer,who='get_KE_force',echo=.true.)
+    
+    return
+  end subroutine get_KE_force
+  !!***
 
-      return
-    end subroutine get_KE_force
-    !!***
+  ! -----------------------------------------------------------
+  ! Subroutine get_HNA_force
+  ! -----------------------------------------------------------
 
-    ! -----------------------------------------------------------
-    ! Subroutine get_HNA_force
-    ! -----------------------------------------------------------
-
-    !!****f* force_module/get_HNA_force *
-    !!
-    !!  NAME
-    !!   get_HNA_force
-    !!  USAGE
-    !!
-    !!  PURPOSE
-    !!   Gets the neutral atom part of the HF force if using projectors
-    !!   This mixes Hellman-Feynman and Pulay forces (as with NL part above)
-    !!  INPUTS
-    !!
-    !!
-    !!  USES
-    !!
-    !!  AUTHOR
-    !!   D. R. Bowler
-    !!  CREATION DATE
-    !!   2018/01/10
-    !!  MODIFICATION HISTORY
+  !!****f* force_module/get_HNA_force *
+  !!
+  !!  NAME
+  !!   get_HNA_force
+  !!  USAGE
+  !!
+  !!  PURPOSE
+  !!   Gets the neutral atom part of the HF force if using projectors
+  !!   This mixes Hellman-Feynman and Pulay forces (as with NL part above)
+  !!  INPUTS
+  !!
+  !!
+  !!  USES
+  !!
+  !!  AUTHOR
+  !!   D. R. Bowler
+  !!  CREATION DATE
+  !!   2018/01/10
+  !!  MODIFICATION HISTORY
   !!   2018/01/25 12:52 JST dave
   !!    Changed transpose type for mat_dNA to aNAa_trans
   !!   2018/01/30 10:06 dave
@@ -2612,6 +2616,8 @@ contains
   !!    which led to erroneous stress values on multiple processors
   !!   2019/05/08 zamaan
   !!    Added atomic stress contributions
+  !!   2019/10/21 14:22 dave
+  !!    Bug fix: missing term in 1-and-2 centre part
   !!  SOURCE
   !!
   subroutine get_HNA_force(NA_force)
@@ -2670,7 +2676,6 @@ contains
                     neigh_global_part, neigh_species, wheremat, matU_NA, matUT_NA
     real(double) :: dx, dy, dz, thisdAP, locforce
     real(double), dimension(3,3) :: NA_P_stress, NA_HF_stress
-    real(double), dimension(:), allocatable :: force_contrib, f_c2
     type(cq_timer) :: backtrace_timer
     
     call start_backtrace(t=backtrace_timer,who='get_HNA_force',where=7,level=3,echo=.true.)
@@ -2678,8 +2683,6 @@ contains
 !    ! First, clear the diagonal blocks of data K; this is the easiest way
 !    ! to avoid doing the onsite terms
     NA_force = zero
-    allocate(force_contrib(ni_in_cell))
-    force_contrib = zero
     ! 3-centre terms
     do k = 1, 3
        matdaNA(k) = allocate_temp_matrix (aNArange, aNA_trans, atomf, napf)
@@ -2910,7 +2913,6 @@ contains
     mat_dNAT = allocate_temp_matrix(aHa_range,aNAa_trans,atomf,atomf)
     ! Now, for the offsite part, done on the integration grid.
     do dir1 = 1, 3
-       force_contrib = zero
        ! Build derivatives
        call assemble_deriv_2(dir1,aHa_range, mat_dNA, 4)
        call matrix_transpose(mat_dNA, mat_dNAT)
@@ -2950,7 +2952,6 @@ contains
                                     np, i, iprim, j, n2, n1)
                                NA_force(dir1,atom) =       &
                                     NA_force(dir1,atom) + two*thisK_gradT
-                               force_contrib(atom) = force_contrib(atom) + two*thisK_gradT
                                if (flag_stress) then
                                  if (flag_full_stress) then
                                    do dir2=1,3
@@ -2979,7 +2980,6 @@ contains
        end do ! np
        call matrix_scale(zero,mat_dNAT)
        call assemble_deriv_2(dir1,aHa_range, mat_dNAT, 6)
-       force_contrib = zero
        !f_c2 = zero
        iprim = 0
        do np = 1, bundle%groups_on_node
@@ -3002,37 +3002,38 @@ contains
                    ! Global number of neighbour: id_glob( parts%icell_beg(gcs%lab_cell(np)) +ni-1 )
                    j_atom = id_glob( parts%icell_beg( BCS_parts%lab_cell(mat(np,aHa_range)%i_part(ist))) &
                         + mat(np,aHa_range)%i_seq(ist)-1 )
+                   ! These lines ensure that the correct pairs of forces are found
                    NA_force(dir1,j_atom) =       &
-                      NA_force(dir1,j_atom) - &
-                      spin_factor * return_matrix_value(mat_dNAT,   &
-                      np, i, iprim, j, 1, 1)
-                   if (flag_stress) then
-                     if (flag_full_stress) then
-                       do dir2=1,3
-                         NA_stress(dir1,dir2) = NA_stress(dir1,dir2) + &
-                            spin_factor * return_matrix_value(mat_dNAT,   &
-                            np, i, iprim, j, 1, 1) * r_str(dir2)
-                         if (flag_atomic_stress) then
-                           atomic_stress(dir1,dir2,j_atom) = &
-                             atomic_stress(dir1,dir2,j_atom) + &
-                             spin_factor * return_matrix_value(mat_dNAT, &
-                             np, i, iprim, j, 1, 1) * r_str(dir2)
-                         end if
-                       end do
-                     else
-                       NA_stress(dir1,dir1) = NA_stress(dir1,dir1) + &
-                          spin_factor * return_matrix_value(mat_dNAT,   &
-                          np, i, iprim, j, 1, 1) * r_str(dir1)
-                     end if !flag_full_stress
-                   end if ! flag_stress
-                   force_contrib(j_atom) = force_contrib(j_atom)-spin_factor * return_matrix_value(mat_dNAT,   &
+                        NA_force(dir1,j_atom) - &
+                        spin_factor * return_matrix_value(mat_dNAT,   &
                         np, i, iprim, j, 1, 1)
-                   force_contrib(atom) = force_contrib(atom)+spin_factor * return_matrix_value(mat_dNAT,   &
-                         np, i, iprim, j, 1, 1)
-                   end do ! j
-                end do ! i
-             end if  ! (bundle%nm_nodgroup(np) > 0)
-          end do ! np
+                   NA_force(dir1,atom) =       &
+                        NA_force(dir1,atom) + &
+                        spin_factor * return_matrix_value(mat_dNAT,   &
+                        np, i, iprim, j, 1, 1)
+                   if (flag_stress) then
+                      if (flag_full_stress) then
+                         do dir2=1,3
+                            NA_stress(dir1,dir2) = NA_stress(dir1,dir2) + &
+                                 spin_factor * return_matrix_value(mat_dNAT,   &
+                                 np, i, iprim, j, 1, 1) * r_str(dir2)
+                            if (flag_atomic_stress) then
+                               atomic_stress(dir1,dir2,j_atom) = &
+                                    atomic_stress(dir1,dir2,j_atom) + &
+                                    spin_factor * return_matrix_value(mat_dNAT, &
+                                    np, i, iprim, j, 1, 1) * r_str(dir2)
+                            end if
+                         end do
+                      else
+                         NA_stress(dir1,dir1) = NA_stress(dir1,dir1) + &
+                              spin_factor * return_matrix_value(mat_dNAT,   &
+                              np, i, iprim, j, 1, 1) * r_str(dir1)
+                      end if !flag_full_stress
+                   end if ! flag_stress
+                end do ! j
+             end do ! i
+          end if  ! (bundle%nm_nodgroup(np) > 0)
+       end do ! np
        call stop_timer(tmr_std_matrices)
     end do ! dir1
 
@@ -3044,7 +3045,6 @@ contains
 
     call free_temp_matrix(mat_dNAT)
     call free_temp_matrix(mat_dNA)
-    deallocate(force_contrib)
     call stop_backtrace(t=backtrace_timer,who='get_HNA_force',echo=.true.)
     return
   end subroutine get_HNA_force
