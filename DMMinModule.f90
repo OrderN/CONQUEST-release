@@ -2027,6 +2027,8 @@ contains
 !!   Solves a cubic: x^3+Ax^2+Bx+C
 !!   This is a general solution first worked out in the
 !!   sixteenth century (published by Gerolamo Cardano)
+!!
+!!   See, for example, Abramowitz & Stegun p. 17
 !!  INPUTS
 !!
 !!
@@ -2063,20 +2065,20 @@ contains
 
     if ((R*R)<(Q*Q*Q)) then ! Guarantees Q is positive
        ! three roots...
-       theta = acos(R/(SQRT(Q*Q*Q)))
-       T = -2.0_double*SQRT(Q)
+       theta = acos(R/(sqrt(Q*Q*Q)))
+       T = -two * sqrt(Q)
        ! Note that solutions are given relative to guess (step taken to find parameters)
-       z1 = T * cos(theta/3.0_double) - (a/3.0_double) - guess
-       z2 = T * cos((theta+2.0_double*pi)/3.0_double) - (a/3.0_double) - guess
-       z3 = T * cos((theta-2.0_double*pi)/3.0_double) - (a/3.0_double) - guess
+       z1 = T * cos(theta/three) - (a/three) 
+       z2 = T * cos((theta+twopi)/three) - (a/three) 
+       z3 = T * cos((theta-twopi)/three) - (a/three) 
 
        ! Take solution with smallest magnitude
        if (abs(z1)<=abs(z2).and.abs(z1)<=abs(Z3)) then
-          SolveCubic = z1 + guess
+          SolveCubic = z1 
        else if (abs(z2)<=abs(z3)) then
-          SolveCubic = z2 + guess
+          SolveCubic = z2 
        else
-          SolveCubic = z3 + guess
+          SolveCubic = z3 
        end if
     else
 
@@ -2099,7 +2101,7 @@ contains
           T = -abs(T)**third
        end if
 
-       SolveCubic = S + T - a/3.0_double - guess
+       SolveCubic = S + T - a/3.0_double 
        ! Experience suggests that, while this is a correct solution to the cubic,
        ! a large step is completely wrong for electron number correction - test
        ! for this, and if necessary return only the initial guess
