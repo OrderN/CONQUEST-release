@@ -2082,6 +2082,8 @@ contains
   !!  Added timers
   !! 2012/05/26 L.Tong
   !! - Added input npmod, this is used by the new version of DoPulay
+  !!   2019/10/24 11:52 dave
+  !!    Changed function calls to DoPulay
   !!SOURCE
   !!
   subroutine pulayStep(npmod, posnStore, forceStore, x_atom_cell, &
@@ -2123,7 +2125,7 @@ contains
        enddo
     enddo
     !call gsum(Aij,mx_pulay,mx_pulay)
-    call DoPulay(npmod,Aij,alph,pul_mx,mx_pulay,inode,ionode)
+    call DoPulay(npmod,Aij,alph,pul_mx,mx_pulay)
     if(myid==0.AND.iprint_MD>2) write(io_lun,*) 'Alpha: ', alph
     x_atom_cell(:) = 0.0_double
     y_atom_cell(:) = 0.0_double

@@ -60,6 +60,8 @@
 !!    Tidying: removing LinearMixSC and earlySC
 !!   2019/08/13 16:46 jtlp with dave
 !!    Implemented new residuals
+!!   2019/10/24 11:52 dave
+!!    Changed function calls to FindMinDM
 !!  SOURCE
 !!
 module SelfCon
@@ -223,7 +225,7 @@ contains
     call start_timer(tmr_l_tmp1,WITH_LEVEL)
     if (.not. flag_self_consistent) then
        call stop_timer(tmr_std_chargescf)
-       call FindMinDM(n_L_iterations, vary_mu, L_tol, inode, ionode, &
+       call FindMinDM(n_L_iterations, vary_mu, L_tol, &
                       reset_L, .false.)
        call start_timer(tmr_std_chargescf)
        call get_energy(total_energy)
@@ -551,8 +553,7 @@ contains
           end do ! i
        end do ! spin
 
-       call DoPulay(npmod, Aij, alph, pul_mx, maxpulaySC, inode, &
-                    ionode)
+       call DoPulay(npmod, Aij, alph, pul_mx, maxpulaySC)
 
        do spin = 1, nspin
           if (inode == ionode) &
@@ -872,7 +873,6 @@ contains
     use datatypes
     use numbers
     use PosTan
-    use Pulay,          only: DoPulay
     use GenBlas
     use dimens,         only: n_my_grid_points, grid_point_volume
     use GenComms,       only: gsum, cq_abort, inode, ionode, my_barrier
@@ -1319,8 +1319,7 @@ contains
     end do ! spin
 
     ! solve for alpha
-    call DoPulay(iPulay, Aij, alpha, pul_max, maxpulaySC, inode, &
-                 ionode)
+    call DoPulay(iPulay, Aij, alpha, pul_max, maxpulaySC)
 
     ! Compute the optimal rho and do mixing
     do spin = 1, nspin
@@ -1588,7 +1587,7 @@ contains
        Ltol = tolerance
        ! Find minimum density matrix
        call stop_timer(tmr_std_chargescf)
-       call FindMinDM(n_CG_L_iterations, vary_mu, Ltol, inode, ionode, &
+       call FindMinDM(n_CG_L_iterations, vary_mu, Ltol, &
                       reset_L, record, backtrace_level)
        call start_timer(tmr_std_chargescf)
 

@@ -117,6 +117,8 @@ contains
   !!    which are no longer used here.
   !!   2017/02/23 dave
   !!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
+  !!   2019/10/24 11:52 dave
+  !!    Changed function calls to FindMinDM
   !!  SOURCE
   !!
   subroutine vary_pao(n_support_iterations, fixed_potential, vary_mu, &
@@ -318,7 +320,7 @@ contains
                                call get_H_matrix(.false., fixed_potential, &
                                                  electrons, density, maxngrid)
                                call FindMinDM(n_cg_L_iterations, vary_mu, &
-                                              L_tolerance, inode, ionode, &
+                                              L_tolerance, &
                                               .false., .false.)
                                call get_energy(E2)
                                E2 = band_energy
@@ -358,7 +360,7 @@ contains
                                ! Recalculate energy and gradient
                                call get_S_matrix(inode, ionode, build_AtomF_matrix=.false.)
                                call FindMinDM(n_cg_L_iterations, vary_mu, &
-                                              L_tolerance, inode, ionode, &
+                                              L_tolerance, &
                                               .false., .false.)
                                call get_energy(E2)
                                E2 = band_energy
@@ -398,7 +400,7 @@ contains
                                call get_H_matrix(.false., fixed_potential, &
                                                  electrons, density, maxngrid)
                                call FindMinDM(n_cg_L_iterations, vary_mu, &
-                                              L_tolerance, inode, ionode, &
+                                              L_tolerance, &
                                               .false., .false.)
                                call get_energy(E2)
                                E2 = band_energy
@@ -560,8 +562,8 @@ contains
        ! 3. Generate H
        call get_H_matrix(.false., fixed_potential, electrons, density, &
                          maxngrid)
-       call FindMinDM(n_cg_L_iterations, vary_mu, L_tolerance, inode, &
-                      ionode, .false., .false.)
+       call FindMinDM(n_cg_L_iterations, vary_mu, L_tolerance, &
+                      .false., .false.)
        call get_energy(total_energy_test)
        ! We need to assemble the gradient
        do spin_SF = 1, nspin_SF
@@ -684,7 +686,7 @@ contains
     use datatypes
     use logicals
     use numbers
-    use Pulay
+    use Pulay,               only: DoPulay
     use mult_module,         only: LNV_matrix_multiply, matM12, matM4, &
                                    mat_p, matSFcoeff, matSFcoeff_tran, &
                                    matdSFcoeff, matdSFcoeff_e,         &
@@ -869,7 +871,7 @@ contains
           end do
        end do
        ! Solve to get alphas
-       call DoPulay(npmod, Aij, alph, pul_mx, mx_pulay, inode, ionode)
+       call DoPulay(npmod, Aij, alph, pul_mx, mx_pulay)
        if (inode == ionode) write (io_lun, *) 'Alph: ', alph
 
        ! Make new supports

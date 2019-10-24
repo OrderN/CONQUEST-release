@@ -1073,6 +1073,8 @@ contains
   !!    Updates for new atom movement routines
   !!   2018/02/08 tsuyoshi (with dave)
   !!    Bug fix for reading K after atom movement
+  !!   2019/10/24 11:52 dave
+  !!    Changed function calls to FindMinDM
   !!  SOURCE
   !!
   subroutine initial_H(start, start_L, find_chdens, fixed_potential, &
@@ -1300,7 +1302,7 @@ contains
        if (vary_mu) then
           ! This cannot be timed within the routine
           call start_timer(tmr_std_densitymat)
-          call correct_electron_number(iprint_init, inode, ionode)
+          call correct_electron_number
           call stop_timer(tmr_std_densitymat)
        end if
     end if
@@ -1465,8 +1467,8 @@ contains
           !
           record  = .false.
           reset_L = .true.                
-          call FindMinDM(n_L_iterations, vary_mu, L_tolerance, inode, &
-               ionode, reset_L, record, backtrace_level)
+          call FindMinDM(n_L_iterations, vary_mu, L_tolerance, &
+               reset_L, record, backtrace_level)
           !
           record  = .true.             
           reset_L = .false.
@@ -1498,13 +1500,13 @@ contains
        if ( .not. restart_LorK ) then
           record  = .false.   
           reset_L = .true.
-          call FindMinDM(n_L_iterations, vary_mu, L_tolerance, inode, &
-               ionode, reset_L, record, backtrace_level)
+          call FindMinDM(n_L_iterations, vary_mu, L_tolerance, &
+               reset_L, record, backtrace_level)
        else
           record  = .false.
           reset_L = .false.
-          call FindMinDM(n_L_iterations, vary_mu, L_tolerance, inode, &
-               ionode, reset_L, record, backtrace_level)
+          call FindMinDM(n_L_iterations, vary_mu, L_tolerance, &
+               reset_L, record, backtrace_level)
        end if
        if (flag_out_wf.OR.flag_write_DOS) then
           wf_self_con=.false.

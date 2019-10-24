@@ -26,11 +26,15 @@
 !!    Changes for output to file not stdout
 !!   2012/03/01 L.Tong
 !!    Added interface DoPulay
+!!   2019/10/24 10:30 dave
+!!    Added inode and ionode as use-associated from GenComms in module header
+!!    for efficiency and best practice; changed function calls
 !!  SOURCE
 !!
 module Pulay
 
   use global_module, ONLY: io_lun
+  use GenComms, ONLY: inode, ionode
 
   implicit none
 
@@ -86,7 +90,7 @@ contains
 !!    Renamed to DoPulay_nospin
 !!  SOURCE
 !!
-  subroutine DoPulay_nospin(Aij, al, n, max_n, inode, ionode)
+  subroutine DoPulay_nospin(Aij, al, n, max_n)
 
     ! Module usage
     use datatypes
@@ -95,7 +99,7 @@ contains
     implicit none
 
     ! Passed variables
-    integer :: n, max_n,len,inode,ionode
+    integer :: n, max_n,len
 
     real(double) :: Aij(:),al(:)
 
@@ -181,7 +185,7 @@ contains
 !!     correspond to linear mixing
 !!  SOURCE
 !!
-  subroutine DoPulay2D_nospin(iPulay, Aij, al, n, max_n, inode, ionode)
+  subroutine DoPulay2D_nospin(iPulay, Aij, al, n, max_n)
 
     ! Module usage
     use datatypes
@@ -191,7 +195,7 @@ contains
     implicit none
 
     ! Passed variables
-    integer :: iPulay, n, max_n ,inode, ionode
+    integer :: iPulay, n, max_n
 
     real(double) :: Aij(max_n, max_n),al(max_n)
 
@@ -292,7 +296,7 @@ contains
   !!     correspond to linear mixing
   !! SOURCE
   !!
-  subroutine DoPulay_spin(iPulay, Aij, alpha, n, max_n, inode, ionode)
+  subroutine DoPulay_spin(iPulay, Aij, alpha, n, max_n)
     use datatypes
     use numbers
     use GenBlas,       only: sytrf, sytri
@@ -302,7 +306,7 @@ contains
     implicit none
 
     ! passed variables
-    integer :: iPulay, n, max_n, inode, ionode
+    integer :: iPulay, n, max_n
     real(double), dimension(max_n,max_n,nspin), intent(inout) :: Aij
     real(double), dimension(max_n,nspin),       intent(out)   :: alpha
     ! local variables
