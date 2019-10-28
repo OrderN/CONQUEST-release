@@ -2101,7 +2101,7 @@ contains
           T = -abs(T)**third
        end if
 
-       SolveCubic = S + T - a/3.0_double 
+       SolveCubic = S + T - a/three
        ! Experience suggests that, while this is a correct solution to the cubic,
        ! a large step is completely wrong for electron number correction - test
        ! for this, and if necessary return only the initial guess

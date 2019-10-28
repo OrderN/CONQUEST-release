@@ -2,7 +2,6 @@
 # $Id: pao2blip.obj,v 1.5 2005/05/26 08:36:27 drb Exp $
 #
 PAO2BLIP_OBJS = blip_pao_values.o\
-                linear_equation_solver.o\
                 ol_ang_coeff_subs.o\
                 ol_bessel_transforms.o\
                 ol_fft_procs.o\

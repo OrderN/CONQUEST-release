@@ -697,10 +697,11 @@ contains
   ! !!*****
 
 
-  !!****f* vdWDFT_module/bcucof
+  !!****f* vdWDFT_module/find_bicubic_coeffs
   !! PURPOSE
   !!   Finds coefficients for bicubic interpolation
-  !!   Adapted from Numerical Recipes
+  !!   Standard approach (written up in many places,
+  !!   including Wikipedia and Numerical Recipes)
   !! INPUTS
   !! OUTPUT
   !! RETURN VALUE
@@ -709,13 +710,16 @@ contains
   !! CREATION DATE
   !!   2012/02/26
   !! MODIFICATION HISTORY
+  !!   2019/10/25 08:17 dave
+  !!    Tidying, renaming
   !! SOURCE
   !!
-  subroutine bcucof(n1, n2, x1, x2, y, dydx1, dydx2, d2ydx1dx2, c)
+  subroutine find_bicubic_coeffs(n1, n2, x1, x2, y, dydx1, dydx2, d2ydx1dx2, c)
 
     use datatypes
 
     implicit none
+    
     ! passed variables
     integer,                        intent(in) :: n1, n2
     real(double), dimension(n1),    intent(in) :: x1
@@ -725,10 +729,12 @@ contains
     real(double), dimension(n1,n2), intent(in) :: dydx2
     real(double), dimension(n1,n2), intent(in) :: d2ydx1dx2
     real(double), dimension(0:3,0:3,n1,n2), intent(out) :: c
+    
     ! local variables
     integer      :: i1, i11, i12, i13, i14, i2, i21, i22, i23, i24
     real(double) :: dx1, dx2
     real(double), dimension(16)     :: z
+    ! This is the inverse matrix needed to find coefficients for one square
     real(double), dimension(16,16) :: wt
     data wt /1,  0, -3, 2, 4*0, -3, 0, 9, -6, 2, 0, -6, 4, 8*0, 3, 0,    &
              -9, 6, -2, 0, 6, -4, 10*0, 9, -6, 2*0, -6, 4, 2*0, 3, -2,   &
@@ -740,6 +746,7 @@ contains
              2*0, - 2, 2, 5*0, 1, -2, 1, 0, -2, 4, -2, 0, 1, -2, 1, 9*0, &
              -1, 2, -1, 0, 1, -2, 1, 10*0, 1, -1, 2*0, -1, 1, 6*0, -1,   &
              1, 2*0, 2, -2, 2*0, -1, 1/
+
     ! Set coefs. for i1<n1 and i2<n2
     do i2 = 1, n2 - 1
        do i1 = 1, n1 - 1
@@ -781,7 +788,7 @@ contains
     c(0, 0, :, n2) = y(:, n2)
 
     return
-  end subroutine bcucof
+  end subroutine find_bicubic_coeffs
   !!*****
 
 
@@ -1954,7 +1961,7 @@ contains
     d2phidd1dd2(1,:) = zero
 
     ! Set up bicubic interpolation coefficients
-    call bcucof(nd, nd, dmesh, dmesh, phi, dphidd1, dphidd2, &
+    call find_bicubic_coeffs(nd, nd, dmesh, dmesh, phi, dphidd1, dphidd2, &
                 d2phidd1dd2, phi_table)
 
     ! Save phi_table in file, note the same  mesh and table are on all nodes.
