@@ -112,7 +112,7 @@ MD analysis
 
 The script ``md_analysis.py`` script performs various analyses of the trajectory
 by parsing the `md.frames`` file. So far, these include the radial distribution
-function, the velocity autocorrelation funciton, the mean squared deviation, and
+function, the velocity autocorrelation function, the mean squared deviation, and
 plotting the stress. For example, the command,
 
 ``md_analysis.py --rdf --stride 20 --rdfcut 8.0 --nbins 100 --dump --skip 200 --stop 400``
@@ -195,33 +195,29 @@ set generation executable ``MakeIonFiles`` and pseudopotential database.
 Keywords for generating the Conquest_input file
 +++++++++++++++++++++++++++++++++++++++++++++++
 
-The calculator object takes a small number of mandatory keywords in the form of
-a dictionary or a set of keyword arguments to generate a minimal input. These
-are listed below, with their defaults and CONQUEST input flags.
-
+The calculator object contains a dictionray containing a small number of
+mandatory keywords, listed below:
 
 ::
 
-  default_parameters =  {
-        iprint:  1,                        # IO.Iprint
-        fractional_coordinates: True,      # IO.FractionalAtomicCoords
-        xc: 'PBE',                         # General.FunctionalType
-        pseudopotential_type: "hamann",    # General.PseudoPotentialType
-        type_of_run: 'static',             # AtomMove.TypeOfRun
-        basis_set: 'PAOs',                 # Basis.BasisSet
-        self_consistent: True,             # minE.SelfConsistent
-        sc_tolerance: 1.0e-6,              # minE.SCTolerance
-        spin_polarised: False,             # Spin.SpinPolarised
-        grid_cutoff: 100,                  # Grid.GridCutoff
-        max_scf: 50,                       # SC.MaxIters
-        solution_method: 'diagon',         # DM.SolutionMethod
+    default_parameters = {
+        'grid_cutoff'   : 100,     # DFT defaults
+        'kpts'          : None,
+        'xc'            : 'PBE',
+        'scf_tolerance' : 1.0e-6,
+        'nspin'         : 1,
+        'general.pseudopotentialtype' : 'Hamann', # CONQUEST defaults
+        'basis.basisset'              : 'PAOs',
+        'io.iprint'                   : 2,
+        'io.fractionalatomiccoords'   : True,
+        'mine.selfconsistent'         : True,
+        'sc.maxiters'                 : 50,
+        'atommove.typeofrun'          : 'static',
+        'dm.solutionmethod'           : 'diagon'}
 
-        kpts: None,                        # K-point mesh
-        setups: {},                        # Dictionary for atomic species
-        other_keywords: {},                # Dictionary for other input flags
-        debug: False
-        }
-
+The first five key/value pairs are special DFT parameters, the grid cutoff, the
+k-point mesh, the exchange-correlation functional, the SCF tolerance and the
+number of spins respectively. The rest are CONQUEST-specific input flags.
 
 The atomic species blocks are handled slightly differently, with a dictionary of
 their own. If the ``.ion`` files are present in the calculation directory, they
@@ -229,39 +225,75 @@ can be specified as follows:
 
 ::
 
-  setups = {"H": {"valence_charge": 1.0,
-                  "number_of_supports": 1,
-                  "support_fn_range": 6.9,
-                  "gen_basis": False},
-            "O": {"valence_charge": 6.0,
-                  "number_of_supports": 4,
-                  "support_fn_range": 6.9,
-                  "gen_basis": True},
-           }
+  basis = {"H": {"valence_charge": 1.0,
+                 "number_of_supports": 1,
+                 "support_fn_range": 6.9},
+           "O": {"valence_charge": 6.0,
+                 "number_of_supports": 4,
+                 "support_fn_range": 6.9}}
+
+If the basis set ``.ion`` files are present in the directory containing the ASE
+script are pressent and are named ``element.ion``, then the relevant parameters
+will be parsed from the ``.ion`` files and included when the input file is
+written and this dictionary can be omitted. It is more important when, for
+example, setting up a multisite calculation, when the number of contracted
+support functions is different from the number in the ``.ion`` file.
 
 ASE can also invoke the CONQUEST basis set generation tool, although care should
 be taken when generating basis sets:
 
 ::
 
-  setups = {"H": {"basis_size": "minimal",
-                  "pseudopotential_type": hamann",
-                  "gen_basis": False},
-            "O": {"basis_size": "minimal",
-                  "pseudopotential_type": hamann",
-                  "gen_basis": True},
-           }
+  basis = {"H": {"basis_size": "minimal",
+                 "pseudopotential_type": hamann",
+                 "gen_basis": True},
+           "O": {"basis_size": "minimal",
+                 "pseudopotential_type": hamann",
+                 "gen_basis": True}}
 
-Finally, non-mandatory input flags can be defined in the ``other_keywords``
-dictionary:
+Finally, non-mandatory input flags can be defined in a new dictionary, and
+passed as an expanded set of keyword arguments.
 
 ::
 
-  other_keywords = {"IO.Coordinates": "coord_next.dat",
-                    "General.LoadL": True,
-                    "SC.MakeInitialChargeFromK": True,
-                    "SC.LinearMixingFactor": 0.3
-                   }
+  conquest_flags = {'IO.Iprint'         : 1,         # Conquest keywords
+                    'DM.SolutionMethod' : 'ordern',
+                    'DM.L_range'        : 8.0,
+                    'minE.LTolerance'   : 1.0e-6}
+
+Here is an example, combining the above. We set up a cubic diamond cell
+containing 8 atoms, and perform a single point energy calculation using the
+order(N) method (the default is diagonalisation, so we must specify all of the
+order(N) flags). We don't define a basis set, instead providing keywords that
+specify that a minimal basis set should be constructed using the MakeIonFiles
+basis generation tool.
+
+::
+
+  from ase.build import bulk
+  from ase.calculators.conquest import Conquest
+
+  os.environ["ASE_CONQUEST_COMMAND"] = "mpirun -np 4 Conquest_master"
+  os.environ["CQ_PP_PATH"] = "/Users/zamaan/Conquest/PPDB/"
+  os.environ["CQ_GEN_BASIS_CMD"] = "MakeIonFiles"
+
+  diamond = bulk('C', 'diamond', a=3.6, cubic=True)  # The atoms object
+  conquest_flags = {'IO.Iprint'         : 1,         # Conquest keywords
+                    'DM.SolutionMethod' : 'ordern',
+                    'DM.L_range'        : 8.0,
+                    'minE.LTolerance'   : 1.0e-6}
+  basis = {'C': {"basis_size"           : 'minimal', # Generate a minimal basis
+                "gen_basis"             : True,
+                "pseudopotential_type"  : "hamann"}}
+
+  calc = Conquest(grid_cutoff = 80,    # Set the calculator keywords
+                  xc="LDA",
+                  self_consistent=True,
+                  basis=basis,
+                  nspin=1,
+                  **conquest_flags)
+  diamond.set_calculator(calc)             # attach the calculator to the atoms object
+  energy = diamond.get_potential_energy()  # calculate the potential energy
 
 Multisite support functions
 +++++++++++++++++++++++++++
@@ -271,15 +303,15 @@ species block, which can be specified as follows:
 
 ::
 
-  setups = {'C': {"basis_size": 'medium',
-                  "gen_basis": True,
-                  "pseudopotential_type": "hamann",
-                  "Atom.NumberofSupports": 4,
-                  "Atom.MultisiteRange": 7.0,
-                  "Atom.LFDRange": 7.0}}
+  basis = {'C': {"basis_size": 'medium',
+                 "gen_basis": True,
+                 "pseudopotential_type": "hamann",
+                 "Atom.NumberofSupports": 4,
+                 "Atom.MultisiteRange": 7.0,
+                 "Atom.LFDRange": 7.0}}
 
 Note that we are constructing a DZP basis set (size medium) with 13 primitive
-support funcitons using ``MakeIonFiles``, and contracting it to multisite basis
+support functions using ``MakeIonFiles``, and contracting it to multisite basis
 of 4 support functions. The calculation requires a few more input flags, which
 are specified in the ``other_keywords`` dictionary:
 
@@ -291,7 +323,27 @@ are specified in the ``other_keywords`` dictionary:
                     "Multisite.LFD.Min.ThreshD": 1.0e-7,
                     "Multisite.LFD.Min.MaxIteration": 150,
                     }
+
+Loading the K/L matrix
+++++++++++++++++++++++
    
+Most calculation that involve incrementally moving atoms (molecular dynamics,
+geometry optimisation, equations of state, nudged elastic band etc.) can be made
+faster by using the K or L matrix from a previous calculation as the initial
+guess for a subsequent calculation in which that atoms have been moved slightly.
+This can be achieved by first performing a single point calculation to generate
+the first K/L matrix, then adding the following keywords to the calculator:
+
+::
+
+  other_keywords = {"General.LoadL": True,
+                    "SC.MakeInitialChargeFromK": True}
+
+These keywords respectively cause the K or L matrix to be loaded from file(s)
+``Kmatrix.i**.p*****``, and the initial charge density to be constructed from
+this matrix. In all subsequent calculations, the K or L matrix will be written
+at the end of the calculation and used as the initial guess for the subsequent
+ionic step.
 
 Equation of state
 +++++++++++++++++
@@ -311,25 +363,19 @@ interpolates the equation of state and uses ``matplotlib`` to generate a plot.
   # Construct a unit cell
   diamond = bulk('C', 'diamond', a=3.6, cubic=True)
 
-  # Basis set parameters
-  setup = {'C': {"basis_size": 'minimal', 
-                  "gen_basis": True,
-                  "pseudopotential_type": "hamann"}}
-  # Instantiate the calculator
+  basis = {'C': {"basis_size": 'minimal', 
+                 "gen_basis": True,
+                 "pseudopotential_type": "hamann"}}
   calc = Conquest(grid_cutoff = 50,
                   xc = "LDA",
-                  self_consistent = True,
-                  setups = setup,
-                  kpts = [4,4,4],
-                  other_keywords = None)
+                  basis = basis,
+                  kpts = [4,4,4]}
   diamond.set_calculator(calc)
 
   cell = diamond.get_cell()
-  # save all energy calculations here
-  traj = Trajectory('diamond.traj', 'w')
+  traj = Trajectory('diamond.traj', 'w') # save all results to trajectory
 
-  # grid for equation of state
-  for x in sp.linspace(0.95, 1.05, 5):
+  for x in sp.linspace(0.95, 1.05, 5):   # grid for equation of state
     diamond.set_cell(cell*x, scale_atoms=True)
     diamond.get_potential_energy()
     traj.write(diamond)
@@ -343,7 +389,5 @@ interpolates the equation of state and uses ``matplotlib`` to generate a plot.
   eos = EquationOfState(volumes, energies)
   v0, e0, B = eos.fit()
 
-  # Plot the equation of state
   import matplotlib
-
-  eos.plot('diamond-eos.pdf')
+  eos.plot('diamond-eos.pdf')    # Plot the equation of state
