@@ -204,7 +204,8 @@ contains
 !!  CREATION DATE
 !!   24/07/03
 !!  MODIFICATION HISTORY
-!!
+!!   2019/10/31 14:11 dave
+!!    Replaced call to twon with simple log calculation
 !!  SOURCE
 !!
    subroutine maxtwon(n1,del1,n2,del2,n12,del12,delk,kcut)
@@ -217,15 +218,17 @@ contains
      !arrays as integral power of 2
      real(double),intent(in):: del1,del2,delk,kcut
      real(double), intent(inout) :: del12
-     integer n1,n2,n12,s1,s2,n1_max,n2_max,s3,s3_max
+     integer :: n1,n2,n12,s3_max,s3i
+
+     real(double) :: s3
 
      !choosing according to restrictions (of user)
      !on minimum delk, min kcut...
      del12 = twopi/(two*kcut)
      s3 = two*(kcut)/delk
-     call twon(s3,s3_max)
-     n12 = s3_max
-
+     s3i = floor(log(s3)/log(two)) + 1
+     n12 = 2**s3i
+     return
    end subroutine maxtwon
 !!***
 
@@ -325,7 +328,7 @@ contains
      if(n>10.AND.r<3.4_double) flag_series = .true.
      if(n<0) call cq_abort("Error: Can't have spherical bessel with order less than zero ",n)
      ! Find Bessel function based on r and need for series expansion
-     if(abs(r)<1e-8_double) then
+     if(abs(r)<very_small) then
         if(n>0) then
            general_bessel = zero
         else
@@ -377,220 +380,9 @@ contains
 !!   22/01/18
 !!  MODIFICATION HISTORY
 !!   2019/06/19 15:29 dave
-!!    Changed to use cosft1 from NR 2nd edition  
+!!    Changed to use FFTW
 !!  SOURCE
 !!
-   subroutine new_bessel_transform_even(n,function_in,npts_in,npts2,rcut,delta_r,function_out)
-
-     use datatypes
-     use numbers
-     use fft_procedures, only: sinft, cosft, cosft1
-
-     implicit none
-
-     ! Passed variables
-     integer :: n, npts_in, npts2
-     real(double) :: rcut, delta_r
-     real(double), dimension(npts_in) :: function_in
-     real(double), dimension(npts2/2) :: function_out
-
-     ! Local variables
-     integer :: i, j, en, l, poly_order, xi
-     real(double) :: k, fac, dk, dk2, dk3, x1,x0,x0_in, x1_in, pmj, r, tee_nm
-     real(double), dimension(:), allocatable :: dummy1, dummy2, ess, coeff_poly, coeff_poly1, prefac
-
-     poly_order = 3
-     ! en is found such that n = 2*en
-     en = floor(half*n)
-     ! Allocate
-     allocate(dummy1(npts2+1),dummy2(npts2),ess(0:en),coeff_poly(0:poly_order), &
-          coeff_poly1(0:poly_order),prefac(0:en))
-     dummy1 = zero
-     dummy2 = zero
-     ess = zero
-     do i=1,npts_in
-        r = real(i-1,double) * delta_r
-        dummy1(i) = r*r*delta_r*function_in(i)
-        dummy2(i) = r*r*r*delta_r*function_in(i)
-     end do
-     ! Cosine transform for function
-     call cosft1(dummy1,npts2) !,+1)
-     ! Sine transform for first derivative (for polynomial fitting)
-     call sinft(dummy2,npts2)
-     dummy2 = -one*dummy2
-     ! Set k-space interval
-     dk = twopi/(rcut+delta_r)
-     dk2 = dk*dk
-     dk3 = dk2*dk
-     ! Calculate prefactors for Legendre polynomial
-     pmj = one
-     do j=0,en
-        prefac(j) = pmj*doublefact(2*en+2*j-1)/(fact(2*j)*doublefact(2*en-2*j))
-        pmj = -pmj
-     end do
-     ! Loop to perform transform
-     do i=3,npts2,2
-        k = ((i-1)/2)*dk
-        fac = one/k
-        x0_in = (k-dk)
-        x1_in = k
-        ! Cubic coefficients in powers of (x-x0)
-        coeff_poly1(0) = dummy1(i-2)
-        coeff_poly1(1) = dummy2(i-2)
-        coeff_poly1(2) = three*(dummy1(i)-dummy1(i-2))/dk2 - (dummy2(i) + two*dummy2(i-2))/dk
-        coeff_poly1(3) =  -two*(dummy1(i)-dummy1(i-2))/dk3 + (dummy2(i) + dummy2(i-2))/dk2
-        ! Convert to x
-        coeff_poly(3) = coeff_poly1(3)
-        coeff_poly(2) = coeff_poly1(2) - three*coeff_poly1(3)*(k-dk)
-        coeff_poly(1) = coeff_poly1(1) - two*coeff_poly1(2)*(k-dk) + &
-             three*(k-dk)*(k-dk)*coeff_poly1(3)
-        coeff_poly(0) = coeff_poly1(0) - coeff_poly1(1)*(k-dk) + &
-             (k-dk)*(k-dk)*coeff_poly1(2) - (k-dk)*(k-dk)*(k-dk)*coeff_poly1(3)
-        function_out((i+1)/2) = zero
-        ! Build Bessel transform
-        do j=0,en
-           ! k^{2j+1} 
-           x0 = x0_in
-           x1 = x1_in
-           ! Interpolate to find T_nm
-           tee_nm = zero
-           do xi=0,poly_order 
-              tee_nm = tee_nm + coeff_poly(xi)*(x1-x0)/real(2*j+xi+1,double)
-              x1 = x1*k
-              x0 = x0*(k-dk)
-           end do
-           x0_in = x0_in*(k-dk)*(k-dk)
-           x1_in = x1_in*k*k
-           ! Accumulate into S_nm
-           ess(j) = ess(j) + tee_nm
-           ! Sum over n to get transform
-           function_out((i+1)/2) = function_out((i+1)/2) + prefac(j)*ess(j)*fac
-           fac = fac/(k*k) ! 1/k^{2j+1}
-        end do
-     end do
-     function_out(1) = zero
-     if(n==0) then ! Quadrature for k=0
-        do i=1,npts_in
-           r = (i-1)*delta_r
-           function_out(1) = function_out(1)+(r*r*delta_r*function_in(i))
-        enddo
-     end if
-   end subroutine new_bessel_transform_even
-!!***
-
-!!****f* bessel_integrals/new_bessel_transform_odd *
-!!
-!!  NAME 
-!!   new_bessel_transform_odd
-!!  USAGE
-!!   new_bessel_transform_odd
-!!  PURPOSE
-!!   Calculates a general Bessel transform for odd order
-!!  INPUTS
-!!   n : order of Bessel function
-!!  USES
-!!   
-!!  AUTHOR
-!!   D. R. Bowler
-!!  CREATION DATE
-!!   22/01/18
-!!  MODIFICATION HISTORY
-!!   2019/06/19 15:29 dave
-!!    Changed to use cosft1 from NR 2nd edition  
-!!
-!!  SOURCE
-!!
-   subroutine new_bessel_transform_odd(n,function_in,npts_in,npts2,rcut,delta_r,function_out)
-
-     use datatypes
-     use numbers
-     use fft_procedures, only: sinft, cosft, cosft1
-
-     implicit none
-
-     ! Passed variables
-     integer :: n, npts_in, npts2
-     real(double) :: rcut, delta_r
-     real(double), dimension(npts_in) :: function_in
-     real(double), dimension(npts2/2) :: function_out
-
-     ! Local variables
-     integer :: i, j, en, l, poly_order, xi
-     real(double) :: k, fac, dk, dk2, dk3, x1,x0,x0_in, x1_in, pmj, r, tee_nm
-     real(double), dimension(:), allocatable :: dummy1, dummy2, ess, coeff_poly, prefac, coeff_poly1
-
-     poly_order = 3
-     ! en is found such that 2*en+1
-     en = floor(half*n)
-     ! Allocate
-     allocate(dummy1(npts2),dummy2(npts2+1),ess(0:en),coeff_poly(0:poly_order), &
-          coeff_poly1(0:poly_order),prefac(0:en))
-     dummy1 = zero
-     dummy2 = zero
-     ess = zero
-     do i=1,npts_in
-        r = real(i-1,double) * delta_r
-        dummy1(i) = r*r*delta_r*function_in(i)
-        dummy2(i) = r*r*r*delta_r*function_in(i)
-     end do
-     ! Sine transform for function
-     call sinft(dummy1,npts2)
-     ! Cosine transform for first derivative (for polynomial fitting)
-     call cosft1(dummy2,npts2) !,+1)
-     ! Set k-space interval
-     dk = twopi/(rcut+delta_r)
-     dk2 = dk*dk
-     dk3 = dk2*dk
-     ! Calculate prefactors for Legendre polynomial
-     pmj = one
-     do j=0,en
-        prefac(j) = pmj*doublefact(2*en+2*j+1)/(fact(2*j+1)*doublefact(2*en-2*j))
-        pmj = -pmj
-     end do
-     ! Loop to perform transform
-     do i=3,npts2,2
-        k = ((i-1)/2)*dk
-        fac = one/(k*k)
-        x0_in = (k-dk)*(k-dk)
-        x1_in = k*k
-        ! Cubic coefficients in powers of (x-x0)
-        coeff_poly1(0) = dummy1(i-2)
-        coeff_poly1(1) = dummy2(i-2)
-        coeff_poly1(2) = three*(dummy1(i)-dummy1(i-2))/dk2 - (dummy2(i) + two*dummy2(i-2))/dk
-        coeff_poly1(3) =  -two*(dummy1(i)-dummy1(i-2))/dk3 + (dummy2(i) + dummy2(i-2))/dk2
-        ! Convert to x
-        coeff_poly(3) = coeff_poly1(3)
-        coeff_poly(2) = coeff_poly1(2) - three*coeff_poly1(3)*(k-dk)
-        coeff_poly(1) = coeff_poly1(1) - two*coeff_poly1(2)*(k-dk) + &
-             three*(k-dk)*(k-dk)*coeff_poly1(3)
-        coeff_poly(0) = coeff_poly1(0) - coeff_poly1(1)*(k-dk) + &
-             (k-dk)*(k-dk)*coeff_poly1(2) - (k-dk)*(k-dk)*(k-dk)*coeff_poly1(3)
-        function_out((i+1)/2) = zero
-        ! Build Bessel transform
-        do j=0,en
-           ! k^{2j+1 +1}
-           x0 = x0_in
-           x1 = x1_in
-           ! Interpolate to find T_nm
-           tee_nm = zero
-           do xi=0,poly_order ! Interpolation to find T_nm
-              tee_nm = tee_nm + coeff_poly(xi)*(x1-x0)/real(2*j+1+xi+1,double)
-              x1 = x1*k
-              x0 = x0*(k-dk)
-           end do
-           x0_in = x0_in*(k-dk)*(k-dk)
-           x1_in = x1_in*k*k
-           ! Accumulate into S_nm
-           ess(j) = ess(j) + tee_nm
-           ! Sum over n to get transform
-           function_out((i+1)/2) = function_out((i+1)/2) + prefac(j)*ess(j)*fac
-           fac = fac/(k*k) ! 1/k^{2j+1+1}
-        end do
-     end do
-     function_out(1) = zero
-   end subroutine new_bessel_transform_odd
-!!***
-   
    subroutine new_bessel_transform_evenFFTW(n,function_in,npts,npts2,rcut,delta_r,function_out)
 
      use datatypes
@@ -611,12 +403,6 @@ contains
      real(double) :: k, fac, dk, dk2, dk3, x1,x0,x0_in, x1_in, pmj, r, tee_nm, rcut_large
      real(double), dimension(:), allocatable :: dummy1, dummy2, ess, coeff_poly, coeff_poly1, prefac
 
-     !write(*,*) 'Even'
-     !npts2 = floor(log(real(npts,double))/log(two))+2
-     !npts2 = 2**npts2
-     !rcut_large = delta_r*real(npts2-1,double)
-     !isign = sign!-1
-     !if(sign==0) isign=-1
      poly_order = 3
      ! en is found such that n = 2*en
      en = floor(half*n)
@@ -626,9 +412,7 @@ contains
      dummy1 = zero
      dummy2 = zero
      ess = zero
-     ! We start the loop from i=2 because i=1 gives zero.  Note that the offset
-     ! on dummy2 is for compatibility with NR definition of sine transform (this
-     ! may be removed later if not needed)
+     ! We start the loop from i=2 because i=1 gives zero.
      do i=2,npts
         r = real(i-1,double) * delta_r
         dummy1(i) = r*r*function_in(i)*delta_r
@@ -637,10 +421,8 @@ contains
      call sinft_init_wrapper(npts2-1)
      call cosft_init_wrapper(npts2+1)
      ! Cosine transform for function
-     !call cosft1(dummy1,npts2)
      call cosft_exec_wrapper(dummy1,npts2+1,-1)
      ! Sine transform for first derivative (for polynomial fitting)
-     !call sinft(dummy2,npts2)
      call sinft_exec_wrapper(dummy2,npts2-1,-1)
      ! Adjust the array back and set to zero
      do j=npts2,2,-1
@@ -648,8 +430,6 @@ contains
      end do
      dummy2(1) = zero
      dummy1 = half*dummy1
-     ! Original using sinft
-     !dummy2 = -one*dummy2
      ! Set k-space interval - the k-space grid is pi/rcut_large for compatibility
      ! with FFT routines which implicitly double the number of points
      dk = twopi/(rcut+delta_r)
@@ -751,12 +531,6 @@ contains
      real(double) :: k, fac, dk, dk2, dk3, x1,x0,x0_in, x1_in, pmj, r, tee_nm, rcut_large
      real(double), dimension(:), allocatable :: dummy1, dummy2, ess, coeff_poly, prefac, coeff_poly1
 
-     !write(*,*) 'Odd'
-     !npts2 = floor(log(real(npts,double))/log(two))+2
-     !npts2 = 2**npts2
-     !rcut_large = delta_r*real(npts2-1,double)
-     !isign = sign!1
-     !if(sign==0) isign=-1
      poly_order = 3
      ! en is found such that 2*en+1
      en = floor(half*n)

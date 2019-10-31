@@ -33,6 +33,7 @@
 module make_rad_tables
 
   use global_module,          only: io_lun, area_basis
+  use numbers,                only: zero
   use timer_module,           only: start_timer, stop_timer
   use timer_stdclocks_module, only: tmr_std_basis, tmr_std_allocation
 
@@ -84,7 +85,7 @@ contains
     use datatypes
     use numbers, ONLY: zero, twopi
     use ol_int_datatypes !, ONLY : rad_tables_nlpf_pao
-    use bessel_integrals !, ONLY : bessloop, maxtwon, complx_fctr
+    use bessel_integrals, ONLY : bessloop, maxtwon, complx_fctr
     use pao_array_utility, ONLY : matcharrays
     use GenComms, ONLY: cq_abort
 
@@ -184,7 +185,7 @@ contains
     use datatypes
     use numbers, ONLY: zero, twopi
     use ol_int_datatypes , ONLY : rad_tables_paoNApao
-    use bessel_integrals !, ONLY : bessloop, maxtwon, complx_fctr
+    use bessel_integrals, ONLY : bessloop, maxtwon, complx_fctr
     use pao_array_utility, ONLY : matcharrays
     use GenComms, ONLY: cq_abort
 
@@ -283,7 +284,7 @@ contains
     use datatypes
     use numbers, ONLY: zero, twopi
     use ol_int_datatypes , ONLY : rad_tables_paopaoNA!, rad_tables_paodpaoNA
-    use bessel_integrals !, ONLY : bessloop, maxtwon, complx_fctr
+    use bessel_integrals, ONLY : bessloop, maxtwon, complx_fctr
     use pao_array_utility, ONLY : matcharrays
     use GenComms, ONLY: cq_abort
 
@@ -394,7 +395,7 @@ contains
     use datatypes
     use numbers, ONLY: zero, twopi
     use ol_int_datatypes !, ONLY : rad_tables_napf_pao
-    use bessel_integrals !, ONLY : bessloop, maxtwon, complx_fctr
+    use bessel_integrals, ONLY : bessloop, maxtwon, complx_fctr
     use pao_array_utility, ONLY : matcharrays
     use GenComms, ONLY: cq_abort
 
@@ -531,7 +532,7 @@ contains
     use datatypes
     use numbers, ONLY: zero, twopi
     use ol_int_datatypes !,ONLY : rad_tables, rad_tables_ke
-    use bessel_integrals !,ONLY : maxtwon,bessloop,complx_fctr,multiply_ksq
+    use bessel_integrals, ONLY : bessloop, maxtwon, complx_fctr, multiply_ksq
     use pao_array_utility, ONLY : matcharrays
     use GenComms, ONLY: cq_abort
 
@@ -603,7 +604,7 @@ contains
        call bessloop(dummyprod,i,n12/2,n12/2,deltak,kcut,dumout,0)
        fullradtbl(1:n12/4,h) = dumout(1:n12/4)*factor
        !RC resetting to zero(really just for peace of mind)
-       dumout = 0.0_double
+       dumout = zero
        call bessloop(dummyprod_ke,i,n12/2,n12/2,deltak,kcut,dumout,0)
        fullradtbl_ke(1:n12/4,h) = dumout(1:n12/4)*factor
        h = h+1
@@ -693,7 +694,7 @@ contains
        
        !RC calculating and storing tables of 2nd derivatives here
        !pao_pao case first
-       y2 = 0.0_double
+       y2 = zero
        yp1 = (fullradtbl(2,i)-fullradtbl(1,i))/delta_r
        ypn = (fullradtbl(npnts,i)-fullradtbl(npnts-1,i))/delta_r
        ! New call to spline_module routine
@@ -701,7 +702,7 @@ contains
        !call spline(npnts,delta_r,fullradtbl(1:npnts,i),yp1,ypn,y2)
        rad_tables(count)%rad_tbls(i)%arr_vals2(1:npnts) = y2(1:npnts)
        !now pao_ke_pao case
-       y2 = 0.0_double
+       y2 = zero
        yp1 = (fullradtbl_ke(2,i)-fullradtbl_ke(1,i))/delta_r
        ypn = (fullradtbl_ke(npnts,i)-fullradtbl_ke(npnts-1,i))/delta_r
        call spline_nonU(npnts,xin,fullradtbl_ke(1:npnts,i),yp1,ypn,y2)       
@@ -790,7 +791,7 @@ contains
        
        !RC calculating and storing tables of 2nd derivatives here for
        !nlpf_pao case 
-       y2 = 0.0_double
+       y2 = zero
        yp1 = (fullradtbl(2,i)-fullradtbl(1,i))/delta_r
        ypn = (fullradtbl(npnts,i)-fullradtbl(npnts-1,i))/delta_r
        call spline_nonU(npnts,xin,fullradtbl(1:npnts,i),yp1,ypn,y2)
@@ -849,7 +850,7 @@ contains
        
        !RC calculating and storing tables of 2nd derivatives here for
        !pao-NA-pao case 
-       y2 = 0.0_double
+       y2 = zero
        yp1 = (fullradtbl(2,i)-fullradtbl(1,i))/delta_r
        ypn = (fullradtbl(npnts,i)-fullradtbl(npnts-1,i))/delta_r
        call spline_nonU(npnts,xin,fullradtbl(1:npnts,i),yp1,ypn,y2)
@@ -907,7 +908,7 @@ contains
        
        !RC calculating and storing tables of 2nd derivatives here for
        !napf_pao case 
-       y2 = 0.0_double
+       y2 = zero
        yp1 = (fullradtbl(2,i)-fullradtbl(1,i))/delta_r
        ypn = (fullradtbl(npnts,i)-fullradtbl(npnts-1,i))/delta_r
        call spline_nonU(npnts,xin,fullradtbl(1:npnts,i),yp1,ypn,y2)

@@ -422,13 +422,15 @@ contains
   !! CREATION DATE
   !!   2012/05/08
   !! MODIFICATION HISTORY
+  !!  2019/10/31 14:17 dave
+  !!   Change to use FFTW calls in fft_interface_module
   !! SOURCE
   !!
   subroutine radfft(func, func_out, n_r, dr)
     use datatypes
     use numbers
     use dimens
-    use fft_procedures, only: sinft
+    use fft_interface_module, only: sinft_init_wrapper, sinft_exec_wrapper
     use memory_module,  only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use GenComms,       only: cq_abort
     implicit none
@@ -449,18 +451,21 @@ contains
     ! see Numerical Recipies Section 12.1: eq (12.1.2), but this time
     ! k only goes from 0 to fc, fc = 1/(2*dr) is Nyquist critical
     ! frequency. So dk = 1/(2*dr*n_r)
-    dk = half / real(dr * n_r, double)
+    dk = half / (dr * real(n_r, double))
+    data = zero
     ! set the real data to 2 * r * func(r)
-    do ir = 1, n_r
-       rr = (ir - 1) * dr
-       data(ir) = two * rr * func(ir)
+    do ir = 2, n_r
+       rr = real(ir - 1, double) * dr
+       data(ir-1) = two * rr * func(ir)
     end do
     ! do sin FT
-    call sinft(data, n_r)
+    call sinft_init_wrapper(n_r-1)
+    call sinft_exec_wrapper(data,n_r-1,-1)
+    !call sinft(data, n_r)
     ! leave the k = 0 point aside, this is treated separately
-    do ik = 2, n_r, 1
-       kk = (ik - 1) * dk
-       func_out(ik) = data(ik) / kk
+    do ik = 2, n_r
+       kk = real(ik - 1,double) * dk
+       func_out(ik) = half*data(ik-1) / kk
     end do
     ! doing the k = 0 point
     ! the limit (k -> 0) of 2 * r * sin(2*pi*k*r) / k is 4*pi*r**2
@@ -478,224 +483,6 @@ contains
 
   end subroutine radfft
   !!*****
-
-
-  ! !!****f* vdWDFT_module/radfft
-  ! !! PURPOSE
-  ! !!   Implementation by Soler et al.
-  ! !!
-  ! !!   Makes a fast Fourier transform of a radial function.
-  ! !!   If function f is of the form
-  ! !!     f(r_vec) = F(r_mod) * Y_lm(theta,phi)
-  ! !!   where Ylm is a spherical harmonic with l = argument L, and
-  ! !!   argument F contains on input the real_function F(r_mod), in a
-  ! !!   uniform radial grid:
-  ! !!     r_mod = ir * rmax / nr,  ir = 0,1,...,nr,
-  ! !!   and if g is the 3-dimensional Fourier transform of f:
-  ! !!     g(k_vec) = 1/(2*pi)**(3/2) *
-  ! !!                Integral(d3_r_vec * exp(-i * k_vec * r_vec) * f(r_vec))
-  ! !!   then g has the form
-  ! !!     g(k_vec) = (-i)**l * G(k_mod) * Ylm(theta,phi)
-  ! !!   where argument G contains on output the real_function G(k_mod)
-  ! !!   in a uniform radial grid:
-  ! !!     k_mod = ik * k_max / nr, ik = 0,1,...,nr,  k_max = nr * pi / rmax
-  ! !!
-  ! !!   Ref: J.M.Soler notes of 16/08/95.
-  ! !! USAGE
-  ! !!   call radfft(l, nr, rmax, F, G)
-  ! !! INPUTS
-  ! !!   integer l   : Angular momentum quantum number
-  ! !!   integer n_r : Number of radial inervals.
-  ! !!                2*nr must be an acceptable number of points for
-  ! !!                the FFT routine used.
-  ! !!   real(double) rmax : maximum radius
-  ! !!   real(double) F(0:n_r) : function to be transformed, in radial mesh
-  ! !! OUTPUT
-  ! !!   real(double) G(0:n_r) : Fourier transform of F (but see point 5 below)
-  ! !! NOTES
-  ! !! - Units
-  ! !!   - Units of rmax and F are arbitrary
-  ! !!   - Units of k_max and G are related with those of rmax and F in
-  ! !!     the obvious way (see above)
-  ! !! - Behaviour
-  ! !!   1) F and G may be the same physical array, i.e. it is allowed
-  ! !!        call radfft(l, n_r, rmax, F, F)
-  ! !!   2) It also works in the opposite direction, but then the factor
-  ! !!      multiplying the output is (+i)**l. Thus, the following two
-  ! !!      calls
-  ! !!        call radfft(l, n_r, rmax, F, G)
-  ! !!        call radfft(l, n_r, n_r * pi / rmax, G, H)
-  ! !!      make H = F
-  ! !!   3) If you will divide the output by q**l, truncation errors may
-  ! !!      be quite large for small k's if l and n_r are
-  ! !!      large. Therefore, these components are calculated by direct
-  ! !!      integration rather than FFT. Parameter ERRFFT is the typical
-  ! !!      truncation error in the FFT, and controls which k's are
-  ! !!      integrated directly. A good value is 1.0e-8. If you will not
-  ! !!      divide by k**l, make ERRFFT = 1.0e-30.
-  ! !!   4) The function F is assumed to be zero at and beyond rmax. The
-  ! !!      last point F(n_r) is not used to find G. except G(0) for l =
-  ! !!      0 (see 5)
-  ! !!   5) Because of the 'uncetainty principle', if f(r) is strictly
-  ! !!      zero for r > rmax, then g(k) cannot be strictly zero for k >
-  ! !!      kmax. Therefore G(n_r), which should be exactly zero, is used
-  ! !!      (for l = 0) as a 'reminder' term for the integral of G
-  ! !!      beyond kmax, to ensure that F(0) = sum(4 * pi * r**2 * dr *
-  ! !!      G(ir)) (this allows to recover F(0) when called again in the
-  ! !!      inverse direction). Thus, the last value G(n_r) should be
-  ! !!      replaced by zero for any other use. NOTICE: this is
-  ! !!      commented out in this version!
-  ! !! AUTHOR
-  ! !!   L.Tong
-  ! !! CREATION DATE
-  ! !!   2012/04/08
-  ! !! MODIFICATION HISTORY
-  ! !! SOURCE
-  ! !!
-  ! subroutine radfft(l, n_r, rmax, F, G)
-
-  !   use datatypes
-  !   use numbers
-
-  !   implicit none
-
-  !   ! passed parameters
-  !   integer,      intent(in) :: l
-  !   integer,      intent(in) :: n_r
-  !   real(double), intent(in) :: rmax
-  !   real(double), dimension(0:n_r), intent(in)  :: F
-  !   real(double), dimension(0:n_r), intent(out) :: G
-  !   ! local variables
-  !   real(double), parameter :: ERRFFT = 1.0e-8_double
-  !   integer      :: ii, iq, ir, jr, mm, mq, nn, n_q
-  !   real(double) :: c, dq, dr, Fr, r, rn, q, qmax
-  !   real(double), dimension(0:2*n_r)   :: GG
-  !   real(double), dimension(2,0:2*n_r) :: Fn
-  !   real(double), dimension(2,0:l,0:l) :: P
-
-  !   ! define some constants
-  !   n_q = n_r
-  !   dr = rmax / n_r
-  !   dq = pi / rmax
-  !   qmax = n_q * dq
-  !   c = dr / sqrt(two * pi)
-
-  !   ! set up a complex polynomial such that the spherical Bessel function:
-  !   !    j_l(x) = Real(sum_n(P(n,l) * x**n) * exp(i*x)) / x**(l+1)
-  !   P(1,0,0) = zero
-  !   P(2,0,0) = -one
-  !   if (l > 0) then
-  !      P(1,0,1) = zero
-  !      P(2,0,1) = -one
-  !      P(1,1,1) = -one
-  !      P(2,1,1) = zero
-  !      if (l > 1) then
-  !         do mm = 2, l
-  !            do nn = 0, mm
-  !               do ii = 1, 2
-  !                  P(ii,nn,mm) = zero
-  !                  if (nn < mm) &
-  !                       P(ii,nn,mm) = P(ii,nn,mm) + &
-  !                                     real(2 * mm - 1, double) * &
-  !                                     P(ii,nn,mm-1)
-  !                  if (nn >= 2) &
-  !                       P(ii,nn,mm) = P(ii,nn,mm) - P(ii,nn-2,mm-2)
-  !               end do ! ii
-  !            end do ! nn
-  !         end do ! mm
-  !      end if
-  !   end if
-
-  !   ! initialise accumulation array
-  !   do iq = 0, n_q
-  !      GG(iq) = zero
-  !   end do
-
-  !   ! iterate on terms of the j_l(q*r) polynomial
-  !   do nn = 0, l
-  !      ! set up function to be fast fourier transformed
-  !      Fn(1,0) = zero
-  !      Fn(2,0) = zero
-  !      do jr = 1, 2 * n_r - 1
-  !         if (jr < n_r) then
-  !            ir = jr
-  !            r = ir * dr
-  !            Fr = F(ir)
-  !         else if (jr == n_r) then
-  !            ir = jr
-  !            r = ir * dr
-  !            Fr = zero
-  !         else
-  !            ir = 2 * n_r - jr
-  !            r = - ir * dr
-  !            Fr = F(ir) * (- one)**l
-  !         end if
-  !         ! find r**2 * r**n / r**(l+1)
-  !         rn = r**(nn - l + 1)
-  !         Fn(1,jr) = c * Fr * rn * P(1,nn,l)
-  !         Fn(2,jr) = c * Fr * rn * P(2,nn,l)
-  !      end do ! jr
-  !      ! perform one-dimensional complex FFT
-
-  !      ! only the elements from 0 to 2*n_r-1 of Fn are used.
-  !      ! (a total of 2*n_r). four1 will receive a one-dimensional array
-  !      ! of size 2*n_r
-
-  !      call four1(Fn, 2*n_r, +1)
-
-  !      ! accumulate contribution
-  !      do iq = 1, n_q
-  !         q = iq * dq
-  !         GG(iq) = (GG(iq) + Fn(1,iq)) / q
-  !      end do
-  !   end do ! nn
-
-  !   ! special case for q = 0
-  !   GG(0) = zero
-  !   if (l == 0) then
-  !      do ir = 1, n_r
-  !         r = ir * dr
-  !         GG(0) = GG(0) + r * r * F(ir)
-  !      end do
-  !      GG(0) = GG(0) * two * c
-  !   end if
-
-  !   ! Direct integration for the smallest Q's
-  !     if (l == 0) then
-  !       mq = 0
-  !     else
-  !       mq = n_q * ERRFFT**(one/real(l, double))
-  !     end if
-  !     do iq = 1, mq
-  !       q = iq * dq
-  !       GG(iq) = zero
-  !       do ir = 1, n_r
-  !         r = ir * dr
-  !         GG(iq) = GG(iq) + r * r * F(ir) * bessph(l, q * r)
-  !       end do
-  !       GG(iq) = GG(iq) * two * c
-  !     end do
-
-  !     ! Special case for q = qmax
-  !     ! if (l == 0) then
-  !     !    G_sum = 0.D0
-  !     !    do iq = 1, n_q - 1
-  !     !       q = iq * dq
-  !     !       G_sum = G_sum + q * q * GG(iq)
-  !     !    end do
-  !     !    G_sum = G_sum * four * pi * dq
-  !     !    GG(n_q) = (two * pi)**1.5_double * F(0) - G_sum
-  !     !    GG(n_q) = GG(n_q) / (four * pi * dq * qmax**2)
-  !     ! end if
-
-  !     ! Copy from local to output array
-  !     do iq = 0, n_q
-  !        G(iq) = GG(iq)
-  !     end do
-
-  ! end subroutine radfft
-  ! !!*****
-
 
   !!****f* vdWDFT_module/find_bicubic_coeffs
   !! PURPOSE
@@ -2365,8 +2152,8 @@ contains
     if (.not. qmesh_set) call set_qmesh()
 
     ! This is the radial grid for phi's, (unrelated to the main 3D FFT grid)
-    dr = rcut / nr
-    dk = pi / rcut
+    dr = rcut / real(nr,double)
+    dk = pi / (rcut)
     ! work out number of array elements just covering kc (i.e. kcut)
     nk = aint(kc/dk) + 1
     nrs = nint(rsoft/dr)
@@ -2445,17 +2232,6 @@ contains
           phik(:,iq2,iq1) = phik(:,iq1,iq2)
           d2phidr2(:,iq2,iq1) = d2phidr2(:,iq1,iq2)
           d2phidk2(:,iq2,iq1) = d2phidk2(:,iq1,iq2)
-
-          !      if (.false. .and. iq1==iq2) then
-          !        print*, 'vdW_set_kcut: iq1,iq2=', iq1, iq2
-          !        call window( 0._dp, 5._dp, -1._dp, 4._dp, 0 )
-          !        call axes( 0._dp, 1._dp, 0._dp, 1._dp )
-          !        call plot( nr+1, r, phi, phir(:,iq1,iq2) )
-          !        call window( 0._dp, 10._dp, -0.05_dp, 0.15_dp, 0 )
-          !        call axes( 0._dp, 1._dp, 0._dp, 0.05_dp )
-          !        call plot( nr+1, r, q1*q2*r**2*phi, q1*q2*r**2*phir(:,iq1,iq2) )
-          !        call show()
-          !      end if
 
        end do ! iq1
     end do ! iq2
