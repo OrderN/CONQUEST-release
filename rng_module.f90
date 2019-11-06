@@ -380,6 +380,8 @@ module rng
     !!
     subroutine get_random_seed(rn)
 
+      use input_module, only: io_assign, io_close
+
       implicit none
 
       ! Passed variables
@@ -392,7 +394,8 @@ module rng
       call random_seed(size=n)
       allocate(rn%seed(n))
       ! First try if the OS provides a random number generator
-      open(newunit=un, file="/dev/urandom", access="stream", &
+      call io_assign(un)
+      open(unit=un, file="/dev/urandom", access="stream", &
            form="unformatted", action="read", status="old", iostat=istat)
       if (istat == 0) then
          read(un) rn%seed
@@ -432,6 +435,7 @@ module rng
             rn%seed = s + 37 * (/ (i, i = 0, n - 1 ) /)
          end if
       end if
+      call io_close(un)
 
     end subroutine get_random_seed
     !!***

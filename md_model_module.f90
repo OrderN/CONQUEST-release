@@ -11,6 +11,9 @@
 !!   2018/05/30 zamaan
 !!    Modified dump_stats to print correct header and columns when using
 !!    Berendsen equilibration in NVT ensemble
+!!  2019/05/09 zmaaan
+!!    New dump_heat_flux subroutine to save heat flux to file for thermal
+!!    conductivity calculations
 !!
 !!  SOURCE
 !!
@@ -25,7 +28,8 @@ module md_model
                               y_atom_cell, z_atom_cell, rcellx, rcelly, rcellz
   use species_module,   only: species
   use md_control,       only: md_n_nhc, ion_velocity, type_thermostat, &
-                              type_barostat, lattice_vec, flag_extended_system
+                              type_barostat, lattice_vec, &
+                              flag_extended_system, heat_flux
 
   implicit none
 
@@ -74,11 +78,12 @@ module md_model
 
     ! Thermodynamic variables
     real(double), pointer                   :: T_int    ! internal temperature
-    real(double), pointer                   :: T_ext    ! internal temperature
+    real(double), pointer                   :: T_ext    ! target temperature
     real(double), pointer                   :: P_int    ! internal pressure
-    real(double), pointer                   :: P_ext    ! internal pressure
+    real(double), pointer                   :: P_ext    ! target pressure
     real(double), pointer                   :: PV
     real(double)                            :: enthalpy
+    real(double), pointer, dimension(:)     :: J_v
 
     ! Thermostat
     character(20), pointer                  :: thermo_type
@@ -117,6 +122,7 @@ module md_model
       procedure, public   :: print_md_energy
       procedure, public   :: dump_stats
       procedure, public   :: dump_frame
+      procedure, public   :: dump_heat_flux
       procedure, public   :: dump_tdep
 
       procedure, private  :: dump_mdl_atom_arr
@@ -167,6 +173,7 @@ contains
     mdl%atom_velocity => ion_velocity
     mdl%lattice_vec   => lattice_vec
     mdl%stress        => stress
+    mdl%J_v           => heat_flux
 
     ! Thermostat
     mdl%T_int         => thermo%T_int
@@ -443,6 +450,43 @@ contains
   end subroutine dump_frame
   !!***
 
+  !!****m* md_model/dump_heat_flux *
+  !!  NAME
+  !!   dump_heat_flux
+  !!  PURPOSE
+  !!   Dump the heat flux for Green-Kubo thermal conductivity
+  !!  AUTHOR
+  !!   Zamaan Raza 
+  !!  SOURCE
+  !!  
+  subroutine dump_heat_flux(mdl, filename)
+
+    use input_module,     only: io_assign, io_close
+
+    ! passed variables
+    class(type_md_model), intent(inout)   :: mdl
+    character(len=*), intent(in)          :: filename
+
+    ! local variables
+    integer                               :: lun, i
+
+    if (inode==ionode) then
+      if (iprint_MD > 1) write(io_lun,'(2x,"Writing heat flux to ",a)') filename
+      call io_assign(lun)
+      if (mdl%append) then
+        open(unit=lun,file=filename,position='append')
+      else 
+        open(unit=lun,file=filename,status='replace')
+      end if
+
+      write(lun,'(i8,3e20.10)') mdl%step, mdl%J_v
+    end if
+
+    call io_close(lun)
+
+  end subroutine dump_heat_flux
+  !!***
+
   !!****m* md_model/dump_mdl_atom_arr *
   !!  NAME
   !!   dump_mdl_atom_arr 
@@ -492,7 +536,7 @@ contains
  
     if (inode==ionode) then
       if (flag_MDdebug .and. iprint_MD > 1) &
-        write(io_lun,*) "Writing TDEP output"
+        write(io_lun,'(2x,a)') "Writing TDEP output"
       call io_assign(lun1)
       open(unit=lun1,file=file_meta,status='replace')
       write(lun1,'(i12,a)') mdl%natoms, " # N atoms"
