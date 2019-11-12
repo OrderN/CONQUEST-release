@@ -11,12 +11,14 @@
 !!  NAME
 !!   functions
 !!  PURPOSE
-!!   Collects mathematical functions in one module
+!!   Collects mathematical and other useful functions in one module
 !!  AUTHOR
 !!   D.R.Bowler
 !!  CREATION DATE
 !!   2016/02/09
 !!  MODIFICATION HISTORY
+!!   2019/11/12 08:13 dave
+!!    Adding sort routines
 !!  SOURCE
 !!
 module functions
@@ -204,5 +206,207 @@ contains
   end function j1x
 !!***
 
+  !!****f* functions/heap_sort_integer_index *
+  !!
+  !!  NAME 
+  !!   heap_sort_integer_index
+  !!  USAGE
+  !!   
+  !!  PURPOSE
+  !!   Heap sort for an integer array returning sorted index (not in-place)
+  !!   Note that this may appear subtly different to standard implementations
+  !!   Arrays starting at 1 have different parent/child formulae to arrays
+  !!   starting at 0.  Contains the sift_down routine.
+  !!  INPUTS
+  !!   
+  !!   
+  !!  USES
+  !!   
+  !!  AUTHOR
+  !!   David Bowler
+  !!  CREATION DATE
+  !!   2019/11/12
+  !!  MODIFICATION HISTORY
+  !!  SOURCE
+  !!  
+  subroutine heap_sort_integer_index(n_arr,array,arr_index,reverse)
+
+    ! Passed variables
+    integer :: n_arr
+    integer, OPTIONAL :: reverse
+    integer, dimension(n_arr) :: array
+    integer, dimension(n_arr) :: arr_index, tmp_index
+
+    ! Local variables
+    integer :: i, temp
+
+    ! Set up index
+    do i=1,n_arr
+       arr_index(i) = i
+    end do
+    if(n_arr==1) return
+    ! Create heap
+    do i = n_arr/2, 1, -1
+       call sift_down_integer_index(i, n_arr)
+    end do
+    ! Sort array
+    do i=n_arr, 2, -1
+       temp = arr_index(1)
+       arr_index(1) = arr_index(i)
+       arr_index(i) = temp
+       call sift_down_integer_index(1, i-1)
+    end do
+    if(present(reverse)) then
+       if(reverse==1) then
+          do i=1,n_arr
+             tmp_index(n_arr-i+1) = arr_index(i)
+          end do
+          arr_index = tmp_index
+       end if
+    end if
+    return
+    
+  contains
+
+    ! Note that we inherit access to array and arr_index while this is contained
+    ! in the original routine
+    subroutine sift_down_integer_index(start,end)
+
+      ! Passed variables
+      integer :: start, end
+
+      ! Local variables
+      integer :: child, root, temp
+
+      root = start
+      ! Left child is i*2
+      child = root*2
+      do while(child<=end)
+         ! Right child is i*2 + 1
+         if(child+1<=end) then
+            if(array(arr_index(child))<array(arr_index(child+1))) child = child+1
+         end if
+         if(array(arr_index(root))<array(arr_index(child))) then
+            temp = arr_index(child)
+            arr_index(child) = arr_index(root)
+            arr_index(root) = temp
+            root = child
+            child = root*2
+         else
+            return
+         end if
+      end do
+      return
+    end subroutine sift_down_integer_index
+    
+  end subroutine heap_sort_integer_index
+
+  !!****f* functions/heap_sort_real_index *
+  !!
+  !!  NAME 
+  !!   heap_sort_real_index
+  !!  USAGE
+  !!   
+  !!  PURPOSE
+  !!   Heap sort for an integer array returning sorted index (not in-place)
+  !!   Note that this may appear subtly different to standard implementations
+  !!   Arrays starting at 1 have different parent/child formulae to arrays
+  !!   starting at 0.  Contains the sift_down routine.
+  !!
+  !!   Contains optional flag to signal descending rather than ascending order
+  !!  INPUTS
+  !!   
+  !!   
+  !!  USES
+  !!   
+  !!  AUTHOR
+  !!   David Bowler
+  !!  CREATION DATE
+  !!   2019/11/12
+  !!  MODIFICATION HISTORY
+  !!  SOURCE
+  !!  
+  subroutine heap_sort_real_index(n_arr,array,arr_index,reverse)
+
+    use datatypes
+
+    implicit none
+    
+    ! Passed variables
+    integer :: n_arr
+    integer, OPTIONAL :: reverse
+    real(double), dimension(n_arr) :: array
+    integer, dimension(n_arr) :: arr_index, tmp_index
+
+    ! Local variables
+    integer :: i
+    real(double) :: temp
+
+    ! Set up index
+    do i=1,n_arr
+       arr_index(i) = i
+    end do
+    if(n_arr==1) return
+    ! Create heap
+    do i = n_arr/2, 1, -1
+       call sift_down_real_index(i, n_arr)
+    end do
+    ! Sort array
+    do i=n_arr, 2, -1
+       temp = arr_index(1)
+       arr_index(1) = arr_index(i)
+       arr_index(i) = temp
+       call sift_down_real_index(1, i-1)
+    end do
+    ! Reverse order (descending) if required
+    if(present(reverse)) then
+       if(reverse==1) then
+          do i=1,n_arr
+             tmp_index(n_arr-i+1) = arr_index(i)
+          end do
+          arr_index = tmp_index
+       end if
+    end if
+    return
+    
+  contains
+
+    ! Note that we inherit access to array and arr_index while this is contained
+    ! in the original routine
+    subroutine sift_down_real_index(start,end)
+
+      use datatypes
+
+      implicit none
+    
+      ! Passed variables
+      integer :: start, end
+
+      ! Local variables
+      integer :: child, root
+      real(double) :: temp
+
+      root = start
+      ! Left child is i*2
+      child = root*2
+      do while(child<=end)
+         ! Right child is i*2 + 1
+         if(child+1<=end) then
+            if(array(arr_index(child))<array(arr_index(child+1))) child = child+1
+         end if
+         if(array(arr_index(root))<array(arr_index(child))) then
+            temp = arr_index(child)
+            arr_index(child) = arr_index(root)
+            arr_index(root) = temp
+            root = child
+            child = root*2
+         else
+            return
+         end if
+      end do
+      return
+    end subroutine sift_down_real_index
+    
+  end subroutine heap_sort_real_index
   
 end module functions

@@ -3087,6 +3087,8 @@ contains
   !!  MODIFICATION HISTORY
   !!   2008/05/25
   !!    Added timers
+  !!   2019/11/04 15:14 dave
+  !!    Replace call to indexx with call to heap_sort_integer_index
   !!  SOURCE
   !!
   subroutine cover_update(x_position, y_position, z_position, set, groups)
@@ -3095,7 +3097,7 @@ contains
     use basic_types
     use global_module, only: ni_in_cell, rcellx, rcelly, rcellz, &
                              IPRINT_TIME_THRES3
-    use cover_module,  only: indexx
+    use functions,  only: heap_sort_integer_index
     use GenComms,      only: cq_abort, myid
     use timer_module
 
@@ -3217,7 +3219,7 @@ contains
        enddo
     enddo
     ! sort minimum CS by nodes 
-    call indexx(groups%mx_gcell,ng_in_min,ind_min,min_sort)
+    call heap_sort_integer_index(ng_in_min,ind_min,min_sort)
     ! go over all GCS groups in node-periodic-grouped order 
     ind_cover=0
     do ind=1,ng_in_min

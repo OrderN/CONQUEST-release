@@ -59,6 +59,8 @@
 !!    fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
 !!   2016/01/28 16:42 dave
 !!    Changed ewald_CS to ion_ion_CS
+!!   2019/11/04 15:12 dave
+!!    Replace indexx from Numerical Recipes with generic heapsort
 !!  SOURCE
 !!
 module cover_module
@@ -143,6 +145,7 @@ contains
     use GenComms, ONLY: cq_abort, inode, ionode
     use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_int,&
          type_dbl
+    use functions, ONLY: heap_sort_integer_index
 
     implicit none
 
@@ -281,7 +284,7 @@ contains
        enddo
     enddo
     ! sort minimum CS by nodes 
-    call indexx(groups%mx_gcell,ng_in_min,ind_min,min_sort)
+    call heap_sort_integer_index(ng_in_min,ind_min,min_sort)
 
     ! go over all GCS groups in node-periodic-grouped order 
     ind_cover=0
@@ -977,4 +980,5 @@ contains
     enddo
   end subroutine indexx
 !!***
+  
 end module cover_module
