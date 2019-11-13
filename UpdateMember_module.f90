@@ -739,7 +739,7 @@ contains
   !!    2016/04/06 dave
   !!     Changed nx_in_cover allocatable to pointer (gcc 4.4.7 issue)
   !!    2019/11/04 15:14 dave
-  !!     Replace call to indexx with call to heap_sort_integer_index
+  !!     Replace call to indexx with call to heapsort_integer_index
   !!  SOURCE
   !!
   subroutine allocate_CSmember(set,groups,nx_in_cover,ny_in_cover,nz_in_cover, &
@@ -749,7 +749,7 @@ contains
     use basic_types
     use global_module, ONLY: rcellx,rcelly,rcellz
     use GenComms, ONLY: cq_abort
-    use functions, ONLY: heap_sort_integer_index
+    use functions, ONLY: heapsort_integer_index
     ! DB
     use io_module, ONLY: get_file_name
     use GenComms, ONLY: inode
@@ -888,7 +888,7 @@ contains
       enddo
     enddo
     ! sort minimum CS by nodes.
-    call heap_sort_integer_index(ng_in_min,ind_min,min_sort)
+    call heapsort_integer_index(ng_in_min,ind_min,min_sort)
 
     ! Go over all GCS groups in NOPG order.
     ind_cover = 0

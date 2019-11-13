@@ -412,7 +412,8 @@ contains
   !!  CREATION DATE
   !!   2013/08/22
   !!  MODIFICATION
-  !!
+  !!   2019/11/13 08:14 dave
+  !!    Uses heapsort from functions now
   !!  SOURCE
   !!
   ! ------------------------------------------------------------
@@ -426,6 +427,7 @@ contains
     use global_module, ONLY: numprocs
     use io_module, ONLY: get_file_name
     use input_module, ONLY: io_assign,io_close
+    use functions, ONLY: heapsort_integer_index
 
     implicit none
 
@@ -469,38 +471,9 @@ contains
     ! KERNEL
     if (n.GT.1) then
 
-      ! Heap arrays
-      do k = n/2, 1, -1
-        !ORI tmp  = x(k)
-        tmp  = x_dummy(k)
-        tmp2 = x_order(k)
-        call mkheap(n,x_dummy,k,n,tmp,x_order,tmp2)
-      enddo
+      call heapsort_integer_index(n,x_dummy,x_order)
 
-      !! --- DEBUG: --- !!
-      if (flag_MDdebug) then
-        write (lun_db,*) "1. list_node_tmp(dummy):", x_dummy(1:n)
-        write (lun_db,*) "1. isort_node          :", x_order(1:n)
-      endif
-      !! --- DEBUG: --- !!
-
-      ! Sort in ascending order
-      do k = n, 2, -1
-        tmp  = x_dummy(k)
-        tmp2 = x_order(k)
-        x_dummy(k) = x_dummy(1)
-        x_order(k) = x_order(1)
-        call mkheap(n,x_dummy,1,k-1,tmp,x_order,tmp2)
-      enddo
-
-      !! --- DEBUG: --- !!
-      if (flag_MDdebug) then
-        write (lun_db,*) "2. list_node_tmp(dummy):", x_dummy(1:n)
-        write (lun_db,*) "2. isort_node          :", x_order(1:n)
-      endif
-      !! --- DEBUG: --- !!
-
-      ! Resort: 1. get to know the first node to be sent/received
+      ! Re-sort: 1. get to know the first node to be sent/received
       !         2. reorder
       min = 1000000
       pos = 0
@@ -550,41 +523,6 @@ contains
     if (stat_alloc.NE.0) call cq_abort('Error deallocating arrays in sort_recv_node:', n)
 
     return
-    contains
-
-    ! Called twice above
-    subroutine mkheap(n,x,root,leaf,val,y,val2)
-      implicit none
-
-      ! passed variables
-      integer, intent(in)    :: n,root,leaf,val,val2
-      integer :: x(n),y(n)
-
-      ! local variables
-      integer :: i,j
-
-      ! Carry out heap sort
-      i = root
-      j = i*2
-      do
-        if (j.GT.leaf) exit
-        if (j.LT.leaf) then
-          if (x(j).LT.x(j+1)) j = j + 1
-        endif
-        if (x(j).GT.val) then
-          x(i) = x(j) ! id
-          y(i) = y(j) ! order
-          i    = j
-          j    = i*2
-        else
-          j    = leaf + 1
-        endif
-      enddo
-      x(i) = val
-      y(i) = val2
-
-      return
-    end subroutine mkheap
 
   end subroutine sort_recv_node
   !!***

@@ -206,10 +206,10 @@ contains
   end function j1x
 !!***
 
-  !!****f* functions/heap_sort_integer_index *
+  !!****f* functions/heapsort_integer_index *
   !!
   !!  NAME 
-  !!   heap_sort_integer_index
+  !!   heapsort_integer_index
   !!  USAGE
   !!   
   !!  PURPOSE
@@ -229,7 +229,7 @@ contains
   !!  MODIFICATION HISTORY
   !!  SOURCE
   !!  
-  subroutine heap_sort_integer_index(n_arr,array,arr_index,reverse)
+  subroutine heapsort_integer_index(n_arr,array,arr_index,reverse)
 
     ! Passed variables
     integer :: n_arr
@@ -299,12 +299,12 @@ contains
       return
     end subroutine sift_down_integer_index
     
-  end subroutine heap_sort_integer_index
+  end subroutine heapsort_integer_index
 
-  !!****f* functions/heap_sort_real_index *
+  !!****f* functions/heapsort_real_index *
   !!
   !!  NAME 
-  !!   heap_sort_real_index
+  !!   heapsort_real_index
   !!  USAGE
   !!   
   !!  PURPOSE
@@ -326,7 +326,7 @@ contains
   !!  MODIFICATION HISTORY
   !!  SOURCE
   !!  
-  subroutine heap_sort_real_index(n_arr,array,arr_index,reverse)
+  subroutine heapsort_real_index(n_arr,array,arr_index,reverse)
 
     use datatypes
 
@@ -407,6 +407,6 @@ contains
       return
     end subroutine sift_down_real_index
     
-  end subroutine heap_sort_real_index
+  end subroutine heapsort_real_index
   
 end module functions

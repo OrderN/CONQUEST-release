@@ -178,7 +178,7 @@ contains
     ! Module usage
     use datatypes
     use global_module, ONLY: iprint_gen
-    use functions, ONLY: heap_sort_real_index
+    use functions, ONLY: heapsort_real_index
     use GenComms, ONLY: cq_abort
 
     implicit none
@@ -204,7 +204,7 @@ contains
     endif
     ! --- make index for ordering of points from right to left ----------
     !call picksort(mxnpt,npt,xpt,indx)
-    call heap_sort_real_index(npt,xpt,indx,1)
+    call heapsort_real_index(npt,xpt,indx,1)
     if(myid==0.AND.iprint_gen>1) then 
        write(io_lun,15)
 15     format(/'sequence nos. of points, going from right to left:'/)
