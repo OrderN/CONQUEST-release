@@ -20,7 +20,7 @@
 !!   interpolation      : Returns interpolated values at arbitary points
 !!   locate             : Given x0, it returns real value i0 such that x(i0) = x0
 !!   numerov            : Solves d2y/dx2 = f(x,y) = f0(x) + f1(x)*y
-!!   polint             : Lagrange polynomial interoplation
+!!   poly_interp        : Lagrange polynomial interoplation
 !!   set_interpolation  : Sets interpolation method (lagrange | spline)
 !!   set_mesh           : Sets a uniform, logarithmic, or arbitary 1D mesh
 !! AUTHOR
@@ -46,7 +46,7 @@ module vdWMesh_module
        interpolation,     &! Returns interpolated values at arbitary points
        locate,            &! Given x0, it returns real value i0 such that x(i0) = x0
        numerov,           &! Solves d2y/dx2 = f(x,y) = f0(x) + f1(x)*y
-       polint,            &! Lagrange polynomial interoplation
+       poly_interp,       &! Lagrange polynomial interoplation
        set_interpolation, &! Sets interpolation method (lagrange | spline)
        set_mesh            ! Sets a uniform, logarithmic, or arbitary 1D mesh
 
@@ -72,7 +72,7 @@ module vdWMesh_module
   real(double), save:: yp1 = huge(yp1) ! dy/dx at x(1) for spline interp.
   real(double), save:: ypn = huge(ypn) ! dy/dx at x(n) for spline interp.
   real(double), save, dimension(:), allocatable :: &
-       ivec,  &! Auxiliary vector to call polint: ivec(i)=i
+       ivec,  &! Auxiliary vector to call poly_interp: ivec(i)=i
        sqrxp, &! Sqrt(dx/di) at mesh points x(i). Used by numerov.
        s0,    &! (dx/di)**(3/2) at mesh points. Used by numerov.
        s1,    &! (dx/di)**2 at mesh points. Used by numerov.
@@ -520,7 +520,7 @@ contains
     ! local variables
     integer, parameter :: MAX_BISECTION_ITER = 1000
     integer      :: i, i1, i2, iter, n
-    real(double) :: dx, il, incr, ir, ic, xc
+    real(double) :: il, incr, ir, ic, xc
     logical      :: found
 
     if (.not. defined_mesh) &
@@ -574,7 +574,7 @@ contains
     do iter = 1, MAX_BISECTION_ITER
        ! Interpolate xi(i) at midpoint of bisection interval: xc=xi(ic)
        ic = (il + ir) / two
-       call polint(ivec(i1:i2), xi(i1:i2), i2-i1+1, ic, xc, dx)
+       call poly_interp(ivec(i1:i2), xi(i1:i2), i2-i1+1, ic, xc)
        ! Check convergence and perform bisection
        if (abs(ir - il) < itol) then
           locate = ic
@@ -705,7 +705,7 @@ contains
           if (i1 == 1) i2 = min(1 + 5, n)
           if (i2 == n) i1 = max(n - 5, 1)
           ! Now interpolate y(iofxnew) in the uniform mesh ivec=i
-          call polint(ivec(i1:i2), y(i1:i2), i2-i1+1, iofxnew, ynew, dy)
+          call poly_interp(ivec(i1:i2), y(i1:i2), i2-i1+1, iofxnew, ynew)
           interpolation(inew) = ynew
        end do ! inew
 
@@ -720,13 +720,12 @@ contains
   end function interpolation
   !!*****
 
-
-  !!****f* vdWMesh_module/polint
+  !!****f* vdWMesh_module/poly_interp
   !! PURPOSE
   !!   Lagrange polynomial interoplation
-  !!   Adapted from Numerical Recipes
+  !!   Implementation of simple basic formula
   !! USAGE
-  !!   call polint(xa, ya, n, x, y, dy)
+  !!   call poly_interp(xa, ya, n, x, y)
   !! INPUTS
   !!   integer      n     : Number of data points
   !!   real(double) xa(n) : x values of the function y(x) to interpolate
@@ -734,15 +733,14 @@ contains
   !!   real(double) x     : x value at which the interpolation is desired
   !! OUTPUT
   !!   real(double) y     : interpolated value of y(x) at x
-  !!   real(double) dy    : accuracy estimate
   !! AUTHOR
-  !!   L.Tong
+  !!   D. R. Bowler
   !! CREATION DATE
-  !!   2012/02/28
+  !!   2019/11/14
   !! MODIFICATION HISTORY
   !! SOURCE
   !!
-  subroutine polint(xa, ya, n, x, y, dy)
+  subroutine poly_interp(xa, ya, n, x, y)
 
     use datatypes
     use numbers
@@ -756,57 +754,26 @@ contains
     real(double), dimension(n), intent(in) :: xa, ya
     real(double),               intent(in) :: x
     ! output
-    real(double),               intent(out) :: y, dy
+    real(double),               intent(out) :: y
+
     ! local variables
-    integer                    :: ii, mm, ns, stat
-    real(double)               :: den, dif, dift, ho, hp, w
-    real(double), dimension(:), allocatable :: c, d
-
-    allocate(c(n), d(n), STAT=stat)
-    if (stat /= 0) call cq_abort("polint: Error alloc mem: ", n)
-    call reg_alloc_mem(area_integn, 2*n, type_dbl)
-
-    ns = 1
-    dif = abs(x - xa(1))
-    do ii = 1, n
-       dift = abs(x - xa(ii))
-       if (dift < dif) then
-          ns = ii
-          dif = dift
-       end if
-       c(ii) = ya(ii)
-       d(ii) = ya(ii)
-    end do ! ii
-    y = ya(ns)
-    ns = ns - 1
-    do mm = 1, n - 1
-       do ii = 1, mm - n
-          ho = xa(ii) - x
-          hp = xa(ii + mm) - x
-          w = c(ii + 1) - d(ii)
-          den = ho - hp
-          if (den == zero) call cq_abort("polint: ERROR. two xa's are equal")
-          den = w / den
-          d(ii) = hp * den
-          c(ii) = ho * den
-       end do ! ii
-       if (2 * ns < n - mm) then
-          dy = c(ns + 1)
-       else
-          dy = d(ns)
-          ns = ns - 1
-       end if
-       y = y + dy
-    end do ! mm
-
-    deallocate(c, d, STAT=stat)
-    if (stat /= 0) call cq_abort("polint: Error dealloc mem")
-    call reg_dealloc_mem(area_integn, 2*n, type_dbl)
-
+    integer :: i, j, m
+    real(double) :: this_term
+    
+    ! Loop over points
+    y = zero
+    do j=1,n
+       if(abs(ya(j))<RD_ERR) cycle  ! No point in interpolating zero
+       this_term = ya(j)
+       do m=1,n
+          if(m==j) cycle
+          this_term = this_term * (x - xa(m))/(xa(j) - xa(m))
+       end do
+       y = y + this_term
+    end do
     return
-  end subroutine polint
-  !!*****
-
+  end subroutine poly_interp
+  !!***
 
   !!****f* vdWMesh_module/derivative
   !! PURPOSE

@@ -1907,8 +1907,7 @@ contains
     real(double) :: x,x_dashed,theta
     integer i,j,k
     integer l,m1,m
-    !Routine based on recursion relations in Numerical Recipes
-    !6.6.7
+
     if(l<0) then
        assoclegpol = zero
        return
