@@ -19,13 +19,16 @@
   !!     io_module2 -> store_matrix
   !!     InfoX, InfoX1, ...., INfoXvel are defined in this module
   !!     InfoS is defined locally (in each subroutine).
+  !!   2019/11/8  Tsuyoshi
+  !!     grab_XXvelS, grab_Xhistories, dump_XL will(!) be moved to a new module, 
+  !!     since they use store_matrix.
+  !!     (this new module will be merged to store_matrix)
   !!  SOURCE
   !!
   module XLBOMD_module
 
     use datatypes
     use global_module, ONLY: iprint_MD,nspin
-    use store_matrix, ONLY: InfoMatrixFile
     implicit none
     integer,allocatable :: matX(:),matXvel(:),matZ(:),matPot(:)
     integer,allocatable :: matX_store(:,:)
@@ -36,8 +39,6 @@
 
     character(80),private :: RCSid = "$Id$"
     logical, save :: allocated_XL = .false.
-
-    type(InfoMatrixFile), pointer :: Info(:)
 
   contains
 
@@ -367,20 +368,32 @@
       use matrix_data, ONLY: LSrange,Srange
       use mult_module, ONLY: LS_trans,S_trans,matS,matL,matrix_product,mult, &
                              L_S_LS
-      use store_matrix, ONLY: grab_matrix2
-      use UpdateInfo_module, ONLY: Matrix_CommRebuild
       ! db
       use global_module, ONLY: io_lun
       use GenComms, ONLY: myid
+ !2019/Nov/13
+      use numbers, ONLY: half, one, very_small
+      use global_module, ONLY: io_lun,ni_in_cell,atom_coord,atom_coord_diff,rcellx,rcelly,rcellz
+      use GenComms, ONLY: ionode
+      use store_matrix,ONLY: matrix_store_global, grab_InfoMatGlobal, set_atom_coord_diff
 
       implicit none
       ! passed variables
       integer,intent(in) :: MDiter,range,trans
       ! local variables
       integer :: nfile,ispin,symm
+ !2019/Nov/13
+      type(matrix_store_global) :: InfoGlob   
+      integer :: ig
+      real(double) :: rms_change, scale_x, scale_y, scale_z
+      real(double) :: small_change = 0.3_double
+
+ !2019/Nov/13 InfoGlob
+      call grab_InfoMatGlobal(InfoGlob,index=0)
+      call set_atom_coord_diff(InfoGlob)
 
       ! Fetches & reconstructs X-matrix, Xvel-matrix & S-matrix
-      call grab_XXvelS(range,trans)
+      call grab_XXvelS(range,trans,InfoGlob)
       ! Gets Z(t) = L^{opt}(t) * S(t)
       if (flag_propagateX) then
         do ispin = 1, nspin
@@ -394,7 +407,7 @@
       call init_matX()
 
       if (flag_dissipation) then
-        call grab_Xhistories(range,trans)
+        call grab_Xhistories(range,trans,InfoGlob)
         call my_barrier()
         call reorder_Xhistories(MDiter)
         if (myid.EQ.0 .AND. iprint_MD.GT.1) &
@@ -478,41 +491,40 @@
     !!   2017/05/11 dave
     !!    Adding read option for spin polarisation
     !!  SOURCE
-    subroutine grab_XXvelS(range,trans)
+    subroutine grab_XXvelS(range,trans,InfoGlob)
       ! Module usage
       use global_module, ONLY: integratorXL,flag_propagateX, nspin
-      use GenComms, ONLY: inode
+      use GenComms, ONLY: inode, ionode
       use matrix_data, ONLY: Srange
       use mult_module, ONLY: matS,S_trans
-      use store_matrix, ONLY: grab_matrix2
-      use UpdateInfo_module, ONLY: Matrix_CommRebuild
+      use store_matrix, ONLY: grab_matrix2, InfoMatrixFile, matrix_store_global
+      use UpdateInfo, ONLY: Matrix_CommRebuild
 
       implicit none
       ! passed variables
       integer,intent(in) :: range,trans
       ! local variables
       integer :: nfile,symm
+      integer :: matStmp(1)
+      type(InfoMatrixFile), pointer :: Info(:)
+ !2019/Nov/08
+      type(matrix_store_global),intent(in) :: InfoGlob   
 
       ! Fetches & reconstructs X-matrix
-      call grab_matrix2('X',inode,nfile,Info,index=0)
-      call Matrix_CommRebuild(Info,range,trans,matX(1),nfile)
-      if(nspin==2) then
-         call grab_matrix2('X_2',inode,nfile,Info,index=0)
-         call Matrix_CommRebuild(Info,range,trans,matX(2),nfile)
-      end if
+      call grab_matrix2('X',inode,nfile,Info,InfoGlob,index=0,n_matrix=nspin)
+      call Matrix_CommRebuild(InfoGlob,Info,range,trans,matX,nfile,symm,n_matrix=nspin)
       ! Fetches & reconstructs Xvel-matrix
       if (integratorXL.EQ.'velocityVerlet') then
-        call grab_matrix2('Xvel',inode,nfile,Info,index=0)
-        call Matrix_CommRebuild(Info,range,trans,matXvel(1),nfile)
-        if(nspin==2) then
-           call grab_matrix2('Xvel_2',inode,nfile,Info,index=0)
-           call Matrix_CommRebuild(Info,range,trans,matXvel(2),nfile)
-        end if
+        call grab_matrix2('Xvel',inode,nfile,Info,InfoGlob,index=0,n_matrix=nspin)
+        call Matrix_CommRebuild(InfoGlob,Info,range,trans,matXvel,symm,nfile,n_matrix=nspin)
       endif
       ! Fetches & reconstructs S-matrix
       if (flag_propagateX) then
-        call grab_matrix2('S',inode,nfile,Info,index=0)
-        call Matrix_CommRebuild(Info,Srange,S_trans,matS,nfile,symm)
+       !matS will be matS(1:nspin_SF) in the near future
+        matStmp(1)=matS
+        call grab_matrix2('S',inode,nfile,Info,InfoGlob,index=0,n_matrix=1)
+        !call Matrix_CommRebuild(InfoGlob,Info,Srange,S_trans,matS,nfile,symm,n_matrix=1)
+        call Matrix_CommRebuild(InfoGlob,Info,Srange,S_trans,matStmp,nfile,symm,n_matrix=1)
       endif
 
       return
@@ -543,14 +555,14 @@
     !!   2019/05/24 tsuyoshi
     !!    Change the filenames and tidying up the code
     !!  SOURCE
-    subroutine grab_Xhistories(range,trans)
+    subroutine grab_Xhistories(range,trans,InfoGlob)
       ! Module usage
       use global_module, ONLY: flag_propagateL, nspin, io_lun
       use GenComms, ONLY: inode, ionode 
       use matrix_data, ONLY: LSrange,Lrange
       use mult_module, ONLY: LS_trans,L_trans
-      use store_matrix, ONLY: grab_matrix2
-      use UpdateInfo_module, ONLY: Matrix_CommRebuild
+      use store_matrix, ONLY: grab_matrix2, InfoMatrixFile, matrix_store_global
+      use UpdateInfo, ONLY: Matrix_CommRebuild
       !db
       use global_module, ONLY: io_lun
       use GenComms, ONLY: myid
@@ -558,9 +570,12 @@
       implicit none
       ! passed variables
       integer :: range,trans
+      !2019/Nov/13
+      type(matrix_store_global),intent(in) :: InfoGlob   
       !integer :: matX_store(maxitersDissipation,nspin)
       ! local variables
       integer :: maxiters,nfile,istep
+      type(InfoMatrixFile), pointer :: Info(:)
 
       maxiters = maxitersDissipation
       if(maxiters < 3) maxiters=3  ! even without dissipation, we need matX_store(:,1:4)
@@ -569,17 +584,32 @@
         &'WARNING: maxitersDissipation should be smaller than 10 : ', maxitersDissipation
        maxiters = 9 
       endif
+
+      ! ----- 2019/Nov/13: (comment by TM)   -----
+      ! Here, we assume InfoGlob is read before calling this subroutine.
+      ! We use same InfoGlob for all index, meaning that the matrices stored in Xmatrix.i**,p**** are
+      ! already rebuilt using the pair information shown in InfoGlob.i00, the one at the last step)
+      !
+
       ! Grab X-matrix files
       do istep = 1, maxiters+1
-       call grab_matrix2('X',inode,nfile,Info,index=istep)
-       call Matrix_CommRebuild(Info,range,trans,matX_store(istep,1),nfile)
+       call grab_matrix2('X',inode,nfile,Info,InfoGlob,index=istep,n_matrix=nspin)
+       call Matrix_CommRebuild(InfoGlob,Info,range,trans,matX_store(istep,:),nfile,n_matrix=nspin)
       enddo
-      if(nspin==2) then
-       do istep = 1, maxiters+1
-        call grab_matrix2('X2',inode,nfile,Info,index=istep)
-        call Matrix_CommRebuild(Info,range,trans,matX_store(istep,2),nfile)
-       enddo
-      endif
+
+      ! ----- 2019/Nov/13: (comment by TM)   -----
+      ! 1. Use same index in InfoGlobal.iXX and Xmatrix2.iXX.pYYYYYY
+      ! 2. Use InfoGlobal.i00 for all Xmatrix2.iXX.pYYYYYY   
+      ! 
+      !  Present scheme uses Option 2, which should be more efficient.
+      ! But, in this case, it is more efficient if we call Matrix_CommRebuild once, 
+      ! with  n_matrix = (maxiters+1)*nspin.   
+      !  (since it is expensive to make the transformation table (i,j) <-> (i_old,j_old))
+      !
+      ! When we use Memory for Info(:) and InfoGlob, instead of using IOs, we should prepare
+      !  set_prev_matrix for grab_matrix2, and we should be able to rebuild matX_store once,
+      ! by setting n_matix = (maxiters+1)*nspin
+      !
 
       return
     end subroutine grab_Xhistories
@@ -965,8 +995,6 @@
       use mult_module, ONLY: mat_p,matrix_product,matS,matL,L_S_LS,mult, &
                              matrix_sum,allocate_temp_matrix,free_temp_matrix, &
                              matrix_product_trace
-      use store_matrix, ONLY: dump_matrix2
-
       ! db
       use global_module, ONLY: io_lun
       use GenComms, ONLY: myid

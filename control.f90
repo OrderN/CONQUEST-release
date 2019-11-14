@@ -544,7 +544,7 @@ contains
                               y_atom_cell, z_atom_cell, area_general, &
                               flag_read_velocity, flag_quench_MD,     &
                               temp_ion, flag_MDcontinue, MDinit_step, &
-                              flag_MDold,n_proc_old,glob2node_old,    &
+                              flag_MDold,                             &
                               flag_LmatrixReuse,flag_XLBOMD,          &
                               flag_dissipation,flag_FixCOM,           &
                               flag_fire_qMD, flag_diagonalisation,    &
@@ -571,7 +571,6 @@ contains
                     matrix_store_global, InfoMatrixFile, dump_pos_and_matrices
     use mult_module,    ONLY: matL,L_trans,matK,S_trans, matrix_scale
     use matrix_data,    ONLY: Lrange,Hrange, rcut, max_range
-    use UpdateInfo_module, ONLY: Matrix_CommRebuild
     use XLBOMD_module,  ONLY: Ready_XLBOMD, Do_XLBOMD
     use Integrators,    ONLY: vVerlet_v_dthalf,vVerlet_r_dt, fire_qMD, &
                               fire_N_below_thresh
@@ -770,9 +769,11 @@ contains
        
        if (flag_fire_qMD) then
           call get_E_and_F(fixed_potential, vary_mu, energy1, .true., .true.,iter)
+          call check_stop(done, iter)   !2019/Nov/14
           call dump_pos_and_matrices(index=0,MDstep=iter,velocity=ion_velocity)
        else
           call get_E_and_F(fixed_potential, vary_mu, energy1, .true., .false.,iter)
+          call check_stop(done, iter)   !2019/Nov/14
           ! Here so that the kinetic stress is reported just after the 
           ! static stress - zamaan
           if (inode == ionode .and. iprint_MD > 2) then
@@ -783,6 +784,19 @@ contains
           call dump_pos_and_matrices(index=0,MDstep=iter,velocity=ion_velocity)
           call vVerlet_v_dthalf(MDtimestep,ion_velocity,tot_force,flag_movable,second_call)
        end if
+!******
+       !2019/Nov/14 tsuyoshi
+       ! we would dump the files(InfoGlobal and *matrix2.i**.p******)  once at the end of each job.
+       ! We should call "dump_pos_and_matrices" after calling "check_stop", since 
+       ! this subroutine would change the format (binary or ascii) of the files,
+       ! if user sets different "IO.MatrixFile.BinaryFormat.Grab" and "IO.MatrixFile.BinaryFormat.Dump".
+       !  (reading binary files at the beginning and writing ascii files at the end is possible.)
+       ! 
+       ! In the near future,  (depending on "IO.DumpEveryStep")
+       !  we would use "store_pos_and_matrices" at each MD step, 
+       !  while call "dump_pos_and_matrices" if "done" is true.
+!******
+
        ! Rescale the ionic positions for the berendsen barostat AFTER the 
        ! velocity updates to avoid rescaling velocities
        if (leqi(md_ensemble, 'npt')) then
@@ -877,7 +891,7 @@ contains
        ! Write all MD data and checkpoints to disk
        call write_md_data(iter, thermo, baro, mdl, nequil)
 
-       call check_stop(done, iter)
+       !call check_stop(done, iter) ! moved above. 2019/Nov/14 tsuyoshi
        if (flag_fire_qMD.OR.flag_quench_MD) then
           if (abs(max) < MDcgtol) then
              if ((iter - step_qMD) > 1) then
@@ -899,6 +913,7 @@ contains
     end do ! Main MD loop
 
     call end_md(thermo, baro)
+
     return
   end subroutine md_run
   !!***
@@ -1506,7 +1521,7 @@ end subroutine write_md_data
     use global_module,  only: iprint_MD, ni_in_cell, x_atom_cell,   &
                               y_atom_cell, z_atom_cell, id_glob,    &
                               atom_coord, area_general, flag_pulay_simpleStep, &
-                              glob2node_old, n_proc_old, flag_MDold, &
+                              flag_MDold, &
                               flag_diagonalisation, nspin, flag_LmatrixReuse, &
                               flag_SFcoeffReuse
     use group_module,   only: parts
@@ -1525,7 +1540,6 @@ end subroutine write_md_data
     use store_matrix,   only: dump_pos_and_matrices
     use mult_module, ONLY: matK, S_trans, matrix_scale, matL, L_trans
     use matrix_data, ONLY: Hrange, Lrange
-    use UpdateInfo_module, ONLY: Matrix_CommRebuild
 
     implicit none
 

@@ -145,6 +145,9 @@
 !!    stress and heat flux
 !!   2019/05/21 zamaan
 !!    Added RNG seed
+!!   2019/11/14 tsuyoshi
+!!    Removed n_proc_old and glob2node_old
+!!  SOURCE
 !!  SOURCE
 !!
 module global_module
@@ -355,9 +358,7 @@ module global_module
   !ORI real(double),parameter   :: shift_in_bohr = 1.0E-03_double
   real(double),parameter   :: shift_in_bohr = 1.0E-06_double
   ! Table showing atoms (global) in nodes
-  integer :: n_proc_old
   integer,allocatable :: glob2node(:)        ! size: ni_in_cell
-  integer,allocatable :: glob2node_old(:)    ! size: ni_in_cell
   ! Displacement of atoms from a previous step
   real(double),allocatable :: atom_coord_diff(:,:)
   ! XL-BOMD

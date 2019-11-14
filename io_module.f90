@@ -101,6 +101,11 @@ module io_module
   logical          :: flag_MatrixFile_BinaryFormat  ! Binary or Ascii
   logical          :: flag_MatrixFile_BinaryFormat_Grab ! Binary or Ascii for reading
   logical          :: flag_MatrixFile_BinaryFormat_Dump ! Binary or Ascii for writing
+  ! flag_MatrixFile_BinaryFormat_Dump is set as flag_MatrixFile_BinaryFormat_Grab in the beginning,
+  !  then, if we get a signal to finalise CONQUEST by calling "check_stop", it is set ast
+  !  flag_MatrixFile_BinaryFormat_Dump_END.  
+  !   (during the job, we need to keep the format of the file, prepared in the last job.)
+  logical          :: flag_MatrixFile_BinaryFormat_Dump_END ! set from Conquest_input
 
   ! RCS tag for object file identification 
   character(len=80), save, private :: &
@@ -4701,6 +4706,11 @@ second:   do
      present_time = mtime()/1000.e0_double
      if(present_time > time_max) flag_userstop=.true.
     endif
+  
+    ! Set flag_MatrixFile_BinaryFormat_Dump
+      flag_MatrixFile_BinaryFormat_Dump = flag_MatrixFile_BinaryFormat_Dump_END 
+      !then, if we call dump_matrix2, the format of the file should be changed.
+      !      2019/Nov/13 tsuyoshi
 
     return
   end subroutine check_stop

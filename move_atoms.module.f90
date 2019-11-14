@@ -794,7 +794,6 @@ contains
          flag_reset_dens_on_atom_move,           &
          IPRINT_TIME_THRES1, flag_pcc_global,    &
          id_glob,flag_MDold,     &
-         n_proc_old, glob2node_old,              &
          flag_LmatrixReuse, flag_diagonalisation, nspin, &
          flag_SFcoeffReuse 
     use minimise,       only: get_E_and_F, sc_tolerance, L_tolerance, &
@@ -812,7 +811,6 @@ contains
     use timer_module
     use dimens, ONLY: r_super_x, r_super_y, r_super_z
     use store_matrix, ONLY: dump_pos_and_matrices
-    use UpdateInfo_module, ONLY: Matrix_CommRebuild
     use multisiteSF_module, only: flag_LFD_minimise
     !use DiagModule, ONLY: diagon
     !for Debugging
@@ -1612,7 +1610,6 @@ contains
     use density_module, only: set_density_pcc
     use timer_module
     use store_matrix, ONLY: dump_pos_and_matrices
-    use UpdateInfo_module, ONLY: Matrix_CommRebuild
     use multisiteSF_module, only: flag_LFD_minimise
 
     implicit none
@@ -2441,7 +2438,7 @@ contains
     !use DiagModule, ONLY: diagon
     use io_module, ONLY: append_coords,write_atomic_positions,pdb_template
     use matrix_data, ONLY: Lrange
-    use UpdateInfo_module, ONLY: make_glob2node,Matrix_CommRebuild
+    use UpdateInfo, ONLY: make_glob2node
     use XLBOMD_module, ONLY: immi_XL,fmmi_XL
 
     ! DB
@@ -3994,6 +3991,8 @@ contains
   !!  MODIFICATION
   !!   2018/Sep/07  tsuyoshi
   !!       added calling ReportUpdateMatrix when flag_debug_move_atoms is true.
+  !!   2019/Nov/14  tsuyoshi
+  !!       removed glob2node_old, n_proc_old
   !!
   !!  SOURCE
   !!
@@ -4002,14 +4001,14 @@ contains
   use numbers,         only: half, zero, one, very_small
   use global_module,   only: flag_diagonalisation, atom_coord, atom_coord_diff, &
                              rcellx, rcelly, rcellz, ni_in_cell, nspin, nspin_SF, id_glob
-    ! n_proc_old and glob2node_old should be removed soon...
-    use global_module, only: n_proc_old, glob2node_old
+    ! n_proc_old and glob2node_old have been removed
   use GenComms,        only: my_barrier, inode, ionode, cq_abort, gcopy
   use mult_module,     only: matL, L_trans, matK, matS, S_trans, matSFcoeff, SFcoeff_trans, &
                              matrix_scale, matrix_transpose, matSFcoeff_tran
   use matrix_data,     only: Lrange, Hrange, Srange, SFcoeff_range
-  use store_matrix,    only: matrix_store_global, InfoMatrixFile, grab_InfoMatGlobal, grab_matrix2
-  use UpdateInfo_module, only: Matrix_CommRebuild, Report_UpdateMatrix
+  use store_matrix,    only: matrix_store_global, InfoMatrixFile, grab_InfoMatGlobal, grab_matrix2, &
+                             set_atom_coord_diff
+  use UpdateInfo, only: Matrix_CommRebuild, Report_UpdateMatrix
 
   implicit none
   integer, intent(in) :: update_method
@@ -4034,6 +4033,8 @@ contains
 
   real(double), dimension(3,ni_in_cell) :: velocity_global
   integer :: i
+  ! temporary for matT(nspin_SF)
+  integer :: matS_tmp(1)
 
  !!! Note: for developers  !!!
  !  if you want to update some new matrix, you should
@@ -4093,35 +4094,7 @@ contains
   ! Then, we use InfoGlob read from the file or use InfoGlob as it is (in the case of 2))
   !       Now, we just assume 1).
      call grab_InfoMatGlobal(InfoGlob,index=0)
-       n_proc_old = InfoGlob%numprocs
-       glob2node_old(:) = InfoGlob%glob_to_node(:)
-
-      scale_x = rcellx/InfoGlob%rcellx; scale_y = rcelly/InfoGlob%rcelly; scale_z = rcellz/InfoGlob%rcellz
-       rms_change = (scale_x - one)**2 + (scale_y - one)**2 + (scale_z - one)**2 
-       rms_change = sqrt(rms_change)
-      if(rms_change > small_change .and. inode == ionode) &
-        write(io_lun,fmt='(4x,a,3f20.10)') 'WARNING!! Big change of the cell', scale_x, scale_y,scale_z
-
-      if(rms_change < very_small) then
-       do ig = 1, ni_in_cell
-          atom_coord_diff(1:3,ig) = atom_coord(1:3,ig) - InfoGlob%atom_coord(1:3,ig)
-       enddo
-      else
-       do ig = 1, ni_in_cell
-          atom_coord_diff(1,ig) = atom_coord(1,ig) - InfoGlob%atom_coord(1,ig)*scale_x
-          atom_coord_diff(2,ig) = atom_coord(2,ig) - InfoGlob%atom_coord(2,ig)*scale_y
-          atom_coord_diff(3,ig) = atom_coord(3,ig) - InfoGlob%atom_coord(3,ig)*scale_z
-       enddo
-      endif
-
-      do ig = 1, ni_in_cell
-          if((atom_coord_diff(1,ig)) > half*rcellx) atom_coord_diff(1,ig)=atom_coord_diff(1,ig)-rcellx
-          if((atom_coord_diff(1,ig)) < -half*rcellx) atom_coord_diff(1,ig)=atom_coord_diff(1,ig)+rcellx
-          if((atom_coord_diff(2,ig)) > half*rcelly) atom_coord_diff(2,ig)=atom_coord_diff(2,ig)-rcelly
-          if((atom_coord_diff(2,ig)) < -half*rcelly) atom_coord_diff(2,ig)=atom_coord_diff(2,ig)+rcelly
-          if((atom_coord_diff(3,ig)) > half*rcellz) atom_coord_diff(3,ig)=atom_coord_diff(3,ig)-rcellz
-          if((atom_coord_diff(3,ig)) < -half*rcellz) atom_coord_diff(3,ig)=atom_coord_diff(3,ig)+rcellz
-      enddo
+     call set_atom_coord_diff(InfoGlob)
 
   ! Since the order of the atoms in x,y,z_atom_cell and velocity (or direction in CG) changes 
   ! depending on their partitions, they are rearranged in updateIndices3.
@@ -4143,49 +4116,29 @@ contains
  ! Then, matrices will be read from the corresponding files
  !
   if(flag_L) then
-     !call grab_matrix2('L',inode,nfile,Info)
-     call grab_matrix2('L',inode,nfile,Info,index=0,nspin_in=nspin)
+     call grab_matrix2('L',inode,nfile,Info,InfoGlob,index=0,n_matrix=nspin)
      call my_barrier()
-     call Matrix_CommRebuild(Info,Lrange,L_trans,matL(1),nfile,symm)
-     !call Matrix_CommRebuild(Info,Lrange,L_trans,matL,nfile,symm)
+     call Matrix_CommRebuild(InfoGlob,Info,Lrange,L_trans,matL,nfile,symm,n_matrix=nspin)
       if(flag_debug_move_atoms) call Report_UpdateMatrix("Lmat")
-     !! DRB 2017/05/09 now extended to spin systems
-     !if(nspin==2) then
-     !  call grab_matrix2('L2',inode,nfile,Info)
-     !  call my_barrier()
-     !  call Matrix_CommRebuild(Info,Lrange,L_trans,matL(2),nfile,symm)
-     !   if(flag_debug_move_atoms) call Report_UpdateMatrix("L2  ")
-     !end if
   endif
 
   if(flag_K) then
-     !call grab_matrix2('K',inode,nfile,Info)
-     call grab_matrix2('K',inode,nfile,Info,index=0,nspin_in=nspin)
+     call grab_matrix2('K',inode,nfile,Info,InfoGlob,index=0,n_matrix=nspin)
      call my_barrier()
-     call Matrix_CommRebuild(Info,Hrange,H_trans,matK(1),nfile)
-     !call Matrix_CommRebuild(Info,Hrange,H_trans,matK,nfile)
+     call Matrix_CommRebuild(InfoGlob,Info,Hrange,H_trans,matK,nfile,n_matrix=nspin)
       if(flag_debug_move_atoms) call Report_UpdateMatrix("Kmat")
-     !if(nspin==2) then
-     !  call grab_matrix2('K2',inode,nfile,Info)
-     !  call my_barrier()
-     !  call Matrix_CommRebuild(Info,Hrange,H_trans,matK(2),nfile)
-     !   if(flag_debug_move_atoms) call Report_UpdateMatrix("K2  ")
-     !end if
   endif
 
   if(flag_S) then
-     call grab_matrix2('S',inode,nfile,Info)
+    ! If we introduce spin-dependent support, matS -> matS(nspin_SF)
+       matS_tmp(1)=matS  ! temporary 
+
+     call grab_matrix2('S',inode,nfile,Info,InfoGlob,index=0,n_matrix=1)
+     !call grab_matrix2('S',inode,nfile,Info,InfoGlob,index=0,n_matrix=nspin_SF)
      call my_barrier()
-     !call Matrix_CommRebuild(Info,Srange,S_trans,matS,nfile)
-     call Matrix_CommRebuild(Info,Srange,S_trans,matS,nfile,nspin)
+     call Matrix_CommRebuild(InfoGlob,Info,Srange,S_trans,matS_tmp,nfile,symm,n_matrix=1)
+     !call Matrix_CommRebuild(InfoGlob,Info,Srange,S_trans,matS_tmp,nfile,symm,n_matrix=nspin_SF)
       if(flag_debug_move_atoms) call Report_UpdateMatrix("Smat")
-     ! If we introduce spin-dependent support ...
-     !if(nspin==2) then
-     !  call grab_matrix2('S2',inode,nfile,Info)
-     !  call my_barrier()
-     !  call Matrix_CommRebuild(Info,Srange,S_trans,matS(2),nfile,symm)
-     !   if(flag_debug_move_atoms) call Report_UpdateMatrix("S2  ")
-     !end if
   endif
 
   if(flag_SFcoeff) then
@@ -4193,16 +4146,10 @@ contains
       call matrix_scale(zero,matSFcoeff(spin_SF))
      enddo !spin_SF = 1,nspin_SF
 
-     call grab_matrix2('SFcoeff',inode,nfile,Info)
+     call grab_matrix2('SFcoeff',inode,nfile,Info,InfoGlob,index=0,n_matrix=nspin_SF)
      call my_barrier()
-     call Matrix_CommRebuild(Info,SFcoeff_range,SFcoeff_trans,matSFcoeff(1),nfile)
+     call Matrix_CommRebuild(InfoGlob,Info,SFcoeff_range,SFcoeff_trans,matSFcoeff,nfile,n_matrix=nspin_SF)
       if(flag_debug_move_atoms) call Report_UpdateMatrix("SFc1")
-     if(nspin_SF==2) then
-      call grab_matrix2('SFcoeff2',inode,nfile,Info)
-      call my_barrier()
-      call Matrix_CommRebuild(Info,SFcoeff_range,SFcoeff_trans,matSFcoeff(2),nfile)
-       if(flag_debug_move_atoms) call Report_UpdateMatrix("SFc2")
-     end if
 
      do spin_SF = 1,nspin_SF
       call matrix_scale(zero,matSFcoeff_tran(spin_SF))

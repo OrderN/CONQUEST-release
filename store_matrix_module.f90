@@ -76,19 +76,8 @@ module store_matrix
 !  or previous jobs. Since the number of (MPI)processes may change during the contiguous jobs,
 !  each present (MPI) process may need to read multiple files. Thus, the arrays with this type
 !  are defined as 1-rank array.  
-!  
-!  At present, in io_module2, they are defined by 
-!  type(InfoMatrixFile), pointer :: InfoL(:),InfoT(:),InfoK(:),    &
-!                                       InfoX(:),InfoXvel(:),InfoS(:), & ! for XL-BOMD
-!                                       InfoX1(:),InfoX2(:),InfoX3(:), & ! for dissipation
-!                                       InfoX4(:),InfoX5(:),InfoX6(:), &
-!                                       InfoX7(:),InfoX8(:),InfoX9(:), &
-!                                       InfoX10(:)
-!
 !                  2017/11/10 Tsuyoshi Miyazaki 
-!!!!
-!  N_MATRIX should be defined for each i_atom ?????
-!!!!
+!
   type InfoMatrixFile
     integer :: index_node
     integer :: natom_i
@@ -983,6 +972,75 @@ contains
   end subroutine grab_InfoMatGlobal
   !!***
 
+  ! -----------------------------------------------------------------------
+  ! Subroutine set_atom_coord_diff
+  ! -----------------------------------------------------------------------
+  !!****f* store_matrix/set_atom_coord_diff
+  !!
+  !!  NAME
+  !!   set_atom_coord_diff
+  !!  USAGE
+  !!   set_atom_coord_diff(InfoGlob)
+  !!  PURPOSE
+  !!   to set up the atom_coord_diff and 
+  !!  INPUTS
+  !!
+  !!  USES
+  !!
+  !!  AUTHOR
+  !!   Tsuyoshi Miyazaki
+  !!  CREATION DATE
+  !!   2019/Nov/13
+  !!  MODIFICATION
+  !!   2019/Nov/14 glob2node_old was removed.
+  !!
+  !!  SOURCE
+  !!
+     subroutine set_atom_coord_diff(InfoGlob)
+       use datatypes
+       use numbers,      only: one, half, very_small
+       use global_module,only: atom_coord, atom_coord_diff, io_lun,&
+                               rcellx, rcelly, rcellz, ni_in_cell
+
+       implicit none
+       ! passed array
+        type(matrix_store_global), intent(in):: InfoGlob
+       ! local
+        real(double) :: scale_x, scale_y, scale_z, rms_change
+        real(double) :: small_change = 0.3_double
+        integer      :: ig
+
+       ! Test for unit cell size change
+       scale_x = rcellx/InfoGlob%rcellx; scale_y = rcelly/InfoGlob%rcelly; scale_z = rcellz/InfoGlob%rcellz
+       rms_change = (scale_x - one)**2 + (scale_y - one)**2 + (scale_z - one)**2
+       rms_change = sqrt(rms_change)
+       if(rms_change > small_change .and. inode == ionode) &
+          write(io_lun,fmt='(4x,a,3f20.10)') 'WARNING!! Big change of the cell', scale_x, scale_y,scale_z
+
+       if(rms_change < very_small) then
+          do ig = 1, ni_in_cell
+             atom_coord_diff(1:3,ig) = atom_coord(1:3,ig) - InfoGlob%atom_coord(1:3,ig)
+          enddo
+       else
+          do ig = 1, ni_in_cell
+             atom_coord_diff(1,ig) = atom_coord(1,ig) - InfoGlob%atom_coord(1,ig)*scale_x
+             atom_coord_diff(2,ig) = atom_coord(2,ig) - InfoGlob%atom_coord(2,ig)*scale_y
+             atom_coord_diff(3,ig) = atom_coord(3,ig) - InfoGlob%atom_coord(3,ig)*scale_z
+          enddo
+       endif
+
+       do ig = 1, ni_in_cell
+          if((atom_coord_diff(1,ig)) > half*rcellx) atom_coord_diff(1,ig)=atom_coord_diff(1,ig)-rcellx
+          if((atom_coord_diff(1,ig)) < -half*rcellx) atom_coord_diff(1,ig)=atom_coord_diff(1,ig)+rcellx
+          if((atom_coord_diff(2,ig)) > half*rcelly) atom_coord_diff(2,ig)=atom_coord_diff(2,ig)-rcelly
+          if((atom_coord_diff(2,ig)) < -half*rcelly) atom_coord_diff(2,ig)=atom_coord_diff(2,ig)+rcelly
+          if((atom_coord_diff(3,ig)) > half*rcellz) atom_coord_diff(3,ig)=atom_coord_diff(3,ig)-rcellz
+          if((atom_coord_diff(3,ig)) < -half*rcellz) atom_coord_diff(3,ig)=atom_coord_diff(3,ig)+rcellz
+       enddo
+
+     return
+     end subroutine set_atom_coord_diff
+  !!***
 
   ! -----------------------------------------------------------------------
   ! Subroutine make_index_iter
@@ -1056,14 +1114,16 @@ contains
   !!    Removed attempts to read both spin channels in one routine (this routine should now be called once for each channel)
   !!   2017/11/10 tsuyoshi 
   !!    Moved from io_module2 to store_matrix
+  !!   2019/11/08 tsuyoshi 
+  !!    Added InfoGlob in the dummy arguments, and removed n_proc_old
   !!  SOURCE
   !!
-  subroutine grab_matrix2(stub,inode,nfile,Info,index,nspin_in)
+  subroutine grab_matrix2(stub,inode,nfile,Info,InfoGlob,index,n_matrix)
 
     ! Module usage
     use io_module, ONLY: get_file_name, get_file_name_2rank
     use GenComms, ONLY: cq_abort
-    use global_module, ONLY: io_lun,n_proc_old
+    use global_module, ONLY: io_lun
 
     implicit none
 
@@ -1072,8 +1132,9 @@ contains
     integer :: inode, matA
     character(len=*) :: stub
     type(InfoMatrixFile), pointer :: Info(:)
+    type(matrix_store_global) :: InfoGlob
     integer, optional :: index
-    integer, optional :: nspin_in
+    integer, optional :: n_matrix
 
     ! local variables
     integer :: lun,stat,padzeros,stat_alloc,size,size2,sizeL,i,j,jbeta_alpha,len,ifile,ibeg
@@ -1086,16 +1147,16 @@ contains
     integer :: lun_db
     character(20) :: file_db
 
-    max_node = n_proc_old
+    !max_node = n_proc_old
+    max_node = InfoGlob%numprocs
 
     index_local=0; if(present(index)) index_local=index
-    nspin_local=1; if(present(nspin_in)) nspin_local=nspin_in
+    nspin_local=1; if(present(n_matrix)) nspin_local=n_matrix
 
     ! Open matrix files to get "natom_i", allocate the arrays of Info,
     ! and read the data.
     ! Note numprocs = No. of MPI_process_new and max_nodes = No. of MPI_process_old.
 
-    nfile = int(max_node/numprocs)
     nfile = int(max_node/numprocs)
     nrest_file = mod(max_node,numprocs)
     if (inode.LT.nrest_file+1) nfile = nfile + 1

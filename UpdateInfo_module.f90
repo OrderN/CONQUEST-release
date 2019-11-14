@@ -1,6 +1,6 @@
-!!****h* Conquest/UpdateInfo_module
+!!****h* Conquest/UpdateInfo
 !!  NAME
-!!   UpdateInfo_module
+!!   UpdateInfo
 !!  PURPOSE
 !!   Reads files, performs communication and reconstructs matrices.
 !!   The following subroutines are applicable not only to L-matrix
@@ -22,7 +22,7 @@
 !!   
 !!  SOURCE
 !!  
-module UpdateInfo_module
+module UpdateInfo
 
   use datatypes
   use global_module, ONLY: flag_MDdebug,iprint_MDdebug
@@ -85,12 +85,12 @@ contains
   ! Subroutine Matrix_CommRebuild
   ! ------------------------------------------------------------
   
-  !!****f* UpdateInfo_module/Matrix_CommRebuild *
+  !!****f* UpdateInfo/Matrix_CommRebuild *
   !!
   !!  NAME
   !!   Matrix_CommRebuild
   !!  USAGE
-  !!
+  !!   call Matrix_CommRebuild(InfoGlob,Info,range,trans,matA,nfile,symm,n_matrix=**)
   !!  PURPOSE
   !!   Manages communication and reordering of matrix elements
   !!  INPUTS
@@ -111,11 +111,14 @@ contains
   !!     sequential job
   !!   2016/04/06 dave
   !!    Changed Info to pointer from allocatable (gcc 4.4.7 issue)
+  !!   2019/11/13 tsuyoshi
+  !!    Spin polarized case is introduced, and 
   !!  SOURCE
   !!
   !subroutine Matrix_CommRebuild(Info,range,matA,nfile)
   !subroutine Matrix_CommRebuild(Info,range,trans,matA,nfile,symm)
-  subroutine Matrix_CommRebuild(Info,range,trans,matA,nfile,symm,nspin)
+  !subroutine Matrix_CommRebuild(Info,range,trans,matA,nfile,symm,nspin)
+  subroutine Matrix_CommRebuild(InfoGlob,Info,range,trans,matA,nfile,symm,n_matrix)
 
 !!!  
 !!!  matA -> matA(1:nspin) 
@@ -124,10 +127,9 @@ contains
     ! Module usage
     use mpi
     use datatypes
-    use global_module, ONLY: io_lun,ni_in_cell,numprocs,glob2node,n_proc_old, iprint_MD
+    use global_module, ONLY: io_lun,ni_in_cell,numprocs,glob2node, iprint_MD
     use GenComms, ONLY: cq_abort,inode,ionode,gcopy,my_barrier
-    use mult_module, ONLY: symmetrise_L,symmetrise_matA
-    !use io_module2, ONLY: InfoL
+    use mult_module, ONLY: symmetrise_mat
     use store_matrix, ONLY: InfoMatrixFile, deallocate_InfoMatrixFile
     use primary_module, ONLY: bundle
     ! db
@@ -135,13 +137,20 @@ contains
     use io_module, ONLY: get_file_name
     use group_module, ONLY: parts
     use mult_module, ONLY: mat_p
+ !2019/Nov/13
+    use store_matrix, ONLY: matrix_store_global
 
     implicit none
 
     ! passed variables
-    integer :: range,matA,trans
+ !2019/Nov/13
+    type(matrix_store_global),intent(in) :: InfoGlob
+    integer :: range,trans
+    integer :: matA(:)    ! changed from integer to integer array
+    !integer :: range,matA,trans
+ !2019/Nov/13
     integer,optional :: symm
-    integer,optional :: nspin
+    integer,optional :: n_matrix
     type(InfoMatrixFile), pointer :: Info(:)
 
     ! local variables
@@ -164,7 +173,7 @@ contains
     integer :: nspin_local
 
     !! nspin is introduced!!  2019/09/02  tsuyoshi
-      nspin_local = 1; if(present(nspin)) nspin_local=nspin
+      nspin_local = 1; if(present(n_matrix)) nspin_local=n_matrix
     !! --------------- DEBUG --------------- !!
     if (flag_MDdebug) then
       call get_file_name('members',numprocs,inode,file_name)
@@ -204,7 +213,7 @@ contains
         LmatrixRecv%nspin=nspin_local
       call CommMat_send_size(LmatrixSend,isend_array)
       ! Receive the size info and allocate arrays.
-      call alloc_recv_array(irecv_array,irecv2_array, &
+      call alloc_recv_array(InfoGlob, irecv_array,irecv2_array, &
                             recv_array,LmatrixRecv,isize1,isize2,flag_remote_iprim)
       if (LmatrixRecv%nsend_node.GE.1) then
         allocate (nreq2(LmatrixRecv%nsend_node),nreq3(LmatrixRecv%nsend_node), STAT=stat_alloc)
@@ -216,7 +225,7 @@ contains
       flag_remote_iprim = .false.
     endif
     call my_barrier()
-    if (inode.EQ.ionode) write (io_lun,*) "Got through the 1st MPI communication !" !db
+    if (flag_MDdebug .and. inode.EQ.ionode) write (io_lun,*) "Got through the 1st MPI communication !" !db
     !write (io_lun,'(a,i7)') "Got through the 1st MPI communication !", inode
 
     ! Get ready for the 2nd & 3rd communication.
@@ -286,23 +295,23 @@ contains
     !!  call statement instead.                                             !!
     !! ------------------------------ NOTE: ------------------------------- !! 
     if (inode.EQ.ionode) write (io_lun,*) "Reorganise local matrix data"
-     call UpdateMatrix_local(Info,range,matA,flag_remote_iprim,nfile)
+     call UpdateMatrix_local(Info,range,nspin_local,matA,flag_remote_iprim,nfile)
     if (numprocs.NE.1) then
       if (LmatrixSend%nrecv_node.GT.0 .OR. LmatrixRecv%nsend_node.GT.0) then
         if (inode.EQ.ionode) write (io_lun,*) "Reorganise remote matrix data"
-        call UpdateMatrix_remote(range,matA,LmatrixRecv,flag_remote_iprim,irecv2_array,recv_array)
+        call UpdateMatrix_remote(range,nspin_local,matA,LmatrixRecv,flag_remote_iprim,irecv2_array,recv_array)
       endif
     endif
-    if (flag_MDdebug .AND. iprint_MDdebug.GT.3) write (lun_db5,*) mat_p(matA)%matrix(1:)
+    if (flag_MDdebug .AND. iprint_MDdebug.GT.3) write (lun_db5,*) mat_p(matA(1))%matrix(1:)
     ! symmetrise_L should be modified to be applicable to any sort of matrices [22/08/2013 michi]
     ! Must consider spin later as well.
     !ORI call symmetrise_L() ! if not calling this routine, IntEnergy gets unstable.. (ibeg2 was wrong.)
     if (present(symm)) then
        if (inode.EQ.ionode.AND.iprint_MD>2) write (io_lun,*) "Symmetrisation !"
-       call symmetrise_matA(range,trans,matA)
+       call symmetrise_mat(range,nspin_local,trans,matA)
     endif
     call my_barrier()
-    if (flag_MDdebug .AND. iprint_MDdebug.GT.3) write (lun_db6,*) mat_p(matA)%matrix(1:)
+    if (flag_MDdebug .AND. iprint_MDdebug.GT.3) write (lun_db6,*) mat_p(matA(1))%matrix(1:)
     if (inode.EQ.ionode) write (io_lun,*) &
        "Got through 2nd & 3rd MPIs and symmetrising matrix !" !db
 
@@ -348,7 +357,7 @@ contains
   ! Subroutine make_glob2node
   ! ------------------------------------------------------------
   
-  !!****f* UpdateInfo_module/make_glob2node *
+  !!****f* UpdateInfo/make_glob2node *
   !!
   !!  NAME
   !!   make_glob2node
@@ -407,7 +416,7 @@ contains
   ! Subroutine sort_recv_node
   ! ------------------------------------------------------------
   
-  !!****f* UpdateInfo_module/sort_recv_node *
+  !!****f* UpdateInfo/sort_recv_node *
   !!
   !!  NAME
   !!   sort_recv_node
@@ -610,7 +619,7 @@ contains
   ! Subroutine alloc_send_array
   ! ------------------------------------------------------------
   
-  !!****f* UpdateInfo_module/alloc_send_array *
+  !!****f* UpdateInfo/alloc_send_array *
   !!
   !!  NAME
   !!   alloc_send_array
@@ -1039,7 +1048,7 @@ contains
   ! Subroutine CommMat_send_size
   ! ------------------------------------------------------------
   
-  !!****f* UpdateInfo_module/CommMat_send_size *
+  !!****f* UpdateInfo/CommMat_send_size *
   !!
   !!  NAME
   !!   CommMat_send_size
@@ -1141,7 +1150,7 @@ contains
   ! Subroutine CommMat_send_neigh
   ! ------------------------------------------------------------
   
-  !!****f* UpdateInfo_module/CommMat_send_neigh *
+  !!****f* UpdateInfo/CommMat_send_neigh *
   !!
   !!  NAME
   !!   CommMat_send_neigh
@@ -1249,7 +1258,7 @@ contains
   end subroutine CommMat_send_neigh
   !!***
 
-  !!****f* UpdateInfo_module/CommMat_send_data *
+  !!****f* UpdateInfo/CommMat_send_data *
   !!
   !!  NAME
   !!   CommMat_send_data
@@ -1363,7 +1372,7 @@ contains
   ! Subroutine alloc_recv_array
   ! ------------------------------------------------------------
   
-  !!****f* UpdateInfo_module/alloc_recv_array *
+  !!****f* UpdateInfo/alloc_recv_array *
   !!
   !!  NAME
   !!   alloc_recv_array
@@ -1391,9 +1400,11 @@ contains
   !!   - Bug fix for changing the number of processors at the sequential job
   !!   2018/10/03 17:10 dave
   !!    Changing MPI tag to conform to standard
+  !!   2019/11/14 tsuyoshi
+  !!    Added InfoGlob in dummy arguments, and removed glob2node_old
   !!  SOURCE
   !!
-  subroutine alloc_recv_array(irecv_array,irecv2_array,recv_array, &
+  subroutine alloc_recv_array(InfoGlob,irecv_array,irecv2_array,recv_array, &
                               LmatrixRecv,isize1,isize2,flag_remote_iprim)
 
     ! Module usage
@@ -1401,15 +1412,16 @@ contains
     use GenComms, ONLY: inode,cq_abort
     use primary_module, ONLY: bundle
     use mpi
-    use global_module, ONLY: n_proc_old,glob2node_old
     ! db
     use input_module, ONLY: io_assign, io_close
     use io_module, ONLY: get_file_name
     use global_module, ONLY: numprocs,io_lun
+    use store_matrix, ONLY: matrix_store_global
 
     implicit none
 
     ! passed variables
+    type(matrix_store_global),intent(in) :: InfoGlob   !2019/Nov/14
     integer, allocatable :: irecv2_array(:)
     real(double), allocatable :: recv_array(:)
     logical, allocatable :: flag_remote_iprim(:)
@@ -1458,8 +1470,8 @@ contains
     do iprim = 1, bundle%n_prim
       flag_find_old = .false.
       iglob = bundle%ig_prim(iprim)
-      inode_old  = glob2node_old(iglob)
-      inode_file = WhichNode(inode_old,n_proc_old)
+      inode_old  = InfoGlob%glob_to_node(iglob)
+      inode_file = WhichNode(inode_old)
 
       !! -------- DEBUG -------- !!
       if (flag_MDdebug .AND. iprint_MDdebug.GT.2) then
@@ -1511,8 +1523,6 @@ contains
       write (lun_db,*) "flag_remote_iprim:", flag_remote_iprim(1:)
       write (lun_db,*) "No. of primary atoms (natom_remote)                  :", LmatrixRecv%natom_remote
       write (lun_db,*) "No. of procs. sending atoms to this node (nsend_node):", LmatrixRecv%nsend_node
-      write (lun_db,*) "glob2node_old   :"
-      write (lun_db,*) glob2node_old(1:)
       write (lun_db,*) "list_node_tmp   :"
       write (lun_db,*) list_node_tmp(1:)
       write (lun_db,*) "natom_node_tmp  :"
@@ -1739,7 +1749,7 @@ contains
   end subroutine alloc_recv_array
   !!***
 
-  !!****f* UpdateInfo_module/CommMat_irecv_data *
+  !!****f* UpdateInfo/CommMat_irecv_data *
   !!
   !!  NAME
   !!   CommMat_irecv_data
@@ -1871,7 +1881,7 @@ contains
   end subroutine CommMat_irecv_data
   !!***
 
-  !!****f* UpdateInfo_module/WhichNode *
+  !!****f* UpdateInfo/WhichNode *
   !!
   !!  NAME
   !!   WhichNode
@@ -1891,7 +1901,7 @@ contains
   !!
   !!  SOURCE
   !!
-  function WhichNode(inode_old,n_proc_old)
+  function WhichNode(inode_old)
 
     ! Module usage
     use global_module, ONLY: numprocs
@@ -1903,7 +1913,7 @@ contains
     integer :: WhichNode
 
     ! passed variables
-    integer,intent(in) :: inode_old,n_proc_old
+    integer,intent(in) :: inode_old
 
     ! local variables
     integer :: ifile
@@ -1928,7 +1938,7 @@ contains
   ! Subroutine UpdateMatrix_local
   ! ------------------------------------------------------------
   
-  !!****f* UpdateInfo_module/UpdateMatrix_local *
+  !!****f* UpdateInfo/UpdateMatrix_local *
   !!
   !!  NAME
   !!   UpdateMatrix_local
@@ -1956,14 +1966,16 @@ contains
   !!    Added the check of the inconsistency for the number of orbitals (sf1)
   !!    between the present matrix and the one read from the file. 
   !!    Also added the part collecting the information of missing pairs
+  !!   2019/Nov/13 tsuyoshi
+  !!    spin-dependent version
   !!  SOURCE
   !!
-  subroutine UpdateMatrix_local(Info,range,matA,flag_remote_iprim,nfile)
+  subroutine UpdateMatrix_local(Info,range,n_matrix,matA,flag_remote_iprim,nfile)
 
     ! Module usage
     use numbers
     use global_module, ONLY: glob2node,id_glob,atom_coord_diff, &
-         runtype,nspin, rcellx, rcelly, rcellz, sf, nlpf, atomf
+         runtype, rcellx, rcelly, rcellz, sf, nlpf, atomf
     use species_module, ONLY: nsf_species, natomf_species, nlpf_species
     use Gencomms, ONLY: inode,cq_abort
     use primary_module, ONLY: bundle
@@ -1991,7 +2003,11 @@ contains
     implicit none
 
     ! passed variables
-    integer :: nfile,range,matA
+   !2019/Nov/13
+    !integer :: nfile,range,matA
+    integer :: nfile,range,n_matrix
+    integer :: matA(n_matrix) ! usually n_matrix = nspin
+   !2019/Nov/13
     logical, allocatable :: flag_remote_iprim(:)
     type(InfoMatrixFile), pointer :: Info(:)
 
@@ -2023,6 +2039,8 @@ contains
     real(double) :: eps, xcover, ycover, zcover, rr
     real(double) :: sum_Rij_fail
 
+    integer :: matA_tmp, isize
+
    !For Report_UpdateMatrix_Local&Remote
         iatom_local=0; ij_local=0; ij_success_local=0; ij_fail_local=0
         min_Rij_fail_local=zero; max_Rij_fail_local=zero; sum_Rij_fail=zero
@@ -2042,11 +2060,17 @@ contains
 
     matA_halo => halo(range)
 
+    ! In the case of  n_matrix > 1,  information of pairs are same for all mat_p(matA(:))
+      matA_tmp = matA(1)
+      if(nfile > 0 ) then
+       if(n_matrix.ne.Info(1)%nspin) call cq_abort("Error: mismatch between n_matrix and Info%nspin",n_matrix, Info(1)%nspin)
+      endif
+
     ! Need to consider spin later.
-    !db write (io_lun,*) "inode, Size of mat_p(matA):", inode, mat_p(matA)%length
+    !db write (io_lun,*) "inode, Size of mat_p(matA):", inode, mat_p(matA_tmp)%length
 
     !For checking the consistency of nsf1 between read and present matrices
-     sf1 = mat_p(matA)%sf1_type; nprim = bundle%n_prim
+     sf1 = mat_p(matA_tmp)%sf1_type; nprim = bundle%n_prim
       allocate(alpha_i2(1:nprim), STAT = stat_alloc)
        if(stat_alloc .ne. 0) call cq_abort('Error in allocating alpha_i2 in UpdateMatrix_local',nprim)
       if(sf1 == sf) then
@@ -2229,40 +2253,20 @@ contains
                    jpart_y = 1 + (jpart-1-(jpart_x-1)*BCS_parts%ncovery*BCS_parts%ncoverz) / BCS_parts%ncoverz
                    jpart_z = jpart - (jpart_x-1) * BCS_parts%ncovery * BCS_parts%ncoverz - (jpart_y-1) * BCS_parts%ncoverz
 
-                   !if (nspin.EQ.1) then
-                   do n1 = 1, n_alpha*n_beta
-                      mat_p(matA)%matrix(ibeg_Lij+n1-1) = &
-                           Info(ifile)%data_Lold(ibeg2+n1-1, 1)
+                   do isize = 1, n_matrix
+                    do n1 = 1, n_alpha*n_beta
+                      mat_p(matA(isize))%matrix(ibeg_Lij+n1-1) = &
+                           Info(ifile)%data_Lold(ibeg2+n1-1,isize)
 
                       !! --------------- DEBUG: --------------- !!
                       if (flag_MDdebug .AND. iprint_MDdebug.GT.1) then
-                         write (lun_db2,'(2f25.18,f15.5,i10)') mat_p(matA)%matrix(ibeg_Lij+n1-1), &
-                              Info(ifile)%data_Lold(ibeg2+n1-1,1), &
-                              Rij, jcover
+                         write (lun_db2,'(2f25.18,f15.5,i10)') mat_p(matA(isize))%matrix(ibeg_Lij+n1-1), &
+                              Info(ifile)%data_Lold(ibeg2+n1-1,isize), Rij, jcover
                       endif
                       !! --------------- DEBUG: --------------- !!
 
-                   enddo
-                   !else
-                   !  do n1 = 1, n_alpha*n_beta
-                   !    mat_p(matA)%matrix(ibeg_Lij+n1-1) = &
-                   !      Info(ifile)%data_Lold(ibeg2+n1-1, 1)
-                   !    !mat_p(matB)%matrix(ibeg_Lij+n1-1) = &
-                   !    !  Info(ifile)%data_Lold(ibeg2+n1-1, 2)
-                   !
-                   !    !! --------------- DEBUG: --------------- !!
-                   !    !if (flag_MDdebug .AND. iprint_MDdebug.GT.1) then
-                   !    !  write (lun_db2,'(3f25.18,f10.5,i10)') mat_p(matA)%matrix(ibeg_Lij+n1-1), &
-                   !    !                                        Info(ifile)%data_Lold(ibeg2+n1-1,1), &
-                   !    !                                        Info(ifile)%data_Lold(ibeg2+n1-1,2), &
-                   !    !                                        Rij, jcover
-                   !    !endif
-                   !    !! --------------- DEBUG: --------------- !!
-                   !
-                   !  enddo
-                   !endif !(nspin)
-
-                   !endif
+                    enddo
+                   enddo ! isize = 1, n_matrix
                   ij_success_local = ij_success_local+1
                 else
                   ij_fail_local = ij_fail_local + 1
@@ -2305,7 +2309,7 @@ contains
   ! Subroutine UpdateMatrix_remote
   ! ------------------------------------------------------------
   
-  !!****f* UpdateInfo_module/UpdateMatrix_remote *
+  !!****f* UpdateInfo/UpdateMatrix_remote *
   !!
   !!  NAME
   !!   UpdateMatrix_remote
@@ -2330,9 +2334,11 @@ contains
   !!   2018/Sep/07 tsuyoshi
   !!    Added the check of the inconsistency for the number of orbitals (sf1)
   !!    between the present matrix and the one read from the file. 
+  !!   2019/Nov/13 tsuyoshi
+  !!    spin dependent version 
   !!  SOURCE
   !!
-  subroutine UpdateMatrix_remote(range,matA,LmatrixRecv,flag_remote_iprim,irecv2_array,recv_array)
+  subroutine UpdateMatrix_remote(range,n_matrix,matA,LmatrixRecv,flag_remote_iprim,irecv2_array,recv_array)
 
     ! Module usage
     use numbers
@@ -2356,7 +2362,11 @@ contains
     implicit none
 
     ! passed variables
-    integer :: range,matA
+   !2019/Nov/13
+    !integer :: range,matA
+    integer :: range, n_matrix
+    integer :: matA(n_matrix)
+   !2019/Nov/13
     integer, allocatable, intent(in) :: irecv2_array(:)
     real(double), allocatable, intent(in) :: recv_array(:)
     logical, allocatable, intent(in) :: flag_remote_iprim(:)
@@ -2365,6 +2375,8 @@ contains
     ! local variables
     integer :: n1,len, nprim, sf1, stat_alloc
     integer, allocatable :: alpha_i2(:)
+    !2019/Nov/13
+    integer :: isize, matA_tmp
 
     ! --- Finding remote i --- !
     integer :: iprim_remote,iprim,idglob_ii,n_alpha
@@ -2418,9 +2430,12 @@ contains
 
     !ORI matA_halo => halo(Lrange)
     matA_halo => halo(range)
+    matA_tmp = matA(1)
+    if(n_matrix .ne. LmatrixRecv%nspin) &
+      call cq_abort("ERROR: mismatch between n_matrix and LmatrixRecv%nspin",n_matrix,LmatrixRecv%nspin)
 
     !For checking the consistency of nsf1 between read and present matrices
-     sf1 = mat_p(matA)%sf1_type; nprim = bundle%n_prim
+     sf1 = mat_p(matA_tmp)%sf1_type; nprim = bundle%n_prim
       allocate(alpha_i2(1:nprim), STAT = stat_alloc)
        if(stat_alloc .ne. 0) call cq_abort('Error in allocating alpha_i2 in UpdateMatrix_local',nprim)
       if(sf1 == sf) then
@@ -2571,6 +2586,7 @@ contains
         endif
         !! ---------- DEBUG ---------- !!
 
+       !2019/Nov/13  tsuyoshi
         len = n_alpha*n_beta
         if (ibeg_Lij.NE.0) then
           if (flag_MDdebug .AND. iprint_MDdebug.GT.1) then
@@ -2584,18 +2600,20 @@ contains
           endif
 
           !if (nspin.EQ.1) then
+          !2019/Nov/13  tsuyoshi
+           do isize = 1, n_matrix
             do n1 = 1, len
-              mat_p(matA)%matrix(ibeg_Lij+n1-1) = recv_array(ibeg_dataL+n1-1)
+              mat_p(matA(isize))%matrix(ibeg_Lij+n1-1) = recv_array(ibeg_dataL+n1-1)
               if (flag_MDdebug) write (lun_db,*) "ibeg_Lij+n1, ibeg_dataL+n1-1:", ibeg_Lij+n1-1, ibeg_dataL+n1-1
 
               !! ---------- DEBUG: ---------- !!
               if (flag_MDdebug .AND. iprint_MDdebug.GT.1) then
-                write (lun_db2,'(2f25.18)') mat_p(matA)%matrix(ibeg_Lij+n1-1), &
+                write (lun_db2,'(2f25.18)') mat_p(matA(isize))%matrix(ibeg_Lij+n1-1), &
                                             recv_array(ibeg_dataL+n1-1)
               endif
               !! ---------- DEBUG: ---------- !!
-
             enddo
+           enddo !isize = 1, n_matrix
           !else
           !  do n1 = 1, len
           !    mat_p(matA)%matrix(ibeg_Lij+n1-1) = recv_array(ibeg_dataL+n1-1)
@@ -2612,8 +2630,9 @@ contains
               if(Rij > max_Rij_fail_remote) max_Rij_fail_remote = Rij
 
         endif !(ibeg_Lij.NE.0)
-        ibeg_dataL = ibeg_dataL + len
-        ! ibeg_dataL = ibeg_dataL + len*LmatrixRecv%nspin
+        !ibeg_dataL = ibeg_dataL + len
+        ! 2019/Nov/13
+        ibeg_dataL = ibeg_dataL + len*LmatrixRecv%nspin
       enddo !(jj, nzise1)
     enddo !(iprim_remote, natom_remote)
 
@@ -2646,7 +2665,7 @@ contains
   ! Subroutine deallocate_CommMatArrays
   ! ------------------------------------------------------------
   
-  !!****f* UpdateInfo_module/deallocate_CommMatArrays *
+  !!****f* UpdateInfo/deallocate_CommMatArrays *
   !!
   !!  NAME
   !!   deallocate_CommMatArrays
@@ -2709,7 +2728,7 @@ contains
   ! Subroutine Report_UpdateMatrix
   ! ------------------------------------------------------------
   
-  !!****f* UpdateInfo_module/Report_UpdateMatrix *
+  !!****f* UpdateInfo/Report_UpdateMatrix *
   !!
   !!  NAME
   !!   Report_UpdateMatrix
@@ -2758,4 +2777,4 @@ contains
   end subroutine Report_UpdateMatrix
   !!***
 
-end module UpdateInfo_module
+end module UpdateInfo
