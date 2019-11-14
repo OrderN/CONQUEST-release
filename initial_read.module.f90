@@ -311,6 +311,10 @@ contains
     !
     !
     ! Set flag_one_to_one and check the number of SFs
+    if (nspin.eq.1) then
+       nspin_SF = 1
+       flag_SpinDependentSF = .false.
+    endif
     if (flag_basis_set==blips) then
        flag_one_to_one = .false.
        atomf = sf
@@ -662,6 +666,8 @@ contains
   !!    Added flag_PDOS_lm for (l,m) projected DOS
   !!   2018/10/30 11:52 dave
   !!    added flag_PDOS_include_semicore to allow inclusion/exclusion of semi-core states from PDOS
+  !!   2019/11/14 20:00 nakata
+  !!    set flag_SpinDependentSF to be .true. in default
   !!  TODO
   !!   Fix reading of start flags (change to block ?) 10/05/2002 dave
   !!   Fix rigid shift 10/05/2002 dave
@@ -1687,7 +1693,7 @@ contains
        TestH                   = fdf_boolean(  'Basis.TestBasisGrad_H',         .false.)
        support_spec_file       = fdf_string(80,'Basis.SupportSpecFile',   'support.dat')
        flag_read_support_spec  = fdf_boolean(  'Basis.ReadSupportSpec',         .false.)
-       flag_SpinDependentSF    = fdf_boolean(  'Basis.SpinDependentSF',         .false.) ! Spin-dependence of SFs
+       flag_SpinDependentSF    = fdf_boolean(  'Basis.SpinDependentSF',         .true. ) ! Spin-dependence of SFs
        !
        !
        flag_test_forces        = fdf_boolean('AtomMove.TestForces',   .false.)
