@@ -738,6 +738,8 @@ contains
   !! CREATION DATE
   !!   2019/11/14
   !! MODIFICATION HISTORY
+  !!   2019/11/14 10:50 dave
+  !!    Bug fix: copying error for line "do ii=1,n-mm"
   !! SOURCE
   !!
   subroutine poly_interp(xa, ya, n, x, y)
