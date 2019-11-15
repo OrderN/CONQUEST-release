@@ -25,7 +25,7 @@
 module UpdateInfo
 
   use datatypes
-  use global_module, ONLY: flag_MDdebug,iprint_MDdebug
+  use global_module, ONLY: flag_MDdebug,iprint_MDdebug, iprint_MD
 
   implicit none
 
@@ -225,7 +225,7 @@ contains
       flag_remote_iprim = .false.
     endif
     call my_barrier()
-    if (flag_MDdebug .and. inode.EQ.ionode) write (io_lun,*) "Got through the 1st MPI communication !" !db
+    if (iprint_MD > 3 .and. inode.EQ.ionode) write (io_lun,*) "Got through the 1st MPI communication !" !db
     !write (io_lun,'(a,i7)') "Got through the 1st MPI communication !", inode
 
     ! Get ready for the 2nd & 3rd communication.
@@ -257,7 +257,8 @@ contains
       enddo
       !db write (io_lun,*) "Got through MPI_Wait:", inode
     endif
-    if (inode.EQ.ionode) write (io_lun,*) "Got through communication! Matrix reconstruction follows next."
+    if (iprint_MD > 3 .and. inode.EQ.ionode) &
+     write (io_lun,*) "Got through communication! Matrix reconstruction follows next."
     !db write (io_lun,*) "Got through MPIs ! Next L-matrix reconstruction.", inode
 
     !! ----- DEBUG: 12/NOV/2012 ----- !!
@@ -294,11 +295,11 @@ contains
     !!  If UpdateMatrix_local is called above, comment out the following   !!
     !!  call statement instead.                                             !!
     !! ------------------------------ NOTE: ------------------------------- !! 
-    if (inode.EQ.ionode) write (io_lun,*) "Reorganise local matrix data"
+    !db if (inode.EQ.ionode) write (io_lun,*) "Reorganise local matrix data"
      call UpdateMatrix_local(Info,range,nspin_local,matA,flag_remote_iprim,nfile)
     if (numprocs.NE.1) then
       if (LmatrixSend%nrecv_node.GT.0 .OR. LmatrixRecv%nsend_node.GT.0) then
-        if (inode.EQ.ionode) write (io_lun,*) "Reorganise remote matrix data"
+        if (iprint_MD > 3 .and. inode.EQ.ionode) write (io_lun,*) "Reorganise remote matrix data"
         call UpdateMatrix_remote(range,nspin_local,matA,LmatrixRecv,flag_remote_iprim,irecv2_array,recv_array)
       endif
     endif
@@ -312,26 +313,26 @@ contains
     endif
     call my_barrier()
     if (flag_MDdebug .AND. iprint_MDdebug.GT.3) write (lun_db6,*) mat_p(matA(1))%matrix(1:)
-    if (inode.EQ.ionode) write (io_lun,*) &
-       "Got through 2nd & 3rd MPIs and symmetrising matrix !" !db
+     if (iprint_MD > 3 .and. inode.EQ.ionode) write (io_lun,*) &
+        "Got through 2nd & 3rd MPIs and symmetrising matrix !" !db
 
     ! Deallocation.
     if (numprocs.NE.1) then
       call deallocate_CommMatArrays(isend_array,isend2_array,send_array, &
                                      irecv_array,irecv2_array,recv_array, &
                                      LmatrixSend,LmatrixRecv)
-      if (inode.EQ.ionode) write (io_lun,*) "Deallocate CommMatArrays" !db
+      if (iprint_MD > 3 .and. inode.EQ.ionode) write (io_lun,*) "Deallocate CommMatArrays" !db
     else
       deallocate (flag_remote_iprim, STAT=stat_alloc)
       if (stat_alloc.NE.0) call cq_abort('Error deallocating flag_remote_iprim:', bundle%n_prim)
-      if (inode.EQ.ionode) write (io_lun,*) "Deallocate flag_remote_iprim" !db
+      if (iprint_MD > 3 .and. inode.EQ.ionode) write (io_lun,*) "Deallocate flag_remote_iprim" !db
     endif
 
     ! This deallocation should be outside this subroutine and called just after this subroutine
     ! 20/08/2013 --> Deallocation call had better stay here, rather than outside this sbrt.
     if (nfile.GT.0) then
       call deallocate_InfoMatrixFile(nfile,Info)
-      if (inode.EQ.ionode) write (io_lun,*) "Deallocate arrays related to Info" !db
+      if (iprint_MD > 3 .and. inode.EQ.ionode) write (io_lun,*) "Deallocate arrays related to Info" !db
     endif
 
     if (LmatrixRecv%nsend_node.GE.1 .AND. numprocs.NE.1) then
@@ -340,7 +341,7 @@ contains
                                           LmatrixRecv%nsend_node)
     endif
 
-    if (inode.EQ.ionode) write (io_lun,*) "Finished communication and matrix reconstruction" !db
+    if (iprint_MD > 3 .and. inode.EQ.ionode) write (io_lun,*) "Finished communication and matrix reconstruction" !db
 
     !! --- DEBUG: --- !!
     if (flag_MDdebug .AND. iprint_MDdebug.GT.3) then

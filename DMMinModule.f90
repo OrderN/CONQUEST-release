@@ -298,14 +298,14 @@ contains
              ! For XL-BOMD
              if (flag_XLBOMD) then
                 if (flag_propagateX) then
-                   call dump_matrix2('X',matX,LSrange,nspin)
-                   call dump_matrix2('S',matStmp,Srange,nspin_S)
+                   call dump_matrix2('X',matX,LSrange,n_matrix=nspin)
+                   call dump_matrix2('S',matStmp,Srange,n_matrix=nspin_S)
                    if (integratorXL.EQ.'velocityVerlet') &
                       call dump_matrix2('Xvel',matXvel,LSrange,nspin)
                 else
-                   call dump_matrix2('X',matX,Lrange,nspin)
+                   call dump_matrix2('X',matX,Lrange,n_matrix=nspin)
                    if (integratorXL.EQ.'velocityVerlet') &
-                      call dump_matrix2('Xvel',matXvel,Lrange,nspin)
+                      call dump_matrix2('Xvel',matXvel,Lrange,n_matrix=nspin)
                 endif
                 ! When dissipation applies
                 if (flag_dissipation) call dump_XL()

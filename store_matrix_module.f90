@@ -16,7 +16,7 @@
 module store_matrix
 
   use datatypes
-  use global_module, ONLY: numprocs
+  use global_module, ONLY: numprocs, iprint_MD
   use input_module, ONLY: io_assign, io_close
   use GenComms, ONLY: inode, ionode, cq_abort, myid
   use io_module, ONLY: flag_MatrixFile_RankFromZero, flag_MatrixFile_BinaryFormat, &
@@ -247,9 +247,9 @@ contains
        else
         call dump_InfoMatGlobal(index_local,MDstep=MDstep)
        endif
-        call dump_matrix2(stub,matA,range,nspin_local,index=index_local)
+        call dump_matrix2(stub,matA,range,n_matrix=nspin_local,index=index_local)
       case(1)  ! only "*matrix2.dat" will be printed out.
-        call dump_matrix2(stub,matA,range,nspin_local,index=index_local)
+        call dump_matrix2(stub,matA,range,n_matrix=nspin_local,index=index_local)
       case(2)  ! only "InfoGlobal.dat" will be printed out.
        if(present(velocity)) then
         call dump_InfoMatGlobal(index=index_local,velocity=velocity,MDstep=MDstep)
@@ -300,18 +300,20 @@ contains
   !!      introduced nmatrix for the case of dumping multiple matrices having a same cutoff range
   !!   2019/09/02 Tsuyoshi Miyazaki
   !!      nmatrix -> nspin
+  !!   2019/11/15 Tsuyoshi Miyazaki
+  !!      nspin -> n_matrix to be consistent with grab_matrix2
   !!  SOURCE
   !!
 
-   subroutine dump_matrix2(stub,matA,range,nspin,index)
+   subroutine dump_matrix2(stub,matA,range,n_matrix,index)
     use GenComms, ONLY: inode, ionode, cq_abort
     use global_module, ONLY: numprocs, id_glob
     use io_module, ONLY: get_file_name, get_file_name_2rank
     implicit none
     character(len=*),intent(in) :: stub
-    integer,intent(in) :: matA(nspin)
+    integer,intent(in) :: matA(n_matrix)
     integer,intent(in) :: range
-    integer,intent(in) :: nspin
+    integer,intent(in) :: n_matrix
     integer,optional,intent(in) :: index
     type(matrix_store):: tmp_matrix_store
 
@@ -322,7 +324,7 @@ contains
     index_local=0; if(present(index)) index_local=index
 
     ! set_matrix_store : build tmp_matrix_store
-    call set_matrix_store(stub,matA,range,nspin,tmp_matrix_store)
+    call set_matrix_store(stub,matA,range,n_matrix,tmp_matrix_store)
 
     ! Actual Dump (from dump_matrix2)
      ! First, get the name of a file based upon the node ID or rank.
@@ -458,7 +460,7 @@ contains
   !!  SOURCE
   !!
 
-   subroutine set_matrix_store(stub,matrices,range,nspin,matinfo)
+   subroutine set_matrix_store(stub,matrices,range,n_matrix,matinfo)
     use numbers
     use global_module, ONLY: id_glob, species_glob, io_lun, sf, nlpf, atomf
     use species_module, ONLY: nsf_species, natomf_species, nlpf_species
@@ -471,8 +473,8 @@ contains
 
     implicit none
     character(len=*),intent(in) :: stub
-    integer,intent(in) :: nspin
-    integer,intent(in) :: matrices(1:nspin)
+    integer,intent(in) :: n_matrix
+    integer,intent(in) :: matrices(1:n_matrix)
     integer,intent(in) :: range
     type(matrix_store), intent(out) :: matinfo
     !Local
@@ -485,7 +487,7 @@ contains
     integer :: nn
 
     !matA
-      matinfo%nspin=nspin
+      matinfo%nspin=n_matrix
       matA = matrices(1)
     !name & n_prim
       matinfo%name=stub
@@ -602,9 +604,9 @@ contains
     ! allocation of the matrix elements 
     !   2019/05/28 TM @ UCL
     !   data_matrix(1:matrix_size) ->  data_matrix(1:matrix_size, 1:nspin)
-    allocate(matinfo%data_matrix(matinfo%matrix_size,1:nspin), STAT = istat)
+    allocate(matinfo%data_matrix(matinfo%matrix_size,1:n_matrix), STAT = istat)
      if(istat .NE. 0) call cq_abort('Allocation 4 in set_matrix_store', istat, matinfo%matrix_size)
-    do nn=1, nspin
+    do nn=1, n_matrix
      matA = matrices(nn)
      matinfo%data_matrix(1:matinfo%matrix_size,nn)=mat_p(matA)%matrix(1:matinfo%matrix_size)
     enddo
@@ -1259,7 +1261,7 @@ contains
        else
        ! Case 2 : Text Format   old version  -----------------------
         open (lun,file=file_name,status='old',iostat=stat)
-            write(*,*) " Trying to open the ASCII file : ",file_name
+        if (iprint_MD > 2) write(*,*) " Trying to open the ASCII file : ",file_name
         if (stat.NE.0) call cq_abort('Fail in opening ASCII Lmatrix file.')
         ! Get dimension, allocate arrays and store necessary data.
         read (lun,*,iostat=stat) proc_id, Info(ifile)%natom_i

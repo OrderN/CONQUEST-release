@@ -512,11 +512,13 @@
 
       ! Fetches & reconstructs X-matrix
       call grab_matrix2('X',inode,nfile,Info,InfoGlob,index=0,n_matrix=nspin)
-      call Matrix_CommRebuild(InfoGlob,Info,range,trans,matX,nfile,symm,n_matrix=nspin)
+      !call Matrix_CommRebuild(InfoGlob,Info,range,trans,matX,nfile,symm,n_matrix=nspin)
+      call Matrix_CommRebuild(InfoGlob,Info,range,trans,matX,nfile,n_matrix=nspin)
       ! Fetches & reconstructs Xvel-matrix
       if (integratorXL.EQ.'velocityVerlet') then
         call grab_matrix2('Xvel',inode,nfile,Info,InfoGlob,index=0,n_matrix=nspin)
-        call Matrix_CommRebuild(InfoGlob,Info,range,trans,matXvel,symm,nfile,n_matrix=nspin)
+        !call Matrix_CommRebuild(InfoGlob,Info,range,trans,matXvel,symm,nfile,n_matrix=nspin)
+        call Matrix_CommRebuild(InfoGlob,Info,range,trans,matXvel,nfile,n_matrix=nspin)
       endif
       ! Fetches & reconstructs S-matrix
       if (flag_propagateX) then
@@ -553,7 +555,8 @@
     !!   2017/05/11 dave
     !!    Adding read option for spin polarisation
     !!   2019/05/24 tsuyoshi
-    !!    Change the filenames and tidying up the code
+    !!    Changing the filenames and tidying up the code
+    !!   
     !!  SOURCE
     subroutine grab_Xhistories(range,trans,InfoGlob)
       ! Module usage
@@ -663,7 +666,7 @@
       ! Dump X-matrix files
       do istep = 1, maxiters+1
         !call dump_matrix2('X',matX_store(istep,1),range,index=istep)
-        call dump_matrix2('X',matX_store(istep,:),range,nspin,index=istep)
+        call dump_matrix2('X',matX_store(istep,:),range,n_matrix=nspin,index=istep)
       enddo
       !if(nspin==2) then
       ! do istep = 1, maxiters+1
