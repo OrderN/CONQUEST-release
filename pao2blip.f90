@@ -116,7 +116,6 @@ contains
     use dimens, ONLY : RadiusSupport
     use GenComms, ONLY : cq_abort, gcopy
     use global_module, ONLY : iprint_basis
-    use linear_equation_solver
     use numbers
     use pao_format
     use primary_module, ONLY : bundle
