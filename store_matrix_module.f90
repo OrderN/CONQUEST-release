@@ -1142,6 +1142,7 @@ contains
     integer :: proc_id, jmax_i_max,ios, index_local, nspin_local
     character(32) :: file_name
     character(80) :: num
+    integer :: ispin
 
     ! db
     integer :: lun_db
@@ -1242,16 +1243,12 @@ contains
           enddo
           len = Info(ifile)%jbeta_max_i(i)*Info(ifile)%alpha_i(i)
 
-          ! spin
-          if (Info(ifile)%nspin.EQ.1) then
+          !Info(ifile)%nspin can be 1, 2, or even larger. (for multiple matrices having same range)
+           do ispin=1,Info(ifile)%nspin
             do jbeta_alpha = 1, len
-              read (lun) Info(ifile)%data_Lold(Info(ifile)%ibeg_dataL(i)+jbeta_alpha-1, 1)
+              read (lun) Info(ifile)%data_Lold(Info(ifile)%ibeg_dataL(i)+jbeta_alpha-1, ispin)
             enddo
-          elseif (Info(ifile)%nspin.EQ.2) then
-            do jbeta_alpha = 1, len
-              read (lun,*) Info(ifile)%data_Lold(Info(ifile)%ibeg_dataL(i)+jbeta_alpha-1, 2)
-            enddo
-          endif
+           enddo
 
           if (i+1.LE.size) then
             Info(ifile)%ibeg_Pij(i+1) = Info(ifile)%ibeg_Pij(i) + Info(ifile)%jmax_i(i)
@@ -1326,16 +1323,12 @@ contains
           enddo
           len = Info(ifile)%jbeta_max_i(i)*Info(ifile)%alpha_i(i)
 
-          ! spin
-          if (Info(ifile)%nspin.EQ.1) then
+          !Info(ifile)%nspin can be 1, 2, or even larger. (for multiple matrices having same range)
+           do ispin = 1, Info(ifile)%nspin
             do jbeta_alpha = 1, len
-              read (lun,*) Info(ifile)%data_Lold(Info(ifile)%ibeg_dataL(i)+jbeta_alpha-1, 1)
+              read (lun,*) Info(ifile)%data_Lold(Info(ifile)%ibeg_dataL(i)+jbeta_alpha-1, ispin)
             enddo
-          elseif (Info(ifile)%nspin.EQ.2) then
-            do jbeta_alpha = 1, len
-              read (lun,*) Info(ifile)%data_Lold(Info(ifile)%ibeg_dataL(i)+jbeta_alpha-1, 2)
-            enddo
-          endif
+           enddo ! ispin = 1, Info(ifile)%nspin
 
           if (i+1.LE.size) then
             Info(ifile)%ibeg_Pij(i+1) = Info(ifile)%ibeg_Pij(i) + Info(ifile)%jmax_i(i)
