@@ -204,6 +204,11 @@ module mult_module
        matHatomf, matKatomf, matXatomf, &
        matSFcoeff, matSFcoeff_tran, matdSFcoeff, matdSFcoeff_e
 
+  ! matrices related to XLBOMD (for DMM, at present)
+   integer, allocatable, dimension(:), public :: matXL, matXLvel    ! (nspin)
+   integer, allocatable, dimension(:,:), public :: matXL_store      ! (maxiter_Dissipation, nspin)
+   integer :: maxiter_Dissipation  
+
   integer, allocatable, dimension(:), public :: matrix_index, &
                                                 trans_index
 

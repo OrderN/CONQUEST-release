@@ -112,7 +112,7 @@ contains
     use matrix_data, ONLY: Lrange, Hrange, SFcoeff_range, SFcoeffTr_range, HTr_range, Srange, LSrange
     use mult_module, ONLY: matL,L_trans, matK, matSFcoeff, matS
     use io_module, ONLY: append_coords, write_atomic_positions, pdb_template
-!    use XLBOMD_module, only: matX, matXvel, dump_XL
+    use mult_module, only: matXL, matXLvel
 
     implicit none
     integer,intent(in), optional :: index
@@ -121,7 +121,9 @@ contains
     logical :: append_coords_bkup
     integer :: index_local, MDstep_local
     real(double), intent(in), optional :: velocity(1:3,ni_in_cell)
-    
+
+    ! temporary until nspin_SF will be introduced for matS
+    integer                 :: matStmp(2), nspin_S
 
     !!! Check whether we should write out the files or not.  !!!
      !   1. check elapsed time
@@ -158,33 +160,31 @@ contains
         endif
        endif
 
-! Since XLBOMD_module uses the subroutines in this module, we cannot 
-! call subroutines in XLBOMD_module.
-!   (Now the following part is in DMMMin_module)
-!
-!       !XLBOMD for DMM (X=LS) 
-!       if(.not.flag_diagonalisation) then
-!          if (flag_XLBOMD) then
-!             if (flag_propagateX) then
-!                call dump_matrix2('X',matX(1),LSrange)
-!                if(nspin==2) call dump_matrix2('X_2',matX(2),LSrange)
-!                call dump_matrix2('S',matS   ,Srange)
-!                if (integratorXL.EQ.'velocityVerlet') then
-!                   call dump_matrix2('Xvel',matXvel(1),LSrange)
-!                   if(nspin==2) call dump_matrix2('Xvel_2',matXvel(2),LSrange)
-!                end if
-!             else
-!                call dump_matrix2('X',matX(1),Lrange)
-!                if(nspin==2) call dump_matrix2('X_2',matX(2),LSrange)
-!                if (integratorXL.EQ.'velocityVerlet') then
-!                   call dump_matrix2('Xvel',matXvel(1),Lrange)
-!                   if(nspin==2) call dump_matrix2('Xvel_2',matXvel(2),LSrange)
-!                end if
-!             endif
-!             ! When dissipation applies
-!             if (flag_dissipation) call dump_XL()
-!          endif ! (flag_XLBOMD)
-!       endif ! (.not.flag_diagonalisation) 
+     ! dump_XL is moved from XLBOMD_module to store_matrix  : 2019/11/15 tsuyoshi
+       !Temporary: Smatrix should be spin dependent like Kmatrix or Smatrix
+       !  (while Satomf (PAO) is not spin dependent.)
+       !  (nspin_SF : for spin polarised support functions.)
+         nspin_S = 1  ! nspin_S = nspin_SF
+         matStmp(1:2)=matS
+       !Temporary:
+
+       if (.NOT. flag_diagonalisation) then
+          ! For XL-BOMD
+          if (flag_XLBOMD) then
+             if (flag_propagateX) then
+                call dump_matrix2('X',matXL,LSrange,n_matrix=nspin)
+                call dump_matrix2('S',matStmp,Srange,n_matrix=nspin_S)
+                if (integratorXL.EQ.'velocityVerlet') &
+                   call dump_matrix2('Xvel',matXLvel,LSrange,nspin)
+             else
+                call dump_matrix2('X',matXL,Lrange,n_matrix=nspin)
+                if (integratorXL.EQ.'velocityVerlet') &
+                   call dump_matrix2('Xvel',matXLvel,Lrange,n_matrix=nspin)
+             endif
+             ! When dissipation applies
+             if (flag_dissipation) call dump_XL()
+          endif
+       end if
 
        append_coords_bkup = append_coords; append_coords = .false.
         call write_atomic_positions('coord_next.dat',trim(pdb_template))
@@ -1418,4 +1418,61 @@ contains
   end subroutine deallocate_InfoMatrixFile
   !!***
 
+! Subroutines from XLBOMD_module !!!
+    ! ------------------------------------------------------------
+    ! Subroutine dump_XL
+    ! ------------------------------------------------------------
+
+    !!****f* store_matrix/dump_XL *
+    !!  NAME
+    !!   dump_XL
+    !!  USAGE
+    !!   call dump_XL()
+    !!  PURPOSE
+    !!   Dumps all matrix files related to XL-BOMD
+    !!  AUTHOR
+    !!   Michiaki Arita
+    !!  CREATION DATE
+    !!   2013/12/03
+    !!  MODIFICATION
+    !!   2017/05/11 dave
+    !!    Adding write option for spin polarisation
+    !!   2019/05/24 tsuyoshi
+    !!    Change the filenames and tidying up the code
+    !!   2019/11/15 tsuyoshi
+    !!    Moved from XLBOMD_module to store_matrix
+    !!  SOURCE
+    subroutine dump_XL()
+      ! Module usage
+      use global_module, ONLY: flag_propagateL, nspin,io_lun
+      use GenComms, ONLY: cq_abort,inode,ionode
+      use matrix_data, ONLY: LSrange,Lrange
+      use mult_module, ONLY: maxiter_Dissipation, matXL_store
+
+      implicit none
+      ! passed variable
+      ! local variables
+      integer :: nfile,maxiters,range,istep
+
+      if (.NOT. flag_propagateL) then
+        range = LSrange
+      else
+        range = Lrange
+      endif
+      maxiters = maxiter_Dissipation
+      if(maxiters < 4) maxiters = 3
+      if(maxiters > 9) then
+       if(inode == ionode) write(io_lun,*)  &
+        &'WARNING: maxiters_Dissipation should be smaller than 10 : ', maxiter_Dissipation
+       maxiters = 9
+      endif
+
+      ! Dump X-matrix files
+      do istep = 1, maxiters+1
+        call dump_matrix2('X',matXL_store(istep,:),range,n_matrix=nspin,index=istep)
+      enddo
+
+      return
+    end subroutine dump_XL
+    !!***
 end module store_matrix

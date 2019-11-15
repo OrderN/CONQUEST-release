@@ -4164,7 +4164,7 @@ contains
  end subroutine update_pos_and_matrices
  !!***
 
-   !!****f* control/propagate_vector *
+  !!****f* control/propagate_vector *
   !!
   !!  NAME
   !!   propagate_vector

@@ -842,7 +842,8 @@ contains
                          cDFT_NumberAtomGroups, cDFT_AtomList,       &
                          cDFT_BlockLabel, cDFT_Vc
     use sfc_partitions_module, only: n_parts_user, average_atomic_diameter, gap_threshold
-    use XLBOMD_module,         only: XLInitFreq,maxitersDissipation,kappa
+    use XLBOMD_module,         only: XLInitFreq,kappa
+    use mult_module,           only: maxiter_Dissipation
     use constraint_module,     only: flag_RigidBonds,constraints,SHAKE_tol, &
                                      RATTLE_tol,maxiterSHAKE,maxiterRATTLE, &
                                      const_range,n_bond
@@ -2009,10 +2010,10 @@ contains
          endif
          XLInitFreq          = fdf_integer('XL.ResetFreq',0)
          flag_dissipation    = fdf_boolean('XL.Dissipation',.false.)
-         maxitersDissipation = fdf_integer('XL.MaxDissipation',5)
+         maxiter_Dissipation = fdf_integer('XL.MaxDissipation',5)
          if (flag_dissipation) then
-           if (maxitersDissipation.LT.1 .OR. maxitersDissipation.GT.9) then
-             maxitersDissipation = 5
+           if (maxiter_Dissipation.LT.1 .OR. maxiter_Dissipation.GT.9) then
+             maxiter_Dissipation = 5
              if (inode.EQ.ionode) write (io_lun,'(2x,a)') &
                "WARNING: K must be 1 <= K <= 9 ! Setting to 5"
            endif

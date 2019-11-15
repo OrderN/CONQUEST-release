@@ -188,7 +188,9 @@ contains
                              WITH_LEVEL
     use store_matrix,  only: dump_matrix2, dump_InfoMatGlobal
     use matrix_data,   only: Lrange, Srange, LSrange, Hrange
-    use XLBOMD_module, only: matX, matXvel, dump_XL
+    !use XLBOMD_module, only: matX, matXvel, dump_XL
+    use store_matrix,  only: dump_XL
+    use mult_module,   only: matXL, matXLvel
 
     use exx_kernel_default, only: get_X_matrix
 
@@ -212,8 +214,6 @@ contains
     !TM 2010.Nov.06
     integer                 :: niter = 0
     integer, parameter      :: niter_max = 10
-    !TM 2019/09/02          
-    integer                 :: matStmp(2), nspin_S
 
 !****lat<$
     if (       present(level) ) backtrace_level = level+1
@@ -275,55 +275,7 @@ contains
                IPRINT_TIME_THRES1)
        end do ! end of do while (.not. done)
     end if
-    ! *** Add frequency of output here *** !
 
-    if (flag_dump_L) then
-       if (.NOT. flag_MDold) then
-
-         !2018Feb12 TM@UCL: 
-         !   Calls of dump_matrix2 for Kmatrix or Lmatrix were removed.
-         !   We may put dump_pos_and_matrices in the future, if needed.
-         !    Kmatrix2.i**.p**** and InfoGlobal.i** must be printed out simultaneously.
-         !   I also plan to revise the parts calling dump_matrix2 for XLBOMD.
-         !2018Feb12 TM@UCL: 
-
-       !Temporary: Smatrix should be spin dependent like Kmatrix or Smatrix
-       !  (while Satomf (PAO) is not spin dependent.)
-       !  (nspin_SF : for spin polarised support functions.) 
-         nspin_S = 1  ! nspin_S = nspin_SF
-         matStmp(1:2)=matS
-       !Temporary: 
-
-          if (.NOT. flag_diagonalisation) then 
-             ! For XL-BOMD
-             if (flag_XLBOMD) then
-                if (flag_propagateX) then
-                   call dump_matrix2('X',matX,LSrange,n_matrix=nspin)
-                   call dump_matrix2('S',matStmp,Srange,n_matrix=nspin_S)
-                   if (integratorXL.EQ.'velocityVerlet') &
-                      call dump_matrix2('Xvel',matXvel,LSrange,nspin)
-                else
-                   call dump_matrix2('X',matX,Lrange,n_matrix=nspin)
-                   if (integratorXL.EQ.'velocityVerlet') &
-                      call dump_matrix2('Xvel',matXvel,Lrange,n_matrix=nspin)
-                endif
-                ! When dissipation applies
-                if (flag_dissipation) call dump_XL()
-             endif
-          end if
-       else
-          if (flag_diagonalisation) then ! Use exact diagonalisation to get K
-             if(inode==ionode.AND.iprint_DM>2) write(io_lun,fmt='(2x,"K matrix only saved if AtomMove.OldMemberUpdates is F")')
-          else
-             if (nspin == 1) then
-                call dump_matrix("L", matL(1), inode)
-             else
-                call dump_matrix("L_up", matL(1), inode)
-                call dump_matrix("L_dn", matL(2), inode)
-             end if
-          end if
-       endif
-    end if
     if (record) then
        if (inode == ionode .and. iprint_DM > 1) then
           write (io_lun,*) '  List of residuals and energies'
