@@ -467,6 +467,8 @@ contains
   !!    Added wf_self_con for accumulate_DOS
   !!   2019/05/09 dave
   !!    Bug fix for band density output (and added write_eigenvalues call)
+  !!   2019/10/23 10:50 dave
+  !!    Bug fix for pDOS output
   !!  SOURCE
   !!
   subroutine FindEvals(electrons)
@@ -1079,18 +1081,21 @@ contains
              if (     flag_pDOS_angmom) call dump_projected_DOS(pDOS,Efermi,pDOS_angmom=pDOS_angmom,Nangmom=Nangmom)
           else
              call gsum(pDOS(:,:,:),n_DOS,ni_in_cell,nspin)
-             if(flag_pDOS_lm) then
-                do spin = 1, nspin
-                   call gsum(pDOS_angmom(:,:,:,:,spin),n_DOS,ni_in_cell,Nangmom,2*Nangmom-1)
-                enddo
+             if(flag_pDOS_angmom) then
+                if(flag_pDOS_lm) then
+                   do spin = 1, nspin
+                      call gsum(pDOS_angmom(:,:,:,:,spin),n_DOS,ni_in_cell,Nangmom,2*Nangmom-1)
+                   enddo
+                else
+                   do spin = 1, nspin
+                      call gsum(pDOS_angmom(:,:,:,1,spin),n_DOS,ni_in_cell,Nangmom)
+                   enddo
+                end if
+                if (inode==ionode) then
+                   call dump_projected_DOS(pDOS,Efermi,pDOS_angmom=pDOS_angmom,Nangmom=Nangmom)
+                end if
              else
-                do spin = 1, nspin
-                   call gsum(pDOS_angmom(:,:,:,1,spin),n_DOS,ni_in_cell,Nangmom)
-                enddo
-             end if
-             if (inode==ionode) then
-                if (.not.flag_pDOS_angmom) call dump_projected_DOS(pDOS,Efermi)
-                if (     flag_pDOS_angmom) call dump_projected_DOS(pDOS,Efermi,pDOS_angmom=pDOS_angmom,Nangmom=Nangmom)
+                if (inode==ionode) call dump_projected_DOS(pDOS,Efermi)
              endif
           endif
           if (flag_normalise_pDOS) deallocate(w_pDOS)
