@@ -4708,6 +4708,7 @@ second:   do
     endif
   
     ! Set flag_MatrixFile_BinaryFormat_Dump
+     if(flag_userstop) &
       flag_MatrixFile_BinaryFormat_Dump = flag_MatrixFile_BinaryFormat_Dump_END 
       !then, if we call dump_matrix2, the format of the file should be changed.
       !      2019/Nov/13 tsuyoshi
