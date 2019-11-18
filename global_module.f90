@@ -149,7 +149,8 @@
 !!    Removed n_proc_old and glob2node_old
 !!   2019/11/18 tsuyoshi
 !!    Removed flag_MDold
-!!  SOURCE
+!!   2019/11/18 14:37 dave
+!!    Added flag_variable_cell
 !!  SOURCE
 !!
 module global_module
@@ -207,6 +208,7 @@ module global_module
   real(double), dimension(3,3)                :: non_atomic_stress
 
   logical :: flag_opt_cell ! optimize the simulation cell?
+  logical :: flag_variable_cell ! Global indicator of whether cell will change
   integer :: optcell_method ! method for cell optimiisation 1 = cell, fixed fractional coords, 2 = nested loop cell + geometry optimisation, 3 = single vector full optimisation
   ! specify sim cell dims/ratios of dims to be held constant.
   character(len=20), save :: cell_constraint_flag

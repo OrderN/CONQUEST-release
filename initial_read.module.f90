@@ -708,6 +708,8 @@ contains
   !!    Added flag for RNG seed
   !!   2019/10/08 nakata
   !!    Fixed bug for the case when reading only Kmatrix but not SFcoeff (for MSSFs)
+  !!   2019/11/18 14:36 dave
+  !!    Added flag_variable_cell set to true for cell optimisation or NPT dynamics
   !!  TODO
   !!   Fix reading of start flags (change to block ?) 10/05/2002 dave
   !!   Fix rigid shift 10/05/2002 dave
@@ -769,7 +771,7 @@ contains
                              E_DOS_min, E_DOS_max, sigma_DOS, n_DOS, E_wf_min, E_wf_max, flag_wf_range_Ef, &
                              mx_temp_matrices, flag_neutral_atom, flag_diagonalisation, &
                              flag_SpinDependentSF, flag_Multisite, flag_LFD, flag_SFcoeffReuse, &
-                             flag_opt_cell, cell_constraint_flag, &
+                             flag_opt_cell, cell_constraint_flag, flag_variable_cell, &
                              cell_en_tol, optcell_method, cell_stress_tol, &
                              flag_stress, flag_full_stress, rng_seed, &
                              flag_atomic_stress, flag_heat_flux
@@ -1470,6 +1472,7 @@ contains
        MDtimestep            = fdf_double ('AtomMove.Timestep',      0.5_double)
        MDcgtol               = fdf_double ('AtomMove.MaxForceTol',0.0005_double)
        flag_opt_cell         = fdf_boolean('AtomMove.OptCell',          .false.)
+       flag_variable_cell    = flag_opt_cell
        optcell_method        = fdf_integer('AtomMove.OptCellMethod', 1)
        cell_constraint_flag  = fdf_string(20,'AtomMove.OptCell.Constraint','none')
        cell_en_tol           = fdf_double('AtomMove.OptCell.EnTol',0.00001_double)
@@ -2076,6 +2079,7 @@ contains
        case('npt')
          md_thermo_type     = fdf_string(20, 'MD.Thermostat', 'nhc')
          md_baro_type       = fdf_string(20, 'MD.Barostat', 'iso-ssm')
+         flag_variable_cell  = .true.
        end select
        md_tau_T           = fdf_double('MD.tauT', -one)
        md_tau_T_equil     = fdf_double('MD.tauTEquil', one)
