@@ -2410,58 +2410,48 @@ contains
   !!   2017/02/23 dave
   !!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
   !!   2018/07/11 12:08 dave
-  !!    Added routines to redistribute atoms to partitions and partitions to processes if an empty bundle is found
+  !!    Added routines to redistribute atoms to partitions and partitions to
+  !!    processes if an empty bundle is found
+  !!   2019/11/18 14:37 dave
+  !!    Updates to rebuild covering sets if cell varies during run
   !! SOURCE
   !!
-  !OLD subroutine updateIndices3(fixed_potential,velocity,step,iteration)
   subroutine updateIndices3(fixed_potential,velocity)
 
     ! Module usage
     use datatypes
-    use global_module, ONLY: flag_basis_set,flag_Becke_weights,flag_dft_d2,blips, &
+    use global_module, ONLY: flag_Becke_weights,flag_dft_d2, flag_variable_cell, id_glob, &
                              ni_in_cell,x_atom_cell,y_atom_cell,z_atom_cell,      &
-                             IPRINT_TIME_THRES2,glob2node,flag_LmatrixReuse,      &
+                             IPRINT_TIME_THRES2,glob2node, io_lun,     &
                              flag_XLBOMD, flag_diagonalisation, flag_neutral_atom, &
                              numprocs, atom_coord, species_glob, iprint_MD
     use GenComms, ONLY: inode,ionode,my_barrier,myid,gcopy, cq_abort
     use group_module, ONLY: parts
     use primary_module, ONLY: bundle
-    use cover_module, ONLY: BCS_parts,DCS_parts,ion_ion_CS
-    use mult_module,            ONLY: fmmi,immi,matL,L_trans
+    use cover_module, ONLY: BCS_parts, DCS_parts, ion_ion_CS, D2_CS, BCS_blocks, &
+         make_cs,make_iprim,send_ncover, deallocate_cs
+    use mult_module,            ONLY: fmmi,immi
     use set_blipgrid_module, ONLY: set_blipgrid
     use set_bucket_module, ONLY: set_bucket
     use dimens, ONLY: RadiusAtomf
     use pseudopotential_common, ONLY: core_radius
     use functions_on_grid, ONLy: associate_fn_on_grid
     use density_module, ONLY: build_Becke_weights
-    use UpdateMember_module, ONLY: updateMembers
+    use UpdateMember_module, ONLY: updateMembers_group, updateMembers_cs
     use atoms, ONLY: distribute_atoms,deallocate_distribute_atom
     use timer_module
     use numbers
-    !use DiagModule, ONLY: diagon
     use io_module, ONLY: append_coords,write_atomic_positions,pdb_template
-    use matrix_data, ONLY: Lrange
     use UpdateInfo_module, ONLY: make_glob2node,Matrix_CommRebuild
     use XLBOMD_module, ONLY: immi_XL,fmmi_XL
-
-    ! DB
-    use global_module, ONLY: io_lun
-    ! Check if updating PS and CS are correct
-    use global_module,       ONLY: id_glob, id_glob_inv_old
-    use UpdateMember_module, ONLY: deallocate_PSmember,allocate_PSmember, &
-                                   deallocate_CSmember
     use group_module,   ONLY: blocks, deallocate_group_set, make_cc2
     use primary_module, ONLY: deallocate_primary_set, bundle, make_prim, domain
     use construct_module, ONLY: init_primary
-    use cover_module,   ONLY: make_cs,make_iprim,send_ncover, deallocate_cs
-    use cover_module, ONLY: BCS_parts,DCS_parts,ion_ion_CS,D2_CS
-    use cover_module, only: BCS_blocks
     use sfc_partitions_module, ONLY: sfc_partitions_to_processors
     use ion_electrostatic, ONLY: ewald_real_cutoff, ion_ion_cutoff
     use species_module, ONLY: species
     use matrix_data,    ONLY: rcut,max_range
     use dimens,         ONLY: r_core_squared,r_h, r_dft_d2
-    ! Check if updating PS and CS are correct
     use DiagModule, only: end_scalapack_format, init_scalapack_format
     use maxima_module, ONLY: maxpartsproc, maxatomsproc, maxatomspart
 
@@ -2480,27 +2470,24 @@ contains
 
 
     call start_timer(tmr_l_tmp1,WITH_LEVEL)
-
-    ! [NOTE:] In md, velocity is exactly velocity, but when running cg,
-    !         velocity corresponds to 'search direction'
-    call updateMembers(fixed_potential,velocity, flag_empty_bundle)
-
-    call my_barrier()
-    !if (inode.EQ.ionode) write (io_lun,*) "Complete distribute_atoms()"
-
+    ! Update members in bundle and check for empty bundle
+    call updateMembers_group(velocity, flag_empty_bundle)
+    if(flag_empty_bundle.and.flag_stop_on_empty_bundle) &
+       call cq_abort("Empty bundle detected: user set stop_on_empty_bundle, so stopping...")
+    ! Update CS member locations
+    !if( (.NOT.(flag_variable_cell)) .AND. (.NOT.flag_empty_bundle)) &
+    !     call updateMembers_cs(velocity)
+    ! Start updates
     call start_timer(tmr_l_tmp2,WITH_LEVEL)
     if(flag_diagonalisation) call end_scalapack_format
-    ! Deallocate all matrix storage
     ! finish blip-grid indexing
     call finish_blipgrid
     ! finish matrix multiplication indexing
     if (flag_XLBOMD) call fmmi_XL()
     call fmmi(bundle)
-    ! Now we need to redistribute
-    if(flag_empty_bundle.and.flag_stop_on_empty_bundle) then
-       call cq_abort("Empty bundle detected: user set stop_on_empty_bundle, so stopping...")
-    else if(flag_empty_bundle) then
-       if(inode==ionode) write(io_lun,fmt='(2x,"Empty bundle detected: redistributing atoms between processes")')
+    ! Now we need to redistribute; if the cell is changing or one process
+    ! has no atoms then we must rebuild the covering sets
+    if(flag_empty_bundle.OR.flag_variable_cell) then
        ! Deallocate parts and covering sets
        call deallocate_cs(BCS_parts,.true.)
        call deallocate_cs(DCS_parts,.true.)
@@ -2508,56 +2495,51 @@ contains
        call deallocate_cs(ion_ion_CS,.true.)
        if(flag_dft_d2) call deallocate_cs(D2_CS,.true.)
        call deallocate_distribute_atom
-       call deallocate_primary_set(bundle)
-       call deallocate_group_set(parts)
-       ! Call Hilbert curve
-       call sfc_partitions_to_processors(parts)
-       ! inverse table to npnode
-       do np=1,parts%ngcellx*parts%ngcelly*parts%ngcellz
-          parts%inv_ngnode(parts%ngnode(np))=np
-       end do
-       call make_cc2(parts,numprocs)
-       ! NB  velocity update is done in update_pos_and_matrices
-       do ni = 1, ni_in_cell
-          id_global= id_glob(ni)
-          x_atom_cell(ni) = atom_coord(1,id_global)
-          y_atom_cell(ni) = atom_coord(2,id_global)
-          z_atom_cell(ni) = atom_coord(3,id_global)
-          species(ni)     = species_glob(id_global)
-       end do
-       ! Covering sets are made in setgrid
-       ! Create primary set for atoms: bundle of partitions
-       call init_primary(bundle, maxatomsproc, maxpartsproc, .true.)
-       call make_prim(parts, bundle, inode-1, id_glob, x_atom_cell, &
-            y_atom_cell, z_atom_cell, species)
+       ! If one process has no atoms then we have to redistribute the
+       ! overall workload; in the longer term, we could trigger this
+       ! if the load balancing becomes poor
+       if(flag_empty_bundle) then
+          if(inode==ionode) &
+               write(io_lun,fmt='(2x,"Empty bundle detected: redistributing atoms between processes")')
+          call deallocate_primary_set(bundle)
+          call deallocate_group_set(parts)
+          ! Call Hilbert curve
+          call sfc_partitions_to_processors(parts)
+          ! inverse table to npnode
+          do np=1,parts%ngcellx*parts%ngcelly*parts%ngcellz
+             parts%inv_ngnode(parts%ngnode(np))=np
+          end do
+          call make_cc2(parts,numprocs)
+          ! NB  velocity update is done in update_pos_and_matrices
+          do ni = 1, ni_in_cell
+             id_global= id_glob(ni)
+             x_atom_cell(ni) = atom_coord(1,id_global)
+             y_atom_cell(ni) = atom_coord(2,id_global)
+             z_atom_cell(ni) = atom_coord(3,id_global)
+             species(ni)     = species_glob(id_global)
+          end do
+          ! Covering sets are made in setgrid
+          ! Create primary set for atoms: bundle of partitions
+          call init_primary(bundle, maxatomsproc, maxpartsproc, .true.)
+          call make_prim(parts, bundle, inode-1, id_glob, x_atom_cell, &
+               y_atom_cell, z_atom_cell, species)
+       end if
        ! Sorts out which processor owns which atoms
        call distribute_atoms(inode, ionode)
-       call my_barrier
        call make_cs(inode-1, rcut(max_range), BCS_parts, parts, bundle, &
             ni_in_cell, x_atom_cell, y_atom_cell, z_atom_cell)
-       call my_barrier
        call make_iprim(BCS_parts, bundle, inode-1)
        call send_ncover(BCS_parts, inode)
        call my_barrier
-       ! Write out new coordinates
-       append_coords_bkup = append_coords
-       append_coords = .false.
-       call write_atomic_positions('coord_next.dat',trim(pdb_template))
-       append_coords = append_coords_bkup
        ! Reallocate and find new indices
        call immi(parts,bundle,BCS_parts,myid+1)
        if (flag_XLBOMD) call immi_XL(parts,bundle,BCS_parts,myid+1)
-       call my_barrier()
        rcut_max = max(sqrt(r_core_squared),r_h) + very_small
        call make_cs(myid,rcut_max, DCS_parts , parts , domain, &
             ni_in_cell, x_atom_cell, y_atom_cell, z_atom_cell)
        call make_cs(myid,rcut_max, BCS_blocks, blocks, bundle)
-       call my_barrier
        call send_ncover(DCS_parts, myid + 1)
-       call my_barrier
        call send_ncover(BCS_blocks, myid + 1)
-       call my_barrier
-       
        ! Initialise the routines to calculate ion-ion interactions
        if(flag_neutral_atom) then
           call make_cs(inode-1,ion_ion_cutoff,ion_ion_CS,parts,bundle,&
@@ -2569,39 +2551,22 @@ contains
        if (flag_dft_d2) call make_cs(inode-1, r_dft_d2, D2_CS, parts, bundle, ni_in_cell, &
                x_atom_cell, y_atom_cell, z_atom_cell)
     else
-       ! Write out new coordinates
-       append_coords_bkup = append_coords
-       append_coords = .false.
-       call write_atomic_positions('coord_next.dat',trim(pdb_template))
-       append_coords = append_coords_bkup
-       ! Reallocate and find new indices
+       call updateMembers_cs(velocity)
        call deallocate_distribute_atom
+       ! Reallocate and find new indices
        call distribute_atoms(inode,ionode)
        call immi(parts,bundle,BCS_parts,myid+1)
        if (flag_XLBOMD) call immi_XL(parts,bundle,BCS_parts,myid+1)
-       call my_barrier()
     end if
-
-    !% NOTE: The author (michi) thinks L-matrix reconstruction, its preparation
-    !%       and hamiltonian update should be called outside updateIndices3.
-    !%  --> Calls for L-matrix reconstruction & update_H deleted from r171
+    ! Write out new coordinates
+    append_coords_bkup = append_coords
+    append_coords = .false.
+    call write_atomic_positions('coord_next.dat',trim(pdb_template))
+    append_coords = append_coords_bkup
 
     ! Update glob2node
     if (inode.EQ.ionode) call make_glob2node
     call gcopy(glob2node,ni_in_cell)
-!%  The following routines are called outside updateIndices3 [02/12/2013]
-!%    ! L-matrix reconstruction
-!%    if (.NOT. diagon .AND. flag_LmatrixReuse) then
-!%      call grab_matrix2('L',inode,nfile,InfoL)
-!%      call my_barrier()
-!%      call Matrix_CommRebuild(InfoL,Lrange,L_trans,matL(1),nfile,symm)
-!%    endif
-!%    call my_barrier()
-
-    ! Only when using blips
-    !if (flag_basis_set.EQ.blips) then
-    !
-    !endif
     ! Reallocate for blip grid
     call set_blipgrid(myid, RadiusAtomf, core_radius)
     call set_bucket(inode-1)
@@ -2609,10 +2574,6 @@ contains
     if(flag_diagonalisation) call init_scalapack_format
     call stop_print_timer(tmr_l_tmp2,"matrix reindexing",IPRINT_TIME_THRES2)
     if (flag_Becke_weights) call build_Becke_weights
-!%  update_H is called outside updateIndices3 [02/12/2013]
-!%    ! Rebuild S, n(r) and hamiltonian based on new positions
-!%    call update_H(fixed_potential)
-
     call stop_print_timer(tmr_l_tmp1,"indices update",IPRINT_TIME_THRES2)
 
     return
