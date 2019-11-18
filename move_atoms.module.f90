@@ -2574,12 +2574,46 @@ contains
        append_coords = .false.
        call write_atomic_positions('coord_next.dat',trim(pdb_template))
        append_coords = append_coords_bkup
-       ! Reallocate and find new indices
+       ! Deallocate parts and covering sets
+       call deallocate_cs(BCS_parts,.true.)
+       call deallocate_cs(DCS_parts,.true.)
+       call deallocate_cs(BCS_blocks,.false.)
+       call deallocate_cs(ion_ion_CS,.true.)
+       if(flag_dft_d2) call deallocate_cs(D2_CS,.true.)
        call deallocate_distribute_atom
+       ! Reallocate and find new indices
        call distribute_atoms(inode,ionode)
+       call my_barrier
+       call make_cs(inode-1, rcut(max_range), BCS_parts, parts, bundle, &
+            ni_in_cell, x_atom_cell, y_atom_cell, z_atom_cell)
+       call my_barrier
+       call make_iprim(BCS_parts, bundle, inode-1)
+       call send_ncover(BCS_parts, inode)
+       call my_barrier
        call immi(parts,bundle,BCS_parts,myid+1)
        if (flag_XLBOMD) call immi_XL(parts,bundle,BCS_parts,myid+1)
        call my_barrier()
+       call my_barrier()
+       rcut_max = max(sqrt(r_core_squared),r_h) + very_small
+       call make_cs(myid,rcut_max, DCS_parts , parts , domain, &
+            ni_in_cell, x_atom_cell, y_atom_cell, z_atom_cell)
+       call make_cs(myid,rcut_max, BCS_blocks, blocks, bundle)
+       call my_barrier
+       call send_ncover(DCS_parts, myid + 1)
+       call my_barrier
+       call send_ncover(BCS_blocks, myid + 1)
+       call my_barrier
+       
+       ! Initialise the routines to calculate ion-ion interactions
+       if(flag_neutral_atom) then
+          call make_cs(inode-1,ion_ion_cutoff,ion_ion_CS,parts,bundle,&
+               ni_in_cell, x_atom_cell,y_atom_cell,z_atom_cell)
+       else
+          call make_cs(inode-1,ewald_real_cutoff,ion_ion_CS,parts,bundle,&
+               ni_in_cell, x_atom_cell,y_atom_cell,z_atom_cell)
+       end if
+       if (flag_dft_d2) call make_cs(inode-1, r_dft_d2, D2_CS, parts, bundle, ni_in_cell, &
+               x_atom_cell, y_atom_cell, z_atom_cell)
     end if
 
     !% NOTE: The author (michi) thinks L-matrix reconstruction, its preparation
