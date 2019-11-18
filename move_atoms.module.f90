@@ -57,6 +57,8 @@
 !!    minimising a single vector
 !!   2019/05/21 zamaan
 !!    Removed old RNG, replaced calls with new one from rng module
+!!   2019/11/18 tsuyoshi
+!!    Removed the places related to flag_MDold 
 !!  SOURCE
 !!
 module move_atoms
@@ -221,7 +223,7 @@ contains
     use global_module,  only: iprint_MD, x_atom_cell, y_atom_cell, &
                               z_atom_cell, ni_in_cell, id_glob,    &
                               flag_reset_dens_on_atom_move,        &
-                              flag_move_atom, flag_MDold
+                              flag_move_atom
     use species_module, only: species, mass
     use GenComms,       only: myid
 
@@ -319,19 +321,11 @@ contains
        end if
     end do
 
-    ! NOTE: By default, updateIndices3 is called for member updates.
-    !       You can switch to the conventional (old) way of member updates
-    !       but not recommended. See dimens.module as well. [2013/07/03 michi]
-    if (.NOT. flag_MDold) then
-      ! IMPORTANT: You MUST wrap atoms BEFORE updating members if they get out of the cell.
-      !            Otherwise, you will get an error message at BtoG-transformation.
+    ! IMPORTANT: You MUST wrap atoms BEFORE updating members if they get out of the cell.
+    !            Otherwise, you will get an error message at BtoG-transformation.
       call wrap_xyz_atom_cell
       call update_atom_coord
       call updateIndices3(fixed_potential,velocity)
-    else
-      call update_atom_coord
-      call updateIndices(.true., fixed_potential)
-    endif
 
     ! DRB 2016/01/13
     ! This line removed because this call is done in update_H
@@ -793,7 +787,7 @@ contains
          rcellz, flag_self_consistent,           &
          flag_reset_dens_on_atom_move,           &
          IPRINT_TIME_THRES1, flag_pcc_global,    &
-         id_glob,flag_MDold,     &
+         id_glob,                                &
          flag_LmatrixReuse, flag_diagonalisation, nspin, &
          flag_SFcoeffReuse 
     use minimise,       only: get_E_and_F, sc_tolerance, L_tolerance, &
@@ -904,24 +898,19 @@ contains
           z_atom_cell(i) = start_z(i) + k3 * direction(3,i)
        end do
 
-       if (.NOT. flag_MDold) then
-          if (ionode.EQ.inode) write (io_lun,*) "CG: 1st stage, call updateIndices3"
-          if(flag_SFcoeffReuse) then
-             call update_pos_and_matrices(updateSFcoeff,direction)
-             !CHECK READING K_MATRIX AND SFCOEFF   2017/12/04
-             !    call dump_matrix("SFcoeff_after_",  matSFcoeff(1), inode)
-             !    call matrix_sum(-one, matSFcoeff(1), one, mat_SFcoeff_old)
-             !    call dump_matrix("SFcoeff_diff",    matSFcoeff(1), inode)
-             !    call matrix_sum(-one, mat_K_old, one, matK(1))
-             !    call dump_matrix("K_diff",  mat_K_old, inode)
-             !    call matrix_sum(zero, matSFcoeff(1), one, mat_SFcoeff_old)
-             !CHECK READING K_MATRIX AND SFCOEFF   2017/12/04
-          else
-             call update_pos_and_matrices(updateLorK,direction)
-          endif
+       if (ionode.EQ.inode) write (io_lun,*) "CG: 1st stage, call updateIndices3"
+       if(flag_SFcoeffReuse) then
+          call update_pos_and_matrices(updateSFcoeff,direction)
+          !CHECK READING K_MATRIX AND SFCOEFF   2017/12/04
+          !    call dump_matrix("SFcoeff_after_",  matSFcoeff(1), inode)
+          !    call matrix_sum(-one, matSFcoeff(1), one, mat_SFcoeff_old)
+          !    call dump_matrix("SFcoeff_diff",    matSFcoeff(1), inode)
+          !    call matrix_sum(-one, mat_K_old, one, matK(1))
+          !    call dump_matrix("K_diff",  mat_K_old, inode)
+          !    call matrix_sum(zero, matSFcoeff(1), one, mat_SFcoeff_old)
+          !CHECK READING K_MATRIX AND SFCOEFF   2017/12/04
        else
-          write (io_lun,*) "CG: 1st stage with old CQ."
-          call updateIndices(.true., fixed_potential)
+          call update_pos_and_matrices(updateLorK,direction)
        endif
        if (inode == ionode .and. iprint_MD > 2) then
           do i=1,ni_in_cell
@@ -1030,20 +1019,14 @@ contains
        y_atom_cell(i) = start_y(i) + kmin*direction(2,i)
        z_atom_cell(i) = start_z(i) + kmin*direction(3,i)
     end do
-    !!if (.NOT. flag_MDold) call wrap_xyz_atom_cell
     ! Get atomic displacements: atom_coord_diff(1:3, ni_in_cell)
     k3_local = kmin - k3
 
-    if (.NOT. flag_MDold) then
-       if(inode==ionode.AND.iprint_MD>0) write (io_lun,*) "CG: 2nd stage"
-       if(flag_SFcoeffReuse) then
-          call update_pos_and_matrices(updateSFcoeff,direction)
-       else
-          call update_pos_and_matrices(updateLorK,direction)
-       endif
+    if(inode==ionode.AND.iprint_MD>0) write (io_lun,*) "CG: 2nd stage"
+    if(flag_SFcoeffReuse) then
+       call update_pos_and_matrices(updateSFcoeff,direction)
     else
-       call update_atom_coord
-       call updateIndices(.true., fixed_potential)
+       call update_pos_and_matrices(updateLorK,direction)
     endif
     if (inode == ionode .and. iprint_MD > 2) then
        do i=1,ni_in_cell
@@ -1159,21 +1142,15 @@ contains
           y_atom_cell(i) = start_y(i) + kmin*direction(2,i)
           z_atom_cell(i) = start_z(i) + kmin*direction(3,i)
        end do
-       !if (.NOT. flag_MDold) call wrap_xyz_atom_cell
        ! Get atomic displacements: atom_coord_diff(1:3, ni_in_cell)
        k3_local = kmin-kmin_old!03/07/2013
        !if (inode.EQ.ionode) write (io_lun,'(a,1x,3f15.10)') "k3, kmin,k3_local:", k3,kmin,k3_local
 
-       if (.NOT. flag_MDold) then
-          write (io_lun,*) "CG: 3rd stage"
-          if(flag_SFcoeffReuse) then
-             call update_pos_and_matrices(updateSFcoeff,direction)
-          else
-             call update_pos_and_matrices(updateLorK,direction)
-          endif
+       write (io_lun,*) "CG: 3rd stage"
+       if(flag_SFcoeffReuse) then
+          call update_pos_and_matrices(updateSFcoeff,direction)
        else
-          call update_atom_coord
-          call updateIndices(.true., fixed_potential)
+          call update_pos_and_matrices(updateLorK,direction)
        endif
        if (inode == ionode .and. iprint_MD > 2) then
           do i=1,ni_in_cell
@@ -1285,7 +1262,7 @@ contains
                                   flag_reset_dens_on_atom_move,           &
                                   IPRINT_TIME_THRES1, flag_pcc_global, &
                                   flag_diagonalisation, cell_constraint_flag, &
-                                  flag_SFcoeffReuse, flag_MDold
+                                  flag_SFcoeffReuse
     use minimise,           only: get_E_and_F, sc_tolerance, L_tolerance, &
                                   n_L_iterations
     use GenComms,           only: my_barrier, myid, inode, ionode, cq_abort, &
@@ -1372,15 +1349,10 @@ contains
             start_rcellz, search_dir_x, search_dir_y, search_dir_z,&
             k3, iter, search_dir_mean)
 
-       if(.NOT.flag_MDold) then
-          if(flag_SFcoeffReuse) then
-             call update_pos_and_matrices(updateSFcoeff,direction)
-          else
-             call update_pos_and_matrices(updateLorK,direction)
-          endif
+       if(flag_SFcoeffReuse) then
+          call update_pos_and_matrices(updateSFcoeff,direction)
        else
-          call update_atom_coord
-          call updateIndices(.true., fixed_potential)
+          call update_pos_and_matrices(updateLorK,direction)
        endif
        call update_H(fixed_potential)
 
@@ -1456,15 +1428,10 @@ contains
     call update_cell_dims(start_rcellx, start_rcelly, &
          start_rcellz, search_dir_x, search_dir_y, search_dir_z,&
          kmin, iter, search_dir_mean)
-    if(.NOT.flag_MDold) then
-       if(flag_SFcoeffReuse) then
-          call update_pos_and_matrices(updateSFcoeff,direction)
-       else
-          call update_pos_and_matrices(updateLorK,direction)
-       endif
+    if(flag_SFcoeffReuse) then
+       call update_pos_and_matrices(updateSFcoeff,direction)
     else
-       call update_atom_coord
-       call updateIndices(.true., fixed_potential)
+       call update_pos_and_matrices(updateLorK,direction)
     endif
     call update_H(fixed_potential)
 
@@ -1515,15 +1482,10 @@ contains
        call update_cell_dims(start_rcellx, start_rcelly, &
             start_rcellz, search_dir_x, search_dir_y, search_dir_z,&
             kmin, iter, search_dir_mean)
-       if(.NOT.flag_MDold) then
-          if(flag_SFcoeffReuse) then
-             call update_pos_and_matrices(updateSFcoeff,direction)
-          else
-             call update_pos_and_matrices(updateLorK,direction)
-          endif
+       if(flag_SFcoeffReuse) then
+          call update_pos_and_matrices(updateSFcoeff,direction)
        else
-          call update_atom_coord
-          call updateIndices(.true., fixed_potential)
+          call update_pos_and_matrices(updateLorK,direction)
        endif
 
        call update_H(fixed_potential)
@@ -2704,7 +2666,7 @@ contains
     use global_module,          only: iprint_MD, flag_self_consistent, &
                                       IPRINT_TIME_THRES2,              &
                                       flag_pcc_global, flag_dft_d2,    &
-                                      nspin, flag_MDold, io_lun,       &
+                                      nspin, io_lun,                   &
                                       flag_mix_L_SC_min, flag_XLBOMD,  &
                                       flag_reset_dens_on_atom_move,    &
                                       flag_LmatrixReuse,               &
@@ -2798,7 +2760,7 @@ contains
         (.NOT. flag_mix_L_SC_min)).OR.flag_reset_dens_on_atom_move) then
         call set_atomic_density(.true.)
     ! For SCF-O(N) calculations
-    elseif (.NOT.flag_diagonalisation .AND. .NOT.flag_MDold) then
+    elseif (.NOT.flag_diagonalisation) then
        if (flag_self_consistent .OR. flag_mix_L_SC_min) then
           if(flag_neutral_atom .and. .not.flag_LFD_MD_UseAtomicDensity) call set_atomic_density(.false.)
           if(flag_LmatrixReuse) then
@@ -2833,7 +2795,7 @@ contains
        call cq_abort("update_H: Can't run non-self-consistent without PAOs !")
     end if
     ! If we have read K and are predicting density from it, then rebuild
-    if(flag_diagonalisation.AND.flag_LmatrixReuse.AND.(.NOT.flag_MDold)) then
+    if(flag_diagonalisation.AND.flag_LmatrixReuse) then
        call get_electronic_density(density,electrons,atomfns,H_on_atomfns(1), &
             inode,ionode,maxngrid)
        do spin=1,nspin

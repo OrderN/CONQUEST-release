@@ -112,17 +112,16 @@ contains
   !!   2016/04/06 dave
   !!    Changed Info to pointer from allocatable (gcc 4.4.7 issue)
   !!   2019/11/13 tsuyoshi
-  !!    Spin polarized case is introduced, and 
+  !!    Spin polarized case is introduced
   !!  SOURCE
   !!
-  !subroutine Matrix_CommRebuild(Info,range,matA,nfile)
-  !subroutine Matrix_CommRebuild(Info,range,trans,matA,nfile,symm)
-  !subroutine Matrix_CommRebuild(Info,range,trans,matA,nfile,symm,nspin)
   subroutine Matrix_CommRebuild(InfoGlob,Info,range,trans,matA,nfile,symm,n_matrix)
+   !! (CAUTION) symm can be used only for the matrices having (trans).
 
 !!!  
 !!!  matA -> matA(1:nspin) 
-!!!    I AM STILL WORKING FOR SPIN_POLARIZED VERSION  !!! (TM 2019/09/02)
+!!!   in the near future, we will introduce 2D-array case  matA(1:index,1:nspin)
+!!!   to make the dissipation calculation more efficient.
 !!!
     ! Module usage
     use mpi

@@ -151,6 +151,8 @@ contains
   !!   2019/06/06 17:30 jack poulton and nakata
   !!    Changed to allow SZP-MSSFs with flag_MSSF_nonminimal when checking the number of MSSFs
   !!    Added MSSF_nonminimal_species
+  !!   2019/11/18 tsuyoshi
+  !!    Removed flag_MDold
   !!  SOURCE
   !!
   subroutine read_and_write(start, start_L, inode, ionode,          &
@@ -755,7 +757,7 @@ contains
                              dscf_target_spin, dscf_source_nfold,      &
                              dscf_target_nfold, flag_local_excitation, dscf_HOMO_thresh,   &
                              dscf_LUMO_thresh, dscf_HOMO_limit, dscf_LUMO_limit,           &
-                             flag_MDcontinue,flag_MDdebug,flag_MDold,  &
+                             flag_MDcontinue,flag_MDdebug,             &
                              flag_thermoDebug, flag_baroDebug, &
                              flag_LmatrixReuse,flag_TmatrixReuse,flag_SkipEarlyDM,McWFreq, &
                              restart_T,restart_X,flag_XLBOMD,flag_propagateX,              &
@@ -1945,7 +1947,6 @@ contains
 !!$
 !!$
        ! Basic settings for MD
-       flag_MDold        = fdf_boolean('AtomMove.OldMemberUpdates',.false.)
        flag_MDdebug      = fdf_boolean('AtomMove.Debug',.false.)
        flag_MDcontinue   = fdf_boolean('AtomMove.RestartRun',.false.)
        flag_SFcoeffReuse = fdf_boolean('AtomMove.ReuseSFcoeff',.false.)

@@ -147,6 +147,8 @@
 !!    Added RNG seed
 !!   2019/11/14 tsuyoshi
 !!    Removed n_proc_old and glob2node_old
+!!   2019/11/18 tsuyoshi
+!!    Removed flag_MDold
 !!  SOURCE
 !!  SOURCE
 !!
@@ -344,7 +346,6 @@ module global_module
   integer,allocatable :: id_glob_old(:),id_glob_inv_old(:)
 
   ! For MD
-  logical :: flag_MDold
   logical :: flag_LmatrixReuse
   logical :: flag_TmatrixReuse
   logical :: flag_SkipEarlyDM

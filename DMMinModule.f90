@@ -173,7 +173,7 @@ contains
     use global_module, only: iprint_DM, IPRINT_TIME_THRES1,             &
                              nspin, flag_fix_spin_population,           &
                              ne_in_cell, ne_spin_in_cell, flag_dump_L,  &
-                             flag_MDold,flag_SkipEarlyDM, flag_XLBOMD,  &
+                             flag_SkipEarlyDM, flag_XLBOMD,             &
                              flag_propagateX, flag_dissipation,         &
                              integratorXL, runtype, flag_exx, flag_diagonalisation
     use mult_module,   only: matrix_transpose, matT, matTtran, matL,    &
@@ -186,7 +186,6 @@ contains
     use energy,        only: entropy
     use timer_module,  only: cq_timer, start_timer, stop_print_timer,   &
                              WITH_LEVEL
-    use store_matrix,  only: dump_matrix2, dump_InfoMatGlobal
     use matrix_data,   only: Lrange, Srange, LSrange, Hrange
     !use XLBOMD_module, only: matX, matXvel, dump_XL
     use store_matrix,  only: dump_XL
@@ -803,7 +802,7 @@ contains
                                  ni_in_cell, flag_global_tolerance,    &
                                  flag_mix_L_SC_min,                    &
                                  flag_fix_spin_population, nspin,      &
-                                 spin_factor, flag_dump_L,flag_MDold
+                                 spin_factor, flag_dump_L
     use timer_module,      only: cq_timer,start_timer,                 &
                                  stop_print_timer, WITH_LEVEL
     use io_module,         only: dump_matrix
@@ -815,7 +814,6 @@ contains
     !Prints out charge density -- 2010.Nov.06 TM
     use io_module,         only: dump_charge
     use dimens,            only: n_my_grid_points
-    use store_matrix,      only: dump_matrix2
 
     implicit none
 
@@ -1191,19 +1189,14 @@ contains
           PulayR(ndone + n_iter) = g1
           PulayE(ndone + n_iter) = energy1_tot
        end if
+
        ! dump the L matrix if required
-       if (flag_dump_L) then
-          if (mod (n_iter, n_dumpL) == 0) then
-            if (flag_MDold) then
-              if (nspin == 1) then
-                 call dump_matrix("L", matL(1), inode)
-              else
-                 call dump_matrix("L_up", matL(1), inode)
-                 call dump_matrix("L_dn", matL(2), inode)
-              end if
-            endif
-          end if
-       end if
+       !if (flag_dump_L) then
+       !   if (mod (n_iter, n_dumpL) == 0) then
+       !    call dump_pos_and_matrices
+       !   end if
+       !end if
+
        ! check if tolerance is reached
        if (g1 < tolerance) then
           done = .true.

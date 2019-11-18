@@ -688,6 +688,8 @@ contains
 !!      io_module2 -> store_matrix, InfoT is defined locally
 !!   2018/07/13 13:21 dave  
 !!    Copy oldomega to omega on termination for consistency
+!!   2019/11/18 tsuyoshi
+!!    Removed flag_MDold
 !!  SOURCE
 !!
   subroutine Iter_Hott_InvS(output_level, n_L_iterations, tolerance,n_atoms,&
@@ -695,7 +697,7 @@ contains
 
     use datatypes
     use numbers
-    use global_module, ONLY: IPRINT_TIME_THRES1,flag_MDold,flag_TmatrixReuse,restart_T, &
+    use global_module, ONLY: IPRINT_TIME_THRES1,flag_TmatrixReuse,restart_T, &
                              runtype, atomf, sf, flag_diagonalisation
     use matrix_data, ONLY: Trange, TSrange, mat, Srange
     use mult_module, ONLY: allocate_temp_matrix, free_temp_matrix, store_matrix_value, matrix_scale, matrix_sum, &
@@ -809,7 +811,7 @@ contains
             call matrix_scale(zero,matT)
             call matrix_sum(zero,matT,eps,matS)
             call stop_print_timer(tmr_l_tmp1,"inverse S preliminaries",IPRINT_TIME_THRES1)
-          elseif (.NOT. flag_MDold .AND. (flag_readT .OR. restart_T)) then
+          elseif (flag_readT .OR. restart_T) then
             !Reusing previously computed inverse S-matrix
              ! Global Information
              call grab_InfoMatGlobal(InfoGlob,index=0)
