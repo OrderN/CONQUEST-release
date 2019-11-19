@@ -813,6 +813,8 @@ contains
 !!  CREATION DATE
 !!   2017/01/08
 !!  MODIFICATION HISTORY
+!!   14/11/2019 nakata
+!!    Take average of matSFcoeff(1) and matSFcoeff(2) when flag_SpinDependentSF=F and nspin=2
 !!
 !!  SOURCE
 !!
@@ -823,8 +825,9 @@ contains
     use matrix_module,          only: matrix_halo
     use matrix_data,            only: mat, halo, SFcoeff_range, LD_range
     use mult_module,            only: mult, mat_p, matrix_scale, &
+                                      matrix_sum, allocate_temp_matrix, free_temp_matrix, &
                                       matSatomf, matHatomf, matSFcoeff, aLa_aHa_aLHa, aLa_aSa_aLSa
-    use global_module,          only: ni_in_cell, numprocs, nspin_SF
+    use global_module,          only: ni_in_cell, numprocs, nspin, nspin_SF, sf, atomf, flag_SpinDependentSF
     use species_module,         only: npao_species
     use io_module,              only: get_file_name
     use input_module,           only: io_assign, io_close
@@ -837,13 +840,14 @@ contains
     ! Passed variables
     type(matrix_halo) LFDhalo                         ! LFDhalo = mult(aLa_aHa_aLHa)%ahalo
     ! Local
-    integer :: stat, spin_SF
+    integer :: stat, spin, spin_SF
     integer :: lun11,lun12, n_naba_i_d, len_Sub_i_d
     character(len=15) :: filename11,filename12
     real(double) :: ChemP, kT, kT1                   ! filter function
     real(double) :: NEsub, NEsub0                    ! number of electrons in subspace, used for determing ChemP
     integer :: INEsub
     integer :: info                                  ! for DSYGVX
+    integer :: matSFcoeff_2
     real(double) :: abstol, t0, t1
     integer :: max_npao, nhalo_LFD, max_npao_LFD, len_kj_sub, len_Sub, &      ! for max subspace of halo atoms
                atom_num, iprim, atom_i, atom_spec, NTVEC,              &      ! for atom_i
@@ -913,15 +917,15 @@ contains
     call reg_alloc_mem(area_basis, 2*len_kj_sub, type_int)
     call stop_timer(tmr_std_allocation)
 
-    do spin_SF = 1,nspin_SF
+    do spin = 1,nspin
 !
 !      --- (1) make subspace matrix for halo atoms (NODE)
 !
        Hsub(:) = zero
        label_kj_Hsub(:) = 0
-       call LFD_make_Subspace_halo(myid,mat_p(matHatomf(spin_SF))%matrix,mat_p(matHatomf(spin_SF))%length,&
+       call LFD_make_Subspace_halo(myid,mat_p(matHatomf(spin))%matrix,mat_p(matHatomf(spin))%length,&
                                    Hsub,len_Sub,label_kj_Hsub,len_kj_sub,mult(aLa_aHa_aLHa))
-       if (spin_SF.eq.1) then
+       if (spin.eq.1) then
           Ssub(:) = zero
           label_kj_Ssub(:) = 0
           call LFD_make_Subspace_halo(myid,mat_p(matSatomf)%matrix,mat_p(matSatomf)%length,&
@@ -932,7 +936,7 @@ contains
 !
        if(myid==0) t0 = mtime()
        if (iprint_basis>=5.and.inode==ionode) &
-          write(io_lun,'(/A,I2)') 'Start atom loop in the LFD method for spin',spin_SF
+          write(io_lun,'(/A,I2)') 'Start atom loop in the LFD method for spin',spin
 
        iprim = 0; atom_i = 0  
        do np = 1,bundle%groups_on_node   ! Loop over primary set partitions
@@ -1072,8 +1076,19 @@ contains
 !
                 WORK(:) = zero
                 call transpose_2Dmat(TVEC,WORK,len_Sub_i,NTVEC)
-                call LFD_put_TVEC_to_SFcoeff(np,i,mat(:,SFcoeff_range),mat_p(matSFcoeff(spin_SF))%matrix, &
-                                             mat_p(matSFcoeff(spin_SF))%length,mat(:,LD_range),WORK,len_Sub_i*NTVEC)
+                if (.not.flag_SpinDependentSF .and. spin.eq.2) then
+!                   if (iprint_basis>=5.and.inode==ionode) &
+                      write(io_lun,*) 'Take average of matSFcoeff(1) and matSFcoeff(2) into matSFcoeff(1)'
+                   matSFcoeff_2 = allocate_temp_matrix(SFcoeff_range,0,sf,atomf)
+                   call matrix_scale(zero,matSFcoeff_2)
+                   call LFD_put_TVEC_to_SFcoeff(np,i,mat(:,SFcoeff_range),mat_p(matSFcoeff_2)%matrix, &
+                                                mat_p(matSFcoeff_2)%length,mat(:,LD_range),WORK,len_Sub_i*NTVEC)
+                   call matrix_sum(half, matSFcoeff(1), half, matSFcoeff_2)
+                   call free_temp_matrix(matSFcoeff_2)
+                else
+                   call LFD_put_TVEC_to_SFcoeff(np,i,mat(:,SFcoeff_range),mat_p(matSFcoeff(spin))%matrix, &
+                                                mat_p(matSFcoeff(spin))%length,mat(:,LD_range),WORK,len_Sub_i*NTVEC)
+                endif
 !
 !               --- deallocate spaces for atom_i ---
 !                                  
@@ -1107,7 +1122,7 @@ contains
              enddo ! i
           endif ! endif of (bundle%nm_nodgroup(np)>0)
        enddo ! np
-    enddo ! spin_SF
+    enddo ! spin
 
     ! deallocate subspace matrices their labels
     call start_timer(tmr_std_allocation)
