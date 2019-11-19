@@ -176,6 +176,8 @@ contains
   !!   efficiency (it should have been in there in the first place)
   !!  2018/11/13 17:30 nakata
   !!   Changed matS, matKE, matNL and matNA to be spin_SF dependent
+  !!  2019/01/31 16:00 nakata
+  !!   Moved dump_matrix(NSmatrix) to sub:get_S_matrix
   !! SOURCE
   !!
   subroutine get_H_matrix(rebuild_KE_NL, fixed_potential, electrons, &
@@ -418,12 +420,6 @@ contains
     !
     ! dump matrices if required
     if (iprint_ops > 3) then
-       if (nspin_SF == 1) then
-          call dump_matrix("NS", matS(1), inode)
-       else
-          call dump_matrix("NS_up", matS(1), inode)
-          call dump_matrix("NS_dn", matS(2), inode)
-       endif
        if (nspin == 1) then
           call dump_matrix("NH",    matH(1), inode)
        else

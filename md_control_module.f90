@@ -38,6 +38,10 @@
 !!   2018/08/12 zamaan
 !!    Removed read/write_thermo/baro_checkpoint, replaced with a unified &
 !!    checkpoint that includes ionic velocities
+!!   2019/05/08 zamaan
+!!    minor changes for heat flux calculations
+!!   2019/02/06 zamaan
+!!    Pressure conversion factor now computed from values from units module
 !!  SOURCE
 !!
 module md_control
@@ -49,11 +53,13 @@ module md_control
   use move_atoms,       only: fac_Kelvin2Hartree
   use species_module,   only: species, mass
   use GenComms,         only: inode, ionode, cq_abort
+  use units,            only: HaToeV, eVToJ, BohrToAng
 
   implicit none
 
   ! Unit conversion factors
-  real(double), parameter :: fac_HaBohr32GPa = 29421.02648438959
+  real(double), parameter :: fac_HaBohr32GPa = (HaToeV*eVToJ*1e21_double)/&
+                                               (BohrToAng**3)
   real(double), parameter :: fac_fs2atu = 41.3413745758
   real(double), parameter :: fac_invcm2hartree = 4.5563352812122295E-6
   real(double), parameter :: fac_thz2hartree = 0.0001519828500716
@@ -64,20 +70,22 @@ module md_control
   character(20) :: md_thermo_file = "md.thermostat"
   character(20) :: md_baro_file = "md.barostat"
   character(20) :: md_trajectory_file = "trajectory.xsf"
-  character(20) :: md_frames_file = "Frames"
-  character(20) :: md_stats_file = "Stats"
+  character(20) :: md_frames_file = "md.frames"
+  character(20) :: md_stats_file = "md.stats"
+  character(20) :: md_heat_flux_file = "md.heatflux"
 
   ! Module variables
   character(20) :: md_thermo_type, md_baro_type
-  real(double)  :: md_tau_T, md_tau_P, md_target_press, md_bulkmod_est, &
+  real(double)  :: md_tau_T, md_tau_P, target_pressure, md_bulkmod_est, &
                    md_box_mass, md_ndof_ions, md_omega_t, md_omega_p, &
                    md_tau_T_equil, md_tau_P_equil, md_p_drag, md_t_drag
   integer       :: md_n_nhc, md_n_ys, md_n_mts, md_berendsen_equil
-  logical       :: flag_write_xsf, md_cell_nhc, md_calc_xlmass
+  logical       :: flag_write_xsf, md_cell_nhc, md_calc_xlmass, flag_nhc
   logical       :: flag_extended_system = .false.
   real(double), dimension(3,3), target      :: lattice_vec
   real(double), dimension(:), allocatable   :: md_nhc_mass, md_nhc_cell_mass
   real(double), dimension(:,:), allocatable, target :: ion_velocity
+  real(double), dimension(3), target        :: heat_flux
 
   !!****s* md_control/type_thermostat
   !!  NAME
@@ -350,6 +358,7 @@ contains
     integer                               :: i
 
     flag_extended_system = .true.
+    flag_nhc = .true.
     th%n_nhc = md_n_nhc
     th%n_ys = md_n_ys
     th%n_mts_nhc = md_n_mts
@@ -907,8 +916,8 @@ contains
     do i_mts=1,th%n_mts_nhc ! MTS loop
       do i_ys=1,th%n_ys     ! Yoshida-Suzuki loop
         if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) then
-          write(io_lun,*) "i_ys  = ", i_ys
-          write(io_lun,*) "dt_ys = ", th%dt_ys(i_ys)
+          write(io_lun,'(4x,a,i8)') "i_ys  = ", i_ys
+          write(io_lun,'(4x,a,i8)') "dt_ys = ", th%dt_ys(i_ys)
         end if
         ! Reverse part of Trotter expansion: update thermostat force/velocity
         call th%propagate_v_eta_lin(th%n_nhc, th%dt_ys(i_ys), quarter)
@@ -1136,9 +1145,12 @@ contains
   !!    Zamaan Raza 
   !!  CREATION DATE
   !!   2017/11/17 12:44
+  !!  MODIFICATION HISTORY
+  !!   2019/04/09 zamaan
+  !!    Removed unnecessary stress input argument
   !!  SOURCE
   !!  
-  subroutine init_baro(baro, baro_type, dt, ndof, stress, v, tau_P, ke_ions)
+  subroutine init_baro(baro, baro_type, dt, ndof, v, tau_P, ke_ions)
 
     use input_module,     only: leqi
     use global_module,    only: rcellx, rcelly, rcellz
@@ -1148,7 +1160,6 @@ contains
     character(*), intent(in)                  :: baro_type
     real(double), intent(in)                  :: ke_ions, tau_P, dt
     integer, intent(in)                       :: ndof
-    real(double), dimension(3), intent(in)    :: stress
     real(double), dimension(:,:), intent(in)  :: v
 
     ! local variables
@@ -1191,7 +1202,7 @@ contains
     baro%c6 = baro%c4/42.0_double
     baro%c8 = baro%c6/72.0_double
 
-    baro%P_ext = md_target_press/fac_HaBohr32GPa
+    baro%P_ext = target_pressure/fac_HaBohr32GPa
     baro%lat_ref = zero
     baro%lat_ref(1,1) = rcellx
     baro%lat_ref(2,2) = rcelly
@@ -1287,6 +1298,9 @@ contains
   !!   2018/08/11 zamaan
   !!    Added final_call optional argument so that we only print to
   !!    Conquest_out once per step
+  !!   2019/04/09 zamaan
+  !!    Minor change since Conquet now computes the off-diagonal stress &
+  !!    tensor elements.
   !!  SOURCE
   !!  
   subroutine get_pressure_and_stress(baro, final_call)
@@ -1307,7 +1321,7 @@ contains
     ! Get the static stress from the global variable
     baro%static_stress = zero
     do i=1,3
-      baro%static_stress(i,i) = -stress(i) ! note the sign convention!!
+      baro%static_stress(i,i) = -stress(i,i) ! note the sign convention!!
     end do
 
     if (present(final_call)) then
@@ -1657,7 +1671,7 @@ contains
     end select
 
     if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 4) then
-      write(io_lun,*) "propagate_v_box_lin"
+      write(io_lun,'(2x,a)') "propagate_v_box_lin"
       select case(baro%baro_type)
       case('iso-mttk')
         write(io_lun,'(4x,a,e16.8)') "v_eps       ", baro%v_eps

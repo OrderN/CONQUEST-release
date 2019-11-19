@@ -123,6 +123,8 @@ contains
 !!    Added optional passed variable rebuild_Spao
 !!   2018/11/13 17:30 nakata
 !!    Changed matS to be spin_SF dependent
+!!   2019/01/31 16:00 nakata
+!!    Moved dump_matrix(NSmatrix) from sub:get_H_matrix and made it optional
 !!  TODO
 !!    
 !!  SOURCE
@@ -189,8 +191,15 @@ contains
        enddo
     endif
 
-    call dump_matrix("NS1",matS(1),inode)
-    if(nspin_SF==2) call dump_matrix("NS2",matS(2),inode)
+    ! dump S-matrix if required
+    if (iprint_ops > 3) then
+       if (nspin_SF == 1) then
+          call dump_matrix("NS", matS(1), inode)
+       else
+          call dump_matrix("NS_up", matS(1), inode)
+          call dump_matrix("NS_dn", matS(2), inode)
+       endif
+    end if
 
     ! get the new InvS matrix
     call  Iter_Hott_InvS(iprint_ops, InvSMaxSteps, &

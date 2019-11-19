@@ -116,14 +116,19 @@ contains
   subroutine initialise(vary_mu, fixed_potential, mu, total_energy)
 
     use datatypes
+    use numbers
     use global_module,     only: x_atom_cell, y_atom_cell, &
                                  z_atom_cell, ni_in_cell,  &
-                                 flag_only_dispersion, flag_neutral_atom
-    use GenComms,          only: inode, ionode, my_barrier, end_comms
+                                 flag_only_dispersion, flag_neutral_atom, &
+                                 flag_atomic_stress, flag_heat_flux, &
+                                 flag_full_stress, area_moveatoms, &
+                                 atomic_stress, non_atomic_stress
+    use GenComms,          only: inode, ionode, my_barrier, end_comms, &
+                                 cq_abort
     use initial_read,      only: read_and_write
     use ionic_data,        only: get_ionic_data
     use density_module,    only: flag_no_atomic_densities
-    use memory_module,     only: init_reg_mem
+    use memory_module,     only: init_reg_mem, reg_alloc_mem, type_dbl
     use group_module,      only: parts
     use primary_module,    only: bundle
     use cover_module,      only: make_cs, D2_CS
@@ -147,7 +152,7 @@ contains
     type(cq_timer)    :: backtrace_timer
     logical           :: start, start_L
     logical           :: read_phi
-    integer :: lmax_tot
+    integer :: lmax_tot, stat
 
     call init_timing_system(inode)
 
@@ -197,6 +202,32 @@ contains
     call my_barrier()
 
     call initial_phis(read_phi, start, find_chdens, fixed_potential, std_level_loc+1)
+
+    ! ewald/screened_ion force and stress is computed in initial_H, so we
+    ! need to allocate the atomic_stress array here - zamaan
+    if (flag_heat_flux) then
+      if (.not. flag_full_stress) then
+        flag_full_stress = .true.
+        if (inode==ionode) write(io_lun,'(2x,a)') &
+          "WARNING: setting AtomMove.FullStress T for heat flux calculation"
+      end if
+      if (.not. flag_atomic_stress) then
+        flag_atomic_stress = .true.
+        if (inode==ionode) write(io_lun,'(2x,a)') &
+          "WARNING: setting AtomMove.AtomicStress T for heat flux calculation"
+      end if
+    end if
+    if (flag_atomic_stress) then
+      if (.not. flag_neutral_atom) then
+        call cq_abort("Atomic stress contributions not implemented for Ewald electrostatics (yet). Set General.NeutralAtom T")
+      end if
+      allocate(atomic_stress(3,3,ni_in_cell), STAT=stat)
+      if (stat /= 0) &
+        call cq_abort("Error allocating atomic_stress: ", ni_in_cell)
+      call reg_alloc_mem(area_moveatoms, 3*3*ni_in_cell, type_dbl)
+      atomic_stress = zero
+      non_atomic_stress = zero
+    end if
 
     call initial_H(start, start_L, find_chdens, fixed_potential, &
                    vary_mu, total_energy,std_level_loc+1)
@@ -1075,7 +1106,8 @@ contains
          flag_exx, exx_scf, flag_out_wf, wf_self_con, &
          flag_write_DOS, flag_neutral_atom, &
          atomf, sf, flag_LFD, nspin_SF, flag_diagonalisation, &
-         atom_coord, atom_coord_diff, rcellx, rcelly, rcellz
+         atom_coord, atom_coord_diff, rcellx, rcelly, rcellz, &
+         ne_in_cell
     use ion_electrostatic,   only: ewald, screened_ion_interaction
     use S_matrix_module,     only: get_S_matrix
     use GenComms,            only: my_barrier,end_comms,inode,ionode, &
@@ -1207,7 +1239,6 @@ contains
        if (read_option) then
           if(.not.flag_MDold) then
              if (inode == ionode) write (io_lun,*) 'Read supp_pao coefficients from SFcoeff files'
-
              call grab_matrix2('SFcoeff',inode,nfile,Info)
              call my_barrier()
              call Matrix_CommRebuild(Info,SFcoeff_range,SFcoeff_trans,matSFcoeff(1),nfile)
@@ -1392,11 +1423,12 @@ contains
             H_on_atomfns(1), inode, ionode,  &
             maxngrid)
        electrons_tot = spin_factor * sum(electrons)
+       density = density * ne_in_cell/electrons_tot
        if (inode == ionode .and. iprint_init > 1) &
             write (io_lun, *) 'In initial_H, electrons: ', electrons_tot
-       ! if flag_LFD=T, update SF-PAO coefficients with the obtained density
+       ! if flag_LFD=T, update SF-PAO coefficients with the obtained density unless they have been read
        ! and update S with the coefficients
-       if (flag_LFD) then
+       if ((.NOT.read_option).AND.flag_LFD) then
           call initial_SFcoeff(.false., .true., fixed_potential, .false.)
           call get_S_matrix(inode, ionode, build_AtomF_matrix=.false.)
        endif

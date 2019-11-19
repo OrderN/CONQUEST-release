@@ -157,6 +157,8 @@ contains
   !!    Added experimental backtrace
   !!   2018/01/22 tsuyoshi (with dave)
   !!    Allocate atom_coord_diff for all calculations
+  !!   2019/04/04 14:17 dave
+  !!    Correct bug in wrapping with non-fractional coordinates and Angstroms
   !!  SOURCE
   !!
   subroutine read_atomic_positions(filename)
@@ -446,6 +448,10 @@ second:   do
                 atom_coord(1,i) = x
                 atom_coord(2,i) = y
                 atom_coord(3,i) = z
+                !2010.06.25 TM (Angstrom Units in coords file, but not pdb)
+                ! 2019/04/04 14:16 dave
+                ! Moved here so that distances are corrected *before* wrapping below
+                if(dist_units == ang) atom_coord(:,i)=atom_coord(:,i)*AngToBohr
              end if
              ! Wrap coordinates
              cell(1) = r_super_x
@@ -476,10 +482,6 @@ second:   do
                        i,atom_coord(1:3,i), species_glob(i), &
                        flag_move_atom(1:3,i)
           end do
-          !2010.06.25 TM (Angstrom Units in coords file, but not pdb)
-             if(.not.flag_fractional_atomic_coords .and. dist_units == ang) &
-              atom_coord(:,:)=atom_coord(:,:)*AngToBohr
-          !2010.06.25 TM (Angstrom Units in coords file, but not pdb)
           call io_close(lun)
        end if pdb
     end if
@@ -3033,7 +3035,6 @@ second:   do
                 end do
              else
                 write(fmt_DOS,*) Nangmom+2 ! NB this is number of columns in format
-                write(*,*) 'N cols: ',Nangmom+2
                 fmt_DOS = '('//trim(adjustl(fmt_DOS))//'f17.10)'
                 do i=1,n_DOS
                    write(lun,fmt_DOS) thisE,pDOS(i,iprim,1),(pDOS_angmom(i,iprim,j,1,1),j=1,Nangmom)
@@ -4105,6 +4106,59 @@ second:   do
       call io_close(lun)
     end if
   end subroutine write_xsf
+  !!***
+
+  !!****f* io_module/write_xyz *
+  !!
+  !!  NAME 
+  !!   write_xyz
+  !!  PURPOSE
+  !!   Writes atomic positions to a .xyz file
+  !!  INPUTS
+  !!   
+  !!  USES
+  !! 
+  !!  AUTHOR
+  !!   Zamaan Raza
+  !!  CREATION DATE
+  !!   2019/02/13
+  !!  MODIFICATION HISTORY
+  !!   
+  !!  SOURCE
+  !!
+  subroutine write_xyz(filename, comment)
+
+    use datatypes
+    use numbers,        only: zero
+    use dimens,         only: r_super_x, r_super_y, r_super_z
+    use global_module,  only: ni_in_cell, iprint_init, atom_coord, &
+                              species_glob
+    use species_module, only: species_label
+    use GenComms,       only: inode, ionode, cq_abort
+    use units,          only: BohrToAng
+    use timer_module
+
+    ! Passed variables
+    character(len=*)  :: filename, comment
+
+    ! Local variables
+    integer                    :: lun, i
+    character(len=2)           :: atom_name
+
+    if(inode==ionode) then
+      if (iprint_init>2) write(io_lun, &
+          '(2x,"Writing atomic positions to ",a,".xyz")') filename
+      call io_assign(lun)
+      open(unit=lun,file=filename)
+      write(lun,fmt='(i8)') ni_in_cell
+      write(lun,'(a)') comment
+      do i=1,ni_in_cell
+        atom_name = adjustr(species_label(species_glob(i))(1:2))
+        write(lun,'(a4,3f16.8)') atom_name, atom_coord(:,i)*BohrToAng
+      end do
+      call io_close(lun)
+    end if
+  end subroutine write_xyz
   !!***
 
   ! Hopefully we'll never need this kludgy but portable way of flushing buffers !

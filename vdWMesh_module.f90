@@ -730,6 +730,8 @@ contains
   !! CREATION DATE
   !!   2012/02/28
   !! MODIFICATION HISTORY
+  !!   2019/11/14 10:50 dave
+  !!    Bug fix: copying error for line "do ii=1,n-mm"
   !! SOURCE
   !!
   subroutine polint(xa, ya, n, x, y, dy)
@@ -770,7 +772,7 @@ contains
     y = ya(ns)
     ns = ns - 1
     do mm = 1, n - 1
-       do ii = 1, mm - n
+       do ii = 1, n - mm
           ho = xa(ii) - x
           hp = xa(ii + mm) - x
           w = c(ii + 1) - d(ii)

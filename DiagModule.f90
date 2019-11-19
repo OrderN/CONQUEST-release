@@ -465,6 +465,12 @@ contains
   !!    Adding (l,m)-projection for pDOS
   !!   2018/11/13 17:30 nakata
   !!    Changed matS to be spin_SF dependent
+  !!   2019/03/18 17:00 nakata
+  !!    Added wf_self_con for accumulate_DOS
+  !!   2019/05/09 dave
+  !!    Bug fix for band density output (and added write_eigenvalues call)
+  !!   2019/10/23 10:50 dave
+  !!    Bug fix for pDOS output
   !!  SOURCE
   !!
   subroutine FindEvals(electrons)
@@ -884,7 +890,7 @@ contains
                 kp = pg_kpoints(ng, i)
                 call DistributeSC_to_ref(DistribH, ng, z(:,:,spin), &
                      expH(:,:,spin))
-                if(flag_write_DOS) then
+                if(wf_self_con.AND.flag_write_DOS) then
                    if(flag_write_projected_DOS) then
                       if (flag_normalise_pDOS) then
                          call get_weight_pDOS(expH(:,:,spin),w_pDOS)
@@ -1021,8 +1027,24 @@ contains
              end do
           end do
        else
-          do wf_no=1,max_wf
-             do spin = 1, nspin
+          if(inode==ionode) call write_eigenvalues(w,matrix_size,nkp,nspin,kk,wtk,Efermi)
+          if(nspin>1) then
+             do wf_no=1,max_wf
+                do spin = 1, nspin
+                   abs_wf(:)=zero
+                   if (atomf.ne.sf) then
+                      call SF_to_AtomF_transform(matBand(wf_no), matBand_atomf, spin, Hrange)
+                      call get_band_density(abs_wf,spin,atomfns,atom_fns_K,matBand_atomf,maxngrid)
+                   else
+                      call get_band_density(abs_wf,spin,atomfns,atom_fns_K,matBand(wf_no),maxngrid)
+                   endif
+                   call wf_output(spin,abs_wf,wf_no)
+                   call my_barrier()
+                end do
+             end do
+          else
+             spin = 1
+             do wf_no=1,max_wf
                 abs_wf(:)=zero
                 if (atomf.ne.sf) then
                    call SF_to_AtomF_transform(matBand(wf_no), matBand_atomf, spin, Hrange)
@@ -1030,10 +1052,10 @@ contains
                 else
                    call get_band_density(abs_wf,spin,atomfns,atom_fns_K,matBand(wf_no),maxngrid)
                 endif
-                call wf_output(spin,abs_wf,wf_no)
+                call wf_output(0,abs_wf,wf_no)
                 call my_barrier()
              end do
-          end do
+          end if
        end if
        deallocate(abs_wf,STAT=stat)
        if (stat /= 0) call cq_abort('Find Evals: Failed to deallocate wfs',stat)
@@ -1062,18 +1084,21 @@ contains
              if (     flag_pDOS_angmom) call dump_projected_DOS(pDOS,Efermi,pDOS_angmom=pDOS_angmom,Nangmom=Nangmom)
           else
              call gsum(pDOS(:,:,:),n_DOS,ni_in_cell,nspin)
-             if(flag_pDOS_lm) then
-                do spin = 1, nspin
-                   call gsum(pDOS_angmom(:,:,:,:,spin),n_DOS,ni_in_cell,Nangmom,2*Nangmom-1)
-                enddo
+             if(flag_pDOS_angmom) then
+                if(flag_pDOS_lm) then
+                   do spin = 1, nspin
+                      call gsum(pDOS_angmom(:,:,:,:,spin),n_DOS,ni_in_cell,Nangmom,2*Nangmom-1)
+                   enddo
+                else
+                   do spin = 1, nspin
+                      call gsum(pDOS_angmom(:,:,:,1,spin),n_DOS,ni_in_cell,Nangmom)
+                   enddo
+                end if
+                if (inode==ionode) then
+                   call dump_projected_DOS(pDOS,Efermi,pDOS_angmom=pDOS_angmom,Nangmom=Nangmom)
+                end if
              else
-                do spin = 1, nspin
-                   call gsum(pDOS_angmom(:,:,:,1,spin),n_DOS,ni_in_cell,Nangmom)
-                enddo
-             end if
-             if (inode==ionode) then
-                if (.not.flag_pDOS_angmom) call dump_projected_DOS(pDOS,Efermi)
-                if (     flag_pDOS_angmom) call dump_projected_DOS(pDOS,Efermi,pDOS_angmom=pDOS_angmom,Nangmom=Nangmom)
+                if (inode==ionode) call dump_projected_DOS(pDOS,Efermi)
              endif
           endif
           if (flag_normalise_pDOS) deallocate(w_pDOS)
@@ -2669,8 +2694,13 @@ contains
              gaussian_height = 0.1_double
           end if
           gaussian_width = two * sqrt(-log(gaussian_height)) * kT
-          incEf(spin) = gaussian_width / &
-               (two * real(iMethfessel_Paxton, double) * finess)
+          if (iMethfessel_Paxton < 2) then   !! prevents division by zero using default iMethfessel value
+             incEf(spin) = gaussian_width / &
+                  (two * finess)
+          else 
+             incEf(spin) = gaussian_width / &
+                  (two * real(iMethfessel_Paxton, double) * finess)
+          end if
           highEf(spin) = lowEf(spin) + incEf(spin)
           call occupy(occ, eig, highEf, highElec, nbands, nkp, spin=spin)
           do while (highElec(spin) < electrons(spin))
