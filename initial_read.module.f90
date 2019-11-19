@@ -1132,7 +1132,6 @@ contains
        else if(leqi(basis_string,'PAOs')) then
           flag_basis_set = PAOs
        end if
-       read_option            = fdf_boolean('Basis.LoadCoeffs',           .false.)
        flag_onsite_blip_ana   = fdf_boolean('Basis.OnsiteBlipsAnalytic',  .true. )
        flag_analytic_blip_int = fdf_boolean('Basis.AnalyticBlipIntegrals',.false.)
        !
@@ -1979,11 +1978,13 @@ contains
          restart_LorK   = fdf_boolean('General.LoadL', .true.)
          find_chdens    = fdf_boolean('SC.MakeInitialChargeFromK',.true.)
          if (flag_XLBOMD) restart_X=fdf_boolean('XL.LoadX', .true.)
+         if (flag_multisite) read_option = fdf_boolean('Basis.LoadCoeffs', .true.)
        else
          flag_read_velocity = fdf_boolean('AtomMove.ReadVelocity',.false.)
          restart_LorK   = fdf_boolean('General.LoadL', .false.)
          find_chdens    = fdf_boolean('SC.MakeInitialChargeFromK',.false.)
          if (flag_XLBOMD) restart_X=fdf_boolean('XL.LoadX', .false.)
+         if (flag_multisite) read_option = fdf_boolean('Basis.LoadCoeffs', .false.)
        end if
 
        if (restart_LorK .and. flag_Multisite .and. .not.read_option) then
