@@ -3951,13 +3951,13 @@ contains
   type(matrix_store_global) :: InfoGlob
   type(InfoMatrixFile),pointer :: Info(:)
 
- !Switch on Debugging
- !  flag_debug_move_atoms = .true.
-
   real(double), dimension(3,ni_in_cell) :: velocity_global
   integer :: i
   ! temporary for matT(nspin_SF)
   integer :: matS_tmp(1)
+
+ !Switch on Debugging
+ !  flag_debug_move_atoms = .true.
 
  !!! Note: for developers  !!!
  !  if you want to update some new matrix, you should
