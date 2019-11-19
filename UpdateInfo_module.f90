@@ -2602,6 +2602,7 @@ contains
           !if (nspin.EQ.1) then
           !2019/Nov/13  tsuyoshi
            do isize = 1, n_matrix
+              ibeg_dataL = ibeg_dataL+(isize-1)*len
             do n1 = 1, len
               mat_p(matA(isize))%matrix(ibeg_Lij+n1-1) = recv_array(ibeg_dataL+n1-1)
               if (flag_MDdebug) write (lun_db,*) "ibeg_Lij+n1, ibeg_dataL+n1-1:", ibeg_Lij+n1-1, ibeg_dataL+n1-1
@@ -2632,7 +2633,7 @@ contains
         endif !(ibeg_Lij.NE.0)
         !ibeg_dataL = ibeg_dataL + len
         ! 2019/Nov/13
-        ibeg_dataL = ibeg_dataL + len*LmatrixRecv%nspin
+        ibeg_dataL = ibeg_dataL + len
       enddo !(jj, nzise1)
     enddo !(iprim_remote, natom_remote)
 
