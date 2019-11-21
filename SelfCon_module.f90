@@ -3229,6 +3229,10 @@ contains
   !!    - Added registrations for memory usage
   !!   2012/03/21 L.Tong
   !!   - Rewrote spin implementation
+  !!   2019/11/21 nakata 
+  !!   - Introduced spin-up/down atomic charge
+  !!   2019/11/21 10:51 dave
+  !!   - Tweak to use gsum for 2D array for charge
   subroutine get_atomic_charge()
 
     use datatypes
@@ -3248,14 +3252,13 @@ contains
     ! Local variables
     integer :: chun, stat, n,l, glob_ind, spin
     integer, dimension(nspin) :: temp_mat
-    real(double), dimension(:),   allocatable :: charge
-    real(double), dimension(:,:), allocatable :: node_charge
+    real(double), dimension(:,:), allocatable :: charge, node_charge
 
     call start_timer(tmr_std_chargescf)
     ! prepare arrays and suitable matrices
     l = bundle%n_prim
     call start_timer(tmr_std_allocation)
-    allocate(charge(ni_in_cell), STAT=stat)
+    allocate(charge(ni_in_cell,nspin), STAT=stat)
     if (stat /= 0) call cq_abort("get_atomic_charge: Error alloc mem: ", ni_in_cell)
     call reg_alloc_mem(area_SC, ni_in_cell, type_dbl)
     allocate(node_charge(l,nspin), STAT=stat)
@@ -3275,20 +3278,26 @@ contains
        ! sum from the node_charge into the total charge array
        do n = 1, l
           glob_ind = atoms_on_node(n, inode)
-          charge(glob_ind) = charge(glob_ind) + &
-                             spin_factor * node_charge(n,spin)
+          charge(glob_ind,spin) = charge(glob_ind,spin) + &
+                                  spin_factor * node_charge(n,spin)
        end do
     end do
-    call gsum(charge, ni_in_cell)
+    call gsum(charge, ni_in_cell, nspin)
 
     ! output
     if (inode == ionode) then
        ! write (*, *) 'Writing charge on individual atoms...'
        call io_assign(chun)
        open(unit = chun, file='AtomCharge.dat')
-       do n = 1, ni_in_cell
-          write (chun, fmt='(f15.10)') charge(n)
-       end do
+       if (nspin.eq.1) then
+          do n = 1, ni_in_cell
+             write (chun, fmt='(f15.10)') charge(n,1)
+          end do
+       else
+          do n = 1, ni_in_cell
+             write (chun, fmt='(3f15.10)') charge(n,1)+charge(n,2), charge(n,1), charge(n,2)
+          end do
+       endif
        call io_close(chun)
     end if
 
