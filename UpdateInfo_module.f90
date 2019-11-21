@@ -2492,9 +2492,16 @@ contains
         ij_remote = ij_remote+1
         n_beta = irecv2_array(ibeg1+jj-1)
         idglob_jj  = irecv2_array(ibeg1+nsize1+jj-1)
-        vec_Rij(1) = recv_array(ibeg2+jj-1)
-        vec_Rij(2) = recv_array(ibeg2+jj)
-        vec_Rij(3) = recv_array(ibeg2+jj+1)
+
+        !old vec_Rij(1) = recv_array(ibeg2+jj-1)
+        !old vec_Rij(2) = recv_array(ibeg2+jj)
+        !old vec_Rij(3) = recv_array(ibeg2+jj+1)
+        !old ibeg2 = ibeg2+2
+        vec_Rij(1) = recv_array(ibeg2)
+        vec_Rij(2) = recv_array(ibeg2+1)
+        vec_Rij(3) = recv_array(ibeg2+2)
+        ibeg2 = ibeg2+3
+
         ! Displacement in x/y/z of neighbour 'i'.
         deltaj_x=atom_coord_diff(1,idglob_jj)
         deltaj_y=atom_coord_diff(2,idglob_jj)
@@ -2522,7 +2529,6 @@ contains
         endif
         !! ---------- DEBUG ---------- !!
 
-        ibeg2 = ibeg2+2
         ! Get the partition to which jj belongs (sim-cell).
         !ORI call atom2part(xx_j,yy_j,zz_j,jcoverx,jcovery,jcoverz)
         call atom2part(xx_j,yy_j,zz_j,ind_part,jcoverx,jcovery,jcoverz,idglob_jj)
@@ -2539,7 +2545,8 @@ contains
              !db write (io_lun,*) "jj is no longer a neighbour! - remote",inode
              !db write (io_lun,*) "iprim_remote, jj, nsize1:"
              !db write (io_lun,*) iprim_remote, jj, nsize1
-             ibeg_dataL = ibeg_dataL + n_alpha*n_beta
+             !old ibeg_dataL = ibeg_dataL + n_alpha*n_beta
+             ibeg_dataL = ibeg_dataL + n_alpha*n_beta * n_matrix
           !exit
 
            ij_fail_remote = ij_fail_remote + 1
@@ -2616,7 +2623,6 @@ contains
               !! ---------- DEBUG: ---------- !!
             enddo
            enddo !isize = 1, n_matrix
-              ibeg_dataL = ibeg_dataL+(isize-1)*len
           !else
           !  do n1 = 1, len
           !    mat_p(matA)%matrix(ibeg_Lij+n1-1) = recv_array(ibeg_dataL+n1-1)
