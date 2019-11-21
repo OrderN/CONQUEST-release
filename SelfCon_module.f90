@@ -3231,6 +3231,8 @@ contains
   !!   - Rewrote spin implementation
   !!   2019/11/21 nakata 
   !!   - Introduced spin-up/down atomic charge
+  !!   2019/11/21 10:51 dave
+  !!   - Tweak to use gsum for 2D array for charge
   subroutine get_atomic_charge()
 
     use datatypes
@@ -3280,9 +3282,7 @@ contains
                                   spin_factor * node_charge(n,spin)
        end do
     end do
-    do spin = 1, nspin
-       call gsum(charge(:,spin), ni_in_cell)
-    enddo
+    call gsum(charge(:,spin), ni_in_cell, nspin)
 
     ! output
     if (inode == ionode) then
