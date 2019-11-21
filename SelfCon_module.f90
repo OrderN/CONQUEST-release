@@ -3282,7 +3282,7 @@ contains
                                   spin_factor * node_charge(n,spin)
        end do
     end do
-    call gsum(charge(:,spin), ni_in_cell, nspin)
+    call gsum(charge, ni_in_cell, nspin)
 
     ! output
     if (inode == ionode) then
