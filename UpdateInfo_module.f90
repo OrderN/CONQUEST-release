@@ -68,7 +68,7 @@ module UpdateInfo
         integer :: ij_local          ! # of (ij) pair
         integer :: ij_success_local  ! # of (ij) pair, whose elements are found
         integer :: ij_fail_local     ! # of (ij) pair, whose elements are not found
-   real(double) :: min_Rij_fail_local, max_Rij_fail_local, ave_Rij_fail_local  
+   real(double) :: min_Rij_fail_local, max_Rij_fail_local, ave_Rij_fail_local, sum_Rij_fail
 
         integer :: ifile_remote       ! # of files 
         integer :: iatom_remote       ! # of iatom 
@@ -126,10 +126,11 @@ contains
     ! Module usage
     use mpi
     use datatypes
+    use numbers,       ONLY: zero
     use global_module, ONLY: io_lun,ni_in_cell,numprocs,glob2node, iprint_MD
-    use GenComms, ONLY: cq_abort,inode,ionode,gcopy,my_barrier
-    use mult_module, ONLY: symmetrise_mat
-    use store_matrix, ONLY: InfoMatrixFile, deallocate_InfoMatrixFile
+    use GenComms,      ONLY: cq_abort,inode,ionode,gcopy,my_barrier
+    use mult_module,   ONLY: symmetrise_mat
+    use store_matrix,  ONLY: InfoMatrixFile, deallocate_InfoMatrixFile
     use primary_module, ONLY: bundle
     ! db
     use input_module, ONLY: io_assign,io_close
@@ -170,6 +171,13 @@ contains
     integer :: lun_db,lun_db2,lun_db3,lun_db4,lun_db5,lun_db6
     logical :: flag_tmp = .false.
     integer :: nspin_local
+
+   !For Report_UpdateMatrix_Local&Remote
+        iatom_local=0; ij_local=0; ij_success_local=0; ij_fail_local=0
+        min_Rij_fail_local=zero; max_Rij_fail_local=zero; sum_Rij_fail=zero
+        iatom_remote=0; ij_remote=0; ij_success_remote=0; ij_fail_remote=0
+        min_Rij_fail_remote=zero; max_Rij_fail_remote=zero
+   !For Report_UpdateMatrix_Local&Remote
 
     !! nspin is introduced!!  2019/09/02  tsuyoshi
       nspin_local = 1; if(present(n_matrix)) nspin_local=n_matrix
@@ -2388,7 +2396,7 @@ contains
     real(double) :: xx_j,yy_j,zz_j,deltaj_x,deltaj_y,deltaj_z
     real(double) :: vec_Rij(3)
     logical :: find_jcover
-    integer :: ibeg_dataLtmp
+    integer :: ibeg_dataLtmp, iadd_dataL
     ! --- Finding P and Pdot --- !
     integer :: ibeg_dataP, ibeg_dataPdot
 
@@ -2488,6 +2496,15 @@ contains
                 LmatrixRecv%ibeg2_recv_array(iprim_remote)              ! for recv_array
       if (flag_MDdebug) write (lun_db,*) "ibeg1 et ibeg2 (iprim_remote)", ibeg1, ibeg2, iprim_remote
       ibeg_dataL = ibeg2 + nsize1*3
+! iadd_dataL
+    !   iadd_dataL = 0
+    !  do jj = 1, nsize1
+    !    n_beta = irecv2_array(ibeg1+jj-1)
+    !    iadd_dataL = iadd_dataL+n_alpha*n_beta
+    !  enddo !jj = 1, nsize1
+        iadd_dataL = LmatrixRecv%njbeta_prim_recv(iprim_remote) * n_alpha
+! iadd_dataL
+
       do jj = 1, nsize1
         ij_remote = ij_remote+1
         n_beta = irecv2_array(ibeg1+jj-1)
@@ -2609,8 +2626,12 @@ contains
 
           !if (nspin.EQ.1) then
           !2019/Nov/13  tsuyoshi
+          !2019/Nov/25    debug for the case (n_matrix (spin) > 1)
+          !     recv_array is arranged as recv_array((alpha,beta),j,spin,i_remote)
+          !                        (not recv_array((alpha,beta),spin,j,i_remote) )
            do isize = 1, n_matrix
-              ibeg_dataLtmp = ibeg_dataL+(isize-1)*len
+              !bug ibeg_dataLtmp = ibeg_dataL+(isize-1)*len
+              ibeg_dataLtmp = ibeg_dataL+(isize-1)*iadd_dataL
             do n1 = 1, len
               mat_p(matA(isize))%matrix(ibeg_Lij+n1-1) = recv_array(ibeg_dataLtmp+n1-1)
               if (flag_MDdebug) write (lun_db,*) "ibeg_Lij+n1, ibeg_dataL+n1-1:", ibeg_Lij+n1-1, ibeg_dataL+n1-1
@@ -2639,11 +2660,13 @@ contains
               if(Rij > max_Rij_fail_remote) max_Rij_fail_remote = Rij
 
         endif !(ibeg_Lij.NE.0)
-        !ibeg_dataL = ibeg_dataL + len
-        ! 2019/Nov/13  tsuyoshi
-        !  ibeg_dataL : ibeg for recv_array             => spin dependent
-        !    ibeg_Lij : ibeg for mat_p(matA(:))%matrix  => spin independent 
-        ibeg_dataL = ibeg_dataL + len * n_matrix
+
+        !  2019/Nov/13  tsuyoshi -> 2019/Nov/25 debugged
+        !   ibeg_dataLtmp : ibeg for recv_array             => spin dependent
+        !        ibeg_Lij : ibeg for mat_p(matA(:))%matrix  => spin independent 
+        !bug ibeg_dataL = ibeg_dataL + len * n_matrix
+
+        ibeg_dataL = ibeg_dataL + len 
       enddo !(jj, nzise1)
     enddo !(iprim_remote, natom_remote)
 
