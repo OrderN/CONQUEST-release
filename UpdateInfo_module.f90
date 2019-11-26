@@ -2398,8 +2398,6 @@ contains
     real(double) :: vec_Rij(3)
     logical :: find_jcover
     integer :: ibeg_dataLtmp, iadd_dataL
-    ! --- Finding P and Pdot --- !
-    integer :: ibeg_dataP, ibeg_dataPdot
 
     type(matrix_halo), pointer :: matA_halo
     ! db
@@ -2490,20 +2488,22 @@ contains
 
       ! Find neighbours of remote primary set of atom i.
       nsize1 = LmatrixRecv%nj_prim_recv(iprim_remote) ! No. of neigh of iprim_remote
-      !ORI nsize2 = LmatrixRecv%njbeta_prim_recv(iprim_remote)
-      nsize2 = LmatrixRecv%njbeta_prim_recv(iprim_remote)*n_alpha       ! for ibeg_dataP
+      nsize2 = LmatrixRecv%njbeta_prim_recv(iprim_remote)*n_alpha       ! period betwen n_matrix = 1 and 2
       ibeg1  = (LmatrixRecv%ibeg1_recv_array(iprim_remote)-1)*2+1       ! for irecv2_array
       ibeg2  = (LmatrixRecv%ibeg1_recv_array(iprim_remote)-1)*3 + &
                 LmatrixRecv%ibeg2_recv_array(iprim_remote)              ! for recv_array
       if (flag_MDdebug) write (lun_db,*) "ibeg1 et ibeg2 (iprim_remote)", ibeg1, ibeg2, iprim_remote
       ibeg_dataL = ibeg2 + nsize1*3
-! iadd_dataL
+
+! iadd_dataL (=nsize2)
     !   iadd_dataL = 0
     !  do jj = 1, nsize1
     !    n_beta = irecv2_array(ibeg1+jj-1)
     !    iadd_dataL = iadd_dataL+n_alpha*n_beta
     !  enddo !jj = 1, nsize1
-        iadd_dataL = LmatrixRecv%njbeta_prim_recv(iprim_remote) * n_alpha
+    !
+    !  iadd_dataL calculated above SHOULD BE nsize2
+    !   (related to the bug found on 25/Nov/2019.)
 ! iadd_dataL
 
       do jj = 1, nsize1
@@ -2625,14 +2625,13 @@ contains
                   ibeg_Lij,ibeg_dataL,len
           endif
 
-          !if (nspin.EQ.1) then
-          !2019/Nov/13  tsuyoshi
+          !2019/Nov/13  tsuyoshi  (case for nspin > 1)
           !2019/Nov/25    debug for the case (n_matrix (spin) > 1)
           !     recv_array is arranged as recv_array((alpha,beta),j,spin,i_remote)
           !                        (not recv_array((alpha,beta),spin,j,i_remote) )
            do isize = 1, n_matrix
               !bug ibeg_dataLtmp = ibeg_dataL+(isize-1)*len
-              ibeg_dataLtmp = ibeg_dataL+(isize-1)*iadd_dataL
+              ibeg_dataLtmp = ibeg_dataL+(isize-1)*nsize2
             do n1 = 1, len
               mat_p(matA(isize))%matrix(ibeg_Lij+n1-1) = recv_array(ibeg_dataLtmp+n1-1)
               if (flag_MDdebug) write (lun_db,*) "ibeg_Lij+n1, ibeg_dataL+n1-1:", ibeg_Lij+n1-1, ibeg_dataL+n1-1
@@ -2645,14 +2644,6 @@ contains
               !! ---------- DEBUG: ---------- !!
             enddo
            enddo !isize = 1, n_matrix
-          !else
-          !  do n1 = 1, len
-          !    mat_p(matA)%matrix(ibeg_Lij+n1-1) = recv_array(ibeg_dataL+n1-1)
-          !    mat_p(matB)%matrix(ibeg_Lij+n1-1) = !recv_array(ibeg_dataL+n1-1)
-          !  enddo
-          !  ibeg_dataP = ibeg_dataL + nsize2
-          !  ibeg_dataPdot = ibeg_dataP + nsize2
-          !endif
 
         else
            ij_fail_remote = ij_fail_remote + 1
