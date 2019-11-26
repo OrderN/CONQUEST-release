@@ -1120,7 +1120,7 @@ contains
   !!    Added InfoGlob in the dummy arguments, and removed n_proc_old
   !!  SOURCE
   !!
-  subroutine grab_matrix2(stub,inode,nfile,Info,InfoGlob,index,n_matrix)
+  subroutine grab_matrix2(stub,inode,nfile,InfoMat,InfoGlob,index,n_matrix)
 
     ! Module usage
     use io_module, ONLY: get_file_name, get_file_name_2rank
@@ -1133,7 +1133,7 @@ contains
     integer :: max_node  ! No. of nodes in the PREVIOUS job.
     integer :: inode, matA
     character(len=*) :: stub
-    type(InfoMatrixFile), pointer :: Info(:)
+    type(InfoMatrixFile), pointer :: InfoMat(:)
     type(matrix_store_global) :: InfoGlob
     integer, optional :: index
     integer, optional :: n_matrix
@@ -1156,7 +1156,7 @@ contains
     index_local=0; if(present(index)) index_local=index
     nspin_local=1; if(present(n_matrix)) nspin_local=n_matrix
 
-    ! Open matrix files to get "natom_i", allocate the arrays of Info,
+    ! Open matrix files to get "natom_i", allocate the arrays of InfoMat,
     ! and read the data.
     ! Note numprocs = No. of MPI_process_new and max_nodes = No. of MPI_process_old.
 
@@ -1164,10 +1164,10 @@ contains
     nrest_file = mod(max_node,numprocs)
     if (inode.LT.nrest_file+1) nfile = nfile + 1
 
-    ! Allocate Info when nfile is greater than 0.
+    ! Allocate InfoMat when nfile is greater than 0.
     if (nfile.GT.0) then
-      allocate (Info(nfile), STAT=stat_alloc)
-      if (stat_alloc.NE.0) call cq_abort('Error allocating Info: ', nfile)
+      allocate (InfoMat(nfile), STAT=stat_alloc)
+      if (stat_alloc.NE.0) call cq_abort('Error allocating InfoMat: ', nfile)
       do ifile = 1, nfile
         ! Open a file to start with.
        if(flag_MatrixFile_RankFromZero) then
@@ -1185,76 +1185,76 @@ contains
         open (lun,file=file_name,status='old',iostat=stat,form='unformatted')
         if (stat.NE.0) call cq_abort('Fail in opening Lmatrix file in Binary.')
         ! Get dimension, allocate arrays and store necessary data.
-        read (lun,iostat=stat) proc_id, Info(ifile)%natom_i
+        read (lun,iostat=stat) proc_id, InfoMat(ifile)%natom_i
          if(stat.NE.0) then
           write(io_lun,*) " ERROR in reading Binary File of Lmatrix : inode= ", inode
           write(io_lun,*) "  ** Set IO.MatirxFile.BinaryFormat or IO.MatrixFile.BinaryFormat.Grab as False.&
                           & if you use ASCII for Matrix Files."
           call cq_abort('Fail in reading Lmatrix File in Binary')
          endif
-        size = Info(ifile)%natom_i
-        allocate (Info(ifile)%alpha_i(size), STAT=stat_alloc)
+        size = InfoMat(ifile)%natom_i
+        allocate (InfoMat(ifile)%alpha_i(size), STAT=stat_alloc)
         if (stat_alloc.NE.0) call cq_abort('Error allocating alpha_i:', size)
-        allocate (Info(ifile)%idglob_i(size), STAT=stat_alloc)
+        allocate (InfoMat(ifile)%idglob_i(size), STAT=stat_alloc)
         if (stat_alloc.NE.0) call cq_abort('Error allocating idglob_i:', size)
-        allocate (Info(ifile)%jmax_i(size), STAT=stat_alloc)
+        allocate (InfoMat(ifile)%jmax_i(size), STAT=stat_alloc)
         if (stat_alloc.NE.0) call cq_abort('Error allocating jmax_i:', size)
-        allocate (Info(ifile)%jbeta_max_i(size), STAT=stat_alloc)
+        allocate (InfoMat(ifile)%jbeta_max_i(size), STAT=stat_alloc)
         if (stat_alloc.NE.0) call cq_abort('Error allocating jbeta_max_i:', size)
-        allocate (Info(ifile)%ibeg_dataL(size), STAT=stat_alloc)
+        allocate (InfoMat(ifile)%ibeg_dataL(size), STAT=stat_alloc)
         if (stat_alloc.NE.0) call cq_abort('Error allocating ibeg_dataL:', size)
-        allocate (Info(ifile)%ibeg_Pij(size), STAT=stat_alloc)
+        allocate (InfoMat(ifile)%ibeg_Pij(size), STAT=stat_alloc)
         if (stat_alloc.NE.0) call cq_abort('Error allocating ibeg_Pij:', size)
-        read (lun) Info(ifile)%alpha_i(1:size)
-        read (lun) Info(ifile)%jmax_i(1:size)
-        read (lun) Info(ifile)%jbeta_max_i(1:size)
+        read (lun) InfoMat(ifile)%alpha_i(1:size)
+        read (lun) InfoMat(ifile)%jmax_i(1:size)
+        read (lun) InfoMat(ifile)%jbeta_max_i(1:size)
         jmax_i_max = -1
         do i = 1, size
-          if (Info(ifile)%jmax_i(i).GT.jmax_i_max) jmax_i_max = Info(ifile)%jmax_i(i)
+          if (InfoMat(ifile)%jmax_i(i).GT.jmax_i_max) jmax_i_max = InfoMat(ifile)%jmax_i(i)
         enddo
         !db write (io_lun,*) "jmax_i_max: ", jmax_i_max
         size2 = 0
         do i = 1, size
-          size2 = size2 + Info(ifile)%jmax_i(i)
+          size2 = size2 + InfoMat(ifile)%jmax_i(i)
         enddo
-        allocate (Info(ifile)%idglob_j(size2), STAT=stat_alloc)
+        allocate (InfoMat(ifile)%idglob_j(size2), STAT=stat_alloc)
         if (stat_alloc.NE.0) call cq_abort('Error allocating idglob_j:', size2)
-        allocate (Info(ifile)%beta_j_i(size2), STAT=stat_alloc)
+        allocate (InfoMat(ifile)%beta_j_i(size2), STAT=stat_alloc)
         if (stat_alloc.NE.0) call cq_abort('Error allocating beta_j_i:', size2)
-        allocate (Info(ifile)%rvec_Pij(3,size2), STAT=stat_alloc)
+        allocate (InfoMat(ifile)%rvec_Pij(3,size2), STAT=stat_alloc)
         if (stat_alloc.NE.0) call cq_abort('Error allocating rvec_Pij:',size2)
         sizeL = 0
         do i = 1, size
-          sizeL = sizeL + Info(ifile)%alpha_i(i)*Info(ifile)%jbeta_max_i(i)
+          sizeL = sizeL + InfoMat(ifile)%alpha_i(i)*InfoMat(ifile)%jbeta_max_i(i)
         enddo
-        read (lun) Info(ifile)%nspin
-        if(Info(ifile)%nspin .ne. nspin_local) call cq_abort("ERROR: nspin mismatch ", Info(ifile)%nspin, nspin_local)
-        allocate (Info(ifile)%data_Lold(sizeL,Info(ifile)%nspin), STAT=stat_alloc)
-        if (stat_alloc.NE.0) call cq_abort('Error allocating data_Lold:', sizeL, Info(ifile)%nspin)
+        read (lun) InfoMat(ifile)%nspin
+        if(InfoMat(ifile)%nspin .ne. nspin_local) call cq_abort("ERROR: nspin mismatch ", InfoMat(ifile)%nspin, nspin_local)
+        allocate (InfoMat(ifile)%data_Lold(sizeL,InfoMat(ifile)%nspin), STAT=stat_alloc)
+        if (stat_alloc.NE.0) call cq_abort('Error allocating data_Lold:', sizeL, InfoMat(ifile)%nspin)
 
-        Info(ifile)%ibeg_dataL(1) = 1 ; Info(ifile)%ibeg_Pij(1) = 1
+        InfoMat(ifile)%ibeg_dataL(1) = 1 ; InfoMat(ifile)%ibeg_Pij(1) = 1
         ibeg = 1
         do i = 1, size
-          read (lun) Info(ifile)%idglob_i(i)
-          read (lun) Info(ifile)%beta_j_i(Info(ifile)%ibeg_Pij(i) : &
-                                             Info(ifile)%ibeg_Pij(i)+Info(ifile)%jmax_i(i)-1)
-          read (lun) Info(ifile)%idglob_j(Info(ifile)%ibeg_Pij(i) : &
-                                             Info(ifile)%ibeg_Pij(i)+Info(ifile)%jmax_i(i)-1)
-          do j = 1, Info(ifile)%jmax_i(i)
-            read (lun) Info(ifile)%rvec_Pij(1:3,Info(ifile)%ibeg_Pij(i)+j-1)
+          read (lun) InfoMat(ifile)%idglob_i(i)
+          read (lun) InfoMat(ifile)%beta_j_i(InfoMat(ifile)%ibeg_Pij(i) : &
+                                             InfoMat(ifile)%ibeg_Pij(i)+InfoMat(ifile)%jmax_i(i)-1)
+          read (lun) InfoMat(ifile)%idglob_j(InfoMat(ifile)%ibeg_Pij(i) : &
+                                             InfoMat(ifile)%ibeg_Pij(i)+InfoMat(ifile)%jmax_i(i)-1)
+          do j = 1, InfoMat(ifile)%jmax_i(i)
+            read (lun) InfoMat(ifile)%rvec_Pij(1:3,InfoMat(ifile)%ibeg_Pij(i)+j-1)
           enddo
-          len = Info(ifile)%jbeta_max_i(i)*Info(ifile)%alpha_i(i)
+          len = InfoMat(ifile)%jbeta_max_i(i)*InfoMat(ifile)%alpha_i(i)
 
-          !Info(ifile)%nspin can be 1, 2, or even larger. (for multiple matrices having same range)
-           do ispin=1,Info(ifile)%nspin
+          !InfoMat(ifile)%nspin can be 1, 2, or even larger. (for multiple matrices having same range)
+           do ispin=1,InfoMat(ifile)%nspin
             do jbeta_alpha = 1, len
-              read (lun) Info(ifile)%data_Lold(Info(ifile)%ibeg_dataL(i)+jbeta_alpha-1, ispin)
+              read (lun) InfoMat(ifile)%data_Lold(InfoMat(ifile)%ibeg_dataL(i)+jbeta_alpha-1, ispin)
             enddo
            enddo
 
           if (i+1.LE.size) then
-            Info(ifile)%ibeg_Pij(i+1) = Info(ifile)%ibeg_Pij(i) + Info(ifile)%jmax_i(i)
-            Info(ifile)%ibeg_dataL(i+1) = Info(ifile)%ibeg_dataL(i) + len
+            InfoMat(ifile)%ibeg_Pij(i+1) = InfoMat(ifile)%ibeg_Pij(i) + InfoMat(ifile)%jmax_i(i)
+            InfoMat(ifile)%ibeg_dataL(i+1) = InfoMat(ifile)%ibeg_dataL(i) + len
           endif
         enddo !(i, size)
 
@@ -1264,77 +1264,77 @@ contains
         if (iprint_MD > 2) write(*,*) " Trying to open the ASCII file : ",file_name
         if (stat.NE.0) call cq_abort('Fail in opening ASCII Lmatrix file.')
         ! Get dimension, allocate arrays and store necessary data.
-        read (lun,*,iostat=stat) proc_id, Info(ifile)%natom_i
+        read (lun,*,iostat=stat) proc_id, InfoMat(ifile)%natom_i
          if(stat.NE.0) then
           write(io_lun,*) " ERROR in reading ASCII File of Lmatrix : inode= ", inode
           write(io_lun,*) "  ** Set IO.MatirxFile.BinaryFormat or IO.MatrixFile.BinaryFormat.Grab as .True.&
                           & if you use Binary for Matrix Files."
           call cq_abort('Fail in reading Lmatrix File in ASCII')
          endif
-        size = Info(ifile)%natom_i
-        allocate (Info(ifile)%alpha_i(size), STAT=stat_alloc)
+        size = InfoMat(ifile)%natom_i
+        allocate (InfoMat(ifile)%alpha_i(size), STAT=stat_alloc)
         if (stat_alloc.NE.0) call cq_abort('Error allocating alpha_i:', size)
-        allocate (Info(ifile)%idglob_i(size), STAT=stat_alloc)
+        allocate (InfoMat(ifile)%idglob_i(size), STAT=stat_alloc)
         if (stat_alloc.NE.0) call cq_abort('Error allocating idglob_i:', size)
-        allocate (Info(ifile)%jmax_i(size), STAT=stat_alloc)
+        allocate (InfoMat(ifile)%jmax_i(size), STAT=stat_alloc)
         if (stat_alloc.NE.0) call cq_abort('Error allocating jmax_i:', size)
-        allocate (Info(ifile)%jbeta_max_i(size), STAT=stat_alloc)
+        allocate (InfoMat(ifile)%jbeta_max_i(size), STAT=stat_alloc)
         if (stat_alloc.NE.0) call cq_abort('Error allocating jbeta_max_i:', size)
-        allocate (Info(ifile)%ibeg_dataL(size), STAT=stat_alloc)
+        allocate (InfoMat(ifile)%ibeg_dataL(size), STAT=stat_alloc)
         if (stat_alloc.NE.0) call cq_abort('Error allocating ibeg_dataL:', size)
-        allocate (Info(ifile)%ibeg_Pij(size), STAT=stat_alloc)
+        allocate (InfoMat(ifile)%ibeg_Pij(size), STAT=stat_alloc)
         if (stat_alloc.NE.0) call cq_abort('Error allocating ibeg_Pij:', size)
-        read (lun,*) Info(ifile)%alpha_i(1:size)
-        read (lun,*) Info(ifile)%jmax_i(1:size)
-        read (lun,*) Info(ifile)%jbeta_max_i(1:size)
+        read (lun,*) InfoMat(ifile)%alpha_i(1:size)
+        read (lun,*) InfoMat(ifile)%jmax_i(1:size)
+        read (lun,*) InfoMat(ifile)%jbeta_max_i(1:size)
         jmax_i_max = -1
         do i = 1, size
-          if (Info(ifile)%jmax_i(i).GT.jmax_i_max) jmax_i_max = Info(ifile)%jmax_i(i)
+          if (InfoMat(ifile)%jmax_i(i).GT.jmax_i_max) jmax_i_max = InfoMat(ifile)%jmax_i(i)
         enddo
         !db write (io_lun,*) "jmax_i_max: ", jmax_i_max
         size2 = 0
         do i = 1, size
-          size2 = size2 + Info(ifile)%jmax_i(i)
+          size2 = size2 + InfoMat(ifile)%jmax_i(i)
         enddo
-        allocate (Info(ifile)%idglob_j(size2), STAT=stat_alloc)
+        allocate (InfoMat(ifile)%idglob_j(size2), STAT=stat_alloc)
         if (stat_alloc.NE.0) call cq_abort('Error allocating idglob_j:', size2)
-        allocate (Info(ifile)%beta_j_i(size2), STAT=stat_alloc)
+        allocate (InfoMat(ifile)%beta_j_i(size2), STAT=stat_alloc)
         if (stat_alloc.NE.0) call cq_abort('Error allocating beta_j_i:', size2)
-        allocate (Info(ifile)%rvec_Pij(3,size2), STAT=stat_alloc)
+        allocate (InfoMat(ifile)%rvec_Pij(3,size2), STAT=stat_alloc)
         if (stat_alloc.NE.0) call cq_abort('Error allocating rvec_Pij:',size2)
         sizeL = 0
         do i = 1, size
-          sizeL = sizeL + Info(ifile)%alpha_i(i)*Info(ifile)%jbeta_max_i(i)
+          sizeL = sizeL + InfoMat(ifile)%alpha_i(i)*InfoMat(ifile)%jbeta_max_i(i)
         enddo
 
-        read (lun,*) Info(ifile)%nspin
-        if(Info(ifile)%nspin .ne. nspin_local) call cq_abort("ERROR: nspin mismatch ", Info(ifile)%nspin, nspin_local)
-        allocate (Info(ifile)%data_Lold(sizeL,Info(ifile)%nspin), STAT=stat_alloc)
-        if (stat_alloc.NE.0) call cq_abort('Error allocating data_Lold:', sizeL, Info(ifile)%nspin)
+        read (lun,*) InfoMat(ifile)%nspin
+        if(InfoMat(ifile)%nspin .ne. nspin_local) call cq_abort("ERROR: nspin mismatch ", InfoMat(ifile)%nspin, nspin_local)
+        allocate (InfoMat(ifile)%data_Lold(sizeL,InfoMat(ifile)%nspin), STAT=stat_alloc)
+        if (stat_alloc.NE.0) call cq_abort('Error allocating data_Lold:', sizeL, InfoMat(ifile)%nspin)
 
-        Info(ifile)%ibeg_dataL(1) = 1 ; Info(ifile)%ibeg_Pij(1) = 1
+        InfoMat(ifile)%ibeg_dataL(1) = 1 ; InfoMat(ifile)%ibeg_Pij(1) = 1
         ibeg = 1
         do i = 1, size
-          read (lun,*) Info(ifile)%idglob_i(i)
-          read (lun,*) Info(ifile)%beta_j_i(Info(ifile)%ibeg_Pij(i) : &
-                                             Info(ifile)%ibeg_Pij(i)+Info(ifile)%jmax_i(i)-1)
-          read (lun,*) Info(ifile)%idglob_j(Info(ifile)%ibeg_Pij(i) : &
-                                             Info(ifile)%ibeg_Pij(i)+Info(ifile)%jmax_i(i)-1)
-          do j = 1, Info(ifile)%jmax_i(i)
-            read (lun,*) Info(ifile)%rvec_Pij(1:3,Info(ifile)%ibeg_Pij(i)+j-1)
+          read (lun,*) InfoMat(ifile)%idglob_i(i)
+          read (lun,*) InfoMat(ifile)%beta_j_i(InfoMat(ifile)%ibeg_Pij(i) : &
+                                             InfoMat(ifile)%ibeg_Pij(i)+InfoMat(ifile)%jmax_i(i)-1)
+          read (lun,*) InfoMat(ifile)%idglob_j(InfoMat(ifile)%ibeg_Pij(i) : &
+                                             InfoMat(ifile)%ibeg_Pij(i)+InfoMat(ifile)%jmax_i(i)-1)
+          do j = 1, InfoMat(ifile)%jmax_i(i)
+            read (lun,*) InfoMat(ifile)%rvec_Pij(1:3,InfoMat(ifile)%ibeg_Pij(i)+j-1)
           enddo
-          len = Info(ifile)%jbeta_max_i(i)*Info(ifile)%alpha_i(i)
+          len = InfoMat(ifile)%jbeta_max_i(i)*InfoMat(ifile)%alpha_i(i)
 
-          !Info(ifile)%nspin can be 1, 2, or even larger. (for multiple matrices having same range)
-           do ispin = 1, Info(ifile)%nspin
+          !InfoMat(ifile)%nspin can be 1, 2, or even larger. (for multiple matrices having same range)
+           do ispin = 1, InfoMat(ifile)%nspin
             do jbeta_alpha = 1, len
-              read (lun,*) Info(ifile)%data_Lold(Info(ifile)%ibeg_dataL(i)+jbeta_alpha-1, ispin)
+              read (lun,*) InfoMat(ifile)%data_Lold(InfoMat(ifile)%ibeg_dataL(i)+jbeta_alpha-1, ispin)
             enddo
-           enddo ! ispin = 1, Info(ifile)%nspin
+           enddo ! ispin = 1, InfoMat(ifile)%nspin
 
           if (i+1.LE.size) then
-            Info(ifile)%ibeg_Pij(i+1) = Info(ifile)%ibeg_Pij(i) + Info(ifile)%jmax_i(i)
-            Info(ifile)%ibeg_dataL(i+1) = Info(ifile)%ibeg_dataL(i) + len
+            InfoMat(ifile)%ibeg_Pij(i+1) = InfoMat(ifile)%ibeg_Pij(i) + InfoMat(ifile)%jmax_i(i)
+            InfoMat(ifile)%ibeg_dataL(i+1) = InfoMat(ifile)%ibeg_dataL(i) + len
           endif
         enddo !(i, size)
 
@@ -1374,7 +1374,7 @@ contains
   !!
   !!  SOURCE
   !!
-  subroutine deallocate_InfoMatrixFile(nfile,Info)
+  subroutine deallocate_InfoMatrixFile(nfile,InfoMat)
 
     ! Module usage
     use numbers
@@ -1382,36 +1382,36 @@ contains
 
     ! passed variables
     integer :: nfile
-    type(InfoMatrixFile), pointer :: Info(:)
+    type(InfoMatrixFile), pointer :: InfoMat(:)
 
     ! local variables
     integer :: ifile,stat_alloc
 
-    if (associated(Info)) then
+    if (associated(InfoMat)) then
       do ifile = 1, nfile
-        deallocate (Info(ifile)%alpha_i, STAT=stat_alloc)
+        deallocate (InfoMat(ifile)%alpha_i, STAT=stat_alloc)
         if (stat_alloc.NE.0) call cq_abort('Error deallocating alpha_i:')
-        deallocate (Info(ifile)%idglob_i, STAT=stat_alloc)
+        deallocate (InfoMat(ifile)%idglob_i, STAT=stat_alloc)
         if (stat_alloc.NE.0) call cq_abort('Error deallocating idglob_i:')
-        deallocate (Info(ifile)%jmax_i, STAT=stat_alloc)
+        deallocate (InfoMat(ifile)%jmax_i, STAT=stat_alloc)
         if (stat_alloc.NE.0) call cq_abort('Error deallocating jmax_i:')
-        deallocate (Info(ifile)%jbeta_max_i, STAT=stat_alloc)
+        deallocate (InfoMat(ifile)%jbeta_max_i, STAT=stat_alloc)
         if (stat_alloc.NE.0) call cq_abort('Error deallocating jbeta_max_i:')
-        deallocate (Info(ifile)%ibeg_Pij, STAT=stat_alloc)
+        deallocate (InfoMat(ifile)%ibeg_Pij, STAT=stat_alloc)
         if (stat_alloc.NE.0) call cq_abort('Error deallocating ibeg_Pij:')
-        deallocate (Info(ifile)%ibeg_dataL, STAT=stat_alloc)
+        deallocate (InfoMat(ifile)%ibeg_dataL, STAT=stat_alloc)
         if (stat_alloc.NE.0) call cq_abort('Error deallocating ibeg_dataL:')
-        deallocate (Info(ifile)%beta_j_i, STAT=stat_alloc)
+        deallocate (InfoMat(ifile)%beta_j_i, STAT=stat_alloc)
         if (stat_alloc.NE.0) call cq_abort('Error deallocating beta_j_i:')
-        deallocate (Info(ifile)%idglob_j, STAT=stat_alloc)
+        deallocate (InfoMat(ifile)%idglob_j, STAT=stat_alloc)
         if (stat_alloc.NE.0) call cq_abort('Error deallocating idglob_j:')
-        deallocate (Info(ifile)%rvec_Pij, STAT=stat_alloc)
+        deallocate (InfoMat(ifile)%rvec_Pij, STAT=stat_alloc)
         if (stat_alloc.NE.0) call cq_abort('Error deallocating rvec_Pij:')
-        deallocate (Info(ifile)%data_Lold, STAT=stat_alloc)
+        deallocate (InfoMat(ifile)%data_Lold, STAT=stat_alloc)
         if (stat_alloc.NE.0) call cq_abort('Error deallocating data_Lold:')
       enddo
-      deallocate (Info, STAT=stat_alloc)
-      if (stat_alloc.NE.0) call cq_abort('Error deallocating Info:', nfile)
+      deallocate (InfoMat, STAT=stat_alloc)
+      if (stat_alloc.NE.0) call cq_abort('Error deallocating InfoMat:', nfile)
     endif
 
     return

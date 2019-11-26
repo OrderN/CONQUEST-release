@@ -514,27 +514,27 @@
       ! local variables
       integer :: nfile,symm
       integer :: matStmp(1)
-      type(InfoMatrixFile), pointer :: Info(:)
+      type(InfoMatrixFile), pointer :: InfoMat(:)
  !2019/Nov/08
       type(matrix_store_global),intent(in) :: InfoGlob   
 
       ! Fetches & reconstructs X-matrix
-      call grab_matrix2('X',inode,nfile,Info,InfoGlob,index=0,n_matrix=nspin)
-      !call Matrix_CommRebuild(InfoGlob,Info,range,trans,matXL,nfile,symm,n_matrix=nspin)
-      call Matrix_CommRebuild(InfoGlob,Info,range,trans,matXL,nfile,n_matrix=nspin)
+      call grab_matrix2('X',inode,nfile,InfoMat,InfoGlob,index=0,n_matrix=nspin)
+      !call Matrix_CommRebuild(InfoGlob,InfoMat,range,trans,matXL,nfile,symm,n_matrix=nspin)
+      call Matrix_CommRebuild(InfoGlob,InfoMat,range,trans,matXL,nfile,n_matrix=nspin)
       ! Fetches & reconstructs Xvel-matrix
       if (integratorXL.EQ.'velocityVerlet') then
-        call grab_matrix2('Xvel',inode,nfile,Info,InfoGlob,index=0,n_matrix=nspin)
-        !call Matrix_CommRebuild(InfoGlob,Info,range,trans,matXLvel,symm,nfile,n_matrix=nspin)
-        call Matrix_CommRebuild(InfoGlob,Info,range,trans,matXLvel,nfile,n_matrix=nspin)
+        call grab_matrix2('Xvel',inode,nfile,InfoMat,InfoGlob,index=0,n_matrix=nspin)
+        !call Matrix_CommRebuild(InfoGlob,InfoMat,range,trans,matXLvel,symm,nfile,n_matrix=nspin)
+        call Matrix_CommRebuild(InfoGlob,InfoMat,range,trans,matXLvel,nfile,n_matrix=nspin)
       endif
       ! Fetches & reconstructs S-matrix
       if (flag_propagateX) then
        !matS will be matS(1:nspin_SF) in the near future
         matStmp(1)=matS
-        call grab_matrix2('S',inode,nfile,Info,InfoGlob,index=0,n_matrix=1)
-        !call Matrix_CommRebuild(InfoGlob,Info,Srange,S_trans,matS,nfile,symm,n_matrix=1)
-        call Matrix_CommRebuild(InfoGlob,Info,Srange,S_trans,matStmp,nfile,symm,n_matrix=1)
+        call grab_matrix2('S',inode,nfile,InfoMat,InfoGlob,index=0,n_matrix=1)
+        !call Matrix_CommRebuild(InfoGlob,InfoMat,Srange,S_trans,matS,nfile,symm,n_matrix=1)
+        call Matrix_CommRebuild(InfoGlob,InfoMat,Srange,S_trans,matStmp,nfile,symm,n_matrix=1)
       endif
 
       return
@@ -587,7 +587,7 @@
       !integer :: matX_store(maxiter_Dissipation,nspin)
       ! local variables
       integer :: maxiters,nfile,istep
-      type(InfoMatrixFile), pointer :: Info(:)
+      type(InfoMatrixFile), pointer :: InfoMat(:)
 
       maxiters = maxiter_Dissipation
       if(maxiters < 3) maxiters=3  ! even without dissipation, we need matX_store(:,1:4)
@@ -605,8 +605,8 @@
 
       ! Grab X-matrix files
       do istep = 1, maxiters+1
-       call grab_matrix2('X',inode,nfile,Info,InfoGlob,index=istep,n_matrix=nspin)
-       call Matrix_CommRebuild(InfoGlob,Info,range,trans,matXL_store(istep,:),nfile,n_matrix=nspin)
+       call grab_matrix2('X',inode,nfile,InfoMat,InfoGlob,index=istep,n_matrix=nspin)
+       call Matrix_CommRebuild(InfoGlob,InfoMat,range,trans,matXL_store(istep,:),nfile,n_matrix=nspin)
       enddo
 
       ! ----- 2019/Nov/13: (comment by TM)   -----
@@ -618,7 +618,7 @@
       ! with  n_matrix = (maxiters+1)*nspin.   
       !  (since it is expensive to make the transformation table (i,j) <-> (i_old,j_old))
       !
-      ! When we use Memory for Info(:) and InfoGlob, instead of using IOs, we should prepare
+      ! When we use Memory for InfoMat(:) and InfoGlob, instead of using IOs, we should prepare
       !  set_prev_matrix for grab_matrix2, and we should be able to rebuild matX_store once,
       ! by setting n_matix = (maxiters+1)*nspin
       !

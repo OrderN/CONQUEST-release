@@ -2135,12 +2135,23 @@ contains
     ! subroutine check_compatibility
     ! ------------------------------------------------------------------------------
     subroutine check_compatibility 
+     use GenComms, only: inode, ionode
      ! this subroutine checks the compatibility between keywords defined in read_input
      ! add the
      !       2017.11(Nov).03   Tsuyoshi Miyazaki
      implicit none
       !check AtomMove.ExtendedLagrangian(flag_XLBOMD) &  AtomMove.TypeOfRun (runtype)
-       if(runtype .NE. 'md') flag_XLBOMD=.false.
+       if(runtype .NE. 'md' .and. flag_XLBOMD) then
+         flag_XLBOMD=.false.
+         if(inode .eq. ionode)  write(io_lun,*)  &
+          'WARNING (AtomMove.ExtendedLagrangian): XLBOMD should be used only with MD.'
+       endif
+      !check AtomMove.ExtendedLagrangian(flag_XLBOMD) &  DM.SolutionMethod
+       if(flag_diagonalisation .and. flag_XLBOMD) then
+         flag_XLBOMD=.false.
+         if(inode .eq. ionode)  write(io_lun,*)  &
+          'WARNING (AtomMove.ExtendedLagrangian): present XLBOMD is only for orderN'
+       endif
      
      return
     end subroutine check_compatibility 

@@ -90,7 +90,7 @@ contains
   !!  NAME
   !!   Matrix_CommRebuild
   !!  USAGE
-  !!   call Matrix_CommRebuild(InfoGlob,Info,range,trans,matA,nfile,symm,n_matrix=**)
+  !!   call Matrix_CommRebuild(InfoGlob,InfoMat,range,trans,matA,nfile,symm,n_matrix=**)
   !!  PURPOSE
   !!   Manages communication and reordering of matrix elements
   !!  INPUTS
@@ -115,7 +115,7 @@ contains
   !!    Spin polarized case is introduced
   !!  SOURCE
   !!
-  subroutine Matrix_CommRebuild(InfoGlob,Info,range,trans,matA,nfile,symm,n_matrix)
+  subroutine Matrix_CommRebuild(InfoGlob,InfoMat,range,trans,matA,nfile,symm,n_matrix)
    !! (CAUTION) symm can be used only for the matrices having (trans).
 
 !!!  
@@ -151,7 +151,7 @@ contains
  !2019/Nov/13
     integer,optional :: symm
     integer,optional :: n_matrix
-    type(InfoMatrixFile), pointer :: Info(:)
+    type(InfoMatrixFile), pointer :: InfoMat(:)
 
     ! local variables
     integer :: nfile,isize1,isize2
@@ -214,7 +214,7 @@ contains
     ! The 1st Comunication starts.
     if (numprocs.NE.1) then ! No need for communication when using a single core.
       ! Organise local and remote atoms / Send the size info to remote nodes.
-      call alloc_send_array(nfile,LmatrixSend,isend_array,isend2_array,send_array,Info)
+      call alloc_send_array(nfile,LmatrixSend,isend_array,isend2_array,send_array,InfoMat)
       !setting nspin
         LmatrixSend%nspin=nspin_local
         LmatrixRecv%nspin=nspin_local
@@ -246,10 +246,10 @@ contains
     !! statements active. The overlap of communication and calculation can  !!
     !! be expected.							    !!
     !! ------------------------------ NOTE: ------------------------------- !! 
-    !! call UpdateMatrix_local(Info,range,matA,flag_remote_iprim,nfile)
+    !! call UpdateMatrix_local(InfoMat,range,matA,flag_remote_iprim,nfile)
     if (LmatrixSend%nrecv_node.GT.0 .AND. numprocs.NE.1) then
-      call CommMat_send_neigh(LmatrixSend,isend2_array,Info)
-      call CommMat_send_data(LmatrixSend,send_array,Info)
+      call CommMat_send_neigh(LmatrixSend,isend2_array,InfoMat)
+      call CommMat_send_data(LmatrixSend,send_array,InfoMat)
       if (inode==ionode .and. flag_MDdebug .and. iprint_MDdebug > 3) &
         write (io_lun,*) "Finished sending neighbour & L-matrix data", inode !db
     endif
@@ -303,7 +303,7 @@ contains
     !!  call statement instead.                                             !!
     !! ------------------------------ NOTE: ------------------------------- !! 
     !db if (inode.EQ.ionode) write (io_lun,*) "Reorganise local matrix data"
-     call UpdateMatrix_local(Info,range,nspin_local,matA,flag_remote_iprim,nfile)
+     call UpdateMatrix_local(InfoMat,range,nspin_local,matA,flag_remote_iprim,nfile)
     if (numprocs.NE.1) then
       if (LmatrixSend%nrecv_node.GT.0 .OR. LmatrixRecv%nsend_node.GT.0) then
         if (iprint_MD > 3 .and. inode.EQ.ionode) write (io_lun,*) "Reorganise remote matrix data"
@@ -338,8 +338,8 @@ contains
     ! This deallocation should be outside this subroutine and called just after this subroutine
     ! 20/08/2013 --> Deallocation call had better stay here, rather than outside this sbrt.
     if (nfile.GT.0) then
-      call deallocate_InfoMatrixFile(nfile,Info)
-      if (iprint_MD > 3 .and. inode.EQ.ionode) write (io_lun,*) "Deallocate arrays related to Info" !db
+      call deallocate_InfoMatrixFile(nfile,InfoMat)
+      if (iprint_MD > 3 .and. inode.EQ.ionode) write (io_lun,*) "Deallocate arrays related to InfoMat" !db
     endif
 
     if (LmatrixRecv%nsend_node.GE.1 .AND. numprocs.NE.1) then
@@ -660,7 +660,7 @@ contains
   !!    Changed Info to pointer from allocatable (gcc 4.4.7 issue)
   !!  SOURCE
   !!
-  subroutine alloc_send_array(nfile,LmatrixSend,isend_array,isend2_array,send_array,Info)
+  subroutine alloc_send_array(nfile,LmatrixSend,isend_array,isend2_array,send_array,InfoMat)
 
     ! Module usage
     use numbers
@@ -680,7 +680,7 @@ contains
     real(double), allocatable :: send_array(:)
 
     type(Lmatrix_comm_send) :: LmatrixSend
-    type(InfoMatrixFile), pointer :: Info(:)
+    type(InfoMatrixFile), pointer :: InfoMat(:)
 
     ! local variables
     ! -- process 1. -- !
@@ -721,7 +721,7 @@ contains
     mx_natom_total = 0
     if (nfile.GT.0) then
       do ifile = 1, nfile
-        mx_natom_total = mx_natom_total + Info(ifile)%natom_i
+        mx_natom_total = mx_natom_total + InfoMat(ifile)%natom_i
       enddo
       if (mx_natom_total.GT.0) then
         allocate (natomr_to_ifile(mx_natom_total),natomr_to_ia_file(mx_natom_total), &
@@ -735,8 +735,8 @@ contains
       LmatrixSend%natom_remote = 0
       do ifile = 1, nfile
         ! Loop over the whole atoms in my Lmatrix files
-        do iatom = 1, Info(ifile)%natom_i
-          idglob_iatom = Info(ifile)%idglob_i(iatom)
+        do iatom = 1, InfoMat(ifile)%natom_i
+          idglob_iatom = InfoMat(ifile)%idglob_i(iatom)
           ind_node = glob2node(idglob_iatom)
           if (inode.NE.ind_node) then ! If iatom is no longer my primary atom
             LmatrixSend%natom_remote = LmatrixSend%natom_remote + 1
@@ -932,11 +932,11 @@ contains
         iatom2 = iatom_sort(iatom_send)
         ifile  = natomr_to_ifile(iatom2)
         ia     = natomr_to_ia_file(iatom2)
-        nsize_jj = nsize_jj + Info(ifile)%jmax_i(ia)
-        !ORI nsize_Lmatrix_remote = nsize_Lmatrix_remote + 3 * Info(ifile)%jmax_i(ia) &
-        !ORI                        + Info(ifile)%jbeta_max_i(ia) * Info(ifile)%alpha_i(ia)
-        nsize_Lmatrix_remote = nsize_Lmatrix_remote + 3 * Info(ifile)%jmax_i(ia) &
-                                + Info(ifile)%jbeta_max_i(ia) * Info(ifile)%alpha_i(ia) * Info(ifile)%nspin
+        nsize_jj = nsize_jj + InfoMat(ifile)%jmax_i(ia)
+        !ORI nsize_Lmatrix_remote = nsize_Lmatrix_remote + 3 * InfoMat(ifile)%jmax_i(ia) &
+        !ORI                        + InfoMat(ifile)%jbeta_max_i(ia) * InfoMat(ifile)%alpha_i(ia)
+        nsize_Lmatrix_remote = nsize_Lmatrix_remote + 3 * InfoMat(ifile)%jmax_i(ia) &
+                                + InfoMat(ifile)%jbeta_max_i(ia) * InfoMat(ifile)%alpha_i(ia) * InfoMat(ifile)%nspin
       enddo
       allocate (isend2_array(2*nsize_jj), STAT=stat_alloc)
       if (stat_alloc.NE.0) call cq_abort('Error allocating isend2_array: ', 2*nsize_jj)
@@ -967,47 +967,47 @@ contains
         if (flag_MDdebug .AND. iprint_MDdebug.GT.2) write (lun_db,*) "iatom2,ifile,ia:", iatom2,ifile,ia
         ! 5-1. Store data in isend_array.
         ibeg=(iatom_send-1)*4+1
-        isend_array(ibeg)   = Info(ifile)%idglob_i(ia)
-        isend_array(ibeg+1) = Info(ifile)%alpha_i(ia)
-        isend_array(ibeg+2) = Info(ifile)%jmax_i(ia)
-        isend_array(ibeg+3) = Info(ifile)%jbeta_max_i(ia)
+        isend_array(ibeg)   = InfoMat(ifile)%idglob_i(ia)
+        isend_array(ibeg+1) = InfoMat(ifile)%alpha_i(ia)
+        isend_array(ibeg+2) = InfoMat(ifile)%jmax_i(ia)
+        isend_array(ibeg+3) = InfoMat(ifile)%jbeta_max_i(ia)
 
         !! ------------ DEBUG: ------------ !!
         if (flag_MDdebug .AND. iprint_MDdebug.GT.2) then
           write (lun_db,*) "glob,alpha,jmax,jbeta(ia):", &
-                           Info(ifile)%idglob_i(ia),Info(ifile)%alpha_i(ia),Info(ifile)%jmax_i(ia), &
-                           Info(ifile)%jbeta_max_i(ia)
-          !OLD write (lun_db,*) "rvec_Pij:", Info(ifile)%rvec_Pij(1:3,:,ia)
-          write (lun_db,*) "rvec_Pij:", Info(ifile)%rvec_Pij(1:3,:)
+                           InfoMat(ifile)%idglob_i(ia),InfoMat(ifile)%alpha_i(ia),InfoMat(ifile)%jmax_i(ia), &
+                           InfoMat(ifile)%jbeta_max_i(ia)
+          !OLD write (lun_db,*) "rvec_Pij:", InfoMat(ifile)%rvec_Pij(1:3,:,ia)
+          write (lun_db,*) "rvec_Pij:", InfoMat(ifile)%rvec_Pij(1:3,:)
         endif
         !! ------------ DEBUG: ------------ !!
 
         ! 5-2. Store data in isend2_array.
-        nsize_jj = Info(ifile)%jmax_i(ia)
+        nsize_jj = InfoMat(ifile)%jmax_i(ia)
         if (nsize_jj.EQ.0) call cq_abort('Error in nsize_jj: ', nsize_jj)
 !OLD        ! == MAY BE WRONG! ==
-        !OLD isend2_array(ibeg2:ibeg2+nsize_jj-1) = Info(ifile)%beta_j_i(1:nsize_jj)
-        isend2_array(ibeg2:ibeg2+nsize_jj-1) = Info(ifile)%beta_j_i(Info(ifile)%ibeg_Pij(ia) : &
-                                                                     Info(ifile)%ibeg_Pij(ia)+nsize_jj-1)
+        !OLD isend2_array(ibeg2:ibeg2+nsize_jj-1) = InfoMat(ifile)%beta_j_i(1:nsize_jj)
+        isend2_array(ibeg2:ibeg2+nsize_jj-1) = InfoMat(ifile)%beta_j_i(InfoMat(ifile)%ibeg_Pij(ia) : &
+                                                                     InfoMat(ifile)%ibeg_Pij(ia)+nsize_jj-1)
         ibeg2 = ibeg2 + nsize_jj
-        !OLD isend2_array(ibeg2:ibeg2+nsize_jj-1) = Info(ifile)%idglob_j(1:nsize_jj)
-        isend2_array(ibeg2:ibeg2+nsize_jj-1) = Info(ifile)%idglob_j(Info(ifile)%ibeg_Pij(ia) : &
-                                                                     Info(ifile)%ibeg_Pij(ia)+nsize_jj-1)
+        !OLD isend2_array(ibeg2:ibeg2+nsize_jj-1) = InfoMat(ifile)%idglob_j(1:nsize_jj)
+        isend2_array(ibeg2:ibeg2+nsize_jj-1) = InfoMat(ifile)%idglob_j(InfoMat(ifile)%ibeg_Pij(ia) : &
+                                                                     InfoMat(ifile)%ibeg_Pij(ia)+nsize_jj-1)
         ibeg2 = ibeg2 + nsize_jj
 !OLD        ! == MAY BE WRONG! ==
         ! 5-3. Store data in send_array.
         do jj = 1, nsize_jj
-          !OLD send_array(ibeg3:ibeg3+2) = Info(ifile)%rvec_Pij(1:3,jj,ia)
-          send_array(ibeg3:ibeg3+2) = Info(ifile)%rvec_Pij(1:3,Info(ifile)%ibeg_Pij(ia)+jj-1)
+          !OLD send_array(ibeg3:ibeg3+2) = InfoMat(ifile)%rvec_Pij(1:3,jj,ia)
+          send_array(ibeg3:ibeg3+2) = InfoMat(ifile)%rvec_Pij(1:3,InfoMat(ifile)%ibeg_Pij(ia)+jj-1)
           ibeg3 = ibeg3 + 3
         enddo
 
         ! spin dependent
-        nsize_Lmatrix_remote = Info(ifile)%alpha_i(ia)*Info(ifile)%jbeta_max_i(ia)
-        do jj = 1, Info(ifile)%nspin
+        nsize_Lmatrix_remote = InfoMat(ifile)%alpha_i(ia)*InfoMat(ifile)%jbeta_max_i(ia)
+        do jj = 1, InfoMat(ifile)%nspin
           send_array(ibeg3:ibeg3+nsize_Lmatrix_remote-1) = &
-                     Info(ifile)%data_Lold(Info(ifile)%ibeg_dataL(ia) : &
-                                            Info(ifile)%ibeg_dataL(ia)+nsize_Lmatrix_remote-1, jj)
+                     InfoMat(ifile)%data_Lold(InfoMat(ifile)%ibeg_dataL(ia) : &
+                                            InfoMat(ifile)%ibeg_dataL(ia)+nsize_Lmatrix_remote-1, jj)
           ibeg3 = ibeg3 + nsize_Lmatrix_remote
         enddo
 
@@ -1182,7 +1182,7 @@ contains
   !!
   !!  SOURCE
   !!
-  subroutine CommMat_send_neigh(LmatrixSend,isend2_array,Info)
+  subroutine CommMat_send_neigh(LmatrixSend,isend2_array,InfoMat)
 
     ! Module usage
     use GenComms, ONLY: cq_abort,myid
@@ -1200,7 +1200,7 @@ contains
     ! passed variables
     integer, allocatable, intent(in) :: isend2_array(:)
     type(Lmatrix_comm_send) :: LmatrixSend
-    type(InfoMatrixFile), pointer :: Info(:)
+    type(InfoMatrixFile), pointer :: InfoMat(:)
     !integer, allocatable, intent(in) :: nreq2(:)
     !integer, intent(in) :: nreq2(:)
 
@@ -1235,7 +1235,7 @@ contains
         iatom2 = iatom2 + 1
         ifile  = LmatrixSend%atom_ifile(iatom2)
         ia     = LmatrixSend%atom_ia_file(iatom2)
-        isize  = isize + Info(ifile)%jmax_i(ia) * 2
+        isize  = isize + InfoMat(ifile)%jmax_i(ia) * 2
       enddo !(i, natom_send)
 
       !! ---------- DEBUG ---------- !!
@@ -1290,7 +1290,7 @@ contains
   !!
   !!  SOURCE
   !!
-  subroutine CommMat_send_data(LmatrixSend,send_array,Info)
+  subroutine CommMat_send_data(LmatrixSend,send_array,InfoMat)
 
     ! Module usage
     use numbers
@@ -1308,7 +1308,7 @@ contains
     ! passed variables
     real(double), allocatable, intent(in) :: send_array(:)
     type(Lmatrix_comm_send) :: LmatrixSend
-    type(InfoMatrixFile), pointer :: Info(:)
+    type(InfoMatrixFile), pointer :: InfoMat(:)
 
     ! local variables
     integer :: i,iatom2,nnd,inode_recv,natom_send,isize,ia,ifile,ibeg
@@ -1325,7 +1325,7 @@ contains
       call io_assign(lun_db)
       !open (lun_db,file=file_name)
       open (lun_db,file=file_name,position='append')
-      write (lun_db,*) "n_matrix:", Info%nspin
+      write (lun_db,*) "n_matrix:", InfoMat%nspin
     endif
     !! ---------- DEBUG ---------- !!
 
@@ -1342,10 +1342,10 @@ contains
         iatom2 = iatom2 + 1
         ifile  = LmatrixSend%atom_ifile(iatom2)
         ia     = LmatrixSend%atom_ia_file(iatom2)
-        !ORI isize  = isize + Info(ifile)%jmax_i(ia)*3 &
-        !ORI                + Info(ifile)%alpha_i(ia)*Info(ifile)%jbeta_max_i(ia)
-        isize  = isize + Info(ifile)%jmax_i(ia)*3 &
-                       + Info(ifile)%alpha_i(ia)*Info(ifile)%jbeta_max_i(ia)*Info(ifile)%nspin
+        !ORI isize  = isize + InfoMat(ifile)%jmax_i(ia)*3 &
+        !ORI                + InfoMat(ifile)%alpha_i(ia)*InfoMat(ifile)%jbeta_max_i(ia)
+        isize  = isize + InfoMat(ifile)%jmax_i(ia)*3 &
+                       + InfoMat(ifile)%alpha_i(ia)*InfoMat(ifile)%jbeta_max_i(ia)*InfoMat(ifile)%nspin
       enddo !(i, natom_send)
 
       !! ---------- DEBUG ---------- !!
@@ -1978,7 +1978,7 @@ contains
   !!    spin-dependent version
   !!  SOURCE
   !!
-  subroutine UpdateMatrix_local(Info,range,n_matrix,matA,flag_remote_iprim,nfile)
+  subroutine UpdateMatrix_local(InfoMat,range,n_matrix,matA,flag_remote_iprim,nfile)
 
     ! Module usage
     use numbers
@@ -2017,7 +2017,7 @@ contains
     integer :: matA(n_matrix) ! usually n_matrix = nspin
    !2019/Nov/13
     logical, allocatable :: flag_remote_iprim(:)
-    type(InfoMatrixFile), pointer :: Info(:)
+    type(InfoMatrixFile), pointer :: InfoMat(:)
 
     ! local variables
     integer :: ifile,ibeg1,ibeg2,ibeg_Lij,n1,n2,nLaddr,nLaddr_old, sf1, nprim
@@ -2071,7 +2071,8 @@ contains
     ! In the case of  n_matrix > 1,  information of pairs are same for all mat_p(matA(:))
       matA_tmp = matA(1)
       if(nfile > 0 ) then
-       if(n_matrix.ne.Info(1)%nspin) call cq_abort("Error: mismatch between n_matrix and Info%nspin",n_matrix, Info(1)%nspin)
+       if(n_matrix.ne.InfoMat(1)%nspin) &
+        call cq_abort("Error: mismatch between n_matrix and InfoMat%nspin",n_matrix,InfoMat(1)%nspin)
       endif
 
     ! Need to consider spin later.
@@ -2095,10 +2096,10 @@ contains
     do ifile = 1, nfile
        ! Check if "ia" is my primary set of atom.
        ! Loop over "i_old".
-       do ia = 1, Info(ifile)%natom_i
-          idglob_ii = Info(ifile)%idglob_i(ia)
+       do ia = 1, InfoMat(ifile)%natom_i
+          idglob_ii = InfoMat(ifile)%idglob_i(ia)
           ind_node  = glob2node(idglob_ii)
-          n_alpha   = Info(ifile)%alpha_i(ia)
+          n_alpha   = InfoMat(ifile)%alpha_i(ia)
 
           if (ind_node.EQ.inode) then
              find_iprim = .false.
@@ -2135,13 +2136,13 @@ contains
              deltai_y=atom_coord_diff(2,idglob_ii)
              deltai_z=atom_coord_diff(3,idglob_ii)
              ! Find i_new neighbours, "j_new", by referring to "j_old". Loop over "j_old" to begin with.
-             ibeg1 = Info(ifile)%ibeg_Pij(ia)
-             ibeg2 = Info(ifile)%ibeg_dataL(ia)
+             ibeg1 = InfoMat(ifile)%ibeg_Pij(ia)
+             ibeg2 = InfoMat(ifile)%ibeg_dataL(ia)
 
-             do jj = 1, Info(ifile)%jmax_i(ia)
+             do jj = 1, InfoMat(ifile)%jmax_i(ia)
                 ij_local = ij_local+1
-                n_beta = Info(ifile)%beta_j_i(ibeg1+jj-1)
-                idglob_jj = Info(ifile)%idglob_j(ibeg1+jj-1)
+                n_beta = InfoMat(ifile)%beta_j_i(ibeg1+jj-1)
+                idglob_jj = InfoMat(ifile)%idglob_j(ibeg1+jj-1)
                 ! Displacement in x/y/z of neighbour 'j' of 'i'.
                 deltaj_x=atom_coord_diff(1,idglob_jj)
                 deltaj_y=atom_coord_diff(2,idglob_jj)
@@ -2149,9 +2150,9 @@ contains
                 ! NOTE: I don't like this writing but keep it for now...
                 !       zero-zero wouldn't be good...
                 ! 2017Dec14: Changed vec_Rij from cartesian (bohr) to fractional coordinates 
-                xx_j=xprim_i-Info(ifile)%rvec_Pij(1,ibeg1+jj-1)*rcellx+deltaj_x-deltai_x
-                yy_j=yprim_i-Info(ifile)%rvec_Pij(2,ibeg1+jj-1)*rcelly+deltaj_y-deltai_y
-                zz_j=zprim_i-Info(ifile)%rvec_Pij(3,ibeg1+jj-1)*rcellz+deltaj_z-deltai_z
+                xx_j=xprim_i-InfoMat(ifile)%rvec_Pij(1,ibeg1+jj-1)*rcellx+deltaj_x-deltai_x
+                yy_j=yprim_i-InfoMat(ifile)%rvec_Pij(2,ibeg1+jj-1)*rcelly+deltaj_y-deltai_y
+                zz_j=zprim_i-InfoMat(ifile)%rvec_Pij(3,ibeg1+jj-1)*rcellz+deltaj_z-deltai_z
 
                    Rijx=xprim_i-xx_j
                    Rijy=yprim_i-yy_j
@@ -2165,7 +2166,7 @@ contains
                    write (lun_db,*) "ibeg1+jj-1:", ibeg1+jj-1
                    write (lun_db,*) "idglob_jj and its beta:", idglob_jj, n_beta
                    write (lun_db,*) "vec_Pij:" 
-                   write (lun_db,*) Info(ifile)%rvec_Pij(1:3,ibeg1+jj-1)
+                   write (lun_db,*) InfoMat(ifile)%rvec_Pij(1:3,ibeg1+jj-1)
                    write (lun_db,*) "delta_i or atom_coord_diff(1:3,idglob_ii):", deltai_x,deltai_y,deltai_z
                    write (lun_db,*) "delta_j or atom_coord_diff(1:3,idglob_jj):", deltaj_x,deltaj_y,deltaj_z
                    write (lun_db,*) "pos of jj (x,y,z):"
@@ -2225,16 +2226,16 @@ contains
                    endif
                 enddo !(jjj, n_ing_cover)
                 if (.NOT. find_jcover) then
-                   xx_j=xprim_i-Info(ifile)%rvec_Pij(1,ibeg1+jj-1)*rcellx+deltaj_x-deltai_x
-                   yy_j=yprim_i-Info(ifile)%rvec_Pij(2,ibeg1+jj-1)*rcelly+deltaj_y-deltai_y
-                   zz_j=zprim_i-Info(ifile)%rvec_Pij(3,ibeg1+jj-1)*rcellz+deltaj_z-deltai_z
+                   xx_j=xprim_i-InfoMat(ifile)%rvec_Pij(1,ibeg1+jj-1)*rcellx+deltaj_x-deltai_x
+                   yy_j=yprim_i-InfoMat(ifile)%rvec_Pij(2,ibeg1+jj-1)*rcelly+deltaj_y-deltai_y
+                   zz_j=zprim_i-InfoMat(ifile)%rvec_Pij(3,ibeg1+jj-1)*rcellz+deltaj_z-deltai_z
                    write(io_lun,*) ' :ERROR: inode = ',inode
                    write(io_lun,*) ' :ERROR: idglob_jj, idglob_jjj, jcover,jpart_nopg,#ofjjj = ', &
                         idglob_jj, idglob_jjj,jcover,jpart_nopg,BCS_parts%n_ing_cover(jpart_nopg)
                    write(io_lun,*) ' :ERROR: jcoverxyz ',jcoverx,jcovery,jcoverz
                    write(io_lun,*) ' :ERROR: vecRij ', &
-                        Info(ifile)%rvec_Pij(1,ibeg1+jj-1), Info(ifile)%rvec_Pij(2,ibeg1+jj-1), &
-                        Info(ifile)%rvec_Pij(3,ibeg1+jj-1) 
+                        InfoMat(ifile)%rvec_Pij(1,ibeg1+jj-1), InfoMat(ifile)%rvec_Pij(2,ibeg1+jj-1), &
+                        InfoMat(ifile)%rvec_Pij(3,ibeg1+jj-1) 
                    write(io_lun,*) ' :ERROR: deltaj_x  ',deltaj_x,deltaj_y,deltaj_z
                    write(io_lun,*) ' :ERROR: deltai_x  ',deltai_x,deltai_y,deltai_z
                    write(io_lun,*) ' :ERROR: vecRi  ',xprim_i, yprim_i, zprim_i
@@ -2264,12 +2265,12 @@ contains
                    do isize = 1, n_matrix
                     do n1 = 1, n_alpha*n_beta
                       mat_p(matA(isize))%matrix(ibeg_Lij+n1-1) = &
-                           Info(ifile)%data_Lold(ibeg2+n1-1,isize)
+                           InfoMat(ifile)%data_Lold(ibeg2+n1-1,isize)
 
                       !! --------------- DEBUG: --------------- !!
                       if (flag_MDdebug .AND. iprint_MDdebug.GT.1) then
                          write (lun_db2,'(2f25.18,f15.5,i10)') mat_p(matA(isize))%matrix(ibeg_Lij+n1-1), &
-                              Info(ifile)%data_Lold(ibeg2+n1-1,isize), Rij, jcover
+                              InfoMat(ifile)%data_Lold(ibeg2+n1-1,isize), Rij, jcover
                       endif
                       !! --------------- DEBUG: --------------- !!
 
@@ -2288,8 +2289,8 @@ contains
                 ibeg2 = ibeg2 + n_alpha*n_beta
              enddo !(jj, jmax_i)
           endif !(ind_node.EQ.inode)
-          !ibeg1 = ibeg1 + Info(ifile)%jmax_i(ia)
-          !ibeg2 = ibeg2 + Info(ifile)%jbeta_max_i(ia)*n_alpha
+          !ibeg1 = ibeg1 + InfoMat(ifile)%jmax_i(ia)
+          !ibeg2 = ibeg2 + InfoMat(ifile)%jbeta_max_i(ia)*n_alpha
 
        enddo !(ia, natom_i)
     enddo !(ifile, nfile)

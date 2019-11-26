@@ -1123,7 +1123,7 @@ contains
     use matrix_data,         ONLY: Lrange,Trange,LSrange,SFcoeff_range,Hrange
     use store_matrix,        ONLY: matrix_store_global, grab_InfoMatGlobal, grab_matrix2, &
          InfoMatrixFile, set_atom_coord_diff
-    use UpdateInfo,          ONLY: make_glob2node,Matrix_CommRebuild
+    use UpdateInfo,          ONLY: make_glob2node,Matrix_CommRebuild, Report_UpdateMatrix
     use XLBOMD_module,       ONLY: grab_XXvelS,grab_Xhistories
     use support_spec_format, only: read_option
     use multisiteSF_module,  only: initial_SFcoeff
@@ -1271,6 +1271,7 @@ contains
           call my_barrier()
           call Matrix_CommRebuild(InfoGlob,Info,Hrange,H_trans,matK,nfile,n_matrix=nspin)
           if (inode == ionode .and. iprint_init > 1) write (io_lun, *) 'Grabbed K  matrix'
+          !DEBUG call Report_UpdateMatrix("Kmat")  
        end if
     end if
     ! XL-BOMD

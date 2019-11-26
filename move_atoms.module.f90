@@ -3949,7 +3949,7 @@ contains
  !InfoGlob and Info can be defined locally.
  ! for extrapolation, we need to prepare multiple InfoGlob and Info.
   type(matrix_store_global) :: InfoGlob
-  type(InfoMatrixFile),pointer :: Info(:)
+  type(InfoMatrixFile),pointer :: InfoMat(:)
 
   real(double), dimension(3,ni_in_cell) :: velocity_global
   integer :: i
@@ -4039,16 +4039,16 @@ contains
  ! Then, matrices will be read from the corresponding files
  !
   if(flag_L) then
-     call grab_matrix2('L',inode,nfile,Info,InfoGlob,index=0,n_matrix=nspin)
+     call grab_matrix2('L',inode,nfile,InfoMat,InfoGlob,index=0,n_matrix=nspin)
      call my_barrier()
-     call Matrix_CommRebuild(InfoGlob,Info,Lrange,L_trans,matL,nfile,symm,n_matrix=nspin)
+     call Matrix_CommRebuild(InfoGlob,InfoMat,Lrange,L_trans,matL,nfile,symm,n_matrix=nspin)
       if(flag_debug_move_atoms) call Report_UpdateMatrix("Lmat")
   endif
 
   if(flag_K) then
-     call grab_matrix2('K',inode,nfile,Info,InfoGlob,index=0,n_matrix=nspin)
+     call grab_matrix2('K',inode,nfile,InfoMat,InfoGlob,index=0,n_matrix=nspin)
      call my_barrier()
-     call Matrix_CommRebuild(InfoGlob,Info,Hrange,H_trans,matK,nfile,n_matrix=nspin)
+     call Matrix_CommRebuild(InfoGlob,InfoMat,Hrange,H_trans,matK,nfile,n_matrix=nspin)
       if(flag_debug_move_atoms) call Report_UpdateMatrix("Kmat")
   endif
 
@@ -4056,11 +4056,11 @@ contains
     ! If we introduce spin-dependent support, matS -> matS(nspin_SF)
        matS_tmp(1)=matS  ! temporary 
 
-     call grab_matrix2('S',inode,nfile,Info,InfoGlob,index=0,n_matrix=1)
-     !call grab_matrix2('S',inode,nfile,Info,InfoGlob,index=0,n_matrix=nspin_SF)
+     call grab_matrix2('S',inode,nfile,InfoMat,InfoGlob,index=0,n_matrix=1)
+     !call grab_matrix2('S',inode,nfile,InfoMat,InfoGlob,index=0,n_matrix=nspin_SF)
      call my_barrier()
-     call Matrix_CommRebuild(InfoGlob,Info,Srange,S_trans,matS_tmp,nfile,symm,n_matrix=1)
-     !call Matrix_CommRebuild(InfoGlob,Info,Srange,S_trans,matS_tmp,nfile,symm,n_matrix=nspin_SF)
+     call Matrix_CommRebuild(InfoGlob,InfoMat,Srange,S_trans,matS_tmp,nfile,symm,n_matrix=1)
+     !call Matrix_CommRebuild(InfoGlob,InfoMat,Srange,S_trans,matS_tmp,nfile,symm,n_matrix=nspin_SF)
       if(flag_debug_move_atoms) call Report_UpdateMatrix("Smat")
   endif
 
@@ -4069,9 +4069,9 @@ contains
       call matrix_scale(zero,matSFcoeff(spin_SF))
      enddo !spin_SF = 1,nspin_SF
 
-     call grab_matrix2('SFcoeff',inode,nfile,Info,InfoGlob,index=0,n_matrix=nspin_SF)
+     call grab_matrix2('SFcoeff',inode,nfile,InfoMat,InfoGlob,index=0,n_matrix=nspin_SF)
      call my_barrier()
-     call Matrix_CommRebuild(InfoGlob,Info,SFcoeff_range,SFcoeff_trans,matSFcoeff,nfile,n_matrix=nspin_SF)
+     call Matrix_CommRebuild(InfoGlob,InfoMat,SFcoeff_range,SFcoeff_trans,matSFcoeff,nfile,n_matrix=nspin_SF)
       if(flag_debug_move_atoms) call Report_UpdateMatrix("SFc1")
 
      do spin_SF = 1,nspin_SF
