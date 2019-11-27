@@ -313,7 +313,7 @@ module DiagModule
   real(double), allocatable, dimension(:,:) :: total_DOS
   real(double), allocatable, dimension(:,:,:) :: pDOS
   real(double), allocatable, dimension(:,:,:,:,:) :: pDOS_angmom ! Bin, atom, l, m, spin
-  real(double), allocatable, dimension(:) :: w_pDOS
+  real(double), allocatable, dimension(:,:) :: w_pDOS
   real(double) :: dE_DOS, pf_DOS
   integer :: n_DOS_max, n_DOS_wid
   logical :: flag_pDOS_include_semicore
@@ -467,6 +467,11 @@ contains
   !!    Added wf_self_con for accumulate_DOS
   !!   2019/05/09 dave
   !!    Bug fix for band density output (and added write_eigenvalues call)
+  !!   2019/10/23 10:50 dave
+  !!    Bug fix for pDOS output
+  !!   2019/11/21 10:40 nakata
+  !!    Bug fix for pDOS normalisation for spin-polarised calculations 
+  !!    (added the dimension of spin to w_pDOS)
   !!  SOURCE
   !!
   subroutine FindEvals(electrons)
@@ -652,7 +657,7 @@ contains
              pDOS_angmom = zero
           endif
           if (flag_normalise_pDOS) then
-             allocate(w_pDOS(matrix_size))
+             allocate(w_pDOS(matrix_size,nspin))
              w_pDOS = zero
           end if
        end if
@@ -888,14 +893,14 @@ contains
                 if(wf_self_con.AND.flag_write_DOS) then
                    if(flag_write_projected_DOS) then
                       if (flag_normalise_pDOS) then
-                         call get_weight_pDOS(expH(:,:,spin),w_pDOS)
-                         call gsum(w_PDOS(:), matrix_size)
+                         call get_weight_pDOS(expH(:,:,spin),w_pDOS(:,spin))
+                         call gsum(w_PDOS(:,spin), matrix_size)
                       endif
                       if (flag_pDOS_angmom) then
                          if (flag_normalise_pDOS) then
                             call accumulate_DOS(wtk(kp),w(:,kp,spin),expH(:,:,spin),total_DOS(:,spin),spin, &
                                                 projDOS=pDOS(:,:,spin),projDOS_angmom=pDOS_angmom(:,:,:,:,spin), &
-                                                weight_pDOS=w_pDOS)
+                                                weight_pDOS=w_pDOS(:,spin))
                          else
                             call accumulate_DOS(wtk(kp),w(:,kp,spin),expH(:,:,spin),total_DOS(:,spin),spin, &
                                                 projDOS=pDOS(:,:,spin),projDOS_angmom=pDOS_angmom(:,:,:,:,spin))
@@ -903,7 +908,7 @@ contains
                       else
                          if (flag_normalise_pDOS) then
                             call accumulate_DOS(wtk(kp),w(:,kp,spin),expH(:,:,spin),total_DOS(:,spin),spin, &
-                                                projDOS=pDOS(:,:,spin),weight_pDOS=w_pDOS)
+                                                projDOS=pDOS(:,:,spin),weight_pDOS=w_pDOS(:,spin))
                          else
                             call accumulate_DOS(wtk(kp),w(:,kp,spin),expH(:,:,spin),total_DOS(:,spin),spin, &
                                                 projDOS=pDOS(:,:,spin))
@@ -1079,18 +1084,21 @@ contains
              if (     flag_pDOS_angmom) call dump_projected_DOS(pDOS,Efermi,pDOS_angmom=pDOS_angmom,Nangmom=Nangmom)
           else
              call gsum(pDOS(:,:,:),n_DOS,ni_in_cell,nspin)
-             if(flag_pDOS_lm) then
-                do spin = 1, nspin
-                   call gsum(pDOS_angmom(:,:,:,:,spin),n_DOS,ni_in_cell,Nangmom,2*Nangmom-1)
-                enddo
+             if(flag_pDOS_angmom) then
+                if(flag_pDOS_lm) then
+                   do spin = 1, nspin
+                      call gsum(pDOS_angmom(:,:,:,:,spin),n_DOS,ni_in_cell,Nangmom,2*Nangmom-1)
+                   enddo
+                else
+                   do spin = 1, nspin
+                      call gsum(pDOS_angmom(:,:,:,1,spin),n_DOS,ni_in_cell,Nangmom)
+                   enddo
+                end if
+                if (inode==ionode) then
+                   call dump_projected_DOS(pDOS,Efermi,pDOS_angmom=pDOS_angmom,Nangmom=Nangmom)
+                end if
              else
-                do spin = 1, nspin
-                   call gsum(pDOS_angmom(:,:,:,1,spin),n_DOS,ni_in_cell,Nangmom)
-                enddo
-             end if
-             if (inode==ionode) then
-                if (.not.flag_pDOS_angmom) call dump_projected_DOS(pDOS,Efermi)
-                if (     flag_pDOS_angmom) call dump_projected_DOS(pDOS,Efermi,pDOS_angmom=pDOS_angmom,Nangmom=Nangmom)
+                if (inode==ionode) call dump_projected_DOS(pDOS,Efermi)
              endif
           endif
           if (flag_normalise_pDOS) deallocate(w_pDOS)
@@ -4177,9 +4185,11 @@ contains
   !!  CREATION DATE
   !!   07/09/2017
   !!  MODIFICATION HISTORY
+  !!   21/11/2019
+  !!    Renamed w_pDOS to weight_pDOS 
   !!  SOURCE
   !!
-  subroutine get_weight_pDOS(evec,w_pDOS)
+  subroutine get_weight_pDOS(evec,weight_pDOS)
 
     use datatypes
     use numbers, ONLY: zero
@@ -4191,7 +4201,7 @@ contains
 
     ! Passed variables
     complex(double_cplx), dimension(:,:), intent(in) :: evec
-    real(double), dimension(:) :: w_pDOS
+    real(double), dimension(:) :: weight_pDOS
 
     ! Local variables
     integer :: iwf, acc, atom, nsf
@@ -4200,7 +4210,7 @@ contains
     ! ---------------
     ! Calculate weight for each band to normalise pDOS
     ! ---------------
-    w_pDOS = zero
+    weight_pDOS = zero
     do iwf=1,matrix_size ! Effectively all bands
        acc = 0
        fac = zero
@@ -4210,7 +4220,7 @@ contains
           end do
           acc = acc + nsf_species(bundle%species(atom))
        end do
-       w_pDOS(iwf) = fac
+       weight_pDOS(iwf) = fac
     end do
   end subroutine get_weight_pDOS
   !!***

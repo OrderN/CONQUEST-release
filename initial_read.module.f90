@@ -151,6 +151,8 @@ contains
   !!   2019/06/06 17:30 jack poulton and nakata
   !!    Changed to allow SZP-MSSFs with flag_MSSF_nonminimal when checking the number of MSSFs
   !!    Added MSSF_nonminimal_species
+  !!   2019/11/18 tsuyoshi
+  !!    Removed flag_MDold
   !!  SOURCE
   !!
   subroutine read_and_write(start, start_L, inode, ionode,          &
@@ -706,6 +708,8 @@ contains
   !!    Added flag for RNG seed
   !!   2019/10/08 nakata
   !!    Fixed bug for the case when reading only Kmatrix but not SFcoeff (for MSSFs)
+  !!   2019/11/18 14:36 dave
+  !!    Added flag_variable_cell set to true for cell optimisation or NPT dynamics
   !!  TODO
   !!   Fix reading of start flags (change to block ?) 10/05/2002 dave
   !!   Fix rigid shift 10/05/2002 dave
@@ -755,7 +759,7 @@ contains
                              dscf_target_spin, dscf_source_nfold,      &
                              dscf_target_nfold, flag_local_excitation, dscf_HOMO_thresh,   &
                              dscf_LUMO_thresh, dscf_HOMO_limit, dscf_LUMO_limit,           &
-                             flag_MDcontinue,flag_MDdebug,flag_MDold,  &
+                             flag_MDcontinue,flag_MDdebug,             &
                              flag_thermoDebug, flag_baroDebug, &
                              flag_LmatrixReuse,flag_TmatrixReuse,flag_SkipEarlyDM,McWFreq, &
                              restart_T,restart_X,flag_XLBOMD,flag_propagateX,              &
@@ -767,7 +771,7 @@ contains
                              E_DOS_min, E_DOS_max, sigma_DOS, n_DOS, E_wf_min, E_wf_max, flag_wf_range_Ef, &
                              mx_temp_matrices, flag_neutral_atom, flag_diagonalisation, &
                              flag_SpinDependentSF, flag_Multisite, flag_LFD, flag_SFcoeffReuse, &
-                             flag_opt_cell, cell_constraint_flag, &
+                             flag_opt_cell, cell_constraint_flag, flag_variable_cell, &
                              cell_en_tol, optcell_method, cell_stress_tol, &
                              flag_stress, flag_full_stress, rng_seed, &
                              flag_atomic_stress, flag_heat_flux
@@ -826,7 +830,8 @@ contains
     use io_module, only: pdb_format, pdb_altloc, append_coords,  &
                          pdb_output, banner, get_file_name, time_max, &
                          flag_MatrixFile_RankFromZero, flag_MatrixFile_BinaryFormat, &
-                         flag_MatrixFile_BinaryFormat_Grab, flag_MatrixFile_BinaryFormat_Dump
+                         flag_MatrixFile_BinaryFormat_Grab, flag_MatrixFile_BinaryFormat_Dump, &
+                         flag_MatrixFile_BinaryFormat_Dump_END
 
     use group_module,     only: part_method, HILBERT, PYTHON
     use energy,           only: flag_check_DFT
@@ -841,7 +846,8 @@ contains
                          cDFT_NumberAtomGroups, cDFT_AtomList,       &
                          cDFT_BlockLabel, cDFT_Vc
     use sfc_partitions_module, only: n_parts_user, average_atomic_diameter, gap_threshold
-    use XLBOMD_module,         only: XLInitFreq,maxitersDissipation,kappa
+    use XLBOMD_module,         only: XLInitFreq,kappa
+    use mult_module,           only: maxiter_Dissipation
     use constraint_module,     only: flag_RigidBonds,constraints,SHAKE_tol, &
                                      RATTLE_tol,maxiterSHAKE,maxiterRATTLE, &
                                      const_range,n_bond
@@ -1126,7 +1132,6 @@ contains
        else if(leqi(basis_string,'PAOs')) then
           flag_basis_set = PAOs
        end if
-       read_option            = fdf_boolean('Basis.LoadCoeffs',           .false.)
        flag_onsite_blip_ana   = fdf_boolean('Basis.OnsiteBlipsAnalytic',  .true. )
        flag_analytic_blip_int = fdf_boolean('Basis.AnalyticBlipIntegrals',.false.)
        !
@@ -1466,6 +1471,7 @@ contains
        MDtimestep            = fdf_double ('AtomMove.Timestep',      0.5_double)
        MDcgtol               = fdf_double ('AtomMove.MaxForceTol',0.0005_double)
        flag_opt_cell         = fdf_boolean('AtomMove.OptCell',          .false.)
+       flag_variable_cell    = flag_opt_cell
        optcell_method        = fdf_integer('AtomMove.OptCellMethod', 1)
        cell_constraint_flag  = fdf_string(20,'AtomMove.OptCell.Constraint','none')
        cell_en_tol           = fdf_double('AtomMove.OptCell.EnTol',0.00001_double)
@@ -1526,7 +1532,8 @@ contains
          flag_MatrixFile_RankFromZero = fdf_boolean('IO.MatrixFile.RankFromZero', .true.)
          flag_MatrixFile_BinaryFormat = fdf_boolean('IO.MatrixFile.BinaryFormat', .true.)
          flag_MatrixFile_BinaryFormat_Grab = fdf_boolean('IO.MatrixFile.BinaryFormat.Grab', flag_MatrixFile_BinaryFormat)
-         flag_MatrixFile_BinaryFormat_Dump = fdf_boolean('IO.MatrixFile.BinaryFormat.Dump', flag_MatrixFile_BinaryFormat)
+         flag_MatrixFile_BinaryFormat_Dump_END = fdf_boolean('IO.MatrixFile.BinaryFormat.Dump', flag_MatrixFile_BinaryFormat)
+         flag_MatrixFile_BinaryFormat_Dump = flag_MatrixFile_BinaryFormat_Grab
  
        ! read wavefunction output flags
        mx_temp_matrices = fdf_integer('General.MaxTempMatrices',100)
@@ -1942,7 +1949,6 @@ contains
 !!$
 !!$
        ! Basic settings for MD
-       flag_MDold        = fdf_boolean('AtomMove.OldMemberUpdates',.false.)
        flag_MDdebug      = fdf_boolean('AtomMove.Debug',.false.)
        flag_MDcontinue   = fdf_boolean('AtomMove.RestartRun',.false.)
        flag_SFcoeffReuse = fdf_boolean('AtomMove.ReuseSFcoeff',.false.)
@@ -1972,11 +1978,13 @@ contains
          restart_LorK   = fdf_boolean('General.LoadL', .true.)
          find_chdens    = fdf_boolean('SC.MakeInitialChargeFromK',.true.)
          if (flag_XLBOMD) restart_X=fdf_boolean('XL.LoadX', .true.)
+         if (flag_multisite) read_option = fdf_boolean('Basis.LoadCoeffs', .true.)
        else
          flag_read_velocity = fdf_boolean('AtomMove.ReadVelocity',.false.)
          restart_LorK   = fdf_boolean('General.LoadL', .false.)
          find_chdens    = fdf_boolean('SC.MakeInitialChargeFromK',.false.)
          if (flag_XLBOMD) restart_X=fdf_boolean('XL.LoadX', .false.)
+         if (flag_multisite) read_option = fdf_boolean('Basis.LoadCoeffs', .false.)
        end if
 
        if (restart_LorK .and. flag_Multisite .and. .not.read_option) then
@@ -2007,10 +2015,10 @@ contains
          endif
          XLInitFreq          = fdf_integer('XL.ResetFreq',0)
          flag_dissipation    = fdf_boolean('XL.Dissipation',.false.)
-         maxitersDissipation = fdf_integer('XL.MaxDissipation',5)
+         maxiter_Dissipation = fdf_integer('XL.MaxDissipation',5)
          if (flag_dissipation) then
-           if (maxitersDissipation.LT.1 .OR. maxitersDissipation.GT.9) then
-             maxitersDissipation = 5
+           if (maxiter_Dissipation.LT.1 .OR. maxiter_Dissipation.GT.9) then
+             maxiter_Dissipation = 5
              if (inode.EQ.ionode) write (io_lun,'(2x,a)') &
                "WARNING: K must be 1 <= K <= 9 ! Setting to 5"
            endif
@@ -2072,6 +2080,7 @@ contains
        case('npt')
          md_thermo_type     = fdf_string(20, 'MD.Thermostat', 'nhc')
          md_baro_type       = fdf_string(20, 'MD.Barostat', 'iso-ssm')
+         flag_variable_cell  = .true.
        end select
        md_tau_T           = fdf_double('MD.tauT', -one)
        md_tau_T_equil     = fdf_double('MD.tauTEquil', one)
@@ -2126,12 +2135,23 @@ contains
     ! subroutine check_compatibility
     ! ------------------------------------------------------------------------------
     subroutine check_compatibility 
+     use GenComms, only: inode, ionode
      ! this subroutine checks the compatibility between keywords defined in read_input
      ! add the
      !       2017.11(Nov).03   Tsuyoshi Miyazaki
      implicit none
       !check AtomMove.ExtendedLagrangian(flag_XLBOMD) &  AtomMove.TypeOfRun (runtype)
-       if(runtype .NE. 'md') flag_XLBOMD=.false.
+       if(runtype .NE. 'md' .and. flag_XLBOMD) then
+         flag_XLBOMD=.false.
+         if(inode .eq. ionode)  write(io_lun,*)  &
+          'WARNING (AtomMove.ExtendedLagrangian): XLBOMD should be used only with MD.'
+       endif
+      !check AtomMove.ExtendedLagrangian(flag_XLBOMD) &  DM.SolutionMethod
+       if(flag_diagonalisation .and. flag_XLBOMD) then
+         flag_XLBOMD=.false.
+         if(inode .eq. ionode)  write(io_lun,*)  &
+          'WARNING (AtomMove.ExtendedLagrangian): present XLBOMD is only for orderN'
+       endif
      
      return
     end subroutine check_compatibility 

@@ -255,7 +255,7 @@ contains
                              y_atom_cell, z_atom_cell, id_glob,    &
                              atom_coord, &
                              area_general, iprint_MD,              &
-                             IPRINT_TIME_THRES1, flag_MDold
+                             IPRINT_TIME_THRES1
     use group_module,  only: parts
     use minimise,      only: get_E_and_F
     use move_atoms,    only: safemin, safemin2
@@ -368,15 +368,8 @@ contains
        end do
        old_force = tot_force
        ! Minimise in this direction
-       !ORI call safemin(x_new_pos, y_new_pos, z_new_pos, cg, energy0, &
-       !ORI              energy1, fixed_potential, vary_mu, energy1)
-       if (.NOT. flag_MDold) then
          call safemin2(x_new_pos, y_new_pos, z_new_pos, cg, energy0, &
                       energy1, fixed_potential, vary_mu, energy1)
-       else
-         call safemin(x_new_pos, y_new_pos, z_new_pos, cg, energy0, &
-                      energy1, fixed_potential, vary_mu, energy1)
-       endif
        ! Output positions
        if (myid == 0 .and. iprint_gen > 1) then
           do i = 1, ni_in_cell
@@ -544,7 +537,6 @@ contains
                               y_atom_cell, z_atom_cell, area_general, &
                               flag_read_velocity, flag_quench_MD,     &
                               temp_ion, flag_MDcontinue, MDinit_step, &
-                              flag_MDold,n_proc_old,glob2node_old,    &
                               flag_LmatrixReuse,flag_XLBOMD,          &
                               flag_dissipation,flag_FixCOM,           &
                               flag_fire_qMD, flag_diagonalisation,    &
@@ -571,7 +563,6 @@ contains
                     matrix_store_global, InfoMatrixFile, dump_pos_and_matrices
     use mult_module,    ONLY: matL,L_trans,matK,S_trans, matrix_scale
     use matrix_data,    ONLY: Lrange,Hrange, rcut, max_range
-    use UpdateInfo_module, ONLY: Matrix_CommRebuild
     use XLBOMD_module,  ONLY: Ready_XLBOMD, Do_XLBOMD
     use Integrators,    ONLY: vVerlet_v_dthalf,vVerlet_r_dt, fire_qMD, &
                               fire_N_below_thresh
@@ -670,7 +661,7 @@ contains
     mdl%dft_total_energy = energy0
 
     ! XL-BOMD
-    if (flag_XLBOMD .AND. flag_dissipation .AND. .NOT.flag_MDold) &
+    if (flag_XLBOMD .AND. flag_dissipation) &
       call Ready_XLBOMD()
 
     ! Get converted 1-D array for flag_atom_move
@@ -740,7 +731,6 @@ contains
        if (flag_RigidBonds) &
          call correct_atomic_position(ion_velocity,MDtimestep)
        ! Reset-up
-       if(.NOT.flag_MDold) then
           if (md_ensemble(2:2) == 'p') then
             if (.not. leqi(md_baro_type, "berendsen") .or. nequil < 1) then
               call baro%update_cell
@@ -751,10 +741,6 @@ contains
           else
              call update_pos_and_matrices(updateLorK,ion_velocity)
           endif
-       else
-          call update_atom_coord
-          call updateIndices(.true., fixed_potential)
-       end if
 
        if (flag_XLBOMD) call Do_XLBOMD(iter,MDtimestep)
        call update_H(fixed_potential)
@@ -770,9 +756,11 @@ contains
        
        if (flag_fire_qMD) then
           call get_E_and_F(fixed_potential, vary_mu, energy1, .true., .true.,iter)
+          call check_stop(done, iter)   !2019/Nov/14
           call dump_pos_and_matrices(index=0,MDstep=iter,velocity=ion_velocity)
        else
           call get_E_and_F(fixed_potential, vary_mu, energy1, .true., .false.,iter)
+          call check_stop(done, iter)   !2019/Nov/14
           ! Here so that the kinetic stress is reported just after the 
           ! static stress - zamaan
           if (inode == ionode .and. iprint_MD > 2) then
@@ -783,6 +771,19 @@ contains
           call dump_pos_and_matrices(index=0,MDstep=iter,velocity=ion_velocity)
           call vVerlet_v_dthalf(MDtimestep,ion_velocity,tot_force,flag_movable,second_call)
        end if
+!******
+       !2019/Nov/14 tsuyoshi
+       ! we would dump the files(InfoGlobal and *matrix2.i**.p******)  once at the end of each job.
+       ! We should call "dump_pos_and_matrices" after calling "check_stop", since 
+       ! this subroutine would change the format (binary or ascii) of the files,
+       ! if user sets different "IO.MatrixFile.BinaryFormat.Grab" and "IO.MatrixFile.BinaryFormat.Dump".
+       !  (reading binary files at the beginning and writing ascii files at the end is possible.)
+       ! 
+       ! In the near future,  (depending on "IO.DumpEveryStep")
+       !  we would use "store_pos_and_matrices" at each MD step, 
+       !  while call "dump_pos_and_matrices" if "done" is true.
+!******
+
        ! Rescale the ionic positions for the berendsen barostat AFTER the 
        ! velocity updates to avoid rescaling velocities
        if (leqi(md_ensemble, 'npt')) then
@@ -877,7 +878,7 @@ contains
        ! Write all MD data and checkpoints to disk
        call write_md_data(iter, thermo, baro, mdl, nequil)
 
-       call check_stop(done, iter)
+       !call check_stop(done, iter) ! moved above. 2019/Nov/14 tsuyoshi
        if (flag_fire_qMD.OR.flag_quench_MD) then
           if (abs(max) < MDcgtol) then
              if ((iter - step_qMD) > 1) then
@@ -899,6 +900,7 @@ contains
     end do ! Main MD loop
 
     call end_md(thermo, baro)
+
     return
   end subroutine md_run
   !!***
@@ -1506,7 +1508,6 @@ end subroutine write_md_data
     use global_module,  only: iprint_MD, ni_in_cell, x_atom_cell,   &
                               y_atom_cell, z_atom_cell, id_glob,    &
                               atom_coord, area_general, flag_pulay_simpleStep, &
-                              glob2node_old, n_proc_old, flag_MDold, &
                               flag_diagonalisation, nspin, flag_LmatrixReuse, &
                               flag_SFcoeffReuse
     use group_module,   only: parts
@@ -1525,7 +1526,6 @@ end subroutine write_md_data
     use store_matrix,   only: dump_pos_and_matrices
     use mult_module, ONLY: matK, S_trans, matrix_scale, matL, L_trans
     use matrix_data, ONLY: Hrange, Lrange
-    use UpdateInfo_module, ONLY: Matrix_CommRebuild
 
     implicit none
 
@@ -1661,28 +1661,18 @@ end subroutine write_md_data
                                   z_atom_cell(i)
              end do
           end if
-          if(.NOT.flag_MDold) then
-             if(flag_SFcoeffReuse) then
-                call update_pos_and_matrices(updateSFcoeff,cg)
-             else
-                call update_pos_and_matrices(updateLorK,cg)
-             endif
+          if(flag_SFcoeffReuse) then
+             call update_pos_and_matrices(updateSFcoeff,cg)
           else
-             call update_atom_coord
-             call updateIndices(.true., fixed_potential)
-          end if
+             call update_pos_and_matrices(updateLorK,cg)
+          endif
           call update_H(fixed_potential)
           call get_E_and_F(fixed_potential, vary_mu, energy1, .true., &
                .false.)
           call dump_pos_and_matrices
        else
-          if (.NOT. flag_MDold) then
-             call safemin2(x_new_pos, y_new_pos, z_new_pos, cg, energy0, &
-                  energy1, fixed_potential, vary_mu, energy1)
-          else
-             call safemin(x_new_pos, y_new_pos, z_new_pos, cg, energy0, &
-                  energy1, fixed_potential, vary_mu, energy1)
-          end if
+          call safemin2(x_new_pos, y_new_pos, z_new_pos, cg, energy0, &
+               energy1, fixed_potential, vary_mu, energy1)
        end if
        ! Analyse forces
        g0 = dot(length, tot_force, 1, tot_force, 1)
@@ -1727,16 +1717,11 @@ end subroutine write_md_data
                                z_atom_cell(i)
           end do
        end if
-       if(.NOT.flag_MDold) then
-          if(flag_SFcoeffReuse) then
-             call update_pos_and_matrices(updateSFcoeff,cg)
-          else
-             call update_pos_and_matrices(updateLorK,cg)
-          endif
+       if(flag_SFcoeffReuse) then
+          call update_pos_and_matrices(updateSFcoeff,cg)
        else
-          call update_atom_coord
-          call updateIndices(.true., fixed_potential)
-       end if
+          call update_pos_and_matrices(updateLorK,cg)
+       endif
        call update_H(fixed_potential)
        call get_E_and_F(fixed_potential, vary_mu, energy1, .true., &
                         .false.)
@@ -1842,7 +1827,7 @@ end subroutine write_md_data
                              y_atom_cell, z_atom_cell, id_glob,    &
                              atom_coord, rcellx, rcelly, rcellz,   &
                              area_general, iprint_MD,              &
-                             IPRINT_TIME_THRES1, flag_MDold, cell_en_tol, &
+                             IPRINT_TIME_THRES1, cell_en_tol,      &
                              cell_constraint_flag, cell_stress_tol
     use group_module,  only: parts
     use minimise,      only: get_E_and_F
@@ -2177,7 +2162,7 @@ end subroutine write_md_data
     use global_module, only: iprint_gen, ni_in_cell, x_atom_cell,  &
                              y_atom_cell, z_atom_cell, id_glob,    &
                              atom_coord, area_general, iprint_MD,  &
-                             IPRINT_TIME_THRES1, flag_MDold,       &
+                             IPRINT_TIME_THRES1,                   &
                              cell_en_tol, cell_stress_tol,         &
                              rcellx, rcelly, rcellz
     use group_module,  only: parts
@@ -2326,15 +2311,8 @@ end subroutine write_md_data
         end do
         old_force = tot_force
         ! Minimise in this direction
-        !ORI call safemin(x_new_pos, y_new_pos, z_new_pos, cg, energy0, &
-        !ORI              energy1, fixed_potential, vary_mu, energy1)
-        if (.NOT. flag_MDold) then
           call safemin2(x_new_pos, y_new_pos, z_new_pos, cg, energy0, &
                         energy1, fixed_potential, vary_mu, energy1)
-        else
-          call safemin(x_new_pos, y_new_pos, z_new_pos, cg, energy0, &
-                       energy1, fixed_potential, vary_mu, energy1)
-        end if
         ! Output positions
         if (inode==ionode .and. iprint_gen > 1) then
           write(io_lun,'(4x,a4,a15)') "Atom", "Position"
@@ -2563,7 +2541,7 @@ end subroutine write_md_data
                              y_atom_cell, z_atom_cell, id_glob,    &
                              atom_coord, rcellx, rcelly, rcellz,   &
                              area_general, iprint_MD,              &
-                             IPRINT_TIME_THRES1, flag_MDold,       &
+                             IPRINT_TIME_THRES1,                   &
                              cell_stress_tol
     use group_module,  only: parts
     use minimise,      only: get_E_and_F

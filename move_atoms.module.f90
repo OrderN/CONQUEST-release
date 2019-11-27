@@ -57,6 +57,8 @@
 !!    minimising a single vector
 !!   2019/05/21 zamaan
 !!    Removed old RNG, replaced calls with new one from rng module
+!!   2019/11/18 tsuyoshi
+!!    Removed the places related to flag_MDold 
 !!  SOURCE
 !!
 module move_atoms
@@ -221,7 +223,7 @@ contains
     use global_module,  only: iprint_MD, x_atom_cell, y_atom_cell, &
                               z_atom_cell, ni_in_cell, id_glob,    &
                               flag_reset_dens_on_atom_move,        &
-                              flag_move_atom, flag_MDold
+                              flag_move_atom
     use species_module, only: species, mass
     use GenComms,       only: myid
 
@@ -319,19 +321,11 @@ contains
        end if
     end do
 
-    ! NOTE: By default, updateIndices3 is called for member updates.
-    !       You can switch to the conventional (old) way of member updates
-    !       but not recommended. See dimens.module as well. [2013/07/03 michi]
-    if (.NOT. flag_MDold) then
-      ! IMPORTANT: You MUST wrap atoms BEFORE updating members if they get out of the cell.
-      !            Otherwise, you will get an error message at BtoG-transformation.
+    ! IMPORTANT: You MUST wrap atoms BEFORE updating members if they get out of the cell.
+    !            Otherwise, you will get an error message at BtoG-transformation.
       call wrap_xyz_atom_cell
       call update_atom_coord
       call updateIndices3(fixed_potential,velocity)
-    else
-      call update_atom_coord
-      call updateIndices(.true., fixed_potential)
-    endif
 
     ! DRB 2016/01/13
     ! This line removed because this call is done in update_H
@@ -793,8 +787,7 @@ contains
          rcellz, flag_self_consistent,           &
          flag_reset_dens_on_atom_move,           &
          IPRINT_TIME_THRES1, flag_pcc_global,    &
-         id_glob,flag_MDold,     &
-         n_proc_old, glob2node_old,              &
+         id_glob,                                &
          flag_LmatrixReuse, flag_diagonalisation, nspin, &
          flag_SFcoeffReuse 
     use minimise,       only: get_E_and_F, sc_tolerance, L_tolerance, &
@@ -812,7 +805,6 @@ contains
     use timer_module
     use dimens, ONLY: r_super_x, r_super_y, r_super_z
     use store_matrix, ONLY: dump_pos_and_matrices
-    use UpdateInfo_module, ONLY: Matrix_CommRebuild
     use multisiteSF_module, only: flag_LFD_minimise
     !use DiagModule, ONLY: diagon
     !for Debugging
@@ -906,24 +898,19 @@ contains
           z_atom_cell(i) = start_z(i) + k3 * direction(3,i)
        end do
 
-       if (.NOT. flag_MDold) then
-          if (ionode.EQ.inode) write (io_lun,*) "CG: 1st stage, call updateIndices3"
-          if(flag_SFcoeffReuse) then
-             call update_pos_and_matrices(updateSFcoeff,direction)
-             !CHECK READING K_MATRIX AND SFCOEFF   2017/12/04
-             !    call dump_matrix("SFcoeff_after_",  matSFcoeff(1), inode)
-             !    call matrix_sum(-one, matSFcoeff(1), one, mat_SFcoeff_old)
-             !    call dump_matrix("SFcoeff_diff",    matSFcoeff(1), inode)
-             !    call matrix_sum(-one, mat_K_old, one, matK(1))
-             !    call dump_matrix("K_diff",  mat_K_old, inode)
-             !    call matrix_sum(zero, matSFcoeff(1), one, mat_SFcoeff_old)
-             !CHECK READING K_MATRIX AND SFCOEFF   2017/12/04
-          else
-             call update_pos_and_matrices(updateLorK,direction)
-          endif
+       if (ionode.EQ.inode) write (io_lun,*) "CG: 1st stage, call updateIndices3"
+       if(flag_SFcoeffReuse) then
+          call update_pos_and_matrices(updateSFcoeff,direction)
+          !CHECK READING K_MATRIX AND SFCOEFF   2017/12/04
+          !    call dump_matrix("SFcoeff_after_",  matSFcoeff(1), inode)
+          !    call matrix_sum(-one, matSFcoeff(1), one, mat_SFcoeff_old)
+          !    call dump_matrix("SFcoeff_diff",    matSFcoeff(1), inode)
+          !    call matrix_sum(-one, mat_K_old, one, matK(1))
+          !    call dump_matrix("K_diff",  mat_K_old, inode)
+          !    call matrix_sum(zero, matSFcoeff(1), one, mat_SFcoeff_old)
+          !CHECK READING K_MATRIX AND SFCOEFF   2017/12/04
        else
-          write (io_lun,*) "CG: 1st stage with old CQ."
-          call updateIndices(.true., fixed_potential)
+          call update_pos_and_matrices(updateLorK,direction)
        endif
        if (inode == ionode .and. iprint_MD > 2) then
           do i=1,ni_in_cell
@@ -1032,20 +1019,14 @@ contains
        y_atom_cell(i) = start_y(i) + kmin*direction(2,i)
        z_atom_cell(i) = start_z(i) + kmin*direction(3,i)
     end do
-    !!if (.NOT. flag_MDold) call wrap_xyz_atom_cell
     ! Get atomic displacements: atom_coord_diff(1:3, ni_in_cell)
     k3_local = kmin - k3
 
-    if (.NOT. flag_MDold) then
-       if(inode==ionode.AND.iprint_MD>0) write (io_lun,*) "CG: 2nd stage"
-       if(flag_SFcoeffReuse) then
-          call update_pos_and_matrices(updateSFcoeff,direction)
-       else
-          call update_pos_and_matrices(updateLorK,direction)
-       endif
+    if(inode==ionode.AND.iprint_MD>0) write (io_lun,*) "CG: 2nd stage"
+    if(flag_SFcoeffReuse) then
+       call update_pos_and_matrices(updateSFcoeff,direction)
     else
-       call update_atom_coord
-       call updateIndices(.true., fixed_potential)
+       call update_pos_and_matrices(updateLorK,direction)
     endif
     if (inode == ionode .and. iprint_MD > 2) then
        do i=1,ni_in_cell
@@ -1161,21 +1142,15 @@ contains
           y_atom_cell(i) = start_y(i) + kmin*direction(2,i)
           z_atom_cell(i) = start_z(i) + kmin*direction(3,i)
        end do
-       !if (.NOT. flag_MDold) call wrap_xyz_atom_cell
        ! Get atomic displacements: atom_coord_diff(1:3, ni_in_cell)
        k3_local = kmin-kmin_old!03/07/2013
        !if (inode.EQ.ionode) write (io_lun,'(a,1x,3f15.10)') "k3, kmin,k3_local:", k3,kmin,k3_local
 
-       if (.NOT. flag_MDold) then
-          write (io_lun,*) "CG: 3rd stage"
-          if(flag_SFcoeffReuse) then
-             call update_pos_and_matrices(updateSFcoeff,direction)
-          else
-             call update_pos_and_matrices(updateLorK,direction)
-          endif
+       write (io_lun,*) "CG: 3rd stage"
+       if(flag_SFcoeffReuse) then
+          call update_pos_and_matrices(updateSFcoeff,direction)
        else
-          call update_atom_coord
-          call updateIndices(.true., fixed_potential)
+          call update_pos_and_matrices(updateLorK,direction)
        endif
        if (inode == ionode .and. iprint_MD > 2) then
           do i=1,ni_in_cell
@@ -1287,7 +1262,7 @@ contains
                                   flag_reset_dens_on_atom_move,           &
                                   IPRINT_TIME_THRES1, flag_pcc_global, &
                                   flag_diagonalisation, cell_constraint_flag, &
-                                  flag_SFcoeffReuse, flag_MDold
+                                  flag_SFcoeffReuse
     use minimise,           only: get_E_and_F, sc_tolerance, L_tolerance, &
                                   n_L_iterations
     use GenComms,           only: my_barrier, myid, inode, ionode, cq_abort, &
@@ -1374,15 +1349,10 @@ contains
             start_rcellz, search_dir_x, search_dir_y, search_dir_z,&
             k3, iter, search_dir_mean)
 
-       if(.NOT.flag_MDold) then
-          if(flag_SFcoeffReuse) then
-             call update_pos_and_matrices(updateSFcoeff,direction)
-          else
-             call update_pos_and_matrices(updateLorK,direction)
-          endif
+       if(flag_SFcoeffReuse) then
+          call update_pos_and_matrices(updateSFcoeff,direction)
        else
-          call update_atom_coord
-          call updateIndices(.true., fixed_potential)
+          call update_pos_and_matrices(updateLorK,direction)
        endif
        call update_H(fixed_potential)
 
@@ -1458,15 +1428,10 @@ contains
     call update_cell_dims(start_rcellx, start_rcelly, &
          start_rcellz, search_dir_x, search_dir_y, search_dir_z,&
          kmin, iter, search_dir_mean)
-    if(.NOT.flag_MDold) then
-       if(flag_SFcoeffReuse) then
-          call update_pos_and_matrices(updateSFcoeff,direction)
-       else
-          call update_pos_and_matrices(updateLorK,direction)
-       endif
+    if(flag_SFcoeffReuse) then
+       call update_pos_and_matrices(updateSFcoeff,direction)
     else
-       call update_atom_coord
-       call updateIndices(.true., fixed_potential)
+       call update_pos_and_matrices(updateLorK,direction)
     endif
     call update_H(fixed_potential)
 
@@ -1517,15 +1482,10 @@ contains
        call update_cell_dims(start_rcellx, start_rcelly, &
             start_rcellz, search_dir_x, search_dir_y, search_dir_z,&
             kmin, iter, search_dir_mean)
-       if(.NOT.flag_MDold) then
-          if(flag_SFcoeffReuse) then
-             call update_pos_and_matrices(updateSFcoeff,direction)
-          else
-             call update_pos_and_matrices(updateLorK,direction)
-          endif
+       if(flag_SFcoeffReuse) then
+          call update_pos_and_matrices(updateSFcoeff,direction)
        else
-          call update_atom_coord
-          call updateIndices(.true., fixed_potential)
+          call update_pos_and_matrices(updateLorK,direction)
        endif
 
        call update_H(fixed_potential)
@@ -1612,7 +1572,6 @@ contains
     use density_module, only: set_density_pcc
     use timer_module
     use store_matrix, ONLY: dump_pos_and_matrices
-    use UpdateInfo_module, ONLY: Matrix_CommRebuild
     use multisiteSF_module, only: flag_LFD_minimise
 
     implicit none
@@ -2412,58 +2371,48 @@ contains
   !!   2017/02/23 dave
   !!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
   !!   2018/07/11 12:08 dave
-  !!    Added routines to redistribute atoms to partitions and partitions to processes if an empty bundle is found
+  !!    Added routines to redistribute atoms to partitions and partitions to
+  !!    processes if an empty bundle is found
+  !!   2019/11/18 14:37 dave
+  !!    Updates to rebuild covering sets if cell varies during run
   !! SOURCE
   !!
-  !OLD subroutine updateIndices3(fixed_potential,velocity,step,iteration)
   subroutine updateIndices3(fixed_potential,velocity)
 
     ! Module usage
     use datatypes
-    use global_module, ONLY: flag_basis_set,flag_Becke_weights,flag_dft_d2,blips, &
+    use global_module, ONLY: flag_Becke_weights,flag_dft_d2, flag_variable_cell, id_glob, &
                              ni_in_cell,x_atom_cell,y_atom_cell,z_atom_cell,      &
-                             IPRINT_TIME_THRES2,glob2node,flag_LmatrixReuse,      &
+                             IPRINT_TIME_THRES2,glob2node, io_lun,     &
                              flag_XLBOMD, flag_diagonalisation, flag_neutral_atom, &
                              numprocs, atom_coord, species_glob, iprint_MD
     use GenComms, ONLY: inode,ionode,my_barrier,myid,gcopy, cq_abort
     use group_module, ONLY: parts
     use primary_module, ONLY: bundle
-    use cover_module, ONLY: BCS_parts,DCS_parts,ion_ion_CS
-    use mult_module,            ONLY: fmmi,immi,matL,L_trans
+    use cover_module, ONLY: BCS_parts, DCS_parts, ion_ion_CS, D2_CS, BCS_blocks, &
+         make_cs,make_iprim,send_ncover, deallocate_cs
+    use mult_module,            ONLY: fmmi,immi
     use set_blipgrid_module, ONLY: set_blipgrid
     use set_bucket_module, ONLY: set_bucket
     use dimens, ONLY: RadiusAtomf
     use pseudopotential_common, ONLY: core_radius
     use functions_on_grid, ONLy: associate_fn_on_grid
     use density_module, ONLY: build_Becke_weights
-    use UpdateMember_module, ONLY: updateMembers
+    use UpdateMember_module, ONLY: updateMembers_group, updateMembers_cs
     use atoms, ONLY: distribute_atoms,deallocate_distribute_atom
     use timer_module
     use numbers
-    !use DiagModule, ONLY: diagon
     use io_module, ONLY: append_coords,write_atomic_positions,pdb_template
-    use matrix_data, ONLY: Lrange
-    use UpdateInfo_module, ONLY: make_glob2node,Matrix_CommRebuild
+    use UpdateInfo, ONLY: make_glob2node
     use XLBOMD_module, ONLY: immi_XL,fmmi_XL
-
-    ! DB
-    use global_module, ONLY: io_lun
-    ! Check if updating PS and CS are correct
-    use global_module,       ONLY: id_glob, id_glob_inv_old
-    use UpdateMember_module, ONLY: deallocate_PSmember,allocate_PSmember, &
-                                   deallocate_CSmember
     use group_module,   ONLY: blocks, deallocate_group_set, make_cc2
     use primary_module, ONLY: deallocate_primary_set, bundle, make_prim, domain
     use construct_module, ONLY: init_primary
-    use cover_module,   ONLY: make_cs,make_iprim,send_ncover, deallocate_cs
-    use cover_module, ONLY: BCS_parts,DCS_parts,ion_ion_CS,D2_CS
-    use cover_module, only: BCS_blocks
     use sfc_partitions_module, ONLY: sfc_partitions_to_processors
     use ion_electrostatic, ONLY: ewald_real_cutoff, ion_ion_cutoff
     use species_module, ONLY: species
     use matrix_data,    ONLY: rcut,max_range
     use dimens,         ONLY: r_core_squared,r_h, r_dft_d2
-    ! Check if updating PS and CS are correct
     use DiagModule, only: end_scalapack_format, init_scalapack_format
     use maxima_module, ONLY: maxpartsproc, maxatomsproc, maxatomspart
 
@@ -2482,27 +2431,24 @@ contains
 
 
     call start_timer(tmr_l_tmp1,WITH_LEVEL)
-
-    ! [NOTE:] In md, velocity is exactly velocity, but when running cg,
-    !         velocity corresponds to 'search direction'
-    call updateMembers(fixed_potential,velocity, flag_empty_bundle)
-
-    call my_barrier()
-    !if (inode.EQ.ionode) write (io_lun,*) "Complete distribute_atoms()"
-
+    ! Update members in bundle and check for empty bundle
+    call updateMembers_group(velocity, flag_empty_bundle)
+    if(flag_empty_bundle.and.flag_stop_on_empty_bundle) &
+       call cq_abort("Empty bundle detected: user set stop_on_empty_bundle, so stopping...")
+    ! Update CS member locations
+    !if( (.NOT.(flag_variable_cell)) .AND. (.NOT.flag_empty_bundle)) &
+    !     call updateMembers_cs(velocity)
+    ! Start updates
     call start_timer(tmr_l_tmp2,WITH_LEVEL)
     if(flag_diagonalisation) call end_scalapack_format
-    ! Deallocate all matrix storage
     ! finish blip-grid indexing
     call finish_blipgrid
     ! finish matrix multiplication indexing
     if (flag_XLBOMD) call fmmi_XL()
     call fmmi(bundle)
-    ! Now we need to redistribute
-    if(flag_empty_bundle.and.flag_stop_on_empty_bundle) then
-       call cq_abort("Empty bundle detected: user set stop_on_empty_bundle, so stopping...")
-    else if(flag_empty_bundle) then
-       if(inode==ionode) write(io_lun,fmt='(2x,"Empty bundle detected: redistributing atoms between processes")')
+    ! Now we need to redistribute; if the cell is changing or one process
+    ! has no atoms then we must rebuild the covering sets
+    if(flag_empty_bundle.OR.flag_variable_cell) then
        ! Deallocate parts and covering sets
        call deallocate_cs(BCS_parts,.true.)
        call deallocate_cs(DCS_parts,.true.)
@@ -2510,56 +2456,51 @@ contains
        call deallocate_cs(ion_ion_CS,.true.)
        if(flag_dft_d2) call deallocate_cs(D2_CS,.true.)
        call deallocate_distribute_atom
-       call deallocate_primary_set(bundle)
-       call deallocate_group_set(parts)
-       ! Call Hilbert curve
-       call sfc_partitions_to_processors(parts)
-       ! inverse table to npnode
-       do np=1,parts%ngcellx*parts%ngcelly*parts%ngcellz
-          parts%inv_ngnode(parts%ngnode(np))=np
-       end do
-       call make_cc2(parts,numprocs)
-       ! NB  velocity update is done in update_pos_and_matrices
-       do ni = 1, ni_in_cell
-          id_global= id_glob(ni)
-          x_atom_cell(ni) = atom_coord(1,id_global)
-          y_atom_cell(ni) = atom_coord(2,id_global)
-          z_atom_cell(ni) = atom_coord(3,id_global)
-          species(ni)     = species_glob(id_global)
-       end do
-       ! Covering sets are made in setgrid
-       ! Create primary set for atoms: bundle of partitions
-       call init_primary(bundle, maxatomsproc, maxpartsproc, .true.)
-       call make_prim(parts, bundle, inode-1, id_glob, x_atom_cell, &
-            y_atom_cell, z_atom_cell, species)
+       ! If one process has no atoms then we have to redistribute the
+       ! overall workload; in the longer term, we could trigger this
+       ! if the load balancing becomes poor
+       if(flag_empty_bundle) then
+          if(inode==ionode) &
+               write(io_lun,fmt='(2x,"Empty bundle detected: redistributing atoms between processes")')
+          call deallocate_primary_set(bundle)
+          call deallocate_group_set(parts)
+          ! Call Hilbert curve
+          call sfc_partitions_to_processors(parts)
+          ! inverse table to npnode
+          do np=1,parts%ngcellx*parts%ngcelly*parts%ngcellz
+             parts%inv_ngnode(parts%ngnode(np))=np
+          end do
+          call make_cc2(parts,numprocs)
+          ! NB  velocity update is done in update_pos_and_matrices
+          do ni = 1, ni_in_cell
+             id_global= id_glob(ni)
+             x_atom_cell(ni) = atom_coord(1,id_global)
+             y_atom_cell(ni) = atom_coord(2,id_global)
+             z_atom_cell(ni) = atom_coord(3,id_global)
+             species(ni)     = species_glob(id_global)
+          end do
+          ! Covering sets are made in setgrid
+          ! Create primary set for atoms: bundle of partitions
+          call init_primary(bundle, maxatomsproc, maxpartsproc, .true.)
+          call make_prim(parts, bundle, inode-1, id_glob, x_atom_cell, &
+               y_atom_cell, z_atom_cell, species)
+       end if
        ! Sorts out which processor owns which atoms
        call distribute_atoms(inode, ionode)
-       call my_barrier
        call make_cs(inode-1, rcut(max_range), BCS_parts, parts, bundle, &
             ni_in_cell, x_atom_cell, y_atom_cell, z_atom_cell)
-       call my_barrier
        call make_iprim(BCS_parts, bundle, inode-1)
        call send_ncover(BCS_parts, inode)
        call my_barrier
-       ! Write out new coordinates
-       append_coords_bkup = append_coords
-       append_coords = .false.
-       call write_atomic_positions('coord_next.dat',trim(pdb_template))
-       append_coords = append_coords_bkup
        ! Reallocate and find new indices
        call immi(parts,bundle,BCS_parts,myid+1)
        if (flag_XLBOMD) call immi_XL(parts,bundle,BCS_parts,myid+1)
-       call my_barrier()
        rcut_max = max(sqrt(r_core_squared),r_h) + very_small
        call make_cs(myid,rcut_max, DCS_parts , parts , domain, &
             ni_in_cell, x_atom_cell, y_atom_cell, z_atom_cell)
        call make_cs(myid,rcut_max, BCS_blocks, blocks, bundle)
-       call my_barrier
        call send_ncover(DCS_parts, myid + 1)
-       call my_barrier
        call send_ncover(BCS_blocks, myid + 1)
-       call my_barrier
-       
        ! Initialise the routines to calculate ion-ion interactions
        if(flag_neutral_atom) then
           call make_cs(inode-1,ion_ion_cutoff,ion_ion_CS,parts,bundle,&
@@ -2571,39 +2512,22 @@ contains
        if (flag_dft_d2) call make_cs(inode-1, r_dft_d2, D2_CS, parts, bundle, ni_in_cell, &
                x_atom_cell, y_atom_cell, z_atom_cell)
     else
-       ! Write out new coordinates
-       append_coords_bkup = append_coords
-       append_coords = .false.
-       call write_atomic_positions('coord_next.dat',trim(pdb_template))
-       append_coords = append_coords_bkup
-       ! Reallocate and find new indices
+       call updateMembers_cs(velocity)
        call deallocate_distribute_atom
+       ! Reallocate and find new indices
        call distribute_atoms(inode,ionode)
        call immi(parts,bundle,BCS_parts,myid+1)
        if (flag_XLBOMD) call immi_XL(parts,bundle,BCS_parts,myid+1)
-       call my_barrier()
     end if
-
-    !% NOTE: The author (michi) thinks L-matrix reconstruction, its preparation
-    !%       and hamiltonian update should be called outside updateIndices3.
-    !%  --> Calls for L-matrix reconstruction & update_H deleted from r171
+    ! Write out new coordinates
+    append_coords_bkup = append_coords
+    append_coords = .false.
+    call write_atomic_positions('coord_next.dat',trim(pdb_template))
+    append_coords = append_coords_bkup
 
     ! Update glob2node
     if (inode.EQ.ionode) call make_glob2node
     call gcopy(glob2node,ni_in_cell)
-!%  The following routines are called outside updateIndices3 [02/12/2013]
-!%    ! L-matrix reconstruction
-!%    if (.NOT. diagon .AND. flag_LmatrixReuse) then
-!%      call grab_matrix2('L',inode,nfile,InfoL)
-!%      call my_barrier()
-!%      call Matrix_CommRebuild(InfoL,Lrange,L_trans,matL(1),nfile,symm)
-!%    endif
-!%    call my_barrier()
-
-    ! Only when using blips
-    !if (flag_basis_set.EQ.blips) then
-    !
-    !endif
     ! Reallocate for blip grid
     call set_blipgrid(myid, RadiusAtomf, core_radius)
     call set_bucket(inode-1)
@@ -2611,10 +2535,6 @@ contains
     if(flag_diagonalisation) call init_scalapack_format
     call stop_print_timer(tmr_l_tmp2,"matrix reindexing",IPRINT_TIME_THRES2)
     if (flag_Becke_weights) call build_Becke_weights
-!%  update_H is called outside updateIndices3 [02/12/2013]
-!%    ! Rebuild S, n(r) and hamiltonian based on new positions
-!%    call update_H(fixed_potential)
-
     call stop_print_timer(tmr_l_tmp1,"indices update",IPRINT_TIME_THRES2)
 
     return
@@ -2709,7 +2629,7 @@ contains
     use global_module,          only: iprint_MD, flag_self_consistent, &
                                       IPRINT_TIME_THRES2,              &
                                       flag_pcc_global, flag_dft_d2,    &
-                                      nspin, flag_MDold, io_lun,       &
+                                      nspin, io_lun,                   &
                                       flag_mix_L_SC_min, flag_XLBOMD,  &
                                       flag_reset_dens_on_atom_move,    &
                                       flag_LmatrixReuse,               &
@@ -2803,7 +2723,7 @@ contains
         (.NOT. flag_mix_L_SC_min)).OR.flag_reset_dens_on_atom_move) then
         call set_atomic_density(.true.)
     ! For SCF-O(N) calculations
-    elseif (.NOT.flag_diagonalisation .AND. .NOT.flag_MDold) then
+    elseif (.NOT.flag_diagonalisation) then
        if (flag_self_consistent .OR. flag_mix_L_SC_min) then
           if(flag_neutral_atom .and. .not.flag_LFD_MD_UseAtomicDensity) call set_atomic_density(.false.)
           if(flag_LmatrixReuse) then
@@ -2838,7 +2758,7 @@ contains
        call cq_abort("update_H: Can't run non-self-consistent without PAOs !")
     end if
     ! If we have read K and are predicting density from it, then rebuild
-    if(flag_diagonalisation.AND.flag_LmatrixReuse.AND.(.NOT.flag_MDold)) then
+    if(flag_diagonalisation.AND.flag_LmatrixReuse) then
        call get_electronic_density(density,electrons,atomfns,H_on_atomfns(1), &
             inode,ionode,maxngrid)
        do spin=1,nspin
@@ -3998,6 +3918,8 @@ contains
   !!  MODIFICATION
   !!   2018/Sep/07  tsuyoshi
   !!       added calling ReportUpdateMatrix when flag_debug_move_atoms is true.
+  !!   2019/Nov/14  tsuyoshi
+  !!       removed glob2node_old, n_proc_old
   !!
   !!  SOURCE
   !!
@@ -4006,14 +3928,14 @@ contains
   use numbers,         only: half, zero, one, very_small
   use global_module,   only: flag_diagonalisation, atom_coord, atom_coord_diff, &
                              rcellx, rcelly, rcellz, ni_in_cell, nspin, nspin_SF, id_glob
-    ! n_proc_old and glob2node_old should be removed soon...
-    use global_module, only: n_proc_old, glob2node_old
+    ! n_proc_old and glob2node_old have been removed
   use GenComms,        only: my_barrier, inode, ionode, cq_abort, gcopy
   use mult_module,     only: matL, L_trans, matK, matS, S_trans, matSFcoeff, SFcoeff_trans, &
                              matrix_scale, matrix_transpose, matSFcoeff_tran
   use matrix_data,     only: Lrange, Hrange, Srange, SFcoeff_range
-  use store_matrix,    only: matrix_store_global, InfoMatrixFile, grab_InfoMatGlobal, grab_matrix2
-  use UpdateInfo_module, only: Matrix_CommRebuild, Report_UpdateMatrix
+  use store_matrix,    only: matrix_store_global, InfoMatrixFile, grab_InfoMatGlobal, grab_matrix2, &
+                             set_atom_coord_diff
+  use UpdateInfo, only: Matrix_CommRebuild, Report_UpdateMatrix
 
   implicit none
   integer, intent(in) :: update_method
@@ -4031,13 +3953,15 @@ contains
  !InfoGlob and Info can be defined locally.
  ! for extrapolation, we need to prepare multiple InfoGlob and Info.
   type(matrix_store_global) :: InfoGlob
-  type(InfoMatrixFile),pointer :: Info(:)
-
- !Switch on Debugging
- !  flag_debug_move_atoms = .true.
+  type(InfoMatrixFile),pointer :: InfoMat(:)
 
   real(double), dimension(3,ni_in_cell) :: velocity_global
   integer :: i
+  ! temporary for matT(nspin_SF)
+  integer :: matS_tmp(1)
+
+ !Switch on Debugging
+ !  flag_debug_move_atoms = .true.
 
  !!! Note: for developers  !!!
  !  if you want to update some new matrix, you should
@@ -4097,35 +4021,7 @@ contains
   ! Then, we use InfoGlob read from the file or use InfoGlob as it is (in the case of 2))
   !       Now, we just assume 1).
      call grab_InfoMatGlobal(InfoGlob,index=0)
-       n_proc_old = InfoGlob%numprocs
-       glob2node_old(:) = InfoGlob%glob_to_node(:)
-
-      scale_x = rcellx/InfoGlob%rcellx; scale_y = rcelly/InfoGlob%rcelly; scale_z = rcellz/InfoGlob%rcellz
-       rms_change = (scale_x - one)**2 + (scale_y - one)**2 + (scale_z - one)**2 
-       rms_change = sqrt(rms_change)
-      if(rms_change > small_change .and. inode == ionode) &
-        write(io_lun,fmt='(4x,a,3f20.10)') 'WARNING!! Big change of the cell', scale_x, scale_y,scale_z
-
-      if(rms_change < very_small) then
-       do ig = 1, ni_in_cell
-          atom_coord_diff(1:3,ig) = atom_coord(1:3,ig) - InfoGlob%atom_coord(1:3,ig)
-       enddo
-      else
-       do ig = 1, ni_in_cell
-          atom_coord_diff(1,ig) = atom_coord(1,ig) - InfoGlob%atom_coord(1,ig)*scale_x
-          atom_coord_diff(2,ig) = atom_coord(2,ig) - InfoGlob%atom_coord(2,ig)*scale_y
-          atom_coord_diff(3,ig) = atom_coord(3,ig) - InfoGlob%atom_coord(3,ig)*scale_z
-       enddo
-      endif
-
-      do ig = 1, ni_in_cell
-          if((atom_coord_diff(1,ig)) > half*rcellx) atom_coord_diff(1,ig)=atom_coord_diff(1,ig)-rcellx
-          if((atom_coord_diff(1,ig)) < -half*rcellx) atom_coord_diff(1,ig)=atom_coord_diff(1,ig)+rcellx
-          if((atom_coord_diff(2,ig)) > half*rcelly) atom_coord_diff(2,ig)=atom_coord_diff(2,ig)-rcelly
-          if((atom_coord_diff(2,ig)) < -half*rcelly) atom_coord_diff(2,ig)=atom_coord_diff(2,ig)+rcelly
-          if((atom_coord_diff(3,ig)) > half*rcellz) atom_coord_diff(3,ig)=atom_coord_diff(3,ig)-rcellz
-          if((atom_coord_diff(3,ig)) < -half*rcellz) atom_coord_diff(3,ig)=atom_coord_diff(3,ig)+rcellz
-      enddo
+     call set_atom_coord_diff(InfoGlob)
 
   ! Since the order of the atoms in x,y,z_atom_cell and velocity (or direction in CG) changes 
   ! depending on their partitions, they are rearranged in updateIndices3.
@@ -4147,44 +4043,29 @@ contains
  ! Then, matrices will be read from the corresponding files
  !
   if(flag_L) then
-     call grab_matrix2('L',inode,nfile,Info)
+     call grab_matrix2('L',inode,nfile,InfoMat,InfoGlob,index=0,n_matrix=nspin)
      call my_barrier()
-     call Matrix_CommRebuild(Info,Lrange,L_trans,matL(1),nfile,symm)
+     call Matrix_CommRebuild(InfoGlob,InfoMat,Lrange,L_trans,matL,nfile,symm,n_matrix=nspin)
       if(flag_debug_move_atoms) call Report_UpdateMatrix("Lmat")
-     ! DRB 2017/05/09 now extended to spin systems
-     if(nspin==2) then
-       call grab_matrix2('L2',inode,nfile,Info)
-       call my_barrier()
-       call Matrix_CommRebuild(Info,Lrange,L_trans,matL(2),nfile,symm)
-        if(flag_debug_move_atoms) call Report_UpdateMatrix("L2  ")
-     end if
   endif
 
   if(flag_K) then
-     call grab_matrix2('K',inode,nfile,Info)
+     call grab_matrix2('K',inode,nfile,InfoMat,InfoGlob,index=0,n_matrix=nspin)
      call my_barrier()
-     call Matrix_CommRebuild(Info,Hrange,H_trans,matK(1),nfile)
+     call Matrix_CommRebuild(InfoGlob,InfoMat,Hrange,H_trans,matK,nfile,n_matrix=nspin)
       if(flag_debug_move_atoms) call Report_UpdateMatrix("Kmat")
-     if(nspin==2) then
-       call grab_matrix2('K2',inode,nfile,Info)
-       call my_barrier()
-       call Matrix_CommRebuild(Info,Hrange,H_trans,matK(2),nfile)
-        if(flag_debug_move_atoms) call Report_UpdateMatrix("K2  ")
-     end if
   endif
 
   if(flag_S) then
-     call grab_matrix2('S',inode,nfile,Info)
+    ! If we introduce spin-dependent support, matS -> matS(nspin_SF)
+       matS_tmp(1)=matS  ! temporary 
+
+     call grab_matrix2('S',inode,nfile,InfoMat,InfoGlob,index=0,n_matrix=1)
+     !call grab_matrix2('S',inode,nfile,InfoMat,InfoGlob,index=0,n_matrix=nspin_SF)
      call my_barrier()
-     call Matrix_CommRebuild(Info,Srange,S_trans,matS,nfile)
+     call Matrix_CommRebuild(InfoGlob,InfoMat,Srange,S_trans,matS_tmp,nfile,symm,n_matrix=1)
+     !call Matrix_CommRebuild(InfoGlob,InfoMat,Srange,S_trans,matS_tmp,nfile,symm,n_matrix=nspin_SF)
       if(flag_debug_move_atoms) call Report_UpdateMatrix("Smat")
-     ! If we introduce spin-dependent support ...
-     !if(nspin==2) then
-     !  call grab_matrix2('S2',inode,nfile,Info)
-     !  call my_barrier()
-     !  call Matrix_CommRebuild(Info,Srange,S_trans,matS(2),nfile,symm)
-     !   if(flag_debug_move_atoms) call Report_UpdateMatrix("S2  ")
-     !end if
   endif
 
   if(flag_SFcoeff) then
@@ -4192,16 +4073,10 @@ contains
       call matrix_scale(zero,matSFcoeff(spin_SF))
      enddo !spin_SF = 1,nspin_SF
 
-     call grab_matrix2('SFcoeff',inode,nfile,Info)
+     call grab_matrix2('SFcoeff',inode,nfile,InfoMat,InfoGlob,index=0,n_matrix=nspin_SF)
      call my_barrier()
-     call Matrix_CommRebuild(Info,SFcoeff_range,SFcoeff_trans,matSFcoeff(1),nfile)
+     call Matrix_CommRebuild(InfoGlob,InfoMat,SFcoeff_range,SFcoeff_trans,matSFcoeff,nfile,n_matrix=nspin_SF)
       if(flag_debug_move_atoms) call Report_UpdateMatrix("SFc1")
-     if(nspin_SF==2) then
-      call grab_matrix2('SFcoeff2',inode,nfile,Info)
-      call my_barrier()
-      call Matrix_CommRebuild(Info,SFcoeff_range,SFcoeff_trans,matSFcoeff(2),nfile)
-       if(flag_debug_move_atoms) call Report_UpdateMatrix("SFc2")
-     end if
 
      do spin_SF = 1,nspin_SF
       call matrix_scale(zero,matSFcoeff_tran(spin_SF))
@@ -4216,7 +4091,7 @@ contains
  end subroutine update_pos_and_matrices
  !!***
 
-   !!****f* control/propagate_vector *
+  !!****f* control/propagate_vector *
   !!
   !!  NAME
   !!   propagate_vector

@@ -160,6 +160,8 @@ contains
 !!    Adding NA projector ranges
 !!   2018/05/15 12:21 dave
 !!    Bug fix: mataNA range was wrong with MSSF (didn't correctly use atom function ranges)
+!!   2019/11/18 tsuyoshi
+!!    flag_MDold was removed.
 !!  SOURCE
 !!
   subroutine set_dimensions(inode, ionode,HNL_fac,non_local, n_species, non_local_species, core_radius)
@@ -169,7 +171,7 @@ contains
     use matrix_data
     use GenComms,      only: cq_abort
     use global_module, only: iprint_init,flag_basis_set,blips,runtype, atomf, sf, flag_Multisite
-    use global_module, only: flag_dft_d2,flag_MDold, flag_exx, flag_diagonalisation
+    use global_module, only: flag_dft_d2, flag_exx, flag_diagonalisation
     use block_module,  only: in_block_x, in_block_y, in_block_z, & 
                              n_pts_in_block, n_blocks
 
@@ -284,27 +286,6 @@ contains
             write(io_lun,fmt='(8x,"WARNING ! S range greater than L !")')
        !r_s = r_c
        !r_h = r_c 
-    endif
-    ! NOTE: The following trick is not used in the default setting any longer.
-    ! ORI if(.NOT.leqi(runtype,'static')) then
-    if(.NOT.leqi(runtype,'static') .AND. flag_MDold) then
-      if(flag_buffer_old) then
-         r_s = 1.1_double * r_s
-         r_c = 1.1_double * r_c
-         r_h = 1.1_double * r_h
-         r_core = 1.1_double * r_core
-         if (flag_dft_d2) r_dft_d2 = 1.1_double * r_dft_d2 ! for DFT-D2
-         r_s_atomf = 1.1_double * r_s_atomf
-         r_h_atomf = 1.1_double * r_h_atomf
-      else
-         r_s = AtomMove_buffer +  r_s
-         r_c = AtomMove_buffer +  r_c
-         r_h = AtomMove_buffer +  r_h
-         r_core = AtomMove_buffer +  r_core
-         if (flag_dft_d2) r_dft_d2 = AtomMove_buffer + r_dft_d2 ! for DFT-D2
-         r_s_atomf = AtomMove_buffer +  r_s_atomf
-         r_h_atomf = AtomMove_buffer +  r_h_atomf
-      end if
     endif
     ! Set ranges for contracted SFs
     if (flag_Multisite) then

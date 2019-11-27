@@ -19,25 +19,32 @@
   !!     io_module2 -> store_matrix
   !!     InfoX, InfoX1, ...., INfoXvel are defined in this module
   !!     InfoS is defined locally (in each subroutine).
+  !!   2019/11/8  Tsuyoshi
+  !!     grab_XXvelS, grab_Xhistories, dump_XL will(!) be moved to store_matrix,
+  !!     since they will be called from the routines in store_matrix.
+  !!     (this new module will be merged to store_matrix)
+  !!   2019/11/15 tsuyoshi
+  !!     1. matX, matXvel, matX_store are now moved to mult_module, and 
+  !!     their names were changed to matXL, matXLvel, matXL_store.
+  !!     2. the three routines (grab_XXvelS, ...) are now moved to store_matrix.
   !!  SOURCE
   !!
   module XLBOMD_module
 
     use datatypes
     use global_module, ONLY: iprint_MD,nspin
-    use store_matrix, ONLY: InfoMatrixFile
+    use mult_module, ONLY: maxiter_Dissipation
     implicit none
-    integer,allocatable :: matX(:),matXvel(:),matZ(:),matPot(:)
-    integer,allocatable :: matX_store(:,:)
+    integer,allocatable :: matZ(:),matPot(:)
+    !old integer,allocatable :: matX(:),matXvel(:),matZ(:),matPot(:)
+    !old integer,allocatable :: matX_store(:,:)
 
-    integer :: XLInitFreq,maxitersDissipation
+    integer :: XLInitFreq
     real(double) :: kappa,kappa_diss,alpha
     real(double),allocatable :: c(:)
 
     character(80),private :: RCSid = "$Id$"
     logical, save :: allocated_XL = .false.
-
-    type(InfoMatrixFile), pointer :: Info(:)
 
   contains
 
@@ -76,6 +83,7 @@
       use GenComms, ONLY: cq_abort,inode,ionode
       use matrix_data, ONLY: mat,halo,LSrange,Lrange,Trange,Tmatind
       use mult_module, ONLY: mult,LS_trans,L_trans,LS_T_L,ltrans,allocate_temp_matrix
+      use mult_module, ONLY: matXL, matXLvel, matXL_store,maxiter_Dissipation
       use mult_init_module, ONLY: mult_ini
 
       implicit none
@@ -98,13 +106,13 @@
 
       ! Allocate X, Z & Xvel
       if (.NOT.allocated_tags1) then
-        allocate (matX(nspin),matZ(nspin), STAT=stat_alloc)
-        if (stat_alloc.NE.0) call cq_abort('Error allocating matX and matZ: ', &
+        allocate (matXL(nspin),matZ(nspin), STAT=stat_alloc)
+        if (stat_alloc.NE.0) call cq_abort('Error allocating matXL and matZ: ', &
                                             nspin, stat_alloc)
         ! with velocity-Verlet
         if (integratorXL.EQ.'velocityVerlet') then
-          allocate (matXvel(nspin), STAT=stat_alloc)
-          if (stat_alloc.NE.0) call cq_abort('Error allocating matXvel: ', &
+          allocate (matXLvel(nspin), STAT=stat_alloc)
+          if (stat_alloc.NE.0) call cq_abort('Error allocating matXLvel: ', &
                                               nspin, stat_alloc)
         endif
         allocated_tags1 = .true.
@@ -119,10 +127,10 @@
         trans = L_trans
       endif
       do ispin = 1, nspin
-        matX(ispin)    = allocate_temp_matrix(range,trans)
+        matXL(ispin)    = allocate_temp_matrix(range,trans)
         matZ(ispin)    = allocate_temp_matrix(range,trans)
         if (integratorXL.EQ.'velocityVerlet') &
-           matXvel(ispin) = allocate_temp_matrix(range,trans)
+           matXLvel(ispin) = allocate_temp_matrix(range,trans)
       enddo
 
       ! Initialise matrix multiplication
@@ -142,16 +150,16 @@
 
       ! When dissipation applies
       if (flag_dissipation) then
-        K = maxitersDissipation
+        K = maxiter_Dissipation
         if (.NOT.allocated_tags2) then
-          allocate(matX_store(K+1,nspin), STAT=stat_alloc)
-          if (stat_alloc.NE.0) call cq_abort('Error allocating matX_store: ', &
+          allocate(matXL_store(K+1,nspin), STAT=stat_alloc)
+          if (stat_alloc.NE.0) call cq_abort('Error allocating matXL_store: ', &
                                               stat_alloc)
           allocated_tags2 = .true.
         endif
         do ispin = 1, nspin
           do i = 1, K+1
-            matX_store(i,ispin) = allocate_temp_matrix(range,0)
+            matXL_store(i,ispin) = allocate_temp_matrix(range,0)
           enddo
         enddo
       endif
@@ -189,31 +197,32 @@
       use global_module, ONLY: io_lun,integratorXL,flag_propagateL,flag_dissipation
       use matrix_module, ONLY: deallocate_comms_data
       use mult_module, ONLY: mult,LS_T_L,mult,free_temp_matrix
+      use mult_module, ONLY: matXL_store, matXL, matXLvel, matXL_store
 
       implicit none
       ! local variables
       integer :: ispin,i,stat_alloc
       integer :: K
 
-      !write (io_lun,*) "Got in deallocate_matX", inode
+      !write (io_lun,*) "Got in deallocate_matXL", inode
 
       ! When dissipation applies
       if (flag_dissipation) then
-        K = maxitersDissipation
+        K = maxiter_Dissipation
         do ispin = nspin, 1, -1
           do i = K+1, 1, -1
-            call free_temp_matrix(matX_store(i,ispin))
+            call free_temp_matrix(matXL_store(i,ispin))
           enddo
-          !deallocate (matX_store)
+          !deallocate (matXL_store)
         enddo
       endif
 
-      !if (allocated(matXvel)) then
+      !if (allocated(matXLvel)) then
       do ispin = nspin,1,-1
          if (integratorXL.EQ.'velocityVerlet') &
-              call free_temp_matrix(matXvel(ispin))
+              call free_temp_matrix(matXLvel(ispin))
          call free_temp_matrix(matZ(ispin))
-         call free_temp_matrix(matX(ispin))
+         call free_temp_matrix(matXL(ispin))
       enddo
       !endif
       !if (allocated(matX) .AND. allocated(matZ)) then 
@@ -270,11 +279,11 @@
       real(double),intent(in) :: dt
 
       if (flag_propagateX) then
-        call CommRebuild_matX(MDiter,LSrange,LS_trans)
-        call propagate_matX(MDiter,dt,matZ,LSrange)
+        call CommRebuild_matXL(MDiter,LSrange,LS_trans)
+        call propagate_matXL(MDiter,dt,matZ,LSrange)
       elseif (flag_propagateL) then
-        call CommRebuild_matX(MDiter,Lrange,L_trans)
-        call propagate_matX(MDiter,dt,matL,Lrange)
+        call CommRebuild_matXL(MDiter,Lrange,L_trans)
+        call propagate_matXL(MDiter,dt,matL,Lrange)
       endif
 
       return
@@ -307,7 +316,7 @@
       use global_module, ONLY: nspin,io_lun,flag_propagateX,flag_propagateL
       use GenComms, ONLY: inode,ionode
       use mult_module, ONLY: mult,matrix_product,matL,matT,matTtran,LS_T_L, &
-                             symmetrise_L,mat_p,matrix_sum,matrix_transpose
+                             symmetrise_L,mat_p,matrix_sum,matrix_transpose, matXL
 
       implicit none
       ! local variables
@@ -318,13 +327,13 @@
       if (flag_propagateX) then
         call matrix_transpose(matT,matTtran)
         do ispin = 1, nspin
-          !WRONG call matrix_product(matX(ispin),matT,matL(ispin),mult(LS_T_L))
-          call matrix_product(matX(ispin),matTtran,matL(ispin),mult(LS_T_L))
+          !WRONG call matrix_product(matXL(ispin),matT,matL(ispin),mult(LS_T_L))
+          call matrix_product(matXL(ispin),matTtran,matL(ispin),mult(LS_T_L))
         enddo
       elseif (flag_propagateL) then
-        !ORI mat_p(matL(1))%matrix = mat_p(matX(1))%matrix
+        !ORI mat_p(matL(1))%matrix = mat_p(matXL(1))%matrix
         do ispin = 1, nspin
-          call matrix_sum(zero,matL(ispin),one,matX(ispin))
+          call matrix_sum(zero,matL(ispin),one,matXL(ispin))
         enddo
       endif
       call symmetrise_L()
@@ -334,14 +343,14 @@
     !!***
 
     ! ------------------------------------------------------------
-    ! Subroutine CommRebuild_matX
+    ! Subroutine CommRebuild_matXL
     ! ------------------------------------------------------------
 
-    !!****f* XLBOMD_module/CommRebuild_matX *
+    !!****f* XLBOMD_module/CommRebuild_matXL *
     !!  NAME
-    !!   CommRebuild_matX
+    !!   CommRebuild_matXL
     !!  USAGE
-    !!   call CommRebuild_matX(MDiter,range,trans)
+    !!   call CommRebuild_matXL(MDiter,range,trans)
     !!  PURPOSE
     !!   Calculates Z(t) = L^{opt}(t)*S(t).
     !!   First grabs L,S,X and Xvel matrices and reconstructs them.
@@ -360,27 +369,39 @@
     !!  MODIFICATION
     !!  SOURCE
     !!
-    subroutine CommRebuild_matX(MDiter,range,trans)
+    subroutine CommRebuild_matXL(MDiter,range,trans)
       ! Module usage
       use global_module, ONLY: nspin,flag_dissipation,integratorXL,flag_propagateX
       use GenComms, ONLY: cq_abort,inode,my_barrier
       use matrix_data, ONLY: LSrange,Srange
       use mult_module, ONLY: LS_trans,S_trans,matS,matL,matrix_product,mult, &
                              L_S_LS
-      use store_matrix, ONLY: grab_matrix2
-      use UpdateInfo_module, ONLY: Matrix_CommRebuild
       ! db
       use global_module, ONLY: io_lun
       use GenComms, ONLY: myid
+ !2019/Nov/13
+      use numbers, ONLY: half, one, very_small
+      use global_module, ONLY: io_lun,ni_in_cell,atom_coord,atom_coord_diff,rcellx,rcelly,rcellz
+      use GenComms, ONLY: ionode
+      use store_matrix,ONLY: matrix_store_global, grab_InfoMatGlobal, set_atom_coord_diff
 
       implicit none
       ! passed variables
       integer,intent(in) :: MDiter,range,trans
       ! local variables
       integer :: nfile,ispin,symm
+ !2019/Nov/13
+      type(matrix_store_global) :: InfoGlob   
+      integer :: ig
+      real(double) :: rms_change, scale_x, scale_y, scale_z
+      real(double) :: small_change = 0.3_double
+
+ !2019/Nov/13 InfoGlob
+      call grab_InfoMatGlobal(InfoGlob,index=0)
+      call set_atom_coord_diff(InfoGlob)
 
       ! Fetches & reconstructs X-matrix, Xvel-matrix & S-matrix
-      call grab_XXvelS(range,trans)
+      call grab_XXvelS(range,trans,InfoGlob)
       ! Gets Z(t) = L^{opt}(t) * S(t)
       if (flag_propagateX) then
         do ispin = 1, nspin
@@ -391,10 +412,10 @@
       endif
 
       ! Initialises or resets X-matrix
-      call init_matX()
+      call init_matXL()
 
       if (flag_dissipation) then
-        call grab_Xhistories(range,trans)
+        call grab_Xhistories(range,trans,InfoGlob)
         call my_barrier()
         call reorder_Xhistories(MDiter)
         if (myid.EQ.0 .AND. iprint_MD.GT.1) &
@@ -404,13 +425,13 @@
       return
       contains
 
-      subroutine init_matX()
+      subroutine init_matXL()
         ! Module usage
         use numbers, ONLY: zero,one
         use global_module, ONLY: integratorXL,flag_propagateX
         use GenComms, ONLY: cq_abort
         use mult_module, ONLY: mult,matrix_product,matrix_sum,matS,matL,L_S_LS, &
-                               mat_p,matrix_scale
+                               mat_p,matrix_scale, matXL, matXLvel
 
         implicit none
         ! local variables
@@ -431,29 +452,29 @@
             write (io_lun,*) "Initialising X-matrix", iter
           if (flag_propagateX) then
             do ispin = 1, nspin
-              call matrix_product(matL(ispin),matS,matX(ispin),mult(L_S_LS))
-              call matrix_sum(zero,matZ(ispin),one,matX(ispin))
+              call matrix_product(matL(ispin),matS,matXL(ispin),mult(L_S_LS))
+              call matrix_sum(zero,matZ(ispin),one,matXL(ispin))
 !% michi - comments 14/11/2013
 !%            I think the above two calls are redundant. It should
-!%            call matrix_sum(zero,matX(ispin),one,matZ(ispin))
+!%            call matrix_sum(zero,matXL(ispin),one,matZ(ispin))
 !%            because matZ is already obtained before this subroutine gets called.
 !% michi - comments 14/11/2013
               if (integratorXL.EQ.'velocityVerlet') &
-                call matrix_scale(zero,matXvel(ispin))
+                call matrix_scale(zero,matXLvel(ispin))
             enddo
           else
             do ispin = 1, nspin
-              call matrix_sum(zero,matX(ispin),one,matL(ispin))
+              call matrix_sum(zero,matXL(ispin),one,matL(ispin))
               if (integratorXL.EQ.'velocityVerlet') &
-                call matrix_scale(zero,matXvel(ispin))
+                call matrix_scale(zero,matXLvel(ispin))
             enddo
           endif
         endif
 
         return
-      end subroutine init_matX
+      end subroutine init_matXL
 
-    end subroutine CommRebuild_matX
+    end subroutine CommRebuild_matXL
     !!***
 
     ! ------------------------------------------------------------
@@ -478,47 +499,48 @@
     !!   2017/05/11 dave
     !!    Adding read option for spin polarisation
     !!  SOURCE
-    subroutine grab_XXvelS(range,trans)
+    subroutine grab_XXvelS(range,trans,InfoGlob)
       ! Module usage
       use global_module, ONLY: integratorXL,flag_propagateX, nspin
-      use GenComms, ONLY: inode
+      use GenComms, ONLY: inode, ionode
       use matrix_data, ONLY: Srange
-      use mult_module, ONLY: matS,S_trans
-      use store_matrix, ONLY: grab_matrix2
-      use UpdateInfo_module, ONLY: Matrix_CommRebuild
+      use mult_module, ONLY: matS,S_trans,matXL,matXLvel
+      use store_matrix, ONLY: grab_matrix2, InfoMatrixFile, matrix_store_global
+      use UpdateInfo, ONLY: Matrix_CommRebuild
 
       implicit none
-      ! passed variables
+!      ! passed variables
       integer,intent(in) :: range,trans
       ! local variables
       integer :: nfile,symm
+      integer :: matStmp(1)
+      type(InfoMatrixFile), pointer :: InfoMat(:)
+ !2019/Nov/08
+      type(matrix_store_global),intent(in) :: InfoGlob   
 
       ! Fetches & reconstructs X-matrix
-      call grab_matrix2('X',inode,nfile,Info,index_in=0)
-      call Matrix_CommRebuild(Info,range,trans,matX(1),nfile)
-      if(nspin==2) then
-         call grab_matrix2('X_2',inode,nfile,Info,index_in=0)
-         call Matrix_CommRebuild(Info,range,trans,matX(2),nfile)
-      end if
+      call grab_matrix2('X',inode,nfile,InfoMat,InfoGlob,index=0,n_matrix=nspin)
+      !call Matrix_CommRebuild(InfoGlob,InfoMat,range,trans,matXL,nfile,symm,n_matrix=nspin)
+      call Matrix_CommRebuild(InfoGlob,InfoMat,range,trans,matXL,nfile,n_matrix=nspin)
       ! Fetches & reconstructs Xvel-matrix
       if (integratorXL.EQ.'velocityVerlet') then
-        call grab_matrix2('Xvel',inode,nfile,Info,index_in=0)
-        call Matrix_CommRebuild(Info,range,trans,matXvel(1),nfile)
-        if(nspin==2) then
-           call grab_matrix2('Xvel_2',inode,nfile,Info,index_in=0)
-           call Matrix_CommRebuild(Info,range,trans,matXvel(2),nfile)
-        end if
+        call grab_matrix2('Xvel',inode,nfile,InfoMat,InfoGlob,index=0,n_matrix=nspin)
+        !call Matrix_CommRebuild(InfoGlob,InfoMat,range,trans,matXLvel,symm,nfile,n_matrix=nspin)
+        call Matrix_CommRebuild(InfoGlob,InfoMat,range,trans,matXLvel,nfile,n_matrix=nspin)
       endif
       ! Fetches & reconstructs S-matrix
       if (flag_propagateX) then
-        call grab_matrix2('S',inode,nfile,Info,index_in=0)
-        call Matrix_CommRebuild(Info,Srange,S_trans,matS,nfile,symm)
+       !matS will be matS(1:nspin_SF) in the near future
+        matStmp(1)=matS
+        call grab_matrix2('S',inode,nfile,InfoMat,InfoGlob,index=0,n_matrix=1)
+        !call Matrix_CommRebuild(InfoGlob,InfoMat,Srange,S_trans,matS,nfile,symm,n_matrix=1)
+        call Matrix_CommRebuild(InfoGlob,InfoMat,Srange,S_trans,matStmp,nfile,symm,n_matrix=1)
       endif
 
       return
     end subroutine grab_XXvelS
     !!***
-
+!
     ! ------------------------------------------------------------
     ! Subroutine grab_Xhistories
     ! ------------------------------------------------------------
@@ -541,16 +563,18 @@
     !!   2017/05/11 dave
     !!    Adding read option for spin polarisation
     !!   2019/05/24 tsuyoshi
-    !!    Change the filenames and tidying up the code
+    !!    Changing the filenames and tidying up the code
+    !!   2019/11/15 tsuyoshi
+    !!   
     !!  SOURCE
-    subroutine grab_Xhistories(range,trans)
+    subroutine grab_Xhistories(range,trans,InfoGlob)
       ! Module usage
       use global_module, ONLY: flag_propagateL, nspin, io_lun
       use GenComms, ONLY: inode, ionode 
       use matrix_data, ONLY: LSrange,Lrange
-      use mult_module, ONLY: LS_trans,L_trans
-      use store_matrix, ONLY: grab_matrix2
-      use UpdateInfo_module, ONLY: Matrix_CommRebuild
+      use mult_module, ONLY: LS_trans,L_trans, matXL_store, maxiter_Dissipation
+      use store_matrix, ONLY: grab_matrix2, InfoMatrixFile, matrix_store_global
+      use UpdateInfo, ONLY: Matrix_CommRebuild
       !db
       use global_module, ONLY: io_lun
       use GenComms, ONLY: myid
@@ -558,97 +582,116 @@
       implicit none
       ! passed variables
       integer :: range,trans
-      !integer :: matX_store(maxitersDissipation,nspin)
+      !2019/Nov/13
+      type(matrix_store_global),intent(in) :: InfoGlob   
+      !integer :: matX_store(maxiter_Dissipation,nspin)
       ! local variables
       integer :: maxiters,nfile,istep
+      type(InfoMatrixFile), pointer :: InfoMat(:)
 
-      maxiters = maxitersDissipation
+      maxiters = maxiter_Dissipation
       if(maxiters < 3) maxiters=3  ! even without dissipation, we need matX_store(:,1:4)
       if(maxiters > 9) then
        if(inode == ionode) write(io_lun,*)  &
-        &'WARNING: maxitersDissipation should be smaller than 10 : ', maxitersDissipation
+        &'WARNING: maxiter_Dissipation should be smaller than 10 : ', maxiter_Dissipation
        maxiters = 9 
       endif
+
+      ! ----- 2019/Nov/13: (comment by TM)   -----
+      ! Here, we assume InfoGlob is read before calling this subroutine.
+      ! We use same InfoGlob for all index, meaning that the matrices stored in Xmatrix.i**,p**** are
+      ! already rebuilt using the pair information shown in InfoGlob.i00, the one at the last step)
+      !
+
       ! Grab X-matrix files
       do istep = 1, maxiters+1
-       call grab_matrix2('X',inode,nfile,Info,index_in=istep)
-       call Matrix_CommRebuild(Info,range,trans,matX_store(istep,1),nfile)
+       call grab_matrix2('X',inode,nfile,InfoMat,InfoGlob,index=istep,n_matrix=nspin)
+       call Matrix_CommRebuild(InfoGlob,InfoMat,range,trans,matXL_store(istep,:),nfile,n_matrix=nspin)
       enddo
-      if(nspin==2) then
-       do istep = 1, maxiters+1
-        call grab_matrix2('X2',inode,nfile,Info,index_in=istep)
-        call Matrix_CommRebuild(Info,range,trans,matX_store(istep,2),nfile)
-       enddo
-      endif
+
+      ! ----- 2019/Nov/13: (comment by TM)   -----
+      ! 1. Use same index in InfoGlobal.iXX and Xmatrix2.iXX.pYYYYYY
+      ! 2. Use InfoGlobal.i00 for all Xmatrix2.iXX.pYYYYYY   
+      ! 
+      !  Present scheme uses Option 2, which should be more efficient.
+      ! But, in this case, it is more efficient if we call Matrix_CommRebuild once, 
+      ! with  n_matrix = (maxiters+1)*nspin.   
+      !  (since it is expensive to make the transformation table (i,j) <-> (i_old,j_old))
+      !
+      ! When we use Memory for InfoMat(:) and InfoGlob, instead of using IOs, we should prepare
+      !  set_prev_matrix for grab_matrix2, and we should be able to rebuild matX_store once,
+      ! by setting n_matix = (maxiters+1)*nspin
+      !
 
       return
     end subroutine grab_Xhistories
     !!***
-
-    ! ------------------------------------------------------------
-    ! Subroutine dump_XL
-    ! ------------------------------------------------------------
-
-    !!****f* XLBOMD_module/dump_XL *
-    !!  NAME
-    !!   dump_XL
-    !!  USAGE
-    !!   call dump_XL()
-    !!  PURPOSE
-    !!   Dumps all matrix files related to XL-BOMD
-    !!  AUTHOR
-    !!   Michiaki Arita
-    !!  CREATION DATE
-    !!   2013/12/03 
-    !!  MODIFICATION
-    !!   2017/05/11 dave
-    !!    Adding write option for spin polarisation
-    !!   2019/05/24 tsuyoshi
-    !!    Change the filenames and tidying up the code
-    !!  SOURCE
-    subroutine dump_XL()
-      ! Module usage
-      use global_module, ONLY: flag_propagateL, nspin,io_lun
-      use GenComms, ONLY: cq_abort,inode,ionode
-      use matrix_data, ONLY: LSrange,Lrange
-      use store_matrix, ONLY: dump_matrix2
-
-      implicit none
-      ! local variables
-      integer :: nfile,maxiters,range,istep
-
-      if (.NOT. flag_propagateL) then
-        range = LSrange
-      else
-        range = Lrange
-      endif
-      maxiters = maxitersDissipation
-      if(maxiters < 4) maxiters = 3
-      if(maxiters > 9) then
-       if(inode == ionode) write(io_lun,*)  &
-        &'WARNING: maxitersDissipation should be smaller than 10 : ', maxitersDissipation
-       maxiters = 9 
-      endif
-
-      ! Dump X-matrix files
-      do istep = 1, maxiters+1
-        call dump_matrix2('X',matX_store(istep,1),range,index_in=istep)
-      enddo
-      if(nspin==2) then
-       do istep = 1, maxiters+1
-        call dump_matrix2('X2',matX_store(istep,2),range,index_in=istep)
-       enddo
-      endif
-
-      return
-    end subroutine dump_XL
-    !!***
-
+!
+!    ! ------------------------------------------------------------
+!    ! Subroutine dump_XL
+!    ! ------------------------------------------------------------
+!
+!    !!****f* XLBOMD_module/dump_XL *
+!    !!  NAME
+!    !!   dump_XL
+!    !!  USAGE
+!    !!   call dump_XL()
+!    !!  PURPOSE
+!    !!   Dumps all matrix files related to XL-BOMD
+!    !!  AUTHOR
+!    !!   Michiaki Arita
+!    !!  CREATION DATE
+!    !!   2013/12/03 
+!    !!  MODIFICATION
+!    !!   2017/05/11 dave
+!    !!    Adding write option for spin polarisation
+!    !!   2019/05/24 tsuyoshi
+!    !!    Change the filenames and tidying up the code
+!    !!  SOURCE
+!    subroutine dump_XL()
+!      ! Module usage
+!      use global_module, ONLY: flag_propagateL, nspin,io_lun
+!      use GenComms, ONLY: cq_abort,inode,ionode
+!      use matrix_data, ONLY: LSrange,Lrange
+!      use store_matrix, ONLY: dump_matrix2
+!
+!      implicit none
+!      ! local variables
+!      integer :: nfile,maxiters,range,istep
+!
+!      if (.NOT. flag_propagateL) then
+!        range = LSrange
+!      else
+!        range = Lrange
+!      endif
+!      maxiters = maxiter_Dissipation
+!      if(maxiters < 4) maxiters = 3
+!      if(maxiters > 9) then
+!       if(inode == ionode) write(io_lun,*)  &
+!        &'WARNING: maxiter_Dissipation should be smaller than 10 : ', maxiter_Dissipation
+!       maxiters = 9 
+!      endif
+!
+!      ! Dump X-matrix files
+!      do istep = 1, maxiters+1
+!        !call dump_matrix2('X',matX_store(istep,1),range,index=istep)
+!        call dump_matrix2('X',matX_store(istep,:),range,n_matrix=nspin,index=istep)
+!      enddo
+!      !if(nspin==2) then
+!      ! do istep = 1, maxiters+1
+!      !  call dump_matrix2('X2',matX_store(istep,2),range,index=istep)
+!      ! enddo
+!      !endif
+!
+!      return
+!    end subroutine dump_XL
+!    !!***
+!
     ! ------------------------------------------------------------
     ! Subroutine reorder_Xhistories
     ! ------------------------------------------------------------
 
-    !!****f* XLBOMD_module/reorder_Xhistories *
+    !!****f* XLBOMD_module/reorder_XLhistories *
     !!  NAME
     !!   reorder_Xhistories
     !!  USAGE
@@ -669,7 +712,7 @@
     subroutine reorder_Xhistories(MDiter)
       ! Module usage
       use numbers
-      use mult_module, ONLY: matrix_sum
+      use mult_module, ONLY: matrix_sum, matXL_store, matXL
       ! db
       use global_module, ONLY: io_lun
       use GenComms, ONLY: myid
@@ -681,21 +724,21 @@
       integer :: i,ispin
       integer :: K
 
-      K = maxitersDissipation
+      K = maxiter_Dissipation
       if (MDiter.GT.K+1) then
         if (myid.EQ.0 .AND. iprint_MD.GT.2) &
           write (io_lun,*) "Reordering X-matrix files",MDiter
         do ispin = 1,nspin
           do i = 1, K
-            call matrix_sum(zero,matX_store(i,ispin),one,matX_store(i+1,ispin))
+            call matrix_sum(zero,matXL_store(i,ispin),one,matXL_store(i+1,ispin))
           enddo
-          call matrix_sum(zero,matX_store(K+1,ispin),one,matX(ispin))
+          call matrix_sum(zero,matXL_store(K+1,ispin),one,matXL(ispin))
         enddo
       elseif (MDiter.LE.K+1) then
         if (myid.EQ.0 .AND. iprint_MD.GT.2) &
           write (io_lun,*) "Storing X-matrix",MDiter
         do ispin = 1, nspin
-          call matrix_sum(zero,matX_store(MDiter,ispin),one,matX(ispin))
+          call matrix_sum(zero,matXL_store(MDiter,ispin),one,matXL(ispin))
         enddo
       endif
 
@@ -729,7 +772,7 @@
     subroutine calc_dissipative_force(MDiter,dissipation)
       ! Module usage
       use numbers, ONLY: zero
-      use mult_module, ONLY: mat_p
+      use mult_module, ONLY: mat_p, matXL, matXL_store
       !db
       use global_module, ONLY: numprocs,io_lun
       use GenComms, ONLY: inode,myid
@@ -751,13 +794,12 @@
       !db                      "Calculate dissipative force at", MDiter, "MD iter"
 
       dissipation = zero
-      K = maxitersDissipation
+      K = maxiter_Dissipation
       do ispin = 1, nspin
+        len=mat_p(matXL(ispin))%length
         do i = 1, K+1
-          do len = 1, mat_p(matX(ispin))%length
-            dissipation(len,ispin) = dissipation(len,ispin) + &
-                                     c(i)*mat_p(matX_store(i,ispin))%matrix(len)
-          enddo
+            dissipation(1:len,ispin) = dissipation(1:len,ispin) + &
+                                     c(i)*mat_p(matXL_store(i,ispin))%matrix(1:len)
         enddo
       enddo
       dissipation = dissipation * alpha
@@ -794,7 +836,7 @@
       ! local variables
       integer :: i,stat_alloc,K
 
-      K = maxitersDissipation
+      K = maxiter_Dissipation
       allocate (c(K+1), STAT=stat_alloc)
       if (stat_alloc.NE.0) call cq_abort('Error allocating coefficcient c: ', &
                                          K+1)
@@ -889,14 +931,14 @@
     !!***
 
     ! ------------------------------------------------------------
-    ! Subroutine propagate_matX
+    ! Subroutine propagate_matXL
     ! ------------------------------------------------------------
 
-    !!****f* XLBOMD_module/propagate_matX *
+    !!****f* XLBOMD_module/propagate_matXL *
     !!  NAME
-    !!   propagate_matX
+    !!   propagate_matXL
     !!  USAGE
-    !!   call propagate_matX(MDiter,dt,matA,Arange)
+    !!   call propagate_matXL(MDiter,dt,matA,Arange)
     !!  PURPOSE
     !!   Propagates X-matrix either with velocity Verlet or Verlet
     !!  INPUTS
@@ -911,7 +953,7 @@
     !!  MODIFICATION
     !!  SOURCE
     !!
-    subroutine propagate_matX(MDiter,dt,matA,Arange)
+    subroutine propagate_matXL(MDiter,dt,matA,Arange)
       ! Module usage
       use global_module, ONLY: integratorXL
       use GenComms, ONLY: cq_abort
@@ -922,26 +964,26 @@
       real(double),intent(in) :: dt
 
       if (integratorXL.EQ.'Verlet') then
-        call Verlet_matX(MDiter,matA,Arange)
+        call Verlet_matXL(MDiter,matA,Arange)
       elseif (integratorXL.EQ.'velocityVerlet') then
-        call vVerlet_matX(MDiter,dt,matA,Arange)
+        call vVerlet_matXL(MDiter,dt,matA,Arange)
       else
         call cq_abort('Error: choose either Verlet or velocityVerlet')
       endif
 
       return
-    end subroutine propagate_matX
+    end subroutine propagate_matXL
     !!***
 
     ! ------------------------------------------------------------
-    ! Subroutine Verlet_matX
+    ! Subroutine Verlet_matXL
     ! ------------------------------------------------------------
 
-    !!****f* XLBOMD_module/Verlet_matX *
+    !!****f* XLBOMD_module/Verlet_matXL *
     !!  NAME
-    !!   Verlet_matX
+    !!   Verlet_matXL
     !!  USAGE
-    !!   call Verlet_matX(MDiter,matA,Arange)
+    !!   call Verlet_matXL(MDiter,matA,Arange)
     !!  PURPOSE
     !!   Performs the Verlet algorithm for propagation of X-matrix
     !!     X(t+dt) = 2X(t) - X(t-dt) + (kappa)*[Z(t)-X(t)]
@@ -956,7 +998,7 @@
     !!  MODIFICATION
     !!  SOURCE
     !!
-    subroutine Verlet_matX(MDiter,matA,Arange)
+    subroutine Verlet_matXL(MDiter,matA,Arange)
       ! Module usage
       use numbers
       use global_module, ONLY: flag_dissipation
@@ -964,9 +1006,8 @@
       use matrix_data, ONLY: LSrange
       use mult_module, ONLY: mat_p,matrix_product,matS,matL,L_S_LS,mult, &
                              matrix_sum,allocate_temp_matrix,free_temp_matrix, &
-                             matrix_product_trace
-      use store_matrix, ONLY: dump_matrix2
-
+                             matrix_product_trace, &
+                             matXL,matXL_store
       ! db
       use global_module, ONLY: io_lun
       use GenComms, ONLY: myid
@@ -997,8 +1038,8 @@
 
       if (MDiter.GT.1) then
         if (flag_dissipation) then
-          K = maxitersDissipation
-          allocate (Fdiss(mat_p(matX(1))%length,nspin), STAT=stat)
+          K = maxiter_Dissipation
+          allocate (Fdiss(mat_p(matXL(1))%length,nspin), STAT=stat)
           if (stat.NE.0) call cq_abort('Error allocating dissipation: ')
           Fdiss = zero
           if (MDiter.GT.K) call calc_dissipative_force(MDiter,Fdiss)
@@ -1010,21 +1051,21 @@
           endif
           kappa_wk = kappa_diss
           do ispin = 1, nspin
-            !%ORI do len = 1, mat_p(matX(1))%length
+            !%ORI do len = 1, mat_p(matXL(1))%length
             !%ORI   ! electronic harmonic potential
-            !%ORI   acc = mat_p(matZ(ispin))%matrix(len) - mat_p(matX(ispin))%matrix(len)
+            !%ORI   acc = mat_p(matZ(ispin))%matrix(len) - mat_p(matXL(ispin))%matrix(len)
             !%ORI   mat_p(matPot(ispin))%matrix(len) = acc
-            !%ORI   mat_p(matX(ispin))%matrix(len) = two*mat_p(matX(ispin))%matrix(len)     - &
-            !%ORI                                    mat_p(matX_store(j,ispin))%matrix(len) + &
+            !%ORI   mat_p(matXL(ispin))%matrix(len) = two*mat_p(matXL(ispin))%matrix(len)     - &
+            !%ORI                                    mat_p(matXL_store(j,ispin))%matrix(len) + &
             !%ORI                                    kappa_wk*acc + Fdiss(len,ispin)
             !%ORI enddo
-            do len = 1, mat_p(matX(ispin))%length
+            do len = 1, mat_p(matXL(ispin))%length
               ! electronic harmonic potential
-              acc    = mat_p(matA(ispin))%matrix(len) - mat_p(matX(ispin))%matrix(len)
+              acc    = mat_p(matA(ispin))%matrix(len) - mat_p(matXL(ispin))%matrix(len)
               mat_p(matPot(ispin))%matrix(len) = acc
-              dr     = mat_p(matX(ispin))%matrix(len) - mat_p(matX_store(j,ispin))%matrix(len)
+              dr     = mat_p(matXL(ispin))%matrix(len) - mat_p(matXL_store(j,ispin))%matrix(len)
               dr_dt  = dr + kappa_wk*acc + Fdiss(len,ispin)
-              mat_p(matX(ispin))%matrix(len) = mat_p(matX(ispin))%matrix(len) + dr_dt
+              mat_p(matXL(ispin))%matrix(len) = mat_p(matXL(ispin))%matrix(len) + dr_dt
             enddo
           enddo
           ! Deallocation
@@ -1048,18 +1089,18 @@
         write (io_lun,*) "X-matrix propagated via Verlet"
 
       return
-    end subroutine Verlet_matX
+    end subroutine Verlet_matXL
     !!***
 
     ! ------------------------------------------------------------
-    ! Subroutine vVerlet_matX
+    ! Subroutine vVerlet_matXL
     ! ------------------------------------------------------------
 
-    !!****f* XLBOMD_module/vVerlet_matX *
+    !!****f* XLBOMD_module/vVerlet_matXL *
     !!  NAME
-    !!   vVerlet_matX
+    !!   vVerlet_matXL
     !!  USAGE
-    !!   call vVerlet_matX(MDiter,dt,matA,Arange)
+    !!   call vVerlet_matXL(MDiter,dt,matA,Arange)
     !!  PURPOSE
     !!   Performs the velocity Verlet algorithm for propagating X-matrix
     !!   The defifnition of velocities is a little tricky:
@@ -1085,14 +1126,14 @@
     !!  MODIFICATION
     !!  SOURCE
     !!
-    subroutine vVerlet_matX(MDiter,dt,matA,Arange)
+    subroutine vVerlet_matXL(MDiter,dt,matA,Arange)
       ! Module usage
       use numbers
       use global_module, ONLY: io_lun,flag_dissipation
       use GenComms, ONLY: cq_abort,myid
       use matrix_data, ONLY: LSrange
       use mult_module, ONLY: mat_p,matrix_product_trace,allocate_temp_matrix, &
-                             free_temp_matrix
+                             free_temp_matrix, matXL, matXLvel
 
       implicit none
       ! passed variables
@@ -1116,7 +1157,7 @@
         matPot(ispin) =  allocate_temp_matrix(Arange,0)
       enddo
 
-      ! Evolve matX
+      ! Evolve matXL
       if (flag_dissipation) then
 
         !db
@@ -1124,32 +1165,32 @@
         !  write (io_lun,'(a,f10.5)') "kappa:  ", kappa_diss
         !  write (io_lun,'(a,f10.5)') "alpha:  ", alpha
         !  write (io_lun,'(a)')       "c(1:K): "
-        !  do i = 1, maxitersDissipation+1
+        !  do i = 1, maxiter_Dissipation+1
         !    write (io_lun,'(f10.5)') c(i)
         !  enddo
         !endif
         !db
 
-        allocate (Fdiss(mat_p(matX(1))%length,nspin), STAT=stat_alloc)
+        allocate (Fdiss(mat_p(matXL(1))%length,nspin), STAT=stat_alloc)
         if (stat_alloc.NE.0) call cq_abort('Error allocating dissipation force: ')
         Fdiss = zero
-        if (MDiter.GT.maxitersDissipation) call calc_dissipative_force(MDiter,Fdiss)
-        !ORI if (MDiter.GE.maxitersDissipation) call calc_dissipative_force(MDiter,Fdiss)
+        if (MDiter.GT.maxiter_Dissipation) call calc_dissipative_force(MDiter,Fdiss)
+        !ORI if (MDiter.GE.maxiter_Dissipation) call calc_dissipative_force(MDiter,Fdiss)
         kappa_wk = kappa_diss
         do ispin = 1, nspin
-          do len = 1, mat_p(matX(ispin))%length
+          do len = 1, mat_p(matXL(ispin))%length
             mat_p(matPot(ispin))%matrix(len) = mat_p(matA(ispin))%matrix(len) -  &
-                                               mat_p(matX(ispin))%matrix(len)
-            acc = mat_p(matA(ispin))%matrix(len) - mat_p(matX(ispin))%matrix(len)
+                                               mat_p(matXL(ispin))%matrix(len)
+            acc = mat_p(matA(ispin))%matrix(len) - mat_p(matXL(ispin))%matrix(len)
             acc_diss = Fdiss(len,ispin)*half/dt
-            mat_p(matXvel(ispin))%matrix(len) = mat_p(matXvel(ispin))%matrix(len) &
+            mat_p(matXLvel(ispin))%matrix(len) = mat_p(matXLvel(ispin))%matrix(len) &
                                                 + kappa_wk*half*acc/dt            &
                                                 + acc_diss
-            mat_p(matX(ispin))%matrix(len) = mat_p(matX(ispin))%matrix(len)       + &
-                                             dt*mat_p(matXvel(ispin))%matrix(len) + &
+            mat_p(matXL(ispin))%matrix(len) = mat_p(matXL(ispin))%matrix(len)       + &
+                                             dt*mat_p(matXLvel(ispin))%matrix(len) + &
                                              half*kappa_wk*acc                    + &
                                              half*Fdiss(len,ispin)
-            mat_p(matXvel(ispin))%matrix(len) = mat_p(matXvel(ispin))%matrix(len) &
+            mat_p(matXLvel(ispin))%matrix(len) = mat_p(matXLvel(ispin))%matrix(len) &
                                                 + kappa_wk*half*acc/dt            &
                                                 + acc_diss
           enddo
@@ -1159,22 +1200,22 @@
       else
         kappa_wk = kappa
         do ispin = 1, nspin
-          do len = 1, mat_p(matX(ispin))%length
-            mat_p(matPot(ispin))%matrix(len) = mat_p(matA(ispin))%matrix(len) - mat_p(matX(ispin))%matrix(len)
-            acc = mat_p(matA(ispin))%matrix(len) - mat_p(matX(ispin))%matrix(len)
-            mat_p(matXvel(ispin))%matrix(len) = mat_p(matXvel(ispin))%matrix(len) &
+          do len = 1, mat_p(matXL(ispin))%length
+            mat_p(matPot(ispin))%matrix(len) = mat_p(matA(ispin))%matrix(len) - mat_p(matXL(ispin))%matrix(len)
+            acc = mat_p(matA(ispin))%matrix(len) - mat_p(matXL(ispin))%matrix(len)
+            mat_p(matXLvel(ispin))%matrix(len) = mat_p(matXLvel(ispin))%matrix(len) &
                                                 + kappa_wk*half*acc/dt
-            mat_p(matX(ispin))%matrix(len) = mat_p(matX(ispin))%matrix(len)       + &
-                                             dt*mat_p(matXvel(ispin))%matrix(len) + &
+            mat_p(matXL(ispin))%matrix(len) = mat_p(matXL(ispin))%matrix(len)       + &
+                                             dt*mat_p(matXLvel(ispin))%matrix(len) + &
                                              half*kappa_wk*acc
-            mat_p(matXvel(ispin))%matrix(len) = mat_p(matXvel(ispin))%matrix(len) &
+            mat_p(matXLvel(ispin))%matrix(len) = mat_p(matXLvel(ispin))%matrix(len) &
                                                 + kappa_wk*half*acc/dt
           enddo
         enddo
       endif
       ! Calculate kinetic term of electronic degrees of freedom    ! 01/10/2013
       Pot_el =  half*matrix_product_trace(matPot(1) ,matPot(1) )
-      KE_el  =  half*matrix_product_trace(matXvel(1),matXvel(1))
+      KE_el  =  half*matrix_product_trace(matXLvel(1),matXLvel(1))
       if (myid.EQ.0) write (io_lun,'(a,2x,i8,2x,a,f25.15,2x,a,f25.15)') &
                             "    *** MD iter",MDiter,"Tr[(dX/dt)^2]:",KE_el,"Tr[(Z-X)^2]", &
                             Pot_el
@@ -1188,7 +1229,7 @@
         write (io_lun,*) "X-matrix propagated via velocity Verlet"
 
       return
-    end subroutine vVerlet_matX
+    end subroutine vVerlet_matXL
     !!***
 
   end module XLBOMD_module

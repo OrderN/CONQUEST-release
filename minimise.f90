@@ -138,7 +138,7 @@ contains
                                  blips, PAOs, IPRINT_TIME_THRES1,      &
                                  runtype, flag_vdWDFT, io_lun,         &
                                  flag_DeltaSCF, flag_excite, runtype,  &
-                                 flag_MDold,flag_LmatrixReuse,McWFreq, &
+                                 flag_LmatrixReuse,McWFreq,            &
                                  flag_multisite,                       &
                                  io_lun, flag_out_wf, wf_self_con, flag_write_DOS, &
                                  flag_diagonalisation, nspin
@@ -189,7 +189,8 @@ contains
     ! Terrible coding.. Should be modified later. [2013/08/20 michi]
     reset_L = .false.
     if (.NOT. leqi(runtype,'static')) then
-      if (.NOT. flag_MDold .AND. flag_LmatrixReuse) then
+      !old if (.NOT. flag_MDold .AND. flag_LmatrixReuse) then
+      if (flag_LmatrixReuse) then
         reset_L = .false.
         if (McWFreq.NE.0) then
           if (present(iter)) then
