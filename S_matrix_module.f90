@@ -688,6 +688,8 @@ contains
 !!      io_module2 -> store_matrix, InfoT is defined locally
 !!   2018/07/13 13:21 dave  
 !!    Copy oldomega to omega on termination for consistency
+!!   2019/11/18 tsuyoshi
+!!    Removed flag_MDold
 !!  SOURCE
 !!
   subroutine Iter_Hott_InvS(output_level, n_L_iterations, tolerance,n_atoms,&
@@ -695,8 +697,8 @@ contains
 
     use datatypes
     use numbers
-    use global_module, ONLY: IPRINT_TIME_THRES1,flag_MDold,flag_TmatrixReuse,restart_T, &
-                             runtype,n_proc_old, atomf, sf, flag_diagonalisation
+    use global_module, ONLY: IPRINT_TIME_THRES1,flag_TmatrixReuse,restart_T, &
+                             runtype, atomf, sf, flag_diagonalisation
     use matrix_data, ONLY: Trange, TSrange, mat, Srange
     use mult_module, ONLY: allocate_temp_matrix, free_temp_matrix, store_matrix_value, matrix_scale, matrix_sum, &
          matT, matS, return_matrix_value, T_trans
@@ -706,10 +708,10 @@ contains
     use species_module, ONLY: nsf_species, species
     use timer_module, ONLY: cq_timer,start_timer,stop_print_timer,WITH_LEVEL
     use input_module, ONLY: leqi
-    !use io_module2, ONLY: grab_matrix2,InfoT
-    use store_matrix, ONLY: dump_matrix2, grab_matrix2, InfoMatrixFile
+    use store_matrix, ONLY: dump_matrix2, grab_matrix2, InfoMatrixFile, &
+                            matrix_store_global, grab_InfoMatGlobal, set_atom_coord_diff
 
-    use UpdateInfo_module, ONLY: Matrix_CommRebuild
+    use UpdateInfo, ONLY: Matrix_CommRebuild
 
     implicit none
 
@@ -725,7 +727,9 @@ contains
     type(cq_timer) :: tmr_l_tmp1
     logical,save :: flag_readT = .false.
 
-    type(InfoMatrixFile),pointer :: InfoT(:)   ! why pointer ?
+    type(InfoMatrixFile),pointer :: Info(:)    ! why pointer ? <-> related to gcc problem
+    type(matrix_store_global)    :: InfoGlob
+    integer :: matT_tmp(1)
 
     if (atomf.ne.sf .and. .not.flag_do_SFtransform) then
        if (inode.eq.ionode.and.output_level>=2) write(io_lun,*) &
@@ -807,11 +811,18 @@ contains
             call matrix_scale(zero,matT)
             call matrix_sum(zero,matT,eps,matS)
             call stop_print_timer(tmr_l_tmp1,"inverse S preliminaries",IPRINT_TIME_THRES1)
-          elseif (.NOT. flag_MDold .AND. (flag_readT .OR. restart_T)) then
+          elseif (flag_readT .OR. restart_T) then
             !Reusing previously computed inverse S-matrix
-            call grab_matrix2('T',inode,nfile,InfoT)
-            call my_barrier()
-            call Matrix_CommRebuild(InfoT,Trange,T_trans,matT,nfile,symm)
+             ! Global Information
+             call grab_InfoMatGlobal(InfoGlob,index=0)
+             call set_atom_coord_diff(InfoGlob)
+             ! Soon, matT -> matT(nspin_SF), we use matT_tmp for now.
+              matT_tmp(1)=matT
+             call grab_matrix2('T',inode,nfile,Info,InfoGlob,index=0,n_matrix=1)
+             !call grab_matrix2('T',inode,nfile,Info,InfoGlob,index=0,n_matrix=nspin_SF)
+             call my_barrier()
+             call Matrix_CommRebuild(InfoGlob,Info,Trange,T_trans,matT_tmp,nfile,symm,n_matrix=1)
+             !call Matrix_CommRebuild(InfoGlob,Info,Trange,T_trans,matT,nfile,symm,n_matrix=nspin_SF)
           endif
           ! and evaluate the current value of the functional and its gradient
           deltaomega = zero

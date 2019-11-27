@@ -151,6 +151,8 @@ contains
   !!   2019/06/06 17:30 jack poulton and nakata
   !!    Changed to allow SZP-MSSFs with flag_MSSF_nonminimal when checking the number of MSSFs
   !!    Added MSSF_nonminimal_species
+  !!   2019/11/18 tsuyoshi
+  !!    Removed flag_MDold
   !!  SOURCE
   !!
   subroutine read_and_write(start, start_L, inode, ionode,          &
@@ -757,7 +759,7 @@ contains
                              dscf_target_spin, dscf_source_nfold,      &
                              dscf_target_nfold, flag_local_excitation, dscf_HOMO_thresh,   &
                              dscf_LUMO_thresh, dscf_HOMO_limit, dscf_LUMO_limit,           &
-                             flag_MDcontinue,flag_MDdebug,flag_MDold,  &
+                             flag_MDcontinue,flag_MDdebug,             &
                              flag_thermoDebug, flag_baroDebug, &
                              flag_LmatrixReuse,flag_TmatrixReuse,flag_SkipEarlyDM,McWFreq, &
                              restart_T,restart_X,flag_XLBOMD,flag_propagateX,              &
@@ -828,7 +830,8 @@ contains
     use io_module, only: pdb_format, pdb_altloc, append_coords,  &
                          pdb_output, banner, get_file_name, time_max, &
                          flag_MatrixFile_RankFromZero, flag_MatrixFile_BinaryFormat, &
-                         flag_MatrixFile_BinaryFormat_Grab, flag_MatrixFile_BinaryFormat_Dump
+                         flag_MatrixFile_BinaryFormat_Grab, flag_MatrixFile_BinaryFormat_Dump, &
+                         flag_MatrixFile_BinaryFormat_Dump_END
 
     use group_module,     only: part_method, HILBERT, PYTHON
     use energy,           only: flag_check_DFT
@@ -843,7 +846,8 @@ contains
                          cDFT_NumberAtomGroups, cDFT_AtomList,       &
                          cDFT_BlockLabel, cDFT_Vc
     use sfc_partitions_module, only: n_parts_user, average_atomic_diameter, gap_threshold
-    use XLBOMD_module,         only: XLInitFreq,maxitersDissipation,kappa
+    use XLBOMD_module,         only: XLInitFreq,kappa
+    use mult_module,           only: maxiter_Dissipation
     use constraint_module,     only: flag_RigidBonds,constraints,SHAKE_tol, &
                                      RATTLE_tol,maxiterSHAKE,maxiterRATTLE, &
                                      const_range,n_bond
@@ -1528,7 +1532,8 @@ contains
          flag_MatrixFile_RankFromZero = fdf_boolean('IO.MatrixFile.RankFromZero', .true.)
          flag_MatrixFile_BinaryFormat = fdf_boolean('IO.MatrixFile.BinaryFormat', .true.)
          flag_MatrixFile_BinaryFormat_Grab = fdf_boolean('IO.MatrixFile.BinaryFormat.Grab', flag_MatrixFile_BinaryFormat)
-         flag_MatrixFile_BinaryFormat_Dump = fdf_boolean('IO.MatrixFile.BinaryFormat.Dump', flag_MatrixFile_BinaryFormat)
+         flag_MatrixFile_BinaryFormat_Dump_END = fdf_boolean('IO.MatrixFile.BinaryFormat.Dump', flag_MatrixFile_BinaryFormat)
+         flag_MatrixFile_BinaryFormat_Dump = flag_MatrixFile_BinaryFormat_Grab
  
        ! read wavefunction output flags
        mx_temp_matrices = fdf_integer('General.MaxTempMatrices',100)
@@ -1944,7 +1949,6 @@ contains
 !!$
 !!$
        ! Basic settings for MD
-       flag_MDold        = fdf_boolean('AtomMove.OldMemberUpdates',.false.)
        flag_MDdebug      = fdf_boolean('AtomMove.Debug',.false.)
        flag_MDcontinue   = fdf_boolean('AtomMove.RestartRun',.false.)
        flag_SFcoeffReuse = fdf_boolean('AtomMove.ReuseSFcoeff',.false.)
@@ -2011,10 +2015,10 @@ contains
          endif
          XLInitFreq          = fdf_integer('XL.ResetFreq',0)
          flag_dissipation    = fdf_boolean('XL.Dissipation',.false.)
-         maxitersDissipation = fdf_integer('XL.MaxDissipation',5)
+         maxiter_Dissipation = fdf_integer('XL.MaxDissipation',5)
          if (flag_dissipation) then
-           if (maxitersDissipation.LT.1 .OR. maxitersDissipation.GT.9) then
-             maxitersDissipation = 5
+           if (maxiter_Dissipation.LT.1 .OR. maxiter_Dissipation.GT.9) then
+             maxiter_Dissipation = 5
              if (inode.EQ.ionode) write (io_lun,'(2x,a)') &
                "WARNING: K must be 1 <= K <= 9 ! Setting to 5"
            endif
@@ -2131,12 +2135,23 @@ contains
     ! subroutine check_compatibility
     ! ------------------------------------------------------------------------------
     subroutine check_compatibility 
+     use GenComms, only: inode, ionode
      ! this subroutine checks the compatibility between keywords defined in read_input
      ! add the
      !       2017.11(Nov).03   Tsuyoshi Miyazaki
      implicit none
       !check AtomMove.ExtendedLagrangian(flag_XLBOMD) &  AtomMove.TypeOfRun (runtype)
-       if(runtype .NE. 'md') flag_XLBOMD=.false.
+       if(runtype .NE. 'md' .and. flag_XLBOMD) then
+         flag_XLBOMD=.false.
+         if(inode .eq. ionode)  write(io_lun,*)  &
+          'WARNING (AtomMove.ExtendedLagrangian): XLBOMD should be used only with MD.'
+       endif
+      !check AtomMove.ExtendedLagrangian(flag_XLBOMD) &  DM.SolutionMethod
+       if(flag_diagonalisation .and. flag_XLBOMD) then
+         flag_XLBOMD=.false.
+         if(inode .eq. ionode)  write(io_lun,*)  &
+          'WARNING (AtomMove.ExtendedLagrangian): present XLBOMD is only for orderN'
+       endif
      
      return
     end subroutine check_compatibility 

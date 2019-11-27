@@ -173,7 +173,7 @@ contains
     use global_module, only: iprint_DM, IPRINT_TIME_THRES1,             &
                              nspin, flag_fix_spin_population,           &
                              ne_in_cell, ne_spin_in_cell, flag_dump_L,  &
-                             flag_MDold,flag_SkipEarlyDM, flag_XLBOMD,  &
+                             flag_SkipEarlyDM, flag_XLBOMD,             &
                              flag_propagateX, flag_dissipation,         &
                              integratorXL, runtype, flag_exx, flag_diagonalisation
     use mult_module,   only: matrix_transpose, matT, matTtran, matL,    &
@@ -186,9 +186,10 @@ contains
     use energy,        only: entropy
     use timer_module,  only: cq_timer, start_timer, stop_print_timer,   &
                              WITH_LEVEL
-    use store_matrix,  only: dump_matrix2, dump_InfoMatGlobal
     use matrix_data,   only: Lrange, Srange, LSrange, Hrange
-    use XLBOMD_module, only: matX, matXvel, dump_XL
+    !use XLBOMD_module, only: matX, matXvel, dump_XL
+    use store_matrix,  only: dump_XL
+    use mult_module,   only: matXL, matXLvel
 
     use exx_kernel_default, only: get_X_matrix
 
@@ -273,54 +274,7 @@ contains
                IPRINT_TIME_THRES1)
        end do ! end of do while (.not. done)
     end if
-    ! *** Add frequency of output here *** !
 
-    if (flag_dump_L) then
-       if (.NOT. flag_MDold) then
-
-         !2018Feb12 TM@UCL: 
-         !   Calls of dump_matrix2 for Kmatrix or Lmatrix were removed.
-         !   We may put dump_pos_and_matrices in the future, if needed.
-         !    Kmatrix2.i**.p**** and InfoGlobal.i** must be printed out simultaneously.
-         !   I also plan to revise the parts calling dump_matrix2 for XLBOMD.
-         !2018Feb12 TM@UCL: 
-
-          if (.NOT. flag_diagonalisation) then 
-             ! For XL-BOMD
-             if (flag_XLBOMD) then
-                if (flag_propagateX) then
-                   call dump_matrix2('X',matX(1),LSrange)
-                   if(nspin==2) call dump_matrix2('X_2',matX(2),LSrange)
-                   call dump_matrix2('S',matS   ,Srange)
-                   if (integratorXL.EQ.'velocityVerlet') then
-                      call dump_matrix2('Xvel',matXvel(1),LSrange)
-                      if(nspin==2) call dump_matrix2('Xvel_2',matXvel(2),LSrange)
-                   end if
-                else
-                   call dump_matrix2('X',matX(1),Lrange)
-                   if(nspin==2) call dump_matrix2('X_2',matX(2),Lrange)
-                   if (integratorXL.EQ.'velocityVerlet') then
-                      call dump_matrix2('Xvel',matXvel(1),Lrange)
-                      if(nspin==2) call dump_matrix2('Xvel_2',matXvel(2),Lrange)
-                   end if
-                endif
-                ! When dissipation applies
-                if (flag_dissipation) call dump_XL()
-             endif
-          end if
-       else
-          if (flag_diagonalisation) then ! Use exact diagonalisation to get K
-             if(inode==ionode.AND.iprint_DM>2) write(io_lun,fmt='(2x,"K matrix only saved if AtomMove.OldMemberUpdates is F")')
-          else
-             if (nspin == 1) then
-                call dump_matrix("L", matL(1), inode)
-             else
-                call dump_matrix("L_up", matL(1), inode)
-                call dump_matrix("L_dn", matL(2), inode)
-             end if
-          end if
-       endif
-    end if
     if (record) then
        if (inode == ionode .and. iprint_DM > 1) then
           write (io_lun,*) '  List of residuals and energies'
@@ -848,7 +802,7 @@ contains
                                  ni_in_cell, flag_global_tolerance,    &
                                  flag_mix_L_SC_min,                    &
                                  flag_fix_spin_population, nspin,      &
-                                 spin_factor, flag_dump_L,flag_MDold
+                                 spin_factor, flag_dump_L
     use timer_module,      only: cq_timer,start_timer,                 &
                                  stop_print_timer, WITH_LEVEL
     use io_module,         only: dump_matrix
@@ -860,7 +814,6 @@ contains
     !Prints out charge density -- 2010.Nov.06 TM
     use io_module,         only: dump_charge
     use dimens,            only: n_my_grid_points
-    use store_matrix,      only: dump_matrix2
 
     implicit none
 
@@ -1236,19 +1189,14 @@ contains
           PulayR(ndone + n_iter) = g1
           PulayE(ndone + n_iter) = energy1_tot
        end if
+
        ! dump the L matrix if required
-       if (flag_dump_L) then
-          if (mod (n_iter, n_dumpL) == 0) then
-            if (flag_MDold) then
-              if (nspin == 1) then
-                 call dump_matrix("L", matL(1), inode)
-              else
-                 call dump_matrix("L_up", matL(1), inode)
-                 call dump_matrix("L_dn", matL(2), inode)
-              end if
-            endif
-          end if
-       end if
+       !if (flag_dump_L) then
+       !   if (mod (n_iter, n_dumpL) == 0) then
+       !    call dump_pos_and_matrices
+       !   end if
+       !end if
+
        ! check if tolerance is reached
        if (g1 < tolerance) then
           done = .true.
