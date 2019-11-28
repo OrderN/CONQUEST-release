@@ -4,7 +4,6 @@
 #
 ENERGY_OBJS = H_matrix_module.o \
               SelfCon_module.o \
-              EarlySC_module.o \
               PosTan_module.o \
               DMMinModule.o \
               DiagModule${DIAG_DUMMY}.o \

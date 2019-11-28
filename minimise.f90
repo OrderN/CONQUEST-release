@@ -119,6 +119,8 @@ contains
   !!    Added LFD minimisation for multisite support functions
   !!   2017/11/10 dave
   !!    Removed calls to dump K matrix (now done in DMMinModule)
+  !!   2019/10/24 11:52 dave
+  !!    Changed function calls to FindMinDM
   !!  SOURCE
   !!
   !subroutine get_E_and_F(fixed_potential, vary_mu, total_energy, &
@@ -262,8 +264,8 @@ contains
                         fixed_potential, vary_mu, n_L_iterations, &
                         L_tolerance, total_energy, backtrace_level)
     else ! Ab initio TB: vary only DM
-       call FindMinDM(n_L_iterations, vary_mu, L_tolerance, inode, &
-                      ionode, reset_L, .false., backtrace_level)
+       call FindMinDM(n_L_iterations, vary_mu, L_tolerance, &
+                      reset_L, .false., backtrace_level)
        call get_energy(total_energy, level=backtrace_level)
     end if
     ! Once ground state is reached, if we are doing deltaSCF, perform excitation
@@ -299,8 +301,8 @@ contains
                L_tolerance, total_energy, backtrace_level)
 
        else ! Ab initio TB: vary only DM
-          call FindMinDM(n_L_iterations, vary_mu, L_tolerance, inode, &
-               ionode, reset_L, .false., backtrace_level)
+          call FindMinDM(n_L_iterations, vary_mu, L_tolerance, &
+               reset_L, .false., backtrace_level)
        end if
     end if
     ! calculate vdW energy correction to xc energy
@@ -351,8 +353,8 @@ contains
     ! output WFs or DOS
     if (flag_self_consistent.AND.(flag_out_wf.OR.flag_write_DOS)) then
        wf_self_con=.true.
-       call FindMinDM(n_L_iterations, vary_mu, L_tolerance, inode,&
-            ionode, reset_L, .false.)
+       call FindMinDM(n_L_iterations, vary_mu, L_tolerance,&
+            reset_L, .false.)
        wf_self_con=.false.
     end if
 

@@ -2041,6 +2041,8 @@ contains
   !!  Added timers
   !! 2012/05/26 L.Tong
   !! - Added input npmod, this is used by the new version of DoPulay
+  !!   2019/10/24 11:52 dave
+  !!    Changed function calls to DoPulay
   !!SOURCE
   !!
   subroutine pulayStep(npmod, posnStore, forceStore, x_atom_cell, &
@@ -2082,7 +2084,7 @@ contains
        enddo
     enddo
     !call gsum(Aij,mx_pulay,mx_pulay)
-    call DoPulay(npmod,Aij,alph,pul_mx,mx_pulay,inode,ionode)
+    call DoPulay(npmod,Aij,alph,pul_mx,mx_pulay)
     if(myid==0.AND.iprint_MD>2) write(io_lun,*) 'Alpha: ', alph
     x_atom_cell(:) = 0.0_double
     y_atom_cell(:) = 0.0_double
@@ -3005,6 +3007,8 @@ contains
   !!  MODIFICATION HISTORY
   !!   2008/05/25
   !!    Added timers
+  !!   2019/11/04 15:14 dave
+  !!    Replace call to indexx with call to heapsort_integer_index
   !!  SOURCE
   !!
   subroutine cover_update(x_position, y_position, z_position, set, groups)
@@ -3013,7 +3017,7 @@ contains
     use basic_types
     use global_module, only: ni_in_cell, rcellx, rcelly, rcellz, &
                              IPRINT_TIME_THRES3
-    use cover_module,  only: indexx
+    use functions,  only: heapsort_integer_index
     use GenComms,      only: cq_abort, myid
     use timer_module
 
@@ -3135,7 +3139,7 @@ contains
        enddo
     enddo
     ! sort minimum CS by nodes 
-    call indexx(groups%mx_gcell,ng_in_min,ind_min,min_sort)
+    call heapsort_integer_index(ng_in_min,ind_min,min_sort)
     ! go over all GCS groups in node-periodic-grouped order 
     ind_cover=0
     do ind=1,ng_in_min

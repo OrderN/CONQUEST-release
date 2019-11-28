@@ -35,12 +35,16 @@
 !!    Added interface for McW_matrix_multiply
 !!   2014/09/15 18:30 lat
 !!    fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
+!!   2019/10/24 10:30 dave
+!!    Added inode and ionode as use-associated from GenComms in module header
+!!    for efficiency and best practice; changed function calls
 !!***
 module McWeeny
 
   use global_module,          only: io_lun, area_DM
   use timer_module,           only: start_timer, stop_timer
   use timer_stdclocks_module, only: tmr_std_matrices
+  use GenComms,               ONLY: inode, ionode
 
   implicit none
 
@@ -112,7 +116,6 @@ contains
                              IPRINT_TIME_THRES2,                       &
                              nspin, spin_factor,                       &
                              flag_fix_spin_population
-    use GenComms,      only: inode, ionode
     use timer_module,  only: cq_timer, start_timer, stop_print_timer,  &
                              WITH_LEVEL
 
@@ -328,7 +331,7 @@ contains
   !!    formulation should have been the identiy matrix (lambda = 0).
   !!  SOURCE
   !!
-  subroutine InitMcW(inode, ionode)
+  subroutine InitMcW
 
     use datatypes
     use numbers
@@ -348,10 +351,6 @@ contains
                               WITH_LEVEL
 
     implicit none
-
-    ! Passed variables
-    ! real(double) :: number_of_bands 
-    integer :: inode, ionode
 
     ! Local variables
     real(double) :: n_e, n_o, hmax_ds, hmin_ds, SX, SXHX_ds, A
@@ -600,7 +599,7 @@ contains
                               free_temp_matrix, L_S_LS, LS_L_LSL,     &
                               LSL_SL_L, mult, matLS, matSL
     use global_module,  only: iprint_DM, nspin, spin_factor
-    use GenComms,       only: gsum, cq_abort, inode, ionode, my_barrier
+    use GenComms,       only: gsum, cq_abort, my_barrier
 
     implicit none
 
@@ -746,7 +745,7 @@ contains
                               free_temp_matrix, matLS, matSL, L_S_LS, &
                               LS_L_LSL, LSL_SL_L, mult
     use global_module,  only: iprint_DM, nspin, spin_factor
-    use GenComms,       only: gsum, cq_abort, inode, ionode, my_barrier
+    use GenComms,       only: gsum, cq_abort, my_barrier
 
     implicit none
 
@@ -868,7 +867,6 @@ contains
     use mult_module,   only: matrix_product, matrix_sum, T_H_TH, &
                              TH_T_L, allocate_temp_matrix, mult, &
                              free_temp_matrix, matrix_trace
-    use GenComms,      only: inode, ionode
     use global_module, only: iprint_DM
 
     implicit none
@@ -914,7 +912,6 @@ contains
 
     use datatypes
     use numbers
-    use GenComms,      only: inode, ionode
     use mult_module,   only: matrix_sum
     use global_module, only: iprint_DM
 

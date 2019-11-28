@@ -2226,6 +2226,8 @@ contains
 !!  MODIFICATION DATE
 !!   2017/01/31 15:56 dave
 !!    Small bug fix: changed dimension of rhototal to maxngrid
+!!   2019/10/24 11:52 dave
+!!    Changed function calls to FindMinDM
 !!  SOURCE
 !!
   subroutine LFD_minimise(fixed_potential, vary_mu, n_cg_L_iterations, L_tolerance, &
@@ -2382,8 +2384,8 @@ contains
           call get_S_matrix(inode, ionode, build_AtomF_matrix=.false.)
           call get_H_matrix(.false., fixed_potential, electrons, &
                             rho, maxngrid)
-          call FindMinDM(n_cg_L_iterations, vary_mu, L_tolerance, inode, &
-                         ionode, reset_L, .false.)
+          call FindMinDM(n_cg_L_iterations, vary_mu, L_tolerance, &
+                         reset_L, .false.)
        else 
           ! Save present energy and density
           if (diff_E.gt.zero .and. inode==ionode) write(io_lun,'(/20x,A,f15.7,A,i3)') &

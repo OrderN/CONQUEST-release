@@ -55,16 +55,20 @@
 !!    in lateDM
 !!   2014/09/15 18:30 lat
 !!    fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
+!!   2019/10/24 08:30 dave
+!!    Added inode and ionode as use-associated from GenComms in module header
+!!    for efficiency and best practice; also iprint_DM
 !!  SOURCE
 !!
 module DMMin
 
   use datatypes
-  use global_module,          only: io_lun, area_DM
+  use global_module,          only: io_lun, area_DM, iprint_DM
   use timer_module,           only: start_timer, stop_timer, cq_timer
   use timer_module,           only: start_backtrace, stop_backtrace
   use timer_stdclocks_module, only: tmr_std_densitymat
-
+  use GenComms,               ONLY: inode, ionode
+  
   ! Area identification
   integer, parameter, private :: area = 4
   !
@@ -165,12 +169,12 @@ contains
   !!    Debug for spin=2, propagateL (not propagateX)
   !!  SOURCE
   !!
-  subroutine FindMinDM(n_L_iterations, vary_mu, tolerance, inode, &
-                       ionode, resetL, record, level)
+  subroutine FindMinDM(n_L_iterations, vary_mu, tolerance, &
+                       resetL, record, level)
 
     use datatypes
     use numbers
-    use global_module, only: iprint_DM, IPRINT_TIME_THRES1,             &
+    use global_module, only: IPRINT_TIME_THRES1,             &
                              nspin, flag_fix_spin_population,           &
                              ne_in_cell, ne_spin_in_cell, flag_dump_L,  &
                              flag_SkipEarlyDM, flag_XLBOMD,             &
@@ -197,7 +201,7 @@ contains
 
     ! Passed variables
     integer, optional :: level
-    integer      :: n_L_iterations, inode, ionode
+    integer      :: n_L_iterations
     real(double) :: tolerance
     logical      :: resetL, vary_mu, record
 
@@ -249,7 +253,7 @@ contains
        do while (.not. done)
           call start_timer(tmr_l_iter, WITH_LEVEL)
           if (resetL .or. inflex) then ! Reset L to McW
-             call InitMcW(inode, ionode)
+             call InitMcW
              call McWMin(n_L_iterations, delta_e)
              early = .true.
              resetL = .false.    !2010.Nov.06 TM
@@ -257,11 +261,11 @@ contains
           if (early .or. problem) then
              inflex = .false.
              call earlyDM(ndone, n_L_iterations, delta_e, done, vary_mu, &
-                  tolerance,inode, ionode, inflex, record)
+                  tolerance, inflex, record)
           end if
           if ((.not. done) .and. (.not. inflex)) then ! Continue on to late stage
              call lateDM(ndone, n_L_iterations, done, delta_e, vary_mu, &
-                  inode, ionode, tolerance, record)
+                  tolerance, record)
           end if
           niter = niter + 1
           if (problem) resetL = .true.
@@ -351,7 +355,7 @@ contains
   !!  SOURCE
   !!
   subroutine earlyDM(ndone, n_L_iterations, delta_e, done, vary_mu, &
-                     tolerance, inode, ionode, inflex, record)
+                     tolerance, inflex, record)
 
     use datatypes
     use logicals
@@ -365,7 +369,7 @@ contains
     use primary_module, only: bundle
     use PosTan,         only: PulayR, PulayE
     use GenComms,       only: cq_abort, gsum
-    use global_module,  only: iprint_DM, IPRINT_TIME_THRES1,           &
+    use global_module,  only: IPRINT_TIME_THRES1,           &
                               ni_in_cell, flag_global_tolerance,       &
                               nspin, spin_factor,                      &
                               flag_fix_spin_population
@@ -376,7 +380,7 @@ contains
 
     ! Passed variables
     real(double) :: tolerance, delta_e
-    integer      :: inode, ionode, n_L_iterations, ndone
+    integer      :: n_L_iterations, ndone
     logical      :: inflex, vary_mu, done, record
 
     ! Local variables
@@ -417,7 +421,7 @@ contains
                        ndone, n_L_iterations)
 
     if (vary_mu) then
-       call correct_electron_number(iprint_DM, inode, ionode)
+       call correct_electron_number
     end if
 
     call LNV_matrix_multiply(electrons, energy0, dontK, dontM1, &
@@ -521,8 +525,8 @@ contains
        ! minimise total E along search direction, updates energy1 =
        ! E(L_n_iter+1), delta_e = energy1_tot - energy0_tot,
        ! matM3(L_n_iter+1), matM3_dn(L_n_iter+1), inflex and interpG
-       call lineMinL(iprint_DM, matM3, mat_search, mat_temp, matSM3,   &
-                     energy0_tot, energy1_tot, delta_e, inode, ionode, &
+       call lineMinL(matM3, mat_search, mat_temp, matSM3,   &
+                     energy0_tot, energy1_tot, delta_e, &
                      inflex, interpG)
        ! panic if found inflexion point
        if (inflex) then
@@ -577,7 +581,7 @@ contains
 
        ! Correct L_n_iter+1 again to get electron numbers correct
        if (vary_mu) then
-          call correct_electron_number(iprint_DM, inode, ionode)
+          call correct_electron_number
        endif
 
        ! recalculate the quantities after L_n_iter+1 is updated
@@ -783,7 +787,7 @@ contains
   !!  SOURCE
   !!
   subroutine lateDM(ndone, n_L_iterations, done, deltaE, vary_mu, &
-                    inode, ionode, tolerance, record)
+                    tolerance, record)
 
     use datatypes
     use numbers
@@ -798,7 +802,7 @@ contains
     use Pulay
     use PosTan,            only: PulayR, PulayE, max_iters
     use GenComms,          only: cq_abort, gsum
-    use global_module,     only: iprint_DM, IPRINT_TIME_THRES1,        &
+    use global_module,     only: IPRINT_TIME_THRES1,        &
                                  ni_in_cell, flag_global_tolerance,    &
                                  flag_mix_L_SC_min,                    &
                                  flag_fix_spin_population, nspin,      &
@@ -818,7 +822,7 @@ contains
     implicit none
 
     ! Passed variables
-    integer      :: n_L_iterations, inode, ionode, length, ndone
+    integer      :: n_L_iterations, length, ndone
     logical      :: vary_mu, done, record
     real(double) :: tolerance, deltaE
 
@@ -995,7 +999,7 @@ contains
           end do
        endif
        ! after the step, correct the electron number
-       if (vary_mu) call correct_electron_number(iprint_DM, inode, ionode)
+       if (vary_mu) call correct_electron_number
        ! Re-evaluate gradient and energy
        call LNV_matrix_multiply(electrons, energy1, dontK, dontM1, &
                                 dontM2, doM3, dontM4, dophi, doE,  &
@@ -1082,7 +1086,7 @@ contains
           end do ! j
        end do ! i
        ! Solve to get alphas
-       call DoPulay(npmod, Aij, alph, pul_mx, maxpulayDMM, inode, ionode)
+       call DoPulay(npmod, Aij, alph, pul_mx, maxpulayDMM)
        ! Make new L matrix from Pulay sum
        do spin = 1, nspin
           call matrix_scale(zero, matL(spin))
@@ -1091,7 +1095,7 @@ contains
           end do
        end do
        ! after the step, correct the electron number
-       if (vary_mu) call correct_electron_number(iprint_DM, inode, ionode)
+       if (vary_mu) call correct_electron_number
        if (flag_mix_L_SC_min) then
           ! 2011/08/29 L.Tong
           ! the original also has dophi, but I think this is redundant
@@ -1345,8 +1349,8 @@ contains
   !!   - Renamed to lineMinL
   !!  SOURCE
   !!
-  subroutine lineMinL(output_level, matM3, mat_D, mat_temp, matSM3,  &
-                      energy_in, energy_out, delta_e, inode, ionode, &
+  subroutine lineMinL( matM3, mat_D, mat_temp, matSM3,  &
+                      energy_in, energy_out, delta_e, &
                       inflex, interpG)
 
     use datatypes
@@ -1364,7 +1368,6 @@ contains
     implicit none
 
     ! Passed variables
-    integer               :: inode, ionode, output_level
     integer, dimension(:) :: matM3, matSM3, mat_D, mat_temp
     logical               :: inflex
     real(double)          :: delta_e, energy_in, energy_out, interpG
@@ -1409,7 +1412,7 @@ contains
     step = delta_e / g0
     if (abs(step) < 1.0e-2_double) step = 0.01_double
     if (abs(step) > 0.1_double)    step = 0.1_double
-    if (inode == ionode .and. output_level >= 2) &
+    if (inode == ionode .and. iprint_DM >= 2) &
          write (io_lun, '(2x,"Step is ",f25.15)') step
 
     ! now we take the step in the direction D
@@ -1483,7 +1486,7 @@ contains
           truestep = - C / (two * B)
        end if
     end if ! if (SQ < 0) then
-    if (inode == ionode .and. output_level >= 2) &
+    if (inode == ionode .and. iprint_DM >= 2) &
          write (io_lun, '(2x,"True Step is ",f25.15)') truestep
 
     !TM 09/09/2003
@@ -1541,7 +1544,7 @@ contains
     ! returns interpG as zeta
     interpG = zeta
 
-    if (inode == ionode .and. output_level >= 2) then
+    if (inode == ionode .and. iprint_DM >= 2) then
        do spin = 1, nspin
           write (io_lun, '(2x,"energy_1 for spin = ",i1," is: ",f25.15)') &
                 spin, energy_1_spin(spin)
@@ -1576,37 +1579,22 @@ contains
   !!    - Added experimental backtrace
   !! SOURCE
   !!
-  subroutine correct_electron_number(output_level,inode,ionode,level)
+  subroutine correct_electron_number
 
     use mult_module,   only: matL, matphi
     use global_module, only: nspin, flag_fix_spin_population
 
     implicit none
 
-    ! Passed variables
-    integer, optional :: level
-    integer :: inode, ionode, output_level
-
     ! Local variables
     type(cq_timer) :: backtrace_timer
     integer        :: backtrace_level
 
-!****lat<$
-    if (       present(level) ) backtrace_level = level+1
-    if ( .not. present(level) ) backtrace_level = -10
-    call start_backtrace(t=backtrace_timer,who='corr_el_number',&
-         where=area,level=backtrace_level)
-!****lat>$
-
     if (nspin == 1 .or. flag_fix_spin_population) then
-       call correct_electron_number_fixspin(output_level, inode, ionode)
+       call correct_electron_number_fixspin
     else
-       call correct_electron_number_varspin(output_level, inode, ionode)
+       call correct_electron_number_varspin
     end if
-
-!****lat<$
-    call stop_backtrace(t=backtrace_timer,who='corr_el_number')
-!****lat>$
 
     return
   end subroutine correct_electron_number
@@ -1630,7 +1618,7 @@ contains
   !!     both spin channels.
   !! SOURCE
   !!
-  subroutine correct_electron_number_fixspin(output_level, inode, ionode)
+  subroutine correct_electron_number_fixspin
 
     use datatypes
     use logicals
@@ -1647,9 +1635,6 @@ contains
 
     implicit none
 
-    ! Passed variables
-    integer :: inode, ionode, output_level
-    integer :: mat_L, mat_phi
     ! Local variables
     real(double)  :: step, step1, g0, g1, recA, B, C, D, truestep, dne
     integer       :: iter, spin
@@ -1675,7 +1660,7 @@ contains
           call LNV_matrix_multiply(electrons, energy, dontK, dontM1,     &
                                    dontM2, dontM3, dontM4, dophi, dontE, &
                                    mat_phi=matphi, spin=spin)
-          if (inode == ionode .and. output_level >= 2) &
+          if (inode == ionode .and. iprint_DM >= 2) &
                write (io_lun, '(2x,"electron number (spin=",i1,") before &
                                &correction: ",f25.15)') spin, electrons(spin)
           call matrix_product(matT, matphi(spin), matTL(spin), mult(T_L_TL))
@@ -1684,13 +1669,13 @@ contains
           ! initial guess is linear correction...
           step1 = (electrons_0(spin) - electrons(spin)) / g0
           step = 0.1_double
-          if (inode == ionode .and. output_level >= 2) &
+          if (inode == ionode .and. iprint_DM >= 2) &
                write (io_lun, '(2x,"g0, step1 (spin=",i1,") are ",2f25.15)') &
                      spin, g0, step1
           if (abs(electrons_0(spin) - electrons(spin)) < 1.0e-9_double) then
              call matrix_sum(one, matL(spin), step1, matSphi(spin))
              ! check that electron number is correct
-             if (output_level >= 2) then
+             if (iprint_DM >= 2) then
                 call LNV_matrix_multiply(electrons_2, energy, dontK,     &
                                          dontM1, dontM2, dontM3, dontM4, &
                                          dophi, dontE, mat_phi=matphi,   &
@@ -1714,7 +1699,7 @@ contains
              call matrix_product(matTL(spin), matTtran, &
                                  matSphi2(spin), mult(TL_T_L))
              g1 = matrix_product_trace(matphi(spin), matSphi2(spin))
-             if (inode == ionode .and. output_level >= 2) &
+             if (inode == ionode .and. iprint_DM >= 2) &
                   write (io_lun, '(2x,"g1, elec2 (spin=",i1,") are ",2f25.15)') &
                         spin, g1, electrons_2(spin)
              ! get coefficients of polynomial
@@ -1729,7 +1714,7 @@ contains
              C = C * recA
              D = D * recA
              truestep = SolveCubic(B, C, D, step, inode, ionode)
-             if (inode .eq. ionode .and. output_level >= 2) &
+             if (inode .eq. ionode .and. iprint_DM >= 2) &
                   write (io_lun, '(2x,"Step, truestep (spin=",i1,") are ",2f25.15)') &
                         spin, step, truestep
              call matrix_sum(one, matL(spin), truestep - step, matSphi(spin))
@@ -1740,7 +1725,7 @@ contains
                                          dontM1, dontM2, dontM3,     &
                                          dontM4, dophi, dontE,       &
                                          mat_phi=matphi, spin=spin)
-                if (inode == ionode .and. output_level >= 2) &
+                if (inode == ionode .and. iprint_DM >= 2) &
                      write (io_lun, '(2x,"electron number (spin=",i1,") &
                                      &after correction",f25.15)') &
                            spin, electrons_2(spin)
@@ -1753,7 +1738,7 @@ contains
                                          dontM1, dontM2, dontM3,     &
                                          dontM4, dophi, dontE,       &
                                          mat_phi=matphi, spin=spin)
-                if (inode == ionode .and. output_level >= 2) &
+                if (inode == ionode .and. iprint_DM >= 2) &
                      write (io_lun, '(2x,"electron number (spin=",i1,") &
                                      &after correction: ",f25.15)') &
                            spin, electrons_2(spin)
@@ -1803,7 +1788,7 @@ contains
   !!     obsolete
   !!  SOURCE
   !!
-  subroutine correct_electron_number_varspin(output_level, inode, ionode)
+  subroutine correct_electron_number_varspin
 
     use datatypes
     use logicals
@@ -1819,9 +1804,6 @@ contains
     use global_module,  only: ne_in_cell, nspin, spin_factor
 
     implicit none
-
-    ! Passed variables
-    integer :: inode, ionode, output_level
 
     ! Local variables
     real(double), dimension(nspin) :: electrons_spin, energy_spin
@@ -1854,7 +1836,7 @@ contains
                                 dontE, mat_phi=matphi)
        electrons = spin_factor * sum(electrons_spin)
 
-       if (inode == ionode .and. output_level >= 2) &
+       if (inode == ionode .and. iprint_DM >= 2) &
             write (io_lun, 1) electrons_spin(1), &
                               electrons_spin(nspin), electrons
 
@@ -1869,7 +1851,7 @@ contains
        ! initial guess is linear correction...
        step1 = (electrons_0 - electrons) / (g0 + RD_ERR)
        step = 0.1_double
-       if (inode == ionode .and. output_level >= 2) &
+       if (inode == ionode .and. iprint_DM >= 2) &
             write (io_lun, '(2x,"g0, step1 are ",2f25.15)') g0, step1
 
        ! if we are within 0.1% of the correct number, linear will do.
@@ -1899,7 +1881,7 @@ contains
              g1 = g1 + spin_factor * &
                   matrix_product_trace(matphi(spin), matSphi2(spin))
           end do
-          if (inode == ionode .and. output_level >= 2)               &
+          if (inode == ionode .and. iprint_DM >= 2)               &
                write (io_lun, '(2x,"g1, elec_up, elec_dn, elec2 are ",&
                                &f25.15/,34x,f25.15/,34x,f25.15/,&
                                &34x,f25.15)')                         &
@@ -1924,7 +1906,7 @@ contains
           D = D * recA
 
           truestep = SolveCubic(B, C, D, step, inode, ionode)
-          if (inode == ionode .and. output_level >= 2) &
+          if (inode == ionode .and. iprint_DM >= 2) &
                write (io_lun, '(2x,"Step, truestep are ",2f25.15)') &
                      step, truestep
 
@@ -1942,7 +1924,7 @@ contains
                                       dontM4, dophi, dontE, mat_phi=matphi)
              electrons2 = spin_factor * sum(electrons_spin)
 
-             if (inode == ionode .and. output_level >= 2) &
+             if (inode == ionode .and. iprint_DM >= 2) &
                   write (io_lun, 2) electrons_spin(1), &
                                     electrons_spin(nspin), electrons2
              dne = abs(electrons2 - electrons_0)
@@ -1954,7 +1936,7 @@ contains
                                       dontK, dontM1, dontM2, dontM3, &
                                       dontM4, dophi, dontE, mat_phi=matphi)
              electrons2 = spin_factor * sum(electrons_spin)
-             if (inode == ionode .and. output_level >= 2) &
+             if (inode == ionode .and. iprint_DM >= 2) &
                   write (io_lun, 2) electrons_spin(1), &
                                     electrons_spin(nspin), electrons2
           end if
@@ -1991,7 +1973,10 @@ contains
 !!
 !!  PURPOSE
 !!   Solves a cubic: x^3+Ax^2+Bx+C
-!!   Taken from NR, 2nd Edition (p179)
+!!   This is a general solution first worked out in the
+!!   sixteenth century (published by Gerolamo Cardano)
+!!
+!!   See, for example, Abramowitz & Stegun p. 17
 !!  INPUTS
 !!
 !!
@@ -2006,9 +1991,11 @@ contains
 !!    Added ROBODoc header
 !!   20/06/2001 dave
 !!    Included in DMMinModule
+!!   2019/10/23 16:57 dave
+!!    Updated and polished
 !!  SOURCE
 !!
-  function SolveCubic(A,B,C,guess,inode,ionode)
+  function SolveCubic(a,b,c,guess,inode,ionode)
 
     use datatypes
     use numbers
@@ -2017,51 +2004,57 @@ contains
 
     integer inode,ionode
     real(double) :: SolveCubic
-    real(double) :: A,B,C,guess
+    real(double) :: a,b,c,guess
 
-    real(double) :: Q, R, theta, T, Z1, Z2, Z3
-    real(double) :: S1, S2
+    real(double) :: Q, R, S, T, theta, z1, z2, z3
 
-    Q = (A*A-3.0_double*B)/9.0_double
-    R = (2.0_double*A*A*A-9.0_double*A*B+27.0_double*C)/54.0_double
+    Q = (a*a - three*b) / nine
+    R = (two*a*a*a - nine*a*b + 27.0_double*c)/54.0_double
 
-    if ((R*R)<(Q*Q*Q)) then
+    if ((R*R)<(Q*Q*Q)) then ! Guarantees Q is positive
        ! three roots...
-       theta = acos(R/(SQRT(Q*Q*Q)))
-       T = -2.0_double*SQRT(Q)
-       Z1 = T * cos(theta/3.0_double) - (A/3.0_double) - guess
-       Z2 = T * cos((theta+2.0_double*pi)/3.0_double) - (A/3.0_double) - guess
-       Z3 = T * cos((theta-2.0_double*pi)/3.0_double) - (A/3.0_double) - guess
+       theta = acos(R/(sqrt(Q*Q*Q)))
+       T = -two * sqrt(Q)
+       ! Note that solutions are given relative to guess (step taken to find parameters)
+       z1 = T * cos(theta/three) - (a/three) 
+       z2 = T * cos((theta+twopi)/three) - (a/three) 
+       z3 = T * cos((theta-twopi)/three) - (a/three) 
 
-       if (ABS(Z1)<=ABS(Z2).and.ABS(Z1)<=ABS(Z3)) then
-          SolveCubic = Z1 + guess
-       else if (ABS(Z2)<=ABS(Z3)) then
-          SolveCubic = Z2 + guess
+       ! Take solution with smallest magnitude
+       if (abs(z1)<=abs(z2).and.abs(z1)<=abs(Z3)) then
+          SolveCubic = z1 
+       else if (abs(z2)<=abs(z3)) then
+          SolveCubic = z2 
        else
-          SolveCubic = Z3 + guess
+          SolveCubic = z3 
        end if
     else
 
-       ! the following is based on Abramowitz-Stegun p.17, and it works
+       ! the solution for the single real root
        Q = -Q
        R = -R
 
-       S1 = R + sqrt(Q*Q*Q + R*R)
-       S2 = R - sqrt(Q*Q*Q + R*R)
+       S = R + sqrt(Q*Q*Q + R*R)
+       T = R - sqrt(Q*Q*Q + R*R)
 
-       if ( S1 >= zero ) then
-          S1 = S1**(1.0_double/3.0_double)
+       if ( S >= zero ) then
+          S = S**third
        else
-          S1 = -(abs(S1))**(1.0_double/3.0_double)
+          S = -abs(S)**third
        end if
 
-       if ( S2 >= zero ) then
-          S2 = S2**(1.0_double/3.0_double)
+       if ( T >= zero ) then
+          T = T**third
        else
-          S2 = -(abs(S2))**(1.0_double/3.0_double)
+          T = -abs(T)**third
        end if
 
-       SolveCubic = S1 + S2 - A/3.0_double
+       SolveCubic = S + T - a/three
+       ! Experience suggests that, while this is a correct solution to the cubic,
+       ! a large step is completely wrong for electron number correction - test
+       ! for this, and if necessary return only the initial guess
+       ! 
+       ! The prefactor of 10 is arbitrary but seems reasonable
        if(abs(SolveCubic)>10.0_double*abs(guess)) then
           if(inode==ionode) &
                write (io_lun, '(2x,"Step too large: linear guess was: ",2e25.15)') &

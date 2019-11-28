@@ -187,6 +187,8 @@ contains
   !!    Bug fix: for ghost atoms
   !!   2018/12/13 13:25 nakata
   !!    Bug fix: for the output of the number of electrons
+  !!   2019/08/16 12:18 dave
+  !!    Replaced call for spline interpolation with direct evaluation
   !!  SOURCE
   !!
   subroutine set_atomic_density(flag_set_density,level)
@@ -209,7 +211,6 @@ contains
     use set_blipgrid_module, only: naba_atoms_of_blocks
     use GenComms,            only: my_barrier, cq_abort, inode, ionode, gsum
     use atomic_density,      only: atomic_density_table
-    use spline_module,       only: splint
     use dimens,              only: n_my_grid_points, grid_point_volume
     use GenBlas,             only: rsum, scal
     use timer_module,        only: WITH_LEVEL
@@ -235,15 +236,12 @@ contains
     real(double) :: dcellx_grid, dcelly_grid, dcellz_grid
     real(double) :: xatom, yatom, zatom, step, loc_cutoff
     real(double) :: xblock, yblock, zblock, alpha
-    real(double) :: dx, dy, dz, rx, ry, rz, r2, r_from_i
+    real(double) :: dx, dy, dz, rx, ry, rz, rsq, r_from_i
+    real(double) :: a, b, c, d, r1, r2, r3, r4, rr
     real(double)   :: local_density, grid_electrons, scale, scale_spin_up, scale_spin_dn
     type(cq_timer) :: tmr_l_tmp1
     type(cq_timer) :: backtrace_timer
     integer        :: backtrace_level, stat
-
-    ! logical flag to warn if splint routine called out of the
-    ! tabulated range.
-    logical :: range_flag
 
 !****lat<$
     if (       present(level) ) backtrace_level = level+1
@@ -367,22 +365,28 @@ contains
                          rx = xblock + dx - xatom
                          ry = yblock + dy - yatom
                          rz = zblock + dz - zatom
-                         r2 = rx * rx + ry * ry + rz * rz
-                         if (r2 < loc_cutoff * loc_cutoff) then
-                            r_from_i = sqrt(r2)
-                            call splint(step, &
-                                 atomic_density_table(the_species)%table(:),&
-                                 atomic_density_table(the_species)%d2_table(:),&
-                                 atomic_density_table(the_species)%length,&
-                                 r_from_i, local_density, range_flag)
-                            if (range_flag) &
-                                 call cq_abort('set_density: overrun problem')
-                            ! Store the density for this grid point
-                            density_atom(igrid) = density_atom(igrid) + local_density ! both up and down
-                            if (flag_InitialAtomicSpin) then
-                               density(igrid,1) = density(igrid,1) + local_density * scale_spin_up
-                               density(igrid,2) = density(igrid,2) + local_density * scale_spin_dn
-                            endif
+                         rsq = rx * rx + ry * ry + rz * rz
+                         if (rsq < loc_cutoff * loc_cutoff) then
+                            r_from_i = sqrt(rsq)
+                            j = floor(r_from_i/step)+1
+                            if(j+1<=atomic_density_table(the_species)%length) then
+                               rr = real(j,double) * step
+                               a = ( rr - r_from_i ) / step
+                               b = one - a
+                               c = a * ( a * a - one ) * step * step / six
+                               d = b * ( b * b - one ) * step * step / six
+                               r1 = atomic_density_table(the_species)%table(j)
+                               r2 = atomic_density_table(the_species)%table(j+1)
+                               r3 = atomic_density_table(the_species)%d2_table(j)
+                               r4 = atomic_density_table(the_species)%d2_table(j+1)
+                               ! Store the density for this grid point
+                               local_density = a * r1 + b * r2 + c * r3 + d * r4
+                               density_atom(igrid) = density_atom(igrid) + local_density ! both up and down
+                               if (flag_InitialAtomicSpin) then
+                                  density(igrid,1) = density(igrid,1) + local_density * scale_spin_up
+                                  density(igrid,2) = density(igrid,2) + local_density * scale_spin_dn
+                               endif
+                            end if
                          end if ! if this point is within cutoff
                       end do !ix gridpoints
                    end do  !iy gridpoints
@@ -484,12 +488,14 @@ contains
   !!  MODIFICATION HISTORY
   !!   2016/07/20 16:30 nakata
   !!    Renamed naba_atm -> naba_atoms_of_blocks
+  !!   2019/08/16 12:19 dave
+  !!    Replaced call for spline interpolation with explicit evaluation
   !!  SOURCE
   !!
   subroutine set_density_pcc()
 
     use datatypes
-    use numbers,             only: zero, one
+    use numbers,             only: zero, one, six
     use global_module,       only: rcellx, rcelly, rcellz, id_glob, &
                                    ni_in_cell, iprint_SC,           &
                                    species_glob, dens, ne_in_cell,  &
@@ -502,7 +508,6 @@ contains
     use set_blipgrid_module, only: naba_atoms_of_blocks
     use GenComms,            only: my_barrier, cq_abort, inode, ionode, gsum
     use pseudo_tm_info,      only: pseudo
-    use spline_module,       only: splint
     use dimens,              only: n_my_grid_points, grid_point_volume
     use GenBlas,             only: rsum, scal
     use timer_module
@@ -521,11 +526,10 @@ contains
     real(double) :: xatom, yatom, zatom
     real(double) :: pcc_cutoff, pcc_step
     real(double) :: xblock, yblock, zblock,  alpha
-    real(double) :: dx, dy, dz, rx, ry, rz, r2, r_from_i
-    real(double) :: pcc_density !P.C.C. charge density returned from splint routine
+    real(double) :: dx, dy, dz, rx, ry, rz, rsq, r_from_i
+    real(double) :: pcc_density !P.C.C. charge density interpolated
+    real(double) :: a, b, c, d, r1, r2, r3, r4, rr
     type(cq_timer) :: tmr_l_tmp1
-    ! logical flag to warn if splint routine called out of the tabulated range.
-    logical :: range_flag
 
     if (inode == ionode .and. iprint_SC >= 2) &
          write (io_lun, fmt='(2x,"Entering set_density_pcc")')
@@ -612,37 +616,25 @@ contains
                          rx=xblock+dx-xatom
                          ry=yblock+dy-yatom
                          rz=zblock+dz-zatom
-                         r2 = rx * rx + ry * ry + rz * rz
-                         if(r2 < pcc_cutoff * pcc_cutoff) then
-                            r_from_i = sqrt(r2)
-                            ! j = aint(r_from_i/step) + 1
-                            ! ! check j (j+1 =< N_TAB_MAX)
-                            ! if(j+1 > atomic_density_table(the_species)%&
-                            !      length) then
-                            !    call cq_abort('set_density: overrun &
-                            !         &problem',j)
-                            ! endif
-                            ! ! Linear interpolation for now
-                            ! alpha = (r_from_i/step)-real(j-1,double)
-                            ! local_density = (one-alpha)*&
-                            !      atomic_density_table(the_species)%&
-                            !      table(j) + alpha*&
-                            !      atomic_density_table(the_species)%&
-                            !      table(j+1)
-                            call splint( pcc_step,pseudo(the_species)%&
-                                 chpcc%f(:), pseudo(the_species)%&
-                                 chpcc%d2(:), pseudo(the_species)%&
-                                 chpcc%n, r_from_i,pcc_density,&
-                                 range_flag)
-                            if(range_flag) &
-                                 call cq_abort('set_density_pcc: overrun problem')
-                            ! recalculate the density for this grid point
-                            density_pcc(igrid) = density_pcc(igrid) + pcc_density
+                         rsq = rx * rx + ry * ry + rz * rz
+                         if(rsq < pcc_cutoff * pcc_cutoff) then
+                            r_from_i = sqrt(rsq)
+                            j = floor(r_from_i/pcc_step) + 1
+                            if(j+1<=pseudo(the_species)%chpcc%n) then
+                               rr = real(j,double) * pcc_step
+                               a = ( rr - r_from_i ) / pcc_step
+                               b = one - a
+                               c = a * ( a * a - one ) * pcc_step * pcc_step / six
+                               d = b * ( b * b - one ) * pcc_step * pcc_step / six
+                               r1 = pseudo(the_species)%chpcc%f(j)
+                               r2 = pseudo(the_species)%chpcc%f(j+1)
+                               r3 = pseudo(the_species)%chpcc%d2(j)
+                               r4 = pseudo(the_species)%chpcc%d2(j+1)
+                               pcc_density = a * r1 + b * r2 + c * r3 + d * r4
+                               ! recalculate the density for this grid point
+                               density_pcc(igrid) = density_pcc(igrid) + pcc_density
+                            end if
                          endif ! if this point is within cutoff
-                         ! test output of densities
-                         ! print '(4(f10.6,a))', xblock+dx, " *", &
-                         !      yblock+dy, " *", zblock+dz, " *", &
-                         !      density(igrid), " *"
                       enddo !ix gridpoints
                    enddo  !iy gridpoints
                 enddo   !iz gridpoints

@@ -100,7 +100,7 @@ contains
     use GenComms, ONLY: cq_abort, gcopy
     use global_module, ONLY : iprint_init, area_init
     use numbers, ONLY : zero, one, two, three, four
-    use spline_module, ONLY : spline
+    use splines, ONLY : spline
     use pao_format
     use memory_module, ONLY: reg_alloc_mem, type_dbl
     use input_module, ONLY: io_assign, io_close

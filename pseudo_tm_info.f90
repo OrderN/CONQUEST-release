@@ -17,7 +17,7 @@
 !!    For using TM's pseudopotetials, 
 !!
 !!  USES
-!!   datatypes, GenComms, numbers, spline_module, global_module
+!!   datatypes, GenComms, numbers, splines, global_module
 !!  AUTHOR
 !!   T. Miyazaki
 !!  CREATION DATE
@@ -478,7 +478,7 @@ contains
   subroutine radial_read_ascii(op,lun)
 
     use numbers, ONLY: BIG, zero, RD_ERR
-    use spline_module, ONLY: spline
+    use splines, ONLY: spline
     use global_module, ONLY: iprint_pseudo
     use GenComms, ONLY: myid
 
@@ -600,7 +600,7 @@ contains
     use global_module, ONLY: numprocs, iprint_pseudo
     use GenComms, ONLY: inode, ionode, gcopy
     use pao_format, ONLY: species_pao
-    use spline_module, ONLY : spline
+    use splines, ONLY : spline
     use memory_module, ONLY: reg_alloc_mem, type_dbl    
     use functions, ONLY: erfc
     use input_module, ONLY: io_assign, io_close
