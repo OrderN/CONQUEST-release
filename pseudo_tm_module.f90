@@ -2290,7 +2290,7 @@ contains
     use species_module, ONLY: n_species
     use pseudo_tm_info, ONLY: rad_func, pseudo, loc_pot, rad_alloc, rad_dealloc
     use atomic_density, ONLY: atomic_density_table
-    use spline_module, ONLY: spline
+    use splines, ONLY: spline
     use functions, ONLY: j0
     use pseudopotential_common, ONLY: flag_neutral_atom_projector, maxL_neutral_atom_projector, &
          numN_neutral_atom_projector

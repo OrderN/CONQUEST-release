@@ -278,10 +278,9 @@ contains
     use datatypes
     use GenComms, ONLY : cq_abort, gcopy
     use global_module, ONLY : iprint_SC, area_SC
-    use numbers, ONLY : zero, one, four, very_small, pi
+    use numbers, ONLY : zero, one, four, very_small, pi, six
     use pao_format
     use memory_module, ONLY: reg_alloc_mem, type_dbl
-    use spline_module, ONLY: splint
 
     implicit none
 
@@ -290,6 +289,7 @@ contains
     integer :: alls, i, lun, nt, n_am, n_sp, n_zeta
     integer, parameter :: default_atomic_density_length = 2001
     real(double) :: alpha, cutoff, density_deltar, pao_deltar, r, rn_am, val
+    real(double) :: a, b, c, d, r1, r2, r3, r4, rr
     logical :: range_flag
 
     call start_timer(tmr_std_chargescf)
@@ -365,23 +365,23 @@ contains
                       i = 1 + floor(r/pao_deltar)
                       if(i+1 <= pao(n_sp)%angmom(n_am)%zeta(n_zeta)%length) then
                          if(n_am /=0) then
-                           rn_am = r**n_am
+                            rn_am = r**n_am
                          else
-                           rn_am = one
+                            rn_am = one
                          endif
-                         call splint(pao_deltar,pao(n_sp)%angmom(n_am)%zeta(n_zeta)%table(:), &
-                              pao(n_sp)%angmom(n_am)%zeta(n_zeta)%table2(:), &
-                              pao(n_sp)%angmom(n_am)%zeta(n_zeta)%length, &
-                              r,val,range_flag)
+                         rr = real(i,double)*pao_deltar
+                         a = (rr - r)/pao_deltar
+                         b = one - a
+                         c = a * ( a * a - one ) * pao_deltar * pao_deltar / six
+                         d = b * ( b * b - one ) * pao_deltar * pao_deltar / six
+                         r1 = pao(n_sp)%angmom(n_am)%zeta(n_zeta)%table(i)
+                         r2 = pao(n_sp)%angmom(n_am)%zeta(n_zeta)%table(i+1)
+                         r3 = pao(n_sp)%angmom(n_am)%zeta(n_zeta)%table2(i)
+                         r4 = pao(n_sp)%angmom(n_am)%zeta(n_zeta)%table2(i+1)
+                         val = a*r1 + b*r2 + c*r3 + d*r4
                          atomic_density_table(n_sp)%table(nt) = atomic_density_table(n_sp)%table(nt) + &
                               &one_over_four_pi * pao(n_sp)%angmom(n_am)%occ(n_zeta) * &
                               &(rn_am * val )**2
-                         ! Linear interpolation
-                         !alpha = one + r/pao_deltar - i
-                         !atomic_density_table(n_sp)%table(nt) = atomic_density_table(n_sp)%table(nt) + &
-                         !     &one_over_four_pi * pao(n_sp)%angmom(n_am)%occ(n_zeta) * &
-                         !     &(rn_am * ((one-alpha)*pao(n_sp)%angmom(n_am)%zeta(n_zeta)%table(i) + &
-                         !     &alpha*pao(n_sp)%angmom(n_am)%zeta(n_zeta)%table(i+1)))**2
                       end if ! if(i+1<=pao(...)%length
                    end do ! do nt = atomic_density_table()%length
                 end if ! if(pao(...)%length > 1
@@ -428,13 +428,15 @@ contains
 !!    Fixed over-run problem with splining
 !!   2008/05/23 ast
 !!    Added timers
+!!   2019/08/16 14:36 dave
+!!    Removed dsplint and output of derivative (unnecessary)
 !!  SOURCE
 !!
   subroutine spline_atomic_density(n_species)
 
     use datatypes
     use numbers
-    use spline_module, ONLY: spline,splint,dsplint
+    use splines, ONLY: spline
     use GenComms, ONLY: cq_abort, inode, ionode
     use global_module, ONLY: iprint_SC, area_SC
     use memory_module, ONLY: reg_alloc_mem, type_dbl
@@ -463,29 +465,15 @@ contains
        d_origin = (atomic_density_table(n)%table(2)- atomic_density_table(n)%table(1))/delta_r
        d_end = (atomic_density_table(n)%table(atomic_density_table(n)%length)- &
             atomic_density_table(n)%table(atomic_density_table(n)%length-1))/delta_r
+       !d_origin = 1e30_double
+       !d_end = 1e30_double
        call spline( atomic_density_table(n)%length, delta_r, atomic_density_table(n)%table(:),  &
             d_origin, d_end, atomic_density_table(n)%d2_table(:) )
        if(inode==ionode.AND.iprint_SC>3) then
           write(io_lun,fmt='(10x,"Atomic density for species ",i5)') n
           do i=1,atomic_density_table(n)%length
              r = real(i-1,double)*delta_r
-             if(r < atomic_density_table(n)%cutoff) then   !TM
-!                call splint(delta_r,atomic_density_table(n)%table(:), & 
-!                     atomic_density_table(n)%d2_table(:), &
-!                     atomic_density_table(n)%length, & 
-!                     r,local_density,range_flag)
-                call dsplint(delta_r,atomic_density_table(n)%table(:), & 
-                     atomic_density_table(n)%d2_table(:), &
-                     atomic_density_table(n)%length, & 
-                     r,local_density,derivative,range_flag)
-                write(io_lun,fmt='(10x,3f20.12)') r,local_density,derivative
-             else                                                    !TM
-                write(io_lun,fmt='(10x,"r in spline_atomic_density > cutoff  ",2f20.12)') &
-                     r, atomic_density_table(n)%cutoff
-                write(io_lun,fmt='(10x,3f20.12)') r, &                                   !TM
-                     atomic_density_table(n)%table(atomic_density_table(n)%length), & !TM
-                     atomic_density_table(n)%d2_table(atomic_density_table(n)%length) !TM
-             endif                                                   !TM
+             write(io_lun,fmt='(10x,2f20.12)') r,atomic_density_table(n)%table(i)
           end do
        end if
     end do

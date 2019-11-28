@@ -145,6 +145,10 @@
 !!    stress and heat flux
 !!   2019/05/21 zamaan
 !!    Added RNG seed
+!!   2019/11/14 tsuyoshi
+!!    Removed n_proc_old and glob2node_old
+!!   2019/11/18 tsuyoshi
+!!    Removed flag_MDold
 !!   2019/11/18 14:37 dave
 !!    Added flag_variable_cell
 !!  SOURCE
@@ -344,7 +348,6 @@ module global_module
   integer,allocatable :: id_glob_old(:),id_glob_inv_old(:)
 
   ! For MD
-  logical :: flag_MDold
   logical :: flag_LmatrixReuse
   logical :: flag_TmatrixReuse
   logical :: flag_SkipEarlyDM
@@ -358,9 +361,7 @@ module global_module
   !ORI real(double),parameter   :: shift_in_bohr = 1.0E-03_double
   real(double),parameter   :: shift_in_bohr = 1.0E-06_double
   ! Table showing atoms (global) in nodes
-  integer :: n_proc_old
   integer,allocatable :: glob2node(:)        ! size: ni_in_cell
-  integer,allocatable :: glob2node_old(:)    ! size: ni_in_cell
   ! Displacement of atoms from a previous step
   real(double),allocatable :: atom_coord_diff(:,:)
   ! XL-BOMD

@@ -29,6 +29,8 @@
 !!    Created fit_coeff; bug fixes
 !!   2008/02/01 17:48 dave
 !!    Changes for output to file not stdout
+!!   2019/11/13 08:04 dave
+!!    Removed local sort routine (now in functions module)
 !!  SOURCE
 !!
 module PosTan
@@ -167,6 +169,8 @@ contains
 !!  MODIFICATION HISTORY
 !!  22/05/2001 dave
 !!   ROBODoc header
+!!  2019/11/13 08:03 dave
+!!   Changed to use heapsort from functions module
 !!  SOURCE
 !!
   subroutine pos_tan(mxnpt,npt,xpt,ypt,cconst,bslope,myid)
@@ -174,6 +178,7 @@ contains
     ! Module usage
     use datatypes
     use global_module, ONLY: iprint_gen
+    use functions, ONLY: heapsort_real_index
     use GenComms, ONLY: cq_abort
 
     implicit none
@@ -198,7 +203,8 @@ contains
        call cq_abort('pos_tan: no. of points out of range',npt)
     endif
     ! --- make index for ordering of points from right to left ----------
-    call picksort(mxnpt,npt,xpt,indx)
+    !call picksort(mxnpt,npt,xpt,indx)
+    call heapsort_real_index(npt,xpt,indx,1)
     if(myid==0.AND.iprint_gen>1) then 
        write(io_lun,15)
 15     format(/'sequence nos. of points, going from right to left:'/)
@@ -335,74 +341,4 @@ contains
   end subroutine pos_tan
 !!***
 
-!!****f* PosTan/picksort *
-!!
-!!  NAME 
-!!   picksort
-!!  USAGE
-!! 
-!!  PURPOSE
-!!   Sorts elements of an array into descending order - makes
-!!   an index array indx so that arr(indx(i)) is correctly 
-!!   ordered.
-!!   Taken from Numerical Recipes
-!!  INPUTS
-!!   integer :: n, nmax - points, array size
-!!   integer, dimension(nmax) :: indx - index giving sorted array
-!!   real(double), dimension(nmax) :: arr - array to be sorted
-!!  USES
-!!   datatypes, GenComms
-!!  AUTHOR
-!!   D.R.Bowler
-!!  CREATION DATE
-!!   15/11/00
-!!  MODIFICATION HISTORY
-!!   21/06/2001 dave
-!!    Changed stop to cq_abort and added use GenComms
-!!    Added to documentation a little
-!!  SOURCE
-!!
-  subroutine picksort(nmax,n,arr,indx)
-
-    use datatypes
-    use GenComms, ONLY: cq_abort
-
-    implicit none
-
-    ! Passed variables
-    integer :: n,nmax
-    integer, dimension(nmax) :: indx
-    real(double), dimension(nmax) :: arr
-
-    ! Local variables
-    integer :: i,j,ifind
-    real(double) :: a
-
-    if((n<2).OR.(n>nmax)) then
-       call cq_abort('picksort: no. of elements out of range',n)
-    endif
-    ! Initiate index array
-    do i=1,n
-       indx(i)=i
-    enddo
-    do j=2,n ! Now sort array
-       a=arr(j)
-       ifind=0
-       i=j
-       do while((ifind==0).AND.(i>1))
-          i=i-1
-          if(arr(indx(i)).lt.a) then
-             indx(i+1)=indx(i)
-          else
-             indx(i+1)=j
-             ifind=1
-          endif
-       enddo ! End do while(ifind==0.AND.i>1)
-       if(ifind==0) then
-          indx(1)=j
-       endif
-    enddo ! End do j=2,n
-    return
-  end subroutine picksort
-!!***
 end module PosTan

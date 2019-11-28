@@ -209,6 +209,11 @@ module mult_module
        matHatomf, matKatomf, matXatomf, &
        matSFcoeff, matSFcoeff_tran, matdSFcoeff, matdSFcoeff_e
 
+  ! matrices related to XLBOMD (for DMM, at present)
+   integer, allocatable, dimension(:), public :: matXL, matXLvel    ! (nspin)
+   integer, allocatable, dimension(:,:), public :: matXL_store      ! (maxiter_Dissipation, nspin)
+   integer :: maxiter_Dissipation  
+
   integer, allocatable, dimension(:), public :: matrix_index, &
                                                 trans_index
 
@@ -1882,10 +1887,10 @@ contains
   end subroutine symmetrise_L
   !!***
 
-  !!****f* mult_module/symmetrise_matA *
+  !!****f* mult_module/symmetrise_mat *
   !!
   !!  NAME
-  !!   symmetrise_matA
+  !!   symmetrise_mat
   !!  USAGE
   !!
   !!  PURPOSE
@@ -1899,10 +1904,11 @@ contains
   !!  CREATION DATE
   !!   2013/08/23
   !!  MODIFICATION HISTORY
-  !!
+  !!   2019/11/13 tsuyoshi
+  !!     integer matA -> integer matA(n_matrix) for spin polarisation
   !!  SOURCE
   !!
-  subroutine symmetrise_matA(range,trans,matA)
+  subroutine symmetrise_mat(range,n_matrix,trans,matA)
 
     ! Module usage
     use datatypes
@@ -1911,18 +1917,23 @@ contains
     implicit none
 
     ! passed variables
-    integer :: range,trans,matA
+    !integer :: range,trans,matA
+    integer :: range,trans,n_matrix
+    integer :: matA(n_matrix)
 
     ! local variables
     integer :: mattmp
+    integer :: isize
 
     mattmp = allocate_temp_matrix(range,trans)
-    call matrix_transpose(matA,mattmp)
-    call matrix_sum(half,matA,half,mattmp)
+    do isize = 1, n_matrix
+     call matrix_transpose(matA(isize),mattmp)
+     call matrix_sum(half,matA(isize),half,mattmp)
+    enddo
     call free_temp_matrix(mattmp)
 
     return
-  end subroutine symmetrise_matA
+  end subroutine symmetrise_mat
   !!***
 
   !!****f* mult_module/end_ops *

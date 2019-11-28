@@ -30,6 +30,10 @@
 !!    fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
 !!   2018/01/22 12:42 JST dave
 !!    Changes to make prefactor arrays allocatable (for NA projectors)
+!!   2019/10/30 16:53 dave
+!!    Remove calculation of (-1)**m throughout (replace with test for m even/odd
+!!    and scaling factor of 1 or -1; also added numbers for module use.  Also
+!!    introduced a universal epsilon parameter for small angles
 !!  SOURCE
 !!
 
@@ -38,6 +42,8 @@ module angular_coeff_routines
   use datatypes
   use global_module,          only: io_lun
   use bessel_integrals,       only: fact, doublefact!, lmax_fact
+  use numbers,                only: zero, quarter, half, one, three_halves, two, &
+       three, pi, eight, very_small
   use timer_module,           only: start_timer, stop_timer
   use timer_stdclocks_module, only: tmr_std_allocation, tmr_std_basis
 
@@ -48,11 +54,10 @@ module angular_coeff_routines
   ! -------------------------------------------------------
   character(len=80), private :: RCSid = "$Id$"
 
-  !integer,parameter :: lmax_prefac=8
+  ! Parameter to avoid small angle errors throughout code
+  real(double), parameter :: epsilon = 1.0e-4_double 
   real(double), allocatable, dimension(:,:) :: prefac
   real(double), allocatable, dimension(:,:) :: prefac_real
-  !real(double) :: prefac(-1:lmax_prefac,-lmax_prefac:lmax_prefac)
-  !real(double) :: prefac_real(-1:lmax_prefac,-lmax_prefac:lmax_prefac)
 
 !!***
 
@@ -142,35 +147,34 @@ contains
 !!   l1,nz1,m1,l2,nz2,m2 relevant PAO angular momenta details
 !!   mat_val ; overlap matrix element
 !!  USES
-!!   ol_int_datatypes, datatypes, cubic_spline_routines, make_rad_tables   
+!!   ol_int_datatypes, datatypes, pao_array_utility, make_rad_tables   
 !!  AUTHOR
 !!   R Choudhury
 !!  CREATION DATE
 !!   24/07/03
 !!  MODIFICATION HISTORY
-!!
+!!   2019/08/16 15:48 dave
+!!    Replace call to spline_ol_intval_new2
 !!  SOURCE
 !!
   subroutine calc_mat_elem_gen(case,sp1,l1,nz1,m1,sp2,l2,nz2,m2,dx,dy,dz,mat_val)
 
     use datatypes
-    use numbers, only: zero
+    use numbers
     use ol_int_datatypes !,ONLY : rad_tables,rad_tables_ke,rad_tables_nlpf_pao,ol_index&
     !&,ol_index_nlpf_pao
-    use cubic_spline_routines, ONLY: spline_ol_intval_new2
     use GenComms, ONLY: inode, ionode, myid !for debugging purposes
-!    use make_rad_tables, ONLY: get_max_paoparams
 
     implicit none
 
     !routine to evaluate overlap matrix elements for the following cases
     !1 - pao_pao, 2 - pao_ke_pao, 3 - nlpf_pao (specified by case).
     integer, intent(in) :: case,sp1,l1,nz1,m1,sp2,l2,nz2,m2
-    integer count,n_lvals,lmax,nzmax,npts,i,l3
+    integer count,n_lvals,lmax,nzmax,npts,i,l3, j
     real(double), intent(in) :: dx,dy,dz
     real(double), intent(out) :: mat_val
     real(double) :: r, theta, phi, ang_factor, del_x, ind_val
-    !real(double), allocatable, dimension(:) :: radial_table
+    real(double) :: a, b, c, d, r1, r2, r3, r4, rr
     
     !find required set of radial tables through indices
     if(case.lt.3.OR.case==4) then !either case 1 or 2
@@ -193,61 +197,103 @@ contains
     
     call convert_basis(dx,dy,dz,r,theta,phi)
     
-    mat_val = 0.0_double ; ind_val = 0.0_double
+    mat_val = zero ; ind_val = zero
     if(case.lt.3.OR.case==4) then
        del_x = rad_tables(count)%rad_tbls(1)%del_x
-       do i = 1,n_lvals
-          l3 = rad_tables(count)%l_values(i)
-          call ol_ang_factor_new(l1,l2,l3,m1,m2,theta,phi,ang_factor)
-          !multiply radial table(l3) by the associated angular factor
-          if(case==1) then
-             call spline_ol_intval_new2(r,rad_tables(count)%rad_tbls(i)%&
-                  &arr_vals(1:npts),rad_tables(count)%rad_tbls(i)%&
-                  &arr_vals2(1:npts),npts,del_x,ind_val)
-          else if(case==2) then !case must eq 2
-             call spline_ol_intval_new2(r,rad_tables_ke(count)%rad_tbls(i)%&
-                  &arr_vals(1:npts),rad_tables_ke(count)%rad_tbls(i)%&
-                  &arr_vals2(1:npts),npts,del_x,ind_val)
-          else if(case==4) then
-             call spline_ol_intval_new2(r,rad_tables_paoNApao(count)%rad_tbls(i)%&
-                  &arr_vals(1:npts),rad_tables_paoNApao(count)%rad_tbls(i)%&
-                  &arr_vals2(1:npts),npts,del_x,ind_val)
-          endif
-          mat_val = mat_val + ind_val*ang_factor
-       enddo
+       j = floor(r/del_x) + 1
+       if(j+1<=npts) then
+          rr = real(j,double)*del_x
+          a = (rr - r)/del_x
+          b = one - a
+          c = a * ( a * a - one ) * del_x * del_x / six
+          d = b * ( b * b - one ) * del_x * del_x / six
+          do i = 1,n_lvals
+             l3 = rad_tables(count)%l_values(i)
+             call ol_ang_factor_new(l1,l2,l3,m1,m2,theta,phi,ang_factor)
+             !multiply radial table(l3) by the associated angular factor
+             if(case==1) then
+                r1 = rad_tables(count)%rad_tbls(i)%arr_vals(j)
+                r2 = rad_tables(count)%rad_tbls(i)%arr_vals(j+1)
+                r3 = rad_tables(count)%rad_tbls(i)%arr_vals2(j)
+                r4 = rad_tables(count)%rad_tbls(i)%arr_vals2(j+1)
+             else if(case==2) then
+                r1 = rad_tables_ke(count)%rad_tbls(i)%arr_vals(j)
+                r2 = rad_tables_ke(count)%rad_tbls(i)%arr_vals(j+1)
+                r3 = rad_tables_ke(count)%rad_tbls(i)%arr_vals2(j)
+                r4 = rad_tables_ke(count)%rad_tbls(i)%arr_vals2(j+1)
+             else if(case==4) then
+                r1 = rad_tables_paoNApao(count)%rad_tbls(i)%arr_vals(j)
+                r2 = rad_tables_paoNApao(count)%rad_tbls(i)%arr_vals(j+1)
+                r3 = rad_tables_paoNApao(count)%rad_tbls(i)%arr_vals2(j)
+                r4 = rad_tables_paoNApao(count)%rad_tbls(i)%arr_vals2(j+1)
+             endif
+             ind_val = a*r1 + b*r2 + c*r3 + d*r4
+             mat_val = mat_val + ind_val*ang_factor
+          end do
+       end if
     else if(case==3) then
        del_x = rad_tables_nlpf_pao(count)%rad_tbls(1)%del_x
-       do i = 1,n_lvals
-          l3 = rad_tables_nlpf_pao(count)%l_values(i)
-          call ol_ang_factor_new(l1,l2,l3,m1,m2,theta,phi,ang_factor)
-          !multiply radial table(l3) by the associated angular factor
-          call spline_ol_intval_new2(r,rad_tables_nlpf_pao(count)%rad_tbls(i)%&
-               &arr_vals(1:npts),rad_tables_nlpf_pao(count)%rad_tbls(i)%&
-               &arr_vals2(1:npts),npts,del_x,ind_val)
-          mat_val = mat_val + ind_val*ang_factor
-       enddo
+       j = floor(r/del_x) + 1
+       if(j+1<=npts) then
+          rr = real(j,double)*del_x
+          a = (rr - r)/del_x
+          b = one - a
+          c = a * ( a * a - one ) * del_x * del_x / six
+          d = b * ( b * b - one ) * del_x * del_x / six
+          do i = 1,n_lvals
+             l3 = rad_tables_nlpf_pao(count)%l_values(i)
+             call ol_ang_factor_new(l1,l2,l3,m1,m2,theta,phi,ang_factor)
+             !multiply radial table(l3) by the associated angular factor
+             r1 = rad_tables_nlpf_pao(count)%rad_tbls(i)%arr_vals(j)
+             r2 = rad_tables_nlpf_pao(count)%rad_tbls(i)%arr_vals(j+1)
+             r3 = rad_tables_nlpf_pao(count)%rad_tbls(i)%arr_vals2(j)
+             r4 = rad_tables_nlpf_pao(count)%rad_tbls(i)%arr_vals2(j+1)
+             ind_val = a*r1 + b*r2 + c*r3 + d*r4
+             mat_val = mat_val + ind_val*ang_factor
+          enddo
+       end if
     else if(case==5) then
        del_x = rad_tables_napf_pao(count)%rad_tbls(1)%del_x
-       do i = 1,n_lvals
-          l3 = rad_tables_napf_pao(count)%l_values(i)
-          call ol_ang_factor_new(l1,l2,l3,m1,m2,theta,phi,ang_factor)
-          !multiply radial table(l3) by the associated angular factor
-          call spline_ol_intval_new2(r,rad_tables_napf_pao(count)%rad_tbls(i)%&
-               &arr_vals(1:npts),rad_tables_napf_pao(count)%rad_tbls(i)%&
-               &arr_vals2(1:npts),npts,del_x,ind_val)
-          mat_val = mat_val + ind_val*ang_factor
-       enddo
+       j = floor(r/del_x) + 1
+       if(j+1<=npts) then
+          rr = real(j,double)*del_x
+          a = (rr - r)/del_x
+          b = one - a
+          c = a * ( a * a - one ) * del_x * del_x / six
+          d = b * ( b * b - one ) * del_x * del_x / six
+          do i = 1,n_lvals
+             l3 = rad_tables_napf_pao(count)%l_values(i)
+             call ol_ang_factor_new(l1,l2,l3,m1,m2,theta,phi,ang_factor)
+             !multiply radial table(l3) by the associated angular factor
+             r1 = rad_tables_napf_pao(count)%rad_tbls(i)%arr_vals(j)
+             r2 = rad_tables_napf_pao(count)%rad_tbls(i)%arr_vals(j+1)
+             r3 = rad_tables_napf_pao(count)%rad_tbls(i)%arr_vals2(j)
+             r4 = rad_tables_napf_pao(count)%rad_tbls(i)%arr_vals2(j+1)
+             ind_val = a*r1 + b*r2 + c*r3 + d*r4
+             mat_val = mat_val + ind_val*ang_factor
+          end do
+       end if
     else if(case==6) then
        del_x = rad_tables_paopaoNA(count)%rad_tbls(1)%del_x
-       do i = 1,n_lvals
-          l3 = rad_tables_paopaoNA(count)%l_values(i)
-          call ol_ang_factor_new(l1,l2,l3,m1,m2,theta,phi,ang_factor)
-          !multiply radial table(l3) by the associated angular factor
-          call spline_ol_intval_new2(r,rad_tables_paopaoNA(count)%rad_tbls(i)%&
-               &arr_vals(1:npts),rad_tables_paopaoNA(count)%rad_tbls(i)%&
-               &arr_vals2(1:npts),npts,del_x,ind_val)
-          mat_val = mat_val + ind_val*ang_factor
-       enddo
+       j = floor(r/del_x) + 1
+       if(j+1<=npts) then
+          rr = real(j,double)*del_x
+          a = (rr - r)/del_x
+          b = one - a
+          c = a * ( a * a - one ) * del_x * del_x / six
+          d = b * ( b * b - one ) * del_x * del_x / six
+          do i = 1,n_lvals
+             l3 = rad_tables_paopaoNA(count)%l_values(i)
+             call ol_ang_factor_new(l1,l2,l3,m1,m2,theta,phi,ang_factor)
+             !multiply radial table(l3) by the associated angular factor
+             r1 = rad_tables_paopaoNA(count)%rad_tbls(i)%arr_vals(j)
+             r2 = rad_tables_paopaoNA(count)%rad_tbls(i)%arr_vals(j+1)
+             r3 = rad_tables_paopaoNA(count)%rad_tbls(i)%arr_vals2(j)
+             r4 = rad_tables_paopaoNA(count)%rad_tbls(i)%arr_vals2(j+1)
+             ind_val = a*r1 + b*r2 + c*r3 + d*r4
+             mat_val = mat_val + ind_val*ang_factor
+          end do
+       end if
     endif
   end subroutine calc_mat_elem_gen
 !!***  
@@ -284,31 +330,35 @@ contains
     integer m3,l_index,m_index,ma,mc,m1_dum,m2_dum
     real(double), intent(in) :: theta, phi
     real(double), intent(out) :: ang_factor
-    real(double) :: ang_coeff1,ang_coeff2,ang_factor1,ang_factor2,af1,af2
+    real(double) :: ang_coeff1,ang_coeff2,ang_factor1,ang_factor2,af1,af2, signfac
     
-    ang_coeff1 = 0.0_double
-    ang_coeff2 = 0.0_double
-    ang_factor1 = 0.0_double
-    ang_factor2 = 0.0_double
+    ang_coeff1 = zero
+    ang_coeff2 = zero
+    ang_factor1 = zero
+    ang_factor2 = zero
     
     !component 2
     ma = m1-m2
     call calc_index_new(l1,l2,l3,-m1,m2,ma,l_index,m_index)
     ang_coeff2 = coefficients(l_index)%m_combs(m_index)
     if(m1.ge.0.and.m2.ge.0) then
-       ang_factor2 = ((-1)**m2)*prefac(l3,-ma)*assoclegpol(l3,-ma,theta)&
-            &*cos(-ma*phi)*2.0_double
+       signfac = one
+       if(2*(m2/2)/=m2) signfac = -one
+       ang_factor2 = signfac*prefac(l3,-ma)*assoclegpol(l3,-ma,theta)&
+            &*cos(-ma*phi)*two
        if(m1.gt.0.and.m2.gt.0) then
-          ang_factor2 = ang_factor2*(1.0_double/2.0_double)
+          ang_factor2 = ang_factor2*half
        else if(m1.eq.0.and.m2.eq.0) then
-          ang_factor2 = ang_factor2*(1.0_double/4.0_double)
+          ang_factor2 = ang_factor2*quarter
        else !bit of both..
-          ang_factor2 = ang_factor2*(1.0_double/(2.0_double*sqrt(2.0_double)))
+          ang_factor2 = ang_factor2*half/sqrt(two)
        endif
        
     else if(m1.lt.0.and.m2.lt.0) then
-       ang_factor2 = ((-1)**m1)*prefac(l3,ma)*assoclegpol(l3,ma,theta)&
-            &*cos(ma*phi)*2.0_double*(1.0_double/2.0_double)
+       signfac = one
+       if(2*(m1/2)/=m1) signfac = -one
+       ang_factor2 = signfac*prefac(l3,ma)*assoclegpol(l3,ma,theta)&
+            &*cos(ma*phi) !*two*(one/two)
        
     else !m1lt0 and m2>=0 or vice versa
        !make sure m1 is .ge.0, m2.lt.0
@@ -321,16 +371,18 @@ contains
           ma = m1_dum-m2_dum
        endif
        
-       ang_factor2 = ((-1)**m1_dum)*prefac(l3,ma)*assoclegpol(l3,ma,theta)&
-            &*sin(-ma*phi)*2.0_double!*(1.0_double/2.0_double)
+       signfac = one
+       if(2*(m1_dum/2)/=m1_dum) signfac = -one
+       ang_factor2 = signfac*prefac(l3,ma)*assoclegpol(l3,ma,theta)&
+            &*sin(-ma*phi)*two!*(one/two)
        if(m1_dum.gt.0) then !m2 must be .lt.0
-          ang_factor2 = ang_factor2*(1.0_double/2.0_double)
+          ang_factor2 = ang_factor2*half
        else if(m1_dum.eq.0) then
-          ang_factor2 = ang_factor2*(1.0_double/(2.0_double*sqrt(2.0_double)))
+          ang_factor2 = ang_factor2*half/sqrt(two)
        else if(m2_dum.gt.0) then !m1 must be .lt. 0
-          ang_factor2 = ang_factor2*(1.0_double/2.0_double)
+          ang_factor2 = ang_factor2*half
        else !m2.eq.0 and m1.lt.0
-          ang_factor2 = ang_factor2*(1.0_double/(2.0_double*sqrt(2.0_double)))
+          ang_factor2 = ang_factor2*half/sqrt(two)
        endif
        
     endif
@@ -341,19 +393,19 @@ contains
     ang_coeff1 = coefficients(l_index)%m_combs(m_index)
     if(m1.ge.0.and.m2.ge.0) then
        ang_factor1 = prefac(l3,mc)*assoclegpol(l3,mc,theta)&
-            &*cos(mc*phi)*2.0_double
+            &*cos(mc*phi)*two
        if(m1.gt.0.and.m2.gt.0) then
-          ang_factor1 = ang_factor1*(1.0_double/2.0_double)
+          ang_factor1 = ang_factor1*half
        else if(m1.eq.0.and.m2.eq.0) then
-          ang_factor1 = ang_factor1*(1.0_double/4.0_double)
+          ang_factor1 = ang_factor1*quarter
        else
           !write(io_lun,*) 'mi.gt.0, mj.eq.0'
           !write(io_lun,*) 'ang factor 1', ang_factor1
-          ang_factor1 = ang_factor1*(1.0_double/(2.0_double*sqrt(2.0_double)))
+          ang_factor1 = ang_factor1*half/sqrt(two)
        endif
     else if(m1.lt.0.and.m2.lt.0) then
-       ang_factor1 = prefac(l3,mc)*assoclegpol(l3,mc,theta)&
-            &*cos(mc*phi)*2.0_double*(-1.0_double/2.0_double)
+       ang_factor1 = -prefac(l3,mc)*assoclegpol(l3,mc,theta)&
+            &*cos(mc*phi) !*two*(-one/two)
     else !m1lt0 and m2>0 or vice versa
        !make sure m1 is .ge.0, m2.lt.0
        if(m1.ge.0) then
@@ -364,17 +416,19 @@ contains
           m2_dum = m1 !mc remains unchanged..
        endif
        
-       ang_factor1 = ((-1)**mc)*prefac(l3,-mc)*assoclegpol(l3,-mc,theta)&
-            &*sin(-mc*phi)*2.0_double
+       signfac = one
+       if(2*(mc/2)/=mc) signfac = -one
+       ang_factor1 = signfac*prefac(l3,-mc)*assoclegpol(l3,-mc,theta)&
+            &*sin(-mc*phi)*two
        if(m1_dum.gt.0) then !m2 must be .lt.0
-          ang_factor1 = ang_factor1*(1.0_double/2.0_double)
+          ang_factor1 = ang_factor1*half
        else if(m1_dum.eq.0) then !m2 must be .lt.0
-          ang_factor1 = ang_factor1*(1.0_double/(2.0_double*sqrt(2.0_double)))
+          ang_factor1 = ang_factor1*half/sqrt(two)
        else if(m2_dum.gt.0) then !m1 must be .lt.0 
-          ang_factor1 = ang_factor1*(-1.0_double/2.0_double)
+          ang_factor1 = ang_factor1*(-half)
        else !m2.eq.0 and m1.lt.0
           !write(io_lun,*) 'm2.eq.0 m1.lt.0'
-          ang_factor1 = ang_factor1*(1.0_double/(2.0_double*sqrt(2.0_double)))
+          ang_factor1 = ang_factor1*half/sqrt(two)
        endif
           
     endif
@@ -382,7 +436,7 @@ contains
     !m1, m2 values we have
     af1 = ang_coeff1*ang_factor1
     af2 = ang_coeff2*ang_factor2
-    ang_factor = (af1+af2)*8.0_double
+    ang_factor = (af1+af2)*eight
   end subroutine ol_ang_factor_new
 !!***  
 
@@ -546,11 +600,11 @@ contains
     integer :: k1,k2,k3,n1,n2,n3
     real(double), intent(out) :: s_coup
     !   real, external :: fact
-    real(double) :: s_coup1,s_coup2,s_coup3
+    real(double) :: s_coup1,s_coup2,s_coup3, signfac
 
-    s_coup1 = 0.0_double
-    s_coup2 = 0.0_double
-    s_coup3 = 0.0_double
+    s_coup1 = zero
+    s_coup2 = zero
+    s_coup3 = zero
     
     s_coup1 = fact(j3+j1-j2)*fact(j3-j1+j2)*fact(j1+j2-j3)*fact(j3+m1+m2) *fact(j3-m1-m2)
 
@@ -568,7 +622,9 @@ contains
        max_x = j3+m1+m2
     endif
     do x = min_x,max_x
-       s_coup3 = s_coup3 + ((-1)**(x+j2+m2))*(sqrt(((2.0_double*j3)+1.0_double))&
+       signfac = one
+       if(2*((x+j2+m2)/2)/=(x+j2+m2)) signfac = -one
+       s_coup3 = s_coup3 + signfac*(sqrt(((two*j3)+one))&
             &*fact(j3+j2+m1-x)*fact(j1-m1+x))/&
             &(fact(j3-j1+j2-x)*fact(j3+m1+m2-x)*fact(x)&
             &*fact(x+j1-j2-m1-m2))
@@ -608,13 +664,16 @@ contains
     ! evaluating Wigner 3-j symbols
     integer, intent(in) :: j1,j2,j3,m1,m2,m3
     real(double), intent(out) :: wig_3j
-    real(double) :: s_coup
-    !real(double), parameter :: pi=3.1415926535897932_double
+    real(double) :: s_coup, signfac
+    
+
     if(m1+m2+m3.eq.0) then
        call vect_coupl(j1,j2,j3,m1,m2,s_coup)
-       wig_3j= ((-1)**(j1-j2-m3))*s_coup/(sqrt(two*j3+one))
+       signfac = one
+       if(2*((j1-j2-m3)/2)/=(j1-j2-m3)) signfac = -one
+       wig_3j= signfac*s_coup/(sqrt(two*j3+one))
     else
-       wig_3j=0.0_double
+       wig_3j=zero
     endif
 
   end subroutine wigner_3j
@@ -653,8 +712,8 @@ contains
     real(double) :: l1,l2,l3,z1,z2,z3 
     real(double) :: wig_3j,s_coup,pref,wig_3ja,wig_3jb,m1neg
     real(double), intent(out) :: intgrlval
-    !real(double), parameter :: pi = 3.1415926535897932_double
-    integer i
+    integer :: i
+
     wig_3j = zero
     wig_3ja = zero
     wig_3jb = zero
@@ -702,7 +761,7 @@ contains
 
   subroutine convert_basis(x,y,z,r,thet,phi)
     use datatypes
-    use numbers, ONLY: pi, half, RD_ERR, three_halves, zero
+
     implicit none
     !routine to convert Cartesian displacements into displacements
     !in spherical polar coordinates
@@ -715,20 +774,20 @@ contains
     z2 = z*z
     mod_r = sqrt(x2+y2+z2)
     mod_r_plane = sqrt(x2+y2)
-    if(mod_r<RD_ERR) then
+    if(mod_r<very_small) then
        r = zero
        thet = zero
        phi = zero
        return
     end if
 
-    if(abs(z)<RD_ERR) then
+    if(abs(z)<very_small) then
        thet = half*pi
     else
        thet = acos(z/mod_r) !need to make sure this ratio doesn't disappear as well..
     endif
 
-    if(abs(x2)<RD_ERR.and.abs(y2)<RD_ERR) then
+    if(abs(x2)<very_small.and.abs(y2)<very_small) then
        phi = zero
     else
        if(x<zero) then
@@ -768,27 +827,31 @@ contains
 !!   sp,l,nz,m - species no., l ang momentum value, zeta value
 !!   and azimuthal quantum number of specified pao
 !!  USES
-!!   datatypes, pao_format, cubic_spline_routines
+!!   datatypes, pao_format, pao_array_utility
 !!  AUTHOR
 !!   R Choudhury
 !!  CREATION DATE
 !!   25/09/03
 !!  MODIFICATION HISTORY
-!!
+!!   2019/08/16 15:57 dave
+!!    Replace spline_ol_intval_new2
 !!  SOURCE
 !!
 
   subroutine evaluate_pao(sp,l,nz,m,x,y,z,pao_val)
+
     use datatypes
-    use pao_format !,ONLY : pao
-    use cubic_spline_routines !,ONLY : spline_ol_intval_new2
+    use numbers
+    use pao_format, ONLY : pao
+
     implicit none
-    !routine to return value of PAO at given point in space
+
     integer, intent(in) :: sp,l,nz,m
     real(double), intent(in) :: x,y,z
     real(double), intent(out) :: pao_val
     real(double) :: r,theta,phi,del_r,y_val,val
-    integer :: npts
+    integer :: npts, j
+    real(double) :: a, b, c, d, r1, r2, r3, r4, rr
     
     !convert Cartesians into spherical polars
     call convert_basis(x,y,z,r,theta,phi)
@@ -796,9 +859,20 @@ contains
     npts = pao(sp)%angmom(l)%zeta(nz)%length
     del_r = (pao(sp)%angmom(l)%zeta(nz)%cutoff/&
          &(pao(sp)%angmom(l)%zeta(nz)%length-1))
-    
-    call spline_ol_intval_new2(r,pao(sp)%angmom(l)%zeta(nz)%table, &
-         pao(sp)%angmom(l)%zeta(nz)%table2,npts,del_r,pao_val)
+    j = floor(r/del_r) + 1
+    pao_val = zero
+    if(j+1<=npts) then
+       rr = real(j,double)*del_r
+       a = (rr - r)/del_r
+       b = one - a
+       c = a * ( a * a - one ) * del_r * del_r / six
+       d = b * ( b * b - one ) * del_r * del_r / six
+       r1 = pao(sp)%angmom(l)%zeta(nz)%table(j)
+       r2 = pao(sp)%angmom(l)%zeta(nz)%table(j+1)
+       r3 = pao(sp)%angmom(l)%zeta(nz)%table2(j)
+       r4 = pao(sp)%angmom(l)%zeta(nz)%table2(j+1)
+       pao_val = a*r1 + b*r2 + c*r3 + d*r4
+    end if
     !now multiply by value of spherical harmonic
     y_val = re_sph_hrmnc(l,m,theta,phi)
     
@@ -860,7 +934,7 @@ contains
     call convert_basis(x,y,z,r_my,theta,phi)
     !write(io_lun,*) 'Basis: ',x,y,z,r_my,theta,phi
     !call test_rotation(l,m,theta)
-    val = 0.0_double
+    val = zero
     val = f_r*re_sph_hrmnc(l,m,theta,phi)
     call stop_timer(tmr_std_basis)
   end subroutine pp_elem
@@ -906,12 +980,12 @@ contains
     real(double) :: del_x,xj1,xj2,f_r,df_r,a,b,c,d,alpha,beta,gamma,delta
     real(double) :: x,y,z,r_my,theta,phi,c_r,c_theta,c_phi,x_n,y_n,z_n
     real(double) :: fm_phi, dfm_phi, val1, val2, rl, rl1, tmpr, tmpdr
-    real(double), parameter :: mintol = 0.000000001_double
+
     !routine to calculate value of gradient of f(r)*Re(Y_lm(x,y,z))
     !along specified Cartesian unit vector
     r_my = sqrt((x_i*x_i)+(y_i*y_i)+(z_i*z_i))
     call pao_rad_vals_fetch(spec,l,nzeta,m,r_my,f_r,df_r)
-    if(r_my>RD_ERR) then 
+    if(r_my>very_small) then 
        x_n = x_i/r_my; y_n = y_i/r_my; z_n = z_i/r_my
     else
        x_n = zero; y_n = zero; z_n = zero
@@ -1005,7 +1079,7 @@ contains
        else
           rl1 = r**(l-1)
        endif
-       !if(l==1.AND.r_my<1.0e-8) rl1 = 1.0_double
+       !if(l==1.AND.r_my<1.0e-8) rl1 = one
        tmpr = rl*f_r
        tmpdr = rl*df_r + l*rl1*f_r
        f_r = tmpr
@@ -1033,34 +1107,34 @@ contains
 !!  CREATION DATE
 !!   2003 sometime
 !!  MODIFICATION HISTORY
-!!
+!!   2019/08/16 15:16 dave
+!!    Replace dsplint call
 !!  SOURCE
 !!
   subroutine grad_mat_elem_gen2_prot(dir,case,sp1,l1,nz1,m1,sp2,l2,nz2,m2,x,y,z,grad_valout)
+    
     use datatypes
-    use ol_int_datatypes !,ONLY : ol_index,rad_tables,rad_tables_ke,ol_index_nlpf_pao&
-    !&,rad_tables_nlpf_pao
-
-    use spline_module, ONLY: dsplint
-    use cubic_spline_routines, ONLY : spline_ol_intval_new2
+    use ol_int_datatypes!, ONLY : ol_index,rad_tables,rad_tables_ke,ol_index_nlpf_pao,rad_tables_nlpf_pao
     use GenComms, ONLY: inode, ionode, myid !for debugging purposes
+    use numbers
+    
     implicit none
+
     !improved routine to evaluate matrix element derivatives for the following cases
     !1 - pao_pao, 2 - pao_ke_pao, 3 - nlpf_pao (specified by case)
     integer, intent(in) :: dir,case,sp1,l1,nz1,m1,sp2,l2,nz2,m2
-    integer :: count,n_lvals,lmax,nzmax,npts,i,l3,l_index,m_index,l,m,ma,mc
+    integer :: count,n_lvals,lmax,nzmax,npts,i,l3,l_index,m_index,l,m,ma,mc, j
     integer :: m1dum,m2dum,l1dum,l2dum
     real(double), intent(in) :: x,y,z
     real(double), intent(out) :: grad_valout
     real(double) :: r,theta,phi,ang_factor,del_x,ind_val,f_r,df_r,grad_val,df_r1,df_r2
     real(double) :: c_r,c_theta,c_phi,ylm_factor,dtheta_factor,dphi_factor,num_grad  
     real(double) :: ang_coeff1,ang_coeff2,out_val,arg,grad1,grad2,dummy,grad_val2
-    real(double), parameter :: mintol = 0.000000001_double
     logical :: flag
-    !just coding for the straight pao_pao case for now, first spline out the function 
-    !values that we need
+    real(double) :: a, b, c, d, r1, r2, r3, r4, rr, da, db, dc, dd
+
     if(case.lt.3.OR.case==4.OR.case==7) then !either pao/pao or pao/ke/pao overlap matrix elements
-       grad_valout = 0.0_double
+       grad_valout = zero
        count = ol_index(sp1,sp2,nz1,nz2,l1,l2)
        n_lvals = rad_tables(count)%no_of_lvals
        call convert_basis(x,y,z,r,theta,phi)
@@ -1068,22 +1142,43 @@ contains
           l3 = rad_tables(count)%l_values(i)
           del_x = rad_tables(count)%rad_tbls(1)%del_x
           npts = rad_tables(count)%rad_tbls(1)%npnts
-          if(case==1) then
-             call dsplint(del_x,rad_tables(count)%rad_tbls(i)%arr_vals(1:npts), &
-                  rad_tables(count)%rad_tbls(i)%arr_vals2(1:npts),npts,r,f_r,df_r,flag)
-          else if(case==2) then
-             call dsplint(del_x,rad_tables_ke(count)%rad_tbls(i)%arr_vals(1:npts), &
-                  rad_tables_ke(count)%rad_tbls(i)%arr_vals2(1:npts),npts,r,f_r,df_r,flag)
-          else if(case==4) then
-             call dsplint(del_x,rad_tables_paoNApao(count)%rad_tbls(i)%arr_vals(1:npts), &
-                  rad_tables_paoNApao(count)%rad_tbls(i)%arr_vals2(1:npts),npts,r,f_r,df_r,flag)
-          endif
-          !have now collected f_r and df_r, next to evaluate the required gradient
-          call construct_gradient(l1,l2,l3,m1,m2,dir,f_r,df_r,x,y,z,grad_val)
+          j = floor(r/del_x) + 1
+          grad_val = zero
+          if(j+1<=npts) then
+             rr = real(j,double)*del_x
+             a = (rr - r)/del_x
+             b = one - a
+             c = a * ( a * a - one ) * del_x * del_x / six
+             d = b * ( b * b - one ) * del_x * del_x / six
+             da = -one/del_x
+             db =  one/del_x
+             dc = -del_x*(three*a*a - one)/six
+             dd =  del_x*(three*b*b - one)/six
+             if(case==1) then
+                r1 = rad_tables(count)%rad_tbls(i)%arr_vals(j)
+                r2 = rad_tables(count)%rad_tbls(i)%arr_vals(j+1)
+                r3 = rad_tables(count)%rad_tbls(i)%arr_vals2(j)
+                r4 = rad_tables(count)%rad_tbls(i)%arr_vals2(j+1)
+             else if(case==2) then
+                r1 = rad_tables_ke(count)%rad_tbls(i)%arr_vals(j)
+                r2 = rad_tables_ke(count)%rad_tbls(i)%arr_vals(j+1)
+                r3 = rad_tables_ke(count)%rad_tbls(i)%arr_vals2(j)
+                r4 = rad_tables_ke(count)%rad_tbls(i)%arr_vals2(j+1)
+             else if(case==4) then
+                r1 = rad_tables_paoNApao(count)%rad_tbls(i)%arr_vals(j)
+                r2 = rad_tables_paoNApao(count)%rad_tbls(i)%arr_vals(j+1)
+                r3 = rad_tables_paoNApao(count)%rad_tbls(i)%arr_vals2(j)
+                r4 = rad_tables_paoNApao(count)%rad_tbls(i)%arr_vals2(j+1)
+             endif
+             f_r = a*r1 + b*r2 + c*r3 + d*r4
+             df_r = da*r1 + db*r2 + dc*r3 + dd*r4
+             !have now collected f_r and df_r, next to evaluate the required gradient
+             call construct_gradient(l1,l2,l3,m1,m2,dir,f_r,df_r,x,y,z,grad_val)
+          end if
           grad_valout = grad_valout+grad_val
        enddo
     else if(case==3) then ! NLPF
-       grad_valout = 0.0_double
+       grad_valout = zero
        count = ol_index_nlpf_pao(sp1,sp2,nz1,nz2,l1,l2)
        n_lvals = rad_tables_nlpf_pao(count)%no_of_lvals
        call convert_basis(x,y,z,r,theta,phi)
@@ -1091,13 +1186,30 @@ contains
           l3 = rad_tables_nlpf_pao(count)%l_values(i)
           del_x = rad_tables_nlpf_pao(count)%rad_tbls(1)%del_x
           npts = rad_tables_nlpf_pao(count)%rad_tbls(1)%npnts
-          call dsplint(del_x,rad_tables_nlpf_pao(count)%rad_tbls(i)%arr_vals(1:npts), &
-                  rad_tables_nlpf_pao(count)%rad_tbls(i)%arr_vals2(1:npts),npts,r,f_r,df_r,flag)
-          call construct_gradient(l1,l2,l3,m1,m2,dir,f_r,df_r,x,y,z,grad_val)
+          j = floor(r/del_x) + 1
+          grad_val = zero
+          if(j+1<=npts) then
+             rr = real(j,double)*del_x
+             a = (rr - r)/del_x
+             b = one - a
+             c = a * ( a * a - one ) * del_x * del_x / six
+             d = b * ( b * b - one ) * del_x * del_x / six
+             da = -one/del_x
+             db =  one/del_x
+             dc = -del_x*(three*a*a - one)/six
+             dd =  del_x*(three*b*b - one)/six
+             r1 = rad_tables_nlpf_pao(count)%rad_tbls(i)%arr_vals(j)
+             r2 = rad_tables_nlpf_pao(count)%rad_tbls(i)%arr_vals(j+1)
+             r3 = rad_tables_nlpf_pao(count)%rad_tbls(i)%arr_vals2(j)
+             r4 = rad_tables_nlpf_pao(count)%rad_tbls(i)%arr_vals2(j+1)
+             f_r = a*r1 + b*r2 + c*r3 + d*r4
+             df_r = da*r1 + db*r2 + dc*r3 + dd*r4
+             call construct_gradient(l1,l2,l3,m1,m2,dir,f_r,df_r,x,y,z,grad_val)
+          end if
           grad_valout = grad_valout+grad_val
        enddo
     else if(case==5) then ! NAPF
-       grad_valout = 0.0_double
+       grad_valout = zero
        count = ol_index_napf_pao(sp1,sp2,nz1,nz2,l1,l2)
        n_lvals = rad_tables_napf_pao(count)%no_of_lvals
        call convert_basis(x,y,z,r,theta,phi)
@@ -1105,13 +1217,30 @@ contains
           l3 = rad_tables_napf_pao(count)%l_values(i)
           del_x = rad_tables_napf_pao(count)%rad_tbls(1)%del_x
           npts = rad_tables_napf_pao(count)%rad_tbls(1)%npnts
-          call dsplint(del_x,rad_tables_napf_pao(count)%rad_tbls(i)%arr_vals(1:npts), &
-                  rad_tables_napf_pao(count)%rad_tbls(i)%arr_vals2(1:npts),npts,r,f_r,df_r,flag)
-          call construct_gradient(l1,l2,l3,m1,m2,dir,f_r,df_r,x,y,z,grad_val)
+          j = floor(r/del_x) + 1
+          grad_val = zero
+          if(j+1<=npts) then
+             rr = real(j,double)*del_x
+             a = (rr - r)/del_x
+             b = one - a
+             c = a * ( a * a - one ) * del_x * del_x / six
+             d = b * ( b * b - one ) * del_x * del_x / six
+             da = -one/del_x
+             db =  one/del_x
+             dc = -del_x*(three*a*a - one)/six
+             dd =  del_x*(three*b*b - one)/six
+             r1 = rad_tables_napf_pao(count)%rad_tbls(i)%arr_vals(j)
+             r2 = rad_tables_napf_pao(count)%rad_tbls(i)%arr_vals(j+1)
+             r3 = rad_tables_napf_pao(count)%rad_tbls(i)%arr_vals2(j)
+             r4 = rad_tables_napf_pao(count)%rad_tbls(i)%arr_vals2(j+1)
+             f_r = a*r1 + b*r2 + c*r3 + d*r4
+             df_r = da*r1 + db*r2 + dc*r3 + dd*r4
+             call construct_gradient(l1,l2,l3,m1,m2,dir,f_r,df_r,x,y,z,grad_val)
+          end if
           grad_valout = grad_valout+grad_val
        enddo
     else if(case==6) then !either pao/pao or pao/ke/pao overlap matrix elements
-       grad_valout = 0.0_double
+       grad_valout = zero
        count = ol_index_paopao(sp1,sp2,nz1,nz2,l1,l2)
        n_lvals = rad_tables_paopaoNA(count)%no_of_lvals
        call convert_basis(x,y,z,r,theta,phi)
@@ -1119,10 +1248,26 @@ contains
           l3 = rad_tables_paopaoNA(count)%l_values(i)
           del_x = rad_tables_paopaoNA(count)%rad_tbls(1)%del_x
           npts = rad_tables_paopaoNA(count)%rad_tbls(1)%npnts
-          call dsplint(del_x,rad_tables_paopaoNA(count)%rad_tbls(i)%arr_vals(1:npts), &
-               rad_tables_paopaoNA(count)%rad_tbls(i)%arr_vals2(1:npts),npts,r,f_r,df_r,flag)
-          !have now collected f_r and df_r, next to evaluate the required gradient
-          call construct_gradient(l1,l2,l3,m1,m2,dir,f_r,df_r,x,y,z,grad_val)
+          j = floor(r/del_x) + 1
+          grad_val = zero
+          if(j+1<=npts) then
+             rr = real(j,double)*del_x
+             a = (rr - r)/del_x
+             b = one - a
+             c = a * ( a * a - one ) * del_x * del_x / six
+             d = b * ( b * b - one ) * del_x * del_x / six
+             da = -one/del_x
+             db =  one/del_x
+             dc = -del_x*(three*a*a - one)/six
+             dd =  del_x*(three*b*b - one)/six
+             r1 = rad_tables_paopaoNA(count)%rad_tbls(i)%arr_vals(j)
+             r2 = rad_tables_paopaoNA(count)%rad_tbls(i)%arr_vals(j+1)
+             r3 = rad_tables_paopaoNA(count)%rad_tbls(i)%arr_vals2(j)
+             r4 = rad_tables_paopaoNA(count)%rad_tbls(i)%arr_vals2(j+1)
+             f_r = a*r1 + b*r2 + c*r3 + d*r4
+             df_r = da*r1 + db*r2 + dc*r3 + dd*r4
+             call construct_gradient(l1,l2,l3,m1,m2,dir,f_r,df_r,x,y,z,grad_val)
+          end if
           grad_valout = grad_valout+grad_val
        enddo
     endif
@@ -1154,36 +1299,38 @@ contains
     use datatypes
     use GenComms, ONLY: inode, ionode, myid !for debugging purposes
     use ol_int_datatypes !,ONLY : coefficients,
-    !use gaussian_test_routines, ONLY: grad_find_cartesian
-    !use cubic_spline_routines
-    !use spline_module, ONLY: dsplint
+
     implicit none
+
     !routine to construct(the)gradient for (real) PAO matrix elements 
     !in the direction specified by dir
     !have now collected f_r and df_r, next to evaluate the required gradient
+
     integer, intent(in) :: l1,l2,l3,m1,m2,dir
     real(double), intent(in) :: x,y,z,f_r,df_r
     real(double), intent(out) :: grad_val
     integer :: ma,mc,l_index,m_index,l1dum,l2dum,m1dum,m2dum
-    real(double) :: ang_coeff1,ang_coeff2,out_val,out_val2
+    real(double) :: ang_coeff1,ang_coeff2,out_val,out_val2, signfac
 
     if((m1.ge.0).and.(m2.ge.0)) then
        !gradient component 1
        ma = m1-m2
        if(abs(ma).gt.l3) then !zero out unwanted values
-          ang_coeff1 = 0.0_double
+          ang_coeff1 = zero
           continue
        else
           call calc_index_new(l1,l2,l3,-m1,m2,ma,l_index,m_index)
           ang_coeff1 = coefficients(l_index)%m_combs(m_index)
           call grad_find(l3,-ma,1,dir,f_r,df_r,x,y,z,out_val)
           ang_coeff1 = ang_coeff1*out_val
-          ang_coeff1 = ang_coeff1*((-1)**m2)
+          signfac = one
+          if(2*(m2/2)/=m2) signfac = -one
+          ang_coeff1 = ang_coeff1*signfac
        endif
        !gradient component 2
        mc = -(m1+m2)
        if(abs(mc).gt.l3) then
-          ang_coeff2 = 0.0_double
+          ang_coeff2 = zero
        else
           call calc_index_new(l1,l2,l3,m1,m2,mc,l_index,m_index)
           ang_coeff2 = coefficients(l_index)%m_combs(m_index)
@@ -1194,7 +1341,7 @@ contains
        !gradient component 1
        ma = m1-m2
        if(abs(ma).gt.l3) then !zero out unwanted values
-          ang_coeff1 = 0.0_double
+          ang_coeff1 = zero
        else
           call calc_index_new(l1,l2,l3,-m1,m2,ma,l_index,m_index)
           ang_coeff1 = coefficients(l_index)%m_combs(m_index)
@@ -1204,20 +1351,22 @@ contains
        !gradient component 2
        mc = -(m1+m2)
        if(abs(mc).gt.l3) then
-          ang_coeff2 = 0.0_double
+          ang_coeff2 = zero
        else
           call calc_index_new(l1,l2,l3,m1,m2,mc,l_index,m_index)
           ang_coeff2 = coefficients(l_index)%m_combs(m_index)
           call grad_find(l3,mc,1,dir,f_r,df_r,x,y,z,out_val)        
           ang_coeff2 = -ang_coeff2*out_val
        endif
-       ang_coeff1 = ang_coeff1*((-1)**m1)
+       signfac = one
+       if(2*(m1/2)/=m1) signfac = -one
+       ang_coeff1 = ang_coeff1*signfac
     else!m1 and m2 have different signs
        call fix_signs(l1,l2,m1,m2,l1dum,l2dum,m1dum,m2dum)
        !gradient component 1
        ma = m1dum-m2dum
        if(abs(ma).gt.l3) then
-          ang_coeff1 = 0.0_double
+          ang_coeff1 = zero
        else
           call calc_index_new(l1dum,l2dum,l3,-m1dum,m2dum,ma,l_index,m_index)
           ang_coeff1 = coefficients(l_index)%m_combs(m_index)
@@ -1226,7 +1375,7 @@ contains
        endif
        mc = -(m1+m2)
        if(abs(mc).gt.l3) then
-          ang_coeff2 = 0.0_double
+          ang_coeff2 = zero
        else
           call calc_index_new(l1,l2,l3,m1,m2,mc,l_index,m_index)
           ang_coeff2 = coefficients(l_index)%m_combs(m_index)
@@ -1234,10 +1383,14 @@ contains
           ang_coeff2 = ang_coeff2*out_val
        endif
        !now take care of normalization
-       ang_coeff1 = ang_coeff1*((-1)**(m1dum+1))
-       ang_coeff2 = ang_coeff2*((-1)**(mc))
+       signfac = one
+       if(2*((m1dum+1)/2)/=(m1dum+1)) signfac = -one
+       ang_coeff1 = ang_coeff1*signfac
+       signfac = one
+       if(2*(mc/2)/=mc) signfac = -one
+       ang_coeff2 = ang_coeff2*signfac
     endif
-    grad_val = 8.0_double*(ang_coeff1+ang_coeff2)*ol_norm(m1,m2)
+    grad_val = eight*(ang_coeff1+ang_coeff2)*ol_norm(m1,m2)
     
   end subroutine construct_gradient
 !!***  
@@ -1267,7 +1420,7 @@ contains
     real(double) :: r
     !direction is 1:x, 2:y, 3:z
     !initialising output to zero..
-    out_val = 0.0_double
+    out_val = zero
     
     select case(direction)
     case(1) !gradient along x direction
@@ -1290,10 +1443,8 @@ contains
     integer :: dir
     real(double) :: x,y,z,r_my,theta,phi,c_r,c_theta,c_phi
     real(double) :: fm_phi, dfm_phi, val1, val2,denom1,denom2
-    real(double), parameter :: mintol = 0.000000001_double
-    real(double), parameter :: epsilon = 0.0001_double
     real(double) x_comp_1,x_comp_2,x_comp_3,x_comp_4,coeff1,coeff2
-    real(double), parameter :: pi = 3.1415926535897932_double
+
     !unnormalize the direction cosines
     x = x_n*r
     y = y_n*r
@@ -1301,8 +1452,8 @@ contains
     !convert from Cartesian system to spherical polars
     call convert_basis(x,y,z,r_my,theta,phi)
     !if zero radius then lets get out of here..
-    if(abs(r).lt.mintol) then
-       d_val = 0.0_double
+    if(abs(r).lt.very_small) then
+       d_val = zero
        return
     else
        continue
@@ -1351,7 +1502,7 @@ contains
        if(m.eq.0) then
           d_val = (cos((m+1)*phi)*(x_comp_1+x_comp_2))+(cos((m-1)*phi))*(x_comp_3+x_comp_4)
           !write(io_lun,*) cos((m+1)*phi),x_comp_1+x_comp_2,cos((m-1)*phi),x_comp_3+x_comp_4
-          d_val = d_val/sqrt(2.0_double)
+          d_val = d_val/sqrt(two)
           !write(io_lun,*) d_val, 'd_val'
        else
           continue
@@ -1372,10 +1523,7 @@ contains
     integer :: dir
     real(double) :: x,y,z,r_my,theta,phi,c_r,c_theta,c_phi
     real(double) :: fm_phi, dfm_phi, val1, val2,denom1,denom2
-    real(double), parameter :: mintol = 0.000000001_double
-    real(double), parameter :: epsilon = 0.000001_double
     real(double) y_comp_1,y_comp_2,y_comp_3,y_comp_4,coeff1,coeff2
-    real(double), parameter :: pi = 3.1415926535897932_double
 
     !unnormalise the direction cosines
     x = x_n*r
@@ -1383,9 +1531,9 @@ contains
     z = z_n*r
     !find the relevant spherical polar coordinates
     call convert_basis(x,y,z,r_my,theta,phi)
-    !if zero radius then lets get out of here..
-    if(abs(r).lt.mintol) then
-       d_val = 0.0_double
+    ! Set d_val to zero for r=0
+    if(abs(r).lt.very_small) then
+       d_val = zero
        return
     else
        continue
@@ -1429,7 +1577,7 @@ contains
        d_val = (sin((m+1)*phi)*(y_comp_1+y_comp_2))+(sin((m-1)*phi))*(y_comp_3+y_comp_4)
        if(m.eq.0) then
           d_val = (sin((m+1)*phi)*(y_comp_1+y_comp_2))+(sin((m-1)*phi))*(y_comp_3+y_comp_4)
-          d_val = d_val/sqrt(2.0_double)
+          d_val = d_val/sqrt(two)
        else
           continue
        endif
@@ -1450,24 +1598,22 @@ contains
     real(double) :: x,y,z,pref1,pref2,coeff1,coeff2,z_comp_1,z_comp_2
     real(double) :: r_my,theta,phi
     real(double) :: denom1,denom2
-    real(double), parameter :: mintol = 0.000000001_double
-    real(double), parameter :: epsilon = 0.0001_double
     
     !unnormalize direction cosines and convert to spherical coordinates
     x = x_n*r; y = y_n*r; z = z_n*r
     call convert_basis(x,y,z,r_my,theta,phi)
-    !if zero radius then lets get out of here..
-    if(abs(r).lt.mintol) then
-       d_val = 0.0_double
+    ! Set d_val to zero for r = zero
+    if(abs(r).lt.very_small) then
+       d_val = zero
        return
     endif
-    denom1 = (2.0_double*l+1.0_double)*(2.0_double*l+3.0_double)
-    denom2 = (2.0_double*l-1.0_double)*(2.0_double*l+1.0_double)
-    pref1 = sqrt((((l+1.0_double)**2)-(m**2))/denom1)
+    denom1 = (two*l+one)*(two*l+three)
+    denom2 = (two*l-one)*(two*l+one)
+    pref1 = sqrt((((l+one)**2)-(m**2))/denom1)
     pref2 = sqrt(((l**2)-(m**2))/denom2)
     ! The commented lines below were present when we didn't exit on small r
     !if(r.gt.epsilon) then
-    coeff1 = (df_r-(l*f_r/r)); coeff2 = (df_r+((l+1.0_double)*f_r/r))
+    coeff1 = (df_r-(l*f_r/r)); coeff2 = (df_r+((l+one)*f_r/r))
     !else
     !   coeff1 = df_r; coeff2 = df_r
     !end if
@@ -1479,22 +1625,22 @@ contains
           z_comp_2 = z_comp_2*sph_hrmnc_z(l-1,m,theta)
           d_val = z_comp_1+z_comp_2
           if(m.gt.0) then
-             d_val = d_val*sqrt(2.0_double)
+             d_val = d_val*sqrt(two)
           else
              d_val = d_val
           endif
        else !m.lt.0
-          d_val = 0.0_double
+          d_val = zero
        endif
     else
        z_comp_1 = z_comp_1*prefac(l+1,m)*assoclegpol(l+1,m,theta)
        z_comp_2 = z_comp_2*prefac(l-1,m)*assoclegpol(l-1,m,theta)
        if(m.gt.0) then
-          d_val = sqrt(2.0_double)*cos(m*phi)*(z_comp_1+z_comp_2)
+          d_val = sqrt(two)*cos(m*phi)*(z_comp_1+z_comp_2)
        else if(m.eq.0) then 
           d_val = (z_comp_1+z_comp_2)
        else !m.lt.0
-          d_val = sqrt(2.0_double)*sin(m*phi)*(z_comp_1+z_comp_2)
+          d_val = sqrt(two)*sin(m*phi)*(z_comp_1+z_comp_2)
        endif
     endif
     
@@ -1541,8 +1687,7 @@ contains
     real(double), intent(in) :: x,y,z,f_r,df_r
     real(double), intent(out) :: out_val
     real(double) :: comp1,comp2,comp3,comp4,coeff1,coeff2,r,theta,phi
-    real(double), parameter :: epsilon = 0.0000001_double
-    real(double), parameter :: pi = 3.1415926535897932_double
+
     !arg=-(+)1 indicating sine(cosine) phi term
     !dir=1(2) indicating x(y) direction gradient is being calculated
     !convert coordinates
@@ -1557,17 +1702,17 @@ contains
                   &l-1,m+1,theta))+(-comp3*sph_hrmnc_z(l+1,m-1,theta))+(&
                   &comp4*sph_hrmnc_z(l-1,m-1,theta))
           else!dir.eq.-1
-             out_val = 0.0_double
+             out_val = zero
           endif
        else!arg.eq.-1
           if(dir.eq.1) then
-             out_val = 0.0_double
+             out_val = zero
           else!dir.eq.-1
              out_val = -((comp1*sph_hrmnc_z(l+1,m+1,theta))-(comp2*sph_hrmnc_z(l-1,m+1,theta)&
                   &)+(comp3*sph_hrmnc_z(l+1,m-1,theta))-(comp4*sph_hrmnc_z(l-1,m-1,theta)))
           endif
        endif
-       out_val = out_val*sqrt(2.0_double)
+       out_val = out_val*sqrt(two)
     else       
        comp1 = comp1*prefac(l+1,m+1)*assoclegpol(l+1,m+1,theta)
        comp2 = comp2*prefac(l-1,m+1)*assoclegpol(l-1,m+1,theta)
@@ -1586,7 +1731,7 @@ contains
              out_val = ((comp1-comp2)*sin((m+1)*phi))+((-comp3+comp4)*sin((m-1)*phi))
           endif
        endif
-       out_val = out_val*sqrt(2.0_double)
+       out_val = out_val*sqrt(two)
     endif
   end subroutine make_xy_paogradient_comps
 
@@ -1599,23 +1744,22 @@ contains
     real(double), intent(out) :: out_val
     real(double) :: denom1,denom2,pref1,pref2,coeff1,coeff2,comp1,comp2
     real(double) :: r,theta,phi
-    real(double), parameter :: epsilon = 0.0000001_double
-    real(double), parameter :: pi = 3.1415926535897932_double
+
     !n.b. arg indicates the sign of the sph hrmnc combinations 
     call convert_basis(x,y,z,r,theta,phi)
     !if zero radius then lets get out of here..
     !if(abs(r).lt.epsilon) then
-    !   out_val = 0.0_double
+    !   out_val = zero
     !   return
     !else
     !   continue
     !endif
-    denom1 = (2.0_double*l+1.0_double)*(2.0_double*l+3.0_double)
-    denom2 = (2.0_double*l-1.0_double)*(2.0_double*l+1.0_double)
-    pref1 = sqrt((((l+1.0_double)**2)-(m**2))/denom1)
+    denom1 = (two*l+one)*(two*l+three)
+    denom2 = (two*l-one)*(two*l+one)
+    pref1 = sqrt((((l+one)**2)-(m**2))/denom1)
     pref2 = sqrt(((l**2)-(m**2))/denom2)
     if(r.gt.epsilon) then
-       coeff1 = (df_r-(l*f_r/r)); coeff2 = (df_r+((l+1.0_double)*f_r/r))
+       coeff1 = (df_r-(l*f_r/r)); coeff2 = (df_r+((l+one)*f_r/r))
     else
        coeff1 = df_r; coeff2 = df_r
     endif
@@ -1626,17 +1770,17 @@ contains
        if(arg.eq.1) then
           comp1 = comp1*sph_hrmnc_z(l+1,m,theta)
           comp2 = comp2*sph_hrmnc_z(l-1,m,theta)
-          out_val = (comp1+comp2)*(2.0_double)
+          out_val = (comp1+comp2)*(two)
         else !arg.eq.-1
-          out_val = 0.0_double
+          out_val = zero
        endif
     else
        comp1 = comp1*prefac(l+1,m)*assoclegpol(l+1,m,theta)
        comp2 = comp2*prefac(l-1,m)*assoclegpol(l-1,m,theta)
        if(arg.eq.1) then
-          out_val = 2.0_double*cos(m*phi)*(comp1+comp2)
+          out_val = two*cos(m*phi)*(comp1+comp2)
        else !arg.eq.-1
-          out_val = 2.0_double*sin(m*phi)*(comp1+comp2)
+          out_val = two*sin(m*phi)*(comp1+comp2)
        endif
     endif
     
@@ -1653,9 +1797,9 @@ contains
           d_val = d_val
        else
           if(m.eq.0) then
-             d_val = d_val/sqrt(2.0_double)
+             d_val = d_val/sqrt(two)
           else
-             d_val = 0.0_double
+             d_val = zero
              continue
           endif
        endif
@@ -1664,9 +1808,9 @@ contains
           d_val = -d_val
        else
           if(m.eq.0) then
-             d_val = d_val/sqrt(2.0_double)
+             d_val = d_val/sqrt(two)
           else
-             d_val = 0.0_double
+             d_val = zero
              continue
           endif
        endif
@@ -1682,7 +1826,6 @@ contains
     real(double), intent(out) :: pref1,pref2,pref3,pref4,coeff1,coeff2
     integer, intent(in) :: l,m
     real(double) :: denom1,denom2
-    real(double), parameter :: epsilon = 0.0000001_double
 
     !need to take care of the situation at the origin
     if(r.gt.epsilon) then
@@ -1692,13 +1835,13 @@ contains
        coeff1 = df_r; coeff2 = df_r
     endif
 
-    denom1 = 2.0_double*(2.0_double*l+1.0_double)*(2.0_double*l+3.0_double)
-    denom2 = 2.0_double*(2.0_double*l-1.0_double)*(2.0_double*l+1.0_double)
+    denom1 = two*(two*l+one)*(two*l+three)
+    denom2 = two*(two*l-one)*(two*l+one)
     
-    pref1 = sqrt((l+m+1.0_double)*(l+m+2.0_double)/denom1)
-    pref2 = sqrt((l-m-1.0_double)*(l-m)/denom2)
-    pref3 = sqrt((l-m+1.0_double)*(l-m+2.0_double)/denom1)
-    pref4 = sqrt((l+m-1.0_double)*(l+m)/denom2)   
+    pref1 = sqrt((l+m+one)*(l+m+two)/denom1)
+    pref2 = sqrt((l-m-one)*(l-m)/denom2)
+    pref3 = sqrt((l-m+one)*(l-m+two)/denom1)
+    pref4 = sqrt((l+m-one)*(l+m)/denom2)   
 
   end subroutine make_grad_prefacs
   
@@ -1715,11 +1858,11 @@ contains
     real(double) :: ol_norm
 
     if(m1.eq.0.and.m2.eq.0) then
-       ol_norm = 0.25_double
+       ol_norm = quarter
     else if(m1.ne.0.and.m2.ne.0) then
-       ol_norm = 0.5_double
+       ol_norm = half
     else !one is zero and the other is not
-       ol_norm = 1.0_double/(2.0_double*sqrt(2.0_double))
+       ol_norm = half/sqrt(two)
     end if
   end function ol_norm
 
@@ -1731,7 +1874,11 @@ contains
 !!   assoclegpol(l,m,x)
 !!  PURPOSE
 !!   Function to return value of associated Legendre Polynomial 
-!!   having parameters l,m.
+!!   having parameters l,m.  Uses standard recursion relations:
+!!    (l-m)P^{m}_{l} = x(2l-1)P^{m}_{l-1} - (l+m-1)P^{m}_{l-2}
+!!    with
+!!    P^{m}_{m} = (-1)^{m}(2m-1)!!(1-x^2)^{m/2} with x = cos(theta)
+!!    P^{m}_{m+1} = x(2m+1)P^{m}_{m}
 !!  INPUTS
 !!   l,m, parameters describing Associated Legendre Polynomial
 !!   x - argument of associated Legendre polynomial
@@ -1744,6 +1891,8 @@ contains
 !!  MODIFICATION HISTORY
 !!   2007/01/25 08:21 dave
 !!    Removed two assoc. leg. pol routines and combined into one
+!!   2019/10/28 13:03 dave
+!!    Tidied to clarify recursion and removed (-1)**m
 !!  SOURCE
 !!
   function assoclegpol(l,m1,theta)
@@ -1758,8 +1907,7 @@ contains
     real(double) :: x,x_dashed,theta
     integer i,j,k
     integer l,m1,m
-    !Routine based on recursion relations in Numerical Recipes
-    !6.6.7
+
     if(l<0) then
        assoclegpol = zero
        return
@@ -1770,28 +1918,22 @@ contains
        assoclegpol = zero
        return
     endif
-    !evaluate val_mm
+    ! Starting value m=l
     val_mm = one
-    !sto_x = sqrt((one-x)*(one+x))
-    !x_dashed = acos(x)
     x = cos(theta)
     sto_x = sin(theta)
-    !write(io_lun,*) sto_x,'sto_x'
-    
     if(m>0) then
-       do i=1,2*m-1,2
+       do i=1,2*m-1,2 ! This is (2m-1)!!
           val_mm = val_mm*i
        enddo
        do i=1,m
-          !val_mm = val_mm*(-1)*(sto_x)
-          !RC removing Condon-Shortley phase factor
           val_mm = val_mm*sto_x
        enddo
     end if ! m>0
     if(m==l) then
        assoclegpol = val_mm
     else
-       val_mm1 = x*(two*m+1)*val_mm
+       val_mm1 = x*(two*m+1)*val_mm ! l=m+1
        if(m+1==l) then
           assoclegpol = val_mm1
        else
@@ -1809,12 +1951,15 @@ contains
        end if ! m+1==l
     end if ! m==l
 
-    !if m is negative we use Arfken 12.81a to convert the 
-    !P_{lm} with positive m to the required value with negative m
+    ! Conversion from P_{lm} with positive m to the required value with negative m
 
     if(m/=m1) then !input m1 must be negative
-       factor2 = (fact(l-m))/(fact(l+m))
-       assoclegpol = assoclegpol*((-1)**(m))*factor2
+       if(2*(m/2)/=m) then ! Odd so factor -1
+          factor2 = -(fact(l-m))/(fact(l+m))
+       else
+          factor2 = (fact(l-m))/(fact(l+m))
+       end if
+       assoclegpol = assoclegpol*factor2
     else
        continue
     endif
@@ -1958,7 +2103,7 @@ contains
     real(double), intent(in) :: theta,phi
     real(double) :: re_sph_hrmnc,val,val_chk,beta,del,val_chk2
     
-    val = 0.0_double
+    val = zero
     val = prefac_real(l,m)*assoclegpol(l,m,theta)
     if(m.lt.0) then
        val = val*sin(m*phi)
@@ -1977,19 +2122,21 @@ contains
     !function to return value of spherical harmonic on the z-axis
     integer, intent(in) :: l,m
     real(double), intent(in) :: theta
-    real(double) :: sph_hrmnc_z,part
-    
+    real(double) :: sph_hrmnc_z,part,signfac
+
     sph_hrmnc_z = zero
     if(l<0) return
     if(abs(m)<=l) then
        if(m==0) then
           part = sqrt((two*l+one)/(four*pi))
-          if(abs(theta).lt.0.0001_double) then !theta roughly zero
+          if(abs(theta).lt.epsilon) then !theta roughly zero
              sph_hrmnc_z = part
           else
              !theta is in vicinity of pi
-             if(theta.lt.pi+0.0001_double.and.theta.gt.pi-0.0001_double) then
-                sph_hrmnc_z = ((-1)**l)*part
+             if(theta < pi+epsilon .and. theta > pi-epsilon) then
+                signfac = one
+                if(2*(l/2)/=l) signfac = -one
+                sph_hrmnc_z = signfac*part
              endif
           endif
        endif

@@ -15,7 +15,7 @@
 !!  USES
 !!   GenBlas, GenComms, atoms, block_module, common, cover_module, datatypes, dimens, 
 !!   global_module, group_module, maxima_module, numbers, primary_module, set_blipgrid_module,
-!!   species_module, spline_module
+!!   species_module, splines
 !!  AUTHOR
 !!   IJB ?
 !!  CREATION DATE
@@ -1173,7 +1173,7 @@ contains
     use datatypes
     use numbers
     use species_module, only:  n_species, species
-    use spline_module, only: spline
+    use splines, only: spline
 
     implicit none
 
