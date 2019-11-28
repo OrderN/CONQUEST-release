@@ -46,6 +46,7 @@ User Guide
 * :doc:`basissets`
 * :doc:`strucrelax`
 * :doc:`moldyn`
+* :doc:`ext-tools`
 * :doc:`errors`
 * :doc:`input_tags`
   
@@ -60,6 +61,7 @@ User Guide
    basissets
    strucrelax
    moldyn
+   ext-tools
    errors
    input_tags
 
