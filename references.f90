@@ -116,10 +116,132 @@ module references
 "10.1088/0953-8984/22/7/074207", &
 "CONQUEST order(N) paper")
 
+      call bib%add_ref( &
+"Niklasson2006", &
+"A. M. N. Niklasson and C. J. Tymczak and M. Challacombe", &
+"Time-reversible Born-Oppenheimer molecular dynamics", &
+"Phys. Rev. Lett.", &
+97, &
+123001, &
+2006, &
+"10.1103/PhysRevLett.97.123001", &
+"Original extended-Lagrangian Born-Oppenheimer MD paper")
+
+      call bib%add_ref( &
+"Niklasson2009", &
+"A. M. N. Niklasson and P. Steneteg and A. Odell and N. Bock and M. Challacombe &
+ &and C. J. Tymczak and E. Holmstrom and G. Zhang and V. Weber", &
+"Extended Lagrangian Born-Oppenheimer molecular dynamics with dissipation", &
+"J. Chem. Phys.", &
+130, &
+214109, &
+2009, &
+"10.1063/1.3148075", &
+"XL-BOMD with dissipation")
+
+      call bib%add_ref( &
+"Torralba2008", &
+"A. S. Torralba and M. Todorovic and V. Brazdova and R. Choudhury and T. Miyazaki and M. J. Gillan and D. R. Bowler", &
+"Pseudo-atomic orbitals as basis sets for O(N) DFT code CONQUEST", &
+"J. Phys.: Condens. Matter", &
+20, &
+294206, &
+2008, &
+"10.1088/0953-8984/20/29/294206", &
+"PAO basis sets for CONQUEST")
+
+      call bib%add_ref( &
+"Bowler2019", &
+"D. R. Bowler and J. S. Baker and J. T. L. Poulton and S. Y. Mujahed and J. Lin and S. Yadav and Z. Raza and T. Miyazaki", &
+"Highly accurate local basis sets for large-scale DFT calculations in CONQUEST", &
+"Japan. J. Appl. Phys. ", &
+58, &
+100503, &
+2019, &
+"10.7567/1347-4065/ab45af", &
+"Details of new CONQUEST PAOs from basis generation tool, using Hamann-type pseudopotentials")
+
+      call bib%add_ref( &
+"Martyna1994", &
+"G. J. Martyna and D. J. Tobias and M. L. Klein", &
+"Constant pressure molecular dynamics algorithsm", &
+"J. Chem. Phys.", &
+101, &
+4177, &
+1994, &
+"10.1063/1.467468", &
+"Equations of motion for NPT molecular dynamics")
+
+      call bib%add_ref( &
+"Martyna1996", &
+"G. J. Martyna and M. E. Tuckerman, D. J. Tobias and M. L. Klein", &
+"Explicit reversible integrators for extended systems dynamics", &
+"Mol. Phys.", &
+87, &
+1117, &
+1996, &
+"10.1080/002689799163235", &
+"Time-reversible integrators for extended system MD")
+
+      call bib%add_ref( &
+"Shinoda2004", &
+"W. Shinoda and M. Shiga and M. Mikami", &
+"Rapid estimation of elastic constants by molecular dynamics simulation under constant stress", &
+"Phys. Rev. B", &
+69, &
+134103, &
+2004, &
+"10.1103/PhysRevB.69.134103", &
+"Liouvillian splitting for NPT MD used in CONQUEST")
+
+      call bib%add_ref( &
+"Hamann2013", &
+"D. R. Hamann", &
+"Optimized norm-conserving Vanderbilt pseudopotentials", &
+"Phys. Rev. B", &
+88, &
+085117, &
+2013, &
+"10.1103/PhysRevB.88.085117", &
+"Hamann-type pseudopotentials generated via ONCVPSP")
+
+      call bib%add_ref( &
+"Miyazakij2004", &
+"T. Miyazaki and D. R. Bowler and R. Choudhury and M. J. Gillan", &
+"Atomic force algorithms in density functional theory electronic-structure techniques based on local orbitals", &
+"J. Chem. Phys.", &
+121, &
+6186, &
+2004, &
+"10.1063/1.1787832", &
+"Force calculations in CONQUEST")
+
+      call bib%add_ref( &
+"Carbogno2017", &
+"C. Carbogno and R. Ramprasad and M. Scheffler", &
+"Ab Initio Green-Kubo approach for thermal conductivity of solids", &
+"Phys. Rev. Lett.", &
+118, &
+175901, &
+2017, &
+"10.1103/PhysRevLett.118.175901", &
+"Method for Green-Kubo thermoal conductivity calculations for solids")
+
+      call bib%add_ref( &
+"Pfrommer1997", &
+"B. G. Pfrommer and M. Cote and S. G. Louie and M. L. Cohen", &
+"Relaxation of crystals with the quasi-Newton method", &
+"J. Comput. Phys.", &
+131, &
+233, &
+1997, &
+"10.1006/jcph.1996.5612", &
+"Method for simultaneous cell and geometry optimisation")
+
     end subroutine get_bib_db
     !!***
 
-    !!****f* referencds/compile_biblio *
+    !!****f* references/compile_biblio *
     !!
     !!  NAME 
     !!   compile_biblio
@@ -136,7 +258,9 @@ module references
     subroutine compile_biblio
 
       use global_module, only: flag_diagonalisation, flag_Multisite, &
-                               flag_XLBOMD
+                               flag_XLBOMD, flag_basis_set, PAOs, &
+                               flag_heat_flux, optcell_method
+      use pseudopotential_common, only: pseudo_type, ABINIT
       use input_module,  only: leqi
       use control,       only: md_ensemble
       use md_control,    only: md_thermo_type
@@ -167,9 +291,19 @@ module references
       end if
 
       ! Cite method-specific publications
-      if (leqi(md_thermo_type, 'nhc'))  call bib%cite("Hirakawa2017")
-      if (flag_XLBOMD)                  call bib%cite("Arita2014")
       if (flag_Multisite)               call bib%cite("Nakata2014")
+      if (flag_basis_set == PAOs)       call bib%cite("Torralba2008")
+      if (pseudo_type == ABINIT)        call bib%cite("Hamann2013")
+      if (pseudo_type == ABINIT)        call bib%cite("Bowler2019")
+      if (leqi(md_thermo_type, 'nhc'))  call bib%cite("Martyna1996")
+      if (leqi(md_thermo_type, 'nhc'))  call bib%cite("Hirakawa2017")
+      if (leqi(md_ensemble, 'npt'))     call bib%cite("Martyna1994")
+      if (leqi(md_ensemble, 'npt'))     call bib%cite("Shinoda2004")
+      if (flag_XLBOMD)                  call bib%cite("Arita2014")
+      if (flag_XLBOMD)                  call bib%cite("Niklasson2006")
+      if (flag_XLBOMD)                  call bib%cite("Niklasson2009")
+      if (flag_heat_flux)               call bib%cite("Carbogno2017")
+      if (optcell_method == 3)          call bib%cite("Pfrommer1997")
 
       call bib%close_bib
 

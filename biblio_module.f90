@@ -25,6 +25,7 @@ module biblio
   character(len=*), parameter :: bib_afield_fmt = '(2x,a," = {{",a,"}},")'
   character(len=*), parameter :: bib_ifield_fmt = '(2x,a," = {",i0,"},")'
   integer, parameter          :: max_refs = 50
+  logical                     :: flag_dump_bib
 
   type type_reference
 
@@ -245,8 +246,6 @@ module biblio
     !!***
 
     subroutine cite(bib, key)
-
-      use global_module, only: flag_dump_bib
 
       ! passed variables
       class(type_bibliography), intent(inout) :: bib

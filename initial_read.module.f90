@@ -776,7 +776,7 @@ contains
                              flag_opt_cell, cell_constraint_flag, &
                              cell_en_tol, optcell_method, cell_stress_tol, &
                              flag_stress, flag_full_stress, rng_seed, &
-                             flag_dump_bib, flag_atomic_stress, flag_heat_flux
+                             flag_atomic_stress, flag_heat_flux
     use dimens, only: r_super_x, r_super_y, r_super_z, GridCutoff,    &
                       n_grid_x, n_grid_y, n_grid_z, r_h, r_c,         &
                       RadiusSupport, RadiusAtomf, RadiusMS, RadiusLD, &
@@ -877,6 +877,7 @@ contains
     use Integrators, only: fire_alpha0, fire_f_inc, fire_f_dec, fire_f_alpha, fire_N_min, &
          fire_N_max, fire_max_step, fire_N_below_thresh
     use XC, only : flag_functional_type, functional_hartree_fock, functional_hyb_pbe0
+    use biblio, only: flag_dump_bib
 
     implicit none
 

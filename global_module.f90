@@ -163,7 +163,6 @@ module global_module
 
   integer :: iprint                 ! Level of output
   integer :: io_lun                 ! Output unit
-  logical :: flag_dump_bib          ! Dump BibTeX bibliography?
   integer, allocatable, dimension(:) :: id_glob      ! global label of atom in sim cell (CC)
   integer, allocatable, dimension(:) :: id_glob_inv  ! gives global number for a CC atom
   integer, dimension(:), allocatable :: species_glob ! gives species 
