@@ -129,6 +129,8 @@ contains
 !!    Introduced atomf instead of sf and paof
 !!   2016/08/08 15:30 nakata
 !!    Renamed rcut_supp -> rcut_atomf
+!!   2019/11/29 13:49 dave
+!!    Changed warning for core/atomf to be less sensitive
 !!  SOURCE
 !!
   subroutine set_blipgrid(myid,rcut_atomf,rcut_proj)
@@ -173,7 +175,7 @@ contains
     naba_atoms_of_blocks(nlpf)%function_type = nlpf
     warn = .false.
     do i=1,n_species
-       if(rcut_atomf(i) < rcut_proj(i)) warn = .true.
+       if(abs(rcut_atomf(i) - rcut_proj(i)) > 1.0e-4_double) warn = .true.
     end do
     if(.NOT.warn) then
        call alloc_halo_atm(halo_atoms_of_blocks(nlpf), max_recv_node_BtoG,max_halo_part,DCS_parts%mx_mcover)

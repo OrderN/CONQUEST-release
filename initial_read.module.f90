@@ -246,6 +246,17 @@ contains
     ! read input data: parameters for run
     call read_input(start, start_L, titles, vary_mu, mu,&
                     find_chdens, read_phi,HNL_fac)
+    ! Read pseudopotential data
+    if(pseudo_type == OLDPS) then
+       call read_pseudopotential(inode, ionode)
+    elseif(pseudo_type == SIESTA.OR.pseudo_type==ABINIT) then
+       !just for setting core_radius in pseudopotential_common
+       ! allocation and deallocation will be performed.
+       call init_pseudo_tm(ecore_tmp, ncf_tmp)
+    else
+       call cq_abort(' Pseudotype Error ', pseudo_type)
+    endif
+    !if(iprint_init>4) write(io_lun,fmt='(10x,"Proc: ",i4," done pseudo")') inode
 
     ! Initialise group data for partitions and read in partitions and atoms
     call my_barrier()
@@ -306,18 +317,6 @@ contains
     ! Skip the following statement if only calculating the dispersion
     if (flag_only_dispersion) return
 
-    !if(iprint_init>4) write(io_lun,fmt='(10x,"Proc: ",i4," done primary")') inode
-    ! Read pseudopotential data
-    if(pseudo_type == OLDPS) then
-       call read_pseudopotential(inode, ionode)
-    elseif(pseudo_type == SIESTA.OR.pseudo_type==ABINIT) then
-       !just for setting core_radius in pseudopotential_common
-       ! allocation and deallocation will be performed.
-       call init_pseudo_tm(ecore_tmp, ncf_tmp)
-    else
-       call cq_abort(' Pseudotype Error ', pseudo_type)
-    endif
-    !if(iprint_init>4) write(io_lun,fmt='(10x,"Proc: ",i4," done pseudo")') inode
     !
     !
     !
@@ -423,7 +422,7 @@ contains
                    if(.NOT.symmetry_breaking.OR..NOT.read_option) then
                       if(inode==ionode) then
                          write(io_lun,fmt='("You have a major problem with your basis set.")')
-                         write(io_lun,fmt='("There are less support functions than the minimal angular momentum")')
+                         write(io_lun,fmt='("There are fewer support functions than the minimal angular momentum")')
                          write(io_lun,fmt='("components.  Either increase number of support functions on species ",i4)') i
                          write(io_lun,fmt='("to",i4," or set flag BasisSet.SymmetryBreaking to T")') count_SZP
                          write(io_lun,fmt='("You must also specify the basis set coefficients.")')
@@ -1102,10 +1101,10 @@ contains
        ! is obselete due to 'r_h = max(r_h,RadiusSupport(n))'
        ! in dimens.module.f90 is this what we want ?
 !****lat>$
-       r_h     = fdf_double('hamiltonian_range',zero)
+       !r_h     = fdf_double('hamiltonian_range',zero)
        r_c     = fdf_double('DM.L_range',       one )
-       r_t     = fdf_double('InvSRange',        r_h )
-       HNL_fac = fdf_double('non_local_factor', zero)
+       !r_t     = fdf_double('InvSRange',        r_h )
+       HNL_fac = zero !fdf_double('non_local_factor', zero)
        ! Exponents for initial gaussian blips
        alpha = fdf_double('Basis.SGaussExponent',zero)
        beta  = fdf_double('Basis.PGaussExponent',zero)
@@ -1276,18 +1275,21 @@ contains
 !!$
        ! Read charge, mass, pseudopotential and starting charge and
        ! blip models for the individual species
-       maxnsf      = 0
-       max_rc = zero
+       !maxnsf      = 0
+       !max_rc = zero
        min_blip_sp = 1.0e8_double
        do i=1,n_species
           charge(i)         = zero
+          charge_up(i)      = zero
+          charge_dn(i)      = zero
+          sum_elecN_spin    = zero
           nsf_species(i)    = 0
-          RadiusSupport(i)  = r_h
-          RadiusAtomf(i)    = r_h
+          RadiusSupport(i)  = zero
+          RadiusAtomf(i)    = zero
           RadiusMS(i)       = zero
           RadiusLD(i)       = zero
-          NonLocalFactor(i) = HNL_fac
-          InvSRange(i)      = r_t
+          NonLocalFactor(i) = zero
+          InvSRange(i)      = zero
           blip_info(i)%SupportGridSpacing = zero
           if(pseudo_type==SIESTA.OR.pseudo_type==ABINIT) non_local_species(i) = .true.
           ! This is new-style fdf_block
@@ -1295,7 +1297,7 @@ contains
           !if(fdf_block(species_label(i),bp)) then
           !   do while(fdf_bline(bp,line)) ! While there are lines in the block
           if(fdf_block(species_label(i))) then
-             charge(i)        = fdf_double ('Atom.ValenceCharge',zero)
+             !charge(i)        = fdf_double ('Atom.ValenceCharge',zero)
              charge_up(i)     = fdf_double ('Atom.SpinNeUp',zero)
              charge_dn(i)     = fdf_double ('Atom.SpinNeDn',zero)
              sum_elecN_spin   = charge_up(i)+charge_dn(i)
@@ -1308,18 +1310,21 @@ contains
                                  sum_elecN_spin,charge(i))
              endif
              nsf_species(i)   = fdf_integer('Atom.NumberOfSupports',0)
-             RadiusSupport(i) = fdf_double ('Atom.SupportFunctionRange',r_h)
-             RadiusAtomf(i)   = RadiusSupport(i) ! = r_pao for (atomf=paof) or r_sf for (atomf==sf)
+             RadiusSupport(i) = fdf_double ('Atom.SupportFunctionRange',zero)
+             !RadiusAtomf(i)   = RadiusSupport(i) ! = r_pao for (atomf=paof) or r_sf for (atomf==sf)
              ! Added DRB 2018/07/16 for safety
-             if(flag_Multisite) RadiusMS(i)      = fdf_double ('Atom.MultisiteRange',zero)
-             RadiusLD(i)      = fdf_double ('Atom.LFDRange',zero)
-             if (flag_Multisite) RadiusSupport(i) = RadiusAtomf(i) + RadiusMS(i)
+             if(flag_Multisite) then
+                RadiusMS(i)      = fdf_double ('Atom.MultisiteRange',zero)
+                RadiusLD(i)      = fdf_double ('Atom.LFDRange',zero)
+             end if
+             ! Moved to ... so that RadiusAtomf is read from ion files
+             !if (flag_Multisite) RadiusSupport(i) = RadiusAtomf(i) + RadiusMS(i)
              ! DRB 2016/08/05 Keep track of maximum support radius
-             if(RadiusSupport(i)>max_rc) max_rc = RadiusSupport(i)
+             !if(RadiusSupport(i)>max_rc) max_rc = RadiusSupport(i)
              ! SYM 2017/03/13 Fix no index on InvSRange
              InvSRange(i)     = fdf_double ('Atom.InvSRange',zero)
-             if(InvSRange(i)<RD_ERR) InvSRange(i) = RadiusSupport(i)
-             NonLocalFactor(i) = fdf_double('Atom.NonLocalFactor',HNL_fac)
+             !if(InvSRange(i)<RD_ERR) InvSRange(i) = RadiusSupport(i)
+             NonLocalFactor(i) = fdf_double('Atom.NonLocalFactor',zero)
              if(NonLocalFactor(i)>one.OR.NonLocalFactor(i)<zero) then
                 if(inode==ionode) &
                      write(io_lun,&
@@ -1346,19 +1351,19 @@ contains
                 end if
              end if
              call fdf_endblock
-          else
+          else if(flag_Multisite.OR.(flag_basis_set==blips)) then
              call cq_abort("Failure to read data for species_label: "&
-                           //species_label(i))
+                  //species_label(i))
           end if
-          if(nsf_species(i)==0) &
-               call cq_abort("Number of supports not specified for species ",i)
+          !%%! if(nsf_species(i)==0) &
+          !%%!      call cq_abort("Number of supports not specified for species ",i)
           if(flag_basis_set==blips.AND.blip_info(i)%SupportGridSpacing<RD_ERR) &
                call cq_abort("Error: for a blip basis set you must &
                               &set SupportGridSpacing for all species")
-          maxnsf = max(maxnsf,nsf_species(i))
-          if(RadiusSupport(i)<RD_ERR) &
-               call cq_abort("Radius of support too small for &
-                              &species; increase SupportFunctionRange ",i)
+          !maxnsf = max(maxnsf,nsf_species(i))
+          !if(RadiusSupport(i)<RD_ERR) &
+          !     call cq_abort("Radius of support too small for &
+          !                    &species; increase SupportFunctionRange ",i)
        end do
        ! For ghost atoms
        if(flag_ghost) then
@@ -1916,7 +1921,7 @@ contains
             call cq_abort("More processors than partitions! ",numprocs,n_parts_user(1)*n_parts_user(2)*n_parts_user(3))
        average_atomic_diameter = &
             fdf_double('General.AverageAtomicDiameter', 5.0_double)
-       gap_threshold = fdf_double('General.GapThreshold',two*max_rc)
+       gap_threshold = fdf_double('General.GapThreshold',zero) !two*max_rc)
        ! end sfc partitioning
        !
        !

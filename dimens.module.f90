@@ -269,8 +269,8 @@ contains
 2      format(8x,'This calculation includes non-local pseudopotentials,'/&
             9x,'with a maximum core radius of ',f15.8)
     end if
-    if (r_core>r_h) then
-       call cq_abort('set_dimens: r_core > r_support')
+    if (r_core-r_h>1e-4_double) then
+       call cq_abort('set_dimens: r_core > r_support',r_core,r_h)
     end if
 
     ! then, obtain the blip width
