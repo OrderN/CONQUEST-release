@@ -135,6 +135,7 @@ contains
 !!
   subroutine set_blipgrid(myid,rcut_atomf,rcut_proj)
     use datatypes
+    use numbers, ONLY: RD_ERR
     use global_module,ONLY:numprocs, sf, nlpf, paof, atomf
     use primary_module,ONLY: bundle, domain
     use cover_module,  ONLY: DCS_parts
@@ -175,7 +176,7 @@ contains
     naba_atoms_of_blocks(nlpf)%function_type = nlpf
     warn = .false.
     do i=1,n_species
-       if(abs(rcut_atomf(i) - rcut_proj(i)) > 1.0e-4_double) warn = .true.
+       if( (rcut_proj(i) - rcut_atomf(i)) > RD_ERR) warn = .true.
     end do
     if(.NOT.warn) then
        call alloc_halo_atm(halo_atoms_of_blocks(nlpf), max_recv_node_BtoG,max_halo_part,DCS_parts%mx_mcover)
