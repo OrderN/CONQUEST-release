@@ -146,9 +146,6 @@ contains
     logical :: append_coords_bkup
     integer :: index_local, MDstep_local
 
-    ! temporary until nspin_SF will be introduced for matS
-    integer                 :: matStmp(2), nspin_S
-
     index_local = 0; if(present(index)) index_local=index
     MDstep_local = 0; if(present(MDstep)) MDstep_local=MDstep
 
@@ -179,16 +176,13 @@ contains
     ! Temporary: Smatrix should be spin dependent like Kmatrix or Smatrix
     !  (while Satomf (PAO) is not spin dependent.)
     !  (nspin_SF : for spin polarised support functions.)
-    nspin_S = 1  ! nspin_S = nspin_SF
-    matStmp(1:2)=matS
-    ! /Temporary:
 
     if (.NOT. flag_diagonalisation) then
        ! For XL-BOMD
        if (flag_XLBOMD) then
           if (flag_propagateX) then
              call dump_matrix2('X',matXL,LSrange,n_matrix=nspin)
-             call dump_matrix2('S',matStmp,Srange,n_matrix=nspin_S)
+             call dump_matrix2('S',matS,Srange,n_matrix=nspin_SF)
              if (integratorXL.EQ.'velocityVerlet') &
                   call dump_matrix2('Xvel',matXLvel,LSrange,nspin)
           else

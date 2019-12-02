@@ -3918,6 +3918,8 @@ contains
   !!  MODIFICATION
   !!   2018/Sep/07  tsuyoshi
   !!       added calling ReportUpdateMatrix when flag_debug_move_atoms is true.
+  !!   2018/Nov/13 17:30 nakata
+  !!       changed matS to be spin_SF dependent
   !!   2019/Nov/14  tsuyoshi
   !!       removed glob2node_old, n_proc_old
   !!
@@ -3957,8 +3959,6 @@ contains
 
   real(double), dimension(3,ni_in_cell) :: velocity_global
   integer :: i
-  ! temporary for matT(nspin_SF)
-  integer :: matS_tmp(1)
 
  !Switch on Debugging
  !  flag_debug_move_atoms = .true.
@@ -4058,13 +4058,9 @@ contains
 
   if(flag_S) then
     ! If we introduce spin-dependent support, matS -> matS(nspin_SF)
-       matS_tmp(1)=matS  ! temporary 
-
-     call grab_matrix2('S',inode,nfile,InfoMat,InfoGlob,index=0,n_matrix=1)
-     !call grab_matrix2('S',inode,nfile,InfoMat,InfoGlob,index=0,n_matrix=nspin_SF)
+     call grab_matrix2('S',inode,nfile,InfoMat,InfoGlob,index=0,n_matrix=nspin_SF)
      call my_barrier()
-     call Matrix_CommRebuild(InfoGlob,InfoMat,Srange,S_trans,matS_tmp,nfile,symm,n_matrix=1)
-     !call Matrix_CommRebuild(InfoGlob,InfoMat,Srange,S_trans,matS_tmp,nfile,symm,n_matrix=nspin_SF)
+     call Matrix_CommRebuild(InfoGlob,InfoMat,Srange,S_trans,matS,nfile,symm,n_matrix=nspin_SF)
       if(flag_debug_move_atoms) call Report_UpdateMatrix("Smat")
   endif
 

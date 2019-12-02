@@ -132,6 +132,8 @@ contains
   !!    Adding neutral atom energy expressions
   !!   2016/03/02 17:20 dave
   !!    Tidying up output for neutral atom
+  !!   2018/05/24 19:00 nakata
+  !!    Changed matKE, matNL and matNA to be spin_SF dependent
   !!  SOURCE
   !!
   subroutine get_energy(total_energy, printDFT, level)
@@ -143,6 +145,7 @@ contains
                                       matK, matKE, matNL, matX, matNA
     use GenComms,               only: inode, ionode
     use global_module,          only: iprint_gen, nspin, spin_factor, &
+                                      flag_SpinDependentSF,           &
                                       flag_dft_d2,                    &
                                       flag_SCconverged_D2,            &
                                       flag_self_consistent,           &
@@ -166,7 +169,7 @@ contains
     integer, intent(in), optional :: level
 
     ! Local variables
-    integer        :: spin
+    integer        :: spin, spin_SF
     logical        :: print_Harris, print_DFT
     real(double)   :: total_energy2
     type(cq_timer) :: backtrace_timer
@@ -207,16 +210,18 @@ contains
     kinetic_energy = zero
     if(flag_neutral_atom_projector) local_ps_energy     = zero
     exx_energy     = zero
+    spin_SF = 1
     do spin = 1, nspin
+       if (flag_SpinDependentSF) spin_SF = spin
        nl_energy   = nl_energy   + spin_factor * &
-                     matrix_product_trace(matK(spin), matNL)
+                     matrix_product_trace(matK(spin), matNL(spin_SF))
        if(flag_neutral_atom_projector) local_ps_energy = local_ps_energy      &
-                        + spin_factor*matrix_product_trace(matK(spin), matNA)
+                        + spin_factor*matrix_product_trace(matK(spin), matNA(spin_SF))
        band_energy = band_energy + spin_factor * &
                      matrix_product_trace(matK(spin), matH(spin))
        ! note that matKE is < phi_i | - grad^2 | phi_j >
        kinetic_energy = kinetic_energy + spin_factor * half * &
-                        matrix_product_trace(matK(spin), matKE)
+                        matrix_product_trace(matK(spin), matKE(spin_SF))
        exx_energy = exx_energy - spin_factor * half * exx_alpha * &
                     matrix_product_trace(matK(spin), matX(spin))
     end do
@@ -433,6 +438,9 @@ contains
   !!    - Added experimental backtrace
   !!   2015/11/30 17:13 dave
   !!    - Added neutral atom output
+  !!   2018/11/13 17:30 nakata
+  !!    Changed matS, matKE, matNL and matNA to be spin_SF dependent
+  !!    Activated "electrons_tot2" calculation
   !!  SOURCE
   !!
   subroutine final_energy(level)
@@ -448,6 +456,7 @@ contains
                                       matK, matKE, matNL, matX, matS, matNA
 
     use global_module,          only: iprint_gen, nspin, spin_factor, &
+                                      flag_SpinDependentSF,           &
                                       flag_dft_d2,                    &
                                       flag_SCconverged_D2,            &
                                       flag_self_consistent,           &
@@ -467,7 +476,7 @@ contains
     integer, optional :: level
 
     ! Local variables
-    integer        :: spin
+    integer        :: spin, spin_SF
     real(double)   :: total_energy1
     real(double)   :: total_energy2
     real(double)   :: one_electron_energy
@@ -498,18 +507,21 @@ contains
     total_energy1       = zero
     total_energy2       = zero
 
+    spin_SF = 1
+
     ! Nonlocal pseudop, kinetic and band energies
     do spin = 1, nspin
+       if (flag_SpinDependentSF) spin_SF = spin
        ! 2*Tr[K NL]
        if (inode == ionode) write (io_lun,*) 'nl_energy' 
        nl_energy      = nl_energy      &
-                        + spin_factor*matrix_product_trace(matK(spin), matNL)
+                        + spin_factor*matrix_product_trace(matK(spin), matNL(spin_SF))
        if(flag_neutral_atom_projector) local_ps_energy = local_ps_energy      &
-                        + spin_factor*matrix_product_trace(matK(spin), matNA)
+                        + spin_factor*matrix_product_trace(matK(spin), matNA(spin_SF))
        ! 2*Tr[K KE] with KE = - < grad**2 >
        if (inode == ionode) write (io_lun,*) 'k_energy'
        kinetic_energy = kinetic_energy &
-                        + spin_factor*half*matrix_product_trace(matK(spin), matKE)
+                        + spin_factor*half*matrix_product_trace(matK(spin), matKE(spin_SF))
        ! 2*Tr[K H]
        if (inode == ionode) write (io_lun,*) 'band_energy'
        band_energy    = band_energy    &
@@ -561,9 +573,9 @@ contains
     call electron_number(electrons)
     if (inode == ionode) electrons_tot1 = electrons(1) + electrons(nspin)
    
-    if (inode == ionode) write(io_lun,*) 'electrons_tot2 start'
-    !electrons_tot2 = matrix_product_trace_length(matK(1),matS)
-    if (inode == ionode) write(io_lun,*) 'electrons_tot2 stop'
+    !if (inode == ionode) write(io_lun,*) 'electrons_tot2 start'
+    !electrons_tot2 = matrix_product_trace_length(matK(1),matS(1))
+    !if (inode == ionode) write(io_lun,*) 'electrons_tot2 stop'
 
     if (inode == ionode) then
        !
@@ -717,10 +729,11 @@ contains
     if (inode == ionode) electrons_tot1 = electrons(1) + electrons(nspin)
 
     electrons_tot2 = zero
-    !do spin = 1, nspin
-       !electrons_tot2 = electrons_tot2 + &
-       !     spin_factor * matrix_product_trace_length(matK(spin),matS)
-    !end do
+    do spin = 1, nspin
+       if (flag_SpinDependentSF) spin_SF = spin
+       electrons_tot2 = electrons_tot2 + &
+            spin_factor * matrix_product_trace_length(matK(spin),matS(spin_SF))
+    end do
     
 
     if (inode == ionode) then

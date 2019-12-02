@@ -322,6 +322,10 @@ contains
     !
     !
     ! Set flag_one_to_one and check the number of SFs
+    if (nspin.eq.1) then
+       nspin_SF = 1
+       flag_SpinDependentSF = .false.
+    endif
     if (flag_basis_set==blips) then
        flag_one_to_one = .false.
        atomf = sf
@@ -350,7 +354,10 @@ contains
        else
           atomf = paof
        end if
-       if (flag_SpinDependentSF) nspin_SF = nspin
+       if (flag_SpinDependentSF) then
+          nspin_SF = nspin
+          if (inode==ionode) write(io_lun,'(2X,A,I1)') 'Support functions are spin-dependent, nspin_SF = ',nspin_SF
+       endif
        if (flag_one_to_one.AND.flag_vary_basis) then
           write(io_lun,fmt='(/2x,"************")')
           write(io_lun,fmt='(2x,"* WARNING !*")')
@@ -708,6 +715,8 @@ contains
   !!    Added flag for RNG seed
   !!   2019/10/08 nakata
   !!    Fixed bug for the case when reading only Kmatrix but not SFcoeff (for MSSFs)
+  !!   2019/11/14 20:00 nakata
+  !!    set flag_SpinDependentSF to be .true. in default
   !!   2019/11/18 14:36 dave
   !!    Added flag_variable_cell set to true for cell optimisation or NPT dynamics
   !!  TODO
@@ -1763,7 +1772,7 @@ contains
        TestH                   = fdf_boolean(  'Basis.TestBasisGrad_H',         .false.)
        support_spec_file       = fdf_string(80,'Basis.SupportSpecFile',   'support.dat')
        flag_read_support_spec  = fdf_boolean(  'Basis.ReadSupportSpec',         .false.)
-       flag_SpinDependentSF    = fdf_boolean(  'Basis.SpinDependentSF',         .false.) ! Spin-dependence of SFs
+       flag_SpinDependentSF    = fdf_boolean(  'Basis.SpinDependentSF',         .true. ) ! Spin-dependence of SFs
        !
        !
        flag_test_forces        = fdf_boolean('AtomMove.TestForces',   .false.)

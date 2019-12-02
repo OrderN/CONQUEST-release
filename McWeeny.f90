@@ -329,6 +329,11 @@ contains
   !!    mubar will be infinity, and cause the calculation to give
   !!    NaN. When n_o == ne(spin) or n_e, the initial L from
   !!    formulation should have been the identiy matrix (lambda = 0).
+  !!  2018/11/15 nakata
+  !!    Changed matS, matT, SX and A to be spin_SF dependent
+  !!  2018/11/15 nakata
+  !!    Removed direct_sum_factor and n_e and 
+  !!    introduced n_e_ds, n_o_ds and A_ds for variable spin case
   !!  SOURCE
   !!
   subroutine InitMcW
@@ -336,9 +341,10 @@ contains
     use datatypes
     use numbers
     use global_module,  only: iprint_DM, ni_in_cell,                  &
-                              IPRINT_TIME_THRES1, nspin,              &
+                              IPRINT_TIME_THRES1, nspin, nspin_SF,    &
                               flag_fix_spin_population, ne_in_cell,   &
-                              ne_spin_in_cell, spin_factor
+                              ne_spin_in_cell, spin_factor,           &
+                              flag_SpinDependentSF
     use species_module, only: species, nsf_species
     use mult_module,    only: allocate_temp_matrix, matH, matS, matT, &
                               matL, mult, matrix_trace, T_S_TS,       &
@@ -353,44 +359,42 @@ contains
     implicit none
 
     ! Local variables
-    real(double) :: n_e, n_o, hmax_ds, hmin_ds, SX, SXHX_ds, A
-    real(double) :: direct_sum_factor = one
+    real(double) :: n_e_ds, n_o, n_o_ds, hmax_ds, hmin_ds, SXHX_ds, A_ds
 
+    real(double), dimension(nspin_SF) :: SX, A
     real(double), dimension(nspin) :: ne, mu1, mu2, mubar, lambda, &
                                       hmin, hmax, SXHX
     integer,      dimension(nspin) :: matXHX, matSXHX, mat_temp
-    integer                        :: matTS, length, i, spin
+    integer                        :: matTS, length, i, spin, spin_SF
     type(cq_timer)                 :: tmr_l_tmp1
 
     call start_timer(tmr_l_tmp1, WITH_LEVEL)
     if (inode == ionode .and. iprint_DM > 1) write (io_lun, 1)
     ! We must first initialise rho
-    ! n_e is the number of electrons per spin channel
+    ! ne is the number of electrons per spin channel
     ne(1:nspin) = ne_spin_in_cell(1:nspin)
-    n_e = spin_factor * sum(ne(:))
-    ! n_e is total number of electrons
-
-    ! we are working with the whole direct sum for variable spin case
-    ! so we need to have twice the size of basis set
-    if (nspin == 2 .and. (.not. flag_fix_spin_population)) &
-         direct_sum_factor = two
+    ! n_e_ds is total number of electrons
+    n_e_ds = spin_factor * sum(ne(:))
 
     ! n_o is number of support functions 
     n_o = zero
     do i = 1, ni_in_cell
-       n_o = n_o + direct_sum_factor * nsf_species(species(i))
+       n_o = n_o + nsf_species(species(i))
     end do
+    ! we are working with the whole direct sum for variable spin case
+    ! so we need to have twice the size of basis set
+    n_o_ds = n_o + n_o
     
     ! check if we have enough orbitals for the given electron
     ! populations for the initialisation procedure to work properly.
     do spin = 1, nspin
-       if (ne(spin) / n_o * direct_sum_factor > one) then
+       if (ne(spin) / n_o > one) then
           write (io_lun, '(/,2x,a,i1,a,i1,a,f12.6,a,f12.6,a,/)')      &
                '*** WARNING!!! You have too few number of support &
                 &functions for the calculation. The number of &
                 &electrons in spin = ', spin, ' is greater than the &
                 &number of orbitals!. ne(', spin, ') = ', ne(spin),   &
-                ', n_o for spin channel = ', n_o / direct_sum_factor, &
+                ', n_o for spin channel = ', n_o, &
                 ' ***'
        end if
     end do
@@ -400,23 +404,35 @@ contains
             write (io_lun, 3) ne(1), ne(2), n_o
     else
        if (inode == ionode .and. iprint_DM > 1) &
-            write (io_lun, 2) n_e, n_o
+            write (io_lun, 2) n_e_ds, n_o_ds    ! check Miyazaki-san
     end if
 
     matTS = allocate_temp_matrix(TSrange,0)
-    call matrix_product(matT, matS, matTS, mult(T_S_TS))
-    SX = direct_sum_factor * matrix_trace(matTS)
+
+    do spin_SF = 1, nspin_SF
+       call matrix_product(matT(spin_SF), matS(spin_SF), matTS, mult(T_S_TS))
+       SX(spin_SF) = matrix_trace(matTS)
+    enddo
     if (inode == ionode .and. iprint_DM > 1) then 
-       write (io_lun, fmt='(2x,"SX is    ",f25.15)') SX
-       write (io_lun, fmt='(2x,"SX/no is ",f25.15)') SX / n_o
+       if (nspin_SF == 1) then
+          write (io_lun, fmt='(2x,"SX is    ",f25.15)') SX(1)
+          write (io_lun, fmt='(2x,"SX/no is ",f25.15)') SX(1) / n_o
+       else
+          write (io_lun, fmt='(2x,"SX_up is    ",f25.15)') SX(1)
+          write (io_lun, fmt='(2x,"SX_up/no is ",f25.15)') SX(1) / n_o
+          write (io_lun, fmt='(2x,"SX_dn is    ",f25.15)') SX(2)
+          write (io_lun, fmt='(2x,"SX_dn/no is ",f25.15)') SX(2) / n_o
+       endif
     end if
 
     SXHX_ds = zero
+    spin_SF = 1
     do spin = 1, nspin
+       if (flag_SpinDependentSF) spin_SF = spin
        matXHX(spin) = allocate_temp_matrix(Lrange, 0)
        mat_temp(spin) = allocate_temp_matrix(Srange, 0)
-       call McWXHX(matH(spin), matT, matXHX(spin), mat_temp(spin))
-       SXHX(spin) = matrix_product_trace(matS, mat_temp(spin))
+       call McWXHX(matH(spin), matT(spin_SF), matXHX(spin), mat_temp(spin))
+       SXHX(spin) = matrix_product_trace(matS(spin_SF), mat_temp(spin))
        SXHX_ds = SXHX_ds + spin_factor * SXHX(spin)
        if (inode == ionode .and. iprint_DM > 1) &
             write (io_lun, '(2x,"SXHX(spin=",i1,") = ",f25.15)') &
@@ -442,11 +458,19 @@ contains
        hmax_ds = maxval(hmax(:))
        if (inode == ionode .and. iprint_DM > 1) write (io_lun, 5) hmin, hmax
     end if
-    
-    A = (one - SX/n_o)
+
+    do spin_SF = 1, nspin_SF    
+       A(spin_SF) = (one - SX(spin_SF)/n_o)
+    enddo
+    if (nspin == 2 .and. (.not. flag_fix_spin_population)) then
+       if (nspin_SF==1) A_ds = (one - (SX(1)+SX(1))/n_o_ds)   ! SX(2) = SX(1)
+       if (nspin_SF==2) A_ds = (one - (SX(1)+SX(2))/n_o_ds)
+    endif
 
     if (nspin == 1 .or. flag_fix_spin_population) then
+       spin_SF = 1
        do spin = 1, nspin
+          if (flag_SpinDependentSF) spin_SF = spin
           ! for the rare case where n_o == ne(spin), we have lambda =
           ! 0, and mu_bar = infty. But initial rho will be identity
           ! matrix.
@@ -454,10 +478,10 @@ contains
              mubar(spin) = zero
              lambda(spin) = zero
           else
-             mu1(spin) = SXHX(spin) / n_o + hmax(spin) * A
-             mu2(spin) = (hmin(spin) * A * ne(spin) / (n_o - ne(spin)) - &
+             mu1(spin) = SXHX(spin) / n_o + hmax(spin) * A(spin_SF)
+             mu2(spin) = (hmin(spin) * A(spin_SF) * ne(spin) / (n_o - ne(spin)) - &
                           SXHX(spin) / n_o) / &
-                         (n_o * A / (n_o - ne(spin)) - one)
+                         (n_o * A(spin_SF) / (n_o - ne(spin)) - one)
              if (inode == ionode) &
                   write (io_lun, &
                          '(2x,"Mu1, Mu2, for spin = ",i1," are: ",2f25.15)') &
@@ -480,32 +504,34 @@ contains
                      spin, mubar(spin), lambda(spin)
        end do
        ! Calculate L0. 
+       spin_SF = 1
        do spin = 1, nspin
-          call McWRho0(matL(spin), matT, matXHX(spin), mubar(spin), &
+          if (flag_SpinDependentSF) spin_SF = spin
+          call McWRho0(matL(spin), matT(spin_SF), matXHX(spin), mubar(spin), &
                lambda(spin), ne(spin), n_o)
        end do
     else ! variable spin
-       ! for the rare case where n_o == n_e, we have lambda =
+       ! for the rare case where n_o_ds == n_e_ds, we have lambda =
        ! 0, and mu_bar = infty. But initial rho will be identity
        ! matrix.
-       if (n_o == n_e) then
+       if (n_o_ds == n_e_ds) then
           mubar(:) = zero
           lambda(:) = zero
        else
           ! mu1(1) and mu1(2) always equal in this case. Same for mu2
-          mu1(:) = SXHX_ds / n_o + hmax_ds * A
-          mu2(:) = (hmin_ds * A * n_e / (n_o - n_e) - SXHX_ds / n_o) / &
-                   (n_o * A / (n_o - n_e) - one)
+          mu1(:) = SXHX_ds / n_o_ds + hmax_ds * A_ds
+          mu2(:) = (hmin_ds * A_ds * n_e_ds / (n_o_ds - n_e_ds) - SXHX_ds / n_o_ds) / &
+                   (n_o_ds * A_ds / (n_o_ds - n_e_ds) - one)
           if (inode == ionode) &
                write (io_lun, '(2x,"Mu1, Mu2: ",2f25.15)') mu1(1), mu2(1)
-          if ((n_e / (hmax_ds - mu1(1))) < &
-              ((n_o - n_e) / (mu1(1) - hmin_ds))) then
+          if ((n_e_ds / (hmax_ds - mu1(1))) < &
+              ((n_o_ds - n_e_ds) / (mu1(1) - hmin_ds))) then
              mubar(:) = mu1(:)
-             lambda(:) = n_e / (hmax_ds - mu1(:))
-          else if ((n_e / (hmax_ds - mu2(1))) < &
-                   ((n_o - n_e) / (mu2(1) - hmin_ds))) then
+             lambda(:) = n_e_ds / (hmax_ds - mu1(:))
+          else if ((n_e_ds / (hmax_ds - mu2(1))) < &
+                   ((n_o_ds - n_e_ds) / (mu2(1) - hmin_ds))) then
              mubar(:) = mu2(:)
-             lambda(:) = (n_o - n_e) / (mu2(:) - hmin_ds)
+             lambda(:) = (n_o_ds - n_e_ds) / (mu2(:) - hmin_ds)
           else
              call cq_abort('InitMcW: Cannot find mubar.')
           end if
@@ -515,9 +541,11 @@ contains
           write (io_lun, '(2x,"lambda is ",f25.15)') lambda(1)
        end if
        ! Calculate L0. 
+       spin_SF = 1
        do spin = 1, nspin
-          call McWRho0(matL(spin), matT, matXHX(spin), mubar(spin), &
-                       lambda(spin), n_e, n_o)
+          if (flag_SpinDependentSF) spin_SF = spin
+          call McWRho0(matL(spin), matT(spin_SF), matXHX(spin), mubar(spin), &
+                       lambda(spin), n_e_ds, n_o_ds)
        end do
     end if
     
@@ -533,7 +561,7 @@ contains
 
 1   format(1x,'Welcome to InitMcW')
 2   format(2x,'Electrons: ',f15.6,' Orbitals: ',f15.6)
-3   format(2x,'Electrons_up: ',f15.6,' Electrons_dn: ',f15.6,' Orbitals: ',f15.6)
+3   format(2x,'Electrons_up: ',f15.6,' Electrons_dn: ',f15.6,' Orbitals for each spin: ',f15.6)
 4   format(2x,'Minimum and maximum limites on H(spin=',i1') are ',2f15.6)
 5   format(2x,'Minimum and maximum limites on overall H are ',2f15.6)
 6   format(2x,'Mubar is ',f15.6)
@@ -585,6 +613,8 @@ contains
   !!    - Major rewrite of spin implementation
   !!    - Use matLS, matSL from mult module directly
   !!    - All inputs except matS and matInvS are arrays of dimension nspin
+  !!   2018/11/15 nakata
+  !!    Changed matS and matInvS to be spin_SF dependent
   !!  SOURCE
   !!
   subroutine McW_matrix_multiply_nonds(matH, matS, matL, matInvS, &
@@ -598,22 +628,24 @@ contains
                               matrix_transpose, allocate_temp_matrix, &
                               free_temp_matrix, L_S_LS, LS_L_LSL,     &
                               LSL_SL_L, mult, matLS, matSL
-    use global_module,  only: iprint_DM, nspin, spin_factor
+    use global_module,  only: iprint_DM, nspin, spin_factor, flag_SpinDependentSF
     use GenComms,       only: gsum, cq_abort, my_barrier
 
     implicit none
 
     ! Passed variables
-    integer,      dimension(:) :: matH, matL, matRhoNew
-    integer                    :: matS, matInvS
+    integer,      dimension(:) :: matH, matS, matL, matInvS, matRhoNew
     real(double), dimension(:) :: energy, c
     ! Local Variables
-    integer :: spin
+    integer :: spin, spin_SF
     real(double), dimension(nspin) :: c1, c2, cn
     integer,      dimension(nspin) :: matLSL, matLSLSL, mat_top, mat_bottom
 
+    spin_SF = 1
+
     do spin = 1, nspin
-       call matrix_product(matL(spin), matS, matLS(spin), mult(L_S_LS))
+       if (flag_SpinDependentSF) spin_SF = spin
+       call matrix_product(matL(spin), matS(spin_SF), matLS(spin), mult(L_S_LS))
        ! Generate LSL, LSLSL
        matLSL(spin) = allocate_temp_matrix(LSLrange,0)
        matLSLSL(spin) = allocate_temp_matrix(Lrange,0)
@@ -630,18 +662,18 @@ contains
        !----------------------------------------------------------------
        call matrix_sum(zero, mat_top(spin),  one, matLSL(spin))
        call matrix_sum(one,  mat_top(spin), -one, matLSLSL(spin))
-       c1(spin) = matrix_product_trace(matS, mat_top(spin))
+       c1(spin) = matrix_product_trace(matS(spin_SF), mat_top(spin))
        if (inode == ionode .and. iprint_DM >= 2) &
             write (io_lun, '(2x,"S.top (spin=",i1,") is  ",f25.15)') &
                   spin, c1(spin)
        call matrix_sum(zero, mat_bottom(spin), one, matL(spin))
-       c1(spin) = matrix_product_trace(matS, mat_bottom(spin))
+       c1(spin) = matrix_product_trace(matS(spin_SF), mat_bottom(spin))
        if (inode == ionode .and. iprint_DM >= 2) &
             write (io_lun, '(2x,"N_e (spin=",i1,") is  ",f25.15)') &
                   spin, c1(spin)
        call matrix_sum(one, mat_bottom(spin), -one, matLSL(spin))
-       c1(spin) = matrix_product_trace(matS, mat_top(spin))
-       c2(spin) = matrix_product_trace(matS, mat_bottom(spin))
+       c1(spin) = matrix_product_trace(matS(spin_SF), mat_top(spin))
+       c2(spin) = matrix_product_trace(matS(spin_SF), mat_bottom(spin))
        if (c2(spin) /= zero) then
           cn(spin) = c1(spin) / c2(spin)
        else
@@ -687,7 +719,7 @@ contains
             write (io_lun, '(2x,"energy (spin=",i1,") is ",f25.15)') &
                   spin, energy(spin)
        call matrix_sum(zero, mat_top(spin), one, matRhoNew(spin))
-       c1(spin) = matrix_product_trace(mat_top(spin), matS)
+       c1(spin) = matrix_product_trace(mat_top(spin), matS(spin_SF))
        if (inode == ionode .and. iprint_DM >= 3) &
             write (io_lun, '(2x,"N_e(2) (spin=",i1,") is ",f25.15)') &
                   spin, c1(spin)
@@ -730,6 +762,8 @@ contains
   !!   2012/03/11 L.Tong
   !!   - Major rewrite of the spin implementation
   !!   - all inputs except matS and matInvS are arrays of dimension nspin
+  !!   2018/11/13 17:30 nakata
+  !!    Changed matS and matInvS to be spin_SF dependent
   !! SOURCE
   !!
   subroutine McW_matrix_multiply_ds(matH, matS, matL, matInvS, &
@@ -744,27 +778,28 @@ contains
                               matrix_transpose, allocate_temp_matrix, &
                               free_temp_matrix, matLS, matSL, L_S_LS, &
                               LS_L_LSL, LSL_SL_L, mult
-    use global_module,  only: iprint_DM, nspin, spin_factor
+    use global_module,  only: iprint_DM, nspin, spin_factor, flag_SpinDependentSF
     use GenComms,       only: gsum, cq_abort, my_barrier
 
     implicit none
 
     ! Passed variables
-    integer, dimension(:) :: matH, matL, matRhoNew
-    integer               :: matS, matInvS
+    integer, dimension(:) :: matH, matS, matL, matInvS, matRhoNew
     real(double)          :: energy_total, c_total
 
     ! Local Variables
     real(double)              :: c1, c2, tmp
     integer, dimension(nspin) :: matLSL, matLSLSL, mat_top, mat_bottom
-    integer                   :: spin
+    integer                   :: spin, spin_SF
     
     c1 = zero
     c2 = zero
     energy_total = zero
+    spin_SF = 1
 
     do spin = 1, nspin
-       call matrix_product(matL(spin), matS, matLS(spin), mult(L_S_LS))
+       if (flag_SpinDependentSF) spin_SF = spin
+       call matrix_product(matL(spin), matS(spin_SF), matLS(spin), mult(L_S_LS))
        ! Generate LSL, LSLSL
        matLSL(spin) = allocate_temp_matrix(LSLrange, 0)
        matLSLSL(spin) = allocate_temp_matrix(Lrange, 0)
@@ -781,18 +816,18 @@ contains
        !----------------------------------------------------------------
        call matrix_sum(zero, mat_top(spin),  one, matLSL(spin))
        call matrix_sum(one,  mat_top(spin), -one, matLSLSL(spin))
-       tmp = matrix_product_trace(matS, mat_top(spin))
+       tmp = matrix_product_trace(matS(spin_SF), mat_top(spin))
        if (inode == ionode .and. iprint_DM >= 2) &
             write (io_lun, '(2x,"S.top (spin=",i1,") is ",f25.15)') spin, tmp
        call matrix_sum(zero, mat_bottom(spin), one, matL(spin))
-       tmp = matrix_product_trace(matS, mat_bottom(spin))
+       tmp = matrix_product_trace(matS(spin_SF), mat_bottom(spin))
        if (inode == ionode .and. iprint_DM >= 2) &
             write (io_lun, '(2x,"N_e (spin=",i1,") is ",f25.15)') spin, tmp
        ! get the real mat_bottom for spin up
        call matrix_sum(one, mat_bottom(spin), -one, matLSL(spin))
        ! c1 and c2 calculated
-       c1 = c1 + spin_factor * matrix_product_trace(matS, mat_top(spin))
-       c2 = c2 + spin_factor * matrix_product_trace(matS, mat_bottom(spin))
+       c1 = c1 + spin_factor * matrix_product_trace(matS(spin_SF), mat_top(spin))
+       c2 = c2 + spin_factor * matrix_product_trace(matS(spin_SF), mat_bottom(spin))
        ! finished  mat_bottom here, change to Hrange for something else
        call free_temp_matrix(mat_bottom(spin))
        mat_bottom(spin) = allocate_temp_matrix(Hrange,0)
@@ -825,7 +860,7 @@ contains
          write (io_lun, '(2x,"energy_total: ",f25.15)') energy_total
     do spin = 1, nspin
        call matrix_sum(zero, mat_top(spin), one, matRhoNew(spin))
-       tmp = matrix_product_trace(mat_top(spin), matS)
+       tmp = matrix_product_trace(mat_top(spin), matS(spin_SF))
        if (inode == ionode .and. iprint_DM >= 3) &
             write (io_lun, '(2x,"N_e (spin=",i1,") is ",f25.15)') &
                   spin, tmp
