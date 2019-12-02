@@ -1667,7 +1667,7 @@ contains
     use datatypes
     use numbers
     use global_module,  only: ni_in_cell, area_SC, nspin, spin_factor, &
-                              flag_SpinDependentSF                     ! nakata SD-MSSF
+                              flag_SpinDependentSF
     use primary_module, only: bundle
     use matrix_data,    only: Srange
     use mult_module,    only: matK, matS, atom_trace, matrix_sum, &

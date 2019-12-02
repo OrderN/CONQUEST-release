@@ -119,6 +119,8 @@ contains
   !!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
   !!   2019/10/24 11:52 dave
   !!    Changed function calls to FindMinDM
+  !!   2019/12/02 nakata
+  !!    Removed dump_matrix(SFcoeff), which will be changed to dump_pos_and_matrices in near future
   !!  SOURCE
   !!
   subroutine vary_pao(n_support_iterations, fixed_potential, vary_mu, &
@@ -145,7 +147,8 @@ contains
     use group_module,              only: parts
     use H_matrix_module,           only: get_H_matrix
     use S_matrix_module,           only: get_S_matrix
-    use io_module,                 only: dump_matrix
+    use store_matrix,              only: dump_pos_and_matrices
+!    use io_module,                 only: dump_matrix
     use support_spec_format,       only: TestBasisGrads, TestTot,      &
                                          TestBoth, TestS, TestH
     use DMMin,                     only: FindMinDM
@@ -534,12 +537,15 @@ contains
           call matrix_scale(zero,matSFcoeff_tran(spin_SF))
           call matrix_transpose(matSFcoeff(spin_SF), matSFcoeff_tran(spin_SF))
        enddo
-       if (nspin_SF == 1) then
-          call dump_matrix("SFcoeff",    matSFcoeff(1), inode)
-       else
-          call dump_matrix("SFcoeff_up", matSFcoeff(1), inode)
-          call dump_matrix("SFcoeff_dn", matSFcoeff(2), inode)
-       end if
+
+    ! Write out current SF coefficients with some iprint (in future)
+    ! if (iprint_basis>=3) call dump_pos_and_matrices
+!       if (nspin_SF == 1) then
+!          call dump_matrix("SFcoeff",    matSFcoeff(1), inode)
+!       else
+!          call dump_matrix("SFcoeff_up", matSFcoeff(1), inode)
+!          call dump_matrix("SFcoeff_dn", matSFcoeff(2), inode)
+!       end if
 
        flag_vary_basis = .true.
 
@@ -676,6 +682,8 @@ contains
   !!    dump_matrix is used instead of writeout_support_functions.
   !!   2017/02/23 dave
   !!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
+  !!   2019/12/02 nakata
+  !!    Removed dump_matrix(SFcoeff), which will be changed to dump_pos_and_matrices in near future
   !! SOURCE
   !!
   subroutine pulay_min_pao(n_support_iterations, fixed_potential,   &
@@ -706,7 +714,8 @@ contains
     use memory_module,       only: reg_alloc_mem, type_dbl,            &
                                    reg_dealloc_mem
     use multisiteSF_module,  only: normalise_SFcoeff
-    use io_module,           only: dump_matrix
+    use store_matrix,        only: dump_pos_and_matrices
+!    use io_module,           only: dump_matrix
 
     implicit none
 
@@ -922,12 +931,14 @@ contains
           call copy(length, mat_p(matSFcoeff(spin_SF))%matrix, 1, data_paostore(1:, npmod, spin_SF), 1)
        enddo
 
-       if (nspin_SF == 1) then
-          call dump_matrix("SFcoeff",    matSFcoeff(1), inode)
-       else
-          call dump_matrix("SFcoeff_up", matSFcoeff(1), inode)
-          call dump_matrix("SFcoeff_dn", matSFcoeff(2), inode)
-       end if
+    ! Write out current SF coefficients with some iprint (in future)
+    ! if (iprint_basis>=3) call dump_pos_and_matrices
+!       if (nspin_SF == 1) then
+!          call dump_matrix("SFcoeff",    matSFcoeff(1), inode)
+!       else
+!          call dump_matrix("SFcoeff_up", matSFcoeff(1), inode)
+!          call dump_matrix("SFcoeff_dn", matSFcoeff(2), inode)
+!       end if
 
        diff = total_energy_last - total_energy_0
        total_energy_last = total_energy_0

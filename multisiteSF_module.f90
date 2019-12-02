@@ -113,6 +113,8 @@ contains
 !!  MODIFICATION HISTORY
 !!   10/11/2017 nakata
 !!    Removed unused grab_charge
+!!   02/12/2019 nakata
+!!    Removed dump_matrix(SFcoeff), which will be changed to dump_pos_and_matrices in near future
 !!  SOURCE
 !!
   subroutine initial_SFcoeff(LFD_build_Spao, LFD_build_Hpao, fixed_potential, output_naba_in_MSSF)
@@ -129,7 +131,8 @@ contains
     use PAO_grid_transform_module, only: single_PAO_to_grid
     use S_matrix_module,           only: get_S_matrix
     use H_matrix_module,           only: get_H_matrix
-    use io_module,                 only: dump_matrix
+    use store_matrix,              only: dump_pos_and_matrices
+!    use io_module,                 only: dump_matrix
     use GenComms,                  only: mtime
 
     implicit none
@@ -194,13 +197,14 @@ contains
        call matrix_transpose(matSFcoeff(spin_SF), matSFcoeff_tran(spin_SF))
     enddo
 
-    ! Write out SF coefficients
-    if (nspin_SF == 1) then
-       call dump_matrix("SFcoeff",    matSFcoeff(1), inode)
-    else
-       call dump_matrix("SFcoeff_up", matSFcoeff(1), inode)
-       call dump_matrix("SFcoeff_dn", matSFcoeff(2), inode)
-    end if
+    ! Write out current SF coefficients with some iprint (in future)
+    ! if (iprint_basis>=3) call dump_pos_and_matrices
+!    if (nspin_SF == 1) then
+!       call dump_matrix("SFcoeff",    matSFcoeff(1), inode)
+!    else
+!       call dump_matrix("SFcoeff_up", matSFcoeff(1), inode)
+!       call dump_matrix("SFcoeff_dn", matSFcoeff(2), inode)
+!    end if
 
     call my_barrier()
     t2 = mtime()
@@ -365,6 +369,8 @@ contains
 !!  CREATION DATE
 !!   2016/10/04
 !!  MODIFICATION HISTORY
+!!   2019/12/02 nakata
+!!    Removed dump_matrix(SFcoeff), which will be changed to dump_pos_and_matrices in near future
 !!
 !!  SOURCE
 !!
@@ -373,7 +379,8 @@ contains
     use datatypes
     use numbers
     use global_module,  ONLY: id_glob, species_glob, IPRINT_TIME_THRES2, nspin_SF
-    use io_module,      ONLY: dump_matrix
+    use store_matrix,   ONLY: dump_pos_and_matrices
+!    use io_module,      ONLY: dump_matrix
     use group_module,   ONLY: parts
     use primary_module, ONLY: bundle
     use cover_module,   ONLY: BCS_parts
@@ -447,12 +454,14 @@ contains
        call matrix_transpose(matSFcoeff(spin_SF), matSFcoeff_tran(spin_SF))
     enddo
 
-    if (nspin_SF == 1) then
-       call dump_matrix("SFcoeff",    matSFcoeff(1), inode)
-    else
-       call dump_matrix("SFcoeff_up", matSFcoeff(1), inode)
-       call dump_matrix("SFcoeff_dn", matSFcoeff(2), inode)
-    end if
+    ! Write out current SF coefficients with some iprint (in future)
+    ! if (iprint_basis>=3) call dump_pos_and_matrices
+!    if (nspin_SF == 1) then
+!       call dump_matrix("SFcoeff",    matSFcoeff(1), inode)
+!    else
+!       call dump_matrix("SFcoeff_up", matSFcoeff(1), inode)
+!       call dump_matrix("SFcoeff_dn", matSFcoeff(2), inode)
+!    end if
 
     call my_barrier
 
@@ -2243,6 +2252,8 @@ contains
 !!    Small bug fix: changed dimension of rhototal to maxngrid
 !!   2019/10/24 11:52 dave
 !!    Changed function calls to FindMinDM
+!!   201912/02 nakata
+!!    Removed dump_matrix(SFcoeff), which will be changed to dump_pos_and_matrices in near future
 !!  SOURCE
 !!
   subroutine LFD_minimise(fixed_potential, vary_mu, n_cg_L_iterations, L_tolerance, &
@@ -2264,7 +2275,8 @@ contains
                                   matrix_scale, matrix_transpose 
     use GenBlas,            only: dot
     use memory_module,      only: reg_alloc_mem, type_dbl, reg_dealloc_mem
-    use io_module,          only: dump_matrix, dump_charge
+    use store_matrix,       only: dump_pos_and_matrices
+!    use io_module,          only: dump_matrix, dump_charge
                                    
     implicit none
 
@@ -2416,27 +2428,29 @@ contains
           if (inode==ionode) write(io_lun,'(/20x,A,i5)') 'LFD_minimise: Save SF coefficients at iteration # ',iter
        endif
 
-       ! Output current SFcoeff and density
-       if (nspin_SF == 1) then
-          call dump_matrix("SFcoeff",    matSFcoeff(1), inode)
-       else
-          call dump_matrix("SFcoeff_up", matSFcoeff(1), inode)
-          call dump_matrix("SFcoeff_dn", matSFcoeff(2), inode)
-       end if
-       if(nspin==1) then
-          allocate(rho_total(maxngrid), STAT=stat)
-          if (stat /= 0) call cq_abort("Error allocating rho_total: ", maxngrid)
-          call reg_alloc_mem(area_ops, n_my_grid_points, type_dbl)
-          rho_total = zero
-          rho_total(:) = spin_factor * rho(:,1)
-          call dump_charge(rho_total, n_my_grid_points, inode, spin=0)
-          deallocate(rho_total, STAT=stat)
-          if (stat /= 0) call cq_abort("Error deallocating rho_total")
-          call reg_dealloc_mem(area_ops, n_my_grid_points, type_dbl)
-       else if (nspin == 2) then
-          call dump_charge(rho(:,1), n_my_grid_points, inode, spin=1)
-          call dump_charge(rho(:,2), n_my_grid_points, inode, spin=2)
-       end if
+    ! Write out current SF coefficients and density matrices with some iprint (in future)
+    ! if (iprint_basis>=3) call dump_pos_and_matrices
+!       ! Output current SFcoeff and density
+!       if (nspin_SF == 1) then
+!          call dump_matrix("SFcoeff",    matSFcoeff(1), inode)
+!       else
+!          call dump_matrix("SFcoeff_up", matSFcoeff(1), inode)
+!          call dump_matrix("SFcoeff_dn", matSFcoeff(2), inode)
+!       end if
+!       if(nspin==1) then
+!          allocate(rho_total(maxngrid), STAT=stat)
+!          if (stat /= 0) call cq_abort("Error allocating rho_total: ", maxngrid)
+!          call reg_alloc_mem(area_ops, n_my_grid_points, type_dbl)
+!          rho_total = zero
+!          rho_total(:) = spin_factor * rho(:,1)
+!          call dump_charge(rho_total, n_my_grid_points, inode, spin=0)
+!          deallocate(rho_total, STAT=stat)
+!          if (stat /= 0) call cq_abort("Error deallocating rho_total")
+!          call reg_dealloc_mem(area_ops, n_my_grid_points, type_dbl)
+!       else if (nspin == 2) then
+!          call dump_charge(rho(:,1), n_my_grid_points, inode, spin=1)
+!          call dump_charge(rho(:,2), n_my_grid_points, inode, spin=2)
+!       end if
 
        ! Go out if converged
        if (convergence_flag) then

@@ -196,7 +196,7 @@ module mult_module
        matAP, matPA, mataNA, matNAa
   ! spin_SF dependent matrices
   integer, allocatable, dimension(:), public :: &
-       matS, matT, matTtran, matKE, matNL, matNA   ! spin_SF dependent, 2018.5.24 nakata SD-MSSF
+       matS, matT, matTtran, matKE, matNL, matNA
   ! spin dependent matrices
   integer, allocatable, dimension(:), public :: &
        matH, matL, matLS, matSL, matK, matphi, matM12, matM4, matU, &
@@ -1476,7 +1476,7 @@ contains
     use numbers
     use datatypes
     use global_module, only: iprint_mat, IPRINT_TIME_THRES3, nspin, &
-                             flag_SpinDependentSF                        ! nakata SD-MSSF
+                             flag_SpinDependentSF
     use matrix_data,   only: LHrange, SLSrange, LSLrange, Lrange,   &
                              Srange, Hrange
     use GenComms,      only: gsum, inode, ionode, my_barrier, gmax, &
@@ -2071,7 +2071,6 @@ contains
        if (stat /= 0) &
             call cq_abort('associate_matrices: failed to allocate spin &
                            &depdendent ATOMF matrix tags', nspin, stat)
-!!! 2018.5.24 nakata SD-MSSF
        ! For spin_SF dependent matrices
        if (atomf.ne.sf) then
           allocate(matSFcoeff(nspin_SF),  matSFcoeff_tran(nspin_SF), &
@@ -2085,7 +2084,6 @@ contains
        if (stat /= 0) &
             call cq_abort('associate_matrices: failed to allocate spin_SF &
                            &depdendent matrix tags', nspin_SF, stat)
-!!!
        allocated_tags = .true.
     end if
 
@@ -2125,7 +2123,6 @@ contains
        matSX(2)  = 31
        current_matrix = 31
     endif
-!!! nakata 2018.5.24 SD-MSSF
     if (nspin_SF == 2) then
        ! when support functions are spin-dependent
        matS(2)     = current_matrix + 1
@@ -2135,7 +2132,6 @@ contains
        matNL(2)    = current_matrix + 5
        current_matrix = current_matrix + 5
     endif
-!!!
     if (atomf.eq.sf) then
     ! when atomic functions are euivalent to SFs (blips and one_to_one PAOs)
        matSatomf    = matS(1)
@@ -2181,14 +2177,12 @@ contains
        mataNA = current_matrix
        current_matrix = current_matrix + 1
        matNAa = current_matrix
-!!! 2018.5.24 nakata SD-MSSF
        current_matrix = current_matrix + 1
        matNA(1)  = current_matrix
        if (nspin_SF == 2) then
           current_matrix = current_matrix + 1
           matNA(2)  = current_matrix
        endif
-!!!
        if (atomf.eq.sf) then
           matNAatomf = matNA(1)
        else
@@ -2220,7 +2214,6 @@ contains
     ! Type for f1
     mat_p(matAP   )%sf1_type = atomf
     mat_p(matPA   )%sf1_type = nlpf
-!!! 2018.5.24 nakata SD-MSSF
     do spin_SF = 1, nspin_SF
        mat_p(matS(spin_SF)    )%sf1_type = sf
        mat_p(matT(spin_SF)    )%sf1_type = sf
@@ -2228,7 +2221,6 @@ contains
        mat_p(matKE(spin_SF)   )%sf1_type = sf
        mat_p(matNL(spin_SF)   )%sf1_type = sf
     enddo
-!!!
     do spin = 1, nspin
        mat_p(matL(spin)  )%sf1_type = sf
        mat_p(matK(spin)  )%sf1_type = sf
@@ -2262,7 +2254,7 @@ contains
     if( flag_neutral_atom_projector ) then
        mat_p(mataNA  )%sf1_type = atomf
        mat_p(matNAa  )%sf1_type = napf
-       do spin_SF = 1, nspin_SF   ! 2018.5.24 nakata SD-MSSF
+       do spin_SF = 1, nspin_SF
           mat_p(matNA(spin_SF))%sf1_type = sf
        enddo
        if (atomf.ne.sf) then
@@ -2272,7 +2264,6 @@ contains
     ! Type for f2
     mat_p(matAP   )%sf2_type = nlpf
     mat_p(matPA   )%sf2_type = atomf
-!!! 2018.5.24 nakata SD-MSSF
     do spin_SF = 1, nspin_SF
        mat_p(matS(spin_SF)    )%sf2_type = sf
        mat_p(matT(spin_SF)    )%sf2_type = sf
@@ -2280,7 +2271,6 @@ contains
        mat_p(matKE(spin_SF)   )%sf2_type = sf
        mat_p(matNL(spin_SF)   )%sf2_type = sf
     enddo
-!!!
     do spin = 1, nspin
        mat_p(matL(spin)  )%sf2_type = sf
        mat_p(matK(spin)  )%sf2_type = sf
@@ -2314,11 +2304,9 @@ contains
     if( flag_neutral_atom_projector ) then
        mat_p(mataNA  )%sf2_type = napf
        mat_p(matNAa  )%sf2_type = atomf
-!!! 2018.5.24 nakata SD-MSSF
        do spin_SF = 1, nspin_SF
           mat_p(matNA(spin_SF))%sf2_type = atomf
        enddo
-!!!
        if (atomf.ne.sf) then
           mat_p(matNAatomf   )%sf2_type = atomf
        end if
@@ -2326,7 +2314,6 @@ contains
     ! Set up index translation for ranges
     matrix_index(matAP   ) = APrange
     matrix_index(matPA   ) = PArange
-!!! 2018.5.24 nakata SD-MSSF
     do spin_SF = 1, nspin_SF
        matrix_index(matS(spin_SF)    ) = Srange
        matrix_index(matT(spin_SF)    ) = Trange
@@ -2334,7 +2321,6 @@ contains
        matrix_index(matKE(spin_SF)   ) = Hrange
        matrix_index(matNL(spin_SF)   ) = Hrange    
     enddo
-!!!
     do spin = 1, nspin
        matrix_index(matL(spin)  ) = Lrange
        matrix_index(matK(spin)  ) = Hrange
@@ -2368,11 +2354,9 @@ contains
     if( flag_neutral_atom_projector ) then
        matrix_index(mataNA  ) = aNArange
        matrix_index(matNAa  ) = NAarange
-!!! 2018.5.24 nakata SD-MSSF
        do spin_SF = 1, nspin_SF
           matrix_index(matNA(spin_SF)) = Hrange    
        enddo
-!!!
        if (atomf.ne.sf) then
           matrix_index(matNAatomf) = aHa_range
        end if
@@ -2433,7 +2417,6 @@ contains
     ! Set up index translation for transposes
     trans_index(matAP   ) = AP_trans
     trans_index(matPA   ) = AP_trans
-!!! 2018.5.24 nakata SD-MSSF
     do spin_SF = 1, nspin_SF
        trans_index(matS(spin_SF)    ) = S_trans
        trans_index(matT(spin_SF)    ) = T_trans
@@ -2441,7 +2424,6 @@ contains
        trans_index(matKE(spin_SF)   ) = 0
        trans_index(matNL(spin_SF)   ) = 0
     enddo
-!!!
     do spin = 1, nspin
        trans_index(matL(spin)  ) = L_trans
        trans_index(matK(spin)  ) = 0
@@ -2475,11 +2457,9 @@ contains
     if( flag_neutral_atom_projector ) then
        trans_index(mataNA  ) = aNA_trans
        trans_index(matNAa  ) = aNA_trans
-!!! 2018.5.24 nakata SD-MSSF
        do spin_SF = 1, nspin_SF
           trans_index(matNA(spin_SF))  = S_trans
        enddo
-!!!
        if (atomf.ne.sf) then
           trans_index(matNAatomf) = aNAa_trans
        end if
