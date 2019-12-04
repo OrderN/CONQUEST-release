@@ -239,11 +239,13 @@ contains
   !!   2012/03/27 L.Tong
   !!   - Removed redundant input parameter real(double) mu
   !!   2013/08/21 M.Arita
-  !!   - Added call for safemin2 necessary in reusibg L-matrix
+  !!   - Added call for safemin2 necessary in reusing L-matrix
   !!    2017/08/29 jack baker & dave
   !!     Removed rcellx references (redundant)
   !!   2017/11/10 14:06 dave
   !!    Removing dump_InfoGlobal calls
+  !!   2019/12/04 11:47 dave
+  !!    Tweak to write convergence only on output process
   !!  SOURCE
   !!
   subroutine cg_run(fixed_potential, vary_mu, total_energy)
@@ -412,11 +414,11 @@ contains
                      iter
        end if
        if (abs(max) < MDcgtol) then
-          write(io_lun,'(2x,a,i4,a)') "GeomOpt converged in ", iter, " iterations"
           done = .true.
-          if (myid == 0) &
-               write (io_lun, fmt='(4x,"Maximum force below threshold: ",f12.5)') &
-                     max
+          if (myid == 0) then
+             write(io_lun,'(2x,a,i4,a)') "GeomOpt converged in ", iter, " iterations"
+             write (io_lun, fmt='(4x,"Maximum force below threshold: ",f12.5)') max
+          end if
        end if
 
        call dump_pos_and_matrices

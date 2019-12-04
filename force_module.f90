@@ -656,7 +656,7 @@ contains
       scale = -(HaToeV*eVToJ*1e21_double)/(volume*BohrToAng*BohrToAng*BohrToAng)
       ! We need pressure in GPa, and only diagonal terms output
       !call print_stress("Total pressure:   ", stress*scale, 0)
-      if(inode==ionode.AND.iprint_MD>0) &
+      if(inode==ionode.AND.iprint_MD>=0) &
            write(io_lun,'(/4x,a18,3f15.8,a4)') "Total pressure:   ",stress(1,1)*scale,&
            stress(2,2)*scale,stress(3,3)*scale," GPa"
       if (flag_atomic_stress .and. iprint_MD > 2) call check_atomic_stress

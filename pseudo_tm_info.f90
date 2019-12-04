@@ -35,6 +35,8 @@
 !!    Adding new members to pseudo_info derived type for neutral atom
 !!   2017/11/27 15:52 dave with TM, NW
 !!    NA projectors added to pseudo_info type
+!!   2019/12/03 08:21 dave
+!!    Added functional to ps_info structure
 !!  SOURCE
 !!
 module pseudo_tm_info
@@ -76,6 +78,8 @@ module pseudo_tm_info
      integer :: n_pjnl               ! number of projector functions
      logical :: flag_pcc             ! flag for partial core correction
      integer :: z                    ! atomic weight
+     integer :: functional           ! Code for functional if set in ion file
+     integer :: ps_type              ! Type of pseudopotential (hamann/siesta)
      real(double) :: zval            ! number of valence electrons
      real(double) :: alpha           ! exponent of gaussian for long range term
      ! of local pseudopotential (might not be used)
@@ -645,7 +649,7 @@ contains
     real(double) :: zval, yp1, ypn, erfarg, tmpv
     real(double), parameter :: ln10 = 2.302585092994_double
 
-    integer :: iproc, lmax, maxz, alls, nzeta, l, count,tzl
+    integer :: iproc, lmax, maxz, alls, nzeta, l, count,tzl, xc_func, ps_type
     real(double), allocatable :: thispop(:)
     integer, allocatable :: thisl(:), thisn(:), thisz(:), zl(:), indexlz(:,:)
 
@@ -655,7 +659,20 @@ contains
        open(lun,file=filename,status='old',form='formatted')
        rewind(lun)
 
-       call read_header_tmp(n_orbnl,lmax,n_pjnl, zval, z, lun)
+       xc_func = 0
+       ps_type = 0
+       call read_header_tmp(n_orbnl,lmax,n_pjnl, zval, z, lun, xc_func, ps_type)
+       if(xc_func/=0) then
+          ps_info%functional = xc_func
+       end if
+       if(ps_type/=0) then
+          ps_info%ps_type = ps_type
+          if(ps_info%ps_type/=pseudo_type) &
+               write(io_lun,'(2x,"Warning: ion file pseudopotential type incompatible with input file ",2i2)') &
+               ps_info%ps_type, pseudo_type
+       else
+          write(io_lun,'(2x,"Warning: pseudopotential type not detected from ion file")')
+       end if
        call alloc_pseudo_info(ps_info, n_pjnl)
        call start_timer(tmr_std_allocation)
        allocate(dummy_rada(n_orbnl),thisl(n_orbnl),thisn(n_orbnl),thisz(n_orbnl),thispop(n_orbnl),zl(0:lmax))
@@ -945,7 +962,7 @@ contains
     end if ! numprocs>1
   contains
 
-    subroutine read_header_tmp(n_orbnl, lmax_basis, n_pjnl, zval, z, unit)
+    subroutine read_header_tmp(n_orbnl, lmax_basis, n_pjnl, zval, z, unit, xc_func, pseudo_type)
 
       use global_module, ONLY: iprint_pseudo
       use input_module, ONLY: leqi
@@ -953,7 +970,7 @@ contains
       implicit none
 
       integer, intent(in)         :: unit
-      integer, intent(out) :: n_orbnl, n_pjnl, z
+      integer, intent(out) :: n_orbnl, n_pjnl, z, xc_func, pseudo_type
       real(double), intent(out) :: zval
 
       character(len=78) :: line, trim_line
@@ -968,6 +985,8 @@ contains
       character(len=3) :: rel
       character(len=4) :: pcc
 
+      xc_func = 0
+      pseudo_type = 0
       ! Judge if P.C.C. is considered
       read(unit,'(a)') line
       trim_line = trim(line)
@@ -984,6 +1003,17 @@ contains
                else !if (pcc .NE. 'pcec') then
                   ps_info%flag_pcc = .false.
                endif
+               read(unit,'(a)') line
+               trim_line = trim(line)
+               if(.NOT.leqi(trim_line(1:25),'</pseudopotential_header>')) then
+                  if(leqi(trim_line(2:4),'ATM')) pseudo_type = 1 ! Siesta-type
+               end if
+            else if (leqi(trim_line(1:14),'<Conquest_pseu')) then
+               read(unit,'(a)') line ! Check this for Hamann
+               if(leqi(line(3:8),'Hamann')) pseudo_type = 3
+               read(unit,'(a)') line
+               read(unit,'(a)') line
+               read(unit,'(a26,i7)') line, xc_func
             endif
          end do
       endif

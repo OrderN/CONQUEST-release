@@ -433,6 +433,8 @@ contains
   !!    - Added experimental backtrace
   !!   2015/11/30 17:13 dave
   !!    - Added neutral atom output
+  !!   2019/12/03 08:09 dave
+  !!    Removed broken code for electrons via Tr[KS]
   !!  SOURCE
   !!
   subroutine final_energy(level)
@@ -478,7 +480,7 @@ contains
 
     ! electron number information
     real(double), dimension(nspin) :: electrons
-    real(double)                   :: electrons_tot1, electrons_tot2, trX
+    real(double)                   :: electrons_tot
 
 !****lat<$
     if (       present(level) ) backtrace_level = level+1
@@ -501,34 +503,20 @@ contains
     ! Nonlocal pseudop, kinetic and band energies
     do spin = 1, nspin
        ! 2*Tr[K NL]
-       if (inode == ionode) write (io_lun,*) 'nl_energy' 
        nl_energy      = nl_energy      &
                         + spin_factor*matrix_product_trace(matK(spin), matNL)
        if(flag_neutral_atom_projector) local_ps_energy = local_ps_energy      &
                         + spin_factor*matrix_product_trace(matK(spin), matNA)
        ! 2*Tr[K KE] with KE = - < grad**2 >
-       if (inode == ionode) write (io_lun,*) 'k_energy'
        kinetic_energy = kinetic_energy &
                         + spin_factor*half*matrix_product_trace(matK(spin), matKE)
        ! 2*Tr[K H]
-       if (inode == ionode) write (io_lun,*) 'band_energy'
        band_energy    = band_energy    &
                         + spin_factor*matrix_product_trace(matK(spin), matH(spin))
        ! -alpha*Tr[K X]
-       if (inode == ionode) write (io_lun,*) 'exx_energy'
        exx_energy     = exx_energy     &
                         - spin_factor*half*exx_alpha*matrix_product_trace(matK(spin), matX(spin))
     end do
-
-    ! Exact exchange energy  = - alpha * Tr[K X]
-    !if (flag_exx) then
-    !   if ( nspin == 1 ) then          
-    !      ! ****not yet implemented with spin-polarisation****
-    !      exx_energy =  - spin_factor * half * exx_alpha &
-    !           * matrix_product_trace(matK(1), matX(1))
-    !   end if
-    !end if
-
 
     ! Find total pure DFT energy
     if(flag_neutral_atom) then
@@ -544,8 +532,6 @@ contains
             ion_interaction_energy    + &
             core_correction
     end if
-    ! Add contribution from exact-exchange (EXX)
-    !if (flag_exx)          total_energy1 = total_energy1 + exx_energy
 
     ! Add contribution from constrained (cDFT)
     if (flag_perform_cdft) total_energy1 = total_energy1 + cdft_energy
@@ -559,13 +545,9 @@ contains
     ! print electron number and spin polarisation information
     
     call electron_number(electrons)
-    if (inode == ionode) electrons_tot1 = electrons(1) + electrons(nspin)
    
-    if (inode == ionode) write(io_lun,*) 'electrons_tot2 start'
-    !electrons_tot2 = matrix_product_trace_length(matK(1),matS)
-    if (inode == ionode) write(io_lun,*) 'electrons_tot2 stop'
-
     if (inode == ionode) then
+       electrons_tot = electrons(1) + electrons(nspin)
        !
        if (iprint_gen >= 1) then          
           write (io_lun, *) 
@@ -712,22 +694,12 @@ contains
        end if
     end if
 
-    electrons_tot1 = zero
     call electron_number(electrons)
-    if (inode == ionode) electrons_tot1 = electrons(1) + electrons(nspin)
-
-    electrons_tot2 = zero
-    !do spin = 1, nspin
-       !electrons_tot2 = electrons_tot2 + &
-       !     spin_factor * matrix_product_trace_length(matK(spin),matS)
-    !end do
-    
-
     if (inode == ionode) then
+       electrons_tot = electrons(1) + electrons(nspin)
        if (iprint_gen >= 1) then
           write (io_lun,23) 
-          write (io_lun,24) electrons_tot1
-          write (io_lun,25) electrons_tot2
+          write (io_lun,24) electrons_tot
           !write (io_lun,26) one_electron_energy
           !write (io_lun,27) potential_energy
           !write (io_lun,28) kinetic_energy
