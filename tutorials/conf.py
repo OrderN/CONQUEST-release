@@ -49,7 +49,7 @@ source_suffix = '.rst'
 master_doc = 'index'
 
 # General information about the project.
-project = u'CONQUEST'
+project = u'CONQUEST Tutorials'
 copyright = u'2018-2019, CONQUEST Developers'
 author = u'CONQUEST Developers'
 
@@ -166,7 +166,7 @@ man_pages = [
 # (source start file, target name, title, author,
 #  dir menu entry, description, category)
 texinfo_documents = [
-    (master_doc, 'CONQUEST', u'CONQUEST Documentation',
+    (master_doc, 'CONQUEST', u'CONQUEST Tutorials',
      'CONQUEST Developers', 'CONQUEST',
      'CONQUEST: Large scale and linear scaling DFT.',
      'Miscellaneous'),
