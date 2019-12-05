@@ -141,7 +141,7 @@ contains
     use units
     use mult_module,            only: matrix_product_trace, matH,     &
                                       matK, matKE, matNL, matX, matNA
-    use GenComms,               only: inode, ionode
+    use GenComms,               only: inode, ionode, cq_warn
     use global_module,          only: iprint_gen, nspin, spin_factor, &
                                       flag_dft_d2,                    &
                                       flag_SCconverged_D2,            &
@@ -160,12 +160,11 @@ contains
 
     ! Passed variables
     real(double) :: total_energy
-
-    ! check DFT energy mode  : by TM Nov2007
     logical, intent(in), optional :: printDFT
     integer, intent(in), optional :: level
-
+    
     ! Local variables
+    character(len=80) :: sub_name = "get_energy"
     integer        :: spin
     logical        :: print_Harris, print_DFT
     real(double)   :: total_energy2
@@ -296,8 +295,7 @@ contains
                 select case (SmearingType)
                 case (0) ! Fermi smearing
                    if (entropy < zero) &
-                        write (io_lun, *) &
-                              ' WARNING !!!!    entropy < 0??? ', entropy
+                        call cq_warn(sub_name,'Calculated entropy is less than zero; something is wrong ', entropy)
                    if (iprint_gen >= 0) &
                         write (io_lun,14) en_conv*(total_energy-half*entropy), &
                                           en_units(energy_units)
@@ -442,8 +440,7 @@ contains
     use datatypes
     use numbers
     use units
-    use GenComms,               only: inode, ionode
-
+    use GenComms,               only: inode, ionode, cq_warn
     use mult_module,            only: matrix_product_trace, matH,     &
                                       matrix_product_trace_length,    &
                                       matrix_trace,                   &
@@ -469,6 +466,7 @@ contains
     integer, optional :: level
 
     ! Local variables
+    character(len=80) :: sub_name = "final_energy"
     integer        :: spin
     real(double)   :: total_energy1
     real(double)   :: total_energy2
@@ -616,8 +614,7 @@ contains
              select case (SmearingType)
              case (0) ! Fermi smearing
                 if (entropy < zero) &
-                     write (io_lun, *) &
-                     ' WARNING !!!!    entropy < 0??? ', entropy
+                     call cq_warn(sub_name, 'Calculated entropy is less than zero; something is wrong ', entropy)
                 !
                 if (iprint_gen >= 0) &
                      write (io_lun,14) en_conv*(total_energy1-half*entropy), &

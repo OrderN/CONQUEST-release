@@ -508,13 +508,16 @@ contains
     use numbers, ONLY: BIG, zero, RD_ERR
     use splines, ONLY: spline
     use global_module, ONLY: iprint_pseudo
-    use GenComms, ONLY: myid
+    use GenComms, ONLY: myid, cq_warn
 
     implicit none
 
+    ! Passed variables
     type(rad_func),intent(out) :: op
     integer,intent(in)         :: lun
 
+    ! Local variables
+    character(len=80) :: sub_name = "radial_read_ascii"
     integer :: j, npts
     real(double) :: dummy, r0, r1
     real(double) :: yp1, ypn
@@ -525,8 +528,8 @@ contains
     read(lun,*) npts, delta, cutoff
     ! DRB 2018/03/08 Adding consistency check between cutoff and delta
     if(abs(cutoff - delta*real(npts-1,double))>RD_ERR) then
-       if(myid==0) write(io_lun,fmt='(/4x,"Warning: cutoff and step inconsistent, cutoff will be adjusted: ",2f8.3/)') &
-            cutoff,delta*real(npts-1,double)
+       call cq_warn(sub_name, "In ion file, cutoff and step inconsistent, cutoff will be adjusted: ",&
+            cutoff,delta*real(npts-1,double))
        cutoff=delta*real(npts-1,double)
     end if
     if(myid==0.AND.iprint_pseudo>3) write(io_lun,fmt='(10x,"Radius: ",f15.10)') cutoff
@@ -537,12 +540,11 @@ contains
     read(lun,*) r0, op%f(1)
     read(lun,*) r1, op%f(2)
     if(abs(r1-r0-delta)>RD_ERR) then
-       if(myid==0) write(io_lun,fmt='(/4x,"Warning: radial grid and step inconsistent ! ",2f8.3/)') r1-r0,delta
+       call cq_warn(sub_name, "Radial grid and step inconsistent ! ",r1-r0,delta)
        ! DRB 2018/03/08 10:55
        ! I can see an argument to abort here - if the step size and grid are inconsistent we may have problems
     end if
     do j=3,npts
-       !       read(lun,'(2g25.15)') dummy, op%f(j)
        read(lun,*) dummy, op%f(j)
     enddo
     !ori call rad_setup_d2(op)
@@ -626,7 +628,7 @@ contains
 
     use numbers, ONLY: six, half, zero, pi, one
     use global_module, ONLY: numprocs, iprint_pseudo
-    use GenComms, ONLY: inode, ionode, gcopy
+    use GenComms, ONLY: inode, ionode, gcopy, cq_warn, cq_abort
     use pao_format, ONLY: species_pao
     use splines, ONLY : spline
     use memory_module, ONLY: reg_alloc_mem, type_dbl    
@@ -637,8 +639,12 @@ contains
 
     implicit none
 
+    ! Passed variables
     type(pseudo_info),intent(inout) :: ps_info
     type(species_pao),intent(inout) :: pao_info
+
+    ! Local variables
+    character(len=80) :: sub_name = "read_ion_ascii_tmp"    
     type(rad_func), dimension(:), allocatable :: dummy_rada
     type(rad_func) :: dummy_rad
 
@@ -668,10 +674,10 @@ contains
        if(ps_type/=0) then
           ps_info%ps_type = ps_type
           if(ps_info%ps_type/=pseudo_type) &
-               write(io_lun,'(2x,"Warning: ion file pseudopotential type incompatible with input file ",2i2)') &
-               ps_info%ps_type, pseudo_type
+               call cq_abort("Error: ion file pseudopotential type incompatible with input file ", &
+               ps_info%ps_type, pseudo_type)
        else
-          write(io_lun,'(2x,"Warning: pseudopotential type not detected from ion file")')
+          call cq_warn(sub_name, "Pseudopotential type not detected from ion file")
        end if
        call alloc_pseudo_info(ps_info, n_pjnl)
        call start_timer(tmr_std_allocation)

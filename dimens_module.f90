@@ -171,7 +171,7 @@ contains
     use datatypes
     use numbers
     use matrix_data
-    use GenComms,      only: cq_abort
+    use GenComms,      only: cq_abort, cq_warn
     use global_module, only: iprint_init,flag_basis_set,blips,runtype, atomf, sf, flag_Multisite
     use global_module, only: flag_dft_d2, flag_exx, flag_diagonalisation
     use block_module,  only: in_block_x, in_block_y, in_block_z, & 
@@ -187,6 +187,7 @@ contains
     real(double) :: HNL_fac, core_radius(:)
 
     ! Local variables
+    character(len=80) :: sub_name = "set_dimensions"
     type(cq_timer) :: backtrace_timer
     integer        :: max_extent, n, stat, mx_matrices_tmp
     real(double)   :: r_core, r_t, rcutmax, max_grid
@@ -295,10 +296,7 @@ contains
     r_s       = r_h
     r_s_atomf = r_h_atomf
     if(two*r_s>r_c.AND.(.NOT.flag_diagonalisation)) then ! Only warn if using O(N)
-       if(inode==ionode) &
-            write(io_lun,fmt='(8x,"WARNING ! S range greater than L !")')
-       !r_s = r_c
-       !r_h = r_c 
+       call cq_warn(sub_name, "S range greater than L !",two*r_s,r_c)
     endif
     ! Set ranges for contracted SFs
     if (flag_Multisite) then
@@ -442,12 +440,13 @@ contains
     use datatypes
     use numbers,        only: pi, very_small,two, half
     use global_module,  only: iprint_init, flag_basis_set, blips
-    use GenComms,       only: inode,ionode,cq_abort
+    use GenComms,       only: inode,ionode,cq_abort, cq_warn
     use species_module, only: n_species
     
     implicit none
     
     ! Local variables
+    character(len=80) :: sub_name="find_grid"
     type(cq_timer) :: backtrace_timer
     real(double)   :: sqKE, blipKE, blip_sp
     integer        :: mingrid, i
@@ -467,8 +466,7 @@ contains
           blip_sp = half*min_blip_sp
           blipKE = half*(pi/blip_sp)*(pi/blip_sp)
           if(GridCutoff<blipKE) then
-             if(iprint_init>0.AND.inode==ionode) &
-                  write(io_lun,fmt='(2x,"Warning ! Adjusted grid cutoff to ",f8.3)') blipKE
+             if(iprint_init>0) call cq_warn(sub_name, "Adjusted grid cutoff to ",blipKE)
              GridCutoff = blipKE
           end if
        end if

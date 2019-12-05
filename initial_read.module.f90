@@ -199,7 +199,7 @@ contains
                                       non_local_species,               &
                                       nsf_species, npao_species,       &
                                       natomf_species
-    use GenComms,               only: my_barrier, cq_abort
+    use GenComms,               only: my_barrier, cq_abort, cq_warn
     use pseudopotential_data,   only: non_local, read_pseudopotential
     use pseudopotential_common, only: core_radius, pseudo_type, OLDPS, &
                                       SIESTA, ABINIT
@@ -215,7 +215,7 @@ contains
                                       MSSF_nonminimal_species   !nonmin_mssf
     use md_control,             only: md_position_file
     use pao_format
-    use XC,                     only: flag_functional_type
+    use XC,                     only: flag_functional_type, flag_different_functional
 
     implicit none
 
@@ -226,6 +226,7 @@ contains
     real(double)      :: mu
 
     ! Local variables
+    character(len=80) :: sub_name = "read_and_write"
     type(cq_timer)    :: backtrace_timer
     character(len=80) :: titles, def
     character(len=80) :: atom_coord_file
@@ -264,15 +265,21 @@ contains
        if(inode==ionode) then ! Check and warn
           do i_species = 2, n_species
              if(flag_functional_type/=pseudo(i_species)%functional) &
-                  write(io_lun,fmt='(2x,"Warning: functionals differ between pseudopotentials: ",2i8)') &
-                  flag_functional_type, pseudo(i_species)%functional
+                  call cq_abort("Functionals differ between pseudopotential files: ",&
+                  flag_functional_type, pseudo(i_species)%functional)
           end do
        end if
     else if(inode==ionode) then ! Check and warn
        do i_species = 1, n_species
-          if(flag_functional_type/=pseudo(i_species)%functional) &
-               write(io_lun,fmt='(2x,"Warning: functional in input differs to pseudopotential: ",2i8)') &
-               flag_functional_type, pseudo(i_species)%functional
+          if(flag_functional_type/=pseudo(i_species)%functional) then
+             if(flag_different_functional) then
+                call cq_warn(sub_name, "Functional in input file differs to pseudopotential but proceeding: ",&
+                     flag_functional_type, pseudo(i_species)%functional)                
+             else
+                call cq_abort("Functional in input file differs to pseudopotential: ",&
+                     flag_functional_type, pseudo(i_species)%functional)
+             end if
+         end if
        end do
     end if
     !if(iprint_init>4) write(io_lun,fmt='(10x,"Proc: ",i4," done pseudo")') inode
@@ -354,9 +361,7 @@ contains
           if (nsf_species(i).ne.npao_species(i)) flag_one_to_one = .false.
        enddo
        if (flag_one_to_one .and. read_option) then
-          if (inode==ionode) write(io_lun,'(A/A)') &
-             'Warning!! nsf and npao are the same but read SF coefficients', &
-             '          so that flag_one_to_one is set to be .false.'
+          call cq_warn(sub_name, "Cannot set 1:1 flag, read coefficients and have NSF==NPAO; setting 1:1 false")
           flag_one_to_one = .false.
        endif
        if (flag_one_to_one .and. flag_Multisite) then
@@ -370,12 +375,7 @@ contains
        end if
        if (flag_SpinDependentSF) nspin_SF = nspin
        if (flag_one_to_one.AND.flag_vary_basis) then
-          write(io_lun,fmt='(/2x,"************")')
-          write(io_lun,fmt='(2x,"* WARNING !*")')
-          write(io_lun,fmt='(2x,"************"/)')
-          write(io_lun,fmt='(2x,"You have set minE.VaryBasis T")')
-          write(io_lun,fmt='(2x,"This is not possible when numbers of support functions and PAOs are the same")')
-          write(io_lun,fmt='(2x,"Setting the flag to false and proceeding"/)')
+          call cq_warn(sub_name, "minE.VaryBasis T is not compatible with NSF==NPAO.  Setting flag to F.")
           flag_vary_basis = .false.
        end if
        ! Check symmetry-breaking for contracted SFs
@@ -810,7 +810,7 @@ contains
          nsf_species, nlpf_species, npao_species, &
          non_local_species, type_species,         &
          species_file, species_from_files
-    use GenComms,   only: gcopy, my_barrier, cq_abort, inode, ionode
+    use GenComms,   only: gcopy, my_barrier, cq_abort, inode, ionode, cq_warn
     !use DiagModule, only: diagon
     use DiagModule,             only: flag_pDOS_include_semicore
     use energy,     only: flag_check_Diag
@@ -897,7 +897,7 @@ contains
          enthalpy_tolerance
     use Integrators, only: fire_alpha0, fire_f_inc, fire_f_dec, fire_f_alpha, fire_N_min, &
          fire_N_max, fire_max_step, fire_N_below_thresh
-    use XC, only : flag_functional_type, functional_hartree_fock, functional_hyb_pbe0
+    use XC, only : flag_functional_type, functional_hartree_fock, functional_hyb_pbe0, flag_different_functional
 
     implicit none
 
@@ -908,6 +908,7 @@ contains
     character(len=80) :: titles
 
     ! Local variables
+    character(len=80)  :: sub_name = "read_input"
     !type(block), pointer :: bp      ! Pointer to a block read by fdf
     !type(parsed_line), pointer :: p ! Pointer to a line broken into tokens by fdf
     type(cq_timer)    :: backtrace_timer
@@ -1345,11 +1346,7 @@ contains
           !if(InvSRange(i)<RD_ERR) InvSRange(i) = RadiusSupport(i)
           NonLocalFactor(i) = fdf_double('Atom.NonLocalFactor',zero)
           if(NonLocalFactor(i)>one.OR.NonLocalFactor(i)<zero) then
-             if(inode==ionode) &
-                  write(io_lun,&
-                  fmt='(10x,"Warning: Atom.NonLocalFactor &
-                  &must lie between 0.0 and 1.0: ",f9.5)') &
-                  NonLocalFactor(i)
+             call cq_warn(sub_name, "0.0 < Atom.NonLocalFactor < 1.0; you have ",NonLocalFactor(i))
              if(NonLocalFactor(i)>one)  NonLocalFactor(i) = one
              if(NonLocalFactor(i)<zero) NonLocalFactor(i) = zero
           end if
@@ -1634,7 +1631,7 @@ contains
        if(flag_multisite) call cq_abort('cDFT is not supported with multi-site SFs.')
        if(.NOT.flag_Becke_weights) then
           flag_Becke_weights = .true.
-          write(io_lun,fmt='(2x,"Warning: we require Becke  weights for cDFT ! Setting to true")')
+          call cq_warn(sub_name, "Becke weights required for cDFT ! Setting to true")
        end if
        cDFT_Type          = fdf_integer('cDFT.Type',2) ! Default to D-A charge diff
        cDFT_MaxIterations = fdf_integer('cDFT.MaxIterations',50)
@@ -1812,6 +1809,7 @@ contains
 !!$
 !!$       
     flag_functional_type = fdf_integer('General.FunctionalType', 0)   ! Read from pseudopotentials
+    flag_different_functional = fdf_boolean('General.DifferentFunctional',.false.) ! Use different functional to ion files
 !!$
 !!$
 !!$  E X X 
