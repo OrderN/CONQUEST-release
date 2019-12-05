@@ -2633,6 +2633,8 @@ contains
   !!    Added gamma-centred option and tweaked loops for MP mesh to be more logical
   !!    Removed iprint control on k-point output: this is always needed
   !!    Removed gcopy and myid checks
+  !!   2019/12/05 08:12 dave
+  !!    Bug fix: only write out on ionode
   !!  SOURCE
   !!
   subroutine readDiagInfo
@@ -2691,15 +2693,17 @@ contains
     ! Read k-point parallelisation process-group incormation, default is 1
     proc_groups = fdf_integer ('Diag.KProcGroups', 1)
     if(proc_groups>numprocs) then
-       write(io_lun,fmt='(/2x,"*************")')
-       write(io_lun,fmt='(2x,"* WARNING ! *")')
-       write(io_lun,fmt='(2x,"*************")')
-       write(io_lun,fmt='(/2x,"Error setting Diag.KProcGroups.  We have ",i6, &
-            &" processes and ",i6," KProcGroups.   Setting to 1 and continuing."/)') numprocs,proc_groups
+       if(inode==ionode) then
+          write(io_lun,fmt='(/2x,"*************")')
+          write(io_lun,fmt='(2x,"* WARNING ! *")')
+          write(io_lun,fmt='(2x,"*************")')
+          write(io_lun,fmt='(/2x,"Error setting Diag.KProcGroups.  We have ",i6, &
+               &" processes and ",i6," KProcGroups.   Setting to 1 and continuing."/)') numprocs,proc_groups
+       end if
        proc_groups = 1
     end if
 
-    if (iprint_init > 0) write (io_lun, 11) proc_groups 
+    if (iprint_init > 0.AND.inode==ionode) write (io_lun, 11) proc_groups 
     ! Read/choose ScaLAPACK processor grid dimensions
     if(fdf_defined('Diag.ProcRows')) then
        proc_rows = fdf_integer('Diag.ProcRows',0)
@@ -2767,7 +2771,7 @@ contains
        end if
        block_size_c = block_size_r
     end if
-    if(iprint_init>1) then
+    if(iprint_init>1.AND.inode==ionode) then
        write(io_lun,2) block_size_r, block_size_c
        write(io_lun,3) proc_rows, proc_cols
     end if
@@ -2778,10 +2782,10 @@ contains
        flag_lines_kpoints = fdf_boolean('Diag.KspaceLines',.false.)
        if(flag_lines_kpoints) then
           nkp_lines = fdf_integer('Diag.NumKptLines',1)
-          if(iprint_init>1) write(io_lun,fmt='(8x,"Number of Kpoint lines: ",i4)') nkp_lines
+          if(iprint_init>1.AND.inode==ionode) write(io_lun,fmt='(8x,"Number of Kpoint lines: ",i4)') nkp_lines
           if(nkp_lines<1) call cq_abort("Need to specify how many kpoint lines !",nkp_lines)
           nkp = fdf_integer('Diag.NumKpts',2)
-          if(iprint_init>1) write(io_lun,fmt='(8x,"Number of Kpoints in a line: ",i4)') nkp
+          if(iprint_init>1.AND.inode==ionode) write(io_lun,fmt='(8x,"Number of Kpoints in a line: ",i4)') nkp
           allocate(kk(3,nkp*nkp_lines),wtk(nkp*nkp_lines),STAT=stat)
           if(stat/=0) call cq_abort('FindEvals: couldnt allocate kpoints',nkp*nkp_lines)
           call reg_alloc_mem(area_general,4*nkp*nkp_lines,type_dbl)
@@ -2800,7 +2804,8 @@ contains
                 dkx = (kk(1,nk_st+nkp-1) - kk(1,nk_st))/real(nkp-1,double)
                 dky = (kk(2,nk_st+nkp-1) - kk(2,nk_st))/real(nkp-1,double)
                 dkz = (kk(3,nk_st+nkp-1) - kk(3,nk_st))/real(nkp-1,double)
-                if(iprint_init>1) write(io_lun,fmt='(2x,"K-point spacing along line : ",i3,3f7.3)') i,dkx,dky,dkz
+                if(iprint_init>1.AND.inode==ionode) &
+                     write(io_lun,fmt='(2x,"K-point spacing along line : ",i3,3f7.3)') i,dkx,dky,dkz
                 do j=1,nkp-2
                    kk(1,nk_st+j) = kk(1,nk_st+j-1)+dkx
                    kk(2,nk_st+j) = kk(2,nk_st+j-1)+dky
@@ -2813,7 +2818,7 @@ contains
           end if
           nkp = nkp*nkp_lines
           ! Write out fractional k-points
-          if(iprint_init>0) then
+          if(iprint_init>0.AND.inode==ionode) then
              write(io_lun,7) nkp
              do i=1,nkp
                 write(io_lun,fmt='(8x,i5,3f15.6,f12.3)')&
@@ -2829,7 +2834,7 @@ contains
        else
           ! Read k-point number and allocate
           nkp = fdf_integer('Diag.NumKpts',1)
-          if(iprint_init>1) write(io_lun,fmt='(8x,"Number of Kpoints: ",i4)') nkp
+          if(iprint_init>1.AND.inode==ionode) write(io_lun,fmt='(8x,"Number of Kpoints: ",i4)') nkp
           if(nkp<1) call cq_abort("Need to specify how many kpoints !",nkp)
           allocate(kk(3,nkp),wtk(nkp),STAT=stat)
           if(stat/=0) call cq_abort('FindEvals: couldnt allocate kpoints',nkp)
@@ -2851,7 +2856,7 @@ contains
              call fdf_endblock
              wtk = wtk/sum
           else ! Force gamma point dependence
-             write(io_lun,4)
+             if(inode==ionode) write(io_lun,4)
              nkp = 1
              kk(1,1) = zero
              kk(2,1) = zero
@@ -2862,44 +2867,44 @@ contains
     else
        ! Read Monkhorst-Pack mesh coefficients
        ! Default is Gamma point only 
-       if(iprint_init>0) then
+       if(iprint_init>0.AND.inode==ionode) then
           write(io_lun,fmt='(/8x,"Reading Monkhorst-Pack Kpoint mesh"//)')
        end if
        mp(1) = fdf_integer('Diag.MPMeshX',1)
        mp(2) = fdf_integer('Diag.MPMeshY',1)
        mp(3) = fdf_integer('Diag.MPMeshZ',1) 
-       if(iprint_init>0) &
+       if(iprint_init>0.AND.inode==ionode) &
             write (io_lun,fmt='(8x,a, 3i3)') &
             ' Monkhorst-Pack mesh: ', (mp(i), i=1,3)
        if (mp(1) <= 0 .OR. mp(2) <= 0 .OR. mp(3) <= 0) &
             call cq_abort('K-points: number of k-points must be > 0!')
        nkp_tmp = mp(1)*mp(2)*mp(3)
-       if(iprint_init>0) &
+       if(iprint_init>0.AND.inode==ionode) &
             write(io_lun,fmt='(8x,a, i4)') ' Number of k-points: ',nkp_tmp
        ! Read k-point shift, default (0.0 0.0 0.0)
        flag_gamma = fdf_boolean('Diag.GammaCentred',.false.)
        if(flag_gamma) then
           mp_shift = zero
           if(modulo(mp(1),2)==0) mp_shift(1) = half/mp(1)
-          if(modulo(mp(1),2)==0) mp_shift(2) = half/mp(2)
-          if(modulo(mp(1),2)==0) mp_shift(3) = half/mp(3)
+          if(modulo(mp(2),2)==0) mp_shift(2) = half/mp(2)
+          if(modulo(mp(3),2)==0) mp_shift(3) = half/mp(3)
        else
           mp_shift(1) = fdf_double('Diag.MPShiftX',zero)
           mp_shift(2) = fdf_double('Diag.MPShiftY',zero)
           mp_shift(3) = fdf_double('Diag.MPShiftZ',zero)
           if (mp_shift(1) >= one) then
-             write(io_lun,9)
+             if(inode==ionode) write(io_lun,9)
              mp_shift(1) = mp_shift(1) - one
           end if
           if (mp_shift(2) >= one) then
-             write(io_lun,9)
+             if(inode==ionode) write(io_lun,9)
              mp_shift(2) = mp_shift(2) - one
           end if
           if (mp_shift(3) >= one) then
-             write(io_lun,9)
+             if(inode==ionode) write(io_lun,9)
              mp_shift(3) = mp_shift(3) - one
           end if
-          if(iprint_init>0) &
+          if(iprint_init>0.AND.inode==ionode) &
                write (io_lun,fmt='(8x,a, 3f11.6)') &
                ' Monkhorst-Pack mesh shift:  ', &
                (mp_shift(i), i=1,3)
@@ -2911,7 +2916,6 @@ contains
        call reg_alloc_mem(area_general,4*nkp_tmp,type_dbl)
        ! All k-points have weight 1 for now
        wtk_tmp(1:nkp_tmp) = one
-       if(iprint_init>0) write(io_lun,*)
        ! Generate fractional k-point coordinates plus shift
        ! Assume orthorhombic cell for now
        do i = 1, mp(1)       ! x axis 
@@ -2928,7 +2932,7 @@ contains
           end do
        end do
        ! Write out fractional k-points
-       if(iprint_init>0) then
+       if(iprint_init>0.AND.inode==ionode) then
           write(io_lun,7) nkp_tmp
           do i=1,nkp_tmp
              write(io_lun,fmt='(8x,i5,3f15.6,f12.3)')&
@@ -2985,7 +2989,7 @@ contains
        if(stat/=0) &
             call cq_abort('FindEvals: couldnt deallocate kpoints',&
             nkp_tmp)
-       if(iprint_init>0) then
+       if(iprint_init>0.AND.inode==ionode) then
           write(io_lun,*)
           write(io_lun,10) nkp
           do i=1,nkp
@@ -3002,14 +3006,15 @@ contains
     end if ! MP mesh branch
 
     ! Write out k-points
-    write(io_lun,51) nkp
-    do i=1,nkp
-       write (io_lun,fmt='(8x,i5,3f15.6,f12.3)') &
-            i,kk(1,i),kk(2,i),kk(3,i),wtk(i)
-    end do
-
+    if(inode==ionode) then
+       write(io_lun,51) nkp
+       do i=1,nkp
+          write (io_lun,fmt='(8x,i5,3f15.6,f12.3)') &
+               i,kk(1,i),kk(2,i),kk(3,i),wtk(i)
+       end do
+    end if
     ! Write out smearing temperature
-    if(iprint_init>0) &
+    if(iprint_init>0.AND.inode==ionode) &
          write (io_lun,'(10x,"Temperature used for smearing: ",f10.6)') kT
 
     !****lat<$    
