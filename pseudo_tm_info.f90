@@ -1009,6 +1009,18 @@ contains
                else !if (pcc .NE. 'pcec') then
                   ps_info%flag_pcc = .false.
                endif
+               ! Set XC functional
+               if(leqi(xc,'ca')) then      ! Ceperley-Alder
+                  xc_func = 1              ! ATOM code uses Perdew-Zunger
+               else if(leqi(xc,'pb')) then ! PBE
+                  xc_func = 101
+               else if(leqi(xc,'rv')) then ! RevPBE
+                  xc_func = 102
+               else if(leqi(xc,'rp')) then ! RPBE
+                  xc_func = 103
+               else if(leqi(xc,'wc')) then ! Wu-Cohen
+                  xc_func = 104
+               end if
                read(unit,'(a)') line
                trim_line = trim(line)
                if(.NOT.leqi(trim_line(1:25),'</pseudopotential_header>')) then
