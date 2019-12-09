@@ -318,7 +318,7 @@ contains
           else
              if (iprint_gen >= 0) &
                   write (io_lun,10) en_conv*total_energy, en_units(energy_units)
-             if (iprint_gen >= 0) &
+             if (iprint_gen >= 1) &
                   write (io_lun, '(10x,"(TS=0 as O(N) or entropic &
                                   &contribution is negligible)")')
           end if

@@ -630,7 +630,7 @@ contains
 
       if (inode == ionode) then       
          write (io_lun,fmt='(/4x,"                  ",3a15)') "X","Y","Z"
-         write(io_lun,fmt='(4x,"Stress contributions:")')
+         if(iprint_MD > 1) write(io_lun,fmt='(4x,"Stress contributions:")')
       end if
       call print_stress("K.E. stress:      ", KE_stress, 3)
       call print_stress("S-Pulay stress:   ", SP_stress, 3)

@@ -730,7 +730,7 @@ contains
   !!    Added flag_variable_cell set to true for cell optimisation or NPT dynamics
   !!   2019/12/04 08:09 dave
   !!    Made default pseudopotential type Hamann to fit with Conquest ion file generator
-  !!    and made default grid 100Ha; removed check for old input file format
+  !!    and made default grid 100Ha; removed check for old input file format; default method diagonalisation
   !!  TODO
   !!   Fix reading of start flags (change to block ?) 10/05/2002 dave
   !!   Fix rigid shift 10/05/2002 dave
@@ -1137,7 +1137,7 @@ contains
     in_block_y = fdf_integer('Grid.InBlockY',4)
     in_block_z = fdf_integer('Grid.InBlockZ',4)
     ! Solution method - O(N) or diagonalisation ?
-    method = fdf_string(6,'DM.SolutionMethod','ordern') ! Default is O(N)
+    method = fdf_string(6,'DM.SolutionMethod','diagon') 
     if(leqi(method,'diagon')) then
        flag_diagonalisation = .true.
        flag_check_Diag = .true. 

@@ -688,7 +688,7 @@ contains
   subroutine dump_InfoMatGlobal(index,velocity,MDstep)
 
     ! Module usage
-    use global_module, ONLY: ni_in_cell,numprocs,rcellx,rcelly,rcellz,id_glob, io_lun
+    use global_module, ONLY: ni_in_cell,numprocs,rcellx,rcelly,rcellz,id_glob, io_lun, iprint_MD
     use GenComms, ONLY: cq_abort, inode, ionode, my_barrier, myid
     use group_module, ONLY: parts
     use io_module, ONLY: get_file_name, get_file_name_2rank
@@ -735,7 +735,7 @@ contains
     if(inode == ionode) then
        call io_assign(lun)
        call get_file_name_2rank('InfoGlobal',filename,index_local)
-       write(io_lun,*) ' filename = ',filename
+       if(iprint_MD>2) write(io_lun,*) ' filename = ',filename
        open (lun,file=filename,iostat=istat)
        rewind lun
        if (istat.GT.0) call cq_abort('Fail in opening InfoGlobal.dat .')

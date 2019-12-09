@@ -1894,7 +1894,7 @@ end subroutine write_md_data
     max_stress = zero
     volume = rcellx*rcelly*rcellz
     do i=1,3
-      stress_diff = abs(press + stress(i,i))/volume
+      stress_diff = abs(press*volume + stress(i,i))/volume
       if (stress_diff > max_stress) max_stress = stress_diff
     end do
     if (inode==ionode) then
@@ -1906,9 +1906,10 @@ end subroutine write_md_data
     do while (.not. done)
        call start_timer(tmr_l_iter, WITH_LEVEL)
        volume = rcellx*rcelly*rcellz
-       stressx = -stress(1,1)/volume
-       stressy = -stress(2,2)/volume
-       stressz = -stress(3,3)/volume
+       ! Keep these as stresses
+       stressx = -stress(1,1)!/volume
+       stressy = -stress(2,2)!/volume
+       stressz = -stress(3,3)!/volume
        mean_stress = (stressx + stressy + stressz)/3
        RMSstress = sqrt(((stressx*stressx) + (stressy*stressy) + (stressz*stressz))/3)
 
@@ -1942,9 +1943,9 @@ end subroutine write_md_data
        if (leqi(cell_constraint_flag, 'volume')) then
          search_dir_mean = gamma*search_dir_mean + mean_stress
        else
-         search_dir_x = gamma*search_dir_x + stressx - press
-         search_dir_y = gamma*search_dir_y + stressy - press
-         search_dir_z = gamma*search_dir_z + stressz - press
+         search_dir_x = gamma*search_dir_x + stressx - press*volume
+         search_dir_y = gamma*search_dir_y + stressy - press*volume
+         search_dir_z = gamma*search_dir_z + stressz - press*volume
        end if
 
        if (inode == ionode .and. iprint_gen > 0) &
@@ -1980,7 +1981,7 @@ end subroutine write_md_data
        volume = rcellx*rcelly*rcellx
        max_stress = zero
        do i=1,3
-         stress_diff = abs(press + stress(i,i))/volume
+         stress_diff = abs(press*volume + stress(i,i))/volume
          if (stress_diff > max_stress) max_stress = stress_diff
        end do
 
