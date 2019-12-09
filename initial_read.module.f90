@@ -1323,11 +1323,7 @@ contains
           sum_elecN_spin   = charge_up(i)+charge_dn(i)
           if (abs(sum_elecN_spin)>RD_ERR) then
              flag_InitialAtomicSpin = .true.
-             if (abs(sum_elecN_spin-charge(i))>RD_ERR) &
-                  call cq_abort('read_input: sum of number of electrons &
-                  &in spin channels is different from total &
-                  &number of electrons for this species ', &
-                  sum_elecN_spin,charge(i))
+             ! We will check that the sum of charge_up and charge_dn matches charge later
           endif
           nsf_species(i)   = fdf_integer('Atom.NumberOfSupports',0)
           RadiusSupport(i) = fdf_double ('Atom.SupportFunctionRange',zero)

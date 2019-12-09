@@ -149,6 +149,8 @@ contains
   !!    Changes to allow reading of Hamann's optimised norm-conserving pseudopotentials (remove ABINIT)
   !!   2018/06/19 20:30 nakata
   !!    Add IF with pseudo_type for calling init_rad when ghost atoms are used
+  !!   2019/12/09 20:16 dave
+  !!    Changes to read valence charge from pseudopotential file and test spin-polarised charge
   !!  SOURCE
   !!
   subroutine setup_pseudo_info
@@ -157,7 +159,7 @@ contains
     use numbers,        ONLY: zero, RD_ERR, two
     use pao_format,     ONLY: pao
     use species_module, ONLY: n_species, species_label, species_file, species_from_files
-    use species_module, ONLY: npao_species, nsf_species, type_species, charge
+    use species_module, ONLY: npao_species, nsf_species, type_species, charge, charge_up, charge_dn
     use global_module,  ONLY: iprint_pseudo, flag_Multisite
     use dimens,         ONLY: RadiusSupport, RadiusAtomf, RadiusMS, InvSRange, atomicnum
     use GenComms,       ONLY: inode, ionode, cq_abort, gcopy
@@ -223,11 +225,14 @@ contains
           atomicnum(ispecies)    = pseudo(ispecies)%z
           ! Valence charge
           charge(ispecies)       = pseudo(ispecies)%zval
-          !%%! if(charge(ispecies)/=pseudo(ispecies)%zval) then
-          !%%!    if(inode==ionode) &
-          !%%!         write(io_lun,fmt='(/,2x,"WARNING: Mismatch between valence charge in input and pseudopotential: ",2f7.2,/)') &
-          !%%!         charge(ispecies),pseudo(ispecies)%zval
-          !%%! end if
+          ! Test spin polarised initialisation
+          if (abs(charge_up(ispecies)+charge_dn(ispecies))>RD_ERR) then
+             if (abs(charge_up(ispecies)+charge_dn(ispecies)-charge(ispecies))>RD_ERR) &
+                  call cq_abort('read_input: sum of number of electrons &
+                  &in spin channels is different from total &
+                  &number of electrons for this species ', &
+                  charge_up(ispecies)+charge_dn(ispecies),charge(ispecies))
+          end if
           ! For P.C.C.
           if (pseudo(ispecies)%flag_pcc) flag_pcc_global = .true.
           !For Ghost atoms
@@ -1053,6 +1058,7 @@ contains
          write(io_lun,fmt='(10x,"lmax_basis, n_orbnl = ",2i4)') lmax_basis, n_orbnl
          read(unit,'(2i4)') lmax_projs, n_pjnl
          write(io_lun,fmt='(10x,"lmax_projs, n_pjnl = ",2i4)') lmax_projs, n_pjnl
+         if(xc_func/=0) write(io_lun,fmt='(10x,"XC functional code = ",i8)') xc_func
       else
          read(unit,'(a2)') symbol
          read(unit,'(a20)') label
