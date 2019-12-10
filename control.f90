@@ -258,7 +258,7 @@ contains
                              IPRINT_TIME_THRES1
     use group_module,  only: parts
     use minimise,      only: get_E_and_F
-    use move_atoms,    only: safemin, safemin2
+    use move_atoms,    only: safemin2, backtrack_linemin
     use GenComms,      only: gsum, myid, inode, ionode
     use GenBlas,       only: dot
     use force_module,  only: tot_force
@@ -277,7 +277,7 @@ contains
     real(double) :: total_energy
     
     ! Local variables
-    real(double)   :: energy0, energy1, max, g0, dE, gg, ggold, gamma,gg1
+    real(double)   :: energy0, energy1, max, g0, dE, gg, ggold, gamma,gg1, test_dot
     integer        :: i,j,k,iter,length, jj, lun, stat
     logical        :: done
     type(cq_timer) :: tmr_l_iter
@@ -366,9 +366,23 @@ contains
           y_new_pos(j) = y_atom_cell(j)
           z_new_pos(j) = z_atom_cell(j)
        end do
+       ! Test
+       test_dot = dot(3*ni_in_cell, cg, 1, tot_force, 1)
+       call gsum(test_dot)
+       if(test_dot<zero) then
+          if(inode==ionode) write(io_lun,fmt='(2x,"Reset direction ",f20.12)') test_dot
+          gamma = zero
+          do j = 1, ni_in_cell
+             jj = id_glob(j)
+             cg(1,j) = tot_force(1,jj)
+             cg(2,j) = tot_force(2,jj)
+             cg(3,j) = tot_force(3,jj)
+          end do
+       end if
        old_force = tot_force
        ! Minimise in this direction
-         call safemin2(x_new_pos, y_new_pos, z_new_pos, cg, energy0, &
+       !call safemin2(x_new_pos, y_new_pos, z_new_pos, cg, energy0, &
+         call backtrack_linemin(x_new_pos, y_new_pos, z_new_pos, cg, energy0, &
                       energy1, fixed_potential, vary_mu, energy1)
        ! Output positions
        if (myid == 0 .and. iprint_gen > 1) then
@@ -1514,7 +1528,7 @@ end subroutine write_md_data
     use minimise,       only: get_E_and_F
     use move_atoms,     only: pulayStep, velocityVerlet,            &
                               updateIndices, updateIndices3, update_atom_coord,     &
-                              safemin, safemin2, update_H, update_pos_and_matrices
+                              safemin2, update_H, update_pos_and_matrices
     use move_atoms,     only: updateL, updateLorK, updateSFcoeff
     use GenComms,       only: gsum, myid, inode, ionode, gcopy, my_barrier
     use GenBlas,        only: dot
@@ -2167,7 +2181,7 @@ end subroutine write_md_data
                              rcellx, rcelly, rcellz
     use group_module,  only: parts
     use minimise,      only: get_E_and_F
-    use move_atoms,    only: safemin, safemin2, safemin_cell, enthalpy, &
+    use move_atoms,    only: safemin2, safemin_cell, enthalpy, &
                              enthalpy_tolerance
     use GenComms,      only: inode, ionode
     use GenBlas,       only: dot
