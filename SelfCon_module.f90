@@ -1656,6 +1656,8 @@ contains
   !!    - Added registrations for memory usage
   !!   2012/03/21 L.Tong
   !!   - Rewrote spin implementation
+  !!   2018/11/13 17:30 nakata
+  !!   - Changed matS to be spin_SF dependent
   !!   2019/11/21 nakata 
   !!   - Introduced spin-up/down atomic charge
   !!   2019/11/21 10:51 dave
@@ -1664,7 +1666,8 @@ contains
 
     use datatypes
     use numbers
-    use global_module,  only: ni_in_cell, area_SC, nspin, spin_factor
+    use global_module,  only: ni_in_cell, area_SC, nspin, spin_factor, &
+                              flag_SpinDependentSF
     use primary_module, only: bundle
     use matrix_data,    only: Srange
     use mult_module,    only: matK, matS, atom_trace, matrix_sum, &
@@ -1677,7 +1680,7 @@ contains
     implicit none
 
     ! Local variables
-    integer :: chun, stat, n,l, glob_ind, spin
+    integer :: chun, stat, n,l, glob_ind, spin, spin_SF
     integer, dimension(nspin) :: temp_mat
     real(double), dimension(:,:), allocatable :: charge, node_charge
 
@@ -1698,10 +1701,12 @@ contains
     ! automatically called on each node
     node_charge = zero
     charge = zero
+    spin_SF = 1
     do spin = 1, nspin
+       if (flag_SpinDependentSF) spin_SF = spin
        temp_mat(spin) = allocate_temp_matrix(Srange, 0)
        call matrix_sum(zero, temp_mat(spin), one, matK(spin))
-       call atom_trace(temp_mat(spin), matS, l, node_charge(:,spin))
+       call atom_trace(temp_mat(spin), matS(spin_SF), l, node_charge(:,spin))
        ! sum from the node_charge into the total charge array
        do n = 1, l
           glob_ind = atoms_on_node(n, inode)

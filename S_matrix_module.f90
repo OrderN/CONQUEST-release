@@ -121,6 +121,8 @@ contains
 !!    Introduce PAO->SF transformation for contracted SFs (AtomF_to_SF_transform)
 !!   2017/01/17 19:00 nakata
 !!    Added optional passed variable rebuild_Spao
+!!   2018/11/13 17:30 nakata
+!!    Changed matS to be spin_SF dependent
 !!   2019/01/31 16:00 nakata
 !!    Moved dump_matrix(NSmatrix) from sub:get_H_matrix and made it optional
 !!  TODO
@@ -133,7 +135,7 @@ contains
     use numbers
     use global_module,               only: iprint_ops, flag_basis_set, &
                                            blips, PAOs, atomf, sf,     &
-                                           ni_in_cell,                 &
+                                           ni_in_cell, nspin_SF,       &
                                            flag_perform_cdft,          &
                                            IPRINT_TIME_THRES1
     use matrix_data,                 only: Srange
@@ -152,6 +154,7 @@ contains
     logical, optional :: transform_AtomF_to_SF
     
     ! Local variables
+    integer :: spin_SF
     logical :: flag_build_Satomf, flag_do_SFtransform
     type(cq_timer) :: tmr_l_tmp1
     type(cq_timer) :: backtrace_timer
@@ -182,11 +185,20 @@ contains
        flag_do_SFtransform = .false.
     endif
 
-    if (flag_do_SFtransform) call AtomF_to_SF_transform(matS, matSatomf, 1, Srange)
+    if (flag_do_SFtransform) then
+       do spin_SF = 1, nspin_SF
+          call AtomF_to_SF_transform(matS(spin_SF), matSatomf, spin_SF, Srange)
+       enddo
+    endif
 
     ! dump S-matrix if required
     if (iprint_ops > 3) then
-       call dump_matrix("NS", matS, inode)
+       if (nspin_SF == 1) then
+          call dump_matrix("NS", matS(1), inode)
+       else
+          call dump_matrix("NS_up", matS(1), inode)
+          call dump_matrix("NS_dn", matS(2), inode)
+       endif
     end if
 
     ! get the new InvS matrix
@@ -293,6 +305,9 @@ contains
 !!  MODIFICATION HISTORY
 !!   2016/09/28 nakata
 !!   This subroutine is the part for blips in previous get_S_matrix
+!!   2018/11/13 nakata
+!!   Changed matS and matKE to matS(spin_SF) and matKE(spin_SF)
+!!   spin_SF is fixed to 1 for blips at present
 !!
 !!  TODO
 !!    
@@ -335,6 +350,7 @@ contains
     integer :: np, ni, iprim, spec, this_nsf, icall, jpart, ind_part, j_in_halo, pb_len, ist, nab
     integer :: i, j,jseq,specj,i_in_prim,speci, pb_st, nblipsj, gcspart, nod, nsfj,sends,ierr, spin
     integer :: neigh_global_num, neigh_global_part, neigh_species, neigh_prim, wheremat, this_nsfi, this_nsfj
+    integer :: spin_SF
     integer, allocatable, dimension(:) :: nreqs
     real(double) :: dx, dy, dz, time0, time1
     real(double), allocatable, dimension(:), target :: part_blips
@@ -344,6 +360,7 @@ contains
     real(double), allocatable, dimension(:,:,:) :: this_data_M12
 
 
+    spin_SF = 1 ! spin-dependent SF is not available with blips at present
     ! Project support functions onto grid
     if (inode == ionode .and. iprint_ops > 2) &
          write (io_lun, *) 'Doing blip-to-support ', atomfns
@@ -353,8 +370,8 @@ contains
          write (io_lun, *) 'Doing integration ', atomfns
     ! Integrate
     if(flag_analytic_blip_int) then
-       call matrix_scale(zero,matS)
-       call matrix_scale(zero,matKE)
+       call matrix_scale(zero,matS(spin_SF))
+       call matrix_scale(zero,matKE(spin_SF))
        grad_coeff_array = zero
        allocate(nreqs(blip_trans%npart_send))
        ! For speed, we should have a blip_trans%max_len and max_nsf and allocate once
@@ -423,7 +440,7 @@ contains
                    call return_matrix_block_pos(matM12(spin),wheremat,this_data_M12(:,:,spin),this_nsfi*this_nsfj)
                 end do
                 call get_S_analytic(blips_on_atom(i_in_prim),supp_on_j,support_gradient(i_in_prim), &
-                     matS,matKE,this_data_M12,this_data_K, i_in_prim, &
+                     matS(spin_SF),matKE(spin_SF),this_data_M12,this_data_K, i_in_prim, &
                      j_in_halo,dx,dy,dz,speci,specj,this_nsfi,this_nsfj)
                 deallocate(this_data_M12,this_data_K)
              end do
@@ -450,7 +467,7 @@ contains
        call my_barrier
        deallocate(nreqs)
     else
-       call get_matrix_elements_new(inode-1, rem_bucket(1), matS, &
+       call get_matrix_elements_new(inode-1, rem_bucket(1), matS(spin_SF), &
             atomfns, atomfns)
        ! Do the onsite elements analytically
        if (flag_onsite_blip_ana) then
@@ -461,7 +478,7 @@ contains
                    iprim = iprim + 1
                    spec = bundle%species(iprim)
                    this_nsf = nsf_species(spec)
-                   call get_onsite_S(blips_on_atom(iprim), matS, &
+                   call get_onsite_S(blips_on_atom(iprim), matS(spin_SF), &
                         np, ni, iprim, this_nsf, spec)
                 end do
              end if
@@ -688,6 +705,8 @@ contains
 !!      io_module2 -> store_matrix, InfoT is defined locally
 !!   2018/07/13 13:21 dave  
 !!    Copy oldomega to omega on termination for consistency
+!!   2018/11/13 17:30 nakata
+!!    Changed matS and matT to be spin_SF dependent
 !!   2019/11/18 tsuyoshi
 !!    Removed flag_MDold
 !!  SOURCE
@@ -698,7 +717,7 @@ contains
     use datatypes
     use numbers
     use global_module, ONLY: IPRINT_TIME_THRES1,flag_TmatrixReuse,restart_T, &
-                             runtype, atomf, sf, flag_diagonalisation
+                             runtype, atomf, sf, flag_diagonalisation, nspin_SF
     use matrix_data, ONLY: Trange, TSrange, mat, Srange
     use mult_module, ONLY: allocate_temp_matrix, free_temp_matrix, store_matrix_value, matrix_scale, matrix_sum, &
          matT, matS, return_matrix_value, T_trans
@@ -721,7 +740,7 @@ contains
     logical :: flag_do_SFtransform
 
     ! Local variables
-    integer :: n_iterations, nn, np, nb, ist, ip, i,j,nsf1,nsf2
+    integer :: n_iterations, nn, np, nb, ist, ip, i, j, nsf1, nsf2, spin_SF
     integer :: matI, matT1, matTM, matTold, nfile, symm
     real(double) :: step, tot, eps, x, omega, oldomega, deltaomega, n_orbs
     type(cq_timer) :: tmr_l_tmp1
@@ -729,7 +748,6 @@ contains
 
     type(InfoMatrixFile),pointer :: Info(:)    ! why pointer ? <-> related to gcc problem
     type(matrix_store_global)    :: InfoGlob
-    integer :: matT_tmp(1)
 
     if (atomf.ne.sf .and. .not.flag_do_SFtransform) then
        if (inode.eq.ionode.and.output_level>=2) write(io_lun,*) &
@@ -741,19 +759,20 @@ contains
        matTM = allocate_temp_matrix(TSrange,0)
 
        if(flag_diagonalisation) then ! Don't need S^-1 for diagonalisation
-          call matrix_scale(zero,matT)
+          call matrix_scale(zero,matT(1))
           ip = 1
           nb = 1
           do np = 1,bundle%groups_on_node
              if(bundle%nm_nodgroup(np)>0) then
                 do i=1,bundle%nm_nodgroup(np)
                    do j = 1, nsf_species(bundle%species(ip))
-                      call store_matrix_value(matT,np,i,ip,nb,j,j,one,1)
+                      call store_matrix_value(matT(1),np,i,ip,nb,j,j,one,1)
                    enddo
                    ip = ip+1
                 enddo
              end if ! bundle%nm_nodgroup(np)>0
           enddo
+          if (nspin_SF==2) call matrix_sum(zero, matT(2), one, matT(1))
        else
           call start_timer(tmr_l_tmp1,WITH_LEVEL)
           n_orbs = zero
@@ -762,11 +781,8 @@ contains
           end do
           ! First construct the identity
           if (inode.eq.ionode.and.output_level>=2) write(io_lun,*) 'Zeroing data'
-          call matrix_scale(zero,matT1)
           call matrix_scale(zero,matI)
-          call matrix_scale(zero,matT)
-          call matrix_scale(zero,matTold)
-          call matrix_scale(zero,matTM)
+          call matrix_scale(zero,matT(1))
           if (inode.eq.ionode.and.output_level>=2) write(io_lun,*) 'Creating I'
           ip = 1
           nb = 1
@@ -774,107 +790,112 @@ contains
              if(bundle%nm_nodgroup(np)>0) then
                 do i=1,bundle%nm_nodgroup(np)
                    do j = 1, nsf_species(bundle%species(ip))
-                      call store_matrix_value(matT,np,i,ip,nb,j,j,one,1)
+                      call store_matrix_value(matT(1),np,i,ip,nb,j,j,one,1)
                       call store_matrix_value(matI,np,i,ip,nb,j,j,one,1)
                    enddo
                    ip = ip+1
                 enddo
              end if ! bundle%nm_nodgroup(np)>0
           enddo
+          if (nspin_SF==2) call matrix_sum(zero, matT(2), one, matT(1))
           call my_barrier
 
 
           if (.NOT. flag_readT .AND. .NOT. restart_T) then ! Initialising invS
             ! Construct the initial guess for T as epsilon.S^T, where epsilon is
             ! given as 1/(sum_jk S^2_jk)
-            tot = 0.0_double
-            ip = 1
-            do np = 1,bundle%groups_on_node
-               if(bundle%nm_nodgroup(np)>0) then
-                  do i=1,bundle%nm_nodgroup(np)
-                     do nb=1,mat(np,Srange)%n_nab(i)
-                        ist = mat(np,Srange)%i_acc(i)+nb-1
-                        do nsf1 = 1,mat(np,Srange)%ndimi(i)
-                           do nsf2 = 1,mat(np,Srange)%ndimj(ist)
-                              eps = return_matrix_value(matS,np,i,ip,nb,nsf1,nsf2)
-                              tot = tot + eps*eps
+            do spin_SF = 1, nspin_SF
+               tot = 0.0_double
+               ip = 1
+               do np = 1,bundle%groups_on_node
+                  if(bundle%nm_nodgroup(np)>0) then
+                     do i=1,bundle%nm_nodgroup(np)
+                        do nb=1,mat(np,Srange)%n_nab(i)
+                           ist = mat(np,Srange)%i_acc(i)+nb-1
+                           do nsf1 = 1,mat(np,Srange)%ndimi(i)
+                              do nsf2 = 1,mat(np,Srange)%ndimj(ist)
+                                 eps = return_matrix_value(matS(spin_SF),np,i,ip,nb,nsf1,nsf2)
+                                 tot = tot + eps*eps
+                              enddo
                            enddo
                         enddo
+                        ip = ip+1
                      enddo
-                     ip = ip+1
-                  enddo
-               end if ! bundle%nm_nodgroup(np)>0
-            enddo
-            call gsum(tot)
-            eps = 1.0_double/(tot)
-            if(output_level>1.and.inode==ionode) write(io_lun,*) 'Eps, tot: ',eps,tot
-            call matrix_scale(zero,matT)
-            call matrix_sum(zero,matT,eps,matS)
+                  end if ! bundle%nm_nodgroup(np)>0
+               enddo
+               call gsum(tot)
+               eps = 1.0_double/(tot)
+               if(output_level>1.and.inode==ionode) write(io_lun,*) 'Eps, tot: ',eps,tot
+               call matrix_scale(zero,matT(spin_SF))
+               call matrix_sum(zero,matT(spin_SF),eps,matS(spin_SF))
+            enddo ! spin_SF
             call stop_print_timer(tmr_l_tmp1,"inverse S preliminaries",IPRINT_TIME_THRES1)
           elseif (flag_readT .OR. restart_T) then
             !Reusing previously computed inverse S-matrix
              ! Global Information
              call grab_InfoMatGlobal(InfoGlob,index=0)
              call set_atom_coord_diff(InfoGlob)
-             ! Soon, matT -> matT(nspin_SF), we use matT_tmp for now.
-              matT_tmp(1)=matT
-             call grab_matrix2('T',inode,nfile,Info,InfoGlob,index=0,n_matrix=1)
-             !call grab_matrix2('T',inode,nfile,Info,InfoGlob,index=0,n_matrix=nspin_SF)
+             call grab_matrix2('T',inode,nfile,Info,InfoGlob,index=0,n_matrix=nspin_SF)
              call my_barrier()
-             call Matrix_CommRebuild(InfoGlob,Info,Trange,T_trans,matT_tmp,nfile,symm,n_matrix=1)
-             !call Matrix_CommRebuild(InfoGlob,Info,Trange,T_trans,matT,nfile,symm,n_matrix=nspin_SF)
+             call Matrix_CommRebuild(InfoGlob,Info,Trange,T_trans,matT,nfile,symm,n_matrix=nspin_SF)
           endif
+
           ! and evaluate the current value of the functional and its gradient
-          deltaomega = zero
-          oldomega = zero
-          if (inode==ionode.and.output_level>=2) write(io_lun,*) 'Starting loop'
-          do n_iterations=1,n_L_iterations
-             call start_timer(tmr_l_tmp1,WITH_LEVEL)
-             if (inode==ionode.and.output_level>=2) &
-                  write(io_lun,2) n_iterations
-             deltaomega = deltaomega * half
-             ! check for convergence
-             if(n_iterations<3.or.abs(deltaomega)>tolerance) then
-                call HotInvS_mm( matI, matS, matT, matT1, matTM, omega,n_iterations)
-                deltaomega = omega - oldomega
-                if(inode==ionode.and.output_level>=1) then
-                   write(io_lun,*) 'Omega is ',omega/n_orbs
-                   if(omega>zero) write(io_lun,*) 'R is ',sqrt(omega)/n_orbs
-                   write(io_lun,*) 'deltaomega is ',n_iterations,deltaomega
-                endif
-                if ( omega>oldomega.and.oldomega/=0.0_double) then
-                   if(inode==ionode) write(io_lun,*) 'Truncation error reached !'
-                   call matrix_sum(zero,matT,one,matTold)
-                   omega = oldomega ! This is consistent with Told
+          do spin_SF = 1, nspin_SF
+             deltaomega = zero
+             oldomega = zero
+             call matrix_scale(zero,matT1)
+             call matrix_scale(zero,matTold)
+             call matrix_scale(zero,matTM)
+             if (inode==ionode.and.output_level>=2) write(io_lun,*) 'Starting loop'
+             do n_iterations=1,n_L_iterations
+                call start_timer(tmr_l_tmp1,WITH_LEVEL)
+                if (inode==ionode.and.output_level>=2) &
+                     write(io_lun,2) n_iterations
+                deltaomega = deltaomega * half
+                ! check for convergence
+                if(n_iterations<3.or.abs(deltaomega)>tolerance) then
+                   call HotInvS_mm( matI, matS(spin_SF), matT(spin_SF), matT1, matTM, omega,n_iterations)
+                   deltaomega = omega - oldomega
+                   if(inode==ionode.and.output_level>=1) then
+                      write(io_lun,*) 'Omega is ',omega/n_orbs
+                      if(omega>zero) write(io_lun,*) 'R is ',sqrt(omega)/n_orbs
+                      write(io_lun,*) 'deltaomega is ',n_iterations,deltaomega
+                   endif
+                   if ( omega>oldomega.and.oldomega/=0.0_double) then
+                      if(inode==ionode) write(io_lun,*) 'Truncation error reached !'
+                      call matrix_sum(zero,matT(spin_SF),one,matTold)
+                      omega = oldomega ! This is consistent with Told
+                      call stop_print_timer(tmr_l_tmp1,"an inverse S iteration",IPRINT_TIME_THRES1)
+                      exit
+                   endif
+                   oldomega = omega 
+                   call matrix_sum(zero,matTold,one,matT(spin_SF))
+                   call matrix_sum(zero,matT(spin_SF),one,matT1)
+                else
                    call stop_print_timer(tmr_l_tmp1,"an inverse S iteration",IPRINT_TIME_THRES1)
-                   exit
+                   exit  ! Leave the do loop
                 endif
-                oldomega = omega 
-                call matrix_sum(zero,matTold,one,matT)
-                call matrix_sum(zero,matT,one,matT1)
-             else
                 call stop_print_timer(tmr_l_tmp1,"an inverse S iteration",IPRINT_TIME_THRES1)
-                exit  ! Leave the do loop
-             endif
-             call stop_print_timer(tmr_l_tmp1,"an inverse S iteration",IPRINT_TIME_THRES1)
-          end do
-          ! If this isn't a good guess, then reset to I
-          if((omega/n_orbs)>InvSTolerance) then
-             if(inode==ionode) write(io_lun,*) 'Setting InvS to I'
-             call matrix_scale(zero,matT)
-             ip = 1
-             nb = 1
-             do np = 1,bundle%groups_on_node
-                if(bundle%nm_nodgroup(np)>0) then
-                   do i=1,bundle%nm_nodgroup(np)
-                      do j = 1, nsf_species(bundle%species(ip))
-                         call store_matrix_value(matT,np,i,ip,nb,j,j,one,1)
+             end do ! n_iterations
+             ! If this isn't a good guess, then reset to I
+             if((omega/n_orbs)>InvSTolerance) then
+                if(inode==ionode) write(io_lun,*) 'Setting InvS to I'
+                call matrix_scale(zero,matT(spin_SF))
+                ip = 1
+                nb = 1
+                do np = 1,bundle%groups_on_node
+                   if(bundle%nm_nodgroup(np)>0) then
+                      do i=1,bundle%nm_nodgroup(np)
+                         do j = 1, nsf_species(bundle%species(ip))
+                            call store_matrix_value(matT(spin_SF),np,i,ip,nb,j,j,one,1)
+                         enddo
+                         ip = ip+1
                       enddo
-                      ip = ip+1
-                   enddo
-                end if ! bundle%nm_nodgroup(np)>0
-             enddo
-          endif
+                   end if ! bundle%nm_nodgroup(np)>0
+                enddo
+             endif
+          enddo ! spin_SF
        end if! End if NOT diagon
        call free_temp_matrix(matTM)
        call free_temp_matrix(matTold)
@@ -882,7 +903,8 @@ contains
        call free_temp_matrix(matI)
        ! Dump T-matrix
        !if (.NOT. flag_MDold .AND. .NOT. leqi(runtype,'static') .AND. flag_TmatrixReuse) then
-       !  call dump_matrix2('T',matT,Trange)
+       !  call dump_matrix2('T',matT(1),Trange)
+       !  if(nspin_SF==2) call dump_matrix2('T2',matT(2),Trange)
        !  flag_readT = .true.
        !endif
     end if ! End if (atomf.ne.sf .and. .not.flag_do_SFtransform)

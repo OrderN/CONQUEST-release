@@ -165,6 +165,8 @@ contains
   !!    Added dump of K matrix
   !!   2018/01/22 tsuyoshi (with dave)
   !!    Initial changes for atom updates
+  !!   2018/11/13 17:30 nakata
+  !!    Changed matS, matT and matTtran to be spin_SF dependent
   !!   2019/05/27 tsuyoshi 
   !!    Debug for spin=2, propagateL (not propagateX)
   !!  SOURCE
@@ -175,7 +177,7 @@ contains
     use datatypes
     use numbers
     use global_module, only: IPRINT_TIME_THRES1,             &
-                             nspin, flag_fix_spin_population,           &
+                             nspin, nspin_SF, flag_fix_spin_population, &
                              ne_in_cell, ne_spin_in_cell, flag_dump_L,  &
                              flag_SkipEarlyDM, flag_XLBOMD,             &
                              flag_propagateX, flag_dissipation,         &
@@ -245,7 +247,8 @@ contains
        if (.NOT. flag_SkipEarlyDM) early = .true.  ! Starts from earlyDM
 
        ! Start with the transpose of S^-1
-       call matrix_transpose(matT, matTtran)
+       call matrix_transpose(matT(1), matTtran(1))
+       if (nspin_SF==2) call matrix_transpose(matT(2), matTtran(2))
 
        ! Now minimise the energy
        ndone = 0
@@ -352,6 +355,8 @@ contains
   !!   2012/03/12 L.Tong
   !!    - Major rewrite of spin implementation
   !!    - Removed redundant input parameter real(double) mu
+  !!   2018/11/13 17:30 nakata
+  !!    Changed matT to be spin_SF dependent
   !!  SOURCE
   !!
   subroutine earlyDM(ndone, n_L_iterations, delta_e, done, vary_mu, &
@@ -372,7 +377,7 @@ contains
     use global_module,  only: IPRINT_TIME_THRES1,           &
                               ni_in_cell, flag_global_tolerance,       &
                               nspin, spin_factor,                      &
-                              flag_fix_spin_population
+                              flag_fix_spin_population, flag_SpinDependentSF
     use timer_module,   only: cq_timer, start_timer, stop_print_timer, &
                               WITH_LEVEL
 
@@ -384,7 +389,7 @@ contains
     logical      :: inflex, vary_mu, done, record
 
     ! Local variables
-    integer                        :: n_iter, length, spin
+    integer                        :: n_iter, length, spin, spin_SF
     integer,      dimension(nspin) :: matM3, matSM3, matSphi, mat_temp, mat_search
     real(double), dimension(nspin) :: energy0, energy1, electrons
     real(double)                   :: energy0_tot, energy1_tot, electrons_tot
@@ -406,6 +411,8 @@ contains
     ! type(cq_timer) :: tmr_l_tmp1, tmr_l_iter
 
     call start_timer(tmr_l_tmp1, WITH_LEVEL)
+
+    spin_SF = 1
 
     ! allocate temp matrices
     do spin = 1, nspin
@@ -431,9 +438,10 @@ contains
     energy0_tot = spin_factor * sum(energy0(:))
 
     do spin = 1, nspin
+       if (flag_SpinDependentSF) spin_SF = spin
        ! Pre- and post-multiply M3 by S^-1 so that it is contravariant
-       call matrix_product(matT, matM3(spin), mat_temp(spin), mult(T_L_TL))
-       call matrix_product(mat_temp(spin), matT, matSM3(spin), mult(TL_T_L))
+       call matrix_product(matT(spin_SF), matM3(spin), mat_temp(spin), mult(T_L_TL))
+       call matrix_product(mat_temp(spin), matT(spin_SF), matSM3(spin), mult(TL_T_L))
        ! Project gradient perpendicular to electron gradient
        call matrix_sum(zero, mat_search(spin), -one, matSM3(spin))
     end do
@@ -442,9 +450,10 @@ contains
        e_dot_n_tot = zero
        n_dot_n_tot = zero
        do spin = 1, nspin
+          if (flag_SpinDependentSF) spin_SF = spin
           ! Pre- and post-multiply phi by S^-1 so that it is contravariant
-          call matrix_product(matT, matphi(spin), mat_temp(spin), mult(T_L_TL))
-          call matrix_product(mat_temp(spin), matT, matSphi(spin), mult(TL_T_L))
+          call matrix_product(matT(spin_SF), matphi(spin), mat_temp(spin), mult(T_L_TL))
+          call matrix_product(mat_temp(spin), matT(spin_SF), matSphi(spin), mult(TL_T_L))
           ! Only one is pre- and post-multiplied because (A,B) = Tr(ASBS)
           e_dot_n(spin) = matrix_product_trace(matSM3(spin), matphi(spin))
           e_dot_n_tot = e_dot_n_tot + spin_factor * e_dot_n(spin)
@@ -551,8 +560,9 @@ contains
        ! Pre- and post-multiply M3 by S^-1 so that it is
        ! contravariant, matSM3 = matSM3(L_n_iter+1)
        do spin = 1, nspin
-          call matrix_product (matT, matM3(spin), mat_temp(spin), mult(T_L_TL))
-          call matrix_product (mat_temp(spin), matT, matSM3(spin), mult(TL_T_L))
+          if (flag_SpinDependentSF) spin_SF = spin
+          call matrix_product (matT(spin_SF), matM3(spin), mat_temp(spin), mult(T_L_TL))
+          call matrix_product (mat_temp(spin), matT(spin_SF), matSM3(spin), mult(TL_T_L))
        end do
 
        ! g1 = tr(matM3(L_n_iter+1) * matSM3(L_n_iter+1))
@@ -597,8 +607,9 @@ contains
 
        ! Pre- and post-multiply M3 by S^-1 so that it is contravariant
        do spin = 1, nspin
-          call matrix_product(matT, matM3(spin), mat_temp(spin), mult(T_L_TL))
-          call matrix_product(mat_temp(spin), matT, matSM3(spin), mult(TL_T_L))
+          if (flag_SpinDependentSF) spin_SF = spin
+          call matrix_product(matT(spin_SF), matM3(spin), mat_temp(spin), mult(T_L_TL))
+          call matrix_product(mat_temp(spin), matT(spin_SF), matSM3(spin), mult(TL_T_L))
        end do
 
        ! prepare for the next iterative step
@@ -614,9 +625,10 @@ contains
           e_dot_n_tot = zero
           n_dot_n_tot = zero
           do spin = 1, nspin
-             call matrix_product(matT, matphi(spin), mat_temp(spin), &
+             if (flag_SpinDependentSF) spin_SF = spin
+             call matrix_product(matT(spin_SF), matphi(spin), mat_temp(spin), &
                                  mult(T_L_TL))
-             call matrix_product(mat_temp(spin), matT, matSphi(spin), &
+             call matrix_product(mat_temp(spin), matT(spin_SF), matSphi(spin), &
                                  mult(TL_T_L))
              e_dot_n(spin) = matrix_product_trace(matSM3(spin), matphi(spin))
              e_dot_n_tot = e_dot_n_tot + spin_factor * e_dot_n(spin)
@@ -784,6 +796,8 @@ contains
   !!    Renamed supportfns -> atomfns
   !!   2017/05/09 dave
   !!    Added output of L matrix for both spin channels
+  !!   2018/11/13 17:30 nakata
+  !!    Changed matT to be spin_SF dependent
   !!  SOURCE
   !!
   subroutine lateDM(ndone, n_L_iterations, done, deltaE, vary_mu, &
@@ -806,7 +820,8 @@ contains
                                  ni_in_cell, flag_global_tolerance,    &
                                  flag_mix_L_SC_min,                    &
                                  flag_fix_spin_population, nspin,      &
-                                 spin_factor, flag_dump_L
+                                 spin_factor, flag_dump_L,             &
+                                 flag_SpinDependentSF
     use timer_module,      only: cq_timer,start_timer,                 &
                                  stop_print_timer, WITH_LEVEL
     use io_module,         only: dump_matrix
@@ -837,7 +852,7 @@ contains
     real(double)   :: e_dot_n_tot, n_dot_n_tot, electrons_tot, &
                       energy0_tot, energy1_tot
     real(double)   :: g0, g1, gg, step, dsum_factor
-    integer        :: n_iter, i, j, pul_mx, npmod, spin, stat
+    integer        :: n_iter, i, j, pul_mx, npmod, spin, spin_SF, stat
     type(cq_timer) :: tmr_l_tmp1,tmr_l_iter
     real(double), dimension(:), allocatable :: density_tot
     !TM
@@ -847,6 +862,8 @@ contains
     call start_timer(tmr_l_tmp1, WITH_LEVEL)
 
     iter_stuck = 0
+
+    spin_SF = 1
 
     if (ndone > n_L_iterations) &
          call cq_abort('lateDM: too many L iterations', ndone, n_L_iterations)
@@ -889,16 +906,18 @@ contains
 
     ! Covariant gradient in SM3
     do spin = 1, nspin
-       call matrix_product(matT, matM3(spin), mat_temp(spin), mult(T_L_TL))
-       call matrix_product(mat_temp(spin), matT, matSM3(spin), mult(TL_T_L))
+       if (flag_SpinDependentSF) spin_SF = spin
+       call matrix_product(matT(spin_SF), matM3(spin), mat_temp(spin), mult(T_L_TL))
+       call matrix_product(mat_temp(spin), matT(spin_SF), matSM3(spin), mult(TL_T_L))
     end do
 
     ! Project electron gradient out
     if (vary_mu) then
        ! update matSphi from matphi
        do spin = 1, nspin
-          call matrix_product(matT, matphi(spin), mat_temp(spin), mult(T_L_TL))
-          call matrix_product(mat_temp(spin), matT, matSphi(spin), mult(TL_T_L))
+          if (flag_SpinDependentSF) spin_SF = spin
+          call matrix_product(matT(spin_SF), matphi(spin), mat_temp(spin), mult(T_L_TL))
+          call matrix_product(mat_temp(spin), matT(spin_SF), matSphi(spin), mult(TL_T_L))
           e_dot_n(spin) = matrix_product_trace(matSM3(spin), matphi(spin))
           n_dot_n(spin) = matrix_product_trace(matSphi(spin), matphi(spin))
           if (inode == ionode .and. iprint_DM >= 2) then
@@ -1008,16 +1027,18 @@ contains
        energy1_tot = spin_factor * sum(energy1)
        ! Covariant gradient in SM3
        do spin = 1, nspin
-          call matrix_product(matT, matM3(spin), mat_temp(spin), mult(T_L_TL))
-          call matrix_product(mat_temp(spin), matT, matSM3(spin), mult(TL_T_L))
+          if (flag_SpinDependentSF) spin_SF = spin
+          call matrix_product(matT(spin_SF), matM3(spin), mat_temp(spin), mult(T_L_TL))
+          call matrix_product(mat_temp(spin), matT(spin_SF), matSM3(spin), mult(TL_T_L))
        end do
        ! Project out electron variation
        if (vary_mu) then
           ! update matSphi
           do spin = 1, nspin
-             call matrix_product(matT, matphi(spin), mat_temp(spin), &
+             if (flag_SpinDependentSF) spin_SF = spin
+             call matrix_product(matT(spin_SF), matphi(spin), mat_temp(spin), &
                                  mult(T_L_TL))
-             call matrix_product(mat_temp(spin), matT, matSphi(spin), &
+             call matrix_product(mat_temp(spin), matT(spin_SF), matSphi(spin), &
                                  mult(TL_T_L))
              e_dot_n(spin) = matrix_product_trace(matSM3(spin), matphi(spin))
              n_dot_n(spin) = matrix_product_trace(matSphi(spin), matphi(spin))
@@ -1115,8 +1136,9 @@ contains
        energy1_tot = spin_factor * sum(energy1)
        electrons_tot = spin_factor * sum(electrons)
        do spin = 1, nspin
-          call matrix_product(matT, matM3(spin), mat_temp(spin), mult(T_L_TL))
-          call matrix_product(mat_temp(spin), matT, matSM3(spin), mult(TL_T_L))
+          if (flag_SpinDependentSF) spin_SF = spin
+          call matrix_product(matT(spin_SF), matM3(spin), mat_temp(spin), mult(T_L_TL))
+          call matrix_product(mat_temp(spin), matT(spin_SF), matSM3(spin), mult(TL_T_L))
        end do
        if (flag_global_tolerance) then
           g1 = zero
@@ -1137,9 +1159,10 @@ contains
                             &correction: ",e25.15)') g1
        if (vary_mu) then
           do spin = 1, nspin
-             call matrix_product(matT, matphi(spin), &
+             if (flag_SpinDependentSF) spin_SF = spin
+             call matrix_product(matT(spin_SF), matphi(spin), &
                                  mat_temp(spin), mult(T_L_TL))
-             call matrix_product(mat_temp(spin), matT, &
+             call matrix_product(mat_temp(spin), matT(spin_SF), &
                                  matSphi(spin), mult(TL_T_L))
              e_dot_n(spin) = matrix_product_trace(matSM3(spin), matphi(spin))
              n_dot_n(spin) = matrix_product_trace(matSphi(spin), matphi(spin))
@@ -1347,6 +1370,8 @@ contains
   !!     polarised and non-polarised calculations share the same
   !!     subroutine.
   !!   - Renamed to lineMinL
+  !!   2018/11/13 17:30 nakata
+  !!    Changed matT to be spin_SF dependent
   !!  SOURCE
   !!
   subroutine lineMinL( matM3, mat_D, mat_temp, matSM3,  &
@@ -1363,7 +1388,7 @@ contains
                              LNV_matrix_multiply, mult, T_L_TL,      &
                              TL_T_L, symmetrise_L
     use global_module, only: flag_fix_spin_population, nspin,        &
-                             spin_factor
+                             spin_factor, flag_SpinDependentSF
 
     implicit none
 
@@ -1380,8 +1405,9 @@ contains
     real(double) :: A, B, C, D, SQ
     real(double) :: g0, g1, ig0, ig1, ig1_step, igcross, igcross2
     real(double) :: lamG, zeta
-    integer      :: i, j, k, length, spin
+    integer      :: i, j, k, length, spin, spin_SF
 
+    spin_SF = 1
     g0 = zero
     ig0 = zero
     do spin = 1, nspin
@@ -1444,8 +1470,9 @@ contains
 
     ! get the matSM3(L_step)
     do spin = 1, nspin
-       call matrix_product(matT, matM3(spin), mat_temp(spin), mult(T_L_TL))
-       call matrix_product(mat_temp(spin), matT, matSM3(spin), mult(TL_T_L))
+       if (flag_SpinDependentSF) spin_SF = spin
+       call matrix_product(matT(spin_SF), matM3(spin), mat_temp(spin), mult(T_L_TL))
+       call matrix_product(mat_temp(spin), matT(spin_SF), matSM3(spin), mult(TL_T_L))
     end do
 
     ! get ig1 = tr(matSM3(L_step) * matM3(L_step)),
@@ -1527,8 +1554,9 @@ contains
        ig1 = zero
        igcross = zero
        do spin = 1, nspin
-          call matrix_product(matT, matM3(spin), mat_temp(spin), mult(T_L_TL))
-          call matrix_product(mat_temp(spin), matT, matSM3(spin), mult(TL_T_L))
+          if (flag_SpinDependentSF) spin_SF = spin
+          call matrix_product(matT(spin_SF), matM3(spin), mat_temp(spin), mult(T_L_TL))
+          call matrix_product(mat_temp(spin), matT(spin_SF), matSM3(spin), mult(TL_T_L))
           ! ig1 is now used to store tr(matSM3(L_truestep) * matM3(L_truestep))
           ! ig1_step stores tr(matSM3(L_step) * matM3(L_step))
           ig1 = ig1 + spin_factor * &
@@ -1616,6 +1644,8 @@ contains
   !!   2012/03/11 L.Tong
   !!   - Major rewrite, the subroutine corrects electron number for
   !!     both spin channels.
+  !!   2018/11/13 17:30 nakata
+  !!    Changed matT and matTtran to be spin_SF dependent
   !! SOURCE
   !!
   subroutine correct_electron_number_fixspin
@@ -1631,25 +1661,30 @@ contains
                               LNV_matrix_multiply, matrix_transpose
     use primary_module, only: bundle
     use GenComms,       only: gsum, cq_abort
-    use global_module,  only: ne_spin_in_cell, nspin, spin_factor
+    use global_module,  only: ne_spin_in_cell, nspin, spin_factor, &
+                              nspin_SF, flag_SpinDependentSF
 
     implicit none
 
     ! Local variables
     real(double)  :: step, step1, g0, g1, recA, B, C, D, truestep, dne
-    integer       :: iter, spin
+    integer       :: iter, spin, spin_SF
     logical       :: done
     real(double), dimension(nspin) :: electrons_0, electrons_2, &
                                       electrons, energy
     integer,      dimension(nspin) :: matTL, matphi2, matSphi, matSphi2
 
+    spin_SF = 1
+
     ! set electrons_0 to the correct electron number
     electrons_0(1:nspin) = ne_spin_in_cell(1:nspin)
 
-    call matrix_transpose(matT, matTtran)
+    call matrix_transpose(matT(1), matTtran(1))
+    if (nspin_SF==2) call matrix_transpose(matT(2), matTtran(2))
     do spin = 1, nspin
        done = .false.
        iter = 0
+       if (flag_SpinDependentSF) spin_SF = spin
        ! allocate temporary matrices
        matTL(spin) = allocate_temp_matrix(TLrange,0)
        matphi2(spin) = allocate_temp_matrix(Lrange,0)
@@ -1663,8 +1698,8 @@ contains
           if (inode == ionode .and. iprint_DM >= 2) &
                write (io_lun, '(2x,"electron number (spin=",i1,") before &
                                &correction: ",f25.15)') spin, electrons(spin)
-          call matrix_product(matT, matphi(spin), matTL(spin), mult(T_L_TL))
-          call matrix_product(matTL(spin), matTtran, matSphi(spin), mult(TL_T_L))
+          call matrix_product(matT(spin_SF), matphi(spin), matTL(spin), mult(T_L_TL))
+          call matrix_product(matTL(spin), matTtran(spin_SF), matSphi(spin), mult(TL_T_L))
           g0 = matrix_product_trace(matSphi(spin), matphi(spin))
           ! initial guess is linear correction...
           step1 = (electrons_0(spin) - electrons(spin)) / g0
@@ -1694,9 +1729,9 @@ contains
                                       dontM1, dontM2, dontM3, dontM4, &
                                       dophi, dontE, mat_phi=matphi2, &
                                       spin=spin)
-             call matrix_product(matT, matphi2(spin), matTL(spin), &
+             call matrix_product(matT(spin_SF), matphi2(spin), matTL(spin), &
                                  mult(T_L_TL))
-             call matrix_product(matTL(spin), matTtran, &
+             call matrix_product(matTL(spin), matTtran(spin_SF), &
                                  matSphi2(spin), mult(TL_T_L))
              g1 = matrix_product_trace(matphi(spin), matSphi2(spin))
              if (inode == ionode .and. iprint_DM >= 2) &
@@ -1786,6 +1821,8 @@ contains
   !!     Fixed a bug, forgot to use matphi_dn from mult_module Switched
   !!     to LNV_matrix_multiply, as LNV_matrix_multiply_spin is now
   !!     obsolete
+  !!   2018/11/13 17:30 nakata
+  !!    Changed matT and matTtran to be spin_SF dependent
   !!  SOURCE
   !!
   subroutine correct_electron_number_varspin
@@ -1801,7 +1838,8 @@ contains
                               LNV_matrix_multiply, matrix_transpose
     use primary_module, only: bundle
     use GenComms,       only: gsum
-    use global_module,  only: ne_in_cell, nspin, spin_factor
+    use global_module,  only: ne_in_cell, nspin, spin_factor, &
+                              nspin_SF, flag_SpinDependentSF
 
     implicit none
 
@@ -1810,11 +1848,12 @@ contains
     integer,      dimension(nspin) :: matTL, matphi2, matSphi, matSphi2
     real(double) :: electrons_0, electrons, energy, step, step1, &
                     electrons2, g0, g1, recA, B, C, D, truestep, dne
-    integer :: iter, spin
+    integer :: iter, spin, spin_SF
     logical :: done
 
     done = .false.
     iter = 0
+    spin_SF = 1
 
     ! set the correct electron number
     electrons_0 = ne_in_cell
@@ -1827,7 +1866,8 @@ contains
     end do
 
     ! get electron number and gradient
-    call matrix_transpose(matT, matTtran)
+    call matrix_transpose(matT(1), matTtran(1))
+    if (nspin_SF==2) call matrix_transpose(matT(2), matTtran(2))
 
     do while (.not. done .and. (iter < 20)) ! Was 20 !
 
@@ -1842,8 +1882,9 @@ contains
 
        g0 = zero
        do spin = 1, nspin
-          call matrix_product(matT, matphi(spin), matTL(spin), mult(T_L_TL))
-          call matrix_product(matTL(spin), matTtran, matSphi(spin), mult(TL_T_L))
+          if (flag_SpinDependentSF) spin_SF = spin
+          call matrix_product(matT(spin_SF), matphi(spin), matTL(spin), mult(T_L_TL))
+          call matrix_product(matTL(spin), matTtran(spin_SF), matSphi(spin), mult(TL_T_L))
           g0 = g0 + spin_factor * &
                matrix_product_trace(matSphi(spin), matphi(spin))
        end do
@@ -1874,9 +1915,10 @@ contains
 
           g1 = zero
           do spin = 1, nspin
-             call matrix_product(matT, matphi2(spin), matTL(spin), &
+             if (flag_SpinDependentSF) spin_SF = spin
+             call matrix_product(matT(spin_SF), matphi2(spin), matTL(spin), &
                                  mult(T_L_TL))
-             call matrix_product(matTL(spin), matTtran, &
+             call matrix_product(matTL(spin), matTtran(spin_SF), &
                                  matSphi2(spin), mult(TL_T_L))
              g1 = g1 + spin_factor * &
                   matrix_product_trace(matphi(spin), matSphi2(spin))

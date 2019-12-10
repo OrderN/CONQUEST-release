@@ -347,6 +347,10 @@ contains
     !
     !
     ! Set flag_one_to_one and check the number of SFs
+    if (nspin.eq.1) then
+       nspin_SF = 1
+       flag_SpinDependentSF = .false.
+    endif
     if (flag_basis_set==blips) then
        flag_one_to_one = .false.
        atomf = sf
@@ -373,7 +377,10 @@ contains
        else
           atomf = paof
        end if
-       if (flag_SpinDependentSF) nspin_SF = nspin
+       if (flag_SpinDependentSF) then
+          nspin_SF = nspin
+          if (inode==ionode) write(io_lun,'(2X,A,I1)') 'Support functions are spin-dependent, nspin_SF = ',nspin_SF
+       endif
        if (flag_one_to_one.AND.flag_vary_basis) then
           call cq_warn(sub_name, "minE.VaryBasis T is not compatible with NSF==NPAO.  Setting flag to F.")
           flag_vary_basis = .false.
@@ -726,6 +733,8 @@ contains
   !!    Added flag for RNG seed
   !!   2019/10/08 nakata
   !!    Fixed bug for the case when reading only Kmatrix but not SFcoeff (for MSSFs)
+  !!   2019/11/14 20:00 nakata
+  !!    set flag_SpinDependentSF to be .true. in default
   !!   2019/11/18 14:36 dave
   !!    Added flag_variable_cell set to true for cell optimisation or NPT dynamics
   !!   2019/12/04 08:09 dave
