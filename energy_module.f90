@@ -487,7 +487,7 @@ contains
 
     ! electron number information
     real(double), dimension(nspin) :: electrons
-    real(double)                   :: electrons_tot
+    real(double)                   :: electrons_tot, electrons_tot2
 
 !****lat<$
     if (       present(level) ) backtrace_level = level+1
@@ -708,7 +708,6 @@ contains
     end if
 
     call electron_number(electrons)
-    if (inode == ionode) electrons_tot1 = electrons(1) + electrons(nspin)
 
     electrons_tot2 = zero
     do spin = 1, nspin
@@ -722,6 +721,7 @@ contains
        if (iprint_gen >= 1) then
           write (io_lun,23) 
           write (io_lun,24) electrons_tot
+          write (io_lun,25) electrons_tot2
           !write (io_lun,26) one_electron_energy
           !write (io_lun,27) potential_energy
           !write (io_lun,28) kinetic_energy
