@@ -186,7 +186,8 @@ contains
        call md_run(fixed_potential,     vary_mu, total_energy)
        !
     else if ( leqi(runtype, 'pulay') ) then
-       call pulay_relax(fixed_potential,vary_mu, total_energy)
+       call lbfgs(fixed_potential,vary_mu, total_energy)
+       !call pulay_relax(fixed_potential,vary_mu, total_energy)
        !
     else if ( leqi(runtype, 'dummy') ) then
        call dummy_run(fixed_potential,  vary_mu, total_energy)
@@ -368,7 +369,7 @@ contains
        end do
        ! Test
        test_dot = dot(3*ni_in_cell, cg, 1, tot_force, 1)
-       call gsum(test_dot)
+       !call gsum(test_dot)
        if(test_dot<zero) then
           if(inode==ionode) write(io_lun,fmt='(2x,"Reset direction ",f20.12)') test_dot
           gamma = zero
@@ -1807,6 +1808,227 @@ end subroutine write_md_data
 6   format(4x,'Maximum force component: ',f15.8,' ',a2,'/',a2)
 7   format(4x,3f15.8)
   end subroutine pulay_relax
+  !!***
+
+  !!****f* control/lbfgs *
+  !!
+  !!  NAME 
+  !!   lbfgs
+  !!  USAGE
+  !!   
+  !!  PURPOSE
+  !!   Performs L-BFGS relaxation
+  !!  INPUTS
+  !! 
+  !!  USES
+  !! 
+  !!  AUTHOR
+  !!   D.R.Bowler
+  !!  CREATION DATE
+  !!   2019/12/10
+  !!  MODIFICATION HISTORY
+  !!  SOURCE
+  !!
+  subroutine lbfgs(fixed_potential, vary_mu, total_energy)
+
+    ! Module usage
+    use numbers
+    use units
+    use global_module,  only: iprint_MD, ni_in_cell, x_atom_cell,   &
+                              y_atom_cell, z_atom_cell, id_glob,    &
+                              atom_coord, area_general, flag_pulay_simpleStep, &
+                              flag_diagonalisation, nspin, flag_LmatrixReuse, &
+                              flag_SFcoeffReuse
+    use group_module,   only: parts
+    use minimise,       only: get_E_and_F
+    use move_atoms,     only: pulayStep, velocityVerlet,            &
+                              updateIndices, updateIndices3, update_atom_coord,     &
+                              safemin2, update_H, update_pos_and_matrices, backtrack_linemin
+    use move_atoms,     only: updateL, updateLorK, updateSFcoeff
+    use GenComms,       only: gsum, myid, inode, ionode, gcopy, my_barrier
+    use GenBlas,        only: dot
+    use force_module,   only: tot_force
+    use io_module,      only: write_atomic_positions, pdb_template, &
+                              check_stop
+    use memory_module,  only: reg_alloc_mem, reg_dealloc_mem, type_dbl
+    use primary_module, only: bundle
+    use store_matrix,   only: dump_pos_and_matrices
+    use mult_module, ONLY: matK, S_trans, matrix_scale, matL, L_trans
+    use matrix_data, ONLY: Hrange, Lrange
+
+    implicit none
+
+    ! Passed variables
+    ! Shared variables needed by get_E_and_F for now (!)
+    logical :: vary_mu, fixed_potential
+    real(double) :: total_energy
+
+    ! Local variables
+    real(double), allocatable, dimension(:,:)   :: cg, cg_new
+    real(double), allocatable, dimension(:)     :: x_new_pos, y_new_pos, z_new_pos
+    real(double), allocatable, dimension(:)     :: alpha, beta, rho
+    real(double), allocatable, dimension(:,:,:) :: posnStore
+    real(double), allocatable, dimension(:,:,:) :: forceStore
+    real(double) :: energy0, energy1, max, g0, dE, gg, ggold, gamma, &
+                    temp, KE, guess_step, step
+    integer      :: i,j,k,iter,length, jj, lun, stat, npmod, pul_mx, &
+                    mx_pulay, i_first, i_last, &
+                    nfile, symm, iter_low, iter_high, this_iter
+    logical      :: done!, simpleStep
+
+    step = MDtimestep
+    !simpleStep = .false.
+    mx_pulay = 5
+    allocate(posnStore(3,ni_in_cell,mx_pulay), &
+             forceStore(3,ni_in_cell,mx_pulay), STAT=stat)
+    if (stat /= 0) &
+         call cq_abort("Error allocating cg in control: ", ni_in_cell, stat)
+    allocate(cg(3,ni_in_cell), cg_new(3,ni_in_cell), STAT=stat)
+    if (stat /= 0) &
+         call cq_abort("Error allocating cg in control: ", ni_in_cell, stat)
+    allocate(x_new_pos(ni_in_cell), y_new_pos(ni_in_cell), &
+             z_new_pos(ni_in_cell), STAT=stat)
+    if (stat /= 0) &
+         call cq_abort("Error allocating _new_pos in control: ", &
+                       ni_in_cell, stat)
+    call reg_alloc_mem(area_general, 6 * ni_in_cell, type_dbl)
+    allocate(alpha(mx_pulay), beta(mx_pulay), rho(mx_pulay))
+    if (myid == 0) &
+         write (io_lun, fmt='(/4x,"Starting Pulay atomic relaxation"/)')
+    if (myid == 0 .and. iprint_MD > 1) then
+       do i = 1, ni_in_cell
+          write (io_lun, 1) i, x_atom_cell(i), y_atom_cell(i), &
+               z_atom_cell(i)
+       end do
+    end if
+    posnStore = zero
+    forceStore = zero
+    ! Do we need to add MD.MaxCGDispl ?
+    done = .false.
+    length = 3 * ni_in_cell!bundle%n_prim
+    if (myid == 0 .and. iprint_MD > 0) &
+         write (io_lun, 2) MDn_steps, MDcgtol
+    energy0 = total_energy
+    energy1 = zero
+    dE = zero
+    ! Find energy and forces
+    call get_E_and_F(fixed_potential, vary_mu, energy0, .true., &
+                     .false.)
+    call dump_pos_and_matrices
+    iter = 0
+    ggold = zero
+    energy1 = energy0
+    ! Store positions and forces on entry (primary set only)
+    !do i=1,ni_in_cell
+       !jj = id_glob(i)
+       !cg_new(:,i) = tot_force(:,jj)
+    !end do
+    cg_new = tot_force
+    do while (.not. done)
+       ! Book-keeping
+       iter = iter + 1
+       npmod = mod(iter, mx_pulay)
+       if(npmod==0) npmod = mx_pulay
+       do i=1,ni_in_cell
+          jj = id_glob(i)
+          posnStore (1,jj,npmod) = x_atom_cell(i)!i)
+          posnStore (2,jj,npmod) = y_atom_cell(i)!i)
+          posnStore (3,jj,npmod) = z_atom_cell(i)!i)
+          forceStore(:,jj,npmod) = tot_force(:,jj)
+          x_new_pos(i) = x_atom_cell(i)
+          y_new_pos(i) = y_atom_cell(i)
+          z_new_pos(i) = z_atom_cell(i)
+          cg(:,i) = cg_new(:,jj)
+       end do
+       ! Set up limits for sums
+       if(iter>mx_pulay) then
+          iter_low = iter-mx_pulay
+       else
+          iter_low = 1
+       end if
+       if (myid == 0 .and. iprint_MD > 2) &
+            write(io_lun,fmt='(2x,"L-BFGS iteration ",i4)') iter
+       ! Line search
+       call backtrack_linemin(x_new_pos, y_new_pos, z_new_pos, cg, energy0, &
+            energy1, fixed_potential, vary_mu, energy1)
+       ! Update stored position difference and force difference
+       do i=1,ni_in_cell
+          jj = id_glob(i)
+          posnStore (1,jj,npmod) = x_atom_cell(i) - posnStore (1,jj,npmod)
+          posnStore (2,jj,npmod) = y_atom_cell(i) - posnStore (2,jj,npmod)
+          posnStore (3,jj,npmod) = z_atom_cell(i) - posnStore (3,jj,npmod)
+          forceStore(:,jj,npmod) = tot_force(:,jj) - forceStore(:,jj,1)
+          ! New search direction
+          cg_new = tot_force
+       end do
+       ! Build q
+       do i=iter, iter_low, -1
+          ! Indexing
+          this_iter = mod(i,mx_pulay)
+          if(this_iter==0) this_iter = mx_pulay
+          ! parameters
+          rho(this_iter) = one/dot(length,forceStore(:,:,this_iter),1,posnStore(:,:,this_iter),1)
+          alpha(this_iter) = rho(this_iter)*dot(length,posnStore(:,:,this_iter),1,cg_new,1)
+          cg_new = cg_new - alpha(this_iter)*forceStore(:,:,this_iter)
+       end do
+       ! Apply preconditioning in future
+       ! Build z
+       do i=iter_low, iter
+          ! Indexing
+          this_iter = mod(i,mx_pulay)
+          if(this_iter==0) this_iter = mx_pulay
+          ! Build
+          beta(this_iter) = rho(this_iter)*dot(length,forceStore(:,:,this_iter),1,cg_new,1)
+          cg_new = cg_new + (alpha(this_iter) - beta(this_iter))*posnStore(:,:,this_iter)
+       end do
+       ! Analyse forces
+       g0 = dot(length, tot_force, 1, tot_force, 1)
+       max = zero
+       do i = 1, ni_in_cell
+          do k = 1, 3
+             if (abs(tot_force(k,i)) > max) max = abs(tot_force(k,i))
+          end do
+       end do
+       if (myid == 0) &
+            write (io_lun, 5) for_conv * sqrt(g0/real(ni_in_cell,double)), & !) / ni_in_cell, &
+                              en_units(energy_units), d_units(dist_units)
+       if (iter > MDn_steps) then
+          done = .true.
+          if (myid == 0) &
+               write (io_lun, fmt='(4x,"Exceeded number of MD steps: ",i4)') iter
+       end if
+       if (abs(max) < MDcgtol) then
+          done = .true.
+          if (myid == 0) &
+               write (io_lun, fmt='(4x,"Maximum force below threshold: ",f12.5)') max
+       end if
+       if (.not. done) call check_stop(done, iter)
+       if(done) exit
+       if (.not. done) call check_stop(done, iter)
+       dE = energy0 - energy1
+       energy0 = energy1
+    end do
+    ! Output final positions
+    !    if (myid == 0) call write_positions(parts)
+    deallocate(z_new_pos, y_new_pos, x_new_pos, STAT=stat)
+    if (stat /= 0) &
+         call cq_abort("Error deallocating _new_pos in control: ", &
+                       ni_in_cell, stat)
+    deallocate(cg, STAT=stat)
+    if (stat /= 0) &
+         call cq_abort("Error deallocating cg in control: ", &
+                       ni_in_cell, stat)
+    call reg_dealloc_mem(area_general, 6 * ni_in_cell, type_dbl)
+
+1   format(4x,'Atom ',i8,' Position ',3f15.8)
+2   format(4x,'Welcome to pulay_run. Doing ',i4,&
+           ' steps with tolerance of ',f8.4,' ev/A')
+3   format(4x,'*** CG step ',i4,' Gamma: ',f14.8)
+4   format(4x,'Energy change: ',f15.8,' ',a2)
+5   format(4x,'Force Residual: ',f15.10,' ',a2,'/',a2)
+6   format(4x,'Maximum force component: ',f15.8,' ',a2,'/',a2)
+7   format(4x,3f15.8)
+  end subroutine lbfgs
   !!***
 
   !!****f* control/cell_cg_run *

@@ -1284,7 +1284,7 @@ contains
     real(double), save :: kmin = zero, dE = zero
     real(double), dimension(:), allocatable :: store_density
     real(double) :: k3_old, k3_local, kmin_old
-    real(double), save :: alpha = two
+    real(double), save :: alpha = three
     real(double) :: c1, c2
 
     integer :: ig, both, mat
