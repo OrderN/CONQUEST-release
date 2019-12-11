@@ -48,6 +48,8 @@
 !!    Added logical_two_copy
 !!   2008/02/06 08:17 dave
 !!    Changed for output to file not stdout
+!!   2019/12/05 08:17 dave
+!!    Added warning output
 !!  SOURCE
 !!
 module GenComms
@@ -64,6 +66,7 @@ module GenComms
 
   integer, save :: myid, root
   integer, save :: inode, ionode
+  integer, save :: warning_lun = 9 ! Check this with input_module to avoid clashes
 
   integer, parameter :: xn_tag = 106
   integer, parameter :: int_gsum_buf = 10000
@@ -92,6 +95,23 @@ module GenComms
      module procedure cq_abort_int
      module procedure cq_abort_real
      module procedure cq_abort_logi
+  end interface
+!!***
+
+!!****m* GenComms/cq_warn *
+!!  NAME
+!!   cq_warn
+!!  PURPOSE
+!!   Interface to different warning routines
+!!  AUTHOR
+!!   D.R. Bowler
+!!  MODIFCATION
+!!  SOURCE
+!!  
+  interface cq_warn
+     module procedure cq_warn_none
+     module procedure cq_warn_int
+     module procedure cq_warn_real
   end interface
 !!***
 
@@ -269,6 +289,7 @@ contains
     call MPI_COMM_SIZE( MPI_COMM_WORLD, number_of_procs, ierr )
     inode  = myid+1
     ionode = 1
+    if(inode==ionode) open(unit=warning_lun, file='Conquest_warnings')
     call mtmini()
     return
   end subroutine init_comms
@@ -313,7 +334,8 @@ contains
 
     ! Local variables
     integer :: ierr
-    
+
+    if(inode==ionode) close(warning_lun)
     if(myid==0) write(io_lun,fmt='(2x,"Total run time was: ",f20.3," seconds")') mtime()*0.001_double
     call MPI_Barrier(MPI_COMM_WORLD, ierr)
     call MPI_Finalize(ierr)
@@ -374,6 +396,7 @@ contains
 1   format(2x,'Error in process ',i4)
 4   format(2x,a)
     call flush(io_lun)
+    call flush(warning_lun)
     call MPI_abort( MPI_comm_world, 1, ierror )
     stop
 
@@ -446,6 +469,7 @@ contains
 3   format(2x,a,2i10)
 
     call flush(io_lun)
+    call flush(warning_lun)
     call MPI_abort( MPI_comm_world, 1, ierror )
     stop
 
@@ -506,6 +530,7 @@ contains
 3   format(2x,a,2l)
 
     call flush(io_lun)
+    call flush(warning_lun)
     call MPI_abort( MPI_comm_world, 1, ierror )
     stop
 
@@ -579,11 +604,152 @@ contains
 4   format(2x,a)
 
     call flush(io_lun)
+    call flush(warning_lun)
     call MPI_abort( MPI_comm_world, 1, ierror )
     stop
 
     return
   end subroutine cq_abort_real
+!!***
+
+! -----------------------------------------------------------
+! Subroutine cq_warn_none
+! -----------------------------------------------------------
+
+!!****f* GenComms/cq_warn_none *
+!!
+!!  NAME 
+!!   cq_warn_none - writes out a warning message to file
+!!  USAGE
+!!   cq_warn_none(message indicating routine and problem)
+!!  PURPOSE
+!!   Allows writing of warning messages to separate file
+!!   output file  
+!!  INPUTS
+!!   character(len=80) :: message - the abort message
+!!  USES
+!! 
+!!  AUTHOR
+!!   D.R.Bowler
+!!  CREATION DATE
+!!   2019/12/05 08:21 dave
+!!  MODIFICATION HISTORY
+!!  SOURCE
+!!
+  subroutine cq_warn_none(sub_name,message)
+
+    implicit none
+
+    ! Passed variables
+    character(len=*) :: sub_name,message
+
+    ! Local variables
+    integer :: ierror
+    
+    if(inode==ionode) then
+       write(io_lun,fmt='(2x,"WARNING: ",a)')  message
+       write(warning_lun,fmt='(a,": ",a)')  trim(sub_name), message
+    end if
+    return
+  end subroutine cq_warn_none
+!!***
+
+! -----------------------------------------------------------
+! Subroutine cq_warn_int
+! -----------------------------------------------------------
+
+!!****f* GenComms/cq_warn_int *
+!!
+!!  NAME 
+!!   cq_warn_int - writes out a warning message to file
+!!  USAGE
+!!   cq_warn_int(message indicating routine and problem, int1, int2)
+!!  PURPOSE
+!!   Allows writing of warning messages to separate file
+!!   output file  
+!!  INPUTS
+!!   character(len=80) :: message - the abort message
+!!  USES
+!! 
+!!  AUTHOR
+!!   D.R.Bowler
+!!  CREATION DATE
+!!   2019/12/05 08:21 dave
+!!  MODIFICATION HISTORY
+!!  SOURCE
+!!
+  subroutine cq_warn_int(sub_name,message, int1, int2)
+
+    implicit none
+
+    ! Passed variables
+    character(len=*) :: sub_name, message
+    integer           :: int1
+    integer, optional :: int2
+
+    ! Local variables
+    integer :: ierror
+    
+    if(inode==ionode) then
+       if(present(int2)) then
+          write(io_lun,fmt='(2x,"WARNING: ",a,2i8)')  message, int1, int2
+          write(warning_lun,fmt='(a,": ",a,2i8)')  trim(sub_name), message, int1, int2
+       else
+          write(io_lun,fmt='(2x,"WARNING: ",a,i8)')  message, int1
+          write(warning_lun,fmt='(a,": ",a,i8)')  trim(sub_name), message, int1
+       end if
+    end if
+    return
+  end subroutine cq_warn_int
+!!***
+
+! -----------------------------------------------------------
+! Subroutine cq_warn_real
+! -----------------------------------------------------------
+
+!!****f* GenComms/cq_warn_real *
+!!
+!!  NAME 
+!!   cq_warn_real - writes out a warning message to file
+!!  USAGE
+!!   cq_warn_real(message indicating routine and problem, real1, real2)
+!!  PURPOSE
+!!   Allows writing of warning messages to separate file
+!!   output file  
+!!  INPUTS
+!!   character(len=80) :: message - the abort message
+!!  USES
+!! 
+!!  AUTHOR
+!!   D.R.Bowler
+!!  CREATION DATE
+!!   2019/12/05 08:21 dave
+!!  MODIFICATION HISTORY
+!!  SOURCE
+!!
+  subroutine cq_warn_real(sub_name, message, real1, real2)
+
+    implicit none
+
+    ! Passed variables
+    character(len=*) :: sub_name, message
+    real(double)           :: real1
+    real(double), optional :: real2
+
+    ! Local variables
+    integer :: ierror
+    
+    if(inode==ionode) then
+       if(present(real2)) then
+          write(io_lun,fmt='(2x,"WARNING: ",a,2f20.12)')  message, real1, real2
+          write(warning_lun,fmt='(a,": ",a,2f20.12)')  trim(sub_name), message, real1, real2
+       else
+          write(io_lun,fmt='(2x,"WARNING: ",a,f20.12)')  message, real1
+          write(warning_lun,fmt='(a,": ",a,f20.12)')  trim(sub_name), message, real1
+       end if
+    end if
+    return
+  end subroutine cq_warn_real
 !!***
 
 ! -----------------------------------------------------------

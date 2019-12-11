@@ -620,7 +620,6 @@ contains
     dcx = rcellx/real(groups%ngcellx,double)
     dcy = rcelly/real(groups%ngcelly,double)
     dcz = rcellz/real(groups%ngcellz,double)
-    !    write(io_lun,*) 'dx, dcx: ',dx,dy,dz,dcx,dcy,dcz
     ! Convert origin of prim to reals (add eps to prevent ambiguity)
     ro_x = (real(prim%nx_origin-1,double))*dx + eps 
     ro_y = (real(prim%ny_origin-1,double))*dy + eps
@@ -640,7 +639,6 @@ contains
     ro_cx = (real(ncx_o-1,double))*dcx
     ro_cy = (real(ncy_o-1,double))*dcy
     ro_cz = (real(ncz_o-1,double))*dcz
-    !    write(io_lun,*) 'Origin: ',ro_x,ro_y,ro_z,ro_cx,ro_cy,ro_cz
     ! Start by finding the left and right hand corners of the CS
     lhx = dx*(prim%nx_origin-1-prim%nleftx)-set%rcut
     lhy = dy*(prim%ny_origin-1-prim%nlefty)-set%rcut

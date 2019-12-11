@@ -630,7 +630,7 @@ contains
 
       if (inode == ionode) then       
          write (io_lun,fmt='(/4x,"                  ",3a15)') "X","Y","Z"
-         write(io_lun,fmt='(4x,"Stress contributions:")')
+         if(iprint_MD > 1) write(io_lun,fmt='(4x,"Stress contributions:")')
       end if
       call print_stress("K.E. stress:      ", KE_stress, 3)
       call print_stress("S-Pulay stress:   ", SP_stress, 3)
@@ -656,7 +656,7 @@ contains
       scale = -(HaToeV*eVToJ*1e21_double)/(volume*BohrToAng*BohrToAng*BohrToAng)
       ! We need pressure in GPa, and only diagonal terms output
       !call print_stress("Total pressure:   ", stress*scale, 0)
-      if(inode==ionode.AND.iprint_MD>0) &
+      if(inode==ionode.AND.iprint_MD>=0) &
            write(io_lun,'(/4x,a18,3f15.8,a4)') "Total pressure:   ",stress(1,1)*scale,&
            stress(2,2)*scale,stress(3,3)*scale," GPa"
       if (flag_atomic_stress .and. iprint_MD > 2) call check_atomic_stress
@@ -3309,7 +3309,7 @@ contains
     use datatypes
     use numbers
     use species_module,      only: species
-    use GenComms,            only: gsum
+    use GenComms,            only: gsum, cq_warn
     use global_module,       only: rcellx, rcelly, rcellz, id_glob,    &
                                    ni_in_cell, species_glob, dens,     &
                                    area_moveatoms, IPRINT_TIME_THRES3, &
@@ -3350,6 +3350,7 @@ contains
     real(double), dimension(:,:) :: HF_force
 
     ! Local variables
+    character(len=80) :: sub_name = "get_nonSC_correction_force"
     integer        :: i, j, my_block, n, the_species, iatom, spin, spin_2
     integer        :: ix, iy, iz, iblock, ipoint, igrid, stat, dir1, dir2
     integer        :: ipart, jpart, ind_part, ia, ii, icover, ig_atom
@@ -3384,26 +3385,11 @@ contains
 
 
 !****lat<$
-    call start_backtrace(t=backtrace_timer,who='get_nonSC_correction_force',where=7,level=3,echo=.true.)
+    call start_backtrace(t=backtrace_timer,who=sub_name,where=7,level=3,echo=.true.)
 !****lat>$ 
     ! Spin-polarised PBE non-SCF forces not implemented, so exit if necessary
     if ((nspin == 2) .and. flag_is_GGA) then ! Only true for CQ not LibXC
-       if (inode == ionode) then
-          write (io_lun, fmt='(10x,a)') &
-               "*****************************************************"
-          write (io_lun, fmt='(10x,a)') &
-               "**** WARNING!!! WARNING!!! WARNING!!! WARNING!!! ****"
-          write (io_lun, fmt='(10x,a)') &
-               "**** non-SC correction forces are not implemented ***"
-          write (io_lun, fmt='(10x,a)') &
-               "**** for spin polarised version of PBE functionals **"
-          write (io_lun, fmt='(10x,a)') &
-               "**** correction forces will be set to ZERO !!!   ****"
-          write (io_lun, fmt='(10x,a)') &
-               "**** The forces are NOT to be TRUSTED !!!        ****"
-          write (io_lun, fmt='(10x,a)') &
-               "*****************************************************"
-       end if
+       call cq_warn(sub_name, "NonSCF forces not implemented for spin and GGA; these will be set to zero.")
        HF_force = zero
        return
     end if
