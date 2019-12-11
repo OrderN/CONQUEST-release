@@ -977,6 +977,8 @@ contains
 
       use global_module, ONLY: iprint_pseudo
       use input_module, ONLY: leqi
+      use XC, ONLY: functional_lda_pw92, functional_gga_pbe96, functional_gga_pbe96_rev98, &
+           functional_gga_pbe96_r99, functional_gga_pbe96_wc
 
       implicit none
 
@@ -992,7 +994,7 @@ contains
       real(double) :: mass, self_energy
 
       ! For judging P.C.C.
-      character(len=2) :: symbol2, xc
+      character(len=2) :: symbol2, xc_code
       character(len=3) :: rel
       character(len=4) :: pcc
 
@@ -1008,23 +1010,23 @@ contains
             read(unit,'(a)') line
             trim_line = trim(line)
             if (leqi(trim_line(1:24),'<pseudopotential_header>')) then
-               read (unit, '(1x,a2,1x,a2,1x,a3,1x,a4)') symbol2, xc, rel, pcc
+               read (unit, '(1x,a2,1x,a2,1x,a3,1x,a4)') symbol2, xc_code, rel, pcc
                if (leqi(pcc,'pcec')) then
                   ps_info%flag_pcc = .true.
                else !if (pcc .NE. 'pcec') then
                   ps_info%flag_pcc = .false.
                endif
                ! Set XC functional
-               if(leqi(xc,'ca')) then      ! Ceperley-Alder
-                  xc_func = 1              ! ATOM code uses Perdew-Zunger
-               else if(leqi(xc,'pb')) then ! PBE
-                  xc_func = 101
-               else if(leqi(xc,'rv')) then ! RevPBE
-                  xc_func = 102
-               else if(leqi(xc,'rp')) then ! RPBE
-                  xc_func = 103
-               else if(leqi(xc,'wc')) then ! Wu-Cohen
-                  xc_func = 104
+               if(leqi(xc_code,'ca')) then      ! LDA; ATOM code uses PZ81 but use PW92
+                  xc_func = functional_lda_pw92
+               else if(leqi(xc_code,'pb')) then ! PBE
+                  xc_func = functional_gga_pbe96
+               else if(leqi(xc_code,'rv')) then ! RevPBE
+                  xc_func = functional_gga_pbe96_rev98
+               else if(leqi(xc_code,'rp')) then ! RPBE
+                  xc_func = functional_gga_pbe96_r99
+               else if(leqi(xc_code,'wc')) then ! Wu-Cohen
+                  xc_func = functional_gga_pbe96_wc
                end if
                read(unit,'(a)') line
                trim_line = trim(line)

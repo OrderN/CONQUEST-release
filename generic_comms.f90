@@ -696,7 +696,7 @@ contains
           write(warning_lun,fmt='(a,": ",a,2i8)')  trim(sub_name), message, int1, int2
        else
           write(io_lun,fmt='(2x,"WARNING: ",a,i8)')  message, int1
-          write(warning_lun,fmt='(a,": ",i8)')  trim(sub_name), message, int1
+          write(warning_lun,fmt='(a,": ",a,i8)')  trim(sub_name), message, int1
        end if
     end if
     return
@@ -742,10 +742,10 @@ contains
     if(inode==ionode) then
        if(present(real2)) then
           write(io_lun,fmt='(2x,"WARNING: ",a,2f20.12)')  message, real1, real2
-          write(warning_lun,fmt='(a,": ",2f20.12)')  trim(sub_name), message, real1, real2
+          write(warning_lun,fmt='(a,": ",a,2f20.12)')  trim(sub_name), message, real1, real2
        else
           write(io_lun,fmt='(2x,"WARNING: ",a,f20.12)')  message, real1
-          write(warning_lun,fmt='(a,": ",f20.12)')  trim(sub_name), message, real1
+          write(warning_lun,fmt='(a,": ",a,f20.12)')  trim(sub_name), message, real1
        end if
     end if
     return
