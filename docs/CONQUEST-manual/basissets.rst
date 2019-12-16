@@ -52,7 +52,7 @@ The multi-site support functions are constructed by taking linear combinations o
 The number of the support functions is required to be specified by ``Atom.NumberOfSupports``, which should be equal or larger than the number of SZ for the atoms. Setting ``Multisite.nonminimal T`` is required when ``Atom.NumberOfSupports`` is larger than SZ.
 
 There are two methods to determine the linear-combination coefficients, 
-the *local filter diagonalization (LFD)* method ``Multisite.LFD`` and the *numerical optimization* ``minE.VaryBasis``.
+the *local filter diagonalization (LFD)* method ``Multisite.LFD`` and the *numerical optimisation* ``minE.VaryBasis``.
 
 LFD
 +++++
@@ -127,7 +127,7 @@ The coefficients can be updated by providing new electronic density by the SCF c
 Numerical optimisation
 ++++++++++++++++++++++++
 
-The linear-combination coefficients are optimized by minimizing the DFT energy with respect to the coefficients. The threshold and the maximum iteration number of the numerical optimisation are specified by ``minE.EnergyTolerance`` and ``minE.SupportVariations``. The optimization is based on the conjugate gradient (CG) method, and the initial CG step size can be specified by ``minE.InitStep_paomin`` (default is 5.0).
+The linear-combination coefficients are optimised by minimizing the DFT energy with respect to the coefficients. The threshold and the maximum iteration number of the numerical optimisation are specified by ``minE.EnergyTolerance`` and ``minE.SupportVariations``. The optimisation is based on the conjugate gradient (CG) method, and the initial CG step size can be specified by ``minE.InitStep_paomin`` (default is 5.0).
 
 ::
 
@@ -135,7 +135,7 @@ The linear-combination coefficients are optimized by minimizing the DFT energy w
    minE.EnergyTolerance 1.0e-6
    minE.SupportVariations 30
 
-The numerical optimisation provides more accurate coefficients than the LFD method but usually more time consuming. Therefore, it is recommended to start from good initial values, for example, the coefficients calculated by LFD. When both ``Multisite.LFD`` (with ``Multisite.LFD.Minimise``) and ``minE.VaryBasis`` are turn on, first the coefficients are calculated by the LFD method (with the LFD repeating procedure) and then optimized numerically. 
+The numerical optimisation provides more accurate coefficients than the LFD method but usually more time consuming. Therefore, it is recommended to start from good initial values, for example, the coefficients calculated by LFD. When both ``Multisite.LFD`` (with ``Multisite.LFD.Minimise``) and ``minE.VaryBasis`` are turn on, first the coefficients are calculated by the LFD method (with the LFD repeating procedure) and then optimised numerically. 
 
 ::
 
@@ -144,7 +144,7 @@ The numerical optimisation provides more accurate coefficients than the LFD meth
    Multisite.LFD.Minimise T
    minE.VaryBasis T
 
-If the users already have some good initial coefficient values as the ``SFcoeffmatrix2`` files, reading the files and performing only the numerical optimization is also a good choice.
+If the users already have some good initial coefficient values as the ``SFcoeffmatrix2`` files, reading the files and performing only the numerical optimisation is also a good choice.
 
 ::
 
@@ -165,7 +165,7 @@ On-site support functions
 On-site support functions are the linear combinations of the PAOs only on the target atom.
 In this case, ``Atom.MultisiteRange`` should be small enough not to include any neighboring atoms.
 
-The coefficient can be determined by the LFD method or the numerical optimization above. Since the range of on-site support function is small, it is strongly recommended to perform the numerical optimization subsequently to the LFD calculation to guarantee accuracy. ``Atom.LFDRange`` can contain neighbor atoms to improve the accuracy.
+The coefficient can be determined by the LFD method or the numerical optimisation above. Since the range of on-site support function is small, it is strongly recommended to perform the numerical optimisation subsequently to the LFD calculation to guarantee accuracy. ``Atom.LFDRange`` can contain neighbor atoms to improve the accuracy.
 
 The minimum size of the on-site support functions is SZP, so ``Multisite.nonminimal`` is required to be set to T.
 
@@ -229,7 +229,7 @@ you have to set the following keyword.
 
 	minE.VaryBasis              T  
 
-You may need to reduce the tolerance and/or increase the number of iterations, to optimize the support functions more.
+You may need to reduce the tolerance and/or increase the number of iterations, to optimise the support functions more.
 ::
 
 	minE.EnergyTolerance             0.10E-07
