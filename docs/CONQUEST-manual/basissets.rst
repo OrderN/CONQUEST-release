@@ -23,7 +23,7 @@ For the first case, users don't need to specify any input parameters related to 
 
 The latter three cases, small number of support functions are constructed by taking linear combinations of the basis functions.
 In this case, the number of the support functions is required to be specified by ``Atom.NumberOfSupports``.
-The linear-combination coefficients are calculated as exlpained below, or read from the ``SFcoeffmatrix2`` files by setting ``Basis.LoadCoeffs T``.
+The linear-combination coefficients are calculated as exlpained below, or read from the ``SFcoeffmatrix2`` files for PAOs or from the ``blip_coeffs`` files for blips by setting ``Basis.LoadCoeffs T``. 
 
 .. _basis_paos:
 
@@ -65,41 +65,93 @@ The coefficients :math:`C` are determined by projecting subspace occupied molecu
 The LFD subspace region is determined for each atom with the range ``Atom.LFDRange``, which is required to be equal or larger than ``Atom.MultisiteRange``.
 (Currently the largest ``Atom.MultisiteRange`` and ``Atom.LFDRange`` among the atoms are used for every atom.)
 
+::
+
+   Basis.BasisSet PAOs
+   Basis.MultisiteSF T
+   Multisite.LFD T
+
+   # example of Si
+   %block Si
+   Atom.NumberOfSupports 4
+   Atom.MultisiteRange 8.0
+   Atom.LFDRange 8.0
+   %endblock
+
 
 The Fermi function :math:`f` with :math:`\varepsilon_{sub}` ``Multisite.LFD.ChemP`` and :math:`kT` ``Multisite.LFD.kT`` in the equation removes the effects of the subspace molecular orbitals in higher energy region.
 In defult, :math:`\varepsilon_{sub}` is automatically set to the mean value of the subspace HOMO and LUMO energies for each subspace. If users want to modify this, set ``Multisite.LFD.UseChemPsub F`` and the :math:`\varepsilon_{sub}` value with ``Multisite.LFD.ChemP``.
 
 For the LFD trial functions :math:`t`, when ``Atom.NumberOfSupports`` is equal to the number of SZ or single-zeta plus polarization (SZP), the PAOs which have the widest radial functions for each spherical harmonic function are chosen as the trial vectors automatically in default.
 When ``Atom.NumberOfSupports`` is equal to the number of SZP and ``Multisite.nonminimal.offset`` is set, the other PAOs will have the weight in the trial vectors with the value of ``Multisite.nonminimal.offset``.
-The users can also provide the trial vectors from the input file as follows:
-LFDTrialVector (block)
+The users can also provide the trial vectors from the input file using the ``LFDTrialVector`` block
 
-The coefficients can be updated by providing new electronic density by the SCF calculation. Therefore, two-step procedure, the SCF calculations and the subsequent update of the coefficients, can be repeated by setting ``Multisite.LFD.Minimise`` until the energy and density converge with the threshold of the total DFT energy Multisite.LFD.Min.ThreshE or the density ``Multisite.LFD.Min.ThreshD``. Since the repeating procedure is not variational, the DFT energy might be increased, especially is not large enough. Therefore, the repeating procedure is treated to be converged when the energy increase is smaller than ``Multisite.LFD.Min.ThreshEnergyRise`` (in default, ten times of ``Multisite.LFD.Min.ThreshE``).
+::
+
+   # Trial vectors of Au (element 1) and O (element 2) atoms.
+   # Au: 15 PAOs (DZP) -> 6 support functions, O: 13 PAOs (DZP) -> 4 support functions.
+   %block LFDTrialVector
+   # species sf npao   s   s   x   y   z  d1  d2  d3  d4  d5  d1  d2  d3  d4  d5 for Au
+           1  1   15 0.0 1.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0
+           1  2   15 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 1.0 0.0 0.0 0.0 0.0
+           1  3   15 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 1.0 0.0 0.0 0.0
+           1  4   15 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 1.0 0.0 0.0
+           1  5   15 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 1.0 0.0
+           1  6   15 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 1.0
+           2  1   13 0.0 1.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0
+           2  2   13 0.0 0.0 0.0 0.0 0.0 1.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0
+           2  3   13 0.0 0.0 0.0 0.0 0.0 0.0 1.0 0.0 0.0 0.0 0.0 0.0 0.0
+           2  4   13 0.0 0.0 0.0 0.0 0.0 0.0 0.0 1.0 0.0 0.0 0.0 0.0 0.0
+   # species sf npao   s   s   x   y   z   x   y   z  d1  d2  d3  d4  d5 for O
+   %endblock LFDTrialVector
+
+The first, second and third columns correspond to the indices of species, support functions for each species, and the number of PAOs for each species. The other columns provide the initial values of the trial vectors. For example, in the first line in the above example, the second *s* PAO is chosen as the trial vector for the first support function of Au.
+
+
+We can use the smearing function to avoid the sudden change of the coefficients at ``Atom.MultisiteRange``. The smearing can be turn on by ``Multisite.Smear``. We can set the smearing-function type ``Multisite.Smear.FunctionType`` (default=1:Fermi-Dirac, 2=Error function), the center position of the function ``Multisite.Smear.Center`` (default is equal to the range of the support functions), offset of the center position ``Multisite.Smear.Shift`` and the width of the Fermi-Dirac function ``Multisite.Smear.Width`` (default=0.1).
+
+
+The coefficients can be updated by providing new electronic density by the SCF calculation. Therefore, two-step procedure, the SCF calculations and the subsequent update of the coefficients, can be repeated by setting ``Multisite.LFD.Minimise`` until the energy and density converge with the threshold of the total DFT energy Multisite.LFD.Min.ThreshE or the density ``Multisite.LFD.Min.ThreshD``. Since the repeating procedure is not variational, the DFT energy might be increased, especially ``Atom.MultisiteRange`` is not large enough. Therefore, the repeating procedure is treated to be converged when the energy increase is smaller than ``Multisite.LFD.Min.ThreshEnergyRise`` (in default, ten times of ``Multisite.LFD.Min.ThreshE``).
 ``Multisite.LFD.Min.MaxIteration`` is the maximum iteration number of the repeating procedure.
 
 ::
 
-   # example of Si
-   %block Si
-   Atom.NumberOfSupports                        4
-   Atom.SupportFunctionRange                  6.0 **(no longer needed?)**
-   Atom.MultisiteRange 8.0
-   Atom.LFDRange 8.0
-   %endblock
+   Multisite.LFD T
+   Multisite.LFD.Minimise T
+   Multisite.LFD.Min.ThreshE 1.0e-6
+   Multisite.LFD.Min.ThreshD 1.0e-6
+   Multisite.LFD.Min.MaxIteration 150
+   Multisite.LFD.Min.ThreshEnergyRise 1.0
 
-Numerical optimization
+
+Numerical optimisation
 ++++++++++++++++++++++++
 
-The linear-combination coefficients are optimized by minimizing the DFT energy with respect to the coefficients. This method provides more accurate coefficients than the LFD method but usually more time consuming. Therefore, it is recommended to start from good initial values. When both ``Multisite.LFD`` (with ``Multisite.LFD.Minimise``) and ``minE.VaryBasis`` are turn on, first the coefficients are calculated by the LFD method (with the LFD repeating procedure) and then optimized numerically. 
+The linear-combination coefficients are optimized by minimizing the DFT energy with respect to the coefficients. The threshold and the maximum iteration number of the numerical optimisation are specified by ``minE.EnergyTolerance`` and ``minE.SupportVariations``. The optimization is based on the conjugate gradient (CG) method, and the initial CG step size can be specified by ``minE.InitStep_paomin`` (default is 5.0).
+
+::
+
+   minE.VaryBasis T
+   minE.EnergyTolerance 1.0e-6
+   minE.SupportVariations 30
+
+The numerical optimisation provides more accurate coefficients than the LFD method but usually more time consuming. Therefore, it is recommended to start from good initial values, for example, the coefficients calculated by LFD. When both ``Multisite.LFD`` (with ``Multisite.LFD.Minimise``) and ``minE.VaryBasis`` are turn on, first the coefficients are calculated by the LFD method (with the LFD repeating procedure) and then optimized numerically. 
+
+::
+
+   Basis.MultisiteSF T
+   Multisite.LFD T
+   Multisite.LFD.Minimise T
+   minE.VaryBasis T
+
 If the users already have some good initial coefficient values as the ``SFcoeffmatrix2`` files, reading the files and performing only the numerical optimization is also a good choice.
 
 ::
 
-   Multisite.LFD.ReadTVEC T
+   Basis.LoadCoeffs T
+   Basis.MultisiteSF T
    Multisite.LFD F
    minE.VaryBasis T
-
-The threshold and the maximum iteration number of the numerical optimization are specified by ``minE.EnergyTolerance`` and ``minE.SupportVariations``. The optimization is based on the conjugate gradient (CG) method, and the initial CG step size can be specified by ``minE.InitStep_paomin`` (default is 5.0).
 
 
 
@@ -109,6 +161,32 @@ The threshold and the maximum iteration number of the numerical optimization are
 
 On-site support functions
 -------------------------
+
+On-site support functions are the linear combinations of the PAOs only on the target atom.
+In this case, ``Atom.MultisiteRange`` should be small enough not to include any neighboring atoms.
+
+The coefficient can be determined by the LFD method or the numerical optimization above. Since the range of on-site support function is small, it is strongly recommended to perform the numerical optimization subsequently to the LFD calculation to guarantee accuracy. ``Atom.LFDRange`` can contain neighbor atoms to improve the accuracy.
+
+The minimum size of the on-site support functions is SZP, so ``Multisite.nonminimal`` is required to be set to T.
+
+Here, the minimum size of on-site support function is larger than that of multi-site support functions (SZ size), but the order-N calculation is more stable with on-site support functions than with multi-site support functions.
+
+::
+
+   Basis.BasisSet PAOs
+   Basis.MultisiteSF T
+   Multisite.LFD T
+   Multisite.nonminimal T
+
+   minE.VaryBasis T
+
+   # example of Si
+   %block Si
+   Atom.NumberOfSupports 9
+   Atom.MultisiteRange 0.1
+   Atom.LFDRange 8.0
+   %endblock
+
 
 .. _basis_blips:
 
@@ -192,7 +270,7 @@ Similarly, for monomer B,
 Subtracting the BSSE part of A and B units from the typical interaction energy mentioned above, the counterpoise corrected 
 interaction energy without BSSE :math:`(E_{AB}^{CP})` will be:
 
-:math:`E_{AB}^{CP} = E_{AB}(AB) - E_A(AB) - E_B(AB).`
+:math:`E_{AB}^{CP} = E_{AB}^{int} - E_{A}^{BSSE} - E_{B}^{BSSE} = E_{AB}(AB) - E_A(AB) - E_B(AB).`
 
 
  
