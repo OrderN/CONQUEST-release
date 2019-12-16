@@ -259,7 +259,7 @@ contains
                              IPRINT_TIME_THRES1
     use group_module,  only: parts
     use minimise,      only: get_E_and_F
-    use move_atoms,    only: safemin2, backtrack_linemin
+    use move_atoms,    only: safemin2, adapt_backtrack_linemin
     use GenComms,      only: gsum, myid, inode, ionode
     use GenBlas,       only: dot
     use force_module,  only: tot_force
@@ -358,17 +358,20 @@ contains
             write (io_lun, fmt='(/4x,"Atomic relaxation CG iteration: ",i5)') iter
        ggold = gg
        ! Build search direction
+       test_dot = zero
        do j = 1, ni_in_cell
           jj = id_glob(j)
           cg(1,j) = gamma*cg(1,j) + tot_force(1,jj)
           cg(2,j) = gamma*cg(2,j) + tot_force(2,jj)
           cg(3,j) = gamma*cg(3,j) + tot_force(3,jj)
+          test_dot = test_dot + cg(1,j)*tot_force(1,jj) + cg(2,j)*tot_force(2,jj) &
+               + cg(3,j)*tot_force(3,jj)
           x_new_pos(j) = x_atom_cell(j)
           y_new_pos(j) = y_atom_cell(j)
           z_new_pos(j) = z_atom_cell(j)
        end do
        ! Test
-       test_dot = dot(3*ni_in_cell, cg, 1, tot_force, 1)
+       !test_dot = dot(3*ni_in_cell, cg, 1, tot_force, 1)
        !call gsum(test_dot)
        if(test_dot<zero) then
           if(inode==ionode) write(io_lun,fmt='(2x,"Reset direction ",f20.12)') test_dot
@@ -383,7 +386,7 @@ contains
        old_force = tot_force
        ! Minimise in this direction
        !call safemin2(x_new_pos, y_new_pos, z_new_pos, cg, energy0, &
-         call backtrack_linemin(x_new_pos, y_new_pos, z_new_pos, cg, energy0, &
+         call adapt_backtrack_linemin(x_new_pos, y_new_pos, z_new_pos, cg, energy0, &
                       energy1, fixed_potential, vary_mu, energy1)
        ! Output positions
        if (myid == 0 .and. iprint_gen > 1) then
@@ -1855,6 +1858,7 @@ end subroutine write_md_data
     use store_matrix,   only: dump_pos_and_matrices
     use mult_module, ONLY: matK, S_trans, matrix_scale, matL, L_trans
     use matrix_data, ONLY: Hrange, Lrange
+    use dimens,        only: r_super_x, r_super_y, r_super_z
 
     implicit none
 
@@ -1870,7 +1874,7 @@ end subroutine write_md_data
     real(double), allocatable, dimension(:,:,:) :: posnStore
     real(double), allocatable, dimension(:,:,:) :: forceStore
     real(double) :: energy0, energy1, max, g0, dE, gg, ggold, gamma, &
-                    temp, KE, guess_step, step
+                    temp, KE, guess_step, step, test_dot
     integer      :: i,j,k,iter,length, jj, lun, stat, npmod, pul_mx, &
                     mx_pulay, i_first, i_last, &
                     nfile, symm, iter_low, iter_high, this_iter
@@ -1923,8 +1927,15 @@ end subroutine write_md_data
        !jj = id_glob(i)
        !cg_new(:,i) = tot_force(:,jj)
     !end do
-    cg_new = tot_force
+    cg_new = -tot_force ! The L-BFGS is in terms of grad E
     do while (.not. done)
+       test_dot = dot(length, cg_new, 1, tot_force, 1)
+       if(inode==ionode.AND.iprint_MD>1) write(io_lun,fmt='(2x,"grad f dot p ",f15.7)') test_dot
+       if(test_dot>zero) then
+          iter = 0
+          if(inode==ionode.AND.iprint_MD>1) write(io_lun,fmt='(2x,"Resetting history")')
+          cg_new = -tot_force
+       end if
        ! Book-keeping
        iter = iter + 1
        npmod = mod(iter, mx_pulay)
@@ -1934,11 +1945,11 @@ end subroutine write_md_data
           posnStore (1,jj,npmod) = x_atom_cell(i)!i)
           posnStore (2,jj,npmod) = y_atom_cell(i)!i)
           posnStore (3,jj,npmod) = z_atom_cell(i)!i)
-          forceStore(:,jj,npmod) = tot_force(:,jj)
+          forceStore(:,jj,npmod) = -tot_force(:,jj)
           x_new_pos(i) = x_atom_cell(i)
           y_new_pos(i) = y_atom_cell(i)
           z_new_pos(i) = z_atom_cell(i)
-          cg(:,i) = cg_new(:,jj)
+          cg(:,i) = -cg_new(:,jj) ! Search downhill
        end do
        ! Set up limits for sums
        if(iter>mx_pulay) then
@@ -1955,11 +1966,20 @@ end subroutine write_md_data
        do i=1,ni_in_cell
           jj = id_glob(i)
           posnStore (1,jj,npmod) = x_atom_cell(i) - posnStore (1,jj,npmod)
+          if(abs(posnStore(1,jj,npmod)/r_super_x)>0.7_double) posnStore(1,jj,npmod) &
+               = posnStore(1,jj,npmod) &
+               - nint(posnStore(1,jj,npmod)/r_super_x)*r_super_x
           posnStore (2,jj,npmod) = y_atom_cell(i) - posnStore (2,jj,npmod)
+          if(abs(posnStore(2,jj,npmod)/r_super_y)>0.7_double) posnStore(2,jj,npmod) &
+               = posnStore(2,jj,npmod) &
+               - nint(posnStore(2,jj,npmod)/r_super_y)*r_super_y
           posnStore (3,jj,npmod) = z_atom_cell(i) - posnStore (3,jj,npmod)
-          forceStore(:,jj,npmod) = tot_force(:,jj) - forceStore(:,jj,1)
+          if(abs(posnStore(3,jj,npmod)/r_super_z)>0.7_double) posnStore(3,jj,npmod) &
+               = posnStore(3,jj,npmod) &
+               - nint(posnStore(3,jj,npmod)/r_super_z)*r_super_z
+          forceStore(:,jj,npmod) = -tot_force(:,jj) - forceStore(:,jj,npmod)
           ! New search direction
-          cg_new = tot_force
+          cg_new = -tot_force ! The L-BFGS is in terms of grad E
        end do
        ! Build q
        do i=iter, iter_low, -1
@@ -1982,6 +2002,8 @@ end subroutine write_md_data
           cg_new = cg_new + (alpha(this_iter) - beta(this_iter))*posnStore(:,:,this_iter)
        end do
        ! Analyse forces
+       g0 = dot(length, cg_new, 1, tot_force, 1)
+       write(io_lun,*) 'z dot -grad E is ',g0
        g0 = dot(length, tot_force, 1, tot_force, 1)
        max = zero
        do i = 1, ni_in_cell
