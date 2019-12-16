@@ -1471,6 +1471,11 @@ contains
 !!$
        ! Find out what type of run we're doing
        runtype             = fdf_string(20,'AtomMove.TypeOfRun',       'static')
+       ! Check on run type
+       if((.NOT.leqi(runtype,'static')).AND.(.NOT.leqi(runtype,'cg')) &
+            .AND.(.NOT.leqi(runtype,'md')).AND.(.NOT.leqi(runtype,'pulay')) &
+            .AND.(.NOT.leqi(runtype,'lbfgs'))) &
+            call cq_abort("Unrecognised runtype: "//runtype)
        flag_buffer_old       = fdf_boolean('AtomMove.OldBuffer',        .false.)
        AtomMove_buffer       = fdf_double ('AtomMove.BufferSize',    4.0_double)
        flag_pulay_simpleStep = fdf_boolean('AtomMove.PulaySimpleStep',  .false.)

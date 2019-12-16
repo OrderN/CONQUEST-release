@@ -1227,7 +1227,7 @@ contains
   !! MODIFICATION HISTORY
   !! SOURCE
   !!
-  subroutine backtrack_linemin(start_x, start_y, start_z, direction, energy_in, &
+  subroutine backtrack_linemin(direction, energy_in, &
                       energy_out, fixed_potential, vary_mu, total_energy)
 
     ! Module usage
@@ -1269,7 +1269,6 @@ contains
     ! Passed variables
     real(double) :: energy_in, energy_out
     real(double), dimension(3,ni_in_cell) :: direction
-    real(double), dimension(ni_in_cell)   :: start_x, start_y, start_z
     ! Shared variables needed by get_E_and_F for now (!)
     logical           :: vary_mu, fixed_potential
     real(double)      :: total_energy
@@ -1284,7 +1283,8 @@ contains
     real(double), save :: kmin = zero, dE = zero
     real(double), dimension(:), allocatable :: store_density
     real(double) :: k3_old, k3_local, kmin_old
-    real(double) :: alpha = one
+    real(double), save :: alpha = one
+    real(double), save :: scale = two
     real(double) :: c1, c2
 
     integer :: ig, both, mat
@@ -1301,7 +1301,7 @@ contains
 
     c1 = 0.1_double
     c2 = 0.9_double
-    ! grad f dot p
+    ! grad f dot p  Note that the ordering of direction and tot_force is different
     grad_f_dot_p = zero
     do i=1, ni_in_cell
        j = id_glob(i)
@@ -1309,23 +1309,13 @@ contains
        grad_f_dot_p = grad_f_dot_p - direction(2,i)*tot_force(2,j)
        grad_f_dot_p = grad_f_dot_p - direction(3,i)*tot_force(3,j)
     end do
-    !grad_f_dot_p = -dot(3*ni_in_cell,direction,1,tot_force,1)
-    if(inode==ionode) write(io_lun, fmt='(2x,"Starting backtrack_linemin, grad_f.p is ",f20.12)') grad_f_dot_p
-       if (inode == ionode .and. iprint_MD > 2) then
-          do i=1,ni_in_cell
-             write (io_lun,fmt='(2x,"Pos: ",i3,6f8.3)') i, &
-                  x_atom_cell(i), y_atom_cell(i), z_atom_cell(i),&
-                  direction(1,i), direction(2,i), direction(3,i)
-          end do
-       end if
+    if(inode==ionode.AND.iprint_MD>1) &
+         write(io_lun, fmt='(2x,"Starting backtrack_linemin, grad_f.p is ",f20.12)') grad_f_dot_p
     done = .false.
-    do while (.not. done) !e3<=e2)
+    do while (.not. done)
        iter = iter+1
-       ! Take a step along sesarch direction
+       ! Take a step along search direction
        do i = 1, ni_in_cell
-          !x_atom_cell(i) = start_x(i) + alpha * direction(1,i)
-          !y_atom_cell(i) = start_y(i) + alpha * direction(2,i)
-          !z_atom_cell(i) = start_z(i) + alpha * direction(3,i)
           x_atom_cell(i) = x_atom_cell(i) + (alpha - old_alpha) * direction(1,i)
           y_atom_cell(i) = y_atom_cell(i) + (alpha - old_alpha) * direction(2,i)
           z_atom_cell(i) = z_atom_cell(i) + (alpha - old_alpha) * direction(3,i)
@@ -1344,8 +1334,6 @@ contains
           end do
        end if
        call update_H(fixed_potential)
-       !Update start_x,start_y & start_z
-       call update_start_xyz(start_x,start_y,start_z)
        ! Write out atomic positions
        if (iprint_MD > 2) then
           call write_atomic_positions("UpdatedAtoms_tmp.dat", &
@@ -1384,11 +1372,15 @@ contains
     ! 2018.Jan19  TM
     energy_out = e3
     call dump_pos_and_matrices
-
+    ! Test increase of alpha
+    if(iter==1) then
+       alpha = scale*alpha
+       scale = scale*0.8_double
+    end if
+    ! Now find forces
     call force(fixed_potential, vary_mu, n_L_iterations, &
          L_tolerance, sc_tolerance, energy_out, .true.)
-    !call get_E_and_F(fixed_potential, vary_mu, energy_out, .true., &
-    !     .true.)
+    ! Evaluate new grad f dot p
     grad_fp_dot_p = zero
     do i=1, ni_in_cell
        j = id_glob(i)
@@ -1396,7 +1388,6 @@ contains
        grad_fp_dot_p = grad_f_dot_p - direction(2,i)*tot_force(2,j)
        grad_fp_dot_p = grad_f_dot_p - direction(3,i)*tot_force(3,j)
     end do
-    !grad_fp_dot_p = -dot(3*ni_in_cell,direction,1,tot_force,1)
     if(inode==ionode) write(io_lun,fmt='(2x,"Second Wolfe condition: ",e11.4," < ",e11.4)') &
          abs(grad_fp_dot_p), c2*abs(grad_f_dot_p)
 
@@ -1513,13 +1504,6 @@ contains
     end do
     !grad_f_dot_p = -dot(3*ni_in_cell,direction,1,tot_force,1)
     if(inode==ionode) write(io_lun, fmt='(2x,"Starting backtrack_linemin, grad_f.p is ",f20.12)') grad_f_dot_p
-       !if (inode == ionode .and. iprint_MD > 2) then
-       !   do i=1,ni_in_cell
-       !      write (io_lun,fmt='(2x,"Pos: ",i3,6f8.3)') i, &
-       !           x_atom_cell(i), y_atom_cell(i), z_atom_cell(i),&
-       !           direction(1,i), direction(2,i), direction(3,i)
-       !   end do
-       !end if
     ! Increase alpha until we *fail* to meet Armijo condition
     done = .false.
     e2 = e0
@@ -1593,9 +1577,6 @@ contains
        iter = iter+1
        ! Take a step along sesarch direction
        do i = 1, ni_in_cell
-          !x_atom_cell(i) = start_x(i) + alpha * direction(1,i)
-          !y_atom_cell(i) = start_y(i) + alpha * direction(2,i)
-          !z_atom_cell(i) = start_z(i) + alpha * direction(3,i)
           x_atom_cell(i) = x_atom_cell(i) + (alpha - old_alpha) * direction(1,i)
           y_atom_cell(i) = y_atom_cell(i) + (alpha - old_alpha) * direction(2,i)
           z_atom_cell(i) = z_atom_cell(i) + (alpha - old_alpha) * direction(3,i)

@@ -186,8 +186,10 @@ contains
        call md_run(fixed_potential,     vary_mu, total_energy)
        !
     else if ( leqi(runtype, 'pulay') ) then
+       call pulay_relax(fixed_potential,vary_mu, total_energy)
+       !
+    else if ( leqi(runtype, 'lbfgs') ) then
        call lbfgs(fixed_potential,vary_mu, total_energy)
-       !call pulay_relax(fixed_potential,vary_mu, total_energy)
        !
     else if ( leqi(runtype, 'dummy') ) then
        call dummy_run(fixed_potential,  vary_mu, total_energy)
@@ -259,7 +261,7 @@ contains
                              IPRINT_TIME_THRES1
     use group_module,  only: parts
     use minimise,      only: get_E_and_F
-    use move_atoms,    only: safemin2, adapt_backtrack_linemin
+    use move_atoms,    only: safemin2, backtrack_linemin
     use GenComms,      only: gsum, myid, inode, ionode
     use GenBlas,       only: dot
     use force_module,  only: tot_force
@@ -386,8 +388,7 @@ contains
        old_force = tot_force
        ! Minimise in this direction
        !call safemin2(x_new_pos, y_new_pos, z_new_pos, cg, energy0, &
-         call adapt_backtrack_linemin(x_new_pos, y_new_pos, z_new_pos, cg, energy0, &
-                      energy1, fixed_potential, vary_mu, energy1)
+       call backtrack_linemin(cg, energy0, energy1, fixed_potential, vary_mu, energy1)
        ! Output positions
        if (myid == 0 .and. iprint_gen > 1) then
           do i = 1, ni_in_cell
@@ -1960,8 +1961,7 @@ end subroutine write_md_data
        if (myid == 0 .and. iprint_MD > 2) &
             write(io_lun,fmt='(2x,"L-BFGS iteration ",i4)') iter
        ! Line search
-       call backtrack_linemin(x_new_pos, y_new_pos, z_new_pos, cg, energy0, &
-            energy1, fixed_potential, vary_mu, energy1)
+       call backtrack_linemin(cg, energy0, energy1, fixed_potential, vary_mu, energy1)
        ! Update stored position difference and force difference
        do i=1,ni_in_cell
           jj = id_glob(i)
@@ -2032,10 +2032,6 @@ end subroutine write_md_data
     end do
     ! Output final positions
     !    if (myid == 0) call write_positions(parts)
-    deallocate(z_new_pos, y_new_pos, x_new_pos, STAT=stat)
-    if (stat /= 0) &
-         call cq_abort("Error deallocating _new_pos in control: ", &
-                       ni_in_cell, stat)
     deallocate(cg, STAT=stat)
     if (stat /= 0) &
          call cq_abort("Error deallocating cg in control: ", &
