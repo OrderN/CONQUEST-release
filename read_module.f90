@@ -22,6 +22,7 @@ module read
   real(double), save :: gen_energy_semicore ! System-wide threshold for semi-core states
   real(double) :: width, prefac ! Defaults
   logical, save :: flag_gen_use_Vl
+  logical :: flag_adjust_deltaE = .false.
 
   character(len=30), dimension(:), allocatable, save :: species_label
       
@@ -176,7 +177,7 @@ contains
        else if(leqi(input_string(1:2),'ra')) then ! Again
           paos%flag_cutoff = pao_cutoff_radii
        else if(leqi(input_string(1:7),'default')) then
-          paos%flag_cutoff = pao_cutoff_default
+          paos%flag_cutoff = pao_cutoff_radii !default
        else
           call cq_abort("Unrecognised atomic cutoff flag "//input_string(1:8))
        end if
@@ -196,6 +197,12 @@ contains
        else if(leqi(input_string(1:2),"Ha")) then
           deltaE_large_radius = fdf_double("Atom.dE_large_radius",0.00073498_double)
           deltaE_small_radius = fdf_double("Atom.dE_small_radius",0.073498_double)
+       end if
+       if(flag_adjust_deltaE) then
+          deltaE_large_radius = deltaE_large_radius*two
+          write(*,fmt='(2x,"High energy shell present ", &
+               "so adjusting large radius energy shift to ",f7.5," Ha")') deltaE_large_radius
+          flag_adjust_deltaE = .false. ! Allow for other elements not to have this
        end if
        !
        ! Basis size
@@ -424,7 +431,7 @@ contains
     use pseudo_tm_info, ONLY: pseudo
     use input_module, ONLY: io_assign, io_close
     use mesh, ONLY: siesta
-    use pseudo_atom_info, ONLY: val, allocate_val, local_and_vkb, allocate_vkb, hamann_version
+    use pseudo_atom_info, ONLY: val, allocate_val, local_and_vkb, allocate_vkb, hamann_version, deltaE_large_radius
     
     implicit none
 
@@ -439,7 +446,7 @@ contains
     character(len=2) :: char_in
     character(len=80) :: line
     logical :: flag_core_done = .false.
-    real(double) :: dummy, dummy2
+    real(double) :: dummy, dummy2, highest_energy
 
     !
     ! Zero arrays
@@ -501,6 +508,7 @@ contains
     !
     ! Check for inner shells and assign pseudo-n value (for nodes)
     !
+    highest_energy = -ten ! For comparison
     do i = 1,n_shells
        if(iprint>3) write(*,fmt='(2i3,f7.2,f10.4)') val%n(i),val%l(i),val%occ(i),val%en_ps(i)
        ! Check for inner shells: count shells with this l and store
@@ -514,9 +522,18 @@ contains
        ! Check for semi-core state
        if(val%en_ps(i)<energy_semicore) val%semicore(i) = 1
        ! Count occupied states
-       if(val%occ(i)>RD_ERR) n_occ = n_occ + 1
+       if(val%occ(i)>RD_ERR) then
+          n_occ = n_occ + 1
+          highest_energy = max(val%en_ps(i),highest_energy)
+       end if
     end do
     if(iprint>3) write(*,fmt='(i2," valence shells, with ",i2," occupied")') n_shells, n_occ
+    if(highest_energy>-0.152_double) then ! Make this a parameter?
+       flag_adjust_deltaE = .true.
+       !deltaE_large_radius = deltaE_large_radius*two
+       !write(*,fmt='(2x,"Highest energy shell is ",f7.3," Ha ", &
+       !     "so adjusting energy shift to ",f8.4," Ha")') highest_energy, deltaE_large_radius
+    end if
     val%n_occ = n_occ
     !
     ! Read grid, charge, partial core, local potential, semilocal potentials
