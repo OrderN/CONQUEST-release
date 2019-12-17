@@ -583,9 +583,9 @@ contains
     integer :: i_species
 
     ! Local variables
-    integer :: lun, z, nc, nv, iexc, i_shell, en, ell, icmod, i, j, zeta, ios, n_nl_proj
+    integer :: lun, nc, nv, iexc, i_shell, en, ell, icmod, i, j, zeta, ios, n_nl_proj
     integer :: input_lines
-    real(double) :: fill, zval
+    real(double) :: fill, zval, z
     character(len=80) :: a
     character(len=2) :: sym
     character(len=4) :: file_format
@@ -603,7 +603,7 @@ contains
     a = get_hamann_line(lun)
     read(a,*) sym,z,nc,nv,iexc,file_format
     write(*,fmt='(/"Information about pseudopotential for species: ",a2/)') sym
-    pseudo(i_species)%z = z
+    pseudo(i_species)%z = int(z)
     !
     ! Assign and initialise XC functional for species
     !
@@ -634,7 +634,7 @@ contains
        a = get_hamann_line(lun)
     end do
     pseudo(i_species)%zval = zval
-    write(*,fmt='("The atomic number is",i3,", with valence charge ",f4.1)') z,zval
+    write(*,fmt='("The atomic number is",f5.1,", with valence charge ",f4.1)') z,zval
     !
     ! lmax
     !

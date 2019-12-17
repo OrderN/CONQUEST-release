@@ -62,7 +62,7 @@ module pseudo_atom_info
   integer, parameter :: pao_cutoff_radii = 2
   integer, parameter :: pao_cutoff_default = 3 ! This will be set properly at some point
   
-  character(len=80), dimension(50) :: input_file ! Store input file and append at end of ion file
+  character(len=80), dimension(80) :: input_file ! Store input file and append at end of ion file
   integer :: input_file_length
   integer :: hamann_version
 

@@ -682,7 +682,7 @@ contains
     use datatypes
     use numbers
     use GenComms, ONLY: cq_abort
-    use mesh, ONLY: rr, rr_squared, nmesh, alpha, make_mesh, beta, sqrt_rr, drdi, drdi_squared
+    use mesh, ONLY: rr, rr_squared, nmesh, alpha, make_mesh, beta, drdi, drdi_squared
     use pseudo_tm_info, ONLY: pseudo
     
     implicit none
@@ -775,7 +775,7 @@ contains
     use datatypes
     use numbers
     use GenComms, ONLY: cq_abort
-    use mesh, ONLY: rr, rr_squared, nmesh, alpha, make_mesh, beta, sqrt_rr, drdi, drdi_squared, convert_r_to_i
+    use mesh, ONLY: rr, rr_squared, nmesh, alpha, make_mesh, beta, drdi, drdi_squared, convert_r_to_i
     use pseudo_tm_info, ONLY: pseudo
     
     implicit none
@@ -986,7 +986,7 @@ contains
     use datatypes
     use numbers
     use GenComms, ONLY: cq_abort
-    use mesh, ONLY: rr, rr_squared, nmesh, alpha, make_mesh, beta, sqrt_rr, drdi, drdi_squared, convert_r_to_i
+    use mesh, ONLY: rr, rr_squared, nmesh, alpha, make_mesh, beta, drdi, drdi_squared, convert_r_to_i
     use pseudo_tm_info, ONLY: pseudo
     
     implicit none
@@ -1185,7 +1185,7 @@ contains
     use datatypes
     use numbers
     use GenComms, ONLY: cq_abort
-    use mesh, ONLY: rr, rr_squared, nmesh, alpha, make_mesh, beta, sqrt_rr, drdi, drdi_squared, convert_r_to_i
+    use mesh, ONLY: rr, rr_squared, nmesh, alpha, make_mesh, beta, drdi, drdi_squared, convert_r_to_i
     use pseudo_tm_info, ONLY: pseudo
     
     implicit none
@@ -1438,7 +1438,7 @@ contains
     use datatypes
     use numbers
     use GenComms, ONLY: cq_abort
-    use mesh, ONLY: alpha, drdi, rr, rr_squared, sqrt_rr, sqrt_drdi
+    use mesh, ONLY: alpha, drdi, rr, rr_squared, sqrt_drdi
     
     implicit none
 

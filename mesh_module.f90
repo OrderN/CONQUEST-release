@@ -11,7 +11,7 @@ module mesh
   real(double) :: beta = 0.0005_double
   real(double) :: mesh_z
   real(double) :: delta_r_reg
-  real(double), allocatable, dimension(:) :: rr, rr_squared, drdi, sqrt_rr, drdi_squared, sqrt_drdi, rmesh_reg
+  real(double), allocatable, dimension(:) :: rr, rr_squared, drdi, drdi_squared, sqrt_drdi, rmesh_reg
   integer, parameter :: hamann = 1
   integer, parameter :: siesta = 2
   integer :: mesh_type
@@ -19,7 +19,7 @@ module mesh
   integer :: n_poly_lag = 3 ! User adjustable in the long term
   integer :: n_poly = 3 ! Should this be user adjustable ? Actually gives 2*n_poly+1
 
-  
+  logical, save :: flag_allocated_mesh = .false.
   
 contains
 
@@ -43,20 +43,20 @@ contains
     !
     ! Initialise and allocate
     !
-    if(allocated(rr)) then
-       deallocate(rr,rr_squared,drdi,sqrt_rr,drdi_squared,sqrt_drdi)
+    if(flag_allocated_mesh) then
+       deallocate(rr,rr_squared,drdi,drdi_squared,sqrt_drdi)
     end if
-    allocate(rr(nmesh),rr_squared(nmesh),drdi(nmesh),sqrt_rr(nmesh),drdi_squared(nmesh),sqrt_drdi(nmesh))
+    allocate(rr(nmesh),rr_squared(nmesh),drdi(nmesh),drdi_squared(nmesh),sqrt_drdi(nmesh))
+    flag_allocated_mesh = .true.
     rr = zero
     rr_squared = zero
     drdi = zero
-    sqrt_rr = zero
     drdi_squared = zero
     sqrt_drdi = zero
     !
     ! Set mesh parameters
     !
-    mesh_z = pseudo(species)%z
+    mesh_z = real(pseudo(species)%z, double)
     if(mesh_type==hamann) then
        ! Check consistency of alpha and grid that has been read
        alpha_hamann = 0.01_double*log(local_and_vkb%rr(101)/local_and_vkb%rr(1))
@@ -69,7 +69,6 @@ contains
        do i=1,nmesh
           rr(i) = (beta/mesh_z)*exp(alpha*real(i-1,double))
           rr_squared(i) = rr(i)*rr(i)
-          sqrt_rr(i) = sqrt(rr(i))
           drdi(i) = alpha*rr(i)
           drdi_squared(i) = drdi(i)*drdi(i)
           sqrt_drdi(i) = sqrt(drdi(i))
@@ -79,7 +78,6 @@ contains
        do i=1,nmesh
           rr(i) = beta*(exp(alpha*real(i,double))-one) ! Normally in Siesta they have i-1 to get r=0
           rr_squared(i) = rr(i)*rr(i)
-          sqrt_rr(i) = sqrt(rr(i))
           drdi(i) = alpha*(rr(i) + beta)
           drdi_squared(i) = drdi(i)*drdi(i)
           sqrt_drdi(i) = sqrt(drdi(i))
