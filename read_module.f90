@@ -200,7 +200,7 @@ contains
        end if
        if(flag_adjust_deltaE) then
           deltaE_large_radius = deltaE_large_radius*two
-          write(*,fmt='(2x,"High energy shell present ", &
+          write(*,fmt='(2x,"Shallow energy state present ", &
                "so adjusting large radius energy shift to ",f7.5," Ha")') deltaE_large_radius
           flag_adjust_deltaE = .false. ! Allow for other elements not to have this
        end if
