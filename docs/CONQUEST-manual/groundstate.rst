@@ -28,5 +28,11 @@ Self-consistency
 
 Support functions
 -----------------
+Support functions are used to express density matrices. The functions are constructed from basis functions, pseudo-atomic orbital (PAO) functions which are given in ``.ion`` files (default) or blip functions. 
+
+When PAOs are used as support functions without any modification, we don't need to set any parameters related to support functions in ``Conquest_input``. 
+
+If we contract multiple PAOs to small number of support functions or use blip functions, we need to provide several input parameters.
+
 Full details of how the support functions are found and represented
-can be found in **add this link**.
+can be found in :ref:`basissets`.
