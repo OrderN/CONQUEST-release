@@ -261,7 +261,7 @@ contains
                              IPRINT_TIME_THRES1
     use group_module,  only: parts
     use minimise,      only: get_E_and_F
-    use move_atoms,    only: safemin2, backtrack_linemin
+    use move_atoms,    only: adapt_backtrack_linemin
     use GenComms,      only: gsum, myid, inode, ionode
     use GenBlas,       only: dot
     use force_module,  only: tot_force
@@ -388,7 +388,7 @@ contains
        old_force = tot_force
        ! Minimise in this direction
        !call safemin2(x_new_pos, y_new_pos, z_new_pos, cg, energy0, &
-       call backtrack_linemin(cg, energy0, energy1, fixed_potential, vary_mu, energy1)
+       call adapt_backtrack_linemin(cg, energy0, energy1, fixed_potential, vary_mu, energy1)
        ! Output positions
        if (myid == 0 .and. iprint_gen > 1) then
           do i = 1, ni_in_cell
