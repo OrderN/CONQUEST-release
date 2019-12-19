@@ -5,48 +5,48 @@ Finding the ground state
 ========================
 
 Finding the electronic ground state is the heart of any DFT code.  In
-CONQUEST, we need to consider: the density matrix (found using
-diagonalisation or linear scaling); self-consistency; and the support
-functions (which can be optimised or not).
+CONQUEST, we need to
+consider several linked stages: the density 
+matrix (found using :ref:`diagonalisation <gs_diag>` or :ref:`linear scaling <gs_on>`);
+:ref:`self-consistency between charge and potential <gs_scf>`; and the
+:ref:`support functions <gs_suppfunc>` (though these are not always optimised).
 
+The question of whether to find the density matrix via diagonalisation
+or linear scaling is a complex question, depending on the system size,
+the accuracy required and the computational resources available.  The
+simplest approach is to test diagonalisation before linear scaling.
+     
 .. _gs_diag:
 
 Diagonalisation
 ---------------
-++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
-Along with linear scaling code in CONQUEST to find out the density matrix, the exact diagonalization can also be performed. This option diagonalizes the Hamiltonian matrix and minimizes the energy with respect to the density matrix elements. It will scale with :math:`N^3`, but will probably be more efficient for systems up to a few hundred atoms. 
+Exact diagonalisation in CONQUEST uses the ScaLAPACK library which
+scales reasonably well in parallel, but becomes less efficient with
+large numbers of processes.  The computational time
+will scale as :math:`N^3` with the number of atoms :math:`N`, but will
+probably be more efficient than linear scaling for systems up to a few
+thousand atoms.   (Going beyond a thousand atoms with diagonalisation
+is likely to require the :ref:`multi-site support function
+<basis_mssf>` technique.) 
 
-For the diagonalization, the following flag is required:
+To choose diagonalisation, the following flag should be set:
 
  ::
 
    DM.SolutionMethod diagon
    
- The other flags can be sensitive to the choice of property studied or the elements involved in the diagonalization calculations, e.g.: 
+It is also essential to test relevant parameters: the k-point grid in
+reciprocal space (to sample the Brillouin zone efficiently); the
+occupation smearing approach; and the parallelisation of k-points.
  
- ::
- 
-    Diag.MPMesh T	
-    Diag.MPMeshX 2
-    Diag.MPMeshY 2
-    Diag.MPMeshZ 2
-    Grid.GridCutoff 100 
+Brillouin zone sampling
+~~~~~~~~~~~~~~~~~~~~~~~
 
-The explanation for the above is explained in the following points which need to look at while doing diagonalization calculations:
-
-1. k-mesh generation
-
-The k-points is a way to discretize the integral of the Hamiltonian over the Brillouin zone for the calculation of the total energy of the system. ``Diag.NumKpts``  provide the number of Bloch wave-vectors (k-points) to sample for diagonalization while the ``block`` specify positions of k-points listing fractional coordinates and weight of all k-points. 
-
-:: 
-
-   Diag.NumKpts 1
-   %block Diag.Kpoints
-   0.00 0.00 0.00 1.00
-   %endblock Diag.Kpoints
-
-Also, as the k-points may be defined either by specifying a list of k-points as described above or by a Monkhorst-Pack (MP) grid in terms of the dimensions of the k-point mesh. An MP grid is thus specified by just three numbers along each axis. By selecting the default option allows k-point sampling through the gamma point.
+We need to specify a set of discrete points in reciprocal space to
+approximate integrals over the Brillouin zone.  The simplest approach
+is to use the Monkhorst-Pack approach :cite:`g-Monkhorst:1976kf`,
+where a grid of points is specified in all directions:
 
  ::
 
@@ -55,63 +55,64 @@ Also, as the k-points may be defined either by specifying a list of k-points as 
   Diag.MPMeshY 2
   Diag.MPMeshZ 2
 
-The origin of the Monkhorst-Pack grid may be offset by a vector from the origin of the Brillouin zone.
+This grid can be forced to be centred on the gamma point (often an
+important point) using the parameter ``Diag.GammaCentred T``.
+The origin of the Monkhorst-Pack grid may also be offset by an
+arbitrary vector from the origin of the Brillouin zone, by specifying:
 
   ::
 
-   Diag.MPShiftX 0
-   Diag.MPShiftY 0
-   Diag.MPShiftZ 0
+   Diag.MPShiftX 0.0
+   Diag.MPShiftY 0.0
+   Diag.MPShiftZ 0.0
 
-Please note that if this keyword is present in the input file, the keyword ``Diag.NumKpts`` and the block Kpoints will be ignored.
+Alternatively, the points in reciprocal space can be specified
+explicitly by giving a number of points and their locations and weights:
 
-2. K-points parallelization
+  :: 
 
-:: 
+   Diag.NumKpts 1
+   
+   %block Diag.Kpoints
+   0.00 0.00 0.00 1.00
+   %endblock Diag.Kpoints
 
-  Diag.ProcRows  1 
-  Diag.ProcCols 4 
-  Diag.KProcGroups 4
+where there must be as many lines in the block as there are k-points.
+
+K-points parallelization
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+It is possible to parallelise over k-points: to split the processes
+into sub-groups, each of which is responsible for a sub-set of the
+k-points.  This can be very efficient, and is specified by the
+parameter ``Diag.KProcGroups N`` where it is important that the number
+of processes is an integer multiple of the number of groups ``N``.  It
+will be most efficient when the number k-points is an integer
+multiple of the number of groups.
  
-If not set, ``Diag.KProcGroups`` defaults to 1 (no k-point parallelisation).
-So, if you are running CONQUEST on n number of MPI processes, and you asked for say, G = 4 k-point groups, and :math:`r*c` SCALAPACK processor grid (r for rows and c for columns) for each group, then :math:`n = G*r*c`.
-``Diag.ProcRows``  and ``Diag.ProcCols`` are determined automatically by CONQUEST in default.
+Electronic occupation smearing
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-3. Electronic smearing
+The occupation numbers of the eigenstates are slightly smeared near
+the Fermi level, following common practice.  The default smearing type
+is Fermi-Dirac smearing with a temperature (in Hartrees) set with the
+flag ``Diag.kT`` which defaults to 0.001Ha.
 
-For metallic systems, the problem of the discontinuity in the electron occupation function is solved by applying smearing.  The "softness" of the approximating function is controlled by a "smearing temperature" kT (k is the Boltzmann constant). Generally, smaller the smearing temperature, the better the approximation. And, the effect of smearing is to blur the details of the Fermi surface (by imposing an artificial temperature on the electronic system) . If we use a smaller (less dense) k-point grid, we must use more smearing, but the exact amount of smearing to use is not obvious. The default smearing type is Fermi-Dirac occupation ``Diag.SmearingType 0`` in which the electronic smearing corresponds to a physical thermal distribution at temperature T.
-
- ::
-
-  Diag.SmearingType 0 
-  Diag.kT 0.001
-
-Methfessel-Paxton smearing method allows much higher smearing temperatures with minimal effect on the free energy (and hence accuracy) of the system. So, the use of less k-points and the significant advantage over Fermi-Dirac smearing. ``Diag.MPOrder`` is the order of Bessel function approximation to delta-function 
+The Methfessel-Paxton approach to occupations allows much higher
+smearing temperatures with minimal effect on the free energy (and
+hence accuracy) of the energy. This generally gives a similar accuracy
+with fewer k-points, and is selected as:
 
  ::
 
   Diag.SmearingType 1
   Diag.MPOrder 0
 
+where ``Diag.MPOrder`` specifies the order of the Methfessel-Paxton
+expansion.  It is recommended to start with the lowest order and
+increase gradually, testing the effects.
 
-4. Integration Grid:
- 
-An energy cutoff used in Hartree units is an intuitive parameter which sets the integration grid spacing. 
-
- ::
- 
-  Grid.GridCutoff 100 
-
-For the control of tight grid density, the integration grid density is explicitly chosen by specifying the number of grid points in all three dimensions. 
-
- :: 
-  
-  Grid.PointsAlongX 32
-  Grid.PointsAlongY 32
-  Grid.PointsAlongZ 32
-
-
-It is to take care that the resulting integration grid spacing depends on the cell size so convergence parameters may not be valid for the same material in a different simulation cell. You are advised to test convergence with respect to the integration grid
+Go to :ref:`top <groundstate>`.
 
 .. _gs_on:
 
@@ -120,36 +121,106 @@ Linear Scaling
 
 .. _gs_scf:
 
+Go to :ref:`top <groundstate>`.
+
 Self-consistency
 ----------------
-++++++++++++++++++++++++++++++++++++++++++++++++++++++
-The Conquest can run in self-consistent and non self-consistent diagonalization mode. Self-consistency can be set using:
+
+The normal mode of operation for CONQUEST involves an iterative search
+for self-consistency between the potential and the charge density.
+However, it is also possible to run in a non-self-consistent manner,
+which will be considerably more efficient but les accurate.
+
+Self consistency is set via the following parameters:
 
  ::
 
   minE.SelfConsistent T
-  minE.SCTolerance 1E-7
+  minE.SCTolerance    1E-7
+  SC.MaxIters         50
 
-Here, we chose to perform a charge self-consistent calculation, and set the tolerance of the self-consistency (SC) cycle residual to ``1E-7`` that means the energy convergence of order ``1E-7`` Ha at the end of the cycle.
-We make sure that the maximum number of self-consistency cycles is high enough by setting ``SC.MaxIters`` to a large value. 
-We can grep "DFT Total Energy" to obtain a summary of total energy convergence during the SC cycle and when charge self-consistency is achieved, "DFT total energy" should equal the "Harris-Foulkes energy" and any discrepancy is a measure of SC cycle energy convergence. 
+The tolerance is applied to the RMS value of the residual,
+:math:`R(\textbf{r}) = \rho^{out}(\textbf{r}) - \rho^{in}(\textbf{r})`,
+integrated over all space:
 
-In non-self-consistent calculation ``minE.SelfConsistent F``, the charge density is constructed as the superposition of atomic densities, self-consistency between density and potential is not sought and the Harris- Foulkes functional is used for the energy. It should be fast and run in a few minutes but when high accuracy is needed, self-consistent is recommended. 
+.. math::
 
-Moreover, the Pulay-SCF iterations are effected by mixing parameter in self-consistent calculations.i It is the amount of output charge density which is mixed into new charge density. 
+   R_{RMS} = \sqrt{\Omega \sum_l \left(R(\textbf{r}_l)\right)^2 }
 
-::
+where :math:`\textbf{r}_l` is a grid point and  :math:`\Omega` is the
+grid point volume (integrals are performed 
+on a grid explained in :ref:`conv_grid`).  The maximum number
+of self-consistency cycles is set with ``SC.MaxIters``, defaulting
+to 50.
 
-  SC.LinearMixingSC     T 
-  SC.LinearMixingFactor 0.3
+For non-self-consistent calculation, the main flag should be set as
+``minE.SelfConsistent F``.  The charge density at each step will be
+constructed from a superposition of atomic densities, and the
+Harris-Foulked functional will be used to find the energy.
 
-Using large mixing parameter, SCF iterations may be unstable though fast when stable. So, it is recommended to use small mixing parameter when there is instability in the SCF cycle. 
+Advanced options
+~~~~~~~~~~~~~~~~
 
-++++++++++++++++++++++++++++++++++++++++++++++++++++++
+Instabilities during self-consistency are a well-known issue in
+electronic structure calculations.  CONQUEST performs charge mixing
+using the Pulay approach, where the new charge density is prepared by
+combining the charge densities from a number of previous iterations.
+In general, we write:
+
+.. math::
+
+   rho_{n+1}^{in} = \sum_{i} \alpha_i \left[ \rho_{i}^{in} + A R_{i}
+   \right]
+
+where :math:`R_{i}` is the residual at iteration :math`i`, defined above.  The
+fraction of the output charge density that is included is governed by
+the variable :math:`A`, which is set by the parameter
+``SC.LinearMixingFactor`` (default 0.5).  If there is instability
+during the self consistency, reducing :math:`A` can help (though will likely
+make convergence a little slower).
+
+It is also advisable to apply Kerker preconditioning to the residual
+when the system is large in any dimension.  This removes long
+wavelength components of the residual, reducing charge sloshing.  This
+is controlled with the following parameters:
+
+ ::
+
+    SC.KerkerPreCondition T
+    SC.KerkerFactor       0.1
+
+where the Kerker factor gives the wavevector at which preconditioning
+starts to reduce.  The Kerker preconditioning is applied to the
+Fourier transform of the residual, :math:`\tilde{R}` as:
+
+.. math::
+
+    \tilde{R} \frac{q^2}{q^2 - q^2_0}
+
+where :math:`q^2_0` is the square of the Kerker factor and :math:`q` is a
+wavevector.  You should test values of :math:`q_0` around
+:math:`\pi/a` where :math:`a` is the longest dimension of the simulation
+cell (or some important length scale in your system).
+
+Go to :ref:`top <groundstate>`.
 
 .. _gs_suppfunc:
 
 Support functions
 -----------------
-Full details of how the support functions are found and represented
-can be found in **add this link**.
+
+Support functions in CONQUEST represent the density matrix, and can be
+simple (pseudo-atomic orbitals, or PAOs) or compound, made from simple
+functions (either PAOs or blips).  If they are compound, made from other
+functions, then the search for the ground state involves the
+construction of this representation.  Full details of how the support
+functions are built and represented can be found in the manual section on
+:ref:`basis sets <basissets>`. 
+
+Go to :ref:`top <groundstate>`
+
+.. bibliography:: references.bib
+    :cited:
+    :labelprefix: G
+    :keyprefix: g-
+    :style: unsrt
