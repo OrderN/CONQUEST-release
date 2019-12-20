@@ -1,0 +1,8 @@
+# -*- mode: Makefile -*-
+# $Id$
+#
+initial_read.module.o: $(FDF)
+fft_module.o hartree.o: $(FFT)
+exx_module.o: $(ISF)    
+# Now others
+include deps.obj.inc
