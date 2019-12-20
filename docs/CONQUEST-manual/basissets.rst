@@ -253,40 +253,39 @@ diffuse functions for the electrons from the other unit, and therefore could be 
 To correct this BSSE, the Counterpoise (CP) correction method proposed by "Boys and Bernardi" is used where the artificial 
 stabilization is controlled by enabling the atoms to improve their basis sets after borrowing functions of an empty basis set from the ghost atoms. 
 
-Since, the typical interaction energy between two monomers A and B is calculated as:
+When systems A and B approaches and make system AB, the typical interaction energy between A and B is calculated as:
 
 :math:`E_{AB}^{int} = E_{AB}(AB) - E_A(A) - E_B(B).`
 
+where :math:`E_{AB}(AB)` is the energy of system AB and :math:`E_{A}(A)` and :math:`E_{B}(B)` are the energies of isolated A and B. The lowerscript and parentheses correspond to the system and its structure, respectively.
+
 Now, the estimate to the amount of the artificial stabilization of A by the extra basis functions from B is:
 
-:math:`E_{A}^{BSSE} = E_A(AB) - E_A(A),`
+:math:`E_{A}^{BSSE} = E_{A\bar{B}}(AB) - E_A(A\text{ in }AB),`
 
-where energy of A in its monomer basis is subtracted from energy of A in dimer basis. 
+where :math:`\bar{A}` and :math:`\bar{B}` are the ghost atoms, which have only basis functions but no actual atoms. :math:`E_{A\bar{B}}(AB)` is the energy of system A with ghost-atom system B in the AB structure. :math:`E_A(A\text{ in }AB)` is the energy of system A in the AB structure but without system B (neither basis functions nor atoms). Therefore, the subtraction corresponds to how much system A is stabilized by the basis function of B.
 
 Similarly, for monomer B,
 
-:math:`E_{B}^{BSSE} = E_B(AB) - E_B(B),`
+:math:`E_{B}^{BSSE} = E_{\bar{A}B}(AB) - E_B(B\text{ in }AB),`
 
 Subtracting the BSSE part of A and B units from the typical interaction energy mentioned above, the counterpoise corrected 
-interaction energy without BSSE :math:`(E_{AB}^{CP})` will be:
+interaction energy without BSSE :math:`(E_{AB}^{int,CP})` will be:
 
-:math:`E_{AB}^{CP} = E_{AB}^{int} - E_{A}^{BSSE} - E_{B}^{BSSE} = E_{AB}(AB) - E_A(AB) - E_B(AB).`
+:math:`E_{AB}^{int,CP} = E_{AB}^{int} - E_{A}^{BSSE} - E_{B}^{BSSE}.`
 
 
  
  
-Practically, to set up such calculation e.g. to evaluate the energy of A in the dimer basis :math:`(E_A(AB))`, the basis 
-functions from B is placed on atomic centers of B, however with zero nuclear charge and mass.  This could be performed in CONQUEST by specifying negative sign to the 
-corresponding masses for the ghost atoms(B) in the ``block ChemicalSpeciesLabel`` of the input file:
+Practically, to calculate :math:`E_{A\bar{B}}(AB)`, the basis functions of B should be placed on atomic centers of B, however with zero nuclear charge and mass.  This could be performed in CONQUEST by specifying negative sign to the 
+corresponding masses for the ghost atoms in B in the ``block ChemicalSpeciesLabel`` of the input file:
 
 ::
 
  %block ChemicalSpeciesLabel
-   1   1.0100000000 A  A.ion
-   2  -1.0100000000 B  B.ion
+   1   1.01  A  A.ion
+   2  -1.01  B  B.ion
  %endblock
 
-Similarly, separate calculations are performed for monomer B in dimer basis with ghost atoms on A :math:`(E_B(AB))` and 
-also for :math:`E_{AB}(AB)` in complete basis, to get the net interaction energy without BSSE. 
 
 
