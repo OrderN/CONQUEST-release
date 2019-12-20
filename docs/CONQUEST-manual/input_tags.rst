@@ -13,7 +13,7 @@ are specified as: *integer*;
    :depth: 1
    :local:
 
-.. _input_tags_general:
+.. _input_general:
 
 General
 -------
@@ -176,7 +176,7 @@ General.RNGSeed (*integer*)
 
     *default*: -1
 
-.. _input_tags_atomic_spec:
+.. _input_atomic_spec:
 
 Atomic Specification
 --------------------
@@ -506,6 +506,8 @@ SC.MetricFactor (*real*)
     from the factor :math:`\left(q^2 + q_1^2\right) / q^2`.
 
     *default*: 0.1
+
+.. _input_dm:
 
 Density Matrix
 --------------

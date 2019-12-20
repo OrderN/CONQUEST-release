@@ -11,11 +11,41 @@ matrix (found using :ref:`diagonalisation <gs_diag>` or :ref:`linear scaling <gs
 :ref:`self-consistency between charge and potential <gs_scf>`; and the
 :ref:`support functions <gs_suppfunc>` (though these are not always optimised).
 
+The basis functions in CONQUEST are :ref:`support functions <gs_suppfunc>` (localised
+functions centred on the atoms), written as
+:math:`\phi_{i\alpha}(\textbf{r})` where :math:`i` indexes an atom and
+:math:`\alpha` a support function on the atom.  The support functions
+are used as basis functions for the density matrix and the Kohn-Sham
+eigenstates:
+
+.. math::
+   \psi_{n\mathbf{k}}(\mathbf{r}) = \sum_{i\alpha} c^{n\mathbf{k}}_{i\alpha}
+   \phi_{i\alpha}(\mathbf{r})\\
+   \rho(\mathbf{r}, \mathbf{r}^\prime) = \sum_{i\alpha j\beta}
+   \phi_{i\alpha}(\mathbf{r}) K_{i\alpha, j\beta} \phi_{j\beta}(\mathbf{r}^\prime)
+
+where :math:`n` is an eigenstate index and :math:`\mathbf{k}` is a
+point in the Brillouin zone (see :ref:`here <gs_diag_bz>` for more on
+this).  The total energy can be written in terms of the density
+matrix, as:
+
+.. math::
+   E_{KS} = \mathrm{Tr}[HK] + \Delta E_{Har} + \Delta E_{XC}
+
+for the Hamiltonian matrix :math:`H` in the basis of support
+functions, with the last two terms the standard Harris-Foulkes
+:cite:`g-Harris1985,g-Foulkes1989` correction terms.
+      
+For diagonalisation, the density matrix is made from the coefficients
+of the Kohn-Sham eigenstates, :math:`c^{n\mathbf{k}}_{i\alpha}`, while
+for :ref:`linear scaling <gs_on>` it is found directly during the variational
+optimisation of the energy.
+
 The question of whether to find the density matrix via diagonalisation
 or linear scaling is a complex one, depending on the system size,
 the accuracy required and the computational resources available.  The
 simplest approach is to test diagonalisation before linear scaling.
-     
+
 .. _gs_diag:
 
 Diagonalisation
@@ -129,6 +159,48 @@ Go to :ref:`top <groundstate>`.
 Linear Scaling
 --------------
 
+A linear scaling calculation is selected by setting
+``DM.SolutionMethod ordern``.  There are two essential parameters that must be
+set: the range of the density matrix, and the tolerance on the
+optimisation.
+
+ ::
+    
+    DM.L_range 16.0
+    minE.Ltolerance 1.0e-6
+
+The tolerance is applied to the residual (the RMS value of the
+gradient of the energy with respect to the density matrix).  The
+maximum number of iterations in the density matrix optimisation can
+be set with ``DM.LVariations`` (default 50).
+
+It is
+almost always more efficient to update the charge density while
+optimising the density matrix, avoiding the need for a separate
+self-consistency loop.  This is set by choosing
+``minE.MixedLSelfConsistent T``. 
+
+An essential part of a linear scaling calculation is finding the
+approximate, sparse inverse of the overlap matrix.  Normally this will
+happen automatically, but it may require some tests.  The key
+parameters are the range for the inverse (see the
+:ref:`input_tags_atomic_spec` block, and specifically the
+:ref:`advanced_atomic_spec_tags` block) and the tolerance applied
+to the inversion.
+
+ ::
+    
+    Atom.InvSRange R
+    DM.InvSTolerance R
+
+A tolerance of up to 0.2 can give convergence without significantly
+affecting the accuracy.  The range should be similar to the radius of
+the support functions, though increasing it by one or two bohr can
+improve the inversion in most cases.
+    
+The input tags are mainly found in the :ref:`input_dm` section of the
+:ref:`input_tags` page.
+     
 Go to :ref:`top <groundstate>`.
 
 .. _gs_scf:
@@ -152,14 +224,14 @@ Self consistency is set via the following parameters:
   SC.MaxIters         50
 
 The tolerance is applied to the RMS value of the residual,
-:math:`R(\textbf{r}) = \rho^{out}(\textbf{r}) - \rho^{in}(\textbf{r})`,
+:math:`R(\mathbf{r}) = \rho^{out}(\mathbf{r}) - \rho^{in}(\mathbf{r})`,
 integrated over all space:
 
 .. math::
 
-   R_{RMS} = \sqrt{\Omega \sum_l \left(R(\textbf{r}_l)\right)^2 }
+   R_{RMS} = \sqrt{\Omega \sum_l \left(R(\mathbf{r}_l)\right)^2 }
 
-where :math:`\textbf{r}_l` is a grid point and  :math:`\Omega` is the
+where :math:`\mathbf{r}_l` is a grid point and  :math:`\Omega` is the
 grid point volume (integrals are performed 
 on a grid explained in :ref:`conv_grid`).  The maximum number
 of self-consistency cycles is set with ``SC.MaxIters``, defaulting
