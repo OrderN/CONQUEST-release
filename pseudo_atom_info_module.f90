@@ -33,6 +33,7 @@ module pseudo_atom_info
      logical :: flag_perturb_polarise
      integer :: flag_zetas ! 1 for split-norm, 2 for compressed energies
      integer, pointer, dimension(:) :: nzeta, l, n, npao, l_no, inner
+     real(double) :: pol_pf
      real(double), pointer, dimension(:,:) :: cutoff, energy
      type(radial_table), pointer, dimension(:,:) :: psi, psi_reg
      type(radial_table), pointer, dimension(:) :: pol, pol_reg
@@ -90,6 +91,7 @@ contains
     paos%width = one
     paos%prefac = zero
     paos%inner = 0
+    paos%pol_pf = one
     return
   end subroutine allocate_pao
 

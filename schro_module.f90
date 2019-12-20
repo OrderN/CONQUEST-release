@@ -160,7 +160,7 @@ contains
           ell = paos%l(i_shell)
           en = paos%n(i_shell)
           do zeta = 1,paos%nzeta(i_shell)
-             write(*,fmt='(4x,3i3,x,2f13.8)') en, ell, zeta, paos%energy(zeta,i_shell), &
+             write(*,fmt='(4x,3i3,1x,2f13.8)') en, ell, zeta, paos%energy(zeta,i_shell), &
                   paos%energy(zeta,i_shell)*HaToeV
              en = paos%npao(i_shell)
              call find_radius_from_energy(i_species,en, ell, paos%cutoff(zeta,i_shell), &
@@ -381,6 +381,7 @@ contains
              write(*,fmt='(2x,"Perturbative polarisation")')
              write(*,fmt='(2x,"Species ",i2," n=",i2," l=",i2," zeta=",i2, " Rc=",f4.1," bohr")') &
                   i_species, en, ell, zeta, paos%cutoff(zeta,i_shell)
+             write(*,fmt='(4x,"Prefactor scaled by ",f5.1)') paos%pol_pf
           end if
           if(zeta>1.AND.paos%flag_zetas==1) then
              call find_split_norm(en,ell+1,paos%cutoff(zeta,i_shell),&
@@ -390,7 +391,7 @@ contains
              paos%cutoff(zeta,i_shell) = paos%cutoff(zeta,i_shell-1)
              call find_polarisation(i_species,en,ell,paos%cutoff(zeta,i_shell),&
                   paos%psi(zeta,i_shell-1)%f,paos%psi(zeta,i_shell)%f,&
-                  paos%energy(zeta,i_shell-1),vha,vxc)
+                  paos%energy(zeta,i_shell-1),vha,vxc,paos%pol_pf)
           end if
        end do
     end if ! paos%flag_perturb_polarise
@@ -743,6 +744,7 @@ contains
        if(n_crossings>=n_nodes+1) then
           write(*,fmt='(2x,"Found cutoff inside the VKB projector cutoff: this suggests too great an energy shift")')
           write(*,fmt='(2x,"Try reducing Atom.dE_small_radius from its default of 2 eV")')
+          write(*,fmt='(2x,"Alternatively this shell should be semi-core - adjust General.SemicoreEnergy")')
           call cq_abort("Aborting")
        else
           do i=n_kink,nmax-1
@@ -1180,7 +1182,7 @@ contains
     deallocate(pot_matrix, pot_vector, s, psi_h, psi_inh, integrand)
   end subroutine integrate_vkb_outwards
   
-  subroutine find_polarisation(i_species,en,ell,Rc,psi_l,psi_pol,energy,vha,vxc)
+  subroutine find_polarisation(i_species,en,ell,Rc,psi_l,psi_pol,energy,vha,vxc,pf_sign)
 
     use datatypes
     use numbers
@@ -1191,7 +1193,7 @@ contains
     implicit none
 
     integer :: i_species, ell, en
-    real(double) :: energy, Rc
+    real(double) :: energy, Rc, pf_sign
     real(double), dimension(nmesh) :: psi_l, psi_pol, vha, vxc
 
     ! Local variables
@@ -1205,7 +1207,7 @@ contains
     do loop = 1,ell
        psi_l = psi_l*rr
     end do
-    pf_low = 1.0_double
+    pf_low = 1.0e-3_double
     pf_high = 10000.0_double
     prefac = 1000.0_double ! Arbitrary initial value
     l_half_sq = real(ell+1,double) + half
@@ -1224,7 +1226,12 @@ contains
     ! compatibility with old Siesta pseudopotentials and for cases where we do not have semi-local
     ! potentials for l+1
     if((ell+1>pseudo(i_species)%lmax).OR.flag_use_Vl) then
-       if(ell+1>pseudo(i_species)%lmax) write(*,*) 'lmax is ',pseudo(i_species)%lmax,' so perturbing using l not l+1'
+       if(ell+1>pseudo(i_species)%lmax) then
+          write(*,*) 'lmax is ',pseudo(i_species)%lmax,' so perturbing using l not l+1'
+       else
+          write(*,*) 'Using V_{l} not V_{l+1} for perturbation'
+       end if
+       !l_l_plus_one = real((ell)*(ell+1),double)
        do i=1,nmesh
           potential(i) = local_and_vkb%semilocal_potential(i,ell) + vha(i) + vxc(i)
        end do
@@ -1256,9 +1263,9 @@ contains
     do loop = 1,n_loop
        ! Small radius solution - dV/dr is zero near centre
        ! Use prefac to set psi(1) and gradient
-       psi_pol(1) = prefac*rr(1)**(ell+2)!*(one - zval*r(1)/(real(ell+1,double)))
+       psi_pol(1) = pf_sign*prefac*rr(1)**(ell+2)!*(one - zval*r(1)/(real(ell+1,double)))
        psi_pol(1) = psi_pol(1)/sqrt(drdi(1))
-       psi_pol(2) = prefac*rr(2)**(ell+2)!*(one - zval*r(2)/(real(ell+1,double)))
+       psi_pol(2) = pf_sign*prefac*rr(2)**(ell+2)!*(one - zval*r(2)/(real(ell+1,double)))
        psi_pol(2) = psi_pol(2)/sqrt(drdi(2))
        ! We need crossings counted - if there are crossings, then increase, else decrease
        n_crossings = 0
@@ -1273,13 +1280,17 @@ contains
           if(iprint>5) write(*,fmt='("More crossings than nodes required: ",2i3)') n_crossings, n_nodes
           if(iprint>5) write(*,fmt='("Polarisation loop ",i3," brackets and prefactor: ",3f13.5)')loop,pf_low,prefac,pf_high
           !do i=1,nmax
-          !   write(13,*) rr(i),psi_pol(i)
+          !   write(13,*) rr(i),psi_pol(i),-rr(i)*rr(i)*psi_l(i)
           !end do
           !write(13,*) '&'
           cycle
        else
           pf_high = prefac
           prefac = half*(pf_low+pf_high)
+          !do i=1,nmax
+          !   write(13,*) rr(i),psi_pol(i),-rr(i)*rr(i)*psi_l(i)
+          !end do
+          !write(13,*) '&'
           if(iprint>5) write(*,fmt='("Polarisation loop ",i3," brackets and prefactor: ",3f13.5)') loop,pf_low,prefac,pf_high
        end if
        ! Normalise
@@ -1295,8 +1306,9 @@ contains
     end do
     if(loop>=n_loop) then
        do i=1,nmax
-          write(50,*) rr(i),psi_pol(i)
+          write(50,*) rr(i),psi_pol(i),-rr(i)*rr(i)*psi_l(i)
        end do
+       call flush(50)
        call cq_abort("ERROR in perturbative polarisation routines - prefactor not found")
     else
        if(iprint>2) write(*,fmt='("Finished perturbative polarisation search with prefactor ",f13.5)') prefac
