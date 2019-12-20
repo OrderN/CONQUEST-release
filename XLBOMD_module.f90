@@ -588,23 +588,22 @@
       use UpdateInfo, ONLY: Matrix_CommRebuild
       !db
       use global_module, ONLY: io_lun
-      use GenComms, ONLY: myid
+      use GenComms, ONLY: myid, cq_warn
 
       implicit none
       ! passed variables
       integer :: range,trans
-      !2019/Nov/13
       type(matrix_store_global),intent(in) :: InfoGlob   
-      !integer :: matX_store(maxiter_Dissipation,nspin)
+
       ! local variables
+      character(len=80) :: sub_name = "grab_Xhistories"
       integer :: maxiters,nfile,istep
       type(InfoMatrixFile), pointer :: InfoMat(:)
 
       maxiters = maxiter_Dissipation
       if(maxiters < 3) maxiters=3  ! even without dissipation, we need matX_store(:,1:4)
       if(maxiters > 9) then
-       if(inode == ionode) write(io_lun,*)  &
-        &'WARNING: maxiter_Dissipation should be smaller than 10 : ', maxiter_Dissipation
+         call cq_warn(sub_name, 'maxiter_Dissipation should be smaller than 10 : ', maxiter_Dissipation)
        maxiters = 9 
       endif
 
@@ -841,10 +840,12 @@
     subroutine Ready_XLBOMD()
       ! Module usage
       use global_module, ONLY: io_lun
-      use GenComms, ONLY: cq_abort,myid
+      use GenComms, ONLY: cq_abort,myid, cq_warn
 
       implicit none
+
       ! local variables
+      character(len=80) :: sub_name = "Ready_XLBOMD"
       integer :: i,stat_alloc,K
 
       K = maxiter_Dissipation
@@ -932,10 +933,8 @@
       end select
 
       ! Corrects kappa if necessary
-      if (kappa.NE.kappa_diss) then
-        if (myid.EQ.0) write (io_lun,'(a,f8.5)') &
-                       "WARNING: kappa is set to ",kappa_diss
-      endif
+      if (kappa.NE.kappa_diss) &
+         call cq_warn(sub_name, "kappa is set to ",kappa_diss)
 
       return
     end subroutine Ready_XLBOMD

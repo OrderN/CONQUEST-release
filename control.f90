@@ -242,11 +242,13 @@ contains
   !!   2012/03/27 L.Tong
   !!   - Removed redundant input parameter real(double) mu
   !!   2013/08/21 M.Arita
-  !!   - Added call for safemin2 necessary in reusibg L-matrix
+  !!   - Added call for safemin2 necessary in reusing L-matrix
   !!    2017/08/29 jack baker & dave
   !!     Removed rcellx references (redundant)
   !!   2017/11/10 14:06 dave
   !!    Removing dump_InfoGlobal calls
+  !!   2019/12/04 11:47 dave
+  !!    Tweak to write convergence only on output process
   !!  SOURCE
   !!
   subroutine cg_run(fixed_potential, vary_mu, total_energy)
@@ -431,11 +433,11 @@ contains
                      iter
        end if
        if (abs(max) < MDcgtol) then
-          write(io_lun,'(2x,a,i4,a)') "GeomOpt converged in ", iter, " iterations"
           done = .true.
-          if (myid == 0) &
-               write (io_lun, fmt='(4x,"Maximum force below threshold: ",f12.5)') &
-                     max
+          if (myid == 0) then
+             write(io_lun,'(2x,a,i4,a)') "GeomOpt converged in ", iter, " iterations"
+             write (io_lun, fmt='(4x,"Maximum force below threshold: ",f12.5)') max
+          end if
        end if
 
        call dump_pos_and_matrices
@@ -2146,7 +2148,7 @@ end subroutine write_md_data
     max_stress = zero
     volume = rcellx*rcelly*rcellz
     do i=1,3
-      stress_diff = abs(press + stress(i,i))/volume
+      stress_diff = abs(press*volume + stress(i,i))/volume
       if (stress_diff > max_stress) max_stress = stress_diff
     end do
     if (inode==ionode) then
@@ -2158,9 +2160,10 @@ end subroutine write_md_data
     do while (.not. done)
        call start_timer(tmr_l_iter, WITH_LEVEL)
        volume = rcellx*rcelly*rcellz
-       stressx = -stress(1,1)/volume
-       stressy = -stress(2,2)/volume
-       stressz = -stress(3,3)/volume
+       ! Keep these as stresses
+       stressx = -stress(1,1)!/volume
+       stressy = -stress(2,2)!/volume
+       stressz = -stress(3,3)!/volume
        mean_stress = (stressx + stressy + stressz)/3
        RMSstress = sqrt(((stressx*stressx) + (stressy*stressy) + (stressz*stressz))/3)
 
@@ -2194,9 +2197,9 @@ end subroutine write_md_data
        if (leqi(cell_constraint_flag, 'volume')) then
          search_dir_mean = gamma*search_dir_mean + mean_stress
        else
-         search_dir_x = gamma*search_dir_x + stressx - press
-         search_dir_y = gamma*search_dir_y + stressy - press
-         search_dir_z = gamma*search_dir_z + stressz - press
+         search_dir_x = gamma*search_dir_x + stressx - press*volume
+         search_dir_y = gamma*search_dir_y + stressy - press*volume
+         search_dir_z = gamma*search_dir_z + stressz - press*volume
        end if
 
        if (inode == ionode .and. iprint_gen > 0) &
@@ -2232,7 +2235,7 @@ end subroutine write_md_data
        volume = rcellx*rcelly*rcellx
        max_stress = zero
        do i=1,3
-         stress_diff = abs(press + stress(i,i))/volume
+         stress_diff = abs(press*volume + stress(i,i))/volume
          if (stress_diff > max_stress) max_stress = stress_diff
        end do
 

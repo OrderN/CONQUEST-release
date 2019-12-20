@@ -1711,7 +1711,7 @@ contains
        kmin = 0.75_double * kmin
     end if
     k3 = kmin
-    lambda = two
+    lambda = 1.5_double ! Reduce severity
     done = .false.
     ! Loop to find a bracketing triplet
     do while (.not. done) !e3<=e2)

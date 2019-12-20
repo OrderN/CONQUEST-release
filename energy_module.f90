@@ -143,7 +143,7 @@ contains
     use units
     use mult_module,            only: matrix_product_trace, matH,     &
                                       matK, matKE, matNL, matX, matNA
-    use GenComms,               only: inode, ionode
+    use GenComms,               only: inode, ionode, cq_warn
     use global_module,          only: iprint_gen, nspin, spin_factor, &
                                       flag_SpinDependentSF,           &
                                       flag_dft_d2,                    &
@@ -163,12 +163,11 @@ contains
 
     ! Passed variables
     real(double) :: total_energy
-
-    ! check DFT energy mode  : by TM Nov2007
     logical, intent(in), optional :: printDFT
     integer, intent(in), optional :: level
-
+    
     ! Local variables
+    character(len=80) :: sub_name = "get_energy"
     integer        :: spin, spin_SF
     logical        :: print_Harris, print_DFT
     real(double)   :: total_energy2
@@ -301,8 +300,7 @@ contains
                 select case (SmearingType)
                 case (0) ! Fermi smearing
                    if (entropy < zero) &
-                        write (io_lun, *) &
-                              ' WARNING !!!!    entropy < 0??? ', entropy
+                        call cq_warn(sub_name,'Calculated entropy is less than zero; something is wrong ', entropy)
                    if (iprint_gen >= 0) &
                         write (io_lun,14) en_conv*(total_energy-half*entropy), &
                                           en_units(energy_units)
@@ -325,7 +323,7 @@ contains
           else
              if (iprint_gen >= 0) &
                   write (io_lun,10) en_conv*total_energy, en_units(energy_units)
-             if (iprint_gen >= 0) &
+             if (iprint_gen >= 1) &
                   write (io_lun, '(10x,"(TS=0 as O(N) or entropic &
                                   &contribution is negligible)")')
           end if
@@ -441,6 +439,8 @@ contains
   !!   2018/11/13 17:30 nakata
   !!    Changed matS, matKE, matNL and matNA to be spin_SF dependent
   !!    Activated "electrons_tot2" calculation
+  !!   2019/12/03 08:09 dave
+  !!    Removed broken code for electrons via Tr[KS]
   !!  SOURCE
   !!
   subroutine final_energy(level)
@@ -448,8 +448,7 @@ contains
     use datatypes
     use numbers
     use units
-    use GenComms,               only: inode, ionode
-
+    use GenComms,               only: inode, ionode, cq_warn
     use mult_module,            only: matrix_product_trace, matH,     &
                                       matrix_product_trace_length,    &
                                       matrix_trace,                   &
@@ -476,6 +475,7 @@ contains
     integer, optional :: level
 
     ! Local variables
+    character(len=80) :: sub_name = "final_energy"
     integer        :: spin, spin_SF
     real(double)   :: total_energy1
     real(double)   :: total_energy2
@@ -487,7 +487,7 @@ contains
 
     ! electron number information
     real(double), dimension(nspin) :: electrons
-    real(double)                   :: electrons_tot1, electrons_tot2, trX
+    real(double)                   :: electrons_tot, electrons_tot2
 
 !****lat<$
     if (       present(level) ) backtrace_level = level+1
@@ -513,34 +513,20 @@ contains
     do spin = 1, nspin
        if (flag_SpinDependentSF) spin_SF = spin
        ! 2*Tr[K NL]
-       if (inode == ionode) write (io_lun,*) 'nl_energy' 
        nl_energy      = nl_energy      &
                         + spin_factor*matrix_product_trace(matK(spin), matNL(spin_SF))
        if(flag_neutral_atom_projector) local_ps_energy = local_ps_energy      &
                         + spin_factor*matrix_product_trace(matK(spin), matNA(spin_SF))
        ! 2*Tr[K KE] with KE = - < grad**2 >
-       if (inode == ionode) write (io_lun,*) 'k_energy'
        kinetic_energy = kinetic_energy &
                         + spin_factor*half*matrix_product_trace(matK(spin), matKE(spin_SF))
        ! 2*Tr[K H]
-       if (inode == ionode) write (io_lun,*) 'band_energy'
        band_energy    = band_energy    &
                         + spin_factor*matrix_product_trace(matK(spin), matH(spin))
        ! -alpha*Tr[K X]
-       if (inode == ionode) write (io_lun,*) 'exx_energy'
        exx_energy     = exx_energy     &
                         - spin_factor*half*exx_alpha*matrix_product_trace(matK(spin), matX(spin))
     end do
-
-    ! Exact exchange energy  = - alpha * Tr[K X]
-    !if (flag_exx) then
-    !   if ( nspin == 1 ) then          
-    !      ! ****not yet implemented with spin-polarisation****
-    !      exx_energy =  - spin_factor * half * exx_alpha &
-    !           * matrix_product_trace(matK(1), matX(1))
-    !   end if
-    !end if
-
 
     ! Find total pure DFT energy
     if(flag_neutral_atom) then
@@ -556,8 +542,6 @@ contains
             ion_interaction_energy    + &
             core_correction
     end if
-    ! Add contribution from exact-exchange (EXX)
-    !if (flag_exx)          total_energy1 = total_energy1 + exx_energy
 
     ! Add contribution from constrained (cDFT)
     if (flag_perform_cdft) total_energy1 = total_energy1 + cdft_energy
@@ -571,13 +555,13 @@ contains
     ! print electron number and spin polarisation information
     
     call electron_number(electrons)
-    if (inode == ionode) electrons_tot1 = electrons(1) + electrons(nspin)
    
     !if (inode == ionode) write(io_lun,*) 'electrons_tot2 start'
     !electrons_tot2 = matrix_product_trace_length(matK(1),matS(1))
     !if (inode == ionode) write(io_lun,*) 'electrons_tot2 stop'
 
     if (inode == ionode) then
+       electrons_tot = electrons(1) + electrons(nspin)
        !
        if (iprint_gen >= 1) then          
           write (io_lun, *) 
@@ -646,8 +630,7 @@ contains
              select case (SmearingType)
              case (0) ! Fermi smearing
                 if (entropy < zero) &
-                     write (io_lun, *) &
-                     ' WARNING !!!!    entropy < 0??? ', entropy
+                     call cq_warn(sub_name, 'Calculated entropy is less than zero; something is wrong ', entropy)
                 !
                 if (iprint_gen >= 0) &
                      write (io_lun,14) en_conv*(total_energy1-half*entropy), &
@@ -724,9 +707,7 @@ contains
        end if
     end if
 
-    electrons_tot1 = zero
     call electron_number(electrons)
-    if (inode == ionode) electrons_tot1 = electrons(1) + electrons(nspin)
 
     electrons_tot2 = zero
     do spin = 1, nspin
@@ -734,12 +715,12 @@ contains
        electrons_tot2 = electrons_tot2 + &
             spin_factor * matrix_product_trace_length(matK(spin),matS(spin_SF))
     end do
-    
 
     if (inode == ionode) then
+       electrons_tot = electrons(1) + electrons(nspin)
        if (iprint_gen >= 1) then
           write (io_lun,23) 
-          write (io_lun,24) electrons_tot1
+          write (io_lun,24) electrons_tot
           write (io_lun,25) electrons_tot2
           !write (io_lun,26) one_electron_energy
           !write (io_lun,27) potential_energy

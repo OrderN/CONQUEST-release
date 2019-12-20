@@ -162,6 +162,8 @@ contains
 !!    Bug fix: mataNA range was wrong with MSSF (didn't correctly use atom function ranges)
 !!   2019/11/18 tsuyoshi
 !!    flag_MDold was removed.
+!!   2019/12/02 15:17 dave 
+!!    Added checks to round RadiusAtomf and RadiusSupport to safe value (including grid points)
 !!  SOURCE
 !!
   subroutine set_dimensions(inode, ionode,HNL_fac,non_local, n_species, non_local_species, core_radius)
@@ -169,15 +171,12 @@ contains
     use datatypes
     use numbers
     use matrix_data
-    use GenComms,      only: cq_abort
+    use GenComms,      only: cq_abort, cq_warn
     use global_module, only: iprint_init,flag_basis_set,blips,runtype, atomf, sf, flag_Multisite
     use global_module, only: flag_dft_d2, flag_exx, flag_diagonalisation
     use block_module,  only: in_block_x, in_block_y, in_block_z, & 
                              n_pts_in_block, n_blocks
-
-    use input_module,           only: leqi
     use pseudopotential_common, only: pseudo_type, OLDPS, SIESTA, ABINIT, flag_neutral_atom_projector
-    !use DiagModule,             only: diagon
 
     implicit none
 
@@ -188,13 +187,30 @@ contains
     real(double) :: HNL_fac, core_radius(:)
 
     ! Local variables
+    character(len=80) :: sub_name = "set_dimensions"
     type(cq_timer) :: backtrace_timer
     integer        :: max_extent, n, stat, mx_matrices_tmp
-    real(double)   :: r_core, r_t, rcutmax
+    real(double)   :: r_core, r_t, rcutmax, max_grid
 
 !****lat<$
     call start_backtrace(t=backtrace_timer,who='set_dimensions',where=9,level=2)
 !****lat>$
+
+    ! Various grid parameters
+    r_super_x_squared = r_super_x * r_super_x
+    r_super_y_squared = r_super_y * r_super_y
+    r_super_z_squared = r_super_z * r_super_z
+    volume = r_super_x * r_super_y * r_super_z
+    grid_point_volume = volume/(n_grid_x*n_grid_y*n_grid_z)
+    one_over_grid_point_volume = one / grid_point_volume
+    !support_grid_volume = support_grid_spacing**3
+    x_grid = one / real( n_grid_x, double)
+    y_grid = one / real( n_grid_y, double)
+    z_grid = one / real( n_grid_z, double)
+    ! Calculate largest grid spacing in any direction (local to routine for now)
+    max_grid = max(r_super_x*x_grid,r_super_y*y_grid,r_super_z*z_grid)
+    ! Grid points in a block
+    n_pts_in_block = in_block_x * in_block_y * in_block_z
 
     ! Set indices for atomf-based-matrix ranges
     if (atomf==sf) then
@@ -249,8 +265,11 @@ contains
     r_h_atomf = zero
     r_MS      = zero
     r_LD      = zero
-    !    if(non_local) then
     do n=1, n_species
+       ! Round the atom function radius to the nearest multiple of the largest grid spacing
+       ! (add one to account for displacement relative to grid point)
+       RadiusAtomf(n) = max_grid*(floor(RadiusAtomf(n)/max_grid)+two)
+       RadiusSupport(n) = max(RadiusSupport(n), RadiusAtomf(n))
        r_core    = max(r_core,core_radius(n))
        r_h       = max(r_h,RadiusSupport(n))
        r_t       = max(r_t,InvSRange(n))
@@ -259,18 +278,13 @@ contains
        r_MS      = max(r_MS,RadiusMS(n))
        r_LD      = max(r_LD,RadiusLD(n))
     end do
-    !    else
-    !       do n=1, n_species
-    !          r_core = max(r_core,core_radius(n))
-    !       end do
-    !    end if
     if(non_local.and.(inode==ionode).and.iprint_init>0) then
        write(io_lun,2) r_core
 2      format(8x,'This calculation includes non-local pseudopotentials,'/&
             9x,'with a maximum core radius of ',f15.8)
     end if
-    if (r_core>r_h) then
-       call cq_abort('set_dimens: r_core > r_support')
+    if (r_core-r_h>1e-4_double) then
+       call cq_abort('set_dimens: r_core > r_support',r_core,r_h)
     end if
 
     ! then, obtain the blip width
@@ -282,10 +296,7 @@ contains
     r_s       = r_h
     r_s_atomf = r_h_atomf
     if(two*r_s>r_c.AND.(.NOT.flag_diagonalisation)) then ! Only warn if using O(N)
-       if(inode==ionode) &
-            write(io_lun,fmt='(8x,"WARNING ! S range greater than L !")')
-       !r_s = r_c
-       !r_h = r_c 
+       call cq_warn(sub_name, "S range greater than L !",two*r_s,r_c)
     endif
     ! Set ranges for contracted SFs
     if (flag_Multisite) then
@@ -416,20 +427,6 @@ contains
        enddo
     endif
 1   format(8x,'Matrix ',a3,' has range ',f15.8)
-    ! Various useful parameters
-    r_super_x_squared = r_super_x * r_super_x
-    r_super_y_squared = r_super_y * r_super_y
-    r_super_z_squared = r_super_z * r_super_z
-    volume = r_super_x * r_super_y * r_super_z
-    grid_point_volume = volume/(n_grid_x*n_grid_y*n_grid_z)
-    one_over_grid_point_volume = one / grid_point_volume
-    !support_grid_volume = support_grid_spacing**3
-    x_grid = one / real( n_grid_x, double)
-    y_grid = one / real( n_grid_y, double)
-    z_grid = one / real( n_grid_z, double)
-    ! Grid points in a block
-    n_pts_in_block = in_block_x * in_block_y * in_block_z
-
 !****lat<$
     call stop_backtrace(t=backtrace_timer,who='set_dimensions')
 !****lat>$
@@ -443,12 +440,13 @@ contains
     use datatypes
     use numbers,        only: pi, very_small,two, half
     use global_module,  only: iprint_init, flag_basis_set, blips
-    use GenComms,       only: inode,ionode,cq_abort
+    use GenComms,       only: inode,ionode,cq_abort, cq_warn
     use species_module, only: n_species
     
     implicit none
     
     ! Local variables
+    character(len=80) :: sub_name="find_grid"
     type(cq_timer) :: backtrace_timer
     real(double)   :: sqKE, blipKE, blip_sp
     integer        :: mingrid, i
@@ -468,8 +466,7 @@ contains
           blip_sp = half*min_blip_sp
           blipKE = half*(pi/blip_sp)*(pi/blip_sp)
           if(GridCutoff<blipKE) then
-             if(iprint_init>0.AND.inode==ionode) &
-                  write(io_lun,fmt='(2x,"Warning ! Adjusted grid cutoff to ",f8.3)') blipKE
+             if(iprint_init>0) call cq_warn(sub_name, "Adjusted grid cutoff to ",blipKE)
              GridCutoff = blipKE
           end if
        end if
