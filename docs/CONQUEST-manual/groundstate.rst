@@ -12,7 +12,7 @@ matrix (found using :ref:`diagonalisation <gs_diag>` or :ref:`linear scaling <gs
 :ref:`support functions <gs_suppfunc>` (though these are not always optimised).
 
 The question of whether to find the density matrix via diagonalisation
-or linear scaling is a complex question, depending on the system size,
+or linear scaling is a complex one, depending on the system size,
 the accuracy required and the computational resources available.  The
 simplest approach is to test diagonalisation before linear scaling.
      
@@ -39,7 +39,9 @@ To choose diagonalisation, the following flag should be set:
 It is also essential to test relevant parameters: the k-point grid in
 reciprocal space (to sample the Brillouin zone efficiently); the
 occupation smearing approach; and the parallelisation of k-points.
- 
+
+.. _gs_diag_bz:
+
 Brillouin zone sampling
 ~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -79,7 +81,11 @@ explicitly by giving a number of points and their locations and weights:
 
 where there must be as many lines in the block as there are k-points.
 
-K-points parallelization
+Go to :ref:`top <groundstate>`.
+
+.. _gs_diag_para:
+
+K-point parallelization
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
 It is possible to parallelise over k-points: to split the processes
@@ -90,6 +96,10 @@ of processes is an integer multiple of the number of groups ``N``.  It
 will be most efficient when the number k-points is an integer
 multiple of the number of groups.
  
+Go to :ref:`top <groundstate>`.
+
+.. _gs_diag_smear:
+
 Electronic occupation smearing
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -98,7 +108,7 @@ the Fermi level, following common practice.  The default smearing type
 is Fermi-Dirac smearing with a temperature (in Hartrees) set with the
 flag ``Diag.kT`` which defaults to 0.001Ha.
 
-The Methfessel-Paxton approach to occupations allows much higher
+The Methfessel-Paxton approach :cite:`g-Methfessel:1989ny` to occupations allows much higher
 smearing temperatures with minimal effect on the free energy (and
 hence accuracy) of the energy. This generally gives a similar accuracy
 with fewer k-points, and is selected as:
@@ -119,9 +129,9 @@ Go to :ref:`top <groundstate>`.
 Linear Scaling
 --------------
 
-.. _gs_scf:
-
 Go to :ref:`top <groundstate>`.
+
+.. _gs_scf:
 
 Self-consistency
 ----------------
@@ -129,7 +139,9 @@ Self-consistency
 The normal mode of operation for CONQUEST involves an iterative search
 for self-consistency between the potential and the charge density.
 However, it is also possible to run in a non-self-consistent manner,
-which will be considerably more efficient but les accurate.
+either with a converged charge density for electronic structure
+analysis, or for dynamics, which will be considerably more efficient
+than a self-consistent calculation, but less accurate.
 
 Self consistency is set via the following parameters:
 
@@ -153,10 +165,16 @@ on a grid explained in :ref:`conv_grid`).  The maximum number
 of self-consistency cycles is set with ``SC.MaxIters``, defaulting
 to 50.
 
-For non-self-consistent calculation, the main flag should be set as
-``minE.SelfConsistent F``.  The charge density at each step will be
-constructed from a superposition of atomic densities, and the
-Harris-Foulked functional will be used to find the energy.
+For non-self-consistent calculations, the main flag should be set as
+``minE.SelfConsistent F``.  The charge density at each step will
+either be read from a file (if the flag ``General.LoadRho T`` is set),
+or constructed from a superposition of 
+atomic densities.  The Harris-Foulkes functional will be used to
+find the energy. 
+
+Go to :ref:`top <groundstate>`.
+
+.. _ gs_scf_adv:
 
 Advanced options
 ~~~~~~~~~~~~~~~~
@@ -172,7 +190,7 @@ In general, we write:
    rho_{n+1}^{in} = \sum_{i} \alpha_i \left[ \rho_{i}^{in} + A R_{i}
    \right]
 
-where :math:`R_{i}` is the residual at iteration :math`i`, defined above.  The
+where :math:`R_{i}` is the residual at iteration :math:`i`, defined above.  The
 fraction of the output charge density that is included is governed by
 the variable :math:`A`, which is set by the parameter
 ``SC.LinearMixingFactor`` (default 0.5).  If there is instability
