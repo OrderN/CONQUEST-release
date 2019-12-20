@@ -2514,7 +2514,8 @@ contains
     end if
 
     if(.NOT.flag_diagonalisation) &
-         write(io_lun,fmt='(10x,"Density Matrix range  = ",f7.4)') dist_conv*r_c, d_units(dist_units)
+         write(io_lun,fmt='(10x,"Density Matrix range  = ",f7.4,x,a2)') &
+         dist_conv*r_c, d_units(dist_units)
     do n=1, n_species
        write(io_lun,131) n, dist_conv*r_h+core_radius(n) * HNL_fac, &
                          d_units(dist_units)
