@@ -249,6 +249,8 @@ contains
   !!    Removing dump_InfoGlobal calls
   !!   2019/12/04 11:47 dave
   !!    Tweak to write convergence only on output process
+  !!   2019/12/20 15:59 dave
+  !!    Added choice of line minimiser: standard safemin2 or backtracking
   !!  SOURCE
   !!
   subroutine cg_run(fixed_potential, vary_mu, total_energy)
@@ -263,7 +265,7 @@ contains
                              IPRINT_TIME_THRES1
     use group_module,  only: parts
     use minimise,      only: get_E_and_F
-    use move_atoms,    only: adapt_backtrack_linemin
+    use move_atoms,    only: adapt_backtrack_linemin, safemin2, cg_line_min, safe, backtrack
     use GenComms,      only: gsum, myid, inode, ionode
     use GenBlas,       only: dot
     use force_module,  only: tot_force
@@ -389,8 +391,12 @@ contains
        end if
        old_force = tot_force
        ! Minimise in this direction
-       !call safemin2(x_new_pos, y_new_pos, z_new_pos, cg, energy0, &
-       call adapt_backtrack_linemin(cg, energy0, energy1, fixed_potential, vary_mu, energy1)
+       if(cg_line_min==safe) then
+          call safemin2(x_new_pos, y_new_pos, z_new_pos, cg, energy0,&
+               energy1, fixed_potential, vary_mu, energy1)
+       else if(cg_line_min==backtrack) then
+          call adapt_backtrack_linemin(cg, energy0, energy1, fixed_potential, vary_mu, energy1)
+       end if
        ! Output positions
        if (myid == 0 .and. iprint_gen > 1) then
           do i = 1, ni_in_cell

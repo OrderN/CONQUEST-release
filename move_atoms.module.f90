@@ -89,7 +89,11 @@ module move_atoms
   real(double) :: enthalpy_tolerance
 
   logical :: flag_stop_on_empty_bundle
-  
+
+  ! Choose line minimiser for CG
+  integer :: cg_line_min
+  integer, parameter :: safe = 0
+  integer, parameter :: backtrack = 1
   ! Table to show the methods to update  (for update_pos_and_matrix)
    integer, parameter :: updatePos  = 0
    integer, parameter :: updateL    = 1
