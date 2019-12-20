@@ -19,9 +19,11 @@ module read
   integer :: energy_units ! Local for reading; 1 is Ha, 2 is eV
   real(double) :: energy_conv ! Define a factor for energy conversion (often 1.0)
   real(double) :: energy_semicore ! Threshold for semi-core states
+  real(double) :: shallow_state_energy ! Energy to define shallow states (maybe too large)
   real(double), save :: gen_energy_semicore ! System-wide threshold for semi-core states
   real(double) :: width, prefac ! Defaults
   logical, save :: flag_gen_use_Vl
+  logical :: flag_adjust_deltaE = .false.
 
   character(len=30), dimension(:), allocatable, save :: species_label
       
@@ -109,6 +111,8 @@ contains
        energy_semicore = fdf_double('Atom.SemicoreEnergy',gen_energy_semicore)
        if(energy_semicore>zero) &
             write(*,fmt='(4x,"Error: your semi-core threshold is positive ! ",f6.3)') energy_semicore
+       ! Energy which detects a state near zero which might have too large a radius
+       shallow_state_energy = fdf_double('Atom.ShallowEnergy',-0.152_double)
        !
        ! Get Hamann input and output file names and read files
        !
@@ -176,7 +180,7 @@ contains
        else if(leqi(input_string(1:2),'ra')) then ! Again
           paos%flag_cutoff = pao_cutoff_radii
        else if(leqi(input_string(1:7),'default')) then
-          paos%flag_cutoff = pao_cutoff_default
+          paos%flag_cutoff = pao_cutoff_radii !default
        else
           call cq_abort("Unrecognised atomic cutoff flag "//input_string(1:8))
        end if
@@ -196,6 +200,13 @@ contains
        else if(leqi(input_string(1:2),"Ha")) then
           deltaE_large_radius = fdf_double("Atom.dE_large_radius",0.00073498_double)
           deltaE_small_radius = fdf_double("Atom.dE_small_radius",0.073498_double)
+       end if
+       if(flag_adjust_deltaE) then
+          deltaE_large_radius = deltaE_large_radius*two
+          write(*,fmt='(2x,"Shallow energy state present ", &
+               "so adjusting large radius energy shift to ",f7.5," Ha")') deltaE_large_radius
+          write(*,fmt='(2x,"Adjust Atom.ShallowEnergy if needed")')
+          flag_adjust_deltaE = .false. ! Allow for other elements not to have this
        end if
        !
        ! Basis size
@@ -444,7 +455,7 @@ contains
     use pseudo_tm_info, ONLY: pseudo
     use input_module, ONLY: io_assign, io_close
     use mesh, ONLY: siesta
-    use pseudo_atom_info, ONLY: val, allocate_val, local_and_vkb, allocate_vkb, hamann_version
+    use pseudo_atom_info, ONLY: val, allocate_val, local_and_vkb, allocate_vkb, hamann_version, deltaE_large_radius
     
     implicit none
 
@@ -459,7 +470,7 @@ contains
     character(len=2) :: char_in
     character(len=80) :: line
     logical :: flag_core_done = .false.
-    real(double) :: dummy, dummy2
+    real(double) :: dummy, dummy2, highest_energy
 
     !
     ! Zero arrays
@@ -521,6 +532,7 @@ contains
     !
     ! Check for inner shells and assign pseudo-n value (for nodes)
     !
+    highest_energy = -ten ! For comparison
     do i = 1,n_shells
        if(iprint>3) write(*,fmt='(2i3,f7.2,f10.4)') val%n(i),val%l(i),val%occ(i),val%en_ps(i)
        ! Check for inner shells: count shells with this l and store
@@ -534,9 +546,15 @@ contains
        ! Check for semi-core state
        if(val%en_ps(i)<energy_semicore) val%semicore(i) = 1
        ! Count occupied states
-       if(val%occ(i)>RD_ERR.OR.val%en_ps(i)<-1e-6_double) n_occ = n_occ + 1
+       if(val%occ(i)>RD_ERR.OR.val%en_ps(i)<-1e-6_double) then
+          n_occ = n_occ + 1
+          highest_energy = max(val%en_ps(i),highest_energy)
+       end if
     end do
-    if(iprint>3) write(*,fmt='(i2," valence shells, with ",i2," included")') n_shells, n_occ
+    if(iprint>3) write(*,fmt='(i2," valence shells, with ",i2," occupied")') n_shells, n_occ
+    if(highest_energy>shallow_state_energy) then
+       flag_adjust_deltaE = .true.
+    end if
     val%n_occ = n_occ
     !
     ! Read grid, charge, partial core, local potential, semilocal potentials
@@ -603,9 +621,9 @@ contains
     integer :: i_species
 
     ! Local variables
-    integer :: lun, z, nc, nv, iexc, i_shell, en, ell, icmod, i, j, zeta, ios, n_nl_proj
+    integer :: lun, nc, nv, iexc, i_shell, en, ell, icmod, i, j, zeta, ios, n_nl_proj
     integer :: input_lines
-    real(double) :: fill, zval
+    real(double) :: fill, zval, z
     character(len=80) :: a
     character(len=2) :: sym
     character(len=4) :: file_format
@@ -623,7 +641,7 @@ contains
     a = get_hamann_line(lun)
     read(a,*) sym,z,nc,nv,iexc,file_format
     write(*,fmt='(/"Information about pseudopotential for species: ",a2/)') sym
-    pseudo(i_species)%z = z
+    pseudo(i_species)%z = int(z)
     !
     ! Assign and initialise XC functional for species
     !
@@ -654,7 +672,7 @@ contains
        a = get_hamann_line(lun)
     end do
     pseudo(i_species)%zval = zval
-    write(*,fmt='("The atomic number is",i3,", with valence charge ",f4.1)') z,zval
+    write(*,fmt='("The atomic number is",f5.1,", with valence charge ",f4.1)') z,zval
     !
     ! lmax
     !
