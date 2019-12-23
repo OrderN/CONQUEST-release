@@ -1928,6 +1928,7 @@ end subroutine write_md_data
     call get_E_and_F(fixed_potential, vary_mu, energy0, .true., &
                      .false.)
     call dump_pos_and_matrices
+    call get_maxf(max)
     iter = 0
     ggold = zero
     energy1 = energy0
@@ -1944,6 +1945,19 @@ end subroutine write_md_data
           iter = 0
           if(inode==ionode.AND.iprint_MD>1) write(io_lun,fmt='(2x,"Resetting history")')
           cg_new = -tot_force
+       end if
+       if (inode==ionode) then
+         write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," E: "e16.8," dE: ",f12.8)') & 
+              iter, max, energy1, en_conv*dE
+         if (iprint_MD > 1) then
+           write(io_lun,'(4x,"Force Residual:     ",f20.10," ",a2,"/",a2)') &
+             for_conv*sqrt(g0/ni_in_cell), en_units(energy_units), & 
+             d_units(dist_units)
+           write(io_lun,'(4x,"Maximum force:      ",f20.10)') max
+           write(io_lun,'(4x,"Force tolerance:    ",f20.10)') MDcgtol
+           write(io_lun,'(4x,"Energy change:      ",f20.10," ",a2)') &
+             en_conv*dE, en_units(energy_units)
+         end if
        end if
        ! Book-keeping
        iter = iter + 1
