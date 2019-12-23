@@ -2043,8 +2043,21 @@ end subroutine write_md_data
        end if
        if (abs(max) < MDcgtol) then
           done = .true.
-          if (myid == 0) &
-               write (io_lun, fmt='(4x,"Maximum force below threshold: ",f12.5)') max
+          if (inode==ionode) then
+             write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," E: "e16.8," dE: ",f12.8)') & 
+                  iter, max, energy1, en_conv*dE
+             if (iprint_MD > 1) then
+                write(io_lun,'(4x,"Force Residual:     ",f20.10," ",a2,"/",a2)') &
+                   for_conv*sqrt(g0/ni_in_cell), en_units(energy_units), & 
+                   d_units(dist_units)
+                write(io_lun,'(4x,"Maximum force:      ",f20.10)') max
+                write(io_lun,'(4x,"Force tolerance:    ",f20.10)') MDcgtol
+                write(io_lun,'(4x,"Energy change:      ",f20.10," ",a2)') &
+                   en_conv*dE, en_units(energy_units)
+             end if
+             write (io_lun, fmt='(4x,"Maximum force below threshold: ",f12.5)') max
+             write(io_lun,'(2x,a,i4,a)') "GeomOpt converged in ", iter, " iterations"
+          end if
        end if
        if (.not. done) call check_stop(done, iter)
        if(done) exit
