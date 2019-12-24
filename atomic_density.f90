@@ -68,7 +68,7 @@ module atomic_density
 
   ! Maximum cutoff atomic on charge density tables
   real(double), allocatable, dimension(:) :: rcut_dens
-  logical :: flag_atomic_density_from_pao
+  ! logical :: flag_atomic_density_from_pao
   character(len=80) :: read_atomic_density_file
   character(len=10) :: atomic_density_method
 
@@ -271,6 +271,9 @@ contains
 !!    Added timers
 !!   2017/03/23 drb
 !!    Change to use delta from PAO structure, not calculate it
+!!   2019/12/24 tsuyoshi
+!!    Removed flag_aotmic_density_from_pao
+!!    We don't need make_atomic_denisty_from_paos any more.
 !!  SOURCE
 !!
   subroutine make_atomic_density_from_paos(inode,ionode,n_species)

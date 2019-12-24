@@ -95,10 +95,8 @@ contains
 
     use datatypes
     use read_pao_info,          only: read_pao
-    use atomic_density,         only: read_atomic_density,           &
-                                      make_atomic_density_from_paos, &
+    use atomic_density,         only: make_atomic_density_from_paos, &
                                       spline_atomic_density,         &
-                                      flag_atomic_density_from_pao,  &
                                       atomic_density_method
     use species_module,         only: n_species
     use GenComms,               only: cq_abort
@@ -117,7 +115,7 @@ contains
 
     ! Local variables
     character(len=10) :: init_blip_method
-    logical           :: flag_blips_from_pao!, flag_atomic_density_from_pao
+    logical           :: flag_blips_from_pao
     type(cq_timer)    :: backtrace_timer
     integer           :: backtrace_level
 
@@ -128,51 +126,72 @@ contains
          where=area,level=backtrace_level)
 !****lat>$
 
-    ! Decide whether blips are to be initialised from PAOs
-    flag_blips_from_pao = .false.
-    if (leqi(init_blip_flag,'pao')) flag_blips_from_pao = .true.
-    ! Decide whether atomic densities are to be initialised from PAOs
-    flag_atomic_density_from_pao = .false.
-    if (leqi(atomic_density_method, 'pao')) &
-         flag_atomic_density_from_pao = .true.
-    ! If PAOs are needed, then read them
-    ! Note that we now read PAOs from the .ion file if we're using
-    ! that pseudopotential
-    if ((pseudo_type /= SIESTA .and. pseudo_type /= ABINIT) .and. &
-         (flag_blips_from_pao .or. flag_atomic_density_from_pao .or. &
-          flag_basis_set == PAOs)) then
+! 2019/Dec/24 tsuyoshi
+!   Now we assume that we always have *.ion files, thus
+!    flag_atomic_density_from_pao = .true.
+!        flag_no_atomic_densities = .false.
+!   (pseudo_type) = SIESTA or ABINIT 
+!   (pao)
+!   (blips) 
+!    flag_blips_from_pao = .true. or .false.
+!         init_blip_flag = 'pao' or 'gauss'
+!      -> removed flag_blips_from_pao  (we don't need it anymore)
+! 2019/Dec/24 tsuyoshi
 
-       if (inode == ionode .and. iprint_init > 1) &
-            write (unit=io_lun, fmt='(//" **** get_ionic_data: about &
-                                      &to call read_pao_info")')
-       call read_pao(inode, ionode, n_species)
-
-    else if ((pseudo_type == SIESTA .or. pseudo_type == ABINIT) .and. &
-             (flag_blips_from_pao .or. flag_atomic_density_from_pao .or. &
-              flag_basis_set == PAOs)) then
-
-       if (inode == ionode .and. iprint_init > 1) &
-            write (unit=io_lun, fmt='(//" **** get_ionic_data: PAO &
-                                      &input from init_pseudo_tm already done")')
-
-    end if
-
-    ! Get the atomic densities
-    if (flag_atomic_density_from_pao) then ! Use PAOs for atomic densities
+! We will remove these two flags in the near future 
+!       flag_atomic_density_from_pao = .true.
+            flag_no_atomic_densities = .false.
+!
+!! NEW GET_IONIC_DATA : start
        call make_atomic_density_from_paos(inode, ionode, n_species)
-    else if (.not. flag_atomic_density_from_pao) then
-       if (leqi(atomic_density_method, 'read')) then ! User has specified a file
-          call read_atomic_density(inode, ionode, n_species)
-       else 
-          ! Signal to the calling routine that no atomic densities
-          ! have been created
-          flag_no_atomic_densities = .true.
-       end if
-    end if
-
-    if (.not. flag_no_atomic_densities) then ! Spline tables
        call spline_atomic_density(n_species)
-    end if
+!! NEW GET_IONIC_DATA : end
+
+!    ! Decide whether blips are to be initialised from PAOs
+!    flag_blips_from_pao = .false.
+!    if (leqi(init_blip_flag,'pao')) flag_blips_from_pao = .true.
+!    ! Decide whether atomic densities are to be initialised from PAOs
+!    flag_atomic_density_from_pao = .false.
+!    if (leqi(atomic_density_method, 'pao')) &
+!         flag_atomic_density_from_pao = .true.
+!    ! If PAOs are needed, then read them
+!    ! Note that we now read PAOs from the .ion file if we're using
+!    ! that pseudopotential
+!    if ((pseudo_type /= SIESTA .and. pseudo_type /= ABINIT) .and. &
+!         (flag_blips_from_pao .or. flag_atomic_density_from_pao .or. &
+!          flag_basis_set == PAOs)) then
+!
+!       if (inode == ionode .and. iprint_init > 1) &
+!            write (unit=io_lun, fmt='(//" **** get_ionic_data: about &
+!                                      &to call read_pao_info")')
+!       call read_pao(inode, ionode, n_species)
+!
+!    else if ((pseudo_type == SIESTA .or. pseudo_type == ABINIT) .and. &
+!             (flag_blips_from_pao .or. flag_atomic_density_from_pao .or. &
+!              flag_basis_set == PAOs)) then
+!
+!       if (inode == ionode .and. iprint_init > 1) &
+!            write (unit=io_lun, fmt='(//" **** get_ionic_data: PAO &
+!                                      &input from init_pseudo_tm already done")')
+!
+!    end if
+!
+!    ! Get the atomic densities
+!    if (flag_atomic_density_from_pao) then ! Use PAOs for atomic densities
+!       call make_atomic_density_from_paos(inode, ionode, n_species)
+!    else if (.not. flag_atomic_density_from_pao) then
+!       if (leqi(atomic_density_method, 'read')) then ! User has specified a file
+!          call read_atomic_density(inode, ionode, n_species)
+!       else 
+!          ! Signal to the calling routine that no atomic densities
+!          ! have been created
+!          flag_no_atomic_densities = .true.
+!       end if
+!    end if
+!
+!    if (.not. flag_no_atomic_densities) then ! Spline tables
+!       call spline_atomic_density(n_species)
+!    end if
 
 !****lat<$
     call stop_backtrace(t=backtrace_timer,who='get_ionic_data')
