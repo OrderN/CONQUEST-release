@@ -740,6 +740,9 @@ contains
   !!   2019/12/04 08:09 dave
   !!    Made default pseudopotential type Hamann to fit with Conquest ion file generator
   !!    and made default grid 100Ha; removed check for old input file format; default method diagonalisation
+  !!   2019/12/26 tsuyoshi
+  !!     General.LoadL => General.LoadLorK
+  !!     AtomMove.ReuseL => AtomMove.ReuseLorK
   !!  TODO
   !!   Fix reading of start flags (change to block ?) 10/05/2002 dave
   !!   Fix rigid shift 10/05/2002 dave
@@ -1979,7 +1982,7 @@ contains
     flag_MDdebug      = fdf_boolean('AtomMove.Debug',.false.)
     flag_MDcontinue   = fdf_boolean('AtomMove.RestartRun',.false.)
     flag_SFcoeffReuse = fdf_boolean('AtomMove.ReuseSFcoeff',.false.)
-    flag_LmatrixReuse = fdf_boolean('AtomMove.ReuseL',.false.)
+    flag_LmatrixReuse = fdf_boolean('AtomMove.ReuseLorK',.false.)
     flag_write_xsf    = fdf_boolean('AtomMove.WriteXSF', .true.)
     if (flag_LFD .and. .not.flag_SFcoeffReuse) then
        ! if LFD, use atomic density in default when we don't reuse SFcoeff
@@ -2002,13 +2005,13 @@ contains
     ! remains consistent
     if (flag_MDcontinue) then
        flag_read_velocity = fdf_boolean('AtomMove.ReadVelocity',.true.)
-       restart_LorK   = fdf_boolean('General.LoadL', .true.)
+       restart_LorK   = fdf_boolean('General.LoadLorK', .true.)
        find_chdens    = fdf_boolean('SC.MakeInitialChargeFromK',.true.)
        if (flag_XLBOMD) restart_X=fdf_boolean('XL.LoadX', .true.)
        if (flag_multisite) read_option = fdf_boolean('Basis.LoadCoeffs', .true.)
     else
        flag_read_velocity = fdf_boolean('AtomMove.ReadVelocity',.false.)
-       restart_LorK   = fdf_boolean('General.LoadL', .false.)
+       restart_LorK   = fdf_boolean('General.LoadLorK', .false.)
        find_chdens    = fdf_boolean('SC.MakeInitialChargeFromK',.false.)
        if (flag_XLBOMD) restart_X=fdf_boolean('XL.LoadX', .false.)
        if (flag_multisite) read_option = fdf_boolean('Basis.LoadCoeffs', .false.)

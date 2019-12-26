@@ -91,7 +91,7 @@ contains
   !!    Removed get_support_pao_rep which is no longer used
   !!  SOURCE
   !!
-  subroutine get_ionic_data(inode,ionode,flag_no_atomic_densities,level)
+  subroutine get_ionic_data(inode,ionode,level)
 
     use datatypes
     use read_pao_info,          only: read_pao
@@ -111,7 +111,7 @@ contains
     ! Passed variables
     integer, optional    :: level
     integer, intent(in)  :: inode, ionode
-    logical, intent(out) :: flag_no_atomic_densities
+    !logical, intent(out) :: flag_no_atomic_densities
 
     ! Local variables
     character(len=10) :: init_blip_method
@@ -140,7 +140,7 @@ contains
 
 ! We will remove these two flags in the near future 
 !       flag_atomic_density_from_pao = .true.
-            flag_no_atomic_densities = .false.
+!           flag_no_atomic_densities = .false.
 !
 !! NEW GET_IONIC_DATA : start
        call make_atomic_density_from_paos(inode, ionode, n_species)

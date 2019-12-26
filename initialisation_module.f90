@@ -111,6 +111,8 @@ contains
   !!    Changes to find maximum angular momentum for PAOs and pseudopotentials (for factorial function)
   !!   2018/02/13 12:18 dave
   !!    Changes to new XC interface
+  !!   2019/12/26 tsuyoshi
+  !!    Removed flag_no_atomic_densities
   !!  SOURCE
   !!
   subroutine initialise(vary_mu, fixed_potential, mu, total_energy)
@@ -127,7 +129,7 @@ contains
                                  cq_abort
     use initial_read,      only: read_and_write
     use ionic_data,        only: get_ionic_data
-    use density_module,    only: flag_no_atomic_densities
+!    use density_module,    only: flag_no_atomic_densities
     use memory_module,     only: init_reg_mem, reg_alloc_mem, type_dbl
     use group_module,      only: parts
     use primary_module,    only: bundle
@@ -184,14 +186,20 @@ contains
     end if
 
     ! Call routines to read or make data for isolated ions
-    flag_no_atomic_densities = .false.
-    call get_ionic_data(inode, ionode, flag_no_atomic_densities)
-    if (flag_no_atomic_densities .and. (.not. find_chdens)) then
-       if (inode == ionode) &
-            write (io_lun, *) 'No initial charge density specified - &
-                               &building from initial K'
-       find_chdens = .true.
-    end if
+    !flag_no_atomic_densities = .false.
+    !call get_ionic_data(inode, ionode, flag_no_atomic_densities)
+    call get_ionic_data(inode, ionode)
+   
+    ! 2019/Dec/26 TM
+    ! Since flag_no_atomic_densities is always .false. now, 
+    ! we don't need the following lines
+    !if (flag_no_atomic_densities .and. (.not. find_chdens)) then
+    !   if (inode == ionode) &
+    !        write (io_lun, *) 'No initial charge density specified - &
+    !                           &building from initial K'
+    !   find_chdens = .true.
+    !end if
+
     lmax_tot = lmax_pao+lmax_ps
     if(2*lmax_pao>lmax_tot) lmax_tot = 2*lmax_pao
     if(lmax_tot<8) lmax_tot = 8
@@ -201,7 +209,7 @@ contains
     
     call my_barrier()
 
-    call initial_phis(read_phi, start, find_chdens, fixed_potential, std_level_loc+1)
+    call initial_phis(read_phi, start, fixed_potential, std_level_loc+1)
 
     ! ewald/screened_ion force and stress is computed in initial_H, so we
     ! need to allocate the atomic_stress array here - zamaan
@@ -745,9 +753,11 @@ contains
  !!    Renamed supportfns -> atomfns
  !!   2017/02/21 16:00 nakata
  !!    Removed unused get_support_pao_rep
+ !!   2019/12/26 tsuyoshi
+ !!    Removed unused find_chdens
  !!  SOURCE
  !!
- subroutine initial_phis(read_phi, start, find_chdens, fixed_potential, level)
+ subroutine initial_phis(read_phi, start, fixed_potential, level)
 
     use datatypes
     use blip,                        only: init_blip_flag, make_pre,   &
@@ -791,7 +801,7 @@ contains
     implicit none
 
     ! Passed variables
-    logical           :: read_phi, start, find_chdens, fixed_potential
+    logical           :: read_phi, start, fixed_potential
     integer, optional :: level
 
     ! Local variables
@@ -1182,8 +1192,14 @@ contains
        call set_atom_coord_diff(InfoGlob)
        MDinit_step = InfoGlob%MDstep
      
-      ! 2018JFeb12 TM 
-       if(restart_LorK) find_chdens=.true.
+      ! 2019Dec26 TM
+      ! Now, since the default value of find_chdens is 'true' if we set restart_LorK 
+      ! as .true., the following line should be commented out. 
+      !  Even when we set restart_LorK, we should be able to choose the option 
+      ! where find_chdens = .false. (initial charge = atomic charge)
+      ! But.. since this change will affect the result, we will issue this change later.
+      !
+       if(restart_LorK) find_chdens=.true.  ! 2018JFeb12 TM 
 
        call my_barrier()
     endif

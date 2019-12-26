@@ -427,7 +427,8 @@ contains
     use GenBlas,            only: dot
     use force_module,       only: tot_force
     use io_module,          only: write_atomic_positions, pdb_template
-    use density_module,     only: density, flag_no_atomic_densities, set_density_pcc
+    !use density_module,     only: density, flag_no_atomic_densities, set_density_pcc
+    use density_module,     only: density, set_density_pcc
     use maxima_module,      only: maxngrid
     use multisiteSF_module, only: flag_LFD_minimise
     use timer_module
@@ -798,7 +799,8 @@ contains
     use GenBlas,        only: dot
     use force_module,   only: tot_force
     use io_module,      only: write_atomic_positions, pdb_template
-    use density_module, only: density, flag_no_atomic_densities, set_density_pcc
+    !use density_module, only: density, flag_no_atomic_densities, set_density_pcc
+    use density_module, only: density, set_density_pcc
     use maxima_module,  only: maxngrid
     use matrix_data, ONLY: Lrange, Hrange, SFcoeff_range, SFcoeffTr_range, HTr_range
     use mult_module, ONLY: matL,L_trans, matK, matSFcoeff
@@ -1271,8 +1273,9 @@ contains
     use GenBlas,            only: dot
     use force_module,       only: tot_force
     use io_module,          only: write_atomic_positions, pdb_template
-    use density_module,     only: density, flag_no_atomic_densities, &
-                                  set_density_pcc
+    !use density_module,     only: density, flag_no_atomic_densities, &
+    !                             set_density_pcc
+    use density_module,     only: density, set_density_pcc
     use maxima_module,      only: maxngrid
     use multisiteSF_module, only: flag_LFD_minimise
     use timer_module
@@ -2640,7 +2643,7 @@ contains
                                       ne_in_cell, spin_factor,         &
                                       ni_in_cell, area_moveatoms
     use density_module,         only: set_atomic_density,              &
-                                      flag_no_atomic_densities,        &
+!                                      flag_no_atomic_densities,        &
                                       density, set_density_pcc,        &
                                       get_electronic_density
     use GenComms,               only: cq_abort, inode, ionode
@@ -2718,9 +2721,15 @@ contains
     if (flag_dft_d2) call dispersion_D2
     ! Now we call set_density if (a) we have non-SCF and atomic densities or
     ! (b) the flag_reset_dens_on_atom_move is set
-    if(((.NOT. flag_self_consistent)     .AND. &
-        (.NOT. flag_no_atomic_densities) .AND. &
-        (.NOT. flag_mix_L_SC_min)).OR.flag_reset_dens_on_atom_move) then
+    !
+    !2019Dec26 tsuyoshi flag_no_atomic_densities is always .false.
+    ! OLD 
+    !if(((.NOT. flag_self_consistent)     .AND. &
+    !    (.NOT. flag_no_atomic_densities) .AND. &
+    !    (.NOT. flag_mix_L_SC_min)).OR.flag_reset_dens_on_atom_move) then
+    ! NEW  (non-SCF or reset density by atomic densities)
+    if(((.NOT. flag_self_consistent) .AND. (.NOT. flag_mix_L_SC_min))&
+         .OR.flag_reset_dens_on_atom_move) then
         call set_atomic_density(.true.)
     ! For SCF-O(N) calculations
     elseif (.NOT.flag_diagonalisation) then
@@ -2753,9 +2762,12 @@ contains
        endif
     else if(flag_diagonalisation.AND.flag_neutral_atom) then
        if (.not.flag_LFD_MD_UseAtomicDensity) call set_atomic_density(.false.)
-    else if ((.not. flag_self_consistent) .and. &
-             (flag_no_atomic_densities)) then
-       call cq_abort("update_H: Can't run non-self-consistent without PAOs !")
+    ! 2019Dec26 tsuyoshi 
+    !  since flag_no_atomic_densities is always .false., we don't need the following "else if"
+    !OLD 
+    !else if ((.not. flag_self_consistent) .and. &
+    !         (flag_no_atomic_densities)) then
+    !   call cq_abort("update_H: Can't run non-self-consistent without PAOs !")
     end if
     ! If we have read K and are predicting density from it, then rebuild
     if(flag_diagonalisation.AND.flag_LmatrixReuse) then
@@ -3690,7 +3702,8 @@ contains
     use GenComms,           only: my_barrier, myid, inode, ionode,        &
          cq_abort
     use io_module,          only: write_atomic_positions, pdb_template
-    use density_module,     only: density, flag_no_atomic_densities, set_density_pcc
+    !use density_module,     only: density, flag_no_atomic_densities, set_density_pcc
+    use density_module,     only: density, set_density_pcc
     use maxima_module,      only: maxngrid
     use multisiteSF_module, only: flag_LFD_minimise
     use timer_module
