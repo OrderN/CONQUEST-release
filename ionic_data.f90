@@ -111,7 +111,6 @@ contains
     ! Passed variables
     integer, optional    :: level
     integer, intent(in)  :: inode, ionode
-    !logical, intent(out) :: flag_no_atomic_densities
 
     ! Local variables
     character(len=10) :: init_blip_method
@@ -130,6 +129,7 @@ contains
 !   Now we assume that we always have *.ion files, thus
 !    flag_atomic_density_from_pao = .true.
 !        flag_no_atomic_densities = .false.
+!
 !   (pseudo_type) = SIESTA or ABINIT 
 !   (pao)
 !   (blips) 
@@ -138,7 +138,7 @@ contains
 !      -> removed flag_blips_from_pao  (we don't need it anymore)
 ! 2019/Dec/24 tsuyoshi
 
-! We will remove these two flags in the near future 
+! 2019/Dec/27 We have removed these two flags
 !       flag_atomic_density_from_pao = .true.
 !           flag_no_atomic_densities = .false.
 !

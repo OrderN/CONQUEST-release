@@ -129,7 +129,6 @@ contains
                                  cq_abort
     use initial_read,      only: read_and_write
     use ionic_data,        only: get_ionic_data
-!    use density_module,    only: flag_no_atomic_densities
     use memory_module,     only: init_reg_mem, reg_alloc_mem, type_dbl
     use group_module,      only: parts
     use primary_module,    only: bundle
@@ -186,8 +185,6 @@ contains
     end if
 
     ! Call routines to read or make data for isolated ions
-    !flag_no_atomic_densities = .false.
-    !call get_ionic_data(inode, ionode, flag_no_atomic_densities)
     call get_ionic_data(inode, ionode)
    
     ! 2019/Dec/26 TM

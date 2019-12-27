@@ -67,6 +67,8 @@
 !!    Merging set_density_atom and set_density and renaming to set_atomic_density
 !!   2018/05/17 12:53 dave with Ayako Nakata
 !!    Moved flag_InitialAtomicSpin from global (and changed set_atomic_density)
+!!   2019/12/27 tsuyoshi
+!!    Removed flag_no_atomic_densities
 !!  SOURCE
 module density_module
 
@@ -79,7 +81,6 @@ module density_module
   implicit none
   save
 
-  logical :: flag_no_atomic_densities
   ! Initialise spin
   logical :: flag_InitialAtomicSpin
 
