@@ -2679,8 +2679,7 @@ contains
     if (atomf.ne.sf) then
        if (flag_SFcoeffReuse) then
        ! Use the coefficients in the previous step   
-          !call cq_abort("update_H: SFcoeff in the previous MD step cannot be reused at present!")
-          ! SF coeffs are already updated before calling update_H, but we need its transpose
+       ! SF coeffs are already updated before calling update_H, but we need its transpose
          do spin_SF = 1,nspin_SF
           call matrix_transpose(matSFcoeff(spin_SF), matSFcoeff_tran(spin_SF))
          enddo
@@ -2721,13 +2720,8 @@ contains
     if (flag_dft_d2) call dispersion_D2
     ! Now we call set_density if (a) we have non-SCF and atomic densities or
     ! (b) the flag_reset_dens_on_atom_move is set
-    !
-    !2019Dec26 tsuyoshi flag_no_atomic_densities is always .false.
-    ! OLD 
-    !if(((.NOT. flag_self_consistent)     .AND. &
-    !    (.NOT. flag_no_atomic_densities) .AND. &
-    !    (.NOT. flag_mix_L_SC_min)).OR.flag_reset_dens_on_atom_move) then
-    ! NEW  (non-SCF or reset density by atomic densities)
+        !2019Dec27 tsuyoshi flag_no_atomic_densities was removed
+        ! For (non-SCF or reset density by atomic densities)
     if(((.NOT. flag_self_consistent) .AND. (.NOT. flag_mix_L_SC_min))&
          .OR.flag_reset_dens_on_atom_move) then
         call set_atomic_density(.true.)
@@ -2762,12 +2756,6 @@ contains
        endif
     else if(flag_diagonalisation.AND.flag_neutral_atom) then
        if (.not.flag_LFD_MD_UseAtomicDensity) call set_atomic_density(.false.)
-    ! 2019Dec26 tsuyoshi 
-    !  since flag_no_atomic_densities is always .false., we don't need the following "else if"
-    !OLD 
-    !else if ((.not. flag_self_consistent) .and. &
-    !         (flag_no_atomic_densities)) then
-    !   call cq_abort("update_H: Can't run non-self-consistent without PAOs !")
     end if
     ! If we have read K and are predicting density from it, then rebuild
     if(flag_diagonalisation.AND.flag_LmatrixReuse) then

@@ -120,6 +120,11 @@ module density_module
   character(len=80), private :: &
        RCSid = "$Id$"
 
+  ! Method for constructing initial charge density (after the movement of atoms)
+  integer            :: method_UpdateChargeDensity
+  integer, parameter :: DensityMatrix = 0   ! use previous-step DM
+  integer, parameter ::  AtomicCharge = 1   ! superposition of atomic charge
+  integer, parameter ::  LastStep     = 2   ! use charge density on the grid at the last step
 !!***
 
 contains

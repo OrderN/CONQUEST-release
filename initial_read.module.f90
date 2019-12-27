@@ -911,6 +911,9 @@ contains
          fire_N_max, fire_max_step, fire_N_below_thresh
     use XC, only : flag_functional_type, functional_hartree_fock, functional_hyb_pbe0, flag_different_functional
 
+   !2019/12/27 tsuyoshi
+    use density_module,  only: method_UpdateChargeDensity,DensityMatrix,AtomicCharge,LastStep
+
     implicit none
 
     ! Passed variables
@@ -1534,7 +1537,7 @@ contains
     flag_wdmetric   = fdf_boolean('SC.WaveDependentMetric', .false.)
     q1              = fdf_double ('SC.MetricFactor',     0.1_double)
     n_exact         = fdf_integer('SC.LateStageReset',   5         )
-    flag_reset_dens_on_atom_move = fdf_boolean('SC.ResetDensOnAtomMove',.false.)
+    !flag_reset_dens_on_atom_move = fdf_boolean('SC.ResetDensOnAtomMove',.false.)  !TM 2019/12/27
     flag_continue_on_SC_fail     = fdf_boolean('SC.ContinueOnSCFail',   .false.)
     maxitersSC      = fdf_integer('SC.MaxIters',50)
     minitersSC      = fdf_integer('SC.MinIters',0) ! Changed default 2->0 DRB 2018/02/26
@@ -1984,14 +1987,38 @@ contains
     flag_SFcoeffReuse = fdf_boolean('AtomMove.ReuseSFcoeff',.false.)
     flag_LmatrixReuse = fdf_boolean('AtomMove.ReuseLorK',.false.)
     flag_write_xsf    = fdf_boolean('AtomMove.WriteXSF', .true.)
-    if (flag_LFD .and. .not.flag_SFcoeffReuse) then
-       ! if LFD, use atomic density in default when we don't reuse SFcoeff
-       flag_LFD_MD_UseAtomicDensity = fdf_boolean('Multisite.LFD.UpdateWithAtomicDensity',.true.)
-    endif
     ! DRB 2017/05/09 Removing restriction (now implemented)
     !if(flag_spin_polarisation.AND.flag_LmatrixReuse) then
     !   call cq_abort("L matrix re-use and spin polarisation not implemented !")
     !end if
+    
+    ! tsuyoshi 2019/12/27
+    !  New Keyword for the method to update the charge density after the movement of atoms
+    !    DensityMatrix = 0; AtomicCharge = 1; LastStep = 2
+     method_UpdateChargeDensity = fdf_integer('AtomMove.InitialChargeDensity',DensityMatrix)
+
+    !  The keywords ( SC.ResetDensOnAtomMove and Multisite.LFD.UpdateWithAtomicDensity ) 
+    !  should be removed in the near future.
+       flag_reset_dens_on_atom_move = fdf_boolean('SC.ResetDensOnAtomMove',.false.)
+       if(flag_reset_dens_on_atom_move) then
+         call cq_warn(sub_name,' SC.ResentDensOnAtomMove will not be available soon. &
+                      Set AtomMove.InitialChargeDensity as 1, instead.')
+         method_UpdateChargeDensity = AtomicCharge
+       endif
+
+       if (flag_LFD .and. .not.flag_SFcoeffReuse) then
+         ! if LFD, use atomic density in default when we don't reuse SFcoeff
+         flag_LFD_MD_UseAtomicDensity = fdf_boolean('Multisite.LFD.UpdateWithAtomicDensity',.true.)
+         call cq_warn(sub_name,' Multisite.LFD.UpdateWithAtomicDensity will not be available soon. &
+                      Set AtomMove.InitialChargeDensity, instead.')
+       endif
+       if(flag_LFD_MD_UseAtomicDensity) method_UpdateChargeDensity = AtomicCharge
+
+    if(method_UpdateChargeDensity == AtomicCharge) then
+      flag_reset_dens_on_atom_move = .true.
+      flag_LFD_MD_UseAtomicDensity = .true.
+    endif
+
 
     flag_TmatrixReuse = fdf_boolean('AtomMove.ReuseInvS',.false.)
     flag_SkipEarlyDM  = fdf_boolean('AtomMove.SkipEarlyDM',.false.)
