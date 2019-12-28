@@ -37,28 +37,41 @@ Spin polarisaion
 ----------------
 Spin-polarised calculation is performed by setting ``Spin.SpinPolarised`` to T. 
 
-Users need to specify the number of spin-up/down electrons in unit cells by ``Spin.NeUP`` and ``Spin.NeDN`` or the difference of spin-up/down electrons by ``Spin.Magn``. When users want to specify the number of spin-up/down electrons for each species, use ``Atom.SpinNeUp`` and ``Atom.SpinNeDn``.
+Users need to specify the initial number of spin-up/down electrons in unit cells by ``Spin.NeUP`` and ``Spin.NeDN`` or the difference of spin-up/down electrons by ``Spin.Magn``. When users want to specify the number of spin-up/down electrons for each species, use ``Atom.SpinNeUp`` and ``Atom.SpinNeDn``.
 
 The number of electrons for each spin will be fixed during SCF calculations when we set ``Spin.FixSpin`` to T (default is F).
+
+:: 
+
+   # example of ferro bcc Fe
+   Spin.SpinPolarised T
+   Spin.FixSpin  F
+   Spin.NeUP  9.0     # initial numbers of up- and down-spin electrons,
+   Spin.NeDN  7.0     # which will be optimised by a SCF calaculation when Spin.FixSpin=F
+   
+   %block ChemicalSpeciesLabel
+   1   55.845   Fe
+   %endblock ChemicalSpeciesLabel
+
 
 ::
 
    # example of anti-ferro bcc Fe
    Spin.SpinPolarised T
    Spin.FixSpin  F
-   Spin.NeUP  8.0
-   Spin.NeDN  8.0
+   Spin.NeUP  8.0     # initial numbers of up- and down-spin electrons in an unit cell
+   Spin.NeDN  8.0     # are set to be the same
    
    %block ChemicalSpeciesLabel
    1   55.845   Fe1
    2   55.845   Fe2
    %endblock ChemicalSpeciesLabel
    
-   %block Fe1
+   %block Fe1           # up-spin Fe
    Atom.SpinNeUp 5.00
    Atom.SpinNeDn 3.00
    %endblock Fe1
-   %block Fe2
+   %block Fe2           # down-spin Fe
    Atom.SpinNeUp 3.00
    Atom.SpinNeDn 5.00
    %endblock Fe2
