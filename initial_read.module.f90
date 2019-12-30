@@ -2001,10 +2001,10 @@ contains
     ! Basic settings for MD
     flag_MDdebug      = fdf_boolean('AtomMove.Debug',.false.)
     flag_MDcontinue   = fdf_boolean('AtomMove.RestartRun',.false.)
-    flag_SFcoeffReuse = fdf_boolean('AtomMove.ReuseSFcoeff',.false.)
-    flag_LmatrixReuse = fdf_boolean('AtomMove.ReuseDM',.false.)
-    !flag_SFcoeffReuse = fdf_boolean('AtomMove.ReuseSFcoeff',.true.)
-    !flag_LmatrixReuse = fdf_boolean('AtomMove.ReuseDM',.true.)
+    !flag_SFcoeffReuse = fdf_boolean('AtomMove.ReuseSFcoeff',.false.)
+    !flag_LmatrixReuse = fdf_boolean('AtomMove.ReuseDM',.false.)
+    flag_SFcoeffReuse = fdf_boolean('AtomMove.ReuseSFcoeff',.true.)
+    flag_LmatrixReuse = fdf_boolean('AtomMove.ReuseDM',.true.)
     flag_write_xsf    = fdf_boolean('AtomMove.WriteXSF', .true.)
     ! DRB 2017/05/09 Removing restriction (now implemented)
     !if(flag_spin_polarisation.AND.flag_LmatrixReuse) then
