@@ -1091,6 +1091,8 @@ contains
   !!    Removed n_proc_old and glob2node_old
   !!   2019/11/18 tsuyoshi 
   !!    Removed flag_MDold
+  !!   2019/12/29 tsuyoshi
+  !!    restart_LorK -> restart_DM
   !!  SOURCE
   !!
   subroutine initial_H(start, start_L, find_chdens, fixed_potential, &
@@ -1106,7 +1108,7 @@ contains
     use SelfCon,             only: new_SC_potl
     use global_module,       only: iprint_init, flag_self_consistent, &
          flag_basis_set, blips, PAOs,       &
-         restart_LorK,                      &
+         restart_DM,                      &
          restart_rho, flag_test_forces,     &
          flag_dft_d2, nspin, spin_factor,   &
          flag_MDcontinue,                   &
@@ -1179,7 +1181,7 @@ contains
     !      --> Fetch and distribute date on old job
 
     if (flag_MDcontinue.or. &
-         restart_LorK.or. &
+         restart_DM.or. &
          restart_T   .or. &
          read_option  ) then
        if (inode.eq.ionode) write (io_lun,*) "Get global info to load matrices"
@@ -1190,13 +1192,13 @@ contains
        MDinit_step = InfoGlob%MDstep
      
       ! 2019Dec26 TM
-      ! Now, since the default value of find_chdens is 'true' if we set restart_LorK 
+      ! Now, since the default value of find_chdens is 'true' if we set restart_DM 
       ! as .true., the following line should be commented out. 
-      !  Even when we set restart_LorK, we should be able to choose the option 
+      !  Even when we set restart_DM, we should be able to choose the option 
       ! where find_chdens = .false. (initial charge = atomic charge)
       ! But.. since this change will affect the result, we will issue this change later.
       !
-       if(restart_LorK) find_chdens=.true.  ! 2018JFeb12 TM 
+       if(restart_DM) find_chdens=.true.  ! 2018JFeb12 TM 
 
        call my_barrier()
     endif
@@ -1274,7 +1276,7 @@ contains
           call stop_timer(tmr_std_densitymat)
        end if
     end if
-    if (restart_LorK) then
+    if (restart_DM) then
        if(.not.flag_diagonalisation) then
           call grab_matrix2('L',inode,nfile,Info,InfoGlob,index=0,n_matrix=nspin)
           call my_barrier()
@@ -1303,7 +1305,7 @@ contains
 !!$
 !!$
     ! (3) get K matrix (and also get phi matrix)
-    if (.not. flag_diagonalisation .and. (find_chdens .or. restart_LorK)) then
+    if (.not. flag_diagonalisation .and. (find_chdens .or. restart_DM)) then
        call LNV_matrix_multiply(electrons, energy_tmp, doK, dontM1,   &
             dontM2, dontM3, dontM4, dophi, dontE, &
             mat_phi=matphi)
@@ -1394,7 +1396,7 @@ contains
 !!$
     if ( flag_self_consistent ) then ! Vary only DM and charge density
        !
-       if ( restart_LorK ) then
+       if ( restart_DM ) then
           record  = .true.
           reset_L = .false.
           call new_SC_potl(record, sc_tolerance, reset_L, &
@@ -1447,7 +1449,7 @@ contains
           wf_self_con=.true.
        endif
 
-       if ( .not. restart_LorK ) then
+       if ( .not. restart_DM ) then
           record  = .false.   
           reset_L = .true.
           call FindMinDM(n_L_iterations, vary_mu, L_tolerance, &

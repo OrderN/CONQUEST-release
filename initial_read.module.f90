@@ -740,9 +740,9 @@ contains
   !!   2019/12/04 08:09 dave
   !!    Made default pseudopotential type Hamann to fit with Conquest ion file generator
   !!    and made default grid 100Ha; removed check for old input file format; default method diagonalisation
-  !!   2019/12/26 tsuyoshi
-  !!     General.LoadL => General.LoadLorK
-  !!     AtomMove.ReuseL => AtomMove.ReuseLorK
+  !!   2019/12/26 tsuyoshi  (2019/12/29)
+  !!     General.LoadL => General.LoadLorK  => General.LoadDM
+  !!     AtomMove.ReuseL => AtomMove.ReuseLorK => AtomMove.ReuseDM
   !!  TODO
   !!   Fix reading of start flags (change to block ?) 10/05/2002 dave
   !!   Fix rigid shift 10/05/2002 dave
@@ -761,7 +761,7 @@ contains
          flag_fractional_atomic_coords,            &
          flag_old_partitions, ne_in_cell,          &
          max_L_iterations, flag_read_blocks,       &
-         runtype, restart_LorK, restart_rho,          &
+         runtype, restart_DM, restart_rho,         &
          flag_basis_set, blips, PAOs,              &
          flag_test_forces, UseGemm,                &
          flag_fractional_atomic_coords,            &
@@ -1394,6 +1394,8 @@ contains
     end do
     ! For ghost atoms
     if(flag_ghost) then
+       !2019Dec30 tsuyoshi
+       !the following do-loop should be commented out, since charge(:) will be updated in setup_pseudo_info
        do i=1, n_species
           if(type_species(i) < 0) then
              charge(i) = zero
@@ -1985,12 +1987,24 @@ contains
     flag_MDdebug      = fdf_boolean('AtomMove.Debug',.false.)
     flag_MDcontinue   = fdf_boolean('AtomMove.RestartRun',.false.)
     flag_SFcoeffReuse = fdf_boolean('AtomMove.ReuseSFcoeff',.false.)
-    flag_LmatrixReuse = fdf_boolean('AtomMove.ReuseLorK',.false.)
+    flag_LmatrixReuse = fdf_boolean('AtomMove.ReuseDM',.false.)
     flag_write_xsf    = fdf_boolean('AtomMove.WriteXSF', .true.)
     ! DRB 2017/05/09 Removing restriction (now implemented)
     !if(flag_spin_polarisation.AND.flag_LmatrixReuse) then
     !   call cq_abort("L matrix re-use and spin polarisation not implemented !")
     !end if
+    ! tsuyoshi 2019/12/30
+     if(flag_SFcoeffReuse .and. .not.flag_LmatrixReuse) then
+       call cq_warn(sub_name,' AtomMove.ReuseDM should be true if AtomMove.ReuseSFcoeff is true.')
+       flag_LmatrixReuse = .true.
+     endif
+     !if(flag_one_to_one .or. flag_Multisite) then  ! one_to_one should be available, though not checked.
+     if(flag_Multisite) then
+      if(.not.flag_SFcoeffReuse .and. flag_LmatrixReuse) then
+       call cq_warn(sub_name,' AtomMove.ReuseSFcoeff should be true if AtomMove.ReuseDM is true.')
+       flag_SFcoeffReuse = .true.
+      endif
+     endif
     
     ! tsuyoshi 2019/12/27
     !  New Keyword for the method to update the charge density after the movement of atoms
@@ -2032,19 +2046,19 @@ contains
     ! remains consistent
     if (flag_MDcontinue) then
        flag_read_velocity = fdf_boolean('AtomMove.ReadVelocity',.true.)
-       restart_LorK   = fdf_boolean('General.LoadLorK', .true.)
+       restart_DM         = fdf_boolean('General.LoadDM', .true.)
        find_chdens    = fdf_boolean('SC.MakeInitialChargeFromK',.true.)
        if (flag_XLBOMD) restart_X=fdf_boolean('XL.LoadX', .true.)
        if (flag_multisite) read_option = fdf_boolean('Basis.LoadCoeffs', .true.)
     else
        flag_read_velocity = fdf_boolean('AtomMove.ReadVelocity',.false.)
-       restart_LorK   = fdf_boolean('General.LoadLorK', .false.)
+       restart_DM         = fdf_boolean('General.LoadDM', .false.)
        find_chdens    = fdf_boolean('SC.MakeInitialChargeFromK',.false.)
        if (flag_XLBOMD) restart_X=fdf_boolean('XL.LoadX', .false.)
        if (flag_multisite) read_option = fdf_boolean('Basis.LoadCoeffs', .false.)
     end if
 
-    if (restart_LorK .and. flag_Multisite .and. .not.read_option) then
+    if (restart_DM .and. flag_Multisite .and. .not.read_option) then
        call cq_abort("When L or K matrix is read from files, SFcoeff also must be read from files for multi-site calculation.")
     endif
 
