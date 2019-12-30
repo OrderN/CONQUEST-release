@@ -36,6 +36,8 @@
 !!   2016/10/04
 !!
 !!  MODIFICATION HISTORY
+!!   2019/12/30 tsuyoshi
+!!      introduced n_dump_SFcoeff for dumping SFcoeff & (K or L) matrices during the minimisation of SFcoeff
 !!
 !!  SOURCE
 !!
@@ -86,6 +88,8 @@ module multisiteSF_module
   ! MD
   logical :: flag_LFD_MD_UseAtomicDensity                        ! use atomic density when recalculate SFcoeff by LFD (default=T)
 
+  ! Frequency for dumping matrices
+  integer :: n_dumpSFcoeff
 !!***
 
 contains
@@ -198,13 +202,7 @@ contains
     enddo
 
     ! Write out current SF coefficients with some iprint (in future)
-    ! if (iprint_basis>=3) call dump_pos_and_matrices
-!    if (nspin_SF == 1) then
-!       call dump_matrix("SFcoeff",    matSFcoeff(1), inode)
-!    else
-!       call dump_matrix("SFcoeff_up", matSFcoeff(1), inode)
-!       call dump_matrix("SFcoeff_dn", matSFcoeff(2), inode)
-!    end if
+     if (iprint_basis>=3) call dump_pos_and_matrices(index=98)
 
     call my_barrier()
     t2 = mtime()
@@ -2430,13 +2428,11 @@ contains
 
     ! Write out current SF coefficients and density matrices with some iprint (in future)
     ! if (iprint_basis>=3) call dump_pos_and_matrices
-!       ! Output current SFcoeff and density
-!       if (nspin_SF == 1) then
-!          call dump_matrix("SFcoeff",    matSFcoeff(1), inode)
-!       else
-!          call dump_matrix("SFcoeff_up", matSFcoeff(1), inode)
-!          call dump_matrix("SFcoeff_dn", matSFcoeff(2), inode)
-!       end if
+      if(n_dumpSFcoeff > 0 .and. mod(iter,n_dumpSFcoeff) ==0) then
+       call dump_pos_and_matrices(index=99)
+      endif
+!
+!     necessary to print out charge density ? (2019/12/30 tsuyoshi)
 !       if(nspin==1) then
 !          allocate(rho_total(maxngrid), STAT=stat)
 !          if (stat /= 0) call cq_abort("Error allocating rho_total: ", maxngrid)
@@ -2446,8 +2442,7 @@ contains
 !          call dump_charge(rho_total, n_my_grid_points, inode, spin=0)
 !          deallocate(rho_total, STAT=stat)
 !          if (stat /= 0) call cq_abort("Error deallocating rho_total")
-!          call reg_dealloc_mem(area_ops, n_my_grid_points, type_dbl)
-!       else if (nspin == 2) then
+!          call reg_dealloc_mem(area_ops, n_my_grid_points, type_dbl) !       else if (nspin == 2) then
 !          call dump_charge(rho(:,1), n_my_grid_points, inode, spin=1)
 !          call dump_charge(rho(:,2), n_my_grid_points, inode, spin=2)
 !       end if

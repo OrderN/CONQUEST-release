@@ -61,6 +61,8 @@
 !!    Understand and document onsite_T
 !   2014/09/15 18:30 lat
 !!    fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
+!   2019/12/30 tsuyoshi
+!!    introduced flag_DumpChargeDensity to control dump_charge in the end of get_H_matrix
 !!  SOURCE
 !!
 module H_matrix_module
@@ -82,6 +84,9 @@ module H_matrix_module
        RCSid = "$Id$"
   logical :: locps_output
   integer :: locps_choice
+
+  ! Dumping charge density or not (this should be used for dumping hilbert_make_blk.dat etc.)
+  logical :: flag_DumpChargeDensity
 !!***
 
 contains
@@ -441,7 +446,8 @@ contains
     !
     !
     ! dump charges if required
-    if (iprint_SC > 2) then
+    ! old if (iprint_SC > 2) then
+    if (flag_DumpChargeDensity .or. iprint_SC > 2) then
        if(nspin==1) then
           allocate(rho_total(size), STAT=stat)
           if (stat /= 0) call cq_abort("Error allocating rho_total: ", size)

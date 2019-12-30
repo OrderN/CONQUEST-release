@@ -343,6 +343,7 @@ module global_module
 
   ! Flag to control if matrix L is dumped to files
   logical :: flag_dump_L
+  logical :: flag_DumpMatrices
 
   ! Hold an old relation between global & partition labels
   integer,allocatable :: id_glob_old(:),id_glob_inv_old(:)

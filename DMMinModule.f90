@@ -77,13 +77,13 @@ module DMMin
        RCSid = "$Id$"
   !
   integer           :: maxpulayDMM
-  integer,     save :: n_dumpL = 5
+  integer,     save :: n_dumpL = 0     ! Redefined: 2019Dec30 tsuyoshi
   real(double)      :: LinTol_DMM
   real(double)      :: minpulaystepDMM ! min step size for pulay minimisation
   real(double)      :: maxpulaystepDMM ! max step size for pulay minimisation
   !integer, parameter :: mx_pulay = 5
   !real(double), parameter :: LinTol = 0.1_double
-
+  
 !!***
 
 contains
@@ -826,13 +826,14 @@ contains
                                  stop_print_timer, WITH_LEVEL
     use io_module,         only: dump_matrix
     use functions_on_grid, only: atomfns, H_on_atomfns
-    use H_matrix_module,   only: get_H_matrix
+    use H_matrix_module,   only: get_H_matrix, flag_DumpChargeDensity
     use density_module,    only: density, get_electronic_density
     use maxima_module,     only: maxngrid
     use memory_module,     only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     !Prints out charge density -- 2010.Nov.06 TM
     use io_module,         only: dump_charge
     use dimens,            only: n_my_grid_points
+    use store_matrix,      only: dump_pos_and_matrices
 
     implicit none
 
@@ -1218,6 +1219,9 @@ contains
        end if
 
        ! dump the L matrix if required
+       if (n_dumpL>0 .and. mod (n_iter, n_dumpL) == 0) then
+           call dump_pos_and_matrices(index=77)
+       endif
        !if (flag_dump_L) then
        !   if (mod (n_iter, n_dumpL) == 0) then
        !    call dump_pos_and_matrices
@@ -1277,7 +1281,8 @@ contains
     end do
 
     !Prints out charge density
-    if (flag_mix_L_SC_min) then
+    !ori if (flag_mix_L_SC_min) then
+    if (flag_DumpChargeDensity .and. flag_mix_L_SC_min) then
        if (nspin == 1) then
           allocate(density_tot(maxngrid), STAT=stat)
           if (stat /= 0) call cq_abort("Error allocating density_tot: ", maxngrid)

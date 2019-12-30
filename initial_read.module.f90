@@ -807,7 +807,7 @@ contains
          flag_opt_cell, cell_constraint_flag, flag_variable_cell, &
          cell_en_tol, optcell_method, cell_stress_tol, &
          flag_stress, flag_full_stress, rng_seed, &
-         flag_atomic_stress, flag_heat_flux
+         flag_atomic_stress, flag_heat_flux, flag_DumpMatrices
     use dimens, only: r_super_x, r_super_y, r_super_z, GridCutoff,    &
          n_grid_x, n_grid_y, n_grid_z, r_h, r_c,         &
          RadiusSupport, RadiusAtomf, RadiusMS, RadiusLD, &
@@ -835,7 +835,7 @@ contains
     use SelfCon, only: A, flag_linear_mixing, EndLinearMixing, q0, q1,&
          n_exact, maxitersSC, maxearlySC, maxpulaySC,   &
          atomch_output, flag_Kerker, flag_wdmetric, minitersSC, &
-         flag_newresidual, flag_newresid_abs 
+         flag_newresidual, flag_newresid_abs, n_dumpSCF
     use atomic_density, only: read_atomic_density_file, &
          atomic_density_method
     use density_module, only: flag_InitialAtomicSpin
@@ -868,7 +868,7 @@ contains
 
     use group_module,     only: part_method, HILBERT, PYTHON
     use energy,           only: flag_check_DFT
-    use H_matrix_module,  only: locps_output, locps_choice
+    use H_matrix_module,  only: locps_output, locps_choice, flag_DumpChargeDensity
     use pao_minimisation, only: InitStep_paomin
     use timer_module,     only: time_threshold,lun_tmr, TimingOn, &
          TimersWriteOut, BackTraceOn
@@ -894,6 +894,7 @@ contains
          flag_LFD_minimise, LFD_ThreshE, LFD_ThreshD,           &
          LFD_Thresh_EnergyRise, LFD_max_iteration,              &
          flag_LFD_MD_UseAtomicDensity,  flag_MSSF_nonminimal,   &
+         n_dumpSFcoeff,                                         &
          MSSF_nonminimal_offset ! nonmin_mssf
     use control,    only: md_ensemble
     use md_control, only: md_tau_T, md_n_nhc, md_n_ys, md_n_mts, md_nhc_mass, &
@@ -1115,7 +1116,8 @@ contains
     ! Number of different iterations - not well defined
     n_L_iterations       = fdf_integer('DM.LVariations',50)
     max_L_iterations     = n_L_iterations
-    n_dumpL              = fdf_integer('DM.n_dumpL',n_L_iterations+1)
+    !2019Dec30  tsuyoshi : n_dumpL is redefined with a new keyword
+    !n_dumpL              = fdf_integer('DM.n_dumpL',n_L_iterations+1)
     n_support_iterations = fdf_integer('minE.SupportVariations',10)
     ! Initial expected drop in energy
     expected_reduction   = fdf_double('minE.ExpectedEnergyReduction',zero)
@@ -1559,6 +1561,19 @@ contains
     threshold_resetCD     = fdf_double('SC.Threshold.Reset',0.1_double)
 !!$
 !!$
+!!$   New Parameters for Dumping Files
+!!$
+!!$
+
+    n_dumpL              = fdf_integer('IO.DumpFreq.DMM',0)
+    n_dumpSCF            = fdf_integer('IO.DumpFreq.SCF',0)
+    n_dumpSFcoeff        = fdf_integer('IO.DumpFreq.SFcoeff',0)
+!!$
+    flag_DumpMatrices      = fdf_boolean('IO.DumpMatrices',.true.)
+    flag_DumpChargeDensity = fdf_boolean('IO.DumpChargeDensity',.false.)
+    
+!!$
+!!$
 !!$
 !!$
 !!$
@@ -1988,6 +2003,8 @@ contains
     flag_MDcontinue   = fdf_boolean('AtomMove.RestartRun',.false.)
     flag_SFcoeffReuse = fdf_boolean('AtomMove.ReuseSFcoeff',.false.)
     flag_LmatrixReuse = fdf_boolean('AtomMove.ReuseDM',.false.)
+    !flag_SFcoeffReuse = fdf_boolean('AtomMove.ReuseSFcoeff',.true.)
+    !flag_LmatrixReuse = fdf_boolean('AtomMove.ReuseDM',.true.)
     flag_write_xsf    = fdf_boolean('AtomMove.WriteXSF', .true.)
     ! DRB 2017/05/09 Removing restriction (now implemented)
     !if(flag_spin_polarisation.AND.flag_LmatrixReuse) then
@@ -2015,7 +2032,7 @@ contains
     !  should be removed in the near future.
        flag_reset_dens_on_atom_move = fdf_boolean('SC.ResetDensOnAtomMove',.false.)
        if(flag_reset_dens_on_atom_move) then
-         call cq_warn(sub_name,' SC.ResentDensOnAtomMove will not be available soon. &
+         call cq_warn(sub_name,' SC.ResetDensOnAtomMove will not be available soon. &
                       Set AtomMove.InitialChargeDensity as 1, instead.')
          method_UpdateChargeDensity = AtomicCharge
        endif
@@ -2204,20 +2221,44 @@ contains
     subroutine check_compatibility 
       use GenComms, only: inode, ionode
       ! this subroutine checks the compatibility between keywords defined in read_input
-      ! add the
       !       2017.11(Nov).03   Tsuyoshi Miyazaki
+      ! 
+      ! we don't need to worry about which parameter is defined first.
+      !
       implicit none
+      character(len=80) :: sub_name = "check_compatibility"
+
       !check AtomMove.ExtendedLagrangian(flag_XLBOMD) &  AtomMove.TypeOfRun (runtype)
       if(runtype .NE. 'md' .and. flag_XLBOMD) then
          flag_XLBOMD=.false.
-         if(inode .eq. ionode)  write(io_lun,*)  &
-              'WARNING (AtomMove.ExtendedLagrangian): XLBOMD should be used only with MD.'
+         !if(inode .eq. ionode)  write(io_lun,*)  &
+         !     'WARNING (AtomMove.ExtendedLagrangian): XLBOMD should be used only with MD.'
+         call cq_warn(sub_name,&
+               '(AtomMove.ExtendedLagrangian): XLBOMD should be used only with MD.')
       endif
       !check AtomMove.ExtendedLagrangian(flag_XLBOMD) &  DM.SolutionMethod
       if(flag_diagonalisation .and. flag_XLBOMD) then
          flag_XLBOMD=.false.
-         if(inode .eq. ionode)  write(io_lun,*)  &
-              'WARNING (AtomMove.ExtendedLagrangian): present XLBOMD is only for orderN'
+         !if(inode .eq. ionode)  write(io_lun,*)  &
+         !     'WARNING (AtomMove.ExtendedLagrangian): present XLBOMD is only for orderN'
+         call cq_warn(sub_name,&
+               'WARNING (AtomMove.ExtendedLagrangian): present XLBOMD is only for orderN')
+      endif
+
+      !flag_LmatrixReuse & method_UpdateChargeDensity
+      if(.not.flag_LmatrixReuse .and. method_UpdateChargeDensity == DensityMatrix) then
+       method_UpdateChargeDensity = AtomicCharge
+       call cq_warn(sub_name,&
+        'AtomMove.InitialChargeDensity is changed to AtomicCharge, since AtomMove.ReuseDM is false')
+      endif
+
+      !flag_DumpMatrices : at present, we need matrix files to reuse the previous matrix data 
+      if(.not.flag_DumpMatrices) then
+       if(flag_SFcoeffReuse .or. flag_LmatrixReuse) then
+        flag_DumpMatrices = .true.
+        call cq_warn(sub_name,&
+         'IO.DumpMatrices must be true when AtomMove.ReuseSFcoeff or AtomMove.ReuseDM is true')
+       endif
       endif
 
       return

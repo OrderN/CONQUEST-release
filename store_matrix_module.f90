@@ -16,7 +16,7 @@
 module store_matrix
 
   use datatypes
-  use global_module, ONLY: numprocs, iprint_MD
+  use global_module, ONLY: numprocs, iprint_MD, io_lun
   use input_module, ONLY: io_assign, io_close
   use GenComms, ONLY: inode, ionode, cq_abort, myid
   use io_module, ONLY: flag_MatrixFile_RankFromZero, flag_MatrixFile_BinaryFormat, &
@@ -118,17 +118,18 @@ contains
   !!  USES
   !!
   !!  AUTHOR
-  !!   Michiaki Arita
+  !!   Michiaki Arita   /  Tsuyoshi Miyazaki
   !!  CREATION DATE
   !!   2013/08/22
   !!  MODIFICATION
+  !!   2019/12/30 flag_DumpMatrices are introduced 
   !!  SOURCE
   !!
   subroutine dump_pos_and_matrices(index, MDstep, velocity)
  
     ! Module usage
     use global_module, ONLY: ni_in_cell, nspin, nspin_SF, flag_diagonalisation, flag_Multisite, &
-         flag_XLBOMD, flag_propagateX, flag_dissipation, integratorXL, flag_SFcoeffReuse
+         flag_XLBOMD, flag_propagateX, flag_dissipation, integratorXL, flag_SFcoeffReuse, flag_DumpMatrices
     use matrix_data, ONLY: Lrange, Hrange, SFcoeff_range, SFcoeffTr_range, HTr_range, Srange, LSrange
     use mult_module, ONLY: matL,L_trans, matK, matSFcoeff, matS
     use io_module, ONLY: append_coords, write_atomic_positions, pdb_template
@@ -145,6 +146,12 @@ contains
     integer :: both=0 , mat=1
     logical :: append_coords_bkup
     integer :: index_local, MDstep_local
+
+    ! If flag_DumpMatrices is false, exit this routine
+     if(.not.flag_DumpMatrices) then
+       if(inode.eq.ionode) write(io_lun,*) " Exit from dump_pos_and_matrices because IO.DumpMatrices is false."
+       return
+     endif
 
     index_local = 0; if(present(index)) index_local=index
     MDstep_local = 0; if(present(MDstep)) MDstep_local=MDstep
