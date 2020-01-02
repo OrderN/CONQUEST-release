@@ -840,7 +840,7 @@ contains
          InvSDeltaOmegaTolerance
     use blip,          only: blip_info, init_blip_flag, alpha, beta
     use maxima_module, only: maxnsf, lmax_ps
-    use control,       only: MDn_steps, MDfreq, MDtimestep, MDcgtol, CGreset
+    use control,       only: MDn_steps, MDfreq, MDtimestep, MDcgtol, CGreset, LBFGS_history
     use ion_electrostatic,  only: ewald_accuracy
     use minimise,      only: UsePulay, n_L_iterations,          &
          n_support_iterations, L_tolerance, &
@@ -903,7 +903,7 @@ contains
     use md_model,   only: md_tdep
     use move_atoms,         only: threshold_resetCD, &
          flag_stop_on_empty_bundle, &
-         enthalpy_tolerance
+         enthalpy_tolerance, cg_line_min, safe, backtrack
     use Integrators, only: fire_alpha0, fire_f_inc, fire_f_dec, fire_f_alpha, fire_N_min, &
          fire_N_max, fire_max_step, fire_N_below_thresh
     use XC, only : flag_functional_type, functional_hartree_fock, functional_hyb_pbe0, flag_different_functional
@@ -1496,6 +1496,7 @@ contains
     MDfreq                = fdf_integer('AtomMove.OutputFreq',    50        )
     MDtimestep            = fdf_double ('AtomMove.Timestep',      0.5_double)
     MDcgtol               = fdf_double ('AtomMove.MaxForceTol',0.0005_double)
+    LBFGS_history         = fdf_integer('AtomMove.LBFGSHistory', 5          )
     flag_opt_cell         = fdf_boolean('AtomMove.OptCell',          .false.)
     flag_variable_cell    = flag_opt_cell
     optcell_method        = fdf_integer('AtomMove.OptCellMethod', 1)
@@ -1549,6 +1550,12 @@ contains
     ! number of electrons. If the error of electron number (per total electron number) 
     ! is larger than the following value, we use atomic charge density. (in update_H)
     threshold_resetCD     = fdf_double('SC.Threshold.Reset',0.1_double)
+    tmp = fdf_string(4,'AtomMove.CGLineMin','safe')
+    if(leqi(tmp,'safe')) then
+       cg_line_min = safe
+    else if(leqi(tmp,'back')) then
+       cg_line_min = backtrack
+    end if
 !!$
 !!$
 !!$

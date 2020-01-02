@@ -1147,9 +1147,11 @@ contains
   !!    Added empty bundle flag to force redistribution of partitions to processes
   !!   2019/11/18 11:49 dave
   !!    Split to update group and then covering sets
+  !!   2019/12/13 13:28 dave
+  !!    Removed redundant velocity argument
   !!  SOURCE
   !!
-  subroutine updateMembers_cs(velocity)
+  subroutine updateMembers_cs
 
     ! Module usage
     use global_module, ONLY: flag_dft_d2,ni_in_cell
@@ -1158,10 +1160,6 @@ contains
     use cover_module, ONLY: BCS_parts,DCS_parts,ion_ion_CS,D2_CS
 
     implicit none
-
-    ! passed variables
-    real(double) :: velocity(3,ni_in_cell)
-    logical :: flag_empty_bundle
 
     ! Local variables
     real(double)   :: dcellx, dcelly, dcellz

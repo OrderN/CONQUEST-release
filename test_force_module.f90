@@ -556,7 +556,7 @@ contains
          maxngrid)
     call pulay_force(p_force, KE_force, fixed_potential, vary_mu,      &
                      n_L_iterations, L_tolerance, tolerance, &
-                     total_energy, expected_reduction, ni_in_cell)
+                     total_energy, ni_in_cell)
     ! This routine deals with the movement of the nonlocal
     ! pseudopotential.
     if (flag_basis_set == PAOs.OR.(flag_basis_set == blips.AND.flag_analytic_blip_int)) then
@@ -636,7 +636,7 @@ contains
     WhichPulay = BothPulay
     call pulay_force(p_force, KE_force, fixed_potential, vary_mu,      &
                      n_L_iterations, L_tolerance, tolerance, &
-                     total_energy, expected_reduction, ni_in_cell)
+                     total_energy, ni_in_cell)
     if (flag_basis_set == PAOs.OR.(flag_basis_set == blips.AND.flag_analytic_blip_int)) then
        call get_HF_non_local_force(HF_NL_force, HF_and_Pulay, &
                                    ni_in_cell)
@@ -1461,7 +1461,7 @@ contains
        call get_S_matrix(inode, ionode)
        call pulay_force(p_force, KE_force, fixed_potential, vary_mu,      &
             n_L_iterations, L_tolerance, tolerance, &
-            total_energy, expected_reduction, ni_in_cell)       
+            total_energy, ni_in_cell)
     else
        call get_KE_force(KE_force, ni_in_cell)
     end if
@@ -1517,7 +1517,7 @@ contains
        KE_force = zero
        call pulay_force(p_force, KE_force, fixed_potential, vary_mu,      &
             n_L_iterations, L_tolerance, tolerance, &
-            total_energy, expected_reduction, ni_in_cell)       
+            total_energy, ni_in_cell)
        WhichPulay = BothPulay
     else
        call get_KE_force(KE_force, ni_in_cell)
@@ -1673,7 +1673,7 @@ contains
     WhichPulay = PhiPulay
     call pulay_force(p_force, KE_force, fixed_potential, vary_mu,      &
                      n_L_iterations, L_tolerance, tolerance, &
-                     total_energy, expected_reduction, ni_in_cell)
+                     total_energy, ni_in_cell)
     ! Store local energy
     E0 = band_energy
     ! Find out direction and atom for displacement
@@ -1722,7 +1722,7 @@ contains
     p_force = zero
     call pulay_force(p_force, KE_force, fixed_potential, vary_mu,      &
                      n_L_iterations, L_tolerance, tolerance, &
-                     total_energy, expected_reduction, ni_in_cell)
+                     total_energy, ni_in_cell)
     E1 = band_energy
     F1 = p_force(TF_direction,TF_atom_moved)
     if (inode == ionode) &
@@ -1859,7 +1859,7 @@ contains
     p_force = zero
     call pulay_force(p_force, KE_force, fixed_potential, vary_mu,      &
                      n_L_iterations, L_tolerance, tolerance, &
-                     total_energy, expected_reduction, ni_in_cell)
+                     total_energy, ni_in_cell)
     ! Store local energy
     E0 = band_energy
     ! Find out direction and atom for displacement
@@ -1923,7 +1923,7 @@ contains
     end if
     call pulay_force(p_force, KE_force, fixed_potential, vary_mu,      &
                      n_L_iterations, L_tolerance, tolerance, &
-                     total_energy, expected_reduction, ni_in_cell)
+                     total_energy, ni_in_cell)
     E1 = band_energy
     F1 = p_force(TF_direction,TF_atom_moved)
     if (inode == ionode) &
@@ -2336,7 +2336,7 @@ contains
     E0 = total_energy
     ! Find force
     call force(fixed_potential, vary_mu, n_L_iterations, L_tolerance, &
-               tolerance, total_energy, expected_reduction, .true.)
+               tolerance, total_energy, .true.)
     ! Find out direction and atom for displacement
     if (inode == ionode) &
          write (io_lun,fmt='(2x,"Moving atom ",i5," in &
@@ -2383,7 +2383,7 @@ contains
     end if
     E1 = total_energy
     call force(fixed_potential, vary_mu, n_L_iterations, L_tolerance, &
-               tolerance, total_energy, expected_reduction, .true.)
+               tolerance, total_energy, .true.)
     F1 = tot_force(TF_direction,TF_atom_moved)
     if (inode == ionode) &
          write (io_lun,fmt='(2x,"Final energy: ",f20.12,/,2x,"Final &

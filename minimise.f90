@@ -368,7 +368,7 @@ contains
 
       call force(fixed_potential, vary_mu, n_L_iterations, &
                  L_tolerance, sc_tolerance, total_energy,  &
-                 expected_reduction, write_forces, backtrace_level)
+                 write_forces, backtrace_level)
  
       ! Stop timing the force calculation
       call stop_print_timer(tmr_l_force, "calculating FORCE", &

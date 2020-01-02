@@ -44,6 +44,8 @@
 !!    to md_run.
 !!   2019/02/28 zamaan
 !!    2 new subroutines for cell optimisation (double loop and single vector)
+!!   2020/01/02 12:14 dave
+!!    Added new module variable for L-BFGS history length
 !!  SOURCE
 !!
 module control
@@ -62,6 +64,7 @@ module control
   real(double) :: MDcgtol 
   logical      :: CGreset
   character(3) :: md_ensemble
+  integer      :: LBFGS_history
 
   ! Area identification
   integer, parameter, private :: area = 9
@@ -188,6 +191,9 @@ contains
     else if ( leqi(runtype, 'pulay') ) then
        call pulay_relax(fixed_potential,vary_mu, total_energy)
        !
+    else if ( leqi(runtype, 'lbfgs') ) then
+       call lbfgs(fixed_potential,vary_mu, total_energy)
+       !
     else if ( leqi(runtype, 'dummy') ) then
        call dummy_run(fixed_potential,  vary_mu, total_energy)
        !
@@ -246,6 +252,8 @@ contains
   !!    Removing dump_InfoGlobal calls
   !!   2019/12/04 11:47 dave
   !!    Tweak to write convergence only on output process
+  !!   2019/12/20 15:59 dave
+  !!    Added choice of line minimiser: standard safemin2 or backtracking
   !!  SOURCE
   !!
   subroutine cg_run(fixed_potential, vary_mu, total_energy)
@@ -260,7 +268,7 @@ contains
                              IPRINT_TIME_THRES1
     use group_module,  only: parts
     use minimise,      only: get_E_and_F
-    use move_atoms,    only: safemin, safemin2
+    use move_atoms,    only: adapt_backtrack_linemin, safemin2, cg_line_min, safe, backtrack
     use GenComms,      only: gsum, myid, inode, ionode
     use GenBlas,       only: dot
     use force_module,  only: tot_force
@@ -279,7 +287,7 @@ contains
     real(double) :: total_energy
     
     ! Local variables
-    real(double)   :: energy0, energy1, max, g0, dE, gg, ggold, gamma,gg1
+    real(double)   :: energy0, energy1, max, g0, dE, gg, ggold, gamma,gg1, test_dot
     integer        :: i,j,k,iter,length, jj, lun, stat
     logical        :: done
     type(cq_timer) :: tmr_l_iter
@@ -305,7 +313,7 @@ contains
     done = .false.
     length = 3 * ni_in_cell
     if (myid == 0 .and. iprint_gen > 0) &
-         write (io_lun, 2) MDn_steps, MDcgtol
+         write (io_lun, 2) MDn_steps, MDcgtol, en_units(energy_units), d_units(dist_units)
     energy0 = total_energy
     energy1 = zero
     dE = zero
@@ -359,19 +367,39 @@ contains
             write (io_lun, fmt='(/4x,"Atomic relaxation CG iteration: ",i5)') iter
        ggold = gg
        ! Build search direction
+       test_dot = zero
        do j = 1, ni_in_cell
           jj = id_glob(j)
           cg(1,j) = gamma*cg(1,j) + tot_force(1,jj)
           cg(2,j) = gamma*cg(2,j) + tot_force(2,jj)
           cg(3,j) = gamma*cg(3,j) + tot_force(3,jj)
+          test_dot = test_dot + cg(1,j)*tot_force(1,jj) + cg(2,j)*tot_force(2,jj) &
+               + cg(3,j)*tot_force(3,jj)
           x_new_pos(j) = x_atom_cell(j)
           y_new_pos(j) = y_atom_cell(j)
           z_new_pos(j) = z_atom_cell(j)
        end do
+       ! Test
+       !test_dot = dot(3*ni_in_cell, cg, 1, tot_force, 1)
+       !call gsum(test_dot)
+       if(test_dot<zero) then
+          if(inode==ionode) write(io_lun,fmt='(2x,"Reset direction ",f20.12)') test_dot
+          gamma = zero
+          do j = 1, ni_in_cell
+             jj = id_glob(j)
+             cg(1,j) = tot_force(1,jj)
+             cg(2,j) = tot_force(2,jj)
+             cg(3,j) = tot_force(3,jj)
+          end do
+       end if
        old_force = tot_force
        ! Minimise in this direction
-         call safemin2(x_new_pos, y_new_pos, z_new_pos, cg, energy0, &
-                      energy1, fixed_potential, vary_mu, energy1)
+       if(cg_line_min==safe) then
+          call safemin2(x_new_pos, y_new_pos, z_new_pos, cg, energy0,&
+               energy1, fixed_potential, vary_mu, energy1)
+       else if(cg_line_min==backtrack) then
+          call adapt_backtrack_linemin(cg, energy0, energy1, fixed_potential, vary_mu, energy1)
+       end if
        ! Output positions
        if (myid == 0 .and. iprint_gen > 1) then
           do i = 1, ni_in_cell
@@ -440,7 +468,7 @@ contains
 
 1   format(4x,'Atom ',i8,' Position ',3f15.8)
 2   format(4x,'Welcome to cg_run. Doing ',i4,&
-           ' steps with tolerance of ',f8.4,' ev/A')
+           ' steps with tolerance of ',f8.4,a2,"/",a2)
 3   format(4x,'*** CG step ',i4,' Gamma: ',f14.8)
 4   format(4x,'Energy change: ',f15.8,' ',a2)
 5   format(4x,'Force Residual: ',f15.10,' ',a2,'/',a2)
@@ -1516,7 +1544,7 @@ end subroutine write_md_data
     use minimise,       only: get_E_and_F
     use move_atoms,     only: pulayStep, velocityVerlet,            &
                               updateIndices, updateIndices3, update_atom_coord,     &
-                              safemin, safemin2, update_H, update_pos_and_matrices
+                              safemin2, update_H, update_pos_and_matrices
     use move_atoms,     only: updateL, updateLorK, updateSFcoeff
     use GenComms,       only: gsum, myid, inode, ionode, gcopy, my_barrier
     use GenBlas,        only: dot
@@ -1795,6 +1823,250 @@ end subroutine write_md_data
 6   format(4x,'Maximum force component: ',f15.8,' ',a2,'/',a2)
 7   format(4x,3f15.8)
   end subroutine pulay_relax
+  !!***
+
+  !!****f* control/lbfgs *
+  !!
+  !!  NAME 
+  !!   lbfgs
+  !!  USAGE
+  !!   
+  !!  PURPOSE
+  !!   Performs L-BFGS relaxation
+  !!  INPUTS
+  !! 
+  !!  USES
+  !! 
+  !!  AUTHOR
+  !!   D.R.Bowler
+  !!  CREATION DATE
+  !!   2019/12/10
+  !!  MODIFICATION HISTORY
+  !!  SOURCE
+  !!
+  subroutine lbfgs(fixed_potential, vary_mu, total_energy)
+
+    ! Module usage
+    use numbers
+    use units
+    use global_module,  only: iprint_MD, ni_in_cell, x_atom_cell,   &
+                              y_atom_cell, z_atom_cell, id_glob,    &
+                              atom_coord, area_general, flag_pulay_simpleStep, &
+                              flag_diagonalisation, nspin, flag_LmatrixReuse, &
+                              flag_SFcoeffReuse
+    use group_module,   only: parts
+    use minimise,       only: get_E_and_F
+    use move_atoms,     only: pulayStep, velocityVerlet,            &
+                              updateIndices, updateIndices3, update_atom_coord,     &
+                              safemin2, update_H, update_pos_and_matrices, backtrack_linemin
+    use move_atoms,     only: updateL, updateLorK, updateSFcoeff
+    use GenComms,       only: gsum, myid, inode, ionode, gcopy, my_barrier
+    use GenBlas,        only: dot
+    use force_module,   only: tot_force
+    use io_module,      only: write_atomic_positions, pdb_template, &
+                              check_stop
+    use memory_module,  only: reg_alloc_mem, reg_dealloc_mem, type_dbl
+    use primary_module, only: bundle
+    use store_matrix,   only: dump_pos_and_matrices
+    use mult_module, ONLY: matK, S_trans, matrix_scale, matL, L_trans
+    use matrix_data, ONLY: Hrange, Lrange
+    use dimens,        only: r_super_x, r_super_y, r_super_z
+
+    implicit none
+
+    ! Passed variables
+    ! Shared variables needed by get_E_and_F for now (!)
+    logical :: vary_mu, fixed_potential
+    real(double) :: total_energy
+
+    ! Local variables
+    real(double), allocatable, dimension(:,:)   :: cg, cg_new
+    real(double), allocatable, dimension(:)     :: x_new_pos, y_new_pos, z_new_pos
+    real(double), allocatable, dimension(:)     :: alpha, beta, rho
+    real(double), allocatable, dimension(:,:,:) :: posnStore
+    real(double), allocatable, dimension(:,:,:) :: forceStore
+    real(double) :: energy0, energy1, max, g0, dE, gg, ggold, gamma, &
+                    temp, KE, guess_step, step, test_dot
+    integer      :: i,j,k,iter,length, jj, lun, stat, npmod, pul_mx, &
+                    i_first, i_last, &
+                    nfile, symm, iter_low, iter_high, this_iter
+    logical      :: done
+
+    step = MDtimestep
+    allocate(posnStore(3,ni_in_cell,LBFGS_history), &
+             forceStore(3,ni_in_cell,LBFGS_history), STAT=stat)
+    if (stat /= 0) &
+         call cq_abort("Error allocating cg in control: ", ni_in_cell, stat)
+    allocate(cg(3,ni_in_cell), cg_new(3,ni_in_cell), STAT=stat)
+    if (stat /= 0) &
+         call cq_abort("Error allocating cg in control: ", ni_in_cell, stat)
+    allocate(x_new_pos(ni_in_cell), y_new_pos(ni_in_cell), &
+             z_new_pos(ni_in_cell), STAT=stat)
+    if (stat /= 0) &
+         call cq_abort("Error allocating _new_pos in control: ", &
+                       ni_in_cell, stat)
+    call reg_alloc_mem(area_general, 6 * ni_in_cell, type_dbl)
+    allocate(alpha(LBFGS_history), beta(LBFGS_history), rho(LBFGS_history))
+    if (myid == 0) &
+         write (io_lun, fmt='(/4x,"Starting L-BFGS atomic relaxation"/)')
+    if (myid == 0 .and. iprint_MD > 1) then
+       do i = 1, ni_in_cell
+          write (io_lun, 1) i, x_atom_cell(i), y_atom_cell(i), &
+               z_atom_cell(i)
+       end do
+    end if
+    posnStore = zero
+    forceStore = zero
+    ! Do we need to add MD.MaxCGDispl ?
+    done = .false.
+    length = 3 * ni_in_cell
+    if (myid == 0 .and. iprint_MD > 0) &
+         write (io_lun, 2) MDn_steps, MDcgtol, en_units(energy_units), & 
+                   d_units(dist_units)
+    energy0 = total_energy
+    energy1 = zero
+    dE = zero
+    ! Find energy and forces
+    call get_E_and_F(fixed_potential, vary_mu, energy0, .true., &
+                     .false.)
+    call dump_pos_and_matrices
+    call get_maxf(max)
+    iter = 0
+    ggold = zero
+    energy1 = energy0
+    cg_new = -tot_force ! The L-BFGS is in terms of grad E
+    do while (.not. done)
+       test_dot = dot(length, cg_new, 1, tot_force, 1)
+       if(test_dot>zero) then
+          iter = 0
+          if(inode==ionode.AND.iprint_MD>1) write(io_lun,fmt='(2x,"Resetting history")')
+          cg_new = -tot_force
+       end if
+       if (inode==ionode) then
+          write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," E: "e16.8," dE: ",f12.8)') & 
+               iter, max, energy1, en_conv*dE
+          if (iprint_MD > 1) then
+             g0 = dot(length, tot_force, 1, tot_force, 1)
+             write(io_lun,'(4x,"Force Residual:     ",f20.10," ",a2,"/",a2)') &
+                  for_conv*sqrt(g0/ni_in_cell), en_units(energy_units), & 
+                  d_units(dist_units)
+             write(io_lun,'(4x,"Maximum force:      ",f20.10)') max
+             write(io_lun,'(4x,"Force tolerance:    ",f20.10)') MDcgtol
+             write(io_lun,'(4x,"Energy change:      ",f20.10," ",a2)') &
+                  en_conv*dE, en_units(energy_units)
+          end if
+       end if
+       ! Book-keeping
+       iter = iter + 1
+       npmod = mod(iter, LBFGS_history)
+       if(npmod==0) npmod = LBFGS_history
+       do i=1,ni_in_cell
+          jj = id_glob(i)
+          posnStore (1,jj,npmod) = x_atom_cell(i)
+          posnStore (2,jj,npmod) = y_atom_cell(i)
+          posnStore (3,jj,npmod) = z_atom_cell(i)
+          forceStore(:,jj,npmod) = -tot_force(:,jj)
+          x_new_pos(i) = x_atom_cell(i)
+          y_new_pos(i) = y_atom_cell(i)
+          z_new_pos(i) = z_atom_cell(i)
+          cg(:,i) = -cg_new(:,jj) ! Search downhill
+       end do
+       ! Set up limits for sums
+       if(iter>LBFGS_history) then
+          iter_low = iter-LBFGS_history
+       else
+          iter_low = 1
+       end if
+       if (myid == 0 .and. iprint_MD > 2) &
+            write(io_lun,fmt='(2x,"L-BFGS iteration ",i4)') iter
+       ! Line search
+       call backtrack_linemin(cg, energy0, energy1, fixed_potential, vary_mu, energy1)
+       ! Update stored position difference and force difference
+       do i=1,ni_in_cell
+          jj = id_glob(i)
+          posnStore (1,jj,npmod) = x_atom_cell(i) - posnStore (1,jj,npmod)
+          if(abs(posnStore(1,jj,npmod)/r_super_x)>0.7_double) posnStore(1,jj,npmod) &
+               = posnStore(1,jj,npmod) &
+               - nint(posnStore(1,jj,npmod)/r_super_x)*r_super_x
+          posnStore (2,jj,npmod) = y_atom_cell(i) - posnStore (2,jj,npmod)
+          if(abs(posnStore(2,jj,npmod)/r_super_y)>0.7_double) posnStore(2,jj,npmod) &
+               = posnStore(2,jj,npmod) &
+               - nint(posnStore(2,jj,npmod)/r_super_y)*r_super_y
+          posnStore (3,jj,npmod) = z_atom_cell(i) - posnStore (3,jj,npmod)
+          if(abs(posnStore(3,jj,npmod)/r_super_z)>0.7_double) posnStore(3,jj,npmod) &
+               = posnStore(3,jj,npmod) &
+               - nint(posnStore(3,jj,npmod)/r_super_z)*r_super_z
+          forceStore(:,jj,npmod) = -tot_force(:,jj) - forceStore(:,jj,npmod)
+          ! New search direction
+          cg_new = -tot_force ! The L-BFGS is in terms of grad E
+       end do
+       ! Build q
+       do i=iter, iter_low, -1
+          ! Indexing
+          this_iter = mod(i,LBFGS_history)
+          if(this_iter==0) this_iter = LBFGS_history
+          ! parameters
+          rho(this_iter) = one/dot(length,forceStore(:,:,this_iter),1,posnStore(:,:,this_iter),1)
+          alpha(this_iter) = rho(this_iter)*dot(length,posnStore(:,:,this_iter),1,cg_new,1)
+          cg_new = cg_new - alpha(this_iter)*forceStore(:,:,this_iter)
+       end do
+       ! Apply preconditioning in future
+       ! Build z
+       do i=iter_low, iter
+          ! Indexing
+          this_iter = mod(i,LBFGS_history)
+          if(this_iter==0) this_iter = LBFGS_history
+          ! Build
+          beta(this_iter) = rho(this_iter)*dot(length,forceStore(:,:,this_iter),1,cg_new,1)
+          cg_new = cg_new + (alpha(this_iter) - beta(this_iter))*posnStore(:,:,this_iter)
+       end do
+       ! Analyse forces
+       g0 = dot(length, tot_force, 1, tot_force, 1)
+       max = zero
+       do i = 1, ni_in_cell
+          do k = 1, 3
+             if (abs(tot_force(k,i)) > max) max = abs(tot_force(k,i))
+          end do
+       end do
+       if (iter > MDn_steps) then
+          done = .true.
+          if (myid == 0) &
+               write (io_lun, fmt='(4x,"Exceeded number of MD steps: ",i4)') iter
+       end if
+       if (abs(max) < MDcgtol) then
+          done = .true.
+          if (inode==ionode) then
+             write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," E: "e16.8," dE: ",f12.8)') & 
+                  iter, max, energy1, en_conv*dE
+             if (iprint_MD > 1) then
+                write(io_lun,'(4x,"Force Residual:     ",f20.10," ",a2,"/",a2)') &
+                   for_conv*sqrt(g0/ni_in_cell), en_units(energy_units), & 
+                   d_units(dist_units)
+                write(io_lun,'(4x,"Maximum force:      ",f20.10)') max
+                write(io_lun,'(4x,"Force tolerance:    ",f20.10)') MDcgtol
+                write(io_lun,'(4x,"Energy change:      ",f20.10," ",a2)') &
+                   en_conv*dE, en_units(energy_units)
+             end if
+             write(io_lun, fmt='(4x,"Maximum force below threshold: ",f12.5)') max
+             write(io_lun,'(2x,a,i4,a)') "GeomOpt converged in ", iter, " iterations"
+          end if
+       end if
+       if (.not. done) call check_stop(done, iter)
+       if(done) exit
+       if (.not. done) call check_stop(done, iter)
+       dE = energy0 - energy1
+       energy0 = energy1
+    end do
+    deallocate(cg, STAT=stat)
+    if (stat /= 0) &
+         call cq_abort("Error deallocating cg in control: ", &
+                       ni_in_cell, stat)
+    call reg_dealloc_mem(area_general, 6 * ni_in_cell, type_dbl)
+
+1   format(4x,'Atom ',i8,' Position ',3f15.8)
+2   format(4x,'L-BFGS structural relaxation. Maximum of ',i4,&
+           ' steps with tolerance of ',f8.4,a2,"/",a2)
+  end subroutine lbfgs
   !!***
 
   !!****f* control/cell_cg_run *
@@ -2170,7 +2442,7 @@ end subroutine write_md_data
                              rcellx, rcelly, rcellz
     use group_module,  only: parts
     use minimise,      only: get_E_and_F
-    use move_atoms,    only: safemin, safemin2, safemin_cell, enthalpy, &
+    use move_atoms,    only: safemin2, safemin_cell, enthalpy, &
                              enthalpy_tolerance
     use GenComms,      only: inode, ionode
     use GenBlas,       only: dot

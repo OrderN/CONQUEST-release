@@ -89,7 +89,11 @@ module move_atoms
   real(double) :: enthalpy_tolerance
 
   logical :: flag_stop_on_empty_bundle
-  
+
+  ! Choose line minimiser for CG
+  integer :: cg_line_min
+  integer, parameter :: safe = 0
+  integer, parameter :: backtrack = 1
   ! Table to show the methods to update  (for update_pos_and_matrix)
    integer, parameter :: updatePos  = 0
    integer, parameter :: updateL    = 1
@@ -1213,8 +1217,382 @@ contains
     call stop_timer(tmr_std_moveatoms)
     return
   end subroutine safemin2
+ !!***
 
+  !!****f* move_atoms/backtrack_linemin *
+  !! PURPOSE
+  !!  Carry out back-tracking line minimisation
+  !! INPUTS
+  !!
+  !! AUTHOR
+  !!   David Bowler
+  !! CREATION DATE 
+  !!   2019/12/09
+  !! MODIFICATION HISTORY
+  !! SOURCE
+  !!
+  subroutine backtrack_linemin(direction, energy_in, &
+                      energy_out, fixed_potential, vary_mu, total_energy)
 
+    ! Module usage
+    use datatypes
+    use numbers
+    use units
+    use global_module,  only: iprint_MD, x_atom_cell, y_atom_cell,    &
+         z_atom_cell, flag_vary_basis,           &
+         atom_coord, ni_in_cell, rcellx, rcelly, &
+         rcellz, flag_self_consistent,           &
+         flag_reset_dens_on_atom_move,           &
+         IPRINT_TIME_THRES1, flag_pcc_global,    &
+         id_glob,                                &
+         flag_LmatrixReuse, flag_diagonalisation, nspin, &
+         flag_SFcoeffReuse 
+    use minimise,       only: get_E_and_F, sc_tolerance, L_tolerance, &
+         n_L_iterations
+    use GenComms,       only: my_barrier, myid, inode, ionode,        &
+         cq_abort, gcopy
+    use SelfCon,        only: new_SC_potl
+    use GenBlas,        only: dot
+    use force_module,   only: tot_force
+    use io_module,      only: write_atomic_positions, pdb_template
+    use density_module, only: density, flag_no_atomic_densities, set_density_pcc
+    use maxima_module,  only: maxngrid
+    use matrix_data, ONLY: Lrange, Hrange, SFcoeff_range, SFcoeffTr_range, HTr_range
+    use mult_module, ONLY: matL,L_trans, matK, matSFcoeff
+    use timer_module
+    use dimens, ONLY: r_super_x, r_super_y, r_super_z
+    use store_matrix, ONLY: dump_pos_and_matrices
+    use multisiteSF_module, only: flag_LFD_minimise
+    use mult_module, ONLY: allocate_temp_matrix, free_temp_matrix, matrix_sum
+    use global_module, ONLY: atomf, sf
+    use io_module, ONLY: dump_matrix
+    use force_module,      only: force
+
+    implicit none
+
+    ! Passed variables
+    real(double) :: energy_in, energy_out
+    real(double), dimension(3,ni_in_cell) :: direction
+    ! Shared variables needed by get_E_and_F for now (!)
+    logical           :: vary_mu, fixed_potential
+    real(double)      :: total_energy
+
+    ! Local variables
+    integer        :: i, j, iter, lun, gatom, stat, nfile, symm
+    logical        :: reset_L = .false.
+    logical        :: done
+    type(cq_timer) :: tmr_l_iter, tmr_l_tmp1
+    real(double)   :: alpha_new, armijo, grad_f_dot_p, grad_fp_dot_p, old_alpha
+    real(double)   :: e0, e1, e2, e3, tmp, bottom
+    real(double), save :: kmin = zero, dE = zero
+    real(double), dimension(:), allocatable :: store_density
+    real(double) :: k3_old, k3_local, kmin_old
+    real(double) :: alpha = one
+    real(double) :: c1, c2
+
+    integer :: ig, both, mat
+
+    call start_timer(tmr_std_moveatoms)
+
+    iter = 0
+    old_alpha = zero
+    e0 = total_energy
+    if (inode == ionode .and. iprint_MD > 0) &
+         write (io_lun, &
+         fmt='(4x,"In backtrack_linemin, initial energy is ",f16.6," ",a2)') &
+         en_conv * energy_in, en_units(energy_units)
+
+    c1 = 0.1_double
+    c2 = 0.9_double
+    ! grad f dot p  Note that the ordering of direction and tot_force is different
+    grad_f_dot_p = zero
+    do i=1, ni_in_cell
+       j = id_glob(i)
+       grad_f_dot_p = grad_f_dot_p - direction(1,i)*tot_force(1,j)
+       grad_f_dot_p = grad_f_dot_p - direction(2,i)*tot_force(2,j)
+       grad_f_dot_p = grad_f_dot_p - direction(3,i)*tot_force(3,j)
+    end do
+    if(inode==ionode.AND.iprint_MD>1) &
+         write(io_lun, fmt='(2x,"Starting backtrack_linemin, grad_f.p is ",f16.6)') grad_f_dot_p
+    done = .false.
+    do while (.not. done)
+       iter = iter+1
+       ! Take a step along search direction
+       do i = 1, ni_in_cell
+          x_atom_cell(i) = x_atom_cell(i) + (alpha - old_alpha) * direction(1,i)
+          y_atom_cell(i) = y_atom_cell(i) + (alpha - old_alpha) * direction(2,i)
+          z_atom_cell(i) = z_atom_cell(i) + (alpha - old_alpha) * direction(3,i)
+       end do
+
+       ! Update and find new energy
+       if(flag_SFcoeffReuse) then
+          call update_pos_and_matrices(updateSFcoeff,direction)
+       else
+          call update_pos_and_matrices(updateLorK,direction)
+       endif
+       if (inode == ionode .and. iprint_MD > 2) then
+          do i=1,ni_in_cell
+             write (io_lun,fmt='(2x,"Position: ",i3,3f13.8)') i, &
+                  x_atom_cell(i), y_atom_cell(i), z_atom_cell(i)
+          end do
+       end if
+       call update_H(fixed_potential)
+       ! Write out atomic positions
+       if (iprint_MD > 2) then
+          call write_atomic_positions("UpdatedAtoms_tmp.dat", &
+               trim(pdb_template))
+       end if
+       ! We've just moved the atoms - we need a self-consistent ground
+       ! state before we can minimise blips !
+       if (flag_vary_basis .or. flag_LFD_minimise) then
+          call new_SC_potl(.false., sc_tolerance, reset_L,           &
+               fixed_potential, vary_mu, n_L_iterations, &
+               L_tolerance, e3)
+       end if
+       call get_E_and_F(fixed_potential, vary_mu, e3, .false., &
+            .false.)
+       !call dump_pos_and_matrices
+       ! e3 is f(x + alpha p)
+       armijo = e0 + c1 * alpha * grad_f_dot_p
+
+       if (inode == ionode .and. iprint_MD > 1) then
+          write (io_lun, &
+               fmt='(4x,"In backtrack_linemin, iter ",i3," step and energy &
+               &are ",2f16.6" ",a2)') &
+               iter, alpha, en_conv * e3, en_units(energy_units)
+          write(io_lun, fmt='(6x,"Armijo threshold is ",f16.6," ",a2)') armijo, en_units(energy_units)
+       end if
+       if(e3<armijo) then ! success
+          done = .true.
+       else
+          old_alpha = alpha
+          alpha_new = (-half * alpha * grad_f_dot_p) / ((e3 - e0)/alpha - grad_f_dot_p)
+          alpha = max(alpha_new, 0.1_double*alpha)
+       end if
+    end do ! while (.not. done)
+    energy_out = e3
+    call dump_pos_and_matrices
+    ! Now find forces
+    call force(fixed_potential, vary_mu, n_L_iterations, &
+         L_tolerance, sc_tolerance, energy_out, .true.)
+    ! Evaluate new grad f dot p
+    grad_fp_dot_p = zero
+    do i=1, ni_in_cell
+       j = id_glob(i)
+       grad_fp_dot_p = grad_f_dot_p - direction(1,i)*tot_force(1,j)
+       grad_fp_dot_p = grad_f_dot_p - direction(2,i)*tot_force(2,j)
+       grad_fp_dot_p = grad_f_dot_p - direction(3,i)*tot_force(3,j)
+    end do
+    if(inode==ionode.AND.iprint_MD>3) &
+         write(io_lun,fmt='(6x,"In backtrack_linemin, second Wolfe: ",e11.4," < ",e11.4)') &
+         abs(grad_fp_dot_p), c2*abs(grad_f_dot_p)
+
+    dE = e0 - energy_out
+    if (inode == ionode .and. iprint_MD > 2) then
+       write (io_lun, &
+            fmt='(4x,"In backtrack_linemin, exit after ",i4," &
+            &iterations with energy ",f16.6," ",a2)') &
+            iter, en_conv * energy_out, en_units(energy_units)
+    else if (inode == ionode .and. iprint_MD > 0) then
+       write (io_lun, fmt='(/4x,"In backtrack_linemin, final energy is   ",f16.6," ",a2)') &
+            en_conv * energy_out, en_units(energy_units)
+    end if
+
+    call stop_timer(tmr_std_moveatoms)
+    return
+  end subroutine backtrack_linemin
+!!***
+  
+  !!****f* move_atoms/adapt_backtrack_linemin *
+  !! PURPOSE
+  !!  Carry out back-tracking line minimisation
+  !!  Tweak to search for large step size initially
+  !! INPUTS
+  !!
+  !! AUTHOR
+  !!   David Bowler
+  !! CREATION DATE 
+  !!   2019/12/09
+  !! MODIFICATION HISTORY
+  !! SOURCE
+  !!
+  subroutine adapt_backtrack_linemin(direction, energy_in, &
+                      energy_out, fixed_potential, vary_mu, total_energy)
+
+    ! Module usage
+    use datatypes
+    use numbers
+    use units
+    use global_module,  only: iprint_MD, x_atom_cell, y_atom_cell,    &
+         z_atom_cell, flag_vary_basis,           &
+         atom_coord, ni_in_cell, rcellx, rcelly, &
+         rcellz, flag_self_consistent,           &
+         flag_reset_dens_on_atom_move,           &
+         IPRINT_TIME_THRES1, flag_pcc_global,    &
+         id_glob,                                &
+         flag_LmatrixReuse, flag_diagonalisation, nspin, &
+         flag_SFcoeffReuse 
+    use minimise,       only: get_E_and_F, sc_tolerance, L_tolerance, &
+         n_L_iterations
+    use GenComms,       only: my_barrier, myid, inode, ionode,        &
+         cq_abort, gcopy
+    use SelfCon,        only: new_SC_potl
+    use GenBlas,        only: dot
+    use force_module,   only: tot_force
+    use io_module,      only: write_atomic_positions, pdb_template
+    use density_module, only: density, flag_no_atomic_densities, set_density_pcc
+    use maxima_module,  only: maxngrid
+    use matrix_data, ONLY: Lrange, Hrange, SFcoeff_range, SFcoeffTr_range, HTr_range
+    use mult_module, ONLY: matL,L_trans, matK, matSFcoeff
+    use timer_module
+    use dimens, ONLY: r_super_x, r_super_y, r_super_z
+    use store_matrix, ONLY: dump_pos_and_matrices
+    use multisiteSF_module, only: flag_LFD_minimise
+    use mult_module, ONLY: allocate_temp_matrix, free_temp_matrix, matrix_sum
+    use global_module, ONLY: atomf, sf
+    use io_module, ONLY: dump_matrix
+    use force_module,      only: force
+
+    implicit none
+
+    ! Passed variables
+    real(double) :: energy_in, energy_out
+    real(double), dimension(3,ni_in_cell) :: direction
+    ! Shared variables needed by get_E_and_F for now (!)
+    logical           :: vary_mu, fixed_potential
+    real(double)      :: total_energy
+
+    ! Local variables
+    integer        :: i, j, iter, lun, gatom, stat, nfile, symm
+    logical        :: reset_L = .false.
+    logical        :: done
+    type(cq_timer) :: tmr_l_iter, tmr_l_tmp1
+    real(double)   :: alpha_new, armijo, grad_f_dot_p, grad_fp_dot_p, old_alpha
+    real(double)   :: e0, e1, e2, e3, tmp, bottom
+    real(double), save :: kmin = zero, dE = zero
+    real(double), dimension(:), allocatable :: store_density
+    real(double) :: k3_old, k3_local, kmin_old
+    real(double), save :: alpha = one
+    real(double), save :: scale = 0.9_double
+    real(double) :: c1, c2
+
+    integer :: ig, both, mat
+
+    call start_timer(tmr_std_moveatoms)
+
+    iter = 0
+    old_alpha = zero
+    e0 = total_energy
+    if (inode == ionode .and. iprint_MD > 0) &
+         write (io_lun, &
+         fmt='(4x,"In backtrack_linemin, initial energy is ",f16.6," ",a2)') &
+         en_conv * energy_in, en_units(energy_units)
+
+    c1 = 0.1_double
+    c2 = 0.9_double
+    ! grad f dot p
+    grad_f_dot_p = zero
+    do i=1, ni_in_cell
+       j = id_glob(i)
+       grad_f_dot_p = grad_f_dot_p - direction(1,i)*tot_force(1,j)
+       grad_f_dot_p = grad_f_dot_p - direction(2,i)*tot_force(2,j)
+       grad_f_dot_p = grad_f_dot_p - direction(3,i)*tot_force(3,j)
+    end do
+    if(inode==ionode.AND.iprint_MD>1) &
+         write(io_lun, fmt='(2x,"Starting backtrack_linemin, grad_f.p is ",f16.6)') grad_f_dot_p
+    done = .false.
+    iter = 0
+    do while (.not. done)
+       iter = iter+1
+       ! Take a step along sesarch direction
+       do i = 1, ni_in_cell
+          x_atom_cell(i) = x_atom_cell(i) + (alpha - old_alpha) * direction(1,i)
+          y_atom_cell(i) = y_atom_cell(i) + (alpha - old_alpha) * direction(2,i)
+          z_atom_cell(i) = z_atom_cell(i) + (alpha - old_alpha) * direction(3,i)
+       end do
+
+       ! Update and find new energy
+       if(flag_SFcoeffReuse) then
+          call update_pos_and_matrices(updateSFcoeff,direction)
+       else
+          call update_pos_and_matrices(updateLorK,direction)
+       endif
+       if (inode == ionode .and. iprint_MD > 2) then
+          do i=1,ni_in_cell
+             write (io_lun,fmt='(2x,"Pos: ",i3,3f13.8)') i, &
+                  x_atom_cell(i), y_atom_cell(i), z_atom_cell(i)
+          end do
+       end if
+       call update_H(fixed_potential)
+       ! Write out atomic positions
+       if (iprint_MD > 2) then
+          call write_atomic_positions("UpdatedAtoms_tmp.dat", &
+               trim(pdb_template))
+       end if
+       ! We've just moved the atoms - we need a self-consistent ground
+       ! state before we can minimise blips !
+       if (flag_vary_basis .or. flag_LFD_minimise) then
+          call new_SC_potl(.false., sc_tolerance, reset_L,           &
+               fixed_potential, vary_mu, n_L_iterations, &
+               L_tolerance, e3)
+       end if
+       call get_E_and_F(fixed_potential, vary_mu, e3, .false., &
+            .false.)
+       !call dump_pos_and_matrices
+       ! e3 is f(x + alpha p)
+       armijo = e0 + c1 * alpha * grad_f_dot_p
+
+       if (inode == ionode .and. iprint_MD > 1) then
+          write (io_lun, &
+               fmt='(4x,"In backtrack_linemin, iter ",i3," step and energy &
+               &are ",2f20.10" ",a2)') &
+               iter, alpha, en_conv * e3, en_units(energy_units)
+          write(io_lun, fmt='(6x,"Armijo threshold is ",f16.6," ",a2)') armijo, en_units(energy_units)
+       end if
+       if(e3<armijo) then ! success
+          done = .true.
+       else
+          old_alpha = alpha
+          alpha_new = (-half * alpha * grad_f_dot_p) / ((e3 - e0)/alpha - grad_f_dot_p)
+          alpha = max(alpha_new, 0.1_double*alpha)
+       end if
+    end do ! while (.not. done)
+    energy_out = e3
+    call dump_pos_and_matrices
+    ! Test increase of alpha
+    if(iter==1) then
+       scale = scale*0.9_double
+       alpha = (one+scale)*alpha
+    end if
+    ! Now find forces
+    call force(fixed_potential, vary_mu, n_L_iterations, &
+         L_tolerance, sc_tolerance, energy_out, .true.)
+    grad_fp_dot_p = zero
+    do i=1, ni_in_cell
+       j = id_glob(i)
+       grad_fp_dot_p = grad_f_dot_p - direction(1,i)*tot_force(1,j)
+       grad_fp_dot_p = grad_f_dot_p - direction(2,i)*tot_force(2,j)
+       grad_fp_dot_p = grad_f_dot_p - direction(3,i)*tot_force(3,j)
+    end do
+    if(inode==ionode.AND.iprint_MD>3) &
+         write(io_lun,fmt='(6x,"In backtrack_linemin, second Wolfe: ",e11.4," < ",e11.4)') &
+         abs(grad_fp_dot_p), c2*abs(grad_f_dot_p)
+    dE = e0 - energy_out
+    if (inode == ionode .and. iprint_MD > 0) then
+       write (io_lun, &
+            fmt='(4x,"In backtrack_linemin, exit after ",i4," &
+            &iterations with energy ",f20.10," ",a2)') &
+            iter, en_conv * energy_out, en_units(energy_units)
+    else if (inode == ionode .and. iprint_MD > 0) then
+       write (io_lun, fmt='(/4x,"Final energy: ",f20.10," ",a2)') &
+            en_conv * energy_out, en_units(energy_units)
+    end if
+
+    call stop_timer(tmr_std_moveatoms)
+    return
+  end subroutine adapt_backtrack_linemin
+!!***
+  
   !!****f* move_atoms/safemin_cell *
   !! PURPOSE
   !! Optimize the simulation cell dimensions a b and c
@@ -2512,7 +2890,7 @@ contains
        if (flag_dft_d2) call make_cs(inode-1, r_dft_d2, D2_CS, parts, bundle, ni_in_cell, &
                x_atom_cell, y_atom_cell, z_atom_cell)
     else
-       call updateMembers_cs(velocity)
+       call updateMembers_cs
        call deallocate_distribute_atom
        ! Reallocate and find new indices
        call distribute_atoms(inode,ionode)
