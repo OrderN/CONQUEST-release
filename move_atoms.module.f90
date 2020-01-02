@@ -1287,7 +1287,7 @@ contains
     real(double), save :: kmin = zero, dE = zero
     real(double), dimension(:), allocatable :: store_density
     real(double) :: k3_old, k3_local, kmin_old
-    real(double), save :: alpha = one
+    real(double) :: alpha = one
     real(double) :: c1, c2
 
     integer :: ig, both, mat
@@ -1299,7 +1299,7 @@ contains
     e0 = total_energy
     if (inode == ionode .and. iprint_MD > 0) &
          write (io_lun, &
-         fmt='(4x,"In backtrack_linemin, initial energy is ",f20.10," ",a2)') &
+         fmt='(4x,"In backtrack_linemin, initial energy is ",f16.6," ",a2)') &
          en_conv * energy_in, en_units(energy_units)
 
     c1 = 0.1_double
@@ -1313,7 +1313,7 @@ contains
        grad_f_dot_p = grad_f_dot_p - direction(3,i)*tot_force(3,j)
     end do
     if(inode==ionode.AND.iprint_MD>1) &
-         write(io_lun, fmt='(2x,"Starting backtrack_linemin, grad_f.p is ",f20.12)') grad_f_dot_p
+         write(io_lun, fmt='(2x,"Starting backtrack_linemin, grad_f.p is ",f16.6)') grad_f_dot_p
     done = .false.
     do while (.not. done)
        iter = iter+1
@@ -1358,9 +1358,9 @@ contains
        if (inode == ionode .and. iprint_MD > 1) then
           write (io_lun, &
                fmt='(4x,"In backtrack_linemin, iter ",i3," step and energy &
-               &are ",2f20.10" ",a2)') &
+               &are ",2f16.6" ",a2)') &
                iter, alpha, en_conv * e3, en_units(energy_units)
-          write(io_lun, fmt='(6x,"Armijo value is ",f20.10," ",a2)') armijo, en_units(energy_units)
+          write(io_lun, fmt='(6x,"Armijo threshold is ",f16.6," ",a2)') armijo, en_units(energy_units)
        end if
        if(e3<armijo) then ! success
           done = .true.
@@ -1368,8 +1368,6 @@ contains
           old_alpha = alpha
           alpha_new = (-half * alpha * grad_f_dot_p) / ((e3 - e0)/alpha - grad_f_dot_p)
           alpha = max(alpha_new, 0.1_double*alpha)
-          if (inode==ionode) write (io_lun,'(a,2f15.10)') "alpha, alpha_new: ", &
-               alpha, alpha_new
        end if
     end do ! while (.not. done)
     energy_out = e3
@@ -1385,17 +1383,18 @@ contains
        grad_fp_dot_p = grad_f_dot_p - direction(2,i)*tot_force(2,j)
        grad_fp_dot_p = grad_f_dot_p - direction(3,i)*tot_force(3,j)
     end do
-    if(inode==ionode) write(io_lun,fmt='(2x,"Second Wolfe condition: ",e11.4," < ",e11.4)') &
+    if(inode==ionode.AND.iprint_MD>3) &
+         write(io_lun,fmt='(6x,"In backtrack_linemin, second Wolfe: ",e11.4," < ",e11.4)') &
          abs(grad_fp_dot_p), c2*abs(grad_f_dot_p)
 
     dE = e0 - energy_out
-    if (inode == ionode .and. iprint_MD > 0) then
+    if (inode == ionode .and. iprint_MD > 2) then
        write (io_lun, &
             fmt='(4x,"In backtrack_linemin, exit after ",i4," &
-            &iterations with energy ",f20.10," ",a2)') &
+            &iterations with energy ",f16.6," ",a2)') &
             iter, en_conv * energy_out, en_units(energy_units)
-    else if (inode == ionode) then
-       write (io_lun, fmt='(/4x,"Final energy: ",f20.10," ",a2)') &
+    else if (inode == ionode .and. iprint_MD > 0) then
+       write (io_lun, fmt='(/4x,"In backtrack_linemin, final energy is   ",f16.6," ",a2)') &
             en_conv * energy_out, en_units(energy_units)
     end if
 
@@ -1486,7 +1485,7 @@ contains
     e0 = total_energy
     if (inode == ionode .and. iprint_MD > 0) &
          write (io_lun, &
-         fmt='(4x,"In backtrack_linemin, initial energy is ",f20.10," ",a2)') &
+         fmt='(4x,"In backtrack_linemin, initial energy is ",f16.6," ",a2)') &
          en_conv * energy_in, en_units(energy_units)
 
     c1 = 0.1_double
@@ -1500,7 +1499,7 @@ contains
        grad_f_dot_p = grad_f_dot_p - direction(3,i)*tot_force(3,j)
     end do
     if(inode==ionode.AND.iprint_MD>1) &
-         write(io_lun, fmt='(2x,"Starting backtrack_linemin, grad_f.p is ",f20.12)') grad_f_dot_p
+         write(io_lun, fmt='(2x,"Starting backtrack_linemin, grad_f.p is ",f16.6)') grad_f_dot_p
     done = .false.
     iter = 0
     do while (.not. done)
@@ -1548,7 +1547,7 @@ contains
                fmt='(4x,"In backtrack_linemin, iter ",i3," step and energy &
                &are ",2f20.10" ",a2)') &
                iter, alpha, en_conv * e3, en_units(energy_units)
-          write(io_lun, fmt='(6x,"Armijo value is ",f20.10," ",a2)') armijo, en_units(energy_units)
+          write(io_lun, fmt='(6x,"Armijo threshold is ",f16.6," ",a2)') armijo, en_units(energy_units)
        end if
        if(e3<armijo) then ! success
           done = .true.
@@ -1556,8 +1555,6 @@ contains
           old_alpha = alpha
           alpha_new = (-half * alpha * grad_f_dot_p) / ((e3 - e0)/alpha - grad_f_dot_p)
           alpha = max(alpha_new, 0.1_double*alpha)
-          if (inode==ionode) write (io_lun,'(a,2f15.10)') "alpha, alpha_new: ", &
-               alpha, alpha_new
        end if
     end do ! while (.not. done)
     energy_out = e3
@@ -1577,16 +1574,16 @@ contains
        grad_fp_dot_p = grad_f_dot_p - direction(2,i)*tot_force(2,j)
        grad_fp_dot_p = grad_f_dot_p - direction(3,i)*tot_force(3,j)
     end do
-    if(inode==ionode) write(io_lun,fmt='(2x,"Second Wolfe condition: ",e11.4," < ",e11.4)') &
+    if(inode==ionode.AND.iprint_MD>3) &
+         write(io_lun,fmt='(6x,"In backtrack_linemin, second Wolfe: ",e11.4," < ",e11.4)') &
          abs(grad_fp_dot_p), c2*abs(grad_f_dot_p)
-
     dE = e0 - energy_out
     if (inode == ionode .and. iprint_MD > 0) then
        write (io_lun, &
             fmt='(4x,"In backtrack_linemin, exit after ",i4," &
             &iterations with energy ",f20.10," ",a2)') &
             iter, en_conv * energy_out, en_units(energy_units)
-    else if (inode == ionode) then
+    else if (inode == ionode .and. iprint_MD > 0) then
        write (io_lun, fmt='(/4x,"Final energy: ",f20.10," ",a2)') &
             en_conv * energy_out, en_units(energy_units)
     end if
