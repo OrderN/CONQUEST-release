@@ -97,11 +97,48 @@ Go to :ref:`top <convergence>`.
 Linear Scaling
 ~~~~~~~~~~~~~~
 
-* L range
-* L Tolerance
-* Inverse S range
-* Inverse S tolerance
-* Number of iterations (?)
+The range applied to the density matrix (``DM.L_range``) determines
+the accuracy of the calculation, as well as the computational time
+required (as the number of non-zero elements will increase based on a
+sphere with the radius of the range, the time will increase roughly
+proportional to the cube of the range).  In almost all circumstances,
+it is best to operate with a range which converges energy
+*differences* and forces, rather than the absolute energy.  Testing
+for this convergence is an essential part of the preparation for
+production calculations.
+
+The tolerance applied to the density matrix optimisation
+(``minE.Ltolerance``) must be
+chosen to give adequate convergence of the energy and forces.  The
+tolerance is applied to the residual in the calculation, defined as:
+
+.. math::
+
+   R = \sqrt{\sum_{i\alpha j\beta} \partial E/\partial L_{i\alpha j\beta}
+   \cdot \partial E/\partial L_{i\alpha j\beta} }
+
+The dot product uses the inverse of the overlap matrix as the metric.
+
+The approximate, sparse inversion of the overlap matrix is performed
+before the optimisation of the density matrix.  The method used,
+Hotelling's method (a version of a Newton-Raphson approach) is
+iterative and terminates when the characteristic quantity
+:math:`\Omega` increases.  On termination, if :math:`\Omega` is below
+the tolerance ``DM.InvSTolerance`` then the inverse is accepted;
+otherwise it is set to the identity (the density matrix optimisation
+will proceed in this case, but is likely to be inefficient).  We
+define:
+
+.. math::
+
+   \Omega = (Tr[I - TS])^2
+
+where :math:`T` is the approximate inverse.  The range for the inverse
+must be chosen (``Atom.InvSRange`` in the species block); by default
+it is same as the support function range 
+(which is then doubled to give the matrix range) but can be
+increased.  The behaviour of the inversion with range is not simple,
+and must be carefully characterised if necessary.
 
 Go to :ref:`top <convergence>`.
 
