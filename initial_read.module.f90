@@ -151,6 +151,8 @@ contains
   !!   2019/06/06 17:30 jack poulton and nakata
   !!    Changed to allow SZP-MSSFs with flag_MSSF_nonminimal when checking the number of MSSFs
   !!    Added MSSF_nonminimal_species
+  !!   2019/07/04 zamaan
+  !!    Added bibliography
   !!   2019/11/18 tsuyoshi
   !!    Removed flag_MDold
   !!  SOURCE
@@ -213,6 +215,8 @@ contains
                                       flag_MSSF_nonminimal, &   !nonmin_mssf
                                       MSSF_nonminimal_offset, & !nonmin_mssf
                                       MSSF_nonminimal_species   !nonmin_mssf
+    use biblio,                 only: type_bibliography
+    use references,             only: compile_biblio
     use md_control,             only: md_position_file
     use pao_format
     use XC,                     only: flag_functional_type, flag_different_functional
@@ -241,6 +245,9 @@ contains
 
     ! for checking the sum of electrons of spin channels
     real(double) :: sum_elecN_spin
+
+    ! the bibliography, obviously
+    type(type_bibliography) :: bib
 
 !****lat<$
     call start_backtrace(t=backtrace_timer,who='read_and_write',where=1,level=1)
@@ -518,6 +525,7 @@ contains
          call write_info(titles, mu, vary_mu, find_chdens, read_phi, &
                          HNL_fac, numprocs)
 
+    call compile_biblio
 !****lat<$
     call stop_backtrace(t=backtrace_timer,who='read_and_write')
 !****lat>$
@@ -908,7 +916,9 @@ contains
          enthalpy_tolerance, cg_line_min, safe, backtrack
     use Integrators, only: fire_alpha0, fire_f_inc, fire_f_dec, fire_f_alpha, fire_N_min, &
          fire_N_max, fire_max_step, fire_N_below_thresh
-    use XC, only : flag_functional_type, functional_hartree_fock, functional_hyb_pbe0, flag_different_functional
+    use XC, only : flag_functional_type, functional_hartree_fock, functional_hyb_pbe0, &
+         flag_different_functional
+    use biblio, only: flag_dump_bib
 
    !2019/12/27 tsuyoshi
     use density_module,  only: method_UpdateChargeDensity,DensityMatrix,AtomicCharge,LastStep
@@ -1043,6 +1053,7 @@ contains
     iprint_exx    = fdf_integer('IO.Iprint_exx',   iprint)
     !
     !
+    flag_dump_bib = fdf_boolean('IO.DumpBibTeX',      .true.)
     flag_dump_L   = fdf_boolean('IO.DumpL',           .true. )
     locps_output  = fdf_boolean('IO.LocalPotOutput',  .false.)
     locps_choice  = fdf_integer('IO.LocalPotChoice',   8     )
@@ -1102,9 +1113,6 @@ contains
     end if
     !
     !
-    !blip_width = fdf_double('blip_width',zero)
-    !support_grid_spacing = fdf_double('support_grid_spacing',zero)
-
     ! Default to 50 Ha cutoff for grid
     GridCutoff = fdf_double('Grid.GridCutoff',50.0_double)
     ! Grid points
@@ -1130,14 +1138,7 @@ contains
 !!$
 !!$
     ! Radii - again, astonishingly badly named
-    !****lat<$
-    ! it seems that the initialisation of r_h here
-    ! is obselete due to 'r_h = max(r_h,RadiusSupport(n))'
-    ! in dimens.module.f90 is this what we want ?
-    !****lat>$
-    !r_h     = fdf_double('hamiltonian_range',zero)
     r_c     = fdf_double('DM.L_range',       one )
-    !r_t     = fdf_double('InvSRange',        r_h )
     HNL_fac = zero !fdf_double('non_local_factor', zero)
     ! Exponents for initial gaussian blips
     alpha = fdf_double('Basis.SGaussExponent',zero)
