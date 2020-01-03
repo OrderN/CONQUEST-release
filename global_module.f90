@@ -184,7 +184,7 @@ module global_module
   integer,      dimension(:,:), allocatable :: sorted_coord ! Atom IDs of atoms sorted according to x, y, z coords
   logical,      dimension(:,:), allocatable :: flag_move_atom  ! Move atoms ?
   integer,      dimension(:),   allocatable :: flag_cdft_atom
-  logical :: restart_LorK, restart_rho, restart_T, restart_X
+  logical :: restart_DM, restart_rho, restart_T, restart_X
 
   integer :: global_maxatomspart ! Maximum atoms per partition, if exceeded, triggers partitioning refinement
 
@@ -343,6 +343,7 @@ module global_module
 
   ! Flag to control if matrix L is dumped to files
   logical :: flag_dump_L
+  logical :: flag_DumpMatrices
 
   ! Hold an old relation between global & partition labels
   integer,allocatable :: id_glob_old(:),id_glob_inv_old(:)

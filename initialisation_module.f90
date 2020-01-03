@@ -111,6 +111,8 @@ contains
   !!    Changes to find maximum angular momentum for PAOs and pseudopotentials (for factorial function)
   !!   2018/02/13 12:18 dave
   !!    Changes to new XC interface
+  !!   2019/12/26 tsuyoshi
+  !!    Removed flag_no_atomic_densities
   !!  SOURCE
   !!
   subroutine initialise(vary_mu, fixed_potential, mu, total_energy)
@@ -127,7 +129,6 @@ contains
                                  cq_abort
     use initial_read,      only: read_and_write
     use ionic_data,        only: get_ionic_data
-    use density_module,    only: flag_no_atomic_densities
     use memory_module,     only: init_reg_mem, reg_alloc_mem, type_dbl
     use group_module,      only: parts
     use primary_module,    only: bundle
@@ -184,14 +185,8 @@ contains
     end if
 
     ! Call routines to read or make data for isolated ions
-    flag_no_atomic_densities = .false.
-    call get_ionic_data(inode, ionode, flag_no_atomic_densities)
-    if (flag_no_atomic_densities .and. (.not. find_chdens)) then
-       if (inode == ionode) &
-            write (io_lun, *) 'No initial charge density specified - &
-                               &building from initial K'
-       find_chdens = .true.
-    end if
+    call get_ionic_data(inode, ionode)
+   
     lmax_tot = lmax_pao+lmax_ps
     if(2*lmax_pao>lmax_tot) lmax_tot = 2*lmax_pao
     if(lmax_tot<8) lmax_tot = 8
@@ -201,7 +196,7 @@ contains
     
     call my_barrier()
 
-    call initial_phis(read_phi, start, find_chdens, fixed_potential, std_level_loc+1)
+    call initial_phis(read_phi, start, fixed_potential, std_level_loc+1)
 
     ! ewald/screened_ion force and stress is computed in initial_H, so we
     ! need to allocate the atomic_stress array here - zamaan
@@ -745,9 +740,11 @@ contains
  !!    Renamed supportfns -> atomfns
  !!   2017/02/21 16:00 nakata
  !!    Removed unused get_support_pao_rep
+ !!   2019/12/26 tsuyoshi
+ !!    Removed unused find_chdens
  !!  SOURCE
  !!
- subroutine initial_phis(read_phi, start, find_chdens, fixed_potential, level)
+ subroutine initial_phis(read_phi, start, fixed_potential, level)
 
     use datatypes
     use blip,                        only: init_blip_flag, make_pre,   &
@@ -791,7 +788,7 @@ contains
     implicit none
 
     ! Passed variables
-    logical           :: read_phi, start, find_chdens, fixed_potential
+    logical           :: read_phi, start, fixed_potential
     integer, optional :: level
 
     ! Local variables
@@ -1084,6 +1081,8 @@ contains
   !!    Removed n_proc_old and glob2node_old
   !!   2019/11/18 tsuyoshi 
   !!    Removed flag_MDold
+  !!   2019/12/29 tsuyoshi
+  !!    restart_LorK -> restart_DM
   !!  SOURCE
   !!
   subroutine initial_H(start, start_L, find_chdens, fixed_potential, &
@@ -1099,7 +1098,7 @@ contains
     use SelfCon,             only: new_SC_potl
     use global_module,       only: iprint_init, flag_self_consistent, &
          flag_basis_set, blips, PAOs,       &
-         restart_LorK,                      &
+         restart_DM,                      &
          restart_rho, flag_test_forces,     &
          flag_dft_d2, nspin, spin_factor,   &
          flag_MDcontinue,                   &
@@ -1172,7 +1171,7 @@ contains
     !      --> Fetch and distribute date on old job
 
     if (flag_MDcontinue.or. &
-         restart_LorK.or. &
+         restart_DM.or. &
          restart_T   .or. &
          read_option  ) then
        if (inode.eq.ionode) write (io_lun,*) "Get global info to load matrices"
@@ -1182,8 +1181,14 @@ contains
        call set_atom_coord_diff(InfoGlob)
        MDinit_step = InfoGlob%MDstep
      
-      ! 2018JFeb12 TM 
-       if(restart_LorK) find_chdens=.true.
+      ! 2019Dec26 TM
+      ! Now, since the default value of find_chdens is 'true' if we set restart_DM 
+      ! as .true., the following line should be commented out. 
+      !  Even when we set restart_DM, we should be able to choose the option 
+      ! where find_chdens = .false. (initial charge = atomic charge)
+      ! But.. since this change will affect the result, we will issue this change later.
+      !
+       if(restart_DM) find_chdens=.true.  ! 2018JFeb12 TM 
 
        call my_barrier()
     endif
@@ -1261,7 +1266,7 @@ contains
           call stop_timer(tmr_std_densitymat)
        end if
     end if
-    if (restart_LorK) then
+    if (restart_DM) then
        if(.not.flag_diagonalisation) then
           call grab_matrix2('L',inode,nfile,Info,InfoGlob,index=0,n_matrix=nspin)
           call my_barrier()
@@ -1290,7 +1295,7 @@ contains
 !!$
 !!$
     ! (3) get K matrix (and also get phi matrix)
-    if (.not. flag_diagonalisation .and. (find_chdens .or. restart_LorK)) then
+    if (.not. flag_diagonalisation .and. (find_chdens .or. restart_DM)) then
        call LNV_matrix_multiply(electrons, energy_tmp, doK, dontM1,   &
             dontM2, dontM3, dontM4, dophi, dontE, &
             mat_phi=matphi)
@@ -1381,7 +1386,7 @@ contains
 !!$
     if ( flag_self_consistent ) then ! Vary only DM and charge density
        !
-       if ( restart_LorK ) then
+       if ( restart_DM ) then
           record  = .true.
           reset_L = .false.
           call new_SC_potl(record, sc_tolerance, reset_L, &
@@ -1434,7 +1439,7 @@ contains
           wf_self_con=.true.
        endif
 
-       if ( .not. restart_LorK ) then
+       if ( .not. restart_DM ) then
           record  = .false.   
           reset_L = .true.
           call FindMinDM(n_L_iterations, vary_mu, L_tolerance, &

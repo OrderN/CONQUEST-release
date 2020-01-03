@@ -159,7 +159,7 @@ contains
     use numbers,        ONLY: zero, RD_ERR, two
     use pao_format,     ONLY: pao
     use species_module, ONLY: n_species, species_label, species_file, species_from_files
-    use species_module, ONLY: npao_species, nsf_species, type_species, charge, charge_up, charge_dn
+    use species_module, ONLY: npao_species, nsf_species, type_species, charge, charge_up, charge_dn, mass
     use global_module,  ONLY: iprint_pseudo, flag_Multisite
     use dimens,         ONLY: RadiusSupport, RadiusAtomf, RadiusMS, InvSRange, atomicnum
     use GenComms,       ONLY: inode, ionode, cq_abort, gcopy
@@ -225,6 +225,7 @@ contains
           atomicnum(ispecies)    = pseudo(ispecies)%z
           ! Valence charge
           charge(ispecies)       = pseudo(ispecies)%zval
+          if(mass(ispecies) < zero) charge(ispecies) = zero
           ! Test spin polarised initialisation
           if (abs(charge_up(ispecies)+charge_dn(ispecies))>RD_ERR) then
              if (abs(charge_up(ispecies)+charge_dn(ispecies)-charge(ispecies))>RD_ERR) &

@@ -68,173 +68,11 @@ module atomic_density
 
   ! Maximum cutoff atomic on charge density tables
   real(double), allocatable, dimension(:) :: rcut_dens
-  logical :: flag_atomic_density_from_pao
-  character(len=80) :: read_atomic_density_file
-  character(len=10) :: atomic_density_method
 
-  ! RCS tag for object file identification
-  character(len=80), private :: RCSid = "$Id$"
 !!***
 
 contains
 
-! -----------------------------------------------------------
-! Subroutine read_atomic_density
-! -----------------------------------------------------------
-
-!!****f* read_density/read_atomic_density *
-!!
-!!  NAME 
-!!   read_atomic_density
-!!  USAGE
-!!   read_atomic_density(inode, ionode)
-!!  PURPOSE
-!!   Reads tables of atomic electron density
-!!  INPUTS
-!!   inode
-!!   ionode
-!!  USES
-!!   datatypes, global_module, GenComms, numbers
-!!  AUTHOR
-!!   L.K.Dash
-!!  CREATION DATE
-!!   14/05/02
-!!  MODIFICATION HISTORY
-!!   18/06/2002 lkd
-!!    changed "open/close" file  statements to io_assign/io_close
-!!   17/07/2002 lkd
-!!    moved to new density_read_module, changed to new radial_density derived type
-!!   10/08/2002 MJG:
-!!    Minor renaming
-!!   11/08/2002 MJG:
-!!    new scheme for broadcasting data
-!!   11:23, 24/09/2002 mjg & drb 
-!!    Minor reformatting
-!!   11:53, 24/09/2002 mjg & drb 
-!!    Included in atomic_density
-!!   12:14, 25/09/2002 mjg & drb 
-!!    Added rcut_dens to keep track of maximum cutoff on atomic charge density
-!!   2006/09/20 17:19 dave
-!!    Moved read of file to initial_read
-!!   2008/05/23 ast
-!!    Added timers
-!!   2008/09/01 08:21 dave
-!!    Added io_ routines from input_module
-!!  SOURCE
-!!
-  subroutine read_atomic_density(inode,ionode,n_species)
-
-    use datatypes
-    use global_module, ONLY: iprint_SC, area_SC
-    use GenComms, ONLY: gcopy, cq_abort
-    use numbers
-    use memory_module, ONLY: reg_alloc_mem, type_dbl
-    use input_module, ONLY: io_assign, io_close
-
-    implicit none
-
-    ! Passed variables
-    integer, intent(in) :: inode, ionode, n_species
-
-    ! Local variables
-    character(len=80) :: read_atomic_density_file
-    integer :: i, nt, n_sp ! do loop variable
-    integer :: lun ! local unit number for io_assign
-    integer :: ios ! status indicator for opening unit
-    integer :: alls ! status indicator for allocations
-    real(double) :: r_dummy
-
-    call start_timer(tmr_std_chargescf)
-    if(inode == ionode) then
-       if(iprint_SC >= 1) then
-          write(unit=io_lun,fmt='(//10x,50("+")/10x,"read_atomic_density: &
-               &no. of species for reading atomic density:",i5/10x,50("+"))') n_species
-       end if
-
-       if(n_species < 1) call cq_abort('read_atomic_density: &
-            &no. of species must be positive',n_species)
-
-       call io_assign(lun)
-       if(iprint_SC >= 2) then
-          write(unit=io_lun,fmt='(/10x," read_atomic_density: io_assign unit no. lun:",i3)') lun
-       end if
-
-       if(iprint_SC >= 2) then
-          write(unit=io_lun,fmt='(/10x," read_atomic_density: name of input file:",a80)') &
-               &read_atomic_density_file
-       end if
-
-       open(unit=lun,file=read_atomic_density_file,status='old',iostat=ios)
-       if(ios /= 0) call cq_abort('read_atomic_density: failed to open input file')
-    end if
-
-    ! allocate memory for atomic density tables
-    call start_timer(tmr_std_allocation)
-    if(allocated(atomic_density_table)) then
-       do i=1,size(atomic_density_table)
-          deallocate(atomic_density_table(i)%table)
-       end do
-       deallocate(atomic_density_table)
-    end if
-    allocate(atomic_density_table(n_species),STAT=alls)
-    if (alls /= 0) call cq_abort('read_atomic_density: error allocating atomic_density_table ',n_species)
-
-    allocate(rcut_dens(n_species),STAT=alls)
-    if (alls /= 0) call cq_abort('read_atomic_density: error allocating rcut_dens ',n_species)
-    call reg_alloc_mem(area_SC, n_species, type_dbl)
-    call stop_timer(tmr_std_allocation)
-    rcut_dens = 0.0_double
-    do n_sp = 1, n_species
-
-       if(inode == ionode) then
-          if(iprint_SC >= 2) write(unit=io_lun,fmt='(/10x," reading atomic density data for species no:",i3)') n_sp
-          read(lun,fmt=*) atomic_density_table(n_sp)%length
-          read(lun,fmt=*) atomic_density_table(n_sp)%cutoff
-          atomic_density_table(n_sp)%delta = atomic_density_table(n_sp)%cutoff / &
-               (real(atomic_density_table(n_sp)%length,double)-1)
-          if(iprint_SC >= 2) then
-             write(unit=io_lun,fmt='(/10x," table length:",i5)') atomic_density_table(n_sp)%length
-             write(unit=io_lun,fmt='(/10x," radial cut-off distance:",f12.6)') atomic_density_table(n_sp)%cutoff
-          end if
-       end if
-
-       call gcopy(atomic_density_table(n_sp)%length)
-       call gcopy(atomic_density_table(n_sp)%cutoff)
-       rcut_dens(n_sp) = atomic_density_table(n_sp)%cutoff
-       !if(atomic_density_table(n_sp)%cutoff>rcut_dens) rcut_dens=atomic_density_table(n_sp)%cutoff
-
-       call start_timer(tmr_std_allocation)
-       allocate(atomic_density_table(n_sp)%table(atomic_density_table(n_sp)%length),stat = alls)
-       if(alls /= 0) call cq_abort('read_atomic_density: &
-            &failed to allocate atomic_density_table(n_sp)%table')
-       call reg_alloc_mem(area_SC,atomic_density_table(n_sp)%length, type_dbl)
-       call stop_timer(tmr_std_allocation)
-
-       if(atomic_density_table(n_sp)%length > 0) then
-
-          if(inode == ionode) then
-             do nt = 1, atomic_density_table(n_sp)%length
-                read(unit=lun,fmt=*) r_dummy, atomic_density_table(n_sp)%table(nt)
-             end do
-          end if
-
-          call gcopy(atomic_density_table(n_sp)%table,atomic_density_table(n_sp)%length)
-       end if
-
-    end do
-
-    if(inode == ionode) then
-       call io_close(lun)
-       if(iprint_SC>2) then
-          do n_sp = 1,n_species
-            write(io_lun,fmt='(10x,"Atomic density cutoff for species ",i4," : ",f15.8)') n_sp,rcut_dens(n_sp)
-         end do
-      end if
-   end if
-   call stop_timer(tmr_std_chargescf)
-  end subroutine read_atomic_density
-!!***
-  
 ! -----------------------------------------------------------
 ! Subroutine make_atomic_density_from_paos
 ! -----------------------------------------------------------
@@ -271,6 +109,9 @@ contains
 !!    Added timers
 !!   2017/03/23 drb
 !!    Change to use delta from PAO structure, not calculate it
+!!   2019/12/24 tsuyoshi
+!!    Removed flag_aotmic_density_from_pao
+!!    We don't need make_atomic_denisty_from_paos any more.
 !!  SOURCE
 !!
   subroutine make_atomic_density_from_paos(inode,ionode,n_species)

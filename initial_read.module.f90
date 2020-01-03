@@ -740,6 +740,9 @@ contains
   !!   2019/12/04 08:09 dave
   !!    Made default pseudopotential type Hamann to fit with Conquest ion file generator
   !!    and made default grid 100Ha; removed check for old input file format; default method diagonalisation
+  !!   2019/12/26 tsuyoshi  (2019/12/29)
+  !!     General.LoadL => General.LoadLorK  => General.LoadDM
+  !!     AtomMove.ReuseL => AtomMove.ReuseLorK => AtomMove.ReuseDM
   !!  TODO
   !!   Fix reading of start flags (change to block ?) 10/05/2002 dave
   !!   Fix rigid shift 10/05/2002 dave
@@ -758,7 +761,7 @@ contains
          flag_fractional_atomic_coords,            &
          flag_old_partitions, ne_in_cell,          &
          max_L_iterations, flag_read_blocks,       &
-         runtype, restart_LorK, restart_rho,          &
+         runtype, restart_DM, restart_rho,         &
          flag_basis_set, blips, PAOs,              &
          flag_test_forces, UseGemm,                &
          flag_fractional_atomic_coords,            &
@@ -804,7 +807,7 @@ contains
          flag_opt_cell, cell_constraint_flag, flag_variable_cell, &
          cell_en_tol, optcell_method, cell_stress_tol, &
          flag_stress, flag_full_stress, rng_seed, &
-         flag_atomic_stress, flag_heat_flux
+         flag_atomic_stress, flag_heat_flux, flag_DumpMatrices
     use dimens, only: r_super_x, r_super_y, r_super_z, GridCutoff,    &
          n_grid_x, n_grid_y, n_grid_z, r_h, r_c,         &
          RadiusSupport, RadiusAtomf, RadiusMS, RadiusLD, &
@@ -832,10 +835,8 @@ contains
     use SelfCon, only: A, flag_linear_mixing, EndLinearMixing, q0, q1,&
          n_exact, maxitersSC, maxearlySC, maxpulaySC,   &
          atomch_output, flag_Kerker, flag_wdmetric, minitersSC, &
-         flag_newresidual, flag_newresid_abs 
-    use atomic_density, only: read_atomic_density_file, &
-         atomic_density_method
-    use density_module, only: flag_InitialAtomicSpin
+         flag_newresidual, flag_newresid_abs, n_dumpSCF
+    use density_module, only: flag_InitialAtomicSpin, flag_DumpChargeDensity
     use S_matrix_module, only: InvSTolerance, InvSMaxSteps,&
          InvSDeltaOmegaTolerance
     use blip,          only: blip_info, init_blip_flag, alpha, beta
@@ -891,6 +892,7 @@ contains
          flag_LFD_minimise, LFD_ThreshE, LFD_ThreshD,           &
          LFD_Thresh_EnergyRise, LFD_max_iteration,              &
          flag_LFD_MD_UseAtomicDensity,  flag_MSSF_nonminimal,   &
+         n_dumpSFcoeff,                                         &
          MSSF_nonminimal_offset ! nonmin_mssf
     use control,    only: md_ensemble
     use md_control, only: md_tau_T, md_n_nhc, md_n_ys, md_n_mts, md_nhc_mass, &
@@ -907,6 +909,9 @@ contains
     use Integrators, only: fire_alpha0, fire_f_inc, fire_f_dec, fire_f_alpha, fire_N_min, &
          fire_N_max, fire_max_step, fire_N_below_thresh
     use XC, only : flag_functional_type, functional_hartree_fock, functional_hyb_pbe0, flag_different_functional
+
+   !2019/12/27 tsuyoshi
+    use density_module,  only: method_UpdateChargeDensity,DensityMatrix,AtomicCharge,LastStep
 
     implicit none
 
@@ -1109,7 +1114,6 @@ contains
     ! Number of different iterations - not well defined
     n_L_iterations       = fdf_integer('DM.LVariations',50)
     max_L_iterations     = n_L_iterations
-    n_dumpL              = fdf_integer('DM.n_dumpL',n_L_iterations+1)
     n_support_iterations = fdf_integer('minE.SupportVariations',10)
     ! Initial expected drop in energy
     expected_reduction   = fdf_double('minE.ExpectedEnergyReduction',zero)
@@ -1388,6 +1392,8 @@ contains
     end do
     ! For ghost atoms
     if(flag_ghost) then
+       !2019Dec30 tsuyoshi
+       !the following do-loop should be commented out, since charge(:) will be updated in setup_pseudo_info
        do i=1, n_species
           if(type_species(i) < 0) then
              charge(i) = zero
@@ -1532,7 +1538,6 @@ contains
     flag_wdmetric   = fdf_boolean('SC.WaveDependentMetric', .false.)
     q1              = fdf_double ('SC.MetricFactor',     0.1_double)
     n_exact         = fdf_integer('SC.LateStageReset',   5         )
-    flag_reset_dens_on_atom_move = fdf_boolean('SC.ResetDensOnAtomMove',.false.)
     flag_continue_on_SC_fail     = fdf_boolean('SC.ContinueOnSCFail',   .false.)
     maxitersSC      = fdf_integer('SC.MaxIters',50)
     minitersSC      = fdf_integer('SC.MinIters',0) ! Changed default 2->0 DRB 2018/02/26
@@ -1541,11 +1546,6 @@ contains
     ! New residual flags jtlp 08/2019
     flag_newresidual = fdf_boolean('SC.AbsResidual', .false.)
     flag_newresid_abs = fdf_boolean('SC.AbsResidual.Fractional', .true.)
-    ! Atomic density
-    read_atomic_density_file = &
-         fdf_string(80,'SC.ReadAtomicDensityFile','read_atomic_density.dat')
-    ! Read atomic density initialisation flag
-    atomic_density_method = fdf_string(10,'SC.AtomicDensityFlag','pao')
     ! When constructing charge density from K matrix at last step, we check the total 
     ! number of electrons. If the error of electron number (per total electron number) 
     ! is larger than the following value, we use atomic charge density. (in update_H)
@@ -1556,6 +1556,19 @@ contains
     else if(leqi(tmp,'back')) then
        cg_line_min = backtrack
     end if
+!!$
+!!$
+!!$   New Parameters for Dumping Files
+!!$
+!!$
+
+    n_dumpL              = fdf_integer('IO.DumpFreq.DMM',0)
+    n_dumpSCF            = fdf_integer('IO.DumpFreq.SCF',0)
+    n_dumpSFcoeff        = fdf_integer('IO.DumpFreq.SFcoeff',0)
+!!$
+    flag_DumpMatrices      = fdf_boolean('IO.DumpMatrices',.true.)
+    flag_DumpChargeDensity = fdf_boolean('IO.DumpChargeDensity',.false.)
+    
 !!$
 !!$
 !!$
@@ -1985,17 +1998,48 @@ contains
     ! Basic settings for MD
     flag_MDdebug      = fdf_boolean('AtomMove.Debug',.false.)
     flag_MDcontinue   = fdf_boolean('AtomMove.RestartRun',.false.)
-    flag_SFcoeffReuse = fdf_boolean('AtomMove.ReuseSFcoeff',.false.)
-    flag_LmatrixReuse = fdf_boolean('AtomMove.ReuseL',.false.)
+    flag_SFcoeffReuse = fdf_boolean('AtomMove.ReuseSFcoeff',.true.)
+    flag_LmatrixReuse = fdf_boolean('AtomMove.ReuseDM',.true.)
     flag_write_xsf    = fdf_boolean('AtomMove.WriteXSF', .true.)
-    if (flag_LFD .and. .not.flag_SFcoeffReuse) then
-       ! if LFD, use atomic density in default when we don't reuse SFcoeff
-       flag_LFD_MD_UseAtomicDensity = fdf_boolean('Multisite.LFD.UpdateWithAtomicDensity',.true.)
+    ! tsuyoshi 2019/12/30
+     if(flag_SFcoeffReuse .and. .not.flag_LmatrixReuse) then
+       call cq_warn(sub_name,' AtomMove.ReuseDM should be true if AtomMove.ReuseSFcoeff is true.')
+       flag_LmatrixReuse = .true.
+     endif
+     if(flag_Multisite) then
+      if(.not.flag_SFcoeffReuse .and. flag_LmatrixReuse) then
+       call cq_warn(sub_name,' AtomMove.ReuseSFcoeff should be true if AtomMove.ReuseDM is true.')
+       flag_SFcoeffReuse = .true.
+      endif
+     endif
+    
+    ! tsuyoshi 2019/12/27
+    !  New Keyword for the method to update the charge density after the movement of atoms
+    !    DensityMatrix = 0; AtomicCharge = 1; LastStep = 2
+     method_UpdateChargeDensity = fdf_integer('AtomMove.InitialChargeDensity',DensityMatrix)
+
+    !  The keywords ( SC.ResetDensOnAtomMove and Multisite.LFD.UpdateWithAtomicDensity ) 
+    !  should be removed in the near future.
+       flag_reset_dens_on_atom_move = fdf_boolean('SC.ResetDensOnAtomMove',.false.)
+       if(flag_reset_dens_on_atom_move) then
+         call cq_warn(sub_name,' SC.ResetDensOnAtomMove will not be available soon. &
+                      Set AtomMove.InitialChargeDensity as 1, instead.')
+         method_UpdateChargeDensity = AtomicCharge
+       endif
+
+       if (flag_LFD .and. .not.flag_SFcoeffReuse) then
+         ! if LFD, use atomic density in default when we don't reuse SFcoeff
+         flag_LFD_MD_UseAtomicDensity = fdf_boolean('Multisite.LFD.UpdateWithAtomicDensity',.true.)
+         call cq_warn(sub_name,' Multisite.LFD.UpdateWithAtomicDensity will not be available soon. &
+                      Set AtomMove.InitialChargeDensity, instead.')
+       endif
+       if(flag_LFD_MD_UseAtomicDensity) method_UpdateChargeDensity = AtomicCharge
+
+    if(method_UpdateChargeDensity == AtomicCharge) then
+      flag_reset_dens_on_atom_move = .true.
+      flag_LFD_MD_UseAtomicDensity = .true.
     endif
-    ! DRB 2017/05/09 Removing restriction (now implemented)
-    !if(flag_spin_polarisation.AND.flag_LmatrixReuse) then
-    !   call cq_abort("L matrix re-use and spin polarisation not implemented !")
-    !end if
+
 
     flag_TmatrixReuse = fdf_boolean('AtomMove.ReuseInvS',.false.)
     flag_SkipEarlyDM  = fdf_boolean('AtomMove.SkipEarlyDM',.false.)
@@ -2009,19 +2053,19 @@ contains
     ! remains consistent
     if (flag_MDcontinue) then
        flag_read_velocity = fdf_boolean('AtomMove.ReadVelocity',.true.)
-       restart_LorK   = fdf_boolean('General.LoadL', .true.)
+       restart_DM         = fdf_boolean('General.LoadDM', .true.)
        find_chdens    = fdf_boolean('SC.MakeInitialChargeFromK',.true.)
        if (flag_XLBOMD) restart_X=fdf_boolean('XL.LoadX', .true.)
        if (flag_multisite) read_option = fdf_boolean('Basis.LoadCoeffs', .true.)
     else
        flag_read_velocity = fdf_boolean('AtomMove.ReadVelocity',.false.)
-       restart_LorK   = fdf_boolean('General.LoadL', .false.)
+       restart_DM         = fdf_boolean('General.LoadDM', .false.)
        find_chdens    = fdf_boolean('SC.MakeInitialChargeFromK',.false.)
        if (flag_XLBOMD) restart_X=fdf_boolean('XL.LoadX', .false.)
        if (flag_multisite) read_option = fdf_boolean('Basis.LoadCoeffs', .false.)
     end if
 
-    if (restart_LorK .and. flag_Multisite .and. .not.read_option) then
+    if (restart_DM .and. flag_Multisite .and. .not.read_option) then
        call cq_abort("When L or K matrix is read from files, SFcoeff also must be read from files for multi-site calculation.")
     endif
 
@@ -2160,27 +2204,52 @@ contains
     call my_barrier()
 
     return
+
   contains
+
     ! ------------------------------------------------------------------------------
     ! subroutine check_compatibility
     ! ------------------------------------------------------------------------------
+    ! this subroutine checks the compatibility between keywords defined in read_input
+    !       2017.11(Nov).03   Tsuyoshi Miyazaki
+    ! 
+    ! we don't need to worry about which parameter is defined first.
+    !
     subroutine check_compatibility 
+
       use GenComms, only: inode, ionode
-      ! this subroutine checks the compatibility between keywords defined in read_input
-      ! add the
-      !       2017.11(Nov).03   Tsuyoshi Miyazaki
+      
       implicit none
+
+      character(len=80) :: sub_name = "check_compatibility"
+
       !check AtomMove.ExtendedLagrangian(flag_XLBOMD) &  AtomMove.TypeOfRun (runtype)
-      if(runtype .NE. 'md' .and. flag_XLBOMD) then
+      if((.NOT.leqi(runtype,'md')) .and. flag_XLBOMD) then
          flag_XLBOMD=.false.
-         if(inode .eq. ionode)  write(io_lun,*)  &
-              'WARNING (AtomMove.ExtendedLagrangian): XLBOMD should be used only with MD.'
+         call cq_warn(sub_name,&
+              '(AtomMove.ExtendedLagrangian): XLBOMD should be used only with MD.')
       endif
       !check AtomMove.ExtendedLagrangian(flag_XLBOMD) &  DM.SolutionMethod
       if(flag_diagonalisation .and. flag_XLBOMD) then
          flag_XLBOMD=.false.
-         if(inode .eq. ionode)  write(io_lun,*)  &
-              'WARNING (AtomMove.ExtendedLagrangian): present XLBOMD is only for orderN'
+         call cq_warn(sub_name,&
+              'WARNING (AtomMove.ExtendedLagrangian): present XLBOMD is only for orderN')
+      endif
+
+      !flag_LmatrixReuse & method_UpdateChargeDensity
+      if(.not.flag_LmatrixReuse .and. method_UpdateChargeDensity == DensityMatrix) then
+         method_UpdateChargeDensity = AtomicCharge
+         call cq_warn(sub_name,&
+              'AtomMove.InitialChargeDensity is changed to AtomicCharge, since AtomMove.ReuseDM is false')
+      endif
+
+      !flag_DumpMatrices : at present, we need matrix files to reuse the previous matrix data 
+      if(.not.flag_DumpMatrices) then
+         if(flag_SFcoeffReuse .or. flag_LmatrixReuse) then
+            flag_DumpMatrices = .true.
+            call cq_warn(sub_name,&
+                 'IO.DumpMatrices must be true when AtomMove.ReuseSFcoeff or AtomMove.ReuseDM is true')
+         endif
       endif
 
       return

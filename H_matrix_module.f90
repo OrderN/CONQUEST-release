@@ -61,6 +61,10 @@
 !!    Understand and document onsite_T
 !   2014/09/15 18:30 lat
 !!    fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
+!   2019/12/30 tsuyoshi
+!!    introduced flag_DumpChargeDensity to control dump_charge in the end of get_H_matrix
+!!  2020/01/02 16:53 dave
+!!    Moved flag to density_module.f90 (more logical location)
 !!  SOURCE
 !!
 module H_matrix_module
@@ -82,6 +86,7 @@ module H_matrix_module
        RCSid = "$Id$"
   logical :: locps_output
   integer :: locps_choice
+
 !!***
 
 contains
@@ -236,6 +241,7 @@ contains
     use exx_io,                      only: exx_global_write
 !****lat>$
     use energy, only: local_ps_energy
+    use density_module,              only: flag_DumpChargeDensity
     
     implicit none
 
@@ -441,7 +447,7 @@ contains
     !
     !
     ! dump charges if required
-    if (iprint_SC > 2) then
+    if (flag_DumpChargeDensity .or. iprint_SC > 2) then
        if(nspin==1) then
           allocate(rho_total(size), STAT=stat)
           if (stat /= 0) call cq_abort("Error allocating rho_total: ", size)
