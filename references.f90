@@ -34,6 +34,8 @@ module references
     !!   2020/01/03 10:11 dave
     !!    Arrange references into Conquest-specific and other
     !!    and order by date
+    !!   2020/01/03 14:09 dave
+    !!    Add further papers, including XC functional references
     !!  SOURCE
     !!
     subroutine get_bib_db(bib)
@@ -43,23 +45,70 @@ module references
 
       ! Conquest-specific papers
       call bib%add_ref( &
+           "Hernandez1997", &
+           "{Hern\'andez, E. and Gillan, M. J. and Goringe, C. M.}", &
+           "{Basis functions for linear-scaling first-principles calculations}", &
+           "{Phys. Rev. B}", &
+           55, &
+           13485, &
+           1997, &
+           "10.1103/PhysRevB.55.13485", &
+           "Blip functions in CONQUEST")
+
+      call bib%add_ref( &
+           "Bowler:1998lo", &
+           "{Bowler, D R and Gillan, M J}", &
+           "{Length-scale ill conditioning in linear-scaling DFT}", &
+           "{Comp. Phys. Commun.}", &
+           112, &
+           103, &
+           1998, &
+           "10.1016/S0010-4655(98)00061-7", &
+           "Optimisation of blips in CONQUEST")
+
+      call bib%add_ref( &
+           "Bowler:1999if", &
+           "{Bowler, D R and Gillan, M J}", &
+           "{Density matrices in O(N) electronic structure calculations: &
+           &theory and applications}", &
+           "{Comp. Phys. Commun.}", &
+           120, &
+           95, &
+           1999, &
+           "10.1016/S0010-4655(99)00221-0", &
+           "CONQUEST O(N) implementation")
+
+      call bib%add_ref( &
            "Bowler2001", &
-           "D. R. Bowler and T. Miyazaki and M. J. Gillan", &
-           "Parallel sparse matrix multiplication for linear scaling &
-           &electronic structure calculations", &
-           "Comp. Phys. Commun.", &
+           "{D. R. Bowler and T. Miyazaki and M. J. Gillan}", &
+           "{Parallel sparse matrix multiplication for linear scaling &
+           &electronic structure calculations}", &
+           "{Comp. Phys. Commun.}", &
            137, &
            255, &
            2001, &
            "10.1016/S0010-4655(01)00164-3", &
-           "Order(N) matrix multiplication")
+           "O(N) matrix multiplication implementation")
+
+      
+      call bib%add_ref(&
+           "Bowler2002pt", &
+           "{Bowler, D R and Miyazaki, T and Gillan, M J}", &
+           "{Recent progress in linear scaling $\backslash$textit{\{}ab initio{\}} &
+           &electronic structure techniques}", &
+           "{J. Phys. Condens. Matter}", &
+           14, &
+           2781, &
+           2002, &
+           "10.1088/0953-8984/14/11/303",&
+           "Overview of CONQUEST methodology")
 
       call bib%add_ref( &
            "Miyazaki2004", &
-           "T. Miyazaki and D. R. Bowler and R. Choudhury and M. J. Gillan", &
-           "Atomic force algorithms in density functional theory &
-           &electronic-structure techniques based on local orbitals", &
-           "J. Chem. Phys.", &
+           "{T. Miyazaki and D. R. Bowler and R. Choudhury and M. J. Gillan}", &
+           "{Atomic force algorithms in density functional theory &
+           &electronic-structure techniques based on local orbitals}", &
+           "{J. Chem. Phys.}", &
            121, &
            6186, &
            2004, &
@@ -67,22 +116,23 @@ module references
            "Force calculations in CONQUEST")
 
       call bib%add_ref( &
-           "Gillan2007", &
-           "M. J. Gillan and D. R. Bowler and A. S. Torralba and T. Miyazaki", &
-           "Order-N first-principles calculations with the CONQUEST code", &
-           "Comp. Phys. Commun.", &
-           177, &
-           14, &
-           2007, &
-           "10.1016/j.cpc.2007.02.075", &
-           "CONQUEST order(N) method")
+           "Bowler:2006xr", &
+           "{Bowler, D R and Choudhury, R and Gillan, M J and Miyazaki, T}", &
+           "{Recent progress with large-scale ab initio calculations: &
+           &the $\backslash$textsc{\{}CONQUEST{\}} code}", &
+           "{phys. stat. sol. b}", &
+           243, &
+           989, &
+           2006, &
+           "10.1002/pssb.200541386", &
+           "Overview of CONQUEST methodology, including diagonalisation")
 
       call bib%add_ref( &
            "Torralba2008", &
-           "A. S. Torralba and M. Todorovic and V. Brazdova and R. Choudhury &
-           &and T. Miyazaki and M. J. Gillan and D. R. Bowler", &
-           "Pseudo-atomic orbitals as basis sets for O(N) DFT code CONQUEST", &
-           "J. Phys.: Condens. Matter", &
+           "{A. S. Torralba and M. Todorovic and V. Brazdova and R. Choudhury &
+           &and T. Miyazaki and M. J. Gillan and D. R. Bowler}", &
+           "{Pseudo-atomic orbitals as basis sets for O(N) DFT code CONQUEST}", &
+           "{J. Phys.: Condens. Matter}", &
            20, &
            294206, &
            2008, &
@@ -91,33 +141,44 @@ module references
 
       call bib%add_ref( &
            "Bowler2010", &
-           "D. R. Bowler and T. Miyazaki", &
-           "Calculations for millions of atoms with density functional theory: &
-           &linear scaling shows its potential", &
-           "J. Phys.: Condens. Matter", &
+           "{D. R. Bowler and T. Miyazaki}", &
+           "{Calculations for millions of atoms with density functional theory: &
+           &linear scaling shows its potential}", &
+           "{J. Phys.: Condens. Matter}", &
            22, &
            074207, &
            2010, &
            "10.1088/0953-8984/22/7/074207", &
-           "CONQUEST order(N) paper")
+           "Further details on O(N) methodology in CONQUEST")
 
       call bib%add_ref( &
-           "Bowler2012", &
-           "D. R. Bowler and T. Miyazaki", &
-           "O(N) methods in electronic structure calculations", &
-           "Rep. Prog. Phys.", &
-           75, &
-           036503, &
-           2012, &
-           "10.1088/0034-4885/75/3/036503", &
-           "Order(N) review paper")
+           "Sena:2011fc", &
+           "{Sena, Alex M P and Miyazaki, Tsuyoshi and Bowler, David R}", &
+           "{Linear Scaling Constrained Density Functional Theory in CONQUEST}", &
+           "{J. Chem. Theory Comput.}", &
+           4, &
+           884, &
+           2011, &
+           "10.1021/ct100601n", &
+           "Constrained DFT in CONQUEST")
+
+      call bib%add_ref( &
+           "Terranova:2013fk", &
+           "{Terranova, U and Bowler, D R}", &
+           "{$\Delta$ Self-Consistent Field Method for Natural Anthocyanidin Dyes}", &
+           "{J. Chem. Theory Comput.}", &
+           9, &
+           3181, &
+           2013, &
+           "10.1021/ct400356k", &
+           "Implementation of delta-SCF method in CONQUEST")
 
       call bib%add_ref( &
            "Arita2014", &
-           "M. Arita and D. R. Bowler and T. Miyazaki", &
-           "Stable and efficient linear scaling first-principles molecular dynamics &
-           &for 10000+ atoms", &
-           "J. Chem. Theor. Comput.", &
+           "{M. Arita and D. R. Bowler and T. Miyazaki}", &
+           "{Stable and efficient linear scaling first-principles molecular dynamics &
+           &for 10000+ atoms}", &
+           "{J. Chem. Theor. Comput.}", &
            10, &
            5419, &
            2014, &
@@ -126,22 +187,34 @@ module references
 
       call bib%add_ref( &
            "Nakata2014", &
-           "A. Nakata and D. R. Bowler and T. Miyazaki", &
-           "Efficient calculations with multisite local orbitals &
-           &in a large scale DFT code CONQUEST", &
-           "J. Chem. Theor. Comput.", &
+           "{A. Nakata and D. R. Bowler and T. Miyazaki}", &
+           "{Efficient calculations with multisite local orbitals &
+           &in a large scale DFT code CONQUEST}", &
+           "{J. Chem. Theor. Comput.}", &
            10, &
            4813, &
            2014, &
            "10.1021/ct5004934", &
            "CONQUEST multisite support functions")
 
+
+      call bib%add_ref( &
+           "Nakata2015", &
+           "{Nakata, Ayako and Bowler, David and Miyazaki, Tsuyoshi}", &
+           "{Optimized multi-site local orbitals in the large-scale DFT program CONQUEST}", &
+           "{Phys. Chem. Chem. Phys.}", &
+           17, &
+           31427, &
+           2015, &
+           "10.1039/C5CP00934K", &
+           "Optimisation of CONQUEST multisite support functions")
+
       call bib%add_ref( &
            "Hirakawa2017", &
-           "T. Hirakawa and T. Suzuki and D. R. Bowler and T. Miyazaki", &
-           "Canonical-ensemble extended Lagrangian Born-Oppenheimer molecular dynamics &
-           &for the linear scaling density functional theory", &
-           "J. Phys. Condens. Matter", &
+           "{T. Hirakawa and T. Suzuki and D. R. Bowler and T. Miyazaki}", &
+           "{Canonical-ensemble extended Lagrangian Born-Oppenheimer molecular dynamics &
+           &for the linear scaling density functional theory}", &
+           "{J. Phys. Condens. Matter}", &
            29, &
            405901, &
            2017, &
@@ -150,14 +223,16 @@ module references
 
       call bib%add_ref( &
            "Bowler2019", &
-           "D. R. Bowler and J. S. Baker and J. T. L. Poulton and S. Y. Mujahed and J. Lin and S. Yadav and Z. Raza and T. Miyazaki", &
-           "Highly accurate local basis sets for large-scale DFT calculations in CONQUEST", &
-           "Japan. J. Appl. Phys. ", &
+           "{D. R. Bowler and J. S. Baker and J. T. L. Poulton and S. Y. Mujahed &
+           &and J. Lin and S. Yadav and Z. Raza and T. Miyazaki}", &
+           "{Highly accurate local basis sets for large-scale DFT calculations in CONQUEST}", &
+           "{Japan. J. Appl. Phys.}", &
            58, &
            100503, &
            2019, &
            "10.7567/1347-4065/ab45af", &
-           "Details of new CONQUEST PAOs from basis generation tool, using Hamann-type pseudopotentials")
+           "Details of new CONQUEST PAOs from basis generation tool, &
+           &using Hamann-type pseudopotentials")
 
       ! Other papers: not Conquest specific
       call bib%add_ref( &
@@ -196,7 +271,8 @@ module references
       call bib%add_ref( &
            "Shinoda2004", &
            "W. Shinoda and M. Shiga and M. Mikami", &
-           "Rapid estimation of elastic constants by molecular dynamics simulation under constant stress", &
+           "Rapid estimation of elastic constants by molecular dynamics simulation&
+           &under constant stress", &
            "Phys. Rev. B", &
            69, &
            134103, &
@@ -249,6 +325,70 @@ module references
            "10.1103/PhysRevLett.118.175901", &
            "Method for Green-Kubo thermoal conductivity calculations for solids")
 
+      ! Functionals
+      call bib%add_ref( &
+           "Perdew1981", &
+           "{Perdew, J. P. and Zunger, Alex}", &
+           "{Self-interaction correction to density-functional approximations &
+           &for many-electron systems}", &
+           "{Phys. Rev. B}", &
+           23, &
+           5048, &
+           1981, &
+           "10.1103/PhysRevB.23.5048", &
+           "PZ81 LDA parameterisation")
+      call bib%add_ref( &
+           "Perdew1992", &
+           "{Perdew, John P. and Wang, Yue}", &
+           "{Accurate and simple analytic representation of the electron-gas &
+           &correlation energy}", &
+           "{Phys. Rev. B}", &
+           45, &
+           13244, &
+           1992, &
+           "10.1103/PhysRevB.45.13244", &
+           "PW92 LDA parameterisation")
+      call bib%add_ref( &
+           "Perdew1996", &
+           "{Perdew, John P. and Burke, Kieron and Ernzerhof, Matthias}", &
+           "{Generalized Gradient Approximation Made Simple}", &
+           "{Phys. Rev. Lett.}", &
+           77, &
+           3865, &
+           1996, &
+           "10.1103/PhysRevLett.77.3865", &
+           "PBE GGA XC functional")
+      call bib%add_ref( &
+           "Zhang1998", &
+           "{Comment on ``Generalized Gradient Approximation Made Simple''}", &
+           "{Zhang, Yingkai and Yang, Weitao}", &
+           "{Phys. Rev. Lett.}", &
+           80, &
+           890, &
+           1998, &
+           "10.1103/PhysRevLett.80.890", &
+           "PBE GGA functional revised by Zhang & Yang 1998 (revPBE)")
+      call bib%add_ref( &
+           "Hammer1999", &
+           "{Improved adsorption energetics within density-functional theory using &
+           &revised Perdew-Burke-Ernzerhof functionals}", &
+           "{Hammer, B. and Hansen, L. B. and N\o{}rskov, J. K.}", &
+           "{Phys. Rev. B}", &
+           59, &
+           7413, &
+           1999, &
+           "10.1103/PhysRevB.59.7413", &
+           "PBE GGA functional revised by Hammer et al (rPBE)")
+      call bib%add_ref( &
+           "Wu2006", &
+           "{More accurate generalized gradient approximation for solids}", &
+           "{Wu, Zhigang and Cohen, R. E.}", &
+           "{Phys. Rev. B}", &
+           73, &
+           235116, &
+           2006, &
+           "10.1103/PhysRevB.73.235116", &
+           "Wu-Cohen reformulation of PBE GGA functional")
     end subroutine get_bib_db
     !!***
 
@@ -270,11 +410,15 @@ module references
 
       use global_module, only: flag_diagonalisation, flag_Multisite, &
                                flag_XLBOMD, flag_basis_set, PAOs, &
-                               flag_heat_flux, optcell_method
+                               flag_heat_flux, optcell_method, &
+                               flag_perform_cDFT, flag_DeltaSCF, runtype
       use pseudopotential_common, only: pseudo_type, ABINIT
       use input_module,  only: leqi
       use control,       only: md_ensemble
       use md_control,    only: md_thermo_type
+      use XC,            only: flag_functional_type, functional_lda_pz81, &
+           functional_lda_gth96, functional_lda_pw92, functional_gga_pbe96, &
+           functional_gga_pbe96_rev98, functional_gga_pbe96_r99, functional_gga_pbe96_wc
 
       ! local variables
       type(type_bibliography) :: bib
@@ -292,8 +436,9 @@ module references
       end if
 
       ! Cite publications for *any* CONQUEST calculation
-      call bib%cite("Gillan2007")
-      call bib%cite("Bowler2010")
+      call bib%cite("Bowler2002pt")
+      call bib%cite("Miyazaki2004")
+      call bib%cite("Bowler:2006xr") ! Replace with 2020 JCP when submitted
 
       if (inode==ionode) then
         write(io_lun,'(2x,a)') "The following papers detail methodology used &
@@ -302,20 +447,62 @@ module references
       end if
 
       ! Cite method-specific publications
-      if (flag_Multisite)               call bib%cite("Nakata2014")
-      if (flag_basis_set == PAOs)       call bib%cite("Torralba2008")
+      ! Basis sets
+      if (flag_Multisite) then
+         call bib%cite("Nakata2014")
+         call bib%cite("Nakata2015")
+      end if
+      if (flag_basis_set == PAOs) then
+         call bib%cite("Torralba2008")
+      else
+         call bib%cite("Hernandez1997")
+         call bib%cite("Bowler:1998lo")
+      end if
+      ! Finding DM
+      if (.NOT.flag_diagonalisation) then ! O(N)
+         call bib%cite("Bowler:1999if")
+         call bib%cite("Bowler2001")
+         call bib%cite("Bowler2010")
+      else
+         call bib%cite("Bowler:2006xr")
+      end if
+      if(flag_perform_cDFT)             call bib%cite("Sena:2011fc")
+      if(flag_DeltaSCF)                 call bib%cite("Terranova:2013fk")
+      ! Pseudopotentials
       if (pseudo_type == ABINIT)        call bib%cite("Hamann2013")
       if (pseudo_type == ABINIT)        call bib%cite("Bowler2019")
+      ! MD
+      if (leqi(runtype,'md').OR.flag_XLBOMD) call bib%cite("Arita2014")
       if (leqi(md_thermo_type, 'nhc'))  call bib%cite("Martyna1996")
       if (leqi(md_thermo_type, 'nhc'))  call bib%cite("Hirakawa2017")
       if (leqi(md_ensemble, 'npt'))     call bib%cite("Martyna1994")
       if (leqi(md_ensemble, 'npt'))     call bib%cite("Shinoda2004")
-      if (flag_XLBOMD)                  call bib%cite("Arita2014")
       if (flag_XLBOMD)                  call bib%cite("Niklasson2006")
       if (flag_XLBOMD)                  call bib%cite("Niklasson2009")
       if (flag_heat_flux)               call bib%cite("Carbogno2017")
+      ! Cell optimisation
       if (optcell_method == 3)          call bib%cite("Pfrommer1997")
-
+      ! Functionals
+      if(flag_functional_type>0) then
+         if (inode==ionode) then
+            write(io_lun,'(2x,a)') "The following paper details the functional used &
+                 &in this CONQUEST calculation:"
+            write(io_lun,*)
+         end if
+         if(flag_functional_type == functional_lda_pz81) &
+              call bib%cite("Perdew1981")
+         if(flag_functional_type == functional_lda_pw92) &
+              call bib%cite("Perdew1992")
+         if(flag_functional_type == functional_gga_pbe96) &
+              call bib%cite("Perdew1996")
+         if(flag_functional_type == functional_gga_pbe96_rev98) &
+              call bib%cite("Zhang1998")
+         if(flag_functional_type == functional_gga_pbe96_r99) &
+              call bib%cite("Hammer1999")
+         if(flag_functional_type == functional_gga_pbe96_wc) &
+              call bib%cite("Wu2006")
+      end if
+      
       call bib%close_bib
 
     end subroutine compile_biblio
