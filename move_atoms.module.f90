@@ -427,7 +427,6 @@ contains
     use GenBlas,            only: dot
     use force_module,       only: tot_force
     use io_module,          only: write_atomic_positions, pdb_template
-    !use density_module,     only: density, flag_no_atomic_densities, set_density_pcc
     use density_module,     only: density, set_density_pcc
     use maxima_module,      only: maxngrid
     use multisiteSF_module, only: flag_LFD_minimise
@@ -799,7 +798,6 @@ contains
     use GenBlas,        only: dot
     use force_module,   only: tot_force
     use io_module,      only: write_atomic_positions, pdb_template
-    !use density_module, only: density, flag_no_atomic_densities, set_density_pcc
     use density_module, only: density, set_density_pcc
     use maxima_module,  only: maxngrid
     use matrix_data, ONLY: Lrange, Hrange, SFcoeff_range, SFcoeffTr_range, HTr_range
@@ -808,7 +806,6 @@ contains
     use dimens, ONLY: r_super_x, r_super_y, r_super_z
     use store_matrix, ONLY: dump_pos_and_matrices
     use multisiteSF_module, only: flag_LFD_minimise
-    !use DiagModule, ONLY: diagon
     !for Debugging
     use mult_module, ONLY: allocate_temp_matrix, free_temp_matrix, matrix_sum
     use global_module, ONLY: atomf, sf
@@ -1273,8 +1270,6 @@ contains
     use GenBlas,            only: dot
     use force_module,       only: tot_force
     use io_module,          only: write_atomic_positions, pdb_template
-    !use density_module,     only: density, flag_no_atomic_densities, &
-    !                             set_density_pcc
     use density_module,     only: density, set_density_pcc
     use maxima_module,      only: maxngrid
     use multisiteSF_module, only: flag_LFD_minimise
@@ -2621,7 +2616,6 @@ contains
     use timer_module    
     use S_matrix_module,        only: get_S_matrix
     use H_matrix_module,        only: get_H_matrix
-    !use DiagModule,             only: diagon
     use mult_module,            only: LNV_matrix_multiply, matrix_scale, matrix_transpose, &
                                       matSFcoeff,matSFcoeff_tran 
     use ion_electrostatic,      only: ewald, screened_ion_interaction
@@ -2643,7 +2637,6 @@ contains
                                       ne_in_cell, spin_factor,         &
                                       ni_in_cell, area_moveatoms
     use density_module,         only: set_atomic_density,              &
-!                                      flag_no_atomic_densities,        &
                                       density, set_density_pcc,        &
                                       get_electronic_density
     use GenComms,               only: cq_abort, inode, ionode
@@ -3690,7 +3683,6 @@ contains
     use GenComms,           only: my_barrier, myid, inode, ionode,        &
          cq_abort
     use io_module,          only: write_atomic_positions, pdb_template
-    !use density_module,     only: density, flag_no_atomic_densities, set_density_pcc
     use density_module,     only: density, set_density_pcc
     use maxima_module,      only: maxngrid
     use multisiteSF_module, only: flag_LFD_minimise

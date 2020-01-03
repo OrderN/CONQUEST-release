@@ -149,7 +149,7 @@ contains
     use group_module,              only: parts
     use H_matrix_module,           only: get_H_matrix
     use S_matrix_module,           only: get_S_matrix
-    use store_matrix,              only: dump_pos_and_matrices
+    use store_matrix,              only: dump_pos_and_matrices, unit_MSSF_save
 !    use io_module,                 only: dump_matrix
     use support_spec_format,       only: TestBasisGrads, TestTot,      &
                                          TestBoth, TestS, TestH
@@ -542,7 +542,7 @@ contains
 
     ! Write out current SF coefficients every n_dumpSFcoeff, if n_dumpSFcoeff > 0)
      if (n_dumpSFcoeff > 0 .and. mod(n_iterations,n_dumpSFcoeff) == 1) then
-       call dump_pos_and_matrices(index = 99)
+       call dump_pos_and_matrices(index = unit_MSSF_save)
      endif
 
        flag_vary_basis = .true.

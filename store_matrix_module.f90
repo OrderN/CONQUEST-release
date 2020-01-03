@@ -12,6 +12,8 @@
 !!   2016/09/29
 !!  MODIFCATION
 !!   - Added derived data types for XL-BOMD
+!!   2020/01/02 16:57 dave
+!!    Defined units for saving intermediary charge etc during optimisation
 !!
 module store_matrix
 
@@ -98,7 +100,9 @@ module store_matrix
      real(double), pointer :: data_Lold(:,:)
   end type InfoMatrixFile
 
-  character(80),private :: RCSid = "$Id$"
+  integer, parameter :: unit_DM_save   = 77
+  integer, parameter :: unit_SCF_save  = 88
+  integer, parameter :: unit_MSSF_save = 99
 
 contains
   
@@ -129,11 +133,13 @@ contains
  
     ! Module usage
     use global_module, ONLY: ni_in_cell, nspin, nspin_SF, flag_diagonalisation, flag_Multisite, &
-         flag_XLBOMD, flag_propagateX, flag_dissipation, integratorXL, flag_SFcoeffReuse, flag_DumpMatrices
+         flag_XLBOMD, flag_propagateX, flag_dissipation, integratorXL, flag_SFcoeffReuse, &
+         flag_DumpMatrices
     use matrix_data, ONLY: Lrange, Hrange, SFcoeff_range, SFcoeffTr_range, HTr_range, Srange, LSrange
     use mult_module, ONLY: matL,L_trans, matK, matSFcoeff, matS
     use io_module, ONLY: append_coords, write_atomic_positions, pdb_template
     use mult_module, only: matXL, matXLvel
+    use GenComms, only: cq_warn
 
     implicit none
 
@@ -148,10 +154,11 @@ contains
     integer :: index_local, MDstep_local
 
     ! If flag_DumpMatrices is false, exit this routine
-     if(.not.flag_DumpMatrices) then
-       if(inode.eq.ionode) write(io_lun,*) " Exit from dump_pos_and_matrices because IO.DumpMatrices is false."
+    if(.not.flag_DumpMatrices.AND.iprint_MD>3) then
+       call cq_warn("dump_pos_and_matrices", &
+            "Routine called but not run because IO.DumpMatrices is false.")
        return
-     endif
+    endif
 
     index_local = 0; if(present(index)) index_local=index
     MDstep_local = 0; if(present(MDstep)) MDstep_local=MDstep

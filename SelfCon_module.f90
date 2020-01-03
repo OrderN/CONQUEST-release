@@ -890,8 +890,8 @@ contains
                               spin_factor
     use memory_module,  only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use maxima_module,  only: maxngrid
-    use store_matrix,   only: dump_pos_and_matrices
-    use H_matrix_module,only: flag_DumpChargeDensity
+    use store_matrix,   only: dump_pos_and_matrices, unit_SCF_save
+    use density_module, only: flag_DumpChargeDensity
 
     implicit none
 
@@ -1151,7 +1151,7 @@ contains
        ! 2019Dec30 tsuyoshi
        ! Dump Kmatrix every n_dumpSCF, if n_dumpSCF > 0
        if(n_dumpSCF > 0 .and. mod(n_iters,n_dumpSCF)==1) then
-        call dump_pos_and_matrices(index=88)
+        call dump_pos_and_matrices(index=unit_SCF_save)
        endif
 
        ! increment iteration counter

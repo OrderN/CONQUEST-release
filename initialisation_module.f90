@@ -187,16 +187,6 @@ contains
     ! Call routines to read or make data for isolated ions
     call get_ionic_data(inode, ionode)
    
-    ! 2019/Dec/26 TM
-    ! Since flag_no_atomic_densities is always .false. now, 
-    ! we don't need the following lines
-    !if (flag_no_atomic_densities .and. (.not. find_chdens)) then
-    !   if (inode == ionode) &
-    !        write (io_lun, *) 'No initial charge density specified - &
-    !                           &building from initial K'
-    !   find_chdens = .true.
-    !end if
-
     lmax_tot = lmax_pao+lmax_ps
     if(2*lmax_pao>lmax_tot) lmax_tot = 2*lmax_pao
     if(lmax_tot<8) lmax_tot = 8

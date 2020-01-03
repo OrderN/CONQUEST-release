@@ -2264,7 +2264,6 @@ contains
     use GenComms,           only: gsum
     use dimens,             only: n_my_grid_points, grid_point_volume
     use maxima_module,      only: maxngrid
-    !use DiagModule,         only: diagon
     use DMMin,              only: FindMinDM
     use SelfCon,            only: new_SC_potl
     use S_matrix_module,    only: get_S_matrix
@@ -2273,9 +2272,8 @@ contains
                                   matrix_scale, matrix_transpose 
     use GenBlas,            only: dot
     use memory_module,      only: reg_alloc_mem, type_dbl, reg_dealloc_mem
-    use store_matrix,       only: dump_pos_and_matrices
-!    use io_module,          only: dump_matrix, dump_charge
-                                   
+    use store_matrix,       only: dump_pos_and_matrices, unit_MSSF_save
+
     implicit none
 
     ! Passed variables
@@ -2396,15 +2394,15 @@ contains
              mat_p(matSFcoeff(spin_SF))%matrix = data_PAO0(:,spin_SF)
              call matrix_scale(zero,matSFcoeff_tran(spin_SF))
              call matrix_transpose(matSFcoeff(spin_SF), matSFcoeff_tran(spin_SF))
-          enddo          
+          enddo
           do spin = 1, nspin
              rho(1:n_my_grid_points,spin) = rho_0(1:n_my_grid_points,spin)
-          enddo          
+          enddo
           if (inode==ionode) &
-             write(io_lun,'(///20x,A,f15.7,A,i3/20x,A,i3//20x,A,f15.7)') &
-                'LFD_minimise: Energy rises by ', diff_E, ' at iteration # ', iter, &
-                'SF coefficients and density are returned to those at previous iteration # ', iter-1, &
-                'Total energy = ',total_energy
+               write(io_lun,'(///20x,A,f15.7,A,i3/20x,A,i3//20x,A,f15.7)') &
+               'LFD_minimise: Energy rises by ', diff_E, ' at iteration # ', iter, &
+               'SF coefficients and density are returned to those at previous iteration # ', iter-1, &
+               'Total energy = ',total_energy
           ! Reconstruct S, H and K with previous density 
           call get_S_matrix(inode, ionode, build_AtomF_matrix=.false.)
           call get_H_matrix(.false., fixed_potential, electrons, &
@@ -2414,7 +2412,7 @@ contains
        else 
           ! Save present energy and density
           if (diff_E.gt.zero .and. inode==ionode) write(io_lun,'(/20x,A,f15.7,A,i3)') &
-             'LFD_minimise: Energy rises by ', diff_E, ' at iteration # ',iter 
+               'LFD_minimise: Energy rises by ', diff_E, ' at iteration # ',iter 
           total_energy   = total_energy_last
           total_energy_0 = total_energy_last
           do spin = 1, nspin
@@ -2423,30 +2421,14 @@ contains
           do spin_SF = 1, nspin_SF
              data_PAO0(:,spin_SF) = mat_p(matSFcoeff(spin_SF))%matrix
           end do
-          if (inode==ionode) write(io_lun,'(/20x,A,i5)') 'LFD_minimise: Save SF coefficients at iteration # ',iter
+          if (inode==ionode) write(io_lun,'(/20x,A,i5)') &
+               'LFD_minimise: Save SF coefficients at iteration # ',iter
        endif
 
-    ! Write out current SF coefficients and density matrices with some iprint (in future)
-    ! if (iprint_basis>=3) call dump_pos_and_matrices
-      if(n_dumpSFcoeff > 0 .and. mod(iter,n_dumpSFcoeff) ==0) then
-       call dump_pos_and_matrices(index=99)
-      endif
-!
-!     necessary to print out charge density ? (2019/12/30 tsuyoshi)
-!       if(nspin==1) then
-!          allocate(rho_total(maxngrid), STAT=stat)
-!          if (stat /= 0) call cq_abort("Error allocating rho_total: ", maxngrid)
-!          call reg_alloc_mem(area_ops, n_my_grid_points, type_dbl)
-!          rho_total = zero
-!          rho_total(:) = spin_factor * rho(:,1)
-!          call dump_charge(rho_total, n_my_grid_points, inode, spin=0)
-!          deallocate(rho_total, STAT=stat)
-!          if (stat /= 0) call cq_abort("Error deallocating rho_total")
-!          call reg_dealloc_mem(area_ops, n_my_grid_points, type_dbl) !       else if (nspin == 2) then
-!          call dump_charge(rho(:,1), n_my_grid_points, inode, spin=1)
-!          call dump_charge(rho(:,2), n_my_grid_points, inode, spin=2)
-!       end if
-
+       ! Write out current SF coefficients and density matrices with some iprint (in future)
+       if(n_dumpSFcoeff > 0 .and. mod(iter,n_dumpSFcoeff) ==0) then
+          call dump_pos_and_matrices(index=unit_MSSF_save)
+       endif
        ! Go out if converged
        if (convergence_flag) then
           deallocate(data_PAO0)
@@ -2456,17 +2438,17 @@ contains
     enddo ! iter
 
     if (inode==ionode) write(io_lun,'(A,I3,A)') &
-     'LFD PAO minimisation is not converged after ',LFD_max_iteration,' iterations.'
+         'LFD PAO minimisation is not converged after ',LFD_max_iteration,' iterations.'
     deallocate(data_PAO0)
 
     call reg_dealloc_mem(area_minE, length*nspin_SF, type_dbl)
-!
+    !
     return
-!
+    !
 7   format(/20x,'------------ LFD Variation #: ',i5,' ------------',/)
 18  format(///20x,'The LFD minimisation has converged to a ',A,' at iteration #',I3, &
-            //20x,'Total energy = ',f15.7)
+         //20x,'Total energy = ',f15.7)
   end subroutine LFD_minimise
-!!***
+  !!***
 
 end module multisiteSF_module

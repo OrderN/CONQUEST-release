@@ -69,6 +69,8 @@
 !!    Moved flag_InitialAtomicSpin from global (and changed set_atomic_density)
 !!   2019/12/27 tsuyoshi
 !!    Removed flag_no_atomic_densities
+!!   2020/01/03 09:32 dave
+!!    Moved flag_DumpChargeDensity from H_matrix_module
 !!  SOURCE
 module density_module
 
@@ -125,6 +127,9 @@ module density_module
   integer, parameter :: DensityMatrix = 0   ! use previous-step DM
   integer, parameter ::  AtomicCharge = 1   ! superposition of atomic charge
   integer, parameter ::  LastStep     = 2   ! use charge density on the grid at the last step
+
+  ! Dump charge density or not (this should also be used for dumping hilbert_make_blk.dat etc.)
+  logical :: flag_DumpChargeDensity
 !!***
 
 contains

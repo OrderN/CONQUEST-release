@@ -826,14 +826,14 @@ contains
                                  stop_print_timer, WITH_LEVEL
     use io_module,         only: dump_matrix
     use functions_on_grid, only: atomfns, H_on_atomfns
-    use H_matrix_module,   only: get_H_matrix, flag_DumpChargeDensity
-    use density_module,    only: density, get_electronic_density
+    use H_matrix_module,   only: get_H_matrix
+    use density_module,    only: density, get_electronic_density, flag_DumpChargeDensity
     use maxima_module,     only: maxngrid
     use memory_module,     only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     !Prints out charge density -- 2010.Nov.06 TM
     use io_module,         only: dump_charge
     use dimens,            only: n_my_grid_points
-    use store_matrix,      only: dump_pos_and_matrices
+    use store_matrix,      only: dump_pos_and_matrices, unit_DM_save
 
     implicit none
 
@@ -1220,7 +1220,7 @@ contains
 
        ! dump the L matrix if required
        if (n_dumpL>0 .and. mod (n_iter, n_dumpL) == 0) then
-           call dump_pos_and_matrices(index=77)
+           call dump_pos_and_matrices(index=unit_DM_save)
        endif
        !if (flag_dump_L) then
        !   if (mod (n_iter, n_dumpL) == 0) then
@@ -1280,8 +1280,7 @@ contains
                              IPRINT_TIME_THRES1)
     end do
 
-    !Prints out charge density
-    !ori if (flag_mix_L_SC_min) then
+    !Prints out charge density when selected
     if (flag_DumpChargeDensity .and. flag_mix_L_SC_min) then
        if (nspin == 1) then
           allocate(density_tot(maxngrid), STAT=stat)
