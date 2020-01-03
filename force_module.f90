@@ -211,11 +211,13 @@ contains
   !!    Added output in GPa for pressure (along with conventional sign change)
   !!   2019/05/08 zamaan
   !!    Initialise atomic_stress, the array for storing atomic stress contributions
+  !!   2019/12/10 10:43 dave
+  !!    Remove redundant argument (expected_reduction)
   !!  SOURCE
   !!
   subroutine force(fixed_potential, vary_mu, n_cg_L_iterations, &
                    tolerance, con_tolerance, total_energy,      &
-                   expected_reduction, write_forces, level )
+                   write_forces, level )
 
     use datatypes
     use numbers
@@ -266,7 +268,6 @@ contains
     logical      :: vary_mu, fixed_potential, write_forces
     integer      :: n_cg_L_iterations
     real(double) :: tolerance, con_tolerance, total_energy
-    real(double) :: expected_reduction
     integer, optional :: level 
 
     ! Local variables
@@ -395,7 +396,7 @@ contains
     call start_timer(tmr_l_tmp1, WITH_LEVEL)
     call pulay_force(p_force, KE_force, fixed_potential, vary_mu, &
                      n_cg_L_iterations, tolerance, con_tolerance, &
-                     total_energy, expected_reduction, ni_in_cell)
+                     total_energy, ni_in_cell)
     call stop_print_timer(tmr_l_tmp1, "Pulay force", IPRINT_TIME_THRES2)
     call start_timer(tmr_l_tmp1, WITH_LEVEL)
     if (flag_perform_cdft) then
@@ -817,7 +818,7 @@ contains
   !!
   subroutine pulay_force(p_force, KE_force, fixed_potential, vary_mu,  &
                          n_cg_L_iterations, L_tol, self_tol, &
-                         total_energy, expected_reduction, n_atoms, level)
+                         total_energy, n_atoms, level)
 
     use datatypes
     use logicals
@@ -887,7 +888,7 @@ contains
     logical      :: vary_mu, fixed_potential
     integer      :: n_atoms
     integer      :: n_cg_L_iterations
-    real(double) :: L_tol, self_tol, total_energy, expected_reduction
+    real(double) :: L_tol, self_tol, total_energy
     real(double), dimension(3,n_atoms) :: p_force, KE_force
     integer, optional :: level
 
