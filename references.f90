@@ -31,7 +31,9 @@ module references
     !!  CREATION DATE
     !!   2019/07/04
     !!  MODIFICATION HISTORY
-    !!
+    !!   2020/01/03 10:11 dave
+    !!    Arrange references into Conquest-specific and other
+    !!    and order by date
     !!  SOURCE
     !!
     subroutine get_bib_db(bib)
@@ -39,204 +41,213 @@ module references
       ! Passed variables
       type(type_bibliography), intent(inout) :: bib
 
+      ! Conquest-specific papers
       call bib%add_ref( &
-"Arita2014", &
-"M. Arita and D. R. Bowler and T. Miyazaki", &
-"Stable and efficient linear scaling first-principles molecular dyanmamics for 10000+ atoms", &
-"J. Chem. Theor. Comput.", &
-10, &
-5419, &
-2014, &
-"10.1021/ct500847y", &
-"CONQUEST XL-BOMD implementation")
+           "Bowler2001", &
+           "D. R. Bowler and T. Miyazaki and M. J. Gillan", &
+           "Parallel sparse matrix multiplication for linear scaling &
+           &electronic structure calculations", &
+           "Comp. Phys. Commun.", &
+           137, &
+           255, &
+           2001, &
+           "10.1016/S0010-4655(01)00164-3", &
+           "Order(N) matrix multiplication")
 
       call bib%add_ref( &
-"Bowler2001", &
-"D. R. Bowler and T. Miyazaki and M. J. Gillan", &
-"Parallel sparse matrix multiplication for linear scaling electronic structure calculations", &
-"Comp. Phys. Commun.", &
-137, &
-255, &
-2001, &
-"10.1016/S0010-4655(01)00164-3", &
-"Order(N) matrix multiplication")
+           "Miyazaki2004", &
+           "T. Miyazaki and D. R. Bowler and R. Choudhury and M. J. Gillan", &
+           "Atomic force algorithms in density functional theory &
+           &electronic-structure techniques based on local orbitals", &
+           "J. Chem. Phys.", &
+           121, &
+           6186, &
+           2004, &
+           "10.1063/1.1787832", &
+           "Force calculations in CONQUEST")
 
       call bib%add_ref( &
-"Nakata2014", &
-"A. Nakata and D. R. Bowler and T. Miyazaki", &
-"Efficient calculations with multisite local orbitals in a large scale DFT code CONQUEST", &
-"J. Chem. Theor. Comput.", &
-10, &
-4813, &
-2014, &
-"10.1021/ct5004934", &
-"CONQUEST multisite support functions")
+           "Gillan2007", &
+           "M. J. Gillan and D. R. Bowler and A. S. Torralba and T. Miyazaki", &
+           "Order-N first-principles calculations with the CONQUEST code", &
+           "Comp. Phys. Commun.", &
+           177, &
+           14, &
+           2007, &
+           "10.1016/j.cpc.2007.02.075", &
+           "CONQUEST order(N) method")
 
       call bib%add_ref( &
-"Gillan2007", &
-"M. J. Gillan and D. R. Bowler and A. S. Torralba and T. Miyazaki", &
-"Order-N first-principles calculations with the CONQUEST code", &
-"Comp. Phys. Commun.", &
-177, &
-14, &
-2007, &
-"10.1016/j.cpc.2007.02.075", &
-"CONQUEST order(N) method")
+           "Torralba2008", &
+           "A. S. Torralba and M. Todorovic and V. Brazdova and R. Choudhury &
+           &and T. Miyazaki and M. J. Gillan and D. R. Bowler", &
+           "Pseudo-atomic orbitals as basis sets for O(N) DFT code CONQUEST", &
+           "J. Phys.: Condens. Matter", &
+           20, &
+           294206, &
+           2008, &
+           "10.1088/0953-8984/20/29/294206", &
+           "PAO basis sets for CONQUEST")
 
       call bib%add_ref( &
-"Bowler2012", &
-"D. R. Bowler and T. Miyazaki", &
-"O(N) methods in electronic structure calculations", &
-"Rep. Prog. Phys.", &
-75, &
-036503, &
-2012, &
-"10.1088/0034-4885/75/3/036503", &
-"Order(N) review paper")
+           "Bowler2010", &
+           "D. R. Bowler and T. Miyazaki", &
+           "Calculations for millions of atoms with density functional theory: &
+           &linear scaling shows its potential", &
+           "J. Phys.: Condens. Matter", &
+           22, &
+           074207, &
+           2010, &
+           "10.1088/0953-8984/22/7/074207", &
+           "CONQUEST order(N) paper")
 
       call bib%add_ref( &
-"Hirakawa2017", &
-"T. Hirakawa and T. Suzuki and D. R. Bowler and T. Miyazaki", &
-"Canonical-ensemble extended Lagrangian Born-Oppenheimer molecular dynamics for the linear scaling density functional theory", &
-"J. Phys. Condens. Matter", &
-29, &
-405901, &
-2017, &
-"10.1088/1361-648X/aa810d", &
-"CONQUEST canonical ensemble MD with XL-BOMD")
+           "Bowler2012", &
+           "D. R. Bowler and T. Miyazaki", &
+           "O(N) methods in electronic structure calculations", &
+           "Rep. Prog. Phys.", &
+           75, &
+           036503, &
+           2012, &
+           "10.1088/0034-4885/75/3/036503", &
+           "Order(N) review paper")
 
       call bib%add_ref( &
-"Bowler2010", &
-"D. R. Bowler and T. Miyazaki", &
-"Calculations for millions of atoms with density functional theory: linear scaling shows its potential", &
-"J. Phys.: Condens. Matter", &
-22, &
-074207, &
-2010, &
-"10.1088/0953-8984/22/7/074207", &
-"CONQUEST order(N) paper")
+           "Arita2014", &
+           "M. Arita and D. R. Bowler and T. Miyazaki", &
+           "Stable and efficient linear scaling first-principles molecular dynamics &
+           &for 10000+ atoms", &
+           "J. Chem. Theor. Comput.", &
+           10, &
+           5419, &
+           2014, &
+           "10.1021/ct500847y", &
+           "CONQUEST XL-BOMD implementation")
 
       call bib%add_ref( &
-"Niklasson2006", &
-"A. M. N. Niklasson and C. J. Tymczak and M. Challacombe", &
-"Time-reversible Born-Oppenheimer molecular dynamics", &
-"Phys. Rev. Lett.", &
-97, &
-123001, &
-2006, &
-"10.1103/PhysRevLett.97.123001", &
-"Original extended-Lagrangian Born-Oppenheimer MD paper")
+           "Nakata2014", &
+           "A. Nakata and D. R. Bowler and T. Miyazaki", &
+           "Efficient calculations with multisite local orbitals &
+           &in a large scale DFT code CONQUEST", &
+           "J. Chem. Theor. Comput.", &
+           10, &
+           4813, &
+           2014, &
+           "10.1021/ct5004934", &
+           "CONQUEST multisite support functions")
 
       call bib%add_ref( &
-"Niklasson2009", &
-"A. M. N. Niklasson and P. Steneteg and A. Odell and N. Bock and M. Challacombe &
- &and C. J. Tymczak and E. Holmstrom and G. Zhang and V. Weber", &
-"Extended Lagrangian Born-Oppenheimer molecular dynamics with dissipation", &
-"J. Chem. Phys.", &
-130, &
-214109, &
-2009, &
-"10.1063/1.3148075", &
-"XL-BOMD with dissipation")
+           "Hirakawa2017", &
+           "T. Hirakawa and T. Suzuki and D. R. Bowler and T. Miyazaki", &
+           "Canonical-ensemble extended Lagrangian Born-Oppenheimer molecular dynamics &
+           &for the linear scaling density functional theory", &
+           "J. Phys. Condens. Matter", &
+           29, &
+           405901, &
+           2017, &
+           "10.1088/1361-648X/aa810d", &
+           "CONQUEST canonical ensemble MD with XL-BOMD")
 
       call bib%add_ref( &
-"Torralba2008", &
-"A. S. Torralba and M. Todorovic and V. Brazdova and R. Choudhury and T. Miyazaki and M. J. Gillan and D. R. Bowler", &
-"Pseudo-atomic orbitals as basis sets for O(N) DFT code CONQUEST", &
-"J. Phys.: Condens. Matter", &
-20, &
-294206, &
-2008, &
-"10.1088/0953-8984/20/29/294206", &
-"PAO basis sets for CONQUEST")
+           "Bowler2019", &
+           "D. R. Bowler and J. S. Baker and J. T. L. Poulton and S. Y. Mujahed and J. Lin and S. Yadav and Z. Raza and T. Miyazaki", &
+           "Highly accurate local basis sets for large-scale DFT calculations in CONQUEST", &
+           "Japan. J. Appl. Phys. ", &
+           58, &
+           100503, &
+           2019, &
+           "10.7567/1347-4065/ab45af", &
+           "Details of new CONQUEST PAOs from basis generation tool, using Hamann-type pseudopotentials")
+
+      ! Other papers: not Conquest specific
+      call bib%add_ref( &
+           "Martyna1994", &
+           "G. J. Martyna and D. J. Tobias and M. L. Klein", &
+           "Constant pressure molecular dynamics algorithsm", &
+           "J. Chem. Phys.", &
+           101, &
+           4177, &
+           1994, &
+           "10.1063/1.467468", &
+           "Equations of motion for NPT molecular dynamics")
 
       call bib%add_ref( &
-"Bowler2019", &
-"D. R. Bowler and J. S. Baker and J. T. L. Poulton and S. Y. Mujahed and J. Lin and S. Yadav and Z. Raza and T. Miyazaki", &
-"Highly accurate local basis sets for large-scale DFT calculations in CONQUEST", &
-"Japan. J. Appl. Phys. ", &
-58, &
-100503, &
-2019, &
-"10.7567/1347-4065/ab45af", &
-"Details of new CONQUEST PAOs from basis generation tool, using Hamann-type pseudopotentials")
+           "Martyna1996", &
+           "G. J. Martyna and M. E. Tuckerman, D. J. Tobias and M. L. Klein", &
+           "Explicit reversible integrators for extended systems dynamics", &
+           "Mol. Phys.", &
+           87, &
+           1117, &
+           1996, &
+           "10.1080/002689799163235", &
+           "Time-reversible integrators for extended system MD")
 
       call bib%add_ref( &
-"Martyna1994", &
-"G. J. Martyna and D. J. Tobias and M. L. Klein", &
-"Constant pressure molecular dynamics algorithsm", &
-"J. Chem. Phys.", &
-101, &
-4177, &
-1994, &
-"10.1063/1.467468", &
-"Equations of motion for NPT molecular dynamics")
+           "Pfrommer1997", &
+           "B. G. Pfrommer and M. Cote and S. G. Louie and M. L. Cohen", &
+           "Relaxation of crystals with the quasi-Newton method", &
+           "J. Comput. Phys.", &
+           131, &
+           233, &
+           1997, &
+           "10.1006/jcph.1996.5612", &
+           "Method for simultaneous cell and geometry optimisation")
 
       call bib%add_ref( &
-"Martyna1996", &
-"G. J. Martyna and M. E. Tuckerman, D. J. Tobias and M. L. Klein", &
-"Explicit reversible integrators for extended systems dynamics", &
-"Mol. Phys.", &
-87, &
-1117, &
-1996, &
-"10.1080/002689799163235", &
-"Time-reversible integrators for extended system MD")
+           "Shinoda2004", &
+           "W. Shinoda and M. Shiga and M. Mikami", &
+           "Rapid estimation of elastic constants by molecular dynamics simulation under constant stress", &
+           "Phys. Rev. B", &
+           69, &
+           134103, &
+           2004, &
+           "10.1103/PhysRevB.69.134103", &
+           "Liouvillian splitting for NPT MD used in CONQUEST")
 
       call bib%add_ref( &
-"Shinoda2004", &
-"W. Shinoda and M. Shiga and M. Mikami", &
-"Rapid estimation of elastic constants by molecular dynamics simulation under constant stress", &
-"Phys. Rev. B", &
-69, &
-134103, &
-2004, &
-"10.1103/PhysRevB.69.134103", &
-"Liouvillian splitting for NPT MD used in CONQUEST")
+           "Niklasson2006", &
+           "A. M. N. Niklasson and C. J. Tymczak and M. Challacombe", &
+           "Time-reversible Born-Oppenheimer molecular dynamics", &
+           "Phys. Rev. Lett.", &
+           97, &
+           123001, &
+           2006, &
+           "10.1103/PhysRevLett.97.123001", &
+           "Original extended-Lagrangian Born-Oppenheimer MD paper")
 
       call bib%add_ref( &
-"Hamann2013", &
-"D. R. Hamann", &
-"Optimized norm-conserving Vanderbilt pseudopotentials", &
-"Phys. Rev. B", &
-88, &
-085117, &
-2013, &
-"10.1103/PhysRevB.88.085117", &
-"Hamann-type pseudopotentials generated via ONCVPSP")
+           "Niklasson2009", &
+           "A. M. N. Niklasson and P. Steneteg and A. Odell and N. Bock and M. Challacombe &
+           &and C. J. Tymczak and E. Holmstrom and G. Zhang and V. Weber", &
+           "Extended Lagrangian Born-Oppenheimer molecular dynamics with dissipation", &
+           "J. Chem. Phys.", &
+           130, &
+           214109, &
+           2009, &
+           "10.1063/1.3148075", &
+           "XL-BOMD with dissipation")
 
       call bib%add_ref( &
-"Miyazakij2004", &
-"T. Miyazaki and D. R. Bowler and R. Choudhury and M. J. Gillan", &
-"Atomic force algorithms in density functional theory electronic-structure techniques based on local orbitals", &
-"J. Chem. Phys.", &
-121, &
-6186, &
-2004, &
-"10.1063/1.1787832", &
-"Force calculations in CONQUEST")
+           "Hamann2013", &
+           "D. R. Hamann", &
+           "Optimized norm-conserving Vanderbilt pseudopotentials", &
+           "Phys. Rev. B", &
+           88, &
+           085117, &
+           2013, &
+           "10.1103/PhysRevB.88.085117", &
+           "Hamann-type pseudopotentials generated via ONCVPSP")
 
       call bib%add_ref( &
-"Carbogno2017", &
-"C. Carbogno and R. Ramprasad and M. Scheffler", &
-"Ab Initio Green-Kubo approach for thermal conductivity of solids", &
-"Phys. Rev. Lett.", &
-118, &
-175901, &
-2017, &
-"10.1103/PhysRevLett.118.175901", &
-"Method for Green-Kubo thermoal conductivity calculations for solids")
-
-      call bib%add_ref( &
-"Pfrommer1997", &
-"B. G. Pfrommer and M. Cote and S. G. Louie and M. L. Cohen", &
-"Relaxation of crystals with the quasi-Newton method", &
-"J. Comput. Phys.", &
-131, &
-233, &
-1997, &
-"10.1006/jcph.1996.5612", &
-"Method for simultaneous cell and geometry optimisation")
+           "Carbogno2017", &
+           "C. Carbogno and R. Ramprasad and M. Scheffler", &
+           "Ab Initio Green-Kubo approach for thermal conductivity of solids", &
+           "Phys. Rev. Lett.", &
+           118, &
+           175901, &
+           2017, &
+           "10.1103/PhysRevLett.118.175901", &
+           "Method for Green-Kubo thermoal conductivity calculations for solids")
 
     end subroutine get_bib_db
     !!***

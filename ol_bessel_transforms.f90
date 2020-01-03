@@ -29,6 +29,8 @@
 !!   2018/01/22 12:46 dave
 !!    Completely new approach for Bessel transform and changes to calculate
 !!    general Bessel function for NA projector functions
+!!   2019/06/19 15:32 dave
+!!    Changes to prepare for removal of NR sine/cosine transform routines
 !!  SOURCE
 !!
 module bessel_integrals
@@ -96,9 +98,9 @@ contains
      real(double), intent(in) :: deltar,rcut
 
      if(mod(l,2)==0) then
-        call new_bessel_transform_even(l,dummyin,npts,npts_2,rcut,deltar,dummyout)
+        call new_bessel_transform_evenFFTW(l,dummyin,npts,npts_2,rcut,deltar,dummyout)
      else 
-        call new_bessel_transform_odd(l,dummyin,npts,npts_2,rcut,deltar,dummyout)
+        call new_bessel_transform_oddFFTW(l,dummyin,npts,npts_2,rcut,deltar,dummyout)
      end if
      return
    end subroutine bessloop
@@ -202,7 +204,8 @@ contains
 !!  CREATION DATE
 !!   24/07/03
 !!  MODIFICATION HISTORY
-!!
+!!   2019/10/31 14:11 dave
+!!    Replaced call to twon with simple log calculation
 !!  SOURCE
 !!
    subroutine maxtwon(n1,del1,n2,del2,n12,del12,delk,kcut)
@@ -215,15 +218,17 @@ contains
      !arrays as integral power of 2
      real(double),intent(in):: del1,del2,delk,kcut
      real(double), intent(inout) :: del12
-     integer n1,n2,n12,s1,s2,n1_max,n2_max,s3,s3_max
+     integer :: n1,n2,n12,s3_max,s3i
+
+     real(double) :: s3
 
      !choosing according to restrictions (of user)
      !on minimum delk, min kcut...
      del12 = twopi/(two*kcut)
      s3 = two*(kcut)/delk
-     call twon(s3,s3_max)
-     n12 = s3_max
-
+     s3i = floor(log(s3)/log(two)) + 1
+     n12 = 2**s3i
+     return
    end subroutine maxtwon
 !!***
 
@@ -323,7 +328,7 @@ contains
      if(n>10.AND.r<3.4_double) flag_series = .true.
      if(n<0) call cq_abort("Error: Can't have spherical bessel with order less than zero ",n)
      ! Find Bessel function based on r and need for series expansion
-     if(abs(r)<1e-8_double) then
+     if(abs(r)<very_small) then
         if(n>0) then
            general_bessel = zero
         else
@@ -374,48 +379,59 @@ contains
 !!  CREATION DATE
 !!   22/01/18
 !!  MODIFICATION HISTORY
-!!
+!!   2019/06/19 15:29 dave
+!!    Changed to use FFTW
 !!  SOURCE
 !!
-   subroutine new_bessel_transform_even(n,function_in,npts_in,npts2,rcut,delta_r,function_out)
+   subroutine new_bessel_transform_evenFFTW(n,function_in,npts,npts2,rcut,delta_r,function_out)
 
      use datatypes
      use numbers
-     use fft_procedures, only: sinft, cosft
+     use fft_interface_module, ONLY: cosft_init_wrapper, cosft_exec_wrapper, &
+          sinft_init_wrapper, sinft_exec_wrapper
 
      implicit none
 
      ! Passed variables
-     integer :: n, npts_in, npts2
+     integer :: n, npts, npts2
      real(double) :: rcut, delta_r
-     real(double), dimension(npts_in) :: function_in
+     real(double), dimension(npts) :: function_in !function_out
      real(double), dimension(npts2/2) :: function_out
 
      ! Local variables
      integer :: i, j, en, l, poly_order, xi
-     real(double) :: k, fac, dk, dk2, dk3, x1,x0,x0_in, x1_in, pmj, r, tee_nm
+     real(double) :: k, fac, dk, dk2, dk3, x1,x0,x0_in, x1_in, pmj, r, tee_nm, rcut_large
      real(double), dimension(:), allocatable :: dummy1, dummy2, ess, coeff_poly, coeff_poly1, prefac
 
      poly_order = 3
      ! en is found such that n = 2*en
      en = floor(half*n)
      ! Allocate
-     allocate(dummy1(npts2),dummy2(npts2),ess(0:en),coeff_poly(0:poly_order), &
+     allocate(dummy1(npts2+1),dummy2(npts2),ess(0:en),coeff_poly(0:poly_order), &
           coeff_poly1(0:poly_order),prefac(0:en))
      dummy1 = zero
      dummy2 = zero
      ess = zero
-     do i=1,npts_in
+     ! We start the loop from i=2 because i=1 gives zero.
+     do i=2,npts
         r = real(i-1,double) * delta_r
-        dummy1(i) = r*r*delta_r*function_in(i)
-        dummy2(i) = r*r*r*delta_r*function_in(i)
+        dummy1(i) = r*r*function_in(i)*delta_r
+        dummy2(i-1) = r*r*r*function_in(i)*delta_r
      end do
+     call sinft_init_wrapper(npts2-1)
+     call cosft_init_wrapper(npts2+1)
      ! Cosine transform for function
-     call cosft(dummy1,npts2,+1)
+     call cosft_exec_wrapper(dummy1,npts2+1,-1)
      ! Sine transform for first derivative (for polynomial fitting)
-     call sinft(dummy2,npts2)
-     dummy2 = -one*dummy2
-     ! Set k-space interval
+     call sinft_exec_wrapper(dummy2,npts2-1,-1)
+     ! Adjust the array back and set to zero
+     do j=npts2,2,-1
+        dummy2(j) = -half*dummy2(j-1)
+     end do
+     dummy2(1) = zero
+     dummy1 = half*dummy1
+     ! Set k-space interval - the k-space grid is pi/rcut_large for compatibility
+     ! with FFT routines which implicitly double the number of points
      dk = twopi/(rcut+delta_r)
      dk2 = dk*dk
      dk3 = dk2*dk
@@ -427,7 +443,7 @@ contains
      end do
      ! Loop to perform transform
      do i=3,npts2,2
-        k = ((i-1)/2)*dk
+        k = real((i-1)/2,double)*dk
         fac = one/k
         x0_in = (k-dk)
         x1_in = k
@@ -467,12 +483,12 @@ contains
      end do
      function_out(1) = zero
      if(n==0) then ! Quadrature for k=0
-        do i=1,npts_in
+        do i=1,npts
            r = (i-1)*delta_r
            function_out(1) = function_out(1)+(r*r*delta_r*function_in(i))
         enddo
      end if
-   end subroutine new_bessel_transform_even
+   end subroutine new_bessel_transform_evenFFTW
 !!***
 
 !!****f* bessel_integrals/new_bessel_transform_odd *
@@ -495,43 +511,51 @@ contains
 !!
 !!  SOURCE
 !!
-   subroutine new_bessel_transform_odd(n,function_in,npts_in,npts2,rcut,delta_r,function_out)
+   subroutine new_bessel_transform_oddFFTW(n,function_in,npts,npts2,rcut,delta_r,function_out)
 
      use datatypes
      use numbers
-     use fft_procedures, only: sinft, cosft
+     use fft_interface_module, ONLY: cosft_init_wrapper, cosft_exec_wrapper, &
+          sinft_init_wrapper, sinft_exec_wrapper
 
      implicit none
 
      ! Passed variables
-     integer :: n, npts_in, npts2
+     integer :: n, npts, npts2
      real(double) :: rcut, delta_r
-     real(double), dimension(npts_in) :: function_in
+     real(double), dimension(npts) :: function_in  !, function_out
      real(double), dimension(npts2/2) :: function_out
 
      ! Local variables
      integer :: i, j, en, l, poly_order, xi
-     real(double) :: k, fac, dk, dk2, dk3, x1,x0,x0_in, x1_in, pmj, r, tee_nm
+     real(double) :: k, fac, dk, dk2, dk3, x1,x0,x0_in, x1_in, pmj, r, tee_nm, rcut_large
      real(double), dimension(:), allocatable :: dummy1, dummy2, ess, coeff_poly, prefac, coeff_poly1
 
      poly_order = 3
      ! en is found such that 2*en+1
      en = floor(half*n)
      ! Allocate
-     allocate(dummy1(npts2),dummy2(npts2),ess(0:en),coeff_poly(0:poly_order), &
+     allocate(dummy1(npts2),dummy2(npts2+1),ess(0:en),coeff_poly(0:poly_order), &
           coeff_poly1(0:poly_order),prefac(0:en))
      dummy1 = zero
      dummy2 = zero
      ess = zero
-     do i=1,npts_in
+     do i=2,npts
         r = real(i-1,double) * delta_r
-        dummy1(i) = r*r*delta_r*function_in(i)
+        dummy1(i-1) = r*r*delta_r*function_in(i)
         dummy2(i) = r*r*r*delta_r*function_in(i)
      end do
+     call sinft_init_wrapper(npts2-1)
+     call cosft_init_wrapper(npts2+1)
      ! Sine transform for function
-     call sinft(dummy1,npts2)
+     call sinft_exec_wrapper(dummy1,npts2-1,-1)
+     do j=npts2,2,-1
+        dummy1(j) = half*dummy1(j-1)
+     end do
+     dummy1(1) = zero
      ! Cosine transform for first derivative (for polynomial fitting)
-     call cosft(dummy2,npts2,+1)
+     call cosft_exec_wrapper(dummy2,npts2+1,-1)
+     dummy2 = half*dummy2
      ! Set k-space interval
      dk = twopi/(rcut+delta_r)
      dk2 = dk*dk
@@ -543,8 +567,8 @@ contains
         pmj = -pmj
      end do
      ! Loop to perform transform
-     do i=3,npts2,2
-        k = ((i-1)/2)*dk
+     do i=3,npts2, 2
+        k = real((i-1)/2,double)*dk
         fac = one/(k*k)
         x0_in = (k-dk)*(k-dk)
         x1_in = k*k
@@ -583,7 +607,6 @@ contains
         end do
      end do
      function_out(1) = zero
-   end subroutine new_bessel_transform_odd
-!!***
+   end subroutine new_bessel_transform_oddFFTW
    
  end module bessel_integrals

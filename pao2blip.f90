@@ -116,7 +116,6 @@ contains
     use dimens, ONLY : RadiusSupport
     use GenComms, ONLY : cq_abort, gcopy
     use global_module, ONLY : iprint_basis
-    use linear_equation_solver
     use numbers
     use pao_format
     use primary_module, ONLY : bundle
@@ -651,6 +650,8 @@ contains
 !!  MODIFICATION HISTORY
 !!   2008/03/03 18:48 dave
 !!    Changed float to real
+!!   2019/10/25 16:52 dave
+!!    Replaced linear_equation_solver with LAPACK call, simplified
 !!  SOURCE
   subroutine blips_in_star(inode,ionode,sym_type,&
        &n_sp,n_am,n_zeta,nu_int,n_b_half,b_int,region_bound_single,&
@@ -661,7 +662,6 @@ contains
     use datatypes
     use GenComms, ONLY: cq_abort
     use global_module, ONLY : iprint_basis
-    use linear_equation_solver
     use numbers
     use symmetry
 
@@ -678,24 +678,22 @@ contains
     real(double), intent(out), dimension(:) :: scal_prod_sym
     integer :: i, i_store, j, j_add, j_store, kb_min, kb_max, &
          &m, mult, n, n1, n2, n3, n_b_int_in_radius, n_b_int_in_diam, &
-         &n_blip, n_blip_squared, n_star_in_cube, n_star_in_sphere
-    integer, allocatable, dimension(:) :: xsite, ysite, zsite
+         &n_blip, n_blip_squared, n_star_in_cube, n_star_in_sphere, info, bas
+    integer, allocatable, dimension(:) :: xsite, ysite, zsite, work, ipiv
     real(double) :: delta_ig, deltax, sum, z0
     real(double), allocatable, dimension(:) :: coeff, scal_prod
     real(double), allocatable, dimension(:,:) :: amat
     real(double), allocatable, dimension(:,:,:) :: fv3
     real(double), allocatable, dimension(:,:,:,:) :: store
 
-    allocate(xsite((blip_info(n_sp)%BlipArraySize+1)*(blip_info(n_sp)%BlipArraySize+1)*(blip_info(n_sp)%BlipArraySize+2)/2))
-    allocate(ysite((blip_info(n_sp)%BlipArraySize+1)*(blip_info(n_sp)%BlipArraySize+1)*(blip_info(n_sp)%BlipArraySize+2)/2))
-    allocate(zsite((blip_info(n_sp)%BlipArraySize+1)*(blip_info(n_sp)%BlipArraySize+1)*(blip_info(n_sp)%BlipArraySize+2)/2))
-    allocate(coeff((blip_info(n_sp)%BlipArraySize+1)*(blip_info(n_sp)%BlipArraySize+1)*(blip_info(n_sp)%BlipArraySize+2)/2))
-    allocate(store(4,4,2*blip_info(n_sp)%BlipArraySize+1,2*blip_info(n_sp)%BlipArraySize+1))
-    allocate(scal_prod((2*blip_info(n_sp)%BlipArraySize+1)*(2*blip_info(n_sp)%BlipArraySize+1)* &
-         (2*blip_info(n_sp)%BlipArraySize+1)))
-    allocate(amat((blip_info(n_sp)%BlipArraySize+1)*(blip_info(n_sp)%BlipArraySize+1)*(blip_info(n_sp)%BlipArraySize+2)/2,&
-         (blip_info(n_sp)%BlipArraySize+1)*(blip_info(n_sp)%BlipArraySize+1)*(blip_info(n_sp)%BlipArraySize+2)/2))
-    allocate(fv3(max_blip_nu_int,2*blip_info(n_sp)%BlipArraySize+1,2*blip_info(n_sp)%BlipArraySize+1))
+    bas = blip_info(n_sp)%BlipArraySize
+    allocate(xsite((bas+1)*(bas+1)*(bas+2)/2))
+    allocate(ysite((bas+1)*(bas+1)*(bas+2)/2))
+    allocate(zsite((bas+1)*(bas+1)*(bas+2)/2))
+    allocate(coeff((bas+1)*(bas+1)*(bas+2)/2))
+    allocate(store(4,4,2*bas+1,2*bas+1))
+    allocate(scal_prod((2*bas+1)*(2*bas+1)* (2*bas+1)))
+    allocate(fv3(max_blip_nu_int,2*bas+1,2*bas+1))
 
     ! constants
     n_blip = 1 + 2*n_b_half
@@ -714,7 +712,7 @@ contains
        call cq_abort('blips_in_star: value of n_b_half gives too few&
             & blips for requested symmetry',n_b_half)
     end if
-    if(n_b_half > blip_info(n_sp)%BlipArraySize) then
+    if(n_b_half > bas) then
        call cq_abort('blips_in_star: n_b_half too big',n_b_half)
     end if
 
@@ -737,10 +735,9 @@ contains
        write(unit=io_lun,fmt='(/" number of stars in cubic region:",i5)') &
             & n_star_in_cube
     end if
-    if(n_star_in_cube > (blip_info(n_sp)%BlipArraySize+1)*(blip_info(n_sp)%BlipArraySize+1)* &
-         (blip_info(n_sp)%BlipArraySize+2)/2) then
+    if(n_star_in_cube > (bas+1) * (bas+1) * (bas+2)/2) then
        call cq_abort('blips_in_star: too many stars',n_star_in_cube,&
-            &(blip_info(n_sp)%BlipArraySize+1)*(blip_info(n_sp)%BlipArraySize+1)*(blip_info(n_sp)%BlipArraySize+2)/2)
+            &(bas+1)*(bas+1)*(bas+2)/2)
     end if
 
     ! do analysis of stars of blip-grid points
@@ -757,6 +754,8 @@ contains
        end do
     end if
 
+    allocate(amat(n_star_in_sphere,n_star_in_sphere))
+    amat = zero
     ! make block of blip-overlap matrix having requested symmetry
     call symmat(sym_type,n_b_half,n_star_in_sphere,n_cube2sphere, &
          xsite,ysite,zsite,coeff,amat)
@@ -819,7 +818,15 @@ contains
     end if
 
     ! solve linear equations to get blip coefficients
-    call linsolv(amat,n_star_in_sphere,scal_prod_sym)
+    allocate(ipiv(n_star_in_sphere))
+    info=0
+    call dgesv(n_star_in_sphere,1,amat, &
+         n_star_in_sphere,ipiv, &
+         scal_prod_sym,n_star_in_sphere,info)
+    if(info/=0) then
+       write(*,*) 'Info non-zero: ',inode-1,info,amat(info,info)
+    end if
+    deallocate(ipiv)
     ! renormalise to get blip coefficients
     do n = 1, n_star_in_sphere
        scal_prod_sym(n) = coeff(n)*scal_prod_sym(n)
@@ -830,7 +837,7 @@ contains
           write(unit=io_lun,fmt='(1x,i5,3x,e15.6)') n, scal_prod_sym(n)
        end do
     end if
-
+    deallocate(xsite, ysite, zsite, coeff, store, scal_prod, fv3, amat)
     return
 
   end subroutine blips_in_star

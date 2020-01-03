@@ -3,6 +3,6 @@
 #
 OVERLAP_OBJS = blip_module.o \
                grid_index.module.o \
-               dimens.module.o \
+               dimens_module.o \
                species_module.o \
-               spline_module.o
+               splines_module.o

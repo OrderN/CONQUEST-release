@@ -59,6 +59,8 @@
 !!    fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
 !!   2016/01/28 16:42 dave
 !!    Changed ewald_CS to ion_ion_CS
+!!   2019/11/04 15:12 dave
+!!    Replace indexx from Numerical Recipes with generic heapsort
 !!  SOURCE
 !!
 module cover_module
@@ -143,6 +145,7 @@ contains
     use GenComms, ONLY: cq_abort, inode, ionode
     use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_int,&
          type_dbl
+    use functions, ONLY: heapsort_integer_index
 
     implicit none
 
@@ -281,7 +284,7 @@ contains
        enddo
     enddo
     ! sort minimum CS by nodes 
-    call indexx(groups%mx_gcell,ng_in_min,ind_min,min_sort)
+    call heapsort_integer_index(ng_in_min,ind_min,min_sort)
 
     ! go over all GCS groups in node-periodic-grouped order 
     ind_cover=0
@@ -617,7 +620,6 @@ contains
     dcx = rcellx/real(groups%ngcellx,double)
     dcy = rcelly/real(groups%ngcelly,double)
     dcz = rcellz/real(groups%ngcellz,double)
-    !    write(io_lun,*) 'dx, dcx: ',dx,dy,dz,dcx,dcy,dcz
     ! Convert origin of prim to reals (add eps to prevent ambiguity)
     ro_x = (real(prim%nx_origin-1,double))*dx + eps 
     ro_y = (real(prim%ny_origin-1,double))*dy + eps
@@ -637,7 +639,6 @@ contains
     ro_cx = (real(ncx_o-1,double))*dcx
     ro_cy = (real(ncy_o-1,double))*dcy
     ro_cz = (real(ncz_o-1,double))*dcz
-    !    write(io_lun,*) 'Origin: ',ro_x,ro_y,ro_z,ro_cx,ro_cy,ro_cz
     ! Start by finding the left and right hand corners of the CS
     lhx = dx*(prim%nx_origin-1-prim%nleftx)-set%rcut
     lhy = dy*(prim%ny_origin-1-prim%nlefty)-set%rcut
@@ -885,96 +886,5 @@ contains
     return
   end subroutine deallocate_cs
 !!***
-
-!!****f* cover_module/indexx *
-!!
-!!  NAME 
-!!   indexx - sort
-!!  USAGE
-!! 
-!!  PURPOSE
-!!   sbrt indexx: uses the heapsort method to construct a sort-index
-!!   array indx() for a supplied integer array iarr(): this means
-!!   that the numbers iarr(indx(j)) are in monotonic ascending
-!!   order for j=1,2,...nsort. The integer arrays iarr() and indx()
-!!   must be dimensioned in the calling routine, and mx_nsort is
-!!   the dimension. A test is made to ensure that n.le.mx_nsort, and if
-!!   this fails, sbrt indexx stops with an error message. This routine
-!!   is taken, with slight modifications, from Numerical Recipes,
-!!   1st edition, p. 233.
-!!  INPUTS
-!! 
-!! 
-!!  USES
-!! 
-!!  AUTHOR
-!!   D.R.Bowler
-!!  CREATION DATE
-!!   24/11/99
-!!  MODIFICATION HISTORY
-!!   21/06/2001 dave
-!!    Added ROBODoc header and used cq_abort
-!!   2008/05/16 ast
-!!    Added timer
-!!  SOURCE
-!!
-  subroutine indexx(mx_nsort,nsort,iarr,indx)
-
-    ! Module usage
-    use datatypes
-    use GenComms, ONLY: cq_abort
-
-    implicit none
-
-    ! Passed variables
-    integer mx_nsort, nsort
-    integer :: iarr(mx_nsort),indx(mx_nsort)
-
-    ! Local variables
-    integer :: i,j,m,ir,indxt,iq,irc,ierr
-
-    ! check on array bounds 
-    if(nsort>mx_nsort.OR.nsort<1) then
-       call cq_abort('indexx: too many elements to be sorted',nsort,mx_nsort)
-    endif
-    do j=1,nsort
-       indx(j)=j
-    enddo
-    if(nsort.eq.1) return
-    m=1+nsort/2
-    ir=nsort
-    do while(.true.)
-       if(m>1) then
-          m=m-1
-          indxt=indx(m)
-          iq=iarr(indxt)
-       else
-          if(ir<1.OR.ir>mx_nsort) call cq_abort("Overflow in indexx: ",ir,mx_nsort)
-          indxt=indx(ir)
-          iq=iarr(indxt)
-          indx(ir)=indx(1)
-          ir=ir-1
-          if(ir==1) then
-             indx(1)=indxt
-             return
-          endif
-       endif
-       i=m
-       j=m+m
-       do while(j<=ir) 
-          if(j<ir) then
-             if(iarr(indx(j))<iarr(indx(j+1))) j=j+1
-          endif
-          if(iq<iarr(indx(j))) then
-             indx(i)=indx(j)
-             i=j
-             j=j+j
-          else
-             j=ir+1
-          endif
-       enddo
-       indx(i)=indxt
-    enddo
-  end subroutine indexx
-!!***
+  
 end module cover_module

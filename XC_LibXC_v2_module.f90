@@ -41,6 +41,8 @@ module XC
   logical, public :: flag_is_GGA ! Needed for non-SC forces
   ! Numerical flag choosing functional type
   integer, public :: flag_functional_type
+  ! Allow user to specify different functional to pseudopotentials
+  logical, public :: flag_different_functional
 
   ! Public methods
   public :: get_xc_potential, get_dxc_potential, init_xc
@@ -95,12 +97,13 @@ contains
   subroutine init_xc
 
     use global_module, ONLY : nspin, flag_dft_d2
-    use GenComms, ONLY : inode, ionode, cq_abort
+    use GenComms, ONLY : inode, ionode, cq_abort, cq_warn
     use numbers
     
     implicit none
 
     ! Local variables
+    character(len=80) :: sub_name = "init_xc"
     integer :: vmajor, vminor, vmicro, i, j
     integer, dimension(2) :: xcpart
     character(len=120) :: name, kind, family, ref
@@ -202,11 +205,7 @@ contains
        if(nspin==2) then ! Check for spin-compatible functionals
           if ( flag_functional_type == functional_lda_pz81       .or. &
                flag_functional_type == functional_lda_gth96     ) then
-             if (inode == ionode) &
-                  write (io_lun,'(/,a,/)') &
-                  '*** WARNING: the chosen xc-functional is not &
-                  &implemented for spin polarised calculation, &
-                  &reverting to LDA-PW92. ***'
+             call cq_warn(sub_name, "Functional not compatible with spin; reverting to LDA-PW92 ",flag_functional_type)
              flag_functional_type = functional_lda_pw92
           end if
        end if
@@ -3640,25 +3639,6 @@ contains
       kappa=kappa_ori
       mu_kappa=mu_kappa_ori
     end if
-
-!*ast* AT PRESENT IGNORED
-    ! Choose functional form
-    if(PRESENT(flavour)) then
-      if(flavour==functional_gga_pbe96_r99) then
-        selector=fx_alternative
-      else
-        selector=fx_original
-      end if
-    else
-      selector=fx_original
-    end if
-
-!*ast* AT PRESENT, NOT IMPLEMENTED
-if(selector == fx_alternative) then
-  print *,"!!!!!!!!WARNING!!!!!!!!!!!"
-  print *,"WARNING: TO DO !!!!!!!!! RPBE NSC Forces NOT IMPLEMENTED YET. The values will be for standard PBE"
-  print *,"!!!!!!!!WARNING!!!!!!!!!!!"
-end if
 
     ! Get the LDA part of the functional
     grad_density = spin_factor * density ! Factor of spin_factor to account for lack of spin

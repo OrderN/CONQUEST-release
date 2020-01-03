@@ -111,6 +111,8 @@ contains
   !!    Changes to find maximum angular momentum for PAOs and pseudopotentials (for factorial function)
   !!   2018/02/13 12:18 dave
   !!    Changes to new XC interface
+  !!   2019/12/26 tsuyoshi
+  !!    Removed flag_no_atomic_densities
   !!  SOURCE
   !!
   subroutine initialise(vary_mu, fixed_potential, mu, total_energy)
@@ -127,7 +129,6 @@ contains
                                  cq_abort
     use initial_read,      only: read_and_write
     use ionic_data,        only: get_ionic_data
-    use density_module,    only: flag_no_atomic_densities
     use memory_module,     only: init_reg_mem, reg_alloc_mem, type_dbl
     use group_module,      only: parts
     use primary_module,    only: bundle
@@ -184,14 +185,8 @@ contains
     end if
 
     ! Call routines to read or make data for isolated ions
-    flag_no_atomic_densities = .false.
-    call get_ionic_data(inode, ionode, flag_no_atomic_densities)
-    if (flag_no_atomic_densities .and. (.not. find_chdens)) then
-       if (inode == ionode) &
-            write (io_lun, *) 'No initial charge density specified - &
-                               &building from initial K'
-       find_chdens = .true.
-    end if
+    call get_ionic_data(inode, ionode)
+   
     lmax_tot = lmax_pao+lmax_ps
     if(2*lmax_pao>lmax_tot) lmax_tot = 2*lmax_pao
     if(lmax_tot<8) lmax_tot = 8
@@ -201,7 +196,7 @@ contains
     
     call my_barrier()
 
-    call initial_phis(read_phi, start, find_chdens, fixed_potential, std_level_loc+1)
+    call initial_phis(read_phi, start, fixed_potential, std_level_loc+1)
 
     ! ewald/screened_ion force and stress is computed in initial_H, so we
     ! need to allocate the atomic_stress array here - zamaan
@@ -330,7 +325,7 @@ contains
                                       flag_Becke_weights,              &
                                       flag_pcc_global, flag_dft_d2,    &
                                       iprint_gen, flag_perform_cDFT,   &
-                                      nspin, runtype, flag_MDold,      &
+                                      nspin, runtype,                  &
                                       glob2node, flag_XLBOMD,          &
                                       flag_neutral_atom, flag_diagonalisation
     use memory_module,          only: reg_alloc_mem, reg_dealloc_mem,  &
@@ -384,7 +379,7 @@ contains
     use cDFT_module,            only: init_cdft
     use DFT_D2,                 only: read_para_D2
     use input_module,           ONLY: leqi
-    use UpdateInfo_module,      ONLY: make_glob2node
+    use UpdateInfo,             ONLY: make_glob2node
     use XLBOMD_module,          ONLY: immi_XL
     use DiagModule,             only: init_blacs_pg, init_scalapack_format
     
@@ -608,13 +603,10 @@ contains
    end if
 
    ! Get the table showing the relation between atoms & processors
-   !if (.NOT. leqi(runtype,'static') .AND. .NOT. flag_MDold) then
-   if (.NOT. flag_MDold) then
      allocate (glob2node(ni_in_cell), STAT=stat)
      if (stat.NE.0) call cq_abort('Error allocating glob2node: ', ni_in_cell)
      if (inode.EQ.ionode) call make_glob2node
      call gcopy(glob2node,ni_in_cell)
-   endif
 
    ! Create initial density from superposition of atomic densities
    if (.not. find_chdens) then
@@ -748,9 +740,11 @@ contains
  !!    Renamed supportfns -> atomfns
  !!   2017/02/21 16:00 nakata
  !!    Removed unused get_support_pao_rep
+ !!   2019/12/26 tsuyoshi
+ !!    Removed unused find_chdens
  !!  SOURCE
  !!
- subroutine initial_phis(read_phi, start, find_chdens, fixed_potential, level)
+ subroutine initial_phis(read_phi, start, fixed_potential, level)
 
     use datatypes
     use blip,                        only: init_blip_flag, make_pre,   &
@@ -794,7 +788,7 @@ contains
     implicit none
 
     ! Passed variables
-    logical           :: read_phi, start, find_chdens, fixed_potential
+    logical           :: read_phi, start, fixed_potential
     integer, optional :: level
 
     ! Local variables
@@ -803,6 +797,7 @@ contains
     real(double)      :: factor
     integer           :: isf, np, ni, iprim, n_blip
     integer           :: n_run, spec, this_nsf
+    integer           :: spin_SF
 
 !****lat<$
     if (       present(level) ) backtrace_level = level+1
@@ -813,6 +808,10 @@ contains
 
     ! Used by pseudopotentials as well as PAOs
     if (flag_basis_set==blips) then
+
+       spin_SF = 1
+!       if (flag_SpinDependentSF) spin_SF = spin   ! SpinDependentSF is not available with blips at present
+
        if (inode==ionode) &
             write(io_lun,fmt='(10x,"Using blips as basis set for &
                                &support functions")')
@@ -868,7 +867,7 @@ contains
           !     call blip_to_support_new(inode-1, support, data_blip, &
           !          NSF, SUPPORT_SIZE, MAX_N_BLIPS)
           !     write(io_lun,*) 'S matrix for normalisation on Node= ',inode
-          call get_matrix_elements_new(inode-1,rem_bucket(1),matS,&
+          call get_matrix_elements_new(inode-1,rem_bucket(1),matS(spin_SF),&
                                        atomfns,atomfns)
           ! Do the onsite elements analytically
           if(flag_onsite_blip_ana) then
@@ -879,7 +878,7 @@ contains
                       iprim=iprim+1
                       spec = bundle%species(iprim)
                       this_nsf = nsf_species(spec)
-                      call get_onsite_S(blips_on_atom(iprim), matS,&
+                      call get_onsite_S(blips_on_atom(iprim), matS(spin_SF),&
                                         np, ni, iprim, this_nsf, spec)
                    end do
                 end if
@@ -892,7 +891,7 @@ contains
                 do ni=1,bundle%nm_nodgroup(np)
                    iprim=iprim+1
                    do isf=1,mat(np,Srange)%ndimi(ni)
-                      factor = return_matrix_value(matS,np,ni,iprim,0,isf,isf,1)
+                      factor = return_matrix_value(matS(spin_SF),np,ni,iprim,0,isf,isf,1)
                       if(factor>RD_ERR) then
                          factor=one/sqrt(factor)
                       else
@@ -913,7 +912,7 @@ contains
           if(inode==ionode.AND.iprint_init>1) &
                write(io_lun,fmt='(10x,"Completed normalise_support")')
           call blip_to_support_new(inode-1, atomfns)
-          call get_matrix_elements_new(inode-1,rem_bucket(1),matS,&
+          call get_matrix_elements_new(inode-1,rem_bucket(1),matS(spin_SF),&
                                        atomfns,atomfns)
           ! Do the onsite elements analytically
           if(flag_onsite_blip_ana) then
@@ -924,13 +923,13 @@ contains
                       iprim=iprim+1
                       spec = bundle%species(iprim)
                       this_nsf = nsf_species(spec)
-                      call get_onsite_S(blips_on_atom(iprim), matS,&
+                      call get_onsite_S(blips_on_atom(iprim), matS(spin_SF),&
                                         np, ni, iprim, this_nsf, spec)
                    end do
                 end if
              end do
           end if
-          !call dump_matrix("NS",matS,inode)
+          !call dump_matrix("NS",matS(1),inode)
        else
           if(inode==ionode.AND.iprint_init>1) &
                write(io_lun,fmt='(10x,"Skipped normalise_support")')
@@ -1073,6 +1072,17 @@ contains
   !!    Updates for new atom movement routines
   !!   2018/02/08 tsuyoshi (with dave)
   !!    Bug fix for reading K after atom movement
+  !!   2018/11/13 17:30 nakata
+  !!    Changed matT to be spin_SF dependent
+  !!   2019/10/24 11:52 dave
+  !!    Changed function calls to FindMinDM
+  !!   2019/11/14 tsuyoshi 
+  !!    The part setting atom_coord_diff is replaced by subroutine call to "set_atom_coord_diff".
+  !!    Removed n_proc_old and glob2node_old
+  !!   2019/11/18 tsuyoshi 
+  !!    Removed flag_MDold
+  !!   2019/12/29 tsuyoshi
+  !!    restart_LorK -> restart_DM
   !!  SOURCE
   !!
   subroutine initial_H(start, start_L, find_chdens, fixed_potential, &
@@ -1088,12 +1098,12 @@ contains
     use SelfCon,             only: new_SC_potl
     use global_module,       only: iprint_init, flag_self_consistent, &
          flag_basis_set, blips, PAOs,       &
-         restart_LorK,                      &
+         restart_DM,                      &
          restart_rho, flag_test_forces,     &
          flag_dft_d2, nspin, spin_factor,   &
-         flag_MDold,flag_MDcontinue,        &
-         restart_T,glob2node,glob2node_old, &
-         n_proc_old,MDinit_step,ni_in_cell, &
+         flag_MDcontinue,                   &
+         restart_T,glob2node,               &
+         MDinit_step,ni_in_cell,            &
          flag_XLBOMD, flag_dissipation,     &
          flag_propagateX, flag_propagateL, restart_X, &
          flag_exx, exx_scf, flag_out_wf, wf_self_con, &
@@ -1120,8 +1130,8 @@ contains
     use DFT_D2,              only: dispersion_D2
     use matrix_data,         ONLY: Lrange,Trange,LSrange,SFcoeff_range,Hrange
     use store_matrix,        ONLY: matrix_store_global, grab_InfoMatGlobal, grab_matrix2, &
-         n_matrix,InfoMatrixFile
-    use UpdateInfo_module,   ONLY: make_glob2node,Matrix_CommRebuild
+         InfoMatrixFile, set_atom_coord_diff
+    use UpdateInfo,          ONLY: make_glob2node,Matrix_CommRebuild, Report_UpdateMatrix
     use XLBOMD_module,       ONLY: grab_XXvelS,grab_Xhistories
     use support_spec_format, only: read_option
     use multisiteSF_module,  only: initial_SFcoeff
@@ -1144,10 +1154,6 @@ contains
     integer        :: spin_SF
     !H_trans is not prepared. If we need to symmetrise K, we need H_trans
     integer        :: H_trans = 1
-    integer        :: ig
-
-    real(double) :: scale_x, scale_y, scale_z, rms_change
-    real(double) :: small_change = 0.3_double
 
     type(matrix_store_global) :: InfoGlob
     type(InfoMatrixFile),pointer :: Info(:)
@@ -1163,54 +1169,27 @@ contains
 
     ! (0) Get the global information
     !      --> Fetch and distribute date on old job
-    allocate(glob2node_old(ni_in_cell), STAT=stat)
-    if (stat .ne.0)      call cq_abort('Error allocating glob2node_old: ', ni_in_cell)
 
-    if (.not.flag_MDold.and.(flag_MDcontinue.or. &
-         restart_LorK.or. &
+    if (flag_MDcontinue.or. &
+         restart_DM.or. &
          restart_T   .or. &
-         read_option)  ) then
+         read_option  ) then
        if (inode.eq.ionode) write (io_lun,*) "Get global info to load matrices"
        if (inode.eq.ionode) call make_glob2node
        call gcopy(glob2node, ni_in_cell)
        call grab_InfoMatGlobal(InfoGlob,MDinit_step)  
-       n_proc_old = InfoGlob%numprocs
-       glob2node_old(:) = InfoGlob%glob_to_node(:)
+       call set_atom_coord_diff(InfoGlob)
        MDinit_step = InfoGlob%MDstep
      
-      ! 2018JFeb12 TM 
-       if(restart_LorK) find_chdens=.true.
+      ! 2019Dec26 TM
+      ! Now, since the default value of find_chdens is 'true' if we set restart_DM 
+      ! as .true., the following line should be commented out. 
+      !  Even when we set restart_DM, we should be able to choose the option 
+      ! where find_chdens = .false. (initial charge = atomic charge)
+      ! But.. since this change will affect the result, we will issue this change later.
+      !
+       if(restart_DM) find_chdens=.true.  ! 2018JFeb12 TM 
 
-       ! Test for unit cell size change 
-       scale_x = rcellx/InfoGlob%rcellx; scale_y = rcelly/InfoGlob%rcelly; scale_z = rcellz/InfoGlob%rcellz
-       rms_change = (scale_x - one)**2 + (scale_y - one)**2 + (scale_z - one)**2
-       rms_change = sqrt(rms_change)
-       if(rms_change > small_change .and. inode == ionode) &
-            write(io_lun,fmt='(4x,a,3f20.10)') 'WARNING!! Big change of the cell', scale_x, scale_y,scale_z
-
-       if(rms_change < very_small) then
-          do ig = 1, ni_in_cell
-             atom_coord_diff(1:3,ig) = atom_coord(1:3,ig) - InfoGlob%atom_coord(1:3,ig)
-          enddo
-       else
-          do ig = 1, ni_in_cell
-             atom_coord_diff(1,ig) = atom_coord(1,ig) - InfoGlob%atom_coord(1,ig)*scale_x
-             atom_coord_diff(2,ig) = atom_coord(2,ig) - InfoGlob%atom_coord(2,ig)*scale_y
-             atom_coord_diff(3,ig) = atom_coord(3,ig) - InfoGlob%atom_coord(3,ig)*scale_z
-          enddo
-       endif
-
-       do ig = 1, ni_in_cell
-          if((atom_coord_diff(1,ig)) > half*rcellx) atom_coord_diff(1,ig)=atom_coord_diff(1,ig)-rcellx
-          if((atom_coord_diff(1,ig)) < -half*rcellx) atom_coord_diff(1,ig)=atom_coord_diff(1,ig)+rcellx
-          if((atom_coord_diff(2,ig)) > half*rcelly) atom_coord_diff(2,ig)=atom_coord_diff(2,ig)-rcelly
-          if((atom_coord_diff(2,ig)) < -half*rcelly) atom_coord_diff(2,ig)=atom_coord_diff(2,ig)+rcelly
-          if((atom_coord_diff(3,ig)) > half*rcellz) atom_coord_diff(3,ig)=atom_coord_diff(3,ig)-rcellz
-          if((atom_coord_diff(3,ig)) < -half*rcellz) atom_coord_diff(3,ig)=atom_coord_diff(3,ig)+rcellz
-       enddo
-
-       n_matrix = 1
-       if (nspin.EQ.2) n_matrix = 2
        call my_barrier()
     endif
 
@@ -1230,27 +1209,10 @@ contains
           call matrix_scale(zero,matSFcoeff(spin_SF))
        enddo
        if (read_option) then
-          if(.not.flag_MDold) then
-             if (inode == ionode) write (io_lun,*) 'Read supp_pao coefficients from SFcoeff files'
-             call grab_matrix2('SFcoeff',inode,nfile,Info)
-             call my_barrier()
-             call Matrix_CommRebuild(Info,SFcoeff_range,SFcoeff_trans,matSFcoeff(1),nfile)
-             if(nspin_SF==2) then
-                call grab_matrix2('SFcoeff2',inode,nfile,Info)
-                call my_barrier()
-                call Matrix_CommRebuild(Info,SFcoeff_range,SFcoeff_trans,matSFcoeff(2),nfile)
-             end if
-
-          else 
-             ! Read SF-PAO coefficients
-             if (inode == ionode) write (io_lun,*) 'Read supp_pao coefficients from input files.'
-             if (nspin_SF == 1) then
-                call grab_matrix("SFcoeff",    matSFcoeff(1), inode)
-             else
-                call grab_matrix("SFcoeff_up", matSFcoeff(1), inode)
-                call grab_matrix("SFcoeff_dn", matSFcoeff(2), inode)
-             endif
-          endif
+          if (inode == ionode) write (io_lun,*) 'Read supp_pao coefficients from SFcoeff files'
+          call grab_matrix2('SFcoeff',inode,nfile,Info,InfoGlob,index=0,n_matrix=nspin_SF)
+          call my_barrier()
+          call Matrix_CommRebuild(InfoGlob,Info,SFcoeff_range,SFcoeff_trans,matSFcoeff,nfile,n_matrix=nspin_SF)
 
           ! Added DRB 2017/04/10 to fix issue 26: transpose required before transformation can occur
           ! Transpose
@@ -1272,10 +1234,10 @@ contains
     total_energy = zero
     ! If we're vary PAOs, allocate memory
     ! (1) Get S matrix
-    if (.not. flag_MDold .and. restart_T) then
-       call grab_matrix2('T',inode,nfile,Info)
+    if (restart_T) then
+       call grab_matrix2('T',inode,nfile,Info,InfoGlob,index=0,n_matrix=nspin_SF)
        call my_barrier()
-       call Matrix_CommRebuild(Info,Trange,T_trans,matT,nfile,symm)
+       call Matrix_CommRebuild(InfoGlob,Info,Trange,T_trans,matT,nfile,symm,n_matrix=nspin_SF)
     endif
     if (flag_LFD .and. .not.read_option) then
        ! Spao was already made in sub:initial_SFcoeff
@@ -1300,50 +1262,32 @@ contains
        if (vary_mu) then
           ! This cannot be timed within the routine
           call start_timer(tmr_std_densitymat)
-          call correct_electron_number(iprint_init, inode, ionode)
+          call correct_electron_number
           call stop_timer(tmr_std_densitymat)
        end if
     end if
-    if (restart_LorK) then
-       if (.NOT. flag_MDold) then
-          if(.not.flag_diagonalisation) then
-             call grab_matrix2('L',inode,nfile,Info)
-             call my_barrier()
-             call Matrix_CommRebuild(Info,Lrange,L_trans,matL(1),nfile,symm)
-             if(nspin==2) then
-                call grab_matrix2('L2',inode,nfile,Info)
-                call my_barrier()
-                call Matrix_CommRebuild(Info,Lrange,L_trans,matL(2),nfile,symm)
-             end if
-             if (inode == ionode .and. iprint_init > 1) write (io_lun, *) 'Grabbed L  matrix'
-          else
-             call grab_matrix2('K',inode,nfile,Info)
-             call my_barrier()
-             call Matrix_CommRebuild(Info,Hrange,H_trans,matK(1),nfile)
-             if(nspin==2) then
-                call grab_matrix2('K2',inode,nfile,Info)
-                call my_barrier()
-                call Matrix_CommRebuild(Info,Hrange,H_trans,matK(2),nfile)
-             end if
-             if (inode == ionode .and. iprint_init > 1) write (io_lun, *) 'Grabbed K  matrix'
-          end if
+    if (restart_DM) then
+       if(.not.flag_diagonalisation) then
+          call grab_matrix2('L',inode,nfile,Info,InfoGlob,index=0,n_matrix=nspin)
+          call my_barrier()
+          call Matrix_CommRebuild(InfoGlob,Info,Lrange,L_trans,matL,nfile,symm,n_matrix=nspin)
+          if (inode == ionode .and. iprint_init > 1) write (io_lun, *) 'Grabbed L  matrix'
        else
-          if(nspin==1) then
-             call grab_matrix( "L",    matL(1), inode)
-          else if (nspin == 2) then
-             call grab_matrix( "L_up", matL(1), inode)
-             call grab_matrix( "L_dn", matL(2), inode)
-          end if
-       endif
+          call grab_matrix2('K',inode,nfile,Info,InfoGlob,index=0,n_matrix=nspin)
+          call my_barrier()
+          call Matrix_CommRebuild(InfoGlob,Info,Hrange,H_trans,matK,nfile,n_matrix=nspin)
+          if (inode == ionode .and. iprint_init > 1) write (io_lun, *) 'Grabbed K  matrix'
+          !DEBUG call Report_UpdateMatrix("Kmat")  
+       end if
     end if
     ! XL-BOMD
-    if (flag_XLBOMD .AND. restart_X) then
+    if (restart_X) then
        if (flag_propagateX) then
-          call grab_XXvelS(LSrange,LS_trans)
-          if (flag_dissipation) call grab_Xhistories(LSrange,LS_trans)
+          call grab_XXvelS(LSrange,LS_trans,InfoGlob)
+          if (flag_dissipation) call grab_Xhistories(LSrange,LS_trans,InfoGlob)
        elseif (flag_propagateL) then
-          call grab_XXvelS(Lrange,L_trans)
-          if (flag_dissipation) call grab_Xhistories(Lrange,L_trans)
+          call grab_XXvelS(Lrange,L_trans,InfoGlob)
+          if (flag_dissipation) call grab_Xhistories(Lrange,L_trans,InfoGlob)
        endif
     endif
 !!$
@@ -1351,7 +1295,7 @@ contains
 !!$
 !!$
     ! (3) get K matrix (and also get phi matrix)
-    if (.not. flag_diagonalisation .and. (find_chdens .or. restart_LorK)) then
+    if (.not. flag_diagonalisation .and. (find_chdens .or. restart_DM)) then
        call LNV_matrix_multiply(electrons, energy_tmp, doK, dontM1,   &
             dontM2, dontM3, dontM4, dophi, dontE, &
             mat_phi=matphi)
@@ -1442,7 +1386,7 @@ contains
 !!$
     if ( flag_self_consistent ) then ! Vary only DM and charge density
        !
-       if ( restart_LorK ) then
+       if ( restart_DM ) then
           record  = .true.
           reset_L = .false.
           call new_SC_potl(record, sc_tolerance, reset_L, &
@@ -1465,8 +1409,8 @@ contains
           !
           record  = .false.
           reset_L = .true.                
-          call FindMinDM(n_L_iterations, vary_mu, L_tolerance, inode, &
-               ionode, reset_L, record, backtrace_level)
+          call FindMinDM(n_L_iterations, vary_mu, L_tolerance, &
+               reset_L, record, backtrace_level)
           !
           record  = .true.             
           reset_L = .false.
@@ -1495,16 +1439,16 @@ contains
           wf_self_con=.true.
        endif
 
-       if ( .not. restart_LorK ) then
+       if ( .not. restart_DM ) then
           record  = .false.   
           reset_L = .true.
-          call FindMinDM(n_L_iterations, vary_mu, L_tolerance, inode, &
-               ionode, reset_L, record, backtrace_level)
+          call FindMinDM(n_L_iterations, vary_mu, L_tolerance, &
+               reset_L, record, backtrace_level)
        else
           record  = .false.
           reset_L = .false.
-          call FindMinDM(n_L_iterations, vary_mu, L_tolerance, inode, &
-               ionode, reset_L, record, backtrace_level)
+          call FindMinDM(n_L_iterations, vary_mu, L_tolerance, &
+               reset_L, record, backtrace_level)
        end if
        if (flag_out_wf.OR.flag_write_DOS) then
           wf_self_con=.false.
@@ -1912,6 +1856,10 @@ contains
   !!   - Changed spin implementation
   !!   2015/06/08 lat
   !!    - Added experimental backtrace
+  !!   2018/11/13 17:30 nakata
+  !!    Changed matT to be spin_SF dependent
+  !!   2018/11/15 15:45 nakata
+  !!    Bug fix: matL(1) should be matL(spin)
   !!  SOURCE
   !!
   subroutine initial_L(level)
@@ -1919,12 +1867,12 @@ contains
     use datatypes
     use numbers,       only: half, zero
     use mult_module,   only: matL, matT, matrix_sum
-    use global_module, only: nspin
+    use global_module, only: nspin, flag_SpinDependentSF
 
     implicit none
 
     integer, optional :: level
-    integer           :: spin
+    integer           :: spin, spin_SF
     type(cq_timer)    :: backtrace_timer
     integer           :: backtrace_level 
 
@@ -1935,9 +1883,11 @@ contains
          where=area,level=backtrace_level,echo=.true.)
 !****lat>$
 
+    spin_SF = 1
     do spin = 1, nspin
+       if (flag_SpinDependentSF) spin_SF = spin
        ! set L for the second spin component also equal to 1/2 S^-1
-       call matrix_sum(zero, matL(1), half, matT)
+       call matrix_sum(zero, matL(spin), half, matT(spin_SF))
     end do
 
 !****lat<$

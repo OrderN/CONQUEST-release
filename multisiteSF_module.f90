@@ -36,6 +36,8 @@
 !!   2016/10/04
 !!
 !!  MODIFICATION HISTORY
+!!   2019/12/30 tsuyoshi
+!!      introduced n_dump_SFcoeff for dumping SFcoeff & (K or L) matrices during the minimisation of SFcoeff
 !!
 !!  SOURCE
 !!
@@ -86,6 +88,8 @@ module multisiteSF_module
   ! MD
   logical :: flag_LFD_MD_UseAtomicDensity                        ! use atomic density when recalculate SFcoeff by LFD (default=T)
 
+  ! Frequency for dumping matrices
+  integer :: n_dumpSFcoeff
 !!***
 
 contains
@@ -113,6 +117,8 @@ contains
 !!  MODIFICATION HISTORY
 !!   10/11/2017 nakata
 !!    Removed unused grab_charge
+!!   02/12/2019 nakata
+!!    Removed dump_matrix(SFcoeff), which will be changed to dump_pos_and_matrices in near future
 !!  SOURCE
 !!
   subroutine initial_SFcoeff(LFD_build_Spao, LFD_build_Hpao, fixed_potential, output_naba_in_MSSF)
@@ -129,7 +135,8 @@ contains
     use PAO_grid_transform_module, only: single_PAO_to_grid
     use S_matrix_module,           only: get_S_matrix
     use H_matrix_module,           only: get_H_matrix
-    use io_module,                 only: dump_matrix
+    use store_matrix,              only: dump_pos_and_matrices
+!    use io_module,                 only: dump_matrix
     use GenComms,                  only: mtime
 
     implicit none
@@ -194,13 +201,8 @@ contains
        call matrix_transpose(matSFcoeff(spin_SF), matSFcoeff_tran(spin_SF))
     enddo
 
-    ! Write out SF coefficients
-    if (nspin_SF == 1) then
-       call dump_matrix("SFcoeff",    matSFcoeff(1), inode)
-    else
-       call dump_matrix("SFcoeff_up", matSFcoeff(1), inode)
-       call dump_matrix("SFcoeff_dn", matSFcoeff(2), inode)
-    end if
+    ! Write out current SF coefficients with some iprint (in future)
+     if (iprint_basis>=3) call dump_pos_and_matrices(index=98)
 
     call my_barrier()
     t2 = mtime()
@@ -365,6 +367,8 @@ contains
 !!  CREATION DATE
 !!   2016/10/04
 !!  MODIFICATION HISTORY
+!!   2019/12/02 nakata
+!!    Removed dump_matrix(SFcoeff), which will be changed to dump_pos_and_matrices in near future
 !!
 !!  SOURCE
 !!
@@ -373,7 +377,8 @@ contains
     use datatypes
     use numbers
     use global_module,  ONLY: id_glob, species_glob, IPRINT_TIME_THRES2, nspin_SF
-    use io_module,      ONLY: dump_matrix
+    use store_matrix,   ONLY: dump_pos_and_matrices
+!    use io_module,      ONLY: dump_matrix
     use group_module,   ONLY: parts
     use primary_module, ONLY: bundle
     use cover_module,   ONLY: BCS_parts
@@ -447,12 +452,14 @@ contains
        call matrix_transpose(matSFcoeff(spin_SF), matSFcoeff_tran(spin_SF))
     enddo
 
-    if (nspin_SF == 1) then
-       call dump_matrix("SFcoeff",    matSFcoeff(1), inode)
-    else
-       call dump_matrix("SFcoeff_up", matSFcoeff(1), inode)
-       call dump_matrix("SFcoeff_dn", matSFcoeff(2), inode)
-    end if
+    ! Write out current SF coefficients with some iprint (in future)
+    ! if (iprint_basis>=3) call dump_pos_and_matrices
+!    if (nspin_SF == 1) then
+!       call dump_matrix("SFcoeff",    matSFcoeff(1), inode)
+!    else
+!       call dump_matrix("SFcoeff_up", matSFcoeff(1), inode)
+!       call dump_matrix("SFcoeff_dn", matSFcoeff(2), inode)
+!    end if
 
     call my_barrier
 
@@ -818,6 +825,8 @@ contains
 !!  CREATION DATE
 !!   2017/01/08
 !!  MODIFICATION HISTORY
+!!   14/11/2019 nakata
+!!    Take average of matSFcoeff(1) and matSFcoeff(2) when flag_SpinDependentSF=F and nspin=2
 !!
 !!  SOURCE
 !!
@@ -828,8 +837,9 @@ contains
     use matrix_module,          only: matrix_halo
     use matrix_data,            only: mat, halo, SFcoeff_range, LD_range
     use mult_module,            only: mult, mat_p, matrix_scale, &
+                                      matrix_sum, allocate_temp_matrix, free_temp_matrix, &
                                       matSatomf, matHatomf, matSFcoeff, aLa_aHa_aLHa, aLa_aSa_aLSa
-    use global_module,          only: ni_in_cell, numprocs, nspin_SF
+    use global_module,          only: ni_in_cell, numprocs, nspin, nspin_SF, sf, atomf, flag_SpinDependentSF
     use species_module,         only: npao_species
     use io_module,              only: get_file_name
     use input_module,           only: io_assign, io_close
@@ -842,13 +852,14 @@ contains
     ! Passed variables
     type(matrix_halo) LFDhalo                         ! LFDhalo = mult(aLa_aHa_aLHa)%ahalo
     ! Local
-    integer :: stat, spin_SF
+    integer :: stat, spin, spin_SF
     integer :: lun11,lun12, n_naba_i_d, len_Sub_i_d
     character(len=15) :: filename11,filename12
     real(double) :: ChemP, kT, kT1                   ! filter function
     real(double) :: NEsub, NEsub0                    ! number of electrons in subspace, used for determing ChemP
     integer :: INEsub
     integer :: info                                  ! for DSYGVX
+    integer :: matSFcoeff_2
     real(double) :: abstol, t0, t1
     integer :: max_npao, nhalo_LFD, max_npao_LFD, len_kj_sub, len_Sub, &      ! for max subspace of halo atoms
                atom_num, iprim, atom_i, atom_spec, NTVEC,              &      ! for atom_i
@@ -918,15 +929,15 @@ contains
     call reg_alloc_mem(area_basis, 2*len_kj_sub, type_int)
     call stop_timer(tmr_std_allocation)
 
-    do spin_SF = 1,nspin_SF
+    do spin = 1,nspin
 !
 !      --- (1) make subspace matrix for halo atoms (NODE)
 !
        Hsub(:) = zero
        label_kj_Hsub(:) = 0
-       call LFD_make_Subspace_halo(myid,mat_p(matHatomf(spin_SF))%matrix,mat_p(matHatomf(spin_SF))%length,&
+       call LFD_make_Subspace_halo(myid,mat_p(matHatomf(spin))%matrix,mat_p(matHatomf(spin))%length,&
                                    Hsub,len_Sub,label_kj_Hsub,len_kj_sub,mult(aLa_aHa_aLHa))
-       if (spin_SF.eq.1) then
+       if (spin.eq.1) then
           Ssub(:) = zero
           label_kj_Ssub(:) = 0
           call LFD_make_Subspace_halo(myid,mat_p(matSatomf)%matrix,mat_p(matSatomf)%length,&
@@ -937,7 +948,7 @@ contains
 !
        if(myid==0) t0 = mtime()
        if (iprint_basis>=5.and.inode==ionode) &
-          write(io_lun,'(/A,I2)') 'Start atom loop in the LFD method for spin',spin_SF
+          write(io_lun,'(/A,I2)') 'Start atom loop in the LFD method for spin',spin
 
        iprim = 0; atom_i = 0  
        do np = 1,bundle%groups_on_node   ! Loop over primary set partitions
@@ -1077,8 +1088,19 @@ contains
 !
                 WORK(:) = zero
                 call transpose_2Dmat(TVEC,WORK,len_Sub_i,NTVEC)
-                call LFD_put_TVEC_to_SFcoeff(np,i,mat(:,SFcoeff_range),mat_p(matSFcoeff(spin_SF))%matrix, &
-                                             mat_p(matSFcoeff(spin_SF))%length,mat(:,LD_range),WORK,len_Sub_i*NTVEC)
+                if (.not.flag_SpinDependentSF .and. spin.eq.2) then
+!                   if (iprint_basis>=5.and.inode==ionode) &
+                      write(io_lun,*) 'Take average of matSFcoeff(1) and matSFcoeff(2) into matSFcoeff(1)'
+                   matSFcoeff_2 = allocate_temp_matrix(SFcoeff_range,0,sf,atomf)
+                   call matrix_scale(zero,matSFcoeff_2)
+                   call LFD_put_TVEC_to_SFcoeff(np,i,mat(:,SFcoeff_range),mat_p(matSFcoeff_2)%matrix, &
+                                                mat_p(matSFcoeff_2)%length,mat(:,LD_range),WORK,len_Sub_i*NTVEC)
+                   call matrix_sum(half, matSFcoeff(1), half, matSFcoeff_2)
+                   call free_temp_matrix(matSFcoeff_2)
+                else
+                   call LFD_put_TVEC_to_SFcoeff(np,i,mat(:,SFcoeff_range),mat_p(matSFcoeff(spin))%matrix, &
+                                                mat_p(matSFcoeff(spin))%length,mat(:,LD_range),WORK,len_Sub_i*NTVEC)
+                endif
 !
 !               --- deallocate spaces for atom_i ---
 !                                  
@@ -1112,7 +1134,7 @@ contains
              enddo ! i
           endif ! endif of (bundle%nm_nodgroup(np)>0)
        enddo ! np
-    enddo ! spin_SF
+    enddo ! spin
 
     ! deallocate subspace matrices their labels
     call start_timer(tmr_std_allocation)
@@ -2226,6 +2248,10 @@ contains
 !!  MODIFICATION DATE
 !!   2017/01/31 15:56 dave
 !!    Small bug fix: changed dimension of rhototal to maxngrid
+!!   2019/10/24 11:52 dave
+!!    Changed function calls to FindMinDM
+!!   201912/02 nakata
+!!    Removed dump_matrix(SFcoeff), which will be changed to dump_pos_and_matrices in near future
 !!  SOURCE
 !!
   subroutine LFD_minimise(fixed_potential, vary_mu, n_cg_L_iterations, L_tolerance, &
@@ -2238,7 +2264,6 @@ contains
     use GenComms,           only: gsum
     use dimens,             only: n_my_grid_points, grid_point_volume
     use maxima_module,      only: maxngrid
-    !use DiagModule,         only: diagon
     use DMMin,              only: FindMinDM
     use SelfCon,            only: new_SC_potl
     use S_matrix_module,    only: get_S_matrix
@@ -2247,8 +2272,8 @@ contains
                                   matrix_scale, matrix_transpose 
     use GenBlas,            only: dot
     use memory_module,      only: reg_alloc_mem, type_dbl, reg_dealloc_mem
-    use io_module,          only: dump_matrix, dump_charge
-                                   
+    use store_matrix,       only: dump_pos_and_matrices, unit_MSSF_save
+
     implicit none
 
     ! Passed variables
@@ -2369,25 +2394,25 @@ contains
              mat_p(matSFcoeff(spin_SF))%matrix = data_PAO0(:,spin_SF)
              call matrix_scale(zero,matSFcoeff_tran(spin_SF))
              call matrix_transpose(matSFcoeff(spin_SF), matSFcoeff_tran(spin_SF))
-          enddo          
+          enddo
           do spin = 1, nspin
              rho(1:n_my_grid_points,spin) = rho_0(1:n_my_grid_points,spin)
-          enddo          
+          enddo
           if (inode==ionode) &
-             write(io_lun,'(///20x,A,f15.7,A,i3/20x,A,i3//20x,A,f15.7)') &
-                'LFD_minimise: Energy rises by ', diff_E, ' at iteration # ', iter, &
-                'SF coefficients and density are returned to those at previous iteration # ', iter-1, &
-                'Total energy = ',total_energy
+               write(io_lun,'(///20x,A,f15.7,A,i3/20x,A,i3//20x,A,f15.7)') &
+               'LFD_minimise: Energy rises by ', diff_E, ' at iteration # ', iter, &
+               'SF coefficients and density are returned to those at previous iteration # ', iter-1, &
+               'Total energy = ',total_energy
           ! Reconstruct S, H and K with previous density 
           call get_S_matrix(inode, ionode, build_AtomF_matrix=.false.)
           call get_H_matrix(.false., fixed_potential, electrons, &
                             rho, maxngrid)
-          call FindMinDM(n_cg_L_iterations, vary_mu, L_tolerance, inode, &
-                         ionode, reset_L, .false.)
+          call FindMinDM(n_cg_L_iterations, vary_mu, L_tolerance, &
+                         reset_L, .false.)
        else 
           ! Save present energy and density
           if (diff_E.gt.zero .and. inode==ionode) write(io_lun,'(/20x,A,f15.7,A,i3)') &
-             'LFD_minimise: Energy rises by ', diff_E, ' at iteration # ',iter 
+               'LFD_minimise: Energy rises by ', diff_E, ' at iteration # ',iter 
           total_energy   = total_energy_last
           total_energy_0 = total_energy_last
           do spin = 1, nspin
@@ -2396,31 +2421,14 @@ contains
           do spin_SF = 1, nspin_SF
              data_PAO0(:,spin_SF) = mat_p(matSFcoeff(spin_SF))%matrix
           end do
-          if (inode==ionode) write(io_lun,'(/20x,A,i5)') 'LFD_minimise: Save SF coefficients at iteration # ',iter
+          if (inode==ionode) write(io_lun,'(/20x,A,i5)') &
+               'LFD_minimise: Save SF coefficients at iteration # ',iter
        endif
 
-       ! Output current SFcoeff and density
-       if (nspin_SF == 1) then
-          call dump_matrix("SFcoeff",    matSFcoeff(1), inode)
-       else
-          call dump_matrix("SFcoeff_up", matSFcoeff(1), inode)
-          call dump_matrix("SFcoeff_dn", matSFcoeff(2), inode)
-       end if
-       if(nspin==1) then
-          allocate(rho_total(maxngrid), STAT=stat)
-          if (stat /= 0) call cq_abort("Error allocating rho_total: ", maxngrid)
-          call reg_alloc_mem(area_ops, n_my_grid_points, type_dbl)
-          rho_total = zero
-          rho_total(:) = spin_factor * rho(:,1)
-          call dump_charge(rho_total, n_my_grid_points, inode, spin=0)
-          deallocate(rho_total, STAT=stat)
-          if (stat /= 0) call cq_abort("Error deallocating rho_total")
-          call reg_dealloc_mem(area_ops, n_my_grid_points, type_dbl)
-       else if (nspin == 2) then
-          call dump_charge(rho(:,1), n_my_grid_points, inode, spin=1)
-          call dump_charge(rho(:,2), n_my_grid_points, inode, spin=2)
-       end if
-
+       ! Write out current SF coefficients and density matrices with some iprint (in future)
+       if(n_dumpSFcoeff > 0 .and. mod(iter,n_dumpSFcoeff) ==0) then
+          call dump_pos_and_matrices(index=unit_MSSF_save)
+       endif
        ! Go out if converged
        if (convergence_flag) then
           deallocate(data_PAO0)
@@ -2430,17 +2438,17 @@ contains
     enddo ! iter
 
     if (inode==ionode) write(io_lun,'(A,I3,A)') &
-     'LFD PAO minimisation is not converged after ',LFD_max_iteration,' iterations.'
+         'LFD PAO minimisation is not converged after ',LFD_max_iteration,' iterations.'
     deallocate(data_PAO0)
 
     call reg_dealloc_mem(area_minE, length*nspin_SF, type_dbl)
-!
+    !
     return
-!
+    !
 7   format(/20x,'------------ LFD Variation #: ',i5,' ------------',/)
 18  format(///20x,'The LFD minimisation has converged to a ',A,' at iteration #',I3, &
-            //20x,'Total energy = ',f15.7)
+         //20x,'Total energy = ',f15.7)
   end subroutine LFD_minimise
-!!***
+  !!***
 
 end module multisiteSF_module

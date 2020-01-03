@@ -61,6 +61,10 @@
 !!    Understand and document onsite_T
 !   2014/09/15 18:30 lat
 !!    fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
+!   2019/12/30 tsuyoshi
+!!    introduced flag_DumpChargeDensity to control dump_charge in the end of get_H_matrix
+!!  2020/01/02 16:53 dave
+!!    Moved flag to density_module.f90 (more logical location)
 !!  SOURCE
 !!
 module H_matrix_module
@@ -82,6 +86,7 @@ module H_matrix_module
        RCSid = "$Id$"
   logical :: locps_output
   integer :: locps_choice
+
 !!***
 
 contains
@@ -174,6 +179,8 @@ contains
   !!  2018/01/30 10:06 dave
   !!   Moved call to NA projector matrix build inside the rebuild_KE_NL loop to improve
   !!   efficiency (it should have been in there in the first place)
+  !!  2018/11/13 17:30 nakata
+  !!   Changed matS, matKE, matNL and matNA to be spin_SF dependent
   !!  2019/01/31 16:00 nakata
   !!   Moved dump_matrix(NSmatrix) to sub:get_S_matrix
   !! SOURCE
@@ -206,7 +213,7 @@ contains
                                            IPRINT_TIME_THRES1,          &
                                            iprint_SC,                   &
                                            flag_perform_cDFT,           &
-                                           area_ops, nspin,             &
+                                           area_ops, nspin, nspin_SF,   &
                                            spin_factor, blips,          &
                                            flag_analytic_blip_int,      &
                                            flag_neutral_atom
@@ -234,6 +241,7 @@ contains
     use exx_io,                      only: exx_global_write
 !****lat>$
     use energy, only: local_ps_energy
+    use density_module,              only: flag_DumpChargeDensity
     
     implicit none
 
@@ -249,7 +257,7 @@ contains
     ! local variables
     real(double), dimension(:), allocatable :: rho_total
     real(double)   :: kinetic_energy, nl_energy
-    integer        :: stat, spin
+    integer        :: stat, spin, spin_SF
     type(cq_timer) :: tmr_l_hmatrix
     type(cq_timer) :: backtrace_timer
     integer        :: backtrace_level
@@ -289,7 +297,7 @@ contains
        if (rebuild_KE_NL) then
           if (inode == ionode .and. iprint_ops > 3)&
                & write(io_lun, fmt='(2x,"Rebuilding KE")')
-          ! both matKE and matNL are independent of spin (only XC is spin dependent)
+          ! both matKEatomf and matNLatomf are independent of spin (only XC is spin dependent)
           if(.NOT.flag_analytic_blip_int.OR.flag_basis_set/=blips) &
                call matrix_scale(zero, matKEatomf)
           call matrix_scale(zero, matNLatomf)
@@ -403,10 +411,12 @@ contains
     endif
 
     if (flag_do_SFtransform) then
-       call AtomF_to_SF_transform(matKE, matKEatomf, 1, Hrange)   ! only to output kinetic energy
-       call AtomF_to_SF_transform(matNL, matNLatomf, 1, Hrange)   ! only to output non-local PP energy
-       if(flag_neutral_atom_projector) &
-            call AtomF_to_SF_transform(matNA, matNAatomf, 1, Hrange)   ! only to output neutral atom energy
+       do spin_SF = 1, nspin_SF
+          call AtomF_to_SF_transform(matKE(spin_SF), matKEatomf, spin_SF, Hrange)   ! only to output kinetic energy
+          call AtomF_to_SF_transform(matNL(spin_SF), matNLatomf, spin_SF, Hrange)   ! only to output non-local PP energy
+          if(flag_neutral_atom_projector) &
+               call AtomF_to_SF_transform(matNA(spin_SF), matNAatomf, spin_SF, Hrange)   ! only to output neutral atom energy
+       enddo
        do spin = 1, nspin
           if (flag_exx) call AtomF_to_SF_transform(matX(spin), matXatomf(spin), spin, Hrange)   ! only to output EXX energy
           call AtomF_to_SF_transform(matH(spin), matHatomf(spin), spin, Hrange)   ! total electronic Hamiltonian
@@ -424,13 +434,20 @@ contains
        end if
     end if
     if (iprint_ops > 4) then
-       call dump_matrix("NNL", matNL, inode)
-       call dump_matrix("NKE", matKE, inode)
+       if (nspin_SF == 1) then
+          call dump_matrix("NNL", matNL(1), inode)
+          call dump_matrix("NKE", matKE(1), inode)
+       else
+          call dump_matrix("NNL_up", matNL(1), inode)
+          call dump_matrix("NNL_dn", matNL(2), inode)
+          call dump_matrix("NKE_up", matKE(1), inode)
+          call dump_matrix("NKE_dn", matKE(2), inode)
+       end if
     endif
     !
     !
     ! dump charges if required
-    if (iprint_SC > 2) then
+    if (flag_DumpChargeDensity .or. iprint_SC > 2) then
        if(nspin==1) then
           allocate(rho_total(size), STAT=stat)
           if (stat /= 0) call cq_abort("Error allocating rho_total: ", size)

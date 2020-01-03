@@ -17,6 +17,8 @@
 !!    Preparing for inclusion in main trunk
 !!   2012/04/21 L.Tong
 !!   - Moved get_cdft_constraint from density module to here
+!!   2019/10/24 11:52 dave
+!!    Changed function calls to FindMinDM
 !!  SOURCE
 !!
 module cdft_module
@@ -516,7 +518,7 @@ contains
      ! Find minimum density matrix
      Ltol = tolerance
      !reset_L = .true.
-     call FindMinDM(n_CG_L_iterations, vary_mu, Ltol, inode, ionode, &
+     call FindMinDM(n_CG_L_iterations, vary_mu, Ltol, &
                     reset_L, .false.)
      ! If we're using O(N), we only have L, and we need K - if
      ! diagonalisation, we have K
