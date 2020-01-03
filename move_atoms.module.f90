@@ -1254,7 +1254,7 @@ contains
     use GenBlas,        only: dot
     use force_module,   only: tot_force
     use io_module,      only: write_atomic_positions, pdb_template
-    use density_module, only: density, flag_no_atomic_densities, set_density_pcc
+    use density_module, only: density, set_density_pcc
     use maxima_module,  only: maxngrid
     use matrix_data, ONLY: Lrange, Hrange, SFcoeff_range, SFcoeffTr_range, HTr_range
     use mult_module, ONLY: matL,L_trans, matK, matSFcoeff
@@ -1439,7 +1439,7 @@ contains
     use GenBlas,        only: dot
     use force_module,   only: tot_force
     use io_module,      only: write_atomic_positions, pdb_template
-    use density_module, only: density, flag_no_atomic_densities, set_density_pcc
+    use density_module, only: density, set_density_pcc
     use maxima_module,  only: maxngrid
     use matrix_data, ONLY: Lrange, Hrange, SFcoeff_range, SFcoeffTr_range, HTr_range
     use mult_module, ONLY: matL,L_trans, matK, matSFcoeff
