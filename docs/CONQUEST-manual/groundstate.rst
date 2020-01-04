@@ -309,6 +309,20 @@ functions are built and represented can be found in the manual section on
 
 Go to :ref:`top <groundstate>`
 
+.. _gs_suppfunc:
+
+Charged systems
+-----------------
+We can treat  charged systems by setting ``General.NetCharge``.
+
+::
+
+   General.NetCharge 1.0
+
+This net charge is the charge of the unit cell, and the background charge is adopted.
+
+Go to :ref:`top <groundstate>`
+
 .. bibliography:: references.bib
     :cited:
     :labelprefix: G
