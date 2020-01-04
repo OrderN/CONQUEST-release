@@ -18,6 +18,8 @@ When we use PAOs, there are three ways to to construct support functions:
 * Multi-site support functions from PAOs
 * on-site support functions from PAOs
 
+Primitive PAOs are efficnet for small systems. When using large PAOs for large systems (containing more than several hundred atoms), multi-site support functions and on-site support functions will be more efficient than primitive PAOs.
+
 
 .. _basis_paos:
 
