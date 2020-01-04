@@ -12,58 +12,59 @@ Two kinds of real-space basis functions are supported in CONQUEST, pseudo-atomic
 
    Basis.BasisSet PAOs
 
-There are four ways to construct support functions:
+When we use PAOs, there are three ways to to construct support functions:
 
 * primitive PAOs as support functions (simplest)
 * Multi-site support functions from PAOs
 * on-site support functions from PAOs
-* support functions from blips
 
-For the first case, users don't need to specify any input parameters related to support functions in ``Conquest_input``.
-
-The latter three cases, small number of support functions are constructed by taking linear combinations of the basis functions.
-In this case, the number of the support functions is required to be specified by ``Atom.NumberOfSupports``.
-The linear-combination coefficients are calculated as exlpained below, or read from the ``SFcoeffmatrix2`` files for PAOs or from the ``blip_coeffs`` files for blips by setting ``Basis.LoadCoeffs T``. 
 
 .. _basis_paos:
 
-Pseudo-atomic orbitals
-----------------------
+Pseudo-atomic orbitals (PAOs)
+-----------------------------
 
 PAOs are the atomic-orbital basis functions found from the pseudo-potentials and consists of radial functions (:math:`\zeta`) multiplied by spherical harmonic functions. 
 The minimal PAOs are *single-*:math:`\zeta` *(SZ)* PAOs, in which a radial function is prepared for each spherical harmonic function. The computational cost with SZ PAOs is much lower than larger PAOs, but the accuracy is often insufficient.
 In general, the calculation accuracy is improved by using *multiple-*:math:`\zeta` PAOs in which several radial functions are used for each spherical harmonic function, although the systematic improvement is not guaranteed (see also :ref:`basis_blips`). Adding polarization functions is also important for accurate descriptions of electron polarization around the atoms in molecules and solids.
 
-When primitive PAOs are used as the support functions without any modifications, the parameters related to the support functions are automatically set based on the information of the PAOs in ``.ion`` files.
+.. _basis_primitivepaos:
+
+Using PAOs as support functions (as is)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+The easiest way to prepare support functions is to use primitive PAOs as the support functions without any modifications. In this case, the input parameters related to the support functions are automatically set by obtaining the information from the PAO files (``.ion`` files). Therefore, users don't need to specify any input parameters related to support functions in ``Conquest_input``.
 
 
 .. _basis_mssf:
 
 Multi-site support functions
-----------------------------
-When ``Basis.MultisiteSF T`` is set, the *multi-site support functions* are constructed.
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Since the computational cost of Conquest scales cubically to the number of support functions, contracting PAOs is an efficient way to reduce the computational cost when we use large multiple-:math:`\zeta` PAOs. Multi-site support functions is a kind of contracted functions, which are constructed by taking linear combinations of the multiple-:math:`\zeta` PAOs on each atom and its neighbouring atoms in the multi-site range ``Atom.MultisiteRange``. Multi-site support functions are constructed for every atom in systems.
+
+Multi-site support functions will be constructed by setting ``Basis.MultisiteSF`` to be .true.,
 
 ::
 
    Basis.BasisSet PAOs
    Basis.MultisiteSF T
 
-The multi-site support functions are constructed by taking linear combinations of the multiple-:math:`\zeta` PAOs on each atom and its neighbouring atoms in the multi-site range ``Atom.MultisiteRange``.
-The number of the support functions is required to be specified by ``Atom.NumberOfSupports``, which should be equal or larger than the number of SZ for the atoms. Setting ``Multisite.nonminimal T`` is required when ``Atom.NumberOfSupports`` is larger than SZ.
+We need to specify the number of support functions to be constructed ``Atom.NumberOfSupports`` and the range of the neighboring atoms included in the multi-site support functions ``Atom.MultisiteRange``.
+The number of multi-site support functions is required to be equal or larger than the minimal basis (SZ) size of the atom. When ``Atom.NumberOfSupports`` is larger than the SZ size, we need to declare it by setting ``Multisite.nonminimal`` to be .true.
 
 There are two methods to determine the linear-combination coefficients, 
 the *local filter diagonalization (LFD)* method ``Multisite.LFD`` and the *numerical optimisation* ``minE.VaryBasis``.
 
-LFD
+
+Local filter diagonalization (LFD)
 +++++
 
-The coefficients :math:`C` are determined by projecting subspace occupied molecular orbitals :math:`C_{sub}` around each atom to the localized trial vectors :math:`t`,
+In this method, the coefficients :math:`C` are determined by projecting subspace molecular orbitals :math:`C_{sub}` around each atom to the localized trial vectors :math:`t`,
 
 :math:`C = C_{sub} f(\varepsilon_{sub}) C_{sub}^T S_{sub} t`
 
 
-The LFD subspace region is determined for each atom with the range ``Atom.LFDRange``, which is required to be equal or larger than ``Atom.MultisiteRange``.
-(Currently the largest ``Atom.MultisiteRange`` and ``Atom.LFDRange`` among the atoms are used for every atom.)
+The LFD subspace region is determined for each atom by setting ``Atom.LFDRange``, which is required to be equal or larger than ``Atom.MultisiteRange``.
+(Currently, the largest ``Atom.MultisiteRange`` and ``Atom.LFDRange`` among the atoms are used for every atom.)
 
 ::
 
@@ -155,12 +156,10 @@ If the users already have some good initial coefficient values as the ``SFcoeffm
 
 
 
-
-
 .. _basis_ossf:
 
 On-site support functions
--------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^
 
 On-site support functions are the linear combinations of the PAOs only on the target atom.
 In this case, ``Atom.MultisiteRange`` should be small enough not to include any neighboring atoms.
@@ -242,6 +241,12 @@ you may need to switch off the preconditinoning procedure for length-scale ill c
 
 	minE.PreconditionBlips              F 
 
+
+.. _basis_readcoeffs:
+
+Reading coefficients from files
+-----
+The calculated linear-combination coefficients of the support functions are stored in ``SFcoeffmatrix2`` files for PAOs or ``blip_coeffs`` files for blips. Those files can be read by setting ``Basis.LoadCoeffs T`` in the subsequent calculations.
 
 .. _basis_bsse:
 
