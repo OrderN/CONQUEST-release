@@ -32,7 +32,7 @@ Support functions are used to express density matrices. The functions are constr
 
 When PAOs are used as support functions without any modification, we don't need to set any parameters related to support functions in ``Conquest_input``. 
 
-If we contract multiple PAOs to small number of support functions or use blip functions, we need to provide several input parameters.
+If we contract multiple PAOs to small number of support functions or use blip functions, we need to provide several input parameters. There are two kinds of support functions contracted from PAOs, *multi-site* support functions and *on-site* support functions.
 
 Full details of how the support functions are found and represented
 can be found in :ref:`basissets`.
