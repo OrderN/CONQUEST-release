@@ -75,12 +75,14 @@
 !!   2019/03/28 zamaan
 !!    Changed stress 3-vectors to 3x3 matrices. Modified calculations to
 !!    include off-diagonal elements.
+!!   2019/05/08 zamaan
+!!    Added atomic contributions to stress for computing heat flux
 !!  SOURCE
 !!
 module force_module
 
   use datatypes
-  use global_module,          only: io_lun
+  use global_module,          only: io_lun, atomic_stress
   use timer_module,           only: start_timer, stop_timer, cq_timer
   use timer_module,           only: start_backtrace, stop_backtrace
   use timer_stdclocks_module, only: tmr_std_allocation,      &
@@ -207,11 +209,15 @@ contains
   !!    Renamed supportfns -> atomfns
   !!   2018/03/06 15:46 dave
   !!    Added output in GPa for pressure (along with conventional sign change)
+  !!   2019/05/08 zamaan
+  !!    Initialise atomic_stress, the array for storing atomic stress contributions
+  !!   2019/12/10 10:43 dave
+  !!    Remove redundant argument (expected_reduction)
   !!  SOURCE
   !!
   subroutine force(fixed_potential, vary_mu, n_cg_L_iterations, &
                    tolerance, con_tolerance, total_energy,      &
-                   expected_reduction, write_forces, level )
+                   write_forces, level )
 
     use datatypes
     use numbers
@@ -221,7 +227,7 @@ contains
                                       screened_ion_force, screened_ion_stress
     use pseudopotential_data,   only: non_local
     use GenComms,               only: my_barrier, inode, ionode,       &
-                                      cq_abort
+                                      cq_abort, gsum
     ! TM new pseudo
     use pseudopotential_common, only: pseudo_type, OLDPS, SIESTA,      &
                                       STATE, ABINIT, core_correction, flag_neutral_atom_projector
@@ -238,7 +244,9 @@ contains
                                       nspin, spin_factor, &
                                       flag_analytic_blip_int, &
                                       flag_neutral_atom, flag_stress, &
-                                      rcellx, rcelly, rcellz
+                                      rcellx, rcelly, rcellz, &
+                                      flag_atomic_stress, non_atomic_stress, &
+                                      flag_heat_flux
     use density_module,         only: get_electronic_density, density, &
                                       build_Becke_weight_forces
     use functions_on_grid,      only: atomfns, H_on_atomfns
@@ -260,7 +268,6 @@ contains
     logical      :: vary_mu, fixed_potential, write_forces
     integer      :: n_cg_L_iterations
     real(double) :: tolerance, con_tolerance, total_energy
-    real(double) :: expected_reduction
     integer, optional :: level 
 
     ! Local variables
@@ -389,7 +396,7 @@ contains
     call start_timer(tmr_l_tmp1, WITH_LEVEL)
     call pulay_force(p_force, KE_force, fixed_potential, vary_mu, &
                      n_cg_L_iterations, tolerance, con_tolerance, &
-                     total_energy, expected_reduction, ni_in_cell)
+                     total_energy, ni_in_cell)
     call stop_print_timer(tmr_l_tmp1, "Pulay force", IPRINT_TIME_THRES2)
     call start_timer(tmr_l_tmp1, WITH_LEVEL)
     if (flag_perform_cdft) then
@@ -588,8 +595,15 @@ contains
                  XC_stress(dir1,dir2) + screened_ion_stress(dir1,dir2) + &
                  Hartree_stress(dir1,dir2) + loc_HF_stress(dir1,dir2) +  &
                  pcc_stress(dir1,dir2) + nonSCF_stress(dir1,dir2)
-               if(flag_neutral_atom_projector) stress(dir1,dir2) = &
-                  stress(dir1,dir2) + NA_stress(dir1,dir2)
+               if (flag_atomic_stress) then
+                 non_atomic_stress(dir1,dir2) = &
+                   non_atomic_stress(dir1,dir2) + GPV_stress(dir1,dir2) + &
+                   XC_stress(dir1,dir2) + Hartree_stress(dir1,dir2)
+               end if
+               if (flag_neutral_atom_projector) then
+                 stress(dir1,dir2) = stress(dir1,dir2) + NA_stress(dir1,dir2)
+               end if
+
             end do
          end do
       else
@@ -598,16 +612,26 @@ contains
                stress(dir1,dir2) = KE_stress(dir1,dir2) + &
                  SP_stress(dir1,dir2) + PP_stress(dir1,dir2) + &
                  NL_stress(dir1,dir2) + GPV_stress(dir1,dir2) + &
-                 XC_stress(dir1,dir2) + Ion_Interaction_stress(dir1,dir2) + &
+                 XC_stress(dir1,dir2) + ion_interaction_stress(dir1,dir2) + &
                  Hartree_stress(dir1,dir2) + loc_HF_stress(dir1,dir2) + &
                  loc_G_stress(dir1,dir2) + pcc_stress(dir1,dir2) + &
                  nonSCF_stress(dir1,dir2)
+               if (flag_atomic_stress) then
+                 ! non-atomic ion_interaction_stress added in
+                 ! ion_electrostatic_module - zamaan
+                 non_atomic_stress(dir1,dir2) = &
+                   non_atomic_stress(dir1,dir2) + GPV_stress(dir1,dir2) + &
+                   XC_stress(dir1,dir2) + Hartree_stress(dir1,dir2) + &
+                   loc_G_stress(dir1,dir2)
+               end if
             end do
          end do
       end if
+      if (flag_atomic_stress) call gsum(atomic_stress,3,3,ni_in_cell)
+
       if (inode == ionode) then       
          write (io_lun,fmt='(/4x,"                  ",3a15)') "X","Y","Z"
-         write(io_lun,fmt='(4x,"Stress contributions:")')
+         if(iprint_MD > 1) write(io_lun,fmt='(4x,"Stress contributions:")')
       end if
       call print_stress("K.E. stress:      ", KE_stress, 3)
       call print_stress("S-Pulay stress:   ", SP_stress, 3)
@@ -631,7 +655,12 @@ contains
       ! Include Ha/cubic bohr to GPa conversion and 1/volume factor
       ! Factor of 1e21 comes from Ang to m (1e30) and Pa to GPa (1e-9) 
       scale = -(HaToeV*eVToJ*1e21_double)/(volume*BohrToAng*BohrToAng*BohrToAng)
-      call print_stress("Total pressure:   ", stress*scale, 0)
+      ! We need pressure in GPa, and only diagonal terms output
+      !call print_stress("Total pressure:   ", stress*scale, 0)
+      if(inode==ionode.AND.iprint_MD>=0) &
+           write(io_lun,'(/4x,a18,3f15.8,a4)') "Total pressure:   ",stress(1,1)*scale,&
+           stress(2,2)*scale,stress(3,3)*scale," GPa"
+      if (flag_atomic_stress .and. iprint_MD > 2) call check_atomic_stress
     end if
 
     call my_barrier()
@@ -783,11 +812,13 @@ contains
   !!    Small bug fix on order of deallocation of matM12atomf
   !!   2019/04/04 zamaan
   !!    Added calculations for off-diagonal elements of PP_stress and SP_stress
+  !!   2019/05/08 zamaan
+  !!    Added atomic stress contributions
   !!  SOURCE
   !!
   subroutine pulay_force(p_force, KE_force, fixed_potential, vary_mu,  &
                          n_cg_L_iterations, L_tol, self_tol, &
-                         total_energy, expected_reduction, n_atoms, level)
+                         total_energy, n_atoms, level)
 
     use datatypes
     use logicals
@@ -815,7 +846,8 @@ contains
                                            flag_analytic_blip_int,   &
                                            id_glob, species_glob,    &
                                            flag_diagonalisation,     &
-                                           flag_full_stress, flag_stress
+                                           flag_full_stress, flag_stress, &
+                                           flag_atomic_stress
     use set_bucket_module,           only: rem_bucket, atomf_atomf_rem
     use blip_grid_transform_module,  only: blip_to_support_new,      &
                                            blip_to_grad_new
@@ -856,7 +888,7 @@ contains
     logical      :: vary_mu, fixed_potential
     integer      :: n_atoms
     integer      :: n_cg_L_iterations
-    real(double) :: L_tol, self_tol, total_energy, expected_reduction
+    real(double) :: L_tol, self_tol, total_energy
     real(double), dimension(3,n_atoms) :: p_force, KE_force
     integer, optional :: level
 
@@ -896,7 +928,7 @@ contains
     !   with local communication. (I am not sure it is important or not)
     !    --  02/Feb/2001  Tsuyoshi Miyazaki
 
-    integer        :: iprim, np, ni, isf, mat_tmp, mat_tmp2, n_stress
+    integer        :: iprim, np, ni, isf, mat_tmp, mat_tmp2, n_stress, iatom
     integer, dimension(nspin) :: matM12atomf
     real(double)   :: matM12_value, matK_value
     type(cq_timer) :: tmr_std_loc
@@ -1016,6 +1048,7 @@ contains
              do i=1,ltrans(aSa_range)%n_hnab(j_in_halo) ! Loop over atoms i: primary set neighbours of j
                 i_in_prim=ltrans(aSa_range)%i_prim(ltrans(aSa_range)%i_beg(j_in_halo)+i-1)
                 speci = bundle%species(i_in_prim)
+                iatom = bundle%ig_prim(i_in_prim)
                 this_nsfi = nsf_species(speci)
                 dr(1)=BCS_parts%xcover(gcspart+jseq-1)-bundle%xprim(i_in_prim)
                 dr(2)=BCS_parts%ycover(gcspart+jseq-1)-bundle%yprim(i_in_prim)
@@ -1035,10 +1068,8 @@ contains
                            forS,forKE,this_data_M12,this_data_K, i_in_prim, &
                            j_in_halo,dr(1),dr(2),dr(3),speci,specj, &
                            this_nsfi,this_nsfj,dir1)
-                      p_force(dir1,bundle%ig_prim(i_in_prim)) = p_force(dir1,bundle%ig_prim(i_in_prim)) &
-                           - forS!(dir1)
-                      KE_force(dir1,bundle%ig_prim(i_in_prim)) = KE_force(dir1,bundle%ig_prim(i_in_prim)) &
-                           - forKE!(dir1)
+                      p_force(dir1,iatom) = p_force(dir1,iatom) - forS!(dir1)
+                      KE_force(dir1,iatom) = KE_force(dir1,iatom) - forKE!(dir1)
                       if (flag_stress) then
                         if (flag_full_stress) then
                           do dir2=1,3
@@ -1046,6 +1077,11 @@ contains
                               forS*dr(dir2)
                             KE_stress(dir1,dir2) = KE_stress(dir1,dir2) - &
                               forKE*dr(dir2)
+                            if (flag_atomic_stress) then
+                              atomic_stress(dir1,dir2,iatom) = &
+                                atomic_stress(dir1,dir2,iatom) - &
+                                (forS*dr(dir2) + forKE*dr(dir2))*half
+                            end if
                           end do
                         else
                           SP_stress(dir1,dir1) = SP_stress(dir1,dir1) - &
@@ -1233,9 +1269,14 @@ contains
                           if (flag_full_stress) then
                             PP_stress(dir1,dir2) = PP_stress(dir1,dir2) - &  
                                return_matrix_value(mat_tmp2, np, ni, 0, 0, isf, isf, 1)
+                            if (flag_atomic_stress) then
+                              atomic_stress(dir1,dir2,i) = &
+                                atomic_stress(dir1,dir2,i) - &
+                                return_matrix_value(mat_tmp2, np, ni, 0, 0, isf, isf, 1)
+                            end if
                           else
                             PP_stress(dir1,dir1) = PP_stress(dir1,dir1) - &  
-                               return_matrix_value(mat_tmp2, np, ni, 0, 0, isf, isf, 1)
+                              return_matrix_value(mat_tmp2, np, ni, 0, 0, isf, isf, 1)
                           end if
                         end if
                      end do ! isf
@@ -1329,6 +1370,11 @@ contains
                                      SP_stress(dir1,dir2) = &
                                        SP_stress(dir1,dir2) + &
                                        thisG_dS_dR * r_str(dir2)
+                                       if (flag_atomic_stress) then
+                                         atomic_stress(dir1,dir2,i) = &
+                                           atomic_stress(dir1,dir2,i) + &
+                                           thisG_dS_dR * r_str(dir2) * half
+                                       end if
                                    end do
                                  else
                                    SP_stress(dir1,dir1) = &
@@ -1831,6 +1877,8 @@ contains
   !!    Renamed supportfns -> atomfns
   !!   2017/02/21 16:30 nakata
   !!    Removed unused PAO_to_grad
+  !!   2019/05/08 zamaan
+  !!    Added atomic stress contributions
   !!  SOURCE
   !!
   subroutine get_HF_non_local_force(HF_NL_force, what_force, n_atoms)
@@ -1867,7 +1915,8 @@ contains
                                            id_glob, species_glob,      &
                                            flag_analytic_blip_int,     &
                                            ni_in_cell, flag_full_stress, &
-                                           flag_stress
+                                           flag_stress, flag_atomic_stress, &
+                                           area_moveatoms
     ! TEMP
     use build_PAO_matrices,          only: assemble_deriv_2
     use group_module,                only: parts
@@ -1885,6 +1934,8 @@ contains
     use primary_module,              only: bundle
     use cover_module,                only: BCS_parts
     use species_module,              only: nsf_species, nlpf_species
+    use memory_module,               only: reg_alloc_mem, reg_dealloc_mem,  &
+                                           type_dbl
 
     implicit none
 
@@ -1905,6 +1956,7 @@ contains
                     neigh_global_part, neigh_species, wheremat, isf, jsf
     real(double) :: dx, dy, dz, thisdAP
     real(double), dimension(3,3) :: NL_P_stress, NL_HF_stress
+    real(double), dimension(:,:,:), allocatable :: NL_P_atomic, NL_HF_atomic
     real(double), dimension(3) :: r_str
     type(cq_timer) :: backtrace_timer
 
@@ -1929,6 +1981,15 @@ contains
     end do
     if (flag_basis_set == blips .and. (.not. flag_analytic_blip_int)) then
        dpseudofns = allocate_temp_fn_on_grid(nlpf)
+    end if
+    if (flag_atomic_stress) then
+      allocate(NL_HF_atomic(3,3,ni_in_cell), STAT=stat)
+      if (stat /= 0) &
+        call cq_abort("Error allocating NL atomic stress: ", ni_in_cell)
+      allocate(NL_P_atomic(3,3,ni_in_cell), STAT=stat)
+      if (stat /= 0) &
+        call cq_abort("Error allocating NL atomic stress: ", ni_in_cell)
+      call reg_alloc_mem(area_moveatoms, 2*3*3*ni_in_cell, type_dbl)
     end if
     HF_NL_force = zero
     NL_P_stress = zero
@@ -2132,8 +2193,13 @@ contains
              if (flag_stress) then
                if (flag_full_stress) then
                  do l = 1, 3
-                   call matrix_diagonal_stress(matdAPr(k,l), matU(spin), &
-                                        NL_P_stress(k,l), APrange, inode)
+                   if (flag_atomic_stress) then
+                     call matrix_diagonal_stress(matdAPr(k,l), matU(spin), &
+                          NL_P_stress(k,l), APrange, inode,atomic_stress(k,l,:))
+                   else
+                     call matrix_diagonal_stress(matdAPr(k,l), matU(spin), &
+                          NL_P_stress(k,l), APrange, inode)
+                   end if
                  end do
                else
                  call matrix_diagonal_stress(matdAPr(k,k), matU(spin), &
@@ -2153,12 +2219,17 @@ contains
              if (flag_stress) then
                if (flag_full_stress) then
                  do l = 1, 3
-                   call matrix_diagonal_stress(matdPAr(k,l), matUT(spin), &
-                                        NL_HF_stress(k,l), PArange, inode)
+                   if (flag_atomic_stress) then
+                     call matrix_diagonal_stress(matdPAr(k,l), matUT(spin), &
+                          NL_HF_stress(k,l), PArange,inode,atomic_stress(k,l,:))
+                   else
+                     call matrix_diagonal_stress(matdPAr(k,l), matUT(spin), &
+                          NL_HF_stress(k,l), PArange, inode)
+                   end if
                  end do
                else
                  call matrix_diagonal_stress(matdPAr(k,k), matUT(spin), &
-                                      NL_HF_stress(k,k), PArange, inode)
+                      NL_HF_stress(k,k), PArange, inode)
                end if
              end if
           end do ! spin
@@ -2166,6 +2237,12 @@ contains
     end if
 
     call gsum(HF_NL_force, 3, n_atoms)
+    if (flag_atomic_stress) then
+      deallocate(NL_HF_atomic, NL_P_atomic, STAT=stat)
+      if (stat /= 0) &
+        call cq_abort("Error deallocating NL atomic stress: ", ni_in_cell)
+      call reg_dealloc_mem(area_moveatoms, 2*3*3*ni_in_cell, type_dbl)
+    end if
     if (flag_stress) then
        do k=1,3
           if (flag_full_stress) then
@@ -2179,6 +2256,8 @@ contains
           end if
        end do
       call gsum(NL_stress,3,3)
+      ! Note that the atomic contributions are computed in flag_diagonal_stress
+      ! for memory efficiency
     end if
     do k = 3, 1, -1
        if (flag_stress) then
@@ -2285,6 +2364,8 @@ contains
   !!    Introduced atomf instead of sf
   !!   2019/04/04 zamaan
   !!    Added off-diagonal elements of KE_stress
+  !!   2019/05/08 zamaan
+  !!    Added atomic stress contributions
   !!  SOURCE
   !!
   subroutine get_KE_force(KE_force, n_atoms)
@@ -2310,7 +2391,8 @@ contains
                                            blips, PAOs, atomf,        &
                                            flag_onsite_blip_ana,      &
                                            nspin, spin_factor,        &
-                                           flag_full_stress, flag_stress
+                                           flag_full_stress, flag_stress, &
+                                           flag_atomic_stress
     use build_PAO_matrices,          only: assemble_deriv_2
     use functions_on_grid,           only: H_on_atomfns,              &
                                            allocate_temp_fn_on_grid,  &
@@ -2322,7 +2404,7 @@ contains
     integer :: n_atoms
     real(double), dimension(3, n_atoms) :: KE_force
     ! local variables
-    integer :: i, j, grad_direction, f_dir1, f_dir2, element, np, nn,&
+    integer :: i, j, grad_direction, dir1, dir2, element, np, nn,&
                atom, n1, n2, mat_grad_T, ist, gcspart, iprim, tmp_fn, &
                spin
     real(double) :: thisK_gradT
@@ -2344,10 +2426,10 @@ contains
 
           ! get the Grad_{\beta} psi_j term
           call blip_to_grad_new(inode-1, grad_direction, H_on_atomfns(1))
-          do f_dir1 = 1, 3
+          do dir1 = 1, 3
              ! get the (d/dR_{i\alpha}) Grad_{\beta} psi_i term
              call blip_to_gradgrad_new(inode-1, grad_direction, &
-                                       f_dir1, tmp_fn)
+                                       dir1, tmp_fn)
              ! now get the (d/dR_{i\alpha}) T_{ij} term from the above
              !new matrix_elements
              call get_matrix_elements_new(inode-1,                       &
@@ -2389,19 +2471,25 @@ contains
                                         return_matrix_value(mat_grad_T,   &
                                         np, i, iprim, &
                                         j, n2, n1)
-                                     KE_force(f_dir1,atom) = &
-                                          KE_force(f_dir1,atom) + thisK_gradT
+                                     KE_force(dir1,atom) = &
+                                          KE_force(dir1,atom) + thisK_gradT
                                      if (flag_stress) then
                                        if (flag_full_stress) then
-                                         do f_dir2=1,3
-                                           KE_stress(f_dir1,f_dir2) = &
-                                                KE_stress(f_dir1,f_dir2) + &
-                                                thisK_gradT * r_str(f_dir2)
+                                         do dir2=1,3
+                                           KE_stress(dir1,dir2) = &
+                                                KE_stress(dir1,dir2) + &
+                                                thisK_gradT * r_str(dir2)
+                                           if (flag_atomic_stress) then
+                                             atomic_stress(dir1,dir2,atom) = &
+                                               atomic_stress(dir1,dir2,atom) +&
+                                               thisK_gradT * r_str(dir2) * half
+
+                                           end if
                                          end do
                                        else
-                                         KE_stress(f_dir1,f_dir1) = &
-                                              KE_stress(f_dir1,f_dir1) + &
-                                              thisK_gradT * r_str(f_dir1)
+                                         KE_stress(dir1,dir1) = &
+                                              KE_stress(dir1,dir1) + &
+                                              thisK_gradT * r_str(dir1)
                                        end if ! flag_full_stress
                                      end if ! flag_stress
                                   end do ! spin
@@ -2419,9 +2507,9 @@ contains
 
     else if (flag_basis_set==PAOs) then
 
-       do f_dir1 = 1, 3
+       do dir1 = 1, 3
           ! Build derivatives
-          call assemble_deriv_2(f_dir1,aHa_range, mat_grad_T, 2)
+          call assemble_deriv_2(dir1,aHa_range, mat_grad_T, 2)
           call start_timer(tmr_std_matrices)
           iprim = 0
           do np = 1, bundle%groups_on_node
@@ -2453,20 +2541,25 @@ contains
                                        np, i, iprim, j, n2, n1) *  &
                                        return_matrix_value(mat_grad_T,   &
                                        np, i, iprim, j, n2, n1)
-                                  KE_force(f_dir1,atom) =       &
-                                       KE_force(f_dir1,atom) +  &
+                                  KE_force(dir1,atom) =       &
+                                       KE_force(dir1,atom) +  &
                                        thisK_gradT
                                   if (flag_stress) then
                                     if (flag_full_stress) then
-                                      do f_dir2=1,3
-                                        KE_stress(f_dir1,f_dir2) = &
-                                             KE_stress(f_dir1,f_dir2) + &
-                                             thisK_gradT * r_str(f_dir2)
-                                      end do ! f_dir2
+                                      do dir2=1,3
+                                        KE_stress(dir1,dir2) = &
+                                             KE_stress(dir1,dir2) + &
+                                             thisK_gradT * r_str(dir2)
+                                        if (flag_atomic_stress) then
+                                          atomic_stress(dir1,dir2,atom) = &
+                                            atomic_stress(dir1,dir2,atom) + &
+                                            thisK_gradT * r_str(dir2) * half
+                                        end if
+                                      end do ! dir2
                                     else
-                                      KE_stress(f_dir1,f_dir1) = &
-                                           KE_stress(f_dir1,f_dir1) + &
-                                           thisK_gradT * r_str(f_dir1)
+                                      KE_stress(dir1,dir1) = &
+                                           KE_stress(dir1,dir1) + &
+                                           thisK_gradT * r_str(dir1)
                                     end if ! flag_full_stress
                                   end if ! flag_stress
                                end do ! spin
@@ -2487,41 +2580,45 @@ contains
       call gsum(KE_stress, 3, 3)
     end if
 
-      call free_temp_matrix(mat_grad_T)
-      call stop_backtrace(t=backtrace_timer,who='get_KE_force',echo=.true.)
+    call free_temp_matrix(mat_grad_T)
+    call stop_backtrace(t=backtrace_timer,who='get_KE_force',echo=.true.)
+    
+    return
+  end subroutine get_KE_force
+  !!***
 
-      return
-    end subroutine get_KE_force
-    !!***
+  ! -----------------------------------------------------------
+  ! Subroutine get_HNA_force
+  ! -----------------------------------------------------------
 
-    ! -----------------------------------------------------------
-    ! Subroutine get_HNA_force
-    ! -----------------------------------------------------------
-
-    !!****f* force_module/get_HNA_force *
-    !!
-    !!  NAME
-    !!   get_HNA_force
-    !!  USAGE
-    !!
-    !!  PURPOSE
-    !!   Gets the neutral atom part of the HF force if using projectors
-    !!   This mixes Hellman-Feynman and Pulay forces (as with NL part above)
-    !!  INPUTS
-    !!
-    !!
-    !!  USES
-    !!
-    !!  AUTHOR
-    !!   D. R. Bowler
-    !!  CREATION DATE
-    !!   2018/01/10
-    !!  MODIFICATION HISTORY
+  !!****f* force_module/get_HNA_force *
+  !!
+  !!  NAME
+  !!   get_HNA_force
+  !!  USAGE
+  !!
+  !!  PURPOSE
+  !!   Gets the neutral atom part of the HF force if using projectors
+  !!   This mixes Hellman-Feynman and Pulay forces (as with NL part above)
+  !!  INPUTS
+  !!
+  !!
+  !!  USES
+  !!
+  !!  AUTHOR
+  !!   D. R. Bowler
+  !!  CREATION DATE
+  !!   2018/01/10
+  !!  MODIFICATION HISTORY
   !!   2018/01/25 12:52 JST dave
   !!    Changed transpose type for mat_dNA to aNAa_trans
   !!   2018/01/30 10:06 dave
   !!    Bug fix (found by Jack Baker): removed premature gsum call on NA_stress
   !!    which led to erroneous stress values on multiple processors
+  !!   2019/05/08 zamaan
+  !!    Added atomic stress contributions
+  !!   2019/10/21 14:22 dave
+  !!    Bug fix: missing term in 1-and-2 centre part
   !!  SOURCE
   !!
   subroutine get_HNA_force(NA_force)
@@ -2552,7 +2649,7 @@ contains
                                            flag_onsite_blip_ana,      &
                                            nspin, spin_factor, ni_in_cell, &
                                            napf, id_glob, flag_full_stress, &
-                                           flag_stress
+                                           flag_stress, flag_atomic_stress
     use build_PAO_matrices,          only: assemble_deriv_2
     use functions_on_grid,           only: H_on_atomfns,              &
                                            allocate_temp_fn_on_grid,  &
@@ -2566,21 +2663,20 @@ contains
     ! local variables
     integer :: i, j, grad_direction, element, np, nn,&
                atom, n1, n2, mat_grad_T, ist, gcspart, iprim, tmp_fn, &
-               spin, mat_dNA, mat_dNAT, j_atom, f_dir1, f_dir2
+               spin, mat_dNA, mat_dNAT, j_atom, dir1, dir2
     integer :: ip, nsf1, nsf2
     real(double) :: thisK_gradT
 
     real(double), dimension(3) :: r_str
     integer, dimension(3) :: matdaNA, matdNAa
     integer, dimension(3,3) :: matdaNAr, matDNAar
-    integer      :: dir1, dir2 , k, l, stat, dpseudofns, i1, i2, &
+    integer      :: k, l, stat, dpseudofns, i1, i2, &
          spec, this_nsf, this_nlpf, ni, isf, jsf
     integer, dimension(2) :: matKzero
     integer      :: nab, neigh_global_num,        &
                     neigh_global_part, neigh_species, wheremat, matU_NA, matUT_NA
     real(double) :: dx, dy, dz, thisdAP, locforce
     real(double), dimension(3,3) :: NA_P_stress, NA_HF_stress
-    real(double), dimension(:), allocatable :: force_contrib, f_c2
     type(cq_timer) :: backtrace_timer
     
     call start_backtrace(t=backtrace_timer,who='get_HNA_force',where=7,level=3,echo=.true.)
@@ -2588,8 +2684,6 @@ contains
 !    ! First, clear the diagonal blocks of data K; this is the easiest way
 !    ! to avoid doing the onsite terms
     NA_force = zero
-    allocate(force_contrib(ni_in_cell))
-    force_contrib = zero
     ! 3-centre terms
     do k = 1, 3
        matdaNA(k) = allocate_temp_matrix (aNArange, aNA_trans, atomf, napf)
@@ -2738,8 +2832,13 @@ contains
           if (flag_stress) then
             if (flag_full_stress) then
               do l = 1, 3
-                call matrix_diagonal_stress(matdaNAr(k,l), matU_NA, &
-                  NA_P_stress(k,l), aNArange, inode)
+                if (flag_atomic_stress) then
+                  call matrix_diagonal_stress(matdaNAr(k,l), matU_NA, &
+                    NA_P_stress(k,l), aNArange, inode, atomic_stress(k,l,:))
+                else
+                  call matrix_diagonal_stress(matdaNAr(k,l), matU_NA, &
+                    NA_P_stress(k,l), aNArange, inode)
+                end if
               end do
             else
               call matrix_diagonal_stress(matdaNAr(k,k), matU_NA, &
@@ -2758,8 +2857,13 @@ contains
           if (flag_stress) then
             if (flag_full_stress) then
               do l = 1, 3
-                call matrix_diagonal_stress(matdNAar(k,l), matUT_NA, &
-                  NA_HF_stress(k,l), NAarange,inode)
+                if (flag_atomic_stress) then
+                  call matrix_diagonal_stress(matdNAar(k,l), matUT_NA, &
+                    NA_HF_stress(k,l), NAarange,inode, atomic_stress(k,l,:))
+                else
+                  call matrix_diagonal_stress(matdNAar(k,l), matUT_NA, &
+                    NA_HF_stress(k,l), NAarange,inode)
+                end if
               end do
             else
               call matrix_diagonal_stress(matdNAar(k,k), matUT_NA, &
@@ -2809,10 +2913,9 @@ contains
     mat_dNA = allocate_temp_matrix(aHa_range,aNAa_trans,atomf,atomf)
     mat_dNAT = allocate_temp_matrix(aHa_range,aNAa_trans,atomf,atomf)
     ! Now, for the offsite part, done on the integration grid.
-    do f_dir1 = 1, 3
-       force_contrib = zero
+    do dir1 = 1, 3
        ! Build derivatives
-       call assemble_deriv_2(f_dir1,aHa_range, mat_dNA, 4)
+       call assemble_deriv_2(dir1,aHa_range, mat_dNA, 4)
        call matrix_transpose(mat_dNA, mat_dNAT)
        call matrix_sum(one,mat_dNA,-one,mat_dNAT)
        ! Add < i | VNA_j | i >
@@ -2848,20 +2951,24 @@ contains
                                     np, i, iprim, j, n2, n1) *  &
                                     return_matrix_value(mat_dNA,   &
                                     np, i, iprim, j, n2, n1)
-                               NA_force(f_dir1,atom) =       &
-                                    NA_force(f_dir1,atom) + two*thisK_gradT
-                               force_contrib(atom) = force_contrib(atom) + two*thisK_gradT
+                               NA_force(dir1,atom) =       &
+                                    NA_force(dir1,atom) + two*thisK_gradT
                                if (flag_stress) then
                                  if (flag_full_stress) then
-                                   do f_dir2=1,3
-                                     NA_stress(f_dir1,f_dir2) = &
-                                       NA_stress(f_dir1,f_dir2) + &
-                                       thisK_gradT * r_str(f_dir2)
+                                   do dir2=1,3
+                                     NA_stress(dir1,dir2) = &
+                                       NA_stress(dir1,dir2) + &
+                                       thisK_gradT * r_str(dir2)
+                                     if (flag_atomic_stress) then
+                                       atomic_stress(dir1,dir2,atom) = &
+                                         atomic_stress(dir1,dir2,atom) + &
+                                         thisK_gradT * r_str(dir2)
+                                     end if
                                    end do ! dir2
                                  else
-                                   NA_stress(f_dir1,f_dir1) = &
-                                     NA_stress(f_dir1,f_dir1) + &
-                                     thisK_gradT * r_str(f_dir1)
+                                   NA_stress(dir1,dir1) = &
+                                     NA_stress(dir1,dir1) + &
+                                     thisK_gradT * r_str(dir1)
                                  end if ! flag_full_stress
                                end if ! flag_stress
                             end do ! spin
@@ -2873,8 +2980,7 @@ contains
           end if  ! (bundle%nm_nodgroup(np) > 0)
        end do ! np
        call matrix_scale(zero,mat_dNAT)
-       call assemble_deriv_2(f_dir1,aHa_range, mat_dNAT, 6)
-       force_contrib = zero
+       call assemble_deriv_2(dir1,aHa_range, mat_dNAT, 6)
        !f_c2 = zero
        iprim = 0
        do np = 1, bundle%groups_on_node
@@ -2897,41 +3003,49 @@ contains
                    ! Global number of neighbour: id_glob( parts%icell_beg(gcs%lab_cell(np)) +ni-1 )
                    j_atom = id_glob( parts%icell_beg( BCS_parts%lab_cell(mat(np,aHa_range)%i_part(ist))) &
                         + mat(np,aHa_range)%i_seq(ist)-1 )
-                   NA_force(f_dir1,j_atom) =       &
-                      NA_force(f_dir1,j_atom) - &
-                      spin_factor * return_matrix_value(mat_dNAT,   &
-                      np, i, iprim, j, 1, 1)
-                   if (flag_stress) then
-                     if (flag_full_stress) then
-                       do f_dir2=1,3
-                         NA_stress(f_dir1,f_dir2) = NA_stress(f_dir1,f_dir2) + &
-                            spin_factor * return_matrix_value(mat_dNAT,   &
-                            np, i, iprim, j, 1, 1) * r_str(f_dir2)
-                       end do
-                     else
-                       NA_stress(f_dir1,f_dir1) = NA_stress(f_dir1,f_dir1) + &
-                          spin_factor * return_matrix_value(mat_dNAT,   &
-                          np, i, iprim, j, 1, 1) * r_str(f_dir1)
-                     end if !flag_full_stress
-                   end if ! flag_stress
-                   force_contrib(j_atom) = force_contrib(j_atom)-spin_factor * return_matrix_value(mat_dNAT,   &
+                   ! These lines ensure that the correct pairs of forces are found
+                   NA_force(dir1,j_atom) =       &
+                        NA_force(dir1,j_atom) - &
+                        spin_factor * return_matrix_value(mat_dNAT,   &
                         np, i, iprim, j, 1, 1)
-                   force_contrib(atom) = force_contrib(atom)+spin_factor * return_matrix_value(mat_dNAT,   &
-                         np, i, iprim, j, 1, 1)
-                   end do ! j
-                end do ! i
-             end if  ! (bundle%nm_nodgroup(np) > 0)
-          end do ! np
+                   NA_force(dir1,atom) =       &
+                        NA_force(dir1,atom) + &
+                        spin_factor * return_matrix_value(mat_dNAT,   &
+                        np, i, iprim, j, 1, 1)
+                   if (flag_stress) then
+                      if (flag_full_stress) then
+                         do dir2=1,3
+                            NA_stress(dir1,dir2) = NA_stress(dir1,dir2) + &
+                                 spin_factor * return_matrix_value(mat_dNAT,   &
+                                 np, i, iprim, j, 1, 1) * r_str(dir2)
+                            if (flag_atomic_stress) then
+                               atomic_stress(dir1,dir2,j_atom) = &
+                                    atomic_stress(dir1,dir2,j_atom) + &
+                                    spin_factor * return_matrix_value(mat_dNAT, &
+                                    np, i, iprim, j, 1, 1) * r_str(dir2)
+                            end if
+                         end do
+                      else
+                         NA_stress(dir1,dir1) = NA_stress(dir1,dir1) + &
+                              spin_factor * return_matrix_value(mat_dNAT,   &
+                              np, i, iprim, j, 1, 1) * r_str(dir1)
+                      end if !flag_full_stress
+                   end if ! flag_stress
+                end do ! j
+             end do ! i
+          end if  ! (bundle%nm_nodgroup(np) > 0)
+       end do ! np
        call stop_timer(tmr_std_matrices)
-    end do ! f_dir1
+    end do ! dir1
 
     call gsum(NA_force, 3, ni_in_cell)
     !KE_stress = half*KE_stress
     if (flag_stress) call gsum(NA_stress,3,3)
+    ! Note that the atomic contributions are computed in flag_diagonal_stress
+    ! for memory efficiency
 
     call free_temp_matrix(mat_dNAT)
     call free_temp_matrix(mat_dNA)
-    deallocate(force_contrib)
     call stop_backtrace(t=backtrace_timer,who='get_HNA_force',echo=.true.)
     return
   end subroutine get_HNA_force
@@ -3019,10 +3133,6 @@ contains
   end subroutine matrix_diagonal
 !!***
 
-! -----------------------------------------------------------
-! Subroutine matrix_diagonal_stress
-! -----------------------------------------------------------
-
 !!****f* force_module/matrix_diagonal_stress *
 !!
 !!  NAME
@@ -3041,9 +3151,10 @@ contains
 !!
 !!  SOURCE
 !!
-  subroutine matrix_diagonal_stress(matA, matB, stress, range, inode)
+  subroutine matrix_diagonal_stress(matA, matB, stress, range, inode, diagonal)
 
     use datatypes
+    use global_module, only: atomic_stress
     use primary_module, only : bundle
     use matrix_module, only: matrix, matrix_halo
     use matrix_data, only : mat, halo
@@ -3055,11 +3166,11 @@ contains
 
     ! Shared variables
     real(double) :: stress
-
+    real(double), dimension(:), optional :: diagonal
     integer :: range, inode, matA, matB
 
     ! Local variables
-    integer :: iprim, np, i, j, element, n1, n2, ist, gcspart
+    integer :: iprim, np, i, j, element, n1, n2, ist, gcspart, atom
     
     iprim = 0
     call start_timer(tmr_std_matrices)
@@ -3067,6 +3178,7 @@ contains
        if(bundle%nm_nodgroup(np) > 0) then
           do i=1,bundle%nm_nodgroup(np)
              iprim = iprim + 1
+             atom = bundle%ig_prim(iprim)
              do j = 1,mat(np,range)%n_nab(i)
                 ist = mat(np,range)%i_acc(i)+j-1
                 gcspart = BCS_parts%icover_ibeg(mat(np,range)%i_part(ist))+mat(np,range)%i_seq(ist)-1
@@ -3076,6 +3188,16 @@ contains
                       stress = stress + &
                            return_matrix_value_pos(matA,element) * &
                            return_matrix_value_pos(matB,element)
+                      if (present(diagonal)) then
+                        diagonal(atom) = diagonal(atom) + &
+                          return_matrix_value_pos(matA,element) * &
+                          return_matrix_value_pos(matB,element) * half
+                        ! the factor of half arises because the total 
+                        ! non-local/neutral atom is 
+                        ! half*(N*_P_stress + N*_HF_stress), but for memory
+                        ! efficiency, I'm not storing the atomic contributions
+                        ! in an array - zamaan
+                      end if
                    end do
                 end do
              end do
@@ -3178,6 +3300,8 @@ contains
   !!   2018/02/14 13:26 dave
   !!    More subtle errors ! The PCC, non-SCF XC stress did not have spin
   !!    factor applied (as above in non-SCF routine)
+  !!   2019/05/08 zamaan
+  !!    Added atomic stress contributions
   !!  SOURCE
   !!
   subroutine get_nonSC_correction_force(HF_force, density_out, inode, &
@@ -3186,12 +3310,13 @@ contains
     use datatypes
     use numbers
     use species_module,      only: species
-    use GenComms,            only: gsum
+    use GenComms,            only: gsum, cq_warn
     use global_module,       only: rcellx, rcelly, rcellz, id_glob,    &
                                    ni_in_cell, species_glob, dens,     &
                                    area_moveatoms, IPRINT_TIME_THRES3, &
                                    flag_pcc_global, nspin, spin_factor, &
-                                   flag_full_stress, flag_stress
+                                   flag_full_stress, flag_stress,      &
+                                   flag_atomic_stress
     use XC,                  only: get_xc_potential,                   &
                                    get_dxc_potential,                  &
                                    flag_is_GGA
@@ -3204,7 +3329,6 @@ contains
     use GenComms,            only: my_barrier, cq_abort
     use atomic_density,      only: atomic_density_table
     use pseudo_tm_info,      only: pseudo
-    use spline_module,       only: dsplint
     use dimens,              only: grid_point_volume, n_my_grid_points
     use GenBlas,             only: axpy
     use density_module,      only: density, density_scale, density_pcc
@@ -3227,10 +3351,11 @@ contains
     real(double), dimension(:,:) :: HF_force
 
     ! Local variables
+    character(len=80) :: sub_name = "get_nonSC_correction_force"
     integer        :: i, j, my_block, n, the_species, iatom, spin, spin_2
     integer        :: ix, iy, iz, iblock, ipoint, igrid, stat, dir1, dir2
     integer        :: ipart, jpart, ind_part, ia, ii, icover, ig_atom
-    real(double)   :: derivative, h_energy, rx, ry, rz, r2, r_from_i,  &
+    real(double)   :: derivative, h_energy, rx, ry, rz, rsq, r_from_i,  &
                       x, y, z, step
     real(double)   :: dcellx_block, dcelly_block, dcellz_block
     real(double)   :: dcellx_grid, dcelly_grid, dcellz_grid
@@ -3241,6 +3366,7 @@ contains
                       z_pcc, derivative_pcc, v_pcc, jacobian
     real(double), dimension(3)       :: r, r_1, r_pcc
     real(double), dimension(3,nspin) :: fr_1, fr_pcc
+    real(double) :: a, b, c, d, r1, r2, r3, r4, rr, da, db, dc, dd
     logical        :: range_flag
     type(cq_timer) :: tmr_l_tmp1, tmr_l_tmp2
     type(cq_timer) :: backtrace_timer
@@ -3260,26 +3386,11 @@ contains
 
 
 !****lat<$
-    call start_backtrace(t=backtrace_timer,who='get_nonSC_correction_force',where=7,level=3,echo=.true.)
+    call start_backtrace(t=backtrace_timer,who=sub_name,where=7,level=3,echo=.true.)
 !****lat>$ 
     ! Spin-polarised PBE non-SCF forces not implemented, so exit if necessary
     if ((nspin == 2) .and. flag_is_GGA) then ! Only true for CQ not LibXC
-       if (inode == ionode) then
-          write (io_lun, fmt='(10x,a)') &
-               "*****************************************************"
-          write (io_lun, fmt='(10x,a)') &
-               "**** WARNING!!! WARNING!!! WARNING!!! WARNING!!! ****"
-          write (io_lun, fmt='(10x,a)') &
-               "**** non-SC correction forces are not implemented ***"
-          write (io_lun, fmt='(10x,a)') &
-               "**** for spin polarised version of PBE functionals **"
-          write (io_lun, fmt='(10x,a)') &
-               "**** correction forces will be set to ZERO !!!   ****"
-          write (io_lun, fmt='(10x,a)') &
-               "**** The forces are NOT to be TRUSTED !!!        ****"
-          write (io_lun, fmt='(10x,a)') &
-               "*****************************************************"
-       end if
+       call cq_warn(sub_name, "NonSCF forces not implemented for spin and GGA; these will be set to zero.")
        HF_force = zero
        return
     end if
@@ -3541,9 +3652,9 @@ contains
                          r(1) = xblock + dx - xatom
                          r(2) = yblock + dy - yatom
                          r(3) = zblock + dz - zatom
-                         r2 = rx * rx + ry * ry + rz * rz
-                         if (r2 < loc_cutoff2) then
-                            r_from_i = sqrt(r2)
+                         rsq = rx * rx + ry * ry + rz * rz
+                         if (rsq < loc_cutoff2) then
+                            r_from_i = sqrt(rsq)
                             if (r_from_i > RD_ERR) then
                                r_1(1) = r(1) / r_from_i
                                r_1(2) = r(2) / r_from_i
@@ -3551,24 +3662,35 @@ contains
                             else
                                r_1 = zero
                             end if
-                            call dsplint(                                       &
-                                 step,                                          &
-                                 atomic_density_table(the_species)%table(:),    &
-                                 atomic_density_table(the_species)%d2_table(:), &
-                                 atomic_density_table(the_species)%length,      &
-                                 r_from_i, v, derivative, range_flag)
-                            if (range_flag) &
-                                 call cq_abort('get_nonSC_force: overrun problem')
-                            ! We assumed the atomic densities were evenly devided in spin channels at
-                            ! start, (in set_density of density module). So we assume the same to be
-                            ! consistent, and then apply density_scale calculated from set_density
-                            ! NB This means that spin_factor cancels out the half for non-spin polarised
-                            do dir1=1,3
-                              do spin = 1, nspin
-                                 fr_1(dir1,spin) = -r_1(dir1) * half * &
-                                   derivative * density_scale(spin)
-                              end do
-                            end do
+                            j = floor(r_from_i/step) + 1
+                            if(j+1<=atomic_density_table(the_species)%length) then
+                               rr = real(j,double) * step
+                               a = ( rr - r_from_i ) / step
+                               b = one - a
+                               c = a * ( a * a - one ) * step * step / six
+                               d = b * ( b * b - one ) * step * step / six
+                               da = -one/step
+                               db =  one/step
+                               dc = -step*(three*a*a - one)/six
+                               dd =  step*(three*b*b - one)/six
+
+                               r1=atomic_density_table(the_species)%table(j)
+                               r2=atomic_density_table(the_species)%table(j+1)
+                               r3=atomic_density_table(the_species)%d2_table(j)
+                               r4=atomic_density_table(the_species)%d2_table(j+1)
+                               v = a*r1 + b*r2 + c*r3 + d*r4
+                               derivative = da*r1 + db*r2 + dc*r3 + dd*r4
+                               ! We assumed the atomic densities were evenly devided in spin channels at
+                               ! start, (in set_density of density module). So we assume the same to be
+                               ! consistent, and then apply density_scale calculated from set_density
+                               ! NB This means that spin_factor cancels out the half for non-spin polarised
+                               do dir1=1,3
+                                  do spin = 1, nspin
+                                     fr_1(dir1,spin) = -r_1(dir1) * half * &
+                                          derivative * density_scale(spin)
+                                  end do
+                               end do
+                            end if
                          else
                             fr_1 = zero
                          end if
@@ -3586,6 +3708,12 @@ contains
                                       nonSCF_stress(dir1,dir2) + r(dir1) * &
                                       spin_factor * fr_1(dir2,spin) * &
                                       pot_here(spin)
+                                    if (flag_atomic_stress) then
+                                      atomic_stress(dir1,dir2,ig_atom) = &
+                                        atomic_stress(dir1,dir2,ig_atom) + &
+                                        r(dir1) * spin_factor * &
+                                        fr_1(dir2,spin) * pot_here(spin)
+                                    end if ! flag_atomic_stress
                                   end do ! dir2
                                 else
                                   nonSCF_stress(dir1,dir1) = &
@@ -3689,9 +3817,9 @@ contains
                             r(1) = xblock + dx - xatom
                             r(2) = yblock + dy - yatom
                             r(3) = zblock + dz - zatom
-                            r2 = rx * rx + ry * ry + rz * rz
-                            if (r2 < pcc_cutoff2) then
-                               r_from_i = sqrt( r2 )
+                            rsq = rx * rx + ry * ry + rz * rz
+                            if (rsq < pcc_cutoff2) then
+                               r_from_i = sqrt( rsq )
                                if ( r_from_i > RD_ERR ) then
                                   r_pcc(1) = r(1) / r_from_i
                                   r_pcc(2) = r(2) / r_from_i
@@ -3699,26 +3827,36 @@ contains
                                else
                                   r_pcc = zero
                                end if
-                               call dsplint(step_pcc, &
-                                            pseudo(the_species)%chpcc%f(:), &
-                                            pseudo(the_species)%chpcc%d2(:), &
-                                            pseudo(the_species)%chpcc%n, &
-                                            r_from_i, v_pcc, derivative_pcc, &
-                                            range_flag)
-                               if (range_flag) &
-                                    call cq_abort('get_nonSC_force: &
-                                                  &overrun problem')
-                               ! We assumed the atomic densities were
-                               ! evenly devided in spin channels at
-                               ! start, (in set_density of density
-                               ! module). So we assume the same to be
-                               ! consistent, and then apply density_scale
-                               ! calculated from set_density
-                               do spin = 1, nspin
-                                  do dir1 = 1, 3
-                                    fr_pcc(dir1,spin) = r_pcc(dir1) * half * derivative_pcc * density_scale(spin)
+                               j = floor(r_from_i/step_pcc) + 1
+                               if(j+1<=pseudo(the_species)%chpcc%n) then
+                                  rr = real(j,double) * step_pcc
+                                  a = ( rr - r_from_i ) / step_pcc
+                                  b = one - a
+                                  c = a * ( a * a - one ) * step_pcc * step_pcc / six
+                                  d = b * ( b * b - one ) * step_pcc * step_pcc / six
+                                  da = -one/step_pcc
+                                  db =  one/step_pcc
+                                  dc = -step_pcc*(three*a*a - one)/six
+                                  dd =  step_pcc*(three*b*b - one)/six
+
+                                  r1=pseudo(the_species)%chpcc%f(j)
+                                  r2=pseudo(the_species)%chpcc%f(j+1)
+                                  r3=pseudo(the_species)%chpcc%d2(j)
+                                  r4=pseudo(the_species)%chpcc%d2(j+1)
+                                  v_pcc = a*r1 + b*r2 + c*r3 + d*r4
+                                  derivative_pcc = da*r1 + db*r2 + dc*r3 + dd*r4
+                                  ! We assumed the atomic densities were
+                                  ! evenly devided in spin channels at
+                                  ! start, (in set_density of density
+                                  ! module). So we assume the same to be
+                                  ! consistent, and then apply density_scale
+                                  ! calculated from set_density
+                                  do spin = 1, nspin
+                                     do dir1 = 1, 3
+                                        fr_pcc(dir1,spin) = r_pcc(dir1) * half * derivative_pcc * density_scale(spin)
+                                     end do
                                   end do
-                               end do
+                               end if
                             else
                                fr_pcc = zero
                             end if
@@ -3737,6 +3875,13 @@ contains
                                          nonSCF_stress(dir1,dir2) + r(dir1) * &
                                          spin_factor * fr_pcc(dir2,spin) * &
                                          pot_here_pcc(spin)
+                                       if (flag_atomic_stress) then
+                                         atomic_stress(dir1,dir2,ig_atom) = &
+                                           atomic_stress(dir1,dir2,ig_atom) + &
+                                           r(dir1) * spin_factor * &
+                                           fr_pcc(dir2,spin) * &
+                                           pot_here_pcc(spin)
+                                       end if ! flag_atomic_stress
                                      end do ! dir1
                                    else
                                      nonSCF_stress(dir1,dir1) = &
@@ -3848,6 +3993,8 @@ contains
   !!   2018/02/14 13:26 dave
   !!    More subtle errors ! The PCC, non-SCF XC stress did not have spin
   !!    factor applied (as above in non-SCF routine)
+  !!   2019/05/08 zamaan
+  !!    Added atomic stress contributions
   !!  SOURCE
   !!
   subroutine get_pcc_force(pcc_force, inode, ionode, n_atoms, size, density_out,xc_energy_ret)
@@ -3860,7 +4007,8 @@ contains
                                    ni_in_cell, species_glob, dens,     &
                                    area_moveatoms, IPRINT_TIME_THRES3, &
                                    nspin, spin_factor, flag_self_consistent, &
-                                   flag_full_stress, flag_stress
+                                   flag_full_stress, flag_stress,      &
+                                   flag_atomic_stress
     use block_module,        only: nx_in_block,ny_in_block,            &
                                    nz_in_block, n_pts_in_block
     use group_module,        only: blocks, parts
@@ -3869,7 +4017,6 @@ contains
     use set_blipgrid_module, only: naba_atoms_of_blocks
     use GenComms,            only: my_barrier, cq_abort
     use pseudo_tm_info,      only: pseudo
-    use spline_module,       only: dsplint
     use dimens,              only: grid_point_volume, n_my_grid_points
     use GenBlas,             only: axpy
     use density_module,      only: density, density_scale, density_pcc
@@ -3895,7 +4042,7 @@ contains
     integer        :: i, j, my_block, n, the_species, iatom, spin
     integer        :: ix, iy, iz, iblock, ipoint, igrid, stat, dir1, dir2
     integer        :: ipart, jpart, ind_part, ia, ii, icover, ig_atom
-    real(double)   :: derivative_pcc, xc_energy, r2,      &
+    real(double)   :: derivative_pcc, xc_energy, rsq,      &
                       r_from_i, x_pcc, y_pcc, z_pcc, step_pcc
     real(double)   :: dcellx_block, dcelly_block, dcellz_block
     real(double)   :: dcellx_grid, dcelly_grid, dcellz_grid
@@ -3903,6 +4050,7 @@ contains
     real(double)   :: xblock, yblock, zblock
     real(double)   :: dx, dy, dz, pcc_cutoff, pcc_cutoff2, electrons, &
                       v_pcc, jacobian
+    real(double) :: a, b, c, d, r1, r2, r3, r4, rr, da, db, dc, dd
     logical        :: range_flag
     type(cq_timer) :: tmr_l_tmp1, tmr_l_tmp2
     ! automatic arrays
@@ -4018,9 +4166,9 @@ contains
                          r(1) = xblock + dx - xatom
                          r(2) = yblock + dy - yatom
                          r(3) = zblock + dz - zatom
-                         r2 = r(1)*r(1) + r(2)*r(2) + r(3)*r(3)
-                         if (r2 < pcc_cutoff2) then
-                            r_from_i = sqrt(r2)
+                         rsq = r(1)*r(1) + r(2)*r(2) + r(3)*r(3)
+                         if (rsq < pcc_cutoff2) then
+                            r_from_i = sqrt(rsq)
                             if (r_from_i > RD_ERR) then
                                do dir1=1,3
                                   r_pcc(dir1) = r(dir1)/r_from_i
@@ -4028,23 +4176,34 @@ contains
                             else
                                r_pcc = zero
                             end if
-                            call dsplint(step_pcc,                        &
-                                         pseudo(the_species)%chpcc%f(:),  &
-                                         pseudo(the_species)%chpcc%d2(:), &
-                                         pseudo(the_species)%chpcc%n,     &
-                                         r_from_i, v_pcc, derivative_pcc, &
-                                         range_flag)
-                            if (range_flag) &
-                                 call cq_abort('get_pcc_force: overrun problem')
-                            ! the factor of half here is because for
-                            ! spin polarised calculations, I have
-                            ! assumed contribution from pcc_density is
-                            ! exactly half of the total in each spin
-                            ! channel.
-                            derivative_pcc = half * derivative_pcc
-                            do dir1=1,3
-                               fr_pcc(dir1) = r_pcc(dir1)*derivative_pcc
-                            end do
+                            j = floor(r_from_i/step_pcc) + 1
+                            if(j+1<=pseudo(the_species)%chpcc%n) then
+                               rr = real(j,double) * step_pcc
+                               a = ( rr - r_from_i ) / step_pcc
+                               b = one - a
+                               c = a * ( a * a - one ) * step_pcc * step_pcc / six
+                               d = b * ( b * b - one ) * step_pcc * step_pcc / six
+                               da = -one/step_pcc
+                               db =  one/step_pcc
+                               dc = -step_pcc*(three*a*a - one)/six
+                               dd =  step_pcc*(three*b*b - one)/six
+
+                               r1=pseudo(the_species)%chpcc%f(j)
+                               r2=pseudo(the_species)%chpcc%f(j+1)
+                               r3=pseudo(the_species)%chpcc%d2(j)
+                               r4=pseudo(the_species)%chpcc%d2(j+1)
+                               v_pcc = a*r1 + b*r2 + c*r3 + d*r4
+                               derivative_pcc = da*r1 + db*r2 + dc*r3 + dd*r4
+                               ! the factor of half here is because for
+                               ! spin polarised calculations, I have
+                               ! assumed contribution from pcc_density is
+                               ! exactly half of the total in each spin
+                               ! channel.
+                               derivative_pcc = half * derivative_pcc
+                               do dir1=1,3
+                                  fr_pcc(dir1) = r_pcc(dir1)*derivative_pcc
+                               end do
+                            end if
                          else
                             fr_pcc = zero
                          end if
@@ -4060,6 +4219,12 @@ contains
                                        pcc_stress(dir1,dir2) + &
                                        r(dir1) * spin_factor * fr_pcc(dir2) * &
                                        pot_here_pcc(spin)
+                                     if (flag_atomic_stress) then
+                                       atomic_stress(dir1,dir2,ig_atom) = &
+                                         atomic_stress(dir1,dir2,ig_atom) + &
+                                         r(dir1) * spin_factor * &
+                                         fr_pcc(dir2)  * pot_here_pcc(spin)
+                                     end if
                                    end do ! dir2
                                  else
                                     pcc_stress(dir1,dir1) = &
@@ -4139,6 +4304,51 @@ subroutine print_stress(label, str_mat, print_level)
     end if
   end if
 end subroutine print_stress
+!!*****
+
+!!****f* force_module/check_atomic_stress *
+!!
+!!  NAME 
+!!   check_atomic_stress
+!!  PURPOSE
+!!   Sanity check the atomic stress contributions
+!!  AUTHOR
+!!   Zamaan Raza
+!!  CREATION DATE
+!!   28 March 2019
+!!  MODIFICATION HISTORY
+!!  
+!!  SOURCE
+!!  
+subroutine check_atomic_stress
+
+  use GenComms,       only: inode, ionode
+  use global_module,  only: iprint_MD, flag_full_stress, atomic_stress, &
+                            non_atomic_stress
+
+  ! Passed variables
+
+  ! local variables
+  real(double), dimension(3,3) :: total_atomic, total
+  integer :: dir1, dir2
+
+  do dir1=1,3
+    do dir2=1,3
+      total_atomic(dir1,dir2) = sum(atomic_stress(dir1,dir2,:))
+      total(dir1,dir2)  = total_atomic(dir1,dir2) + &
+                          non_atomic_stress(dir1,dir2)
+    end do
+  end do
+
+  if (inode==ionode) then
+    write(io_lun,'(2x,a)') &
+      "Checking sum of atomic and non-atomic contributions to stress:"
+  end if
+  call print_stress("Atomic total:     ", total_atomic, 3)
+  call print_stress("Non-atomic total: ", non_atomic_stress, 3)
+  call print_stress("Total:            ", total, 3)
+
+end subroutine check_atomic_stress
 !!*****
 
 end module force_module

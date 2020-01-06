@@ -225,6 +225,7 @@ contains
       write (lun,*) "y_atom_cell:", y_atom_cell(1:)
       write (lun,*) "z_atom_cell:", z_atom_cell(1:)
       write (lun,*) ""
+      call flush(lun)
     endif
     !! ---------------- DEBUG ------------------ !!
 

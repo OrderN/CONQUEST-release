@@ -17,7 +17,7 @@
 !!    For using TM's pseudopotetials, 
 !!
 !!  USES
-!!   datatypes, GenComms, numbers, spline_module, global_module
+!!   datatypes, GenComms, numbers, splines, global_module
 !!  AUTHOR
 !!   T. Miyazaki
 !!  CREATION DATE
@@ -35,6 +35,8 @@
 !!    Adding new members to pseudo_info derived type for neutral atom
 !!   2017/11/27 15:52 dave with TM, NW
 !!    NA projectors added to pseudo_info type
+!!   2019/12/03 08:21 dave
+!!    Added functional to ps_info structure
 !!  SOURCE
 !!
 module pseudo_tm_info
@@ -50,7 +52,7 @@ module pseudo_tm_info
   save
   private
   public :: rad_func, pseudo_info, pseudo, setup_pseudo_info, &
-           rad_alloc, rad_dealloc, loc_pot, loc_chg
+       rad_alloc, rad_dealloc, loc_pot, loc_chg
 
   ! Choose between representing local part of pseudopotential as a local potential or charge density
   integer :: loc_pot = 1
@@ -76,6 +78,8 @@ module pseudo_tm_info
      integer :: n_pjnl               ! number of projector functions
      logical :: flag_pcc             ! flag for partial core correction
      integer :: z                    ! atomic weight
+     integer :: functional           ! Code for functional if set in ion file
+     integer :: ps_type              ! Type of pseudopotential (hamann/siesta)
      real(double) :: zval            ! number of valence electrons
      real(double) :: alpha           ! exponent of gaussian for long range term
      ! of local pseudopotential (might not be used)
@@ -87,83 +91,87 @@ module pseudo_tm_info
      type(rad_func) :: chna               ! neutral atom charge
      type(rad_func) :: vna                ! neutral atom potential
      real(double)   :: eshift             ! shift of vchlocal-zval/r
-     
+
      type(rad_func) :: chpcc              ! partial core charge
      type(rad_func), pointer :: pjnl(:)   ! size = n_pjnl, projector functions
      integer, pointer :: pjnl_l(:)        ! size = n_pjnl, angular momentum
      integer, pointer :: pjnl_n(:)        ! size = n_pjnl, index for projectors
      real(double), pointer :: pjnl_ekb(:) ! size = n_pjnl, <phi_ln|dV_l|phi_ln>
-     
+
      ! Neutral atom projectors
      integer :: n_pjna               ! number of NA projector functions
      type(rad_func), pointer :: pjna(:)   ! size = n_pjna, projector functions
      integer, pointer :: pjna_l(:)        ! size = n_pjna, angular momentum
      integer, pointer :: pjna_n(:)        ! size = n_pjna, index for projectors
      real(double), pointer :: pjna_ekb(:) ! size = n_pjna, <phi_ln|V_na|phi_ln>
-     
+
   end type pseudo_info
 
   type(pseudo_info), allocatable :: pseudo(:)
 
   ! RCS tag for object file identification
   character(len=80), private :: RCSid = "$Id$"
-!!***
+  !!***
 
 contains
 
-!---------------------------------------------------------------
-! sbrt setup_pseudo_info
-!---------------------------------------------------------------
+  !---------------------------------------------------------------
+  ! sbrt setup_pseudo_info
+  !---------------------------------------------------------------
 
-!!****f* pseudo_tm_info/setup_pseudo_info *
-!!
-!!  NAME 
-!!   setup_pseudo_info
-!!  USAGE
-!! 
-!!  PURPOSE
-!!   allocates pseudo(:), whose size is nspecies.
-!!   sets up the name of files *.ion and reads the files.
-!!  INPUTS
-!!   nspecies, species_label
-!!  USES
-!! 
-!!  AUTHOR
-!!   T. Miyazaki
-!!  CREATION DATE
-!!   18/06/2002
-!!  MODIFICATION HISTORY
-!!   2008/05/25
-!!    Added timers
-!!   2011/03/30 M.Arita
-!!    Added statements for P.C.C.
-!!   2011/09/16 11:00 dave
-!!    Changed to use n_species and species_label from species_module, and changed atomicrad to atomicnum
-!!   2014/10/12 12:21 lat
-!!    Added possibility of user defined filename for PAO/pseudo *ion
-!!   2017/02/17 15:59 dave
-!!    Changes to allow reading of Hamann's optimised norm-conserving pseudopotentials (remove ABINIT)
-!!   2018/06/19 20:30 nakata
-!!    Add IF with pseudo_type for calling init_rad when ghost atoms are used
-!!  SOURCE
-!!
+  !!****f* pseudo_tm_info/setup_pseudo_info *
+  !!
+  !!  NAME 
+  !!   setup_pseudo_info
+  !!  USAGE
+  !! 
+  !!  PURPOSE
+  !!   allocates pseudo(:), whose size is nspecies.
+  !!   sets up the name of files *.ion and reads the files.
+  !!  INPUTS
+  !!   nspecies, species_label
+  !!  USES
+  !! 
+  !!  AUTHOR
+  !!   T. Miyazaki
+  !!  CREATION DATE
+  !!   18/06/2002
+  !!  MODIFICATION HISTORY
+  !!   2008/05/25
+  !!    Added timers
+  !!   2011/03/30 M.Arita
+  !!    Added statements for P.C.C.
+  !!   2011/09/16 11:00 dave
+  !!    Changed to use n_species and species_label from species_module, and changed atomicrad to atomicnum
+  !!   2014/10/12 12:21 lat
+  !!    Added possibility of user defined filename for PAO/pseudo *ion
+  !!   2017/02/17 15:59 dave
+  !!    Changes to allow reading of Hamann's optimised norm-conserving pseudopotentials (remove ABINIT)
+  !!   2018/06/19 20:30 nakata
+  !!    Add IF with pseudo_type for calling init_rad when ghost atoms are used
+  !!   2019/12/09 20:16 dave
+  !!    Changes to read valence charge from pseudopotential file and test spin-polarised charge
+  !!  SOURCE
+  !!
   subroutine setup_pseudo_info
 
     use datatypes
-    use numbers,        ONLY: zero
+    use numbers,        ONLY: zero, RD_ERR, two
     use pao_format,     ONLY: pao
     use species_module, ONLY: n_species, species_label, species_file, species_from_files
-    use species_module, ONLY: npao_species, nsf_species, type_species, charge
-    use global_module,  ONLY: iprint_pseudo
-    use dimens,         ONLY: RadiusSupport, atomicnum
+    use species_module, ONLY: npao_species, nsf_species, type_species, charge, charge_up, charge_dn, mass
+    use global_module,  ONLY: iprint_pseudo, flag_Multisite
+    use dimens,         ONLY: RadiusSupport, RadiusAtomf, RadiusMS, InvSRange, atomicnum
     use GenComms,       ONLY: inode, ionode, cq_abort, gcopy
     use pseudopotential_common, ONLY: pseudo_type, SIESTA, ABINIT
+    use sfc_partitions_module, only: gap_threshold
+    use maxima_module,  ONLY: maxnsf
 
     implicit none
 
     !local
     integer :: stat, ispecies, l, zeta
-    real(double) :: cutoff
+    real(double) :: max_rc
     character(len=80) :: filename
     integer :: ii
 
@@ -177,6 +185,7 @@ contains
        if(stat /= 0) call cq_abort ('allocating pao in setup_pseudo_info',stat)
        call stop_timer(tmr_std_allocation)
        flag_pcc_global = .false.
+       max_rc = zero
        do ispecies=1,n_species
           if(pseudo_type==SIESTA) then
              pseudo(ispecies)%tm_loc_pot = loc_chg
@@ -198,85 +207,110 @@ contains
           call read_ion_ascii_tmp(pseudo(ispecies),pao(ispecies))
 
           npao_species(ispecies) = pao(ispecies)%count
+          ! Set NSF if not set by user
+          if(nsf_species(ispecies)==0) nsf_species(ispecies) = pao(ispecies)%count
+          maxnsf = max(maxnsf,nsf_species(ispecies))
+          ! Find radius for atom functions
+          do l=0,pao(ispecies)%greatest_angmom
+             do zeta=1,pao(ispecies)%angmom(l)%n_zeta_in_angmom
+                RadiusAtomf(ispecies) = max(RadiusAtomf(ispecies), &
+                     pao(ispecies)%angmom(l)%zeta(zeta)%cutoff)
+             end do
+          end do
+          ! Set SF radius if not set by user
+          if(abs(RadiusSupport(ispecies))<RD_ERR) RadiusSupport(ispecies) = RadiusAtomf(ispecies)
+          if(abs(InvSRange(ispecies))<RD_ERR) InvSRange(ispecies) = RadiusSupport(ispecies)
+          if (flag_Multisite) RadiusSupport(ispecies) = RadiusSupport(ispecies) + RadiusMS(ispecies)
+          max_rc = max(RadiusSupport(ispecies),max_rc)
           atomicnum(ispecies)    = pseudo(ispecies)%z
-          if(charge(ispecies)/=pseudo(ispecies)%zval) then
-             if(inode==ionode) &
-                  write(io_lun,fmt='(/,2x,"WARNING: Mismatch between valence charge in input and pseudopotential: ",2f7.2,/)') &
-                  charge(ispecies),pseudo(ispecies)%zval
+          ! Valence charge
+          charge(ispecies)       = pseudo(ispecies)%zval
+          if(mass(ispecies) < zero) charge(ispecies) = zero
+          ! Test spin polarised initialisation
+          if (abs(charge_up(ispecies)+charge_dn(ispecies))>RD_ERR) then
+             if (abs(charge_up(ispecies)+charge_dn(ispecies)-charge(ispecies))>RD_ERR) &
+                  call cq_abort('read_input: sum of number of electrons &
+                  &in spin channels is different from total &
+                  &number of electrons for this species ', &
+                  charge_up(ispecies)+charge_dn(ispecies),charge(ispecies))
           end if
           ! For P.C.C.
           if (pseudo(ispecies)%flag_pcc) flag_pcc_global = .true.
           !For Ghost atoms
           if(type_species(ispecies) < 0) then
-            pseudo(ispecies)%zval = zero
-           if(pseudo(ispecies)%n_pjnl > 0) then
-            do ii=1, pseudo(ispecies)%n_pjnl
-             call init_rad(pseudo(ispecies)%pjnl(ii))
-            enddo
-           endif
-            if(pseudo_type==ABINIT) call init_rad(pseudo(ispecies)%vlocal)
-            if(pseudo_type==SIESTA) call init_rad(pseudo(ispecies)%chlocal)
-            if(pseudo(ispecies)%flag_pcc) call init_rad(pseudo(ispecies)%chpcc)
-            pseudo(ispecies)%n_pjnl      = 0
-            pseudo(ispecies)%flag_pcc    = .false.
-            pseudo(ispecies)%pjnl_l(:)   = 0
-            pseudo(ispecies)%pjnl_n(:)   = 0
-            pseudo(ispecies)%pjnl_ekb(:) = zero
-            ! pseudo(ispecies)%alpha
-            ! pseudo(ispecies)%prefac
+             pseudo(ispecies)%zval = zero
+             if(pseudo(ispecies)%n_pjnl > 0) then
+                do ii=1, pseudo(ispecies)%n_pjnl
+                   call init_rad(pseudo(ispecies)%pjnl(ii))
+                enddo
+             endif
+             if(pseudo_type==ABINIT) call init_rad(pseudo(ispecies)%vlocal)
+             if(pseudo_type==SIESTA) call init_rad(pseudo(ispecies)%chlocal)
+             if(pseudo(ispecies)%flag_pcc) call init_rad(pseudo(ispecies)%chpcc)
+             pseudo(ispecies)%n_pjnl      = 0
+             pseudo(ispecies)%flag_pcc    = .false.
+             pseudo(ispecies)%pjnl_l(:)   = 0
+             pseudo(ispecies)%pjnl_n(:)   = 0
+             pseudo(ispecies)%pjnl_ekb(:) = zero
+             ! pseudo(ispecies)%alpha
+             ! pseudo(ispecies)%prefac
           endif
 
           if(npao_species(ispecies)<nsf_species(ispecies)) &
-               call cq_abort("Error ! Less PAOs than SFs.  Decrease NumberOfSupports: ", &
+               call cq_abort("Error ! Fewer PAOs than SFs.  Decrease NumberOfSupports: ", &
                npao_species(ispecies),nsf_species(ispecies))
-          cutoff = zero
-          do l=0,pao(ispecies)%greatest_angmom
-             if(pao(ispecies)%angmom(l)%n_zeta_in_angmom>0) then
-                do zeta = 1,pao(ispecies)%angmom(l)%n_zeta_in_angmom
-                   cutoff = max(cutoff,pao(ispecies)%angmom(l)%zeta(zeta)%cutoff)
-                end do
-             end if
-          end do
-          if(cutoff>RadiusSupport(ispecies)) then
-             if(inode==ionode.AND.iprint_pseudo>0) &
-                  write(io_lun,fmt='(10x,"Warning ! Species ",i3," support radius less than PAO radius ",f8.3)') ispecies,cutoff
-             !RadiusSupport(ispecies) = cutoff
-          endif
+          !%%! cutoff = zero
+          !%%! do l=0,pao(ispecies)%greatest_angmom
+          !%%!    if(pao(ispecies)%angmom(l)%n_zeta_in_angmom>0) then
+          !%%!       do zeta = 1,pao(ispecies)%angmom(l)%n_zeta_in_angmom
+          !%%!          cutoff = max(cutoff,pao(ispecies)%angmom(l)%zeta(zeta)%cutoff)
+          !%%!       end do
+          !%%!    end if
+          !%%! end do
+          !%%! if(cutoff>RadiusSupport(ispecies)) then
+          !%%!    if(inode==ionode.AND.iprint_pseudo>0) &
+          !%%!         write(io_lun,fmt='(10x,"Warning ! Species ",i3," support radius less than PAO radius ",f8.3)') ispecies,cutoff
+          !%%!    !RadiusSupport(ispecies) = cutoff
+          !%%! endif
        enddo
+       ! This isn't ideal, but replaces a read for gap_threshold with default of two*max_rc
+       if(abs(gap_threshold)<RD_ERR) gap_threshold = two*max_rc
     endif
-    call gcopy(flag_pcc_global)
+    !call gcopy(flag_pcc_global)
+    !call gcopy(gap_threshold)
+    !call gcopy(maxnsf)
     if (iprint_pseudo>0.AND.inode==ionode .AND.flag_pcc_global) &
          write (io_lun,fmt='(10x,a)') "P.C.C. is taken into account."
     return
   end subroutine setup_pseudo_info
-!!***
+  !!***
 
-!---------------------------------------------------------------
-! sbrt alloc_pseudo_info
-!---------------------------------------------------------------
+  !---------------------------------------------------------------
+  ! sbrt alloc_pseudo_info
+  !---------------------------------------------------------------
 
-!!****f* pseudo_tm_info/alloc_pseudo_info *
-!!
-!!  NAME 
-!!   alloc_pseudo_info
-!!  USAGE
-!! 
-!!  PURPOSE
-!!   Allocates memory for ps_info type
-!!  INPUTS
-!! 
-!! 
-!!  USES
-!! 
-!!  AUTHOR
-!!   T.Miyazaki
-!!  CREATION DATE
-!!   May 2003
-!!  MODIFICATION HISTORY
-!!   2008/05/25
-!!    Added timers
-!!  SOURCE
-!!
+  !!****f* pseudo_tm_info/alloc_pseudo_info *
+  !!
+  !!  NAME 
+  !!   alloc_pseudo_info
+  !!  USAGE
+  !! 
+  !!  PURPOSE
+  !!   Allocates memory for ps_info type
+  !!  INPUTS
+  !! 
+  !! 
+  !!  USES
+  !! 
+  !!  AUTHOR
+  !!   T.Miyazaki
+  !!  CREATION DATE
+  !!   May 2003
+  !!  MODIFICATION HISTORY
+  !!   2008/05/25
+  !!    Added timers
+  !!  SOURCE
+  !!
   subroutine alloc_pseudo_info(ps_info,n)
 
     use memory_module, ONLY: reg_alloc_mem, type_int, type_dbl    
@@ -302,35 +336,35 @@ contains
 
     return
   end subroutine alloc_pseudo_info
-!!***
+  !!***
 
-!---------------------------------------------------------------
-! sbrt rad_alloc : from TM
-!---------------------------------------------------------------
+  !---------------------------------------------------------------
+  ! sbrt rad_alloc : from TM
+  !---------------------------------------------------------------
 
-!!****f* pseudo_tm_info/rad_alloc *
-!!
-!!  NAME 
-!!   rad_alloc
-!!  USAGE
-!! 
-!!  PURPOSE
-!!   Sets the 'size' n of the arrays and allocates f and d2.
-!! 
-!!  INPUTS
-!! 
-!! 
-!!  USES
-!! 
-!!  AUTHOR
-!!   T.Miyazaki
-!!  CREATION DATE
-!! 
-!!  MODIFICATION HISTORY
-!!   2008/05/25
-!!    Added timers
-!!  SOURCE
-!!
+  !!****f* pseudo_tm_info/rad_alloc *
+  !!
+  !!  NAME 
+  !!   rad_alloc
+  !!  USAGE
+  !! 
+  !!  PURPOSE
+  !!   Sets the 'size' n of the arrays and allocates f and d2.
+  !! 
+  !!  INPUTS
+  !! 
+  !! 
+  !!  USES
+  !! 
+  !!  AUTHOR
+  !!   T.Miyazaki
+  !!  CREATION DATE
+  !! 
+  !!  MODIFICATION HISTORY
+  !!   2008/05/25
+  !!    Added timers
+  !!  SOURCE
+  !!
   subroutine rad_alloc(func,n)
 
     use memory_module, ONLY: reg_alloc_mem, type_dbl    
@@ -349,34 +383,34 @@ contains
     call stop_timer(tmr_std_allocation)
     return
   end subroutine rad_alloc
-!!***
+  !!***
 
-!---------------------------------------------------------------
-! sbrt rad_dealloc 
-!---------------------------------------------------------------
+  !---------------------------------------------------------------
+  ! sbrt rad_dealloc 
+  !---------------------------------------------------------------
 
-!!****f* pseudo_tm_info/rad_dealloc *
-!!
-!!  NAME 
-!!   rad_dealloc
-!!  USAGE
-!! 
-!!  PURPOSE
-!!   Deallocates f and d2
-!!  INPUTS
-!! 
-!! 
-!!  USES
-!! 
-!!  AUTHOR
-!!   T.Miyazaki
-!!  CREATION DATE
-!! 
-!!  MODIFICATION HISTORY
-!!   2008/05/25
-!!    Added timers
-!!  SOURCE
-!!
+  !!****f* pseudo_tm_info/rad_dealloc *
+  !!
+  !!  NAME 
+  !!   rad_dealloc
+  !!  USAGE
+  !! 
+  !!  PURPOSE
+  !!   Deallocates f and d2
+  !!  INPUTS
+  !! 
+  !! 
+  !!  USES
+  !! 
+  !!  AUTHOR
+  !!   T.Miyazaki
+  !!  CREATION DATE
+  !! 
+  !!  MODIFICATION HISTORY
+  !!   2008/05/25
+  !!    Added timers
+  !!  SOURCE
+  !!
   subroutine rad_dealloc(func)
 
     use memory_module, ONLY: reg_dealloc_mem, type_dbl    
@@ -395,38 +429,38 @@ contains
     call stop_timer(tmr_std_allocation)
     return
   end subroutine rad_dealloc
-!!***
+  !!***
 
-!---------------------------------------------------------------
-! sbrt init_rad: from TM
-!---------------------------------------------------------------
+  !---------------------------------------------------------------
+  ! sbrt init_rad: from TM
+  !---------------------------------------------------------------
 
-!!****f* pseudo_tm_info/init_rad *
-!!
-!!  NAME
-!!   init_rad
-!!  USAGE
-!!
-!!  PURPOSE
-!!   initilise all members of rad_func
-!!
-!!  INPUTS
-!!
-!!
-!!  USES
-!!
-!!  AUTHOR
-!!   T.Miyazaki
-!!  CREATION DATE
-!!
-!!  MODIFICATION HISTORY
-!!    2012/06/17 L.Tong
-!!    - Changed func to intent(inout) from intent(out). If set to out,
-!!      then all members of func upon entering the subroutine
-!!      becomes undefined! This means f and d2 becomes disassociated
-!!      and non-allocated.
-!!  SOURCE
-!!
+  !!****f* pseudo_tm_info/init_rad *
+  !!
+  !!  NAME
+  !!   init_rad
+  !!  USAGE
+  !!
+  !!  PURPOSE
+  !!   initilise all members of rad_func
+  !!
+  !!  INPUTS
+  !!
+  !!
+  !!  USES
+  !!
+  !!  AUTHOR
+  !!   T.Miyazaki
+  !!  CREATION DATE
+  !!
+  !!  MODIFICATION HISTORY
+  !!    2012/06/17 L.Tong
+  !!    - Changed func to intent(inout) from intent(out). If set to out,
+  !!      then all members of func upon entering the subroutine
+  !!      becomes undefined! This means f and d2 becomes disassociated
+  !!      and non-allocated.
+  !!  SOURCE
+  !!
   subroutine init_rad(func)
 
     use numbers, only: zero
@@ -441,64 +475,67 @@ contains
     func%d2(:) = zero
     return
   end subroutine init_rad
-!!***
+  !!***
 
 
 
-!---------------------------------------------------------------
-! sbrt radial_read_ascii : from SIESTA, with small changes
-!---------------------------------------------------------------
+  !---------------------------------------------------------------
+  ! sbrt radial_read_ascii : from SIESTA, with small changes
+  !---------------------------------------------------------------
 
-!!****f* pseudo_tm_info/radial_read_ascii *
-!!
-!!  NAME 
-!!   radial_read_ascii
-!!  USAGE
-!! 
-!!  PURPOSE
-!!   Reads radial table
-!!  INPUTS
-!! 
-!! 
-!!  USES
-!! 
-!!  AUTHOR
-!!   T.Miyazaki
-!!  CREATION DATE
-!! 
-!!  MODIFICATION HISTORY
-!!   10:17, 2004/01/12 dave
-!!    Changed formatting for reads to read new Siesta (1.3) pseudos
-!!   2017/11/10 14:24 dave
-!!    Changed yp1 and ypn to use first derivative (simple FD) instead of zero
-!!   2018/03/08 09:54 dave
-!!    Added consistency check between cutoff and step size/number of points
-!!  SOURCE
-!!
+  !!****f* pseudo_tm_info/radial_read_ascii *
+  !!
+  !!  NAME 
+  !!   radial_read_ascii
+  !!  USAGE
+  !! 
+  !!  PURPOSE
+  !!   Reads radial table
+  !!  INPUTS
+  !! 
+  !! 
+  !!  USES
+  !! 
+  !!  AUTHOR
+  !!   T.Miyazaki
+  !!  CREATION DATE
+  !! 
+  !!  MODIFICATION HISTORY
+  !!   10:17, 2004/01/12 dave
+  !!    Changed formatting for reads to read new Siesta (1.3) pseudos
+  !!   2017/11/10 14:24 dave
+  !!    Changed yp1 and ypn to use first derivative (simple FD) instead of zero
+  !!   2018/03/08 09:54 dave
+  !!    Added consistency check between cutoff and step size/number of points
+  !!  SOURCE
+  !!
   subroutine radial_read_ascii(op,lun)
 
     use numbers, ONLY: BIG, zero, RD_ERR
-    use spline_module, ONLY: spline
+    use splines, ONLY: spline
     use global_module, ONLY: iprint_pseudo
-    use GenComms, ONLY: myid
+    use GenComms, ONLY: myid, cq_warn
 
     implicit none
 
+    ! Passed variables
     type(rad_func),intent(out) :: op
     integer,intent(in)         :: lun
 
+    ! Local variables
+    character(len=80) :: sub_name = "radial_read_ascii"
     integer :: j, npts
     real(double) :: dummy, r0, r1
     real(double) :: yp1, ypn
     real(double) :: delta, cutoff
 
     !ori read(lun,'(i4,2g25.15)') npts, op%delta, op%cutoff
-!    read(lun,'(i4,2g25.15)') npts, delta, cutoff
+    !    read(lun,'(i4,2g25.15)') npts, delta, cutoff
     read(lun,*) npts, delta, cutoff
     ! DRB 2018/03/08 Adding consistency check between cutoff and delta
     if(abs(cutoff - delta*real(npts-1,double))>RD_ERR) then
-       if(myid==0) write(io_lun,fmt='(/4x,"Warning: cutoff and step inconsistent, cutoff will be adjusted: ",2f8.3/)') &
-            cutoff,delta*real(npts-1,double)
+       call cq_warn(sub_name, "In ion file, cutoff and step inconsistent, cutoff will be adjusted: ",&
+            cutoff,delta*real(npts-1,double))
        cutoff=delta*real(npts-1,double)
     end if
     if(myid==0.AND.iprint_pseudo>3) write(io_lun,fmt='(10x,"Radius: ",f15.10)') cutoff
@@ -509,12 +546,11 @@ contains
     read(lun,*) r0, op%f(1)
     read(lun,*) r1, op%f(2)
     if(abs(r1-r0-delta)>RD_ERR) then
-       if(myid==0) write(io_lun,fmt='(/4x,"Warning: radial grid and step inconsistent ! ",2f8.3/)') r1-r0,delta
+       call cq_warn(sub_name, "Radial grid and step inconsistent ! ",r1-r0,delta)
        ! DRB 2018/03/08 10:55
        ! I can see an argument to abort here - if the step size and grid are inconsistent we may have problems
     end if
     do j=3,npts
-!       read(lun,'(2g25.15)') dummy, op%f(j)
        read(lun,*) dummy, op%f(j)
     enddo
     !ori call rad_setup_d2(op)
@@ -526,81 +562,81 @@ contains
     call spline(op%n, op%delta, op%f, yp1, ypn, op%d2)
     return
   end subroutine radial_read_ascii
-!!***
+  !!***
 
-!---------------------------------------------------------------
-! sbrt read_ion_ascii_tmp
-!---------------------------------------------------------------
+  !---------------------------------------------------------------
+  ! sbrt read_ion_ascii_tmp
+  !---------------------------------------------------------------
 
-!!****f* pseudo_tm_info/read_ion_ascii_tmp *
-!!
-!!  NAME 
-!!   read_ion_ascii_tmp
-!!  USAGE
-!! 
-!!  PURPOSE
-!!   this subroutine only reads KB projectors,
-!!   chlocal and partial core charge
-!!  INPUTS
-!! 
-!! 
-!!  USES
-!! 
-!!  AUTHOR
-!!   T.Miyazaki
-!!  CREATION DATE
-!! 
-!!  MODIFICATION HISTORY
-!!   13:04, 31/10/2003 drb 
-!!    Added routine to create lmax for pseudos
-!!   11:00, 13/02/2006 drb 
-!!    Changed line length
-!!   2006/10/17 08:18 dave
-!!    Rewrote to read once on inode and broadcast
-!!   2007/02/12 08:21 dave
-!!    Added changes for TM potentials from ABINIT
-!!   2007/08/16 15:36 dave
-!!    More tweaks for local potential (particularly short/long range division)
-!!   09:30, 27/11/2007 drb 
-!!    Added calculation of prefac on all processors for local potential
-!!   2008/05/25
-!!    Added timers
-!!   2008/09/01 08:21 dave
-!!    Added io_ routines from input_module
-!!   2013/07/05 dave
-!!    Added reading and copying of z, charge state of ion
-!!    Changed to read ALL radial functions for a given l (now picks up "semi-core" PAOs)
-!!   2016/01/28 16:46 dave
-!!    Updated module name to ion_electrostatic
-!!   2016/02/09 08:17 dave
-!!    Changed to use erfc from functions module
-!!   2016/01/09 20:00 nakata
-!!    Added pao_info%angmom%prncpl
-!!   2017/02/24 10:06 dave & tsuyoshi
-!!    Bug fix for read_header_tmp: removed formatting for zval
-!!   2017/03/13 dave
-!!    Repeated bug fix for other if branch in read_header_tmp (credit Jac van Driel for finding issue)
-!!   2017/03/14 dave
-!!    Changed string comparisons to use leqi from input_module (direct comparison breaks on Cray)
-!!   2017/03/23 dave
-!!    Added storage of spacing of PAO table
-!!   2017/11/10 14:22 dave
-!!    Bug fix: added Ry->Ha conversion for Siesta VNA d2 table (as well as f table)
-!!   2018/01/22 14:39 JST dave
-!!    Added test for lmax_pao/lmax_ps to find maximum PAO/PP angular momentum
-!!   2018/10/30 11:02 dave
-!!    Added semicore flag for each zeta
-!!   2018/11/02 16:30 nakata
-!!    Bug fix: set semicore when numprocs>1
-!!  SOURCE
-!!
+  !!****f* pseudo_tm_info/read_ion_ascii_tmp *
+  !!
+  !!  NAME 
+  !!   read_ion_ascii_tmp
+  !!  USAGE
+  !! 
+  !!  PURPOSE
+  !!   this subroutine only reads KB projectors,
+  !!   chlocal and partial core charge
+  !!  INPUTS
+  !! 
+  !! 
+  !!  USES
+  !! 
+  !!  AUTHOR
+  !!   T.Miyazaki
+  !!  CREATION DATE
+  !! 
+  !!  MODIFICATION HISTORY
+  !!   13:04, 31/10/2003 drb 
+  !!    Added routine to create lmax for pseudos
+  !!   11:00, 13/02/2006 drb 
+  !!    Changed line length
+  !!   2006/10/17 08:18 dave
+  !!    Rewrote to read once on inode and broadcast
+  !!   2007/02/12 08:21 dave
+  !!    Added changes for TM potentials from ABINIT
+  !!   2007/08/16 15:36 dave
+  !!    More tweaks for local potential (particularly short/long range division)
+  !!   09:30, 27/11/2007 drb 
+  !!    Added calculation of prefac on all processors for local potential
+  !!   2008/05/25
+  !!    Added timers
+  !!   2008/09/01 08:21 dave
+  !!    Added io_ routines from input_module
+  !!   2013/07/05 dave
+  !!    Added reading and copying of z, charge state of ion
+  !!    Changed to read ALL radial functions for a given l (now picks up "semi-core" PAOs)
+  !!   2016/01/28 16:46 dave
+  !!    Updated module name to ion_electrostatic
+  !!   2016/02/09 08:17 dave
+  !!    Changed to use erfc from functions module
+  !!   2016/01/09 20:00 nakata
+  !!    Added pao_info%angmom%prncpl
+  !!   2017/02/24 10:06 dave & tsuyoshi
+  !!    Bug fix for read_header_tmp: removed formatting for zval
+  !!   2017/03/13 dave
+  !!    Repeated bug fix for other if branch in read_header_tmp (credit Jac van Driel for finding issue)
+  !!   2017/03/14 dave
+  !!    Changed string comparisons to use leqi from input_module (direct comparison breaks on Cray)
+  !!   2017/03/23 dave
+  !!    Added storage of spacing of PAO table
+  !!   2017/11/10 14:22 dave
+  !!    Bug fix: added Ry->Ha conversion for Siesta VNA d2 table (as well as f table)
+  !!   2018/01/22 14:39 JST dave
+  !!    Added test for lmax_pao/lmax_ps to find maximum PAO/PP angular momentum
+  !!   2018/10/30 11:02 dave
+  !!    Added semicore flag for each zeta
+  !!   2018/11/02 16:30 nakata
+  !!    Bug fix: set semicore when numprocs>1
+  !!  SOURCE
+  !!
   subroutine read_ion_ascii_tmp(ps_info,pao_info)
 
     use numbers, ONLY: six, half, zero, pi, one
     use global_module, ONLY: numprocs, iprint_pseudo
-    use GenComms, ONLY: inode, ionode, gcopy
+    use GenComms, ONLY: inode, ionode, gcopy, cq_warn, cq_abort
     use pao_format, ONLY: species_pao
-    use spline_module, ONLY : spline
+    use splines, ONLY : spline
     use memory_module, ONLY: reg_alloc_mem, type_dbl    
     use functions, ONLY: erfc
     use input_module, ONLY: io_assign, io_close
@@ -609,8 +645,12 @@ contains
 
     implicit none
 
+    ! Passed variables
     type(pseudo_info),intent(inout) :: ps_info
     type(species_pao),intent(inout) :: pao_info
+
+    ! Local variables
+    character(len=80) :: sub_name = "read_ion_ascii_tmp"    
     type(rad_func), dimension(:), allocatable :: dummy_rada
     type(rad_func) :: dummy_rad
 
@@ -621,7 +661,7 @@ contains
     real(double) :: zval, yp1, ypn, erfarg, tmpv
     real(double), parameter :: ln10 = 2.302585092994_double
 
-    integer :: iproc, lmax, maxz, alls, nzeta, l, count,tzl
+    integer :: iproc, lmax, maxz, alls, nzeta, l, count,tzl, xc_func, ps_type
     real(double), allocatable :: thispop(:)
     integer, allocatable :: thisl(:), thisn(:), thisz(:), zl(:), indexlz(:,:)
 
@@ -631,7 +671,20 @@ contains
        open(lun,file=filename,status='old',form='formatted')
        rewind(lun)
 
-       call read_header_tmp(n_orbnl,lmax,n_pjnl, zval, z, lun)
+       xc_func = 0
+       ps_type = 0
+       call read_header_tmp(n_orbnl,lmax,n_pjnl, zval, z, lun, xc_func, ps_type)
+       if(xc_func/=0) then
+          ps_info%functional = xc_func
+       end if
+       if(ps_type/=0) then
+          ps_info%ps_type = ps_type
+          if(ps_info%ps_type/=pseudo_type) &
+               call cq_abort("Error: ion file pseudopotential type incompatible with input file ", &
+               ps_info%ps_type, pseudo_type)
+       else
+          call cq_warn(sub_name, "Pseudopotential type not detected from ion file")
+       end if
        call alloc_pseudo_info(ps_info, n_pjnl)
        call start_timer(tmr_std_allocation)
        allocate(dummy_rada(n_orbnl),thisl(n_orbnl),thisn(n_orbnl),thisz(n_orbnl),thispop(n_orbnl),zl(0:lmax))
@@ -727,7 +780,7 @@ contains
        read(lun,*)
        ps_info%lmax = 0
        do i=1,ps_info%n_pjnl
-!          read(lun,'(2i3,f22.16)') &
+          !          read(lun,'(2i3,f22.16)') &
           read(lun,*) &
                ps_info%pjnl_l(i), ps_info%pjnl_n(i), ps_info%pjnl_ekb(i)
           !!   25/Jul/2002 TM : Rydberg units -> Hartree units
@@ -794,7 +847,7 @@ contains
        end if
        !ps_info%flag_pcc = .true.
 
-!9999   continue
+       !9999   continue
        call io_close(lun)
     endif !  (inode == ionode) then
     ! Now broadcast the information
@@ -821,7 +874,7 @@ contains
              if(inode/=ionode) then
                 call start_timer(tmr_std_allocation)
                 allocate(pao_info%angmom(l)%zeta(tzl),pao_info%angmom(l)%prncpl(tzl),&
-                         pao_info%angmom(l)%occ(tzl),pao_info%angmom(l)%semicore(tzl),STAT=alls)
+                     pao_info%angmom(l)%occ(tzl),pao_info%angmom(l)%semicore(tzl),STAT=alls)
                 if(alls/=0) call cq_abort('Failed to allocate PAOs zeta')
                 call stop_timer(tmr_std_allocation)
              end if
@@ -921,15 +974,17 @@ contains
     end if ! numprocs>1
   contains
 
-    subroutine read_header_tmp(n_orbnl, lmax_basis, n_pjnl, zval, z, unit)
+    subroutine read_header_tmp(n_orbnl, lmax_basis, n_pjnl, zval, z, unit, xc_func, pseudo_type)
 
       use global_module, ONLY: iprint_pseudo
       use input_module, ONLY: leqi
+      use XC, ONLY: functional_lda_pw92, functional_gga_pbe96, functional_gga_pbe96_rev98, &
+           functional_gga_pbe96_r99, functional_gga_pbe96_wc
 
       implicit none
 
       integer, intent(in)         :: unit
-      integer, intent(out) :: n_orbnl, n_pjnl, z
+      integer, intent(out) :: n_orbnl, n_pjnl, z, xc_func, pseudo_type
       real(double), intent(out) :: zval
 
       character(len=78) :: line, trim_line
@@ -940,10 +995,12 @@ contains
       real(double) :: mass, self_energy
 
       ! For judging P.C.C.
-      character(len=2) :: symbol2, xc
+      character(len=2) :: symbol2, xc_code
       character(len=3) :: rel
       character(len=4) :: pcc
 
+      xc_func = 0
+      pseudo_type = 0
       ! Judge if P.C.C. is considered
       read(unit,'(a)') line
       trim_line = trim(line)
@@ -954,12 +1011,35 @@ contains
             read(unit,'(a)') line
             trim_line = trim(line)
             if (leqi(trim_line(1:24),'<pseudopotential_header>')) then
-              read (unit, '(1x,a2,1x,a2,1x,a3,1x,a4)') symbol2, xc, rel, pcc
-              if (leqi(pcc,'pcec')) then
-                ps_info%flag_pcc = .true.
-              else !if (pcc .NE. 'pcec') then
-                ps_info%flag_pcc = .false.
-              endif
+               read (unit, '(1x,a2,1x,a2,1x,a3,1x,a4)') symbol2, xc_code, rel, pcc
+               if (leqi(pcc,'pcec')) then
+                  ps_info%flag_pcc = .true.
+               else !if (pcc .NE. 'pcec') then
+                  ps_info%flag_pcc = .false.
+               endif
+               ! Set XC functional
+               if(leqi(xc_code,'ca')) then      ! LDA; ATOM code uses PZ81 but use PW92
+                  xc_func = functional_lda_pw92
+               else if(leqi(xc_code,'pb')) then ! PBE
+                  xc_func = functional_gga_pbe96
+               else if(leqi(xc_code,'rv')) then ! RevPBE
+                  xc_func = functional_gga_pbe96_rev98
+               else if(leqi(xc_code,'rp')) then ! RPBE
+                  xc_func = functional_gga_pbe96_r99
+               else if(leqi(xc_code,'wc')) then ! Wu-Cohen
+                  xc_func = functional_gga_pbe96_wc
+               end if
+               read(unit,'(a)') line
+               trim_line = trim(line)
+               if(.NOT.leqi(trim_line(1:25),'</pseudopotential_header>')) then
+                  if(leqi(trim_line(2:4),'ATM')) pseudo_type = 1 ! Siesta-type
+               end if
+            else if (leqi(trim_line(1:14),'<Conquest_pseu')) then
+               read(unit,'(a)') line ! Check this for Hamann
+               if(leqi(line(3:8),'Hamann')) pseudo_type = 3
+               read(unit,'(a)') line
+               read(unit,'(a)') line
+               read(unit,'(a26,i7)') line, xc_func
             endif
          end do
       endif
@@ -981,6 +1061,7 @@ contains
          write(io_lun,fmt='(10x,"lmax_basis, n_orbnl = ",2i4)') lmax_basis, n_orbnl
          read(unit,'(2i4)') lmax_projs, n_pjnl
          write(io_lun,fmt='(10x,"lmax_projs, n_pjnl = ",2i4)') lmax_projs, n_pjnl
+         if(xc_func/=0) write(io_lun,fmt='(10x,"XC functional code = ",i8)') xc_func
       else
          read(unit,'(a2)') symbol
          read(unit,'(a20)') label
@@ -995,5 +1076,5 @@ contains
     end subroutine read_header_tmp
   end subroutine read_ion_ascii_tmp
 
-!!***
+  !!***
 end module pseudo_tm_info

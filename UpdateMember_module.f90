@@ -738,6 +738,8 @@ contains
   !!  MODIFICATION HISTORY
   !!    2016/04/06 dave
   !!     Changed nx_in_cover allocatable to pointer (gcc 4.4.7 issue)
+  !!    2019/11/04 15:14 dave
+  !!     Replace call to indexx with call to heapsort_integer_index
   !!  SOURCE
   !!
   subroutine allocate_CSmember(set,groups,nx_in_cover,ny_in_cover,nz_in_cover, &
@@ -747,7 +749,7 @@ contains
     use basic_types
     use global_module, ONLY: rcellx,rcelly,rcellz
     use GenComms, ONLY: cq_abort
-    use cover_module, ONLY: indexx
+    use functions, ONLY: heapsort_integer_index
     ! DB
     use io_module, ONLY: get_file_name
     use GenComms, ONLY: inode
@@ -886,7 +888,7 @@ contains
       enddo
     enddo
     ! sort minimum CS by nodes.
-    call indexx(groups%mx_gcell,ng_in_min,ind_min,min_sort)
+    call heapsort_integer_index(ng_in_min,ind_min,min_sort)
 
     ! Go over all GCS groups in NOPG order.
     ind_cover = 0
@@ -1068,20 +1070,18 @@ contains
   end subroutine cover_update_mparts
   !!***
 
-  !!****f* UpdateMember_module/updateMembers *
+  !!****f* UpdateMember_module/updateMembers_group *
   !!
   !!  NAME 
-  !!   updateMembers
+  !!   updateMembers_group
   !!  USAGE
   !! 
   !!  PURPOSE
-  !!   All member-update processes are carried out
+  !!   Preliminary: update the group
   !!  INPUTS
-  !!   fixed_potential,velocity,iteration
-  !!    - 'iteration' is optional
-  !!    - 'iteration' will be deleted in the next update
+  !!   velocity, flag_empty_bundle
   !!  USES
-  !!   basic_types,global_module,ewald_module,group_module,primary_module,cover_module
+  !!   
   !!  AUTHOR
   !!   Michiaki Arita
   !!  CREATION DATE
@@ -1095,85 +1095,108 @@ contains
   !!     Changed nx_in_cover allocatable to pointer (gcc 4.4.7 issue)
   !!   2018/07/11 12:01 dave
   !!    Added empty bundle flag to force redistribution of partitions to processes
+  !!   2019/11/18 11:49 dave
+  !!    Split to update group and then covering sets
   !!  SOURCE
   !!
-  subroutine updateMembers(fixed_potential,velocity,flag_empty_bundle)
+  subroutine updateMembers_group(velocity,flag_empty_bundle)
 
     ! Module usage
-    use basic_types
-    use global_module, ONLY: flag_dft_d2,ni_in_cell
-    use GenComms, ONLY: cq_abort,my_barrier
-    use group_module, ONLY: parts
-    use primary_module, ONLY: bundle,domain
-    use cover_module, ONLY: BCS_parts,DCS_parts,ion_ion_CS,D2_CS
-    use density_module, ONLY: build_Becke_weights
-    ! DB
-    use global_module, ONLY: io_lun
-    use input_module, ONLY: inode,ionode,io_assign,io_close
-    use io_module, ONLY: get_file_name
-    use global_module, ONLY: numprocs
+    use global_module, ONLY: ni_in_cell
+    use group_module,           only: parts
 
     implicit none
 
     ! passed variables
-    logical :: fixed_potential
     real(double) :: velocity(3,ni_in_cell)
     logical :: flag_empty_bundle
-    !ORI integer, intent(in), optional :: iteration
 
-    ! local variables
-    integer :: nmodx,nmody,nmodz
-    integer, pointer :: nx_in_cover(:),ny_in_cover(:),nz_in_cover(:)
-    real(double) :: dcellx,dcelly,dcellz
-
-    ! DB
-    integer :: lun_db,lun_db2,lun_db3,lun_db4,lun_db5,lun_db6,lun_db7,lun_db8,lun_db9,lun_db10
-    character(20) :: file_name
-
-    ! NOTE: This if statement will be deleted in the next update
-    !ORI if (present(iteration)) then                                ! for MD
-    !ORI   call group_update_mparts(velocity,iteration)
-    !ORI else
-    !ORI   call group_update_mparts(velocity)                        ! for CG
-    !ORI endif
     call group_update_mparts(velocity,flag_empty_bundle) ! both for md & cg
-    if(flag_empty_bundle) return
     ! Update members n PS
     call deallocate_PSmember
     call allocate_PSmember(parts)
     call primary_update_mparts
-    call deallocate_CSmember(BCS_parts)
-    call allocate_CSmember(BCS_parts,parts,nx_in_cover,ny_in_cover,nz_in_cover, &
-                           nmodx,nmody,nmodz,dcellx,dcelly,dcellz,bundle)
-    call cover_update_mparts(BCS_parts,parts,nx_in_cover,ny_in_cover,nz_in_cover, &
-                             nmodx,nmody,nmodz,dcellx,dcelly,dcellz,bundle)
-    if (inode.EQ.ionode) write (io_lun,*) "Finished updating BCS_parts!"
-    ! Update members in CS
-    call deallocate_CSmember(DCS_parts)
-    call allocate_CSmember(DCS_parts,parts,nx_in_cover,ny_in_cover,nz_in_cover, &
-                           nmodx,nmody,nmodz,dcellx,dcelly,dcellz,domain)
-    call cover_update_mparts(DCS_parts,parts,nx_in_cover,ny_in_cover,nz_in_cover, &
-                             nmodx,nmody,nmodz,dcellx,dcelly,dcellz,domain)
-    if (inode.EQ.ionode) write (io_lun,*) "Finished updating DCS_parts!"
-    call deallocate_CSmember(ion_ion_CS)
-    call allocate_CSmember(ion_ion_CS,parts,nx_in_cover,ny_in_cover,nz_in_cover, &
-                             nmodx,nmody,nmodz,dcellx,dcelly,dcellz)
-    call cover_update_mparts(ion_ion_CS,parts,nx_in_cover,ny_in_cover,nz_in_cover, &
-                               nmodx,nmody,nmodz,dcellx,dcelly,dcellz)
-      if (inode.EQ.ionode) write (io_lun,*) "Finished updating ion_ion_CS!"
-    if (flag_dft_d2) then
-      call deallocate_CSmember(D2_CS)
-      call allocate_CSmember(D2_CS,parts,nx_in_cover,ny_in_cover,nz_in_cover, &
-                             nmodx,nmody,nmodz,dcellx,dcelly,dcellz)
-      call cover_update_mparts(D2_CS,parts,nx_in_cover,ny_in_cover,nz_in_cover, &
-                               nmodx,nmody,nmodz,dcellx,dcelly,dcellz)
-      if (inode.EQ.ionode) write (io_lun,*) "Finished updating D2_CS!"
-    endif
-    call my_barrier()
-    !if (flag_Becke_weights) call build_Becke_weights
-
     return
-  end subroutine updateMembers
+  end subroutine updateMembers_group
   !! ***
 
+  !!****f* UpdateMember_module/updateMembers_cs *
+  !!
+  !!  NAME 
+  !!   updateMembers_cs
+  !!  USAGE
+  !! 
+  !!  PURPOSE
+  !!   Updates members of covering sets (atoms only)
+  !!  INPUTS
+  !!   velocity
+  !!  USES
+  !!   
+  !!  AUTHOR
+  !!   Michiaki Arita
+  !!  CREATION DATE
+  !!   2013/07/02
+  !!  MODIFICATION HISTORY
+  !!   2013/08/21 M.Arita
+  !!   - Removed iteration
+  !!   2015/11/24 08:29 dave
+  !!    Removed old ewald reference
+  !!   2016/04/06 dave
+  !!     Changed nx_in_cover allocatable to pointer (gcc 4.4.7 issue)
+  !!   2018/07/11 12:01 dave
+  !!    Added empty bundle flag to force redistribution of partitions to processes
+  !!   2019/11/18 11:49 dave
+  !!    Split to update group and then covering sets
+  !!   2019/12/13 13:28 dave
+  !!    Removed redundant velocity argument
+  !!  SOURCE
+  !!
+  subroutine updateMembers_cs
+
+    ! Module usage
+    use global_module, ONLY: flag_dft_d2,ni_in_cell
+    use group_module, ONLY: parts
+    use primary_module, ONLY: bundle,domain
+    use cover_module, ONLY: BCS_parts,DCS_parts,ion_ion_CS,D2_CS
+
+    implicit none
+
+    ! Local variables
+    real(double)   :: dcellx, dcelly, dcellz
+    integer        :: nmodx,nmody,nmodz
+    ! x,y,z numbering of CS groups (for CC labels)
+    integer, pointer, dimension(:)  :: nx_in_cover
+    integer, pointer, dimension(:)  :: ny_in_cover
+    integer, pointer, dimension(:)  :: nz_in_cover
+    
+    ! Update members in BCS_parts
+    call deallocate_CSmember(BCS_parts)
+    call allocate_CSmember(BCS_parts,parts,nx_in_cover,ny_in_cover,nz_in_cover, &
+         nmodx,nmody,nmodz,dcellx,dcelly,dcellz,bundle)
+    call cover_update_mparts(BCS_parts,parts,nx_in_cover,ny_in_cover,nz_in_cover, &
+         nmodx,nmody,nmodz,dcellx,dcelly,dcellz,bundle)
+    ! Update members in DCS_parts
+    call deallocate_CSmember(DCS_parts)
+    call allocate_CSmember(DCS_parts,parts,nx_in_cover,ny_in_cover,nz_in_cover, &
+         nmodx,nmody,nmodz,dcellx,dcelly,dcellz,domain)
+    call cover_update_mparts(DCS_parts,parts,nx_in_cover,ny_in_cover,nz_in_cover, &
+         nmodx,nmody,nmodz,dcellx,dcelly,dcellz,domain)
+    ! Update members in ion_ion_CS
+    call deallocate_CSmember(ion_ion_CS)
+    call allocate_CSmember(ion_ion_CS,parts,nx_in_cover,ny_in_cover,nz_in_cover, &
+         nmodx,nmody,nmodz,dcellx,dcelly,dcellz)
+    call cover_update_mparts(ion_ion_CS,parts,nx_in_cover,ny_in_cover,nz_in_cover, &
+         nmodx,nmody,nmodz,dcellx,dcelly,dcellz)
+    ! If we're doing DFT-D2, update
+    if (flag_dft_d2) then
+       call deallocate_CSmember(D2_CS)
+       call allocate_CSmember(D2_CS,parts,nx_in_cover,ny_in_cover,nz_in_cover, &
+            nmodx,nmody,nmodz,dcellx,dcelly,dcellz)
+       call cover_update_mparts(D2_CS,parts,nx_in_cover,ny_in_cover,nz_in_cover, &
+            nmodx,nmody,nmodz,dcellx,dcelly,dcellz)
+    endif
+    return
+  end subroutine updateMembers_cs
+  !! ***
+  
 end module UpdateMember_module

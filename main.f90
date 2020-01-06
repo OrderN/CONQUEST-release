@@ -59,6 +59,8 @@
 !!   - updated some calls that no longer passes mu
 !!   2016/01/28 16:45 dave
 !!    Updated module name to ion_electrostatic
+!!   2019/12/24 tsuyoshi   
+!!    Removed flag_atomic_density_from_pao
 !!  SOURCE
 !!
 program Conquest
@@ -94,8 +96,7 @@ program Conquest
   use ion_electrostatic
   use DiagModule
   use ScalapackFormat
-  use atomic_density, only: atomic_density_table, rcut_dens, &
-                            flag_atomic_density_from_pao
+  use atomic_density, only: atomic_density_table, rcut_dens
   use block_module,   only: nx_in_block,ny_in_block,nz_in_block, &
                             n_pts_in_block
   use memory_module

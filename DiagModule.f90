@@ -313,7 +313,7 @@ module DiagModule
   real(double), allocatable, dimension(:,:) :: total_DOS
   real(double), allocatable, dimension(:,:,:) :: pDOS
   real(double), allocatable, dimension(:,:,:,:,:) :: pDOS_angmom ! Bin, atom, l, m, spin
-  real(double), allocatable, dimension(:) :: w_pDOS
+  real(double), allocatable, dimension(:,:) :: w_pDOS
   real(double) :: dE_DOS, pf_DOS
   integer :: n_DOS_max, n_DOS_wid
   logical :: flag_pDOS_include_semicore
@@ -463,10 +463,17 @@ contains
   !!    Added optional normalization of each eigenstate of PDOS
   !!   2018/10/22 14:28 dave & jsb
   !!    Adding (l,m)-projection for pDOS
+  !!   2018/11/13 17:30 nakata
+  !!    Changed matS to be spin_SF dependent
   !!   2019/03/18 17:00 nakata
   !!    Added wf_self_con for accumulate_DOS
   !!   2019/05/09 dave
   !!    Bug fix for band density output (and added write_eigenvalues call)
+  !!   2019/10/23 10:50 dave
+  !!    Bug fix for pDOS output
+  !!   2019/11/21 10:40 nakata
+  !!    Bug fix for pDOS normalisation for spin-polarised calculations 
+  !!    (added the dimension of spin to w_pDOS)
   !!  SOURCE
   !!
   subroutine FindEvals(electrons)
@@ -484,7 +491,8 @@ contains
          flag_out_wf,wf_self_con, max_wf, paof, sf, atomf, flag_out_wf_by_kp, &
          out_wf, n_DOS, E_DOS_max, E_DOS_min, flag_write_DOS, sigma_DOS, &
          flag_write_projected_DOS, flag_normalise_pDOS, flag_pDOS_angmom, flag_pDOS_lm, &
-         E_wf_min, E_wf_max, flag_wf_range_Ef
+         E_wf_min, E_wf_max, flag_wf_range_Ef, &
+         flag_SpinDependentSF
     use GenComms,        only: my_barrier, cq_abort, mtime, gsum, myid
     use ScalapackFormat, only: matrix_size, proc_rows, proc_cols,     &
          block_size_r,       &
@@ -522,7 +530,7 @@ contains
     complex(double_cplx), dimension(:,:,:), allocatable :: expH
     complex(double_cplx) :: c_n_alpha2, c_n_setA2, c_n_setB2
     integer :: info, stat, il, iu, i, j, m, mz, prim_size, ng, wf_no, &
-         kp, spin, iacc, iprim, l, band, cdft_group, atom_fns_K, &
+         kp, spin, spin_SF, iacc, iprim, l, band, cdft_group, atom_fns_K, &
          n_band_min, n_band_max
     integer, allocatable, dimension(:) :: matBand
     integer, allocatable, dimension(:,:) :: matBand_kp
@@ -652,7 +660,7 @@ contains
              pDOS_angmom = zero
           endif
           if (flag_normalise_pDOS) then
-             allocate(w_pDOS(matrix_size))
+             allocate(w_pDOS(matrix_size,nspin))
              w_pDOS = zero
           end if
        end if
@@ -888,14 +896,14 @@ contains
                 if(wf_self_con.AND.flag_write_DOS) then
                    if(flag_write_projected_DOS) then
                       if (flag_normalise_pDOS) then
-                         call get_weight_pDOS(expH(:,:,spin),w_pDOS)
-                         call gsum(w_PDOS(:), matrix_size)
+                         call get_weight_pDOS(expH(:,:,spin),w_pDOS(:,spin))
+                         call gsum(w_PDOS(:,spin), matrix_size)
                       endif
                       if (flag_pDOS_angmom) then
                          if (flag_normalise_pDOS) then
                             call accumulate_DOS(wtk(kp),w(:,kp,spin),expH(:,:,spin),total_DOS(:,spin),spin, &
                                                 projDOS=pDOS(:,:,spin),projDOS_angmom=pDOS_angmom(:,:,:,:,spin), &
-                                                weight_pDOS=w_pDOS)
+                                                weight_pDOS=w_pDOS(:,spin))
                          else
                             call accumulate_DOS(wtk(kp),w(:,kp,spin),expH(:,:,spin),total_DOS(:,spin),spin, &
                                                 projDOS=pDOS(:,:,spin),projDOS_angmom=pDOS_angmom(:,:,:,:,spin))
@@ -903,7 +911,7 @@ contains
                       else
                          if (flag_normalise_pDOS) then
                             call accumulate_DOS(wtk(kp),w(:,kp,spin),expH(:,:,spin),total_DOS(:,spin),spin, &
-                                                projDOS=pDOS(:,:,spin),weight_pDOS=w_pDOS)
+                                                projDOS=pDOS(:,:,spin),weight_pDOS=w_pDOS(:,spin))
                          else
                             call accumulate_DOS(wtk(kp),w(:,kp,spin),expH(:,:,spin),total_DOS(:,spin),spin, &
                                                 projDOS=pDOS(:,:,spin))
@@ -1079,18 +1087,21 @@ contains
              if (     flag_pDOS_angmom) call dump_projected_DOS(pDOS,Efermi,pDOS_angmom=pDOS_angmom,Nangmom=Nangmom)
           else
              call gsum(pDOS(:,:,:),n_DOS,ni_in_cell,nspin)
-             if(flag_pDOS_lm) then
-                do spin = 1, nspin
-                   call gsum(pDOS_angmom(:,:,:,:,spin),n_DOS,ni_in_cell,Nangmom,2*Nangmom-1)
-                enddo
+             if(flag_pDOS_angmom) then
+                if(flag_pDOS_lm) then
+                   do spin = 1, nspin
+                      call gsum(pDOS_angmom(:,:,:,:,spin),n_DOS,ni_in_cell,Nangmom,2*Nangmom-1)
+                   enddo
+                else
+                   do spin = 1, nspin
+                      call gsum(pDOS_angmom(:,:,:,1,spin),n_DOS,ni_in_cell,Nangmom)
+                   enddo
+                end if
+                if (inode==ionode) then
+                   call dump_projected_DOS(pDOS,Efermi,pDOS_angmom=pDOS_angmom,Nangmom=Nangmom)
+                end if
              else
-                do spin = 1, nspin
-                   call gsum(pDOS_angmom(:,:,:,1,spin),n_DOS,ni_in_cell,Nangmom)
-                enddo
-             end if
-             if (inode==ionode) then
-                if (.not.flag_pDOS_angmom) call dump_projected_DOS(pDOS,Efermi)
-                if (     flag_pDOS_angmom) call dump_projected_DOS(pDOS,Efermi,pDOS_angmom=pDOS_angmom,Nangmom=Nangmom)
+                if (inode==ionode) call dump_projected_DOS(pDOS,Efermi)
              endif
           endif
           if (flag_normalise_pDOS) deallocate(w_pDOS)
@@ -1137,8 +1148,10 @@ contains
        end if
        ! for tr(S.G)
        bandE_total = zero
+       spin_SF = 1
        do spin = 1, nspin
-          bandE(spin) = matrix_product_trace(matS, matM12(spin))
+          if (flag_SpinDependentSF) spin_SF = spin
+          bandE(spin) = matrix_product_trace(matS(spin_SF), matM12(spin))
           bandE_total = bandE_total + spin_factor * bandE(spin)
        end do
        if (inode == ionode) then
@@ -3920,7 +3933,8 @@ contains
     use datatypes
     use numbers,         only: half, zero
     use global_module,   only: n_DOS, E_DOS_max, E_DOS_min, flag_write_DOS, sigma_DOS, flag_write_projected_DOS, &
-                               sf, atomf, id_glob, species_glob, nspin_SF, flag_normalise_pDOS, flag_pDOS_angmom, flag_pDOS_lm
+                               sf, atomf, id_glob, species_glob, flag_normalise_pDOS, flag_pDOS_angmom, flag_pDOS_lm, &
+                               flag_SpinDependentSF
     use ScalapackFormat, only: matrix_size
     use species_module,  only: nsf_species, natomf_species
     use group_module,    only: parts
@@ -4048,8 +4062,8 @@ contains
                 acc = acc + nsf_species(atom_spec)
              end do ! atom
           else
-             spin_SF = spinSF
-             if (nspin_SF == 1) spin_SF = 1
+             spin_SF = 1
+             if (flag_SpinDependentSF) spin_SF = spinSF
              acc = 0 
              iprim = 0
              do part = 1,bundle%groups_on_node ! Loop over primary set partitions
@@ -4177,9 +4191,11 @@ contains
   !!  CREATION DATE
   !!   07/09/2017
   !!  MODIFICATION HISTORY
+  !!   21/11/2019
+  !!    Renamed w_pDOS to weight_pDOS 
   !!  SOURCE
   !!
-  subroutine get_weight_pDOS(evec,w_pDOS)
+  subroutine get_weight_pDOS(evec,weight_pDOS)
 
     use datatypes
     use numbers, ONLY: zero
@@ -4191,7 +4207,7 @@ contains
 
     ! Passed variables
     complex(double_cplx), dimension(:,:), intent(in) :: evec
-    real(double), dimension(:) :: w_pDOS
+    real(double), dimension(:) :: weight_pDOS
 
     ! Local variables
     integer :: iwf, acc, atom, nsf
@@ -4200,7 +4216,7 @@ contains
     ! ---------------
     ! Calculate weight for each band to normalise pDOS
     ! ---------------
-    w_pDOS = zero
+    weight_pDOS = zero
     do iwf=1,matrix_size ! Effectively all bands
        acc = 0
        fac = zero
@@ -4210,7 +4226,7 @@ contains
           end do
           acc = acc + nsf_species(bundle%species(atom))
        end do
-       w_pDOS(iwf) = fac
+       weight_pDOS(iwf) = fac
     end do
   end subroutine get_weight_pDOS
   !!***
@@ -4246,13 +4262,15 @@ contains
   !!    Added abort if we pass k-point with multiple process groups (not possible at present)
   !!   2018/09/05 14:25 dave
   !!    Updating the behaviour when info/=0
+  !!   2018/11/13 17:30 nakata
+  !!    Changed matS to be spin_SF dependent
   !!  SOURCE
   !!
   subroutine distrib_and_diag(spin,index_kpoint,mode,flag_store_w,kpassed)
 
     use datatypes
     use numbers
-    use global_module,   only: iprint_DM
+    use global_module,   only: iprint_DM, flag_SpinDependentSF
     use mult_module,     only: matH, matS
     use ScalapackFormat, only: matrix_size, proc_rows, proc_cols,     &
          nkpoints_max, pgid, N_kpoints_in_pg, pg_kpoints, N_procs_in_pg, proc_groups
@@ -4268,7 +4286,10 @@ contains
 
     ! Local
     real(double) :: vl, vu, orfac, scale
-    integer :: il, iu, m, mz, info
+    integer :: il, iu, m, mz, info, spin_SF
+
+    spin_SF = 1
+    if (flag_SpinDependentSF) spin_SF = spin
 
     scale = one / real(N_procs_in_pg(pgid), double)
     vl = zero
@@ -4282,10 +4303,10 @@ contains
     if(PRESENT(kpassed)) then
        if(proc_groups>1) call cq_abort("Coding error: can't have more than one PG and pass k-point to distrib_and_diag")
        call DistributeCQ_to_SC(DistribH, matH(spin), index_kpoint, SCHmat(:,:,spin),kpassed)
-       call DistributeCQ_to_SC(DistribS, matS, index_kpoint, SCSmat(:,:,spin),kpassed)
+       call DistributeCQ_to_SC(DistribS, matS(spin_SF), index_kpoint, SCSmat(:,:,spin),kpassed)
     else
        call DistributeCQ_to_SC(DistribH, matH(spin), index_kpoint, SCHmat(:,:,spin))
-       call DistributeCQ_to_SC(DistribS, matS, index_kpoint, SCSmat(:,:,spin))
+       call DistributeCQ_to_SC(DistribS, matS(spin_SF), index_kpoint, SCSmat(:,:,spin))
     end if
     ! Now, if this processor is involved, do the diagonalisation
     if (iprint_DM > 3 .and. inode == ionode) &

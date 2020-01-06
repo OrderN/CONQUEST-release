@@ -46,6 +46,8 @@
 !!    Extensive tweaks to fix forces with analytic blips (throughout)
 !!   2014/09/15 18:30 lat
 !!    fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
+!!   2019/10/24 11:52 dave
+!!    Changed function calls to FindMinDM throughout
 !!  SOURCE
 !!
 module test_force_module
@@ -180,7 +182,7 @@ contains
              call get_H_matrix(.true., fixed_potential, electrons, &
                                density, maxngrid)
              call FindMinDM(n_L_iterations, vary_mu, L_tolerance, &
-                            inode, ionode, reset_L, .false.)
+                            reset_L, .false.)
              call get_energy(total_energy)
           end if
        end if
@@ -203,7 +205,7 @@ contains
              call get_H_matrix(.true., fixed_potential, electrons, &
                                density, maxngrid)
              call FindMinDM(n_L_iterations, vary_mu, L_tolerance, &
-                            inode, ionode, reset_L, .false.)
+                            reset_L, .false.)
              call get_energy(total_energy)
           end if
           ! call force( fixed_potential, vary_mu, n_L_iterations, &
@@ -229,7 +231,7 @@ contains
              call get_H_matrix(.true., fixed_potential, electrons, &
                                density, maxngrid)
              call FindMinDM(n_L_iterations, vary_mu, L_tolerance, &
-                            inode, ionode, reset_L, .false.)
+                            reset_L, .false.)
              call get_energy(total_energy)
           end if
        end if
@@ -256,7 +258,7 @@ contains
                 call get_H_matrix(.true., fixed_potential, electrons, &
                                   density, maxngrid)
                 call FindMinDM(n_L_iterations, vary_mu, L_tolerance, &
-                               inode, ionode, reset_L, .false.)
+                               reset_L, .false.)
                 call get_energy(total_energy)
              end if
           end if
@@ -283,7 +285,7 @@ contains
              call get_H_matrix(.true., fixed_potential, electrons, &
                                density, maxngrid)
              call FindMinDM(n_L_iterations, vary_mu, L_tolerance, &
-                            inode, ionode, reset_L, .false.)
+                            reset_L, .false.)
              call get_energy(total_energy)
           end if
        end if
@@ -308,7 +310,7 @@ contains
              call get_H_matrix(.true., fixed_potential, electrons, &
                                density, maxngrid)
              call FindMinDM(n_L_iterations, vary_mu, L_tolerance, &
-                            inode, ionode, reset_L, .false.)
+                            reset_L, .false.)
              call get_energy(total_energy)
           end if
        end if
@@ -334,7 +336,7 @@ contains
              call get_H_matrix(.true., fixed_potential, electrons, &
                                density, maxngrid)
              call FindMinDM(n_L_iterations, vary_mu, L_tolerance, &
-                            inode, ionode, reset_L, .false.)
+                            reset_L, .false.)
              call get_energy(total_energy)
           end if
        end if
@@ -358,7 +360,7 @@ contains
              call get_H_matrix(.true., fixed_potential, electrons, &
                                density, maxngrid)
              call FindMinDM(n_L_iterations, vary_mu, L_tolerance, &
-                            inode, ionode, reset_L, .false.)
+                            reset_L, .false.)
              call get_energy(total_energy)
           end if
        end if
@@ -382,7 +384,7 @@ contains
              call get_H_matrix(.true., fixed_potential, electrons, &
                                density, maxngrid)
              call FindMinDM(n_L_iterations, vary_mu, L_tolerance, &
-                            inode, ionode, reset_L, .false.)
+                            reset_L, .false.)
              call get_energy(total_energy)
           end if
        end if
@@ -408,7 +410,7 @@ contains
                 call get_H_matrix(.true., fixed_potential, electrons, &
                                   density, maxngrid)
                 call FindMinDM(n_L_iterations, vary_mu, L_tolerance, &
-                               inode, ionode, reset_L, .false.)
+                               reset_L, .false.)
                 call get_energy(total_energy)
              end if
           end if
@@ -554,7 +556,7 @@ contains
          maxngrid)
     call pulay_force(p_force, KE_force, fixed_potential, vary_mu,      &
                      n_L_iterations, L_tolerance, tolerance, &
-                     total_energy, expected_reduction, ni_in_cell)
+                     total_energy, ni_in_cell)
     ! This routine deals with the movement of the nonlocal
     ! pseudopotential.
     if (flag_basis_set == PAOs.OR.(flag_basis_set == blips.AND.flag_analytic_blip_int)) then
@@ -619,8 +621,8 @@ contains
     !else ! Ab initio TB: vary only DM
        call get_H_matrix(.true., fixed_potential, electrons, density, &
                          maxngrid)
-       call FindMinDM(n_L_iterations, vary_mu, L_tolerance, inode, &
-                      ionode, reset_L, .false.)
+       call FindMinDM(n_L_iterations, vary_mu, L_tolerance, &
+                      reset_L, .false.)
        call get_energy(total_energy)
     !end if
     ! Note that we've held K fixed but allow potential to vary ? Yes:
@@ -634,7 +636,7 @@ contains
     WhichPulay = BothPulay
     call pulay_force(p_force, KE_force, fixed_potential, vary_mu,      &
                      n_L_iterations, L_tolerance, tolerance, &
-                     total_energy, expected_reduction, ni_in_cell)
+                     total_energy, ni_in_cell)
     if (flag_basis_set == PAOs.OR.(flag_basis_set == blips.AND.flag_analytic_blip_int)) then
        call get_HF_non_local_force(HF_NL_force, HF_and_Pulay, &
                                    ni_in_cell)
@@ -1459,7 +1461,7 @@ contains
        call get_S_matrix(inode, ionode)
        call pulay_force(p_force, KE_force, fixed_potential, vary_mu,      &
             n_L_iterations, L_tolerance, tolerance, &
-            total_energy, expected_reduction, ni_in_cell)       
+            total_energy, ni_in_cell)
     else
        call get_KE_force(KE_force, ni_in_cell)
     end if
@@ -1515,7 +1517,7 @@ contains
        KE_force = zero
        call pulay_force(p_force, KE_force, fixed_potential, vary_mu,      &
             n_L_iterations, L_tolerance, tolerance, &
-            total_energy, expected_reduction, ni_in_cell)       
+            total_energy, ni_in_cell)
        WhichPulay = BothPulay
     else
        call get_KE_force(KE_force, ni_in_cell)
@@ -1671,7 +1673,7 @@ contains
     WhichPulay = PhiPulay
     call pulay_force(p_force, KE_force, fixed_potential, vary_mu,      &
                      n_L_iterations, L_tolerance, tolerance, &
-                     total_energy, expected_reduction, ni_in_cell)
+                     total_energy, ni_in_cell)
     ! Store local energy
     E0 = band_energy
     ! Find out direction and atom for displacement
@@ -1720,7 +1722,7 @@ contains
     p_force = zero
     call pulay_force(p_force, KE_force, fixed_potential, vary_mu,      &
                      n_L_iterations, L_tolerance, tolerance, &
-                     total_energy, expected_reduction, ni_in_cell)
+                     total_energy, ni_in_cell)
     E1 = band_energy
     F1 = p_force(TF_direction,TF_atom_moved)
     if (inode == ionode) &
@@ -1857,7 +1859,7 @@ contains
     p_force = zero
     call pulay_force(p_force, KE_force, fixed_potential, vary_mu,      &
                      n_L_iterations, L_tolerance, tolerance, &
-                     total_energy, expected_reduction, ni_in_cell)
+                     total_energy, ni_in_cell)
     ! Store local energy
     E0 = band_energy
     ! Find out direction and atom for displacement
@@ -1893,8 +1895,8 @@ contains
     p_force = zero
     call get_S_matrix(inode, ionode)
     ! Now we diagonalise with new S but keeping H fixed
-    call FindMinDM(n_L_iterations, vary_mu, L_tolerance, inode, &
-         ionode, reset_L, .false.)
+    call FindMinDM(n_L_iterations, vary_mu, L_tolerance, &
+         reset_L, .false.)
     call get_energy(total_energy)
     ! Find force
     if (flag_basis_set == PAOs) then
@@ -1921,7 +1923,7 @@ contains
     end if
     call pulay_force(p_force, KE_force, fixed_potential, vary_mu,      &
                      n_L_iterations, L_tolerance, tolerance, &
-                     total_energy, expected_reduction, ni_in_cell)
+                     total_energy, ni_in_cell)
     E1 = band_energy
     F1 = p_force(TF_direction,TF_atom_moved)
     if (inode == ionode) &
@@ -2334,7 +2336,7 @@ contains
     E0 = total_energy
     ! Find force
     call force(fixed_potential, vary_mu, n_L_iterations, L_tolerance, &
-               tolerance, total_energy, expected_reduction, .true.)
+               tolerance, total_energy, .true.)
     ! Find out direction and atom for displacement
     if (inode == ionode) &
          write (io_lun,fmt='(2x,"Moving atom ",i5," in &
@@ -2375,13 +2377,13 @@ contains
     else ! Ab initio TB: vary only DM
        call get_H_matrix(.true., fixed_potential, electrons, density, &
                          maxngrid)
-       call FindMinDM(n_L_iterations, vary_mu, L_tolerance, inode, &
-                      ionode, reset_L, .false.)
+       call FindMinDM(n_L_iterations, vary_mu, L_tolerance, &
+                      reset_L, .false.)
        call get_energy(total_energy)
     end if
     E1 = total_energy
     call force(fixed_potential, vary_mu, n_L_iterations, L_tolerance, &
-               tolerance, total_energy, expected_reduction, .true.)
+               tolerance, total_energy, .true.)
     F1 = tot_force(TF_direction,TF_atom_moved)
     if (inode == ionode) &
          write (io_lun,fmt='(2x,"Final energy: ",f20.12,/,2x,"Final &
@@ -2644,7 +2646,6 @@ contains
     use global_module,   only: WhichPulay, SPulay, flag_basis_set,  &
                                blips, PAOs
     use SelfCon,         only: new_SC_potl
-    use DMMin,           only: FindMinDM
     use density_module,  only: build_Becke_weight_forces,           &
                                build_Becke_weights
     use maxima_module,   only: maxngrid

@@ -38,12 +38,17 @@
 !!   2018/08/12 zamaan
 !!    Removed read/write_thermo/baro_checkpoint, replaced with a unified &
 !!    checkpoint that includes ionic velocities
+!!   2019/05/08 zamaan
+!!    minor changes for heat flux calculations
 !!   2019/02/06 zamaan
 !!    Pressure conversion factor now computed from values from units module
 !!   2019/04/23 zamaan
 !!    Implemented stochastic velocity scaling MD, Bussi et al., J. Chem.
 !!    Phys. 126, 014101 (2007) (NVT) and Bussi et al., J. Chem. Phys.
 !!    130, 074101 (2009) (NPT)
+!!   2020/01/06 12:18 dave
+!!    Removed Berendsen thermostat due to unreliability (see articles on
+!!    flying ice-cube effect)
 !!  SOURCE
 !!
 module md_control
@@ -72,18 +77,21 @@ module md_control
   character(20) :: md_trajectory_file = "trajectory.xsf"
   character(20) :: md_frames_file = "md.frames"
   character(20) :: md_stats_file = "md.stats"
+  character(20) :: md_heat_flux_file = "md.heatflux"
 
   ! Module variables
   character(20) :: md_thermo_type, md_baro_type
   real(double)  :: md_tau_T, md_tau_P, target_pressure, md_bulkmod_est, &
                    md_box_mass, md_ndof_ions, md_omega_t, md_omega_p, &
-                   md_tau_T_equil, md_tau_P_equil, md_p_drag, md_t_drag
-  integer       :: md_n_nhc, md_n_ys, md_n_mts, md_berendsen_equil
-  logical       :: flag_write_xsf, md_cell_nhc, md_calc_xlmass
+                   md_tau_T_equil, md_tau_P_equil, md_p_drag, md_t_drag, &
+                   md_equil_press
+  integer       :: md_n_nhc, md_n_ys, md_n_mts, md_equil_steps
+  logical       :: flag_write_xsf, md_cell_nhc, md_calc_xlmass, flag_nhc
   logical       :: flag_extended_system = .false.
   real(double), dimension(3,3), target      :: lattice_vec
   real(double), dimension(:), allocatable   :: md_nhc_mass, md_nhc_cell_mass
   real(double), dimension(:,:), allocatable, target :: ion_velocity
+  real(double), dimension(3), target        :: heat_flux
 
   !!****s* md_control/type_thermostat
   !!  NAME
@@ -146,7 +154,6 @@ module md_control
       procedure, public   :: init_thermo
       procedure, public   :: init_nhc
       procedure, public   :: init_ys
-      procedure, public   :: get_berendsen_thermo_sf
       procedure, public   :: get_svr_thermo_sf
       procedure, public   :: v_rescale
       procedure, public   :: get_thermostat_energy
@@ -227,8 +234,6 @@ module md_control
       procedure, public   :: init_baro
       procedure, public   :: get_pressure_and_stress
       procedure, public   :: get_volume
-      procedure, public   :: get_berendsen_baro_sf
-      procedure, public   :: propagate_berendsen
       procedure, public   :: get_barostat_energy
       procedure, public   :: propagate_npt_mttk
       procedure, public   :: propagate_r_mttk
@@ -312,15 +317,12 @@ contains
       ! For NPT stochastic velocity rescaling we also need to thermostat the box
       th%ke_target = th%ke_target +  &
                      half*th%cell_ndof*fac_Kelvin2Hartree*th%T_ext
-    case('berendsen')
     case('default')
-      call cq_abort('Incompatible barostat')
+      call cq_abort("MD.Barostat must be 'none', 'pr' or 'mttk'")
     end select
 
     select case(th%thermo_type)
     case('none')
-    case('berendsen')
-      flag_extended_system = .false.
     case('svr')
       ! This will be true for isobaric-isothermal SVR, because we will use
       ! Parrinello-Rahman NPH dynamics with a SVR thermostat (barostat 
@@ -331,7 +333,7 @@ contains
     case('nhc')
       call th%init_nhc(dt)
     case default
-      call cq_abort("MD.ThermoType must be 'none', 'berendsen', 'svr' or 'nhc'")
+      call cq_abort("MD.ThermoType must be 'none', 'svr' or 'nhc'")
     end select
 
     if (inode==ionode .and. iprint_MD > 1) then
@@ -375,6 +377,7 @@ contains
     integer                               :: i
 
     flag_extended_system = .true.
+    flag_nhc = .true.
     th%n_nhc = md_n_nhc
     th%n_ys = md_n_ys
     th%n_mts_nhc = md_n_mts
@@ -654,32 +657,6 @@ contains
     end if
   end subroutine get_temperature_and_ke
 
-  !!****m* md_control/get_berendsen_thermo_sf *
-  !!  NAME
-  !!   get_berendsen_thermo_sf
-  !!  PURPOSE
-  !!   Get velocity scaling factor for Berendsen thermostat
-  !!  AUTHOR
-  !!    Zamaan Raza 
-  !!  CREATION DATE
-  !!   2017/10/24 14:26
-  !!  SOURCE
-  !!  
-  subroutine get_berendsen_thermo_sf(th, dt)
-
-    ! passed variables
-    class(type_thermostat), intent(inout)   :: th
-    real(double), intent(in)                :: dt
-
-    th%lambda = sqrt(one + (dt/th%tau_T)* &
-                     (th%T_ext/th%T_int - one))
-
-    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 1) then
-      write(io_lun,'(2x,a)') "get_berendsen_thermo_sf"
-    end if
-  end subroutine get_berendsen_thermo_sf
-  !!***
-
   !!****m* md_control/get_svr_thermo_sf *
   !!  NAME
   !!   get_svr_thermo_sf
@@ -736,7 +713,6 @@ contains
         rn = th%myrng%rng_normal()
         sum_ri_sq = sum_ri_sq + rn*rn
       end do
-
       alpha_sq = exp_dt_tau + temp_fac * (one - exp_dt_tau) * sum_ri_sq + &
                  two*sqrt(exp_dt_tau) * sqrt(temp_fac*(one - exp_dt_tau)) * r1
       th%lambda = sqrt(alpha_sq)
@@ -751,7 +727,7 @@ contains
   !!  NAME
   !!   v_rescale
   !!  PURPOSE
-  !!   rescale veolocity for simple velocity rescaling thermostats.
+  !!   rescale velocity for simple velocity rescaling thermostats.
   !!   Note that the scaling factor is computed before the first vVerlet
   !!   velocity update, and the velocities scaled after the second vVerlet
   !!   velocity update.
@@ -995,8 +971,8 @@ contains
     do i_mts=1,th%n_mts_nhc ! MTS loop
       do i_ys=1,th%n_ys     ! Yoshida-Suzuki loop
         if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) then
-          write(io_lun,*) "i_ys  = ", i_ys
-          write(io_lun,*) "dt_ys = ", th%dt_ys(i_ys)
+          write(io_lun,'(4x,a,i8)') "i_ys  = ", i_ys
+          write(io_lun,'(4x,a,i8)') "dt_ys = ", th%dt_ys(i_ys)
         end if
         ! Reverse part of Trotter expansion: update thermostat force/velocity
         call th%propagate_v_eta_lin(th%n_nhc, th%dt_ys(i_ys), quarter)
@@ -1156,7 +1132,7 @@ contains
         call io_close(lun)
       end if
     case('svr')
-      th%e_thermostat = th%e_thermostat - &
+       th%e_thermostat = th%e_thermostat - &
                         th%ke_ions * (th%lambda**2 - one) * th%dt! * half
       if (.not. leqi(th%baro_type, 'none')) then
         th%e_thermostat = th%e_thermostat - &
@@ -1231,7 +1207,7 @@ contains
   !!  NAME
   !!   init_baro
   !!  PURPOSE
-  !!   initialise MTTK barostat
+  !!   initialise barostat
   !!  AUTHOR
   !!    Zamaan Raza 
   !!  CREATION DATE
@@ -1306,8 +1282,6 @@ contains
     if (flag_MDcontinue) baro%append = .true.
     select case(baro%baro_type)
     case('none')
-    case('berendsen')
-      flag_extended_system = .false.
     case('mttk')
       flag_extended_system = .true.
       baro%append = .false.
@@ -1337,7 +1311,7 @@ contains
       call baro%get_barostat_energy
       baro%odnf = one + three/baro%ndof
     case default
-      call cq_abort("MD.BaroType must be 'none', 'berendsen', 'mttk' or 'pr'")
+      call cq_abort("MD.BaroType must be 'none', 'mttk' or 'pr'")
     end select
 
     if (inode==ionode .and. iprint_MD > 1) then
@@ -1467,91 +1441,6 @@ contains
     end if
 
   end subroutine get_volume
-  !!***
-
-  !!****m* md_control/get_berendsen_baro_sf *
-  !!  NAME
-  !!   berendsen_baro_sf
-  !!  PURPOSE
-  !!   Get cell scaling factor for Berendsen barostat
-  !!  AUTHOR
-  !!    Zamaan Raza 
-  !!  CREATION DATE
-  !!   2017/12/01 14:17
-  !!  SOURCE
-  !!  
-  subroutine get_berendsen_baro_sf(baro, dt)
-
-    ! passed variables
-    class(type_barostat), intent(inout)         :: baro
-    real(double), intent(in)                    :: dt
-
-    baro%mu = (one - (dt/baro%tau_P)*(baro%P_ext-baro%P_int)* &
-                HaBohr3ToGPa/baro%bulkmod)**third
-
-  end subroutine get_berendsen_baro_sf
-  !!***
-
-  !!****m* md_control/propagate_berendsen *
-  !!  NAME
-  !!   propagate_berendsen
-  !!  PURPOSE
-  !!   Propagate the fractional coordinates and cell parameters for the
-  !!   Berendsen barostat. Note that this is equivalent to scaling the,
-  !!   fractional coordinates, and is not part of the dynamics
-  !!  AUTHOR
-  !!    Zamaan Raza 
-  !!  CREATION DATE
-  !!   2017/12/01 14:21
-  !!  SOURCE
-  !!  
-  subroutine propagate_berendsen(baro, flag_movable)
-
-    use global_module,      only: x_atom_cell, y_atom_cell, z_atom_cell, &
-                                  atom_coord_diff, id_glob
-
-    ! passed variables
-    class(type_barostat), intent(inout)         :: baro
-    logical, dimension(:), intent(in)           :: flag_movable
-
-    ! local variables
-    integer                                     :: i, gatom, ibeg_atom
-    real(double)                                :: x_old, y_old, z_old
-    logical                                     :: flagx, flagy, flagz
-
-    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 1) then
-      write(io_lun,'(2x,a)') "propagate_berendsen"
-      write(io_lun,'(4x,a,e16.8)') "mu:   :     ", baro%mu
-    end if
-
-    baro%lat = baro%lat*baro%mu
-
-    ibeg_atom = 1
-    do i=1,ni_in_cell
-      gatom = id_glob(i)
-      flagx = flag_movable(ibeg_atom)
-      flagy = flag_movable(ibeg_atom+1)
-      flagz = flag_movable(ibeg_atom+2)
-
-      if (flagx) then
-        x_old = x_atom_cell(i)
-        x_atom_cell(i) = baro%mu*x_atom_cell(i)
-        atom_coord_diff(1,gatom) = x_atom_cell(i) - x_old
-      end if
-      if (flagy) then
-        y_old = y_atom_cell(i)
-        y_atom_cell(i) = baro%mu*y_atom_cell(i)
-        atom_coord_diff(2,gatom) = y_atom_cell(i) - y_old
-      end if
-      if (flagz) then
-        z_old = z_atom_cell(i)
-        z_atom_cell(i) = baro%mu*z_atom_cell(i)
-        atom_coord_diff(3,gatom) = z_atom_cell(i) - z_old
-      end if
-    end do
-    call baro%update_cell
-
-  end subroutine propagate_berendsen
   !!***
 
   !!****m* md_control/get_barostat_energy *

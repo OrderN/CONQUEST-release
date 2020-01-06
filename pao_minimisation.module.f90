@@ -117,6 +117,12 @@ contains
   !!    which are no longer used here.
   !!   2017/02/23 dave
   !!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
+  !!   2019/10/24 11:52 dave
+  !!    Changed function calls to FindMinDM
+  !!   2019/12/02 nakata
+  !!    Removed dump_matrix(SFcoeff), which will be changed to dump_pos_and_matrices in near future
+  !!   2019/12/30 tsuyoshi
+  !!    introduced dump_pos_and_matrices (every n_dumpSFcoeff iterations)
   !!  SOURCE
   !!
   subroutine vary_pao(n_support_iterations, fixed_potential, vary_mu, &
@@ -143,7 +149,8 @@ contains
     use group_module,              only: parts
     use H_matrix_module,           only: get_H_matrix
     use S_matrix_module,           only: get_S_matrix
-    use io_module,                 only: dump_matrix
+    use store_matrix,              only: dump_pos_and_matrices, unit_MSSF_save
+!    use io_module,                 only: dump_matrix
     use support_spec_format,       only: TestBasisGrads, TestTot,      &
                                          TestBoth, TestS, TestH
     use DMMin,                     only: FindMinDM
@@ -158,7 +165,7 @@ contains
                                          matSFcoeff, matSFcoeff_tran,  &
                                          matdSFcoeff, matdSFcoeff_e,   &
                                          matrix_scale, matrix_transpose
-    use multisiteSF_module,        only: normalise_SFcoeff
+    use multisiteSF_module,        only: normalise_SFcoeff, n_dumpSFcoeff
 
     implicit none
 
@@ -318,7 +325,7 @@ contains
                                call get_H_matrix(.false., fixed_potential, &
                                                  electrons, density, maxngrid)
                                call FindMinDM(n_cg_L_iterations, vary_mu, &
-                                              L_tolerance, inode, ionode, &
+                                              L_tolerance, &
                                               .false., .false.)
                                call get_energy(E2)
                                E2 = band_energy
@@ -358,7 +365,7 @@ contains
                                ! Recalculate energy and gradient
                                call get_S_matrix(inode, ionode, build_AtomF_matrix=.false.)
                                call FindMinDM(n_cg_L_iterations, vary_mu, &
-                                              L_tolerance, inode, ionode, &
+                                              L_tolerance, &
                                               .false., .false.)
                                call get_energy(E2)
                                E2 = band_energy
@@ -398,7 +405,7 @@ contains
                                call get_H_matrix(.false., fixed_potential, &
                                                  electrons, density, maxngrid)
                                call FindMinDM(n_cg_L_iterations, vary_mu, &
-                                              L_tolerance, inode, ionode, &
+                                              L_tolerance, &
                                               .false., .false.)
                                call get_energy(E2)
                                E2 = band_energy
@@ -532,12 +539,11 @@ contains
           call matrix_scale(zero,matSFcoeff_tran(spin_SF))
           call matrix_transpose(matSFcoeff(spin_SF), matSFcoeff_tran(spin_SF))
        enddo
-       if (nspin_SF == 1) then
-          call dump_matrix("SFcoeff",    matSFcoeff(1), inode)
-       else
-          call dump_matrix("SFcoeff_up", matSFcoeff(1), inode)
-          call dump_matrix("SFcoeff_dn", matSFcoeff(2), inode)
-       end if
+
+    ! Write out current SF coefficients every n_dumpSFcoeff, if n_dumpSFcoeff > 0)
+     if (n_dumpSFcoeff > 0 .and. mod(n_iterations,n_dumpSFcoeff) == 1) then
+       call dump_pos_and_matrices(index = unit_MSSF_save)
+     endif
 
        flag_vary_basis = .true.
 
@@ -560,8 +566,8 @@ contains
        ! 3. Generate H
        call get_H_matrix(.false., fixed_potential, electrons, density, &
                          maxngrid)
-       call FindMinDM(n_cg_L_iterations, vary_mu, L_tolerance, inode, &
-                      ionode, .false., .false.)
+       call FindMinDM(n_cg_L_iterations, vary_mu, L_tolerance, &
+                      .false., .false.)
        call get_energy(total_energy_test)
        ! We need to assemble the gradient
        do spin_SF = 1, nspin_SF
@@ -674,6 +680,8 @@ contains
   !!    dump_matrix is used instead of writeout_support_functions.
   !!   2017/02/23 dave
   !!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
+  !!   2019/12/02 nakata
+  !!    Removed dump_matrix(SFcoeff), which will be changed to dump_pos_and_matrices in near future
   !! SOURCE
   !!
   subroutine pulay_min_pao(n_support_iterations, fixed_potential,   &
@@ -684,7 +692,7 @@ contains
     use datatypes
     use logicals
     use numbers
-    use Pulay
+    use Pulay,               only: DoPulay
     use mult_module,         only: LNV_matrix_multiply, matM12, matM4, &
                                    mat_p, matSFcoeff, matSFcoeff_tran, &
                                    matdSFcoeff, matdSFcoeff_e,         &
@@ -704,7 +712,8 @@ contains
     use memory_module,       only: reg_alloc_mem, type_dbl,            &
                                    reg_dealloc_mem
     use multisiteSF_module,  only: normalise_SFcoeff
-    use io_module,           only: dump_matrix
+    use store_matrix,        only: dump_pos_and_matrices
+!    use io_module,           only: dump_matrix
 
     implicit none
 
@@ -869,7 +878,7 @@ contains
           end do
        end do
        ! Solve to get alphas
-       call DoPulay(npmod, Aij, alph, pul_mx, mx_pulay, inode, ionode)
+       call DoPulay(npmod, Aij, alph, pul_mx, mx_pulay)
        if (inode == ionode) write (io_lun, *) 'Alph: ', alph
 
        ! Make new supports
@@ -920,12 +929,14 @@ contains
           call copy(length, mat_p(matSFcoeff(spin_SF))%matrix, 1, data_paostore(1:, npmod, spin_SF), 1)
        enddo
 
-       if (nspin_SF == 1) then
-          call dump_matrix("SFcoeff",    matSFcoeff(1), inode)
-       else
-          call dump_matrix("SFcoeff_up", matSFcoeff(1), inode)
-          call dump_matrix("SFcoeff_dn", matSFcoeff(2), inode)
-       end if
+    ! Write out current SF coefficients with some iprint (in future)
+    ! if (iprint_basis>=3) call dump_pos_and_matrices
+!       if (nspin_SF == 1) then
+!          call dump_matrix("SFcoeff",    matSFcoeff(1), inode)
+!       else
+!          call dump_matrix("SFcoeff_up", matSFcoeff(1), inode)
+!          call dump_matrix("SFcoeff_dn", matSFcoeff(2), inode)
+!       end if
 
        diff = total_energy_last - total_energy_0
        total_energy_last = total_energy_0

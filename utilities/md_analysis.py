@@ -7,7 +7,7 @@ import os.path
 import scipy as sp
 import matplotlib.pyplot as plt
 from frame import Frame
-from md_tools import Pairdist, MSER, VACF, MSD
+from md_tools import Pairdist, MSER, VACF, MSD, autocorr
 from pdb import set_trace
 
 ha2ev = 27.211399
@@ -22,7 +22,6 @@ specblock_re = re.compile(r'%block ChemicalSpeciesLabel\n(.*?)\n%endblock',
 cq_input_file = 'Conquest_input'
 
 # Parsing functions
-
 def strip_comments(line, separator):
   for s in separator:
     i = line.find(s)
@@ -81,6 +80,7 @@ def parse_init_config(conf_filename):
         scount[data['species'][i]] = 1
     data['species_count'] = scount
     data['nspecies'] = len(scount.keys())
+    data['volume'] = data['latvec'][0,0]*data['latvec'][1,1]*data['latvec'][2,2]
   return data
 
 def read_stats(stats_file, nstop):
@@ -116,7 +116,7 @@ parser = argparse.ArgumentParser(description='Analyse a Conquest MD \
 parser.add_argument('-c', '--compare', action='store_true', default=False,
                     dest='compare', help='Compare statistics of trajectories \
                     in directories specified by -d')
-parser.add_argument('-d', '--dirs', nargs='+', default='.', dest='dirs',
+parser.add_argument('-d', '--dirs', nargs='+', default=['.',], dest='dirs',
                     action='store', help='Directories to compare')
 parser.add_argument('--description', nargs='+', default='', dest='desc',
                     action='store', help='Description of graph for legend \
@@ -135,8 +135,14 @@ parser.add_argument('--stop', action='store', dest='nstop', default=-1,
                     type=int, help='Number of last frame in analysis')
 parser.add_argument('--equil', action='store', dest='nequil', default=0, 
                     type=int, help='Number of equilibration steps')
+parser.add_argument('--stats', action='store_true', dest='stats',
+                    help='Plot statistics')
 parser.add_argument('--vacf', action='store_true', dest='vacf', 
                     help='Plot velocity autocorrelation function')
+parser.add_argument('--hfacf', action='store_true', dest='hfacf', 
+                    help='Plot heat flux autocorrelation function')
+parser.add_argument('--acfwindow', action='store', dest='acfwindow', default=0.0, 
+                    type=float, help='window for autocorrelation')
 parser.add_argument('--msd', action='store_true', dest='msd', 
                     help='Plot mean squared deviation')
 parser.add_argument('--rdf', action='store_true', dest='rdf', 
@@ -272,24 +278,24 @@ else:
     time = [float(s)*dt for s in data['step']]
     data['time'] = sp.array(time)
 
-    ax1.plot(data['time'][opts.nskip:], data['H\''][opts.nskip:],
-             linewidth=0.5, label=opts.desc[ind])
-    y1,y2 = ax1.get_ylim()
-    ax1a.set_ylim(y1*ha2k,y2*ha2k)
-    ax2.plot(data['time'][opts.nskip:], data['T'][opts.nskip:],
-             linewidth=0.5, label=opts.desc[ind])
-    ax3.plot(data['time'][opts.nskip:], data['P'][opts.nskip:],
-             linewidth=0.5, label=opts.desc[ind])
+      ax1.plot(data['time'][opts.nskip:], data['H\''][opts.nskip:],
+               linewidth=0.5, label=opts.desc[ind])
+      y1,y2 = ax1.get_ylim()
+      ax1a.set_ylim(y1*ha2k,y2*ha2k)
+      ax2.plot(data['time'][opts.nskip:], data['T'][opts.nskip:],
+               linewidth=0.5, label=opts.desc[ind])
+      ax3.plot(data['time'][opts.nskip:], data['P'][opts.nskip:],
+               linewidth=0.5, label=opts.desc[ind])
 
-  ax1.set_ylabel("H$'$ (Ha)")
-  ax1a.set_ylabel("H$'$ (K)")
-  ax2.set_ylabel("T (K)")
-  ax3.set_ylabel("P (GPa)")
-  ax3.set_xlabel("time (fs)")
-  ax1.legend()
-  plt.xlim((opts.nskip,data['time'][-1]))
-  fig1.subplots_adjust(hspace=0)
-  fig1.savefig("stats.pdf", bbox_inches='tight')
+    ax1.set_ylabel("H$'$ (Ha)")
+    ax1a.set_ylabel("H$'$ (K)")
+    ax2.set_ylabel("T (K)")
+    ax3.set_ylabel("P (GPa)")
+    ax3.set_xlabel("time (fs)")
+    ax1.legend()
+    plt.xlim((opts.nskip,data['time'][-1]))
+    fig1.subplots_adjust(hspace=0)
+    fig1.savefig("stats.pdf", bbox_inches='tight')
 
 # Plot MSER
 if opts.mser_var:
@@ -298,6 +304,53 @@ if opts.mser_var:
   traj.plot_mser(data['step'])
   if opts.dump:
     traj.dump_mser(data['step'])
+
+# Plot heat flux autocorrelation function
+if opts.hfacf:
+  window = int(opts.acfwindow // dt)
+  G = sp.zeros((3,3,window))
+  time = sp.array([float(i)*dt for i in range(window)])
+  nruns = 0
+  for ind, d in enumerate(opts.dirs):
+    path = os.path.join(d, heatfluxfile)
+
+    J = []
+    t = []
+    nsteps = 0
+    with open(path, 'r') as infile:
+      for line in infile:
+        step, Jx, Jy, Jz = line.split()
+        step = int(step)
+        Jx = float(Jx)
+        Jy = float(Jy)
+        Jz = float(Jz)
+        J.append([Jx, Jy, Jz])
+        t.append(step*dt)
+        nsteps += 1
+    J = sp.array(J)
+    t = sp.array(t)
+
+    nwindows = int((nsteps - opts.nskip) // window)
+    for i in range(3):
+      for j in range(3):
+        for k in range(nwindows):
+          nruns += 1
+          start = opts.nskip + k*window
+          finish = opts.nskip + k*window + window
+          G += autocorr(J[start:finish,i],J[start:finish,j])
+  G = G / float(nruns)
+  plt.figure("HFACF")
+  plt.xlabel("t (fs)")
+  plt.ylabel("HFACF")
+  plt.xlim((0, time[-1]))
+  plt.plot(time[:], G[0,0,:], 'r-', label='G_{xx}', linewidth=1.0)
+  plt.plot(time[:], G[1,1,:], 'g-', label='G_{yy}', linewidth=1.0)
+  plt.plot(time[:], G[2,2,:], 'b-', label='G_{zz}', linewidth=1.0)
+  plt.plot(time[:], G[0,1,:], 'r--', label='G_{xy}', linewidth=1.0)
+  plt.plot(time[:], G[0,2,:], 'b--', label='G_{xz}', linewidth=1.0)
+  plt.plot(time[:], G[1,2,:], 'g--', label='G_{yz}', linewidth=1.0)
+  plt.legend(loc='upper right')
+  plt.savefig("hfacf.pdf", bbox_inches='tight')
 
 # Parse the frames file
 if read_frames:

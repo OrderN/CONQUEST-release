@@ -98,6 +98,8 @@
 !!    Removed PAOP_PS_H, matdS and matdH which are no longer used
 !!   2017/12/05 10:21 dave with TM and NW (Mizuho)
 !!    Adding multiplications for NA projectors
+!!   2018/11/13 17:30 nakata
+!!    Changed matS, matT, matTtran, matKE, matNL and matNA to be spin_SF dependent
 !!  SOURCE
 !!
 module mult_module
@@ -191,7 +193,10 @@ module mult_module
   integer :: max_matrices, current_matrix
   ! spin independent matrices
   integer, public :: &
-       matS, matT, matTtran, matAP, matPA, matKE, matNL, mataNA, matNAa, matNA
+       matAP, matPA, mataNA, matNAa
+  ! spin_SF dependent matrices
+  integer, allocatable, dimension(:), public :: &
+       matS, matT, matTtran, matKE, matNL, matNA
   ! spin dependent matrices
   integer, allocatable, dimension(:), public :: &
        matH, matL, matLS, matSL, matK, matphi, matM12, matM4, matU, &
@@ -203,6 +208,11 @@ module mult_module
   integer, allocatable, dimension(:), public :: &
        matHatomf, matKatomf, matXatomf, &
        matSFcoeff, matSFcoeff_tran, matdSFcoeff, matdSFcoeff_e
+
+  ! matrices related to XLBOMD (for DMM, at present)
+   integer, allocatable, dimension(:), public :: matXL, matXLvel    ! (nspin)
+   integer, allocatable, dimension(:,:), public :: matXL_store      ! (maxiter_Dissipation, nspin)
+   integer :: maxiter_Dissipation  
 
   integer, allocatable, dimension(:), public :: matrix_index, &
                                                 trans_index
@@ -1465,7 +1475,8 @@ contains
 
     use numbers
     use datatypes
-    use global_module, only: iprint_mat, IPRINT_TIME_THRES3, nspin
+    use global_module, only: iprint_mat, IPRINT_TIME_THRES3, nspin, &
+                             flag_SpinDependentSF
     use matrix_data,   only: LHrange, SLSrange, LSLrange, Lrange,   &
                              Srange, Hrange
     use GenComms,      only: gsum, inode, ionode, my_barrier, gmax, &
@@ -1491,7 +1502,7 @@ contains
     type(cq_timer)            :: tmr_l_tmp1
     type(cq_timer)            :: backtrace_timer
     integer                   :: backtrace_level
-    integer                   :: ss, ss_start, ss_end
+    integer                   :: ss, ss_start, ss_end, ss_SF
 
     ! This routine is basically calls to matrix operations, so these
     ! are timed within the routines themselves
@@ -1525,11 +1536,13 @@ contains
     if (iprint_mat > 3) t0 = mtime()
 
     do ss = ss_start, ss_end
+       ss_SF = 1
+       if (flag_SpinDependentSF) ss_SF = ss
  
        if (iprint_mat > 3 .and. nspin == 2) then
           if (inode == ionode) write (io_lun, '(1x,"For spin = ",i1," :")') ss
        end if
-       call matrix_product(matL(ss), matS, matLS(ss), mult(L_S_LS))
+       call matrix_product(matL(ss), matS(ss_SF), matLS(ss), mult(L_S_LS))
        if (iprint_mat > 3) then
           t1 = mtime()
           if (inode == ionode) write (io_lun, *) 'LS time: ', t1 - t0
@@ -1587,13 +1600,13 @@ contains
              if (inode == ionode) write (io_lun, *) 'Alloc time: ', t1 - t0
              t0 = t1
           end if
-          call matrix_product(matHL(ss), matS, matHLS(ss), mult(HL_S_LSL))
+          call matrix_product(matHL(ss), matS(ss_SF), matHLS(ss), mult(HL_S_LSL))
           if (iprint_mat > 3) then
              t1 = mtime()
              if (inode == ionode) write (io_lun, *) 'HLS time: ', t1 - t0
              t0 = t1
           end if
-          call matrix_product(matHL(ss), matS, matHLS(ss), mult(HL_S_LSL))
+          call matrix_product(matHL(ss), matS(ss_SF), matHLS(ss), mult(HL_S_LSL))
           if (iprint_mat > 3) then
              t1 = mtime()
              if (inode == ionode) write (io_lun, *) 'HLS time: ', t1 - t0
@@ -1635,7 +1648,7 @@ contains
              if (inode == ionode) write (io_lun, *) 'SLS alloc time: ', t1 - t0
              t0 = t1
           end if
-          call matrix_product(matSL(ss), matS, matSLS(ss), &
+          call matrix_product(matSL(ss), matS(ss_SF), matSLS(ss), &
                               mult(SL_S_SLS))
           if (iprint_mat > 3) then
              t1 = mtime()
@@ -1874,10 +1887,10 @@ contains
   end subroutine symmetrise_L
   !!***
 
-  !!****f* mult_module/symmetrise_matA *
+  !!****f* mult_module/symmetrise_mat *
   !!
   !!  NAME
-  !!   symmetrise_matA
+  !!   symmetrise_mat
   !!  USAGE
   !!
   !!  PURPOSE
@@ -1891,10 +1904,11 @@ contains
   !!  CREATION DATE
   !!   2013/08/23
   !!  MODIFICATION HISTORY
-  !!
+  !!   2019/11/13 tsuyoshi
+  !!     integer matA -> integer matA(n_matrix) for spin polarisation
   !!  SOURCE
   !!
-  subroutine symmetrise_matA(range,trans,matA)
+  subroutine symmetrise_mat(range,n_matrix,trans,matA)
 
     ! Module usage
     use datatypes
@@ -1903,18 +1917,23 @@ contains
     implicit none
 
     ! passed variables
-    integer :: range,trans,matA
+    !integer :: range,trans,matA
+    integer :: range,trans,n_matrix
+    integer :: matA(n_matrix)
 
     ! local variables
     integer :: mattmp
+    integer :: isize
 
     mattmp = allocate_temp_matrix(range,trans)
-    call matrix_transpose(matA,mattmp)
-    call matrix_sum(half,matA,half,mattmp)
+    do isize = 1, n_matrix
+     call matrix_transpose(matA(isize),mattmp)
+     call matrix_sum(half,matA(isize),half,mattmp)
+    enddo
     call free_temp_matrix(mattmp)
 
     return
-  end subroutine symmetrise_matA
+  end subroutine symmetrise_mat
   !!***
 
   !!****f* mult_module/end_ops *
@@ -2013,6 +2032,8 @@ contains
   !!    Removed dSrange, dHrange, matdS and matdH which are no longer used
   !!   2017/12/05 10:34 dave
   !!    Associating NA-projector matrices
+  !!   2018/11/13 17:30 nakata
+  !!    Changed matS, matT, matTtran, matKE, matNL and matNA to be spin_SF dependent
   !!  SOURCE
   !!
   subroutine associate_matrices
@@ -2023,7 +2044,7 @@ contains
                              Xrange, SXrange, aSa_range, aHa_range,   &
                              SFcoeff_range, SFcoeffTr_range,          &
                              mat, aNArange, NAarange
-    use global_module, only: area_matrices, iprint_mat, nspin
+    use global_module, only: area_matrices, iprint_mat, nspin, nspin_SF
     use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use GenComms,      only: inode, ionode
 !%%!    use matrix_data, only: data_S, data_H, data_L, data_T, data_Ttran, &
@@ -2034,7 +2055,7 @@ contains
 
     implicit none
 
-    integer :: stat, i, spin
+    integer :: stat, i, spin, spin_SF
     logical :: allocated_tags = .false.
 
     ! Allocate spin dependent matrices
@@ -2050,36 +2071,42 @@ contains
        if (stat /= 0) &
             call cq_abort('associate_matrices: failed to allocate spin &
                            &depdendent ATOMF matrix tags', nspin, stat)
+       ! For spin_SF dependent matrices
        if (atomf.ne.sf) then
-          allocate(matSFcoeff(nspin),  matSFcoeff_tran(nspin), &
-                   matdSFcoeff(nspin), matdSFcoeff_e(nspin), STAT=stat)
+          allocate(matSFcoeff(nspin_SF),  matSFcoeff_tran(nspin_SF), &
+                   matdSFcoeff(nspin_SF), matdSFcoeff_e(nspin_SF), STAT=stat)
           if (stat /= 0) &
-               call cq_abort('associate_matrices: failed to allocate spin &
-                              &depdendent SFcoefficient matrix tags', nspin, stat)
+               call cq_abort('associate_matrices: failed to allocate spin_SF &
+                              &depdendent SFcoefficient matrix tags', nspin_SF, stat)
        endif
+       allocate(matS(nspin_SF), matT(nspin_SF), matTtran(nspin_SF), &
+                matKE(nspin_SF), matNL(nspin_SF), matNA(nspin_SF), STAT=stat) 
+       if (stat /= 0) &
+            call cq_abort('associate_matrices: failed to allocate spin_SF &
+                           &depdendent matrix tags', nspin_SF, stat)
        allocated_tags = .true.
     end if
 
     ! Assign indices for the matrices that we need
-    matS      = 1
-    matH(1)   = 2
-    matL(1)   = 3
-    matT      = 4
-    matTtran  = 5
-    matLS(1)  = 6
-    matSL(1)  = 7
-    matAP     = 8
-    matPA     = 9
-    matK(1)   = 10
-    matM4(1)  = 11
-    matU(1)   = 12
-    matphi(1) = 13
-    matM12(1) = 14
-    matUT(1)  = 15
-    matKE     = 16
-    matNL     = 17
-    matX(1)   = 18
-    matSX(1)  = 19
+    matS(1)     = 1
+    matH(1)     = 2
+    matL(1)     = 3
+    matT(1)     = 4
+    matTtran(1) = 5
+    matLS(1)    = 6
+    matSL(1)    = 7
+    matAP       = 8
+    matPA       = 9
+    matK(1)     = 10
+    matM4(1)    = 11
+    matU(1)     = 12
+    matphi(1)   = 13
+    matM12(1)   = 14
+    matUT(1)    = 15
+    matKE(1)    = 16
+    matNL(1)    = 17
+    matX(1)     = 18
+    matSX(1)    = 19
     current_matrix = 19
     if (nspin == 2) then
        matH(2)   = 20
@@ -2095,14 +2122,23 @@ contains
        matX(2)   = 30
        matSX(2)  = 31
        current_matrix = 31
-    end if
+    endif
+    if (nspin_SF == 2) then
+       ! when support functions are spin-dependent
+       matS(2)     = current_matrix + 1
+       matT(2)     = current_matrix + 2
+       matTtran(2) = current_matrix + 3
+       matKE(2)    = current_matrix + 4
+       matNL(2)    = current_matrix + 5
+       current_matrix = current_matrix + 5
+    endif
     if (atomf.eq.sf) then
     ! when atomic functions are euivalent to SFs (blips and one_to_one PAOs)
-       matSatomf    = matS
+       matSatomf    = matS(1)
+       matKEatomf   = matKE(1)
+       matNLatomf   = matNL(1)
        matHatomf(1) = matH(1)
        matKatomf(1) = matK(1)
-       matKEatomf   = matKE
-       matNLatomf   = matNL
        matXatomf(1) = matX(1)
        if (nspin == 2) then
           matHatomf(2) = matH(2)
@@ -2126,11 +2162,14 @@ contains
           matHatomf(2)       = current_matrix + 1  ! 42
           matKatomf(2)       = current_matrix + 2  ! 43
           matXatomf(2)       = current_matrix + 3  ! 44
-          matSFcoeff(2)      = current_matrix + 4  ! 45
-          matSFcoeff_tran(2) = current_matrix + 5  ! 46
-          matdSFcoeff(2)     = current_matrix + 6  ! 47
-          matdSFcoeff_e(2)   = current_matrix + 7  ! 48
-          current_matrix     = current_matrix + 7  ! 48
+          current_matrix     = current_matrix + 3  ! 44
+          if (nspin_SF == 2) then
+             matSFcoeff(2)      = current_matrix + 1  ! 45
+             matSFcoeff_tran(2) = current_matrix + 2  ! 46
+             matdSFcoeff(2)     = current_matrix + 3  ! 47
+             matdSFcoeff_e(2)   = current_matrix + 4  ! 48
+             current_matrix     = current_matrix + 4  ! 48
+          endif
        endif
     endif ! atomf
     if( flag_neutral_atom_projector ) then
@@ -2139,9 +2178,13 @@ contains
        current_matrix = current_matrix + 1
        matNAa = current_matrix
        current_matrix = current_matrix + 1
-       matNA  = current_matrix
+       matNA(1)  = current_matrix
+       if (nspin_SF == 2) then
+          current_matrix = current_matrix + 1
+          matNA(2)  = current_matrix
+       endif
        if (atomf.eq.sf) then
-          matNAatomf = matNA
+          matNAatomf = matNA(1)
        else
           current_matrix = current_matrix + 1
           matNAatomf  = current_matrix
@@ -2169,13 +2212,15 @@ contains
 
     ! Set the dimensions of the arrays
     ! Type for f1
-    mat_p(matS    )%sf1_type = sf
-    mat_p(matT    )%sf1_type = sf
-    mat_p(matTtran)%sf1_type = sf    
     mat_p(matAP   )%sf1_type = atomf
     mat_p(matPA   )%sf1_type = nlpf
-    mat_p(matKE   )%sf1_type = sf
-    mat_p(matNL   )%sf1_type = sf
+    do spin_SF = 1, nspin_SF
+       mat_p(matS(spin_SF)    )%sf1_type = sf
+       mat_p(matT(spin_SF)    )%sf1_type = sf
+       mat_p(matTtran(spin_SF))%sf1_type = sf    
+       mat_p(matKE(spin_SF)   )%sf1_type = sf
+       mat_p(matNL(spin_SF)   )%sf1_type = sf
+    enddo
     do spin = 1, nspin
        mat_p(matL(spin)  )%sf1_type = sf
        mat_p(matK(spin)  )%sf1_type = sf
@@ -2195,31 +2240,37 @@ contains
        mat_p(matKEatomf)%sf1_type = atomf
        mat_p(matNLatomf)%sf1_type = atomf
        do spin = 1, nspin
-          mat_p(matKatomf(spin)      )%sf1_type = atomf
-          mat_p(matHatomf(spin)      )%sf1_type = atomf
-          mat_p(matXatomf(spin)      )%sf1_type = atomf
-          mat_p(matSFcoeff(spin)     )%sf1_type = sf
-          mat_p(matSFcoeff_tran(spin))%sf1_type = atomf
-          mat_p(matdSFcoeff(spin)    )%sf1_type = sf
-          mat_p(matdSFcoeff_e(spin)  )%sf1_type = sf
+          mat_p(matKatomf(spin))%sf1_type = atomf
+          mat_p(matHatomf(spin))%sf1_type = atomf
+          mat_p(matXatomf(spin))%sf1_type = atomf
+       enddo
+       do spin_SF = 1, nspin_SF
+          mat_p(matSFcoeff(spin_SF)     )%sf1_type = sf
+          mat_p(matSFcoeff_tran(spin_SF))%sf1_type = atomf
+          mat_p(matdSFcoeff(spin_SF)    )%sf1_type = sf
+          mat_p(matdSFcoeff_e(spin_SF)  )%sf1_type = sf
        enddo
     endif
     if( flag_neutral_atom_projector ) then
        mat_p(mataNA  )%sf1_type = atomf
        mat_p(matNAa  )%sf1_type = napf
-       mat_p(matNA   )%sf1_type = sf
+       do spin_SF = 1, nspin_SF
+          mat_p(matNA(spin_SF))%sf1_type = sf
+       enddo
        if (atomf.ne.sf) then
           mat_p(matNAatomf   )%sf1_type = atomf
        end if
     end if
     ! Type for f2
-    mat_p(matS    )%sf2_type = sf
-    mat_p(matT    )%sf2_type = sf
-    mat_p(matTtran)%sf2_type = sf
     mat_p(matAP   )%sf2_type = nlpf
     mat_p(matPA   )%sf2_type = atomf
-    mat_p(matKE   )%sf2_type = sf
-    mat_p(matNL   )%sf2_type = sf
+    do spin_SF = 1, nspin_SF
+       mat_p(matS(spin_SF)    )%sf2_type = sf
+       mat_p(matT(spin_SF)    )%sf2_type = sf
+       mat_p(matTtran(spin_SF))%sf2_type = sf
+       mat_p(matKE(spin_SF)   )%sf2_type = sf
+       mat_p(matNL(spin_SF)   )%sf2_type = sf
+    enddo
     do spin = 1, nspin
        mat_p(matL(spin)  )%sf2_type = sf
        mat_p(matK(spin)  )%sf2_type = sf
@@ -2239,31 +2290,37 @@ contains
        mat_p(matKEatomf)%sf2_type = atomf
        mat_p(matNLatomf)%sf2_type = atomf
        do spin = 1, nspin
-          mat_p(matKatomf(spin)      )%sf2_type = atomf
-          mat_p(matHatomf(spin)      )%sf2_type = atomf
-          mat_p(matXatomf(spin)      )%sf2_type = atomf
-          mat_p(matSFcoeff(spin)     )%sf2_type = atomf
-          mat_p(matSFcoeff_tran(spin))%sf2_type = sf
-          mat_p(matdSFcoeff(spin)    )%sf2_type = atomf
-          mat_p(matdSFcoeff_e(spin)  )%sf2_type = atomf
+          mat_p(matKatomf(spin))%sf2_type = atomf
+          mat_p(matHatomf(spin))%sf2_type = atomf
+          mat_p(matXatomf(spin))%sf2_type = atomf
+       enddo
+       do spin_SF = 1, nspin_SF
+          mat_p(matSFcoeff(spin_SF)     )%sf2_type = atomf
+          mat_p(matSFcoeff_tran(spin_SF))%sf2_type = sf
+          mat_p(matdSFcoeff(spin_SF)    )%sf2_type = atomf
+          mat_p(matdSFcoeff_e(spin_SF)  )%sf2_type = atomf
        enddo
     endif
     if( flag_neutral_atom_projector ) then
        mat_p(mataNA  )%sf2_type = napf
        mat_p(matNAa  )%sf2_type = atomf
-       mat_p(matNA   )%sf2_type = atomf
+       do spin_SF = 1, nspin_SF
+          mat_p(matNA(spin_SF))%sf2_type = atomf
+       enddo
        if (atomf.ne.sf) then
           mat_p(matNAatomf   )%sf2_type = atomf
        end if
     end if
     ! Set up index translation for ranges
-    matrix_index(matS    ) = Srange
-    matrix_index(matT    ) = Trange
-    matrix_index(matTtran) = TTrrange
     matrix_index(matAP   ) = APrange
     matrix_index(matPA   ) = PArange
-    matrix_index(matKE   ) = Hrange
-    matrix_index(matNL   ) = Hrange    
+    do spin_SF = 1, nspin_SF
+       matrix_index(matS(spin_SF)    ) = Srange
+       matrix_index(matT(spin_SF)    ) = Trange
+       matrix_index(matTtran(spin_SF)) = TTrrange
+       matrix_index(matKE(spin_SF)   ) = Hrange
+       matrix_index(matNL(spin_SF)   ) = Hrange    
+    enddo
     do spin = 1, nspin
        matrix_index(matL(spin)  ) = Lrange
        matrix_index(matK(spin)  ) = Hrange
@@ -2283,19 +2340,23 @@ contains
        matrix_index(matKEatomf) = aHa_range
        matrix_index(matNLatomf) = aHa_range
        do spin = 1, nspin
-          matrix_index(matKatomf(spin)      ) = aHa_range
-          matrix_index(matHatomf(spin)      ) = aHa_range
-          matrix_index(matXatomf(spin)      ) = aHa_range   ! Xatomf_range
-          matrix_index(matSFcoeff(spin)     ) = SFcoeff_range
-          matrix_index(matSFcoeff_tran(spin)) = SFcoeffTr_range
-          matrix_index(matdSFcoeff(spin)    ) = SFcoeff_range
-          matrix_index(matdSFcoeff_e(spin)  ) = SFcoeff_range
+          matrix_index(matKatomf(spin)) = aHa_range
+          matrix_index(matHatomf(spin)) = aHa_range
+          matrix_index(matXatomf(spin)) = aHa_range   ! Xatomf_range
+       enddo
+       do spin_SF = 1, nspin_SF
+          matrix_index(matSFcoeff(spin_SF)     ) = SFcoeff_range
+          matrix_index(matSFcoeff_tran(spin_SF)) = SFcoeffTr_range
+          matrix_index(matdSFcoeff(spin_SF)    ) = SFcoeff_range
+          matrix_index(matdSFcoeff_e(spin_SF)  ) = SFcoeff_range
        end do
     endif
     if( flag_neutral_atom_projector ) then
        matrix_index(mataNA  ) = aNArange
        matrix_index(matNAa  ) = NAarange
-       matrix_index(matNA   ) = Hrange    
+       do spin_SF = 1, nspin_SF
+          matrix_index(matNA(spin_SF)) = Hrange    
+       enddo
        if (atomf.ne.sf) then
           matrix_index(matNAatomf) = aHa_range
        end if
@@ -2354,13 +2415,15 @@ contains
        end do
     end if
     ! Set up index translation for transposes
-    trans_index(matS    ) = S_trans
-    trans_index(matT    ) = T_trans
-    trans_index(matTtran) = T_trans
     trans_index(matAP   ) = AP_trans
     trans_index(matPA   ) = AP_trans
-    trans_index(matKE   ) = 0
-    trans_index(matNL   ) = 0
+    do spin_SF = 1, nspin_SF
+       trans_index(matS(spin_SF)    ) = S_trans
+       trans_index(matT(spin_SF)    ) = T_trans
+       trans_index(matTtran(spin_SF)) = T_trans
+       trans_index(matKE(spin_SF)   ) = 0
+       trans_index(matNL(spin_SF)   ) = 0
+    enddo
     do spin = 1, nspin
        trans_index(matL(spin)  ) = L_trans
        trans_index(matK(spin)  ) = 0
@@ -2380,19 +2443,23 @@ contains
        trans_index(matKEatomf) = 0
        trans_index(matNLatomf) = 0
        do spin = 1, nspin
-          trans_index(matKatomf(spin)      ) = 0
-          trans_index(matHatomf(spin)      ) = 0 ! Hatomf_trans
-          trans_index(matXatomf(spin)      ) = 0 ! Satomf_trans
-          trans_index(matSFcoeff(spin)     ) = SFcoeff_trans 
-          trans_index(matSFcoeff_tran(spin)) = SFcoeff_trans 
-          trans_index(matdSFcoeff(spin)    ) = SFcoeff_trans 
-          trans_index(matdSFcoeff_e(spin)  ) = SFcoeff_trans 
+          trans_index(matKatomf(spin)) = 0
+          trans_index(matHatomf(spin)) = 0 ! Hatomf_trans
+          trans_index(matXatomf(spin)) = 0 ! Satomf_trans
+       enddo
+       do spin_SF = 1, nspin_SF
+          trans_index(matSFcoeff(spin_SF)     ) = SFcoeff_trans 
+          trans_index(matSFcoeff_tran(spin_SF)) = SFcoeff_trans 
+          trans_index(matdSFcoeff(spin_SF)    ) = SFcoeff_trans 
+          trans_index(matdSFcoeff_e(spin_SF)  ) = SFcoeff_trans 
        end do
     endif
     if( flag_neutral_atom_projector ) then
        trans_index(mataNA  ) = aNA_trans
        trans_index(matNAa  ) = aNA_trans
-       trans_index(matNA  )  = S_trans
+       do spin_SF = 1, nspin_SF
+          trans_index(matNA(spin_SF))  = S_trans
+       enddo
        if (atomf.ne.sf) then
           trans_index(matNAatomf) = aNAa_trans
        end if
@@ -3342,7 +3409,7 @@ contains
 
 
     spin_SF = 1
-    if (flag_SpinDependentSF .and. spin.eq.2) spin_SF = 2
+    if (flag_SpinDependentSF) spin_SF = spin
 
     if (Arange.eq.Srange) then
        mat_AtomF_SF = allocate_temp_matrix(aSs_range,0,atomf,sf)
@@ -3404,7 +3471,7 @@ contains
 
 
     spin_SF = 1
-    if (flag_SpinDependentSF .and. spin.eq.2) spin_SF = 2
+    if (flag_SpinDependentSF) spin_SF = spin
 
     if (Arange.eq.Srange) then
        mat_AtomF_SF = allocate_temp_matrix(aSs_range,0,atomf,sf)

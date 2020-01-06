@@ -140,8 +140,17 @@
 !!    Added enthalpy and stress tolerances for cell optimisation
 !!   2019/03/28 zamaan
 !!    Added flag_stress and flag_full_stress
+!!   2019/05/08 zamaan
+!!    Added flag_atomic_stress and atomic_stress for atomic contributions to 
+!!    stress and heat flux
 !!   2019/05/21 zamaan
 !!    Added RNG seed
+!!   2019/11/14 tsuyoshi
+!!    Removed n_proc_old and glob2node_old
+!!   2019/11/18 tsuyoshi
+!!    Removed flag_MDold
+!!   2019/11/18 14:37 dave
+!!    Added flag_variable_cell
 !!  SOURCE
 !!
 module global_module
@@ -175,7 +184,7 @@ module global_module
   integer,      dimension(:,:), allocatable :: sorted_coord ! Atom IDs of atoms sorted according to x, y, z coords
   logical,      dimension(:,:), allocatable :: flag_move_atom  ! Move atoms ?
   integer,      dimension(:),   allocatable :: flag_cdft_atom
-  logical :: restart_LorK, restart_rho, restart_T, restart_X
+  logical :: restart_DM, restart_rho, restart_T, restart_X
 
   integer :: global_maxatomspart ! Maximum atoms per partition, if exceeded, triggers partitioning refinement
 
@@ -188,7 +197,18 @@ module global_module
 
   logical :: flag_stress   ! Compute the stress tensor?
   logical :: flag_full_stress ! Compute the off-diagonal elements?
+  logical :: flag_atomic_stress ! Compute atomic contributions to stress?
+  logical :: flag_heat_flux ! Compute heat flux during MD?
+
+  ! Atomic contributions to total stress
+  ! I would rather not put this in global module, but it is required by enough
+  ! different force computing modules that it's impossible to put it in a more
+  ! sensible file without circular dependencies - zamaan
+  real(double), dimension(:,:,:), allocatable :: atomic_stress
+  real(double), dimension(3,3)                :: non_atomic_stress
+
   logical :: flag_opt_cell ! optimize the simulation cell?
+  logical :: flag_variable_cell ! Global indicator of whether cell will change
   integer :: optcell_method ! method for cell optimiisation 1 = cell, fixed fractional coords, 2 = nested loop cell + geometry optimisation, 3 = single vector full optimisation
   ! specify sim cell dims/ratios of dims to be held constant.
   character(len=20), save :: cell_constraint_flag
@@ -323,12 +343,12 @@ module global_module
 
   ! Flag to control if matrix L is dumped to files
   logical :: flag_dump_L
+  logical :: flag_DumpMatrices
 
   ! Hold an old relation between global & partition labels
   integer,allocatable :: id_glob_old(:),id_glob_inv_old(:)
 
   ! For MD
-  logical :: flag_MDold
   logical :: flag_LmatrixReuse
   logical :: flag_TmatrixReuse
   logical :: flag_SkipEarlyDM
@@ -342,9 +362,7 @@ module global_module
   !ORI real(double),parameter   :: shift_in_bohr = 1.0E-03_double
   real(double),parameter   :: shift_in_bohr = 1.0E-06_double
   ! Table showing atoms (global) in nodes
-  integer :: n_proc_old
   integer,allocatable :: glob2node(:)        ! size: ni_in_cell
-  integer,allocatable :: glob2node_old(:)    ! size: ni_in_cell
   ! Displacement of atoms from a previous step
   real(double),allocatable :: atom_coord_diff(:,:)
   ! XL-BOMD

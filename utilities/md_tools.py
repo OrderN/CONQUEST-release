@@ -4,6 +4,7 @@ import scipy as sp
 import matplotlib.pyplot as plt
 from scipy.linalg import norm
 from scipy.integrate import cumtrapz
+from scipy.signal import correlate
 from scipy import histogram
 from math import ceil, pi
 from frame import Frame
@@ -11,6 +12,14 @@ from pdb import set_trace
 
 bohr2ang = 0.529177249
 small = 1.0e-3
+
+def autocorr(x, y=None):
+  """Autocorrelation function"""
+  if y.any():
+    result = correlate(x, y, mode='full')
+  else:
+    result = correlate(x, x, mode='full')
+  return result[result.size // 2:]
 
 def diff_mic(pos1, pos2, cell):
   """Minimum image convention relative vector (orthorhombic cell only)"""
