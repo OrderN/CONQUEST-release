@@ -955,7 +955,7 @@ contains
     use input_module,   only: leqi
     use io_module,      only: read_velocity
     use md_model,       only: type_md_model
-    use GenComms,       only: inode, ionode, gcopy
+    use GenComms,       only: inode, ionode, gcopy, cq_warn
     use memory_module,  only: reg_alloc_mem, type_dbl
     use global_module,  only: rcellx, rcelly, rcellz, temp_ion, ni_in_cell, &
                               flag_MDcontinue, flag_read_velocity, &
