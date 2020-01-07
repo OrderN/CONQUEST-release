@@ -66,6 +66,9 @@ module initial_read
 
   implicit none
 
+  ! Index number for loading DM etc
+  integer, save :: index_MatrixFile
+
   ! RCS tag for object file identification
   character(len=80), save, private :: &
        RCSid = "$Id$"
@@ -751,6 +754,8 @@ contains
   !!   2019/12/26 tsuyoshi  (2019/12/29)
   !!     General.LoadL => General.LoadLorK  => General.LoadDM
   !!     AtomMove.ReuseL => AtomMove.ReuseLorK => AtomMove.ReuseDM
+  !!   2020/01/07 tsuyoshi 
+  !!     Default setting of MakeInitialChargeFromK has been changed
   !!  TODO
   !!   Fix reading of start flags (change to block ?) 10/05/2002 dave
   !!   Fix rigid shift 10/05/2002 dave
@@ -1582,6 +1587,9 @@ contains
     flag_MatrixFile_BinaryFormat_Dump_END = fdf_boolean('IO.MatrixFile.BinaryFormat.Dump', flag_MatrixFile_BinaryFormat)
     flag_MatrixFile_BinaryFormat_Dump = flag_MatrixFile_BinaryFormat_Grab
 
+    ! To load Matrix Files having nonzero indices
+    index_MatrixFile       = fdf_integer('IO.MatrixFile.FileIndex',0)
+
     ! read wavefunction output flags
     mx_temp_matrices = fdf_integer('General.MaxTempMatrices',100)
     flag_out_wf=fdf_boolean('IO.outputWF',.false.)
@@ -2061,7 +2069,11 @@ contains
     else
        flag_read_velocity = fdf_boolean('AtomMove.ReadVelocity',.false.)
        restart_DM         = fdf_boolean('General.LoadDM', .false.)
-       find_chdens    = fdf_boolean('SC.MakeInitialChargeFromK',.false.)
+       if(restart_DM) then                                             
+        find_chdens    = fdf_boolean('SC.MakeInitialChargeFromK',.true.) 
+       else
+        find_chdens    = fdf_boolean('SC.MakeInitialChargeFromK',.false.)
+       endif
        if (flag_XLBOMD) restart_X=fdf_boolean('XL.LoadX', .false.)
        if (flag_multisite) read_option = fdf_boolean('Basis.LoadCoeffs', .false.)
     end if
