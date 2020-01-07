@@ -27,7 +27,7 @@
 !!   2017/12/05 zamaan
 !!    Added separate NHC chain for cell degrees of freedom
 !!   2017/05/29 zamaan
-!!    Corrected sign of potential energy contribution in get_nhc_energy. Added
+!!    Corrected sign of potential energy contribution in get_thermostat_energy. Added
 !!    cell degrees of freedom (cell_ndof) to equations for clarity.
 !!   2018/07/12 zamaan
 !!    Added SSM integrator, adapted from W. Shinoda et al., PRB 69:134103
@@ -42,6 +42,13 @@
 !!    minor changes for heat flux calculations
 !!   2019/02/06 zamaan
 !!    Pressure conversion factor now computed from values from units module
+!!   2019/04/23 zamaan
+!!    Implemented stochastic velocity scaling MD, Bussi et al., J. Chem.
+!!    Phys. 126, 014101 (2007) (NVT) and Bussi et al., J. Chem. Phys.
+!!    130, 074101 (2009) (NPT)
+!!   2020/01/06 12:18 dave
+!!    Removed Berendsen thermostat due to unreliability (see articles on
+!!    flying ice-cube effect)
 !!  SOURCE
 !!
 module md_control
@@ -53,16 +60,14 @@ module md_control
   use move_atoms,       only: fac_Kelvin2Hartree
   use species_module,   only: species, mass
   use GenComms,         only: inode, ionode, cq_abort
-  use units,            only: HaToeV, eVToJ, BohrToAng
+  use input_module,     only: leqi
+  use rng,              only: type_rng
+  use units,            only: HaBohr3ToGPa
 
   implicit none
 
-  ! Unit conversion factors
-  real(double), parameter :: fac_HaBohr32GPa = (HaToeV*eVToJ*1e21_double)/&
-                                               (BohrToAng**3)
-  real(double), parameter :: fac_fs2atu = 41.3413745758
-  real(double), parameter :: fac_invcm2hartree = 4.5563352812122295E-6
-  real(double), parameter :: fac_thz2hartree = 0.0001519828500716
+  ! Flags
+  character(20) :: md_cell_constraint
 
   ! Files
   character(20) :: md_position_file = 'md.position'
@@ -78,8 +83,9 @@ module md_control
   character(20) :: md_thermo_type, md_baro_type
   real(double)  :: md_tau_T, md_tau_P, target_pressure, md_bulkmod_est, &
                    md_box_mass, md_ndof_ions, md_omega_t, md_omega_p, &
-                   md_tau_T_equil, md_tau_P_equil, md_p_drag, md_t_drag
-  integer       :: md_n_nhc, md_n_ys, md_n_mts, md_berendsen_equil
+                   md_tau_T_equil, md_tau_P_equil, md_p_drag, md_t_drag, &
+                   md_equil_press
+  integer       :: md_n_nhc, md_n_ys, md_n_mts, md_equil_steps
   logical       :: flag_write_xsf, md_cell_nhc, md_calc_xlmass, flag_nhc
   logical       :: flag_extended_system = .false.
   real(double), dimension(3,3), target      :: lattice_vec
@@ -120,7 +126,8 @@ module md_control
     integer             :: n_nhc        ! number of Nose-Hoover heat baths
     integer             :: n_ys         ! Yoshida-Suzuki order
     integer             :: n_mts_nhc    ! number of time steps for NHC
-    real(double)        :: e_nhc        ! energy of NHC thermostats
+    real(double)        :: e_thermostat ! energy of thermostat
+    real(double)        :: e_barostat   ! energy of barostat (for NPT SVR)
     real(double)        :: e_nhc_ion    ! energy of ionic NHC thermostats
     real(double)        :: e_nhc_cell   ! energy of cell NHC thermostats
     real(double)        :: ke_nhc_ion   ! ke of ionic NHC thermostats
@@ -140,15 +147,16 @@ module md_control
     real(double), dimension(:), allocatable :: G_nhc_cell
     real(double), dimension(:), allocatable :: m_nhc_cell
     real(double), dimension(:), allocatable :: dt_ys  ! Yoshida-Suzuki time steps
+    type(type_rng)      :: myrng
 
     contains
 
       procedure, public   :: init_thermo
       procedure, public   :: init_nhc
       procedure, public   :: init_ys
-      procedure, public   :: get_berendsen_thermo_sf
-      procedure, public   :: berendsen_v_rescale
-      procedure, public   :: get_nhc_energy
+      procedure, public   :: get_svr_thermo_sf
+      procedure, public   :: v_rescale
+      procedure, public   :: get_thermostat_energy
       procedure, public   :: get_temperature_and_ke
       procedure, public   :: dump_thermo_state
 
@@ -200,7 +208,7 @@ module md_control
 
     ! Extended Lagrangian barostat variables
     real(double)        :: box_mass
-    real(double)        :: ke_box
+    real(double)        :: e_barostat
     real(double)        :: p_drag       ! drag factor for barostat
 
     ! Isotropic variables
@@ -226,14 +234,13 @@ module md_control
       procedure, public   :: init_baro
       procedure, public   :: get_pressure_and_stress
       procedure, public   :: get_volume
-      procedure, public   :: get_berendsen_baro_sf
-      procedure, public   :: propagate_berendsen
-      procedure, public   :: get_box_energy
+      procedure, public   :: get_barostat_energy
       procedure, public   :: propagate_npt_mttk
       procedure, public   :: propagate_r_mttk
       procedure, public   :: propagate_box_mttk
       procedure, public   :: dump_baro_state
       procedure, public   :: update_cell
+      procedure, public   :: scale_box_velocity
 
       procedure, private  :: update_G_box
       procedure, private  :: propagate_eps_lin
@@ -266,14 +273,16 @@ contains
   !!  
   subroutine init_thermo(th, thermo_type, baro_type, dt, ndof, tau_T, ke_ions)
 
-    use input_module,     only: leqi
-
     ! passed variables
     class(type_thermostat), intent(inout) :: th
     character(*), intent(in)              :: thermo_type, baro_type
     real(double), intent(in)              :: dt
     integer, intent(in)                   :: ndof
     real(double), intent(in)              :: ke_ions, tau_T
+
+    ! local variables
+    real(double)                          :: dummy_rn
+    integer                               :: i
 
     if (inode==ionode .and. iprint_MD > 1) &
       write(io_lun,'(2x,a)') 'Welcome to init_thermo'
@@ -282,48 +291,59 @@ contains
     th%dt = dt
     th%ndof = ndof
     th%ke_ions = ke_ions
+    th%ke_target = half*md_ndof_ions*fac_Kelvin2Hartree*th%T_ext
     th%tau_T = tau_T
     th%thermo_type = thermo_type
     th%baro_type = baro_type
     th%cell_nhc = md_cell_nhc
+    if (.not. flag_MDcontinue) th%e_thermostat = zero
 
-    select case(baro_type)
-    case('none')
+    select case(md_cell_constraint)
+    case('fixed')
       th%cell_ndof = 0
+    case('volume')
+      th%cell_ndof = 1
+    case('xyz')
+      th%cell_ndof = 3
+    case default
+      call cq_abort('MD.CellConstraint must be "fixed", "volume" or "xyz"')
+    end select
+
+    select case(th%baro_type)
+    case('none')
+      md_cell_constraint = 'fixed'
       th%cell_nhc = .false.
-    case('iso-mttk')
-      th%cell_ndof = 1
-    case('ortho-mttk')
-      th%cell_ndof = 3
-    case('mttk')
-      th%cell_ndof = 3
-    case('iso-ssm')
-      th%cell_ndof = 1
-    case('ortho-ssm')
-      th%cell_ndof = 3
+    case('pr')
+      ! For NPT stochastic velocity rescaling we also need to thermostat the box
+      th%ke_target = th%ke_target +  &
+                     half*th%cell_ndof*fac_Kelvin2Hartree*th%T_ext
+    case('default')
+      call cq_abort("MD.Barostat must be 'none', 'pr' or 'mttk'")
     end select
 
     select case(th%thermo_type)
     case('none')
-    case('berendsen')
+    case('svr')
+      ! This will be true for isobaric-isothermal SVR, because we will use
+      ! Parrinello-Rahman NPH dynamics with a SVR thermostat (barostat 
+      ! is initialised AFTER thermostat)
       flag_extended_system = .false.
+      call th%myrng%init_rng ! Initialise random number generator
+      call th%myrng%init_normal(one, zero)
     case('nhc')
       call th%init_nhc(dt)
-    case('ssm')
-      call th%init_nhc(dt)
     case default
-      call cq_abort("Unknown thermostat type")
+      call cq_abort("MD.ThermoType must be 'none', 'svr' or 'nhc'")
     end select
 
     if (inode==ionode .and. iprint_MD > 1) then
       write(io_lun,'(4x,"Thermostat type: ",a)') th%thermo_type
+      write(io_lun,'(4x,"Extended system: ",l)') flag_extended_system
       if (.not. leqi(thermo_type, 'none')) then
         write(io_lun,'(4x,a,f10.2)') 'Target temperature        T_ext = ', &
                                      th%T_ext
         write(io_lun,'(4x,a,f10.2)') 'Coupling time period      tau_T = ', &
                                      th%tau_T
-        write(io_lun,'(4x,a,l)')     'Cell NHC                          ', &
-                                     th%cell_nhc
       end if
     end if
 
@@ -345,7 +365,6 @@ contains
 
     use memory_module,    only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use global_module,    only: area_moveatoms
-    use input_module,     only: leqi
 
     ! passed variables
     class(type_thermostat), intent(inout) :: th
@@ -364,7 +383,6 @@ contains
     th%n_mts_nhc = md_n_mts
     th%lambda = one
     th%t_drag = one - (md_t_drag*dt/md_tau_T/md_n_mts/md_n_ys)
-    th%ke_target = half*md_ndof_ions*fac_Kelvin2Hartree*th%T_ext
     write(th%nhc_fmt,'("(4x,a12,",i4,"e14.6)")') th%n_nhc
     write(th%nhc_fmt2,'("(",i4,"e20.12)")') th%n_nhc
 
@@ -391,12 +409,10 @@ contains
 
       th%m_nhc(1) = md_ndof_ions*th%T_ext*fac_Kelvin2Hartree/omega_thermo**2
       if (th%cell_nhc) then
-        select case (md_baro_type)
-        case('iso-mttk')
+        select case (md_cell_constraint)
+        case('volume')
           ndof_baro = one
-        case('iso-ssm')
-          ndof_baro = one
-        case('ortho-ssm')
+        case('xyz')
           ndof_baro = three
         end select
         th%m_nhc_cell(1) = (ndof_baro**2)*th%T_ext*fac_Kelvin2Hartree/omega_baro**2
@@ -452,7 +468,7 @@ contains
       write(io_lun,fmt1) 'ion  NHC masses:', th%m_nhc
       if (th%cell_nhc) write(io_lun,fmt1) 'cell NHC masses:', th%m_nhc_cell
     end if
-    call th%get_nhc_energy
+    call th%get_thermostat_energy
 
   end subroutine init_nhc
   !!***
@@ -604,7 +620,7 @@ contains
     integer                                   :: j, k, iatom
     real(double)                              :: m, trace
 
-    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 2) &
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 1) &
       write(io_lun,'(2x,a)') "get_temperature_and_ke"
 
     ! Update the kinetic energy and stress
@@ -624,7 +640,7 @@ contains
     th%T_int = KE/fac_Kelvin2Hartree/md_ndof_ions
     KE = half*KE
     th%ke_ions = KE
-    trace = baro%ke_stress(1,1) + baro%ke_stress(2,2) + baro%ke_stress(3,3)
+!    trace = baro%ke_stress(1,1) + baro%ke_stress(2,2) + baro%ke_stress(3,3)
 
     if (present(final_call)) then
       if (inode==ionode .and. iprint_MD > 1) then
@@ -641,38 +657,77 @@ contains
     end if
   end subroutine get_temperature_and_ke
 
-  !!****m* md_control/get_berendsen_thermo_sf *
+  !!****m* md_control/get_svr_thermo_sf *
   !!  NAME
-  !!   get_berendsen_thermo_sf
+  !!   get_svr_thermo_sf
   !!  PURPOSE
-  !!   Get velocity scaling factor for Berendsen thermostat
+  !!   Get velocity scaling factor for CSVR thermostat: &
+  !!   Bussi et al. J. Chem. Phys. 126, 014101 (2007)
   !!  AUTHOR
   !!    Zamaan Raza 
   !!  CREATION DATE
-  !!   2017/10/24 14:26
+  !!   2019/04/19
+  !!  MODIFICATION HISTORY
+  !!   2019/05/21 zamaan
+  !!    Replaced all calls to old RNG with new
   !!  SOURCE
   !!  
-  subroutine get_berendsen_thermo_sf(th, dt)
+  subroutine get_svr_thermo_sf(th, dt, baro)
 
-    ! passed variables
+    use GenComms,      only: gsum, my_barrier
+    use rng,           only: type_rng
+
+    ! Passed variables
     class(type_thermostat), intent(inout)   :: th
     real(double), intent(in)                :: dt
+    type(type_barostat), intent(inout), optional :: baro
 
-    th%lambda = sqrt(one + (dt/th%tau_T)* &
-                     (th%T_ext/th%T_int - one))
+    ! Local variables
+    real(double)    :: ke, rn, alpha_sq, exp_dt_tau, r1, sum_ri_sq, temp_fac
+    integer         :: i, ndof
 
-    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 2) then
-      write(io_lun,'(2x,a)') "get_berendsen_thermo_sf"
-      write(io_lun,'(4x,"lambda: ",e16.8)') th%lambda
+    th%lambda = zero
+    ! We need to guarantee that the generated random numbers are consistent on
+    ! all processes, so only doing this part on ionode, the gsumming the scaling
+    ! factor - zamaan
+    if (inode==ionode) then
+      if (flag_MDdebug .and. iprint_MD > 1) &
+        write(io_lun,'(2x,a)') "get_svr_thermo_sf"
+
+      ndof = th%ndof + th%cell_ndof
+
+      exp_dt_tau = exp(-dt/th%tau_T)
+      ke = th%ke_ions
+      if (present(baro)) then
+        call baro%get_barostat_energy
+        th%e_barostat = baro%e_barostat ! save for computing e_thermostat
+        ke = ke + th%e_barostat
+      end if
+      temp_fac = th%ke_target/th%ndof/ke
+
+      ! sum can be replaced by a single number drawn from a gamma distribution
+      sum_ri_sq = zero
+      r1 = th%myrng%rng_normal()
+      sum_ri_sq = sum_ri_sq + r1*r1
+      do i=1,ndof-1
+        rn = th%myrng%rng_normal()
+        sum_ri_sq = sum_ri_sq + rn*rn
+      end do
+      alpha_sq = exp_dt_tau + temp_fac * (one - exp_dt_tau) * sum_ri_sq + &
+                 two*sqrt(exp_dt_tau) * sqrt(temp_fac*(one - exp_dt_tau)) * r1
+      th%lambda = sqrt(alpha_sq)
     end if
-  end subroutine get_berendsen_thermo_sf
+    call gsum(th%lambda)
+    call my_barrier
+
+  end subroutine get_svr_thermo_sf
   !!***
 
-  !!****m* md_control/berendsen_v_rescale *
+  !!****m* md_control/v_rescale *
   !!  NAME
-  !!   berendsen_v_rescale
+  !!   v_rescale
   !!  PURPOSE
-  !!   rescale veolocity using Berendsen (weak coupling) velocity rescaling.
+  !!   rescale velocity for simple velocity rescaling thermostats.
   !!   Note that the scaling factor is computed before the first vVerlet
   !!   velocity update, and the velocities scaled after the second vVerlet
   !!   velocity update.
@@ -682,7 +737,7 @@ contains
   !!   2017/10/24 14:26
   !!  SOURCE
   !!  
-  subroutine berendsen_v_rescale(th, v)
+  subroutine v_rescale(th, v)
 
     ! passed variables
     class(type_thermostat), intent(inout)       :: th
@@ -690,12 +745,12 @@ contains
 
     v = v*th%lambda
 
-    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 2) then
-      write(io_lun,'(2x,a)') "berendsen_v_rescale"
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 1) then
+      write(io_lun,'(2x,a)') "v_rescale"
       write(io_lun,'(4x,"lambda: ",e16.8)') th%lambda
     end if
 
-  end subroutine berendsen_v_rescale
+  end subroutine v_rescale
   !!***
 
   !!****m* md_control/update_G_nhc *
@@ -709,17 +764,17 @@ contains
   !!   2017/10/24 10:41
   !!  SOURCE
   !!  
-  subroutine update_G_nhc(th, k, ke_box)
+  subroutine update_G_nhc(th, k, e_barostat)
 
     ! passed variables
     class(type_thermostat), intent(inout) :: th
     integer, intent(in)                   :: k      ! NH thermostat index
-    real(double), intent(in)              :: ke_box ! box ke for pressure coupling
+    real(double), intent(in)              :: e_barostat ! box ke for pressure coupling
 
     if (th%cell_nhc) then
       if (k == 1) then
         th%G_nhc(k) = two*th%ke_ions - th%ndof*th%T_ext*fac_Kelvin2Hartree
-        th%G_nhc_cell(k) = two*ke_box - th%T_ext*fac_Kelvin2Hartree
+        th%G_nhc_cell(k) = two*e_barostat - th%T_ext*fac_Kelvin2Hartree
       else
         th%G_nhc(k) = th%m_nhc(k-1)*th%v_eta(k-1)**2 - &
                       th%T_ext*fac_Kelvin2Hartree
@@ -731,7 +786,7 @@ contains
     else
       if (k == 1) then
         th%G_nhc(k) = two*th%ke_ions - th%ndof*th%T_ext*fac_Kelvin2Hartree + &
-                      two*ke_box
+                      two*e_barostat
       else
         th%G_nhc(k) = th%m_nhc(k-1)*th%v_eta(k-1)**2 - &
                       th%T_ext*fac_Kelvin2Hartree
@@ -900,19 +955,19 @@ contains
     real(double), dimension(:,:), intent(inout) :: v  ! ion velocities
 
     ! local variables
-    integer       :: i_mts, i_ys, i_nhc, i
-    real(double)  :: v_sfac   ! ionic velocity scaling factor
-    real(double)  :: box_sfac ! box velocity scaling factor
-    real(double)  :: fac
+    integer         :: i_mts, i_ys, i_nhc, i
+    real(double)    :: v_sfac   ! ionic velocity scaling factor
+    real(double)    :: box_sfac ! box velocity scaling factor
+    real(double)    :: fac
 
-    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 2) &
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 1) &
       write(io_lun,'(2x,a)') "integrate_nhc"
 
     th%ke_ions = ke
     v_sfac = one
     box_sfac = one
-    if (th%cell_nhc) call baro%get_box_energy
-    call th%update_G_nhc(1, baro%ke_box) ! update force on thermostat 1
+    if (th%cell_nhc) call baro%get_barostat_energy
+    call th%update_G_nhc(1, baro%e_barostat) ! update force on thermostat 1
     do i_mts=1,th%n_mts_nhc ! MTS loop
       do i_ys=1,th%n_ys     ! Yoshida-Suzuki loop
         if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) then
@@ -938,19 +993,19 @@ contains
         if (th%cell_nhc) then
           ! Update the box velocities
           fac = exp(-half*th%dt_ys(i_ys)*th%v_eta_cell(1))
-          select case(baro%baro_type)
-          case('iso-ssm')
+          select case(md_cell_constraint)
+          case('volume')
             baro%v_eps = baro%v_eps*fac
-          case('ortho-ssm')
+          case('xyz')
             do i=1,3
               baro%v_h(i,i) = baro%v_h(i,i)*fac
             end do
           end select
           box_sfac = box_sfac*fac
-          call baro%get_box_energy
+          call baro%get_barostat_energy
         end if
 
-        call th%update_G_nhc(1, baro%ke_box) ! update force on thermostat 1
+        call th%update_G_nhc(1, baro%e_barostat) ! update force on thermostat 1
         ! update the thermostat "positions" eta
         do i_nhc=1,th%n_nhc
           call th%propagate_eta(i_nhc, th%dt_ys(i_ys), half)
@@ -960,7 +1015,7 @@ contains
         do i_nhc=1,th%n_nhc-1 ! loop over NH thermostats in forward order
           ! Trotter expansion to avoid sinh singularity
           call th%propagate_v_eta_exp(i_nhc, th%dt_ys(i_ys), one_eighth)
-          call th%update_G_nhc(i_nhc+1, baro%ke_box)
+          call th%update_G_nhc(i_nhc+1, baro%e_barostat)
           call th%propagate_v_eta_lin(i_nhc, th%dt_ys(i_ys), quarter)
           call th%propagate_v_eta_exp(i_nhc, th%dt_ys(i_ys), one_eighth)
         end do
@@ -993,9 +1048,9 @@ contains
   end subroutine integrate_nhc
   !!***
 
-  !!****m* md_control/get_nhc_energy *
+  !!****m* md_control/get_thermostat_energy *
   !!  NAME
-  !!   get_nhc_energy
+  !!   get_thermostat_energy
   !!  PURPOSE
   !!   compute the NHC contribution to the conserved quantity
   !!  AUTHOR
@@ -1007,7 +1062,7 @@ contains
   !!    Corrected sign of potential energy contribution, added cell_ndof
   !!  SOURCE
   !!  
-  subroutine get_nhc_energy(th)
+  subroutine get_thermostat_energy(th)
 
     use input_module,     only: io_assign, io_close
 
@@ -1017,15 +1072,16 @@ contains
     ! local variables
     integer                               :: k, lun
 
-    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 2) &
-      write(io_lun,'(2x,a)') "get_nhc_energy"
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 1) &
+      write(io_lun,'(2x,a)') "get_thermostat_energy"
 
-    th%ke_nhc_ion = zero
-    th%pe_nhc_ion = zero
-    th%ke_nhc_cell = zero
-    th%pe_nhc_cell = zero
-    th%e_nhc = zero
-    if (flag_extended_system) then
+    select case(th%thermo_type)
+    case('nhc')
+      th%ke_nhc_ion = zero
+      th%pe_nhc_ion = zero
+      th%ke_nhc_cell = zero
+      th%pe_nhc_cell = zero
+      th%e_thermostat = zero
       if (th%cell_nhc) then
         th%ke_nhc_ion = half*th%m_nhc(1)*th%v_eta(1)**2
         th%pe_nhc_ion = real(th%ndof, double)*th%T_ext*fac_Kelvin2Hartree*th%eta(1)
@@ -1034,8 +1090,7 @@ contains
           real(th%cell_ndof, double)*th%T_ext*fac_Kelvin2Hartree*th%eta_cell(1)
       else
         th%ke_nhc_ion = half*th%m_nhc(1)*th%v_eta(1)**2
-        th%pe_nhc_ion = real((th%ndof+th%cell_ndof), double) * &
-                        th%T_ext*fac_Kelvin2Hartree*th%eta(1)
+        th%pe_nhc_ion = real(th%ndof, double)*th%T_ext*fac_Kelvin2Hartree*th%eta(1)
       end if
 
       do k=2,th%n_nhc
@@ -1048,16 +1103,17 @@ contains
                            th%T_ext*fac_Kelvin2Hartree*th%eta_cell(k)
         end if
       end do
-      th%e_nhc = th%ke_nhc_ion + th%pe_nhc_ion + th%ke_nhc_cell + th%pe_nhc_cell
+      th%e_thermostat = th%ke_nhc_ion + th%pe_nhc_ion + &
+                        th%ke_nhc_cell + th%pe_nhc_cell
 
-      if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) then
+      if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 2) then
         write(io_lun,'(4x,"ke_nhc_ion: ",e16.8)') th%ke_nhc_ion
         write(io_lun,'(4x,"pe_nhc_ion: ",e16.8)') th%pe_nhc_ion
         if (th%cell_nhc) then
           write(io_lun,'(4x,"ke_nhc_cell:",e16.8)') th%ke_nhc_cell
           write(io_lun,'(4x,"pe_nhc_cell:",e16.8)') th%pe_nhc_cell
         end if
-        write(io_lun,'(4x,"e_nhc:      ",e16.8)') th%e_nhc
+        write(io_lun,'(4x,"e_nhc:      ",e16.8)') th%e_thermostat
         call io_assign(lun)
         if (th%append) then
           open(unit=lun,file='nhc.dat',position='append')
@@ -1068,16 +1124,27 @@ contains
         end if
         if (th%cell_nhc) then
           write(lun,'(5e16.8)') th%ke_nhc_ion, th%pe_nhc_ion, &
-            th%ke_nhc_cell, th%pe_nhc_cell, th%e_nhc
+            th%ke_nhc_cell, th%pe_nhc_cell, th%e_thermostat
         else
           write(lun,'(5e16.8)') th%ke_nhc_ion, th%pe_nhc_ion, &
-            zero, zero, th%e_nhc
+            zero, zero, th%e_thermostat
         end if
         call io_close(lun)
       end if
-    end if
+    case('svr')
+       th%e_thermostat = th%e_thermostat - &
+                        th%ke_ions * (th%lambda**2 - one) * th%dt! * half
+      if (.not. leqi(th%baro_type, 'none')) then
+        th%e_thermostat = th%e_thermostat - &
+                          th%e_barostat * (th%lambda**2 - one) * th%dt
+      end if
+      if (inode==ionode .and. iprint_MD > 2) &
+        write(io_lun,'(4x,"ke_svr:     ",e16.8)') th%e_thermostat
+    case default
+      th%e_thermostat = zero
+    end select
 
-  end subroutine get_nhc_energy
+  end subroutine get_thermostat_energy
   !!***
 
   !!****m* md_control/dump_thermo_state *
@@ -1110,24 +1177,24 @@ contains
         open(unit=lun,file=filename,status='replace')
         th%append = .true.
       end if
-      write(lun,'("step        ",i12)') step
-      write(lun,'("T_int       ",f12.4)') th%T_int
-      write(lun,'("ke_ions     ",e12.4)') th%ke_ions
-      write(lun,'("lambda      ",f12.4)') th%lambda
-      if (flag_extended_system) then
-        write(lun,th%nhc_fmt) "eta:        ", th%eta
-        write(lun,th%nhc_fmt) "v_eta:      ", th%v_eta
-        write(lun,th%nhc_fmt) "G_nhc:      ", th%G_nhc
+      write(lun,'("step          ",i12)') step
+      write(lun,'("T_int         ",f12.4)') th%T_int
+      write(lun,'("ke_ions       ",e12.4)') th%ke_ions
+      write(lun,'("lambda        ",f12.4)') th%lambda
+      if (leqi(th%thermo_type, 'nhc')) then
+        write(lun,th%nhc_fmt) "eta:          ", th%eta
+        write(lun,th%nhc_fmt) "v_eta:        ", th%v_eta
+        write(lun,th%nhc_fmt) "G_nhc:        ", th%G_nhc
         if (th%cell_nhc) then
-          write(lun,th%nhc_fmt) "eta_cell:   ", th%eta_cell
-          write(lun,th%nhc_fmt) "v_eta_cell: ", th%v_eta_cell
-          write(lun,th%nhc_fmt) "G_nhc_cell: ", th%G_nhc_cell
-          write(lun,'("ke_nhc_ion: ",e16.4)') th%ke_nhc_ion
-          write(lun,'("pe_nhc_ion: ",e16.4)') th%pe_nhc_ion
-          write(lun,'("ke_nhc_cell:",e16.4)') th%ke_nhc_cell
-          write(lun,'("pe_nhc_cell:",e16.4)') th%pe_nhc_cell
+          write(lun,th%nhc_fmt) "eta_cell:     ", th%eta_cell
+          write(lun,th%nhc_fmt) "v_eta_cell:   ", th%v_eta_cell
+          write(lun,th%nhc_fmt) "G_nhc_cell:   ", th%G_nhc_cell
+          write(lun,'("ke_nhc_ion:   ",e16.4)') th%ke_nhc_ion
+          write(lun,'("pe_nhc_ion:   ",e16.4)') th%pe_nhc_ion
+          write(lun,'("ke_nhc_cell:  ",e16.4)') th%ke_nhc_cell
+          write(lun,'("pe_nhc_cell:  ",e16.4)') th%pe_nhc_cell
         end if
-        write(lun,'("e_nhc:      ",e16.4)') th%e_nhc
+        write(lun,'("e_thermostat: ",e16.4)') th%e_thermostat
       end if
       write(lun,*)
       call io_close(lun)
@@ -1140,7 +1207,7 @@ contains
   !!  NAME
   !!   init_baro
   !!  PURPOSE
-  !!   initialise MTTK barostat
+  !!   initialise barostat
   !!  AUTHOR
   !!    Zamaan Raza 
   !!  CREATION DATE
@@ -1152,7 +1219,6 @@ contains
   !!  
   subroutine init_baro(baro, baro_type, dt, ndof, v, tau_P, ke_ions)
 
-    use input_module,     only: leqi
     use global_module,    only: rcellx, rcelly, rcellz
 
     ! passed variables
@@ -1169,29 +1235,26 @@ contains
     baro%baro_type = baro_type
     baro%dt = dt
     baro%ndof = ndof
-    baro%ke_box = zero
+    baro%e_barostat = zero
+
+    select case(md_cell_constraint)
+    case('volume')
+      baro%cell_ndof = 1
+    case('xyz')
+      baro%cell_ndof = 3
+    end select
+
     if (md_tau_P < zero) md_tau_P = dt*ten*ten
     if (md_calc_xlmass) then
       omega_P = twopi/md_tau_P
 
-      select case(baro_type)
-      case('iso-mttk')
-        baro%cell_ndof = 1
-      case('iso-ssm')
-        baro%cell_ndof = 1
-      case('ortho-ssm')
-        baro%cell_ndof = 3
-      end select
-
       baro%box_mass = &
         (baro%ndof+baro%cell_ndof)*temp_ion*fac_Kelvin2Hartree/omega_P**2
 
-      select case(baro_type)
-      case('iso-mttk')
-      case('iso-ssm')
-      case('ortho-ssm')
-        baro%box_mass = baro%box_mass/three
-      end select
+      if (leqi(baro%baro_type, 'pr')) then
+        if (leqi(md_cell_constraint, 'xyz')) &
+          baro%box_mass = baro%box_mass/three
+      end if
     else
       baro%box_mass = md_box_mass
     end if
@@ -1202,12 +1265,13 @@ contains
     baro%c6 = baro%c4/42.0_double
     baro%c8 = baro%c6/72.0_double
 
-    baro%P_ext = target_pressure/fac_HaBohr32GPa
+    baro%P_ext = target_pressure/HaBohr3ToGPa
     baro%lat_ref = zero
     baro%lat_ref(1,1) = rcellx
     baro%lat_ref(2,2) = rcelly
     baro%lat_ref(3,3) = rcellz
     baro%lat = baro%lat_ref
+    call baro%get_volume
     call baro%get_pressure_and_stress
     baro%volume_ref = baro%volume
     baro%v_old = baro%volume
@@ -1218,58 +1282,48 @@ contains
     if (flag_MDcontinue) baro%append = .true.
     select case(baro%baro_type)
     case('none')
-    case('berendsen')
-      flag_extended_system = .false.
-    case('iso-mttk')
+    case('mttk')
       flag_extended_system = .true.
       baro%append = .false.
       baro%eps_ref = third*log(baro%volume/baro%volume_ref)
       baro%eps = baro%eps_ref
       baro%v_eps = zero
       baro%G_eps = zero
-      call baro%get_box_energy
+      call baro%get_barostat_energy
       baro%odnf = one + three/baro%ndof
-    case('ortho-mttk')
-    case('mttk')
-    case('iso-ssm')
+      ! constants for polynomial expanion
+      baro%c2 = one/6.0_double
+      baro%c4 = baro%c2/20.0_double
+      baro%c6 = baro%c4/42.0_double
+      baro%c8 = baro%c6/72.0_double
+    case('pr')
       flag_extended_system = .true.
       baro%append = .false.
-      baro%eps = zero
-      baro%v_eps = zero
-      baro%G_eps = zero
-      call baro%get_box_energy
-      baro%odnf = one + three/baro%ndof
-    case('ortho-ssm')
-      flag_extended_system = .true.
-      baro%append = .false.
-      baro%h = zero
-      baro%v_h = zero
-      baro%G_h = zero
-      call baro%get_box_energy
+      if (leqi(md_cell_constraint, 'volume')) then
+        baro%eps = zero
+        baro%v_eps = zero
+        baro%G_eps = zero
+      else
+        baro%h = zero
+        baro%v_h = zero
+        baro%G_h = zero
+      end if
+      call baro%get_barostat_energy
       baro%odnf = one + three/baro%ndof
     case default
-      call cq_abort("Invalid barostat type")
+      call cq_abort("MD.BaroType must be 'none', 'mttk' or 'pr'")
     end select
 
     if (inode==ionode .and. iprint_MD > 1) then
       write(io_lun,'(2x,a)') 'Welcome to init_baro'
-      write(io_lun,'(4x,"Barostat type: ",a)') baro%baro_type
+      write(io_lun,'(4x,"Barostat type:   ",a)') baro%baro_type
+      write(io_lun,'(4x,"Extended system: ",l)') flag_extended_system
       if (.not. leqi(baro_type, 'none')) then
         write(io_lun,'(4x,a,f14.2)') 'Target pressure        P_ext = ', &
                                       baro%P_ext
         write(io_lun,'(4x,a,f14.2)') 'Coupling time period   tau_P = ', &
                                       baro%tau_P
-        if (leqi(baro%baro_type, 'iso-mttk')) then
-          write(io_lun,'(4x,a,f15.8)') 'Box mass                     = ', &
-                                        baro%box_mass
-          write(io_lun,'(4x,a,f15.8)') 'Pressure drag factor  p_drag = ', &
-                                        baro%p_drag
-        else if (leqi(baro%baro_type, 'iso-ssm')) then
-          write(io_lun,'(4x,a,f15.8)') 'Box mass                     = ', &
-                                        baro%box_mass
-          write(io_lun,'(4x,a,f15.8)') 'Pressure drag factor  p_drag = ', &
-                                        baro%p_drag
-        else if (leqi(baro%baro_type, 'ortho-ssm')) then
+        if (flag_extended_system) then
           write(io_lun,'(4x,a,f15.8)') 'Box mass                     = ', &
                                         baro%box_mass
           write(io_lun,'(4x,a,f15.8)') 'Pressure drag factor  p_drag = ', &
@@ -1315,14 +1369,12 @@ contains
     ! local variables
     integer                                   :: i
 
-    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 2) &
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 1) &
       write(io_lun,'(2x,a)') "get_pressure_and_stress"
 
     ! Get the static stress from the global variable
     baro%static_stress = zero
-    do i=1,3
-      baro%static_stress(i,i) = -stress(i,i) ! note the sign convention!!
-    end do
+    baro%static_stress = -stress ! note the sign convention!!
 
     if (present(final_call)) then
       if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) then
@@ -1337,7 +1389,7 @@ contains
     end if
 
     ! Update the total stress and pressure pressure
-    call baro%get_volume
+    if (.not. (leqi(baro%baro_type, 'none'))) call baro%get_volume
     baro%total_stress = zero
     baro%P_int = zero
     baro%total_stress = (baro%ke_stress + baro%static_stress)/baro%volume
@@ -1354,10 +1406,10 @@ contains
       baro%P_int = baro%P_int + baro%total_stress(i,i)
     end do
     baro%P_int = baro%P_int*third
-    baro%PV = baro%volume*baro%P_ext/fac_HaBohr32GPa
+    baro%PV = baro%volume*baro%P_ext/HaBohr3ToGPa
     if (present(final_call)) then
       if (inode==ionode .and. iprint_MD > 1) then
-        write(io_lun,'(4x,"P:  ",f12.6," GPa")') baro%P_int*fac_HaBohr32GPa
+        write(io_lun,'(4x,"P:  ",f12.6," GPa")') baro%P_int*HaBohr3ToGPa
         write(io_lun,'(4x,"PV: ",f12.6," Ha")') baro%PV
       end if
     end if
@@ -1383,7 +1435,7 @@ contains
 
     baro%volume = baro%lat(1,1)*baro%lat(2,2)*baro%lat(3,3)
 
-    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 2) then
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 1) then
       write(io_lun,'(2x,a)') "get_volume"
       write(io_lun,'(4x,a,e16.8)') "volume:     ", baro%volume
     end if
@@ -1391,94 +1443,9 @@ contains
   end subroutine get_volume
   !!***
 
-  !!****m* md_control/get_berendsen_baro_sf *
+  !!****m* md_control/get_barostat_energy *
   !!  NAME
-  !!   berendsen_baro_sf
-  !!  PURPOSE
-  !!   Get cell scaling factor for Berendsen barostat
-  !!  AUTHOR
-  !!    Zamaan Raza 
-  !!  CREATION DATE
-  !!   2017/12/01 14:17
-  !!  SOURCE
-  !!  
-  subroutine get_berendsen_baro_sf(baro, dt)
-
-    ! passed variables
-    class(type_barostat), intent(inout)         :: baro
-    real(double), intent(in)                    :: dt
-
-    baro%mu = (one - (dt/baro%tau_P)*(baro%P_ext-baro%P_int)* &
-                fac_HaBohr32GPa/baro%bulkmod)**third
-
-  end subroutine get_berendsen_baro_sf
-  !!***
-
-  !!****m* md_control/propagate_berendsen *
-  !!  NAME
-  !!   propagate_berendsen
-  !!  PURPOSE
-  !!   Propagate the fractional coordinates and cell parameters for the
-  !!   Berendsen barostat. Note that this is equivalent to scaling the,
-  !!   fractional coordinates, and is not part of the dynamics
-  !!  AUTHOR
-  !!    Zamaan Raza 
-  !!  CREATION DATE
-  !!   2017/12/01 14:21
-  !!  SOURCE
-  !!  
-  subroutine propagate_berendsen(baro, flag_movable)
-
-    use global_module,      only: x_atom_cell, y_atom_cell, z_atom_cell, &
-                                  atom_coord_diff, id_glob
-
-    ! passed variables
-    class(type_barostat), intent(inout)         :: baro
-    logical, dimension(:), intent(in)           :: flag_movable
-
-    ! local variables
-    integer                                     :: i, gatom, ibeg_atom
-    real(double)                                :: x_old, y_old, z_old
-    logical                                     :: flagx, flagy, flagz
-
-    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 2) then
-      write(io_lun,'(2x,a)') "propagate_berendsen"
-      write(io_lun,'(4x,a,e16.8)') "mu:   :     ", baro%mu
-    end if
-
-    baro%lat = baro%lat*baro%mu
-
-    ibeg_atom = 1
-    do i=1,ni_in_cell
-      gatom = id_glob(i)
-      flagx = flag_movable(ibeg_atom)
-      flagy = flag_movable(ibeg_atom+1)
-      flagz = flag_movable(ibeg_atom+2)
-
-      if (flagx) then
-        x_old = x_atom_cell(i)
-        x_atom_cell(i) = baro%mu*x_atom_cell(i)
-        atom_coord_diff(1,gatom) = x_atom_cell(i) - x_old
-      end if
-      if (flagy) then
-        y_old = y_atom_cell(i)
-        y_atom_cell(i) = baro%mu*y_atom_cell(i)
-        atom_coord_diff(2,gatom) = y_atom_cell(i) - y_old
-      end if
-      if (flagz) then
-        z_old = z_atom_cell(i)
-        z_atom_cell(i) = baro%mu*z_atom_cell(i)
-        atom_coord_diff(3,gatom) = z_atom_cell(i) - z_old
-      end if
-    end do
-    call baro%update_cell
-
-  end subroutine propagate_berendsen
-  !!***
-
-  !!****m* md_control/get_box_energy *
-  !!  NAME
-  !!   get_box_energy
+  !!   get_barostat_energy
   !!  PURPOSE
   !!   get the box kinetic energy
   !!  AUTHOR
@@ -1487,7 +1454,7 @@ contains
   !!   2017/11/17 14:09
   !!  SOURCE
   !!  
-  subroutine get_box_energy(baro, final_call)
+  subroutine get_barostat_energy(baro, final_call)
 
     ! passed variables
     class(type_barostat), intent(inout)         :: baro
@@ -1496,31 +1463,30 @@ contains
     ! local variables
     integer                                     :: i
 
-    baro%ke_box = zero
+    baro%e_barostat = zero
     if (flag_extended_system) then
       select case(baro%baro_type)
-      case('iso-mttk')
-        baro%ke_box = half*baro%box_mass*baro%v_eps**2
-      case('ortho-mttk')
       case('mttk')
-      case('iso-ssm')
-        baro%ke_box = three*half*baro%box_mass*baro%v_eps**2
-      case('ortho-ssm')
-        baro%ke_box = zero
-        do i=1,3
-          baro%ke_box = baro%ke_box + half*baro%box_mass*baro%v_h(i,i)**2
-        end do
+        baro%e_barostat = half*baro%box_mass*baro%v_eps**2
+      case('pr')
+        if (leqi(md_cell_constraint, 'volume')) then
+          baro%e_barostat = three*half*baro%box_mass*baro%v_eps**2
+        else
+          do i=1,3
+            baro%e_barostat = baro%e_barostat + half*baro%box_mass*baro%v_h(i,i)**2
+          end do
+        end if
       end select
     end if
 
     if (present(final_call)) then
-      if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 2) then
-        write(io_lun,'(2x,a)') "get_box_energy"
-        write(io_lun,'(4x,a,e16.8)') "ke_box:     ", baro%ke_box
+      if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 1) then
+        write(io_lun,'(2x,a)') "get_barostat_energy"
+        write(io_lun,'(4x,a,e16.8)') "e_barostat:     ", baro%e_barostat
       end if
     end if
 
-  end subroutine get_box_energy
+  end subroutine get_barostat_energy
   !!***
 
   !!****m* md_control/update_G_box *
@@ -1548,31 +1514,37 @@ contains
       write(io_lun,'(2x,a)') "update_G_box"
 
     select case(baro%baro_type)
-    case('iso-mttk')
+    case('mttk')
       baro%G_eps = (two*baro%odnf*th%ke_ions + &
                     three*(baro%P_int - baro%P_ext)*baro%volume)/baro%box_mass
-    case('iso-ssm')
-      baro%G_eps = (two*th%ke_ions/md_ndof_ions + &
-                   (baro%P_int - baro%P_ext)*baro%volume)/baro%box_mass
-    case('ortho-ssm')
-      tr_ke_stress = zero
-      do i=1,3
-        tr_ke_stress = tr_ke_stress + baro%ke_stress(i,i)
-      end do
-      do i=1,3
-        baro%G_h(i,i) = (two*tr_ke_stress/md_ndof_ions + &
-                        (baro%total_stress(i,i) - baro%P_ext)*baro%volume) / &
-                         baro%box_mass
-      end do
+    case('pr')
+      if (leqi(md_cell_constraint, 'volume')) then
+        baro%G_eps = (two*th%ke_ions/md_ndof_ions + &
+                     (baro%P_int - baro%P_ext)*baro%volume)/baro%box_mass
+      else
+        tr_ke_stress = zero
+        do i=1,3
+          tr_ke_stress = tr_ke_stress + baro%ke_stress(i,i)
+        end do
+        do i=1,3
+          baro%G_h(i,i) = (two*tr_ke_stress/md_ndof_ions + &
+                          (baro%total_stress(i,i) - baro%P_ext)*baro%volume)/ &
+                           baro%box_mass
+        end do
+      end if
     end select
 
     if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 4) then 
       select case(baro%baro_type)
-      case('iso-ssm')
+      case('mttk')
         write(io_lun,'(2x,a,e16.8)') "G_eps: ", baro%G_eps
-      case('ortho-ssm')
-        write(io_lun,'(2x,a,3e16.8)') "G_h:   ", baro%G_h(1,1), &
-                                       baro%G_h(2,2), baro%G_h(3,3)
+      case('pr')
+        if (leqi(md_cell_constraint, 'volume')) then
+          write(io_lun,'(2x,a,e16.8)') "G_eps: ", baro%G_eps
+        else
+          write(io_lun,'(2x,a,3e16.8)') "G_h:   ", baro%G_h(1,1), &
+                                         baro%G_h(2,2), baro%G_h(3,3)
+        end if
       end select
     end if
 
@@ -1659,28 +1631,22 @@ contains
     if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 4) &
       write(io_lun,'(2x,a)') "propagate_v_box_lin"
 
-    select case(baro%baro_type)
-    case('iso-mttk')
+    if (leqi(md_cell_constraint, 'volume')) then
       baro%v_eps = baro%v_eps + dtfac*dt*baro%G_eps
-    case('iso-ssm')
-      baro%v_eps = baro%v_eps + dtfac*dt*baro%G_eps
-    case('ortho-ssm')
+    else
       do i=1,3
         baro%v_h(i,i) = baro%v_h(i,i) + dt*dtfac*baro%G_h(i,i)
       end do
-    end select
+    end if
 
     if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 4) then
-      write(io_lun,'(2x,a)') "propagate_v_box_lin"
-      select case(baro%baro_type)
-      case('iso-mttk')
+      write(io_lun,*) "propagate_v_box_lin"
+      if (leqi(md_cell_constraint, 'volume')) then
         write(io_lun,'(4x,a,e16.8)') "v_eps       ", baro%v_eps
-      case('iso-ssm')
-        write(io_lun,'(4x,a,e16.8)') "v_eps       ", baro%v_eps
-      case('ortho-ssm')
+      else
         write(io_lun,'(4x,a,3e16.8)') "v_h         ", &
           baro%v_h(1,1), baro%v_h(2,2), baro%v_h(3,3)
-      end select
+      end if
     end if
 
   end subroutine propagate_v_box_lin
@@ -1708,12 +1674,9 @@ contains
     if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 4) &
       write(io_lun,'(2x,a)') "propagate_v_box_lin"
 
-    select case(baro%baro_type)
-    case('iso-mttk')
+    if (leqi(md_cell_constraint, 'volume')) then
       baro%v_eps = baro%v_eps*exp(-dtfac*dt*v_eta_1)
-    case('iso-ssm')
-    case('ortho-ssm')
-    end select
+    end if
 
   end subroutine propagate_v_box_exp
   !!***
@@ -1740,16 +1703,42 @@ contains
     if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 4) &
       write(io_lun,'(2x,a)') "apply_box_drag"
 
-    select case(baro%baro_type)
-    case('iso-ssm')
+    if (leqi(md_cell_constraint, 'volume')) then    
       baro%v_eps = baro%v_eps*baro%p_drag
-    case('ortho-ssm')
+    else
       do i=1,3
         baro%v_h(i,i) = baro%v_h(i,i)*baro%p_drag
       end do
-    end select
+    end if
 
   end subroutine apply_box_drag
+  !!***
+
+  !!****m* md_control/scale_box_velocity *
+  !!  NAME
+  !!   scale_box_velocity
+  !!  PURPOSE
+  !!   Scale the box velocity during SVR NPT dynamics
+  !!  AUTHOR
+  !!   Zamaan Raza
+  !!  CREATION DATE
+  !!   2019/05/17
+  !!  SOURCE
+  !!  
+  subroutine scale_box_velocity(baro, th)
+
+    ! passed variables
+    class(type_barostat), intent(inout)   :: baro
+    type(type_thermostat), intent(in)     :: th
+
+    ! local variables
+    integer :: i
+
+    do i=1,3
+      baro%v_h(i,i) = baro%v_h(i,i)*th%lambda
+    end do
+
+  end subroutine scale_box_velocity
   !!***
 
   !!****m* md_control/update_vscale_fac *
@@ -1777,7 +1766,7 @@ contains
     real(double)                          :: expfac
 
     select case(baro%baro_type)
-    case('iso-mttk')
+    case('mttk')
       expfac = exp(-dtfac*dt*(v_eta_1 + baro%odnf*baro%v_eps))
       v_sfac = v_sfac*expfac
       th%ke_ions = th%ke_ions*expfac**2
@@ -1822,11 +1811,10 @@ contains
     integer                               :: i, speca, gatom, ibeg_atom
     logical                               :: flagx, flagy, flagz
 
-    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 2) &
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 1) &
       write(io_lun,'(2x,a)') "propagate_r_mttk"
 
-    select case(baro%baro_type)
-    case('iso-mttk')
+    if (leqi(md_cell_constraint, 'volume')) then
       exp_v_eps = exp(dt*half*baro%v_eps)
       sinhx_x = baro%poly_sinhx_x(half*dt*baro%v_eps)
       fac_r = exp_v_eps**2
@@ -1856,9 +1844,7 @@ contains
           atom_coord_diff(3,gatom) = z_atom_cell(i) - z_old
         end if
       end do
-    case('ortho-mttk')
-    case('mttk')
-    end select
+    end if
 
     if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) then
       write(io_lun,'(4x,a,e16.8)') "fac_v:      ", fac_v
@@ -1888,21 +1874,17 @@ contains
     ! local variables
     real(double)                          :: v_new, v_old, lat_sfac
 
-    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 2) &
       write(io_lun,'(2x,a)') "propagate_box_mttk"
 
     baro%v_old = baro%volume
-    select case(baro%baro_type)
-    case('iso-mttk')
+    if (leqi(md_cell_constraint, 'volume')) then
       call baro%propagate_eps_lin(dt, one)
       v_old = baro%volume
       v_new = baro%volume_ref*exp(three*baro%eps)
       lat_sfac = (v_new/v_old)**third
       baro%mu = lat_sfac
       baro%lat = baro%lat*lat_sfac
-    case('ortho-mttk')
-    case('mttk')
-    end select
+    end if
 
     if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) then
       write(io_lun,'(4x,a,e16.8)') "lat_sfac:   ", lat_sfac
@@ -1960,16 +1942,15 @@ contains
     integer                                 :: i_mts, i_ys, i_nhc
     real(double)                            :: v_sfac, v_eta_couple
 
-    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 2) &
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 1) &
       write(io_lun,'(2x,a)') "propagate_npt_mttk"
 
     v_sfac = one
-    call baro%get_box_energy
-    call th%update_G_nhc(1, baro%ke_box)
-    select case(baro%baro_type)
-    case('iso-mttk')
+    call baro%get_barostat_energy
+    call th%update_G_nhc(1, baro%e_barostat)
+    if (leqi(md_cell_constraint, 'volume')) then
       call baro%update_G_box(th)
-    end select
+    end if
 
     do i_mts=1,th%n_mts_nhc ! MTS loop
       do i_ys=1,th%n_ys     ! Yoshida-Suzuki loop
@@ -1995,28 +1976,22 @@ contains
         else
           v_eta_couple = th%v_eta(1)      ! same NHC as ions
         end if
-        select case(baro%baro_type)
-        case('iso-mttk')
+        if (leqi(md_cell_constraint, 'volume')) then
           call baro%propagate_v_box_exp(th%dt_ys(i_ys), one_eighth, &
                                         v_eta_couple)
           call baro%propagate_v_box_lin(th%dt_ys(i_ys), quarter)
           baro%v_eps = baro%v_eps*baro%p_drag
           call baro%propagate_v_box_exp(th%dt_ys(i_ys), one_eighth, &
                                         v_eta_couple)
-        case('ortho-mttk')
-        case('mttk')
-        end select
+        end if
 
         ! update ionic velocities, scale ion kinetic energy
-        select case(baro%baro_type)
-        case('iso-mttk')
+        if (leqi(md_cell_constraint, 'volume')) then
           call baro%update_vscale_fac(th, th%dt_ys(i_ys), half, v_eta_couple, &
                                       v_sfac)
           call baro%update_G_box(th)
-        case('ortho-mttk')
-        case('mttk')
-        end select
-        call baro%get_box_energy
+        end if
+        call baro%get_barostat_energy
         ! update the thermostat "positions" eta
         do i_nhc=1,th%n_nhc
           call th%propagate_eta(i_nhc, th%dt_ys(i_ys), half)
@@ -2028,23 +2003,20 @@ contains
         else
           v_eta_couple = th%v_eta(1)      ! same NHC as ions
         end if
-        select case(baro%baro_type)
-        case('iso-mttk')
+        if (leqi(md_cell_constraint, 'volume')) then
           call baro%propagate_v_box_exp(th%dt_ys(i_ys), one_eighth, &
                                         v_eta_couple)
           call baro%propagate_v_box_lin(th%dt_ys(i_ys), quarter)
           call baro%propagate_v_box_exp(th%dt_ys(i_ys), one_eighth, &
                                         v_eta_couple)
-        case('ortho-mttk')
-        case('mttk')
-        end select
+        end if
 
-        call baro%get_box_energy
-        call th%update_G_nhc(1, baro%ke_box)
+        call baro%get_barostat_energy
+        call th%update_G_nhc(1, baro%e_barostat)
         do i_nhc=1,th%n_nhc-1 ! loop over NH thermostats in forward order
           ! Trotter expansion to avoid sinh singularity
           call th%propagate_v_eta_exp(i_nhc, th%dt_ys(i_ys), one_eighth)
-          call th%update_G_nhc(i_nhc+1, baro%ke_box)
+          call th%update_G_nhc(i_nhc+1, baro%e_barostat)
           call th%propagate_v_eta_lin(i_nhc, th%dt_ys(i_ys), quarter)
           call th%propagate_v_eta_exp(i_nhc, th%dt_ys(i_ys), one_eighth)
         end do
@@ -2084,20 +2056,15 @@ contains
     integer                                 :: i
     real(double)                            :: tr_ke_stress
 
-    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 2) &
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 1) &
       write(io_lun,'(2x,a)') "integrate_box"
 
-!    call baro%update_G_box(th)
-!    call baro%propagate_v_box_lin(baro%dt, half)
-!    call baro%apply_box_drag
-
-    select case(baro%baro_type)
-    case('iso-ssm')
+    if (leqi(md_cell_constraint, 'volume')) then
       baro%G_eps = (two*th%ke_ions/md_ndof_ions + &
                    (baro%P_int - baro%P_ext)*baro%volume)/baro%box_mass
       baro%v_eps = baro%v_eps + baro%G_eps*baro%dt*half
       baro%v_eps = baro%v_eps*baro%p_drag
-    case('ortho-ssm')
+    else
       tr_ke_stress = zero
       do i=1,3
         tr_ke_stress = tr_ke_stress + baro%ke_stress(i,i)
@@ -2109,19 +2076,18 @@ contains
         baro%v_h(i,i) = baro%v_h(i,i) + baro%G_h(i,i)*baro%dt*half
         baro%v_h(i,i) = baro%v_h(i,i)*baro%p_drag
       end do
-    end select
+    end if
 
     if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) then 
-      select case(baro%baro_type)
-      case('iso-ssm')
+      if (leqi(md_cell_constraint, 'volume')) then
         write(io_lun,'(2x,a,e16.8)') "v_eps: ", baro%v_eps
         write(io_lun,'(2x,a,e16.8)') "G_eps: ", baro%G_eps
-      case('ortho-ssm')
+      else
         write(io_lun,'(2x,a,3e16.8)') "v_h:   ", baro%v_h(1,1), &
                                        baro%v_h(2,2), baro%v_h(3,3)
         write(io_lun,'(2x,a,3e16.8)') "G_h:   ", baro%G_h(1,1), &
                                        baro%G_h(2,2), baro%G_h(3,3)
-      end select
+      end if
     end if
 
   end subroutine integrate_box
@@ -2148,19 +2114,18 @@ contains
     real(double)                            :: expfac, const
     integer                                 :: i
 
-    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 2) &
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 1) &
       write(io_lun,'(2x,a)') "couple_box_particle_velocity"
 
     const = zero
-    select case(baro%baro_type)
-    case('iso-ssm')
+    if (leqi(md_cell_constraint, 'volume')) then
       const = three*baro%v_eps/md_ndof_ions
 !      expfac = exp(-quarter*baro%dt*baro%odnf*baro%v_eps)
       expfac = exp(-quarter*baro%dt*(baro%v_eps + const))
       v  = v*expfac**2
       if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) &
         write(io_lun,'(4x,"expfac: ",f16.8)') expfac
-    case('ortho-ssm')
+    else
       do i=1,3
         const = const + baro%v_h(i,i)
       end do
@@ -2171,7 +2136,7 @@ contains
       if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) &
         write(io_lun,'(4x,"expfac ",i2,": ",f16.8)') i, expfac
       end do
-    end select
+    end if
 
   end subroutine couple_box_particle_velocity
 
@@ -2196,13 +2161,12 @@ contains
     real(double), dimension(3)              :: expfac_h
     integer                                 :: i
 
-    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 2) &
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 1) &
       write(io_lun,'(2x,a)') "propagate_box_ssm"
 
     baro%v_old = baro%volume
 
-    select case(baro%baro_type)
-    case('iso-ssm')
+    if (leqi(md_cell_constraint, 'volume')) then
       ! Propagate box velocity and compute scaling factor
       baro%eps = baro%eps + half*baro%dt*baro%v_eps
       expfac= exp(half*baro%dt*(baro%v_eps + three*baro%v_eps/ni_in_cell))
@@ -2214,7 +2178,7 @@ contains
       baro%lat(1,1) = baro%lat(1,1)*expfac
       baro%lat(2,2) = baro%lat(2,2)*expfac
       baro%lat(3,3) = baro%lat(3,3)*expfac
-    case('ortho-ssm')
+    else
       tr_vh = zero
       do i=1,3
         tr_vh = tr_vh + baro%v_h(i,i)
@@ -2229,7 +2193,7 @@ contains
                                                  baro%v_h(2,2), baro%v_h(3,3)
         write(io_lun,'(4x,"expfac_h: ",3f16.8)') expfac_h
       end if
-    end select
+    end if
 
   end subroutine propagate_box_ssm
 
@@ -2264,42 +2228,37 @@ contains
         baro%append = .true.
       end if
       write(lun,'("step    ",i12)') step
-      write(lun,'("P_int   ",f12.4)') baro%P_int*fac_HaBohr32GPa
+      write(lun,'("P_int   ",f12.4)') baro%P_int*HaBohr3ToGPa
       write(lun,'("volume  ",f12.4)') baro%volume
       write(lun,'("static_stress: ",3e16.8)') &
-            baro%static_stress(1,1)*fac_HaBohr32GPa, &
-            baro%static_stress(2,2)*fac_HaBohr32GPa, &
-            baro%static_stress(3,3)*fac_HaBohr32GPa
+            baro%static_stress(1,1)*HaBohr3ToGPa, &
+            baro%static_stress(2,2)*HaBohr3ToGPa, &
+            baro%static_stress(3,3)*HaBohr3ToGPa
       write(lun,'("ke_stress    : ",3e16.8)') &
-            baro%ke_stress(1,1)*fac_HaBohr32GPa, &
-            baro%ke_stress(2,2)*fac_HaBohr32GPa, &
-            baro%ke_stress(3,3)*fac_HaBohr32GPa
+            baro%ke_stress(1,1)*HaBohr3ToGPa, &
+            baro%ke_stress(2,2)*HaBohr3ToGPa, &
+            baro%ke_stress(3,3)*HaBohr3ToGPa
       write(lun,'("cell         : ",3f16.8)') &
             baro%lat(1,1), baro%lat(2,2), baro%lat(3,3)
-      select case(baro%baro_type)
-      case('iso-mttk')
-        write(lun,'("eps     ",e14.6)') baro%eps
-        write(lun,'("v_eps   ",e14.6)') baro%v_eps
-        write(lun,'("G_eps   ",e14.6)') baro%G_eps
-        write(lun,'("ke_box  ",e14.6)') baro%ke_box
+      if (flag_extended_system) then
+        if (leqi(md_cell_constraint, 'volume')) then
+          write(lun,'("eps     ",e14.6)') baro%eps
+          write(lun,'("v_eps   ",e14.6)') baro%v_eps
+          write(lun,'("G_eps   ",e14.6)') baro%G_eps
+          write(lun,'("e_barostat  ",e14.6)') baro%e_barostat
+          write(lun,'("mu      ",e14.6)') baro%mu
+        else
+          write(lun,'("h       ",3e14.6)') baro%h(1,1), baro%h(2,2), &
+                                           baro%h(3,3)
+          write(lun,'("v_h     ",3e14.6)') baro%v_h(1,1), baro%v_h(2,2), &
+                                           baro%v_h(3,3)
+          write(lun,'("G_h     ",3e14.6)') baro%G_h(1,1), baro%G_h(2,2), &
+                                           baro%G_h(3,3)
+          write(lun,'("e_barostat  ",3e14.6)') baro%e_barostat
+        end if
+      else
         write(lun,'("mu      ",e14.6)') baro%mu
-      case('ortho-mttk')
-      case('mttk')
-      case('iso-ssm')
-        write(lun,'("eps     ",e14.6)') baro%eps
-        write(lun,'("v_eps   ",e14.6)') baro%v_eps
-        write(lun,'("G_eps   ",e14.6)') baro%G_eps
-        write(lun,'("ke_box  ",e14.6)') baro%ke_box
-      case('ortho-ssm')
-        write(lun,'("h       ",3e14.6)') baro%h(1,1), baro%h(2,2), baro%h(3,3)
-        write(lun,'("v_h     ",3e14.6)') baro%v_h(1,1), baro%v_h(2,2), &
-                                         baro%v_h(3,3)
-        write(lun,'("G_h     ",3e14.6)') baro%G_h(1,1), baro%G_h(2,2), &
-                                         baro%G_h(3,3)
-        write(lun,'("ke_box  ",3e14.6)') baro%ke_box
-      case('berendsen')
-        write(lun,'("mu      ",e14.6)') baro%mu
-      end select
+      end if
       write(lun,*)
       call io_close(lun)
     end if
@@ -2336,7 +2295,6 @@ contains
                                   n_grid_y, n_grid_z
     use fft_module,         only: recip_vector, hartree_factor, i0
     use DiagModule,         only: kk, nkp
-    use input_module,       only: leqi
 
     implicit none
 
@@ -2347,7 +2305,7 @@ contains
     real(double) :: orcellx, orcelly, orcellz, xvec, yvec, zvec, r2, scale
     integer :: i, j
 
-    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 2) &
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 1) &
       write(io_lun,'(2x,a)') "update_cell"
 
     orcellx = rcellx
@@ -2455,8 +2413,9 @@ contains
           write(lun,'(2i8,3e20.12)') id_global, ni, ion_velocity(1:3,ni)
       end do
 
-      ! Write the extended system variables
-      if (flag_extended_system) then
+      ! Write the thermostat and barostat variables
+      select case(th%thermo_type)
+      case('nhc')
         write(lun,th%nhc_fmt2) th%eta
         write(lun,th%nhc_fmt2) th%v_eta
         write(lun,th%nhc_fmt2) th%G_nhc
@@ -2465,22 +2424,26 @@ contains
           write(lun,th%nhc_fmt2) th%v_eta_cell
           write(lun,th%nhc_fmt2) th%G_nhc_cell
         end if
+      case('svr')
+        ! SVR thermostat is a running total, so if we will need the
+        ! last value for a restart
+        write(lun,'(e20.12)') th%e_thermostat 
+      end select
 
-        select case(baro%baro_type)
-        case('iso-mttk')
+      if (flag_extended_system) then
+        if (leqi(baro%baro_type, 'mttk')) then
           write(lun,'(3e20.12)') baro%lat_ref(1,:)
           write(lun,'(3e20.12)') baro%lat_ref(2,:)
           write(lun,'(3e20.12)') baro%lat_ref(3,:)
           write(lun,'(e20.12)') baro%volume_ref
           write(lun,'(e20.12)') baro%eps_ref
+        end if
+
+        if (leqi(md_cell_constraint, 'volume')) then
           write(lun,'(e20.12)') baro%eps
           write(lun,'(e20.12)') baro%v_eps
           write(lun,'(e20.12)') baro%G_eps
-        case('iso-ssm')
-          write(lun,'(e20.12)') baro%eps
-          write(lun,'(e20.12)') baro%v_eps
-          write(lun,'(e20.12)') baro%G_eps
-        case('ortho-ssm')
+        else
           write(lun,'(3e20.12)') baro%h(1,:)
           write(lun,'(3e20.12)') baro%h(2,:)
           write(lun,'(3e20.12)') baro%h(3,:)
@@ -2490,7 +2453,7 @@ contains
           write(lun,'(3e20.12)') baro%G_h(1,:)
           write(lun,'(3e20.12)') baro%G_h(2,:)
           write(lun,'(3e20.12)') baro%G_h(3,:)
-        end select
+        end if
       end if
       call io_close(lun)
     end if
@@ -2547,8 +2510,9 @@ contains
       end do
       if (flag_read_velocity) ion_velocity = v
 
-      ! Read the extended system variables
-      if (flag_extended_system) then
+      ! Read the themrostat and barostat variables
+      select case(th%thermo_type)
+      case('nhc')
         read(lun,*) th%eta
         read(lun,*) th%v_eta
         read(lun,*) th%G_nhc
@@ -2557,22 +2521,24 @@ contains
           read(lun,*) th%v_eta_cell
           read(lun,*) th%G_nhc_cell
         end if
+      case('svr')
+        read(lun,*) th%e_thermostat
+      end select
 
-        select case(baro%baro_type)
-        case('iso-mttk')
+      if (flag_extended_system) then
+        if (leqi(baro%baro_type, 'mttk')) then
           read(lun,*) baro%lat_ref(1,:)
           read(lun,*) baro%lat_ref(2,:)
           read(lun,*) baro%lat_ref(3,:)
           read(lun,*) baro%volume_ref
           read(lun,*) baro%eps_ref
+        end if
+
+        if (leqi(md_cell_constraint, 'volume')) then
           read(lun,*) baro%eps
           read(lun,*) baro%v_eps
           read(lun,*) baro%G_eps
-        case('iso-ssm')
-          read(lun,*) baro%eps
-          read(lun,*) baro%v_eps
-          read(lun,*) baro%G_eps
-        case('ortho-ssm')
+        else
           read(lun,*) baro%h(1,:)
           read(lun,*) baro%h(2,:)
           read(lun,*) baro%h(3,:)
@@ -2582,19 +2548,11 @@ contains
           read(lun,*) baro%G_h(1,:)
           read(lun,*) baro%G_h(2,:)
           read(lun,*) baro%G_h(3,:)
-        end select
+        end if
       end if
 
       if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) then
         write(io_lun,'(2x,"flag_extended_system ",l)') flag_extended_system
-        write(io_lun,th%nhc_fmt) "eta:", th%eta
-        write(io_lun,th%nhc_fmt) "v_eta:", th%v_eta
-        write(io_lun,th%nhc_fmt) "G_nhc:", th%G_nhc
-        if (th%cell_nhc) then
-          write(io_lun,th%nhc_fmt) "eta_cell:", th%eta_cell
-          write(io_lun,th%nhc_fmt) "v_eta_cell:", th%v_eta_cell
-          write(io_lun,th%nhc_fmt) "G_eta_cell:", th%G_nhc_cell
-        end if
         if (flag_read_velocity) then
           write(io_lun,'(a)') "Reading velocities from md.checkpoint"
           do ni=1,ni_in_cell
@@ -2605,29 +2563,30 @@ contains
         if (flag_extended_system) then
           write(io_lun,'(a)') "Reading extended system variables &
                                 &from md.checkpoint"
-          write(io_lun,th%nhc_fmt) "eta:", th%eta
-          write(io_lun,th%nhc_fmt) "v_eta:", th%v_eta
-          write(io_lun,th%nhc_fmt) "G_nhc:", th%G_nhc
-          if (th%cell_nhc) then
-            write(io_lun,th%nhc_fmt) "eta_cell:", th%eta_cell
-            write(io_lun,th%nhc_fmt) "v_eta_cell:", th%v_eta_cell
-            write(io_lun,th%nhc_fmt) "G_eta_cell:", th%G_nhc_cell
+          if (leqi(th%thermo_type, 'nhc')) then
+            write(io_lun,th%nhc_fmt) "eta:", th%eta
+            write(io_lun,th%nhc_fmt) "v_eta:", th%v_eta
+            write(io_lun,th%nhc_fmt) "G_nhc:", th%G_nhc
+            if (th%cell_nhc) then
+              write(io_lun,th%nhc_fmt) "eta_cell:", th%eta_cell
+              write(io_lun,th%nhc_fmt) "v_eta_cell:", th%v_eta_cell
+              write(io_lun,th%nhc_fmt) "G_eta_cell:", th%G_nhc_cell
+            end if
           end if
-          select case(baro%baro_type)
-          case('iso-mttk')
+
+          if (leqi(baro%baro_type, 'mttk')) then
             write(io_lun,'(2x,12a,3e20.12)') "lat_ref(1,:):", baro%lat_ref(1,:)
             write(io_lun,'(2x,12a,3e20.12)') "lat_ref(2,:):", baro%lat_ref(2,:)
             write(io_lun,'(2x,12a,3e20.12)') "lat_ref(3,:):", baro%lat_ref(3,:)
             write(io_lun,'(2x,12a,e20.12)') "volume_ref:", baro%volume_ref
             write(io_lun,'(2x,12a,e20.12)') "eps_ref:", baro%eps_ref
+          end if
+
+          if (leqi(md_cell_constraint, 'volume')) then
             write(io_lun,'(2x,12a,e20.12)') "eps:", baro%eps
             write(io_lun,'(2x,12a,e20.12)') "v_eps:", baro%v_eps
             write(io_lun,'(2x,12a,e20.12)') "G_eps:", baro%G_eps
-          case('iso-ssm')
-            write(io_lun,'(2x,12a,e20.12)') "eps:", baro%eps
-            write(io_lun,'(2x,12a,e20.12)') "v_eps:", baro%v_eps
-            write(io_lun,'(2x,12a,e20.12)') "G_eps:", baro%G_eps
-          case('ortho-ssm')
+          else
             write(io_lun,'(2x,12a,3e20.12)') "h(1,:):", baro%h(1,:)
             write(io_lun,'(2x,12a,3e20.12)') "h(2,:):", baro%h(2,:)
             write(io_lun,'(2x,12a,3e20.12)') "h(3,:):", baro%h(3,:)
@@ -2637,7 +2596,7 @@ contains
             write(io_lun,'(2x,12a,3e20.12)') "G_h(1,:):", baro%G_h(1,:)
             write(io_lun,'(2x,12a,3e20.12)') "G_h(2,:):", baro%G_h(2,:)
             write(io_lun,'(2x,12a,3e20.12)') "G_h(3,:):", baro%G_h(3,:)
-          end select
+          end if
         end if
       end if
 
@@ -2646,13 +2605,15 @@ contains
 
     call gcopy(ion_velocity,3,ni_in_cell)
     if (flag_extended_system) then
-      call gcopy(th%eta,th%n_nhc)
-      call gcopy(th%v_eta,th%n_nhc)
-      call gcopy(th%G_nhc,th%n_nhc)
-      if (md_cell_nhc) then
-        call gcopy(th%eta_cell,th%n_nhc)
-        call gcopy(th%v_eta_cell,th%n_nhc)
-        call gcopy(th%G_nhc_cell,th%n_nhc)
+      if (leqi(th%thermo_type, 'nhc')) then
+        call gcopy(th%eta,th%n_nhc)
+        call gcopy(th%v_eta,th%n_nhc)
+        call gcopy(th%G_nhc,th%n_nhc)
+        if (md_cell_nhc) then
+          call gcopy(th%eta_cell,th%n_nhc)
+          call gcopy(th%v_eta_cell,th%n_nhc)
+          call gcopy(th%G_nhc_cell,th%n_nhc)
+        end if
       end if
       call gcopy(baro%lat_ref,3,3)
       call gcopy(baro%volume_ref)

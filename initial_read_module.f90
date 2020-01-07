@@ -754,11 +754,11 @@ contains
   !!   2019/12/26 tsuyoshi  (2019/12/29)
   !!     General.LoadL => General.LoadLorK  => General.LoadDM
   !!     AtomMove.ReuseL => AtomMove.ReuseLorK => AtomMove.ReuseDM
+  !!   2020/01/06 15:43 dave
+  !!    Keywords for equilibration
   !!   2020/01/07 tsuyoshi 
   !!     Default setting of MakeInitialChargeFromK has been changed
   !!  TODO
-  !!   Fix reading of start flags (change to block ?) 10/05/2002 dave
-  !!   Fix rigid shift 10/05/2002 dave
   !!  SOURCE
   !!
   subroutine read_input(start, start_L, titles, vary_mu,&
@@ -909,12 +909,12 @@ contains
          MSSF_nonminimal_offset ! nonmin_mssf
     use control,    only: md_ensemble
     use md_control, only: md_tau_T, md_n_nhc, md_n_ys, md_n_mts, md_nhc_mass, &
-         target_pressure, md_baro_type, md_tau_P, &
-         md_thermo_type, md_bulkmod_est, md_box_mass, &
-         flag_write_xsf, md_cell_nhc, md_nhc_cell_mass, &
-         md_calc_xlmass, md_berendsen_equil, &
-         md_tau_T_equil, md_tau_P_equil, md_p_drag, &
-         md_t_drag
+                          target_pressure, md_baro_type, md_tau_P, &
+                          md_thermo_type, md_bulkmod_est, md_box_mass, &
+                          flag_write_xsf, md_cell_nhc, md_nhc_cell_mass, &
+                          md_calc_xlmass, md_equil_steps, md_equil_press, &
+                          md_tau_T_equil, md_tau_P_equil, md_p_drag, &
+                          md_t_drag, md_cell_constraint
     use md_model,   only: md_tdep
     use move_atoms,         only: threshold_resetCD, &
          flag_stop_on_empty_bundle, &
@@ -2170,7 +2170,7 @@ contains
        md_baro_type       = fdf_string(20, 'MD.Barostat', 'none')
     case('npt')
        md_thermo_type     = fdf_string(20, 'MD.Thermostat', 'nhc')
-       md_baro_type       = fdf_string(20, 'MD.Barostat', 'iso-ssm')
+       md_baro_type       = fdf_string(20, 'MD.Barostat', 'pr')
        flag_variable_cell  = .true.
     end select
     md_tau_T           = fdf_double('MD.tauT', -one)
@@ -2204,9 +2204,16 @@ contains
     md_bulkmod_est     = fdf_double('MD.BulkModulusEst', 100.0_double)
     md_cell_nhc        = fdf_boolean('MD.CellNHC', .true.)
     flag_baroDebug     = fdf_boolean('MD.BaroDebug',.false.)
-    md_berendsen_equil = fdf_integer('MD.BerendsenEquil', 0)
+    md_equil_steps     = fdf_integer('MD.EquilSteps', 0)
+    if(.NOT.leqi(md_thermo_type,'svr').AND.md_equil_steps>0) then
+       call cq_warn("read_input","MD equilibration only possible with SVR")
+       md_equil_steps = 0
+    end if
+    md_equil_press     = fdf_double('MD.EquilPress',one) ! GPa
+    md_equil_press     = md_equil_press/HaBohr3ToGPa
     md_tdep            = fdf_boolean('MD.TDEP', .false.)
     md_p_drag          = fdf_double('MD.PDrag', zero)
+    md_cell_constraint = fdf_string(20, 'MD.CellConstraint', 'volume')
 
     !**** TM 2017.Nov.3rd
     call check_compatibility
