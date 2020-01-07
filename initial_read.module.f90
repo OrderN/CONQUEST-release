@@ -751,6 +751,8 @@ contains
   !!   2019/12/26 tsuyoshi  (2019/12/29)
   !!     General.LoadL => General.LoadLorK  => General.LoadDM
   !!     AtomMove.ReuseL => AtomMove.ReuseLorK => AtomMove.ReuseDM
+  !!   2020/01/07 tsuyoshi 
+  !!     Default setting of MakeInitialChargeFromK has been changed
   !!  TODO
   !!   Fix reading of start flags (change to block ?) 10/05/2002 dave
   !!   Fix rigid shift 10/05/2002 dave
@@ -2065,7 +2067,11 @@ contains
     else
        flag_read_velocity = fdf_boolean('AtomMove.ReadVelocity',.false.)
        restart_DM         = fdf_boolean('General.LoadDM', .false.)
-       find_chdens    = fdf_boolean('SC.MakeInitialChargeFromK',.false.)
+       if(restart_DM) then                                             
+        find_chdens    = fdf_boolean('SC.MakeInitialChargeFromK',.true.) 
+       else
+        find_chdens    = fdf_boolean('SC.MakeInitialChargeFromK',.false.)
+       endif
        if (flag_XLBOMD) restart_X=fdf_boolean('XL.LoadX', .false.)
        if (flag_multisite) read_option = fdf_boolean('Basis.LoadCoeffs', .false.)
     end if
