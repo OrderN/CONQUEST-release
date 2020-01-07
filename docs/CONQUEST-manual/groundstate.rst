@@ -309,6 +309,28 @@ functions are built and represented can be found in the manual section on
 
 Go to :ref:`top <groundstate>`
 
+.. _gs_suppfunc:
+
+Charged systems
+-----------------
+CONQUEST uses periodic boundary conditions, which require overall
+charge neutrality.  However, charged systems can be modelled:
+if an excess of electrons is specified by the user, a uniform
+positive background charge is added automatically to restore overall
+neutrality.  At present, there are no correction schemes implemented,
+so it is important to test the convergence of the energy with unit
+cell size and shape.  Electrons are added by setting the parameter
+``General.NetCharge``.
+
+::
+
+   General.NetCharge 1.0
+
+This gives the number of extra electrons to be added to the unit cell,
+beyond the valence electrons.
+
+Go to :ref:`top <groundstate>`
+
 .. bibliography:: references.bib
     :cited:
     :labelprefix: G
