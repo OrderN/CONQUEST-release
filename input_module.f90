@@ -53,7 +53,6 @@ module input_module
   logical, dimension(lun_min:lun_max) :: free_lun != (/90*.true./)!nunits*.true./)
   data free_lun /nunits*.true./
 
-  character(len=80), private :: RCSid = "$Id: initial_read.module.f90 64 2008-08-07 07:50:31Z astorralba $"
 !!***
 
 contains

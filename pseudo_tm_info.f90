@@ -855,11 +855,13 @@ contains
     if(lmax>lmax_pao) lmax_pao = lmax    
     call gcopy(n_pjnl )
     call gcopy(zval)
+    call gcopy(xc_func)
     call gcopy(z)
     if(inode/=ionode) then
        call alloc_pseudo_info(ps_info, n_pjnl)
        ps_info%zval = zval
        ps_info%z = z
+       if(xc_func/=0) ps_info%functional = xc_func
        pao_info%greatest_angmom = lmax
        allocate(pao_info%angmom(0:lmax),STAT=alls)
     end if
