@@ -815,7 +815,8 @@ contains
          flag_opt_cell, cell_constraint_flag, flag_variable_cell, &
          cell_en_tol, optcell_method, cell_stress_tol, &
          flag_stress, flag_full_stress, rng_seed, &
-         flag_atomic_stress, flag_heat_flux, flag_DumpMatrices
+         flag_atomic_stress, flag_heat_flux, flag_DumpMatrices, &
+         index_MatrixFile
     use dimens, only: r_super_x, r_super_y, r_super_z, GridCutoff,    &
          n_grid_x, n_grid_y, n_grid_z, r_h, r_c,         &
          RadiusSupport, RadiusAtomf, RadiusMS, RadiusLD, &
@@ -1581,6 +1582,9 @@ contains
     flag_MatrixFile_BinaryFormat_Grab = fdf_boolean('IO.MatrixFile.BinaryFormat.Grab', flag_MatrixFile_BinaryFormat)
     flag_MatrixFile_BinaryFormat_Dump_END = fdf_boolean('IO.MatrixFile.BinaryFormat.Dump', flag_MatrixFile_BinaryFormat)
     flag_MatrixFile_BinaryFormat_Dump = flag_MatrixFile_BinaryFormat_Grab
+
+    ! To load Matrix Files having nonzero indices
+    index_MatrixFile       = fdf_integer('IO.MatrixFile.FileIndex',0)
 
     ! read wavefunction output flags
     mx_temp_matrices = fdf_integer('General.MaxTempMatrices',100)

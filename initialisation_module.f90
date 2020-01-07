@@ -1083,6 +1083,9 @@ contains
   !!    Removed flag_MDold
   !!   2019/12/29 tsuyoshi
   !!    restart_LorK -> restart_DM
+  !!   2020/01/07 tsuyoshi
+  !!    Introduced index_MatrixFile (defined in global) to load Matrix Files having non-zero indices. 
+  !!    (Matrix files dumped during the DMM, SCF, or the optimisation of multisite support functions.)
   !!  SOURCE
   !!
   subroutine initial_H(start, start_L, find_chdens, fixed_potential, &
@@ -1110,7 +1113,7 @@ contains
          flag_write_DOS, flag_neutral_atom, &
          atomf, sf, flag_LFD, nspin_SF, flag_diagonalisation, &
          atom_coord, atom_coord_diff, rcellx, rcelly, rcellz, &
-         ne_in_cell
+         ne_in_cell, index_MatrixFile
     use ion_electrostatic,   only: ewald, screened_ion_interaction
     use S_matrix_module,     only: get_S_matrix
     use GenComms,            only: my_barrier,end_comms,inode,ionode, &
@@ -1170,6 +1173,10 @@ contains
     ! (0) Get the global information
     !      --> Fetch and distribute date on old job
 
+    !2020Jan07 tsuyoshi
+    !index_MatrixFile is read from Conquest_input  (default is 0)
+     MDinit_step = 0
+
     if (flag_MDcontinue.or. &
          restart_DM.or. &
          restart_T   .or. &
@@ -1177,7 +1184,7 @@ contains
        if (inode.eq.ionode) write (io_lun,*) "Get global info to load matrices"
        if (inode.eq.ionode) call make_glob2node
        call gcopy(glob2node, ni_in_cell)
-       call grab_InfoMatGlobal(InfoGlob,MDinit_step)  
+       call grab_InfoMatGlobal(InfoGlob,index=index_MatrixFile)  
        call set_atom_coord_diff(InfoGlob)
        MDinit_step = InfoGlob%MDstep
      
@@ -1210,7 +1217,7 @@ contains
        enddo
        if (read_option) then
           if (inode == ionode) write (io_lun,*) 'Read supp_pao coefficients from SFcoeff files'
-          call grab_matrix2('SFcoeff',inode,nfile,Info,InfoGlob,index=0,n_matrix=nspin_SF)
+          call grab_matrix2('SFcoeff',inode,nfile,Info,InfoGlob,index=index_MatrixFile,n_matrix=nspin_SF)
           call my_barrier()
           call Matrix_CommRebuild(InfoGlob,Info,SFcoeff_range,SFcoeff_trans,matSFcoeff,nfile,n_matrix=nspin_SF)
 
@@ -1235,7 +1242,8 @@ contains
     ! If we're vary PAOs, allocate memory
     ! (1) Get S matrix
     if (restart_T) then
-       call grab_matrix2('T',inode,nfile,Info,InfoGlob,index=0,n_matrix=nspin_SF)
+       !call grab_matrix2('T',inode,nfile,Info,InfoGlob,index=0,n_matrix=nspin_SF)  ! when we need to read T ?
+       call grab_matrix2('T',inode,nfile,Info,InfoGlob,index=index_MatrixFile,n_matrix=nspin_SF)
        call my_barrier()
        call Matrix_CommRebuild(InfoGlob,Info,Trange,T_trans,matT,nfile,symm,n_matrix=nspin_SF)
     endif
@@ -1268,12 +1276,12 @@ contains
     end if
     if (restart_DM) then
        if(.not.flag_diagonalisation) then
-          call grab_matrix2('L',inode,nfile,Info,InfoGlob,index=0,n_matrix=nspin)
+          call grab_matrix2('L',inode,nfile,Info,InfoGlob,index=index_MatrixFile,n_matrix=nspin)
           call my_barrier()
           call Matrix_CommRebuild(InfoGlob,Info,Lrange,L_trans,matL,nfile,symm,n_matrix=nspin)
           if (inode == ionode .and. iprint_init > 1) write (io_lun, *) 'Grabbed L  matrix'
        else
-          call grab_matrix2('K',inode,nfile,Info,InfoGlob,index=0,n_matrix=nspin)
+          call grab_matrix2('K',inode,nfile,Info,InfoGlob,index=index_MatrixFile,n_matrix=nspin)
           call my_barrier()
           call Matrix_CommRebuild(InfoGlob,Info,Hrange,H_trans,matK,nfile,n_matrix=nspin)
           if (inode == ionode .and. iprint_init > 1) write (io_lun, *) 'Grabbed K  matrix'
