@@ -313,13 +313,21 @@ Go to :ref:`top <groundstate>`
 
 Charged systems
 -----------------
-We can treat  charged systems by setting ``General.NetCharge``.
+CONQUEST uses periodic boundary conditions, which require overall
+charge neutrality.  However, charged systems can be modelled:
+if an excess of electrons is specified by the user, a uniform
+positive background charge is added automatically to restore overall
+neutrality.  At present, there are no correction schemes implemented,
+so it is important to test the convergence of the energy with unit
+cell size and shape.  Electrons are added by setting the parameter
+``General.NetCharge``.
 
 ::
 
    General.NetCharge 1.0
 
-This net charge is the charge of the unit cell, and the background charge is adopted.
+This gives the number of extra electrons to be added to the unit cell,
+beyond the valence electrons.
 
 Go to :ref:`top <groundstate>`
 
