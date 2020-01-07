@@ -33,13 +33,39 @@ can be found in **add this link**.
 
 .. _gs_spin:
 
-Spin polarisaion
-----------------
-Spin-polarised calculation is performed by setting ``Spin.SpinPolarised`` to T. 
+Spin polarisation
+-----------------
+CONQUEST performs collinear spin calculations only.  A spin-polarised
+calculation is performed by setting the parameter
+``Spin.SpinPolarised`` to T.  
 
-Users need to specify the initial number of spin-up/down electrons in unit cells by ``Spin.NeUP`` and ``Spin.NeDN`` or the difference of spin-up/down electrons by ``Spin.Magn``. When users want to specify the number of spin-up/down electrons for each species, use ``Atom.SpinNeUp`` and ``Atom.SpinNeDn``.
+Users need to specify *either* the total initial number of spin-up and spin-down electrons in
+the simulation cell (using the parameters ``Spin.NeUP`` and
+``Spin.NeDN``), *or* the difference between the number of spin-up and
+spin-down electrons (using the parameter ``Spin.Magn``).
 
-The number of electrons for each spin will be fixed during SCF calculations when we set ``Spin.FixSpin`` to T (default is F).
+The number of electrons for each spin channel can be fixed during SCF
+calculations by setting the parameter ``Spin.FixSpin`` to T (default is F).
+
+It is possible to specify the spin occupation in the atomic charge
+densities (i.e. the number of spin-up and spin-down electrons used to
+build the density).  This is done in the :ref:`input_tags_atomic_spec`
+part of the ``Conquest_input`` file.  Within the atom block for
+each species, the numbers of electrons should be set with
+``Atom.SpinNeUp`` and ``Atom.SpinNeDn``.  Note that these numbers
+*must* sum to the number of valence electrons for the atom.
+
+Go to :ref:`top <groundstate>`.
+
+.. _gs_spin_example:
+
+Examples: FM and AFM iron
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+A two atom ferromagnetic iron simulation might be set up using the
+parameters below.  Note that the net spin here is S=1 :math:`\mu_B`
+(i.e. two more electrons in the up channel than in the down), and
+that the net spin is not constrained.
 
 :: 
 
@@ -47,12 +73,18 @@ The number of electrons for each spin will be fixed during SCF calculations when
    Spin.SpinPolarised T
    Spin.FixSpin  F
    Spin.NeUP  9.0     # initial numbers of up- and down-spin electrons,
-   Spin.NeDN  7.0     # which will be optimised by a SCF calaculation when Spin.FixSpin=F
+   Spin.NeDN  7.0     # which will be optimised by a SCF calculation when Spin.FixSpin=F
    
    %block ChemicalSpeciesLabel
    1   55.845   Fe
    %endblock ChemicalSpeciesLabel
 
+An equivalent anti-ferromagnetic calculation could be set up as
+follows (though note that the initial specification of spin for the
+atoms does *not* guarantee convergence to an AFM ground state).  By
+defining two species we can create spin-up and spin-down atoms (note
+that both species will require their own, appropriately labelled, ion
+file). 
 
 ::
 
@@ -76,6 +108,9 @@ The number of electrons for each spin will be fixed during SCF calculations when
    Atom.SpinNeDn 5.00
    %endblock Fe2
 
-When we use multi-site or on-site support functions in spin-polarised calculations, we can choose whether to use different support function coefficients for each spin by ``Basis.SpinDependentSF`` (T/F, default is T).
+When using multi-site or on-site support functions in spin-polarised
+calculations, the support functions can be made spin-dependent
+(different coefficients for each spin channel) or not by setting
+``Basis.SpinDependentSF`` (T/F, default is T).
 
-
+Go to :ref:`top <groundstate>`.
