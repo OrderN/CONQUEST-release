@@ -79,7 +79,7 @@ include deps.obj
 
 $(NODE_OBJECTS): 
 
-initial_read.module.o:initial_read.module.f90 datestamp.o
+initial_read_module.o:initial_read_module.f90 datestamp.o
 	$(FC) $(COMPFLAGS) -c $<
 
 #datestamp.f90: $(COMMENT)

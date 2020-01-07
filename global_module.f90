@@ -345,8 +345,6 @@ module global_module
   logical :: flag_dump_L
   logical :: flag_DumpMatrices
 
-  integer :: index_MatrixFile
-
   ! Hold an old relation between global & partition labels
   integer,allocatable :: id_glob_old(:),id_glob_inv_old(:)
 

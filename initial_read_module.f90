@@ -66,6 +66,9 @@ module initial_read
 
   implicit none
 
+  ! Index number for loading DM etc
+  integer, save :: index_MatrixFile
+
   ! RCS tag for object file identification
   character(len=80), save, private :: &
        RCSid = "$Id$"
@@ -817,8 +820,7 @@ contains
          flag_opt_cell, cell_constraint_flag, flag_variable_cell, &
          cell_en_tol, optcell_method, cell_stress_tol, &
          flag_stress, flag_full_stress, rng_seed, &
-         flag_atomic_stress, flag_heat_flux, flag_DumpMatrices, &
-         index_MatrixFile
+         flag_atomic_stress, flag_heat_flux, flag_DumpMatrices
     use dimens, only: r_super_x, r_super_y, r_super_z, GridCutoff,    &
          n_grid_x, n_grid_y, n_grid_z, r_h, r_c,         &
          RadiusSupport, RadiusAtomf, RadiusMS, RadiusLD, &

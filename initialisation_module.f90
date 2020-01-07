@@ -1086,6 +1086,8 @@ contains
   !!   2020/01/07 tsuyoshi
   !!    Introduced index_MatrixFile (defined in global) to load Matrix Files having non-zero indices. 
   !!    (Matrix files dumped during the DMM, SCF, or the optimisation of multisite support functions.)
+  !!   2020/01/07 10:29 dave
+  !!    Moved index_MatrixFile to initial_read
   !!  SOURCE
   !!
   subroutine initial_H(start, start_L, find_chdens, fixed_potential, &
@@ -1113,7 +1115,7 @@ contains
          flag_write_DOS, flag_neutral_atom, &
          atomf, sf, flag_LFD, nspin_SF, flag_diagonalisation, &
          atom_coord, atom_coord_diff, rcellx, rcelly, rcellz, &
-         ne_in_cell, index_MatrixFile
+         ne_in_cell
     use ion_electrostatic,   only: ewald, screened_ion_interaction
     use S_matrix_module,     only: get_S_matrix
     use GenComms,            only: my_barrier,end_comms,inode,ionode, &
@@ -1138,6 +1140,7 @@ contains
     use XLBOMD_module,       ONLY: grab_XXvelS,grab_Xhistories
     use support_spec_format, only: read_option
     use multisiteSF_module,  only: initial_SFcoeff
+    use initial_read,        only: index_MatrixFile
 
     implicit none
 
