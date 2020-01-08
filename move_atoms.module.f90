@@ -1228,6 +1228,8 @@ contains
   !! CREATION DATE 
   !!   2019/12/09
   !! MODIFICATION HISTORY
+  !!  2020/01/08 12:52 dave
+  !!   Bug fix: reset alpha to one on entry
   !! SOURCE
   !!
   subroutine backtrack_linemin(direction, energy_in, &
@@ -1295,6 +1297,7 @@ contains
 
     iter = 0
     old_alpha = zero
+    alpha = one
     e0 = total_energy
     if (inode == ionode .and. iprint_MD > 0) &
          write (io_lun, &
