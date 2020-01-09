@@ -32,7 +32,8 @@ General.PseudopotentialType (*string*) siesta/hamann
     Type of pseudopotential (in practice, this defines how the local
     part of the pseudopotential is handled)
 
-    *default*: siest
+    *default*: hamann (read from ion file)
+
 General.NeutralAtom (*boolean*)
     Use neutral atom potential or not (removes need for Ewald sum)
 
@@ -44,7 +45,7 @@ General.FunctionalType (*integer*)
     parameterisations of the LDA available, as well as three variants
     of the PBE GGA functional, with numbers given below.
 
-    *default*: 3
+    *default*: read from ion file (same as pseudopotentials)
 
     =========================================  ======= =======================
     Functional                                 Keyword Ref
@@ -184,31 +185,23 @@ Atomic Specification
 ChemicalSpeciesLabel (*block*)
     Lists all atomic species used in the calculation. Format:
 
-    | ``1 atomic_mass1 element_type1``
-    | ``2 atomic_mass2 element_type2``
+    | ``1 atomic_mass1 element_label_1``
+    | ``2 atomic_mass2 element_label_2``
     | ``...``
-    | ``n atomic_mass_n_ element_type_n``
+    | ``n atomic_mass_n_ element_label_n``
 
+    (Note that the block must end with %endblock ChemicalSpeciesLabel.)
     1-–n are integer numbers used in the coordinate file to identify
-    atomic species (see :ref:`coordinate-file` for more details).
-    (don’t forget to end the block with %endblock ChemicalSpeciesLabel)
+    atomic species, as discussed in the :ref:`coordinate-file`
+    section.  The atomic masses are only used for dynamics.  The
+    element labels should have a corresponding ion file
+    ``element_label_x.ion`` and *may* have an accompanying atom
+    specification block.
 
-Atom.ValenceCharge (*real*)
-    Valence charge of species (e.g. 4 for carbon, 6 for oxygen)
-
-    *default*: 0.0
-
-Atom.NumberOfSupports (*integer*)
-    Number of support functions per atom for a species. Don’t confuse
-    support functions and PAOs ! Support functions can be expanded in
-    a basis set of PAOs or blips
-
-    *default*: none
-
-Atom.SupportFunctionRange (*real*)
-    Confinement radius for the support functions for a given species
-
-    *default*: none (though will default to PAO radius if PAO basis is chosen)
+    There can then be up to n atom specification blocks whose names
+    should be ``element_label_x``.  When using :ref:`primitive PAOs
+    <basis_primitivepaos>` for support functions many of these are
+    read from the ion file.
 
 Atom.MultisiteRange (*real*)
     Range for multi-site support functions (the PAOs on all atoms
@@ -1300,6 +1293,23 @@ General.only_Dispersion (*boolean*)
 
 Atomic Specification
 ********************
+
+Atom.ValenceCharge (*real*)
+    Valence charge of species (e.g. 4 for carbon, 6 for oxygen)
+
+    *default*: read from ion file
+
+Atom.NumberOfSupports (*integer*)
+    Number of support functions per atom for a species. Don’t confuse
+    support functions and PAOs ! Support functions can be expanded in
+    a basis set of PAOs or blips
+
+    *default*: number of PAOs read from ion file
+
+Atom.SupportFunctionRange (*real*)
+    Confinement radius for the support functions for a given species
+
+    *default*: maximal PAO radius read from ion file
 
 Atom.SupportGridSpacing (*real*)
     The spacing of the blip grid (if using). Equivalent (under certain
