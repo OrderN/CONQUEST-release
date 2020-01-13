@@ -82,18 +82,22 @@ Theory
 Get in touch
 ------------
 
-- If you have questions or suggestions for developing the code, please
-  use **what interface**.  The developers cannot guarantee to offer
+- If you have suggestions for developing the code, please
+  use `GitHub issues`_.  The developers cannot guarantee to offer
   support, though we will try to help. 
-- Report bugs, suggest features or view the source code `on GitHub issues`_.
+- Report bugs, suggest features or view the source code on `GitHub
+  issues`_.
+- You can ask for help and discuss any problems that you may have on
+  the Conquest mailing list (**to be completed**)
 
-.. _on GitHub issues: http://github.com/OrderN/CONQUEST-release/issues
+.. _GitHub issues: http://github.com/OrderN/CONQUEST-release/issues
 
 Licence
 -------
 
 CONQUEST is available freely under the open source `MIT Licence`__.
 We ask that you acknowledge use of the code by citing appropriate
-papers **details**.
+papers, which will be given in the output file (a BiBTeX file
+containing these references is also output).
 
 __ https://choosealicense.com/licenses/mit/

@@ -53,5 +53,6 @@ beyond this system size, a composite basis is used,
 where PAOs from several are combined into a smaller set of support functions
 (multi-site support functions, or MSSF).  With MSSF, calculations on
 3,000+ atoms are possible on HPC platforms.  For linear scaling, more
-care is required with basis sets (full details **elsewhere**).
+care is required with basis sets (more details can be found :ref:`here
+<gs_on>`).
 

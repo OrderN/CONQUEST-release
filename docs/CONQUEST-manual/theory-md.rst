@@ -282,9 +282,9 @@ be expressed,
     \dot{\mathbf{r}} = \mathbf{v} - \frac{\beta(P_0 - P)}{3\tau_P}\mathbf{r},
 
 i.e. the fractional coordinates are scaled by a factor determined by the
-  difference between the internal and external pressures, the isothermal
-  compressibility :math:`\beta` and a pressure coupling time constant $\tau_P$.
-  In the isotropic case, the cell scaling factor :math:`\mu` can be expressed,
+difference between the internal and external pressures, the isothermal
+compressibility :math:`\beta` and a pressure coupling time constant $\tau_P$.
+In the isotropic case, the cell scaling factor :math:`\mu` can be expressed,
 
 .. math::
     \mu = \left[ 1 - \frac{\Delta t}{\tau_P}(P_0 - P)\right]^{\frac{1}{3}},

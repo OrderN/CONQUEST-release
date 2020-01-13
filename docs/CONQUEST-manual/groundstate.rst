@@ -175,6 +175,16 @@ gradient of the energy with respect to the density matrix).  The
 maximum number of iterations in the density matrix optimisation can
 be set with ``DM.LVariations`` (default 50).
 
+At present, CONQUEST can only operate efficiently in linear scaling
+mode with a restricted number of support functions (though this is an
+area of active development).  PAO basis sets of SZ and SZP size
+(minimal and small in the ion file generator) will run without
+restrictions.  For larger PAO basis sets, the :ref:`OSSF <basis_ossf>`
+approach must be used, and is effective.  With a blip basis there are
+no restrictions, though efficient optimisation is still under active
+development. 
+
+
 It is
 almost always more efficient to update the charge density while
 optimising the density matrix, avoiding the need for a separate
@@ -421,4 +431,5 @@ Go to :ref:`top <groundstate>`.
     :labelprefix: G
     :keyprefix: g-
     :style: unsrt
->>>>>>> manual
+
+Go to :ref:`top <groundstate>`.

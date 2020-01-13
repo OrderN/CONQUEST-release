@@ -12,9 +12,11 @@ overhead.  If you need to perform DFT calculations on large systems
 (several hundred atoms or beyond) or want to perform highly parallel
 calculations, you should definitely consider CONQUEST.
 
-CONQUEST can use the same norm-conserving pseudopotentials as `PWSCF`_
+CONQUEST uses `Hamann`_ optimised norm-conserving Vanderbilt (ONCV)
+pseudopotentials, which can also be used by `PWSCF`_
 and `Abinit`_ which allows direct comparisons between the codes.
 
+.. _Hamann: http://www.mat-simresearch.com
 .. _PWSCF: https://www.quantum-espresso.org
 .. _Abinit: https://www.abinit.org
 
@@ -52,4 +54,9 @@ but cannot guarantee to help on any timescale.
 
 How do I get help?
 ------------------
-**This needs to be decided; how do we facilitate a user community?**
+The Conquest mailing list (**details**) is the best place to get
+help.  However, the developers cannot guarantee to answer any
+questions, though they will try.  Bug reports should be made through
+the `GitHub issues`_ page.
+
+.. _GitHub issues: http://github.com/OrderN/CONQUEST-release/issues
