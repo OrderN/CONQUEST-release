@@ -1,4 +1,4 @@
-! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
+! -*- mode: F90; mode: font-lock; column-number-mode: true -*-
 ! ------------------------------------------------------------------------------
 ! $Id$
 ! ------------------------------------------------------------------------------
@@ -106,8 +106,17 @@ contains
     ! Count lines in input file on ionode
     if(inode==ionode) then
        call io_assign(lun)
-       open(unit=lun,file='Conquest_input',iostat=stat,status='old')
-       if(stat/=0) call cq_abort("We need Conquest_input to run !")
+       open(unit=lun,file='Conquest_ion_input',iostat=stat,status='old')
+       if(stat/=0) then
+          stat = 0
+          open(unit=lun,file='Conquest_input',iostat=stat,status='old')
+          if(stat/=0) then
+             call cq_abort("We need Conquest_ion_input to run !")
+          else
+             write(*,fmt='(2x,"Warning! MakeIonFiles input file name has changed!")')
+             write(*,fmt='(2x,"Please update Conquest_input to Conquest_ion_input")')
+          end if
+       end if
        input_lines = 0
        done = .false.
        do while(.NOT.done)
@@ -137,7 +146,14 @@ contains
     ! Allocate array
     allocate(input_array(input_lines))
     if(inode==ionode) then
-       open(unit=lun,file='Conquest_input',iostat=stat,status='old')
+       open(unit=lun,file='Conquest_ion_input',iostat=stat,status='old')
+       if(stat/=0) then
+          stat = 0
+          open(unit=lun,file='Conquest_input',iostat=stat,status='old')
+          if(stat/=0) then
+             call cq_abort("We need Conquest_ion_input to run !")
+          end if
+       end if
        l = 1
        done = .false.
        do while(.NOT.done)
