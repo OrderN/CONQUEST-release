@@ -1865,6 +1865,8 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
   !!  CREATION DATE
   !!   2019/12/10
   !!  MODIFICATION HISTORY
+  !!  2020/01/17 smujahed
+  !!  - Added call to subroutine write_xsf to write trajectory file
   !!  SOURCE
   !!
   subroutine lbfgs(fixed_potential, vary_mu, total_energy)
@@ -1887,13 +1889,14 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
     use GenBlas,        only: dot
     use force_module,   only: tot_force
     use io_module,      only: write_atomic_positions, pdb_template, &
-                              check_stop
+                              check_stop, write_xsf
     use memory_module,  only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use primary_module, only: bundle
     use store_matrix,   only: dump_pos_and_matrices
     use mult_module, ONLY: matK, S_trans, matrix_scale, matL, L_trans
     use matrix_data, ONLY: Hrange, Lrange
     use dimens,        only: r_super_x, r_super_y, r_super_z
+    use md_control,    only: flag_write_xsf
 
     implicit none
 
@@ -2023,6 +2026,9 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
           ! New search direction
           cg_new = -tot_force ! The L-BFGS is in terms of grad E
        end do
+       ! Add call to write_atomic_positions and write_xsf (2020/01/17: smujahed)
+       call write_atomic_positions("UpdatedAtoms.dat", trim(pdb_template))
+       if (flag_write_xsf) call write_xsf('trajectory.xsf', iter)
        ! Build q
        do i=iter, iter_low, -1
           ! Indexing
