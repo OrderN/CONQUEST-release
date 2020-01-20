@@ -29,7 +29,7 @@ module read
       
 contains
 
-  ! Read Conquest_input into memory, and obtain general parameters
+  ! Read Conquest_ion_input into memory, and obtain general parameters
   subroutine read_general_input
 
     use numbers
@@ -44,7 +44,7 @@ contains
     integer :: i, j, ios
     
     !
-    ! Load the Conquest_input file into memory
+    ! Load the Conquest_ion_input file into memory
     !
     call load_input
     !
@@ -85,7 +85,7 @@ contains
     return
   end subroutine read_general_input
 
-  ! Read input from Conquest_input for a species
+  ! Read input from Conquest_ion_input for a species
   ! This routine also reads input and output from Hamann code
   subroutine read_species_input(species)
 

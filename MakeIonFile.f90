@@ -37,7 +37,7 @@ program MakeIonFiles
   !
   call write_banner
   !
-  ! Load Conquest_input, read general parameters
+  ! Load Conquest_ion_input, read general parameters
   !
   call read_general_input
   !
