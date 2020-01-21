@@ -177,6 +177,8 @@ General.RNGSeed (*integer*)
 
     *default*: -1
 
+Go to :ref:`top <input_tags>`.
+
 .. _input_atomic_spec:
 
 Atomic Specification
@@ -192,7 +194,7 @@ ChemicalSpeciesLabel (*block*)
 
     (Note that the block must end with %endblock ChemicalSpeciesLabel.)
     1-–n are integer numbers used in the coordinate file to identify
-    atomic species, as discussed in the :ref:`coordinate-file`
+    atomic species, as discussed in the :ref:`io_coords`
     section.  The atomic masses are only used for dynamics.  The
     element labels should have a corresponding ion file
     ``element_label_x.ion`` and *may* have an accompanying atom
@@ -216,7 +218,9 @@ Atom.LFDRange (*real*)
 
     *default*: 0.0
 
-.. _io_general_tags:
+Go to :ref:`top <input_tags>`.
+
+.. _input_general_tags:
 
 Input-Output General Tags
 -------------------------
@@ -271,6 +275,10 @@ IO.TimeFileRoot (*string*)
 
     *default*: ``time``
 
+Go to :ref:`top <input_tags>`.
+
+.. _input_coords:
+
 Atomic Coordinates
 ------------------
 
@@ -290,6 +298,10 @@ IO.PdbIn (*boolean*)
     Switches between the   coordinate file format (F) and PDB format (T)
 
     *default*: F
+
+Go to :ref:`top <input_tags>`.
+
+.. _input_output:
 
 Levels of Output
 ----------------
@@ -357,6 +369,8 @@ IO.Iprint\_intgn (*integer*)
 IO.Iprint\_time (*integer*)
     Timing information
 
+Go to :ref:`top <input_tags>`.
+
 .. _integration-grid:
 
 Integration Grid
@@ -369,6 +383,10 @@ Grid.GridCutoff (*real*)
     (to fit with default FFT routines)
 
     Default: 20 Ha.
+
+Go to :ref:`top <input_tags>`.
+
+.. _input_minE:
 
 Minimising Energy
 -----------------
@@ -422,6 +440,10 @@ minE.GlobalTolerance (*boolean*)
     system, or per atom?
 
     *default*: T
+
+Go to :ref:`top <input_tags>`.
+
+.. _input_scf:
 
 Charge Self-Consistency
 -----------------------
@@ -499,6 +521,8 @@ SC.MetricFactor (*real*)
     from the factor :math:`\left(q^2 + q_1^2\right) / q^2`.
 
     *default*: 0.1
+
+Go to :ref:`top <input_tags>`.
 
 .. _input_dm:
 
@@ -588,6 +612,10 @@ DM.mu (*real*)
 
     *default*: 0.0
 
+Go to :ref:`top <input_tags>`.
+
+.. _input_diag:
+
 Diagonalisation
 ---------------
 
@@ -614,6 +642,11 @@ Diag.MPMesh[X/Y/Z] (*integer*)
 
     *default*: 1
 
+Diag.GammaCentred (*boolean*)
+    Selects Monkhorst-Pack mesh centred on the Gamma point
+
+    *default*: F
+    
 Diag.ProcRows (*integer*)
 
     *default*:
@@ -702,6 +735,10 @@ Diag.ProcCols (*integer*)
     processor group (see section [sec:scal-proc-grid])
 
     *default*: Determined automatically
+
+Go to :ref:`top <input_tags>`.
+
+.. _input_move_atoms:
 
 Moving Atoms
 ------------
@@ -921,6 +958,9 @@ AtomMove.FixCentreOfMass (*boolean*)
 
     *default*: T
 
+Go to :ref:`top <input_tags>`.
+
+.. _input_md:
 
 Molecular Dynamics
 ------------------
@@ -1063,6 +1103,10 @@ MD.BaroDebug (*boolean*)
 
     *default*: F
 
+Go to :ref:`top <input_tags>`.
+
+.. _input_spin:
+
 Spin Polarisation
 -----------------
 
@@ -1085,6 +1129,10 @@ Spin.NeDN (*real*)
     Total number of electrons in spin down channel at start of calculation.
 
     *default*: 0.0
+
+Go to :ref:`top <input_tags>`.
+
+.. _input_deltaSCF:
 
 DeltaSCF
 --------
@@ -1149,6 +1197,10 @@ DeltaSCF.LUMOThresh (*real*)
 
     *default*:
 
+Go to :ref:`top <input_tags>`.
+
+.. _input_cdft:
+
 Constrained DFT (cDFT)
 ----------------------
 
@@ -1184,6 +1236,10 @@ cDFT.AtomGroups (*block*)
     block. For each line, there should be a corresponding block with the appropriate
     label; the block consists of a list of atom numbers for the atoms in the group
 
+Go to :ref:`top <input_tags>`.
+
+.. _input_vdw:
+
 vdW-DF
 ------
 
@@ -1192,6 +1248,10 @@ vdWDFT.LDAFunctionalType (*string*)
 
     *default*:
 
+Go to :ref:`top <input_tags>`.
+
+.. _input_dftd2:
+
 DFT-D2
 ------
 
@@ -1199,6 +1259,10 @@ DFT-D2\_range (*real*)
     DFT-D2 cutoff range (bohr)
 
     *default*:
+
+Go to :ref:`top <input_tags>`.
+
+.. _input_xlbomd:
 
 XL-BOMD
 -------
@@ -1232,6 +1296,10 @@ XL.Integrator (*string*)
     Selects the Verlet method or velocity Verlet method
 
     *default*:
+
+Go to :ref:`top <input_tags>`.
+
+.. _advanced:
 
 Advanced and obscure tags
 -------------------------
@@ -1288,6 +1356,8 @@ General.GapThreshold (*real*)
 
 General.only_Dispersion (*boolean*)
     Selects only DFT\_D2 calculation (no electronic structure etc)
+
+Go to :ref:`top <input_tags>`.
 
 .. _advanced_atomic_spec_tags:
 
@@ -1351,7 +1421,9 @@ Atom.SpinNeDn (*real*)
 
     *default*: 0.0
 
-.. _advanced_io_general_tags:
+Go to :ref:`top <input_tags>`.
+
+.. _advanced_input_general_tags:
 
 I/O General
 ***********
@@ -1385,7 +1457,9 @@ IO.TimeFileRoot (*string*)
 
     *default*: ``time``
 
-.. _advanced_io_coord_tags:
+Go to :ref:`top <input_tags>`.
+
+.. _advanced_input_coord_tags:
 
 I/O Atomic Coordinates
 **********************
@@ -1413,6 +1487,8 @@ IO.PdbTemplate (*string*)
     overwritten with this keyword
 
     *default*: coordinate file
+
+Go to :ref:`top <input_tags>`.
 
 .. _advanced_basis_tags:
 
@@ -1526,6 +1602,8 @@ Basis.PAOs\_OneToOne (*boolean*)
 
     *default*: F
 
+Go to :ref:`top <input_tags>`.
+
 .. _advanced_grid_tags:
 
 Integration Grid
@@ -1550,10 +1628,13 @@ Grid.ReadBlocks (*boolean*)
 
     *default*: F
 
-
+Go to :ref:`top <input_tags>`.
 
 .. bibliography:: references.bib
     :cited:
     :labelprefix: E
     :keyprefix: e-
     :style: unsrt
+
+Go to :ref:`top <input_tags>`.
+

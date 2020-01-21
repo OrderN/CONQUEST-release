@@ -1,9 +1,13 @@
+.. _overview:
+
 =======================
 Overview: Why CONQUEST?
 =======================
 
 There are already many DFT codes which are available under open-source
 licences.  Here we give reasons why you might choose to use CONQUEST.
+
+.. _over_large:
 
 Large-scale simulations
 -----------------------
@@ -13,6 +17,8 @@ demonstrated calculations on over 3,000 atoms) or with linear scaling
 (where calculations on over 2,000,000 atoms have been demonstrated).
 Moreover, the same code and basis sets can be used to model systems
 from 1 atom to more than 1,000,000 atoms.
+
+.. _over_para:
 
 Efficient parallelisation
 -------------------------
@@ -28,6 +34,8 @@ CONQUEST also offers some OpenMP parallelisation in linear scaling
 mode, with relatively low numbers of MPI threads per node, and further
 parallelisation performed with OpenMP.
 
+.. _over_on:
+
 Linear scaling
 --------------
 The ideas of linear scaling have been current for more than twenty
@@ -36,6 +44,8 @@ to implement these ideas.  CONQUEST has demonstrated effective linear
 scaling (with excellent parallel scaling), though is still somewhat
 restricted in the basis sets that can be used.  For calculations
 beyond 5,000-10,000 atoms with DFT, linear scaling is the only option.
+
+.. _over_basis:
 
 Basis sets
 ----------

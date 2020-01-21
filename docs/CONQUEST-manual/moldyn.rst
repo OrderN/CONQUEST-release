@@ -5,13 +5,17 @@ Molecular Dynamics
 ==================
 
 CONQUEST can perform molecular dynamics both when the density matrix is computed
-using diagonalisation and order(N), the latter allowing dynamical simulations of
+using diagonalisation and O(N), the latter allowing dynamical simulations of
 (but not limited to) tens of thousands of atoms. The equations of motion are
 integrated using the velocity Verlet method in the case of the microcanonical
 ensemble (NVE), and modifications thereof for the canonical (NVT) and
 isobaric-isothermal (NPT) ensembles, the details of which can be found in
 :ref:`theory-md`. In addition to converging the parameters for the electronic
 structure calculations, the following points must also be considered.
+
+Go to :ref:`top <moldyn>`.
+
+.. _md_scf:
 
 Self-consistency tolerance and XL-BOMD
 --------------------------------------
@@ -23,7 +27,7 @@ time reversible, *the SCF procedure is not*. Therefore a tight SCF tolerance
 (``minE.SCTolerance`` for diagonalisation, ``minE.LTolerance`` for linear
 scaling) is necessary. In the case of diagonalisation, a value of ``1E-7`` is
 typically enough to negate the drift. However, extended-Lagrangian
-Born-Oppenheimer MD (XL-BOMD), currently only implemented for order(N),
+Born-Oppenheimer MD (XL-BOMD) :cite:`md-Niklasson2008`, currently only implemented for O(N),
 essentially makes the SCF component of the MD time-reversible by adding the
 electronic degrees of freedom to the Lagrangian, relaxing the constraint on
 ``minE.LTolerance`` --- although it is still somewhat dependent on the ensemble.
@@ -35,6 +39,10 @@ ensemble. The following flags are required for XL-BOMD:
 
    DM.SolutionMethod ordern
    AtomMove.ExtendedLagrangian T
+
+Go to :ref:`top <moldyn>`.
+
+.. _md_restart:
 
 Restarting
 ----------
@@ -61,9 +69,9 @@ the X-matrix files. Finally, it will *append* new data to the ``md.stats`` and
    SC.MakeInitialChargeFromK T
    XL.LoadL T
 
-In addition to the files mentioned above, Conquest will try to read the K-matrix
+In addition to the files mentioned above, CONQUEST will try to read the K-matrix
 from ``Kmatrix2.i00.*`` when using diagonalisation or the L-matrix from
-``Lmatrix2.i00.*`` when using order(N), and ``Xmatrix2.i0*.*`` if the
+``Lmatrix2.i00.*`` when using O(N), and ``Xmatrix2.i0*.*`` if the
 extended-Lagrangian formalism is used. Note that metadata for these files is
 stored in ``InfoGlobal.i00.dat`` which is also required when restarting. If the
 calculation ended by hitting the walltime limit, the writing of these matrix
@@ -72,6 +80,10 @@ calculation can be restarted by setting the above flags to ``F`` *after* setting
 ``AtomMove.RestartRun T``. Setting the flag ``General.MaxTime`` to some number
 of seconds less (say 30 minutes) than the calculation wall time limit will force
 the calculation to stop gracefully, preventing the aforementioned situation.
+
+Go to :ref:`top <moldyn>`.
+
+.. _md_vis:
 
 Visualising the trajectory
 --------------------------
@@ -85,6 +97,10 @@ read using `VMD <https://www.ks.uiuc.edu/Research/vmd/>`_. A small VMD script,
 
 assuming the vmd executable is in your path.
 
+Go to :ref:`top <moldyn>`.
+
+.. _md_tdep:
+
 TDEP output
 -----------
 
@@ -94,33 +110,43 @@ calculations using the `Temperature Dependent Effective Potential (TDEP)
 T`` will make conquest dump configurations, forces and metadata in a format
 readable by TDEP.
 
+Go to :ref:`top <moldyn>`.
+
+.. _md_nonh:
+
 Non-Hamiltonian dynamics
 ------------------------
+
+.. _md_nvt:
 
 Canonical (NVT) ensemble
 ++++++++++++++++++++++++
 
 The thermostat is set using the ``MD.Thermostat`` flag, and can take the values
-``berendsen`` (weak coupling), ``nhc`` (Nose-Hoover chain) and ``svr``
-(stochastic velocity rescaling). Without going into the details of the
-thermostat, one would typically use the NHC or SVR thermostats, because they
-genterate the correct canonical ensemble phase space distribution.
+``svr`` (stochastic velocity rescaling) and ``nhc`` (Nose-Hoover
+chain). These thermostats generate the correct canonical ensemble
+phase space distribution, and both give a conserved quantity that
+allows the quality of the dynamics to be monitored.
 
-1. Berendsen
+1. Stochastic velocity rescaling
 
 ::
 
    AtomMove.IonTemperature 300.0
    MD.Ensemble nvt
-   MD.Thermostat berendsen
-   MD.tauT 5
-   
-Here, ``MD.tauT`` is the coupling timescale; the velocity scaling factor is
-modified by a factor :math:`\Delta t/\tau`, so a larger :math:`\tau` results in
-a more slowly varying temperature. Note that this method does not recover the
-canonical ensemble, and is oly useful for equilibration. Moreover, it has been
-shown to systematically transfer energy to the slowest degrees of freedom, a
-phenomenon known as the "flying ice cube effect." Use with care.
+   MD.Thermostat svr
+   MD.tauT 10
+
+While the NHC uses chaotic sensitivity to initial conditions to achieve better
+ergodicity, the SVR thermostat :cite:`md-Bussi2007` uses a judiciously chosen stochastic force
+coupled to a weak scaling thermostat to correctly generate the
+canonical phase space distribution. The ``MD.tauT`` parameter gives
+the coupling timescale; the velocity scaling factor is modified by a
+factor :math:`\Delta t/\tau`, so a larger :math:`\tau` results in a
+more slowly varying temperature.  While some characterisation of the
+system is recommended, values of :math:`\tau` around 20--200fs are
+reasonable.  To reproduce a simulation, the random number
+generator seed can be set with the ``General.RNGSeed <integer>`` flag.
 
 2. Nose-Hoover chain
 
@@ -133,13 +159,13 @@ phenomenon known as the "flying ice cube effect." Use with care.
    MD.nYoshida 5
    MD.tauT 30
 
-When thermostatting using a Nose-Hoover chain, it may be necessary to set a
+When thermostatting using a Nose-Hoover chain :cite:`md-Nose1984,md-Hoover1985,md-Martyna1992`, it may be necessary to set a
 couple more flags. ``MD.nNHC`` sets the number of thermostats in the chain (the
 default of 5 is generally sensible), and ``MD.nYoshida`` determines the order of
 Yoshida-Suzuki integration. This is essentially a higher level integration
 scheme that *can* improve energy conservation in cases when rapid changes in the
 Nose-Hoover thermostat velocity is causing integration errors. **Note that**
-``MD.tauT`` **means something different to the Berendsen case**. A good guess is
+``MD.tauT`` **means something different to the SVR case**. A good guess is
 the time period of the highest frequency motion of the system in fs; however, in
 the NVT ensemble, the energy conservation is not very sensitive to this value.
 The NHC masses can also be set manually using the following block.
@@ -152,53 +178,20 @@ The NHC masses can also be set manually using the following block.
      5 1 1 1 1
    %endblock
 
-3. Stochastic velocity rescaling
+Go to :ref:`top <moldyn>`.
 
-::
-
-   AtomMove.IonTemperature 300.0
-   MD.Ensemble nvt
-   MD.Thermostat svr
-   MD.tauT 10
-
-While the NHC uses chaotic sensitivity to initial conditions to achieve better
-ergodicity, the SVR thermostat uses a judiciously chosen stochastic force
-coupled to a Berendsen-type weak scaling thermostat to correctly generate the
-canonical phase space distribution. As such, the ``MD.tauT`` parameter has the
-same meaning as for the Berendsen barostat. It has the advantage of not
-producing a flying ice cube effect. To reproduce a simulation, the random number
-generator seed can be set with the ``General.RNGSeed <integer>`` flag.
+.. _md_npt:
 
 Isobaric-Isothermal (NPT) ensemble
 ++++++++++++++++++++++++++++++++++
 
-There are two implemented barostats, weak coupling (Berendsen) and extended
-system (Parrinello-Rahman). As with the thermostats, the weak coupling barostat
-does not generate the correct phase space distribution, while the extended
-system barostat does.
+There is one implemented barostat at present, the extended
+system, Parrinello-Rahman :cite:`md-Parrinello1981`. At present the
+barostat should be treated as a beta-version implementation, which
+will be fully characterised and made robust for the full release of
+the code. 
 
-1. Berendsen
-
-::
-
-   AtomMove.IonTemperature 300.0
-   MD.Ensemble npt
-   MD.Thermostat berendsen
-   MD.Barostat berendsen
-   MD.tauT 5
-   MD.tauP 30
-   MD.BulkModulusEstimate 100.0
-
-Note that the Berendsen barostat can only be used with the Berendsen thermostat.
-The pressure time coupling parameter ``MD.tauP`` has an analogous meaning to the
-temperature parameter ``MD.tauT``, but in this case is quite important, since
-rapid fluctuations in the cell parameters can destabilise or crash a simulation.
-One possible strategy to equilibrate a system that is far from its target
-pressure and volume is to relax it using the Berendsen barostat/thermostat with
-a large value of ``MD.tauP``, i.e. an over-damped system. Note the necessity of
-a bulk modulus estimate (in GPa), which is a parameter in the cell rescaling.
-
-2. Parrinello-Rahman
+1. Parrinello-Rahman
 
 ::
 
@@ -213,8 +206,8 @@ a bulk modulus estimate (in GPa), which is a parameter in the cell rescaling.
    MD.tauP 200
    MD.PDrag 10.0
 
-The Parrinello-Rahman barostat generates the correct ensemble unlike the
-Berendsen, but can be subject to low frequency "ringing" fluctuations in the
+The Parrinello-Rahman barostat generates the correct ensemble, but can
+be subject to low frequency "ringing" fluctuations in the 
 temperature and pressure that can destabilise the system or slow equilibration.
 Unlike in the NVT ensemble, this combination of barostat and thermostat is
 *very* sensitive to the choice of both ``MD.tauT`` and ``MD.tauP``; note that
@@ -231,9 +224,20 @@ dynamics, but not significantly, and the stability is significantly improved.
 
 Note that the NPT ensemble can also be generated correctly by thermostatting
 using the SVR thermostat, although the meaning of the parameter ``MD.tauT`` is
-different in this case, akin to the Berendsen thermostat.
+different in this case, as in NVT dynamics.
 
 Postprocessing tools
 --------------------
 
-Details of Python post-processing tools for CONQUEST can be found in :ref:`md_scripts`.
+Details of Python post-processing tools for CONQUEST can be found in :ref:`et_md_scripts`.
+
+Go to :ref:`top <moldyn>`.
+
+.. bibliography:: references.bib
+    :cited:
+    :labelprefix: MD
+    :keyprefix: md-
+    :style: unsrt
+
+Go to :ref:`top <moldyn>`.
+	    

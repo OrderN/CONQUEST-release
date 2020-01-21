@@ -41,6 +41,8 @@ following:
 In this example, MaxF is the maximum single force component, H is the enthalpy and dH is the
 change in enthalpy.
 
+Go to :ref:`top <strucrelax>`.
+
 .. _sr_ions:
 
 Ionic relaxation
@@ -90,6 +92,8 @@ conjugate gradients, and can be switched on using,
    AtomMove.MaxForceTol 5e-4
    AtomMove.ReuseL T
 
+Go to :ref:`top <strucrelax>`.
+
 .. _sr_cell:
 
 Cell optimisation
@@ -110,6 +114,8 @@ coordinates* (``AtomMove.OptCellMethod 1``) using the following input:
 
 Here, we specify the target pressure in GPa and two new tolerances, the enthalpy
 tolerance in Ha and the stress tolerance in GPa.
+
+Go to :ref:`top <strucrelax>`.
 
 .. _sr_both:
 
@@ -146,3 +152,6 @@ gradients relaxation for the inner loop and a single cell steepest descent
 relaxation for the outer loop. This is considerable less efficient, and is not
 guaranteed to converge to the same minimum as ``AtomMove.OptCellMethod 3``, but
 may help in particularly problematic cases.
+
+Go to :ref:`top <strucrelax>`.
+
