@@ -2032,7 +2032,7 @@ contains
        flag_reset_dens_on_atom_move = fdf_boolean('SC.ResetDensOnAtomMove',.false.)
        if(flag_reset_dens_on_atom_move) then
          call cq_warn(sub_name,' SC.ResetDensOnAtomMove will not be available soon. &
-                      Set AtomMove.InitialChargeDensity as 1, instead.')
+         &             Set AtomMove.InitialChargeDensity as 1, instead.')
          method_UpdateChargeDensity = AtomicCharge
        endif
 
@@ -2040,7 +2040,7 @@ contains
          ! if LFD, use atomic density in default when we don't reuse SFcoeff
          flag_LFD_MD_UseAtomicDensity = fdf_boolean('Multisite.LFD.UpdateWithAtomicDensity',.true.)
          call cq_warn(sub_name,' Multisite.LFD.UpdateWithAtomicDensity will not be available soon. &
-                      Set AtomMove.InitialChargeDensity, instead.')
+         &             Set AtomMove.InitialChargeDensity, instead.')
        endif
        if(flag_LFD_MD_UseAtomicDensity) method_UpdateChargeDensity = AtomicCharge
 
