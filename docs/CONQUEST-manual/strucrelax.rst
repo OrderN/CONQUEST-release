@@ -5,13 +5,13 @@ Structural relaxation
 =====================
 
 This section describes how to find the zero-Kelvin equilibrium structure, given
-a starting structure with non-zero forces and/or stresses. CONQUEST employs a
-conjugate gradients algorithm to minimise energy or enthalpy with respect to
-atomic positions and in some cases, cell vectors. Although many codes use a
-quasi-Newton algorithm (some variant of BFGS), iteratively improving the Hessian
-matrix does not scale well to the kinds of large systems that CONQUEST is
-designed to solve. For pathological cases, a damped MD optimiser is also
-available.
+a starting structure with non-zero forces and/or stresses. CONQUEST
+can employ a variety of algorithms 
+algorithm to minimise energy with respect to
+atomic positions, including: L-BFGS; conjugate gradients; and damped
+molecular dynamics (both MDMin and FIRE approaches).  The minimisation
+of energy or enthalpy with respect to cell vectors is restricted to
+conjugate gradients at present, though L-BFGS will be implemented.
 
 Setting ``AtomMove.WriteXSF T`` for all flavours of optimisation will dump the
 trajectory to the file ``trajectory.xsf``, which can be visualised using `VMD
@@ -19,7 +19,7 @@ trajectory to the file ``trajectory.xsf``, which can be visualised using `VMD
 will the structure at each step to ``UpdatedAtoms.dat`` in the format of a
 CONQUEST structure input.
 
-For the conjugate gradients relaxations, the progress of the calculation can be
+For the L-BFGS and conjugate gradients relaxations, the progress of the calculation can be
 monitored by searching for the word ``GeomOpt``; grepping will print the
 following:
 
@@ -53,44 +53,52 @@ following flags are essential:
 
 ::
 
-   AtomMove.TypeOfRun cg
+   AtomMove.TypeOfRun lbfgs
    AtomMove.MaxForceTol 5e-4
-   AtomMove.ReuseL T
+   AtomMove.ReuseDM T
 
-The first specifies a conjugate gradients relaxation, which is robust and
-relatively efficient in most instances. The second specifies the force
-convergence criterion, i.e. the calculation will terminate when the *maximum
-single component of force* is below this threshold (rather than, for example,
-the force residual). The third flag specifies that the K-matrix (for
-diagonalisation calculations) or L-matrix (for order(N) calculations) from the
+The parameter ``AtomMove.TypeOfRun`` can take the value ``lbfgs`` or
+``cg`` for iterative optimisation.  Both algorithms are robust and
+relatively efficient in most instances; L-BFGS is preferred. The
+parameter ``AtomMove.MaxForceTol`` specifies the force
+convergence criterion in Ha/bohr, i.e. the calculation will terminate
+when the largest force component on any atom is below this value.
+The parameter
+``AtomMove.ReuseDM``  specifies that the density matrix (the K-matrix for
+diagonalisation or L-matrix for O(N) calculations) from the
 previous step will be used as an initial guess for the SCF cycle after
 propagating the atoms; this should generally decrease the number of SCF cycles
 per ionic step.
 
-If the self-consistency tolerance is too low, the optimisation will fail to
+If the self-consistency tolerance is too low, the optimisation may fail to
 converge with respect to the force tolerance; this may necessitate a tighter
-``minE.SCTolerance`` for diagonalisation or ``minE.LTolerance`` for order(N).
+``minE.SCTolerance`` for diagonalisation (also possibly
+``minE.LTolerance`` for O(N) calculations).  A grid which is too
+coarse can also cause problems with structural relaxation to high tolerances.
 
 For problematic cases where the conjugate gradients algorithm fails to find a
 downhill search direction, it may be worth trying quenched molecular dyanamics,
-which is akin to a steepest descent algorithm.
+which propagates the equations of motion following a simple NVE
+approach, but resets the velocities to zero when the dot product of
+force and velocity is zero.
 
 ::
 
    AtomMove.TypeOfRun md
    AtomMove.QuenchedMD T
    AtomMove.MaxForceTol 5e-4
-   AtomMove.ReuseL T
+   AtomMove.ReuseDM T
 
-The FIRE algorithm is a variant of quenched MD that has been shown to outperform
-conjugate gradients, and can be switched on using,
+The FIRE algorithm :cite:`sr-Bitzek2006` is a variant of quenched MD
+that has been shown to outperform conjugate gradients in some
+circumstances. 
 
 ::
 
    AtomMove.TypeOfRun md
    AtomMove.FIRE T
    AtomMove.MaxForceTol 5e-4
-   AtomMove.ReuseL T
+   AtomMove.ReuseDM T
 
 Go to :ref:`top <strucrelax>`.
 
@@ -155,3 +163,10 @@ may help in particularly problematic cases.
 
 Go to :ref:`top <strucrelax>`.
 
+.. bibliography:: references.bib
+    :cited:
+    :labelprefix: SR
+    :keyprefix: sr-
+    :style: unsrt
+
+Go to :ref:`top <strucrelax>`.
