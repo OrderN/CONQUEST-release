@@ -194,7 +194,7 @@ contains
              if(iprint_ops>2) then
                 if(vmajor>2) then
                    write(io_lun,'("The functional ", a, " is ", a, ", it belongs to the ", a, &
-                        " family and is defined in the reference(s):")') &
+                   &     " family and is defined in the reference(s):")') &
                         trim(name), trim(kind), trim(family)
                    j = 0
                    call xc_f90_info_refs(xc_info(i), j, ref)
@@ -204,7 +204,7 @@ contains
                    end do
                 else
                    write(io_lun,'("The functional ", a, " is ", a, ", and it belongs to the ", a, &
-                        " family")') &
+                   &     " family")') &
                         trim(name), trim(kind), trim(family)
                 end if
              else if(iprint_ops>0) then
