@@ -628,6 +628,8 @@ contains
   !!    Added semicore flag for each zeta
   !!   2018/11/02 16:30 nakata
   !!    Bug fix: set semicore when numprocs>1
+  !!   2020/01/22 16:59 dave
+  !!    Bug fix: change header to read Hamann code version line if present
   !!  SOURCE
   !!
   subroutine read_ion_ascii_tmp(ps_info,pao_info)
@@ -1039,8 +1041,9 @@ contains
             else if (leqi(trim_line(1:14),'<Conquest_pseu')) then
                read(unit,'(a)') line ! Check this for Hamann
                if(leqi(line(3:8),'Hamann')) pseudo_type = 3
-               read(unit,'(a)') line
-               read(unit,'(a)') line
+               if(leqi(line(3:10),'Hamann c')) read(unit,'(a)') line
+               read(unit,'(a)') line ! Core radii
+               read(unit,'(a)') line ! Valence shells
                read(unit,'(a26,i7)') line, xc_func
             endif
          end do
