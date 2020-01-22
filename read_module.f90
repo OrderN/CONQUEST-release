@@ -130,7 +130,7 @@ contains
        !
        ! Polarisation
        !
-       paos%flag_perturb_polarise = fdf_boolean("Atom.Perturbative_Polarised",.false.)
+       paos%flag_perturb_polarise = fdf_boolean("Atom.Perturbative_Polarised",.true.)
        if(paos%flag_perturb_polarise) then
           ! This is for compatibility but should be false
           flag_use_Vl = fdf_boolean('Atom.UseVl',flag_gen_use_Vl)
@@ -216,10 +216,9 @@ contains
           basis_size = minimal
        else if(leqi(input_string(1:5),'small')) then
           basis_size = small
-       else if(leqi(input_string,'medium')) then
+       else if(leqi(input_string,'medium').OR.leqi(input_string(1:4),'none')) then ! Default
           basis_size = medium
-       else if(leqi(input_string(1:4),'full').OR.leqi(input_string(1:4),'none').OR.&
-            leqi(input_string(1:5),'large')) then ! Default
+       else if(leqi(input_string(1:4),'full').OR.leqi(input_string(1:5),'large')) then
           basis_size = full
        else
           call cq_abort("Error ! Unknown Atom.BasisSize specification: "//input_string(1:7))
