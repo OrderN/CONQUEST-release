@@ -433,7 +433,7 @@ contains
     ! Construct list of grid-points in each domain (i.e. grid-points belonging
     ! to each node). In present version, grid-points are organised into
     ! blocks, with each node responsible for a cluster of blocks.
-    call set_domains(inode)
+    call set_domains
     allocate(density(maxngrid,nspin), potential(maxngrid,nspin), STAT=stat)
     if (stat /= 0) &
          call cq_abort("Error allocating density and potential: ", &
@@ -478,7 +478,7 @@ contains
     call make_cs(inode-1, rcut_BCS, BCS_parts, parts, bundle, &
                  ni_in_cell, x_atom_cell, y_atom_cell, z_atom_cell)
     call my_barrier
-    call make_iprim(BCS_parts, bundle, inode-1)
+    call make_iprim(BCS_parts, bundle)
     call send_ncover(BCS_parts, inode)
     call my_barrier
     if (inode == ionode .and. iprint_init > 1) &
@@ -1537,8 +1537,7 @@ contains
     use construct_module,       only: init_primary, init_cover
     use primary_module,         only: domain, bundle, make_prim
     use cover_module,           only: DCS_parts, BCS_blocks, make_cs, &
-                                      make_iprim, send_ncover,        &
-                                      BCS_parts
+                                      send_ncover, BCS_parts
     use set_blipgrid_module,    only: set_blipgrid
     use set_bucket_module,      only: set_bucket
     use GenComms,               only: my_barrier
@@ -1581,8 +1580,6 @@ contains
     call make_cs(myid,rcut_max, BCS_blocks, blocks, bundle)
     !if(iprint_index > 4) write(io_lun,*) 'Node ',myid+1,' Done make_BCSblocks'
 
-    !call make_iprim(DCS_parts,bundle,myid) !primary number for members
-    !  write(io_lun,*) 'Node ',myid+1,' Done make_iprim'
     call my_barrier
 
     call send_ncover(DCS_parts, myid + 1)
@@ -1618,7 +1615,7 @@ contains
     use group_module,   only: blocks, parts
     use primary_module, only: domain, bundle, make_prim
     use cover_module,   only: DCS_parts, BCS_blocks, make_cs, &
-                              make_iprim, send_ncover, BCS_parts
+                              send_ncover, BCS_parts
 
     implicit none
 

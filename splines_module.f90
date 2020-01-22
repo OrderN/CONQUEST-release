@@ -30,9 +30,6 @@ module splines
 
   implicit none
 
-  ! RCS tag for object file identification 
-  character(len=80), save, private :: RCSid = "$Id$"
-
 contains
   
 ! -----------------------------------------------------------
@@ -86,7 +83,7 @@ contains
     real(double), dimension(n) :: y, d2y
 
     ! Local variables
-    integer :: i, k, stat, info
+    integer :: i, stat, info
     real(double), dimension(:), allocatable :: b, d, du
     external :: dptsv
 
@@ -175,7 +172,7 @@ contains
     real(double), dimension(n) :: x, y, d2y
 
     ! Local variables
-    integer :: i, k, stat, info
+    integer :: i, stat, info
     real(double), dimension(:), allocatable :: b, d, du, dl
     external :: dgtsv
 

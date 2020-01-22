@@ -1,4 +1,4 @@
-! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
+! -*- mode: F90; mode: font-lock; column-number-mode: true -*-
 ! ------------------------------------------------------------------------------
 ! $Id$
 ! ------------------------------------------------------------------------------
@@ -108,10 +108,6 @@ module io_module
   !  flag_MatrixFile_BinaryFormat_Dump_END.  
   !   (during the job, we need to keep the format of the file, prepared in the last job.)
   logical          :: flag_MatrixFile_BinaryFormat_Dump_END ! set from Conquest_input
-
-  ! RCS tag for object file identification 
-  character(len=80), save, private :: &
-       RCSid = "$Id$"
 
 !!***
 
@@ -1102,7 +1098,8 @@ second:   do
     use basic_types, only: group_set
     use construct_module, only: init_group
     use group_module,  only: make_cc2
-    use block_module, only : in_block_x, in_block_y, in_block_z, n_pts_in_block, set_block_module
+    use block_module, only : in_block_x, in_block_y, in_block_z, n_pts_in_block, &
+         nx_in_block, ny_in_block, nz_in_block
     use dimens, only: n_grid_x, n_grid_y, n_grid_z
     use GenComms, only: inode, ionode
     use input_module, only: fdf_string
@@ -1130,7 +1127,9 @@ second:   do
     blocks%ngcellx=n_block_x
     blocks%ngcelly=n_block_y
     blocks%ngcellz=n_block_z
-    call set_block_module
+    nx_in_block=in_block_x
+    ny_in_block=in_block_y
+    nz_in_block=in_block_z
     if(inode==ionode) then
        call io_assign(lun)
        def = 'make_blk.dat'

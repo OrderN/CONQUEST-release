@@ -1,4 +1,4 @@
-# -*- mode: makefile; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
+# -*- mode: makefile; mode: font-lock; column-number-mode: true -*-
 #
 # $Id: Makefile,v 1.9.2.1 2006/03/07 07:36:40 drb Exp $
 #
@@ -40,17 +40,17 @@ include pseudo_tm.obj
 include exx.obj 
 
 #List of all object files
-NODE_OBJECTS = main.o datatypes.module.o numbers.module.o datestamp.o                   \
+NODE_OBJECTS = main.o datatypes_module.o numbers_module.o datestamp.o                   \
                $(MATRIX_OBJS) $(COMM_OBJS) $(ODD_OBJS) $(OVERLAP_OBJS) $(ENERGY_OBJS)   \
                $(IONICS_OBJS) $(FORCES_OBJS) $(SETGRID_NEW_OBJS) $(PAO2BLIP_OBJS)       \
                $(PS_TM_OBJS)  $(EXX_OBJS)
-SRCS = $(NODE_OBJECTS:.o=.f90) basic_types.f90 datatypes.module.f90 matrix_data_module.f90 numbers.module.f90 
+SRCS = $(NODE_OBJECTS:.o=.f90) basic_types.f90 datatypes_module.f90 matrix_data_module.f90 numbers_module.f90 
 # List without datestamp (for dependencies)
-NODE_OBJECTS_NODS = main.o datatypes.module.o numbers.module.o                               \
+NODE_OBJECTS_NODS = main.o datatypes_module.o numbers_module.o                               \
                $(MATRIX_OBJS) $(COMM_OBJS) $(ODD_OBJS) $(OVERLAP_OBJS) $(ENERGY_OBJS)   \
                $(IONICS_OBJS) $(FORCES_OBJS) $(SETGRID_NEW_OBJS) $(PAO2BLIP_OBJS)       \
                $(PS_TM_OBJS)  $(EXX_OBJS)
-SRCS_NODS = $(NODE_OBJECTS_NODS:.o=.f90) basic_types.f90 datatypes.module.f90 matrix_data_module.f90 numbers.module.f90 
+SRCS_NODS = $(NODE_OBJECTS_NODS:.o=.f90) basic_types.f90 datatypes_module.f90 matrix_data_module.f90 numbers_module.f90 
 
 #Dependency rule
 deps.obj.inc: $(SRCS_NODS) system.make

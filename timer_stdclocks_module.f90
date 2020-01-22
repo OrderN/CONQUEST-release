@@ -1,4 +1,4 @@
-! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
+! -*- mode: F90; mode: font-lock; column-number-mode: true -*-
 ! ------------------------------------------------------------------------------
 ! $Id:$
 ! ------------------------------------------------------------------------------
@@ -35,9 +35,6 @@ module timer_stdclocks_module
   use timer_module
 
   implicit none
-
-  ! RCS tag for object file identification
-  character(len=80), save, private :: RCSid = "$Id:$"
 
   type(cq_timer),save :: tmr_std_initialisation   ! Code area: 1
   type(cq_timer),save :: tmr_std_matrices         ! Code area: 2

@@ -44,9 +44,6 @@ module timer_module
 
   implicit none
 
-  ! RCS tag for object file identification
-  character(len=80), save, private :: RCSid = "$Id:$"
-
   ! Parameters
   logical, parameter :: TIME_ACCUMULATE_YES = .true.
   logical, parameter :: TIME_ACCUMULATE_NO  = .false.
@@ -492,7 +489,7 @@ contains
 !!
 !!  SOURCE
 !!
-  subroutine initialise_backtrace(t,name,area,state,echo)
+  subroutine initialise_backtrace(t,name,area,state)
 
     implicit none
 
@@ -501,12 +498,11 @@ contains
     character(len=*),  optional :: name 
     integer,           optional :: area
     integer,           optional :: state
-    integer,           optional :: echo
 
     ! Local variables
     character(len=1 ), parameter:: symb = '*'
     character(len=48)           :: string
-    integer                     :: tmp, i
+    integer                     :: tmp
 
     t%first_use = .false.
     t%have_ini  = .false.
@@ -596,7 +592,7 @@ contains
     logical,          optional :: echo  ! print in std
 
     ! Local variables
-    integer                    :: i, j, k
+    integer                    :: i
    
     if( .not. BackTraceOn) return
 
@@ -637,9 +633,8 @@ contains
 
     return
 
-1   format( '[Area:',i2,']',x,'Backtrace  INIT:',x,a48,x,'[',12a,']' )
-2   format( '[Area:',i2,']',x,'Backtrace  STAR:',x,a48,x,'[',12a,']' )
-3   format( '[Area:',i2,']',x,'Backtrace  WARN:',x,a48,x,'[',12a,']' )
+2   format( '[Area:',i2,']',1x,'Backtrace  STAR:',1x,a48,1x,'[',12a,']' )
+3   format( '[Area:',i2,']',1x,'Backtrace  WARN:',1x,a48,1x,'[',12a,']' )
 
 
   end subroutine start_backtrace
@@ -729,13 +724,10 @@ contains
     
     return
     
-1   format( /'[Area:',i2,']',x,'time = ',x,f8.3,x,'s'/ &
-                          9x,x,'Backtrace  STOP:',x,a48,x,'[',12a,']' )
-2   format( /'[Area:',i2,']',x,'time = ',x,f8.3,x,'s'/ &
-                          9x,x,'Backtrace  WARN:',x,a48,x,'[',12a,']' )
-3   format( /'[Area:',i2,']',x,'time = ',x,f8.3,x,'s'/ &
-                          9x,x,'Backtrace  STOP:',x,a48,x,'[',12a,']' )
-
+1   format( /'[Area:',i2,']',1x,'time = ',1x,f8.3,1x,'s'/ &
+                          9x,1x,'Backtrace  STOP:',1x,a48,1x,'[',12a,']' )
+2   format( /'[Area:',i2,']',1x,'time = ',1x,f8.3,1x,'s'/ &
+                          9x,1x,'Backtrace  WARN:',1x,a48,1x,'[',12a,']' )
   end subroutine stop_backtrace
 !!****
 

@@ -1315,7 +1315,8 @@ contains
        grad_f_dot_p = grad_f_dot_p - direction(3,i)*tot_force(3,j)
     end do
     if(inode==ionode.AND.iprint_MD>1) &
-         write(io_lun, fmt='(2x,"Starting backtrack_linemin, grad_f.p is ",f16.6)') grad_f_dot_p
+         write(io_lun, fmt='(2x,"Starting backtrack_linemin, magnitude of grad_f.p is ",e16.6)') &
+         sqrt(-grad_f_dot_p/ni_in_cell)
     done = .false.
     do while (.not. done)
        iter = iter+1
@@ -2868,7 +2869,7 @@ contains
        call distribute_atoms(inode, ionode)
        call make_cs(inode-1, rcut(max_range), BCS_parts, parts, bundle, &
             ni_in_cell, x_atom_cell, y_atom_cell, z_atom_cell)
-       call make_iprim(BCS_parts, bundle, inode-1)
+       call make_iprim(BCS_parts, bundle)
        call send_ncover(BCS_parts, inode)
        call my_barrier
        ! Reallocate and find new indices

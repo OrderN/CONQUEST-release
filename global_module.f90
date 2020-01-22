@@ -161,10 +161,6 @@ module global_module
 
   implicit none
 
-  ! RCS tag for object file identification 
-  character(len=80), save, private :: &
-       RCSid = "$Id$"
-
   integer :: iprint                 ! Level of output
   integer :: io_lun                 ! Output unit
   integer, allocatable, dimension(:) :: id_glob      ! global label of atom in sim cell (CC)

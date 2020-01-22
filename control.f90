@@ -1959,12 +1959,6 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
     energy1 = energy0
     cg_new = -tot_force ! The L-BFGS is in terms of grad E
     do while (.not. done)
-       test_dot = dot(length, cg_new, 1, tot_force, 1)
-       if(test_dot>zero) then
-          iter = 0
-          if(inode==ionode.AND.iprint_MD>1) write(io_lun,fmt='(2x,"Resetting history")')
-          cg_new = -tot_force
-       end if
        if (inode==ionode) then
           write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," E: "e16.8," dE: ",f12.8)') & 
                iter, max, energy1, en_conv*dE
@@ -1977,6 +1971,8 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
              write(io_lun,'(4x,"Force tolerance:    ",f20.10)') MDcgtol
              write(io_lun,'(4x,"Energy change:      ",f20.10," ",a2)') &
                   en_conv*dE, en_units(energy_units)
+             g0 = dot(length,cg_new,1,cg_new,1)
+             write(io_lun,'(4x,"Search direction has magnitude ",f20.10)') sqrt(g0/ni_in_cell)
           end if
        end if
        ! Book-keeping
@@ -1996,7 +1992,7 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
        end do
        ! Set up limits for sums
        if(iter>LBFGS_history) then
-          iter_low = iter-LBFGS_history
+          iter_low = iter-LBFGS_history+1
        else
           iter_low = 1
        end if
@@ -2021,8 +2017,8 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
                - nint(posnStore(3,jj,npmod)/r_super_z)*r_super_z
           forceStore(:,jj,npmod) = -tot_force(:,jj) - forceStore(:,jj,npmod)
           ! New search direction
-          cg_new = -tot_force ! The L-BFGS is in terms of grad E
        end do
+       cg_new = -tot_force ! The L-BFGS is in terms of grad E
        ! Build q
        do i=iter, iter_low, -1
           ! Indexing
@@ -2041,8 +2037,27 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
           if(this_iter==0) this_iter = LBFGS_history
           ! Build
           beta(this_iter) = rho(this_iter)*dot(length,forceStore(:,:,this_iter),1,cg_new,1)
+          if(inode==ionode.AND.iprint_MD>2) &
+               write(io_lun,fmt='(4x,"L-BFGS iter ",i2," rho, alpha, beta: ",3e15.7)') &
+               this_iter, rho(this_iter), alpha(this_iter), beta(this_iter)
           cg_new = cg_new + (alpha(this_iter) - beta(this_iter))*posnStore(:,:,this_iter)
        end do
+       gg = dot(length, tot_force, 1, cg_new, 1)
+       if(gg>zero) then
+          if(inode==ionode.AND.iprint_MD>1) then
+             write(io_lun,fmt='(4x,"L-BFGS Search direction uphill; resetting to force")')
+             write(io_lun,fmt='(4x,"Force residual and force.dir: ",2e15.7)') sqrt(g0/ni_in_cell), &
+                  sqrt(gg/ni_in_cell)
+          end if
+          cg_new = -tot_force
+       else if(abs(gg/g0)>ten) then
+          if(inode==ionode.AND.iprint_MD>1) then
+             write(io_lun,fmt='(4x,"L-BFGS Search direction anomalous; resetting to force")')
+             write(io_lun,fmt='(4x,"Force residual and force.dir: ",2e15.7)') sqrt(g0/ni_in_cell), &
+                  sqrt(gg/ni_in_cell)
+          end if
+          cg_new = -tot_force
+       end if
        ! Analyse forces
        g0 = dot(length, tot_force, 1, tot_force, 1)
        max = zero

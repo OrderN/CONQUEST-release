@@ -53,9 +53,6 @@ module dimens
   implicit none
   save
 
-  ! RCS tag for object file identification 
-  character(len=80), private :: RCSid = "$Id$"
-
   real(double) :: r_super_x, r_super_y, r_super_z, volume
   real(double) :: r_super_x_squared, r_super_y_squared, r_super_z_squared
   real(double) :: r_s, r_h, r_c, r_nl, r_core_squared, r_dft_d2, r_exx
@@ -172,10 +169,8 @@ contains
     use numbers
     use matrix_data
     use GenComms,      only: cq_abort, cq_warn
-    use global_module, only: iprint_init,flag_basis_set,blips,runtype, atomf, sf, flag_Multisite
-    use global_module, only: flag_dft_d2, flag_exx, flag_diagonalisation
-    use block_module,  only: in_block_x, in_block_y, in_block_z, & 
-                             n_pts_in_block, n_blocks
+    use global_module, only: iprint_init,runtype, atomf, sf, flag_Multisite, flag_exx, flag_diagonalisation
+    use block_module,  only: in_block_x, in_block_y, in_block_z, n_pts_in_block, n_blocks
     use pseudopotential_common, only: pseudo_type, OLDPS, SIESTA, ABINIT, flag_neutral_atom_projector
 
     implicit none
@@ -368,11 +363,11 @@ contains
        rcut(SFcoeff_range)   = r_MS
        rcut(SFcoeffTr_range) = r_MS
        rcut(LD_range)        = r_LD
-       if (r_MS.eq.zero) then
+       if (abs(r_MS)<very_small) then
           rcut(SFcoeff_range)   = 0.001_double
           rcut(SFcoeffTr_range) = 0.001_double
        endif
-       if (r_LD.eq.zero) rcut(LD_range) = 0.001_double
+       if (abs(r_LD)<very_small) rcut(LD_range) = 0.001_double
     endif
     if(flag_neutral_atom_projector) then
        rcut(aNArange)   = r_s_atomf + r_h_atomf
@@ -441,7 +436,6 @@ contains
     use numbers,        only: pi, very_small,two, half
     use global_module,  only: iprint_init, flag_basis_set, blips
     use GenComms,       only: inode,ionode,cq_abort, cq_warn
-    use species_module, only: n_species
     
     implicit none
     

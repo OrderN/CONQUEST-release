@@ -1,4 +1,4 @@
-! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
+! -*- mode: F90; mode: font-lock; column-number-mode: true -*-
 ! ------------------------------------------------------------------------------
 ! $Id$
 ! ------------------------------------------------------------------------------
@@ -84,12 +84,6 @@ module cover_module
   type(cover_set) :: BCS_parts
   type(cover_set) :: ion_ion_CS
   type(cover_set) :: D2_CS ! for DFT-D2
-
-  ! -------------------------------------------------------
-  ! RCS ident string for object file id
-  ! -------------------------------------------------------
-  character(len=80), private :: &
-       RCSid = "$Id$"
 
 !!***
 contains
@@ -181,8 +175,8 @@ contains
     integer :: ng_in_cell,nmodx,nmody,nmodz
     integer :: noccx,nremx,minx,ngcx,noccy,nremy,miny,ngcy,noccz,nremz
     integer :: minz,ngcz,ng_in_min,ind,nqx,nqy,nqz,ind_qart,ino,ind_cover
-    integer :: nrx,nry,nrz,nsx,nsy,nsz,ni,nnd,irc,ierr,stat,pr,i,j
-    integer :: ind_part,np, nm_in_cover
+    integer :: nrx,nry,nrz,nsx,nsy,nsz,ni,nnd,stat
+    integer :: nm_in_cover
     real(double) :: dcellx,dcelly,dcellz,xadd,yadd,zadd
     logical :: members
 
@@ -463,7 +457,7 @@ contains
 !!    Added timer
 !!  SOURCE
 !!
-  subroutine make_iprim(set,prim,nnd)
+  subroutine make_iprim(set,prim)
 
     use basic_types
     use GenComms, ONLY: cq_abort
@@ -475,10 +469,9 @@ contains
     ! Passed variables
     type(cover_set) :: set
     type(primary_set) :: prim
-    integer :: nnd
 
     ! Local variables
-    integer :: pr,i,nsx,nsy,nsz,ind_group,j,irc,ierr, stat
+    integer :: pr,nsx,nsy,nsz,ind_group,i,j,stat
 
     call start_timer(tmr_std_indexing)
     if(.NOT.ASSOCIATED(set%iprim_group)) then
@@ -549,9 +542,6 @@ contains
     type(cover_set) :: set
     integer :: nnd ! Node no. starting from one
 
-    ! Local variables
-    integer :: ierr,i,stat
-
     set%ncover_rem = 0
     set%ncover_rem(3*(nnd-1)+1) = set%ncoverx
     set%ncover_rem(3*(nnd-1)+2) = set%ncovery
@@ -589,6 +579,7 @@ contains
     use datatypes
     use global_module
     use basic_types
+    use numbers, ONLY: very_small
     use GenComms, ONLY: cq_abort
 
     implicit none
@@ -600,9 +591,6 @@ contains
     integer :: ncx_o,ncy_o,ncz_o                ! Origin for cover set
 
     ! Local variables
-    real(double), parameter :: eps = 0.00000001_double
-
-    integer :: irc,ierr  
     real(double) :: ro_x,ro_y,ro_z              ! Origin in reals
     real(double) :: ro_cx,ro_cy,ro_cz           ! CS origin in reals
     real(double) :: dx,dy,dz,dcx,dcy,dcz        ! Sizes of groups in reals
@@ -620,15 +608,16 @@ contains
     dcx = rcellx/real(groups%ngcellx,double)
     dcy = rcelly/real(groups%ngcelly,double)
     dcz = rcellz/real(groups%ngcellz,double)
-    ! Convert origin of prim to reals (add eps to prevent ambiguity)
-    ro_x = (real(prim%nx_origin-1,double))*dx + eps 
-    ro_y = (real(prim%ny_origin-1,double))*dy + eps
-    ro_z = (real(prim%nz_origin-1,double))*dz + eps
+    ! Convert origin of prim to reals (add very_small to prevent ambiguity)
+    ro_x = (real(prim%nx_origin-1,double))*dx + very_small 
+    ro_y = (real(prim%ny_origin-1,double))*dy + very_small
+    ro_z = (real(prim%nz_origin-1,double))*dz + very_small
     ! Convert this to number of CS groups
     ro_cx = ro_x/dcx
     ro_cy = ro_y/dcy
     ro_cz = ro_z/dcz
     ! Round and offset (partition 1,1,1 has LH corner at 0.0,0.0,0.0)
+    ! Accept implicit type conversion
     ncx_o = 1+anint(ro_cx)  
     ncy_o = 1+anint(ro_cy)
     ncz_o = 1+anint(ro_cz)
@@ -668,28 +657,28 @@ contains
     rhcz = dcz*(ncz_o-1-set%nspanlz+set%ncoverz)
     ! First check that the LH and RH corners are large enough
     ! LH
-    if(lhx+eps<lhcx) then
+    if(lhx+very_small<lhcx) then
        write(io_lun,*) 'CS too small; adjusting nspanlx',lhx,lhcx
        set%nspanlx = set%nspanlx+ceiling((lhcx-lhx)/dcx)
     endif
-    if(lhy+eps<lhcy) then
+    if(lhy+very_small<lhcy) then
        write(io_lun,*) 'CS too small; adjusting nspanly',lhy,lhcy
        set%nspanly = set%nspanly+ceiling((lhcy-lhy)/dcy)
     endif
-    if(lhz+eps<lhcz) then
+    if(lhz+very_small<lhcz) then
        write(io_lun,*) 'CS too small; adjusting nspanlz',lhz,lhcz
        set%nspanlz = set%nspanlz+ceiling((lhcz-lhz)/dcz)
     endif
     ! RH
-    if(rhx>rhcx+eps) then
+    if(rhx>rhcx+very_small) then
        write(io_lun,*) 'CS too small; adjusting ncoverx',rhx,rhcx
        set%ncoverx = set%ncoverx+ceiling((rhx-rhcx)/dcx)
     endif
-    if(rhy>rhcy+eps) then
+    if(rhy>rhcy+very_small) then
        write(io_lun,*) 'CS too small; adjusting ncovery',rhy,rhcy
        set%ncovery = set%ncovery+ceiling((rhy-rhcy)/dcy)
     endif
-    if(rhz>rhcz+eps) then
+    if(rhz>rhcz+very_small) then
        write(io_lun,*) 'CS too small; adjusting ncoverz',rhz,rhcz
        set%ncoverz = set%ncoverz+ceiling((rhz-rhcz)/dcz)
     endif
@@ -764,7 +753,7 @@ contains
     logical :: members
 
     ! Local variables
-    integer :: stat,irc,ierr
+    integer :: stat
 
     call start_timer(tmr_std_allocation)
     allocate(set%lab_cell(set%mx_gcover),STAT=stat)
@@ -864,7 +853,7 @@ contains
     logical :: members
 
     ! Local variables
-    integer :: stat,irc,ierr
+    integer :: stat
 
     stat = 0
     call start_timer(tmr_std_allocation)

@@ -50,6 +50,8 @@
 !!    Changed for output to file not stdout
 !!   2019/12/05 08:17 dave
 !!    Added warning output
+!!   2020/01/21 17:11 dave
+!!    Tidying and removing non-standard FORTRAN
 !!  SOURCE
 !!
 module GenComms
@@ -59,10 +61,6 @@ module GenComms
   use mpi
 
   implicit none
-
-  ! RCS tag for object file identification 
-  character(len=80), save, private :: &
-       RCSid = "$Id$"
 
   integer, save :: myid, root
   integer, save :: inode, ionode
@@ -526,8 +524,8 @@ contains
     endif
 
 1   format(2x,'Error in process ',i4)
-2   format(2x,a, l)
-3   format(2x,a,2l)
+2   format(2x,a, l2)
+3   format(2x,a,2l2)
 
     call flush(io_lun)
     call flush(warning_lun)
@@ -601,7 +599,6 @@ contains
 1   format(2x,'Error in process ',i4)
 2   format(2x,a,f20.12)
 3   format(2x,a,2f20.12)
-4   format(2x,a)
 
     call flush(io_lun)
     call flush(warning_lun)
@@ -644,7 +641,6 @@ contains
     character(len=*) :: sub_name,message
 
     ! Local variables
-    integer :: ierror
     
     if(inode==ionode) then
        write(io_lun,fmt='(2x,"WARNING: ",a)')  message
@@ -688,7 +684,6 @@ contains
     integer, optional :: int2
 
     ! Local variables
-    integer :: ierror
     
     if(inode==ionode) then
        if(present(int2)) then
@@ -737,7 +732,6 @@ contains
     real(double), optional :: real2
 
     ! Local variables
-    integer :: ierror
     
     if(inode==ionode) then
        if(present(real2)) then
@@ -1146,7 +1140,7 @@ contains
     integer :: ierr, stat, tmpsize, j, mod_dgsum_buf, mod_dgsum
 
     ! Make the buffersize an integer multiple of len1
-    mod_dgsum = aint(double_gsum_buf/real(len1,double)) ! Round down
+    mod_dgsum = floor(double_gsum_buf/real(len1,double)) ! Round down
     ! mod_dgsum must be at least equal to 1
     if (mod_dgsum == 0) mod_dgsum = 1
     !print*, 'mod_dgsum', mod_dgsum, 'double_gsum_buf', double_gsum_buf, 'real(len1,double)', real(len1,double)
@@ -1222,35 +1216,16 @@ contains
 
     ! Local variables
     real(double), allocatable, dimension(:,:,:) :: temp
-    integer :: ierr, stat, tmpsize, j, mod_dgsum_buf, mod_dgsum
+    integer :: ierr, stat
 
-    allocate(temp(len1,len2,len3))
+    allocate(temp(len1,len2,len3),STAT=stat)
+    if(stat/=0) call cq_abort('double_gsumv: error allocating temp')
     t1 = MPI_wtime()
     call dcopy(len1*len2*len3,variable,1,temp,1)
     call MPI_allreduce(temp,variable,len1*len2*len3,&
          MPI_Double_precision, MPI_Sum,MPI_COMM_WORLD,ierr)
     if(ierr/=MPI_Success) &
          call cq_abort('double_gsumv: Problem with allreduce')
-!    ! Make the buffersize an integer multiple of len1
-!    mod_dgsum = aint(double_gsum_buf/real(len1,double)) ! Round down
-!    mod_dgsum_buf = mod_dgsum*len1
-!    t1 = MPI_wtime()
-!    if(len1<=0.OR.len2<=0) &
-!         call cq_abort('double_gsumv: length of vector passed as zero')
-!    ! Establish size of temporary variable and allocate
-!    tmpsize = min(len2,mod_dgsum)
-!    allocate(temp(len1,tmpsize),STAT=stat)
-!    if(stat/=0) call cq_abort('double_gsumv: error allocating temp')
-!    ! Loop over chunks of len2
-!    do j=1,len2,mod_dgsum
-!       if(j+mod_dgsum-1>len2) tmpsize = len2-j+1 ! Catch last bit
-!       ! Copy data into temp
-!       call dcopy(len1*tmpsize,variable(1:len1,j:j+tmpsize-1),1,temp,1)
-!       call MPI_allreduce(temp,variable(1,j),len1*tmpsize,&
-!            MPI_Double_precision, MPI_Sum,MPI_COMM_WORLD,ierr)
-!       if(ierr/=MPI_Success) &
-!            call cq_abort('double_gsumv: Problem with allreduce')
-!    enddo
     ! Tidy up
     deallocate(temp,STAT=stat)
     if(stat/=0) call cq_abort('double_gsumv: error deallocating temp')
@@ -1305,9 +1280,10 @@ contains
 
     ! Local variables
     real(double), allocatable, dimension(:,:,:,:) :: temp
-    integer :: ierr, stat, tmpsize, j, mod_dgsum_buf, mod_dgsum
+    integer :: ierr, stat
 
-    allocate(temp(len1,len2,len3,len4))
+    allocate(temp(len1,len2,len3,len4),STAT=stat)
+    if(stat/=0) call cq_abort('double_four_gsumv: error allocating temp')
     t1 = MPI_wtime()
     call dcopy(len1*len2*len3*len4,variable,1,temp,1)
     call MPI_allreduce(temp,variable,len1*len2*len3*len4,&
