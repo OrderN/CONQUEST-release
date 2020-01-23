@@ -1771,7 +1771,7 @@ contains
        UseGemm = .false.
     endif
 
-    flag_check_DFT     = fdf_boolean('General.CheckDFT',.false.)
+    flag_check_DFT     = fdf_boolean('General.CheckDFT',.true.)
     flag_quench_MD     = fdf_boolean('AtomMove.QuenchMD',.false.)
     flag_fire_qMD = fdf_boolean('AtomMove.FIRE',.false.)
     ! If we're doing MD, then the centre of mass should generally be fixed,
