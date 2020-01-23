@@ -13,11 +13,12 @@ Input files
 
 Conquest_input
 ++++++++++++++
-All input parameters are specified in the ``Conquest_input`` file,
+All necessary input parameters should be specified in the ``Conquest_input`` file,
 including the names of the coordinate file and the ion files.  This
 file controls the run; there are many sensible default values for
 input parameters, but you should ensure that you understand what
-they mean.
+they mean.  After a run, the full set of relevant input parameters
+(whether specified by the user, or default, are available in the file ``input.log``).
 
 The most common input tags are listed briefly here.
 Full documentation can be found in :ref:`input_tags`.
@@ -162,13 +163,23 @@ the key output flag is given.  Further output flags are described in :ref:`input
   * Band-resolved charge density (``IO.outputWF``)
   * Density of states (``IO.writeDOS``)
   * Atom-projected density of states (``IO.write_proj_DOS``)
-  * Atomic charges, using the Becke approach (``IO.AtomChargeOutput``)
+  * Atomic charges, using the Mulliken approach (``IO.AtomChargeOutput``)
 
 The Kohn-Sham eigenvalues are output in the ``Conquest_out`` file.
 The charge densities need post-processing to convert from the
 standard output format to a file compatible with visualisation
 (current supported formats include Gaussian CUBE file and OpenDX
 files).
+
+Note that Becke charges can be calculated if the following parameters
+are set:
+
+::
+   SC.BeckeWeights T
+   SC.BeckeAtomicRadii T
+   IO.Iprint_SC 3
+
+This method of output will be refined soon.
 
 Go to :ref:`top <input-output>`
 
