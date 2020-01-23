@@ -212,7 +212,9 @@ contains
     blocks%ngcelly=n_block_y
     blocks%ngcellz=n_block_z
     !-- set variables in block_module
-    call set_block_module
+    nx_in_block=in_block_x
+    ny_in_block=in_block_y
+    nz_in_block=in_block_z
     mx_gedge_tmp=max(n_block_x,n_block_y,n_block_z)
     if(flag_assign_blocks==blocks_raster) then
        !--- distribution of blocks over nodes:

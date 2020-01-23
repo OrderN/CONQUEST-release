@@ -41,10 +41,6 @@ module initialisation
   ! Area identification
   integer, parameter, private :: area = 1
 
-  ! RCS tag for object file identification
-  character(len=80), save, private :: &
-       RCSid = "$Id$"
-
 !!***
 
 contains
@@ -144,7 +140,6 @@ contains
 
     ! Passed variables
     logical           :: vary_mu, find_chdens, fixed_potential
-    character(len=40) :: output_file
     real(double)      :: mu
     real(double)      :: total_energy
 
@@ -196,7 +191,7 @@ contains
     
     call my_barrier()
 
-    call initial_phis(read_phi, start, fixed_potential, std_level_loc+1)
+    call initial_phis(start, std_level_loc+1)
 
     ! ewald/screened_ion force and stress is computed in initial_H, so we
     ! need to allocate the atomic_stress array here - zamaan
@@ -325,19 +320,17 @@ contains
                                       flag_Becke_weights,              &
                                       flag_pcc_global, flag_dft_d2,    &
                                       iprint_gen, flag_perform_cDFT,   &
-                                      nspin, runtype,                  &
+                                      nspin,                  &
                                       glob2node, flag_XLBOMD,          &
                                       flag_neutral_atom, flag_diagonalisation
     use memory_module,          only: reg_alloc_mem, reg_dealloc_mem,  &
                                       type_dbl, type_int
     use group_module,           only: parts
-    use primary_module,         only: bundle
     use cover_module,           only: BCS_parts, make_cs, make_iprim,  &
                                       send_ncover, D2_CS
     use mult_module,            only: immi
     use construct_module
-    use matrix_data,            only: rcut, Lrange, Srange,            &
-                                      mx_matrices, max_range
+    use matrix_data,            only: rcut, max_range
     use ion_electrostatic,      only: set_ewald, setup_screened_ion_interaction
     use atoms,                  only: distribute_atoms
     use dimens,                 only: n_grid_x, n_grid_y, n_grid_z,    &
@@ -350,7 +343,7 @@ contains
     ! Troullier-Martin pseudos    15/11/2002 TM
     use pseudo_tm_module,       only: init_pseudo_tm
     use pseudopotential_common, only: pseudo_type, OLDPS, SIESTA,      &
-                                      STATE, ABINIT, core_correction,  &
+                                      ABINIT, core_correction,  &
                                       pseudopotential
     ! Troullier-Martin pseudos    15/11/2002 TM
     use density_module,         only: set_atomic_density, density,            &
@@ -359,21 +352,19 @@ contains
                                       build_Becke_charges,             &
                                       set_density_pcc, density_pcc,    &
                                       density_atom
-    use block_module,           only: nx_in_block,ny_in_block,         &
-                                      nz_in_block, n_pts_in_block,     &
+    use block_module,           only: n_pts_in_block,     &
                                       set_blocks_from_new,             &
                                       set_blocks_from_old,             &
                                       set_domains, n_blocks
     use grid_index,             only: grid_point_x, grid_point_y,      &
                                       grid_point_z, grid_point_block,  &
                                       grid_point_position
-    use primary_module,         only: domain
+    use primary_module,         only: bundle
     use group_module,           only: blocks
     use io_module,              only: read_blocks
     use functions_on_grid,      only: associate_fn_on_grid
     use potential_module,       only: potential
     use maxima_module,          only: maxngrid, lmax_ps, lmax_pao
-    use species_module,         only: n_species
     use angular_coeff_routines, only: set_fact, set_prefac, set_prefac_real
     use numbers,                only: zero
     use cDFT_module,            only: init_cdft
@@ -392,7 +383,7 @@ contains
     ! Local variables
     complex(double_cplx), allocatable, &
          dimension(:) :: chdenr
-    integer           :: i, stat, spec, lmax_tot
+    integer           :: stat, lmax_tot
     real(double)      :: rcut_BCS  !TM 26/Jun/2003
     type(cq_timer)    :: backtrace_timer
     integer           :: backtrace_level
@@ -744,14 +735,14 @@ contains
  !!    Removed unused find_chdens
  !!  SOURCE
  !!
- subroutine initial_phis(read_phi, start, fixed_potential, level)
+ subroutine initial_phis(start, level)
 
     use datatypes
     use blip,                        only: init_blip_flag, make_pre,   &
                                            set_blip_index, gauss2blip
     use blip_grid_transform_module,  only: blip_to_support_new
     use calc_matrix_elements_module, only: get_matrix_elements_new
-    use dimens,                      only: grid_point_volume, r_h
+    use dimens,                      only: r_h
     !use fdf,                        only : fdf_boolean
     use GenComms,                    only: cq_abort, my_barrier,       &
                                            gcopy, inode, ionode
@@ -788,7 +779,7 @@ contains
     implicit none
 
     ! Passed variables
-    logical           :: read_phi, start, fixed_potential
+    logical           :: start
     integer, optional :: level
 
     ! Local variables
@@ -1102,19 +1093,17 @@ contains
          matrix_scale, matSFcoeff, matSFcoeff_tran, matrix_transpose
     use SelfCon,             only: new_SC_potl
     use global_module,       only: iprint_init, flag_self_consistent, &
-         flag_basis_set, blips, PAOs,       &
          restart_DM,                      &
          restart_rho, flag_test_forces,     &
          flag_dft_d2, nspin, spin_factor,   &
          flag_MDcontinue,                   &
          restart_T,glob2node,               &
          MDinit_step,ni_in_cell,            &
-         flag_XLBOMD, flag_dissipation,     &
+         flag_dissipation,     &
          flag_propagateX, flag_propagateL, restart_X, &
-         flag_exx, exx_scf, flag_out_wf, wf_self_con, &
+         flag_out_wf, wf_self_con, &
          flag_write_DOS, flag_neutral_atom, &
          atomf, sf, flag_LFD, nspin_SF, flag_diagonalisation, &
-         atom_coord, atom_coord_diff, rcellx, rcelly, rcellz, &
          ne_in_cell
     use ion_electrostatic,   only: ewald, screened_ion_interaction
     use S_matrix_module,     only: get_S_matrix
@@ -1153,9 +1142,9 @@ contains
     ! Local variables
     type(cq_timer) :: backtrace_timer
     integer        :: backtrace_level
-    logical        :: reset_L, record, rebuild_KE_NL, build_X ! charge, store
-    integer        :: force_to_test, stat, nfile, symm
-    real(double)   :: electrons_tot, bandE
+    logical        :: reset_L, record, rebuild_KE_NL
+    integer        :: nfile, symm
+    real(double)   :: electrons_tot
     real(double), dimension(nspin) :: electrons, energy_tmp
     integer        :: spin_SF
     !H_trans is not prepared. If we need to symmetrise K, we need H_trans
@@ -1485,9 +1474,6 @@ contains
 
     return
 
-5   format(2x,'Energy as 2Tr[K.H]: ',f18.11,' eV')
-6   format(2x,'2Tr[S.G]: ',f18.11,' eV')
-
   end subroutine initial_H
   !!***
 
@@ -1529,15 +1515,14 @@ contains
     use numbers,                only: very_small
     use global_module,          only: x_atom_cell,y_atom_cell,        &
                                       z_atom_cell, ni_in_cell,        &
-                                      iprint_index,                   &
-                                      atomf, sf
+                                      iprint_index
     use block_module,           only: n_pts_in_block
     use maxima_module,          only: maxblocks
     use group_module,           only: blocks, parts
     use construct_module,       only: init_primary, init_cover
     use primary_module,         only: domain, bundle, make_prim
     use cover_module,           only: DCS_parts, BCS_blocks, make_cs, &
-                                      send_ncover, BCS_parts
+                                      send_ncover
     use set_blipgrid_module,    only: set_blipgrid
     use set_bucket_module,      only: set_bucket
     use GenComms,               only: my_barrier
@@ -1623,7 +1608,6 @@ contains
     real(double) :: xx, yy, zz, dcellx, dcelly, dcellz
     integer      :: nnx, nny, nnz
     integer      :: no_of_naba_atom, ip
-    integer      :: ierror = 0
 
     !FOR DEBUGGING
     if(iprint_index > 6) then
