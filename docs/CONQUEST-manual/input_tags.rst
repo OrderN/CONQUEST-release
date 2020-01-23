@@ -706,7 +706,7 @@ Diag.ProcCols (*integer*)
 Moving Atoms
 ------------
 AtomMove.TypeOfRun (*string*)
-    values: static/cg/md
+    values: static/cg/lbfgs/md
 
     Options:
 
@@ -719,6 +719,16 @@ AtomMove.TypeOfRun (*string*)
     md — Velocity Verlet algorithm
 
     *default*: static
+
+AtomMove.QuenchMD (*boolean*)
+    Selects Quenched MD for structure relaxation (with ``AtomMove.TypeOfRun md``)
+
+    *default*: F 
+
+AtomMove.FIRE (*boolean*)
+    Selects FIRE method for structure relaxation (with ``AtomMove.TypeOfRun md``)
+
+    *default*: F 
 
 AtomMove.NumSteps (*integer*)
     Maximum number of steps for a structure optimisation or molecular dynamics run
@@ -741,22 +751,14 @@ AtomMove.IonTemperature (*real*)
 
     *default*: 300 K for MD, 0 for Quench MD or FIRE
 
-AtomMove.QuenchMD (*boolean*)
-    Selects Quenched MD for structure relaxation (with ``AtomMove.TypeOfRun md``)
-
-    *default*: F 
-
-AtomMove.FIRE (*boolean*)
-    Selects FIRE method for structure relaxation (with ``AtomMove.TypeOfRun md``)
-
-    *default*: F 
-
 AtomMove.ReadVelocity (*boolean*)
     Read velocity from file ``md.checkpoint`` (when ``AtomMove.RestartRun T``)
-                            ``velocity.dat``  (when ``AtomMove.RestartRun F``, very rare)
 
-    *default*: F (when ``AtomMove.RestartRun F``)
-               T (when ``AtomMove.RestartRun T``)
+                           or  ``velocity.dat``  (when ``AtomMove.RestartRun F``, very rare)
+
+    *default*: F (when ``AtomMove.RestartRun F``) 
+
+            or T (when ``AtomMove.RestartRun T``)
 
 AtomMove.AppendCoords (*boolean*)
     Chooses whether to append coordinates to ``UpdatedAtoms.dat`` during atomic
