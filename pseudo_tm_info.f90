@@ -1022,16 +1022,18 @@ contains
                   ps_info%flag_pcc = .false.
                endif
                ! Set XC functional
-               if(leqi(xc_code,'ca')) then      ! LDA; ATOM code uses PZ81 but use PW92
-                  xc_func = functional_lda_pw92
-               else if(leqi(xc_code,'pb')) then ! PBE
-                  xc_func = functional_gga_pbe96
-               else if(leqi(xc_code,'rv')) then ! RevPBE
-                  xc_func = functional_gga_pbe96_rev98
-               else if(leqi(xc_code,'rp')) then ! RPBE
-                  xc_func = functional_gga_pbe96_r99
-               else if(leqi(xc_code,'wc')) then ! Wu-Cohen
-                  xc_func = functional_gga_pbe96_wc
+               if(xc_func==0) then
+                  if(leqi(xc_code,'ca')) then      ! LDA; ATOM code uses PZ81 but use PW92
+                     xc_func = functional_lda_pw92
+                  else if(leqi(xc_code,'pb')) then ! PBE
+                     xc_func = functional_gga_pbe96
+                  else if(leqi(xc_code,'rv')) then ! RevPBE
+                     xc_func = functional_gga_pbe96_rev98
+                  else if(leqi(xc_code,'rp')) then ! RPBE
+                     xc_func = functional_gga_pbe96_r99
+                  else if(leqi(xc_code,'wc')) then ! Wu-Cohen
+                     xc_func = functional_gga_pbe96_wc
+                  end if
                end if
                read(unit,'(a)') line
                trim_line = trim(line)
