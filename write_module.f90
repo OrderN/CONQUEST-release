@@ -58,7 +58,7 @@ contains
        write(lun,fmt='(x,i1,a1)',advance='no') val%n(i),ang_mom(val%l(i)+1)
     end do
     write(lun,fmt='(x)')    
-    write(lun,fmt='(2x,"XC functional code    : ",i7)') flag_functional_type
+    write(lun,fmt='(2x,"XC functional code    : ",i7.6)') flag_functional_type
     write(lun,fmt='(2x,"XC description        : ",a)') trim(functional_description(1:80))
     if(pseudo(i_species)%flag_pcc) &
          write(lun,fmt='(2x,"Includes partial core corrections")')
