@@ -956,14 +956,12 @@ MD.Ensemble (*string*)
     *default*: nve
 
 MD.Thermostat (*string*)
-    values: none/nhc/berendsen
+    values: none/nhc/berendsen/svr
 
     Thermostat type
 
     ``none``
         No thermostat (used for calculating temperature only)
-    ``nhc``
-        Nosé-Hoover chain
     ``berendsen``
         Berendsen weak coupling thermostat
     ``svr``
@@ -1229,17 +1227,17 @@ XL-BOMD
 XL.Kappa (*real*)
     Value of kappa
 
-    *default*:
+    *default*: 2.0
 
 XL.PropagateX (*boolean*)
-    Selects the corrected XL-BOMD
+    Selects the propagation of LS in XL-BOMD
 
-    *default*:
+    *default*: T
 
 XL.PropagateL (*boolean*)
-    Selects the original XL-BOMD
+    Selects the propagation of L matrix in XL-BOMD (inappropriate)
 
-    *default*:
+    *default*: F
 
 XL.Dissipation (*boolean*)
     Selects the addition of dissipative force
@@ -1247,14 +1245,19 @@ XL.Dissipation (*boolean*)
     *default*:
 
 XL.MaxDissipation (*integer*)
-    (*please fill in*)
+    Order of dissipative force term 
 
-    *default*:
+    *default*: 5
 
 XL.Integrator (*string*)
     Selects the Verlet method or velocity Verlet method
 
-    *default*:
+    *default*: velocityVerlet
+
+XL.ResetFreq (*integer*)
+    Frequency to reset the propagation of X matrix in XL-BOMD
+
+    *default*: 0 (no reset)
 
 Advanced and obscure tags
 -------------------------
