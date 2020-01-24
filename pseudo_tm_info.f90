@@ -626,6 +626,8 @@ contains
   !!    Added semicore flag for each zeta
   !!   2018/11/02 16:30 nakata
   !!    Bug fix: set semicore when numprocs>1
+  !!   2020/01/22 16:59 dave
+  !!    Bug fix: change header to read Hamann code version line if present
   !!  SOURCE
   !!
   subroutine read_ion_ascii_tmp(ps_info,pao_info)
@@ -1018,16 +1020,18 @@ contains
                   ps_info%flag_pcc = .false.
                endif
                ! Set XC functional
-               if(leqi(xc_code,'ca')) then      ! LDA; ATOM code uses PZ81 but use PW92
-                  xc_func = functional_lda_pw92
-               else if(leqi(xc_code,'pb')) then ! PBE
-                  xc_func = functional_gga_pbe96
-               else if(leqi(xc_code,'rv')) then ! RevPBE
-                  xc_func = functional_gga_pbe96_rev98
-               else if(leqi(xc_code,'rp')) then ! RPBE
-                  xc_func = functional_gga_pbe96_r99
-               else if(leqi(xc_code,'wc')) then ! Wu-Cohen
-                  xc_func = functional_gga_pbe96_wc
+               if(xc_func==0) then
+                  if(leqi(xc_code,'ca')) then      ! LDA; ATOM code uses PZ81 but use PW92
+                     xc_func = functional_lda_pw92
+                  else if(leqi(xc_code,'pb')) then ! PBE
+                     xc_func = functional_gga_pbe96
+                  else if(leqi(xc_code,'rv')) then ! RevPBE
+                     xc_func = functional_gga_pbe96_rev98
+                  else if(leqi(xc_code,'rp')) then ! RPBE
+                     xc_func = functional_gga_pbe96_r99
+                  else if(leqi(xc_code,'wc')) then ! Wu-Cohen
+                     xc_func = functional_gga_pbe96_wc
+                  end if
                end if
                read(unit,'(a)') line
                trim_line = trim(line)
@@ -1037,8 +1041,9 @@ contains
             else if (leqi(trim_line(1:14),'<Conquest_pseu')) then
                read(unit,'(a)') line ! Check this for Hamann
                if(leqi(line(3:8),'Hamann')) pseudo_type = 3
-               read(unit,'(a)') line
-               read(unit,'(a)') line
+               if(leqi(line(3:10),'Hamann c')) read(unit,'(a)') line
+               read(unit,'(a)') line ! Core radii
+               read(unit,'(a)') line ! Valence shells
                read(unit,'(a26,i7)') line, xc_func
             endif
          end do
