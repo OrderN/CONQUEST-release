@@ -113,6 +113,8 @@ explicitly by giving a number of points and their locations and weights:
    %endblock Diag.Kpoints
 
 where there must be as many lines in the block as there are k-points.
+It is important to note that CONQUEST does not consider space group
+symmetry when integrating over the Brillouin zone.
 
 Go to :ref:`top <groundstate>`.
 
