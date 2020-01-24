@@ -20,20 +20,22 @@ Go to :ref:`top <moldyn>`.
 Self-consistency tolerance and XL-BOMD
 --------------------------------------
 
-Self-consistency tolerance is a critical parameter, because it can be
-responsible for "drift" in the conserved quantity of the dynamics if it is not
-tight enough. Although the molecular dynamics integrators used in CONQUEST are
-time reversible, *the SCF procedure is not*. Therefore a tight SCF tolerance
-(``minE.SCTolerance`` for diagonalisation, ``minE.LTolerance`` for linear
-scaling) is necessary. In the case of diagonalisation, a value of ``1E-7`` is
+The convergence of the electronic structure is important in MD, as
+insufficient convergence can be responsible for "drift" in the
+conserved quantity of the dynamics. Although the molecular dynamics
+integrators used in CONQUEST are time reversible, *the SCF procedure
+is not*. Therefore tight convergence (``minE.SCTolerance`` for
+diagonalisation, ``minE.LTolerance`` for linear scaling) is
+necessary. In the case of diagonalisation, SCF tolerance of ``1E-6`` is
 typically enough to negate the drift. However, extended-Lagrangian
-Born-Oppenheimer MD (XL-BOMD) :cite:`md-Niklasson2008`, currently only implemented for O(N),
-essentially makes the SCF component of the MD time-reversible by adding the
-electronic degrees of freedom to the Lagrangian, relaxing the constraint on
-``minE.LTolerance`` --- although it is still somewhat dependent on the ensemble.
-In the NVE and NVT ensembles, a L-tolerance of ``1E-5`` has been found to be
-sufficient to give good energy conservations, decreasing to ``1E-6`` in the NPT
-ensemble. The following flags are required for XL-BOMD:
+Born-Oppenheimer MD (XL-BOMD) :cite:`md-Niklasson2008`, currently only
+implemented for O(N), essentially makes the SCF component of the MD
+time-reversible by adding the electronic degrees of freedom to the
+Lagrangian, relaxing the constraint on ``minE.LTolerance`` ---
+although it is still somewhat dependent on the ensemble.  In the NVE
+and NVT ensembles, a L-tolerance of ``1E-5`` has been found to be
+sufficient to give good energy conservations, decreasing to ``1E-6``
+in the NPT ensemble. The following flags are required for XL-BOMD:
 
 ::
 
@@ -55,7 +57,7 @@ setting,
    AtomMove.RestartRun T
 
 This will do several things: it will read the atomic coordinates from
-``md.positions`` and read the ``md.checkpoint`` file, which contains the
+``md.position`` and read the ``md.checkpoint`` file, which contains the
 velocities and extended system (Nose-Hoover chain and cell) variables. Depending
 on the value of ``DM.SolutionMethod``, it will read the K-matrix files
 (``diagon``) or the L-matrix files (``ordern``), and if XL-BOMD is being used,

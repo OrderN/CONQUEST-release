@@ -16,7 +16,7 @@ conjugate gradients at present, though L-BFGS will be implemented.
 Setting ``AtomMove.WriteXSF T`` for all flavours of optimisation will dump the
 trajectory to the file ``trajectory.xsf``, which can be visualised using `VMD
 <https://www.ks.uiuc.edu/Research/vmd/>`_. Setting ``AtomMove.AppendCoords T``
-will the structure at each step to ``UpdatedAtoms.dat`` in the format of a
+will append the structure at each step to ``UpdatedAtoms.dat`` in the format of a
 CONQUEST structure input.
 
 For the L-BFGS and conjugate gradients relaxations, the progress of the calculation can be
@@ -157,8 +157,7 @@ may cause the calculation to crash, particlularly in the case of combined
 optimisation. In such cases, it may help to try ``AtomMove.OptCellMethod 2``,
 which uses a simple but robust double-loop minimisation: a full ionic conjugate
 gradients relaxation for the inner loop and a single cell steepest descent
-relaxation for the outer loop. This is considerable less efficient, and is not
-guaranteed to converge to the same minimum as ``AtomMove.OptCellMethod 3``, but
+relaxation for the outer loop. This is considerably less efficient, but
 may help in particularly problematic cases.
 
 Go to :ref:`top <strucrelax>`.

@@ -262,7 +262,9 @@ this simulation, the conserved quantity is the total energy (the sum
 of ionic kinetic energy and potential energy of the system) which is
 maintained to better than 0.1mHa in this instance.  More importantly,
 the variation in this quantity is much smaller than the variation in
-the potential energy.
+the potential energy.  This can be seen in the plot below.
+
+.. image:: MDPlot.png
 
 Go to :ref:`top <examples>`.
 

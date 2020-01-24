@@ -178,8 +178,8 @@ Some form of self-consistency between the MSSF and the charge density
 is required (as the MSSF will determine the Hamiltonian and hence the
 output charge density).  At present, this is performed as a complete
 SCF cycle for each set of MSSF coefficients (though this is likely to
-be updated soon for improved efficiency).  This is selected by setting
-the parameter ``Multisite.LFD.Minimise T``.
+be updated soon for improved efficiency).  This is selected by default
+(but can be turned off by setting the parameter ``Multisite.LFD.NonSCF T``).
 
 This iterative process is not variational, but is terminated when the
 absolute energy change between iterations is less than
@@ -192,7 +192,6 @@ An example input block for this process would be as follows:
 ::
 
    Multisite.LFD T
-   Multisite.LFD.Minimise T
    Multisite.LFD.Min.ThreshE 1.0e-6
    Multisite.LFD.Min.ThreshD 1.0e-6
 
@@ -230,7 +229,6 @@ and the coefficients will then be optimised.
 
    Basis.MultisiteSF T
    Multisite.LFD T
-   Multisite.LFD.Minimise T
    minE.VaryBasis T
 
 If good initial coefficient values have been found in a previous
