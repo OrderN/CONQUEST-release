@@ -723,8 +723,12 @@ contains
     if (flag_heat_flux) &
       call get_heat_flux(atomic_stress, ion_velocity, heat_flux)
 
-    if (.not. flag_MDcontinue) &
-      call write_md_data(i_first-1, thermo, baro, mdl, nequil)
+    if (.not. flag_MDcontinue) then
+       ! Check this: it fixes H' for NVE but needs NVT confirmation
+       ! DRB & TM 2020/01/24 12:03
+       call mdl%get_cons_qty
+       call write_md_data(i_first-1, thermo, baro, mdl, nequil)
+    end if
 
     do iter = i_first, i_last ! Main MD loop
        mdl%step = iter
