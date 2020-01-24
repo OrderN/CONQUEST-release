@@ -1,0 +1,12 @@
+General.NumberOfSpecies 1
+General.SemicoreEnergy -0.69
+
+%block SpeciesLabels
+1  K
+%endblock
+
+%block K
+Atom.PseudopotentialFile K.in
+Atom.VKBFile K.pot
+Atom.BasisSize medium
+%endblock
