@@ -1415,7 +1415,7 @@ contains
        endif
     else
        flag_LFD          = .false.
-       flag_LFD_nonSCF   = .false.
+       flag_LFD_nonSCF   = .true.
        flag_MSSF_smear   = .false.
     endif
     ! For LFD
