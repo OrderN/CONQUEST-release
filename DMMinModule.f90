@@ -1,4 +1,4 @@
-! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
+! -*- mode: F90; mode: font-lock -*-
 ! ------------------------------------------------------------------------------
 ! $Id$
 ! ------------------------------------------------------------------------------
@@ -71,11 +71,6 @@ module DMMin
   
   ! Area identification
   integer, parameter, private :: area = 4
-  !
-  ! RCS tag for object file identification
-  character(len=80), save, private :: &
-       RCSid = "$Id$"
-  !
   integer           :: maxpulayDMM
   integer,     save :: n_dumpL = 0     ! Redefined: 2019Dec30 tsuyoshi
   real(double)      :: LinTol_DMM
@@ -922,9 +917,9 @@ contains
           e_dot_n(spin) = matrix_product_trace(matSM3(spin), matphi(spin))
           n_dot_n(spin) = matrix_product_trace(matSphi(spin), matphi(spin))
           if (inode == ionode .and. iprint_DM >= 2) then
-             write (io_lun, '(2x,"e_dot_n (spin=",i1"): ",f25.15)') &
+             write (io_lun, '(2x,"e_dot_n (spin=",i1,"): ",f25.15)') &
                    spin, e_dot_n(spin)
-             write (io_lun, '(2x,"n_dot_n (spin=",i1"): ",f25.15)') &
+             write (io_lun, '(2x,"n_dot_n (spin=",i1,"): ",f25.15)') &
                    spin, n_dot_n(spin)
           end if
        end do

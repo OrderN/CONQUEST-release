@@ -562,7 +562,7 @@ contains
 1   format(1x,'Welcome to InitMcW')
 2   format(2x,'Electrons: ',f15.6,' Orbitals: ',f15.6)
 3   format(2x,'Electrons_up: ',f15.6,' Electrons_dn: ',f15.6,' Orbitals for each spin: ',f15.6)
-4   format(2x,'Minimum and maximum limites on H(spin=',i1') are ',2f15.6)
+4   format(2x,'Minimum and maximum limites on H(spin=',i1,') are ',2f15.6)
 5   format(2x,'Minimum and maximum limites on overall H are ',2f15.6)
 6   format(2x,'Mubar is ',f15.6)
 

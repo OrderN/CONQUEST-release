@@ -1,4 +1,4 @@
-! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
+! -*- mode: F90; mode: font-lock -*-
 ! ------------------------------------------------------------------------------
 ! $Id$
 ! ------------------------------------------------------------------------------
@@ -72,8 +72,6 @@ module set_blipgrid_module
   integer,pointer :: naba_blk_rem(:)
   integer,pointer :: offset_rem(:)
 
-  ! RCS tag for object file identification
-  character(len=80), save, private :: RCSid = "$Id$"
 !!***
 
 contains

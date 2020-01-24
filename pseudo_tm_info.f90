@@ -1,4 +1,4 @@
-! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
+! -*- mode: F90; mode: font-lock -*-
 ! ------------------------------------------------------------------------------
 ! $Id$
 ! ------------------------------------------------------------------------------
@@ -109,8 +109,6 @@ module pseudo_tm_info
 
   type(pseudo_info), allocatable :: pseudo(:)
 
-  ! RCS tag for object file identification
-  character(len=80), private :: RCSid = "$Id$"
   !!***
 
 contains
@@ -638,7 +636,7 @@ contains
     use pao_format, ONLY: species_pao
     use splines, ONLY : spline
     use memory_module, ONLY: reg_alloc_mem, type_dbl    
-    use functions, ONLY: erfc
+    use functions, ONLY: erfc_cq
     use input_module, ONLY: io_assign, io_close
     use pseudopotential_common, ONLY: pseudo_type, SIESTA, ABINIT
     use maxima_module, only: lmax_pao, lmax_ps
@@ -818,14 +816,14 @@ contains
           a = sqrt(ps_info%alpha)
           !r = ps_info%vlocal%delta
           r = 1.0e-7_double
-          erfarg = one - erfc(a*r)
+          erfarg = one - erfc_cq(a*r)
           !erfarg = derf(a*r)
           tmpv = ps_info%vlocal%f(1)
           ps_info%vlocal%f(1) = ps_info%vlocal%f(1) + ps_info%zval * erfarg/r
           !write(52,*) r,ps_info%vlocal%f(1),tmpv,ps_info%zval * erfarg/r!ps_info%zval * derf(a*r)/r
           do i=2,ps_info%vlocal%n
              r = ps_info%vlocal%delta*real(i-1,double)
-             erfarg = one - erfc(a*r)
+             erfarg = one - erfc_cq(a*r)
              tmpv = ps_info%vlocal%f(i)
              ps_info%vlocal%f(i) = ps_info%vlocal%f(i) + ps_info%zval * erfarg/r
              !write(52,*) r,ps_info%vlocal%f(i), tmpv,ps_info%zval * erfarg/r!,ps_info%zval * derf(a*r)/r

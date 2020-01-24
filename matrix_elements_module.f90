@@ -82,20 +82,17 @@ contains
     type(primary_set) :: prim
     type(cover_set) :: gcs
     ! Now general integers
-    integer :: myid,nd1,nd2
+    integer :: myid
     real(double) :: rcut
     ! These variables are generic matrix variables
     type(matrix), dimension (:) :: amat
     type(matrix_trans),OPTIONAL :: atrans
     type(matrix_halo),OPTIONAL :: ahalo
-    !type(trans_remote),OPTIONAL :: atrans_rem
-    !type(pair_data),OPTIONAL    :: apairs(:)
-    !integer(integ), pointer, dimension(:), OPTIONAL :: apairind
     integer(integ), pointer, dimension(:) :: aind
 
     ! Local variables
-    integer :: nnd,nr,posn
-    integer :: irc,ierr
+    integer :: nnd
+    integer :: ierr
     integer :: index_size
     integer, dimension(:), allocatable :: part_offset
 
@@ -200,8 +197,8 @@ contains
 
     ! Local variables
     integer, dimension(MPI_STATUS_SIZE) :: mpi_stat
-    integer :: nnd,nr,posn, j
-    integer :: irc,ierr
+    integer :: nnd, j
+    integer :: ierr
     integer, dimension(:), allocatable :: nreq
 
 
@@ -263,7 +260,7 @@ contains
     use datatypes
     use basic_types
     use matrix_module
-    use GenComms, ONLY: cq_abort, inode
+    use GenComms, ONLY: cq_abort
     use global_module, ONLY: id_glob, species_glob, sf, nlpf, paof, napf
     use group_module, ONLY: parts
     use species_module, ONLY: nsf_species, nlpf_species, npao_species, napf_species
@@ -277,7 +274,7 @@ contains
     type(matrix) :: amat(:)
 
     ! Local variables
-    integer :: irc,ierr,inp, cumu_ndims, neigh_spec
+    integer :: inp, cumu_ndims, neigh_spec
     integer :: nn,j,np,ni,ist
     real(double) :: rcutsq,dx,dy,dz
     real(double), parameter :: tol=1.0e-8_double
@@ -416,10 +413,9 @@ contains
     use datatypes
     use basic_types
     use matrix_module
-    use GenComms, ONLY: cq_abort, inode
-    use global_module, ONLY: id_glob, species_glob, sf, nlpf, paof
+    use GenComms, ONLY: cq_abort
+    use global_module, ONLY: sf
     use group_module, ONLY: parts
-    use species_module, ONLY: nsf_species, nlpf_species, npao_species
 
     implicit none
 
@@ -432,8 +428,8 @@ contains
     integer :: index_size
 
     ! Local variables
-    integer :: irc,ierr,inp, cumu_ndims, neigh_spec
-    integer :: nn,j,np,ni,ist
+    integer :: inp
+    integer :: nn,j,np,ni
     integer :: tot_nabs, nabs_of_atom, mx_abs_nabs
     real(double) :: rcutsq,dx,dy,dz
     real(double), parameter :: tol=1.0e-8_double
@@ -530,7 +526,7 @@ contains
     type(primary_set) :: prim
     type(matrix_halo)::ahalo
     type(matrix_trans)::at
-    integer :: irc,ierr,ni,i,cumu_ndims
+    integer :: ni,i,cumu_ndims
 
     if((ahalo%ni_in_halo.le.0).or.(ahalo%ni_in_halo.gt.ahalo%mx_halo)) then
        call cq_abort('get_retr: ni_in_halo out of range')
@@ -612,11 +608,9 @@ contains
     type(matrix_halo)::ahalo
 
     ! Local variables
-    integer :: irc
-    integer :: ierr,np,ni,i,nb,i_in_part,nh,j,ist,isu,nd1
-    integer(integ) :: np_in_halo,ni_in_halo
+    integer :: np,ni,i,nb,i_in_part,nh,j,ist,isu,nd1
 
-    integer :: stat,pr, neigh_spec
+    integer :: pr, neigh_spec
 
     ! initialise flag for every part and atom in covering set
     do np=1,gcs%ng_cover
@@ -750,9 +744,6 @@ contains
     use matrix_module
     use basic_types
     use GenComms, ONLY: cq_abort
-    use global_module, ONLY: id_glob, species_glob, sf, nlpf, paof
-    use group_module, ONLY: parts
-    use species_module, ONLY: nsf_species, nlpf_species, npao_species
 
     implicit none
 
@@ -763,11 +754,10 @@ contains
     type(matrix_halo)::ahalo
 
     ! Local variables
-    integer :: irc, max_atoms_halo, max_part_halo
-    integer :: ierr,np,ni,i,nb,i_in_part,nh,j,ist,isu,nd1
-    integer :: np_in_halo,ni_in_halo
+    integer :: max_atoms_halo, max_part_halo
+    integer :: np,ni,i,nb,i_in_part,j
 
-    integer :: stat,pr, neigh_spec
+    integer :: stat
 
     allocate(ahalo%i_halo(gcs%mx_mcover),STAT=stat)
     if(stat/=0) call cq_abort('Error allocating ihalo !')
@@ -863,7 +853,7 @@ contains
 
     ! Local variables
     integer(integ) :: np,i,ni,nb,ind_cover,ibpartp,ncoveryz
-    integer(integ) :: nx,ny,nz,npx,npy,npz,ist,isu,neigh_spec
+    integer(integ) :: nx,ny,nz,npx,npy,npz,isu,neigh_spec
 
     ncoveryz = gcs%ncovery*gcs%ncoverz
     do np=1,prim%groups_on_node

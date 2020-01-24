@@ -1,4 +1,4 @@
-! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
+! -*- mode: F90; mode: font-lock -*-
 ! ------------------------------------------------------------------------------
 ! $Id$
 ! ------------------------------------------------------------------------------
@@ -55,10 +55,8 @@ module pseudopotential_data
   use timer_stdclocks_module, only: tmr_std_pseudopot, tmr_std_allocation
 
   implicit none
+
   save
-  ! RCS tag for object file identification 
-  character(len=80), private :: &
-       RCSid = "$Id$"
 
   real(double), allocatable, dimension(:) :: core_radius_2, radius_max, radius_max_2, ps_exponent, &
        spherical_harmonic_norm, loc_radius
@@ -369,7 +367,7 @@ contains
                             if(r2 < core_radius_2(the_species)) then
                                icheck=1
                                r_from_i = sqrt( r2 )
-                               j = aint( r_from_i / step ) + 1
+                               j = floor( r_from_i / step ) + 1
                                ! check j (j+1 =< n_points_max)
                                if(j > n_points_max(the_species)) then
                                   call cq_abort('set_ps: overrun problem',j,n_points_max(the_species))
@@ -681,7 +679,7 @@ contains
                                   icheck=1
 
                                   r_from_i = sqrt( r2 )
-                                  j = aint( r_from_i / step ) + 1
+                                  j = floor( r_from_i / step ) + 1
 
                                   ! OLD version : the following lines are
                                   if(j > n_points_max(the_species)-1) then

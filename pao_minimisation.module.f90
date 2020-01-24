@@ -1,4 +1,4 @@
-! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
+! -*- mode: F90; mode: font-lock -*-
 ! ------------------------------------------------------------------------------
 ! $Id$
 ! ------------------------------------------------------------------------------
@@ -44,13 +44,8 @@ module pao_minimisation
   integer, parameter :: GdS = 1
   integer, parameter :: KdH = 2
   integer, parameter :: full = 3
-  !real(double), save  :: PAOprecond(npao,npao,mx_at_prim*mx_tnab)
-  !real(double), save  :: PAOprecond2(npao)
   real(double), save :: InitStep_paomin = 5.0_double
 
-  ! RCS tag for object file identification
-  character(len=80), save, private :: &
-       RCSid = "$Id$"
 !!***
 
 contains

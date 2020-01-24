@@ -1,4 +1,4 @@
-! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
+! -*- mode: F90; mode: font-lock -*-
 ! ------------------------------------------------------------------------------
 ! $Id$
 ! ------------------------------------------------------------------------------
@@ -87,11 +87,6 @@ module set_bucket_module
   integer, parameter :: atomf_atomf_rem    = 1
   integer, parameter :: atomf_nlpf_rem     = 2
   integer, parameter :: atomf_H_atomf_rem  = 3
-
-  ! -------------------------------------------------------
-  ! RCS ident string for object file id
-  ! -------------------------------------------------------
-  character(len=80), save, private :: RCSid = "$Id$"
 
 !!***
 

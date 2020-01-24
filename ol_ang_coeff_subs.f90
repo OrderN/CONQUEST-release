@@ -1,4 +1,4 @@
-! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
+! -*- mode: F90; mode: font-lock -*-
 ! ------------------------------------------------------------------------------
 ! $Id$
 ! ------------------------------------------------------------------------------
@@ -48,11 +48,6 @@ module angular_coeff_routines
   use timer_stdclocks_module, only: tmr_std_allocation, tmr_std_basis
 
   implicit none
-
-  ! -------------------------------------------------------
-  ! RCS ident string for object file id
-  ! -------------------------------------------------------
-  character(len=80), private :: RCSid = "$Id$"
 
   ! Parameter to avoid small angle errors throughout code
   real(double), parameter :: epsilon = 1.0e-4_double 
@@ -1040,7 +1035,7 @@ contains
     n1 = 0; n2 = 0; xj1 = zero; xj2 = zero;a=zero
     b = zero; c = zero; d = zero
     
-    n1 = aint(r/del_x)
+    n1 = floor(r/del_x)
     n2 = n1+1
     xj1 = n1*del_x
     xj2 = xj1+del_x

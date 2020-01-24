@@ -1,4 +1,4 @@
-! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
+! -*- mode: F90; mode: font-lock -*-
 ! ------------------------------------------------------------------------------
 ! $Id: DFT_D2_module.f90 85 2011-06-09 14:46:30Z M. Arita $
 ! ------------------------------------------------------------------------------
@@ -27,9 +27,6 @@ module DFT_D2
 
   implicit none
   
-  ! RCS tag for object file identification
-  character(len=80), private :: RCSid = "$Id: DFT_D2_module.f90 85 2011-06-09 14:46:30Z M. Arita $"
-
   real(double) :: disp_energy
   real(double), allocatable :: disp_force(:, :)
   real(double), allocatable :: atm_disp_coeff(:), vdW_rad(:)
@@ -232,7 +229,7 @@ contains
       if (inode == ionode) then
         write (io_lun, '(/a)') "***** Dispersion Information: DFT-D2 *****"
         write (io_lun,16) en_conv*disp_energy, en_units(energy_units)
-        write (io_lun,fmt='(/,20x,"Disp. Force on atoms (",a2"/",a2,")"/)') en_units(energy_units), d_units(dist_units)
+        write (io_lun,fmt='(/,20x,"Disp. Force on atoms (",a2,"/",a2,")"/)') en_units(energy_units), d_units(dist_units)
         write (io_lun,fmt='("Atom        X               Y               Z")')
         do i = 1, ni_in_cell
             write (io_lun, 109) i, (for_conv*disp_force(j,i),j=1,3)

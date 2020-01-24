@@ -1,4 +1,4 @@
-! -*- mode: F90; mode: font-lock; column-number-mode: true -*-
+! -*- mode: F90; mode: font-lock -*-
 ! ------------------------------------------------------------------------------
 ! $Id$
 ! ------------------------------------------------------------------------------
@@ -217,7 +217,7 @@ pdb:   if (pdb_format) then
           open( unit=lun, file=filename, status='old', iostat=ios)
           if ( ios > 0 ) call cq_abort('Reading pdb file: file error')
           if (iprint_init > 2) &
-               write (io_lun,'(x,a)') &
+               write (io_lun,'(1x,a)') &
                      'Counting atoms, checking for alternate locations'
           ni_in_cell = 0
 first:    do
@@ -250,7 +250,7 @@ first:    do
           end do first
           call io_close(lun)
           if (iprint_init>0) &
-               write(io_lun,'(x,a,i5)') 'Number of atoms: ', ni_in_cell
+               write(io_lun,'(1x,a,i5)') 'Number of atoms: ', ni_in_cell
 
           ! Now read the file again and extracts the coordinates
           open(unit=lun, file=filename, status='old', iostat=ios)

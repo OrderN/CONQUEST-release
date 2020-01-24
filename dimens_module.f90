@@ -1,4 +1,4 @@
-! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
+! -*- mode: F90; mode: font-lock -*-
 ! ------------------------------------------------------------------------------
 ! $Id$
 ! ------------------------------------------------------------------------------
@@ -169,8 +169,8 @@ contains
     use numbers
     use matrix_data
     use GenComms,      only: cq_abort, cq_warn
-    use global_module, only: iprint_init,runtype, atomf, sf, flag_Multisite, flag_exx, flag_diagonalisation
-    use block_module,  only: in_block_x, in_block_y, in_block_z, n_pts_in_block, n_blocks
+    use global_module, only: iprint_init, atomf, sf, flag_Multisite, flag_exx, flag_diagonalisation
+    use block_module,  only: in_block_x, in_block_y, in_block_z, n_pts_in_block
     use pseudopotential_common, only: pseudo_type, OLDPS, SIESTA, ABINIT, flag_neutral_atom_projector
 
     implicit none
@@ -184,7 +184,7 @@ contains
     ! Local variables
     character(len=80) :: sub_name = "set_dimensions"
     type(cq_timer) :: backtrace_timer
-    integer        :: max_extent, n, stat, mx_matrices_tmp
+    integer        :: n, mx_matrices_tmp
     real(double)   :: r_core, r_t, rcutmax, max_grid
 
 !****lat<$

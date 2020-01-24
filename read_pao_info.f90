@@ -1,4 +1,4 @@
-! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
+! -*- mode: F90; mode: font-lock -*-
 ! ------------------------------------------------------------------------------
 ! $Id$
 ! ------------------------------------------------------------------------------
@@ -43,11 +43,6 @@ module read_pao_info
   character(len=80) :: pao_info_file
   integer :: pao_norm_flag
 
-
-  ! -------------------------------------------------------
-  ! RCS ident string for object file id
-  ! -------------------------------------------------------
-  character(len=80), private :: RCSid = "$Id$"
 
 !!***
 

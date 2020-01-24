@@ -1,4 +1,4 @@
-! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
+! -*- mode: F90; mode: font-lock -*-
 ! ------------------------------------------------------------------------------
 ! $Id$
 ! ------------------------------------------------------------------------------
@@ -220,9 +220,6 @@ module mult_module
   ! Area identification
   integer, parameter, private :: area = 2
 
-  ! RCS ident string for object file id
-  character(len=80), private :: &
-       RCSid = "$Id$"
 !!***
 
 contains
@@ -2495,7 +2492,7 @@ contains
   !!
   subroutine dissociate_matrices
 
-    use global_module, only: nspin, area_matrices
+    use global_module, only: area_matrices
     use memory_module, only: reg_dealloc_mem, type_dbl
 
     implicit none
@@ -2775,7 +2772,7 @@ contains
     integer :: A
 
     ! Local variables
-    integer :: np, i, j, ierr, iprim, sf1, loc, Ah
+    integer :: np, i, j, iprim, sf1, loc, Ah
 
 !    call start_timer(tmr_std_matrices)
     Ah = matrix_index(A)
@@ -2877,7 +2874,6 @@ contains
 
     use datatypes
     use numbers
-    use matrix_data, only: mat
     use GenBlas,     only: dot, vdot, asum
 
     implicit none
@@ -2887,9 +2883,6 @@ contains
     
     ! Passed variables
     integer, intent(in) :: A, B
-
-    ! Local variables
-    integer :: np, i, j, ierr
 
     ! call start_timer(tmr_std_matrices)
     ! If the matrices are the same range
@@ -2932,7 +2925,6 @@ contains
 
     use datatypes
     use numbers
-    use matrix_data, only: mat
     use GenBlas,     only: dot, vdot, asum
 
     implicit none
@@ -2942,9 +2934,6 @@ contains
     
     ! Passed variables
     integer, intent(in) :: A, B
-
-    ! Local variables
-    integer :: np, i, j, ierr
 
     ! call start_timer(tmr_std_matrices)
     ! If the matrices are the same range
@@ -3139,7 +3128,7 @@ contains
                                 onsite)
     use datatypes
     use matrix_module, only: matrix_halo, matrix
-    use matrix_data,   only: halo, mat, mat_name
+    use matrix_data,   only: halo, mat
     use cover_module,  only: BCS_parts
     use GenComms,      only: cq_abort
 

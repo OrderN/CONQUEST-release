@@ -1,4 +1,4 @@
-! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
+! -*- mode: F90; mode: font-lock -*-
 ! ------------------------------------------------------------------------------
 ! $Id$
 ! ------------------------------------------------------------------------------
@@ -101,10 +101,6 @@ module ion_electrostatic
   real(double), allocatable, dimension(:,:) :: screened_ion_force
   real(double), dimension(3,3) :: screened_ion_stress  
   
-  ! -------------------------------------------------------
-  ! RCS ident string for object file id
-  ! -------------------------------------------------------
-  character(len=80), private :: RCSid = "$Id$"
   !!***
 
 contains
@@ -974,7 +970,7 @@ contains
     use timer_module,   ONLY: cq_timer,start_timer,stop_timer, &
                               stop_print_timer,WITH_LEVEL
     use timer_module,   ONLY: start_backtrace,stop_backtrace
-    use functions,      ONLY: erfc
+    use functions,      ONLY: erfc_cq
     use energy,         ONLY: ion_interaction_energy
     
     implicit none
@@ -1156,8 +1152,8 @@ contains
                    arg_1 = ewald_gamma*rij_squared
                    arg_2 = sqrt(arg_1)
                    ewald_real_sum_ip = ewald_real_sum_ip + &
-                     q_i * q_j * erfc(arg_2) / rij
-                   dummy = q_i * q_j * (erfc(arg_2)/rij + coeff_1*exp(-arg_1))/rij_squared
+                     q_i * q_j * erfc_cq(arg_2) / rij
+                   dummy = q_i * q_j * (erfc_cq(arg_2)/rij + coeff_1*exp(-arg_1))/rij_squared
                    ewald_intra_force_x(iatom) = &
                      ewald_intra_force_x(iatom) + dummy*rij_vec(1)
                    ewald_intra_force_x(jatom) = &
@@ -1269,8 +1265,8 @@ contains
                          arg_1 = ewald_gamma*rij_squared
                          arg_2 = sqrt(arg_1)
                          ewald_real_sum_ip = ewald_real_sum_ip + &
-                              &q_i * q_j * erfc(arg_2) / rij
-                         dummy = q_i * q_j * (erfc(arg_2)/rij + coeff_1*exp(-arg_1))/rij_squared
+                              &q_i * q_j * erfc_cq(arg_2) / rij
+                         dummy = q_i * q_j * (erfc_cq(arg_2)/rij + coeff_1*exp(-arg_1))/rij_squared
                          ewald_inter_force_x(iatom) = &
                               ewald_inter_force_x(iatom) + dummy*rij_vec(1)
                          ewald_inter_force_y(iatom) = &

@@ -179,7 +179,7 @@ contains
                          del_r = (pao(spec)%angmom(l1)%zeta(acz)%cutoff/&
                               (pao(spec)%angmom(l1)%zeta(acz)%length-1))
 
-                         n1 = aint(r/del_r)
+                         n1 = floor(r/del_r)
                          n2 = n1 + 1
 
                          if(n2 > npts-1) then

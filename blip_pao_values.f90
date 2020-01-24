@@ -1,4 +1,4 @@
-! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
+! -*- mode: F90; mode: font-lock -*-
 ! ------------------------------------------------------------------------------
 ! $Id$
 ! ------------------------------------------------------------------------------
@@ -39,11 +39,6 @@ module blip_pao_values
   implicit none
   save
 
-  ! -------------------------------------------------------
-  ! RCS ident string for object file id
-  ! -------------------------------------------------------
-  character(len=80), private :: &
-       RCSid = "$Id$"
 !!***
 
 contains

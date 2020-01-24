@@ -887,7 +887,7 @@ contains
          MSSF_Smear_center, MSSF_Smear_shift, MSSF_Smear_width, &
          flag_LFD_ReadTVEC, LFD_TVEC_read,                      &
          LFD_kT, LFD_ChemP, flag_LFD_useChemPsub,               &
-         flag_LFD_minimise, LFD_ThreshE, LFD_ThreshD,           &
+         flag_LFD_nonSCF, LFD_ThreshE, LFD_ThreshD,           &
          LFD_Thresh_EnergyRise, LFD_max_iteration,              &
          flag_LFD_MD_UseAtomicDensity,  flag_MSSF_nonminimal,   &
          n_dumpSFcoeff,                                         &
@@ -1415,7 +1415,7 @@ contains
        endif
     else
        flag_LFD          = .false.
-       flag_LFD_minimise = .false.
+       flag_LFD_nonSCF   = .false.
        flag_MSSF_smear   = .false.
     endif
     ! For LFD
@@ -1446,8 +1446,8 @@ contains
              call cq_abort("No LFDTrialVector label in the input file.")
           endif
        endif ! flag_LFD_ReadTVEC
-       flag_LFD_minimise = fdf_boolean('Multisite.LFD.Minimise',.true.)
-       if (flag_LFD_minimise) then
+       flag_LFD_nonSCF = fdf_boolean('Multisite.LFD.NonSCF',.false.)
+       if (.NOT.flag_LFD_nonSCF) then ! Expected behaviour
           LFD_threshE = fdf_double('Multisite.LFD.Min.ThreshE',1.0e-6_double)
           LFD_threshD = fdf_double('Multisite.LFD.Min.ThreshD',1.0e-6_double)
           LFD_Thresh_EnergyRise = fdf_double('Multisite.LFD.Min.ThreshEnergyRise',LFD_threshE*ten)

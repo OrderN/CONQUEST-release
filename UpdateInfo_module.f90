@@ -78,8 +78,6 @@ module UpdateInfo
   integer :: ij_fail_remote     ! # of (ij) pair, whose elements are not found
   real(double) :: min_Rij_fail_remote, max_Rij_fail_remote, ave_Rij_fail_remote  
 
-  character(80),private :: RCSid = "$Id$"
-
 contains
 
   ! ------------------------------------------------------------

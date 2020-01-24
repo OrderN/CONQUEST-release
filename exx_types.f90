@@ -1,4 +1,4 @@
-! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
+! -*- mode: F90; mode: font-lock -*-
 ! ------------------------------------------------------------------------------
 ! $Id: $
 ! -----------------------------------------------------------
@@ -39,7 +39,7 @@ module exx_types
      !     complex(double_cplx), allocatable, dimension(:,:,:) :: auxout
      complex(double_cplx), pointer, dimension(:,:,:) :: arrayin
      complex(double_cplx), pointer, dimension(:,:,:) :: arrayout
-     integer*8 :: planF, planR
+     integer(wide) :: planF, planR
   end type fftw3d
 
   !  type fftw2d

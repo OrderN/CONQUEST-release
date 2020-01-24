@@ -1,4 +1,4 @@
-! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
+! -*- mode: F90; mode: font-lock -*-
 ! ------------------------------------------------------------------------------
 ! $Id$
 ! ------------------------------------------------------------------------------
@@ -105,11 +105,6 @@ module move_atoms
    integer, parameter :: updateXdiss= 7
    integer, parameter :: updateS    = 8
 
-  ! -------------------------------------------------------
-  ! RCS ident string for object file id
-  ! -------------------------------------------------------
-  character(len=80), save, private :: &
-       RCSid = "$Id$"
 !!***
 
 contains
@@ -433,7 +428,7 @@ contains
     use io_module,          only: write_atomic_positions, pdb_template
     use density_module,     only: density, set_density_pcc
     use maxima_module,      only: maxngrid
-    use multisiteSF_module, only: flag_LFD_minimise
+    use multisiteSF_module, only: flag_LFD_NonSCF
     use timer_module
 
     implicit none
@@ -571,7 +566,7 @@ contains
        call stop_print_timer(tmr_l_tmp1, "atom updates", IPRINT_TIME_THRES1)
        ! We've just moved the atoms - we need a self-consistent ground
        ! state before we can minimise blips !
-       if (flag_vary_basis .or. flag_LFD_minimise) then
+       if (flag_vary_basis .or. .NOT.flag_LFD_NonSCF) then
           call new_SC_potl(.false., sc_tolerance, reset_L,           &
                            fixed_potential, vary_mu, n_L_iterations, &
                            L_tolerance, e3)
@@ -581,7 +576,7 @@ contains
        if (inode == ionode .and. iprint_MD > 1) &
             write (io_lun, &
                    fmt='(4x,"In safemin, iter ",i3," step and energy &
-                         &are ",2f20.10" ",a2)') &
+                         &are ",2f20.10," ",a2)') &
                   iter, k3, en_conv * e3, en_units(energy_units)
        if (e3 < e2) then ! We're still going down hill
           k1 = k2
@@ -661,7 +656,7 @@ contains
                           "safemin - Final interpolation and updates", &
                           IPRINT_TIME_THRES1)
     ! We've just moved the atoms - we need a self-consistent ground state before we can minimise blips !
-    if (flag_vary_basis .or. flag_LFD_minimise) then
+    if (flag_vary_basis .or. .NOT.flag_LFD_NonSCF) then
        call new_SC_potl(.false., sc_tolerance, reset_L,           &
                         fixed_potential, vary_mu, n_L_iterations, &
                         L_tolerance, e3)
@@ -675,7 +670,7 @@ contains
     if (inode == ionode .and. iprint_MD > 1) &
          write (io_lun, &
                 fmt='(4x,"In safemin, Interpolation step and energy &
-                      &are ",f15.10,f20.10" ",a2)') &
+                      &are ",f15.10,f20.10," ",a2)') &
                kmin, en_conv*energy_out, en_units(energy_units)
     if (energy_out > e2 .and. abs(bottom) > RD_ERR) then
        ! The interpolation failed - go back
@@ -718,7 +713,7 @@ contains
                              IPRINT_TIME_THRES1)
        ! We've just moved the atoms - we need a self-consistent ground
        ! state before we can minimise blips !
-       if(flag_vary_basis .or. flag_LFD_minimise) then
+       if(flag_vary_basis .or. .NOT.flag_LFD_NonSCF) then
           call new_SC_potl(.false., sc_tolerance, reset_L,           &
                            fixed_potential, vary_mu, n_L_iterations, &
                            L_tolerance, e3)
@@ -809,7 +804,7 @@ contains
     use timer_module
     use dimens, ONLY: r_super_x, r_super_y, r_super_z
     use store_matrix, ONLY: dump_pos_and_matrices
-    use multisiteSF_module, only: flag_LFD_minimise
+    use multisiteSF_module, only: flag_LFD_NonSCF
     !for Debugging
     use mult_module, ONLY: allocate_temp_matrix, free_temp_matrix, matrix_sum
     use global_module, ONLY: atomf, sf
@@ -941,7 +936,7 @@ contains
        call stop_print_timer(tmr_l_tmp1, "atom updates", IPRINT_TIME_THRES1)
        ! We've just moved the atoms - we need a self-consistent ground
        ! state before we can minimise blips !
-       if (flag_vary_basis .or. flag_LFD_minimise) then
+       if (flag_vary_basis .or. .NOT.flag_LFD_NonSCF) then
           call new_SC_potl(.false., sc_tolerance, reset_L,           &
                fixed_potential, vary_mu, n_L_iterations, &
                L_tolerance, e3)
@@ -956,7 +951,7 @@ contains
        if (inode == ionode .and. iprint_MD > 1) &
             write (io_lun, &
             fmt='(4x,"In safemin2, iter ",i3," step and energy &
-            &are ",2f20.10" ",a2)') &
+            &are ",2f20.10," ",a2)') &
             iter, k3, en_conv * e3, en_units(energy_units)
        k3_old = k3
        if (e3 < e2) then ! We're still going down hill
@@ -1057,7 +1052,7 @@ contains
          IPRINT_TIME_THRES1)
     ! We've just moved the atoms - we need a self-consistent ground state before
     ! we can minimise blips !
-    if (flag_vary_basis .or. flag_LFD_minimise) then
+    if (flag_vary_basis .or. .NOT.flag_LFD_NonSCF) then
        call new_SC_potl(.false., sc_tolerance, reset_L,           &
             fixed_potential, vary_mu, n_L_iterations, &
             L_tolerance, e3)
@@ -1075,7 +1070,7 @@ contains
     if (inode == ionode .and. iprint_MD > 1) &
          write (io_lun, &
          fmt='(4x,"In safemin2, Interpolation step and energy &
-         &are ",f15.10,f20.10" ",a2)') &
+         &are ",f15.10,f20.10," ",a2)') &
          kmin, en_conv*energy_out, en_units(energy_units)
     ! If interpolation step failed, do interpolation AGAIN
     if (energy_out > e2 .and. abs(bottom) > RD_ERR) then
@@ -1175,7 +1170,7 @@ contains
             IPRINT_TIME_THRES1)
        ! We've just moved the atoms - we need a self-consistent ground
        ! state before we can minimise blips !
-       if(flag_vary_basis .or. flag_LFD_minimise) then
+       if(flag_vary_basis .or. .NOT.flag_LFD_NonSCF) then
           call new_SC_potl(.false., sc_tolerance, reset_L,           &
                fixed_potential, vary_mu, n_L_iterations, &
                L_tolerance, e3)
@@ -1263,7 +1258,7 @@ contains
     use timer_module
     use dimens, ONLY: r_super_x, r_super_y, r_super_z
     use store_matrix, ONLY: dump_pos_and_matrices
-    use multisiteSF_module, only: flag_LFD_minimise
+    use multisiteSF_module, only: flag_LFD_NonSCF
     use mult_module, ONLY: allocate_temp_matrix, free_temp_matrix, matrix_sum
     use global_module, ONLY: atomf, sf
     use io_module, ONLY: dump_matrix
@@ -1347,7 +1342,7 @@ contains
        end if
        ! We've just moved the atoms - we need a self-consistent ground
        ! state before we can minimise blips !
-       if (flag_vary_basis .or. flag_LFD_minimise) then
+       if (flag_vary_basis .or. .NOT.flag_LFD_NonSCF) then
           call new_SC_potl(.false., sc_tolerance, reset_L,           &
                fixed_potential, vary_mu, n_L_iterations, &
                L_tolerance, e3)
@@ -1361,7 +1356,7 @@ contains
        if (inode == ionode .and. iprint_MD > 1) then
           write (io_lun, &
                fmt='(4x,"In backtrack_linemin, iter ",i3," step and energy &
-               &are ",2f16.6" ",a2)') &
+               &are ",2f16.6," ",a2)') &
                iter, alpha, en_conv * e3, en_units(energy_units)
           write(io_lun, fmt='(6x,"Armijo threshold is ",f16.6," ",a2)') armijo, en_units(energy_units)
        end if
@@ -1450,7 +1445,7 @@ contains
     use timer_module
     use dimens, ONLY: r_super_x, r_super_y, r_super_z
     use store_matrix, ONLY: dump_pos_and_matrices
-    use multisiteSF_module, only: flag_LFD_minimise
+    use multisiteSF_module, only: flag_LFD_NonSCF
     use mult_module, ONLY: allocate_temp_matrix, free_temp_matrix, matrix_sum
     use global_module, ONLY: atomf, sf
     use io_module, ONLY: dump_matrix
@@ -1534,7 +1529,7 @@ contains
        end if
        ! We've just moved the atoms - we need a self-consistent ground
        ! state before we can minimise blips !
-       if (flag_vary_basis .or. flag_LFD_minimise) then
+       if (flag_vary_basis .or. .NOT.flag_LFD_NonSCF) then
           call new_SC_potl(.false., sc_tolerance, reset_L,           &
                fixed_potential, vary_mu, n_L_iterations, &
                L_tolerance, e3)
@@ -1548,7 +1543,7 @@ contains
        if (inode == ionode .and. iprint_MD > 1) then
           write (io_lun, &
                fmt='(4x,"In backtrack_linemin, iter ",i3," step and energy &
-               &are ",2f20.10" ",a2)') &
+               &are ",2f20.10," ",a2)') &
                iter, alpha, en_conv * e3, en_units(energy_units)
           write(io_lun, fmt='(6x,"Armijo threshold is ",f16.6," ",a2)') armijo, en_units(energy_units)
        end if
@@ -1654,7 +1649,7 @@ contains
     use io_module,          only: write_atomic_positions, pdb_template
     use density_module,     only: density, set_density_pcc
     use maxima_module,      only: maxngrid
-    use multisiteSF_module, only: flag_LFD_minimise
+    use multisiteSF_module, only: flag_LFD_NonSCF
     use timer_module
     use dimens,             only: r_super_x, r_super_y, r_super_z, &
                                   r_super_x_squared, r_super_y_squared, &
@@ -1748,7 +1743,7 @@ contains
        call stop_print_timer(tmr_l_tmp1, "atom updates", IPRINT_TIME_THRES1)
        ! We've just moved the atoms - we need a self-consistent ground
        ! state before we can minimise blips !
-       if (flag_vary_basis .or. flag_LFD_minimise) then
+       if (flag_vary_basis .or. .NOT.flag_LFD_NonSCF) then
           call new_SC_potl(.false., sc_tolerance, reset_L,           &
                fixed_potential, vary_mu, n_L_iterations, &
                L_tolerance, e3)
@@ -1761,7 +1756,7 @@ contains
        if (inode == ionode .and. iprint_MD > 1) &
             write (io_lun, &
             fmt='(4x,"In safemin_cell, iter ",i3," step and enthalpy &
-            &are ",2f20.10" ",a2)') &
+            &are ",2f20.10," ",a2)') &
             iter, k3, en_conv * h3, en_units(energy_units)
        write(io_lun,*) "h3 is", h3, "h2 is", h2
        write(io_lun,*) "k1 is", k1, "k2 is", k2, "k3 is", k3
@@ -1831,7 +1826,7 @@ contains
          "safemin_cell - Final interpolation and updates", &
          IPRINT_TIME_THRES1)
     ! We've just moved the atoms - we need a self-consistent ground state before we can minimise blips !
-    if (flag_vary_basis .or. flag_LFD_minimise) then
+    if (flag_vary_basis .or. .NOT.flag_LFD_NonSCF) then
        call new_SC_potl(.false., sc_tolerance, reset_L,           &
             fixed_potential, vary_mu, n_L_iterations, &
             L_tolerance, e3)
@@ -1849,7 +1844,7 @@ contains
     if (inode == ionode .and. iprint_MD > 1) &
          write (io_lun, &
          fmt='(4x,"In safemin_cell, Interpolation step and enthalpy &
-         &are ",f15.10,f20.10" ",a2)') &
+         &are ",f15.10,f20.10," ",a2)') &
          kmin, en_conv*enthalpy_out, en_units(energy_units)
     if (enthalpy_out > h2 .and. abs(bottom) > RD_ERR) then
        ! The interpolation failed - go back
@@ -1881,7 +1876,7 @@ contains
             IPRINT_TIME_THRES1)
        ! We've just moved the atoms - we need a self-consistent ground
        ! state before we can minimise blips !
-       if(flag_vary_basis .or. flag_LFD_minimise) then
+       if(flag_vary_basis .or. .NOT.flag_LFD_NonSCF) then
           call new_SC_potl(.false., sc_tolerance, reset_L,           &
                fixed_potential, vary_mu, n_L_iterations, &
                L_tolerance, e3)
@@ -1952,7 +1947,7 @@ contains
     use density_module, only: set_density_pcc
     use timer_module
     use store_matrix, ONLY: dump_pos_and_matrices
-    use multisiteSF_module, only: flag_LFD_minimise
+    use multisiteSF_module, only: flag_LFD_NonSCF
 
     implicit none
 
@@ -2059,7 +2054,7 @@ contains
        call stop_print_timer(tmr_l_tmp1, "atom updates", IPRINT_TIME_THRES1)
        ! We've just moved the atoms - we need a self-consistent ground
        ! state before we can minimise blips !
-       if (flag_vary_basis .or. flag_LFD_minimise) then
+       if (flag_vary_basis .or. .NOT.flag_LFD_NonSCF) then
           call new_SC_potl(.false., sc_tolerance, reset_L,           &
                fixed_potential, vary_mu, n_L_iterations, &
                L_tolerance, e3)
@@ -2075,7 +2070,7 @@ contains
        if (inode == ionode .and. iprint_MD > 1) &
             write (io_lun, &
             fmt='(4x,"In safemin_full, iter ",i3," step and enthalpy &
-            &are ",2f20.10" ",a2)') &
+            &are ",2f20.10," ",a2)') &
             iter, k3, en_conv * h3, en_units(energy_units)
        k3_old = k3
        if (h3 < h2) then ! We're still going down hill
@@ -2154,7 +2149,7 @@ contains
          IPRINT_TIME_THRES1)
     ! We've just moved the atoms - we need a self-consistent ground state before
     ! we can minimise blips !
-    if (flag_vary_basis .or. flag_LFD_minimise) then
+    if (flag_vary_basis .or. .NOT.flag_LFD_NonSCF) then
        call new_SC_potl(.false., sc_tolerance, reset_L,           &
             fixed_potential, vary_mu, n_L_iterations, &
             L_tolerance, e3)
@@ -2173,7 +2168,7 @@ contains
     if (inode == ionode .and. iprint_MD > 1) &
          write (io_lun, &
          fmt='(4x,"In safemin_full, Interpolation step and enthalpy &
-         &are ",f15.10,f20.10" ",a2)') &
+         &are ",f15.10,f20.10," ",a2)') &
          kmin, en_conv*enthalpy_out, en_units(energy_units)
     ! If interpolation step failed, do interpolation AGAIN
     if (enthalpy_out > h2 .and. abs(bottom) > RD_ERR) then
@@ -2271,7 +2266,7 @@ contains
             IPRINT_TIME_THRES1)
        ! We've just moved the atoms - we need a self-consistent ground
        ! state before we can minimise blips !
-       if(flag_vary_basis .or. flag_LFD_minimise) then
+       if(flag_vary_basis .or. .NOT.flag_LFD_NonSCF) then
           call new_SC_potl(.false., sc_tolerance, reset_L,           &
                fixed_potential, vary_mu, n_L_iterations, &
                L_tolerance, e3)
@@ -2439,12 +2434,12 @@ contains
     implicit none
 
     ! Passed variables
+    integer :: npmod, mx_pulay, pul_mx
     real(double), dimension(3,ni_in_cell,mx_pulay) :: forceStore
     real(double), dimension(3,ni_in_cell,mx_pulay) :: posnStore
     real(double), dimension(ni_in_cell)            :: x_atom_cell
     real(double), dimension(ni_in_cell)            :: y_atom_cell
     real(double), dimension(ni_in_cell)            :: z_atom_cell
-    integer :: npmod, mx_pulay, pul_mx
 
     ! Local variables
     integer      :: i,j, length, jj
@@ -4067,7 +4062,7 @@ contains
     use io_module,          only: write_atomic_positions, pdb_template
     use density_module,     only: density, set_density_pcc
     use maxima_module,      only: maxngrid
-    use multisiteSF_module, only: flag_LFD_minimise
+    use multisiteSF_module, only: flag_LFD_NonSCF
     use timer_module
     use dimens, ONLY: r_super_x, r_super_y, r_super_z, &
          r_super_x_squared, r_super_y_squared, r_super_z_squared, volume, &

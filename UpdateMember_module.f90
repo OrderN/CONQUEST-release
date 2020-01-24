@@ -1,4 +1,4 @@
-! $Id: UpdateMember_module.f90 81 2013-07-05 michi $
+! 
 ! -----------------------------------------------------------
 ! Module UpdateMember_module
 ! -----------------------------------------------------------
@@ -34,8 +34,6 @@ module UpdateMember_module
 
   implicit none
   save
-
-  character(80),private :: RCSid = "$Id$"
 
 !!***
 

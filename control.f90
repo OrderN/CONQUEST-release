@@ -1,4 +1,4 @@
-! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
+! -*- mode: F90; mode: font-lock -*-
 ! ------------------------------------------------------------------------------
 ! $Id$
 ! ------------------------------------------------------------------------------
@@ -71,9 +71,6 @@ module control
   ! Area identification
   integer, parameter, private :: area = 9
 
-  ! RCS tag for object file identification
-  character(len=80), save, private :: &
-       RCSid = "$Id$"
 !!***
 
 contains
@@ -324,7 +321,7 @@ contains
     call dump_pos_and_matrices
     call get_maxf(max)
     if (inode==ionode) then
-      write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," E: "   e16.8," dE: ",f12.8)') & 
+      write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," E: ",e16.8," dE: ",f12.8)') & 
            0, max, energy0, dE
     end if
 
@@ -418,7 +415,7 @@ contains
        dE = energy0 - energy1
 
        if (inode==ionode) then
-         write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," E: "e16.8," dE: ",f12.8)') & 
+         write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," E: ",e16.8," dE: ",f12.8)') & 
               iter, max, energy1, en_conv*dE
          if (iprint_MD > 1) then
            write(io_lun,'(4x,"Force Residual:     ",f20.10," ",a2,"/",a2)') &
@@ -1960,7 +1957,7 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
     cg_new = -tot_force ! The L-BFGS is in terms of grad E
     do while (.not. done)
        if (inode==ionode) then
-          write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," E: "e16.8," dE: ",f12.8)') & 
+          write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," E: ",e16.8," dE: ",f12.8)') & 
                iter, max, energy1, en_conv*dE
           if (iprint_MD > 1) then
              g0 = dot(length, tot_force, 1, tot_force, 1)
@@ -2074,7 +2071,7 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
        if (abs(max) < MDcgtol) then
           done = .true.
           if (inode==ionode) then
-             write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," E: "e16.8," dE: ",f12.8)') & 
+             write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," E: ",e16.8," dE: ",f12.8)') & 
                   iter, max, energy1, en_conv*dE
              if (iprint_MD > 1) then
                 write(io_lun,'(4x,"Force Residual:     ",f20.10," ",a2,"/",a2)') &
@@ -2208,7 +2205,7 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
       if (stress_diff > max_stress) max_stress = stress_diff
     end do
     if (inode==ionode) then
-      write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxStr: ",f12.8," H: "e16.8," dH: ",f12.8)') &
+      write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxStr: ",f12.8," H: ",e16.8," dH: ",f12.8)') &
            0, max_stress, enthalpy0, zero
     end if
 
@@ -2298,7 +2295,7 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
        reset_iter = reset_iter +1
 
        if (inode==ionode) then
-         write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxStr: ",f12.8," H: "e16.8," dH: ",f12.8)') &
+         write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxStr: ",f12.8," H: ",e16.8," dH: ",f12.8)') &
               iter, max_stress, enthalpy1, en_conv*dH
          if (iprint_MD > 1) then
            write(io_lun,'(4x,"Maximum stress         ",3f10.6)') &
@@ -2556,7 +2553,7 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
     enthalpy0 = enthalpy(energy0, press)
     dH = zero
     if (inode==ionode) then
-      write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," H: " e16.8," dH: ",f12.8)') & 
+      write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," H: ", e16.8," dH: ",f12.8)') & 
            0, max, enthalpy0, dH
     end if
 
@@ -2646,7 +2643,7 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
         energy0 = energy1
 
         if (inode==ionode) then
-          write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," H: "e16.8," dH: ",f12.8)') &
+          write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," H: ",e16.8," dH: ",f12.8)') &
                iter, max, enthalpy1, en_conv*dH
           if (iprint_MD > 1) then
             write(io_lun,'(4x,"Force Residual:     ",f20.10," ",a2,"/",a2)') &
@@ -2741,7 +2738,7 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
       end do
 
       if (inode==ionode) then
-        write(io_lun,'(2x,"GeomOpt + Iter: ",i4," MaxF: ",f12.8," H: " e16.8," dH: ",f12.8)') &
+        write(io_lun,'(2x,"GeomOpt + Iter: ",i4," MaxF: ",f12.8," H: " ,e16.8," dH: ",f12.8)') &
              iter, max, enthalpy1, en_conv*dH
         if (iprint_MD > 1) then
           write(io_lun,'(4x,"Force Residual:     ",f20.10," ",a2,"/",a2)') &
@@ -2925,7 +2922,7 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
     call get_maxf(max)
     enthalpy0 = enthalpy(energy0, press)
     if (inode==ionode) then
-      write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," H: "e16.8," dH: ",f12.8)') &
+      write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," H: ",e16.8," dH: ",f12.8)') &
            0, max, enthalpy0, zero
     end if
 
@@ -3003,7 +3000,7 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
       ! Output and energy changes
       dH = enthalpy0 - enthalpy1
       if (inode==ionode) then
-        write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," H: "e16.8," dH: ",f12.8)') &
+        write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," H: ",e16.8," dH: ",f12.8)') &
              iter, max, enthalpy1, en_conv*dH
         if (iprint_MD > 1) then
           write(io_lun,'(4x,"Force Residual:     ",f20.10," ",a2,"/",a2)') &

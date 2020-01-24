@@ -1,4 +1,4 @@
-! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
+! -*- mode: F90; mode: font-lock -*-
 ! ------------------------------------------------------------------------------
 ! $Id: exx_module.f90 XX year-mm-dd XX:XX:XXZ Lionel $
 ! -----------------------------------------------------------
@@ -51,10 +51,6 @@ module exx_module
   
   ! Area identification
   integer, parameter, private :: area = 13
-
-  ! RCS tag for object file identification
-  character(len=80), save, private :: RCSid = &
-       "$Id: exx_module.f90 XX year-mm-dd XX:XX:XXZ lionel $"
 
   !!***
 
@@ -625,9 +621,9 @@ contains
 41  format( 32x,'method: ',a30)
 42  format( 34x,'phil: ',a30)
 43  format( 28x,'allocation: ',a30)
-44  format( 29x,'screening: ',l,', method: ',a4, ', cutoff: ',f12.4,' a0,',f12.4,' Ang')
+44  format( 29x,'screening: ',l1,', method: ',a4, ', cutoff: ',f12.4,' a0,',f12.4,' Ang')
 
-46  format( 27x,'overlap_box: ',l)
+46  format( 27x,'overlap_box: ',l1)
 47  format( 27x,'pao_on_grid: ',a30)
 48  format( 24x,'memory_storage: ',a30)
     
@@ -711,7 +707,7 @@ contains
   subroutine exx_ewald_pot(potential,extent,alpha,r_int)
     
     use numbers,         ONLY: zero, one, two, twopi, pi
-    use functions,      ONLY: erfc
+    use functions,      ONLY: erfc_cq
 
     implicit none
 
@@ -742,7 +738,7 @@ contains
              else
                 arg    = sqrt(dot_product(r,r))*sqrt(alpha)
                 factor = one/sqrt(dot_product(r,r))
-                potential(extent+i+1,extent+j+1,extent+k+1) = (one - erfc(arg))*factor             
+                potential(extent+i+1,extent+j+1,extent+k+1) = (one - erfc_cq(arg))*factor             
              end if
              
           end do
@@ -938,11 +934,11 @@ contains
     !
     if ( exx_debug ) then
        if (which == 'k') then
-          write(unit,'(I8,6X,A9,2X,A,I8,A2,I3,A,6X,A2,X,I8,X,4F12.4,3X,I3,2I8,X,F7.3)')     &
+          write(unit,'(I8,6X,A9,2X,A,I8,A2,I3,A,6X,A2,1X,I8,1X,4F12.4,3X,I3,2I8,1X,F7.3)')     &
                part,'{k\gamma}','{',hl%global_num,'\ ',hl%nsup,'}', hl%name, hl%global_num, &
                xyz_Ang(1), xyz_Ang(2), xyz_Ang(3), zero, hl%spec, ind, hl%nsup, hl%radi
        else
-          write(unit,'(I8,6X,A9,2X,A,I8,A2,I3,A,6X,A2,X,I8,X,4F12.4,3X,I3,2I8,X,F7.3)')     &
+          write(unit,'(I8,6X,A9,2X,A,I8,A2,I3,A,6X,A2,1X,I8,1X,4F12.4,3X,I3,2I8,1X,F7.3)')     &
                part,'{l\delta}','{',hl%global_num,'\ ',hl%nsup,'}', hl%name, hl%global_num, &
                xyz_Ang(1), xyz_Ang(2), xyz_Ang(3), zero, hl%spec, ind, hl%nsup, hl%radi
        end if
@@ -1019,7 +1015,7 @@ contains
     xyz_Ang(3) = ia%xyz_ip(3)
     !
     if ( exx_debug ) then
-       write(unit,'(I8,2X,A9,6X,A,I8,A2,I3,A,6X,A2,X,I8,X,4F12.4,3X,I3,2I8,X,F7.3,F12.8)')           &
+       write(unit,'(I8,2X,A9,6X,A,I8,A2,I3,A,6X,A2,1X,I8,1X,4F12.4,3X,I3,2I8,1X,F7.3,F12.8)')           &
             parts%ngnode(parts%inode_beg(inode)+part-1),'{i\alpha}','{',ia%labcell,'\ ',ia%nsup,'}', &
             ia%name, ia%labcell, xyz_Ang(1), xyz_Ang(2), xyz_Ang(3), zero, ia%spec, ind, ia%nsup, zero
     end if

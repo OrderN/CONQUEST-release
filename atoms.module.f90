@@ -1,4 +1,4 @@
-! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
+! -*- mode: F90; mode: font-lock -*-
 ! ------------------------------------------------------------------------------
 ! $Id$
 ! ------------------------------------------------------------------------------
@@ -38,9 +38,6 @@ module atoms
 
   implicit none
   save
-
-  ! RCS tag for object file identification 
-  character(len=80), private :: RCSid = "$Id$"
 
   integer :: n_my_atoms
 

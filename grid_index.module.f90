@@ -1,4 +1,4 @@
-! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
+! -*- mode: F90; mode: font-lock -*-
 ! ------------------------------------------------------------------------------
 ! $Id$
 ! ------------------------------------------------------------------------------
@@ -33,9 +33,6 @@ module grid_index
 
   implicit none
   save
-
-  ! RCS tag for object file identification 
-  character(len=80), private :: RCSid = "$Id$"
 
   integer, allocatable, dimension(:) :: grid_point_x, grid_point_y, grid_point_z, grid_point_block, &
           grid_point_position
