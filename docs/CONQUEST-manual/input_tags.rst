@@ -92,9 +92,7 @@ General.PartitionMethod (*string*) File/Hilbert
     -  Hilbert (default) — Automatic partitioning using Hilbert curves;
        safe for initial use though optimum load balancing *not*
        guaranteed
-    -  File — Reads a file (name given below in
-       Sec. [sec:general-io-flags]; details of how to create in
-       Sec. [sec:parall-issu])
+    -  File — Reads a file (NOT recommended)
 
 General.LoadBalance (*string*) partitions/atoms
     Applies to Hilbert above; chooses whether to distribute atoms or partitions
@@ -283,7 +281,7 @@ Atomic Coordinates
 ------------------
 
 IO.Coordinates (*string*)
-    Specifies the file with atomic coordinates. See Section [sec:atomic-positions]
+    Specifies the file with atomic coordinates. See :ref:`io_coords`
     for details on the file format
 
     *default*: none
@@ -542,7 +540,7 @@ DM.SolutionMethod (*string*)
 DM.L\_range (*real*)
     Cutoff applied to L matrix (total energy will converge with increasing range;
     suggested minimum for O(N) calculations is twice largest support function range;
-    see Sec. [sec:find-dens-matr] for more details)
+    see :ref:`gs_on` for more details)
 
     *default*: 1.0
 
@@ -700,13 +698,13 @@ Diag.MPOrder (*integer*)
 
 Diag.GaussianHeight (*real*)
     The height of Gaussian function used to determine the width of Methfessel-Paxton
-     approximation to delta-function (see section [sec:methf-paxt-smear])
+     approximation to delta-function (see :ref:`gs_diag_smear`)
 
     *default*: 0.1
 
 Diag.EfStepFiness (*real*)
     Parameter controlling the finness of the Fermi energy search step used in
-    Methfessel-Paxton smearing method (see section [sec:methf-paxt-smear])
+    Methfessel-Paxton smearing method (see :ref:`gs_diag_smear`)
 
     *default*: 1.0
 
@@ -714,25 +712,25 @@ Diag.NElecLess (*Real*)
     The number of electrons to subtract from the total number of electrons in each
     spin channel, which gives the starting point for searching the lower bound for
     Fermi energy. Used in Methfessel-Paxton smearing method
-    (see section [sec:methf-paxt-smear])
+    (see :ref:`gs_diag_smear`)
 
     *default*: 10.0
 
 Diag.KProcGroups (*integer*)
     Number of k-point processor groups for k-point parallelisation
-    (see section [sec:scal-proc-grid])
+    (see :ref:`gs_diag_para`)
 
     *default*: 1
 
 Diag.ProcRows (*integer*)
     Number of rows in the processor grid for SCALAPACK within each k-point processor
-    group (see section [sec:scal-proc-grid])
+    group 
 
     *default*: Determined automatically
 
 Diag.ProcCols (*integer*)
     Number of columns in the processor grid for SCALAPACK within each k-point
-    processor group (see section [sec:scal-proc-grid])
+    processor group 
 
     *default*: Determined automatically
 
@@ -890,8 +888,7 @@ AtomMove.TestSpecificForce (*integer*)
     Label for which force contribution to test. Note that for PAOs non-local Pulay
     and Hellman-Feynman forces are found together as part of the HF calculation;
     :math:`\phi` Pulay refers to changes in :math:`\phi(\mathbf{r})` when atoms move,
-    while S Pulay refers to changes in S when atoms move; see Sec. [sec:forces] and
-    references therein for more information. Options:
+    while S Pulay refers to changes in S when atoms move. Options:
 
     1 Total
     2 Total Hellman-Feynman
@@ -1386,8 +1383,7 @@ Atom.SupportGridSpacing (*real*)
     circumstances) to a maximum g-vector of
     :math:`\pi`/**SupportGridSpacing**
     plane wave cutoff as region radius and L matrix radius go to infinity. *Not used for PAO
-    calculations*. See Sec. [sec:blip-basis] for more
-    information. N.B. Grid.GridCutoff will be reset to *at least* half
+    calculations*.  N.B. Grid.GridCutoff will be reset to *at least* half
     SupportGridSpacing if too small.
 
     *default*: none
@@ -1557,17 +1553,6 @@ Basis.PaoNormFlag (*integer*)
     Determines whether PAOs are normalised
 
     *default*: 0
-
-Basis.ReadSupportSpec (*boolean*)
-    Should a file mapping PAOs to support functions *for initialisation of blip
-    coefficients* be read ? See Sec. [sec:other:-basis-spec] for details of file
-
-    *default*: F
-
-Basis.SupportSpecFile (*string*)
-    Name of file to be read (see ``Basis.ReadSupportSpec``)
-
-    *default*: ``support.dat``
 
 Basis.TestBasisGradients (*boolean*)
     Chooses whether gradients of energy with respect to basis function coefficients

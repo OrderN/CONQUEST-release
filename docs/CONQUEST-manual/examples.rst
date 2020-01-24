@@ -219,7 +219,50 @@ Go to :ref:`top <examples>`.
 
 Simple Molecular Dynamics
 -------------------------
-Maybe we can do some simple NVE or NVT of water.
+We will perform NVE molecular dynamics for methane, CH4, as a simple
+example of how to do this kind of calculation.  You should use the
+same coordinate file and ion files as you did for the structural
+relaxation, but change the atomic movement flags in the coordinate
+file to allow all atoms to move (the centre of mass is fixed during MD
+by default).  Your coordinate file should look like this:
+
+::
+
+   20.00000000000000     0.00000000000000     0.00000000000000
+    0.00000000000000    20.00000000000000     0.00000000000000
+    0.00000000000000     0.00000000000000    20.00000000000000
+   5
+   0.500 0.500 0.500 1  T T T
+   0.386 0.500 0.500 2  T T T
+   0.539 0.607 0.500 2  T T T
+   0.537 0.446 0.593 2  T T T
+   0.537 0.446 0.407 2  T T T
+
+The input file should be:
+
+::
+
+   IO.Coordinates CH4.in
+
+   AtomMove.TypeOfRun md
+   AtomMove.IonTemperature 300
+   AtomMove.NumSteps 100
+
+   General.NumberOfSpecies  2
+   %block ChemicalSpeciesLabel
+   1 12.00 C
+   2 1.00 H
+   %endblock
+
+where the default timestep (0.5fs) is necessary for simulations
+involving light atoms like hydrogen.  The file ``md.stats`` contains
+details of the simulation, while the trajectory is output to
+``trajectory.xsf`` which can be read by VMD among other programs.  In
+this simulation, the conserved quantity is the total energy (the sum
+of ionic kinetic energy and potential energy of the system) which is
+maintained to better than 0.1mHa in this instance.  More importantly,
+the variation in this quantity is much smaller than the variation in
+the potential energy.
 
 Go to :ref:`top <examples>`.
 
