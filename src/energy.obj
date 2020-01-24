@@ -1,0 +1,33 @@
+# -*- mode: Makefile -*-
+# $Id$
+#
+#
+ENERGY_OBJS = H_matrix_module.o \
+              SelfCon_module.o \
+              PosTan_module.o \
+              DMMinModule.o \
+              DiagModule${DIAG_DUMMY}.o \
+              ScalapackFormat.o \
+              blip_minimisation.module.o \
+              blip_gradient.module.o \
+              pseudopotential.module.o \
+              potential_module.o \
+              ion_electrostatic_module.o \
+              minimise.o \
+	      Pulay.o \
+	      S_matrix_module.o \
+              McWeeny.o \
+	      control.o \
+	      density_module.o \
+	      initialisation_module.o \
+	      initial_read_module.o \
+	      energy_module.o \
+              test_force_module.o\
+              functions_on_grid_module.o\
+              cdft_data_module.o\
+              cdft_module.o\
+              XC_${XC_LIBRARY}_module.o\
+              DFT_D2_module.o\
+              vdWMesh_module.o\
+              vdWDFT_module.o
+

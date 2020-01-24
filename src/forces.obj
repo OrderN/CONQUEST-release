@@ -1,0 +1,9 @@
+# -*- mode: Makefile -*-
+# $Id: forces.obj,v 1.4 2003/02/10 13:47:05 drb Exp $
+#
+FORCES_OBJS = force_module.o \
+              move_atoms.module.o \
+              Integrators_module.o \
+              constraint_module.o \
+              md_control_module.o \
+              md_model_module.o

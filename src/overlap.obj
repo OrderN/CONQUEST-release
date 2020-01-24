@@ -1,0 +1,8 @@
+# -*- mode: Makefile -*-
+# $Id: overlap.obj,v 1.7 2003/06/10 09:40:24 drb Exp $
+#
+OVERLAP_OBJS = blip_module.o \
+               grid_index.module.o \
+               dimens_module.o \
+               species_module.o \
+               splines_module.o

@@ -5,3 +5,6 @@ database](http://www.pseudo-dojo.org) (roughly speaking up to 86Rn).
 It also includes the input files you will need for generating basis
 sets of your own using the CONQUEST basis generation code.  More
 details are found in the documentation directory.
+
+The potentials are available for LDA, PBE and PBEsol
+exchange-correlation functionals.
