@@ -202,7 +202,8 @@ sub MakeDependsf90 {
           /^\s*include\s+["\']([^"\']+)["\']/i && push(@incs, $1);
           /^\s*use\s+(\w+)/i && push(@modules, &ToLower($1));
         }
-      if (defined @incs || defined @modules)
+#      if (defined @incs || defined @modules)
+      if (@incs || @modules)
         {
           ($objfile = $file) =~ s/\.[fF](90)?$/.o/;
           print $output "$objfile: ";

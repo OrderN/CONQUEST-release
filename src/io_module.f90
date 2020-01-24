@@ -2517,8 +2517,11 @@ second:   do
          '       David Bowler           Tsuyoshi Miyazaki       ',/,12x, &
          '        (UCL,NIMS)                 (NIMS)             ',/,12x, &
          '                                                      ',/,12x, &
-         '       Ayako Nakata           Lionel Truflandier      ',/,12x, &
-         '          (NIMS)                 (Bordeaux)           ',/,12x, &
+         '       Ayako Nakata              Zamaan Raza          ',/,12x, &
+         '          (NIMS)                   (NIMS)             ',/,12x, &
+         '                                                      ',/,12x, &
+         '       Jack Poulton           Lionel Truflandier      ',/,12x, &
+         '          (UCL)                  (Bordeaux)           ',/,12x, &
          '                                                      ',/,12x, &
          '      Shereif Mujahed            Jack Baker           ',/,12x, &
          '          (UCL)                    (UCL)              ',/,12x, &
