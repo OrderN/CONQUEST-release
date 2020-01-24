@@ -1,4 +1,4 @@
-! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
+! -*- mode: F90; mode: font-lock -*-
 ! ------------------------------------------------------------------------------
 ! $Id$
 ! ------------------------------------------------------------------------------
@@ -42,14 +42,6 @@ module memory_module
   integer, parameter :: type_dbl  = 2
   integer, parameter :: type_cplx = 3
 
-  interface reg_dealloc_mem
-     module procedure reg_dealloc_mem_32
-     module procedure reg_dealloc_mem_64
-  end interface
-
-  ! RCS tag for object file identification
-  character(len=80), private :: &
-       RCSid = "$Id$"
 !!***
 
 contains
@@ -144,7 +136,7 @@ contains
   !!    Added optional printing options
   !!  SOURCE
   !!
-  subroutine reg_dealloc_mem_32(area, amount, type, what, lun)
+  subroutine reg_dealloc_mem(area, amount, type, what, lun)
 
     use units, only: m_units, mem_units, mem_conv
     use global_module, only: iprint_gen
@@ -168,34 +160,7 @@ contains
     tot_alloc_area(area) = tot_alloc_area(area) - amount*no_bytes(type)
     tot_alloc = tot_alloc - amount*no_bytes(type)
 
-  end subroutine reg_dealloc_mem_32
-
-  subroutine reg_dealloc_mem_64(area, amount, type, what, lun)
-
-    use units, only: m_units, mem_units, mem_conv
-    use global_module, only: iprint_gen
-
-    implicit none
-
-    ! Passed variables
-    integer   :: area
-    integer(8):: amount
-    integer   :: type
-
-    character(*), optional, intent(in) :: what
-    integer,      optional, intent(in) :: lun
-
-    if (iprint_gen>4 .and. present(what).and.present(lun)) then
-       write(lun,fmt='(10x,"Delocating ",a12," in area ",i3,f10.3," ",a2)') &
-            adjustl(what), area, real(amount*no_bytes(type),double)*mem_conv, &
-            mem_units(m_units)
-    end if
-
-    tot_alloc_area(area) = tot_alloc_area(area) - amount*no_bytes(type)
-    tot_alloc = tot_alloc - amount*no_bytes(type)
-
-  end subroutine reg_dealloc_mem_64
-  !!***
+  end subroutine reg_dealloc_mem
 
   ! -----------------------------------------------------------
   ! Subroutine init_reg_mem
@@ -245,7 +210,7 @@ contains
   subroutine write_mem_use(lun, area)
 
     use datatypes
-    use global_module, only: n_areas
+    use global_module, only: n_areas, iprint
     use units,         only: m_units, mem_units, mem_conv
     use GenComms,      only: inode, ionode
 
@@ -262,10 +227,12 @@ contains
             area,real(max_alloc_area(area))*mem_conv,mem_units(m_units)
     else
        if(inode==ionode) then
-          do i=1,n_areas
-             write(io_lun,'(2x,"Max mem use for area ",i4," is ",f10.3," ",a2)') &
-                  i,real(max_alloc_area(i))*mem_conv,mem_units(m_units)
-          end do
+          if(iprint>2) then
+             do i=1,n_areas
+                write(io_lun,'(2x,"Max mem use for area ",i4," is ",f10.3," ",a2)') &
+                     i,real(max_alloc_area(i))*mem_conv,mem_units(m_units)
+             end do
+          end if
           write(io_lun,'(2x,"Max total mem use is ",f10.3," ",a2)') &
                real(max_alloc)*mem_conv,mem_units(m_units)
        end if

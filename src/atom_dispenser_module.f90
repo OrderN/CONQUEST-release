@@ -24,9 +24,6 @@ module atom_dispenser
 
   implicit none
 
-  ! RCS tag for object file idetification
-  character(80), private :: RCSid = "$Id: atom_dispenser_module.f90 "
-
   logical, parameter :: flag_ortho = .true.
 
 !!***

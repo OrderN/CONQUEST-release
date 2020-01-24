@@ -1,4 +1,4 @@
-!-*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
+!-*- mode: F90; mode: font-lock -*-
 ! -----------------------------------------------------------------------------
 ! $Id: DiagModule.dummy.f90,v 1.1 2002/06/25 10:52:10 drb Exp $
 ! -----------------------------------------------------------------------------
@@ -66,11 +66,6 @@ module DiagModule
   integer :: max_brkt_iterations
 
   logical :: diagon ! Do we diagonalise or use O(N) ?
-  ! -------------------------------------------------------
-  ! RCS ident string for object file id
-  ! -------------------------------------------------------
-  character(len=80), private :: &
-       RCSid = "$Id: DiagModule.dummy.f90,v 1.1 2002/06/25 10:52:10 drb Exp $"
 
 contains
 

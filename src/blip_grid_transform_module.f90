@@ -59,9 +59,6 @@ module blip_grid_transform_module
 
  implicit none
 
-  ! RCS tag for object file identification
-  character(len=80), save, private :: &
-       RCSid = "$Id$"
 !!***
 
 contains
@@ -2979,7 +2976,7 @@ contains
              else
                 ig = i+1
              end if
-             FFTblip(ig,jg,kg)  = cmplx(x*y*z,zero)
+             FFTblip(ig,jg,kg)  = cmplx(x*y*z,zero,double)
           end do
        end do
     end do
@@ -3011,7 +3008,7 @@ contains
              do i=1,nsize!2*blip_inf%BlipArraySize+1
                 ig = i+blip_FFT_off
                 if(i>blip_FFT_off+1) ig = i-blip_FFT_off-1
-                FFTgrid(i,j,k) = cmplx(local_grid(ig,jg,kg,nsf1),zero)
+                FFTgrid(i,j,k) = cmplx(local_grid(ig,jg,kg,nsf1),zero,double)
              end do
           end do
        end do

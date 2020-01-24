@@ -1,4 +1,4 @@
-! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
+! -*- mode: F90; mode: font-lock -*-
 ! ------------------------------------------------------------------------------
 ! $Id$
 ! ------------------------------------------------------------------------------
@@ -53,10 +53,6 @@ module energy
 
   ! Area identification
   integer, parameter, private :: area = 9
-
-  ! RCS tag for object file identification
-  character(len=80), save, private :: &
-       RCSid = "$Id$"
 
   real(double) ::  hartree_energy_total_rho
   real(double) :: local_ps_energy

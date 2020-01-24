@@ -1,4 +1,4 @@
-! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
+! -*- mode: F90; mode: font-lock -*-
 ! ------------------------------------------------------------------------------
 ! $Id$
 ! ------------------------------------------------------------------------------
@@ -48,9 +48,6 @@ module minimise
   ! Area identification
   integer, parameter, private :: area = 6
 
-  ! RCS tag for object file identification
-  character(len=80), private :: &
-       RCSid = "$Id$"
 !!***
 
 contains
@@ -150,7 +147,7 @@ contains
     use input_module,      only: leqi
     use vdWDFT_module,     only: vdWXC_energy, vdWXC_energy_slow
     use density_module,    only: density
-    use multisiteSF_module,only: flag_LFD_minimise, LFD_minimise
+    use multisiteSF_module,only: flag_LFD_nonSCF, LFD_SCF
     use units
 
     implicit none
@@ -210,9 +207,9 @@ contains
     ! Start timing the energy calculation
     call start_timer(tmr_l_energy, WITH_LEVEL)
     ! Now choose what we vary
-    if (flag_LFD_minimise) then ! Vary everything, this flag is only for PAO-based multi-site SFs
+    if (.NOT.flag_LFD_nonSCF) then ! Vary everything, this flag is only for PAO-based multi-site SFs
        ! minimise by repeating LFD with updated SCF density
-       call LFD_minimise(fixed_potential, vary_mu, n_L_iterations, L_tolerance, &
+       call LFD_SCF(fixed_potential, vary_mu, n_L_iterations, L_tolerance, &
                          sc_tolerance, expected_reduction, total_energy, density)
        ! Numerical optimisation subsequently 
        if (flag_vary_basis) then
@@ -235,9 +232,9 @@ contains
                             sc_tolerance, energy_tolerance,        &
                             total_energy, expected_reduction)
        else if (flag_basis_set == PAOs) then
-          if (flag_multisite .and. .not.flag_LFD_minimise) then
+          if (flag_multisite .and. flag_LFD_NonSCF) then
              if (inode==ionode) write(io_lun,'(/3x,A/)') &
-                'WARNING: Numerical PAO minimisation will be performed without doing LFD_minimisation!'   
+                'WARNING: Numerical PAO minimisation will be performed without doing LFD_SCF!'   
              !2017.Dec.28 TM: We need Selfconsistent Hamiltonian if this routine is called from control
              call new_SC_potl(.false., sc_tolerance, reset_L,             &
                               fixed_potential, vary_mu, n_L_iterations, &

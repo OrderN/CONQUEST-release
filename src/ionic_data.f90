@@ -1,4 +1,4 @@
-! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
+! -*- mode: F90; mode: font-lock -*-
 ! ------------------------------------------------------------------------------
 ! $Id$
 ! ------------------------------------------------------------------------------
@@ -40,9 +40,6 @@ module ionic_data
   ! Area identification
   integer, parameter, private :: area = 1
 
-  ! RCS tag for object file identification
-  character(len=80), private, save :: &
-       RCSid = "$Id$"
 !!***
 
 contains

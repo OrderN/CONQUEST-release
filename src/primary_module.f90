@@ -1,4 +1,4 @@
-! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
+! -*- mode: F90; mode: font-lock -*-
 ! ------------------------------------------------------------------------------
 ! $Id$
 ! ------------------------------------------------------------------------------
@@ -52,8 +52,6 @@ module primary_module
   implicit none
   save
 
-  ! Used for identifying object files (RCS ident command)
-  character(len=80) :: RCSid = "$Id$"
   type(primary_set) :: domain ! Integration grid points
   type(primary_set) :: bundle ! Atoms
 

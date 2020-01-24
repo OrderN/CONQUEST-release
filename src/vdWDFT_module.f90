@@ -50,9 +50,6 @@ module vdWDFT_module
 
   private  ! all module parameters are private beyond this point
 
-  character(len=80) :: &
-       RCSid = "$Id$"
-
   ! Precision parameters for the integral defining phi in routine phi_val
   real(double), parameter :: acutmin = 10.0_double  ! Upper integration limit
   real(double), parameter :: acutbyd = 30.0_double  ! Upper integration limit / d
@@ -1859,7 +1856,7 @@ contains
     else
        ! Expand interpolation inline since this is the hottest point in VdW
        ! Note arrays has dimension (1:nk)
-       ik_lo = aint(k / dk) + 1 ! integer division gives lower bound,
+       ik_lo = floor(k / dk) + 1 ! integer division gives lower bound,
                                 ! add 1 for correct array index
        ik_hi = ik_lo + 1
        k_lo = dk * real(ik_lo - 1, double)
@@ -1975,7 +1972,7 @@ contains
     dr = rcut / real(nr,double)
     dk = pi / (rcut)
     ! work out number of array elements just covering kc (i.e. kcut)
-    nk = aint(kc/dk) + 1
+    nk = floor(kc/dk) + 1
     nrs = nint(rsoft/dr)
     rs = real(nrs,double) * dr
 

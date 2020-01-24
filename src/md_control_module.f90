@@ -1,4 +1,4 @@
-! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
+! -*- mode: F90; mode: font-lock -*-
 ! ------------------------------------------------------------------------------
 ! $Id$
 ! ------------------------------------------------------------------------------
@@ -338,7 +338,7 @@ contains
 
     if (inode==ionode .and. iprint_MD > 1) then
       write(io_lun,'(4x,"Thermostat type: ",a)') th%thermo_type
-      write(io_lun,'(4x,"Extended system: ",l)') flag_extended_system
+      write(io_lun,'(4x,"Extended system: ",l1)') flag_extended_system
       if (.not. leqi(thermo_type, 'none')) then
         write(io_lun,'(4x,a,f10.2)') 'Target temperature        T_ext = ', &
                                      th%T_ext
@@ -1317,7 +1317,7 @@ contains
     if (inode==ionode .and. iprint_MD > 1) then
       write(io_lun,'(2x,a)') 'Welcome to init_baro'
       write(io_lun,'(4x,"Barostat type:   ",a)') baro%baro_type
-      write(io_lun,'(4x,"Extended system: ",l)') flag_extended_system
+      write(io_lun,'(4x,"Extended system: ",l1)') flag_extended_system
       if (.not. leqi(baro_type, 'none')) then
         write(io_lun,'(4x,a,f14.2)') 'Target pressure        P_ext = ', &
                                       baro%P_ext
@@ -2552,7 +2552,7 @@ contains
       end if
 
       if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) then
-        write(io_lun,'(2x,"flag_extended_system ",l)') flag_extended_system
+        write(io_lun,'(2x,"flag_extended_system ",l1)') flag_extended_system
         if (flag_read_velocity) then
           write(io_lun,'(a)') "Reading velocities from md.checkpoint"
           do ni=1,ni_in_cell

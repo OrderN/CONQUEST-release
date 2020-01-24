@@ -1,4 +1,4 @@
-! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
+! -*- mode: F90; mode: font-lock -*-
 !----------------------------------------------------------------------
 ! $Id$
 !----------------------------------------------------------------------
@@ -30,10 +30,6 @@ module sfc_partitions_module
        sfc_partitions_to_processors, &
        n_parts_user, &
        average_atomic_diameter, gap_threshold
-
-  ! RCS tag for object file identification
-  character(len=80), private :: &
-       RCSid = "$Id$"
 
   ! partition type
   type part

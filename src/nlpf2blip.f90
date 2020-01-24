@@ -25,11 +25,6 @@ module nlpf2blip
   real(double), allocatable, dimension(:), target :: nlpf_array
 
 
-  ! -------------------------------------------------------
-  ! RCS ident string for object file id
-  ! -------------------------------------------------------
-  character(len=80), private :: RCSid = "$Id$"
-
 contains
 
   subroutine make_blips_from_nlpfs
@@ -156,7 +151,7 @@ contains
                    n_sup = n_sup+1
                    if(r<pseudo(n_sp)%pjnl(nl)%cutoff) then
                       step = pseudo(n_sp)%pjnl(nl)%delta
-                      j = aint(r/step)+1
+                      j = floor(r/step)+1
                       if(j<pseudo(n_sp)%pjnl(nl)%n) then
                          rr = real(j,double)*step
                          a = ( rr - r ) / step

@@ -54,9 +54,6 @@ module S_matrix_module
   integer      :: InvSMaxSteps
   real(double) :: InvSDeltaOmegaTolerance
 
-  ! RCS tag for object file identification
-  character(len=80), save, private :: &
-       RCSid = "$Id$"
 !!***
 
 contains

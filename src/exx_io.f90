@@ -1,4 +1,4 @@
-! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
+! -*- mode: F90; mode: font-lock -*-
 ! ------------------------------------------------------------------------------
 ! $Id: exx_kernel_default.f90 XX year-mm-dd XX:XX:XXZ Lionel $
 ! -----------------------------------------------------------
@@ -319,47 +319,47 @@ contains
     select case(in)       
     case(1)   
        write(unit,*) 
-       write(unit,'(30X,A8,2X,A8,4X,A,11X,A,11X,A,11X,A,8X,A5,X,A7,2X,A3,3X,A5,6X,A3)') &
+       write(unit,'(30X,A8,2X,A8,4X,A,11X,A,11X,A,11X,A,8X,A5,1X,A7,2X,A3,3X,A5,6X,A3)') &
             '  type  ','lab.cell','x','y','z','r','spec.','neighb.','nsf','radii','exx'
-       write(unit,'(A9,X,A,I8,A2,I3,A,6X,2X,A2,X,I8,X,4F12.4,3X,I3,2I8,X,F7.3,F12.8)') &
+       write(unit,'(A9,1X,A,I8,A2,I3,A,6X,2X,A2,1X,I8,1X,4F12.4,3X,I3,2I8,1X,F7.3,F12.8)') &
             '{i\alpha}','{',labcell,'\ ',nsuppfuncs,'}', name, labcell, &
             xyz_Ang(1), xyz_Ang(2), xyz_Ang(3), r, spec, atom, nsuppfuncs, radii,e_hf
        
     case(2)       
-       write(unit,'(A9,X,A,I8,A2,I3,A,6X,2X,A2,X,I8,X,4F12.4,3X,I3,2I8,X,F7.3,F14.8)') &
+       write(unit,'(A9,1X,A,I8,A2,I3,A,6X,2X,A2,1X,I8,1X,4F12.4,3X,I3,2I8,1X,F7.3,F14.8)') &
             '{j\beta} ','{',labcell,'\ ',nsuppfuncs,'}', name, labcell, &
             xyz_Ang(1), xyz_Ang(2), xyz_Ang(3), r, spec, atom, nsuppfuncs, radii,e_hf
        write(unit,*) 
        
     case(3)
-       write(unit,'(2X,A9,X,A,I8,A2,I3,A,4X,2X,A2,X,I8,X,4F12.4,3X,I3,2I8,X,F7.3)') &
+       write(unit,'(2X,A9,1X,A,I8,A2,I3,A,4X,2X,A2,1X,I8,1X,4F12.4,3X,I3,2I8,1X,F7.3)') &
             '{k\gamma}','{',labcell,'\ ',nsuppfuncs,'}', name, labcell, &
             xyz_Ang(1), xyz_Ang(2), xyz_Ang(3), r, spec, atom, nsuppfuncs, radii
        
     case(4)
-       write(unit,'(4X,A9,X,A,I8,A2,I3,A,2X,2X,A2,X,I8,X,4F12.4,3X,I3,2I8,X,F7.3)') &
+       write(unit,'(4X,A9,1X,A,I8,A2,I3,A,2X,2X,A2,1X,I8,1X,4F12.4,3X,I3,2I8,1X,F7.3)') &
             '{l\delta}','{',labcell,'\ ',nsuppfuncs,'}', name, labcell, &
             xyz_Ang(1), xyz_Ang(2), xyz_Ang(3), r, spec, atom, nsuppfuncs, radii
        
     case(5)
-       write(unit,'(8X,A20,X,A,2I3,A,2I3,A,X,F12.8)') 'K{k-\gamma,l-\delta}', &
+       write(unit,'(8X,A20,1X,A,2I3,A,2I3,A,1X,F12.8)') 'K{k-\gamma,l-\delta}', &
             '{', npartitions,partition,',',nmembers,member,'}', r       
 
     case(10)
        open(unit)
-       write(unit,'(X,104A)', advance='no') ('=', j=1,104) ; write(unit,'(A)') ' '
+       write(unit,'(1X,104A)', advance='no') ('=', j=1,104) ; write(unit,'(A)') ' '
        write(unit,'(A15,I8)') '| inode:        ', inode
        write(unit,'(A15,I8)') '| n_partitions: ', npartitions
-       write(unit,'(X,104A)', advance='no') ('=', j=1,104) ; write(unit,'(A)') ' '
+       write(unit,'(1X,104A)', advance='no') ('=', j=1,104) ; write(unit,'(A)') ' '
 
     case(20)
-       write(unit,'(X,104A)', advance='no') ('=', j=1,104) ; write(unit,'(A)') ' '
+       write(unit,'(1X,104A)', advance='no') ('=', j=1,104) ; write(unit,'(A)') ' '
        write(unit,'(A12,I8,A12,I8)')   ' partition: ', partition,' n_members: ', &
             nmembers
-       write(unit,'(X,104A)', advance='no') ('=', j=1,104) ; write(unit,'(A)') ' '
+       write(unit,'(1X,104A)', advance='no') ('=', j=1,104) ; write(unit,'(A)') ' '
 
     case(30)   
-       write(unit,'(A4,A8,F12.4,X,A)') adjustr(mat_name(range)),'range:  ', &
+       write(unit,'(A4,A8,F12.4,1X,A)') adjustr(mat_name(range)),'range:  ', &
             rcut(range)*BohrtoAng, 'A'
 
        !write(unit,'(A12,I8,A12,I8,A16,I8)')'   member:  ', member, ' n_supports:  ', &
@@ -367,10 +367,10 @@ contains
        !write(unit,'(A12,6X,A2,4X,3F12.4,X,I3,3I8)') '   member:  ', name, &
        !     xyz_Ang(1), xyz_Ang(2), xyz_Ang(3), spec, atom, labcell,  nsuppfuncs
 
-       write(unit,'(A12,6X,A2,4X,3F12.4,X,I3)') '   member:  ', name, &
+       write(unit,'(A12,6X,A2,4X,3F12.4,1X,I3)') '   member:  ', name, &
             xyz_Ang(1), xyz_Ang(2), xyz_Ang(3), spec
             
-       write(unit,'(18X,A,11X,A,11X,A,7X,A11,X,A5,X,A7,X,A8,X,A3,2X,A5)') &
+       write(unit,'(18X,A,11X,A,11X,A,7X,A11,1X,A5,1X,A7,1X,A8,1X,A3,2X,A5)') &
             'x','y','z','distance(A)','spec.','neighb.','lab.cell','nsf','radii'
 
     case(31)   
@@ -388,34 +388,34 @@ contains
 
     case(60)
        if (r_Ang > very_small) then
-          write(unit,'(6X,A2,4X,4F12.4,X,I3,3I8,F7.3)') name, xyz_Ang(1), xyz_Ang(2), &
+          write(unit,'(6X,A2,4X,4F12.4,1X,I3,3I8,F7.3)') name, xyz_Ang(1), xyz_Ang(2), &
                xyz_Ang(3), r_Ang, spec, atom, labcell, nsuppfuncs, radii
        else
-          write(unit,'(2X,A3,X,A2,4X,4F12.4,X,I3,3I8,F7.3,X,A3)') '>>>',&
+          write(unit,'(2X,A3,1X,A2,4X,4F12.4,1X,I3,3I8,F7.3,1X,A3)') '>>>',&
                name, xyz_Ang(1), xyz_Ang(2), xyz_Ang(3), r_Ang, spec, atom, labcell, &
                nsuppfuncs, radii, '<<<'
        end if
     case(70)
        if (r_Ang > very_small) then
-          write(unit,'(6X,A2,4X,4F12.4,X,I3,3I8,F16.12)') name, xyz_Ang(1), xyz_Ang(2), &
+          write(unit,'(6X,A2,4X,4F12.4,1X,I3,3I8,F16.12)') name, xyz_Ang(1), xyz_Ang(2), &
                xyz_Ang(3), r_Ang, spec, atom, labcell, nsuppfuncs, e_hf
        else
-          write(unit,'(2X,A3X,A2,4X,4F12.4,X,I3,3I8,F16.12,X,A3)') '>>>', name, xyz_Ang(1), &
+          write(unit,'(2X,A3,1X,A2,4X,4F12.4,1X,I3,3I8,F16.12,1X,A3)') '>>>', name, xyz_Ang(1), &
                xyz_Ang(2), xyz_Ang(3), r_Ang, spec, atom, labcell, nsuppfuncs, e_hf, '<<<'
        end if
 
     case(800)
-       write(unit,'(18X,A,11X,A,11X,A,7X,A11,X,A5,X,A7,X,A8,X,A3,2X,A12)') &
+       write(unit,'(18X,A,11X,A,11X,A,7X,A11,1X,A5,1X,A7,1X,A8,1X,A3,2X,A12)') &
             'x','y','z','distance(A)','spec.','neighb.','lab.cell','nsf','Exx(Hartree)'
        
     case(1000)
-       write(unit,'(X,104A)', advance='no') ('=', j=1,104) ; write(unit,'(A)') ' '       
+       write(unit,'(1X,104A)', advance='no') ('=', j=1,104) ; write(unit,'(A)') ' '       
 
     case(0)
-       write(unit,'(X,104A)', advance='no') ('=', j=1,104) ; write(unit,'(A)') ' '
+       write(unit,'(1X,104A)', advance='no') ('=', j=1,104) ; write(unit,'(A)') ' '
        write(unit,'(A15,I8)') '| inode:        ', inode
        write(unit,'(A13)')    '| ...job done'
-       write(unit,'(X,104A)', advance='no') ('=', j=1,104) ; write(unit,'(A)') ' '
+       write(unit,'(1X,104A)', advance='no') ('=', j=1,104) ; write(unit,'(A)') ' '
        close(unit)     
 
     end select
@@ -491,10 +491,10 @@ contains
     integer, intent(in) :: inode
     integer             :: j
     
-    write(unit,'(X,150A)', advance='no') ('=', j=1,150) ; write(unit,'(A)') ' '
+    write(unit,'(1X,150A)', advance='no') ('=', j=1,150) ; write(unit,'(A)') ' '
     write(unit,'(A15,I8)') '| inode:        ', inode
     write(unit,'(A13)')    '| ...job done'
-    write(unit,'(X,150A)', advance='no') ('=', j=1,150) ; write(unit,'(A)') ' '
+    write(unit,'(1X,150A)', advance='no') ('=', j=1,150) ; write(unit,'(A)') ' '
     
     return
   end subroutine exx_write_tail
@@ -508,10 +508,10 @@ contains
     integer, intent(in) :: npart
     integer             :: j
 
-    write(unit,'(X,150A)', advance='no') ('=', j=1,150) ; write(unit,'(A)') ' '
+    write(unit,'(1X,150A)', advance='no') ('=', j=1,150) ; write(unit,'(A)') ' '
     write(unit,'(A15,I8)') '| inode:        ', inode
     write(unit,'(A15,I8)') '| n_partitions: ', npart
-    write(unit,'(X,150A)', advance='no') ('=', j=1,150) ; write(unit,'(A)') ' '
+    write(unit,'(1X,150A)', advance='no') ('=', j=1,150) ; write(unit,'(A)') ' '
     write(unit,'(43X,A8,2X,A8,4X,A,11X,A,11X,A,11X,A,8X,A5,3X,A3,5X,A3,2X,A5,4X,A3)') &
          '  type  ','lab.cell','x','y','z','r','spec.','ind','nsf','radii','exx'
 
@@ -527,9 +527,9 @@ contains
     integer, intent(in) :: n
     integer             :: j
 
-    write(unit,'(X,150A)', advance='no') ('=', j=1,150) ; write(unit,'(A)') ' '
+    write(unit,'(1X,150A)', advance='no') ('=', j=1,150) ; write(unit,'(A)') ' '
     write(unit,'(A12,I8,A12,I8)') ' partition: ', part,' n_members: ', n
-    write(unit,'(X,150A)', advance='no') ('=', j=1,150) ; write(unit,'(A)') ' '
+    write(unit,'(1X,150A)', advance='no') ('=', j=1,150) ; write(unit,'(A)') ' '
     
     return
   end subroutine exx_write_part

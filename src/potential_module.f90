@@ -1,4 +1,4 @@
-! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
+! -*- mode: F90; mode: font-lock -*-
 ! ------------------------------------------------------------------------------
 ! $Id$
 ! ------------------------------------------------------------------------------
@@ -34,14 +34,7 @@ module potential_module
   implicit none
   save
 
-  ! RCS tag for object file identification
-  character(len=80), private :: &
-       RCSid = "$Id$"
-
   real(double), allocatable, dimension(:,:) :: potential
-  ! ! for spin polarisation
-  ! real(double), allocatable, dimension(:) :: potential_up
-  ! real(double), allocatable, dimension(:) :: potential_dn
 
 !!***
 

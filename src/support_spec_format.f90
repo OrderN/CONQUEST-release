@@ -1,4 +1,4 @@
-! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
+! -*- mode: F90; mode: font-lock -*-
 ! ------------------------------------------------------------------------------
 ! $Id$
 ! ------------------------------------------------------------------------------
@@ -90,11 +90,6 @@ module support_spec_format
   real(double), dimension(:), allocatable, target :: coefficient_array_remote
   real(double), dimension(:), allocatable, target :: grad_coeff_array, elec_grad_coeff_array
   integer :: coeff_array_size ! size of coefficient_array
-
-  ! -------------------------------------------------------
-  ! RCS ident string for object file id
-  ! -------------------------------------------------------
-  character(len=80), private :: RCSid = "$Id$"
 
 !!***
 

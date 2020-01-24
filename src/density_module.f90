@@ -1,4 +1,4 @@
-! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
+! -*- mode: F90; mode: font-lock -*-
 ! ------------------------------------------------------------------------------
 ! $Id$
 ! ------------------------------------------------------------------------------
@@ -117,10 +117,6 @@ module density_module
 
   ! Area identification
   integer, parameter, private :: area = 5
-
-  ! RCS tag for object file identification
-  character(len=80), private :: &
-       RCSid = "$Id$"
 
   ! Method for constructing initial charge density (after the movement of atoms)
   integer            :: method_UpdateChargeDensity

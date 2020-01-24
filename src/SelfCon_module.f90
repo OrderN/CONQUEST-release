@@ -1,4 +1,4 @@
-! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
+! -*- mode: F90; mode: font-lock -*-
 ! ------------------------------------------------------------------------------
 ! $Id$
 ! ------------------------------------------------------------------------------
@@ -79,10 +79,6 @@ module SelfCon
   ! Area identification
   integer, parameter, private :: area = 5
 
-  ! RCS ident string for object file id
-  character(len=80), save, private :: &
-       RCSid = "$Id$"
-  !
   ! These should all be read or dynamically allocated
   real(double), parameter :: thresh        = 2.0_double
   real(double), parameter :: InitialLambda = 1.0_double
