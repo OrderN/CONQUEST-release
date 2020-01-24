@@ -23,6 +23,7 @@ include deps.obj
 
 $(TARGET): $(OBJECTS)
 	$(FC) $(LINKFLAGS) -o $(TARGET) $(OBJECTS) $(LIBS)
+	cp $(TARGET) ../../bin
 
 %.o: %.f90
 	$(FC) $(COMPFLAGS) -c $<

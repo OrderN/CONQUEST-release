@@ -1,4 +1,4 @@
-# -*- mode: makefile; mode: font-lock; column-number-mode: true -*-
+# -*- mode: makefile; mode: font-lock -*-
 #
 # $Id: Makefile,v 1.9.2.1 2006/03/07 07:36:40 drb Exp $
 #
@@ -65,7 +65,8 @@ deps.obj.inc: $(SRCS_NODS) system.make
 
 #Target
 $(TARGET) : $(NODE_OBJECTS)
-	$(FC) $(LINKFLAGS) -o $(TARGET) $(NODE_OBJECTS) $(LIBS) 
+	$(FC) $(LINKFLAGS) -o $(TARGET) $(NODE_OBJECTS) $(LIBS)
+	cp $(TARGET) ../bin
 
 #.f90.o:
 %.o: %.f90
@@ -112,13 +113,9 @@ doc:
 help:
 	$(ECHOSTR) "\nConquest Makefile\n-----------------\n"
 	$(ECHOSTR) "\t default (make or make Conquest) is to make Conquest\n"
-	$(ECHOSTR) "\t make preConquest makes preConquest\n"
 	$(ECHOSTR) "\t make tar makes a .tar.gz file in the directory below\n"
 	$(ECHOSTR) "\t make xhtml makes xrefs for ROBODoc html documentation"
 	$(ECHOSTR) "\t make html makes ROBODoc html documentation"
-	$(ECHOSTR) "\t make doc; netscape Conquest_mi.html gives documentation\n"
-	$(ECHOSTR) "\t make <file>_pure removes \"!!\" lines from source file <file>"
-	$(ECHOSTR) "\t make pure does for all files (puts into subdir pure)\n"
 	$(ECHOSTR) "\t make clean removes all object files and emacs ~ files"
 	$(ECHOSTR) "\t make doc_clean cleans up ROBODoc html documentation"
 	$(ECHOSTR) "\t make pure_clean removes all _pure files"
@@ -128,9 +125,6 @@ list:
 	$(ECHOSTR) $(SOURCES)
 	$(ECHOSTR) $(HTMLXREFS)
 	$(ECHOSTR) $(HTMLDOCS)
-
-tools:
-	( cd utilities; make )
 
 notimers:
 	@if [ ! -d $(NOTIMERS_DIR) ]; \
