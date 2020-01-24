@@ -1,4 +1,4 @@
-! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
+! -*- mode: F90; mode: font-lock -*-
 ! ------------------------------------------------------------------------------
 ! $Id$
 ! ------------------------------------------------------------------------------
@@ -66,15 +66,6 @@ module fft_module
   implicit none
 
   save
-
-  ! RCS tag for object file identification   
-  character(len=80), private :: RCSid = "$Id$"
-
-  ! Previously ffttable
-!  integer, parameter :: MAX_FFT_SIZE=8*128
-  
-!  real(double), dimension(100+MAX_FFT_SIZE*8) :: tablex,tabley,tablez
-!  complex(double_cplx), dimension(3*(100+MAX_FFT_SIZE*8)) :: tablex,tabley,tablez
 
   ! Previously map
   integer, allocatable, dimension(:), target :: prbx
@@ -175,8 +166,6 @@ contains
     use dimens,        ONLY: n_my_grid_points, n_grid_x, n_grid_y, n_grid_z
     use GenComms,      ONLY: cq_abort, inode
     use maxima_module, ONLY: maxngrid
-    use global_module, ONLY: area_SC
-    use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl, type_int
 
     implicit none
 
@@ -187,7 +176,7 @@ contains
     integer :: isign
 
     ! Local variables
-    integer :: i, stat
+    integer :: i
 
     if(size>maxngrid) call cq_abort("Error in fft3 with sizes: ",size,maxngrid)
     if (isign==-1) then ! Forward transform (from domains to columns)
@@ -257,7 +246,7 @@ contains
     use global_module, ONLY: numprocs, area_SC
     use maxima_module, ONLY: maxngrid
     use GenComms, ONLY: exchv, cq_abort
-    use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl, type_int
+    use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl
 
     ! Passed variables
     integer :: size
@@ -374,7 +363,6 @@ contains
     use global_module, ONLY: numprocs, area_SC, iprint_SC
     use numbers
     use dimens, ONLY: n_my_grid_points, n_grid_x, n_grid_y, n_grid_z, &
-         r_super_x_squared, r_super_y_squared, r_super_z_squared, &
          r_super_x, r_super_y, r_super_z
     use grid_index, ONLY: grid_point_x, grid_point_y, grid_point_z
     use GenComms, ONLY: gcopy_diff, exch, cq_abort, my_barrier, inode, myid
@@ -385,7 +373,7 @@ contains
 
     ! Local variables
     integer :: I, send_count(numprocs), count(numprocs), z, y, node_to, &
-         lz, ly, x, lx, JNODE, xcol, get_count(numprocs), site, cnt, &
+         x, JNODE, xcol, get_count(numprocs), site, cnt, &
          col_num, N
     integer :: ierr
     integer, dimension(numprocs) :: sx_columns_node

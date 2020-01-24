@@ -51,9 +51,6 @@ module PosTan
   real(double) :: SCC, SCBeta
   real(double) :: SupFnC, SupFnBeta
 
-  ! RCS tag for object file identification
-  character(len=80), save, private :: &
-       RCSid = "$Id$"
 !!***
 
 contains

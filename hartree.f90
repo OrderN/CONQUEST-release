@@ -33,10 +33,6 @@ module hartree_module
   ! We have this here since hartree_module is used by force_module, so we can't have it here
   real(double), dimension(3,3) :: Hartree_stress
 
-  ! RCS tag for object file identification
-  character(len=80), save, private :: &
-       RCSid = "$Id$"
-
 !!***
 
 contains

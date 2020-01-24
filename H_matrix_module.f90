@@ -1,4 +1,4 @@
-! -*- mode: F90; mode: font-lock; column-number-mode: true -*-
+! -*- mode: F90; mode: font-lock -*-
 ! ------------------------------------------------------------------------------
 ! $Id$
 ! ------------------------------------------------------------------------------
@@ -81,9 +81,6 @@ module H_matrix_module
   ! Area identification
   integer, parameter, private :: area = 3
 
-  ! RCS tag for object file identification
-  character(len=80), save, private :: &
-       RCSid = "$Id$"
   logical :: locps_output
   integer :: locps_choice
 

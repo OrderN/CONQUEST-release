@@ -1,4 +1,4 @@
-! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
+! -*- mode: F90; mode: font-lock -*-
 ! ------------------------------------------------------------------------------
 ! $Id$
 ! ------------------------------------------------------------------------------
@@ -78,11 +78,6 @@ module pseudo_tm_module
   !     module procedure nonloc_pp_derivative_tm
   !   end interface nonloc_pp_derivative_tm
 
-  ! -------------------------------------------------------
-  ! RCS ident string for object file id
-  ! -------------------------------------------------------
-  character(len=80), private :: &
-       RCSid = "$Id$"
   !!***
 
 contains
@@ -634,7 +629,7 @@ contains
                          x = x_store(ip)
                          y = y_store(ip)
                          z = z_store(ip)
-                         j = aint( r_from_i / step ) + 1
+                         j = floor( r_from_i / step ) + 1
                          if(j+1 <= pseudo(the_species)%vna%n) then
                             rr = real(j,double) * step
                             a = ( rr - r_from_i ) / step
@@ -668,7 +663,7 @@ contains
                          x = x_store(ip)
                          y = y_store(ip)
                          z = z_store(ip)
-                         j = aint( r_from_i / step ) + 1
+                         j = floor( r_from_i / step ) + 1
                          !As we use the maximum of cutoff for check_block
                          ! overrun should occur in some cases.
                          !if(j > N_TAB-1) call cq_abort &
@@ -716,7 +711,7 @@ contains
                          x = x_store(ip)
                          y = y_store(ip)
                          z = z_store(ip)
-                         j = aint( r_from_i / step ) + 1
+                         j = floor( r_from_i / step ) + 1
                          !As we use the maximum of cutoff for check_block
                          ! overrun should occur in some cases.
                          !if(j > N_TAB-1) call cq_abort &
@@ -823,7 +818,7 @@ contains
                             x = x_store(ip)
                             y = y_store(ip)
                             z = z_store(ip)
-                            j = aint( r_from_i / step ) + 1
+                            j = floor( r_from_i / step ) + 1
                             !As we use the maximum of cutoff for check_block
                             ! overrun should occur in some cases.
                             !if(j > N_TAB-1) then
@@ -1152,7 +1147,7 @@ contains
                       else
                          step = pseudo(the_species)%chlocal%delta
                       end if
-                      j = aint( r_from_i / step ) + 1
+                      j = floor( r_from_i / step ) + 1
                       !As we use the maximum of cutoff for check_block
                       ! overrun should occur in some cases.
                       !if(j > N_TAB-1) call cq_abort &
@@ -1210,7 +1205,7 @@ contains
                          ! Now the atomic density interacting with the potential from drho
                          ! Note that this is the force from the SCREENED Hartree potential
                          step = atomic_density_table(the_species)%delta
-                         j = aint( r_from_i / step ) + 1
+                         j = floor( r_from_i / step ) + 1
 
                          if(j+1 <= atomic_density_table(the_species)%length) then
                             rr = real(j,double) * step
@@ -1565,7 +1560,7 @@ contains
                          x = x_store(ip)  
                          y = y_store(ip)
                          z = z_store(ip)
-                         j = aint( r_from_i / step ) + 1
+                         j = floor( r_from_i / step ) + 1
                          !As we use the maximum of cutoff for check_block
                          ! overrun should occur in some cases.
                          !if(j > N_TAB) then
@@ -1981,7 +1976,7 @@ contains
       use GenComms, only: inode, ionode
       use pseudo_tm_info, only: rad_func, rad_alloc, rad_dealloc
       use global_module, only: iprint_pseudo
-      use functions, only: erfc
+      use functions, only: erfc_cq
 
       implicit none
 
@@ -2024,7 +2019,7 @@ contains
          !%%! zcore = zero
          !%%! do imesh = 1, func1%n
          !%%!    rr = (imesh-1)*func1%delta
-         !%%!    imesh_rr = aint(rr/step+very_small) +1
+         !%%!    imesh_rr = floor(rr/step+very_small) +1
          !%%!    rr_imesh = step * imesh_rr
          !%%! 
          !%%!    if(imesh < func1%n) then
@@ -2061,7 +2056,7 @@ contains
          call set_wos(nmesh_vloc, step_fine, wos)
          do imesh = 1, nmesh_vloc
             rr = (imesh-1) * step_fine
-            imesh_rr = aint(rr/step+very_small) +1
+            imesh_rr = floor(rr/step+very_small) +1
             rr_imesh = step * imesh_rr
 
             if(imesh_rr < pseudo%vlocal%n) then ! This is OK - will stop at n-1
@@ -2095,7 +2090,7 @@ contains
             ! eshift = eshift + (vlocal + z ) * four *pi * rr * wos(imesh)
             !erf eshift = eshift +  four *pi * rr * wos(imesh) * &
             !erf            (vlocal + zcore * erf(sqrt(beta) *rr) )
-            erfarg = one - erfc(sqrt(beta) *rr)
+            erfarg = one - erfc_cq(sqrt(beta) *rr)
             !erfarg = derf(sqrt(beta) *rr)
             !write(52,*) rr, erf(sqrt(beta) *rr), erfarg
             intvloc = intvloc +  four *pi * rr * wos(imesh) * &
@@ -2147,7 +2142,7 @@ contains
          zcore = zero
          do imesh = 1, func1%n
             rr = (imesh-1)*func1%delta
-            imesh_rr = aint(rr/step+very_small) +1
+            imesh_rr = floor(rr/step+very_small) +1
             rr_imesh = step * imesh_rr
 
             if(imesh < func1%n) then
@@ -2424,7 +2419,7 @@ contains
              if( r<atomic_density_table(isp)%cutoff ) then
 
                 step = atomic_density_table(isp)%delta
-                j = aint( r / step ) + 1
+                j = floor( r / step ) + 1
                 if(j+1<=atomic_density_table(isp)%length) then
                    rr = real(j,double) * step
                    a = ( rr - r ) / step
@@ -2453,7 +2448,7 @@ contains
                 chlocal_at = zero
                 if( r<pseudo(isp)%chlocal%cutoff ) then
                    step = pseudo(isp)%chlocal%delta
-                   j = aint( r / step ) + 1
+                   j = floor( r / step ) + 1
                    if(j+1<=pseudo(isp)%chlocal%n) then
                       rr = real(j,double) * step
                       a = ( rr - r ) / step
@@ -2502,7 +2497,7 @@ contains
                 r_2 = real(ir2-1,double)*pseudo(isp)%chna%delta
 
                 step = pseudo(isp)%chna%delta
-                j = aint( r_2 / step ) + 1
+                j = floor( r_2 / step ) + 1
                 chna_at = zero
                 if(j+1<=pseudo(isp)%chna%n) then
                    rr = real(j,double) * step
@@ -2536,7 +2531,7 @@ contains
                 r_2 = real(ir2-1,double)*pseudo(isp)%chna%delta
 
                 step = pseudo(isp)%chna%delta
-                j = aint( r_2 / step ) + 1
+                j = floor( r_2 / step ) + 1
                 chna_at = zero
                 if(j+1<=pseudo(isp)%chna%n) then
                    rr = real(j,double) * step
@@ -2566,7 +2561,7 @@ contains
                 if( r_1<pseudo(isp)%vlocal%cutoff ) then
 
                    step = pseudo(isp)%vlocal%delta
-                   j = aint( r_1 / step ) + 1
+                   j = floor( r_1 / step ) + 1
                    if(j+1<=pseudo(isp)%vlocal%n) then
                       rr = real(j,double) * step
                       a = ( rr - r_1 ) / step
@@ -2612,7 +2607,7 @@ contains
 
                 chatom_at = zero
                 step = atomic_density_table(isp)%delta
-                j = aint( r_2 / step ) + 1
+                j = floor( r_2 / step ) + 1
                 if(j+1<=atomic_density_table(isp)%length) then
                    rr = real(j,double) * step
                    a = ( rr - r_2 ) / step
@@ -2651,7 +2646,7 @@ contains
 
                 chatom_at = zero
                 step = atomic_density_table(isp)%delta
-                j = aint( r_2 / step ) + 1
+                j = floor( r_2 / step ) + 1
                 if(j+1<=atomic_density_table(isp)%length) then
                    rr = real(j,double) * step
                    a = ( rr - r_2 ) / step
@@ -2776,7 +2771,7 @@ contains
                 step = pseudo(isp)%vna%delta
                 do j=1,paoVNA(isp)%angmom(l)%zeta(n)%length
                    r = paoVNA(isp)%angmom(l)%zeta(n)%delta * real(j-1,double)
-                   jj = aint(r/step) + 1
+                   jj = floor(r/step) + 1
                    if(jj+1<=pseudo(isp)%vna%n) then
                       rr = real(jj,double) * step
                       a = ( rr - r ) / step
@@ -2807,7 +2802,7 @@ contains
                 step = pao(isp)%angmom(l)%zeta(n)%delta
                 do j=1,pseudo(isp)%vna%n
                    r = pseudo(isp)%vna%delta * real(j-1,double)
-                   jj = aint(r/step) + 1
+                   jj = floor(r/step) + 1
                    if(jj+1<=pao(isp)%angmom(l)%zeta(n)%length) then
                       rr = real(jj,double) * step
                       a = ( rr - r ) / step
@@ -2910,7 +2905,7 @@ contains
 
           chatom_at = zero
           step = atomic_density_table(isp)%delta
-          j = aint( r / step ) + 1
+          j = floor( r / step ) + 1
           if(j+1<=atomic_density_table(isp)%length) then
              rr = real(j,double) * step
              a = ( rr - r ) / step
@@ -2957,7 +2952,7 @@ contains
 
              chatom_at = zero
              step = pseudo(isp)%chlocal%delta
-             j = aint( r / step ) + 1
+             j = floor( r / step ) + 1
              if(j+1<=pseudo(isp)%chlocal%n) then
                 rr = real(j,double) * step
                 a = ( rr - r ) / step
@@ -2993,7 +2988,7 @@ contains
 
              chatom_at = zero
              step = pseudo(isp)%chna%delta
-             j = aint( r / step ) + 1
+             j = floor( r / step ) + 1
              if(j+1<=pseudo(isp)%chna%n) then
                 rr = real(j,double) * step
                 a = ( rr - r ) / step

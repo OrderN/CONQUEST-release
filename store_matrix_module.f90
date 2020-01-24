@@ -344,9 +344,9 @@ contains
 
     ! Passed variables
     character(len=*),intent(in) :: stub
+    integer,intent(in) :: n_matrix
     integer,intent(in) :: matA(n_matrix)
     integer,intent(in) :: range
-    integer,intent(in) :: n_matrix
     integer,optional,intent(in) :: index
 
     ! Local variables

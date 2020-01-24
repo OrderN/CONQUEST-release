@@ -69,9 +69,6 @@ module initial_read
   ! Index number for loading DM etc
   integer, save :: index_MatrixFile
 
-  ! RCS tag for object file identification
-  character(len=80), save, private :: &
-       RCSid = "$Id$"
 !!***
 
 contains
@@ -161,53 +158,46 @@ contains
   !!  SOURCE
   !!
   subroutine read_and_write(start, start_L, inode, ionode,          &
-                            vary_mu, mu, find_chdens, &
-                            read_phi)
+       vary_mu, mu, find_chdens, &
+       read_phi)
 
     use datatypes
     use numbers
     use io_module,              only: read_mult,                       &
-                                      read_atomic_positions,           &
-                                      pdb_template, pdb_format,        &
-                                      print_process_info
-    use group_module,           only: parts, part_method, HILBERT,     &
-                                      PYTHON
+         read_atomic_positions,           &
+         pdb_template, pdb_format,        &
+         print_process_info
+    use group_module,           only: parts, part_method
     use construct_module,       only: init_group, init_primary
     use maxima_module,          only: maxpartsproc, maxatomsproc
     use global_module,          only: id_glob,x_atom_cell,y_atom_cell, &
-                                      z_atom_cell, numprocs,           &
-                                      iprint_init, rcellx, rcelly,     &
-                                      rcellz, flag_old_partitions,     &
-                                      nspin, spin_factor,              &
-                                      flag_fix_spin_population,        &
-                                      ne_in_cell, ne_spin_in_cell,     &
-                                      ne_magn_in_cell,                 &
-                                      ni_in_cell, area_moveatoms,      &
-                                      io_lun, flag_only_dispersion,    &
-                                      flag_basis_set, blips, PAOs,     &
-                                      atomf, sf, paof,                 &
-                                      flag_SpinDependentSF, nspin_SF,  &
-                                      flag_Multisite,                  &
-                                      flag_cdft_atom, flag_local_excitation, &
-                                      flag_diagonalisation, flag_vary_basis, &
-                                      flag_MDcontinue, flag_SFcoeffReuse
+         z_atom_cell, numprocs,           &
+         iprint_init, nspin,              &
+         flag_fix_spin_population,        &
+         ne_in_cell, ne_spin_in_cell,     &
+         ne_magn_in_cell,                 &
+         ni_in_cell, area_moveatoms,      &
+         io_lun, flag_only_dispersion,    &
+         flag_basis_set, blips, PAOs,     &
+         atomf, sf, paof,                 &
+         flag_SpinDependentSF, nspin_SF,  &
+         flag_Multisite,                  &
+         flag_cdft_atom, flag_local_excitation, &
+         flag_diagonalisation, flag_vary_basis, &
+         flag_MDcontinue, flag_SFcoeffReuse
     use cdft_data, only: cDFT_NAtoms, &
-                         cDFT_NumberAtomGroups, cDFT_AtomList
+         cDFT_NumberAtomGroups, cDFT_AtomList
     use memory_module,          only: reg_alloc_mem, type_dbl
     use primary_module,         only: bundle, make_prim
-    use dimens,                 only: r_super_x, r_super_y, r_super_z, &
-                                      x_grid, y_grid, z_grid, r_h,     &
-                                      set_dimensions, find_grid
-    use block_module,           only: in_block_x, in_block_y,          &
-                                      in_block_z
+    use dimens,                 only: set_dimensions, find_grid
     use species_module,         only: n_species, species, charge,      &
-                                      non_local_species,               &
-                                      nsf_species, npao_species,       &
-                                      natomf_species
+         non_local_species,               &
+         nsf_species, npao_species,       &
+         natomf_species
     use GenComms,               only: my_barrier, cq_abort, cq_warn
     use pseudopotential_data,   only: non_local, read_pseudopotential
     use pseudopotential_common, only: core_radius, pseudo_type, OLDPS, &
-                                      SIESTA, ABINIT
+         SIESTA, ABINIT
     use pseudo_tm_module,       only: init_pseudo_tm
     use pseudo_tm_info,         only: pseudo
     use input_module,           only: fdf_string, fdf_out, io_close, leqi
@@ -215,9 +205,8 @@ contains
     use constraint_module,      only: flag_RigidBonds,constraints
     use support_spec_format,    only: flag_one_to_one, symmetry_breaking, read_option
     use multisiteSF_module,     only: flag_LFD_ReadTVEC, &
-                                      flag_MSSF_nonminimal, &   !nonmin_mssf
-                                      MSSF_nonminimal_offset, & !nonmin_mssf
-                                      MSSF_nonminimal_species   !nonmin_mssf
+         flag_MSSF_nonminimal, &   !nonmin_mssf
+         MSSF_nonminimal_species   !nonmin_mssf
     use biblio,                 only: type_bibliography
     use references,             only: compile_biblio
     use md_control,             only: md_position_file
@@ -239,7 +228,7 @@ contains
     character(len=80) :: atom_coord_file
     character(len=80) :: part_coord_file
 
-    integer      :: i, ierr, nnd, np, ni, ind_part, j, acz, prncpl, prncpl0
+    integer      :: i, j, acz, prncpl, prncpl0
     integer      :: ncf_tmp, stat, i_species
     integer      :: count_SZ, count_SZP
     real(double) :: ecore_tmp
@@ -249,16 +238,13 @@ contains
     ! for checking the sum of electrons of spin channels
     real(double) :: sum_elecN_spin
 
-    ! the bibliography, obviously
-    type(type_bibliography) :: bib
-
-!****lat<$
+    !****lat<$
     call start_backtrace(t=backtrace_timer,who='read_and_write',where=1,level=1)
-!****lat>$
+    !****lat>$
 
     ! read input data: parameters for run
     call read_input(start, start_L, titles, vary_mu, mu,&
-                    find_chdens, read_phi,HNL_fac)
+         find_chdens, read_phi,HNL_fac)
     ! Read pseudopotential data
     if(pseudo_type == OLDPS) then
        call read_pseudopotential(inode, ionode)
@@ -289,7 +275,7 @@ contains
                 call cq_abort("Functional in input file differs to pseudopotential: ",&
                      flag_functional_type, pseudo(i_species)%functional)
              end if
-         end if
+          end if
        end do
     end if
     !if(iprint_init>4) write(io_lun,fmt='(10x,"Proc: ",i4," done pseudo")') inode
@@ -303,13 +289,13 @@ contains
        pdb_template = fdf_string(80,'IO.PdbTemplate',atom_coord_file)
     else
        pdb_template = fdf_string(80,'IO.PdbTemplate',' ')
-    end if    
+    end if
     def = 'make_prt.dat'
     part_coord_file = fdf_string(80,'IO.Partitions',def)
     if (.not. flag_MDcontinue) then
-      call read_atomic_positions(trim(atom_coord_file))
+       call read_atomic_positions(trim(atom_coord_file))
     else
-      call read_atomic_positions(md_position_file)
+       call read_atomic_positions(md_position_file)
     end if
     if(iprint_init>4) call print_process_info()
     ! By now, we'll have unit cell sizes and grid cutoff
@@ -326,8 +312,8 @@ contains
     !          inode,maxatomsproc,maxpartsproc
     if(allocated(tot_force)) then
        write (io_lun,fmt='(10x,"WARNING! Proc: ",i4," tot_force &
-                          &already allocated: ",i7)') &
-             size(tot_force)
+            &already allocated: ",i7)') &
+            size(tot_force)
        deallocate(tot_force)
     end if
     allocate(tot_force(3,ni_in_cell))
@@ -348,7 +334,7 @@ contains
     call init_primary(bundle, maxatomsproc, maxpartsproc, .true.)
 
     call make_prim(parts, bundle, inode-1, id_glob, x_atom_cell, &
-                   y_atom_cell, z_atom_cell, species)
+         y_atom_cell, z_atom_cell, species)
 
     ! Skip the following statement if only calculating the dispersion
     if (flag_only_dispersion) return
@@ -426,11 +412,11 @@ contains
                 else
                    if (.not.flag_MSSF_nonminimal) then
                       if(inode==ionode) write(io_lun,'(A/A,I3,A,I3/2A)') &
-                      "You have a major problem with your multi-site support functions.",&
-                      "Number of multi-site SFs", nsf_species(i), &
-                      " is not equal to single-zeta (SZ) size", count_SZ, &
-                      "You need to set Multisite.nonminimal to be .true. or ",&
-                      "set Atom.NumberOfSupports to be SZ size."
+                           "You have a major problem with your multi-site support functions.",&
+                           "Number of multi-site SFs", nsf_species(i), &
+                           " is not equal to single-zeta (SZ) size", count_SZ, &
+                           "You need to set Multisite.nonminimal to be .true. or ",&
+                           "set Atom.NumberOfSupports to be SZ size."
                       call cq_abort("Multi-site support function error for species ",i)
                    else if (nsf_species(i).eq.count_SZP) then
                       MSSF_nonminimal_species(i) = 2   ! SZP-size MSSF
@@ -438,14 +424,14 @@ contains
                       MSSF_nonminimal_species(i) = 3   ! other size
                       if (.not.flag_LFD_ReadTVEC .and. .not.read_option) then
                          if (inode==ionode) write(io_lun,'(A/A,I3,A,I3,A,I3/A/A/A/A)') &
-                         "You have a major problem with your multi-site support functions.",&
-                         "Number of multi-site SFs", nsf_species(i), &
-                         " is not equal to single-zeta (SZ) size", count_SZ, &
-                         " nor single-zeta plus polarisation (SZP) size", count_SZP, &
-                         "Since the automatic setting of the trial vectors in the local filter diagonalisation method is ",&
-                         "avaialble only for SZ or SZP size,",&
-                         "you need to provide initial SFcoeffmatrix or trial vectors for the LFD method, ",&
-                         "or change Atom.NumberOfSupports to be SZ or SZP size."
+                              "You have a major problem with your multi-site support functions.",&
+                              "Number of multi-site SFs", nsf_species(i), &
+                              " is not equal to single-zeta (SZ) size", count_SZ, &
+                              " nor single-zeta plus polarisation (SZP) size", count_SZP, &
+                              "Since the automatic setting of the trial vectors in the local filter diagonalisation method is ",&
+                              "avaialble only for SZ or SZP size,",&
+                              "you need to provide initial SFcoeffmatrix or trial vectors for the LFD method, ",&
+                              "or change Atom.NumberOfSupports to be SZ or SZP size."
                          call cq_abort("Multi-site support function error for species ",i)
                       endif
                    endif
@@ -468,7 +454,7 @@ contains
                    else if(symmetry_breaking.AND.read_option) then
                       write(io_lun,fmt='("You have a major problem with your basis set.")')
                       write(io_lun,fmt='("There are ",i4," support functions and",i4," angular momentum")') &
-                          nsf_species(i),count_SZP
+                           nsf_species(i),count_SZP
                       write(io_lun,fmt='("components.  But as BasisSet.SymmetryBreaking is set T we will continue.")')
                    end if
                 end if
@@ -506,12 +492,12 @@ contains
     ! Calculate the number of electrons in the spin channels
     ! if (flag_fix_spin_population) then
     sum_elecN_spin = ne_spin_in_cell(1) + ne_spin_in_cell(2)
-    if (sum_elecN_spin /= ne_in_cell) then
+    if (abs(sum_elecN_spin - ne_in_cell)>very_small) then
        if (nspin == 2 .and. flag_fix_spin_population) then
           call cq_abort('read_and_write: sum of number of electrons &
-                         &in spin channels is different from total &
-                         &number of electrons. ', &
-                         sum_elecN_spin, ne_in_cell)
+               &in spin channels is different from total &
+               &number of electrons. ', &
+               sum_elecN_spin, ne_in_cell)
        else
           ne_spin_in_cell(:) = half * ne_in_cell
        end if
@@ -521,17 +507,16 @@ contains
     !
     ! Set up various lengths, volumes, reciprocals etc. for convenient use
     call set_dimensions(inode, ionode,HNL_fac, non_local, n_species, &
-                        non_local_species, core_radius)
+         non_local_species, core_radius)
 
     ! write out some information on the run
     if (inode == ionode) &
-         call write_info(titles, mu, vary_mu, find_chdens, read_phi, &
-                         HNL_fac, numprocs)
+         call write_info(titles, mu, vary_mu, read_phi, HNL_fac, numprocs)
 
     call compile_biblio
-!****lat<$
+    !****lat<$
     call stop_backtrace(t=backtrace_timer,who='read_and_write')
-!****lat>$
+    !****lat>$
 
     call my_barrier()
 
@@ -772,13 +757,13 @@ contains
          flag_precondition_blips,                  &
          flag_fix_spin_population,                 &
          flag_fractional_atomic_coords,            &
-         flag_old_partitions, ne_in_cell,          &
+         ne_in_cell,          &
          max_L_iterations, flag_read_blocks,       &
          runtype, restart_DM, restart_rho,         &
          flag_basis_set, blips, PAOs,              &
          flag_test_forces, UseGemm,                &
          flag_fractional_atomic_coords,            &
-         flag_old_partitions, ne_in_cell,          &
+         ne_in_cell,          &
          ne_spin_in_cell, nspin, spin_factor,      &
          ne_magn_in_cell,                          &
          max_L_iterations,    &
@@ -788,9 +773,9 @@ contains
          iprint_SC, iprint_minE, iprint_time,      &
          iprint_MD, iprint_index, iprint_gen,      &
          iprint_pseudo, iprint_basis, iprint_exx,  &
-         iprint_intgn,iprint_MDdebug,area_general, &
+         iprint_intgn,iprint_MDdebug, &
          global_maxatomspart, load_balance,        &
-         many_processors, flag_assign_blocks,      &
+         flag_assign_blocks,      &
          io_lun, flag_pulay_simpleStep,            &
          flag_Becke_weights,                       &
          flag_Becke_atomic_radii,                  &
@@ -821,8 +806,8 @@ contains
          cell_en_tol, optcell_method, cell_stress_tol, &
          flag_stress, flag_full_stress, rng_seed, &
          flag_atomic_stress, flag_heat_flux, flag_DumpMatrices
-    use dimens, only: r_super_x, r_super_y, r_super_z, GridCutoff,    &
-         n_grid_x, n_grid_y, n_grid_z, r_h, r_c,         &
+    use dimens, only: GridCutoff,    &
+         n_grid_x, n_grid_y, n_grid_z, r_c,         &
          RadiusSupport, RadiusAtomf, RadiusMS, RadiusLD, &
          NonLocalFactor, InvSRange,                      &
          min_blip_sp, flag_buffer_old, AtomMove_buffer,  &
@@ -831,8 +816,8 @@ contains
          blocks_raster, blocks_hilbert
     use species_module, only: species_label, charge, mass, n_species,  &
          charge, charge_up, charge_dn,            &
-         species, ps_file, ch_file, phi_file,     &
-         nsf_species, nlpf_species, npao_species, &
+         ps_file,     &
+         nsf_species, &
          non_local_species, type_species,         &
          species_file, species_from_files
     use GenComms,   only: gcopy, my_barrier, cq_abort, inode, ionode, cq_warn
@@ -843,7 +828,7 @@ contains
          LinTol_DMM, n_dumpL
     !TM
     use pseudopotential_common, only: pseudo_type, OLDPS, SIESTA, &
-         STATE, ABINIT, flag_angular_new, &
+         ABINIT, flag_angular_new, &
          flag_neutral_atom_projector, maxL_neutral_atom_projector, numN_neutral_atom_projector
     use SelfCon, only: A, flag_linear_mixing, EndLinearMixing, q0, q1,&
          n_exact, maxitersSC, maxearlySC, maxpulaySC,   &
@@ -853,7 +838,7 @@ contains
     use S_matrix_module, only: InvSTolerance, InvSMaxSteps,&
          InvSDeltaOmegaTolerance
     use blip,          only: blip_info, init_blip_flag, alpha, beta
-    use maxima_module, only: maxnsf, lmax_ps
+    use maxima_module, only: lmax_ps
     use control,       only: MDn_steps, MDfreq, MDtimestep, MDcgtol, CGreset, LBFGS_history
     use ion_electrostatic,  only: ewald_accuracy
     use minimise,      only: UsePulay, n_L_iterations,          &
@@ -888,7 +873,7 @@ contains
     use cdft_data, only: cDFT_Type, cDFT_MaxIterations, cDFT_NAtoms, &
          cDFT_Target, cDFT_Tolerance,                &
          cDFT_NumberAtomGroups, cDFT_AtomList,       &
-         cDFT_BlockLabel, cDFT_Vc
+         cDFT_BlockLabel
     use sfc_partitions_module, only: n_parts_user, average_atomic_diameter, gap_threshold
     use XLBOMD_module,         only: XLInitFreq,kappa
     use mult_module,           only: maxiter_Dissipation
@@ -902,19 +887,19 @@ contains
          MSSF_Smear_center, MSSF_Smear_shift, MSSF_Smear_width, &
          flag_LFD_ReadTVEC, LFD_TVEC_read,                      &
          LFD_kT, LFD_ChemP, flag_LFD_useChemPsub,               &
-         flag_LFD_minimise, LFD_ThreshE, LFD_ThreshD,           &
+         flag_LFD_nonSCF, LFD_ThreshE, LFD_ThreshD,           &
          LFD_Thresh_EnergyRise, LFD_max_iteration,              &
          flag_LFD_MD_UseAtomicDensity,  flag_MSSF_nonminimal,   &
          n_dumpSFcoeff,                                         &
          MSSF_nonminimal_offset ! nonmin_mssf
     use control,    only: md_ensemble
     use md_control, only: md_tau_T, md_n_nhc, md_n_ys, md_n_mts, md_nhc_mass, &
-                          target_pressure, md_baro_type, md_tau_P, &
-                          md_thermo_type, md_bulkmod_est, md_box_mass, &
-                          flag_write_xsf, md_cell_nhc, md_nhc_cell_mass, &
-                          md_calc_xlmass, md_equil_steps, md_equil_press, &
-                          md_tau_T_equil, md_tau_P_equil, md_p_drag, &
-                          md_t_drag, md_cell_constraint
+         target_pressure, md_baro_type, md_tau_P, &
+         md_thermo_type, md_bulkmod_est, md_box_mass, &
+         flag_write_xsf, md_cell_nhc, md_nhc_cell_mass, &
+         md_calc_xlmass, md_equil_steps, md_equil_press, &
+         md_tau_T_equil, md_tau_P_equil, md_p_drag, &
+         md_t_drag, md_cell_constraint
     use md_model,   only: md_tdep
     use move_atoms,         only: threshold_resetCD, &
          flag_stop_on_empty_bundle, &
@@ -925,8 +910,8 @@ contains
          flag_different_functional
     use biblio, only: flag_dump_bib
 
-   !2019/12/27 tsuyoshi
-    use density_module,  only: method_UpdateChargeDensity,DensityMatrix,AtomicCharge,LastStep
+    !2019/12/27 tsuyoshi
+    use density_module,  only: method_UpdateChargeDensity,DensityMatrix,AtomicCharge
 
     implicit none
 
@@ -941,11 +926,9 @@ contains
     !type(block), pointer :: bp      ! Pointer to a block read by fdf
     !type(parsed_line), pointer :: p ! Pointer to a line broken into tokens by fdf
     type(cq_timer)    :: backtrace_timer
-    type(cq_timer)    :: backtrace_timer2
-    type(cq_timer)    :: backtrace_timer3
 
 
-    integer           :: i, j, k, lun, stat
+    integer           :: i, j, stat
     integer           :: i_LFD, j_LFD, k_LFD, n_LFD, line_LFD
     character(len=20) :: def, tmp2
     character(len=80) :: coordfile, timefile, timefileroot
@@ -953,9 +936,6 @@ contains
     character(len=6)  :: method ! To find whether we diagonalise or use O(N)
     character(len=5)  :: ps_type !To find which pseudo we use
     character(len=8)  :: tmp
-    logical           :: new_format
-    !logical, external :: leqi
-    real(double)      :: r_t, max_rc
     logical :: flag_ghost, find_species
 
     ! spin polarisation
@@ -1258,8 +1238,8 @@ contains
     !
     !**<lat>** added possibility to read *.ion from file specified by the user
     species_from_files = fdf_boolean('General.PAOFromFiles',.false.)
+    flag_ghost=.false.
     if(fdf_block('ChemicalSpeciesLabel')) then
-       flag_ghost=.false.
        if(1+block_end-block_start<n_species) & 
             call cq_abort("Too few species in ChemicalSpeciesLabel: ",&
             1+block_end-block_start,n_species)
@@ -1435,7 +1415,7 @@ contains
        endif
     else
        flag_LFD          = .false.
-       flag_LFD_minimise = .false.
+       flag_LFD_nonSCF   = .false.
        flag_MSSF_smear   = .false.
     endif
     ! For LFD
@@ -1466,8 +1446,8 @@ contains
              call cq_abort("No LFDTrialVector label in the input file.")
           endif
        endif ! flag_LFD_ReadTVEC
-       flag_LFD_minimise = fdf_boolean('Multisite.LFD.Minimise',.true.)
-       if (flag_LFD_minimise) then
+       flag_LFD_nonSCF = fdf_boolean('Multisite.LFD.NonSCF',.false.)
+       if (.NOT.flag_LFD_nonSCF) then ! Expected behaviour
           LFD_threshE = fdf_double('Multisite.LFD.Min.ThreshE',1.0e-6_double)
           LFD_threshD = fdf_double('Multisite.LFD.Min.ThreshD',1.0e-6_double)
           LFD_Thresh_EnergyRise = fdf_double('Multisite.LFD.Min.ThreshEnergyRise',LFD_threshE*ten)
@@ -1574,7 +1554,7 @@ contains
 !!$
     flag_DumpMatrices      = fdf_boolean('IO.DumpMatrices',.true.)
     flag_DumpChargeDensity = fdf_boolean('IO.DumpChargeDensity',.false.)
-    
+
 !!$
 !!$
 !!$
@@ -1614,7 +1594,7 @@ contains
           E_wf_max = fdf_double('IO.max_wf_E',zero)
           ! Is the range relative to Ef (T) or absolute (F)
           flag_wf_range_Ef = fdf_boolean('IO.WFRangeRelative',.true.)
-          if(flag_wf_range_Ef.AND.E_wf_min==zero.AND.E_wf_max==zero) then
+          if(flag_wf_range_Ef.AND.abs(E_wf_min)<very_small.AND.abs(E_wf_max)<very_small) then
              flag_out_wf = .false.
              flag_wf_range_Ef = .false.
              if(inode==ionode) write(io_lun,'(2x,"Setting IO.outputWF F as no bands range given")')
@@ -2011,42 +1991,42 @@ contains
     flag_LmatrixReuse = fdf_boolean('AtomMove.ReuseDM',.true.)
     flag_write_xsf    = fdf_boolean('AtomMove.WriteXSF', .true.)
     ! tsuyoshi 2019/12/30
-     if(flag_SFcoeffReuse .and. .not.flag_LmatrixReuse) then
+    if(flag_SFcoeffReuse .and. .not.flag_LmatrixReuse) then
        call cq_warn(sub_name,' AtomMove.ReuseDM should be true if AtomMove.ReuseSFcoeff is true.')
        flag_LmatrixReuse = .true.
-     endif
-     if(flag_Multisite) then
-      if(.not.flag_SFcoeffReuse .and. flag_LmatrixReuse) then
-       call cq_warn(sub_name,' AtomMove.ReuseSFcoeff should be true if AtomMove.ReuseDM is true.')
-       flag_SFcoeffReuse = .true.
-      endif
-     endif
-    
+    endif
+    if(flag_Multisite) then
+       if(.not.flag_SFcoeffReuse .and. flag_LmatrixReuse) then
+          call cq_warn(sub_name,' AtomMove.ReuseSFcoeff should be true if AtomMove.ReuseDM is true.')
+          flag_SFcoeffReuse = .true.
+       endif
+    endif
+
     ! tsuyoshi 2019/12/27
     !  New Keyword for the method to update the charge density after the movement of atoms
     !    DensityMatrix = 0; AtomicCharge = 1; LastStep = 2
-     method_UpdateChargeDensity = fdf_integer('AtomMove.InitialChargeDensity',DensityMatrix)
+    method_UpdateChargeDensity = fdf_integer('AtomMove.InitialChargeDensity',DensityMatrix)
 
     !  The keywords ( SC.ResetDensOnAtomMove and Multisite.LFD.UpdateWithAtomicDensity ) 
     !  should be removed in the near future.
-       flag_reset_dens_on_atom_move = fdf_boolean('SC.ResetDensOnAtomMove',.false.)
-       if(flag_reset_dens_on_atom_move) then
-         call cq_warn(sub_name,' SC.ResetDensOnAtomMove will not be available soon. &
-         &             Set AtomMove.InitialChargeDensity as 1, instead.')
-         method_UpdateChargeDensity = AtomicCharge
-       endif
+    flag_reset_dens_on_atom_move = fdf_boolean('SC.ResetDensOnAtomMove',.false.)
+    if(flag_reset_dens_on_atom_move) then
+       call cq_warn(sub_name,' SC.ResetDensOnAtomMove will not be available soon. &
+            &             Set AtomMove.InitialChargeDensity as 1, instead.')
+       method_UpdateChargeDensity = AtomicCharge
+    endif
 
-       if (flag_LFD .and. .not.flag_SFcoeffReuse) then
-         ! if LFD, use atomic density in default when we don't reuse SFcoeff
-         flag_LFD_MD_UseAtomicDensity = fdf_boolean('Multisite.LFD.UpdateWithAtomicDensity',.true.)
-         call cq_warn(sub_name,' Multisite.LFD.UpdateWithAtomicDensity will not be available soon. &
-         &             Set AtomMove.InitialChargeDensity, instead.')
-       endif
-       if(flag_LFD_MD_UseAtomicDensity) method_UpdateChargeDensity = AtomicCharge
+    if (flag_LFD .and. .not.flag_SFcoeffReuse) then
+       ! if LFD, use atomic density in default when we don't reuse SFcoeff
+       flag_LFD_MD_UseAtomicDensity = fdf_boolean('Multisite.LFD.UpdateWithAtomicDensity',.true.)
+       call cq_warn(sub_name,' Multisite.LFD.UpdateWithAtomicDensity will not be available soon. &
+            &             Set AtomMove.InitialChargeDensity, instead.')
+    endif
+    if(flag_LFD_MD_UseAtomicDensity) method_UpdateChargeDensity = AtomicCharge
 
     if(method_UpdateChargeDensity == AtomicCharge) then
-      flag_reset_dens_on_atom_move = .true.
-      flag_LFD_MD_UseAtomicDensity = .true.
+       flag_reset_dens_on_atom_move = .true.
+       flag_LFD_MD_UseAtomicDensity = .true.
     endif
 
 
@@ -2070,9 +2050,9 @@ contains
        flag_read_velocity = fdf_boolean('AtomMove.ReadVelocity',.false.)
        restart_DM         = fdf_boolean('General.LoadDM', .false.)
        if(restart_DM) then                                             
-        find_chdens    = fdf_boolean('SC.MakeInitialChargeFromK',.true.) 
+          find_chdens    = fdf_boolean('SC.MakeInitialChargeFromK',.true.) 
        else
-        find_chdens    = fdf_boolean('SC.MakeInitialChargeFromK',.false.)
+          find_chdens    = fdf_boolean('SC.MakeInitialChargeFromK',.false.)
        endif
        if (flag_XLBOMD) restart_X=fdf_boolean('XL.LoadX', .false.)
        if (flag_multisite) read_option = fdf_boolean('Basis.LoadCoeffs', .false.)
@@ -2237,8 +2217,7 @@ contains
     !
     subroutine check_compatibility 
 
-      use GenComms, only: inode, ionode
-      
+
       implicit none
 
       character(len=80) :: sub_name = "check_compatibility"
@@ -2277,51 +2256,51 @@ contains
   end subroutine read_input
   !!***
 
-! ------------------------------------------------------------------------------
-! Subroutine allocate_species_vars
-! ------------------------------------------------------------------------------
-
-!!****f* initial_read/allocate_species_vars *
-!!
-!!  NAME 
-!!   allocate_species_vars
-!!  USAGE
-!!   
-!!  PURPOSE
-!!   Allocates variables which depend on number of species
-!!  INPUTS
-!! 
-!! 
-!!  USES
-!!   
-!!  AUTHOR
-!!   D. R. Bowler
-!!  CREATION DATE
-!!   Unknown
-!!  MODIFICATION HISTORY
-!!   2011/09/16 11:10 dave
-!!    - Added header and changed atomicrad to atomicnum
-!!   2011/11/16 15:51 dave
-!!    - Changes for new blip data
-!!   2014/10/12 10:58 lat
-!!    - Added species_file
-!!   2015/06/08 lat
-!!    - Added experimental backtrace
-!!   2016/09/16 17:00 nakata
-!!    - Added RadiusAtomf, RadiusMS and RadiusLD
-!!   2017/04/05 18:00 nakata
-!!    - Added charge_up and charge_dn
-!!   2019/06/06 18:00 nakata
-!!    - Added MSSF_nonminimal_species
-!!  SOURCE
-!!
+  ! ------------------------------------------------------------------------------
+  ! Subroutine allocate_species_vars
+  ! ------------------------------------------------------------------------------
+  
+  !!****f* initial_read/allocate_species_vars *
+  !!
+  !!  NAME 
+  !!   allocate_species_vars
+  !!  USAGE
+  !!   
+  !!  PURPOSE
+  !!   Allocates variables which depend on number of species
+  !!  INPUTS
+  !! 
+  !! 
+  !!  USES
+  !!   
+  !!  AUTHOR
+  !!   D. R. Bowler
+  !!  CREATION DATE
+  !!   Unknown
+  !!  MODIFICATION HISTORY
+  !!   2011/09/16 11:10 dave
+  !!    - Added header and changed atomicrad to atomicnum
+  !!   2011/11/16 15:51 dave
+  !!    - Changes for new blip data
+  !!   2014/10/12 10:58 lat
+  !!    - Added species_file
+  !!   2015/06/08 lat
+  !!    - Added experimental backtrace
+  !!   2016/09/16 17:00 nakata
+  !!    - Added RadiusAtomf, RadiusMS and RadiusLD
+  !!   2017/04/05 18:00 nakata
+  !!    - Added charge_up and charge_dn
+  !!   2019/06/06 18:00 nakata
+  !!    - Added MSSF_nonminimal_species
+  !!  SOURCE
+  !!
   subroutine allocate_species_vars
 
     use dimens,             only: RadiusSupport, RadiusAtomf, RadiusMS, RadiusLD, &
-                                  NonLocalFactor, InvSRange, atomicnum
+         NonLocalFactor, InvSRange, atomicnum
     use memory_module,      only: reg_alloc_mem, type_dbl
     use species_module,     only: n_species, nsf_species, nlpf_species, npao_species, natomf_species, &
-                                  charge, charge_up, charge_dn
+         charge, charge_up, charge_dn
     use species_module,     only: mass, non_local_species, ps_file, ch_file, phi_file 
     use species_module,     only: species_label, species_file, type_species
     use global_module,      only: area_general
@@ -2335,9 +2314,9 @@ contains
     type(cq_timer) :: backtrace_timer
     integer        :: stat
 
-!****lat<$
+    !****lat<$
     call start_backtrace(t=backtrace_timer,who='allocate_species_vars',where=1,level=3)
-!****lat>$
+    !****lat>$
 
     call start_timer(tmr_std_allocation)
     !
@@ -2410,13 +2389,13 @@ contains
     !
     call stop_timer(tmr_std_allocation)
 
-!****lat<$
+    !****lat<$
     call stop_backtrace(t=backtrace_timer,who='allocate_species_vars')
-!****lat>$
+    !****lat>$
 
     return
   end subroutine allocate_species_vars
-!!***
+  !!***
 
   ! ------------------------------------------------------------------------------
   ! Subroutine write_info
@@ -2460,31 +2439,31 @@ contains
   !!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
   !!  SOURCE
   !!
-  subroutine write_info(titles, mu, vary_mu, find_chdens, read_phi, &
-                        HNL_fac, NODES)
+  subroutine write_info(titles, mu, vary_mu, read_phi, &
+       HNL_fac, NODES)
 
     use datatypes
     use units
     use dimens,               only: r_super_x, r_super_y, r_super_z,   &
-                                    n_grid_x, n_grid_y, n_grid_z, r_h, &
-                                    r_c
+         n_grid_x, n_grid_y, n_grid_z, r_h, &
+         r_c
     use block_module,         only: in_block_x, in_block_y, in_block_z
     use species_module,       only: n_species, species_label, mass,    &
-                                    charge, ps_file, ch_file,          &
-                                    phi_file, species, nsf_species
-    use pseudopotential_data, only: core_radius, non_local_species
+         charge,          &
+         phi_file, nsf_species
+    use pseudopotential_data, only: core_radius
     use DiagModule,           only: flag_smear_type,           &
-                                    iMethfessel_Paxton
+         iMethfessel_Paxton
     use blip,                 only: blip_info
-    use global_module,        only: flag_basis_set, PAOs,blips,        &
-                                    flag_precondition_blips, io_lun,   &
-                                    flag_Multisite, flag_diagonalisation, flag_neutral_atom, &
-                                    flag_self_consistent, flag_vary_basis
+    use global_module,        only: flag_basis_set, blips,        &
+         flag_precondition_blips, io_lun,   &
+         flag_Multisite, flag_diagonalisation, flag_neutral_atom, &
+         flag_self_consistent, flag_vary_basis
     use SelfCon,              only: maxitersSC
     use minimise,             only: energy_tolerance, L_tolerance,     &
-                                    sc_tolerance,                      &
-                                    n_support_iterations,              &
-                                    n_L_iterations
+         sc_tolerance,                      &
+         n_support_iterations,              &
+         n_L_iterations
     use datestamp,            only: datestr, commentver
     use pseudopotential_common, only: flag_neutral_atom_projector, maxL_neutral_atom_projector, &
          numN_neutral_atom_projector
@@ -2492,12 +2471,11 @@ contains
     implicit none
 
     ! Passed variables
-    logical :: vary_mu, find_chdens
+    logical :: vary_mu
     logical :: read_phi
     character(len=80) :: titles
     integer :: NODES 
-    integer :: n_title
-    real(double) :: mu, alpha, beta, expected_reduction, HNL_fac
+    real(double) :: mu, HNL_fac
 
     ! Local variables
     integer :: n
@@ -2505,11 +2483,11 @@ contains
 
     call date_and_time(today, the_time)
     write(io_lun,3) today(1:4), today(5:6), today(7:8), the_time(1:2),&
-                    the_time(3:4)
+         the_time(3:4)
     write(io_lun,&
-          '(/10x,"Code compiled on: ",a,/10x,"Version comment: ",/10x,a)') &
+         '(/10x,"Code compiled on: ",a,/10x,"Version comment: ",/10x,a)') &
          datestr, commentver
-    
+
     write(io_lun,1)
     write(io_lun,2) titles
 
@@ -2520,28 +2498,28 @@ contains
           write(io_lun,'(/,10x,"Using Fermi-Dirac smearing")')
        case (1)
           write(io_lun,&
-                '(/,10x,"Using order ",i2," Methfessel-Paxton smearing")') &
+               '(/,10x,"Using order ",i2," Methfessel-Paxton smearing")') &
                iMethfessel_Paxton
        end select
     else
        write(io_lun,30) 'order N with LNV'   
     end if
     write(io_lun,4) dist_conv*r_super_x, dist_conv*r_super_y, &
-                    dist_conv*r_super_z,d_units(dist_units)
+         dist_conv*r_super_z,d_units(dist_units)
 
     write(io_lun,9) n_grid_x, n_grid_y, n_grid_z
 
     write(io_lun,17) in_block_x, in_block_y, in_block_z
 
     write(io_lun,15) dist_conv*(r_super_x/n_grid_x), d_units(dist_units), &
-                     dist_conv*(r_super_y/n_grid_y), d_units(dist_units), &
-                     dist_conv*(r_super_z/n_grid_z), d_units(dist_units)
+         dist_conv*(r_super_y/n_grid_y), d_units(dist_units), &
+         dist_conv*(r_super_z/n_grid_z), d_units(dist_units)
 
     write(io_lun,18) n_species, d_units(dist_units)
 
     do n=1, n_species
        write(io_lun,19) n, species_label(n), mass(n), charge(n), &
-                        dist_conv*core_radius(n), nsf_species(n)
+            dist_conv*core_radius(n), nsf_species(n)
        if(flag_basis_set==blips) then 
           if(flag_precondition_blips) then
              write(io_lun,'(/13x,"Blip basis with preconditioning")') 
@@ -2604,70 +2582,54 @@ contains
     end if
 
     if(.NOT.flag_diagonalisation) &
-         write(io_lun,fmt='(10x,"Density Matrix range  = ",f7.4,x,a2)') &
+         write(io_lun,fmt='(10x,"Density Matrix range  = ",f7.4,1x,a2)') &
          dist_conv*r_c, d_units(dist_units)
     do n=1, n_species
        write(io_lun,131) n, dist_conv*r_h+core_radius(n) * HNL_fac, &
-                         d_units(dist_units)
+            d_units(dist_units)
     end do
 
 1   format(/10x,'Job title: ')
 2   format(10x,a80)
 3   format(/10x,'This job was run on ',a4,'/',a2,'/',a2,' at ',a2,':',a2,/)
 4   format(/10x,'The simulation box has the following dimensions',/, &
-           10x,'a = ',f11.5,' b = ',f11.5,' c = ',f11.5,' 'a2)
-5   format(/10x,'The simulation box contains ',i7,' atoms.')
-! 6   format(/10x,'The number of bands is ',f8.2)
+         10x,'a = ',f11.5,' b = ',f11.5,' c = ',f11.5,' ',a2)
 7   format(/10x,'The calculation will be performed on ',i5,' processes')
 9   format(/10x,'The number of cell grid points in each direction is :',/, &
-           20x,i5,' cell grid points along x',/, &
-           20x,i5,' cell grid points along y',/, &
-           20x,i5,' cell grid points along z')
+         20x,i5,' cell grid points along x',/, &
+         20x,i5,' cell grid points along y',/, &
+         20x,i5,' cell grid points along z')
 131 format(/10x,'Species ',i2,' Non-local Hamiltonian radius = ', &
-           f7.4,' ',a2)
+         f7.4,' ',a2)
 14  format(/10x,'Support-grid spacing =   ',f7.4,' ',a2,' ',/, &
-           10x,'Width of (3D) b-spline = ',f7.4,' ',a2)
+         10x,'Width of (3D) b-spline = ',f7.4,' ',a2)
 15  format(/10x,'integration grid spacing along x ',f9.5,' ',a2,/, &
-           10x,'integration grid spacing along y ',f9.5,' ',a2,/, &
-           10x,'integration grid spacing along z ',f9.5,' ',a2)
+         10x,'integration grid spacing along y ',f9.5,' ',a2,/, &
+         10x,'integration grid spacing along z ',f9.5,' ',a2)
 16  format(/10x,'The Chemical Potential mu is :',f7.4)
 17  format(/10x,'The number of cell grid points in each block is :',/, &
-           20x,i5,' cell grid points along x',/, &
-           20x,i5,' cell grid points along y',/, &
-           20x,i5,' cell grid points along z')
+         20x,i5,' cell grid points along x',/, &
+         20x,i5,' cell grid points along y',/, &
+         20x,i5,' cell grid points along z')
 18  format(/10x,'The number of atomic species in the system is :', &
-           i5,/,/,6x, &
-           '------------------------------------------------------------------',/,6x, &
-           '   #   Label     Mass (a.u.)   Charge (e)  NLPF Rad (',a2,')   NSF  ',/,6x, &
-           '------------------------------------------------------------------')
+         i5,/,/,6x, &
+         '------------------------------------------------------------------',/,6x, &
+         '   #   Label     Mass (a.u.)   Charge (e)  NLPF Rad (',a2,')   NSF  ',/,6x, &
+         '------------------------------------------------------------------')
 19  format(6x,i4,3x,a30,3f11.5,9x,i3)
 20  format(6x, &
          '------------------------------------------------------------------',/)
-21  format(20x,a10,10x,a40)
-211 format(20x,a10,10x,a40)
 212 format(20x,a10,10x,a40)
-22  format(20x,a30,10x,a10) 
-23  format(/,10x, &
-         '-------------------------------------------------------',/, &
-         10x,'   Atom No.    Species      rx        ry       rz       ' &
-         ,/,10x,'-------------------------------------------------------')
-24  format(12x,i5,10x,a5,3f10.5)
-25  format(/, &
-         10x,'-------------------------------------------------------')
-26  format(/,10x,'The pseudopotential data is read from:',/, &
-         15x,'  Species ',12x,'  File  ')
-261 format(/,10x,'The initial charge density data is read from:',/, &
-         15x,'  Species ',12x,'  File  ')
 262 format(/,10x,'The initial support function data is read from:',/, &
          15x,'  Species ',12x,'  File  ')
 29  format(/,10x,'Energy tolerance required:             ',f12.8, &
-           /,10x,'L-matrix convergence tolerance:        ',f12.8, &
-           /,10x,'Self consistent convergence tolerance: ',f12.8)
+         /,10x,'L-matrix convergence tolerance:        ',f12.8, &
+         /,10x,'Self consistent convergence tolerance: ',f12.8)
 30  format(/,10x,'Solving for the K matrix using ',a16)
 
     return
   end subroutine write_info
-!!***
+  !!***
 
 
 
@@ -2741,27 +2703,27 @@ contains
 
     use datatypes
     use global_module,   only: iprint_init, rcellx, rcelly, rcellz,  &
-                               area_general, ni_in_cell, numprocs,   &
-                               species_glob, io_lun
+         area_general, ni_in_cell, numprocs,   &
+         species_glob, io_lun
     use numbers,         only: zero, one, two, pi, RD_ERR, half
-    use GenComms,        only: cq_abort, gcopy, myid
+    use GenComms,        only: cq_abort, gcopy
     use input_module
     use ScalapackFormat, only: proc_rows, proc_cols, block_size_r,   &
-                               block_size_c, proc_groups, matrix_size
+         block_size_c, proc_groups, matrix_size
     use DiagModule,      only: nkp, kk, wtk, kT, maxefermi,          &
-                               flag_smear_type, iMethfessel_Paxton,  &
-                               max_brkt_iterations, gaussian_height, &
-                               finess, NElec_less
+         flag_smear_type, iMethfessel_Paxton,  &
+         max_brkt_iterations, gaussian_height, &
+         finess, NElec_less
     use energy,          only: SmearingType, MPOrder
     use memory_module,   only: reg_alloc_mem, reg_dealloc_mem,       &
-                               type_dbl
+         type_dbl
     use species_module,  only: nsf_species
 
     implicit none
 
     ! Local variables
     type(cq_timer) :: backtrace_timer
-    integer        :: stat, iunit, i, j, k, nk_st, nkp_lines
+    integer        :: stat, i, j, k, nk_st, nkp_lines
     real(double)   :: a, sum, dkx, dky, dkz
     integer        :: proc_per_group
 
@@ -2773,10 +2735,10 @@ contains
     real(double), allocatable, dimension(:)   :: wtk_tmp
     integer :: nkp_tmp
     integer :: counter
-    
-!****lat<$    
+
+    !****lat<$    
     call start_backtrace(t=backtrace_timer,who='readDiagInfo',where=1,level=2)
-!****lat>$
+    !****lat>$
 
     ! Read Control Flags associated to diagonalisation method
     maxefermi = fdf_integer('Diag.MaxEfIter',50)
@@ -2828,10 +2790,10 @@ contains
           ! k-point groups
           proc_per_group = numprocs / proc_groups
           a = sqrt(real(proc_per_group, double))
-          proc_rows = aint(a)+1
+          proc_rows = floor(a)+1
           do while(.NOT.done.AND.proc_rows>1) 
              proc_rows = proc_rows - 1
-             proc_cols = aint(real(proc_per_group,double) / &
+             proc_cols = floor(real(proc_per_group,double) / &
                   real(proc_rows,double))
              if(proc_per_group - proc_rows*proc_cols == 0) &
                   done = .true.
@@ -3045,9 +3007,9 @@ contains
           if (wtk_tmp(i) > zero) then
              do j = nkp_tmp, 1, -1
                 if (i /= j) then
-                   if ((kk_tmp(1,i) == -kk_tmp(1,j)) .and. &
-                        (kk_tmp(2,i) == -kk_tmp(2,j)) .and. &
-                        (kk_tmp(3,i) == -kk_tmp(3,j))) then
+                   if (abs(kk_tmp(1,i) + kk_tmp(1,j))<RD_ERR .and. &
+                        abs(kk_tmp(2,i) + kk_tmp(2,j))<RD_ERR .and. &
+                        abs(kk_tmp(3,i) + kk_tmp(3,j))<RD_ERR) then
                       wtk_tmp(j) = zero
                       wtk_tmp(i) = wtk_tmp(i) + one
                    end if
@@ -3127,12 +3089,8 @@ contains
 3   format(8x,'Proc grid (row, col): ',2i5)
 4   format(/8x,'***WARNING***',/,2x,&
          'No Kpoints block found - defaulting to Gamma point')
-5   format(8x,i4,' Kpoints in Cartesian (inverse Angstrom) form: ')
 51  format(/8x,i4,' symmetry inequivalent Kpoints in Cartesian form (1/A): ')
-6   format(8x,'Kpt: ',i4,' : ',3f12.8,' Weight: ',f10.6)
 7   format(8x,' All ',i4,' Kpoints in fractional coordinates: ')
-8   format(/8x,'***WARNING***',/,8x,&
-         'No Kpoint mesh found - defaulting to Gamma point')
 9   format(/8x,'***WARNING***',/,8x,&
          'Specified Kpoint mesh shift in fractional coords >= 1.0.')
 10  format(8x,i4,' symmetry inequivalent Kpoints in fractional coordinates: ')
@@ -3167,7 +3125,7 @@ contains
     use auxiliary_types, ONLY: group_aux
     use GenComms, ONLY: myid,cq_abort,gcopy
     use io_module, ONLY: io_assign,io_close
-    use input_module, ONLY: fdf_block,fdf_endblock,input_array,block_start
+    use input_module, ONLY: fdf_block,fdf_endblock
 
     implicit none
     ! passed variables
@@ -3183,8 +3141,8 @@ contains
     isize = 0
     jsize = 0
     do i = 1, aux%n_grp
-      isize = isize + aux%n_atom_in_grp(i)*aux%n_subgrp(i)
-      jsize = jsize + aux%n_subgrp(i)
+       isize = isize + aux%n_atom_in_grp(i)*aux%n_subgrp(i)
+       jsize = jsize + aux%n_subgrp(i)
     enddo
     allocate (aux%ibeg_grp(aux%n_grp), STAT=stat)
     if (stat.NE.0) call cq_abort('Error allocating ibeg_grp: ',aux%n_grp)
@@ -3194,68 +3152,68 @@ contains
     if (stat.NE.0) call cq_abort('Error allocating iatom_beg: ',jsize)
 
     if (myid.EQ.0) then
-      ! Open file
-      filename_aux=aux%filename
-      call io_assign(lun_aux)
-      open (lun_aux,file=filename_aux,status='old',action='read', iostat=stat)
-      if (stat.NE.0) call cq_abort('Error opening auxiliary file !')
-      ! Reckon addresses
-      aux%ibeg_grp(1) = 1
-      do i = 1, aux%n_grp-1
-        aux%ibeg_grp(i+1) = aux%ibeg_grp(i) + aux%n_atom_in_grp(i)*aux%n_subgrp(i)
-      enddo
-      aux%iatom_beg(1) = 1
-      l = 0
-      natom = aux%n_atom_in_grp(1)
-      do i = 1, aux%n_grp
-        do j = 1, aux%n_subgrp(i)
-          l = l + 1
-          if (l.NE.1) then
-            aux%iatom_beg(l) = aux%iatom_beg(l-1) + natom
-          else
-            cycle
-          endif
-          natom = aux%n_atom_in_grp(i)
-        enddo
-      enddo
-      ! Read aux%filename
-      do i = 1, aux%n_grp
-        done = .false.
-        ibeg = aux%ibeg_grp(i)
-        do while (.NOT.done)
-          read (lun_aux,'(a100)') line
-          line_blck = trim(adjustl(line(7:100)))
-          if (trim(adjustl(line_blck)).EQ.trim(aux%grp_name(i))) then
-            do j = 1, aux%n_subgrp(i)
-              read (lun_aux,*) jj,aux%glob_atom(ibeg:ibeg+aux%n_atom_in_grp(i)-1)
-              ibeg = ibeg + aux%n_atom_in_grp(i)
-            enddo
-            done = .true.
-          endif
-        enddo !done
-        rewind (lun_aux)
-      enddo
+       ! Open file
+       filename_aux=aux%filename
+       call io_assign(lun_aux)
+       open (lun_aux,file=filename_aux,status='old',action='read', iostat=stat)
+       if (stat.NE.0) call cq_abort('Error opening auxiliary file !')
+       ! Reckon addresses
+       aux%ibeg_grp(1) = 1
+       do i = 1, aux%n_grp-1
+          aux%ibeg_grp(i+1) = aux%ibeg_grp(i) + aux%n_atom_in_grp(i)*aux%n_subgrp(i)
+       enddo
+       aux%iatom_beg(1) = 1
+       l = 0
+       natom = aux%n_atom_in_grp(1)
+       do i = 1, aux%n_grp
+          do j = 1, aux%n_subgrp(i)
+             l = l + 1
+             if (l.NE.1) then
+                aux%iatom_beg(l) = aux%iatom_beg(l-1) + natom
+             else
+                cycle
+             endif
+             natom = aux%n_atom_in_grp(i)
+          enddo
+       enddo
+       ! Read aux%filename
+       do i = 1, aux%n_grp
+          done = .false.
+          ibeg = aux%ibeg_grp(i)
+          do while (.NOT.done)
+             read (lun_aux,'(a100)') line
+             line_blck = trim(adjustl(line(7:100)))
+             if (trim(adjustl(line_blck)).EQ.trim(aux%grp_name(i))) then
+                do j = 1, aux%n_subgrp(i)
+                   read (lun_aux,*) jj,aux%glob_atom(ibeg:ibeg+aux%n_atom_in_grp(i)-1)
+                   ibeg = ibeg + aux%n_atom_in_grp(i)
+                enddo
+                done = .true.
+             endif
+          enddo !done
+          rewind (lun_aux)
+       enddo
 
-      !% NOTE: I'd like to make use of fdf_block but it doesn't work...
-      !% ibeg = 1
-      !% do i = 1, aux%n_grp
-      !%   !if (fdf_block(trim(adjustl(aux%grp_name(i))))) then
-      !%   if (fdf_block(aux%grp_name(i))) then
-      !%     do j = 1, aux%n_subgrp(i)
-      !%       read (unit=input_array(block_start+j-1),fmt=*) &
-      !%         jj,aux%glob_atom(ibeg:ibeg+aux%n_atom_in_grp(i)-1)
-      !%         ibeg = ibeg + aux%n_atom_in_grp(i)
-      !%     enddo
-      !%   else
-      !%     write (io_lun,*) trim(adjustl(aux%grp_name(i)))," not found !"
-      !%     call cq_abort('Block not defined in auxiliary file:')
-      !%   endif
-      !%   rewind (lun_aux)
-      !%   call fdf_endblock
-      !% enddo
+       !% NOTE: I'd like to make use of fdf_block but it doesn't work...
+       !% ibeg = 1
+       !% do i = 1, aux%n_grp
+       !%   !if (fdf_block(trim(adjustl(aux%grp_name(i))))) then
+       !%   if (fdf_block(aux%grp_name(i))) then
+       !%     do j = 1, aux%n_subgrp(i)
+       !%       read (unit=input_array(block_start+j-1),fmt=*) &
+       !%         jj,aux%glob_atom(ibeg:ibeg+aux%n_atom_in_grp(i)-1)
+       !%         ibeg = ibeg + aux%n_atom_in_grp(i)
+       !%     enddo
+       !%   else
+       !%     write (io_lun,*) trim(adjustl(aux%grp_name(i)))," not found !"
+       !%     call cq_abort('Block not defined in auxiliary file:')
+       !%   endif
+       !%   rewind (lun_aux)
+       !%   call fdf_endblock
+       !% enddo
 
-      ! Close file
-      call io_close(lun_aux)
+       ! Close file
+       call io_close(lun_aux)
     endif ! myid
 
     ! Broadcast data to all processors
@@ -3267,5 +3225,5 @@ contains
 
     return
   end subroutine read_input_aux
-
+  !!***
 end module initial_read

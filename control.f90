@@ -1,4 +1,4 @@
-! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
+! -*- mode: F90; mode: font-lock -*-
 ! ------------------------------------------------------------------------------
 ! $Id$
 ! ------------------------------------------------------------------------------
@@ -71,9 +71,6 @@ module control
   ! Area identification
   integer, parameter, private :: area = 9
 
-  ! RCS tag for object file identification
-  character(len=80), save, private :: &
-       RCSid = "$Id$"
 !!***
 
 contains
@@ -324,7 +321,7 @@ contains
     call dump_pos_and_matrices
     call get_maxf(max)
     if (inode==ionode) then
-      write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," E: "   e16.8," dE: ",f12.8)') & 
+      write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," E: ",e16.8," dE: ",f12.8)') & 
            0, max, energy0, dE
     end if
 
@@ -418,7 +415,7 @@ contains
        dE = energy0 - energy1
 
        if (inode==ionode) then
-         write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," E: "e16.8," dE: ",f12.8)') & 
+         write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," E: ",e16.8," dE: ",f12.8)') & 
               iter, max, energy1, en_conv*dE
          if (iprint_MD > 1) then
            write(io_lun,'(4x,"Force Residual:     ",f20.10," ",a2,"/",a2)') &
@@ -726,8 +723,12 @@ contains
     if (flag_heat_flux) &
       call get_heat_flux(atomic_stress, ion_velocity, heat_flux)
 
-    if (.not. flag_MDcontinue) &
-      call write_md_data(i_first-1, thermo, baro, mdl, nequil)
+    if (.not. flag_MDcontinue) then
+       ! Check this: it fixes H' for NVE but needs NVT confirmation
+       ! DRB & TM 2020/01/24 12:03
+       call mdl%get_cons_qty
+       call write_md_data(i_first-1, thermo, baro, mdl, nequil)
+    end if
 
     do iter = i_first, i_last ! Main MD loop
        mdl%step = iter
@@ -1962,14 +1963,8 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
     energy1 = energy0
     cg_new = -tot_force ! The L-BFGS is in terms of grad E
     do while (.not. done)
-       test_dot = dot(length, cg_new, 1, tot_force, 1)
-       if(test_dot>zero) then
-          iter = 0
-          if(inode==ionode.AND.iprint_MD>1) write(io_lun,fmt='(2x,"Resetting history")')
-          cg_new = -tot_force
-       end if
        if (inode==ionode) then
-          write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," E: "e16.8," dE: ",f12.8)') & 
+          write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," E: ",e16.8," dE: ",f12.8)') & 
                iter, max, energy1, en_conv*dE
           if (iprint_MD > 1) then
              g0 = dot(length, tot_force, 1, tot_force, 1)
@@ -1980,6 +1975,8 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
              write(io_lun,'(4x,"Force tolerance:    ",f20.10)') MDcgtol
              write(io_lun,'(4x,"Energy change:      ",f20.10," ",a2)') &
                   en_conv*dE, en_units(energy_units)
+             g0 = dot(length,cg_new,1,cg_new,1)
+             write(io_lun,'(4x,"Search direction has magnitude ",f20.10)') sqrt(g0/ni_in_cell)
           end if
        end if
        ! Book-keeping
@@ -1999,7 +1996,7 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
        end do
        ! Set up limits for sums
        if(iter>LBFGS_history) then
-          iter_low = iter-LBFGS_history
+          iter_low = iter-LBFGS_history+1
        else
           iter_low = 1
        end if
@@ -2024,8 +2021,8 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
                - nint(posnStore(3,jj,npmod)/r_super_z)*r_super_z
           forceStore(:,jj,npmod) = -tot_force(:,jj) - forceStore(:,jj,npmod)
           ! New search direction
-          cg_new = -tot_force ! The L-BFGS is in terms of grad E
        end do
+       cg_new = -tot_force ! The L-BFGS is in terms of grad E
        ! Add call to write_atomic_positions and write_xsf (2020/01/17: smujahed)
        call write_atomic_positions("UpdatedAtoms.dat", trim(pdb_template))
        if (flag_write_xsf) call write_xsf('trajectory.xsf', iter)
@@ -2047,8 +2044,27 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
           if(this_iter==0) this_iter = LBFGS_history
           ! Build
           beta(this_iter) = rho(this_iter)*dot(length,forceStore(:,:,this_iter),1,cg_new,1)
+          if(inode==ionode.AND.iprint_MD>2) &
+               write(io_lun,fmt='(4x,"L-BFGS iter ",i2," rho, alpha, beta: ",3e15.7)') &
+               this_iter, rho(this_iter), alpha(this_iter), beta(this_iter)
           cg_new = cg_new + (alpha(this_iter) - beta(this_iter))*posnStore(:,:,this_iter)
        end do
+       gg = dot(length, tot_force, 1, cg_new, 1)
+       if(gg>zero) then
+          if(inode==ionode.AND.iprint_MD>1) then
+             write(io_lun,fmt='(4x,"L-BFGS Search direction uphill; resetting to force")')
+             write(io_lun,fmt='(4x,"Force residual and force.dir: ",2e15.7)') sqrt(g0/ni_in_cell), &
+                  sqrt(gg/ni_in_cell)
+          end if
+          cg_new = -tot_force
+       else if(abs(gg/g0)>ten) then
+          if(inode==ionode.AND.iprint_MD>1) then
+             write(io_lun,fmt='(4x,"L-BFGS Search direction anomalous; resetting to force")')
+             write(io_lun,fmt='(4x,"Force residual and force.dir: ",2e15.7)') sqrt(g0/ni_in_cell), &
+                  sqrt(gg/ni_in_cell)
+          end if
+          cg_new = -tot_force
+       end if
        ! Analyse forces
        g0 = dot(length, tot_force, 1, tot_force, 1)
        max = zero
@@ -2065,7 +2081,7 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
        if (abs(max) < MDcgtol) then
           done = .true.
           if (inode==ionode) then
-             write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," E: "e16.8," dE: ",f12.8)') & 
+             write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," E: ",e16.8," dE: ",f12.8)') & 
                   iter, max, energy1, en_conv*dE
              if (iprint_MD > 1) then
                 write(io_lun,'(4x,"Force Residual:     ",f20.10," ",a2,"/",a2)') &
@@ -2199,7 +2215,7 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
       if (stress_diff > max_stress) max_stress = stress_diff
     end do
     if (inode==ionode) then
-      write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxStr: ",f12.8," H: "e16.8," dH: ",f12.8)') &
+      write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxStr: ",f12.8," H: ",e16.8," dH: ",f12.8)') &
            0, max_stress, enthalpy0, zero
     end if
 
@@ -2289,7 +2305,7 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
        reset_iter = reset_iter +1
 
        if (inode==ionode) then
-         write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxStr: ",f12.8," H: "e16.8," dH: ",f12.8)') &
+         write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxStr: ",f12.8," H: ",e16.8," dH: ",f12.8)') &
               iter, max_stress, enthalpy1, en_conv*dH
          if (iprint_MD > 1) then
            write(io_lun,'(4x,"Maximum stress         ",3f10.6)') &
@@ -2547,7 +2563,7 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
     enthalpy0 = enthalpy(energy0, press)
     dH = zero
     if (inode==ionode) then
-      write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," H: " e16.8," dH: ",f12.8)') & 
+      write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," H: ", e16.8," dH: ",f12.8)') & 
            0, max, enthalpy0, dH
     end if
 
@@ -2637,7 +2653,7 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
         energy0 = energy1
 
         if (inode==ionode) then
-          write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," H: "e16.8," dH: ",f12.8)') &
+          write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," H: ",e16.8," dH: ",f12.8)') &
                iter, max, enthalpy1, en_conv*dH
           if (iprint_MD > 1) then
             write(io_lun,'(4x,"Force Residual:     ",f20.10," ",a2,"/",a2)') &
@@ -2732,7 +2748,7 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
       end do
 
       if (inode==ionode) then
-        write(io_lun,'(2x,"GeomOpt + Iter: ",i4," MaxF: ",f12.8," H: " e16.8," dH: ",f12.8)') &
+        write(io_lun,'(2x,"GeomOpt + Iter: ",i4," MaxF: ",f12.8," H: " ,e16.8," dH: ",f12.8)') &
              iter, max, enthalpy1, en_conv*dH
         if (iprint_MD > 1) then
           write(io_lun,'(4x,"Force Residual:     ",f20.10," ",a2,"/",a2)') &
@@ -2916,7 +2932,7 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
     call get_maxf(max)
     enthalpy0 = enthalpy(energy0, press)
     if (inode==ionode) then
-      write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," H: "e16.8," dH: ",f12.8)') &
+      write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," H: ",e16.8," dH: ",f12.8)') &
            0, max, enthalpy0, zero
     end if
 
@@ -2994,7 +3010,7 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
       ! Output and energy changes
       dH = enthalpy0 - enthalpy1
       if (inode==ionode) then
-        write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," H: "e16.8," dH: ",f12.8)') &
+        write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," H: ",e16.8," dH: ",f12.8)') &
              iter, max, enthalpy1, en_conv*dH
         if (iprint_MD > 1) then
           write(io_lun,'(4x,"Force Residual:     ",f20.10," ",a2,"/",a2)') &

@@ -1,4 +1,4 @@
-! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
+! -*- mode: F90; mode: font-lock -*-
 ! ------------------------------------------------------------------------------
 ! $Id$
 ! ------------------------------------------------------------------------------
@@ -147,8 +147,5 @@ module matrix_data
      real(double), pointer, dimension(:) :: matrix
   end type matrix_pointer
 !!***
-
-  ! RCS tag for object file identification 
-  character(len=80), private :: RCSid = "$Id$"
 
 end module matrix_data

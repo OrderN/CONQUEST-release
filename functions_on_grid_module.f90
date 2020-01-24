@@ -1,4 +1,4 @@
-! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
+! -*- mode: F90; mode: font-lock -*-
 ! ------------------------------------------------------------------------------
 ! $Id$
 ! ------------------------------------------------------------------------------
@@ -82,12 +82,6 @@ module functions_on_grid
   integer, parameter :: pseudofns = 4
   integer :: current_fn_on_grid
   integer, parameter :: mx_fns_on_grid = 20
-
-  !real(double), target, dimension(SUPPORT_SIZE*NSF) :: support, workspace_support, workspace2_support
-  
-  ! RCS tag for object file identification
-  character(len=80), private :: &
-       RCSid = "$Id$"
 
 contains
 

@@ -1,4 +1,4 @@
-! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
+! -*- mode: F90; mode: font-lock -*-
 ! ------------------------------------------------------------------------------
 ! $Id$
 ! ------------------------------------------------------------------------------
@@ -46,9 +46,6 @@ module cdft_data
      integer, dimension(:), pointer :: Numbers
   end type atom_list
   type(atom_list), dimension(:), allocatable :: cDFT_AtomList
-
-  ! RCS tag for object file identification
-  character(len=80), save, private :: RCSid = "$Id$"
 
 !!***
 

@@ -1,4 +1,4 @@
-! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
+! -*- mode: F90; mode: font-lock -*-
 ! ------------------------------------------------------------------------------
 ! $Id$
 ! ------------------------------------------------------------------------------
@@ -24,12 +24,11 @@
 !!    Added static id for object files and tidied header
 !!   2014/07/24 11:40 dave
 !!    Added type wide for 64-bit integer (i.e. that can include beyond 10^9)
+!!   2020/01/21 16:53 dave
+!!    Tidying source, remove RCSid
 !!  SOURCE
 !!
 module datatypes
-
-  ! RCS tag for object file identification 
-  character(len=80), save, private :: RCSid = "$Id$"
 
   ! This picks a the most memory efficient integer kind
   ! that can hold number from -10**6 to 10**6. This

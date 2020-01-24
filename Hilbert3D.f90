@@ -1,4 +1,4 @@
-! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
+! -*- mode: F90; mode: font-lock -*-
 ! ------------------------------------------------------------------------------
 ! $Id$
 ! ------------------------------------------------------------------------------
@@ -33,9 +33,6 @@ module Hilbert3D
        Hilbert3D_Initialise,  &
        Hilbert3D_IntToCoords, &
        Hilbert3D_CoordsToInt
-
-  character(len=80) :: &
-       RCSid = "$Id$"
 
   integer, dimension(3) :: Alpha
   integer, dimension(3) :: Direction

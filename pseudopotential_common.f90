@@ -26,9 +26,6 @@ module pseudopotential_common
             pseudopotential, core_radius, &
             OLDPS, SIESTA, STATE, ABINIT, core_correction
 
-  ! RCS tag for object file identification
-  character(len=80), private :: RCSid = "$Id$"
-
   logical :: non_local
   logical :: flag_angular_new
 

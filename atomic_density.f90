@@ -1,4 +1,4 @@
-! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
+! -*- mode: F90; mode: font-lock -*-
 ! ------------------------------------------------------------------------------
 ! $Id$
 ! ------------------------------------------------------------------------------
@@ -119,7 +119,7 @@ contains
     use datatypes
     use GenComms, ONLY : cq_abort, gcopy
     use global_module, ONLY : iprint_SC, area_SC
-    use numbers, ONLY : zero, one, four, very_small, pi, six
+    use numbers, ONLY : zero, one, four, pi, six
     use pao_format
     use memory_module, ONLY: reg_alloc_mem, type_dbl
 
@@ -127,11 +127,10 @@ contains
 
     real(double), parameter :: one_over_four_pi = one/(four*pi)
     integer, intent(in) :: inode,ionode, n_species
-    integer :: alls, i, lun, nt, n_am, n_sp, n_zeta
+    integer :: alls, i, nt, n_am, n_sp, n_zeta
     integer, parameter :: default_atomic_density_length = 2001
-    real(double) :: alpha, cutoff, density_deltar, pao_deltar, r, rn_am, val
+    real(double) :: cutoff, density_deltar, pao_deltar, r, rn_am, val
     real(double) :: a, b, c, d, r1, r2, r3, r4, rr
-    logical :: range_flag
 
     call start_timer(tmr_std_chargescf)
     call start_timer(tmr_std_allocation)
@@ -288,10 +287,9 @@ contains
     integer :: n_species
     ! Local variables
 
-    integer :: i, j, n, n_l, stat
+    integer :: i, n, stat
 
-    real(double) :: d_end, d_origin, delta_r, r, local_density, derivative
-    logical :: range_flag
+    real(double) :: d_end, d_origin, delta_r, r
 
     call start_timer(tmr_std_chargescf)
     ! loop over species and do the interpolation

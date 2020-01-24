@@ -1,4 +1,4 @@
-! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
+! -*- mode: F90; mode: font-lock -*-
 ! ------------------------------------------------------------------------------
 ! $Id$
 ! ------------------------------------------------------------------------------
@@ -108,10 +108,6 @@ module force_module
 
   ! Area identification
   integer, parameter, private :: area = 7
-
-  ! RCS tag for object file identification
-  character(len=80), private :: &
-       RCSid = "$Id$"
 
 !!***
 
@@ -1640,7 +1636,7 @@ contains
                                y = zero
                                z = zero
                             end if
-                            j = aint (r_from_i / step) + 1
+                            j = floor (r_from_i / step) + 1
                             ! check j
                             if (j > n_points_max(the_species) - 1) then
                                call cq_abort ('set_ps: overrun problem', j)

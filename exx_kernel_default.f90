@@ -1,4 +1,4 @@
-! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
+! -*- mode: F90; mode: font-lock -*-
 ! ------------------------------------------------------------------------------
 ! $Id: exx_kernel_default.f90 XX year-mm-dd XX:XX:XXZ Lionel $
 ! -----------------------------------------------------------
@@ -58,10 +58,6 @@ module exx_kernel_default
 
   ! Area identification
   integer, parameter, private :: area = 13
-
-  ! RCS tag for object file identification
-  character(len=80), save, private :: RCSid = &
-       "$Id: exx_kernel_default.f90 XX year-mm-dd XX:XX:XXZ lionel $"
 
 !!***
   

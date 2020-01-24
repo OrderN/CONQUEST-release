@@ -5,15 +5,17 @@ FC=mpif90
 F77=mpif77
 
 # Linking flags
-LINKFLAGS= -L/opt/local/lib
+LINKFLAGS= -L/usr/local/lib
 ARFLAGS=
 
 # Compilation flags
-COMPFLAGS= -O3 $(XC_COMPFLAGS)
+#COMPFLAGS= -O3 $(XC_COMPFLAGS) -Wpedantic -Wall -Wextra
+COMPFLAGS= -O3 $(XC_COMPFLAGS) -Wpedantic -Wampersand -Wconversion -Wtabs
+#COMPFLAGS= -O3 $(XC_COMPFLAGS)
 COMPFLAGS_F77= $(COMPFLAGS)
 
 # Set BLAS and LAPACK libraries
-BLAS= -latlas -llapack -lf77blas -lcblas
+BLAS= -lvecLibFort
 
 # Full library call; remove scalapack if using dummy diag module
 LIBS= $(FFT_LIB) $(XC_LIB) -lscalapack $(BLAS)
@@ -30,7 +32,7 @@ LIBS= $(FFT_LIB) $(XC_LIB) -lscalapack $(BLAS)
 #XC_LIBRARY = LibXC_v2
 XC_LIBRARY = LibXC
 XC_LIB = -lxcf90 -lxc
-XC_COMPFLAGS = -I/opt/local/include
+XC_COMPFLAGS = -I/usr/local/include
 
 # Set FFT library
 

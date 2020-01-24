@@ -1,4 +1,4 @@
-! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
+! -*- mode: F90; mode: font-lock -*-
 ! ------------------------------------------------------------------------------
 ! $Id$
 ! ------------------------------------------------------------------------------
@@ -43,14 +43,12 @@
 !!
 
 module ol_int_datatypes
-  use datatypes
-  implicit none
-  save
-  ! -------------------------------------------------------
-  ! RCS ident string for object file id
-  ! -------------------------------------------------------
-  character(len=80), private :: RCSid = "$Id$"
 
+  use datatypes
+
+  implicit none
+
+  save
 
   !datatypes used in calculating overlap integrals
 

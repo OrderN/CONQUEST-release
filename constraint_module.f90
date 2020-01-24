@@ -1,4 +1,4 @@
-! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
+! -*- mode: F90; mode: font-lock -*-
 ! ------------------------------------------------------------------------------
 ! $Id$
 ! ------------------------------------------------------------------------------
@@ -34,7 +34,6 @@ module constraint_module
   ! private
   real(double),allocatable,private :: dij2(:),vec_rji(:)
   integer,allocatable,private :: ibeg_dij2(:),ibeg_vec_rji(:)
-  character(80),save,private :: RCSid = "$Id$"
 
 contains
 

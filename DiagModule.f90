@@ -1,4 +1,4 @@
-!-*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
+!-*- mode: F90; mode: font-lock -*-
 ! -----------------------------------------------------------------------------
 ! $Id$
 ! -----------------------------------------------------------------------------
@@ -268,12 +268,6 @@ module DiagModule
   logical :: first = .true.
 
   !logical :: diagon ! Do we diagonalise or use O(N) ?
-
-  ! -------------------------------------------------------
-  ! RCS ident string for object file id
-  ! -------------------------------------------------------
-  character(len=80), private :: &
-       RCSid = "$Id$"
 
   ! Local scratch data
   real(double), dimension(:,:,:), allocatable :: w ! matrix_size, nkp, nspin
@@ -2318,9 +2312,9 @@ contains
              roff = Distrib%start_row(send_proc+1) ! note what used to be recv_proc in DistribCQ_to_SC is now send_proc
              ! Decode receive buffer into local eigenvector store
              do j=1,rrow_size
-                rblock = aint(real((roff-1+j-1)/block_size_r))+1  ! get block row ind corresponding to reveiving row
+                rblock = floor(real((roff-1+j-1)/block_size_r))+1  ! get block row ind corresponding to reveiving row
                 do k=1,rcol_size,block_size_c
-                   cblock = aint(real((k-1)/block_size_c))+1
+                   cblock = floor(real((k-1)/block_size_c))+1
                    refblock = mapy(recv_proc+1,rblock,cblock)
                    coff = (refblock-1)*block_size_c + 1
                    if(iprint_DM>=5.AND.myid==0) &
@@ -2370,9 +2364,9 @@ contains
              ! Put the data in place from the receive buffer
              if(rrow_size > 0) then
                 do j=1,rrow_size
-                   rblock = aint(real((roff-1+j-1)/block_size_r))+1
+                   rblock = floor(real((roff-1+j-1)/block_size_r))+1
                    do k=1,rcol_size,block_size_c
-                      cblock = aint(real((k-1)/block_size_c))+1
+                      cblock = floor(real((k-1)/block_size_c))+1
                       refblock = mapy(recv_proc+1,rblock,cblock)
                       coff = (refblock-1)*block_size_c + 1
                       if(iprint_DM>=5.AND.myid==0) write(io_lun,3) myid,j,k,rblock,cblock,refblock,coff,&
@@ -2754,9 +2748,9 @@ contains
 
     return
 
-1   format(10x, 'Proc: ', i5, ' findFermi_fixspin: searching for Ne: ' f12.5)
+1   format(10x, 'Proc: ', i5, ' findFermi_fixspin: searching for Ne: ', f12.5)
 2   format(10x, 'Proc: ', i5, &
-         ' findFermi_fixspin: searching for Ne (up, dn, total): ' 3f12.5)
+         ' findFermi_fixspin: searching for Ne (up, dn, total): ', 3f12.5)
 3   format(10x, 'Proc: ', i5, ' findFermi_fixspin: Finding Ef for spin = ', i2)
 4   format(10x, 'Proc: ', i5, ' findFermi_fixspin: found lower bound', f12.5)
 5   format(10x, 'Proc: ', i5, ' findFermi_fixspin: level, Ne: ', 2f12.5)
@@ -3127,7 +3121,7 @@ contains
 
 1   format(10x, 'In occupy on proc: ', i5, &
          ' For Ef of ', f8.5,            &
-         ' we get ', f12.5 ' electrons')
+         ' we get ', f12.5, ' electrons')
 2   format(10x, 'In occupy on proc: ', i5,           &
          ' For Spin = ', i1, ' with Ef of ', f8.5, &
          ' we get ', f12.5, ' electrons')
@@ -3248,7 +3242,7 @@ contains
 
     use datatypes
     use numbers, only: zero, one, half, two, four, pi
-    use functions, ONLY: erfc
+    use functions, ONLY: erfc_cq
 
     implicit none
 
@@ -3276,13 +3270,13 @@ contains
     else if(smear>zero) then
        x = E/smear
        if(order==0) then
-          MP_step = half*erfc(x)
+          MP_step = half*erfc_cq(x)
        else
           x2 = x*x
           A = one/sqrt(pi)
           H0 = one
           H1 = two*x
-          MP_step = half*erfc(x)
+          MP_step = half*erfc_cq(x)
           nd = one
           do n=1,order
              A = A/((-four)*real(n,double))
@@ -3976,7 +3970,7 @@ contains
     ! Now accumulate DOS for this band
     do iwf=1,matrix_size ! Effectively all bands
        tmp = zero
-       n_band = aint((eval(iwf) - E_DOS_min)/dE_DOS) + 1
+       n_band = floor((eval(iwf) - E_DOS_min)/dE_DOS) + 1
        n_min = n_band - n_DOS_wid
        if(n_min<1) n_min = 1
        n_max = n_band + n_DOS_wid

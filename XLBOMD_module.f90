@@ -43,7 +43,6 @@
     real(double) :: kappa,kappa_diss,alpha
     real(double),allocatable :: c(:)
 
-    character(80),private :: RCSid = "$Id$"
     logical, save :: allocated_XL = .false.
 
   contains

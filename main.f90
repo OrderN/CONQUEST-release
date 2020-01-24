@@ -1,4 +1,4 @@
-! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
+! -*- mode: F90; mode: font-lock -*-
 ! ------------------------------------------------------------------------------
 ! $Id$
 ! ------------------------------------------------------------------------------
@@ -125,14 +125,6 @@ program Conquest
   fixed_potential = .false.
   ! identify what node we are on
   call init_comms(myid, numprocs)
-
-  !call init_timing_system(inode)
- 
-  !call init_reg_mem
- 
-  !**<lat>** can be used here to open std output
-  !          for printing at the very beginning
-  !call init_user_output()
 
   ! Initialise reads in data and finds an initial, self-consistent
   ! Hamiltonian

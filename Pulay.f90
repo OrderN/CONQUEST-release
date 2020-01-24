@@ -38,8 +38,6 @@ module Pulay
 
   implicit none
 
-  ! RCS tag for object file identification
-  character(len=80), save, private :: RCSid = "$Id$"
 !!***
 
   !!****f* Pulay/DoPulay

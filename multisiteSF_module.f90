@@ -1,4 +1,4 @@
-! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
+! -*- mode: F90; mode: font-lock -*-
 ! ------------------------------------------------------------------------------
 ! $Id$
 ! ------------------------------------------------------------------------------
@@ -25,7 +25,7 @@
 !!   LocFilterDiag,    LFD_make_Subspace_halo, LFD_pickup_subspace_elements, LFD_make_Subspace_i,
 !!   LFD_symm_sub_mat, LFD_make_TVEC,          LFD_filter,                   LFD_put_TVEC_to_SFcoeff,
 !!   transpose_2Dmat,  LFD_debug_matrix,
-!!   LFD_minimise
+!!   LFD_SCF
 !!
 !!  USES
 !!
@@ -37,7 +37,7 @@
 !!
 !!  MODIFICATION HISTORY
 !!   2019/12/30 tsuyoshi
-!!      introduced n_dump_SFcoeff for dumping SFcoeff & (K or L) matrices during the minimisation of SFcoeff
+!!      introduced n_dump_SFcoeff for dumping SFcoeff & (K or L) matrices during the SCF iteration of SFcoeff
 !!
 !!  SOURCE
 !!
@@ -55,9 +55,6 @@ module multisiteSF_module
 
 
   implicit none
-
-  ! RCS tag for object file identification
-  character(len=80), save, private :: RCSid = "$Id$"
 
   ! Number of MSSFs
   logical :: flag_MSSF_nonminimal              !nonmin_mssf
@@ -78,12 +75,12 @@ module multisiteSF_module
   logical :: flag_LFD_ReadTVEC                                   ! read trial vectors from input file (default=F)
   real(double), allocatable, dimension(:,:,:) :: LFD_TVEC_read   ! (species, nsf, npao)
 
-  ! LFD SFcoeff minimisation
-  logical :: flag_LFD_minimise                                   ! minimise energy (optimise SF coefficients) by updating Hpao with SCF density
-  real(double) :: LFD_threshE                                    ! energy  threshold for SFcoeff minimisation by LFD with SCF charge
-  real(double) :: LFD_threshD                                    ! density threshold for SFcoeff minimisation by LFD with SCF charge
+  ! LFD SFcoeff iteration
+  logical :: flag_LFD_nonSCF                                     ! Update Hpao with SCF density
+  real(double) :: LFD_threshE                                    ! energy  threshold for SFcoeff iteration by LFD with SCF charge
+  real(double) :: LFD_threshD                                    ! density threshold for SFcoeff iteration by LFD with SCF charge
   real(double) :: LFD_Thresh_EnergyRise                          ! energy  threshold when energy rises
-  integer :: LFD_max_iteration                                   ! max. iteration of LFD SFcoeff minimization
+  integer :: LFD_max_iteration                                   ! max. iteration of LFD SFcoeff iteration
 
   ! MD
   logical :: flag_LFD_MD_UseAtomicDensity                        ! use atomic density when recalculate SFcoeff by LFD (default=T)
@@ -616,6 +613,7 @@ contains
     use primary_module, ONLY: bundle
     use cover_module, ONLY: BCS_parts
     use matrix_data, ONLY: mat, halo, rcut, Srange
+    use functions, ONLY: erfc_cq
     use mult_module, ONLY: matrix_pos, mat_p
 
     implicit none
@@ -704,7 +702,7 @@ contains
                       EXFRM = ( r2 - (r_center + r_shift) ) * width1     ! (r - r_mc) / width
                       FLTR  = one / (exp(EXFRM) + one)                   ! f(r) = 1 / ( exp[(r - (r_center+r_shift)) / kT] + 1 )
                    else if (itype.eq.2) then
-                      FLTR = half * erfc(r2 - (r_center + r_shift))      ! f(r) = 0.5 * erfc(r - (r_center+r_shift))
+                      FLTR = half * erfc_cq(r2 - (r_center + r_shift))      ! f(r) = 0.5 * erfc(r - (r_center+r_shift))
                    endif
                    if (iprint_basis>=6) write(io_lun,'(2(A,F10.5))') 'r=',r2,'  FLTR =',FLTR
 
@@ -2229,10 +2227,10 @@ contains
   end subroutine LFD_debug_matrix
 !!***   
 
-!!****f* multisiteSF_module/LFD_minimise *
+!!****f* multisiteSF_module/LFD_SCF *
 !!
 !!  NAME
-!!   LFD_minimise
+!!   LFD_SCF
 !!
 !!  PURPOSE
 !!   This subroutine is to update SF coefficients by LFD method using SCF density.
@@ -2254,7 +2252,7 @@ contains
 !!    Removed dump_matrix(SFcoeff), which will be changed to dump_pos_and_matrices in near future
 !!  SOURCE
 !!
-  subroutine LFD_minimise(fixed_potential, vary_mu, n_cg_L_iterations, L_tolerance, &
+  subroutine LFD_SCF(fixed_potential, vary_mu, n_cg_L_iterations, L_tolerance, &
                           sc_tolerance, expected_reduction, total_energy, rho)
 
     use logicals
@@ -2292,7 +2290,7 @@ contains
     real(double), dimension(nspin) :: electrons, energy_tmp
     integer :: spin, spin_SF, iter, length, stat
 
-    if (inode==ionode) write(io_lun,*) 'We are in sub:LFD_minimise'
+    if (inode==ionode) write(io_lun,*) 'We are in sub:LFD_SCF'
 
     length = mat_p(matSFcoeff(1))%length
 
@@ -2315,7 +2313,7 @@ contains
     ! First, make a copy of the coefficients FOR THIS PRIMARY SET
     allocate(data_PAO0(length,nspin_SF), STAT=stat)
     if (stat /= 0) &
-         call cq_abort("LFD_minimise: Error alloc mem: ", length*nspin_SF)
+         call cq_abort("LFD_SCF: Error alloc mem: ", length*nspin_SF)
     call reg_alloc_mem(area_minE, length*nspin_SF, type_dbl)
     data_PAO0 = zero
     do spin_SF = 1, nspin_SF
@@ -2338,7 +2336,7 @@ contains
        call my_barrier
 
        ! Find new self-consistent energy
-       if (inode==ionode .and. iprint_basis.ge.5) write(io_lun,*) 'In sub:LFD_minimise, perform SC calculation.'
+       if (inode==ionode .and. iprint_basis.ge.5) write(io_lun,*) 'In sub:LFD_SCF, perform SC calculation.'
        ! 1. Get new S_sf matrix 
        call get_S_matrix(inode, ionode, build_AtomF_matrix=.false.)
        ! 2. If we're building K as 3LSL-2LSLSL, we need to make K now
@@ -2373,7 +2371,7 @@ contains
        R0 = sqrt(grid_point_volume * R0) / ne_in_cell
 
        if (inode == ionode) write(io_lun,'(/A,I3,3(3X,A,F20.10))') &
-                            'LFD_minimise: iter =',iter,'Total energy =',total_energy_last, &
+                            'LFD_SCF: iter =',iter,'Total energy =',total_energy_last, &
                             'diff_E=',diff_E,'R0 =',R0
 
        if (ABS(diff_E).le.LFD_threshE) then
@@ -2387,7 +2385,7 @@ contains
           total_energy = total_energy_last
           if (inode==ionode) write(io_lun,18) 'density', iter, total_energy
        else if (diff_E.gt.zero .and. ABS(diff_E).le.LFD_Thresh_EnergyRise) then
-          ! Energy rises so finish minimisation with the previous SF coefficients and density
+          ! Energy rises so finish iteration with the previous SF coefficients and density
           convergence_flag = .true.
           total_energy = total_energy_0
           do spin_SF = 1, nspin_SF
@@ -2400,7 +2398,7 @@ contains
           enddo
           if (inode==ionode) &
                write(io_lun,'(///20x,A,f15.7,A,i3/20x,A,i3//20x,A,f15.7)') &
-               'LFD_minimise: Energy rises by ', diff_E, ' at iteration # ', iter, &
+               'LFD_SCF: Energy rises by ', diff_E, ' at iteration # ', iter, &
                'SF coefficients and density are returned to those at previous iteration # ', iter-1, &
                'Total energy = ',total_energy
           ! Reconstruct S, H and K with previous density 
@@ -2412,7 +2410,7 @@ contains
        else 
           ! Save present energy and density
           if (diff_E.gt.zero .and. inode==ionode) write(io_lun,'(/20x,A,f15.7,A,i3)') &
-               'LFD_minimise: Energy rises by ', diff_E, ' at iteration # ',iter 
+               'LFD_SCF: Energy rises by ', diff_E, ' at iteration # ',iter 
           total_energy   = total_energy_last
           total_energy_0 = total_energy_last
           do spin = 1, nspin
@@ -2422,7 +2420,7 @@ contains
              data_PAO0(:,spin_SF) = mat_p(matSFcoeff(spin_SF))%matrix
           end do
           if (inode==ionode) write(io_lun,'(/20x,A,i5)') &
-               'LFD_minimise: Save SF coefficients at iteration # ',iter
+               'LFD_SCF: Save SF coefficients at iteration # ',iter
        endif
 
        ! Write out current SF coefficients and density matrices with some iprint (in future)
@@ -2438,7 +2436,7 @@ contains
     enddo ! iter
 
     if (inode==ionode) write(io_lun,'(A,I3,A)') &
-         'LFD PAO minimisation is not converged after ',LFD_max_iteration,' iterations.'
+         'LFD SCF iteration is not converged after ',LFD_max_iteration,' iterations.'
     deallocate(data_PAO0)
 
     call reg_dealloc_mem(area_minE, length*nspin_SF, type_dbl)
@@ -2446,9 +2444,9 @@ contains
     return
     !
 7   format(/20x,'------------ LFD Variation #: ',i5,' ------------',/)
-18  format(///20x,'The LFD minimisation has converged to a ',A,' at iteration #',I3, &
+18  format(///20x,'The LFD SCF iteration has converged to a ',A,' at iteration #',I3, &
          //20x,'Total energy = ',f15.7)
-  end subroutine LFD_minimise
+  end subroutine LFD_SCF
   !!***
 
 end module multisiteSF_module

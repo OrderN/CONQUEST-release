@@ -1,4 +1,4 @@
-! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
+! -*- mode: F90; mode: font-lock -*-
 ! ------------------------------------------------------------------------------
 ! $Id$
 ! ------------------------------------------------------------------------------
@@ -64,10 +64,6 @@ module blip
   implicit none
 
   save
-
-  ! RCS tag for object file identification 
-  character(len=80), private :: &
-       RCSid = "$Id$"
 
   real(double) :: alpha, beta
 
@@ -409,10 +405,10 @@ contains
        ! tested against the relevant array bound:
        blip_info(spec)%BlipArraySize = sqrt(r2_over_b2 - 8.0_double) - 2.0_double
        if((inode == ionode).and.(iprint_init >= 2)) then
-          write(unit=io_lun,fmt='(/10x," set_blip_index: bliparraysize:",i5/10x&
-               &"(This is the smallest integer such that for all blip functions"/10x&
-               &" wholly contained within the support region, these blip"/10x&
-               &" functions being centred on sites (nx,ny,nz), the absolute"/10x&
+          write(unit=io_lun,fmt='(/10x," set_blip_index: bliparraysize:",i5/10x,&
+               &"(This is the smallest integer such that for all blip functions",/10x,&
+               &" wholly contained within the support region, these blip",/10x,&
+               &" functions being centred on sites (nx,ny,nz), the absolute",/10x,&
                &" values of nx, ny and nz never exceed this integer)")') &
                &blip_info(spec)%BlipArraySize
        end if

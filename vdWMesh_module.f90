@@ -52,9 +52,6 @@ module vdWMesh_module
 
   private ! nothings is declared public beyond this point
 
-  character(len=80), save :: &
-       RCSid = "$Id$"
-
   ! Internal parameters
   ! Max. exponent coef. in log. mesh
   real(double), parameter :: amax = 1.e-6_double

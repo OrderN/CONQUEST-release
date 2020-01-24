@@ -1,4 +1,4 @@
-! -*- mode: F90; mode: font-lock; column-number-mode: true -*-
+! -*- mode: F90; mode: font-lock -*-
 ! ------------------------------------------------------------------------------
 ! $Id$
 ! ------------------------------------------------------------------------------
@@ -25,10 +25,6 @@ module functions
 
   implicit none
 
-  ! -------------------------------------------------------
-  ! RCS ident string for object file id
-  ! -------------------------------------------------------
-  character(len=80), private :: RCSid = "$Id$"
   !!***
 
 contains
@@ -58,7 +54,7 @@ contains
   !!    Moved to functions module from DiagModule
   !!  SOURCE
   !!
-  real(double) function erfc(x)
+  real(double) function erfc_cq(x)
 
     use datatypes
     use numbers,  only: RD_ERR, one, zero, half, two
@@ -76,7 +72,7 @@ contains
     ! local variables
     real(double) :: y, y2
     real(double) :: ap, sum, del
-    real(double) :: an, b, c, d, h
+    real(double) :: an, b, c, d
     integer :: i
 
     if(x < zero) then
@@ -87,7 +83,7 @@ contains
     ! This expects y^2
     y2 = y*y
     if(y<RD_ERR) then
-       erfc = one
+       erfc_cq = one
        return
     end if
     if (y2 < 2.25_double) then
@@ -100,7 +96,7 @@ contains
           sum = sum + del
           if (abs(del) < abs(sum) * erfc_delta) exit
        end do
-       erfc = one - sum * exp(-y2 + half * log(y2) - erfc_gln)
+       erfc_cq = one - sum * exp(-y2 + half * log(y2) - erfc_gln)
     else
        b = y2 + half
        c = erfc_fpmax
@@ -116,11 +112,11 @@ contains
           sum = sum * del
           if (abs(del - one) < erfc_delta) exit
        end do
-       erfc = sum * exp(-y2 + half * log(y2) - erfc_gln)
+       erfc_cq = sum * exp(-y2 + half * log(y2) - erfc_gln)
     end if
-    if (x < zero) erfc = two - erfc
+    if (x < zero) erfc_cq = two - erfc_cq
     return
-  end function erfc
+  end function erfc_cq
   !!***
 
 !!****f* functions/j0 *
@@ -324,6 +320,8 @@ contains
   !!  CREATION DATE
   !!   2019/11/12
   !!  MODIFICATION HISTORY
+  !!   2020/01/24 08:05 dave
+  !!    Corrected type of temp to integer
   !!  SOURCE
   !!  
   subroutine heapsort_real_index(n_arr,array,arr_index,reverse)
@@ -339,8 +337,7 @@ contains
     integer, dimension(n_arr) :: arr_index, tmp_index
 
     ! Local variables
-    integer :: i
-    real(double) :: temp
+    integer :: i, temp
 
     ! Set up index
     do i=1,n_arr
@@ -383,8 +380,7 @@ contains
       integer :: start, end
 
       ! Local variables
-      integer :: child, root
-      real(double) :: temp
+      integer :: child, root, temp
 
       root = start
       ! Left child is i*2

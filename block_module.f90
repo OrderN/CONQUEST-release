@@ -1,4 +1,4 @@
-! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
+! -*- mode: F90; mode: font-lock -*-
 ! ------------------------------------------------------------------------------
 ! $Id$
 ! ------------------------------------------------------------------------------
@@ -64,9 +64,6 @@ module block_module
   implicit none
   save
 
-  ! RCS tag for object file identification 
-  character(len=80), private :: RCSid = "$Id$"
-
   integer :: nx_in_block,ny_in_block,nz_in_block
   integer :: n_pts_in_block
   integer :: n_blocks
@@ -80,53 +77,6 @@ module block_module
 !!***
 
 contains
-
-!!****f* block_module/set_block_module *
-!!
-!!  NAME 
-!!   set_block_module
-!!  USAGE
-!!   set_block_module(blockpts x,y,z)
-!!  PURPOSE
-!!   this subroutine must be called after setting 
-!!   rcellx,y,z in global_module, and
-!!   blocks%ngcellx,y,z.
-!! 
-!!  INPUTS
-!! 
-!!  USES
-!!   datatypes, global_module, group_module
-!!  AUTHOR
-!!   T.Miyazaki
-!!  CREATION DATE
-!!   11/07/2000
-!!  MODIFICATION HISTORY
-!!   15/03/2002 dave
-!!    Added ROBODoc header
-!!   2006/10/10 16:50 dave
-!!    Removed grid_point_volume definition
-!!   2006/10/10 16:58 dave
-!!    in_block_ variables now part of module, so removed from argument list
-!!   2017/08/29 jack baker & dave
-!!    Removed rcellx references (redundant)
-!!  SOURCE
-!!
-  subroutine set_block_module
-
-    ! Module usage
-    use datatypes
-    use group_module, ONLY: blocks
-    use GenComms, ONLY: inode, ionode
-
-    implicit none
-
-    nx_in_block=in_block_x
-    ny_in_block=in_block_y
-    nz_in_block=in_block_z
-    
-    return
-  end subroutine set_block_module
-!!***
 
 !!****f* block_module/set_blocks_from_new *
 !!
@@ -156,8 +106,7 @@ contains
   use grid_index, ONLY: ind_block_x, ind_block_y, ind_block_z
   use GenComms, ONLY: inode, cq_abort
   use group_module, ONLY: blocks
-  use primary_module, ONLY: domain
-  use maxima_module, ONLY: maxngrid, maxblocks
+  use maxima_module, ONLY: maxblocks
 
   ! Local variables
   integer :: icount, iblock, ind_group, stat
@@ -240,14 +189,14 @@ contains
     integer,intent(in):: n_grid_x, n_grid_y, n_grid_z
 
     !Local variables
-    integer:: n_block_x, n_block_y, n_block_z, n_all_block,   &
+    integer:: n_block_x, n_block_y, n_block_z,   &
          n_per_proc, n_first, n_all_blocks,              &
          nfb_x, nfb_y, nfb_z, nc_x, nc_y, nc_z,  &
          n_add_x, n_add_y, n_add_z, nx, ny, nz, icount, lun
 
 
     integer:: mx_gedge_tmp,ind_block,nnd, maxtmp, i, cx, cy, cz, cc
-    integer:: iblock, minblocks
+    integer:: minblocks
 
     integer, dimension(:), allocatable :: blocks_per_proc, proc_block, proc_which_block
 
@@ -263,7 +212,9 @@ contains
     blocks%ngcelly=n_block_y
     blocks%ngcellz=n_block_z
     !-- set variables in block_module
-    call set_block_module
+    nx_in_block=in_block_x
+    ny_in_block=in_block_y
+    nz_in_block=in_block_z
     mx_gedge_tmp=max(n_block_x,n_block_y,n_block_z)
     if(flag_assign_blocks==blocks_raster) then
        !--- distribution of blocks over nodes:
@@ -501,7 +452,7 @@ contains
 !!    Added timer
 !!  SOURCE
 !!
-  subroutine set_domains( inode)
+  subroutine set_domains
 
     !use dimens, ONLY: n_my_grid_points
     use grid_index, ONLY: ind_block_x, ind_block_y, ind_block_z, &
@@ -512,11 +463,10 @@ contains
     implicit none
 
     ! Shared variables
-    integer :: inode
 
     ! Local variables
     integer :: n_pts, nb,  &
-         n0_x, n0_y, n0_z, nx, ny, nz, stat
+         n0_x, n0_y, n0_z, nx, ny, nz
 
     call start_timer(tmr_std_indexing)
     ! This subroutine replaces a previous version in which grid-points

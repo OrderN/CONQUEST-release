@@ -1,4 +1,4 @@
-! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
+! -*- mode: F90; mode: font-lock -*-
 ! ------------------------------------------------------------------------------
 ! $Id$
 ! ------------------------------------------------------------------------------
@@ -42,6 +42,8 @@
 !!    Added fourpi
 !!   2017/10/24 Z.Raza
 !!     Added one_eighth for MD Trotter expansion
+!!   2020/01/21 16:53 dave
+!!    Tidying source, remove RCSid
 !!  SOURCE
 !!
 module numbers
@@ -49,10 +51,6 @@ module numbers
   use datatypes
 
   implicit none      
-
-  ! RCS tag for object file identification
-  character(len=80), save, private :: &
-       RCSid = "$Id$"
 
   real(double), parameter :: zero = 0.0_double 
   real(double), parameter :: one = 1.0_double 

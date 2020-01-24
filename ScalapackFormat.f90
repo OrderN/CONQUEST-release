@@ -1,4 +1,4 @@
-!-*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
+!-*- mode: F90; mode: font-lock -*-
 ! -----------------------------------------------------------------------------
 ! $Id$
 ! -----------------------------------------------------------------------------
@@ -208,11 +208,6 @@ module ScalapackFormat
   ! Atom numbers in given SC row/column block
   type(block_atom), allocatable, dimension(:,:) :: SC_row_block_atom, SC_col_block_atom
 
-
-  ! -------------------------------------------------------
-  ! RCS ident string for object file id
-  ! -------------------------------------------------------
-  character(len=80), private :: RCSid = "$Id$"
 !!***
 
 contains
@@ -278,8 +273,8 @@ contains
     blocks_r = (matrix_size/block_size_r)
     blocks_c = (matrix_size/block_size_c)
     if(myid==0.AND.iprint_DM>3) write(io_lun,1) blocks_r,blocks_c
-    maxrow = aint(real(blocks_r/proc_rows))+1
-    maxcol = aint(real(blocks_c/proc_cols))+1
+    maxrow = floor(real(blocks_r/proc_rows))+1
+    maxcol = floor(real(blocks_c/proc_cols))+1
     if(iprint_DM>1.AND.myid==0) write(io_lun,*) 'maxrow, maxcol: ',maxrow,maxcol
     call start_timer(tmr_std_allocation)
     allocate(mapx(numprocs,maxrow,maxcol),mapy(numprocs,maxrow,maxcol),STAT=stat)
@@ -296,8 +291,8 @@ contains
          SC_col_block_atom(block_size_c,blocks_c),STAT=stat)
     if(stat/=0) call cq_abort("ScalapackFormat: Could not alloc bxa var",stat)
     allocate(CQ2SC_row_info(matrix_size), my_row(matrix_size),proc_start(numprocs), STAT=stat)
-    nprocs_max = aint(real(numprocs/proc_groups))+1
-    nkpoints_max = aint(real(nkp/proc_groups))+1
+    nprocs_max = floor(real(numprocs/proc_groups))+1
+    nkpoints_max = floor(real(nkp/proc_groups))+1
     allocate(pg_procs(proc_groups,nprocs_max),pg_kpoints(proc_groups,nkpoints_max),STAT=stat)
     if(stat/=0) call cq_abort("ScalapackFormat: Could not alloc pg_procs, pg_kpoints",stat)
     allocate(N_procs_in_pg(proc_groups),N_kpoints_in_pg(proc_groups),STAT=stat)
@@ -337,7 +332,7 @@ contains
 !!
   subroutine deallocate_arrays
 
-    use global_module, ONLY: iprint_DM, numprocs
+    use global_module, ONLY: iprint_DM
     use GenComms, ONLY: cq_abort, myid
 
     implicit none
@@ -370,7 +365,6 @@ contains
     if(stat/=0) call cq_abort("ScalapackFormat: Could not dealloc pgroup",stat)
     call stop_timer(tmr_std_allocation)
     return
-1   format(2x,'AllocArr: block sizes are: ',2i5)
   end subroutine deallocate_arrays
 !!***
 
@@ -397,7 +391,7 @@ contains
   subroutine pg_initialise (nkp)
     
     use GenComms, ONLY: cq_abort, inode
-    use global_module, ONLY: iprint_DM, numprocs
+    use global_module, ONLY: numprocs
   
     implicit none
     
@@ -491,7 +485,7 @@ contains
   subroutine ref_to_SC_blocks 
 
     use GenComms, ONLY: cq_abort, myid
-    use global_module, ONLY: iprint_DM, numprocs
+    use global_module, ONLY: iprint_DM
 
     implicit none
 
@@ -519,10 +513,10 @@ contains
     do ng = 1, proc_groups
        do i=1,blocks_r                          ! Rows of blocks in ref format
           prow = mod(i-1,proc_rows)+1             ! Processor row for this row
-          nrow = aint(real((i-1)/proc_rows))+1    ! Which row on the processor 
+          nrow = floor(real((i-1)/proc_rows))+1    ! Which row on the processor 
           do j=1,blocks_c                       ! Cols of blocks in ref format
              pcol = mod(j-1,proc_cols)+1          ! Processor col for this row
-             ncol = aint(real((j-1)/proc_cols))+1 ! Which col on the processor
+             ncol = floor(real((j-1)/proc_cols))+1 ! Which col on the processor
              ! Which processor (linear number) is this ?
              proc = procid(ng, prow, pcol)
              ! Map from block on processor to reference format
@@ -622,16 +616,16 @@ contains
     n = 1
     do i = 1, proc_rows ! looping over proc-grid rows
        if(i<=row_max_n) then
-          loc_max_row = aint(real(blocks_r/proc_rows))+1
+          loc_max_row = floor(real(blocks_r/proc_rows))+1
        else
-          loc_max_row = aint(real(blocks_r/proc_rows))
+          loc_max_row = floor(real(blocks_r/proc_rows))
        end if
        do row = 1, loc_max_row ! looping over local SC format block rows
           do j = 1, proc_cols ! looping over proc-grid cols
              if (j <= col_max_n) then
-                loc_max_col = aint(real(blocks_c/proc_cols))+1
+                loc_max_col = floor(real(blocks_c/proc_cols))+1
              else
-                loc_max_col = aint(real(blocks_c/proc_cols))
+                loc_max_col = floor(real(blocks_c/proc_cols))
              end if
              do ng = 1, proc_groups
                 proc = procid(ng, i, j)
@@ -761,7 +755,7 @@ contains
     implicit none
 
     ! Local variables
-    integer :: i, n, batom, patom, part, proc, CC, brow, SCblock, supfn
+    integer :: i, patom, part, proc, CC, brow, SCblock, supfn
 
     if(iprint_DM>3.AND.myid==0) write(io_lun,*) myid,' Starting Find SC Row Atoms'
     ! -----------------------------------------------------------------
@@ -813,7 +807,7 @@ contains
     ! End loop over matrix using blocks
     ! -----------------------------------------------------------------
     return
-1   format(2x,'Proc: ',i5,' Row, Block, Atom: ',3i5)
+
 2   format(2x,'Proc: ',i5,' Part, Seq, SupFn: ',3i5)
   end subroutine find_SC_row_atoms
 !!***
@@ -869,7 +863,7 @@ contains
     implicit none
 
     ! Local variables
-    integer :: rb, cb, SCblockx,SCblocky,blockrow, blockcol
+    integer :: rb, cb, SCblockx, blockrow, blockcol
     integer :: part, seq, supfn
 
     if(iprint_DM>3.AND.myid==0) write(io_lun,*) myid,' Starting Find Ref Row Atoms'
@@ -958,7 +952,7 @@ contains
     implicit none
 
     ! Local variables
-    integer :: rb, cb, blockcol,refc,part,seq,supfn, i,j,np_in_cell
+    integer :: cb, blockcol, refc, part, seq, supfn, np_in_cell
 
     if(iprint_DM>3.AND.myid==0) write(io_lun,*) myid,' Starting Find SC Col Atoms'
     ! Loop over SC blocks
@@ -988,7 +982,7 @@ contains
        end do
     endif
     return
-1   format(i5)
+
 2   format(2x,'Proc: ',i5,' SC col, ref col: ',2i5)
 3   format(2x,3i5,' : ',4i5)
 4   format(2x,'On proc ',i3,' CC_to_SC is',/,2x,' Part Atom  SFn   Label')

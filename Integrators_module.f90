@@ -1,4 +1,4 @@
-! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
+! -*- mode: F90; mode: font-lock -*-
 ! ------------------------------------------------------------------------------
 ! $Id$
 ! ------------------------------------------------------------------------------
@@ -31,7 +31,6 @@ module Integrators
 
   use datatypes
   implicit none
-  character(80),save,private :: RCSid = "$Id$"
 
   ! FIRE relaxation method
   ! Parameters adjusted after this many steps if there is slow convergence
