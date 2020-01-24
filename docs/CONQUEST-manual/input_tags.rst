@@ -706,7 +706,7 @@ Diag.ProcCols (*integer*)
 Moving Atoms
 ------------
 AtomMove.TypeOfRun (*string*)
-    values: static/cg/md
+    values: static/cg/lbfgs/md
 
     Options:
 
@@ -714,9 +714,21 @@ AtomMove.TypeOfRun (*string*)
 
     cg — Structure optimisation by conjugate gradients
 
+    lbfgs — Structure optimisation by LBFGS (Limited Memory Broyden–Fletcher–Goldfarb–Shanno algorithm)
+
     md — Velocity Verlet algorithm
 
     *default*: static
+
+AtomMove.QuenchMD (*boolean*)
+    Selects Quenched MD for structure relaxation (with ``AtomMove.TypeOfRun md``)
+
+    *default*: F 
+
+AtomMove.FIRE (*boolean*)
+    Selects FIRE method for structure relaxation (with ``AtomMove.TypeOfRun md``)
+
+    *default*: F 
 
 AtomMove.NumSteps (*integer*)
     Maximum number of steps for a structure optimisation or molecular dynamics run
@@ -737,12 +749,16 @@ AtomMove.Timestep (*real*)
 AtomMove.IonTemperature (*real*)
     Initial temperature for molecular dynamics
 
-    *default*: none
+    *default*: 300 K for MD, 0 for Quench MD or FIRE
 
 AtomMove.ReadVelocity (*boolean*)
-    Read velocity from file ``velocity.dat``
+    Read velocity from file ``md.checkpoint`` (when ``AtomMove.RestartRun T``)
 
-    *default*: F
+                           or  ``velocity.dat``  (when ``AtomMove.RestartRun F``, very rare)
+
+    *default*: F (when ``AtomMove.RestartRun F``) 
+
+            or T (when ``AtomMove.RestartRun T``)
 
 AtomMove.AppendCoords (*boolean*)
     Chooses whether to append coordinates to ``UpdatedAtoms.dat`` during atomic
@@ -759,7 +775,7 @@ AtomMove.WriteXSF *(boolean*)
     Write atomic coordinates to ``trajectory.xsf`` for ``AtomMove.TypeOfRun = md`` or ``cg``,
     every ``AtomMove.OutputFreq`` steps
 
-    *default*: F
+    *default*: T
 
 AtomMove.TestForces (*boolean*)
     Flag for testing forces with comparison of analytic and numerical calculations.
@@ -891,13 +907,20 @@ AtomMove.RestartRun (*boolean*)
 
     *default*: F
 
-AtomMove.ReuseL (*boolean*)
-    Selects the use of L-matrix in MD run
+AtomMove.ReuseDM (*boolean*)
+    Selects the use of last-step L-matrix (``ordern``) or K-matrix(``diagon``) 
+    during MD or structure relaxation
 
-    *default*: F
+    *default*: T
+
+AtomMove.ReuseSFcoeff (*boolean*)
+    Selects the use of last-step PAO coefficients of multi-site support functions
+    during MD or structure relaxation
+
+    *default*: T
 
 AtomMove.ReuseInvS (*boolean*)
-    Selects the use of T-matrix in MD run
+    Selects the use of T-matrix in MD run  (rare)
 
     *default*: F
 
@@ -907,12 +930,12 @@ AtomMove.SkipEarlyDM (*boolean*)
     *default*: F
 
 AtomMove.McWeenyFreq (*integer*)
-    Number of steps to apply to McWeeny calculation (with “AtomMove.ReuseL T”)
+    McWeeny step is applied every N steps (with “AtomMove.ReuseDM T”)
 
     *default*:
 
 AtomMove.ExtendedLagrangian (*boolean*)
-    Selects XL-BOMD (with “AtomMove.ReuseL T”)
+    Selects XL-BOMD (with “AtomMove.ReuseDM T”)
 
     *default*: F
 
@@ -933,14 +956,12 @@ MD.Ensemble (*string*)
     *default*: nve
 
 MD.Thermostat (*string*)
-    values: none/nhc/berendsen
+    values: none/nhc/berendsen/svr
 
     Thermostat type
 
     ``none``
         No thermostat (used for calculating temperature only)
-    ``nhc``
-        Nosé-Hoover chain
     ``berendsen``
         Berendsen weak coupling thermostat
     ``svr``
@@ -1206,17 +1227,17 @@ XL-BOMD
 XL.Kappa (*real*)
     Value of kappa
 
-    *default*:
+    *default*: 2.0
 
 XL.PropagateX (*boolean*)
-    Selects the corrected XL-BOMD
+    Selects the propagation of LS in XL-BOMD
 
-    *default*:
+    *default*: T
 
 XL.PropagateL (*boolean*)
-    Selects the original XL-BOMD
+    Selects the propagation of L matrix in XL-BOMD (inappropriate)
 
-    *default*:
+    *default*: F
 
 XL.Dissipation (*boolean*)
     Selects the addition of dissipative force
@@ -1224,14 +1245,19 @@ XL.Dissipation (*boolean*)
     *default*:
 
 XL.MaxDissipation (*integer*)
-    (*please fill in*)
+    Order of dissipative force term 
 
-    *default*:
+    *default*: 5
 
 XL.Integrator (*string*)
     Selects the Verlet method or velocity Verlet method
 
-    *default*:
+    *default*: velocityVerlet
+
+XL.ResetFreq (*integer*)
+    Frequency to reset the propagation of X matrix in XL-BOMD
+
+    *default*: 0 (no reset)
 
 Advanced and obscure tags
 -------------------------
