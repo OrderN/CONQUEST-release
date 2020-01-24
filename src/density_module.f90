@@ -67,6 +67,10 @@
 !!    Merging set_density_atom and set_density and renaming to set_atomic_density
 !!   2018/05/17 12:53 dave with Ayako Nakata
 !!    Moved flag_InitialAtomicSpin from global (and changed set_atomic_density)
+!!   2019/12/27 tsuyoshi
+!!    Removed flag_no_atomic_densities
+!!   2020/01/03 09:32 dave
+!!    Moved flag_DumpChargeDensity from H_matrix_module
 !!  SOURCE
 module density_module
 
@@ -79,7 +83,6 @@ module density_module
   implicit none
   save
 
-  logical :: flag_no_atomic_densities
   ! Initialise spin
   logical :: flag_InitialAtomicSpin
 
@@ -119,6 +122,14 @@ module density_module
   character(len=80), private :: &
        RCSid = "$Id$"
 
+  ! Method for constructing initial charge density (after the movement of atoms)
+  integer            :: method_UpdateChargeDensity
+  integer, parameter :: DensityMatrix = 0   ! use previous-step DM
+  integer, parameter ::  AtomicCharge = 1   ! superposition of atomic charge
+  integer, parameter ::  LastStep     = 2   ! use charge density on the grid at the last step
+
+  ! Dump charge density or not (this should also be used for dumping hilbert_make_blk.dat etc.)
+  logical :: flag_DumpChargeDensity
 !!***
 
 contains

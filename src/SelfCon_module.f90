@@ -62,6 +62,8 @@
 !!    Implemented new residuals
 !!   2019/10/24 11:52 dave
 !!    Changed function calls to FindMinDM
+!!   2019/12/30 tsuyoshi
+!!    Introduced n_dumpSCF for dumping Kmatrix2.i99.p*****
 !!  SOURCE
 !!
 module SelfCon
@@ -113,6 +115,7 @@ module SelfCon
   logical,      save :: flag_linear_mixing
   real(double), save :: EndLinearMixing
 
+  integer,      save :: n_dumpSCF
   !!***
 
 contains
@@ -865,6 +868,8 @@ contains
   !!    Adding new residual definitions
   !!   2019/09/11 09:52 dave
   !!    Bug fix to changes in residual calculation
+  !!   2019/12/30 tsuyoshi
+  !!    flag_DumpChargeDensity is introduced to control dump_charge
   !! SOURCE
   !!
   subroutine PulayMixSC_spin(done, ndone, self_tol, reset_L, &
@@ -885,6 +890,8 @@ contains
                               spin_factor
     use memory_module,  only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use maxima_module,  only: maxngrid
+    use store_matrix,   only: dump_pos_and_matrices, unit_SCF_save
+    use density_module, only: flag_DumpChargeDensity
 
     implicit none
 
@@ -1051,7 +1058,9 @@ contains
        pul_mx = min(iter - IterPulayReset + 1, maxpulaySC)
 
        ! print out charge
-       if (iprint_SC > 1) then
+       !  2019Dec30 tsuyoshi: flag_DumpChargeDensity is introduced, but ...
+       !                      is it okay with iprint_SC > 1 ?
+       if (flag_DumpChargeDensity .and. iprint_SC > 1) then
           if (nspin == 1) then
              rho_tot(:) = spin_factor * rho(:,1)
              call dump_charge(rho_tot, n_my_grid_points, inode, spin=0)
@@ -1138,6 +1147,12 @@ contains
        ! get optimum rho mixed from rho_pul, R_pul and Rcov_pul
        call get_pulay_optimal_rho(iPulay, rho, pul_mx, A, rho_pul, &
                                   R_pul, KR_pul, Rcov_pul, backtrace_level)
+
+       ! 2019Dec30 tsuyoshi
+       ! Dump Kmatrix every n_dumpSCF, if n_dumpSCF > 0
+       if(n_dumpSCF > 0 .and. mod(n_iters,n_dumpSCF)==1) then
+        call dump_pos_and_matrices(index=unit_SCF_save)
+       endif
 
        ! increment iteration counter
        n_iters = n_iters + 1

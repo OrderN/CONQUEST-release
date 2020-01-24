@@ -20,7 +20,7 @@ ENERGY_OBJS = H_matrix_module.o \
 	      control.o \
 	      density_module.o \
 	      initialisation_module.o \
-	      initial_read.module.o \
+	      initial_read_module.o \
 	      energy_module.o \
               test_force_module.o\
               functions_on_grid_module.o\

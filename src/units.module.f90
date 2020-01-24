@@ -39,6 +39,13 @@ module units
   real(double), parameter :: BohrToAng = 0.52917721067_double ! 2014 CODATA value
   real(double), parameter :: AngToBohr = one/BohrToAng
 
+  ! Time
+  real(double), parameter :: fac_fs2atu = 41.3413745758
+
+  ! Pressure
+  real(double), parameter :: HaBohr3ToGPa = &
+    (HaToeV*eVToJ*1e21_double)/(BohrToAng**3)
+
   ! Memory (?!)
   real(double), parameter :: kB = 0.0009765625_double
   real(double), parameter :: MB = 9.5367431640625e-07_double

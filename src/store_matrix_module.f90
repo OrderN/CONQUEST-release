@@ -12,11 +12,13 @@
 !!   2016/09/29
 !!  MODIFCATION
 !!   - Added derived data types for XL-BOMD
+!!   2020/01/02 16:57 dave
+!!    Defined units for saving intermediary charge etc during optimisation
 !!
 module store_matrix
 
   use datatypes
-  use global_module, ONLY: numprocs, iprint_MD
+  use global_module, ONLY: numprocs, iprint_MD, io_lun
   use input_module, ONLY: io_assign, io_close
   use GenComms, ONLY: inode, ionode, cq_abort, myid
   use io_module, ONLY: flag_MatrixFile_RankFromZero, flag_MatrixFile_BinaryFormat, &
@@ -98,7 +100,9 @@ module store_matrix
      real(double), pointer :: data_Lold(:,:)
   end type InfoMatrixFile
 
-  character(80),private :: RCSid = "$Id$"
+  integer, parameter :: unit_DM_save   = 77
+  integer, parameter :: unit_SCF_save  = 88
+  integer, parameter :: unit_MSSF_save = 99
 
 contains
   
@@ -118,21 +122,24 @@ contains
   !!  USES
   !!
   !!  AUTHOR
-  !!   Michiaki Arita
+  !!   Michiaki Arita   /  Tsuyoshi Miyazaki
   !!  CREATION DATE
   !!   2013/08/22
   !!  MODIFICATION
+  !!   2019/12/30 flag_DumpMatrices are introduced 
   !!  SOURCE
   !!
   subroutine dump_pos_and_matrices(index, MDstep, velocity)
  
     ! Module usage
     use global_module, ONLY: ni_in_cell, nspin, nspin_SF, flag_diagonalisation, flag_Multisite, &
-         flag_XLBOMD, flag_propagateX, flag_dissipation, integratorXL, flag_SFcoeffReuse
+         flag_XLBOMD, flag_propagateX, flag_dissipation, integratorXL, flag_SFcoeffReuse, &
+         flag_DumpMatrices
     use matrix_data, ONLY: Lrange, Hrange, SFcoeff_range, SFcoeffTr_range, HTr_range, Srange, LSrange
     use mult_module, ONLY: matL,L_trans, matK, matSFcoeff, matS
     use io_module, ONLY: append_coords, write_atomic_positions, pdb_template
     use mult_module, only: matXL, matXLvel
+    use GenComms, only: cq_warn
 
     implicit none
 
@@ -145,6 +152,13 @@ contains
     integer :: both=0 , mat=1
     logical :: append_coords_bkup
     integer :: index_local, MDstep_local
+
+    ! If flag_DumpMatrices is false, exit this routine
+    if(.not.flag_DumpMatrices.AND.iprint_MD>3) then
+       call cq_warn("dump_pos_and_matrices", &
+            "Routine called but not run because IO.DumpMatrices is false.")
+       return
+    endif
 
     index_local = 0; if(present(index)) index_local=index
     MDstep_local = 0; if(present(MDstep)) MDstep_local=MDstep

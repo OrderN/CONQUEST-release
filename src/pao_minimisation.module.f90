@@ -121,6 +121,8 @@ contains
   !!    Changed function calls to FindMinDM
   !!   2019/12/02 nakata
   !!    Removed dump_matrix(SFcoeff), which will be changed to dump_pos_and_matrices in near future
+  !!   2019/12/30 tsuyoshi
+  !!    introduced dump_pos_and_matrices (every n_dumpSFcoeff iterations)
   !!  SOURCE
   !!
   subroutine vary_pao(n_support_iterations, fixed_potential, vary_mu, &
@@ -147,7 +149,7 @@ contains
     use group_module,              only: parts
     use H_matrix_module,           only: get_H_matrix
     use S_matrix_module,           only: get_S_matrix
-    use store_matrix,              only: dump_pos_and_matrices
+    use store_matrix,              only: dump_pos_and_matrices, unit_MSSF_save
 !    use io_module,                 only: dump_matrix
     use support_spec_format,       only: TestBasisGrads, TestTot,      &
                                          TestBoth, TestS, TestH
@@ -163,7 +165,7 @@ contains
                                          matSFcoeff, matSFcoeff_tran,  &
                                          matdSFcoeff, matdSFcoeff_e,   &
                                          matrix_scale, matrix_transpose
-    use multisiteSF_module,        only: normalise_SFcoeff
+    use multisiteSF_module,        only: normalise_SFcoeff, n_dumpSFcoeff
 
     implicit none
 
@@ -538,14 +540,10 @@ contains
           call matrix_transpose(matSFcoeff(spin_SF), matSFcoeff_tran(spin_SF))
        enddo
 
-    ! Write out current SF coefficients with some iprint (in future)
-    ! if (iprint_basis>=3) call dump_pos_and_matrices
-!       if (nspin_SF == 1) then
-!          call dump_matrix("SFcoeff",    matSFcoeff(1), inode)
-!       else
-!          call dump_matrix("SFcoeff_up", matSFcoeff(1), inode)
-!          call dump_matrix("SFcoeff_dn", matSFcoeff(2), inode)
-!       end if
+    ! Write out current SF coefficients every n_dumpSFcoeff, if n_dumpSFcoeff > 0)
+     if (n_dumpSFcoeff > 0 .and. mod(n_iterations,n_dumpSFcoeff) == 1) then
+       call dump_pos_and_matrices(index = unit_MSSF_save)
+     endif
 
        flag_vary_basis = .true.
 

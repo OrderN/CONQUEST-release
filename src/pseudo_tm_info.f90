@@ -159,7 +159,7 @@ contains
     use numbers,        ONLY: zero, RD_ERR, two
     use pao_format,     ONLY: pao
     use species_module, ONLY: n_species, species_label, species_file, species_from_files
-    use species_module, ONLY: npao_species, nsf_species, type_species, charge, charge_up, charge_dn
+    use species_module, ONLY: npao_species, nsf_species, type_species, charge, charge_up, charge_dn, mass
     use global_module,  ONLY: iprint_pseudo, flag_Multisite
     use dimens,         ONLY: RadiusSupport, RadiusAtomf, RadiusMS, InvSRange, atomicnum
     use GenComms,       ONLY: inode, ionode, cq_abort, gcopy
@@ -225,6 +225,7 @@ contains
           atomicnum(ispecies)    = pseudo(ispecies)%z
           ! Valence charge
           charge(ispecies)       = pseudo(ispecies)%zval
+          if(mass(ispecies) < zero) charge(ispecies) = zero
           ! Test spin polarised initialisation
           if (abs(charge_up(ispecies)+charge_dn(ispecies))>RD_ERR) then
              if (abs(charge_up(ispecies)+charge_dn(ispecies)-charge(ispecies))>RD_ERR) &
@@ -627,6 +628,8 @@ contains
   !!    Added semicore flag for each zeta
   !!   2018/11/02 16:30 nakata
   !!    Bug fix: set semicore when numprocs>1
+  !!   2020/01/22 16:59 dave
+  !!    Bug fix: change header to read Hamann code version line if present
   !!  SOURCE
   !!
   subroutine read_ion_ascii_tmp(ps_info,pao_info)
@@ -854,11 +857,13 @@ contains
     if(lmax>lmax_pao) lmax_pao = lmax    
     call gcopy(n_pjnl )
     call gcopy(zval)
+    call gcopy(xc_func)
     call gcopy(z)
     if(inode/=ionode) then
        call alloc_pseudo_info(ps_info, n_pjnl)
        ps_info%zval = zval
        ps_info%z = z
+       if(xc_func/=0) ps_info%functional = xc_func
        pao_info%greatest_angmom = lmax
        allocate(pao_info%angmom(0:lmax),STAT=alls)
     end if
@@ -1017,16 +1022,18 @@ contains
                   ps_info%flag_pcc = .false.
                endif
                ! Set XC functional
-               if(leqi(xc_code,'ca')) then      ! LDA; ATOM code uses PZ81 but use PW92
-                  xc_func = functional_lda_pw92
-               else if(leqi(xc_code,'pb')) then ! PBE
-                  xc_func = functional_gga_pbe96
-               else if(leqi(xc_code,'rv')) then ! RevPBE
-                  xc_func = functional_gga_pbe96_rev98
-               else if(leqi(xc_code,'rp')) then ! RPBE
-                  xc_func = functional_gga_pbe96_r99
-               else if(leqi(xc_code,'wc')) then ! Wu-Cohen
-                  xc_func = functional_gga_pbe96_wc
+               if(xc_func==0) then
+                  if(leqi(xc_code,'ca')) then      ! LDA; ATOM code uses PZ81 but use PW92
+                     xc_func = functional_lda_pw92
+                  else if(leqi(xc_code,'pb')) then ! PBE
+                     xc_func = functional_gga_pbe96
+                  else if(leqi(xc_code,'rv')) then ! RevPBE
+                     xc_func = functional_gga_pbe96_rev98
+                  else if(leqi(xc_code,'rp')) then ! RPBE
+                     xc_func = functional_gga_pbe96_r99
+                  else if(leqi(xc_code,'wc')) then ! Wu-Cohen
+                     xc_func = functional_gga_pbe96_wc
+                  end if
                end if
                read(unit,'(a)') line
                trim_line = trim(line)
@@ -1036,8 +1043,9 @@ contains
             else if (leqi(trim_line(1:14),'<Conquest_pseu')) then
                read(unit,'(a)') line ! Check this for Hamann
                if(leqi(line(3:8),'Hamann')) pseudo_type = 3
-               read(unit,'(a)') line
-               read(unit,'(a)') line
+               if(leqi(line(3:10),'Hamann c')) read(unit,'(a)') line
+               read(unit,'(a)') line ! Core radii
+               read(unit,'(a)') line ! Valence shells
                read(unit,'(a26,i7)') line, xc_func
             endif
          end do
