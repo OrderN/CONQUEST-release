@@ -71,6 +71,8 @@ the k-point grid in reciprocal space (to sample the Brillouin zone
 efficiently); the occupation smearing approach; and the
 parallelisation of k-points.
 
+Go to :ref:`top <groundstate>`
+
 .. _gs_diag_bz:
 
 Brillouin zone sampling
@@ -111,6 +113,8 @@ explicitly by giving a number of points and their locations and weights:
    %endblock Diag.Kpoints
 
 where there must be as many lines in the block as there are k-points.
+It is important to note that CONQUEST does not consider space group
+symmetry when integrating over the Brillouin zone.
 
 Go to :ref:`top <groundstate>`.
 
@@ -175,6 +179,16 @@ gradient of the energy with respect to the density matrix).  The
 maximum number of iterations in the density matrix optimisation can
 be set with ``DM.LVariations`` (default 50).
 
+At present, CONQUEST can only operate efficiently in linear scaling
+mode with a restricted number of support functions (though this is an
+area of active development).  PAO basis sets of SZ and SZP size
+(minimal and small in the ion file generator) will run without
+restrictions.  For larger PAO basis sets, the :ref:`OSSF <basis_ossf>`
+approach must be used, and is effective.  With a blip basis there are
+no restrictions, though efficient optimisation is still under active
+development. 
+
+
 It is
 almost always more efficient to update the charge density while
 optimising the density matrix, avoiding the need for a separate
@@ -185,7 +199,7 @@ An essential part of a linear scaling calculation is finding the
 approximate, sparse inverse of the overlap matrix.  Normally this will
 happen automatically, but it may require some tests.  The key
 parameters are the range for the inverse (see the
-:ref:`input_tags_atomic_spec` block, and specifically the
+:ref:`input_atomic_spec` block, and specifically the
 :ref:`advanced_atomic_spec_tags` block) and the tolerance applied
 to the inversion.
 
@@ -330,7 +344,7 @@ cell size and shape.  Electrons are added by setting the parameter
 This gives the number of extra electrons to be added to the unit cell,
 beyond the valence electrons.
 
-Go to :ref:`top <groundstate>`
+Go to :ref:`top <groundstate>`.
 
 .. _gs_spin:
 
@@ -350,7 +364,7 @@ calculations by setting the parameter ``Spin.FixSpin`` to T (default is F).
 
 It is possible to specify the spin occupation in the atomic charge
 densities (i.e. the number of spin-up and spin-down electrons used to
-build the density).  This is done in the :ref:`input_tags_atomic_spec`
+build the density).  This is done in the :ref:`input_atomic_spec`
 part of the ``Conquest_input`` file.  Within the atom block for
 each species, the numbers of electrons should be set with
 ``Atom.SpinNeUp`` and ``Atom.SpinNeDn``.  Note that these numbers
@@ -421,4 +435,5 @@ Go to :ref:`top <groundstate>`.
     :labelprefix: G
     :keyprefix: g-
     :style: unsrt
->>>>>>> manual
+
+Go to :ref:`top <groundstate>`.

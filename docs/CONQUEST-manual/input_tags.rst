@@ -92,9 +92,7 @@ General.PartitionMethod (*string*) File/Hilbert
     -  Hilbert (default) — Automatic partitioning using Hilbert curves;
        safe for initial use though optimum load balancing *not*
        guaranteed
-    -  File — Reads a file (name given below in
-       Sec. [sec:general-io-flags]; details of how to create in
-       Sec. [sec:parall-issu])
+    -  File — Reads a file (NOT recommended)
 
 General.LoadBalance (*string*) partitions/atoms
     Applies to Hilbert above; chooses whether to distribute atoms or partitions
@@ -177,6 +175,8 @@ General.RNGSeed (*integer*)
 
     *default*: -1
 
+Go to :ref:`top <input_tags>`.
+
 .. _input_atomic_spec:
 
 Atomic Specification
@@ -192,7 +192,7 @@ ChemicalSpeciesLabel (*block*)
 
     (Note that the block must end with %endblock ChemicalSpeciesLabel.)
     1-–n are integer numbers used in the coordinate file to identify
-    atomic species, as discussed in the :ref:`coordinate-file`
+    atomic species, as discussed in the :ref:`io_coords`
     section.  The atomic masses are only used for dynamics.  The
     element labels should have a corresponding ion file
     ``element_label_x.ion`` and *may* have an accompanying atom
@@ -216,7 +216,9 @@ Atom.LFDRange (*real*)
 
     *default*: 0.0
 
-.. _io_general_tags:
+Go to :ref:`top <input_tags>`.
+
+.. _input_general_tags:
 
 Input-Output General Tags
 -------------------------
@@ -271,11 +273,15 @@ IO.TimeFileRoot (*string*)
 
     *default*: ``time``
 
+Go to :ref:`top <input_tags>`.
+
+.. _input_coords:
+
 Atomic Coordinates
 ------------------
 
 IO.Coordinates (*string*)
-    Specifies the file with atomic coordinates. See Section [sec:atomic-positions]
+    Specifies the file with atomic coordinates. See :ref:`io_coords`
     for details on the file format
 
     *default*: none
@@ -290,6 +296,10 @@ IO.PdbIn (*boolean*)
     Switches between the   coordinate file format (F) and PDB format (T)
 
     *default*: F
+
+Go to :ref:`top <input_tags>`.
+
+.. _input_output:
 
 Levels of Output
 ----------------
@@ -357,6 +367,8 @@ IO.Iprint\_intgn (*integer*)
 IO.Iprint\_time (*integer*)
     Timing information
 
+Go to :ref:`top <input_tags>`.
+
 .. _integration-grid:
 
 Integration Grid
@@ -369,6 +381,10 @@ Grid.GridCutoff (*real*)
     (to fit with default FFT routines)
 
     Default: 20 Ha.
+
+Go to :ref:`top <input_tags>`.
+
+.. _input_minE:
 
 Minimising Energy
 -----------------
@@ -422,6 +438,10 @@ minE.GlobalTolerance (*boolean*)
     system, or per atom?
 
     *default*: T
+
+Go to :ref:`top <input_tags>`.
+
+.. _input_scf:
 
 Charge Self-Consistency
 -----------------------
@@ -500,6 +520,8 @@ SC.MetricFactor (*real*)
 
     *default*: 0.1
 
+Go to :ref:`top <input_tags>`.
+
 .. _input_dm:
 
 Density Matrix
@@ -518,7 +540,7 @@ DM.SolutionMethod (*string*)
 DM.L\_range (*real*)
     Cutoff applied to L matrix (total energy will converge with increasing range;
     suggested minimum for O(N) calculations is twice largest support function range;
-    see Sec. [sec:find-dens-matr] for more details)
+    see :ref:`gs_on` for more details)
 
     *default*: 1.0
 
@@ -588,6 +610,10 @@ DM.mu (*real*)
 
     *default*: 0.0
 
+Go to :ref:`top <input_tags>`.
+
+.. _input_diag:
+
 Diagonalisation
 ---------------
 
@@ -614,6 +640,11 @@ Diag.MPMesh[X/Y/Z] (*integer*)
 
     *default*: 1
 
+Diag.GammaCentred (*boolean*)
+    Selects Monkhorst-Pack mesh centred on the Gamma point
+
+    *default*: F
+    
 Diag.ProcRows (*integer*)
 
     *default*:
@@ -667,13 +698,13 @@ Diag.MPOrder (*integer*)
 
 Diag.GaussianHeight (*real*)
     The height of Gaussian function used to determine the width of Methfessel-Paxton
-     approximation to delta-function (see section [sec:methf-paxt-smear])
+     approximation to delta-function (see :ref:`gs_diag_smear`)
 
     *default*: 0.1
 
 Diag.EfStepFiness (*real*)
     Parameter controlling the finness of the Fermi energy search step used in
-    Methfessel-Paxton smearing method (see section [sec:methf-paxt-smear])
+    Methfessel-Paxton smearing method (see :ref:`gs_diag_smear`)
 
     *default*: 1.0
 
@@ -681,27 +712,31 @@ Diag.NElecLess (*Real*)
     The number of electrons to subtract from the total number of electrons in each
     spin channel, which gives the starting point for searching the lower bound for
     Fermi energy. Used in Methfessel-Paxton smearing method
-    (see section [sec:methf-paxt-smear])
+    (see :ref:`gs_diag_smear`)
 
     *default*: 10.0
 
 Diag.KProcGroups (*integer*)
     Number of k-point processor groups for k-point parallelisation
-    (see section [sec:scal-proc-grid])
+    (see :ref:`gs_diag_para`)
 
     *default*: 1
 
 Diag.ProcRows (*integer*)
     Number of rows in the processor grid for SCALAPACK within each k-point processor
-    group (see section [sec:scal-proc-grid])
+    group 
 
     *default*: Determined automatically
 
 Diag.ProcCols (*integer*)
     Number of columns in the processor grid for SCALAPACK within each k-point
-    processor group (see section [sec:scal-proc-grid])
+    processor group 
 
     *default*: Determined automatically
+
+Go to :ref:`top <input_tags>`.
+
+.. _input_move_atoms:
 
 Moving Atoms
 ------------
@@ -869,8 +904,7 @@ AtomMove.TestSpecificForce (*integer*)
     Label for which force contribution to test. Note that for PAOs non-local Pulay
     and Hellman-Feynman forces are found together as part of the HF calculation;
     :math:`\phi` Pulay refers to changes in :math:`\phi(\mathbf{r})` when atoms move,
-    while S Pulay refers to changes in S when atoms move; see Sec. [sec:forces] and
-    references therein for more information. Options:
+    while S Pulay refers to changes in S when atoms move. Options:
 
     1 Total
     2 Total Hellman-Feynman
@@ -944,6 +978,9 @@ AtomMove.FixCentreOfMass (*boolean*)
 
     *default*: T
 
+Go to :ref:`top <input_tags>`.
+
+.. _input_md:
 
 Molecular Dynamics
 ------------------
@@ -1084,6 +1121,10 @@ MD.BaroDebug (*boolean*)
 
     *default*: F
 
+Go to :ref:`top <input_tags>`.
+
+.. _input_spin:
+
 Spin Polarisation
 -----------------
 
@@ -1106,6 +1147,10 @@ Spin.NeDN (*real*)
     Total number of electrons in spin down channel at start of calculation.
 
     *default*: 0.0
+
+Go to :ref:`top <input_tags>`.
+
+.. _input_deltaSCF:
 
 DeltaSCF
 --------
@@ -1170,6 +1215,10 @@ DeltaSCF.LUMOThresh (*real*)
 
     *default*:
 
+Go to :ref:`top <input_tags>`.
+
+.. _input_cdft:
+
 Constrained DFT (cDFT)
 ----------------------
 
@@ -1205,6 +1254,10 @@ cDFT.AtomGroups (*block*)
     block. For each line, there should be a corresponding block with the appropriate
     label; the block consists of a list of atom numbers for the atoms in the group
 
+Go to :ref:`top <input_tags>`.
+
+.. _input_vdw:
+
 vdW-DF
 ------
 
@@ -1213,6 +1266,10 @@ vdWDFT.LDAFunctionalType (*string*)
 
     *default*:
 
+Go to :ref:`top <input_tags>`.
+
+.. _input_dftd2:
+
 DFT-D2
 ------
 
@@ -1220,6 +1277,10 @@ DFT-D2\_range (*real*)
     DFT-D2 cutoff range (bohr)
 
     *default*:
+
+Go to :ref:`top <input_tags>`.
+
+.. _input_xlbomd:
 
 XL-BOMD
 -------
@@ -1258,6 +1319,10 @@ XL.ResetFreq (*integer*)
     Frequency to reset the propagation of X matrix in XL-BOMD
 
     *default*: 0 (no reset)
+
+Go to :ref:`top <input_tags>`.
+
+.. _advanced:
 
 Advanced and obscure tags
 -------------------------
@@ -1315,6 +1380,8 @@ General.GapThreshold (*real*)
 General.only_Dispersion (*boolean*)
     Selects only DFT\_D2 calculation (no electronic structure etc)
 
+Go to :ref:`top <input_tags>`.
+
 .. _advanced_atomic_spec_tags:
 
 Atomic Specification
@@ -1342,8 +1409,7 @@ Atom.SupportGridSpacing (*real*)
     circumstances) to a maximum g-vector of
     :math:`\pi`/**SupportGridSpacing**
     plane wave cutoff as region radius and L matrix radius go to infinity. *Not used for PAO
-    calculations*. See Sec. [sec:blip-basis] for more
-    information. N.B. Grid.GridCutoff will be reset to *at least* half
+    calculations*.  N.B. Grid.GridCutoff will be reset to *at least* half
     SupportGridSpacing if too small.
 
     *default*: none
@@ -1377,7 +1443,9 @@ Atom.SpinNeDn (*real*)
 
     *default*: 0.0
 
-.. _advanced_io_general_tags:
+Go to :ref:`top <input_tags>`.
+
+.. _advanced_input_general_tags:
 
 I/O General
 ***********
@@ -1411,7 +1479,9 @@ IO.TimeFileRoot (*string*)
 
     *default*: ``time``
 
-.. _advanced_io_coord_tags:
+Go to :ref:`top <input_tags>`.
+
+.. _advanced_input_coord_tags:
 
 I/O Atomic Coordinates
 **********************
@@ -1439,6 +1509,8 @@ IO.PdbTemplate (*string*)
     overwritten with this keyword
 
     *default*: coordinate file
+
+Go to :ref:`top <input_tags>`.
 
 .. _advanced_basis_tags:
 
@@ -1508,17 +1580,6 @@ Basis.PaoNormFlag (*integer*)
 
     *default*: 0
 
-Basis.ReadSupportSpec (*boolean*)
-    Should a file mapping PAOs to support functions *for initialisation of blip
-    coefficients* be read ? See Sec. [sec:other:-basis-spec] for details of file
-
-    *default*: F
-
-Basis.SupportSpecFile (*string*)
-    Name of file to be read (see ``Basis.ReadSupportSpec``)
-
-    *default*: ``support.dat``
-
 Basis.TestBasisGradients (*boolean*)
     Chooses whether gradients of energy with respect to basis function coefficients
     should be tested (using numerical vs. analytical gradients). **WARNING :** this
@@ -1552,6 +1613,8 @@ Basis.PAOs\_OneToOne (*boolean*)
 
     *default*: F
 
+Go to :ref:`top <input_tags>`.
+
 .. _advanced_grid_tags:
 
 Integration Grid
@@ -1576,10 +1639,13 @@ Grid.ReadBlocks (*boolean*)
 
     *default*: F
 
-
+Go to :ref:`top <input_tags>`.
 
 .. bibliography:: references.bib
     :cited:
     :labelprefix: E
     :keyprefix: e-
     :style: unsrt
+
+Go to :ref:`top <input_tags>`.
+

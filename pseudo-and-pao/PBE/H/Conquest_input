@@ -1,0 +1,11 @@
+General.NumberOfSpecies 1
+
+%block SpeciesLabels
+1  H
+%endblock
+
+%block H
+Atom.PseudopotentialFile H.in
+Atom.VKBFile H.pot
+Atom.BasisSize medium
+%endblock

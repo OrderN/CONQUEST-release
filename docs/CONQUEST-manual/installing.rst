@@ -1,9 +1,13 @@
+.. _install:
+
 ============
 Installation
 ============
 
 You will need to download and compile the code before you can use it;
 we do not supply binaries.
+
+.. _install_down:
 
 Downloading
 -----------
@@ -14,10 +18,13 @@ it can be cloned:
 
 ``git clone https://github.com/OrderN/CONQUEST-release destination-directory``
 
+where ``destination-directory`` should be set by the user.
 Alternatively, it can be downloaded from GitHub as a zip file and
-unpacked:
+unpacked: 
 
 `<https://github.com/OrderN/CONQUEST-release/archive/master.zip>`_
+
+.. _install_compile:
 
 Compiling
 ---------
@@ -45,10 +52,10 @@ directory, along with other parameters needed for compilation.
   optimisation)
 * ``BLAS`` (specify the BLAS and LAPACK libraries)
 * ``SCALAPACK`` (specify the ScaLAPACK library)
-* ``FFT_LIB`` (**we may remove this and require FFTW**)
+* ``FFT_LIB`` (must be left as FFTW)
 * ``XC_LIBRARY`` (choose ``XC_LIBRARY=CQ`` for the internal Conquest
-  library, otherwise ``XC_LIBRARY=LibXC_v2`` or ``XC_LIBRARY=LibXC``
-  for LibXC v2.x or higher)
+  library, otherwise ``XC_LIBRARY=LibXC_v2`` LibXC v2. or ``XC_LIBRARY=LibXC``
+  for LibXC v3.x or higher)
 * Two further options need to be set for LibXC:
 
   + ``XC_LIB`` (specify the XC libraries)

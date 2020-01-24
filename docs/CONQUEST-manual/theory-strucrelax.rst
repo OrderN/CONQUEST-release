@@ -8,8 +8,19 @@ Structural relaxation involves optimisation of the ionic coordinates,
 optimisation of the simulation cell, or both, with respect to the DFT total
 energy or the enthalpy if the cell is not fixed.
 
+.. _th_sr_ions:
+
 Ionic relaxation
 ----------------
+
+.. _th_sr_lbfgs:
+
+L-BFGS:
+~~~~~~~
+
+To be written...
+
+.. _th_sr_cg:
 
 Conjugate gradients
 ~~~~~~~~~~~~~~~~~~~
@@ -40,12 +51,20 @@ then construct the search direction at step :math:`n`, :math:`D_n`,
 and peform the line minimisation in this direction. This process is repeated
 until the maximum force component is below some threshold.
 
+Go to :ref:`top <theory-strucrelax>`.
+
+.. _th_sr_qmd:
+
 Quenched MD
 ~~~~~~~~~~~
 
 The system is propagated in the direction of steepest descent as determined by
 the DFT forces, and the velocity is scaled down as the system approaches its
 zero-temperature equilibrium configuration.
+
+Go to :ref:`top <theory-strucrelax>`.
+
+.. _th_sr_fire:
 
 FIRE Quenched MD
 ~~~~~~~~~~~~~~~~
@@ -63,12 +82,20 @@ steeper than the current direction of motion. If the power :math:`P(t) =
 "downhill" on the potential energy surface, and the stopping criterion is when
 it becomes negative (moving "uphill").
 
+Go to :ref:`top <theory-strucrelax>`.
+
+.. _th_sr_cell_opt:
+
 Cell optimisation
 -----------------
 
 When optimising the cell with *fixed fractional ionic coordinates*, the same
 conjugate gradients method is used as above, but minimising the enthalpy with
 respect to the cell vectors.
+
+Go to :ref:`top <theory-strucrelax>`.
+
+.. _th_sr_comb_opt:
 
 Combined optimisation
 ---------------------
@@ -82,7 +109,7 @@ method of Pfrommer *et al*. :cite:`t2-Pfrommer1997`, the latter can be enforced
 by using fractional coordinates for the ionic positions, and fractional lattice
 vectors of the form :math:`h = (1 + \epsilon)h_0` where h is the matrix of
 lattice vectors, :math:`h_0` is the matrix for some reference configuration and
-epsilon is the strain matrix. The "fractional" force on the *i*th atom is then
+epsilon is the strain matrix. The "fractional" force on the *i* th atom is then
 :math:`\mathbf{F}_i = g\mathbf{f}_i` where :math:`\mathbf{f}_i` is the
 DFT-calculated force multiplied by the metric tensor :math:`g = h^Th`. The
 "fractional" stress is,
@@ -98,6 +125,10 @@ using the same conjugate gradients algorithm as before, minimising the enthalpy.
 
 .. bibliography:: references.bib
     :cited:
-    :labelprefix: T
+    :labelprefix: Tb
     :keyprefix: t2-
     :style: unsrt
+
+Go to :ref:`top <theory-strucrelax>`.
+
+

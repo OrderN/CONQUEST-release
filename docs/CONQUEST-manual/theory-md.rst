@@ -4,6 +4,8 @@
 Molecular Dynamics: Theory
 ==========================
 
+.. _th_md_nve:
+
 Microcanonical (NVE) ensemble
 -----------------------------
 
@@ -64,6 +66,10 @@ generates the velocity Verlet algorithm, which is used to integrate
 microcanonical molecular dynamics in CONQUEST. For a detailed derivation of the
 algorithm, refer to Frenkel & Smit :cite:`t-Frenkel2002`.
 
+Go to :ref:`top <theory-md>`.
+
+.. _th_md_xlbomd:
+
 Extended Lagrangian Born-Oppenheimer MD (XL-BOMD)
 -------------------------------------------------
 
@@ -113,8 +119,14 @@ note that since the auxiliary variable :math:`X` is used to generate an intial
 guess for the SCF process, it does not appear in the conserved
 (pseudo-Hamiltonian) quantity for the dynamics.
 
+Go to :ref:`top <theory-md>`.
+
+.. _th_md_nonH:
+
 Non-Hamiltonian dynamics
 ------------------------
+
+.. _th_md_ext:
 
 Extended system method
 ~~~~~~~~~~~~~~~~~~~~~~
@@ -128,6 +140,10 @@ of motion, and proving that they generate the correct statistical ensemble
 Hamiltonian to include the thermostat and/or barostat degrees of freedom, derive
 the (pseudo-) Hamiltonian equations of motion, and demostrate that the correct
 phase space distribution for the ensemble is recovered.
+
+Go to :ref:`top <theory-md>`.
+
+.. _th_md_nvt:
 
 Canonical (NVT) ensemble
 ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -180,6 +196,10 @@ integration which can be reduced to a single step, as described in
 integration of the Nose-Hoover chain equations of motion before and after. For
 full details of the integration scheme, see Hirakawa *et al*.
 :cite:`t-Hirakawa2017`.
+
+Go to :ref:`top <theory-md>`.
+
+.. _th_md_npt:
 
 Isobaric-Isothermal (NPT) ensemble
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -253,6 +273,9 @@ Finally, expanding the first propagator in the previous expression, we have,
 
 These expressions are directly translated into the integration algorithm.
 
+Go to :ref:`top <theory-md>`.
+
+.. _th_md_weak:
 
 Weak coupling thermostat/barostat
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -282,9 +305,9 @@ be expressed,
     \dot{\mathbf{r}} = \mathbf{v} - \frac{\beta(P_0 - P)}{3\tau_P}\mathbf{r},
 
 i.e. the fractional coordinates are scaled by a factor determined by the
-  difference between the internal and external pressures, the isothermal
-  compressibility :math:`\beta` and a pressure coupling time constant $\tau_P$.
-  In the isotropic case, the cell scaling factor :math:`\mu` can be expressed,
+difference between the internal and external pressures, the isothermal
+compressibility :math:`\beta` and a pressure coupling time constant $\tau_P$.
+In the isotropic case, the cell scaling factor :math:`\mu` can be expressed,
 
 .. math::
     \mu = \left[ 1 - \frac{\Delta t}{\tau_P}(P_0 - P)\right]^{\frac{1}{3}},
@@ -298,7 +321,12 @@ scaling factor becomes,
 
 While trivial to implement and in general stable, the weak-coupling method does
 not recover the correct phase space distribution for the canonical or
-isobaric-isothermal ensembles, for which the extended system method is required.
+isobaric-isothermal ensembles, for which the extended system method is
+required.  It is no longer supported in CONQUEST, but the concepts are useful.
+
+Go to :ref:`top <theory-md>`.
+
+.. _th_md_svr:
 
 Stochastic velocity rescaling
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -329,6 +357,8 @@ and thermostatting the cell velocities as well as the particle velocities
 
 .. bibliography:: references.bib
     :cited:
-    :labelprefix: T
+    :labelprefix: Ta
     :keyprefix: t-
     :style: unsrt
+
+Go to :ref:`top <theory-md>`.

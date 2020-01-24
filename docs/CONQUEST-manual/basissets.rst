@@ -95,7 +95,7 @@ PAO basis sets.  Multi-site support functions (MSSFs)
 atom by taking linear combinations of the atom's 
 PAOs and the PAOs from neighbouring atoms within a certain range
 (set with the parameter ``Atom.MultisiteRange`` in
-the :ref:`atom specification block <input_tags_atomic_spec>`).
+the :ref:`atom specification block <input_atomic_spec>`).
 
 Multi-site support functions can be selected by setting the following
 parameters:
@@ -107,7 +107,7 @@ parameters:
 
 
 Various other parameters need to be set in the
-:ref:`atom specification block <input_tags_atomic_spec>`.
+:ref:`atom specification block <input_atomic_spec>`.
 The number of support functions for the atoms must be set, and is
 normally equivalent to a minimal (single zeta) basis; it is set with
 ``Atom.NumberOfSupports``.
@@ -197,6 +197,8 @@ An example input block for this process would be as follows:
    Multisite.LFD.Min.ThreshD 1.0e-6
 
 Go to :ref:`top <basissets>`.
+
+.. _basis_sets_numopt:
 
 Numerical optimisation
 ++++++++++++++++++++++

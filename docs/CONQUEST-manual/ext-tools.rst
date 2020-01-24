@@ -4,7 +4,7 @@
 External tools
 ==============
 
-.. _md_scripts:
+.. _et_md_scripts:
 
 Molecular dynamics analysis
 ---------------------------
@@ -27,6 +27,10 @@ parse the necessary files, namely ``Conquest_input``, ``input.log``,
 also read the CONQUEST input flags to determine, for example, what ensemble is
 used, and process the results accordingly.
 
+Go to :ref:`top <ext-tools>`.
+
+.. _et_plot_stat:
+
 Plotting statistics
 +++++++++++++++++++
 
@@ -37,7 +41,7 @@ Plotting statistics
                       [--stop NSTOP] [--equil NEQUIL] [--landscape]
                       [--mser MSER_VAR]
 
-  Plot statistics for a Conquest MD trajectory
+  Plot statistics for a CONQUEST MD trajectory
 
   optional arguments:
     -h, --help            show this help message and exit
@@ -73,6 +77,10 @@ plot.
 
 .. image:: compare.jpg
 
+Go to :ref:`top <ext-tools>`.
+
+.. _et_md_ana:
+
 MD analysis
 +++++++++++
 
@@ -84,7 +92,7 @@ MD analysis
                         [--nbins NBINS] [--rdfwidth RDFWIDTH] [--rdfcut RDFCUT]
                         [--window WINDOW] [--fitstart FITSTART] [--dump]
 
-  Analyse a Conquest MD trajectory
+  Analyse a CONQUEST MD trajectory
 
   optional arguments:
     -h, --help            show this help message and exit
@@ -123,6 +131,10 @@ with a cutoff of 8.0 A, and the histogram is divided into 100 bins.
 
 .. image:: rdf.jpg
 
+Go to :ref:`top <ext-tools>`.
+
+.. _et_cq_struc:
+
 CONQUEST structure file analysis
 ++++++++++++++++++++++++++++++++
 
@@ -136,7 +148,7 @@ CONQUEST structure file analysis
   optional arguments:
     -h, --help            show this help message and exit
     -i INFILE, --infile INFILE
-                          Conquest format structure file (default:
+                          CONQUEST format structure file (default:
                           coord_next.dat)
     --bonds               Compute average and minimum bond lengths (default:
                           False)
@@ -165,7 +177,9 @@ output will look something like this:
   Minimum bond lengths:
   O-Si:   1.6493
 
-.. _ase:
+Go to :ref:`top <ext-tools>`.
+
+.. _et_ase:
 
 Atomic Simulation Environment (ASE)
 -----------------------------------
@@ -191,6 +205,10 @@ set generation executable ``MakeIonFiles`` and pseudopotential database.
   os.environ["CQ_PP_PATH"] = "~/Conquest/PPDB/"
   # Path to the basis generation tool executable
   os.environ["CQ_GEN_BASIS_CMD"] = "/path/to/MakeIonFiles"
+
+Go to :ref:`top <ext-tools>`.
+
+.. _et_ase_input:
 
 Keywords for generating the Conquest_input file
 +++++++++++++++++++++++++++++++++++++++++++++++
@@ -256,7 +274,7 @@ passed as an expanded set of keyword arguments.
 
 ::
 
-  conquest_flags = {'IO.Iprint'         : 1,         # Conquest keywords
+  conquest_flags = {'IO.Iprint'         : 1,         # CONQUEST keywords
                     'DM.SolutionMethod' : 'ordern',
                     'DM.L_range'        : 8.0,
                     'minE.LTolerance'   : 1.0e-6}
@@ -295,6 +313,10 @@ basis generation tool.
   diamond.set_calculator(calc)             # attach the calculator to the atoms object
   energy = diamond.get_potential_energy()  # calculate the potential energy
 
+Go to :ref:`top <ext-tools>`.
+
+.. _et_ase_mssf:
+
 Multisite support functions
 +++++++++++++++++++++++++++
 
@@ -324,6 +346,10 @@ are specified in the ``other_keywords`` dictionary:
                     "Multisite.LFD.Min.MaxIteration": 150,
                     }
 
+Go to :ref:`top <ext-tools>`.
+
+.. _et_ase_load_dm:
+
 Loading the K/L matrix
 ++++++++++++++++++++++
    
@@ -344,6 +370,10 @@ These keywords respectively cause the K or L matrix to be loaded from file(s)
 this matrix. In all subsequent calculations, the K or L matrix will be written
 at the end of the calculation and used as the initial guess for the subsequent
 ionic step.
+
+Go to :ref:`top <ext-tools>`.
+
+.. _et_eos:
 
 Equation of state
 +++++++++++++++++
@@ -391,3 +421,6 @@ interpolates the equation of state and uses ``matplotlib`` to generate a plot.
 
   import matplotlib
   eos.plot('diamond-eos.pdf')    # Plot the equation of state
+
+Go to :ref:`top <ext-tools>`.
+
