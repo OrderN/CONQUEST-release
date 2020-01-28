@@ -1,0 +1,18 @@
+# -*- mode: Makefile -*-
+# $Id: odd.obj,v 1.3 2004/11/12 02:48:41 drb Exp $
+#
+ODD_OBJS = global_module.o \
+           hartree.o \
+           units.module.o \
+           input_module.o \
+           logicals_module.o \
+           memory_module.o \
+           mpi.o \
+           timer_module.o \
+           timer_stdclocks_module.o \
+           auxiliary_types.o \
+           functions_module.o \
+           rng_module.o \
+           biblio_module.o \
+           references.o \
+           fft_module.o $(FFT_OBJ)
