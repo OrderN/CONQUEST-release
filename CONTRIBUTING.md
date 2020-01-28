@@ -5,7 +5,7 @@ CONQUEST.  The [current
 roadmap](https://github.com/OrderN/CONQUEST-release/issues) can be
 seen on the [Conquest GitHub issues
 page](https://github.com/OrderN/CONQUEST-release/issues).  
-The features and developments planned are organised through the
+The features and developments planned are organised through
 [milestones](https://github.com/OrderN/CONQUEST-release/milestones)
 If you want to submit a [new
 issue](https://github.com/OrderN/CONQUEST-release/issues/new) please
@@ -28,9 +28,10 @@ interested in contributing to an existing feature, please contact the
 development team.
 
 We follow a
-[gitflow](https://nvie.com/posts/a-successful-git-branching-model/)
-workflow (also described
-[here](https://www.atlassian.com/git/tutorials/comparing-workflows/gitflow-workflow). 
+[git branching workflow](https://nvie.com/posts/a-successful-git-branching-model/)
+(also described
+[here](https://www.atlassian.com/git/tutorials/comparing-workflows/gitflow-workflow),
+though we do *not* use the ``gitflow`` tool). 
 The key idea is that all developments should be made on a branch
 created from the ``develop`` branch.  The overall approach is this:
 
