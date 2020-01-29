@@ -85,12 +85,17 @@ Get in touch
 - If you have suggestions for developing the code, please
   use `GitHub issues`_.  The developers cannot guarantee to offer
   support, though we will try to help. 
-- Report bugs, suggest features or view the source code on `GitHub
-  issues`_.
+- Report bugs, or suggest features on `GitHub
+  issues`_.  View the source code on the main `GitHub page`_.
 - You can ask for help and discuss any problems that you may have on
-  the Conquest mailing list (**to be completed**)
+  the Conquest mailing list (to register for this list, please send an
+  email to mlsystem@ml.nims.go.jp with the subject "sub
+  conquest-user", though please note that, for a little while, some of the
+  system emails may be in Japanese; you will receive a confirmation
+  email to which you should simply reply without adding any text).
 
-.. _GitHub issues: http://github.com/OrderN/CONQUEST-release/issues
+.. _GitHub issues: https://github.com/OrderN/CONQUEST-release/issues
+.. _GitHub page: https://github.com/OrderN/CONQUEST-release
 
 Licence
 -------
@@ -98,6 +103,14 @@ Licence
 CONQUEST is available freely under the open source `MIT Licence`__.
 We ask that you acknowledge use of the code by citing appropriate
 papers, which will be given in the output file (a BiBTeX file
-containing these references is also output).
+containing these references is also output).  The key CONQUEST
+references are:
+
+* D. R. Bowler, T. Miyazaki and M. J. Gillan, J. Phys. Condens. Matter
+  **14**, 2781--2798 (2002)
+* T. Miyazaki, D. R. Bowler, R. Choudhury
+  and M. J. Gillan, J. Chem. Phys. **121**, 6186--6194 (2004)
+* D. R. Bowler, R. Choudhury, M. J. Gillan and T. Miyazaki,
+  phys. stat. sol. b **243**, 989--1000 (2006)
 
 __ https://choosealicense.com/licenses/mit/
