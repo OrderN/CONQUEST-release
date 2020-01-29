@@ -4,9 +4,9 @@ Thank you for your interest in contributing to the development of
 CONQUEST.  The [current
 roadmap](https://github.com/OrderN/CONQUEST-release/issues) can be
 seen on the [Conquest GitHub issues
-page](https://github.com/OrderN/CONQUEST-release/issues).  
-The features and developments planned are organised through
-[milestones](https://github.com/OrderN/CONQUEST-release/milestones)
+page](https://github.com/OrderN/CONQUEST-release/issues).  The
+features and developments planned are organised through 
+[milestones](https://github.com/OrderN/CONQUEST-release/milestones).
 If you want to submit a [new
 issue](https://github.com/OrderN/CONQUEST-release/issues/new) please
 use one of the templates, and provide as much information as possible,
@@ -31,8 +31,9 @@ We follow a
 [git branching workflow](https://nvie.com/posts/a-successful-git-branching-model/)
 (also described
 [here](https://www.atlassian.com/git/tutorials/comparing-workflows/gitflow-workflow),
-though we do *not* use the ``gitflow`` tool). 
-The key idea is that all developments should be made on a branch
+though we do *not* use the ``gitflow`` tool).  You may find the
+figures in these references very helpful in understanding the overall
+workflow. The key idea is that all developments should be made on a branch
 created from the ``develop`` branch.  The overall approach is this:
 
 * We consider the [GitHub
@@ -43,17 +44,17 @@ created from the ``develop`` branch.  The overall approach is this:
 * The ``origin/master`` branch is the main branch which always represents a
   production-ready state.
 * The ``origin/develop`` branch is where developments which have been
-  delivered for the next release reside
+  delivered for the next release reside.
 * Feature branches (named ``f-FeatureName``) branch off ``develop``
   and are used to develop new features or functionality for a future
   release (possibly unspecified).  They may reside on a
   developer's local repository only in the early stages, but will need
   to be pushed for collaboration and discussion.  They will merge into
-  ``develop``
+  ``develop``.
 * Release branches (named ``release-Release``) branch from ``develop``
   and merge into both ``master`` and ``develop``.
   Release branches allow new developments to proceed on ``develop``
-  while final changes and bug fixes are made to the release
+  while final changes and bug fixes are made to the release.
 * Hotfix branches (named ``hotfix-Version``) branch off ``master`` and
   merge into both ``master`` and ``develop``.  They are only used for
   urgent fixes to an existing release.
