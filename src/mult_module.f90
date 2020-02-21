@@ -217,6 +217,10 @@ module mult_module
   integer, allocatable, dimension(:), public :: matrix_index, &
                                                 trans_index
 
+  ! Parameters for atom distance checking
+  real(double) :: InitAtomicDistance_max, InitAtomicDistance_min
+  logical :: flag_check_init_atomic_coords
+  
   ! Area identification
   integer, parameter, private :: area = 2
 
@@ -365,6 +369,7 @@ contains
                     Lmatind, rcut(Lrange), myid-1, halo(Lrange), ltrans(Lrange))
     call matrix_ini(parts, prim, gcs, mat(1:prim%groups_on_node,Srange),    &
                     Smatind, rcut(Srange), myid-1, halo(Srange), ltrans(Srange))
+    if(flag_check_init_atomic_coords) call check_InterAtomicDistances
     call matrix_ini(parts, prim, gcs, mat(1:prim%groups_on_node,Hrange),    &
                     Hmatind, rcut(Hrange), myid-1, halo(Hrange), ltrans(Hrange))
     mat(1:prim%groups_on_node, APrange)%sf1_type = atomf
@@ -3490,5 +3495,78 @@ contains
   end subroutine SF_to_AtomF_transform
 !!***
 
+!!****f* multisiteSF_module/check_InterAtomicDistances *
+!!
+!!  NAME
+!!   check_InterAtomicDistances
+!!  USAGE
+!!
+!!  PURPOSE
+!!   Check interatomic distances in given coordinates
+!!   whetehr the atoms have appropiate distances (not too close to each other),
+!!   using the information of matSatomf.
+!!   Ghost atoms will be ignored.
+!!
+!!  AUTHOR
+!!   A.Nakata
+!!  CREATION DATE
+!!   2019/02/22
+!!  MODIFICATION HISTORY
+!!
+!!  SOURCE
+!!
+  subroutine check_InterAtomicDistances
+
+    use datatypes
+    use global_module,  ONLY: id_glob, species_glob
+    use species_module, ONLY: type_species
+    use GenComms,       ONLY: cq_abort
+    use group_module,   ONLY: parts
+    use primary_module, ONLY: bundle
+    use cover_module,   ONLY: BCS_parts
+    use matrix_data,    ONLY: mat, Srange
+
+    implicit none
+
+    ! Local variables
+    integer :: iprim, np, i, j, ist, atom_num, atom_i, atom_spec
+    integer :: neigh_global_part, atom_j, neigh_species
+    integer :: gcspart
+    real(double) :: dx, dy, dz, r2, r_min
+
+    r_min = 100.0_double
+
+    iprim = 0
+    do np = 1,bundle%groups_on_node ! Loop over primary set partitions
+       if(bundle%nm_nodgroup(np)>0) then ! If there are atoms in partition
+          do i = 1,bundle%nm_nodgroup(np) ! Loop over atoms
+             atom_num = bundle%nm_nodbeg(np) + i - 1
+             iprim = iprim + 1
+             atom_i = bundle%ig_prim(iprim)   ! global number of i
+             atom_spec = bundle%species(atom_num)
+             if(type_species(atom_spec) < 0) cycle   ! if ghost atoms
+             do j = 1, mat(np,Srange)%n_nab(i) ! Loop over neighbours of atom
+                ist = mat(np,Srange)%i_acc(i) + j - 1
+                ! Build the distances between atoms
+                gcspart = BCS_parts%icover_ibeg(mat(np,Srange)%i_part(ist))+mat(np,Srange)%i_seq(ist)-1
+                neigh_global_part = BCS_parts%lab_cell(mat(np,Srange)%i_part(ist))
+                ! global number of j
+                atom_j = id_glob(parts%icell_beg(neigh_global_part)+mat(np,Srange)%i_seq(ist)-1) 
+                neigh_species = species_glob(atom_j)
+                if(type_species(neigh_species) < 0) cycle   ! if ghost atoms
+                if (atom_i/=atom_j .AND. mat(np,Srange)%radius(ist)<=InitAtomicDistance_min) then
+                   call cq_abort("Atoms are too close to each other:",atom_i,atom_j)
+                endif
+                if (mat(np,Srange)%radius(ist)<r_min) r_min = mat(np,Srange)%radius(ist)
+             end do ! j
+          end do ! i
+       end if ! End if nm_nodgroup > 0
+    end do ! np
+!
+    if (r_min>InitAtomicDistance_max) call cq_abort("Atoms are too far apart! Minimum distance is ",r_min)
+!
+    return
+  end subroutine check_InterAtomicDistances
+  !!***
 
 end module mult_module
