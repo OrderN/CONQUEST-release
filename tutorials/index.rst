@@ -9,62 +9,86 @@ in the various different modes of operation.
 Introductory
 ------------
 
-* :doc:`Introductory_one/tutorial`
+* :doc:`Introductory_1/tutorial`
+* :doc:`Introductory_2/tutorial`
+* :doc:`Introductory_3/tutorial`
   
 .. toctree::
    :maxdepth: 1
    :hidden:      
    :caption: Introductory Tutorials
 
-   Introductory_one/tutorial
+   Introductory_1/tutorial
+   Introductory_2/tutorial
+   Introductory_3/tutorial
 
 Structural Relaxation
 ---------------------
 
-* :doc:`Structural_relaxation_one/tutorial`
+* :doc:`Structural_relaxation_1/tutorial`
+* :doc:`Structural_relaxation_2/tutorial`
+* :doc:`Structural_relaxation_3/tutorial`
+* :doc:`Structural_relaxation_4/tutorial`
   
 .. toctree::
    :maxdepth: 1
    :hidden:      
    :caption: Structural Relaxation
 
-   Structural_relaxation_one/tutorial
+   Structural_relaxation_1/tutorial
+   Structural_relaxation_2/tutorial
+   Structural_relaxation_3/tutorial
+   Structural_relaxation_4/tutorial
 
 Molecular Dynamics
 ------------------
 
-* :doc:`MD_one/tutorial`
+* :doc:`MD_1/tutorial`
+* :doc:`MD_2/tutorial`
+* :doc:`MD_3/tutorial`
+* :doc:`MD_4/tutorial`
+* :doc:`MD_5/tutorial`
+* :doc:`MD_6/tutorial`
 
 .. toctree::
    :maxdepth: 1
    :hidden:      
    :caption: Molecular dynamics
 
-   MD_one/tutorial
+   MD_1/tutorial
+   MD_2/tutorial
+   MD_3/tutorial
+   MD_4/tutorial
+   MD_5/tutorial
+   MD_6/tutorial
 
 Basis Sets
 ----------
 
-* :doc:`Basis_sets_one/tutorial`
+* :doc:`Basis_sets_1/tutorial`
+* :doc:`Basis_sets_2/tutorial`
 
 .. toctree::
    :maxdepth: 1
    :hidden:      
    :caption: Basis sets
 
-   Basis_sets_one/tutorial
+   Basis_sets_1/tutorial
+   Basis_sets_2/tutorial
 
 Advanced topics
 ---------------
 
-* :doc:`Advanced_one/tutorial`
+* :doc:`Advanced_1/tutorial`
+* :doc:`Advanced_2/tutorial`
 
 .. toctree::
    :maxdepth: 1
    :hidden:      
    :caption: Advanced
 
-   Advanced_one/tutorial
+   Advanced_1/tutorial
+   Advanced_2/tutorial
 
 
    

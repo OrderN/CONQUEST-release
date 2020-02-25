@@ -1,6 +1,6 @@
-.. MD tutorial
+.. Spin initialisation
 
-Molecular dynamics
+Initialising spins
 ==================
 
 * Parameters that are needed
