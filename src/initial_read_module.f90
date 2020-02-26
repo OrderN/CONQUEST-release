@@ -763,7 +763,6 @@ contains
          flag_basis_set, blips, PAOs,              &
          flag_test_forces, UseGemm,                &
          flag_fractional_atomic_coords,            &
-         ne_in_cell,          &
          ne_spin_in_cell, nspin, spin_factor,      &
          ne_magn_in_cell,                          &
          max_L_iterations,    &
@@ -876,7 +875,8 @@ contains
          cDFT_BlockLabel
     use sfc_partitions_module, only: n_parts_user, average_atomic_diameter, gap_threshold
     use XLBOMD_module,         only: XLInitFreq,kappa
-    use mult_module,           only: maxiter_Dissipation
+    use mult_module,           only: maxiter_Dissipation, InitAtomicDistance_max, &
+         InitAtomicDistance_min, flag_check_init_atomic_coords
     use constraint_module,     only: flag_RigidBonds,constraints,SHAKE_tol, &
          RATTLE_tol,maxiterSHAKE,maxiterRATTLE, &
          const_range,n_bond
@@ -1082,6 +1082,12 @@ contains
     ! Read coordinates file 
     flag_fractional_atomic_coords = &
          fdf_boolean('IO.FractionalAtomicCoords',.true.)
+    flag_check_init_atomic_coords = &
+         fdf_boolean('IO.CheckInitialAtomicDistances',.true.)
+    if (flag_check_init_atomic_coords) then
+       InitAtomicDistance_max = fdf_double('IO.InitAtomicDistance_max', 50.0_double)
+       InitAtomicDistance_min = fdf_double('IO.InitAtomicDistance_min',  0.5_double)
+    end if
     call my_barrier()
     !
     !
