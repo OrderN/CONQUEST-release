@@ -1,4 +1,4 @@
-.. _basis_tut
+.. _basis_tut:
 
 Basis Function Tutorials
 ========================
@@ -6,7 +6,7 @@ Basis Function Tutorials
 We now introduce details of the basis sets used in CONQUEST, and how
 they are specified and optimised.
 
-.. _basis_mssf:
+.. _basis_tut_mssf:
 
 MSSF: local filter diagonalisation
 ----------------------------------
@@ -15,7 +15,7 @@ MSSF: local filter diagonalisation
 * The output
 * Files in ``Basis_sets_1``
 
-.. _basis_mssf_opt:
+.. _basis_tut_mssf_opt:
 
 MSSF: Optimisation
 ------------------

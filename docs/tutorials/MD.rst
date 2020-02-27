@@ -1,4 +1,4 @@
-.. _md_tut
+.. _md_tut:
 
 Molecular Dynamics Tutorials
 ============================
@@ -7,7 +7,7 @@ These tutorials introduce molecular dynamics (MD) in CONQUEST, though
 not the topic of MD itself, for which you should consult an
 appropriate textbook.
 
-.. _md_nve:
+.. _md_tut_nve:
 
 Molecular dynamics: NVE
 -----------------------
@@ -16,7 +16,7 @@ Molecular dynamics: NVE
 * The output
 * Files in ``MD_1``
 
-.. _md_nvt_svr:
+.. _md_tut_nvt_svr:
 
 Molecular dynamics: NVT with SVR
 --------------------------------
@@ -25,7 +25,7 @@ Molecular dynamics: NVT with SVR
 * The output
 * Files in ``MD_2``
 
-.. _md_nvt_nhc:
+.. _md_tut_nvt_nhc:
 
 Molecular dynamics: NVT with Nose-Hoover chains
 -----------------------------------------------
@@ -34,7 +34,7 @@ Molecular dynamics: NVT with Nose-Hoover chains
 * The output
 * Files in ``MD_3``
 
-.. _md_npt_svr_pr:
+.. _md_tut_npt_svr_pr:
 
 Molecular dynamics: NPT with SVR and Parrinello-Rahman
 ------------------------------------------------------
@@ -43,7 +43,7 @@ Molecular dynamics: NPT with SVR and Parrinello-Rahman
 * The output
 * Files in ``MD_4``
 
-.. _md_npt_nhc:
+.. _md_tut_npt_nhc:
 
 Molecular dynamics: NPT with Nose-Hoover chains
 -----------------------------------------------
@@ -52,7 +52,7 @@ Molecular dynamics: NPT with Nose-Hoover chains
 * The output
 * Files in ``MD_5``
 
-.. _md_cont:
+.. _md_tut_cont:
 
 Molecular dynamics: Continuing a run
 ------------------------------------
