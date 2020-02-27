@@ -1,9 +1,18 @@
-.. Bulk silicon input
+.. _intro_tut:
+
+Introductory Tutorials
+======================
+
+These introductory tutorials will give you an overview of how to run
+Conquest, the files and parameter settings required, and what output
+to expect.  
+
+.. _intro_one:
 
 Bulk silicon: input, output and SCF
-===================================
+-----------------------------------
 
-This tutorial is intended to be a very basic introduction to the input
+We start with a very basic introduction to the input
 required for CONQUEST, the output generated, and the self-consistency
 (SCF) procedure; it uses the same system as the first of the examples
 in the manual, but provides more detail.  The files are found in
@@ -69,3 +78,35 @@ discussed in the next tutorial
 * The output
 * Changing the output level and destination
 * Controlling the SCF (tolerance and iterations, options)
+
+.. _intro_two:
+
+Bulk silicon: parameters to converge
+------------------------------------
+
+* The files that are needed
+
+  * Coordinates
+  * Ion files
+  * Input file: ``Conquest_input``
+
+* Integration grid
+* Brillouin zone sampling
+* Possibly basis set size
+
+.. _intro_three:
+
+Bulk silicon: analysis
+----------------------
+
+* The files that are needed
+
+  * Coordinates
+  * Ion files
+  * Input file: ``Conquest_input``
+
+* Total DOS
+* Atom-projected DOS
+* Band structure output
+* Charge density and bands
+* Atomic charges

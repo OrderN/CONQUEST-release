@@ -65,6 +65,26 @@ User Guide
    errors
    input_tags
 
+Tutorials
+---------
+
+* :doc:`tutorials/intro`
+* :doc:`tutorials/relax`
+* :doc:`tutorials/MD`
+* :doc:`tutorials/Basis`
+* :doc:`tutorials/Advanced`
+
+.. toctree::
+   :maxdepth: 1
+   :hidden:      
+   :caption: Tutorials
+
+   tutorials/intro
+   tutorials/relax
+   tutorials/MD
+   tutorials/Basis
+   tutorials/Advanced
+
 Theory
 ------
 
