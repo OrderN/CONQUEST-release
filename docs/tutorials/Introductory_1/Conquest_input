@@ -1,0 +1,25 @@
+# Input/Output
+IO.Title Bulk Si 8 atoms static
+IO.Coordinates ionpos.dat
+
+# General Parameters
+General.NumberOfSpecies 1
+
+# Specify species
+%block ChemicalSpeciesLabel
+1  28.0850   Si_SZ
+%endblock
+
+# Moving Atoms
+AtomMove.TypeOfRun static
+
+# Finding the density matrix
+DM.SolutionMethod diagon
+
+# k-points
+Diag.GammaCentred T
+Diag.MPMesh T
+Diag.MPMeshX 2
+Diag.MPMeshY 2
+Diag.MPMeshZ 2
+

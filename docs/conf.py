@@ -167,7 +167,8 @@ man_pages = [
 #  dir menu entry, description, category)
 texinfo_documents = [
     (master_doc, 'CONQUEST', u'CONQUEST Documentation',
-     author, 'CONQUEST', 'One line description of project.',
+     'CONQUEST Developers', 'CONQUEST',
+     'CONQUEST: Large scale and linear scaling DFT.',
      'Miscellaneous'),
 ]
 

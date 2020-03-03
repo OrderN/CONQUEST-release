@@ -1,26 +1,25 @@
 This directory contains tutorials for various aspects of CONQUEST.
 
 * Static
-  * Converging parameters (grid, k-points)
-  * Convergence of electronic structure (tolerances, SCF)
+  * Introduction (input, output, SCF)
+  * Parameters to converge
   * Analysis: DOS, charge and orbital densities
 * Structural relaxation
-  * Quenched MD
-  * FIRE
-  * Pulay
+  * L-BFGS
   * CG
-  * Continuation (including time check)
+  * Quenched MD
   * Cell optimisation
 * Molecular dynamics
   * NVE
-  * NVT
+  * NVT with SVR
+  * NVT with NHC
+  * NPT with SVR/PR
+  * NPT with NHC
   * Continuing a run
 * Basis sets
-  * MSSF basics
   * LFD and self-consistency
   * Optimisation
 * Advanced topics
   * Spin initialisation
   * Linear scaling
-  * Blips as basis
 
