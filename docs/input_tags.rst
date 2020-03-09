@@ -622,7 +622,7 @@ Diag.NumKpts (*integer*)
 
     *default*:
 
-Diag.Kpoints (*block*) 
+Diag.Kpoints (*block*)
     Lists fractional coordinates and weights of all k-points: ``x_fract y_fract z_fract weight``
     Generates the Monkhorst-Pack mesh, an equally spaced mesh of k-points.
 
@@ -645,19 +645,13 @@ Diag.GammaCentred (*boolean*)
 
     *default*: F
     
-Diag.ProcRows (*integer*)
+Diag.Proc[Rows/Cols] (*integer*)
+    Number of rows in the processor grid for SCALAPACK within each k-point processor
+    group 
 
-    *default*:
+    *default*: Calculated by CONQUEST
 
-Diag.ProcCols (*integer*)
-
-    *default*:
-
-Diag.BlockSizeR (*integer*)
-
-    *default*:
-
-Diag.BlockSizeC (*integer*)
+Diag.BlockSize[R/C] (*integer*)
     R ... rows, C ... columns
     These are ScaLAPACK parameters, and can be set heuristically by the code. Blocks
     are sub-divisions of matrices, used to divide up the matrices between processors.
@@ -698,7 +692,7 @@ Diag.MPOrder (*integer*)
 
 Diag.GaussianHeight (*real*)
     The height of Gaussian function used to determine the width of Methfessel-Paxton
-     approximation to delta-function (see :ref:`gs_diag_smear`)
+    approximation to delta-function (see :ref:`gs_diag_smear`)
 
     *default*: 0.1
 
@@ -721,18 +715,6 @@ Diag.KProcGroups (*integer*)
     (see :ref:`gs_diag_para`)
 
     *default*: 1
-
-Diag.ProcRows (*integer*)
-    Number of rows in the processor grid for SCALAPACK within each k-point processor
-    group 
-
-    *default*: Determined automatically
-
-Diag.ProcCols (*integer*)
-    Number of columns in the processor grid for SCALAPACK within each k-point
-    processor group 
-
-    *default*: Determined automatically
 
 Go to :ref:`top <input_tags>`.
 

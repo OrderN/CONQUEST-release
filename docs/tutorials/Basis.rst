@@ -15,6 +15,8 @@ MSSF: local filter diagonalisation
 * The output
 * Files in ``Basis_sets_1``
 
+Go to :ref:`top <basis_tut>`.
+
 .. _basis_tut_mssf_opt:
 
 MSSF: Optimisation
@@ -23,5 +25,7 @@ MSSF: Optimisation
 * Parameters that are needed
 * The output
 * Files in ``Basis_sets_2``
+
+Go to :ref:`top <basis_tut>`.
 
 

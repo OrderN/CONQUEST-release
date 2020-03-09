@@ -101,7 +101,7 @@ Coordinates
 
 The coordinates are specified in a separate file with relatively
 simple format.  The coordinates can be specified in fractional form
-(default) or cartesian (set the input tag ``IO.FractionalAtomicCoords T``).
+(default) or cartesian (set the input tag ``IO.FractionalAtomicCoords F``).
 Distance units can be Bohr radii (default) or Angstroms (set the input tag
 ``General.DistanceUnits`` to ``Ang``).  At present,
 CONQUEST only handles *orthorhombic* unit cells.

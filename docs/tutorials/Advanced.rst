@@ -16,6 +16,8 @@ Initialising spins
 * The output
 * Files in ``Advanced_1``
 
+Go to :ref:`top <adv_tut>`.
+
 .. _adv_on_intro:
 
 An introduction to linear scaling
@@ -24,4 +26,6 @@ An introduction to linear scaling
 * Parameters that are needed
 * The output
 * Files in ``Advanced_2``
+
+Go to :ref:`top <adv_tut>`.
 
