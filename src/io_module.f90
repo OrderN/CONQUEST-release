@@ -185,7 +185,7 @@ contains
                               flag_move_atom, area_init, shift_in_bohr, &
                               runtype,atom_coord_diff,id_glob_old,id_glob_inv_old
     use species_module, only: species, species_label, n_species
-    use GenComms,       only: inode, ionode, cq_abort
+    use GenComms,       only: inode, ionode, cq_abort, cq_warn
     use memory_module,  only: reg_alloc_mem, type_dbl, type_int
     use units,          only: AngToBohr
     use units,          only: dist_units, ang
@@ -419,15 +419,21 @@ second:   do
              end do
           end do
           call io_close(lun)
-       else
+       else ! Read normal coordinate file
           if(iprint_init>2) write(io_lun,'(10x,a40,a20)') 'Entering read_atomic_positions; reading ', filename
           call io_assign(lun)
           open(unit=lun,file=filename,status='old')
           ! Read supercell vector - for now it must be orthorhombic so
           ! we use x and y as dummy variables
           read(lun,*) r_super_x, x, y
+          if(abs(x)>RD_ERR.OR.abs(y)>RD_ERR) call cq_warn('read_atomic_positions', &
+               'Non-orthorhombic simulation cells are not supported by CONQUEST')
           read(lun,*) x,r_super_y, y
+          if(abs(x)>RD_ERR.OR.abs(y)>RD_ERR) call cq_warn('read_atomic_positions', &
+               'Non-orthorhombic simulation cells are not supported by CONQUEST')
           read(lun,*) x,y,r_super_z
+          if(abs(x)>RD_ERR.OR.abs(y)>RD_ERR) call cq_warn('read_atomic_positions', &
+               'Non-orthorhombic simulation cells are not supported by CONQUEST')
           read(lun,*) ni_in_cell
          !2010.06.25 TM (Angstrom Units in coords file, but not pdb)
           if(dist_units == ang) then
@@ -443,6 +449,8 @@ second:   do
                call cq_abort("Failure to allocate coordinates: ",ni_in_cell)
           call reg_alloc_mem(area_init, 6*ni_in_cell,type_dbl)
           call reg_alloc_mem(area_init, 4*ni_in_cell,type_int)
+          if((iprint_init>0) .or. (iprint_init==0.AND.ni_in_cell<200)) &
+               write(io_lun,fmt='(/,2x,"Atomic coordinates (Bohr) : ")')
           do i=1,ni_in_cell
              read(lun,*) x,y,z,species_glob(i),movex,movey,movez
              if(species_glob(i)>n_species) then
@@ -487,9 +495,8 @@ second:   do
              flag_move_atom(1,i) = movex
              flag_move_atom(2,i) = movey
              flag_move_atom(3,i) = movez
-             !          id_glob(i) = i
-!!$ LAT: put in write info
-            if(iprint_init>0) &
+             ! Write out atomic coordinates
+             if((iprint_init>0) .or. (iprint_init==0.AND.ni_in_cell<200)) &
                  write (io_lun,fmt='(3x, i7, 3f15.8, i3, 3L2)') &
                        i,atom_coord(1:3,i), species_glob(i), &
                        flag_move_atom(1:3,i)
@@ -2513,49 +2520,30 @@ second:   do
     write(io_lun,1) 
 
 1   format(/12x, &
-         '______________________________________________________',/,12x, &
-         '______________________________________________________',/,12x, &
-         '                                                      ',/,12x, &
-         '                        CONQUEST                      ',/,12x, &
-         '                                                      ',/,12x, &
-         '    Concurrent Order N QUantum Electronic STructure   ',/,12x, &
-         '______________________________________________________',/,12x, &
-         '                                                      ',/,12x, &
-         '                       Written by:                    ',/,12x, &
-         '                                                      ',/,12x, &
-         '       David Bowler           Tsuyoshi Miyazaki       ',/,12x, &
-         '        (UCL,NIMS)                 (NIMS)             ',/,12x, &
-         '                                                      ',/,12x, &
-         '       Ayako Nakata              Zamaan Raza          ',/,12x, &
-         '          (NIMS)                   (NIMS)             ',/,12x, &
-         '                                                      ',/,12x, &
-         '       Jack Poulton           Lionel Truflandier      ',/,12x, &
-         '          (UCL)                  (Bordeaux)           ',/,12x, &
-         '                                                      ',/,12x, &
-         '      Shereif Mujahed            Jack Baker           ',/,12x, &
-         '          (UCL)                    (UCL)              ',/,12x, &
-         '                                                      ',/,12x, &
-         '     Antonio Torralba         Veronika Brazdova       ',/,12x, &
-         '        (UCL,NIMS)                 (UCL)              ',/,12x, &
-         '                                                      ',/,12x, &
-         '      Lianheng Tong            Michiaki Arita         ',/,12x, &
-         '          (UCL)                    (NIMS)             ',/,12x, &
-         '                                                      ',/,12x, &
-         '        Alex Sena             Umberto Terranova       ',/,12x, &
-         '          (UCL)                    (UCL)              ',/,12x, &
-         '                                                      ',/,12x, &
-         '     Rathin Choudhury           Mike Gillan           ',/,12x, &
-         '          (UCL)                    (UCL)              ',/,12x, &
-         '                                                      ',/,12x, &
-         '               Early Development by                   ',/,12x, & 
-         '                                                      ',/,12x, &
-         '       Chris Goringe             Edward Hernandez     ',/,12x, &
-         '          (Keele)                     (Keele)         ',/,12x, &
-         '                                                      ',/,12x, &
-         '                      Ian Bush                        ',/,12x, &
-         '                     (Daresbury)                      ',/,12x, &
-         '______________________________________________________',/,12x, &
-         '______________________________________________________',/,/)
+         '________________________________________________________',/,12x, &
+         '                                                        ',/,12x, &
+         '                        CONQUEST                        ',/,12x, &
+         '                                                        ',/,12x, &
+         '    Concurrent Order N QUantum Electronic STructure     ',/,12x, &
+         '________________________________________________________',/,12x, &
+         '                                                        ',/,12x, &
+         ' Conquest lead developers:                              ',/,12x, &
+         '  D.R.Bowler (UCL, NIMS), T.Miyazaki (NIMS),            ',/,12x, &
+         '  A.Nakata (NIMS), L.Truflandier (U. Bordeaux)          ',/,12x, &
+         '                                                        ',/,12x, &
+         ' Developers:                                            ',/,12x, &
+         '  M.Arita (NIMS), J.S.Baker (UCL), V.Brazdova (UCL),    ',/,12x, &
+         '  R.Choudhury (UCL), S.Y.Mujahed (UCL),                 ',/,12x, &
+         '  J.T.Poulton (UCL), Z.Raza (NIMS), A.Sena (UCL),       ',/,12x, &
+         '  U.Terranova (UCL), L.Tong (UCL), A.Torralba (NIMS)    ',/,12x, &
+         '                                                        ',/,12x, &
+         ' Early development:                                     ',/,12x, &
+         '  I.J.Bush (STFC), C.M.Goringe (Keele),                 ',/,12x, &
+         '  E.H.Hernandez (Keele)                                 ',/,12x, &
+         '                                                        ',/,12x, &
+         ' Original inspiration and oversight:                    ',/,12x, &
+         '  Mike Gillan (Keele, UCL)                              ',/,12x, &
+         '________________________________________________________',/,/)
 
   end subroutine banner
   !!***

@@ -2786,6 +2786,7 @@ contains
     use memory_module,   only: reg_alloc_mem, reg_dealloc_mem,       &
          type_dbl
     use species_module,  only: nsf_species
+    use units, only: en_conv, en_units, energy_units
 
     implicit none
 
@@ -2835,7 +2836,7 @@ contains
        proc_groups = 1
     end if
 
-    if (iprint_init > 0.AND.inode==ionode) write (io_lun, 11) proc_groups 
+    if (iprint_init > 1 .AND. inode==ionode) write (io_lun, 11) proc_groups 
     ! Read/choose ScaLAPACK processor grid dimensions
     if(fdf_defined('Diag.ProcRows')) then
        proc_rows = fdf_integer('Diag.ProcRows',0)
@@ -3016,22 +3017,27 @@ contains
     else
        ! Read Monkhorst-Pack mesh coefficients
        ! Default is Gamma point only 
-       if(iprint_init>0.AND.inode==ionode) then
-          write(io_lun,fmt='(/8x,"Reading Monkhorst-Pack Kpoint mesh"//)')
-       end if
+       if(iprint_init>1.AND.inode==ionode) &
+            write(io_lun,fmt='(/8x,"Reading Monkhorst-Pack Kpoint mesh"//)')
+       flag_gamma = fdf_boolean('Diag.GammaCentred',.false.)
        mp(1) = fdf_integer('Diag.MPMeshX',1)
        mp(2) = fdf_integer('Diag.MPMeshY',1)
        mp(3) = fdf_integer('Diag.MPMeshZ',1) 
-       if(iprint_init>0.AND.inode==ionode) &
-            write (io_lun,fmt='(8x,a, 3i3)') &
-            ' Monkhorst-Pack mesh: ', (mp(i), i=1,3)
+       if(iprint_init>0.AND.inode==ionode) then
+          if(flag_gamma) then
+             write (io_lun,fmt='(/8x,a, 3i3," gamma-centred")') &
+                  ' Monkhorst-Pack mesh: ', (mp(i), i=1,3)
+          else
+             write (io_lun,fmt='(/8x,a, 3i3)') &
+                  ' Monkhorst-Pack mesh: ', (mp(i), i=1,3)
+          end if
+       end if
        if (mp(1) <= 0 .OR. mp(2) <= 0 .OR. mp(3) <= 0) &
             call cq_abort('K-points: number of k-points must be > 0!')
        nkp_tmp = mp(1)*mp(2)*mp(3)
-       if(iprint_init>0.AND.inode==ionode) &
+       if(iprint_init>1.AND.inode==ionode) &
             write(io_lun,fmt='(8x,a, i4)') ' Number of k-points: ',nkp_tmp
        ! Read k-point shift, default (0.0 0.0 0.0)
-       flag_gamma = fdf_boolean('Diag.GammaCentred',.false.)
        if(flag_gamma) then
           mp_shift = zero
           if(modulo(mp(1),2)==0) mp_shift(1) = half/mp(1)
@@ -3081,7 +3087,7 @@ contains
           end do
        end do
        ! Write out fractional k-points
-       if(iprint_init>0.AND.inode==ionode) then
+       if(iprint_init>1.AND.inode==ionode) then
           write(io_lun,7) nkp_tmp
           do i=1,nkp_tmp
              write(io_lun,fmt='(8x,i5,3f15.6,f12.3)')&
@@ -3136,9 +3142,8 @@ contains
        call reg_dealloc_mem(area_general,4*nkp_tmp,type_dbl)
        deallocate(kk_tmp,wtk_tmp,STAT=stat)
        if(stat/=0) &
-            call cq_abort('FindEvals: couldnt deallocate kpoints',&
-            nkp_tmp)
-       if(iprint_init>0.AND.inode==ionode) then
+            call cq_abort('FindEvals: couldnt deallocate kpoints', nkp_tmp)
+       if(iprint_init>1.AND.inode==ionode) then
           write(io_lun,*)
           write(io_lun,10) nkp
           do i=1,nkp
@@ -3155,7 +3160,7 @@ contains
     end if ! MP mesh branch
 
     ! Write out k-points
-    if(inode==ionode) then
+    if(inode==ionode.AND.iprint_init>2) then
        write(io_lun,51) nkp
        do i=1,nkp
           write (io_lun,fmt='(8x,i5,3f15.6,f12.3)') &
@@ -3163,8 +3168,9 @@ contains
        end do
     end if
     ! Write out smearing temperature
-    if(iprint_init>0.AND.inode==ionode) &
-         write (io_lun,'(10x,"Temperature used for smearing: ",f10.6)') kT
+    if(iprint_init>1.AND.inode==ionode) &
+         write (io_lun,'(10x,"Value of kT used for smearing: ",f10.6, a2)') &
+         en_conv * kT, en_units(energy_units)
 
     !****lat<$    
     call stop_backtrace(t=backtrace_timer,who='readDiagInfo')
