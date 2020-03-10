@@ -451,6 +451,8 @@ second:   do
                call cq_abort("Failure to allocate coordinates: ",ni_in_cell)
           call reg_alloc_mem(area_init, 6*ni_in_cell,type_dbl)
           call reg_alloc_mem(area_init, 4*ni_in_cell,type_int)
+          if((iprint_init>0) .or. (iprint_init==0.AND.ni_in_cell<200)) &
+               write(io_lun,fmt='(/,2x,"Atomic coordinates (Bohr) : ")')
           do i=1,ni_in_cell
              read(lun,*) x,y,z,species_glob(i),movex,movey,movez
              if(species_glob(i)>n_species) then
@@ -495,6 +497,11 @@ second:   do
              flag_move_atom(1,i) = movex
              flag_move_atom(2,i) = movey
              flag_move_atom(3,i) = movez
+             ! Write out atomic coordinates
+             if((iprint_init>0) .or. (iprint_init==0.AND.ni_in_cell<200)) &
+                 write (io_lun,fmt='(3x, i7, 3f15.8, i3, 3L2)') &
+                       i,atom_coord(1:3,i), species_glob(i), &
+                       flag_move_atom(1:3,i)
           end do
           call io_close(lun)
        end if pdb
