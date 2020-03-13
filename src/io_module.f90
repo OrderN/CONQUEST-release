@@ -329,10 +329,10 @@ second:   do
                          num_move_atom = num_move_atom - 2
                       end if
                       if (num_move_atom == 1) flag_move_atom(1,i) = .true.
-                      if (iprint_init > 0) &
-                           write (io_lun,fmt='(3x, i7, 3f15.8, i3, 3L2)') &
-                                 i, atom_coord(1:3,i), species_glob(i), &
-                                 flag_move_atom(1:3,i)
+                      !if (iprint_init > 0) &
+                      !     write (io_lun,fmt='(3x, i7, 3f15.8, i3, 3L2)') &
+                      !           i, atom_coord(1:3,i), species_glob(i), &
+                      !           flag_move_atom(1:3,i)
                    end if
                 else
                    i = i + 1
@@ -377,10 +377,10 @@ second:   do
                       num_move_atom = num_move_atom - 2
                    end if
                    if (num_move_atom == 1) flag_move_atom(1,i) = .true.
-                   if (iprint_init > 0) &
-                        write (io_lun,fmt='(3x, i7, 3f15.8, i3, 3L2)')&
-                              i, atom_coord(1:3,i), species_glob(i), &
-                              flag_move_atom(1:3,i)
+                   !if (iprint_init > 0) &
+                   !     write (io_lun,fmt='(3x, i7, 3f15.8, i3, 3L2)')&
+                   !           i, atom_coord(1:3,i), species_glob(i), &
+                   !           flag_move_atom(1:3,i)
                 end if
              case ('CRYST1')
                 read (pdb_line,'(6x,3f9.3,3f7.2,15x)') &
@@ -392,9 +392,9 @@ second:   do
                 ! initial_read_module, but I think it's better to have
                 ! it (also) here, because then the cell size will be
                 ! printed together with the coordinates
-                write(io_lun,4) r_super_x, r_super_y, r_super_z
-4               format(/10x,'The simulation box has the following dimensions',/, &
-                       10x,'a = ',f9.5,' b = ',f9.5,' c = ',f9.5,' a.u.')
+                !write(io_lun,4) r_super_x, r_super_y, r_super_z
+!4               format(/10x,'The simulation box has the following dimensions',/, &
+!                       10x,'a = ',f9.5,' b = ',f9.5,' c = ',f9.5,' a.u.')
              end select
           end do second
           ! Wrap coordinates
@@ -449,8 +449,6 @@ second:   do
                call cq_abort("Failure to allocate coordinates: ",ni_in_cell)
           call reg_alloc_mem(area_init, 6*ni_in_cell,type_dbl)
           call reg_alloc_mem(area_init, 4*ni_in_cell,type_int)
-          if((iprint_init>0) .or. (iprint_init==0.AND.ni_in_cell<200)) &
-               write(io_lun,fmt='(/,2x,"Atomic coordinates (Bohr) : ")')
           do i=1,ni_in_cell
              read(lun,*) x,y,z,species_glob(i),movex,movey,movez
              if(species_glob(i)>n_species) then
@@ -495,15 +493,12 @@ second:   do
              flag_move_atom(1,i) = movex
              flag_move_atom(2,i) = movey
              flag_move_atom(3,i) = movez
-             ! Write out atomic coordinates
-             if((iprint_init>0) .or. (iprint_init==0.AND.ni_in_cell<200)) &
-                 write (io_lun,fmt='(3x, i7, 3f15.8, i3, 3L2)') &
-                       i,atom_coord(1:3,i), species_glob(i), &
-                       flag_move_atom(1:3,i)
           end do
           call io_close(lun)
        end if pdb
     end if
+    if((iprint_init>0) .or. (iprint_init==0.AND.ni_in_cell<200)) &
+         call print_atomic_positions
     call gcopy(ni_in_cell)
     if(inode/=ionode) &
          allocate(flag_move_atom(3,ni_in_cell), atom_coord(3,ni_in_cell),&
@@ -656,7 +651,7 @@ second:   do
           call io_close(lun)
           call io_close(template)
        else
-          if(iprint_init>2) write(io_lun,*) 'Writing read_atomic_positions'
+          if(iprint_init>2) write(io_lun,*) 'Writing atomic positions'
           call io_assign(lun)
           if(append_coords) then
              open(unit=lun,file=filename,position='append')
@@ -2517,33 +2512,28 @@ second:   do
 
     implicit none
 
-    write(io_lun,1) 
-
-1   format(/12x, &
-         '________________________________________________________',/,12x, &
-         '                                                        ',/,12x, &
-         '                        CONQUEST                        ',/,12x, &
-         '                                                        ',/,12x, &
-         '    Concurrent Order N QUantum Electronic STructure     ',/,12x, &
-         '________________________________________________________',/,12x, &
-         '                                                        ',/,12x, &
-         ' Conquest lead developers:                              ',/,12x, &
-         '  D.R.Bowler (UCL, NIMS), T.Miyazaki (NIMS),            ',/,12x, &
-         '  A.Nakata (NIMS), L.Truflandier (U. Bordeaux)          ',/,12x, &
-         '                                                        ',/,12x, &
-         ' Developers:                                            ',/,12x, &
-         '  M.Arita (NIMS), J.S.Baker (UCL), V.Brazdova (UCL),    ',/,12x, &
-         '  R.Choudhury (UCL), S.Y.Mujahed (UCL),                 ',/,12x, &
-         '  J.T.Poulton (UCL), Z.Raza (NIMS), A.Sena (UCL),       ',/,12x, &
-         '  U.Terranova (UCL), L.Tong (UCL), A.Torralba (NIMS)    ',/,12x, &
-         '                                                        ',/,12x, &
-         ' Early development:                                     ',/,12x, &
-         '  I.J.Bush (STFC), C.M.Goringe (Keele),                 ',/,12x, &
-         '  E.H.Hernandez (Keele)                                 ',/,12x, &
-         '                                                        ',/,12x, &
-         ' Original inspiration and oversight:                    ',/,12x, &
-         '  Mike Gillan (Keele, UCL)                              ',/,12x, &
-         '________________________________________________________',/,/)
+    write(io_lun,fmt='(4x,a72)') '________________________________________________________________________'
+    write(io_lun,fmt='(4x,a72)') '                                                                        '
+    write(io_lun,fmt='(4x,a72)') '                                CONQUEST                                '
+    write(io_lun,fmt='(4x,a72)') '                                                                        '
+    write(io_lun,fmt='(4x,a72)') '            Concurrent Order N QUantum Electronic STructure             '
+    write(io_lun,fmt='(4x,a72)') '________________________________________________________________________'
+    write(io_lun,fmt='(4x,a72)') '                                                                        '
+    write(io_lun,fmt='(4x,a72)') ' Conquest lead developers:                                              '
+    write(io_lun,fmt='(4x,a72)') '  D.R.Bowler (UCL, NIMS), T.Miyazaki (NIMS), A.Nakata (NIMS),           '
+    write(io_lun,fmt='(4x,a72)') '  L. Truflandier (U. Bordeaux)                                          '
+    write(io_lun,fmt='(4x,a72)') '                                                                        '
+    write(io_lun,fmt='(4x,a72)') ' Developers:                                                            '
+    write(io_lun,fmt='(4x,a72)') '  M.Arita (NIMS), J.S.Baker (UCL), V.Brazdova (UCL), R.Choudhury (UCL), '
+    write(io_lun,fmt='(4x,a72)') '  S.Y.Mujahed (UCL), J.T.Poulton (UCL), Z.Raza (NIMS), A.Sena (UCL),    '
+    write(io_lun,fmt='(4x,a72)') '  U.Terranova (UCL), L.Tong (UCL), A.Torralba (NIMS)                    '
+    write(io_lun,fmt='(4x,a72)') '                                                                        '
+    write(io_lun,fmt='(4x,a72)') ' Early development:                                                     '
+    write(io_lun,fmt='(4x,a72)') '  I.J.Bush (STFC), C.M.Goringe (Keele), E.H.Hernandez (Keele)           '
+    write(io_lun,fmt='(4x,a72)') '                                                                        '
+    write(io_lun,fmt='(4x,a72)') ' Original inspiration and project oversight:                            '
+    write(io_lun,fmt='(4x,a72)') '  M.J.Gillan (Keele, UCL)                                               '
+    write(io_lun,fmt='(4x,a72)') '________________________________________________________________________'
 
   end subroutine banner
   !!***
@@ -3080,7 +3070,53 @@ second:   do
   end subroutine print_process_info
   !!***
 
+  !!****f* io_module/print_atomic_positions *
+  !!
+  !!  NAME
+  !!   print_atomic_positions
+  !!  USAGE
+  !!   print_atomic_positions
+  !!  PURPOSE
+  !!   Prints atomic positions to the output file
+  !!  INPUTS
+  !!
+  !!  OUTPUTS
+  !!
+  !!  USES
+  !!
+  !!  AUTHOR
+  !!   D. R. Bowler
+  !!  CREATION DATE
+  !!   2020/03/11
+  !!  MODIFICATION HISTORY
+  !!
+  !!  SOURCE
+  !!
+  subroutine print_atomic_positions
 
+    use global_module, only: atom_coord, iprint_MD, ni_in_cell, species_glob
+    use dimens,         only: r_super_x, r_super_y, r_super_z
+    use GenComms, only: inode, ionode
+    use units, only: dist_conv, d_units, dist_units
+
+    implicit none
+
+    integer :: i
+
+    if(inode==ionode) then
+       write(io_lun,fmt='(/2x,"Simulation cell dimensions: ",f9.5,1x,a2,f9.5,1x,a2,f9.5,1x,a2)') &
+            r_super_x*dist_conv, d_units(dist_units), r_super_y*dist_conv, d_units(dist_units), &
+            r_super_z*dist_conv, d_units(dist_units)
+       write(io_lun,fmt='(/,2x,"Atomic index, coordinates (",a2,") and species index:")') d_units(dist_units)
+       do i = 1, ni_in_cell
+          write (io_lun,fmt='(2x, i7, 3f10.4, i3)') i,atom_coord(1:3,i), species_glob(i)
+       end do
+    end if
+    return
+    
+  end subroutine print_atomic_positions
+  !!***
+  
   !!****f* io_module/write_velocity *
   !!
   !!  NAME
