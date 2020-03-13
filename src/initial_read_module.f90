@@ -2622,6 +2622,18 @@ contains
     do n=1, n_species
        write(io_lun,fmt='(4x,i4,2x,f9.3,3x,f9.3,4x,f9.3,2x,i3,2x,a30)') &
             n, mass(n), charge(n), dist_conv*RadiusSupport(n), nsf_species(n), species_label(n)
+       if(flag_basis_set==blips) then 
+          if(flag_precondition_blips) then
+             write(io_lun,'(/13x,"Blip basis with preconditioning")') 
+          else
+             write(io_lun,'(/13x,"Blip basis - no preconditioning")') 
+          end if
+          write(io_lun,14) &
+               dist_conv*blip_info(n)%SupportGridSpacing, d_units(dist_units), &
+               dist_conv*blip_info(n)%BlipWidth,          d_units(dist_units)
+       else
+          write(io_lun,'(13x,"PAO basis")') 
+       end if
     end do
     write(io_lun,fmt='(4x,a66)') '------------------------------------------------------------------'
 
