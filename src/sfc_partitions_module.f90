@@ -1359,7 +1359,7 @@ contains
     real(double) :: mean_noccparts_proc, std_noccparts_proc
 
     ! only the ionode will carry out this subroutine
-    if (inode == ionode) then
+    if (inode == ionode.AND.iprint_init>0) then
        ! print system information
        select case (FSC%system_type)
        case (3)

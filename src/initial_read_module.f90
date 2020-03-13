@@ -1183,16 +1183,16 @@ contains
     ps_type = fdf_string(5,'General.PseudopotentialType','haman') 
     ! Write out pseudopotential type
     if(leqi(ps_type,'siest')) then
-       if(inode==ionode.AND.iprint_init>0) &
-            write(io_lun,fmt='(10x,"SIESTA pseudopotential will be used. ")')
+       !if(inode==ionode.AND.iprint_init>0) &
+       !     write(io_lun,fmt='(10x,"SIESTA pseudopotential will be used. ")')
        pseudo_type = SIESTA
     else if(leqi(ps_type,'plato').OR.leqi(ps_type,'haman')) then
-       if(inode==ionode.AND.iprint_init>0) &
-            write(io_lun,fmt='(10x,"HAMANN pseudopotential will be used. ")')
+       !if(inode==ionode.AND.iprint_init>0) &
+       !     write(io_lun,fmt='(10x,"HAMANN pseudopotential will be used. ")')
        pseudo_type = ABINIT
     else
-       if(inode==ionode.AND.iprint_init>0) &
-            write(io_lun,fmt='(10x,"OLD pseudopotential will be used. ")')
+       !if(inode==ionode.AND.iprint_init>0) &
+       !     write(io_lun,fmt='(10x,"OLD pseudopotential will be used. ")')
        pseudo_type = OLDPS
     endif
     if((.NOT.flag_angular_new).AND.&
@@ -2505,8 +2505,7 @@ contains
     use datatypes
     use units
     use dimens,               only: r_super_x, r_super_y, r_super_z,   &
-         n_grid_x, n_grid_y, n_grid_z, r_h, &
-         r_c
+         n_grid_x, n_grid_y, n_grid_z, r_h, r_c, RadiusSupport
     use block_module,         only: in_block_x, in_block_y, in_block_z
     use species_module,       only: n_species, species_label, mass,    &
          charge,          &
@@ -2518,7 +2517,7 @@ contains
     use global_module,        only: flag_basis_set, blips,        &
          flag_precondition_blips, io_lun,   &
          flag_Multisite, flag_diagonalisation, flag_neutral_atom, &
-         flag_self_consistent, flag_vary_basis
+         flag_self_consistent, flag_vary_basis, iprint_init, flag_pcc_global
     use SelfCon,              only: maxitersSC
     use minimise,             only: energy_tolerance, L_tolerance,     &
          sc_tolerance,                      &
@@ -2526,7 +2525,7 @@ contains
          n_L_iterations
     use datestamp,            only: datestr, commentver
     use pseudopotential_common, only: flag_neutral_atom_projector, maxL_neutral_atom_projector, &
-         numN_neutral_atom_projector
+         numN_neutral_atom_projector, pseudo_type, OLDPS, SIESTA, ABINIT
 
     implicit none
 
@@ -2542,44 +2541,48 @@ contains
     character(len=10) :: today, the_time
 
     call date_and_time(today, the_time)
-    write(io_lun,3) today(1:4), today(5:6), today(7:8), the_time(1:2),&
-         the_time(3:4)
+3   format()
+    write(io_lun,fmt='(/4x,"This job was run on ",a4,"/",a2,"/",a2," at ",a2,":",a2)') &
+         today(1:4), today(5:6), today(7:8), the_time(1:2), the_time(3:4)
     write(io_lun,&
-         '(/10x,"Code compiled on: ",a,/10x,"Version comment: ",/10x,a)') &
+         '(4x,"Code compiled on: ",a,/4x,"Version comment: ",a)') &
          datestr, commentver
 
-    write(io_lun,1)
-    write(io_lun,2) titles
+    write(io_lun,fmt='(4x,"Job title: ",a)') titles
 
     if(flag_diagonalisation) then
-       write(io_lun,30) 'diagonalisation '
-       select case (flag_smear_type)
-       case (0)
-          write(io_lun,'(/,10x,"Using Fermi-Dirac smearing")')
-       case (1)
-          write(io_lun,&
-               '(/,10x,"Using order ",i2," Methfessel-Paxton smearing")') &
-               iMethfessel_Paxton
-       end select
+       write(io_lun,fmt='(4x,"Solving for the K matrix using ",a16)') 'diagonalisation '
+       if(iprint_init>0) then
+          select case (flag_smear_type)
+          case (0)
+             write(io_lun,'(4x,"Using Fermi-Dirac smearing")')
+          case (1)
+             write(io_lun,&
+                  '(4x,"Using order ",i2," Methfessel-Paxton smearing")') &
+                  iMethfessel_Paxton
+          end select
+       end if
     else
-       write(io_lun,30) 'order N with LNV'   
+       write(io_lun,fmt='(4x,"Solving for the K matrix using ",a16)') 'order N with LNV'   
     end if
-    write(io_lun,4) dist_conv*r_super_x, dist_conv*r_super_y, &
-         dist_conv*r_super_z,d_units(dist_units)
+    if(iprint_init>0) write(io_lun,fmt='(4x,"Integration grid size: ",i4," x ",i4," x ",i4)') &
+         n_grid_x, n_grid_y, n_grid_z
 
-    write(io_lun,9) n_grid_x, n_grid_y, n_grid_z
+    if(iprint_init>1) write(io_lun,fmt='(4x,"Integration grid blocks: ",i3," x ",i3," x ",i3)') &
+         in_block_x, in_block_y, in_block_z
 
-    write(io_lun,17) in_block_x, in_block_y, in_block_z
+    write(io_lun,fmt='(4x,"Integration grid spacing: ",3f6.3,1x,a2)') dist_conv*(r_super_x/n_grid_x), & 
+         dist_conv*(r_super_y/n_grid_y), dist_conv*(r_super_z/n_grid_z), d_units(dist_units)
 
-    write(io_lun,15) dist_conv*(r_super_x/n_grid_x), d_units(dist_units), &
-         dist_conv*(r_super_y/n_grid_y), d_units(dist_units), &
-         dist_conv*(r_super_z/n_grid_z), d_units(dist_units)
-
-    write(io_lun,18) n_species, d_units(dist_units)
+    write(io_lun,fmt='(4x,"Number of species: ",i2)') n_species
+    write(io_lun,fmt='(4x,a66)') '------------------------------------------------------------------'
+    write(io_lun,fmt='(4x,"   #  Mass (au)  Charge (e)  SF Rad (",a2,")  NSF  Label            ")') &
+         d_units(dist_units)
+    write(io_lun,fmt='(4x,a66)') '------------------------------------------------------------------'
 
     do n=1, n_species
-       write(io_lun,19) n, species_label(n), mass(n), charge(n), &
-            dist_conv*core_radius(n), nsf_species(n)
+       write(io_lun,fmt='(4x,i4,2x,f9.3,3x,f9.3,4x,f9.3,2x,i3,2x,a30)') &
+            n, mass(n), charge(n), dist_conv*RadiusSupport(n), nsf_species(n), species_label(n)
        if(flag_basis_set==blips) then 
           if(flag_precondition_blips) then
              write(io_lun,'(/13x,"Blip basis with preconditioning")') 
@@ -2604,7 +2607,13 @@ contains
     else
        write(io_lun,29) energy_tolerance, L_tolerance, sc_tolerance
     end if
-
+    if(iprint_init>1) then
+       if(pseudo_type==SIESTA) write(io_lun,fmt='(4x,"SIESTA (TM) pseudopotential will be used. ")')
+       if(pseudo_type==ABINIT) write(io_lun,fmt='(4x,"Hamann (ONCVPSP) pseudopotential will be used. ")')
+    end if
+    ! PCC
+    if (iprint_init>2.AND.flag_pcc_global) &
+         write (io_lun,fmt='(4x,a)') "Some species include partial core corrections (PCC)."
     if(flag_neutral_atom) then
        write(io_lun,fmt='(/13x,"Using neutral atom potential (NAP) formalism")')
        if(flag_neutral_atom_projector) then
@@ -2649,28 +2658,12 @@ contains
             d_units(dist_units)
     end do
 
-1   format(/10x,'Job title: ')
-2   format(10x,a80)
-3   format(/10x,'This job was run on ',a4,'/',a2,'/',a2,' at ',a2,':',a2,/)
-4   format(/10x,'The simulation box has the following dimensions',/, &
-         10x,'a = ',f11.5,' b = ',f11.5,' c = ',f11.5,' ',a2)
 7   format(/10x,'The calculation will be performed on ',i5,' processes')
-9   format(/10x,'The number of cell grid points in each direction is :',/, &
-         20x,i5,' cell grid points along x',/, &
-         20x,i5,' cell grid points along y',/, &
-         20x,i5,' cell grid points along z')
 131 format(/10x,'Species ',i2,' Non-local Hamiltonian radius = ', &
          f7.4,' ',a2)
 14  format(/10x,'Support-grid spacing =   ',f7.4,' ',a2,' ',/, &
          10x,'Width of (3D) b-spline = ',f7.4,' ',a2)
-15  format(/10x,'integration grid spacing along x ',f9.5,' ',a2,/, &
-         10x,'integration grid spacing along y ',f9.5,' ',a2,/, &
-         10x,'integration grid spacing along z ',f9.5,' ',a2)
 16  format(/10x,'The Chemical Potential mu is :',f7.4)
-17  format(/10x,'The number of cell grid points in each block is :',/, &
-         20x,i5,' cell grid points along x',/, &
-         20x,i5,' cell grid points along y',/, &
-         20x,i5,' cell grid points along z')
 18  format(/10x,'The number of atomic species in the system is :', &
          i5,/,/,6x, &
          '------------------------------------------------------------------',/,6x, &
