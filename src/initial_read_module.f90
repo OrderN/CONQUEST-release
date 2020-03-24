@@ -2628,9 +2628,8 @@ contains
           else
              write(io_lun,'(/13x,"Blip basis - no preconditioning")') 
           end if
-          write(io_lun,14) &
-               dist_conv*blip_info(n)%SupportGridSpacing, d_units(dist_units), &
-               dist_conv*blip_info(n)%BlipWidth,          d_units(dist_units)
+          write(io_lun,'(4x,"Support-grid spacing: ",f7.4,1x,a2)') &
+               dist_conv*blip_info(n)%SupportGridSpacing, d_units(dist_units)
        else
           write(io_lun,'(13x,"PAO basis")') 
        end if
