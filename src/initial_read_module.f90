@@ -158,8 +158,7 @@ contains
   !!  SOURCE
   !!
   subroutine read_and_write(start, start_L, inode, ionode,          &
-       vary_mu, mu, find_chdens, &
-       read_phi)
+       vary_mu, mu, find_chdens)
 
     use datatypes
     use numbers
@@ -216,7 +215,7 @@ contains
     implicit none
 
     ! Passed variables
-    logical           :: vary_mu, start, start_L, read_phi
+    logical           :: vary_mu, start, start_L
     logical           :: find_chdens
     integer           :: inode, ionode
     real(double)      :: mu
@@ -244,7 +243,7 @@ contains
 
     ! read input data: parameters for run
     call read_input(start, start_L, titles, vary_mu, mu,&
-         find_chdens, read_phi,HNL_fac)
+         find_chdens, HNL_fac)
     ! Read pseudopotential data
     if(pseudo_type == OLDPS) then
        call read_pseudopotential(inode, ionode)
@@ -511,7 +510,7 @@ contains
 
     ! write out some information on the run
     if (inode == ionode) &
-         call write_info(titles, mu, vary_mu, read_phi, HNL_fac, numprocs)
+         call write_info(titles, mu, vary_mu, HNL_fac, numprocs)
 
     call compile_biblio
     !****lat<$
@@ -750,7 +749,7 @@ contains
   !!  SOURCE
   !!
   subroutine read_input(start, start_L, titles, vary_mu,&
-       mu, find_chdens, read_phi,HNL_fac)
+       mu, find_chdens, HNL_fac)
 
     use datatypes
     use numbers
@@ -919,7 +918,7 @@ contains
 
     ! Passed variables
     logical           :: vary_mu, find_chdens
-    logical           :: start, start_L, read_phi
+    logical           :: start, start_L
     real(double)      :: mu, HNL_fac
     character(len=80) :: titles
 
@@ -946,7 +945,6 @@ contains
 
     ! Set defaults
     vary_mu  = .true.
-    read_phi = .false.
 
     !*** WHO READS AND BROADCASTS ? ***!
 
@@ -2499,8 +2497,7 @@ contains
   !!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
   !!  SOURCE
   !!
-  subroutine write_info(titles, mu, vary_mu, read_phi, &
-       HNL_fac, NODES)
+  subroutine write_info(titles, mu, vary_mu, HNL_fac, NODES)
 
     use datatypes
     use units
@@ -2531,7 +2528,6 @@ contains
 
     ! Passed variables
     logical :: vary_mu
-    logical :: read_phi
     character(len=80) :: titles
     integer :: NODES 
     real(double) :: mu, HNL_fac
@@ -2589,23 +2585,29 @@ contains
           else
              write(io_lun,'(/13x,"Blip basis - no preconditioning")') 
           end if
-          write(io_lun,14) &
-               dist_conv*blip_info(n)%SupportGridSpacing, d_units(dist_units), &
-               dist_conv*blip_info(n)%BlipWidth,          d_units(dist_units)
+          write(io_lun,'(4x,"Support-grid spacing: ",f7.4,1x,a2)') &
+               dist_conv*blip_info(n)%SupportGridSpacing, d_units(dist_units)
        else
           write(io_lun,'(13x,"PAO basis")') 
        end if
     end do
-
-    write(io_lun,20)
+    write(io_lun,fmt='(4x,a66)') '------------------------------------------------------------------'
 
     if (flag_Multisite) write(io_lun,'(/10x,"PAOs are contracted to multi-site support functions")')
 
-    if(flag_diagonalisation) then
-       write(io_lun,fmt='(/,10x,"Energy tolerance required:             ",f12.8, &
-            & /,10x,"Self consistent convergence tolerance: ",f12.8)') energy_tolerance, sc_tolerance
-    else
-       write(io_lun,29) energy_tolerance, L_tolerance, sc_tolerance
+    if(iprint_init>0) then
+       if(flag_vary_basis) then
+          write(io_lun,fmt='(10x,"Support function tolerance:  ",f12.8)') energy_tolerance
+          write(io_lun,fmt='(10x,"Support function iterations: ",i4)') n_support_iterations
+       end if
+       if(flag_self_consistent) then
+          write(io_lun,fmt='(10x,"SCF tolerance:               ",f12.8)') sc_tolerance
+          write(io_lun,fmt='(10x,"SCF iterations:              ",i4)') maxitersSC
+       end if
+       if(flag_self_consistent) then
+          write(io_lun,fmt='(10x,"O(N) tolerance:              ",f12.8)') L_tolerance
+          write(io_lun,fmt='(10x,"O(N) iterations:             ",i4)') n_L_iterations
+       end if
     end if
     if(iprint_init>1) then
        if(pseudo_type==SIESTA) write(io_lun,fmt='(4x,"SIESTA (TM) pseudopotential will be used. ")')
@@ -2614,7 +2616,7 @@ contains
     ! PCC
     if (iprint_init>2.AND.flag_pcc_global) &
          write (io_lun,fmt='(4x,a)') "Some species include partial core corrections (PCC)."
-    if(flag_neutral_atom) then
+    if(flag_neutral_atom.and.iprint_init>2) then
        write(io_lun,fmt='(/13x,"Using neutral atom potential (NAP) formalism")')
        if(flag_neutral_atom_projector) then
           write(io_lun,fmt='(/13x,"Calculating 1- and 2-centre NAP integrals analytically")')
@@ -2623,62 +2625,16 @@ contains
        end if
     end if
 
-    if(read_phi) then
-       write(io_lun,262)
-       do n=1, n_species
-          write(io_lun,212) species_label(n), phi_file(n)
-       end do
-    endif
-
     if (.not.vary_mu) then
        write(io_lun,*) '          mu is constant'
-       write(io_lun,16) mu
+       write(io_lun,fmt="(/10x,'The Chemical Potential mu is :',f7.4)") mu
     endif
 
-    write(io_lun,7) NODES
-
-    if(flag_diagonalisation) then
-       if(flag_vary_basis) &
-            write(io_lun,fmt='(10x,"Maximum number of support iterations: ",i4)') n_support_iterations
-       if(flag_self_consistent) &
-            write(io_lun,fmt='(10x,"Maximum number of SCF iterations: ",i4)') maxitersSC
-    else
-       if(flag_vary_basis) &
-            write(io_lun,fmt='(10x,"Maximum number of support iterations: ",i4)') n_support_iterations
-       if(flag_self_consistent) &
-            write(io_lun,fmt='(10x,"Maximum number of SCF iterations: ",i4)') maxitersSC
-       write(io_lun,fmt='(10x,"Maximum number of L matrix iterations: ",i4)') n_L_iterations
-    end if
+    write(io_lun,fmt="(/10x,'The calculation will be performed on ',i5,' processes')") NODES
 
     if(.NOT.flag_diagonalisation) &
          write(io_lun,fmt='(10x,"Density Matrix range  = ",f7.4,1x,a2)') &
          dist_conv*r_c, d_units(dist_units)
-    do n=1, n_species
-       write(io_lun,131) n, dist_conv*r_h+core_radius(n) * HNL_fac, &
-            d_units(dist_units)
-    end do
-
-7   format(/10x,'The calculation will be performed on ',i5,' processes')
-131 format(/10x,'Species ',i2,' Non-local Hamiltonian radius = ', &
-         f7.4,' ',a2)
-14  format(/10x,'Support-grid spacing =   ',f7.4,' ',a2,' ',/, &
-         10x,'Width of (3D) b-spline = ',f7.4,' ',a2)
-16  format(/10x,'The Chemical Potential mu is :',f7.4)
-18  format(/10x,'The number of atomic species in the system is :', &
-         i5,/,/,6x, &
-         '------------------------------------------------------------------',/,6x, &
-         '   #   Label     Mass (a.u.)   Charge (e)  NLPF Rad (',a2,')   NSF  ',/,6x, &
-         '------------------------------------------------------------------')
-19  format(6x,i4,3x,a30,3f11.5,9x,i3)
-20  format(6x, &
-         '------------------------------------------------------------------',/)
-212 format(20x,a10,10x,a40)
-262 format(/,10x,'The initial support function data is read from:',/, &
-         15x,'  Species ',12x,'  File  ')
-29  format(/,10x,'Energy tolerance required:             ',f12.8, &
-         /,10x,'L-matrix convergence tolerance:        ',f12.8, &
-         /,10x,'Self consistent convergence tolerance: ',f12.8)
-30  format(/,10x,'Solving for the K matrix using ',a16)
 
     return
   end subroutine write_info
@@ -3018,10 +2974,10 @@ contains
        mp(3) = fdf_integer('Diag.MPMeshZ',1) 
        if(iprint_init>0.AND.inode==ionode) then
           if(flag_gamma) then
-             write (io_lun,fmt='(/8x,a, 3i3," gamma-centred")') &
+             write (io_lun,fmt='(/8x,a, i3," x ",i3," x ",i3," gamma-centred")') &
                   ' Monkhorst-Pack mesh: ', (mp(i), i=1,3)
           else
-             write (io_lun,fmt='(/8x,a, 3i3)') &
+             write (io_lun,fmt='(/8x,a, i3," x ",i3," x ",i3)') &
                   ' Monkhorst-Pack mesh: ', (mp(i), i=1,3)
           end if
        end if

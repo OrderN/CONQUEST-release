@@ -3104,12 +3104,13 @@ second:   do
     integer :: i
 
     if(inode==ionode) then
-       write(io_lun,fmt='(/2x,"Simulation cell dimensions: ",f9.5,1x,a2,f9.5,1x,a2,f9.5,1x,a2)') &
+       write(io_lun,fmt='(/4x,"Simulation cell dimensions: ",f10.4,a3," x ",f10.4,a3," x ",f10.4,a3)') &
             r_super_x*dist_conv, d_units(dist_units), r_super_y*dist_conv, d_units(dist_units), &
             r_super_z*dist_conv, d_units(dist_units)
-       write(io_lun,fmt='(/,2x,"Atomic index, coordinates (",a2,") and species index:")') d_units(dist_units)
+       write(io_lun,fmt='(/4x,"Atomic coordinates (",a2,")")') d_units(dist_units)
+       write(io_lun,fmt='(4x,"   Atom     X           Y          Z       Species")')
        do i = 1, ni_in_cell
-          write (io_lun,fmt='(2x, i7, 3f10.4, i3)') i,atom_coord(1:3,i), species_glob(i)
+          write (io_lun,fmt='(4x, i7, 3f10.4, i3)') i,atom_coord(1:3,i), species_glob(i)
        end do
     end if
     return
