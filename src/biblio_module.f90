@@ -249,8 +249,24 @@ contains
   end subroutine add_ref
   !!***
 
+  !!****f* biblio/cite *
+  !!
+  !!  NAME 
+  !!   cite
+  !!  PURPOSE
+  !!   Write reference to output file and bibliography
+  !!  AUTHOR
+  !!   Zamaan Raza
+  !!  CREATION DATE
+  !!   2019/07/04
+  !!  MODIFICATION HISTORY
+  !!   2020/03/24 14:22 dave
+  !!    Changed to write reference key only if iprint<2
+  !!  SOURCE
+  !!
   subroutine cite(bib, key)
 
+    use global_module, ONLY: iprint_init
     ! passed variables
     class(type_bibliography), intent(inout) :: bib
     character(*), intent(in)                :: key
@@ -259,8 +275,13 @@ contains
     type(type_reference)                    :: reference
 
     reference = bib%get_ref(key)
-    call reference%cite_reference
-    if (flag_dump_bib) call reference%write_bib(bib%first)
+    if(iprint_init>1) then
+       call reference%cite_reference
+       if (flag_dump_bib) call reference%write_bib(bib%first)
+    else
+       write(io_lun,fmt='(4x,a)') reference%key
+       call reference%write_bib(bib%first)
+    end if
 
   end subroutine cite
   !!***

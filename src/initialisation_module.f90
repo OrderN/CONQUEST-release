@@ -161,8 +161,7 @@ contains
     lmax_pao = 0
     lmax_ps = 0
     ! Read input
-    call read_and_write(start, start_L, inode, ionode, &
-                        vary_mu, mu, find_chdens, read_phi)
+    call read_and_write(start, start_L, inode, ionode, vary_mu, mu, find_chdens)
     call init_xc
     ! IMPORTANT!!!!! No timers allowed before this point
     !                We need to know if the user wants them or not
