@@ -403,6 +403,8 @@ module references
     !!  CREATION DATE
     !!   2019/07/04
     !!  MODIFICATION HISTORY
+    !!   2020/03/24 14:22 dave
+    !!    Changed to write reference key only if iprint<2
     !!
     !!  SOURCE
     !!
@@ -411,7 +413,7 @@ module references
       use global_module, only: flag_diagonalisation, flag_Multisite, &
                                flag_XLBOMD, flag_basis_set, PAOs, &
                                flag_heat_flux, optcell_method, &
-                               flag_perform_cDFT, flag_DeltaSCF, runtype
+                               flag_perform_cDFT, flag_DeltaSCF, runtype, iprint_init
       use pseudopotential_common, only: pseudo_type, ABINIT
       use input_module,  only: leqi
       use control,       only: md_ensemble
@@ -428,11 +430,16 @@ module references
       call get_bib_db(bib)
 
       if (inode==ionode) then
-        write(io_lun,*)
-        write(io_lun,'(2x,a)') "BIBLIOGRAPHY: If you publish results obtained &
-                               &with CONQUEST, please consider citing the &
-                               &following:"
-        write(io_lun,*)
+         if(iprint_init>1) then
+            write(io_lun,*)
+            write(io_lun,'(2x,a)') "BIBLIOGRAPHY: If you publish results obtained &
+                 &with CONQUEST, please consider citing the &
+                 &following:"
+            write(io_lun,*)
+         else
+            write(io_lun,fmt='(/2x,a/)') "BIBLIOGRAPHY: Please consider citing the following &
+                 &references in the conquest.bib file"
+         end if
       end if
 
       ! Cite publications for *any* CONQUEST calculation
@@ -441,7 +448,7 @@ module references
       call bib%cite("Bowler:2006xr") ! Replace with 2020 JCP when submitted
 
       if (inode==ionode) then
-        write(io_lun,'(2x,a)') "The following papers detail methodology used &
+        write(io_lun,'(/2x,a)') "The following papers detail methodology used &
                                &in this CONQUEST calculation:"
         write(io_lun,*)
       end if
@@ -485,7 +492,7 @@ module references
       ! Functionals
       if(flag_functional_type>0) then
          if (inode==ionode) then
-            write(io_lun,'(2x,a)') "The following paper details the functional used &
+            write(io_lun,'(/2x,a)') "The following paper details the functional used &
                  &in this CONQUEST calculation:"
             write(io_lun,*)
          end if

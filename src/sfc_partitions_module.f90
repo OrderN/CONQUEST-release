@@ -1359,7 +1359,7 @@ contains
     real(double) :: mean_noccparts_proc, std_noccparts_proc
 
     ! only the ionode will carry out this subroutine
-    if (inode == ionode.AND.iprint_init>0) then
+    if (inode == ionode.AND.iprint_init>1) then
        ! print system information
        select case (FSC%system_type)
        case (3)
@@ -1371,7 +1371,7 @@ contains
        case (0)
           write (io_lun, "(/,10x,a,/)") "Detected system type: molecule"
        end select
-       if (iprint_init >= 2) then
+       if (iprint_init > 2) then
           write (io_lun, "(10x,a,3f10.6)")  &
                "Cell dimensions    (a0): ", &
                FSC%dims(1), FSC%dims(2), FSC%dims(3)
@@ -1398,7 +1398,7 @@ contains
                FSC%is_folded(1), FSC%is_folded(2), FSC%is_folded(3)
        end if
        ! print partition information
-       if (iprint_init >= 2) then
+       if (iprint_init > 2) then
           write (io_lun, "(10x,a,i6)")  &
                "User requested N partitions in x: ", n_parts_user(1)
           write (io_lun, "(10x,a,i6)")  &
@@ -1420,7 +1420,7 @@ contains
                "Partition cell size (a0): ", r_part(1), r_part(2), r_part(3)
        end if
        ! print partition statistics
-       if (iprint_init >= 2) then
+       if (iprint_init > 2) then
           allocate(n_occupied_parts_proc(numprocs), STAT=stat)
           if (stat /= 0) then
              call cq_abort("print_information: &
