@@ -2490,7 +2490,7 @@ contains
          '(4x,"Code compiled on: ",a,/4x,"Version comment: ",a)') &
          datestr, commentver
 
-    write(io_lun,fmt='(4x,"Job title: ",a)') titles
+    write(io_lun,fmt='(/4x,"Job title: ",a)') titles
 
     if(flag_diagonalisation) then
        write(io_lun,fmt='(4x,"Solving for the K matrix using ",a16)') 'diagonalisation '
@@ -2513,10 +2513,12 @@ contains
     if(iprint_init>1) write(io_lun,fmt='(4x,"Integration grid blocks: ",i3," x ",i3," x ",i3)') &
          in_block_x, in_block_y, in_block_z
 
-    write(io_lun,fmt='(4x,"Integration grid spacing: ",3f6.3,1x,a2)') dist_conv*(r_super_x/n_grid_x), & 
-         dist_conv*(r_super_y/n_grid_y), dist_conv*(r_super_z/n_grid_z), d_units(dist_units)
+    write(io_lun,fmt='(4x,"Integration grid spacing: ",f6.3,a3," x",f6.3,a3," x",f6.3,a3)') &
+         dist_conv*(r_super_x/n_grid_x), d_units(dist_units), & 
+         dist_conv*(r_super_y/n_grid_y), d_units(dist_units), &
+         dist_conv*(r_super_z/n_grid_z), d_units(dist_units)
 
-    write(io_lun,fmt='(4x,"Number of species: ",i2)') n_species
+    write(io_lun,fmt='(/4x,"Number of species: ",i2)') n_species
     write(io_lun,fmt='(4x,a66)') '------------------------------------------------------------------'
     write(io_lun,fmt='(4x,"   #  Mass (au)  Charge (e)  SF Rad (",a2,")  NSF  Label            ")') &
          d_units(dist_units)
@@ -2576,7 +2578,7 @@ contains
        write(io_lun,fmt="(/10x,'The Chemical Potential mu is :',f7.4)") mu
     endif
 
-    write(io_lun,fmt="(/10x,'The calculation will be performed on ',i5,' processes')") NODES
+    write(io_lun,fmt="(/4x,'The calculation will be performed on ',i5,' processes')") NODES
 
     if(.NOT.flag_diagonalisation) &
          write(io_lun,fmt='(10x,"Density Matrix range  = ",f7.4,1x,a2)') &

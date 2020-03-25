@@ -432,12 +432,12 @@ module references
       if (inode==ionode) then
          if(iprint_init>1) then
             write(io_lun,*)
-            write(io_lun,'(2x,a)') "BIBLIOGRAPHY: If you publish results obtained &
+            write(io_lun,'(4x,a)') "BIBLIOGRAPHY: If you publish results obtained &
                  &with CONQUEST, please consider citing the &
                  &following:"
             write(io_lun,*)
          else
-            write(io_lun,fmt='(/2x,a/)') "BIBLIOGRAPHY: Please consider citing the following &
+            write(io_lun,fmt='(/4x,a/)') "BIBLIOGRAPHY: Please consider citing the following &
                  &references in the conquest.bib file"
          end if
       end if
@@ -448,7 +448,7 @@ module references
       call bib%cite("Bowler:2006xr") ! Replace with 2020 JCP when submitted
 
       if (inode==ionode) then
-        write(io_lun,'(/2x,a)') "The following papers detail methodology used &
+        write(io_lun,'(/4x,a)') "The following papers detail methodology used &
                                &in this CONQUEST calculation:"
         write(io_lun,*)
       end if
@@ -492,7 +492,7 @@ module references
       ! Functionals
       if(flag_functional_type>0) then
          if (inode==ionode) then
-            write(io_lun,'(/2x,a)') "The following paper details the functional used &
+            write(io_lun,'(/4x,a)') "The following paper details the functional used &
                  &in this CONQUEST calculation:"
             write(io_lun,*)
          end if
