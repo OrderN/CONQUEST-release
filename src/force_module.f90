@@ -262,6 +262,7 @@ contains
     use hartree_module, only: Hartree_stress
     use XC, ONLY: XC_GGA_stress
     use io_module, only: atom_output_threshold, return_prefix
+    use input_module,         only: leqi
 
     implicit none
 
