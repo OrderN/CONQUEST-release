@@ -214,3 +214,139 @@ files:
 Full details are available in :ref:`moldyn`.
 
 Go to :ref:`top <input-output>`
+
+.. _io_output_levels:
+
+Output levels
+-------------
+
+Different output levels have different effects on different areas of
+the code.  The operations of CONQUEST are broken down  roughly as
+follows, though several of these processes may be mixed, particularly
+during the ground state search: 
+
+* Initialisation
+* Run
+
+  * Ground state search
+    
+    * Support functions
+    * Self-consistency
+    * Density matrix
+
+  * Move atoms
+
+    * MD
+    * Relaxation
+
+* Ending and summary
+
+Iprint=0
+++++++++
+
+* Initialisation
+
+  * Simulation cell size, coordinate file name, atomic positions (if
+    fewer than 200)
+  * Date and time of run and executable compilation, along with
+    version number of code and job title
+  * Ground state search details
+  * Integration grid spacing
+  * Species data: mass, charge, radius, NSF, label and basis
+  * Number of processes
+  * Bibliography details and XC functional
+    
+* Ground state search
+  
+  Note that this output should be effectively a single line, giving a
+  brief overview of the process.  During O(N) optimisation, the SCF
+  process is included as part of the optimisation.
+  
+  * If SFs are optimised, output:
+
+    * Number of iterations
+    * Success or failure
+    * Final SF residual
+
+  * If SFs are not optimised (i.e. PAO basis set), output:
+
+    * Number of SCF iterations
+    * Success or failure
+    * Final SCF residual
+
+  * If direct SCF is not used, but O(N) optimisation is, output:
+
+    * Number of DMM iterations
+    * Success or failure
+    * Final DMM residual
+
+* Atomic movement
+
+  * For MD: PE, KE, P/V/T, thermostat information
+  * For relaxation: Total (potential) energy, maximum force, force
+    residual
+  * For static run, write atomic forces (if fewer than 200 atoms)
+
+* Ending
+
+  * Estimates of total time and memory
+  * Summary of run: number of iterations (atoms), reason for stopping
+
+N.B. The threshold for output of atomic positions and forces (200
+atoms above) can be set using the input tag ``IO.AtomOutputThreshold``
+(see :ref:`here <advanced_input_coord_tags>` for more details).
+
+Go to :ref:`top <input-output>`
+    
+Iprint=1
+++++++++
+
+* Initialisation
+
+  * Simulation cell size, coordinate file name, atomic positions (if
+    fewer than 200)
+  * Date and time of run and executable compilation, along with
+    version number of code and job title
+  * Ground state search details
+  * Integration grid spacing
+  * Species data: mass, charge, radius, NSF, label and basis
+  * Number of processes
+  * Bibliography details and XC functional
+    
+* Ground state search
+  
+  Note that this output should be effectively a single line, giving a
+  brief overview of the process.  During O(N) optimisation, the SCF
+  process is included as part of the optimisation.
+  
+  * If SFs are optimised, output:
+
+    * Energy and residual at each iteration
+    * At end: number of iterations, Success or failure,  Final SF residual
+
+  * If SFs are not optimised (i.e. PAO basis set), output:
+
+    * Energy and residual at each iteration
+    * At end: number of SCF iterations, Success or failure, Final SCF residual
+
+  * If direct SCF is not used, but O(N) optimisation is, output:
+
+    * Number of DMM iterations
+    * Success or failure
+    * Final DMM residual
+
+* Atomic movement
+
+  * For MD: PE, KE, P/V/T, thermostat information
+  * For relaxation: Total (potential) energy, maximum force, force
+    residual
+  * If performing cell optimisation or NPT MD, give cell parameters
+
+* Ending
+
+  * Estimates of total time and memory
+  * Summary of run: number of iterations (atoms), reason for stopping
+      
+
+
+Go to :ref:`top <input-output>`

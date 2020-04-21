@@ -221,19 +221,19 @@ contains
     integer, optional, intent(in) :: area
 
     if (present(lun).and.present(area)) then
-       write(lun,'(2x,"Max mem use for area ",i4," is ",f10.3," ",a2)') &
+       write(lun,'(4x,"Max mem use for area ",i4," is ",f10.3," ",a2)') &
             area,real(max_alloc_area(area))*mem_conv,mem_units(m_units)
-       write(io_lun,'(2x,"Max mem use for area ",i4," is ",f10.3," ",a2)') &
+       write(io_lun,'(4x,"Max mem use for area ",i4," is ",f10.3," ",a2)') &
             area,real(max_alloc_area(area))*mem_conv,mem_units(m_units)
     else
        if(inode==ionode) then
           if(iprint>2) then
              do i=1,n_areas
-                write(io_lun,'(2x,"Max mem use for area ",i4," is ",f10.3," ",a2)') &
+                write(io_lun,'(4x,"Max mem use for area ",i4," is ",f10.3," ",a2)') &
                      i,real(max_alloc_area(i))*mem_conv,mem_units(m_units)
              end do
           end if
-          write(io_lun,'(2x,"Max total mem use is ",f10.3," ",a2)') &
+          write(io_lun,'(/4x,"Max total mem use is ",f10.3," ",a2)') &
                real(max_alloc)*mem_conv,mem_units(m_units)
        end if
     end if

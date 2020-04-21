@@ -97,6 +97,7 @@ module io_module
 
   !Maximum of wallclock time (in seconds): See subroutine 'check_stop' 2018.Jan.17 TM 
   real(double)      :: time_max =zero
+  integer :: atom_output_threshold
    
   !Name and Format of  MatrixFile used in store_matrix
   logical          :: flag_MatrixFile_RankFromZero  ! Starting from 0 in ##### (*matrix2.i**.p#####)
@@ -497,7 +498,7 @@ second:   do
           call io_close(lun)
        end if pdb
     end if
-    if((iprint_init>0) .or. (iprint_init==0.AND.ni_in_cell<200)) &
+    if((iprint_init>0) .or. (iprint_init==0.AND.ni_in_cell<atom_output_threshold)) &
          call print_atomic_positions
     call gcopy(ni_in_cell)
     if(inode/=ionode) &
