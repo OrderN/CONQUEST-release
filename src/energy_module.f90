@@ -295,18 +295,18 @@ contains
           end if
 
           if (abs(entropy) >= RD_ERR) then
-             if (iprint_gen >= 0) &
+             if (iprint_gen >= 1) &
                   write(io_lun,10) en_conv*total_energy, en_units(energy_units)
              if (flag_check_Diag) then
                 select case (SmearingType)
                 case (0) ! Fermi smearing
                    if (entropy < zero) &
                         call cq_warn(sub_name,'Calculated entropy is less than zero; something is wrong ', entropy)
-                   if (iprint_gen >= 0) &
+                   if (iprint_gen >= 1) &
                         write (io_lun,14) en_conv*(total_energy-half*entropy), &
                                           en_units(energy_units)
                 case (1) ! Methfessel-Paxton smearing
-                   if (iprint_gen >= 0)                                     &
+                   if (iprint_gen >= 1)                                     &
                         write (io_lun,16)                                   &
                               en_conv * (total_energy -                     &
                                          (real(MPOrder+1,double) /          &
@@ -314,7 +314,7 @@ contains
                               en_units(energy_units)
                 end select
              else
-                if (iprint_gen >= 0) &
+                if (iprint_gen >= 1) &
                      write (io_lun,14) en_conv*(total_energy-half*entropy), &
                                        en_units(energy_units)
              end if
@@ -322,7 +322,7 @@ contains
                   write (io_lun,15) en_conv*(total_energy-entropy), &
                                     en_units(energy_units)
           else
-             if (iprint_gen >= 0) &
+             if (iprint_gen >= 1) &
                   write (io_lun,10) en_conv*total_energy, en_units(energy_units)
              if (iprint_gen >= 1) &
                   write (io_lun, '(10x,"(TS=0 as O(N) or entropic &
@@ -353,7 +353,7 @@ contains
        if (flag_perform_cdft) total_energy2 = total_energy2 + cdft_energy
        if (flag_dft_d2)       total_energy2 = total_energy2 + disp_energy
 
-       if (inode == ionode) then
+       if (inode == ionode .and. iprint_gen>=1) then
           write(io_lun,13) en_conv*total_energy2, en_units(energy_units)
        end if
     end if
@@ -697,10 +697,12 @@ contains
 
     if (inode == ionode) then
        if (iprint_gen >= 0) then
-          write(io_lun,10) en_conv*total_energy1, en_units(energy_units)          
-          write(io_lun,13) en_conv*total_energy2, en_units(energy_units) 
-          write(io_lun,22) en_conv*(total_energy1 - total_energy2), en_units(energy_units) 
-          write(io_lun, *) 
+          write(io_lun,10) en_conv*total_energy1, en_units(energy_units)
+          if(iprint_gen>0) then
+             write(io_lun,13) en_conv*total_energy2, en_units(energy_units) 
+             write(io_lun,22) en_conv*(total_energy1 - total_energy2), &
+                  en_units(energy_units) 
+          end if
        end if
     end if
 
@@ -745,54 +747,54 @@ contains
                '===================================', &
                '===========****')
 
-2   format(10x, ' ')
+2   format(4x, ' ')
 
 
-6   format(10x,' |* band energy as 2Tr[K.H] = ',f25.15,' ',a2)
-7   format(10x,' |  hartree energy (rho)    = ',f25.15,' ',a2)
-8   format(10x,' |  ion-ion energy          = ',f25.15,' ',a2)
-67  format(10x,' |  hartree energy (drho)   = ',f25.15,' ',a2)
-68  format(10x,' |  screened ion-ion energy = ',f25.15,' ',a2)
-9   format(10x,' |  kinetic energy          = ',f25.15,' ',a2)
+6   format(4x,' |* band energy as 2Tr[K.H] = ',f25.15,' ',a2)
+7   format(4x,' |  hartree energy (rho)    = ',f25.15,' ',a2)
+8   format(4x,' |  ion-ion energy          = ',f25.15,' ',a2)
+67  format(4x,' |  hartree energy (drho)   = ',f25.15,' ',a2)
+68  format(4x,' |  screened ion-ion energy = ',f25.15,' ',a2)
+9   format(4x,' |  kinetic energy          = ',f25.15,' ',a2)
 
-30  format(10x,' |* xc total energy         = ',f25.15,' ',a2)
-31  format(10x,' |    DFT exchange          = ',f25.15,' ',a2)
-32  format(10x,' |    DFT correlation       = ',f25.15,' ',a2)
-33  format(10x,' |    EXX contribution      = ',f25.15,' ',a2)
+30  format(4x,' |* xc total energy         = ',f25.15,' ',a2)
+31  format(4x,' |    DFT exchange          = ',f25.15,' ',a2)
+32  format(4x,' |    DFT correlation       = ',f25.15,' ',a2)
+33  format(4x,' |    EXX contribution      = ',f25.15,' ',a2)
 
 
-40  format(10x,' |* pseudopotential energy  = ',f25.15,' ',a2)
-41  format(10x,' |    core correction       = ',f25.15,' ',a2)
-42  format(10x,' |    local contribution    = ',f25.15,' ',a2)
-43  format(10x,' |    nonlocal contribution = ',f25.15,' ',a2)
-60  format(10x,' |* pseudo/NA energy        = ',f25.15,' ',a2)
-62  format(10x,' |    NA contribution       = ',f25.15,' ',a2)
+40  format(4x,' |* pseudopotential energy  = ',f25.15,' ',a2)
+41  format(4x,' |    core correction       = ',f25.15,' ',a2)
+42  format(4x,' |    local contribution    = ',f25.15,' ',a2)
+43  format(4x,' |    nonlocal contribution = ',f25.15,' ',a2)
+60  format(4x,' |* pseudo/NA energy        = ',f25.15,' ',a2)
+62  format(4x,' |    NA contribution       = ',f25.15,' ',a2)
 
-11  format(10x,' |  Ha correction           = ',f25.15,' ',a2)
-12  format(10x,' |  XC correction           = ',f25.15,' ',a2)
+11  format(4x,' |  Ha correction           = ',f25.15,' ',a2)
+12  format(4x,' |  XC correction           = ',f25.15,' ',a2)
 
-10  format(10x,' |* Harris-Foulkes energy   = ',f25.15,' ',a2)
-13  format(10x,' |* DFT total energy        = ',f25.15,' ',a2)
-22  format(10x,' |  estimated accuracy      = ',f25.15,' ',a2)
+10  format(4x,' |* Harris-Foulkes energy   = ',f25.15,' ',a2)
+13  format(4x,' |* DFT total energy        = ',f25.15,' ',a2)
+22  format(4x,' |  estimated accuracy      = ',f25.15,' ',a2)
 
-14  format(10x,' | GS Energy as E-(1/2)TS   = ',f25.15,' ',a2)
-15  format(10x,' | Free Energy as E-TS      = ',f25.15,' ',a2)
-16  format(10x,' | GS Energy with kT -> 0   = ',f25.15,' ',a2)
-17  format(10x,' | Dispersion (DFT-D2)      = ',f25.15,' ',a2)
-18  format(10x,' | cDFT Energy as 2Tr[K.W]  = ',f25.15,' ',a2)
-19  format(10x,' | Number of e- spin up     = ',f25.15)
-20  format(10x,' | Number of e- spin down   = ',f25.15)
-21  format(10x,' | Spin pol. as (up - down) = ',f25.15)
+14  format(4x,' | GS Energy as E-(1/2)TS   = ',f25.15,' ',a2)
+15  format(4x,' | Free Energy as E-TS      = ',f25.15,' ',a2)
+16  format(4x,' | GS Energy with kT -> 0   = ',f25.15,' ',a2)
+17  format(4x,' | Dispersion (DFT-D2)      = ',f25.15,' ',a2)
+18  format(4x,' | cDFT Energy as 2Tr[K.W]  = ',f25.15,' ',a2)
+19  format(4x,' | Number of e- spin up     = ',f25.15)
+20  format(4x,' | Number of e- spin down   = ',f25.15)
+21  format(4x,' | Spin pol. as (up - down) = ',f25.15)
 
-23  format(10x,' |* check for accuracy      = ',f25.15,' ',a2)
-24  format(10x,' |  number of e- num. int.  = ',f25.15,' ',a2)
-25  format(10x,' |  number of e- as 2Tr[KS] = ',f25.15,' ',a2)
-26  format(10x,' |  one-electron energy     = ',f25.15,' ',a2)
-27  format(10x,' |  potential energy V      = ',f25.15,' ',a2)
-28  format(10x,' |  kinetic energy T        = ',f25.15,' ',a2)
-29  format(10x,' |* virial V/T              = ',f25.15,' ',a2)
-50  format(10x,' |  rescaled DFT exchange   = ',f25.15,' ',a2)
-51  format(10x,' |  rescaled exact exchange = ',f25.15,' ',a2)
+23  format(4x,' |* check for accuracy      = ',f25.15,' ',a2)
+24  format(4x,' |  number of e- num. int.  = ',f25.15,' ',a2)
+25  format(4x,' |  number of e- as 2Tr[KS] = ',f25.15,' ',a2)
+26  format(4x,' |  one-electron energy     = ',f25.15,' ',a2)
+27  format(4x,' |  potential energy V      = ',f25.15,' ',a2)
+28  format(4x,' |  kinetic energy T        = ',f25.15,' ',a2)
+29  format(4x,' |* virial V/T              = ',f25.15,' ',a2)
+50  format(4x,' |  rescaled DFT exchange   = ',f25.15,' ',a2)
+51  format(4x,' |  rescaled exact exchange = ',f25.15,' ',a2)
 
 
   end subroutine final_energy

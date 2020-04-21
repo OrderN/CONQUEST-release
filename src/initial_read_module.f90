@@ -206,8 +206,6 @@ contains
     use multisiteSF_module,     only: flag_LFD_ReadTVEC, &
          flag_MSSF_nonminimal, &   !nonmin_mssf
          MSSF_nonminimal_species   !nonmin_mssf
-    use biblio,                 only: type_bibliography
-    use references,             only: compile_biblio
     use md_control,             only: md_position_file
     use pao_format
     use XC,                     only: flag_functional_type, flag_different_functional
@@ -512,7 +510,6 @@ contains
     if (inode == ionode) &
          call write_info(titles, mu, vary_mu, HNL_fac, numprocs)
 
-    call compile_biblio
     !****lat<$
     call stop_backtrace(t=backtrace_timer,who='read_and_write')
     !****lat>$
@@ -861,7 +858,7 @@ contains
          pdb_output, banner, get_file_name, time_max, &
          flag_MatrixFile_RankFromZero, flag_MatrixFile_BinaryFormat, &
          flag_MatrixFile_BinaryFormat_Grab, flag_MatrixFile_BinaryFormat_Dump, &
-         flag_MatrixFile_BinaryFormat_Dump_END
+         flag_MatrixFile_BinaryFormat_Dump_END, atom_output_threshold
 
     use group_module,     only: part_method, HILBERT, PYTHON
     use H_matrix_module,  only: locps_output, locps_choice
@@ -1088,6 +1085,7 @@ contains
        InitAtomicDistance_max = fdf_double('IO.InitAtomicDistance_max', 50.0_double)
        InitAtomicDistance_min = fdf_double('IO.InitAtomicDistance_min',  0.5_double)
     end if
+    atom_output_threshold = fdf_integer('IO.AtomOutputThreshold',200)
     call my_barrier()
     !
     !
@@ -2512,7 +2510,7 @@ contains
          iMethfessel_Paxton
     use blip,                 only: blip_info
     use global_module,        only: flag_basis_set, blips,        &
-         flag_precondition_blips, io_lun,   &
+         flag_precondition_blips, io_lun, flag_LFD, runtype, flag_opt_cell, &
          flag_Multisite, flag_diagonalisation, flag_neutral_atom, &
          flag_self_consistent, flag_vary_basis, iprint_init, flag_pcc_global
     use SelfCon,              only: maxitersSC
@@ -2523,12 +2521,15 @@ contains
     use datestamp,            only: datestr, commentver
     use pseudopotential_common, only: flag_neutral_atom_projector, maxL_neutral_atom_projector, &
          numN_neutral_atom_projector, pseudo_type, OLDPS, SIESTA, ABINIT
+    use input_module,         only: leqi, chrcap
+    use control,    only: md_ensemble, MDn_steps
 
     implicit none
 
     ! Passed variables
     logical :: vary_mu
     character(len=80) :: titles
+    character(len=3) :: ensemblestr
     integer :: NODES 
     real(double) :: mu, HNL_fac
 
@@ -2546,28 +2547,64 @@ contains
 
     write(io_lun,fmt='(/4x,"Job title: ",a)') titles
 
+    ! Job type
+    write(io_lun,fmt='(/4x,"Job to be run: ")')
+    if(leqi(runtype,'static') ) then
+       write(io_lun, fmt='(4x,"Static calculation")')
+    else if(leqi(runtype,'cg')) then
+       if(flag_opt_cell) then
+          write(io_lun, fmt='(4x,"CG cell relaxation")')
+       else
+          write(io_lun, fmt='(4x,"CG atomic relaxation")')
+       end if
+    else if(leqi(runtype,'md')) then
+       ensemblestr = md_ensemble
+       call chrcap(ensemblestr,3)
+       write(io_lun, fmt='(4x,a3," MD run for ",i5," steps ")') ensemblestr, MDn_steps
+    else if(leqi(runtype,'lbfgs')) then
+       write(io_lun, fmt='(4x,"L-BFGS atomic relaxation")')
+    end if
+    ! Ground state search details
+    write(io_lun,fmt='(/4x,"Ground state search:")')
+    if(flag_basis_set==blips) then 
+       write(io_lun,'(6x,"Support functions represented with blip basis")') 
+       write(io_lun,'(6x,"Support-grid spacing: ",f7.4,1x,a2)') &
+            dist_conv*blip_info(n)%SupportGridSpacing, d_units(dist_units)
+    else
+       write(io_lun,'(6x,"Support functions represented with PAO basis")') 
+       if(flag_Multisite) then
+          if(flag_LFD) then
+             write(io_lun,'(6x,"Multi-site SFs used with local filter diagonalisation")')
+          else
+             write(io_lun,'(6x,"Multi-site SFs used")')
+          end if
+       else
+          write(io_lun,'(6x,"1:1 PAO to SF mapping")')
+       end if
+    end if
+    
     if(flag_diagonalisation) then
-       write(io_lun,fmt='(4x,"Solving for the K matrix using ",a16)') 'diagonalisation '
+       write(io_lun,fmt='(6x,"Solving for the K matrix using ",a16)') 'diagonalisation '
        if(iprint_init>0) then
           select case (flag_smear_type)
           case (0)
-             write(io_lun,'(4x,"Using Fermi-Dirac smearing")')
+             write(io_lun,'(6x,"Using Fermi-Dirac smearing")')
           case (1)
              write(io_lun,&
-                  '(4x,"Using order ",i2," Methfessel-Paxton smearing")') &
+                  '(6x,"Using order ",i2," Methfessel-Paxton smearing")') &
                   iMethfessel_Paxton
           end select
        end if
     else
-       write(io_lun,fmt='(4x,"Solving for the K matrix using ",a16)') 'order N with LNV'   
+       write(io_lun,fmt='(6x,"Solving for the K matrix using ",a16)') 'order N with LNV'   
     end if
-    if(iprint_init>0) write(io_lun,fmt='(4x,"Integration grid size: ",i4," x ",i4," x ",i4)') &
+    if(iprint_init>0) write(io_lun,fmt='(/4x,"Integration grid size: ",i4," x ",i4," x ",i4)') &
          n_grid_x, n_grid_y, n_grid_z
 
     if(iprint_init>1) write(io_lun,fmt='(4x,"Integration grid blocks: ",i3," x ",i3," x ",i3)') &
          in_block_x, in_block_y, in_block_z
 
-    write(io_lun,fmt='(4x,"Integration grid spacing: ",f6.3,a3," x",f6.3,a3," x",f6.3,a3)') &
+    write(io_lun,fmt='(/4x,"Integration grid spacing: ",f6.3,a3," x",f6.3,a3," x",f6.3,a3)') &
          dist_conv*(r_super_x/n_grid_x), d_units(dist_units), & 
          dist_conv*(r_super_y/n_grid_y), d_units(dist_units), &
          dist_conv*(r_super_z/n_grid_z), d_units(dist_units)
@@ -2581,17 +2618,6 @@ contains
     do n=1, n_species
        write(io_lun,fmt='(4x,i4,2x,f9.3,3x,f9.3,4x,f9.3,2x,i3,2x,a30)') &
             n, mass(n), charge(n), dist_conv*RadiusSupport(n), nsf_species(n), species_label(n)
-       if(flag_basis_set==blips) then 
-          if(flag_precondition_blips) then
-             write(io_lun,'(/13x,"Blip basis with preconditioning")') 
-          else
-             write(io_lun,'(/13x,"Blip basis - no preconditioning")') 
-          end if
-          write(io_lun,'(4x,"Support-grid spacing: ",f7.4,1x,a2)') &
-               dist_conv*blip_info(n)%SupportGridSpacing, d_units(dist_units)
-       else
-          write(io_lun,'(13x,"PAO basis")') 
-       end if
     end do
     write(io_lun,fmt='(4x,a66)') '------------------------------------------------------------------'
 
@@ -2632,8 +2658,12 @@ contains
        write(io_lun,fmt="(/10x,'The Chemical Potential mu is :',f7.4)") mu
     endif
 
-    write(io_lun,fmt="(/4x,'The calculation will be performed on ',i5,' processes')") NODES
-
+    if(nodes>1) then
+       write(io_lun,fmt="(/4x,'The calculation will be performed on ',i5,' processes')") NODES
+    else
+       write(io_lun,fmt="(/4x,'The calculation will be performed on ',i5,' process')") NODES
+    end if
+    
     if(.NOT.flag_diagonalisation) &
          write(io_lun,fmt='(10x,"Density Matrix range  = ",f7.4,1x,a2)') &
          dist_conv*r_c, d_units(dist_units)

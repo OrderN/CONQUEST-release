@@ -147,7 +147,7 @@ contains
        functional_description = 'LSDA PW92'
        if(flag_dft_d2) call cq_abort("DFT-D2 only compatible with PBE and rPBE")
     end select
-    if(inode==ionode) write(io_lun,'(/10x, "The functional used will be ", a15)') functional_description
+    if(inode==ionode) write(io_lun,'(/4x, "The functional used will be ", a15/)') functional_description
     ! This is a temporary, Conquest-specific test - we will
     ! need to keep an eye on this and potentially introduce
     ! tests against functional name

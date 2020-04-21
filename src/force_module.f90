@@ -262,6 +262,7 @@ contains
     use hartree_module, only: Hartree_stress
     use XC, ONLY: XC_GGA_stress
     use input_module,         only: leqi
+    use io_module, only: atom_output_threshold
 
     implicit none
 
@@ -274,7 +275,7 @@ contains
     ! Local variables
     integer        :: i, j, ii, stat, max_atom, max_compt, ispin, &
                       direction, dir1, dir2
-    real(double)   :: max_force, volume, scale
+    real(double)   :: max_force, volume, scale, g0
     type(cq_timer) :: tmr_l_tmp1
     type(cq_timer) :: backtrace_timer
     integer        :: backtrace_level
@@ -290,7 +291,8 @@ contains
                                                  pcc_force, NA_force
     real(double), dimension(:),   allocatable :: density_out_tot
     real(double), dimension(:,:), allocatable :: density_out
-
+    character(len=1), dimension(3) :: comptstr = (/"x", "y", "z"/)
+    
 !****lat<$
     if (       present(level) ) backtrace_level = level+1
     if ( .not. present(level) ) backtrace_level = -10
@@ -504,12 +506,13 @@ contains
     max_force = zero
     max_atom  = 0
     max_compt = 0
-    if (inode == ionode .and. write_forces) then
-       write (io_lun, fmt='(/,20x,"Forces on atoms (",a2,"/",a2,")"/)') &
+    if (inode == ionode .and. write_forces .and. (iprint_MD>0 .or. ni_in_cell<atom_output_threshold)) then
+       write (io_lun, fmt='(/,4x,"Forces on atoms (",a2,"/",a2,")"/)') &
              en_units(energy_units), d_units(dist_units)
-       write (io_lun, fmt='(18x,"    Atom   X              Y              Z")')
+       write (io_lun, fmt='(4x,"    Atom   X              Y              Z")')
     end if
     ! Calculate forces and write out
+    g0 = zero
     do i = 1, ni_in_cell
        do j = 1, 3
           ! Force components that are always needed
@@ -539,6 +542,7 @@ contains
           if (.not. flag_move_atom(j,i)) then
              tot_force(j,i) = zero
           end if
+          g0 = g0 + tot_force(j,i)*tot_force(j,i)
           if (abs (tot_force(j,i)) > max_force) then
              max_force = abs (tot_force(j,i))
              max_atom  = i
@@ -572,18 +576,20 @@ contains
                 write (io_lun, 107) (for_conv * nonSC_force(j,i), j = 1, 3)
                 write (io_lun, 105) (for_conv * tot_force(j,i),   j = 1, 3)
              end if
-          else if (write_forces) then
-             write (io_lun,fmt='(20x,i6,3f15.10)') &
+          else if (write_forces .and. iprint_MD>0 .or. ni_in_cell<atom_output_threshold) then
+             write (io_lun,fmt='(6x,i6,3f15.10)') &
                   i, (for_conv * tot_force(j,i), j = 1, 3)
           end if ! (iprint_MD > 2)
        end if ! (inode == ionode)
     end do ! i
-    if (inode == ionode) &
-         write (io_lun,                                      &
-                fmt='(4x,"Maximum force : ",f15.8,"(",a2,"/",&
-                      &a2,") on atom, component ",2i9)')     &
-               for_conv * max_force, en_units(energy_units), &
-               d_units(dist_units), max_atom, max_compt
+    if (inode == ionode) then
+       write (io_lun, fmt='(4x,"Maximum force : ",f15.8,"(",a2,"/",&
+            &a2,") on atom ",i9," in ",a1," direction")')     &
+            for_conv * max_force, en_units(energy_units), &
+            d_units(dist_units), max_atom, comptstr(max_compt)
+       write(io_lun, fmt='(4x,"Force Residual:     ",f20.10," ",a2,"/",a2)') &
+            for_conv*sqrt(g0/ni_in_cell), en_units(energy_units), d_units(dist_units)
+    end if
     ! We will add PCC and nonSCF stresses even if the flags are not set, as they are
     ! zeroed at the start
     if (flag_stress) then
@@ -676,8 +682,8 @@ contains
       scale = -HaBohr3ToGPa/volume
       !call print_stress("Total pressure:   ", stress*scale, 0)
       if(inode==ionode.AND.iprint_MD>=0) &
-           write(io_lun,'(/4x,a18,3f15.8,a4)') "Total pressure:   ",stress(1,1)*scale,&
-           stress(2,2)*scale,stress(3,3)*scale," GPa"
+           write(io_lun,'(/4x,a18,f15.8,a4)') "Average pressure:   ", &
+           third*scale*(stress(1,1) + stress(2,2) + stress(3,3))," GPa"
       if (flag_atomic_stress .and. iprint_MD > 2) call check_atomic_stress
     end if
 

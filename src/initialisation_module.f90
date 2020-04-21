@@ -937,14 +937,14 @@ contains
           call gen_napf_supp_tbls(inode,ionode)
        end if
        call make_ang_coeffs
-       if(inode==ionode) &
-            write(io_lun,&
-                  fmt='(10x,"Using PAOs as basis set for support functions")')
+       !if(inode==ionode) &
+       !     write(io_lun,&
+       !           fmt='(10x,"Using PAOs as basis set for support functions")')
        !call make_pre_paos
-       if((inode == ionode).and.(iprint_init >0)) then
-          write(unit=io_lun,fmt='(10x,"initial_phis: n_species:",i3)') n_species
-          write(unit=io_lun,fmt='(10x,"initial_phis: r_h:",f12.6)') r_h
-       end if
+       !if((inode == ionode).and.(iprint_init >0)) then
+       !   write(unit=io_lun,fmt='(10x,"initial_phis: n_species:",i3)') n_species
+       !   write(unit=io_lun,fmt='(10x,"initial_phis: r_h:",f12.6)') r_h
+       !end if
        ! We don't need a PAO equivalent of blip_to_support here: this
        ! is done by get_S_matrix_PAO
     end if

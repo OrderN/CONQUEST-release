@@ -236,7 +236,7 @@ contains
        call stop_timer(tmr_std_chargescf)
        return
     end if
-    if (inode == ionode) &
+    if (inode == ionode .and. iprint_SC > 0) &
          write (io_lun, &
                 fmt='(8x,"Starting self-consistency.  Tolerance: ",e12.5,/)') &
                self_tol
@@ -971,7 +971,7 @@ contains
     R_pul   = zero
 
     ! write out start information
-    if (inode == ionode) then
+    if (inode == ionode .and. iprint_SC>0) then
        write (io_lun, '(8x,a,f6.3,a,f6.3)') &
              'Starting Pulay mixing, A_up = ', A(1), ' A_dn = ', A(2)
        if (nspin == 2) then
@@ -1049,14 +1049,16 @@ contains
                'Pulay iteration ', iter, ' absolute residual (tot) : ', RB
           write (io_lun, '(8x,a,i5,a,e12.5)') &
                'Pulay iteration ', iter, ' absolute residual (frac): ', RC
-      else
+      else if(iprint_SC>0) then
           write (io_lun, '(8x,a,i5,a,e12.5)') &
                'Pulay iteration ', iter, ' residual:             ', R0
       end if
     end if
     ! check if they have reached tolerance
     if (R0 < self_tol .AND. iter >= minitersSC) then ! If we've done minimum number
-       if (inode == ionode) write (io_lun,1) iter
+       if (inode == ionode) &
+            write (io_lun,fmt='(4x,"Reached SCF tolerance of ",e12.5, &
+            &" after ",i6," iterations")') R0, iter
        done = .true.
        call deallocate_PulayMiXSC_spin
        return
@@ -1149,7 +1151,7 @@ contains
                   'Pulay iteration ', iter, ' absolute residual (tot) : ', RB
              write (io_lun, '(8x,a,i5,a,e12.5)') &
                   'Pulay iteration ', iter, ' absolute residual (frac): ', RC
-          else
+          else if(iprint_SC>0) then
              write (io_lun, '(8x,a,i5,a,e12.5)') &
                   'Pulay iteration ', iter, ' residual:             ', R0
           end if
@@ -1167,7 +1169,9 @@ contains
              end if
           end if
 
-          if (inode == ionode) write (io_lun,1) iter
+          if (inode == ionode) &
+               write (io_lun,fmt='(4x,"Reached SCF tolerance of ",e12.5, &
+               &" after ",i6," iterations")') R0, iter
           done = .true.
           call deallocate_PulayMiXSC_spin
           return
@@ -1183,7 +1187,7 @@ contains
        if (R0 > R0_old) &
             icounter_fail = icounter_fail + 1
        if (icounter_fail > mx_fail) then
-          if (inode == ionode) &
+          if (inode == ionode .and. iprint_SC>0) &
                write (io_lun, *) ' Pulay iteration is reset !!  at ', iter, &
                ' th iteration'
           reset_Pulay = .true.
@@ -1233,9 +1237,6 @@ contains
 !****lat>$
 
     return
-
-1   format(8x,'Reached self-consistency tolerance after ',i6,' iterations')
-
 
   contains
 

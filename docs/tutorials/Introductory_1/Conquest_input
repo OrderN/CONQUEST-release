@@ -1,6 +1,7 @@
 # Input/Output
 IO.Title Bulk Si 8 atoms static
 IO.Coordinates ionpos.dat
+IO.Iprint 0
 
 # General Parameters
 General.NumberOfSpecies 1

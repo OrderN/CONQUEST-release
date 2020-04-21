@@ -219,7 +219,8 @@ contains
     if (con_tolerance < ten * tolerance) &
          tolerance = 0.1_double * con_tolerance
     con_tolerance = sc_tolerance
-
+    tolerance = L_tolerance
+    
     if (inode == ionode) &
          write (io_lun, *) 'Tolerances: ', &
          con_tolerance, tolerance
@@ -1327,7 +1328,7 @@ contains
           call LNV_matrix_multiply(electrons, energy_tmp, doK, dontM1,&
                                    dontM2, dontM3, dontM4, dontphi, dontE)
        end if
-       reset_L = .true.
+       reset_L = .false. !true.
        ! 3. Get a new self-consistent potential and Hamiltonian
        ! I've not put a call to get_H_matrix here because it's
        ! currently in new_SC_potl
@@ -1392,7 +1393,7 @@ contains
        call LNV_matrix_multiply(electrons, energy_tmp, doK, dontM1, &
                                 dontM2, dontM3, dontM4, dontphi, dontE)
     end if
-    reset_L = .true.
+    reset_L = .false. !true.
     ! 3. Get a new self-consistent potential and Hamiltonian
     ! I've not put a call to get_H_matrix here because it's currently
     ! in new_SC_potl
@@ -1421,7 +1422,7 @@ contains
           call LNV_matrix_multiply(electrons, energy_tmp, doK, dontM1,&
                                    dontM2, dontM3, dontM4, dontphi, dontE)
        end if
-       reset_L = .true.
+       reset_L = .false. !true.
        ! 3. Get a new self-consistent potential and Hamiltonian
        call new_SC_potl(.false., con_tolerance, reset_L,             &
                         fixed_potential, vary_mu, n_cg_L_iterations, &
