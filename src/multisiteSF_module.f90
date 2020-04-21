@@ -2304,6 +2304,7 @@ contains
     if (con_tolerance < ten * tolerance) &
          tolerance = 0.1_double * con_tolerance
     con_tolerance = sc_tolerance
+    tolerance = L_tolerance
 
     ! initialise
     rho_0  = zero
@@ -2344,7 +2345,8 @@ contains
           call LNV_matrix_multiply(electrons, energy_tmp, doK, dontM1,&
                                    dontM2, dontM3, dontM4, dontphi, dontE)
        end if
-       reset_L = .true.
+       !reset_L = .true.
+       reset_L = .false.
        ! 3. Get a new self-consistent potential and Hamiltonian
        call new_SC_potl(.false., con_tolerance, reset_L,             &
                         fixed_potential, vary_mu, n_cg_L_iterations, &

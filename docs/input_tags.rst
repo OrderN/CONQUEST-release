@@ -1510,6 +1510,13 @@ IO.PdbTemplate (*string*)
 
     *default*: coordinate file
 
+IO.AtomOutputThreshold (*integer*)
+    Threshold below which atomic positions are output on
+    initialisation, and atomic forces are output at the end of a
+    static run.
+
+    *default*: 200
+
 Go to :ref:`top <input_tags>`.
 
 .. _advanced_basis_tags:

@@ -52,12 +52,15 @@
 !!    Added warning output
 !!   2020/01/21 17:11 dave
 !!    Tidying and removing non-standard FORTRAN
+!!   2020/04/21 15:05 dave
+!!    Update cq_warn so that warnings only go to Conquest_warnings at iprint=0
+!!    Add flag_warnings to alert user to check file
 !!  SOURCE
 !!
 module GenComms
 
   use datatypes
-  use global_module, ONLY: numprocs, io_lun
+  use global_module, ONLY: numprocs, io_lun, iprint
   use mpi
 
   implicit none
@@ -65,6 +68,7 @@ module GenComms
   integer, save :: myid, root
   integer, save :: inode, ionode
   integer, save :: warning_lun = 9 ! Check this with input_module to avoid clashes
+  logical, save :: flag_warnings = .false.
 
   integer, parameter :: xn_tag = 106
   integer, parameter :: int_gsum_buf = 10000
@@ -334,7 +338,7 @@ contains
     integer :: ierr
 
     if(inode==ionode) close(warning_lun)
-    if(myid==0) write(io_lun,fmt='(2x,"Total run time was: ",f20.3," seconds")') mtime()*0.001_double
+    if(myid==0) write(io_lun,fmt='(/4x,"Total run time was: ",f20.3," seconds")') mtime()*0.001_double
     call MPI_Barrier(MPI_COMM_WORLD, ierr)
     call MPI_Finalize(ierr)
     return
@@ -631,6 +635,8 @@ contains
 !!  CREATION DATE
 !!   2019/12/05 08:21 dave
 !!  MODIFICATION HISTORY
+!!   2020/04/21 15:05 dave
+!!    Update so that warnings only go to Conquest_warnings at iprint=0
 !!  SOURCE
 !!
   subroutine cq_warn_none(sub_name,message)
@@ -643,8 +649,9 @@ contains
     ! Local variables
     
     if(inode==ionode) then
-       write(io_lun,fmt='(2x,"WARNING: ",a)')  message
+       if(iprint>0) write(io_lun,fmt='(2x,"WARNING: ",a)')  message
        write(warning_lun,fmt='(a,": ",a)')  trim(sub_name), message
+       flag_warnings = .true.
     end if
     return
   end subroutine cq_warn_none
@@ -672,6 +679,8 @@ contains
 !!  CREATION DATE
 !!   2019/12/05 08:21 dave
 !!  MODIFICATION HISTORY
+!!   2020/04/21 15:05 dave
+!!    Update so that warnings only go to Conquest_warnings at iprint=0
 !!  SOURCE
 !!
   subroutine cq_warn_int(sub_name,message, int1, int2)
@@ -687,12 +696,13 @@ contains
     
     if(inode==ionode) then
        if(present(int2)) then
-          write(io_lun,fmt='(2x,"WARNING: ",a,2i8)')  message, int1, int2
+          if(iprint>0) write(io_lun,fmt='(2x,"WARNING: ",a,2i8)')  message, int1, int2
           write(warning_lun,fmt='(a,": ",a,2i8)')  trim(sub_name), message, int1, int2
        else
-          write(io_lun,fmt='(2x,"WARNING: ",a,i8)')  message, int1
+          if(iprint>0) write(io_lun,fmt='(2x,"WARNING: ",a,i8)')  message, int1
           write(warning_lun,fmt='(a,": ",a,i8)')  trim(sub_name), message, int1
        end if
+       flag_warnings = .true.
     end if
     return
   end subroutine cq_warn_int
@@ -720,6 +730,8 @@ contains
 !!  CREATION DATE
 !!   2019/12/05 08:21 dave
 !!  MODIFICATION HISTORY
+!!   2020/04/21 15:05 dave
+!!    Update so that warnings only go to Conquest_warnings at iprint=0
 !!  SOURCE
 !!
   subroutine cq_warn_real(sub_name, message, real1, real2)
@@ -735,12 +747,13 @@ contains
     
     if(inode==ionode) then
        if(present(real2)) then
-          write(io_lun,fmt='(2x,"WARNING: ",a,2f20.12)')  message, real1, real2
+          if(iprint>0) write(io_lun,fmt='(2x,"WARNING: ",a,2f20.12)')  message, real1, real2
           write(warning_lun,fmt='(a,": ",a,2f20.12)')  trim(sub_name), message, real1, real2
        else
-          write(io_lun,fmt='(2x,"WARNING: ",a,f20.12)')  message, real1
+          if(iprint>0) write(io_lun,fmt='(2x,"WARNING: ",a,f20.12)')  message, real1
           write(warning_lun,fmt='(a,": ",a,f20.12)')  trim(sub_name), message, real1
        end if
+       flag_warnings = .true.
     end if
     return
   end subroutine cq_warn_real

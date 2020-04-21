@@ -264,22 +264,38 @@ contains
   !!    Changed to write reference key only if iprint<2
   !!  SOURCE
   !!
-  subroutine cite(bib, key)
+  subroutine cite(bib, key, punc, pre)
 
     use global_module, ONLY: iprint_init
     ! passed variables
     class(type_bibliography), intent(inout) :: bib
     character(*), intent(in)                :: key
+    character(2), intent(in), optional      :: punc
+    character(*), intent(in), optional      :: pre
 
     ! local variables
     type(type_reference)                    :: reference
+    character(18) :: start
 
     reference = bib%get_ref(key)
     if(iprint_init>1) then
        call reference%cite_reference
        if (flag_dump_bib) call reference%write_bib(bib%first)
     else
-       write(io_lun,fmt='(4x,a)') reference%key
+       if(present(pre)) then
+          write(start,'(a)') pre
+          if(present(punc)) then
+             write(io_lun,fmt='(4x,a18,a,a2)',advance='no') adjustl(start), trim(reference%key), punc
+          else
+             write(io_lun,fmt='(4x,a18,a)',advance='no') adjustl(start), trim(reference%key)
+          end if
+       else
+          if(present(punc)) then
+             write(io_lun,fmt='(a,a2)',advance='no') trim(reference%key),punc
+          else
+             write(io_lun,fmt='(a)',advance='no') trim(reference%key)
+          end if
+       end if
        call reference%write_bib(bib%first)
     end if
 
