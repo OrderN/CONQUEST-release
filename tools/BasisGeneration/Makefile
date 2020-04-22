@@ -27,3 +27,6 @@ $(TARGET): $(OBJECTS)
 
 %.o: %.f90
 	$(FC) $(COMPFLAGS) -c $<
+
+clean:
+	rm -f *.o *.mod *~

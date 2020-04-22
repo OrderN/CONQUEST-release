@@ -98,16 +98,16 @@ tar:
 clean:
 	rm -f *.o *.mod *~  *.d work.pc* deps.obj.inc
 #	(cd FFT; make -k clean)
-	(cd utilities; make -k clean)
+#	(cd utilities; make -k clean)
 
-clean_lib:
-	rm -f *.a
-	(cd FFT.FFTE; make -k clean)
-	(cd FFT.GPFA; make -k clean)
-	(cd FFT.ISF;  make -k clean)
+#clean_lib:
+#	rm -f *.a
+#	(cd FFT.FFTE; make -k clean)
+#	(cd FFT.GPFA; make -k clean)
+#	(cd FFT.ISF;  make -k clean)
 
 very_clean: 
-	make clean; make clean_lib; make doc_clean; make pure_clean;
+	make clean; make doc_clean; make pure_clean
 doc:
 	make xhtml; make html
 help:

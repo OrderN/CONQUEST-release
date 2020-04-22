@@ -13,7 +13,11 @@ COMPFLAGS= -O3 $(XC_COMPFLAGS)
 COMPFLAGS_F77= $(COMPFLAGS)
 
 # Set BLAS and LAPACK libraries
-BLAS= -lvecLibFort
+# MacOS X
+# BLAS= -lvecLibFort
+# Intel MKL use the Intel tool
+# Generic
+# BLAS= -llapack -lblas
 
 # Full library call; remove scalapack if using dummy diag module
 LIBS= $(FFT_LIB) $(XC_LIB) -lscalapack $(BLAS)
@@ -26,9 +30,9 @@ LIBS= $(FFT_LIB) $(XC_LIB) -lscalapack $(BLAS)
 #XC_COMPFLAGS =
 
 # LibXC compatibility
-# Choose old LibXC (v2.x) or modern versions
-#XC_LIBRARY = LibXC_v2
-XC_LIBRARY = LibXC
+# Choose old LibXC (v2.x or 3.x) or modern version (v4)
+#XC_LIBRARY = LibXC_v2or3
+XC_LIBRARY = LibXC_v4
 XC_LIB = -lxcf90 -lxc
 XC_COMPFLAGS = -I/usr/local/include
 
