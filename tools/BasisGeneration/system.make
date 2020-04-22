@@ -30,8 +30,9 @@ LIBS= $(FFT_LIB) $(XC_LIB) -lscalapack $(BLAS)
 #XC_COMPFLAGS =
 
 # LibXC compatibility
-# Choose old LibXC (v2.x or 3.x) or modern version (v4)
-#XC_LIBRARY = LibXC_v2or3
+# Choose LibXC version: v2, v3 or v4
+#XC_LIBRARY = LibXC_v2
+#XC_LIBRARY = LibXC_v3
 XC_LIBRARY = LibXC_v4
 XC_LIB = -lxcf90 -lxc
 XC_COMPFLAGS = -I/usr/local/include
