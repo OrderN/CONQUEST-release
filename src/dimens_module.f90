@@ -169,7 +169,8 @@ contains
     use numbers
     use matrix_data
     use GenComms,      only: cq_abort, cq_warn
-    use global_module, only: iprint_init, atomf, sf, flag_Multisite, flag_exx, flag_diagonalisation
+    use global_module, only: iprint_init, atomf, sf, flag_Multisite, flag_exx, flag_diagonalisation, &
+         flag_basis_set, PAOs
     use block_module,  only: in_block_x, in_block_y, in_block_z, n_pts_in_block
     use pseudopotential_common, only: pseudo_type, OLDPS, SIESTA, ABINIT, flag_neutral_atom_projector
 
@@ -263,8 +264,10 @@ contains
     do n=1, n_species
        ! Round the atom function radius to the nearest multiple of the largest grid spacing
        ! (add one to account for displacement relative to grid point)
-       RadiusAtomf(n) = max_grid*(floor(RadiusAtomf(n)/max_grid)+two)
-       RadiusSupport(n) = max(RadiusSupport(n), RadiusAtomf(n))
+       if(flag_basis_set==PAOs) then
+          RadiusAtomf(n) = max_grid*(floor(RadiusAtomf(n)/max_grid)+two)
+          RadiusSupport(n) = max(RadiusSupport(n), RadiusAtomf(n))
+       end if
        r_core    = max(r_core,core_radius(n))
        r_h       = max(r_h,RadiusSupport(n))
        r_t       = max(r_t,InvSRange(n))

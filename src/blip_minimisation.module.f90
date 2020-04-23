@@ -136,7 +136,8 @@ contains
     use blip_gradient,       only: get_blip_gradient, get_electron_gradient
     use global_module,       only: flag_precondition_blips, iprint_basis, &
                                    area_basis, nspin, spin_factor,        &
-                                   flag_analytic_blip_int, flag_diagonalisation
+                                   flag_analytic_blip_int, flag_diagonalisation, &
+                                   flag_self_consistent
     use io_module,           only: dump_blip_coeffs
     use functions_on_grid,   only: atomfns, H_on_atomfns,                 &
                                    gridfunctions, fn_on_grid
@@ -147,6 +148,7 @@ contains
     use primary_module,      only: bundle
     use memory_module,       only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use S_matrix_module,     only: get_S_matrix
+    use SelfCon,             only: new_SC_potl
 
     implicit none
 
@@ -163,7 +165,7 @@ contains
                     energy_in_tot, last_step, dN_dot_de, dN_dot_dN
     integer      :: length, n_iterations, n_tries, offset
     integer      :: k, i, j, n, spec, stat, spin
-    logical      :: notredone, reduced
+    logical      :: notredone, reduced, orig_SC
     real(double), parameter :: gamma_max = 6.0_double !! TM 2007.03.29
     real(double), dimension(nspin)          :: electrons, energy_in
     real(double), dimension(:), allocatable :: search_direction, last_sd, Psd
@@ -359,12 +361,21 @@ contains
             write (io_lun, fmt='(6x,"Calling minimise")')
 
        call my_barrier()
-
+       orig_SC = flag_self_consistent
+       flag_self_consistent = .false.
        call line_minimise_support(search_direction, length,      &
                                   fixed_potential, vary_mu,      &
                                   n_L_iterations, tolerance,     &
                                   con_tolerance, total_energy_0, &
                                   expected_reduction, last_step)
+       if(orig_SC) flag_self_consistent = orig_SC
+       if(flag_self_consistent.and.n_iterations<5) then ! Update SCF
+          call new_SC_potl(.false., con_tolerance, .false.,             &
+               fixed_potential, vary_mu, n_L_iterations, &
+               tolerance, total_energy_0)
+       end if
+       write (io_lun, fmt='(6x,"In blip_min, at exit energy is ",f15.10)') &
+             total_energy_0
        if (inode == ionode .AND. iprint_basis > 2) &
             write (io_lun,fmt='(6x,"Returned !")')
        call dump_blip_coeffs(coefficient_array, coeff_array_size, &
@@ -372,6 +383,9 @@ contains
        ! Find change in energy for convergence
        diff = total_energy_last - total_energy_0
        if (abs(diff / total_energy_0) <= energy_tolerance) then
+          call new_SC_potl(.false., con_tolerance, .false.,             &
+               fixed_potential, vary_mu, n_L_iterations, &
+               tolerance, total_energy_0)
           if (inode == ionode) &
                write (io_lun, 18) total_energy_0 * en_conv, &
                                   en_units(energy_units)
@@ -409,6 +423,9 @@ contains
        total_energy_last = total_energy_0
 
     end do ! n_iterations
+    call new_SC_potl(.false., con_tolerance, .false.,             &
+         fixed_potential, vary_mu, n_L_iterations, &
+         tolerance, total_energy_0)
     
     deallocate(search_direction, last_sd, Psd, STAT=stat)
     if (stat /= 0) &
@@ -678,12 +695,12 @@ contains
                         fixed_potential, vary_mu, n_cg_L_iterations, &
                         tolerance, energy_out)
     end if
-    if (inode == ionode .and. iprint_basis > 0) then
-       write (io_lun, fmt='(6x,"In blip_min, at exit energy is ",f15.10)') &
-             energy_out
-    else if (inode == ionode .and. iprint_basis == 0) then
-       write (io_lun, fmt='(6x,"Final Energy: ",f15.10)') energy_out
-    end if
+    !if (inode == ionode .and. iprint_basis > 0) then
+    !   write (io_lun, fmt='(6x,"In blip_min, at exit energy is ",f15.10)') &
+    !         energy_out
+    !else if (inode == ionode .and. iprint_basis == 0) then
+    !   write (io_lun, fmt='(6x,"Final Energy: ",f15.10)') energy_out
+    !end if
     dE = total_energy_0 - energy_out
     if (inode == ionode .and. iprint_basis > 2) &
          write (io_lun, &
