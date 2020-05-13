@@ -640,7 +640,8 @@ contains
     a = get_hamann_line(lun)
     read(a,*) sym,z,nc,nv,iexc,file_format
     write(*,fmt='(/"Information about pseudopotential for species: ",a2/)') sym
-    pseudo(i_species)%z = int(z)
+    !pseudo(i_species)%z = int(z)
+    pseudo(i_species)%z = z
     !
     ! Assign and initialise XC functional for species
     !
@@ -776,7 +777,7 @@ contains
     logical :: flag_confine
 
     flag_confine = .false.
-    write(*,fmt='(/"Species ",i2," is ",a2)') i_species, pte(pseudo(i_species)%z)
+    write(*,fmt='(/"Species ",i2," is ",a2)') i_species, pte(nint(pseudo(i_species)%z))
     !
     ! Defaults
     !

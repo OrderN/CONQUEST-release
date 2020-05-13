@@ -73,7 +73,8 @@ module pseudo_tm_info
      integer :: lmax                 ! maximum of the angular momentum
      integer :: n_pjnl               ! number of projector functions
      logical :: flag_pcc             ! flag for partial core correction
-     integer :: z                    ! atomic weight
+     !integer :: z                    ! atomic weight
+     real(double) :: z               ! atomic number
      real(double) :: zval            ! number of valence electrons
      real(double) :: alpha           ! exponent of gaussian for long range term
      ! of local pseudopotential (might not be used)
@@ -131,6 +132,8 @@ contains
 !!    Changed to use n_species and species_label from species_module, and changed atomicrad to atomicnum
 !!   2014/10/12 12:21 lat
 !!    Added possibility of user defined filename for PAO/pseudo *ion
+!!   2020/05/13 tm
+!!    Removed atomicnum
 !!  SOURCE
 !!
   subroutine setup_pseudo_info
@@ -141,7 +144,7 @@ contains
     use species_module, ONLY: n_species, species_label, species_file, species_from_files
     use species_module, ONLY: npao_species, nsf_species, type_species
     use global_module,  ONLY: iprint_pseudo
-    use dimens,         ONLY: RadiusSupport, atomicnum
+    use dimens,         ONLY: RadiusSupport
     use GenComms,       ONLY: inode, ionode, cq_abort, gcopy
     use pseudopotential_common, ONLY: pseudo_type, SIESTA, ABINIT
 
@@ -184,7 +187,6 @@ contains
           call read_ion_ascii_tmp(pseudo(ispecies),pao(ispecies))
 
           npao_species(ispecies) = pao(ispecies)%count
-          atomicnum(ispecies)    = pseudo(ispecies)%z
           ! For P.C.C.
           if (pseudo(ispecies)%flag_pcc) flag_pcc_global = .true.
           !For Ghost atoms
