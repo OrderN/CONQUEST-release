@@ -453,6 +453,7 @@ contains
     ! Local variables
     integer :: i_shell, en, ell, zeta, nmesh_pot, i, j, k, nrc, istart
     real(double) :: max_cutoff
+    real(double) :: zz
     real(double), allocatable, dimension(:) :: x_reg
 
     !
@@ -532,9 +533,10 @@ contains
     !
     ! Interpolate using exact value of local potential at cutoff: -Z/r
     !
+    zz = pseudo(i_species)%z - pseudo(i_species)%zcore
     call interpolate(x_reg,pseudo(i_species)%vlocal%f,nmesh_pot, &
          !rr,local_and_vkb%local,local_and_vkb%ngrid,-pseudo(i_species)%zval/pseudo(i_species)%vlocal%cutoff)
-         rr,local_and_vkb%local,local_and_vkb%ngrid,-pseudo(i_species)%z/pseudo(i_species)%vlocal%cutoff)
+         rr,local_and_vkb%local,local_and_vkb%ngrid,-zz/pseudo(i_species)%vlocal%cutoff)
     if(flag_plot_output) call write_pao_plot(nint(pseudo(i_species)%z),x_reg, &
          pseudo(i_species)%vlocal%f,nmesh_pot,"Vlocal")
     !

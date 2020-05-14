@@ -76,6 +76,7 @@ module pseudo_tm_info
      !integer :: z                    ! atomic weight
      real(double) :: z               ! atomic number
      real(double) :: zval            ! number of valence electrons
+     real(double) :: zcore           ! number of core electrons
      real(double) :: alpha           ! exponent of gaussian for long range term
      ! of local pseudopotential (might not be used)
      real(double) :: prefac          ! (alpha/pi)**1.5 stored for efficiency
