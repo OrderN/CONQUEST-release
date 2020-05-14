@@ -5,6 +5,5 @@ module dimens
   implicit none
 
   real(double), allocatable, dimension(:) :: RadiusSupport
-  integer, allocatable, dimension(:) :: atomicnum
   
 end module dimens

@@ -29,7 +29,7 @@ contains
     ! Local variables
     real(double), allocatable, dimension(:) :: vha, vxc, atomic_rho, vha_conf
     
-    write(*,fmt='(/"Generating PAOs for ",a2/)') pte(pseudo(i_species)%z)
+    write(*,fmt='(/"Generating PAOs for ",a2/)') pte(nint(pseudo(i_species)%z))
     !
     ! Create mesh
     !
@@ -82,7 +82,7 @@ contains
     vha_conf = vha_conf + local_and_vkb%local
     call interpolate_potentials(i_species,vha_conf)
     deallocate(vha,vxc,vha_conf,atomic_rho)
-    write(*,fmt='(/2x,"Finished ",a2)') pte(pseudo(i_species)%z)
+    write(*,fmt='(/2x,"Finished ",a2)') pte(nint(pseudo(i_species)%z))
   end subroutine make_paos
 
   ! Solve for the unconfined (atomic) pseudo-functions
@@ -429,7 +429,7 @@ contains
           ! Interpolate
           call interpolate(paos%psi_reg(zeta,i_shell)%x,paos%psi_reg(zeta,i_shell)%f,nmesh_pao,&
                rr(1:nrc-1),paos%psi(zeta,i_shell)%f(1:nrc-1),nrc-1,zero)
-          if(flag_plot_output) call write_pao_plot(pseudo(i_species)%z,paos%psi_reg(zeta,i_shell)%x, &
+          if(flag_plot_output) call write_pao_plot(nint(pseudo(i_species)%z),paos%psi_reg(zeta,i_shell)%x, &
                paos%psi_reg(zeta,i_shell)%f, nmesh_pao,"PAO", en,ell,zeta)
        end do
     end do
@@ -453,6 +453,7 @@ contains
     ! Local variables
     integer :: i_shell, en, ell, zeta, nmesh_pot, i, j, k, nrc, istart
     real(double) :: max_cutoff
+    real(double) :: zz
     real(double), allocatable, dimension(:) :: x_reg
 
     !
@@ -487,7 +488,7 @@ contains
           pseudo(i_species)%pjnl(j)%delta = rr(nrc)/real(nmesh_pot-1,double)
           call interpolate(x_reg,pseudo(i_species)%pjnl(j)%f,nmesh_pot, &
                rr(1:nrc),local_and_vkb%projector(1:nrc,i,ell),nrc,zero)
-          if(flag_plot_output) call write_pao_plot(pseudo(i_species)%z,x_reg, &
+          if(flag_plot_output) call write_pao_plot(nint(pseudo(i_species)%z),x_reg, &
                pseudo(i_species)%pjnl(j)%f,nmesh_pot,"KB",ell=ell,zeta=i)
           deallocate(x_reg)
        end do
@@ -514,7 +515,7 @@ contains
        call make_mesh_reg(x_reg,nmesh_pot,pseudo(i_species)%chpcc%cutoff)
        call interpolate(x_reg,pseudo(i_species)%chpcc%f,nmesh_pot, &
             rr,local_and_vkb%pcc,local_and_vkb%ngrid,zero)
-       if(flag_plot_output) call write_pao_plot(pseudo(i_species)%z,x_reg, &
+       if(flag_plot_output) call write_pao_plot(nint(pseudo(i_species)%z),x_reg, &
             pseudo(i_species)%chpcc%f,nmesh_pot,"PCC")
        deallocate(x_reg)
     end if
@@ -532,9 +533,11 @@ contains
     !
     ! Interpolate using exact value of local potential at cutoff: -Z/r
     !
+    zz = pseudo(i_species)%z - pseudo(i_species)%zcore
     call interpolate(x_reg,pseudo(i_species)%vlocal%f,nmesh_pot, &
-         rr,local_and_vkb%local,local_and_vkb%ngrid,-pseudo(i_species)%zval/pseudo(i_species)%vlocal%cutoff)
-    if(flag_plot_output) call write_pao_plot(pseudo(i_species)%z,x_reg, &
+         !rr,local_and_vkb%local,local_and_vkb%ngrid,-pseudo(i_species)%zval/pseudo(i_species)%vlocal%cutoff)
+         rr,local_and_vkb%local,local_and_vkb%ngrid,-zz/pseudo(i_species)%vlocal%cutoff)
+    if(flag_plot_output) call write_pao_plot(nint(pseudo(i_species)%z),x_reg, &
          pseudo(i_species)%vlocal%f,nmesh_pot,"Vlocal")
     !
     ! Neutral atom potential - same mesh as local
@@ -545,7 +548,7 @@ contains
     pseudo(i_species)%vna%cutoff = pseudo(i_species)%vlocal%cutoff
     call interpolate(x_reg,pseudo(i_species)%vna%f,pseudo(i_species)%vna%n,&
          rr,vha_conf,nmesh,zero)
-    if(flag_plot_output) call write_pao_plot(pseudo(i_species)%z,x_reg, &
+    if(flag_plot_output) call write_pao_plot(nint(pseudo(i_species)%z),x_reg, &
          pseudo(i_species)%vna%f,nmesh_pot,"VNA")
     deallocate(x_reg)
     return
@@ -806,6 +809,7 @@ contains
     l_half_sq = l_half_sq*l_half_sq
     l_l_plus_one = real(ell*(ell+1),double)
     zval = pseudo(i_species)%zval ! Added
+    !zval = pseudo(i_species)%z  (z or zval?)
     !write(*,*) '# zval is ',zval
     dx_sq_over_twelve = alpha*alpha/twelve
     alpha_sq_over_four = alpha*alpha/four
