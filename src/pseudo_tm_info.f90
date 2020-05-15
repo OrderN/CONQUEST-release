@@ -79,7 +79,6 @@ module pseudo_tm_info
      integer :: lmax                 ! maximum of the angular momentum
      integer :: n_pjnl               ! number of projector functions
      logical :: flag_pcc             ! flag for partial core correction
-!     integer :: z                    ! atomic weight
      integer :: functional           ! Code for functional if set in ion file
      integer :: ps_type              ! Type of pseudopotential (hamann/siesta)
      real(double) :: z               ! atomic weight
@@ -223,7 +222,7 @@ contains
           if(abs(InvSRange(ispecies))<RD_ERR) InvSRange(ispecies) = RadiusSupport(ispecies)
           if (flag_Multisite) RadiusSupport(ispecies) = RadiusSupport(ispecies) + RadiusMS(ispecies)
           max_rc = max(RadiusSupport(ispecies),max_rc)
-          atomicnum(ispecies)    = pseudo(ispecies)%z
+          atomicnum(ispecies)    = nint(pseudo(ispecies)%z)
           ! Valence charge
           charge(ispecies)       = pseudo(ispecies)%zval
           if(mass(ispecies) < zero) charge(ispecies) = zero
@@ -658,7 +657,6 @@ contains
     type(rad_func) :: dummy_rad
 
     character(len=80) :: filename
-    !integer :: i, lun , i1, i2, i3, i4, z
     integer :: i, lun , i1, i2, i3, i4
     real(double) :: dummy, a, r
     integer :: n_orbnl, n_pjnl
@@ -990,7 +988,6 @@ contains
       implicit none
 
       integer, intent(in)         :: unit
-      !integer, intent(out) :: n_orbnl, n_pjnl, z, xc_func, pseudo_type
       integer, intent(out) :: n_orbnl, n_pjnl, xc_func, pseudo_type
       real(double), intent(out) :: z, zval
 
