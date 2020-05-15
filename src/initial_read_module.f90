@@ -2051,7 +2051,7 @@ contains
        restart_DM         = fdf_boolean('General.LoadDM', .true.)
        find_chdens    = fdf_boolean('SC.MakeInitialChargeFromK',.true.)
        if (flag_XLBOMD) restart_X=fdf_boolean('XL.LoadX', .true.)
-       if (flag_multisite) read_option = fdf_boolean('Basis.LoadCoeffs', .true.)
+       if (flag_multisite .or. flag_basis_set==blips) read_option = fdf_boolean('Basis.LoadCoeffs', .true.)
     else
        flag_read_velocity = fdf_boolean('AtomMove.ReadVelocity',.false.)
        restart_DM         = fdf_boolean('General.LoadDM', .false.)
@@ -2061,7 +2061,7 @@ contains
           find_chdens    = fdf_boolean('SC.MakeInitialChargeFromK',.false.)
        endif
        if (flag_XLBOMD) restart_X=fdf_boolean('XL.LoadX', .false.)
-       if (flag_multisite) read_option = fdf_boolean('Basis.LoadCoeffs', .false.)
+       if (flag_multisite .or. flag_basis_set==blips) read_option = fdf_boolean('Basis.LoadCoeffs', .false.)
     end if
 
     if (restart_DM .and. flag_Multisite .and. .not.read_option) then

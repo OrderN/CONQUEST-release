@@ -149,6 +149,8 @@ contains
     use memory_module,       only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use S_matrix_module,     only: get_S_matrix
     use SelfCon,             only: new_SC_potl
+    use matrix_data,                 only: Srange, mat
+    use mult_module,                 only: return_matrix_value, matS
 
     implicit none
 
@@ -162,9 +164,9 @@ contains
     ! Local variables
     real(double) :: tolerance, con_tolerance, dgg, gamma, gg, &
                     electrons_tot, sum_0, diff, total_energy_0, &
-                    energy_in_tot, last_step, dN_dot_de, dN_dot_dN
-    integer      :: length, n_iterations, n_tries, offset
-    integer      :: k, i, j, n, spec, stat, spin
+                    energy_in_tot, last_step, dN_dot_de, dN_dot_dN, factor
+    integer      :: length, n_iterations, n_tries, offset, n_blip, ni, np, spin_SF, isf
+    integer      :: k, i, j, n, spec, stat, spin, iprim
     logical      :: notredone, reduced, orig_SC
     real(double), parameter :: gamma_max = 6.0_double !! TM 2007.03.29
     real(double), dimension(nspin)          :: electrons, energy_in
@@ -173,6 +175,7 @@ contains
 
     call start_timer(tmr_std_basis)
 
+    spin_SF = 1
     allocate(search_direction(coeff_array_size), &
              last_sd(coeff_array_size), Psd(coeff_array_size), STAT=stat)
     if (stat /= 0) &
@@ -361,15 +364,19 @@ contains
             write (io_lun, fmt='(6x,"Calling minimise")')
 
        call my_barrier()
-       orig_SC = flag_self_consistent
-       flag_self_consistent = .false.
+       ! This performs non-SCF line minimisation only after 5 iterations; experimental
+       if(n_iterations>5) then
+          orig_SC = flag_self_consistent
+          flag_self_consistent = .false.
+       end if
        call line_minimise_support(search_direction, length,      &
                                   fixed_potential, vary_mu,      &
                                   n_L_iterations, tolerance,     &
                                   con_tolerance, total_energy_0, &
                                   expected_reduction, last_step)
        if(orig_SC) flag_self_consistent = orig_SC
-       if(flag_self_consistent.and.n_iterations<5) then ! Update SCF
+       ! This performs an SCF update after line minimisation where necessary
+       if(flag_self_consistent.and.(n_iterations<4 .or. mod(n_iterations,3)==0)) then ! Update SCF
           call new_SC_potl(.false., con_tolerance, .false.,             &
                fixed_potential, vary_mu, n_L_iterations, &
                tolerance, total_energy_0)
@@ -378,6 +385,29 @@ contains
              total_energy_0
        if (inode == ionode .AND. iprint_basis > 2) &
             write (io_lun,fmt='(6x,"Returned !")')
+       ! Normalise
+          iprim=0
+          do np=1,bundle%groups_on_node
+             if(bundle%nm_nodgroup(np) > 0) then
+                do ni=1,bundle%nm_nodgroup(np)
+                   iprim=iprim+1
+                   do isf=1,mat(np,Srange)%ndimi(ni)
+                      factor = return_matrix_value(matS(spin_SF),np,ni,iprim,0,isf,isf,1)
+                      if(factor>RD_ERR) then
+                         factor=one/sqrt(factor)
+                      else
+                         factor = zero
+                      end if
+                      do n_blip=1,blips_on_atom(iprim)%supp_func(isf)%ncoeffs
+                         blips_on_atom(iprim)%supp_func(isf)%coefficients(n_blip) = &
+                              factor * blips_on_atom(iprim)%supp_func(isf)%coefficients(n_blip)
+                      enddo ! n_blip
+                   enddo ! isf
+                enddo ! ni
+             endif ! if the partition has atoms
+          enddo ! np
+          ! Update S after normalisation
+          call get_S_matrix(inode, ionode)
        call dump_blip_coeffs(coefficient_array, coeff_array_size, &
                              inode)
        ! Find change in energy for convergence
