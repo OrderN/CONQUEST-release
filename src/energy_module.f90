@@ -559,7 +559,13 @@ contains
     if (inode == ionode) then
        electrons_tot = electrons(1) + electrons(nspin)
        !
-       if (iprint_gen >= 1) then          
+       if(iprint_gen==0) then
+          if (nspin == 1) then
+             write (io_lun,fmt='(4x," | Number of electrons      = ",f16.6)') electrons_tot
+          else if(nspin == 2) then
+             write (io_lun,fmt='(4x," | Number of electrons (u/d)= ",2f16.6)') electrons(1),electrons(nspin)
+          end if
+       else if (iprint_gen >= 1) then
           write (io_lun, *) 
           !write (io_lun, *) 
           !write (io_lun, 1) 
