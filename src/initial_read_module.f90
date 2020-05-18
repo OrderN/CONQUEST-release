@@ -2536,33 +2536,35 @@ contains
     ! Local variables
     integer :: n
     character(len=10) :: today, the_time
+    character(len=15) :: job_str
+    character(len=5)  :: timezone
 
-    call date_and_time(today, the_time)
+    call date_and_time(today, the_time, timezone)
 3   format()
-    write(io_lun,fmt='(/4x,"This job was run on ",a4,"/",a2,"/",a2," at ",a2,":",a2)') &
-         today(1:4), today(5:6), today(7:8), the_time(1:2), the_time(3:4)
+    write(io_lun,fmt='(/4x,"This job was run on  ",a4,"/",a2,"/",a2," at ",a2,":",a2," ",a5)') &
+         today(1:4), today(5:6), today(7:8), the_time(1:2), the_time(3:4), timezone
     write(io_lun,&
-         '(4x,"Code compiled on: ",a,/4x,"Version comment: ",a)') &
+         '(4x,"Code was compiled on ",a,/4x,"Version comment: ",a)') &
          datestr, commentver
 
     write(io_lun,fmt='(/4x,"Job title: ",a)') titles
 
     ! Job type
-    write(io_lun,fmt='(/4x,"Job to be run: ")')
+    job_str = "Job to be run: "
     if(leqi(runtype,'static') ) then
-       write(io_lun, fmt='(4x,"Static calculation")')
+       write(io_lun, fmt='(4x,a15,"static calculation")') job_str
     else if(leqi(runtype,'cg')) then
        if(flag_opt_cell) then
-          write(io_lun, fmt='(4x,"CG cell relaxation")')
+          write(io_lun, fmt='(4x,a15,"CG cell relaxation")') job_str
        else
-          write(io_lun, fmt='(4x,"CG atomic relaxation")')
+          write(io_lun, fmt='(4x,a15,"CG atomic relaxation")') job_str
        end if
     else if(leqi(runtype,'md')) then
        ensemblestr = md_ensemble
        call chrcap(ensemblestr,3)
-       write(io_lun, fmt='(4x,a3," MD run for ",i5," steps ")') ensemblestr, MDn_steps
+       write(io_lun, fmt='(4x,a15,a3," MD run for ",i5," steps ")') job_str, ensemblestr, MDn_steps
     else if(leqi(runtype,'lbfgs')) then
-       write(io_lun, fmt='(4x,"L-BFGS atomic relaxation")')
+       write(io_lun, fmt='(4x,a15,"L-BFGS atomic relaxation")') job_str
     end if
     ! Ground state search details
     write(io_lun,fmt='(/4x,"Ground state search:")')
