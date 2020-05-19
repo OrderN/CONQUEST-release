@@ -114,6 +114,7 @@ module io_module
   ! Moved here from read_and_write so that it can be used for extended XYZ output
   ! Moved here from initial_read_module to slove the dependence problem
   character(len=80), save :: titles
+  logical          :: flag_coords_xyz
 
 !!***
 
@@ -3098,7 +3099,9 @@ second:   do
     use global_module, only: atom_coord, iprint_MD, ni_in_cell, species_glob
     use dimens,         only: r_super_x, r_super_y, r_super_z
     use GenComms, only: inode, ionode
-    use units, only: dist_conv, d_units, dist_units
+    use units, only: dist_conv, d_units, dist_units, BohrToAng, bohr
+    use periodic_table, only: pte
+    use pseudo_tm_info, only: pseudo
 
     implicit none
 
@@ -3108,11 +3111,27 @@ second:   do
        write(io_lun,fmt='(/4x,"Simulation cell dimensions: ",f10.4,a3," x ",f10.4,a3," x ",f10.4,a3)') &
             r_super_x*dist_conv, d_units(dist_units), r_super_y*dist_conv, d_units(dist_units), &
             r_super_z*dist_conv, d_units(dist_units)
-       write(io_lun,fmt='(/4x,"Atomic coordinates (",a2,")")') d_units(dist_units)
-       write(io_lun,fmt='(4x,"   Atom         X         Y         Z  Species")')
-       do i = 1, ni_in_cell
-          write (io_lun,fmt='(4x, i7, 3f10.4, 6x, i3)') i,atom_coord(1:3,i), species_glob(i)
-       end do
+       if(flag_coords_xyz) then
+          write(io_lun,fmt='(4x,"           X         Y         Z")')
+          if(dist_units==bohr) then
+             write(io_lun,fmt='(/4x,"Atomic coordinates (",a2,")")') "A "
+             do i = 1, ni_in_cell
+                write (io_lun,fmt='(4x, a2, 3f10.4)') pte(pseudo(species_glob(i))%z), atom_coord(1:3,i)*BohrToAng
+             end do
+             write(io_lun,fmt='(6x,"N.B. units above converted to Angstroms for xyz output")')
+          else
+             write(io_lun,fmt='(/4x,"Atomic coordinates (",a2,")")') d_units(dist_units)
+             do i = 1, ni_in_cell
+                write (io_lun,fmt='(4x, a2, 3f10.4)') pte(pseudo(species_glob(i))%z), atom_coord(1:3,i)
+             end do
+          end if
+       else
+          write(io_lun,fmt='(/4x,"Atomic coordinates (",a2,")")') d_units(dist_units)
+          write(io_lun,fmt='(4x,"   Atom         X         Y         Z  Species")')
+          do i = 1, ni_in_cell
+             write (io_lun,fmt='(4x, i7, 3f10.4, 6x, i3)') i,atom_coord(1:3,i), species_glob(i)
+          end do
+       end if
     end if
     return
     
