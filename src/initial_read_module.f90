@@ -855,7 +855,7 @@ contains
          pdb_output, banner, get_file_name, time_max, &
          flag_MatrixFile_RankFromZero, flag_MatrixFile_BinaryFormat, &
          flag_MatrixFile_BinaryFormat_Grab, flag_MatrixFile_BinaryFormat_Dump, &
-         flag_MatrixFile_BinaryFormat_Dump_END, atom_output_threshold
+         flag_MatrixFile_BinaryFormat_Dump_END, atom_output_threshold, flag_coords_xyz
 
     use group_module,     only: part_method, HILBERT, PYTHON
     use energy,           only: flag_check_DFT
@@ -1084,6 +1084,7 @@ contains
        InitAtomicDistance_min = fdf_double('IO.InitAtomicDistance_min',  0.5_double)
     end if
     atom_output_threshold = fdf_integer('IO.AtomOutputThreshold',200)
+    flag_coords_xyz = fdf_boolean('IO.AtomCoordsXYZ',.false.)
     call my_barrier()
     !
     !
@@ -2725,6 +2726,7 @@ contains
     real(double), allocatable, dimension(:)   :: wtk_tmp
     integer :: nkp_tmp
     integer :: counter
+    character(len=2) :: suffix
 
     !****lat<$    
     call start_backtrace(t=backtrace_timer,who='readDiagInfo',where=1,level=2)
@@ -2834,7 +2836,11 @@ contains
        flag_lines_kpoints = fdf_boolean('Diag.KspaceLines',.false.)
        if(flag_lines_kpoints) then
           nkp_lines = fdf_integer('Diag.NumKptLines',1)
-          if(iprint_init>1.AND.inode==ionode) write(io_lun,fmt='(8x,"Number of Kpoint lines: ",i4)') nkp_lines
+          if(iprint_init>1.AND.inode==ionode) then
+             write(io_lun,fmt='(8x,"Number of Kpoint lines: ",i4)') nkp_lines
+          else
+             write(io_lun,fmt='(4x,"Using ",i3," lines of k-points specified by user")')
+          end if
           if(nkp_lines<1) call cq_abort("Need to specify how many kpoint lines !",nkp_lines)
           nkp = fdf_integer('Diag.NumKpts',2)
           if(iprint_init>1.AND.inode==ionode) write(io_lun,fmt='(8x,"Number of Kpoints in a line: ",i4)') nkp
@@ -2886,7 +2892,9 @@ contains
        else
           ! Read k-point number and allocate
           nkp = fdf_integer('Diag.NumKpts',1)
-          if(iprint_init>1.AND.inode==ionode) write(io_lun,fmt='(8x,"Number of Kpoints: ",i4)') nkp
+          if(iprint_init>1.AND.inode==ionode) then
+             write(io_lun,fmt='(8x,"Number of Kpoints: ",i4)') nkp
+          end if
           if(nkp<1) call cq_abort("Need to specify how many kpoints !",nkp)
           allocate(kk(3,nkp),wtk(nkp),STAT=stat)
           if(stat/=0) call cq_abort('FindEvals: couldnt allocate kpoints',nkp)
@@ -2894,6 +2902,13 @@ contains
           sum = zero
           ! Read k-points
           if(fdf_block('Diag.Kpoints'))then
+             if(iprint_init==0) then
+                if(nkp==1) then
+                   write(io_lun,fmt='(4x,"Using ",i1," k-point specified by user")') nkp
+                else
+                   write(io_lun,fmt='(4x,"Using ",i3," k-points specified by user")') nkp
+                endif
+             end if
              if(1+block_end-block_start<nkp) &
                   call cq_abort("Kpoint error: ",1+block_end-block_start,nkp)
              do i=1,nkp
@@ -2908,7 +2923,7 @@ contains
              call fdf_endblock
              wtk = wtk/sum
           else ! Force gamma point dependence
-             if(inode==ionode) write(io_lun,4)
+             if(inode==ionode) write(io_lun,fmt='(4x,"Default k-point sampling of Gamma point only")')
              nkp = 1
              kk(1,1) = zero
              kk(2,1) = zero
@@ -2933,6 +2948,14 @@ contains
              write (io_lun,fmt='(/8x,a, i3," x ",i3," x ",i3)') &
                   ' Monkhorst-Pack mesh: ', (mp(i), i=1,3)
           end if
+       else if(inode==ionode) then
+          if(flag_gamma) then
+             suffix = " G"
+          else
+             suffix = "  "
+          end if
+          write (io_lun,fmt='(4x,"Using a MP mesh for k-points: ", i3," x ",i3," x ",i3,a2)') &
+               (mp(i), i=1,3), suffix
        end if
        if (mp(1) <= 0 .OR. mp(2) <= 0 .OR. mp(3) <= 0) &
             call cq_abort('K-points: number of k-points must be > 0!')
