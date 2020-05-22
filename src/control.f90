@@ -139,7 +139,7 @@ contains
     use force_module,         only: tot_force
     use minimise,             only: get_E_and_F
     use global_module,        only: runtype, flag_self_consistent, &
-                                    flag_out_wf, flag_write_DOS, &
+                                    flag_out_wf, flag_write_DOS, wf_self_con, &
                                     flag_opt_cell, optcell_method
     use input_module,         only: leqi
     use store_matrix,         only: dump_pos_and_matrices
@@ -153,7 +153,7 @@ contains
     ! Local variables
     integer, parameter:: backtrace_level = 0
     type(cq_timer)    :: backtrace_timer
-    logical           :: NoMD
+    logical           :: NoMD, flag_ff, flag_wf
     integer           :: i, j
 
     real(double) :: spr, e_r_OLD
@@ -164,9 +164,16 @@ contains
 !****lat>$
 
     if ( leqi(runtype,'static') ) then
-       if(.NOT.flag_self_consistent.AND.(flag_out_wf.OR.flag_write_DOS)) return
-       call get_E_and_F(fixed_potential,vary_mu, total_energy,&
-                        .true.,.true.,level=backtrace_level)
+       !if(.NOT.flag_self_consistent.AND.(flag_out_wf.OR.flag_write_DOS)) return
+       flag_ff = .true.
+       flag_wf = .true.
+       if (flag_out_wf.OR.flag_write_DOS) then
+          wf_self_con=.true.
+          flag_ff = .false.
+          flag_wf = .false.
+       endif
+       call get_E_and_F(fixed_potential, vary_mu, total_energy,&
+                        flag_ff, flag_wf, level=backtrace_level)
        !
     else if ( leqi(runtype, 'cg')    ) then
         if (flag_opt_cell) then

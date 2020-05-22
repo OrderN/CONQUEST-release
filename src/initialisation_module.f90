@@ -1387,83 +1387,98 @@ contains
 !!$  S C F
 !!$
 !!$
-    if ( flag_self_consistent ) then ! Vary only DM and charge density
-       !
-       if ( restart_DM ) then
-          record  = .true.
-          reset_L = .false.
-          call new_SC_potl(record, sc_tolerance, reset_L, &
-               fixed_potential, vary_mu, n_L_iterations,  &
-               L_tolerance, total_energy, backtrace_level)
-          !
-       else
-          if (flag_LFD .and. .not.read_option) then
-             ! Hpao was already made in sub:initial_SFcoeff
-             rebuild_KE_NL = .false. 
-             call get_H_matrix(rebuild_KE_NL, fixed_potential, electrons, &
-                  density, maxngrid, level=backtrace_level, build_AtomF_matrix=.false.)
-          else
-             rebuild_KE_NL = .true. 
-             call get_H_matrix(rebuild_KE_NL, fixed_potential, electrons, &
-                  density, maxngrid, level=backtrace_level)
-          endif
-          !
-          electrons_tot = spin_factor * sum(electrons)
-          !
-          record  = .false.
-          reset_L = .true.                
-          call FindMinDM(n_L_iterations, vary_mu, L_tolerance, &
-               reset_L, record, backtrace_level)
-          !
-          record  = .true.             
-          reset_L = .false.
-          call new_SC_potl(record, sc_tolerance, reset_L, &
-               fixed_potential, vary_mu, n_L_iterations,  &
-               L_tolerance, total_energy, backtrace_level)
-          !
-       end if
-       !
-    else ! Ab initio TB: vary only DM
-
+    rebuild_KE_NL = .true.
+    !build_X = .false
+    if (flag_LFD .and. .not.read_option) then
+       ! Hpao was already made in sub:initial_SFcoeff
+       rebuild_KE_NL = .false.
+       call get_H_matrix(rebuild_KE_NL, fixed_potential, electrons, &
+            density, maxngrid, level=backtrace_level, build_AtomF_matrix=.false.)
+    else
        rebuild_KE_NL = .true.
-       !build_X = .false
-       if (flag_LFD .and. .not.read_option) then
-          ! Hpao was already made in sub:initial_SFcoeff
-          rebuild_KE_NL = .false.
-          call get_H_matrix(rebuild_KE_NL, fixed_potential, electrons, &
-               density, maxngrid, level=backtrace_level, build_AtomF_matrix=.false.)
-       else
-          rebuild_KE_NL = .true.
-          call get_H_matrix(rebuild_KE_NL, fixed_potential, electrons, &
-               density, maxngrid, level=backtrace_level)
-       endif
-       electrons_tot = spin_factor * sum(electrons)
-       if (flag_out_wf.OR.flag_write_DOS) then
-          wf_self_con=.true.
-       endif
-
-       if ( .not. restart_DM ) then
-          record  = .false.   
-          reset_L = .true.
-          call FindMinDM(n_L_iterations, vary_mu, L_tolerance, &
-               reset_L, record, backtrace_level)
-       else
-          record  = .false.
-          reset_L = .false.
-          call FindMinDM(n_L_iterations, vary_mu, L_tolerance, &
-               reset_L, record, backtrace_level)
-       end if
-       if (flag_out_wf.OR.flag_write_DOS) then
-          wf_self_con=.false.
-       endif
-       call get_energy(total_energy=total_energy,level=backtrace_level)
-    end if
+       call get_H_matrix(rebuild_KE_NL, fixed_potential, electrons, &
+            density, maxngrid, level=backtrace_level)
+    endif
+!    if ( flag_self_consistent ) then ! Vary only DM and charge density
+!       !
+!       if ( restart_DM ) then
+!          record  = .true.
+!          reset_L = .false.
+!          call new_SC_potl(record, sc_tolerance, reset_L, &
+!               fixed_potential, vary_mu, n_L_iterations,  &
+!               L_tolerance, total_energy, backtrace_level)
+!          !
+!       else
+!          if (flag_LFD .and. .not.read_option) then
+!             ! Hpao was already made in sub:initial_SFcoeff
+!             rebuild_KE_NL = .false. 
+!             call get_H_matrix(rebuild_KE_NL, fixed_potential, electrons, &
+!                  density, maxngrid, level=backtrace_level, build_AtomF_matrix=.false.)
+!          else
+!             rebuild_KE_NL = .true. 
+!             call get_H_matrix(rebuild_KE_NL, fixed_potential, electrons, &
+!                  density, maxngrid, level=backtrace_level)
+!          endif
+!          !
+!          electrons_tot = spin_factor * sum(electrons)
+!          !
+!          record  = .false.
+!          reset_L = .true.                
+!          call FindMinDM(n_L_iterations, vary_mu, L_tolerance, &
+!               reset_L, record, backtrace_level)
+!          !
+!          record  = .true.             
+!          reset_L = .false.
+!          call new_SC_potl(record, sc_tolerance, reset_L, &
+!               fixed_potential, vary_mu, n_L_iterations,  &
+!               L_tolerance, total_energy, backtrace_level)
+!          !
+!       end if
+!       !
+!    else ! Ab initio TB: vary only DM
+!
+!       rebuild_KE_NL = .true.
+!       !build_X = .false
+!       if (flag_LFD .and. .not.read_option) then
+!          ! Hpao was already made in sub:initial_SFcoeff
+!          rebuild_KE_NL = .false.
+!          call get_H_matrix(rebuild_KE_NL, fixed_potential, electrons, &
+!               density, maxngrid, level=backtrace_level, build_AtomF_matrix=.false.)
+!       else
+!          rebuild_KE_NL = .true.
+!          call get_H_matrix(rebuild_KE_NL, fixed_potential, electrons, &
+!               density, maxngrid, level=backtrace_level)
+!       endif
+!       electrons_tot = spin_factor * sum(electrons)
+!       if (flag_out_wf.OR.flag_write_DOS) then
+!          wf_self_con=.true.
+!       endif
+!
+!       if ( .not. restart_DM ) then
+!          record  = .false.   
+!          reset_L = .true.
+!          call FindMinDM(n_L_iterations, vary_mu, L_tolerance, &
+!               reset_L, record, backtrace_level)
+!       else
+!          record  = .false.
+!          reset_L = .false.
+!          call FindMinDM(n_L_iterations, vary_mu, L_tolerance, &
+!               reset_L, record, backtrace_level)
+!       end if
+!       if (flag_out_wf.OR.flag_write_DOS) then
+!          wf_self_con=.false.
+!       endif
+!       call get_energy(total_energy=total_energy,level=backtrace_level)
+!    end if
 !!$
 !!$
 !!$
 !!$
     ! Do we want to just test the forces ?
     if (flag_test_forces) then
+       call new_SC_potl(record, sc_tolerance, reset_L, &
+            fixed_potential, vary_mu, n_L_iterations,  &
+            L_tolerance, total_energy, backtrace_level)
        call test_forces(fixed_potential, vary_mu, n_L_iterations, &
             L_tolerance, sc_tolerance, total_energy,  &
             expected_reduction)
