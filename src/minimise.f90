@@ -258,14 +258,11 @@ contains
        end if
        ! Removing these lines as they've already been done in initial_H
        ! DRB 2020/04/21
-    !else if (flag_self_consistent) then ! Vary only DM and charge density
-    !   call new_SC_potl(.false., sc_tolerance, reset_L,           &
-    !                    fixed_potential, vary_mu, n_L_iterations, &
-    !                    L_tolerance, total_energy, backtrace_level)
-    !else ! Ab initio TB: vary only DM
-    !   call FindMinDM(n_L_iterations, vary_mu, L_tolerance, &
-    !                  reset_L, .false., backtrace_level)
-    !   call get_energy(total_energy, level=backtrace_level)
+       ! Restoring lines (but new_SC_potl deals with Non-SCF)DRB 2020/05/22
+    else 
+       call new_SC_potl(.false., sc_tolerance, reset_L,           &
+                        fixed_potential, vary_mu, n_L_iterations, &
+                        L_tolerance, total_energy, backtrace_level)
     end if
     ! Once ground state is reached, if we are doing deltaSCF, perform excitation
     ! and solve for the new ground state (on excited Born-Oppenheimer surface)

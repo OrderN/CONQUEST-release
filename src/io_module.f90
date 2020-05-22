@@ -3012,7 +3012,7 @@ second:   do
        if(flag_coords_xyz) then
           write(io_lun,fmt='(4x,"           X         Y         Z")')
           if(dist_units==bohr) then
-             write(io_lun,fmt='(/4x,"Atomic coordinates (",a2,")")') "A "
+             write(io_lun,fmt='(/4x,"Atomic coordinates in XYZ format (",a2,")")') "A "
              do i = 1, ni_in_cell
                 write (io_lun,fmt='(4x, a2, 3f10.4)') pte(pseudo(species_glob(i))%z), atom_coord(1:3,i)*BohrToAng
              end do

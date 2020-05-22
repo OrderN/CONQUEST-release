@@ -847,7 +847,7 @@ contains
     ! for debugging
 
     !allocate(store_density(maxngrid))
-    e0 = total_energy
+    e0 = energy_in !total_energy
     if (inode == ionode .and. iprint_MD > 0) &
          write (io_lun, &
          fmt='(4x,"In safemin2, initial energy is ",f20.10," ",a2)') &
