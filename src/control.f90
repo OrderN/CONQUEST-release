@@ -279,7 +279,7 @@ contains
     use GenBlas,       only: dot
     use force_module,  only: tot_force
     use io_module,     only: write_atomic_positions, pdb_template, &
-                             check_stop, write_xsf
+                             check_stop, write_xsf, print_atomic_positions
     use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use timer_module
     use store_matrix,  ONLY: dump_InfoMatGlobal, dump_pos_and_matrices
@@ -312,8 +312,11 @@ contains
          call cq_abort("Error allocating _new_pos in control: ", &
                        ni_in_cell,stat)
     call reg_alloc_mem(area_general, 6 * ni_in_cell, type_dbl)
-    if (myid == 0) &
-         write (io_lun, fmt='(/4x,"Starting CG atomic relaxation"/)')
+    if (inode == ionode .and. cg_line_min==safe) then
+         write (io_lun, fmt='(/4x,"Starting CG atomic relaxation with safemin line minimisation"/)')
+    else if (inode == ionode .and. cg_line_min==backtrack) then
+         write (io_lun, fmt='(/4x,"Starting CG atomic relaxation with backtracking line minimisation"/)')
+    end if
     cg = zero
     ! Do we need to add MD.MaxCGDispl ?
     done = .false.
@@ -328,7 +331,7 @@ contains
     call dump_pos_and_matrices
     call get_maxf(max)
     if (inode==ionode) then
-      write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," E: ",e16.8," dE: ",f12.8)') & 
+      write(io_lun,'(/4x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," E: ",e16.8," dE: ",f12.8/)') & 
            0, max, energy0, dE
     end if
 
@@ -364,13 +367,13 @@ contains
             write (io_lun,*) ' CHECK :: gamma = ', gamma
        if (CGreset) then
           if (gamma > one) then
-             if (inode == ionode) &
-                  write(io_lun,*) ' CG direction is reset! '
+             if (inode == ionode .and. iprint_MD>0) &
+                  write(io_lun,fmt='(4x,"In cg_run, gamma>1, so resetting direction")')
              gamma = zero
           end if
        end if
-       if (inode == ionode) &
-            write (io_lun, fmt='(/4x,"Atomic relaxation CG iteration: ",i5)') iter
+       !if (inode == ionode) &
+       !     write (io_lun, fmt='(/4x,"Atomic relaxation CG iteration: ",i5)') iter
        ggold = gg
        ! Build search direction
        test_dot = zero
@@ -389,7 +392,7 @@ contains
        !test_dot = dot(3*ni_in_cell, cg, 1, tot_force, 1)
        !call gsum(test_dot)
        if(test_dot<zero) then
-          if(inode==ionode) write(io_lun,fmt='(2x,"Reset direction ",f20.12)') test_dot
+          if(inode==ionode.AND.iprint_MD>0) write(io_lun,fmt='(4x,"In cg_run, search dot gradient < zero. Reset direction ",f14.6)') test_dot
           gamma = zero
           do j = 1, ni_in_cell
              jj = id_glob(j)
@@ -408,10 +411,7 @@ contains
        end if
        ! Output positions
        if (myid == 0 .and. iprint_gen > 1) then
-          do i = 1, ni_in_cell
-             write (io_lun, 1) i, atom_coord(1,i), atom_coord(2,i), &
-                               atom_coord(3,i)
-          end do
+          call print_atomic_positions
        end if
        call write_atomic_positions("UpdatedAtoms.dat", trim(pdb_template))
        if (flag_write_xsf) call write_xsf('trajectory.xsf', iter)
@@ -422,7 +422,7 @@ contains
        dE = energy0 - energy1
 
        if (inode==ionode) then
-         write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," E: ",e16.8," dE: ",f12.8)') & 
+         write(io_lun,'(/4x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," E: ",e16.8," dE: ",f12.8/)') & 
               iter, max, energy1, en_conv*dE
          if (iprint_MD > 1) then
            write(io_lun,'(4x,"Force Residual:     ",f20.10," ",a2,"/",a2)') &
@@ -450,7 +450,7 @@ contains
        if (abs(max) < MDcgtol) then
           done = .true.
           if (myid == 0) then
-             write(io_lun,'(2x,a,i4,a)') "GeomOpt converged in ", iter, " iterations"
+             write(io_lun,'(/4x,a,i4,a)') "GeomOpt converged in ", iter, " iterations"
              write (io_lun, fmt='(4x,"Maximum force below threshold: ",f12.5)') max
           end if
        end if
@@ -593,7 +593,7 @@ contains
     use GenComms,       only: gsum, my_barrier, inode, ionode, gcopy
     use GenBlas,        only: dot
     use force_module,   only: tot_force, stress
-    use io_module,      only: read_fire, check_stop
+    use io_module,      only: read_fire, check_stop, print_atomic_positions
     use memory_module,  only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use move_atoms,     only: fac_Kelvin2Hartree, update_pos_and_matrices, &
                               updateL, updateLorK, updateSFcoeff
@@ -740,7 +740,7 @@ contains
     do iter = i_first, i_last ! Main MD loop
        mdl%step = iter
        if (inode==ionode) &
-            write(io_lun,fmt='(4x,"MD run, iteration ",i5)') iter
+            write(io_lun,fmt='(/4x,"MD run, iteration ",i5)') iter
 
        if (flag_heat_flux) then
          atomic_stress = zero
@@ -792,10 +792,6 @@ contains
        !   may change after the atomic positions are updated.
        call check_move_atoms(flag_movable)
        
-       !! For Debuggging !!
-       !     call dump_pos_and_matrices(index=2,MDstep=i_first)
-       !! For Debuggging !!
-       
        if (flag_fire_qMD) then
           call get_E_and_F(fixed_potential, vary_mu, energy1, .true., .true.,iter)
           call check_stop(done, iter)   !2019/Nov/14
@@ -844,11 +840,11 @@ contains
 
        ! Print out energy
        if (inode==ionode) then
-         write(io_lun,'(4x,"***MD step ",i6," KE: ",f18.8," &
+         write(io_lun,'(/4x,"***MD step ",i6," KE: ",f18.8," &
                        &IntEnergy: ",f20.8," TotalEnergy: ",f20.8)') &
                iter, mdl%ion_kinetic_energy, mdl%dft_total_energy, &
                mdl%ion_kinetic_energy+mdl%dft_total_energy
-         write(io_lun, fmt='(4x,"Kinetic Energy in K     : ",f15.8)') &
+         if(iprint_MD>0) write(io_lun, fmt='(4x,"Kinetic Energy in K     : ",f15.8)') &
                mdl%ion_kinetic_energy / (three / two * ni_in_cell) / &
                fac_Kelvin2Hartree
        end if
@@ -866,7 +862,7 @@ contains
        dE = energy0 - energy1
        energy0 = energy1
        energy1 = abs(dE)
-       if(inode==ionode) then
+       if(inode==ionode .and. iprint_MD>1) then
          write (io_lun,'(4x,"Maximum force component : ",f15.8)') max
          write (io_lun,'(4x,"Force Residual          : ",f15.8)') &
                 sqrt(g0/ni_in_cell)
@@ -880,10 +876,7 @@ contains
 
        ! Output positions
        if (inode==ionode .and. iprint_gen > 1) then
-          do i = 1, ni_in_cell
-            write(io_lun,'(4x,"Atom ",i4," Position ",3f15.8)') &
-                  i, x_atom_cell(i), y_atom_cell(i), z_atom_cell(i)
-          enddo
+          call print_atomic_positions
        endif
        call my_barrier
 
@@ -1971,7 +1964,7 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
     cg_new = -tot_force ! The L-BFGS is in terms of grad E
     do while (.not. done)
        if (inode==ionode) then
-          write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," E: ",e16.8," dE: ",f12.8)') & 
+          write(io_lun,'(/4x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," E: ",e16.8," dE: ",f12.8/)') & 
                iter, max, energy1, en_conv*dE
           if (iprint_MD > 1) then
              g0 = dot(length, tot_force, 1, tot_force, 1)
@@ -2088,7 +2081,7 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
        if (abs(max) < MDcgtol) then
           done = .true.
           if (inode==ionode) then
-             write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," E: ",e16.8," dE: ",f12.8)') & 
+             write(io_lun,'(/4x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," E: ",e16.8," dE: ",f12.8/)') & 
                   iter, max, energy1, en_conv*dE
              if (iprint_MD > 1) then
                 write(io_lun,'(4x,"Force Residual:     ",f20.10," ",a2,"/",a2)') &
@@ -2100,7 +2093,7 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
                    en_conv*dE, en_units(energy_units)
              end if
              write(io_lun, fmt='(4x,"Maximum force below threshold: ",f12.5)') max
-             write(io_lun,'(2x,a,i4,a)') "GeomOpt converged in ", iter, " iterations"
+             write(io_lun,'(/4x,a,i4,a)') "GeomOpt converged in ", iter, " iterations"
           end if
        end if
        if (.not. done) call check_stop(done, iter)
@@ -2222,7 +2215,7 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
       if (stress_diff > max_stress) max_stress = stress_diff
     end do
     if (inode==ionode) then
-      write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxStr: ",f12.8," H: ",e16.8," dH: ",f12.8)') &
+      write(io_lun,'(/4x,"GeomOpt - Iter: ",i4," MaxStr: ",f12.8," H: ",e16.8," dH: ",f12.8/)') &
            0, max_stress, enthalpy0, zero
     end if
 
@@ -2312,7 +2305,7 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
        reset_iter = reset_iter +1
 
        if (inode==ionode) then
-         write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxStr: ",f12.8," H: ",e16.8," dH: ",f12.8)') &
+         write(io_lun,'(/4x,"GeomOpt - Iter: ",i4," MaxStr: ",f12.8," H: ",e16.8," dH: ",f12.8/)') &
               iter, max_stress, enthalpy1, en_conv*dH
          if (iprint_MD > 1) then
            write(io_lun,'(4x,"Maximum stress         ",3f10.6)') &
@@ -2348,7 +2341,7 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
        ! Will replace with stress tolerance when more reliable
        if (abs(dH)<enthalpy_tolerance .and. max_stress < cell_stress_tol) then
           if (inode==ionode) &
-               write(io_lun,'(2x,a,i4,a)') "GeomOpt converged in ", &
+               write(io_lun,'(/4x,a,i4,a)') "GeomOpt converged in ", &
                iter, " iterations"
           done = .true.
           if (myid == 0 .and. iprint_gen > 0) &
@@ -2570,7 +2563,7 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
     enthalpy0 = enthalpy(energy0, press)
     dH = zero
     if (inode==ionode) then
-      write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," H: ", e16.8," dH: ",f12.8)') & 
+      write(io_lun,'(/4x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," H: ", e16.8," dH: ",f12.8/)') & 
            0, max, enthalpy0, dH
     end if
 
@@ -2660,7 +2653,7 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
         energy0 = energy1
 
         if (inode==ionode) then
-          write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," H: ",e16.8," dH: ",f12.8)') &
+          write(io_lun,'(/4x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," H: ",e16.8," dH: ",f12.8/)') &
                iter, max, enthalpy1, en_conv*dH
           if (iprint_MD > 1) then
             write(io_lun,'(4x,"Force Residual:     ",f20.10," ",a2,"/",a2)') &
@@ -2755,7 +2748,7 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
       end do
 
       if (inode==ionode) then
-        write(io_lun,'(2x,"GeomOpt + Iter: ",i4," MaxF: ",f12.8," H: " ,e16.8," dH: ",f12.8)') &
+        write(io_lun,'(/4x,"GeomOpt + Iter: ",i4," MaxF: ",f12.8," H: " ,e16.8," dH: ",f12.8/)') &
              iter, max, enthalpy1, en_conv*dH
         if (iprint_MD > 1) then
           write(io_lun,'(4x,"Force Residual:     ",f20.10," ",a2,"/",a2)') &
@@ -2793,7 +2786,7 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
         if (abs(max) < MDcgtol .and. max_stress < cell_stress_tol) then
           done_cell = .true.
           if (inode==ionode) then
-            write(io_lun,'(2x,a,i4,a,i4,a)') "GeomOpt converged in ", &
+            write(io_lun,'(/4x,a,i4,a,i4,a)') "GeomOpt converged in ", &
               iter-iter_cell," ionic steps and ", iter_cell, " cell steps"
             write(io_lun, fmt='(4x,"Maximum force:      ",f20.10)') max
             write(io_lun, fmt='(4x,"Force tolerance:    ",f20.10)') MDcgtol
@@ -2939,7 +2932,7 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
     call get_maxf(max)
     enthalpy0 = enthalpy(energy0, press)
     if (inode==ionode) then
-      write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," H: ",e16.8," dH: ",f12.8)') &
+      write(io_lun,'(/4x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," H: ",e16.8," dH: ",f12.8/)') &
            0, max, enthalpy0, zero
     end if
 
@@ -3017,7 +3010,7 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
       ! Output and energy changes
       dH = enthalpy0 - enthalpy1
       if (inode==ionode) then
-        write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," H: ",e16.8," dH: ",f12.8)') &
+        write(io_lun,'(/4x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," H: ",e16.8," dH: ",f12.8/)') &
              iter, max, enthalpy1, en_conv*dH
         if (iprint_MD > 1) then
           write(io_lun,'(4x,"Force Residual:     ",f20.10," ",a2,"/",a2)') &
@@ -3046,7 +3039,7 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
         if (abs(max) < MDcgtol .and. max_stress < cell_stress_tol) then
           done = .true.
           if (inode==ionode) then
-            write(io_lun,'(2x,a,i4,a)') "GeomOpt converged in ", iter, " iterations"
+            write(io_lun,'(/4x,a,i4,a)') "GeomOpt converged in ", iter, " iterations"
             write(io_lun, fmt='(4x,"Maximum force:      ",f20.10)') max
             write(io_lun, fmt='(4x,"Force tolerance:    ",f20.10)') MDcgtol
             write(io_lun, fmt='(4x,"Enthalpy change:    ",f20.10)') dH

@@ -286,10 +286,10 @@ contains
 
     ! local variables
 
-    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 1) &
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 2) &
       write(io_lun,'(2x,a)') "print_md_energy"
 
-    if (inode==ionode) then
+    if (inode==ionode .and. iprint_MD>0) then
       write (io_lun, '(4x,"Conserved quantity H''  : ",f15.8)') &
         mdl%h_prime
       write (io_lun, '(4x,a)') "Components of conserved quantity"

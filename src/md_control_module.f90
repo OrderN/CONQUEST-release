@@ -620,7 +620,7 @@ contains
     integer                                   :: j, k, iatom
     real(double)                              :: m, trace
 
-    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 1) &
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 2) &
       write(io_lun,'(2x,a)') "get_temperature_and_ke"
 
     ! Update the kinetic energy and stress
