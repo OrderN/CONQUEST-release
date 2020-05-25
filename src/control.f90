@@ -400,7 +400,8 @@ contains
        !test_dot = dot(3*ni_in_cell, cg, 1, tot_force, 1)
        !call gsum(test_dot)
        if(test_dot<zero) then
-          if(inode==ionode.AND.iprint_MD>0) write(io_lun,fmt='(4x,"In cg_run, search dot gradient < zero. Reset direction ",f14.6)') test_dot
+          if(inode==ionode.AND.iprint_MD>0) &
+               write(io_lun,fmt='(4x,"In cg_run, search dot gradient < zero. Reset direction ",e14.6)') test_dot
           gamma = zero
           do j = 1, ni_in_cell
              jj = id_glob(j)
@@ -427,7 +428,7 @@ contains
        g0 = dot(length, tot_force, 1, tot_force, 1)
        call get_maxf(max)
        ! Output and energy changes
-       dE = energy0 - energy1
+       dE = energy1 - energy0
 
        if (inode==ionode) then
          write(io_lun,'(/4x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," E: ",e16.8," dE: ",f12.8/)') & 
@@ -2155,7 +2156,7 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
        if (.not. done) call check_stop(done, iter)
        if(done) exit
        if (.not. done) call check_stop(done, iter)
-       dE = energy0 - energy1
+       dE = energy1 - energy0
        energy0 = energy1
     end do
     deallocate(cg, STAT=stat)
@@ -3242,8 +3243,119 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
     iter_cell = 1
     ! Cell loop
     do while (.not. done_cell)
-       call cg_run(fixed_potential, vary_mu, energy1)
-       energy0 = energy1
+      ggold = zero
+      old_force = zero
+      energy1 = energy0
+      enthalpy1 = enthalpy0
+      done_ions = .false.
+
+      do while (.not. done_ions) ! ionic loop
+        call start_timer(tmr_l_iter, WITH_LEVEL)
+        ! Construct ratio for conjugacy
+        gg = zero
+        gg1 = zero! PR
+        do j = 1, ni_in_cell
+          gg = gg +                              &
+               tot_force(1,j) * tot_force(1,j) + &
+               tot_force(2,j) * tot_force(2,j) + &
+               tot_force(3,j) * tot_force(3,j)
+          gg1 = gg1 +                              &
+                tot_force(1,j) * old_force(1,j) + &
+                tot_force(2,j) * old_force(2,j) + &
+                tot_force(3,j) * old_force(3,j)
+        end do
+        if (abs(ggold) < 1.0e-6_double) then
+          gamma = zero
+        else
+          gamma = (gg-gg1)/ggold ! PR - change to gg/ggold for FR
+        end if
+        if(gamma<zero) gamma = zero
+        if (inode == ionode .and. iprint_MD > 2) &
+          write (io_lun,*) ' CHECK :: Force Residual = ', &
+                               for_conv * sqrt(gg)/ni_in_cell
+        if (inode == ionode .and. iprint_MD > 2) &
+          write (io_lun,*) ' CHECK :: gamma = ', gamma
+        if (CGreset) then
+          if (gamma > one) then
+            if (inode == ionode) &
+              write(io_lun,*) ' CG direction is reset! '
+            gamma = zero
+          end if
+        end if
+        if (inode == ionode) &
+          write (io_lun, fmt='(/4x,"Atomic relaxation CG iteration: ",i5)') iter
+        ggold = gg
+        ! Build search direction
+        do j = 1, ni_in_cell
+          jj = id_glob(j)
+          cg(1,j) = gamma*cg(1,j) + tot_force(1,jj)
+          cg(2,j) = gamma*cg(2,j) + tot_force(2,jj)
+          cg(3,j) = gamma*cg(3,j) + tot_force(3,jj)
+          x_new_pos(j) = x_atom_cell(j)
+          y_new_pos(j) = y_atom_cell(j)
+          z_new_pos(j) = z_atom_cell(j)
+        end do
+        old_force = tot_force
+        ! Minimise in this direction
+          call safemin2(x_new_pos, y_new_pos, z_new_pos, cg, energy0, &
+                        energy1, fixed_potential, vary_mu, energy1)
+        ! Output positions
+        if (inode==ionode .and. iprint_gen > 1) then
+          write(io_lun,'(4x,a4,a15)') "Atom", "Position"
+          do i = 1, ni_in_cell
+            write(io_lun,'(4x,i8,3f15.8)') i,atom_coord(:,i)
+          end do
+        end if
+        call write_atomic_positions("UpdatedAtoms.dat", trim(pdb_template))
+        if (flag_write_xsf) call write_xsf('trajectory.xsf', iter)
+        ! Analyse forces
+        g0 = dot(length, tot_force, 1, tot_force, 1)
+        call get_maxf(max)
+        ! Output and energy changes
+        enthalpy0 = enthalpy(energy0, press)
+        enthalpy1 = enthalpy(energy1, press)
+        dE = energy1 - energy0
+        dH = enthalpy1 - enthalpy0
+        energy0 = energy1
+
+        if (inode==ionode) then
+          write(io_lun,'(/4x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," H: ",e16.8," dH: ",f12.8/)') &
+               iter, max, enthalpy1, en_conv*dH
+          if (iprint_MD > 1) then
+            write(io_lun,'(4x,"Force Residual:     ",f20.10," ",a2,"/",a2)') &
+              for_conv*sqrt(g0/ni_in_cell), en_units(energy_units), & 
+              d_units(dist_units)
+            write(io_lun,'(4x,"Maximum force:      ",f20.10)') max
+            write(io_lun,'(4x,"Force tolerance:    ",f20.10)') MDcgtol
+            write(io_lun,'(4x,"Maximum stress         ",3f10.6)') &
+              max_stress
+            write(io_lun,'(4x,"Stress tolerance:   ",f20.10)') &
+              cell_stress_tol
+            write(io_lun,'(4x,"Enthalpy change:    ",f20.10," ",a2)') &
+              en_conv*dH, en_units(energy_units)
+            write(io_lun,'(4x,"Enthalpy tolerance: ",f20.10)') &
+              enthalpy_tolerance
+          end if
+        end if
+
+        iter = iter + 1
+        if (iter > MDn_steps) then
+          done_ions = .true.
+          if (inode==ionode) &
+            write (io_lun, fmt='(4x,"Exceeded number of CG steps: ",i6)') &
+                   iter
+        end if
+        if (abs(max) < MDcgtol) then
+          done_ions = .true.
+          if (inode==ionode) &
+            write (io_lun, &
+              fmt='(4x,"Maximum force below threshold: ",f12.5)') max
+        end if
+
+        call dump_pos_and_matrices
+        call stop_print_timer(tmr_l_iter, "a CG iteration", IPRINT_TIME_THRES1)
+        if (.not. done_ions) call check_stop(done_ions, iter)
+      end do ! ionic loop
 
       enthalpy0 = enthalpy(energy0, press)
       volume = rcellx*rcelly*rcellz
