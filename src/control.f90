@@ -400,7 +400,8 @@ contains
        !test_dot = dot(3*ni_in_cell, cg, 1, tot_force, 1)
        !call gsum(test_dot)
        if(test_dot<zero) then
-          if(inode==ionode.AND.iprint_MD>0) write(io_lun,fmt='(4x,"In cg_run, search dot gradient < zero. Reset direction ",f14.6)') test_dot
+          if(inode==ionode.AND.iprint_MD>0) &
+               write(io_lun,fmt='(4x,"In cg_run, search dot gradient < zero. Reset direction ",e14.6)') test_dot
           gamma = zero
           do j = 1, ni_in_cell
              jj = id_glob(j)
@@ -427,7 +428,7 @@ contains
        g0 = dot(length, tot_force, 1, tot_force, 1)
        call get_maxf(max)
        ! Output and energy changes
-       dE = energy0 - energy1
+       dE = energy1 - energy0
 
        if (inode==ionode) then
          write(io_lun,'(/4x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," E: ",e16.8," dE: ",f12.8/)') & 
@@ -2155,7 +2156,7 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
        if (.not. done) call check_stop(done, iter)
        if(done) exit
        if (.not. done) call check_stop(done, iter)
-       dE = energy0 - energy1
+       dE = energy1 - energy0
        energy0 = energy1
     end do
     deallocate(cg, STAT=stat)
@@ -3317,9 +3318,8 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
         ! Output and energy changes
         enthalpy0 = enthalpy(energy0, press)
         enthalpy1 = enthalpy(energy1, press)
-        dE = energy0 - energy1
-        dH = enthalpy0 - enthalpy1
-        dH = enthalpy0 - enthalpy1
+        dE = energy1 - energy0
+        dH = enthalpy1 - enthalpy0
         energy0 = energy1
 
         if (inode==ionode) then
