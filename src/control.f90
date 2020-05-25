@@ -2729,28 +2729,28 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
        reset_iter = reset_iter +1
 
        if (inode==ionode) then
-         write(io_lun,'(/4x,"GeomOpt - Iter: ",i4," MaxStr: ",f12.8," H: ",e16.8," dH: ",f12.8/)') &
-              iter, max_stress, enthalpy1, en_conv*dH
-         if (iprint_MD > 1) then
-           write(io_lun,'(4x,"Maximum stress         ",3f10.6)') &
-             max_stress
-           write(io_lun,'(4x,"Stress tolerance:   ",f20.10)') &
-             cell_stress_tol
-           write(io_lun,'(4x,"Change in stress: ",f15.8," ",a2)') max_stress, &
-             en_units(energy_units)
-           write(io_lun,'(4x,"Enthalpy change:    ",f20.10," ",a2)') &
-             en_conv*dH, en_units(energy_units)
-           write(io_lun,'(4x,"Enthalpy tolerance: ",f20.10)') &
-             enthalpy_tolerance
-         end if
+          write(io_lun,'(/4x,"GeomOpt - Iter: ",i4," MaxStr: ",f12.8," H: ",e16.8," dH: ",f12.8/)') &
+               iter, max_stress, enthalpy1, en_conv*dH
+          if (iprint_MD > 1) then
+             write(io_lun,'(4x,"Maximum stress         ",3f10.6)') &
+                  max_stress
+             write(io_lun,'(4x,"Stress tolerance:   ",f20.10)') &
+                  cell_stress_tol
+             write(io_lun,'(4x,"Change in stress: ",f15.8," ",a2)') dRMSstress, &
+                  en_units(energy_units)
+             write(io_lun,'(4x,"Enthalpy change:    ",f20.10," ",a2)') &
+                  en_conv*dH, en_units(energy_units)
+             write(io_lun,'(4x,"Enthalpy tolerance: ",f20.10)') &
+                  enthalpy_tolerance
+          else if (iprint_MD > 0) then
+             write(io_lun,'(4x,"Enthalpy change:    ",f20.10," ",a2)') &
+                  en_conv*dH, en_units(energy_units)
+             write(io_lun,'(4x,"Change in stress: ",f15.8," ",a2)') dRMSstress, &
+                  en_units(energy_units)
+          end if
        end if
 
        iter = iter + 1
-       if (myid == 0 .and. iprint_MD > 0) then
-           write (io_lun, 4) en_conv*dH, en_units(energy_units)
-           write (io_lun, 5) dRMSstress, "Ha"
-           write(io_lun,'(4x,"Change in stress: ",f15.8," ",a2)') max_stress, &
-                 en_units(energy_units)
        end if
 
        ! First exit is if too many steps have been taken. Default is 50.
