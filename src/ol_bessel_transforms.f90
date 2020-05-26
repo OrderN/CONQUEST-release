@@ -383,7 +383,7 @@ contains
      use datatypes
      use numbers
      use fft_interface_module, ONLY: cosft_init_wrapper, cosft_exec_wrapper, &
-          sinft_init_wrapper, sinft_exec_wrapper
+          sinft_init_wrapper, sinft_exec_wrapper, cosft_dest_wrapper, sinft_dest_wrapper
 
      implicit none
 
@@ -483,6 +483,8 @@ contains
            function_out(1) = function_out(1)+(r*r*delta_r*function_in(i))
         enddo
      end if
+     call cosft_dest_wrapper
+     call sinft_dest_wrapper
    end subroutine new_bessel_transform_evenFFTW
 !!***
 
@@ -511,7 +513,7 @@ contains
      use datatypes
      use numbers
      use fft_interface_module, ONLY: cosft_init_wrapper, cosft_exec_wrapper, &
-          sinft_init_wrapper, sinft_exec_wrapper
+          sinft_init_wrapper, sinft_exec_wrapper, cosft_dest_wrapper, sinft_dest_wrapper
 
      implicit none
 
@@ -602,6 +604,8 @@ contains
         end do
      end do
      function_out(1) = zero
+     call cosft_dest_wrapper
+     call sinft_dest_wrapper
    end subroutine new_bessel_transform_oddFFTW
    
  end module bessel_integrals

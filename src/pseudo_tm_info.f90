@@ -37,6 +37,8 @@
 !!    NA projectors added to pseudo_info type
 !!   2019/12/03 08:21 dave
 !!    Added functional to ps_info structure
+!!   2020/05/15 tsuyoshi
+!!    changed the type of z from integer to real
 !!  SOURCE
 !!
 module pseudo_tm_info
@@ -77,9 +79,9 @@ module pseudo_tm_info
      integer :: lmax                 ! maximum of the angular momentum
      integer :: n_pjnl               ! number of projector functions
      logical :: flag_pcc             ! flag for partial core correction
-     integer :: z                    ! atomic weight
      integer :: functional           ! Code for functional if set in ion file
      integer :: ps_type              ! Type of pseudopotential (hamann/siesta)
+     real(double) :: z               ! atomic weight
      real(double) :: zval            ! number of valence electrons
      real(double) :: alpha           ! exponent of gaussian for long range term
      ! of local pseudopotential (might not be used)
@@ -220,7 +222,7 @@ contains
           if(abs(InvSRange(ispecies))<RD_ERR) InvSRange(ispecies) = RadiusSupport(ispecies)
           if (flag_Multisite) RadiusSupport(ispecies) = RadiusSupport(ispecies) + RadiusMS(ispecies)
           max_rc = max(RadiusSupport(ispecies),max_rc)
-          atomicnum(ispecies)    = pseudo(ispecies)%z
+          atomicnum(ispecies)    = nint(pseudo(ispecies)%z)
           ! Valence charge
           charge(ispecies)       = pseudo(ispecies)%zval
           if(mass(ispecies) < zero) charge(ispecies) = zero
@@ -655,10 +657,10 @@ contains
     type(rad_func) :: dummy_rad
 
     character(len=80) :: filename
-    integer :: i, lun , i1, i2, i3, i4, z
+    integer :: i, lun , i1, i2, i3, i4
     real(double) :: dummy, a, r
     integer :: n_orbnl, n_pjnl
-    real(double) :: zval, yp1, ypn, erfarg, tmpv
+    real(double) :: z, zval, yp1, ypn, erfarg, tmpv
     real(double), parameter :: ln10 = 2.302585092994_double
 
     integer :: iproc, lmax, maxz, alls, nzeta, l, count,tzl, xc_func, ps_type
@@ -986,8 +988,8 @@ contains
       implicit none
 
       integer, intent(in)         :: unit
-      integer, intent(out) :: n_orbnl, n_pjnl, z, xc_func, pseudo_type
-      real(double), intent(out) :: zval
+      integer, intent(out) :: n_orbnl, n_pjnl, xc_func, pseudo_type
+      real(double), intent(out) :: z, zval
 
       character(len=78) :: line, trim_line
 
@@ -1055,7 +1057,7 @@ contains
          read(unit,'(a20)') label
          write(io_lun,fmt='(10x,"label = ",a20)') label
          read(unit,*) z
-         write(io_lun,fmt='(10x,"z = ",i5)') z
+         write(io_lun,fmt='(10x,"z = ",f12.5)') z
          read(unit,*) zval
          write(io_lun,fmt='(10x,"zval_int, zval = ",f12.5)') zval
          read(unit,*) mass

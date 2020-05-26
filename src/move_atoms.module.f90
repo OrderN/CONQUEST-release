@@ -3917,6 +3917,10 @@ contains
   !!  CREATION DATE
   !!   30/05/17
   !!  MODIFICATION HISTORY
+  !!   2020/04/24 08:15 dave
+  !!    Bug fix for constrained ratios
+  !!   2020/05/15 12:26 dave
+  !!    Update to remove unnecessary code (a/c and c/a etc are the same)
   !!  SOURCE
   !!
   subroutine update_cell_dims(start_rcellx, start_rcelly, start_rcellz, &
@@ -3997,18 +4001,18 @@ contains
         rcellx = start_rcellx + k * search_dir_x
 
     ! Fix a single ratio?
-    else if (leqi(cell_constraint_flag, 'c/a') .or. leqi(cell_constraint_flag, 'a/c')) then
-        rcellx = start_rcellx + k * (start_rcellx/start_rcellz)*search_dir_z
-        rcelly = start_rcelly + k * search_dir_y
-        rcellz = start_rcellz + k * (start_rcellz/start_rcellx)*search_dir_x
-    else if (leqi(cell_constraint_flag, 'a/b') .or. leqi(cell_constraint_flag, 'b/a')) then
-        rcellx = start_rcellx + k * (start_rcellx/start_rcelly)*search_dir_y
-        rcelly = start_rcelly + k * (start_rcelly/start_rcellx)*search_dir_x
-        rcellz = start_rcellz + k * search_dir_z
-    else if (leqi(cell_constraint_flag, 'b/c') .or. leqi(cell_constraint_flag, 'c/b')) then
-        rcellx = start_rcellx + k * search_dir_x
-        rcelly = start_rcelly + k * (start_rcelly/start_rcellz)*search_dir_z
-        rcellz = start_rcellz + k * (start_rcellz/start_rcelly)*search_dir_y
+    else if (leqi(cell_constraint_flag, 'a/c') .OR. leqi(cell_constraint_flag, 'c/a')) then
+       rcellx = start_rcellx + k * search_dir_x
+       rcelly = start_rcelly + k * search_dir_y
+       rcellz = start_rcellz + k * (start_rcellz/start_rcellx)*search_dir_x
+    else if (leqi(cell_constraint_flag, 'a/b') .OR. leqi(cell_constraint_flag, 'b/a')) then
+       rcellx = start_rcellx + k * search_dir_x
+       rcelly = start_rcelly + k * (start_rcelly/start_rcellx)*search_dir_x
+       rcellz = start_rcellz + k * search_dir_z
+    else if (leqi(cell_constraint_flag, 'b/c') .OR. leqi(cell_constraint_flag, 'c/b')) then
+       rcellx = start_rcellx + k * search_dir_x
+       rcelly = start_rcelly + k * search_dir_y
+       rcellz = start_rcellz + k * (start_rcellz/start_rcelly)*search_dir_y
     end if
 
     r_super_x = rcellx

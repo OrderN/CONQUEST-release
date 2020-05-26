@@ -54,8 +54,8 @@ directory, along with other parameters needed for compilation.
 * ``SCALAPACK`` (specify the ScaLAPACK library)
 * ``FFT_LIB`` (must be left as FFTW)
 * ``XC_LIBRARY`` (choose ``XC_LIBRARY=CQ`` for the internal Conquest
-  library, otherwise ``XC_LIBRARY=LibXC_v2`` LibXC v2. or ``XC_LIBRARY=LibXC``
-  for LibXC v3.x or higher)
+  library, otherwise ``XC_LIBRARY=LibXC_v2or3`` for LibXC v2.x or v3.x, or ``XC_LIBRARY=LibXC_v4``
+  for LibXC v4.x)
 * Two further options need to be set for LibXC:
 
   + ``XC_LIB`` (specify the XC libraries)
