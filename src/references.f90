@@ -420,7 +420,8 @@ module references
       use md_control,    only: md_thermo_type
       use XC,            only: flag_functional_type, functional_lda_pz81, &
            functional_lda_gth96, functional_lda_pw92, functional_gga_pbe96, &
-           functional_gga_pbe96_rev98, functional_gga_pbe96_r99, functional_gga_pbe96_wc
+           functional_gga_pbe96_rev98, functional_gga_pbe96_r99, functional_gga_pbe96_wc, &
+           write_xc_refs
 
       ! local variables
       type(type_bibliography) :: bib
@@ -464,7 +465,7 @@ module references
          end if
       else
          call bib%cite("Hernandez1997",punc=", ",pre="Basis: ")
-         call bib%cite("Bowler:1998lo",punc=", ")
+         call bib%cite("Bowler:1998lo")
       end if
       write(io_lun,*)
       ! Finding DM
@@ -530,6 +531,8 @@ module references
          if(flag_functional_type == functional_gga_pbe96_wc) &
               call bib%cite("Wu2006",pre="XC functional: ")
          write(io_lun,*)
+      else ! LibXC
+         call write_xc_refs
       end if
       
       call bib%close_bib

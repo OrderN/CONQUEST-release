@@ -2373,6 +2373,8 @@ contains
        call gsum(R0)
        R0 = sqrt(grid_point_volume * R0) / ne_in_cell
 
+       if (diff_E.gt.zero .and. inode==ionode) write(io_lun,'(4x,A,f15.7,A,i3)') &
+            'LFD_SCF: Energy rose by ', diff_E, ' at iteration # ',iter 
        if (inode == ionode) write(io_lun,'(4x,A,I3,2(3X,A,F17.10,1x,A2),(3X,A,F17.10)/)') &
             'LFD_SCF: iter =',iter, &
             'Total energy =',total_energy_last*en_conv,en_units(energy_units), &
@@ -2401,8 +2403,8 @@ contains
              rho(1:n_my_grid_points,spin) = rho_0(1:n_my_grid_points,spin)
           enddo
           if (inode==ionode) &
-               write(io_lun,'(//4x,A,f15.7,1x,A2,A,i3/4x,A,i3/4x,A,f15.7,1x,A2)') &
-               'LFD_SCF: Energy rises by ', diff_E*en_conv,en_units(energy_units), ' at iteration # ', iter, &
+               write(io_lun,'(4x,A,f15.7,1x,A2,A,i3/4x,A,i3/4x,A,f15.7,1x,A2)') &
+               'LFD_SCF: Energy rose by ', diff_E*en_conv,en_units(energy_units), ' at iteration # ', iter, &
                'SF coefficients and density are returned to those at previous iteration # ', iter-1, &
                'Total energy = ',total_energy*en_conv,en_units(energy_units)
           ! Reconstruct S, H and K with previous density 
@@ -2413,8 +2415,6 @@ contains
                          reset_L, .false.)
        else 
           ! Save present energy and density
-          if (diff_E.gt.zero .and. inode==ionode) write(io_lun,'(/4x,A,f15.7,A,i3)') &
-               'LFD_SCF: Energy rises by ', diff_E, ' at iteration # ',iter 
           total_energy   = total_energy_last
           total_energy_0 = total_energy_last
           do spin = 1, nspin
@@ -2423,10 +2423,9 @@ contains
           do spin_SF = 1, nspin_SF
              data_PAO0(:,spin_SF) = mat_p(matSFcoeff(spin_SF))%matrix
           end do
-          if (inode==ionode .and. iprint_basis>1) write(io_lun,'(/4x,A,i5)') &
+          if (inode==ionode .and. iprint_basis>2) write(io_lun,'(/4x,A,i5)') &
                'LFD_SCF: Save SF coefficients at iteration # ',iter
        endif
-
        ! Write out current SF coefficients and density matrices with some iprint (in future)
        if(n_dumpSFcoeff > 0 .and. mod(iter,n_dumpSFcoeff) ==0) then
           call dump_pos_and_matrices(index=unit_MSSF_save)
@@ -2448,7 +2447,7 @@ contains
     return
     !
 7   format(/20x,'------------ LFD Variation #: ',i5,' ------------',/)
-18  format(/4x,'The LFD SCF iteration has converged to a ',A,' at iteration #',I3, &
+18  format(4x,'The LFD SCF iteration has converged to a ',A,' at iteration #',I3, &
          /4x,'Total energy = ',f15.7,1x,a2)
   end subroutine LFD_SCF
   !!***

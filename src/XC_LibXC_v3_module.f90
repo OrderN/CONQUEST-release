@@ -193,7 +193,16 @@ contains
              else if(iprint_ops>0) then
                 write(io_lun,'(2x,"Using the ",a," functional ",a)') trim(family),trim(name)
              else
-                write(io_lun,fmt='(2x,"Using functional ",a)') trim(name)
+                select case(xc_f90_info_kind(xc_info(i)))
+                case (XC_EXCHANGE)
+                   write(io_lun,fmt='(/4x,"Using X functional ",a)') trim(name)
+                case (XC_CORRELATION)
+                   write(io_lun,fmt='(4x,"Using C functional ",a/)') trim(name)
+                case (XC_EXCHANGE_CORRELATION)
+                   write(io_lun,fmt='(/4x,"Using XC functional ",a/)') trim(name)
+                case default
+                   write(io_lun,fmt='(/4x,"Using functional ",a/)') trim(name)
+                end select
              end if
           end if
        end do
@@ -251,6 +260,46 @@ contains
   end subroutine init_xc
   !!***
   
+  !!****f* XC_module/write_xc_refs *
+  !!
+  !!  NAME
+  !!   write_xc_refs
+  !!  USAGE
+  !!
+  !!  PURPOSE
+  !!   Write XC references
+  !!  INPUTS
+  !!
+  !!  USES
+  !!
+  !!  AUTHOR
+  !!   D. R. Bowler
+  !!  CREATION DATE
+  !!   2020/05/26
+  !!  MODIFICATION HISTORY
+  !!
+  !!  SOURCE
+  !!
+  subroutine write_xc_refs
+
+    implicit none
+
+    integer :: i, j
+    character(len=120) :: ref
+
+    write(io_lun,fmt='(4x,"XC references from LibXC:")')
+    do j=1,n_xc_terms
+       i = 0
+       call xc_f90_info_refs(xc_info(j), i, ref)
+       do while(i >= 0)
+          write(io_lun, '(6x,a)') trim(ref)
+          call xc_f90_info_refs(xc_info(j), i, ref)
+       end do
+    end do
+    return
+  end subroutine write_xc_refs
+  !!***
+
   !!****f* XC/get_xc_potential *
   !!
   !!  NAME
