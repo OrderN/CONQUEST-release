@@ -219,13 +219,13 @@ contains
              else
                 select case(xc_f90_info_kind(xc_info(i)))
                 case (XC_EXCHANGE)
-                   write(io_lun,fmt='(4x,"Using X functional ",a)') trim(name)
+                   write(io_lun,fmt='(/4x,"Using X functional ",a)') trim(name)
                 case (XC_CORRELATION)
-                   write(io_lun,fmt='(4x,"Using C functional ",a)') trim(name)
+                   write(io_lun,fmt='(4x,"Using C functional ",a/)') trim(name)
                 case (XC_EXCHANGE_CORRELATION)
-                   write(io_lun,fmt='(4x,"Using XC functional ",a)') trim(name)
+                   write(io_lun,fmt='(/4x,"Using XC functional ",a/)') trim(name)
                 case default
-                   write(io_lun,fmt='(4x,"Using functional ",a)') trim(name)
+                   write(io_lun,fmt='(/4x,"Using functional ",a/)') trim(name)
                 end select
              end if
           end if
