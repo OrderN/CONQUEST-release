@@ -160,6 +160,33 @@ contains
   end subroutine init_xc
   !!***
 
+  !!****f* XC_module/write_xc_refs *
+  !!
+  !!  NAME
+  !!   write_xc_refs
+  !!  USAGE
+  !!
+  !!  PURPOSE
+  !!   Blank subroutine; with LibXC, write XC references
+  !!  INPUTS
+  !!
+  !!  USES
+  !!
+  !!  AUTHOR
+  !!   D. R. Bowler
+  !!  CREATION DATE
+  !!   2020/05/26
+  !!  MODIFICATION HISTORY
+  !!
+  !!  SOURCE
+  !!
+  subroutine write_xc_refs
+
+    return
+
+  end subroutine write_xc_refs
+  !!***
+  
   !!****f* XC/get_xc_potential *
   !!
   !!  NAME
