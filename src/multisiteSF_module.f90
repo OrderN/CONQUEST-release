@@ -147,11 +147,7 @@ contains
     integer :: spin_SF
 
 
-<<<<<<< HEAD
     if (inode==ionode .and. iprint_basis>3) write(io_lun,*) 'We are in sub:initial_SFcoeff'
-=======
-    if (inode==ionode .and. iprint_basis>1) write(io_lun,*) 'We are in sub:initial_SFcoeff'
->>>>>>> Tidy LFD and start LibXC reference output
 
     if (output_naba_in_MSSF) call print_naba_in_MSSF
 
@@ -173,11 +169,7 @@ contains
                                              density, maxngrid, transform_AtomF_to_SF=.false.)
        call my_barrier()
        t1 = mtime()
-<<<<<<< HEAD
        if (inode == ionode .and. iprint_basis>4) write (io_lun,'(A,f20.8,A)') &
-=======
-       if (inode == ionode .and. iprint_basis>2) write (io_lun,'(A,f20.8,A)') &
->>>>>>> Tidy LFD and start LibXC reference output
           'LFD: Time for S and H in primitive PAO: ', t1-t0, ' ms'
        t0 = t1
        ! Rayson's Localised Filter Diagonalisation method
@@ -212,11 +204,7 @@ contains
 
     call my_barrier()
     t2 = mtime()
-<<<<<<< HEAD
     if (inode == ionode .and. iprint_basis>2) write (io_lun,'(A,f20.8,A)') &
-=======
-    if (inode == ionode .and. iprint_basis>1) write (io_lun,'(A,f20.8,A)') &
->>>>>>> Tidy LFD and start LibXC reference output
        'Time for making initial multi-site SF coeffficients: ', t2-t0, ' ms'
 
     return
@@ -888,11 +876,7 @@ contains
 
 
     call my_barrier
-<<<<<<< HEAD
     if (inode==ionode .and. iprint_basis>2) write(io_lun,*) 'Do Localized Filter Diagonalization'
-=======
-    if (inode==ionode .and. iprint_basis>1) write(io_lun,*) 'Do Localized Filter Diagonalization'
->>>>>>> Tidy LFD and start LibXC reference output
 
     do spin_SF = 1, nspin_SF
        call matrix_scale(zero,matSFcoeff(spin_SF))
@@ -1167,19 +1151,11 @@ contains
        call io_close(lun12)
     endif
 
-<<<<<<< HEAD
     if(myid==0 .and. iprint_basis>3) then
        t1 = mtime()
        write(io_lun,'(A,f20.8,A)') 'Time for Localised Filter Diagonalisation: ',t1-t0,' ms'
     end if
     if (inode==ionode .and. iprint_basis>3) write(io_lun,*) 'Done Localized Filter Diagonalization'
-=======
-    if(myid==0 .and. inode==ionode  .and. iprint_basis>1) then
-       t1 = mtime()
-       write(io_lun,'(A,f20.8,A)') 'Time for Localised Filter Diagonalisation: ',t1-t0,' ms'
-    end if
-    if (inode==ionode .and. iprint_basis>2) write(io_lun,*) 'Done Localized Filter Diagonalization'
->>>>>>> Tidy LFD and start LibXC reference output
 !
     return
   end subroutine LocFilterDiag
@@ -1663,11 +1639,7 @@ contains
                ist, gcspart, k_in_halo, j, ist2, gcspart2, j_in_halo, nd2, nd3, n2, n3
 
 
-<<<<<<< HEAD
     if (inode==ionode .and. iprint_basis>=5) write(io_lun,*) 'We are in sub:LFD_make_Subspace_i'
-=======
-    if (inode==ionode .and. iprint_basis>1) write(io_lun,*) 'We are in sub:LFD_make_Subspace_i'
->>>>>>> Tidy LFD and start LibXC reference output
 
     kpao0 = 0
     ! Loop over atom_k, neighbour of atom_i

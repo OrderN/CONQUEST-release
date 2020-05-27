@@ -3097,7 +3097,7 @@ second:   do
   subroutine print_atomic_positions
 
     use global_module, only: atom_coord, iprint_MD, ni_in_cell, species_glob
-    use dimens,         only: r_super_x, r_super_y, r_super_z
+    use dimens,         only: r_super_x, r_super_y, r_super_z, atomicnum
     use GenComms, only: inode, ionode
     use units, only: dist_conv, d_units, dist_units, BohrToAng, bohr
     use periodic_table, only: pte
@@ -3116,13 +3116,13 @@ second:   do
           if(dist_units==bohr) then
              write(io_lun,fmt='(/4x,"Atomic coordinates in XYZ format (",a2,")")') "A "
              do i = 1, ni_in_cell
-                write (io_lun,fmt='(4x, a2, 3f10.4)') pte(pseudo(species_glob(i))%z), atom_coord(1:3,i)*BohrToAng
+                write (io_lun,fmt='(4x, a2, 3f10.4)') pte(atomicnum(species_glob(i))), atom_coord(1:3,i)*BohrToAng
              end do
              write(io_lun,fmt='(6x,"N.B. units above converted to Angstroms for xyz output")')
           else
              write(io_lun,fmt='(/4x,"Atomic coordinates (",a2,")")') d_units(dist_units)
              do i = 1, ni_in_cell
-                write (io_lun,fmt='(4x, a2, 3f10.4)') pte(pseudo(species_glob(i))%z), atom_coord(1:3,i)
+                write (io_lun,fmt='(4x, a2, 3f10.4)') pte(atomicnum(species_glob(i))), atom_coord(1:3,i)
              end do
           end if
        else

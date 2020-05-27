@@ -306,11 +306,19 @@ contains
     integer :: i, j
     character(len=120) :: ref
 
+<<<<<<< HEAD
+=======
+    write(io_lun,fmt='(4x,"XC references from LibXC:")')
+>>>>>>> Update to XC reference output
     do j=1,n_xc_terms
        i = 0
        call xc_f90_info_refs(xc_info(j), i, ref)
        do while(i >= 0)
+<<<<<<< HEAD
           write(io_lun, '(4x,a)') trim(ref)
+=======
+          write(io_lun, '(6x,a)') trim(ref)
+>>>>>>> Update to XC reference output
           call xc_f90_info_refs(xc_info(j), i, ref)
        end do
     end do
