@@ -2373,9 +2373,11 @@ contains
        call gsum(R0)
        R0 = sqrt(grid_point_volume * R0) / ne_in_cell
 
-       if (diff_E.gt.zero .and. inode==ionode) write(io_lun,'(4x,A,f15.7,A,i3)') &
+       if (diff_E.gt.zero .and. inode==ionode .and. iprint_basis>=0) &
+            write(io_lun,'(4x,A,f15.7,A,i3)') &
             'LFD_SCF: Energy rose by ', diff_E, ' at iteration # ',iter 
-       if (inode == ionode) write(io_lun,'(4x,A,I3,2(3X,A,F17.10,1x,A2),(3X,A,F17.10)/)') &
+       if (inode == ionode .and. iprint_basis>=0) &
+            write(io_lun,'(4x,A,I3,2(3X,A,F17.10,1x,A2),(3X,A,F17.10)/)') &
             'LFD_SCF: iter =',iter, &
             'Total energy =',total_energy_last*en_conv,en_units(energy_units), &
             'diff_E=',diff_E*en_conv,en_units(energy_units),'R0 =',R0
@@ -2384,12 +2386,14 @@ contains
           ! Energy converged
           convergence_flag = .true.
           total_energy = total_energy_last
-          if (inode==ionode) write(io_lun,18) 'total energy', iter, total_energy*en_conv,en_units(energy_units)
+          if (inode==ionode .and. iprint_basis>=-1) &
+               write(io_lun,18) 'total energy', iter, total_energy*en_conv,en_units(energy_units)
        else if (R0.le.LFD_threshD) then
           ! Density converged
           convergence_flag = .true.
           total_energy = total_energy_last
-          if (inode==ionode) write(io_lun,18) 'density', iter, total_energy*en_conv,en_units(energy_units)
+          if (inode==ionode .and. iprint_basis>=-1) &
+               write(io_lun,18) 'density', iter, total_energy*en_conv,en_units(energy_units)
        else if (diff_E.gt.zero .and. ABS(diff_E).le.LFD_Thresh_EnergyRise) then
           ! Energy rises so finish iteration with the previous SF coefficients and density
           convergence_flag = .true.
@@ -2402,7 +2406,7 @@ contains
           do spin = 1, nspin
              rho(1:n_my_grid_points,spin) = rho_0(1:n_my_grid_points,spin)
           enddo
-          if (inode==ionode) &
+          if (inode==ionode .and. iprint_basis>=0) &
                write(io_lun,'(4x,A,f15.7,1x,A2,A,i3/4x,A,i3/4x,A,f15.7,1x,A2)') &
                'LFD_SCF: Energy rose by ', diff_E*en_conv,en_units(energy_units), ' at iteration # ', iter, &
                'SF coefficients and density are returned to those at previous iteration # ', iter-1, &

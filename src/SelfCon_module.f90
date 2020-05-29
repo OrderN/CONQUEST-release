@@ -1018,7 +1018,7 @@ contains
     end if
     ! check if they have reached tolerance
     if (R0 < self_tol .AND. iter >= minitersSC) then ! If we've done minimum number
-       if (inode == ionode) &
+       if (inode == ionode .and. iprint_SC>=0) &
             write (io_lun,fmt='(4x,"Reached SCF tolerance of ",e12.5, &
             &" after ",i6," iterations")') R0, iter
        done = .true.
@@ -1120,7 +1120,7 @@ contains
        end if
        ! check if they have reached tolerance
        if (R0 < self_tol .AND. iter >= minitersSC) then ! Passed minimum number of iterations
-          if (inode == ionode) &
+          if (inode == ionode .and. iprint_SC>=0) &
                write (io_lun,fmt='(4x,"Reached SCF tolerance of ",e12.5, &
                &" after ",i6," iterations")') R0, iter
           done = .true.
