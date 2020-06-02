@@ -129,7 +129,7 @@ contains
   subroutine vary_pao(n_support_iterations, fixed_potential, vary_mu, &
                       n_cg_L_iterations, L_tolerance, sc_tolerance,   &
                       energy_tolerance, total_energy_last,            &
-                      expected_reduction)
+                      expected_reduction, level)
 
     use datatypes
     use logicals
@@ -176,6 +176,7 @@ contains
     logical      :: vary_mu, fixed_potential, convergence_flag
     integer      :: n_cg_L_iterations
     integer      :: n_support_iterations
+    integer      :: level
     real(double) :: expected_reduction
     real(double) :: total_energy_last, energy_tolerance, L_tolerance, &
                     sc_tolerance
