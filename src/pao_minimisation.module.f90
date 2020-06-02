@@ -129,7 +129,7 @@ contains
   subroutine vary_pao(n_support_iterations, fixed_potential, vary_mu, &
                       n_cg_L_iterations, L_tolerance, sc_tolerance,   &
                       energy_tolerance, total_energy_last,            &
-                      expected_reduction)
+                      expected_reduction, level)
 
     use datatypes
     use logicals
@@ -173,6 +173,7 @@ contains
     logical      :: vary_mu, fixed_potential, convergence_flag
     integer      :: n_cg_L_iterations
     integer      :: n_support_iterations
+    integer      :: level
     real(double) :: expected_reduction
     real(double) :: total_energy_last, energy_tolerance, L_tolerance, &
                     sc_tolerance
@@ -193,8 +194,12 @@ contains
     real(double), dimension(:), allocatable :: grad_copy,        &
                                                grad_copy_dH,     &
                                                grad_copy_dS
+    character(len=10) :: subname = "vary_pao: "
+    character(len=120) :: prefix
 
-
+    prefix = return_prefix(subname, level)
+    if(inode==ionode .and. iprint_minE + level >= 0) &
+         write(io_lun,fmt='(/4x,a)') trim(prefix)//" Starting PAO optimisation"
     reset_L = .true.
 
     length = mat_p(matSFcoeff(1))%length
@@ -221,11 +226,9 @@ contains
     con_tolerance = sc_tolerance
     tolerance = L_tolerance
     
-    if (inode == ionode) &
-         write (io_lun, *) 'Tolerances: ', &
+    if (inode == ionode .and. iprint_minE + level >= 1) &
+         write (io_lun, fmt='(4x,a,2e12.5)') trim(prefix)//' Tolerances: ', &
          con_tolerance, tolerance
-    if (inode == ionode) &
-         write (io_lun, *) inode, ' entering vary_pao'
 
     allocate(search_direction(length,nspin_SF), &
              last_sd(length,nspin_SF), Psd(length,nspin_SF), STAT=stat)
@@ -575,11 +578,6 @@ contains
 
     return
     
-! 1   format(20x,'mu = ',f10.7,'start energy = ',f15.7)
-! 2   format(/20x,'Current Total Energy : ',f15.7,' a.u. ')
-! 3   format(20x,'Previous Total Energy: ',f15.7,' a.u. ')
-! 4   format(20x,'Difference           : ',f15.7,' a.u. ')
-! 5   format(20x,'Required difference  : ',f15.7,' a.u. '/)
 7   format(/20x,'------------ PAO Variation #: ',i5,' ------------',/)
 18  format(///20x,'The minimisation has converged to a total energy:', &
          //20x,' Total energy = ',f15.7)
@@ -1676,5 +1674,14 @@ contains
                    !sum = dot(nsf*mat(part,Srange)%n_nab(memb),data_K(nsf1,1:,point:),1,data_dHloc(npao1,1,point),1)
                    !gradient(npao1,nsf1,iprim) = gradient(npao1,nsf1,iprim) + sum
 
+  function return_prefix(name, level)
 
+    character(len=120) :: return_prefix
+    character(len=*)   :: name
+    character(len=10):: prefix = "          "
+    integer          :: level
+
+    return_prefix = prefix(1:level)//name
+  end function return_prefix
+    
 end module pao_minimisation

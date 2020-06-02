@@ -238,7 +238,7 @@ contains
     end if
     if (inode == ionode .and. iprint_SC > 0) &
          write (io_lun, &
-                fmt='(8x,"Starting self-consistency.  Tolerance: ",e12.5,/)') &
+                fmt='(4x,"Starting self-consistency.  Tolerance: ",e12.5,/)') &
                self_tol
     if (record) then
        if (inode == ionode .and. iprint_SC > 1) &
