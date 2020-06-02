@@ -222,7 +222,7 @@ contains
              call vary_pao(n_support_iterations, fixed_potential, &
                            vary_mu, n_L_iterations, L_tolerance,  &
                            sc_tolerance, energy_tolerance,        &
-                           total_energy, expected_reduction)
+                           total_energy, expected_reduction, level)
           end if
        endif
     else if (flag_vary_basis) then ! Vary everything: DM, charge density, basis set
@@ -250,7 +250,7 @@ contains
              call vary_pao(n_support_iterations, fixed_potential, &
                            vary_mu, n_L_iterations, L_tolerance,  &
                            sc_tolerance, energy_tolerance,        &
-                           total_energy, expected_reduction)
+                           total_energy, expected_reduction, level)
           end if
        else
           call cq_abort("get_E_and_F: basis set undefined: ", &
@@ -285,7 +285,7 @@ contains
                 call vary_pao(n_support_iterations, fixed_potential, &
                      vary_mu, n_L_iterations, L_tolerance,  &
                      sc_tolerance, energy_tolerance,        &
-                     total_energy, expected_reduction)
+                     total_energy, expected_reduction, level)
              end if
           else
              call cq_abort("get_E_and_F: basis set undefined: ", &
