@@ -215,10 +215,11 @@ contains
     real(double), dimension(:), allocatable :: drho_dr, sigma, vrho, vsigma, loc_rho, d2term
 
     flag_energy = .false.
+    ! Necessary for LibXC
+    allocate(exc_array(n_tot))
+    exc_array = zero
     if(PRESENT(exc)) then
        flag_energy = .true.
-       allocate(exc_array(n_tot))
-       exc_array = zero
        exc = zero
     end if
     vxc = zero
@@ -273,6 +274,7 @@ contains
           ! Potentially also find Exc correction
        end if
     end if
+    deallocate(exc_array)
   end subroutine get_vxc
   
   subroutine vxc_pz_ca(n_tot,rr,rho,vxc,exc)
