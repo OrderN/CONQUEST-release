@@ -1,0 +1,34 @@
+#!/bin/bash
+#
+# **<lat>** 2020/07/15
+# env_g2_pao - settings for running MakeIonFiles
+#
+# BIN_DIR = path of compiled executables
+# PAO_DIR = path of pseudopotential & numerical atomic orbitals
+#
+CQ_PREFIX=/Users/lioneltruflandier/Conquest-develop
+CQ_BINDIR=$CQ_PREFIX/bin
+CQ_PAODIR=$CQ_PREFIX/pseudo-and-pao
+#
+# To run the Conquest program on a parallel machine, you may have to
+# add the appropriate options, ie specifying the mpi/omp command 
+# and the maximum number of processors/cores for large scale
+#
+MPI_PREFIX="" 
+MPI_NPROCS=
+OMP_PREFIX=""
+#export OMP_NUM_THREADS=4
+#
+#
+# function to test the exit status of a job
+check_failure () {
+    # usage: check_failure $?
+    if test $1 != 0
+    then
+        $ECHO "Error condition encountered during test: exit status = $1"
+        $ECHO "Aborting"
+        exit 1
+    fi
+}
+
+export -f check_failure 
