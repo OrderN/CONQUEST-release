@@ -40,7 +40,7 @@ but is also available on
 
 ## DOI
 
-The DOI for *all* versions of Conquest is here; you can find a DOI for each version 
+The DOI for *all* versions of CONQUEST is here; you can find a DOI for each version 
 under this umbrella DOI (which will resolve to the latest version).  Please use the 
 DOI for the specific version you have used in any given study.
 
