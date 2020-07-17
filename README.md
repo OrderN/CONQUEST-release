@@ -37,3 +37,11 @@ pseudo-atomic orbitals (PAOs) in those files.  CONQUEST integrates with
 The manual is provided with the release (see the ``docs`` directory)
 but is also available on
 [ReadTheDocs](https://conquest.readthedocs.io/en/latest/). 
+
+## DOI
+
+The DOI for *all* versions of Conquest is here; you can find a DOI for each version 
+under this umbrella DOI (which will resolve to the latest version).  Please use the 
+DOI for the specific version you have used in any given study.
+
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.3943720.svg)](https://doi.org/10.5281/zenodo.3943720)
