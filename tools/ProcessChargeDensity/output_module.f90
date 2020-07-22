@@ -162,7 +162,7 @@ contains
     
     character(len=50) :: filename
 
-    integer :: i, j, icount, nrx, nry, nrz, nx, ny, nz, isym
+    integer :: i, j, icount, nrx, nry, nrz, nx, ny, nz, isym, nz_total
     logical :: SymSamp
     character(len=3), dimension(7) :: asymm = (/'X  ','Y  ','XY ','Z  ','XZ ','YZ ','XYZ'/)
     real(double) :: shiftx, shifty, shiftz
@@ -192,7 +192,7 @@ contains
        write(17,fmt='("Sampling points asymmetric in directions ",a2)') asymm(isym)
     end if
     ! Atoms, origin location
-    write(17,fmt='(i5,3f12.6)') ni_in_cell*nrptx*nrpty*nrptz, zero, zero, zero
+    write(17,fmt='(i5,3f12.6,i5)') ni_in_cell*nrptx*nrpty*nrptz, zero, zero, zero, 1
     ! Numbers of grid points, grid increment (i.e. spacing)
     write(17,fmt='(i5,3f12.6)') nptsx*nrptx/nsampx,grid_x,zero,zero
     write(17,fmt='(i5,3f12.6)') nptsy*nrpty/nsampy,zero,grid_y,zero
@@ -215,15 +215,16 @@ contains
        end do
     end do
     ! Charge density, z fastest
-    icount = 0
+    nz_total = nptsz*nrptz/nsampz
     do nrx=1,nrptx
        do nx=1,nptsx,nsampx
           do nry=1,nrpty
              do ny=1,nptsy,nsampy
+                icount = 0
                 do nrz=1,nrptz
                    do nz=1,nptsz,nsampz
                       icount = icount + 1
-                      if(mod(icount,6)==0) then
+                      if ((icount==nz_total).or.(mod(icount,6)==0)) then
                          write(17,fmt='(e13.5)') current(nx,ny,nz)/gpv
                       else
                          write(17,fmt='(e13.5)',advance='no') current(nx,ny,nz)/gpv
