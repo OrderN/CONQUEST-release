@@ -1325,6 +1325,7 @@ contains
           charge_up(i)     = fdf_double ('Atom.SpinNeUp',zero)
           charge_dn(i)     = fdf_double ('Atom.SpinNeDn',zero)
           sum_elecN_spin   = charge_up(i)+charge_dn(i)
+          flag_InitialAtomicSpin = .false.
           if (abs(sum_elecN_spin)>RD_ERR) then
              flag_InitialAtomicSpin = .true.
              ! We will check that the sum of charge_up and charge_dn matches charge later
@@ -2635,7 +2636,7 @@ contains
           write(io_lun,fmt='(10x,"SCF tolerance:               ",f12.8)') sc_tolerance
           write(io_lun,fmt='(10x,"SCF iterations:              ",i4)') maxitersSC
        end if
-       if(flag_self_consistent) then
+       if(.not.flag_diagonalisation) then
           write(io_lun,fmt='(10x,"O(N) tolerance:              ",f12.8)') L_tolerance
           write(io_lun,fmt='(10x,"O(N) iterations:             ",i4)') n_L_iterations
        end if

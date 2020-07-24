@@ -812,7 +812,7 @@ second:   do
        !call create_sfc_partitions(myid, parts)
        call sfc_partitions_to_processors(parts)
        np_in_cell = parts%ngcellx*parts%ngcelly*parts%ngcellz
-       if (iprint_init > 1.AND.myid==0) write(io_lun,*) 'Finished partitioning'
+       if (iprint_init > 2.AND.myid==0) write(io_lun,fmt='(4x,a)') 'Finished partitioning'
     end if
     ! inverse table to npnode
     do np=1,np_in_cell
@@ -3452,6 +3452,16 @@ second:   do
     return
   end subroutine check_stop
   !!***
+
+  function return_prefix(name, level)
+
+    character(len=120) :: return_prefix
+    character(len=*)   :: name
+    character(len=10):: prefix = "          "
+    integer          :: level
+
+    return_prefix = prefix(1:-2*level)//name
+  end function return_prefix
 
 end module io_module
 

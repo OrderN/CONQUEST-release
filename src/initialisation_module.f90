@@ -122,7 +122,7 @@ contains
                                  flag_only_dispersion, flag_neutral_atom, &
                                  flag_atomic_stress, flag_heat_flux, &
                                  flag_full_stress, area_moveatoms, &
-                                 atomic_stress, non_atomic_stress
+                                 atomic_stress, non_atomic_stress, min_layer
     use GenComms,          only: inode, ionode, my_barrier, end_comms, &
                                  cq_abort
     use initial_read,      only: read_and_write
@@ -137,6 +137,7 @@ contains
     use angular_coeff_routines, only: set_fact
     use maxima_module,          only: lmax_ps, lmax_pao
     use XC, only: init_xc
+    use io_module,                 only: return_prefix
     
     implicit none
 
@@ -151,7 +152,10 @@ contains
     logical           :: start, start_L
     logical           :: read_phi
     integer :: lmax_tot, stat
+    character(len=12) :: subname = "initialise: "
+    character(len=120) :: prefix
 
+    prefix = return_prefix(subname, min_layer)
     call init_timing_system(inode)
 
     call init_reg_mem
@@ -199,13 +203,13 @@ contains
     if (flag_heat_flux) then
       if (.not. flag_full_stress) then
         flag_full_stress = .true.
-        if (inode==ionode) write(io_lun,'(2x,a)') &
-          "WARNING: setting AtomMove.FullStress T for heat flux calculation"
+        if (inode==ionode) write(io_lun,'(4x,a)') &
+             trim(prefix)//"WARNING: setting AtomMove.FullStress T for heat flux calculation"
       end if
       if (.not. flag_atomic_stress) then
         flag_atomic_stress = .true.
-        if (inode==ionode) write(io_lun,'(2x,a)') &
-          "WARNING: setting AtomMove.AtomicStress T for heat flux calculation"
+        if (inode==ionode) write(io_lun,'(4x,a)') &
+             trim(prefix)//"WARNING: setting AtomMove.AtomicStress T for heat flux calculation"
       end if
     end if
     if (flag_atomic_stress) then
@@ -323,7 +327,7 @@ contains
                                       flag_Becke_weights,              &
                                       flag_pcc_global, flag_dft_d2,    &
                                       iprint_gen, flag_perform_cDFT,   &
-                                      nspin,                  &
+                                      nspin, min_layer,                &
                                       glob2node, flag_XLBOMD,          &
                                       flag_neutral_atom, flag_diagonalisation
     use memory_module,          only: reg_alloc_mem, reg_dealloc_mem,  &
@@ -364,7 +368,7 @@ contains
                                       grid_point_position
     use primary_module,         only: bundle
     use group_module,           only: blocks
-    use io_module,              only: read_blocks
+    use io_module,              only: read_blocks, return_prefix
     use functions_on_grid,      only: associate_fn_on_grid
     use potential_module,       only: potential
     use maxima_module,          only: maxngrid, lmax_ps, lmax_pao
@@ -390,6 +394,8 @@ contains
     real(double)      :: rcut_BCS  !TM 26/Jun/2003
     type(cq_timer)    :: backtrace_timer
     integer           :: backtrace_level
+    character(len=7) :: subname = "setup: "
+    character(len=120) :: prefix
 
 !****lat<$
     if (       present(level) ) backtrace_level = level+1
@@ -397,6 +403,7 @@ contains
     call start_backtrace(t=backtrace_timer,who='set_up',&
          where=area,level=backtrace_level,echo=.true.)
 !****lat>$
+    prefix = return_prefix(subname, min_layer)
 
     ! Set organisation of blocks of grid-points.
     ! set_blocks determines the number of blocks on this node,
@@ -409,8 +416,8 @@ contains
     call set_blocks_from_new()
     ! Allocate ?
     !call set_blocks(inode, ionode)
-    if (inode == ionode .and. iprint_init > 1) &
-         write(io_lun,*) 'Completed set_blocks()'
+    if (inode == ionode .and. iprint_init + min_layer > 2) &
+         write(io_lun,fmt='(4x,a)') trim(prefix)//'Completed set_blocks()'
     n_my_grid_points = n_blocks*n_pts_in_block
     ! allocate(grid_point_x(n_my_grid_points),&
     !      grid_point_y(n_my_grid_points),&
@@ -450,14 +457,14 @@ contains
     call reg_alloc_mem(area_index, maxngrid, type_dbl)
     ! extra local potential for second spin channel for spin polarised calculation
     call my_barrier()
-    if (inode == ionode .and. iprint_init > 1) &
-         write (io_lun, *) 'Completed set_domains()'
+    if (inode == ionode .and. iprint_init > 2) &
+         write (io_lun,fmt='(4x,a)') trim(prefix)//'Completed set_domains()'
 
     ! Sorts out which processor owns which atoms
     call distribute_atoms(inode, ionode)
     call my_barrier
-    if (inode == ionode .and. iprint_init > 1) &
-         write (io_lun, *) 'Completed distribute_atoms()'
+    if (inode == ionode .and. iprint_init > 2) &
+         write (io_lun,fmt='(4x,a)') trim(prefix)//'Completed distribute_atoms()'
     ! Create a covering set
     call my_barrier
     !Define rcut_BCS  !TM 26/Jun/2003
@@ -466,8 +473,8 @@ contains
     !   if(rcut_BCS < rcut(i)) rcut_BCS= rcut(i)
     !enddo !  i=1, mx_matrices
     rcut_BCS = rcut(max_range)
-    if (inode == ionode .and. iprint_init > 1) &
-         write (io_lun, *) ' rcut for BCS_parts =', rcut_BCS
+    if (inode == ionode .and. iprint_init > 3) &
+         write (io_lun,fmt='(4x,a)') trim(prefix)//'rcut for BCS_parts =', rcut_BCS
 
     call make_cs(inode-1, rcut_BCS, BCS_parts, parts, bundle, &
                  ni_in_cell, x_atom_cell, y_atom_cell, z_atom_cell)
@@ -475,16 +482,16 @@ contains
     call make_iprim(BCS_parts, bundle)
     call send_ncover(BCS_parts, inode)
     call my_barrier
-    if (inode == ionode .and. iprint_init > 1) &
-         write (io_lun, *) 'Made covering set for matrix multiplications'
+    if (inode == ionode .and. iprint_init > 2) &
+         write (io_lun,fmt='(4x,a)') trim(prefix)//'Made covering set for matrix multiplications'
 
     ! Create all of the indexing required to perform matrix multiplications
     ! at a later point. This routine also identifies all the density
     ! matrix range interactions and hamiltonian range interactions
     ! associated with any atom being handled by this processor.
     call immi(parts, bundle, BCS_parts, inode)
-    if (inode == ionode .and. iprint_init > 1) &
-         write (io_lun, *) 'Completed immi()'
+    if (inode == ionode .and. iprint_init > 2) &
+         write (io_lun,fmt='(4x,a)') trim(prefix)//'Completed immi()'
     if (flag_XLBOMD) call immi_XL(parts,bundle,BCS_parts,inode)
 
     ! set up all the data block by block for atoms overlapping any
@@ -495,13 +502,13 @@ contains
     call setgrid(inode-1, r_core_squared, r_h)
 
     call my_barrier()
-    if (inode == ionode .and. iprint_init > 1) &
-         write (io_lun, *) 'Completed set_grid()'
+    if (inode == ionode .and. iprint_init > 2) &
+         write (io_lun,fmt='(4x,a)') trim(prefix)//'Completed set_grid()'
 
     call associate_fn_on_grid
     call my_barrier()
-    if (inode == ionode .and. iprint_init > 1) &
-         write (io_lun, *) 'Completed associate_fn_on_grid()'
+    if (inode == ionode .and. iprint_init > 2) &
+         write (io_lun,fmt='(4x,a)') trim(prefix)//'Completed associate_fn_on_grid()'
 
     ! The FFT requires the data to be reorganised into columns parallel to
     ! each axis in turn. The data for this organisation is help in map.inc,
@@ -524,34 +531,34 @@ contains
          call cq_abort("Error deallocating chdenr: ", maxngrid, stat)
     call reg_dealloc_mem(area_init, maxngrid, type_dbl)
     call my_barrier()
-    if (inode == ionode .and. iprint_init > 1) &
-         write (io_lun, *) 'Completed fft init'
+    if (inode == ionode .and. iprint_init > 2) &
+         write (io_lun,fmt='(4x,a)') trim(prefix)//'Completed fft init'
 
     ! Initialise the routines to calculate ion-ion interactions
     if(flag_neutral_atom) then
        call setup_screened_ion_interaction
        call my_barrier
-       if (inode == ionode .and. iprint_init > 1) &
-            write (io_lun, *) 'Completed setup_ion_interaction()'
+       if (inode == ionode .and. iprint_init > 2) &
+            write (io_lun,fmt='(4x,a)') trim(prefix)//'Completed setup_ion_interaction()'
     else
        ! set up the Ewald sumation: find out how many superlatices
        ! in the real space sum and how many reciprocal latice vectors in the
        ! reciprocal space sum are needed for a given energy tolerance. 
        call set_ewald(inode,ionode)
        call my_barrier
-       if (inode == ionode .and. iprint_init > 1) &
-            write (io_lun, *) 'Completed set_ewald()'
+       if (inode == ionode .and. iprint_init > 2) &
+            write (io_lun,fmt='(4x,a)') trim(prefix)//'Completed set_ewald()'
     end if
     ! +++
 
     ! Generate D2CS
     if (flag_dft_d2) then
-      if ((inode == ionode) .and. (iprint_gen > 1) ) &
+      if ((inode == ionode) .and. (iprint_gen > 2) ) &
            write (io_lun, '(/1x,"The dispersion is considered in the &
                            &DFT-D2 level.")')
       call make_cs(inode-1, r_dft_d2, D2_CS, parts, bundle, ni_in_cell, &
                    x_atom_cell, y_atom_cell, z_atom_cell)
-      if ( (inode == ionode) .and. (iprint_gen > 1) ) then
+      if ( (inode == ionode) .and. (iprint_gen > 3) ) then
         write (io_lun, '(/8x,"+++ D2_CS%ng_cover:",i10)')       &
               D2_CS%ng_cover
         write (io_lun, '(8x,"+++ D2_CS%ncoverx, y, z:",3i8)')   &
@@ -562,11 +569,6 @@ contains
               D2_CS%nx_origin, D2_CS%ny_origin, D2_CS%nz_origin
       end if
       call set_para_D2
-      if (inode == ionode) then                               !! DEBUG !!
-         write (io_lun, '(a, f10.5)') &                       !! DEBUG !!
-               "Sbrt: make_cs for DFT-D2, the cutoff is ", &  !! DEBUG !!
-               r_dft_d2                                       !! DEBUG !!
-      end if                                                   !! DEBUG !!
    end if
 
    ! external potential - first set up angular momentum bits
@@ -621,8 +623,8 @@ contains
       call build_Becke_weights
       call build_Becke_charges(atomcharge, density, maxngrid)
    end if
-   if (inode == ionode .and. iprint_init > 1) &
-        write (io_lun, *) 'Done init_pseudo '
+   if (inode == ionode .and. iprint_init > 2) &
+        write (io_lun,fmt='(4x,a)') trim(prefix)//'Done init_pseudo '
 
    if(flag_diagonalisation) then
       call init_blacs_pg
@@ -1226,7 +1228,7 @@ contains
           ! make SF-PAO coefficients
           call initial_SFcoeff(.true., .true., fixed_potential, .true.)
        endif
-       if (inode == ionode .and. iprint_init > 1) write (io_lun, *) 'Got SFcoeff'
+       if (inode == ionode .and. iprint_init > 2) write (io_lun, fmt='(4x,a)') 'Got SFcoeff'
        call my_barrier
     endif
 !!$
@@ -1248,7 +1250,7 @@ contains
     else
        call get_S_matrix(inode, ionode)
     endif
-    if (inode == ionode .and. iprint_init > 1) write (io_lun, *) 'Got S'
+    if (inode == ionode .and. iprint_init > 2) write (io_lun, fmt='(4x,a)') 'Got S'
     call my_barrier
 !!$
 !!$
@@ -1260,8 +1262,8 @@ contains
     if (.not. flag_diagonalisation .and. find_chdens .and. (start .or. start_L)) then
        call initial_L()
        call my_barrier()
-       if (inode == ionode .and. iprint_init > 1) &
-            write (io_lun, *) 'Got L  matrix'
+       if (inode == ionode .and. iprint_init > 2) &
+            write (io_lun, fmt='(4x,a)') 'Got L  matrix'
        if (vary_mu) then
           ! This cannot be timed within the routine
           call start_timer(tmr_std_densitymat)
@@ -1274,12 +1276,12 @@ contains
           call grab_matrix2('L',inode,nfile,Info,InfoGlob,index=index_MatrixFile,n_matrix=nspin)
           call my_barrier()
           call Matrix_CommRebuild(InfoGlob,Info,Lrange,L_trans,matL,nfile,symm,n_matrix=nspin)
-          if (inode == ionode .and. iprint_init > 1) write (io_lun, *) 'Grabbed L  matrix'
+          if (inode == ionode .and. iprint_init > 2) write (io_lun, fmt='(4x,a)') 'Grabbed L  matrix'
        else
           call grab_matrix2('K',inode,nfile,Info,InfoGlob,index=index_MatrixFile,n_matrix=nspin)
           call my_barrier()
           call Matrix_CommRebuild(InfoGlob,Info,Hrange,H_trans,matK,nfile,n_matrix=nspin)
-          if (inode == ionode .and. iprint_init > 1) write (io_lun, *) 'Grabbed K  matrix'
+          if (inode == ionode .and. iprint_init > 2) write (io_lun, fmt='(4x,a)') 'Grabbed K  matrix'
           !DEBUG call Report_UpdateMatrix("Kmat")  
        end if
     end if
@@ -1303,8 +1305,8 @@ contains
             dontM2, dontM3, dontM4, dophi, dontE, &
             mat_phi=matphi)
        electrons_tot = spin_factor * sum(electrons)
-       if (inode == ionode .and. iprint_init > 1)              &
-            write (io_lun,*) 'Got elect: (Nup, Ndn, Ntotal) ', &
+       if (inode == ionode .and. iprint_init > 2)              &
+            write (io_lun,fmt='(4x,a)') 'Got elect: (Nup, Ndn, Ntotal) ', &
             electrons(1), electrons(nspin),   &
             electrons_tot
     end if
@@ -1319,15 +1321,15 @@ contains
 !!$
 !!$
     ! (5) Find the Ewald energy for the initial set of atoms
-    if (inode == ionode .and. iprint_init > 1) &
-         write (io_lun, *) 'Ionic electrostatics'
+    if (inode == ionode .and. iprint_init > 2) &
+         write (io_lun, fmt='(4x,a)') 'Ionic electrostatics'
     if(flag_neutral_atom) then
-       if (inode == ionode .and. iprint_init > 1) &
-            write (io_lun, *) 'Calling screened_ion_interaction'
+       if (inode == ionode .and. iprint_init > 2) &
+            write (io_lun, fmt='(4x,a)') 'Calling screened_ion_interaction'
        call screened_ion_interaction
     else
-       if (inode == ionode .and. iprint_init > 1) &
-            write (io_lun, *) 'Calling ewald'
+       if (inode == ionode .and. iprint_init > 2) &
+            write (io_lun, fmt='(4x,a)') 'Calling ewald'
        call ewald
     end if
 !!$
@@ -1337,8 +1339,8 @@ contains
     ! +++
     ! (6) Find the dispersion energy for the initial set of atoms
     if (flag_dft_d2) then
-       if ((inode == ionode) .and. (iprint_init > 1) ) &
-            write (io_lun, *) 'Calling DFT-D2'
+       if ((inode == ionode) .and. (iprint_init > 2) ) &
+            write (io_lun, fmt='(4x,a)') 'Calling DFT-D2'
        call dispersion_D2
     end if
     call my_barrier
@@ -1347,7 +1349,7 @@ contains
 !!$
 !!$
     if (inode == ionode .and. iprint_init > 2) &
-         write (io_lun, *) 'Find_chdens is ', find_chdens
+         write (io_lun, fmt='(4x,a)') 'Find_chdens is ', find_chdens
 !!$
 !!$
 !!$
@@ -1359,8 +1361,8 @@ contains
             maxngrid)
        electrons_tot = spin_factor * sum(electrons)
        density = density * ne_in_cell/electrons_tot
-       if (inode == ionode .and. iprint_init > 1) &
-            write (io_lun, *) 'In initial_H, electrons: ', electrons_tot
+       if (inode == ionode .and. iprint_init > 2) &
+            write (io_lun, fmt='(4x,a)') 'In initial_H, electrons: ', electrons_tot
        ! if flag_LFD=T, update SF-PAO coefficients with the obtained density unless they have been read
        ! and update S with the coefficients
        if ((.NOT.read_option).AND.flag_LFD) then
@@ -1557,8 +1559,8 @@ contains
     real(double) :: rcut_max, r_core
 
     !-- Start of the subroutine (set_grid_new)
-    if(myid == 0 .and. iprint_index > 1) &
-         write (io_lun, *) 'setgrid_new starts'
+    if(myid == 0 .and. iprint_index > 2) &
+         write (io_lun, fmt='(4x,a)') 'setgrid_new starts'
     !if(iprint_index > 4) write(io_lun,*) ' setgrid_new starts for myid= ',myid
 
     !Sets up domain

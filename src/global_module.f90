@@ -293,6 +293,7 @@ module global_module
   integer, parameter :: IPRINT_TIME_THRES2 = 4  ! Not that important
   integer, parameter :: IPRINT_TIME_THRES3 = 6  ! For special purposes
 
+  integer :: min_layer ! Layer of minimisation algorithm (from 0 to -n)
   ! For P.C.C.
   logical :: flag_pcc_global = .false.
 
