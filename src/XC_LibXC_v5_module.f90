@@ -126,9 +126,9 @@ contains
        call xc_f90_version(vmajor, vminor, vmicro)
        if(inode==ionode.AND.iprint_ops>0) then
           if(vmajor>2) then
-             write(io_lun,'("LibXC version: ",I2,".",I2,".",I2)') vmajor, vminor, vmicro
+             write(io_lun,'(4x,"LibXC version: ",I2,".",I2,".",I2)') vmajor, vminor, vmicro
           else
-             write(io_lun,'("LibXC version: ",I2,".",I2)') vmajor, vminor
+             write(io_lun,'(4x,"LibXC version: ",I2,".",I2)') vmajor, vminor
           end if
        end if
        ! Identify the functional

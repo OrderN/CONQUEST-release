@@ -608,7 +608,7 @@ contains
     row_max_n = mod(blocks_r,proc_rows)
     col_max_n = mod(blocks_c,proc_cols)
     if(iprint_DM>2.AND.myid==0) write(io_lun,fmt='(4x,a,2i4)') 'N for row, col: ',row_max_n, col_max_n
-    if(iprint_DM>2.AND.myid==0) write(io_lun,fmt='(4x,a,2f4.0)') 'Loc_max_row, col: ',&
+    if(iprint_DM>2.AND.myid==0) write(io_lun,fmt='(4x,a,2i4)') 'Loc_max_row, col: ',&
          aint(real(blocks_r/proc_rows)),aint(real(blocks_c/proc_cols))
     my_row = 0
     ! first record proc_start(:)%rows and %cols map, this is proc proc dependent

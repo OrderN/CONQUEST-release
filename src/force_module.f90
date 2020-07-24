@@ -685,6 +685,7 @@ contains
       call print_stress(trim(prefix)//" Hartree stress:   ", Hartree_stress, 3 + min_layer)
       call print_stress(trim(prefix)//" PCC stress:       ", pcc_stress, 3 + min_layer)
       call print_stress(trim(prefix)//" non-SCF stress:   ", nonSCF_stress, 3 + min_layer)
+      if(flag_dft_D2) call print_stress(trim(prefix)//"DFT-D2 stress:    ", disp_stress, 3 + min_layer)
       call print_stress(trim(prefix)//" Total stress:     ", stress, 0 + min_layer)
       volume = rcellx*rcelly*rcellz
       ! We need pressure in GPa, and only diagonal terms output

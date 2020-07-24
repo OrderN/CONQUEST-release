@@ -237,7 +237,7 @@ contains
              call vary_pao(n_support_iterations, fixed_potential, &
                            vary_mu, n_L_iterations, L_tolerance,  &
                            sc_tolerance, energy_tolerance,        &
-                           total_energy, expected_reduction, level)
+                           total_energy, expected_reduction)
           end if
           dE_elec_opt = dE_PAO
        else ! Or SCF if necessary
@@ -272,7 +272,7 @@ contains
              call vary_pao(n_support_iterations, fixed_potential, &
                            vary_mu, n_L_iterations, L_tolerance,  &
                            sc_tolerance, energy_tolerance,        &
-                           total_energy, expected_reduction, level)
+                           total_energy, expected_reduction)
           end if
           dE_elec_opt = dE_PAO
        else
@@ -305,7 +305,7 @@ contains
                 call vary_pao(n_support_iterations, fixed_potential, &
                      vary_mu, n_L_iterations, L_tolerance,  &
                      sc_tolerance, energy_tolerance,        &
-                     total_energy, expected_reduction, level)
+                     total_energy, expected_reduction)
              end if
           else
              call cq_abort("get_E_and_F: basis set undefined: ", &

@@ -129,7 +129,7 @@ contains
   subroutine vary_pao(n_support_iterations, fixed_potential, vary_mu, &
                       n_cg_L_iterations, L_tolerance, sc_tolerance,   &
                       energy_tolerance, total_energy_last,            &
-                      expected_reduction, level)
+                      expected_reduction)
 
     use datatypes
     use logicals
@@ -176,7 +176,6 @@ contains
     logical      :: vary_mu, fixed_potential, convergence_flag
     integer      :: n_cg_L_iterations
     integer      :: n_support_iterations
-    integer      :: level
     real(double) :: expected_reduction
     real(double) :: total_energy_last, energy_tolerance, L_tolerance, &
                     sc_tolerance
@@ -540,14 +539,12 @@ contains
                               vary_mu, n_cg_L_iterations, tolerance, &
                               con_tolerance, total_energy_0,         &
                               expected_reduction, last_step, tmp)
-
        ! Normalise and writeout
        !call normalise_SFcoeff
        !do spin_SF = 1,nspin_SF
        !   call matrix_scale(zero,matSFcoeff_tran(spin_SF))
        !   call matrix_transpose(matSFcoeff(spin_SF), matSFcoeff_tran(spin_SF))
        !enddo
-
        ! Write out current SF coefficients every n_dumpSFcoeff, if n_dumpSFcoeff > 0)
        if (n_dumpSFcoeff > 0 .and. mod(n_iterations,n_dumpSFcoeff) == 1) then
           call dump_pos_and_matrices(index = unit_MSSF_save)
@@ -580,6 +577,11 @@ contains
                " dE: ",diff*en_conv,en_units(energy_units)
        end if
 
+       ! prepare for next iteration
+       ! Find new self-consistent energy 
+       !call new_SC_potl(.false., sc_tolerance, reset_L,             &
+       !     fixed_potential, vary_mu, n_L_iterations, &
+       !     L_tolerance, total_energy_0)
        ! We need to assemble the gradient
        do spin_SF = 1, nspin_SF
           call matrix_scale(zero, matdSFcoeff(spin_SF))
