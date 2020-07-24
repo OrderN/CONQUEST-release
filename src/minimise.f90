@@ -149,7 +149,7 @@ contains
                                  flag_LmatrixReuse,McWFreq,            &
                                  flag_multisite,                       &
                                  io_lun, flag_out_wf, wf_self_con, flag_write_DOS, &
-                                 flag_diagonalisation, nspin, flag_LFD
+                                 flag_diagonalisation, nspin, flag_LFD, min_layer
     use energy,            only: get_energy, xc_energy, final_energy
     use GenComms,          only: cq_abort, inode, ionode
     use blip_minimisation, only: vary_support, dE_blip
@@ -237,7 +237,7 @@ contains
              call vary_pao(n_support_iterations, fixed_potential, &
                            vary_mu, n_L_iterations, L_tolerance,  &
                            sc_tolerance, energy_tolerance,        &
-                           total_energy, expected_reduction, level)
+                           total_energy, expected_reduction)
           end if
           dE_elec_opt = dE_PAO
        else ! Or SCF if necessary
@@ -255,7 +255,7 @@ contains
           dE_elec_opt = dE_blip
        else if (flag_basis_set == PAOs) then
           if (flag_multisite .and. flag_LFD_NonSCF) then
-             if (inode==ionode) write(io_lun,'(/3x,A/)') &
+             if (inode==ionode) write(io_lun,'(/4x,A/)') &
                 'WARNING: Numerical PAO minimisation will be performed without doing LFD_SCF!'   
              !2017.Dec.28 TM: We need Selfconsistent Hamiltonian if this routine is called from control
              call new_SC_potl(.false., sc_tolerance, reset_L,             &
@@ -272,7 +272,7 @@ contains
              call vary_pao(n_support_iterations, fixed_potential, &
                            vary_mu, n_L_iterations, L_tolerance,  &
                            sc_tolerance, energy_tolerance,        &
-                           total_energy, expected_reduction, level)
+                           total_energy, expected_reduction)
           end if
           dE_elec_opt = dE_PAO
        else
@@ -308,7 +308,7 @@ contains
                 call vary_pao(n_support_iterations, fixed_potential, &
                      vary_mu, n_L_iterations, L_tolerance,  &
                      sc_tolerance, energy_tolerance,        &
-                     total_energy, expected_reduction, level)
+                     total_energy, expected_reduction)
              end if
           else
              call cq_abort("get_E_and_F: basis set undefined: ", &

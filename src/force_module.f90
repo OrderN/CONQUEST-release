@@ -246,7 +246,7 @@ contains
                                       flag_neutral_atom, flag_stress, &
                                       rcellx, rcelly, rcellz, &
                                       flag_atomic_stress, non_atomic_stress, &
-                                      flag_heat_flux, cell_constraint_flag
+                                      flag_heat_flux, cell_constraint_flag, min_layer
     use density_module,         only: get_electronic_density, density, &
                                       build_Becke_weight_forces
     use functions_on_grid,      only: atomfns, H_on_atomfns
@@ -262,7 +262,7 @@ contains
     use hartree_module, only: Hartree_stress
     use XC, ONLY: XC_GGA_stress
     use input_module,         only: leqi
-    use io_module, only: atom_output_threshold
+    use io_module, only: atom_output_threshold, return_prefix
 
     implicit none
 
@@ -292,7 +292,10 @@ contains
     real(double), dimension(:),   allocatable :: density_out_tot
     real(double), dimension(:,:), allocatable :: density_out
     character(len=1), dimension(3) :: comptstr = (/"x", "y", "z"/)
-    
+    character(len=10) :: subname = "force:  "
+    character(len=120) :: prefix
+
+    prefix = return_prefix(subname, min_layer)
 !****lat<$
     if (       present(level) ) backtrace_level = level+1
     if ( .not. present(level) ) backtrace_level = -10
@@ -327,7 +330,7 @@ contains
        call reg_alloc_mem(area_moveatoms, 3 * ni_in_cell, type_dbl)
        cdft_force = zero
     end if
-    if(iprint_MD>3) then
+    if(iprint_MD + min_layer>3) then
        allocate(s_pulay_for(3,ni_in_cell),phi_pulay_for(3,ni_in_cell))
        s_pulay_for = zero
        phi_pulay_for = zero
@@ -506,10 +509,11 @@ contains
     max_force = zero
     max_atom  = 0
     max_compt = 0
-    if (inode == ionode .and. write_forces .and. (iprint_MD>0 .or. ni_in_cell<atom_output_threshold)) then
-       write (io_lun, fmt='(/,4x,"Forces on atoms (",a2,"/",a2,")"/)') &
-             en_units(energy_units), d_units(dist_units)
-       write (io_lun, fmt='(4x,"    Atom   X              Y              Z")')
+    if (inode == ionode .and. write_forces .and. (iprint_MD + min_layer>0 .or. ni_in_cell<atom_output_threshold)) then
+       write (io_lun, fmt='(/4x,a,a2,"/",a2,")"/)') &
+             trim(prefix)//" Forces on atoms (",en_units(energy_units), d_units(dist_units)
+       write (io_lun, fmt='(4x,a)') &
+            trim(prefix)//"  Atom   X              Y              Z"
     end if
     ! Calculate forces and write out
     g0 = zero
@@ -550,44 +554,49 @@ contains
           end if
        end do ! j
        if (inode == ionode) then
-          if(iprint_MD > 2) then
-             write(io_lun, 101) i
-             write(io_lun, 102) (for_conv *   HF_force(j,i),  j = 1, 3)
-             if(flag_neutral_atom_projector) write (io_lun, fmt='("Force NA     : ",3f15.10)') (for_conv*NA_force(j,i),j=1,3)
-             write(io_lun, 112) (for_conv * HF_NL_force(j,i), j = 1, 3)
-             write(io_lun, 103) (for_conv *     p_force(j,i), j = 1, 3)
-             if(iprint_MD>3) then
-                write (io_lun, fmt='("  Phi pulay  : ",3f15.10)') (for_conv*phi_pulay_for(j,i),j=1,3)
-                write (io_lun, fmt='("  S pulay    : ",3f15.10)') (for_conv*s_pulay_for(j,i),j=1,3)
+          if(iprint_MD + min_layer > 2) then
+             write(io_lun, 101) trim(prefix),i
+             write(io_lun, 102) trim(prefix),(for_conv *   HF_force(j,i),  j = 1, 3)
+             if(flag_neutral_atom_projector) &
+                  write (io_lun, fmt='(4x,a,3f15.10)') trim(prefix)//"Force NA     : ", &
+                  (for_conv*NA_force(j,i),j=1,3)
+             write(io_lun, 112) trim(prefix),(for_conv * HF_NL_force(j,i), j = 1, 3)
+             write(io_lun, 103) trim(prefix),(for_conv *     p_force(j,i), j = 1, 3)
+             if(iprint_MD + min_layer>3) then
+                write (io_lun, fmt='(4x,a,3f15.10)') trim(prefix)//"  Phi pulay  : ", &
+                     (for_conv*phi_pulay_for(j,i),j=1,3)
+                write (io_lun, fmt='(4x,a,3f15.10)') trim(prefix)//"  S pulay    : ", &
+                     (for_conv*s_pulay_for(j,i),j=1,3)
              end if
-             write(io_lun, 104) (for_conv *    KE_force(j,i), j = 1, 3)
+             write(io_lun, 104) trim(prefix),(for_conv *    KE_force(j,i), j = 1, 3)
              if(flag_neutral_atom) then
-                write(io_lun, 106) (for_conv * screened_ion_force(j,i), j = 1, 3)
+                write(io_lun, 106) trim(prefix),(for_conv * screened_ion_force(j,i), j = 1, 3)
              else
-                write(io_lun, 106) (for_conv * ion_interaction_force(j,i), j = 1, 3)
+                write(io_lun, 106) trim(prefix),(for_conv * ion_interaction_force(j,i), j = 1, 3)
              end if
-             if (flag_pcc_global) write(io_lun, 108) (for_conv *   pcc_force(j,i), j = 1, 3)
-             if (flag_dft_d2) write (io_lun, 109) (for_conv * disp_force(j,i), j = 1, 3)
-             if (flag_perform_cdft) write (io_lun, fmt='("Force cDFT : ",3f15.10)') &
-                  (for_conv*cdft_force(j,i),j=1,3)
+             if (flag_pcc_global) write(io_lun, 108) trim(prefix),(for_conv *   pcc_force(j,i), j = 1, 3)
+             if (flag_dft_d2) write (io_lun, 109) trim(prefix),(for_conv * disp_force(j,i), j = 1, 3)
+             if (flag_perform_cdft) write (io_lun, fmt='(4x,a,3f15.10)') &
+                  trim(prefix)//"Force cDFT : ",(for_conv*cdft_force(j,i),j=1,3)
              if (flag_self_consistent) then
-                write (io_lun, 105) (for_conv * tot_force(j,i),   j = 1, 3)
+                write (io_lun, 105) trim(prefix),(for_conv * tot_force(j,i),   j = 1, 3)
              else
-                write (io_lun, 107) (for_conv * nonSC_force(j,i), j = 1, 3)
-                write (io_lun, 105) (for_conv * tot_force(j,i),   j = 1, 3)
+                write (io_lun, 107) trim(prefix),(for_conv * nonSC_force(j,i), j = 1, 3)
+                write (io_lun, 105) trim(prefix),(for_conv * tot_force(j,i),   j = 1, 3)
              end if
-          else if (write_forces .and. iprint_MD>0 .or. ni_in_cell<atom_output_threshold) then
-             write (io_lun,fmt='(6x,i6,3f15.10)') &
-                  i, (for_conv * tot_force(j,i), j = 1, 3)
-          end if ! (iprint_MD > 2)
+          else if (write_forces .and. iprint_MD + min_layer>0 .or. ni_in_cell<atom_output_threshold) then
+             write (io_lun,fmt='(4x,a,i6,3f15.10)') &
+                  trim(prefix),i, (for_conv * tot_force(j,i), j = 1, 3)
+          end if ! (iprint_MD + min_layer > 2)
        end if ! (inode == ionode)
     end do ! i
     if (inode == ionode) then
-       write (io_lun, fmt='(4x,"Maximum force : ",f15.8,"(",a2,"/",&
+       write (io_lun, fmt='(4x,a,f15.8,"(",a2,"/",&
             &a2,") on atom ",i9," in ",a1," direction")')     &
-            for_conv * max_force, en_units(energy_units), &
+            trim(prefix)//" Maximum force : ",for_conv * max_force, en_units(energy_units), &
             d_units(dist_units), max_atom, comptstr(max_compt)
-       write(io_lun, fmt='(4x,"Force Residual:     ",f20.10," ",a2,"/",a2)') &
+       write(io_lun, fmt='(4x,a,f20.10," ",a2,"/",a2)') &
+            trim(prefix)//" Force Residual:     ", &
             for_conv*sqrt(g0/ni_in_cell), en_units(energy_units), d_units(dist_units)
     end if
     ! We will add PCC and nonSCF stresses even if the flags are not set, as they are
@@ -655,42 +664,43 @@ contains
       end if
       ! Output
       if (inode == ionode) then       
-         write (io_lun,fmt='(/4x,"                  ",3a15)') "X","Y","Z"
-         if(iprint_MD > 1) write(io_lun,fmt='(4x,"Stress contributions:")')
+         write (io_lun,fmt='(/4x,a,3a15)') trim(prefix)//"                  ","X","Y","Z"
+         if(iprint_MD + min_layer > 1) write(io_lun,fmt='(4x,a)') trim(prefix)//"Stress contributions:"
       end if
-      call print_stress("K.E. stress:      ", KE_stress, 3)
-      call print_stress("S-Pulay stress:   ", SP_stress, 3)
-      call print_stress("Phi-Pulay stress: ", PP_stress, 3)
-      call print_stress("Local stress:     ", loc_HF_stress, 3)
-      call print_stress("Local G stress:   ", loc_G_stress, 3)
-      call print_stress("Non-local stress: ", NL_stress, 3)
-      call print_stress("Jacobian stress:  ", GPV_stress, 3)
-      call print_stress("XC stress:        ", XC_stress, 3)
+      call print_stress(trim(prefix)//" K.E. stress:      ", KE_stress, 3 + min_layer)
+      call print_stress(trim(prefix)//" S-Pulay stress:   ", SP_stress, 3 + min_layer)
+      call print_stress(trim(prefix)//" Phi-Pulay stress: ", PP_stress, 3 + min_layer)
+      call print_stress(trim(prefix)//" Local stress:     ", loc_HF_stress, 3 + min_layer)
+      call print_stress(trim(prefix)//" Local G stress:   ", loc_G_stress, 3 + min_layer)
+      call print_stress(trim(prefix)//" Non-local stress: ", NL_stress, 3 + min_layer)
+      call print_stress(trim(prefix)//" Jacobian stress:  ", GPV_stress, 3 + min_layer)
+      call print_stress(trim(prefix)//" XC stress:        ", XC_stress, 3 + min_layer)
       if (flag_neutral_atom) then
-        call print_stress("Ion-ion stress:   ", screened_ion_stress, 3)
-        call print_stress("N.A. stress:      ", NA_stress, 3)
+        call print_stress(trim(prefix)//" Ion-ion stress:   ", screened_ion_stress, 3 + min_layer)
+        if(flag_neutral_atom_projector) &
+             call print_stress(trim(prefix)//" N.A. stress:      ", NA_stress, 3 + min_layer)
       else
-        call print_stress("Ion-ion stress:   ", ion_interaction_stress, 3)
+        call print_stress(trim(prefix)//" Ion-ion stress:   ", ion_interaction_stress, 3 + min_layer)
       end if
-      call print_stress("Hartree stress:   ", Hartree_stress, 3)
-      call print_stress("PCC stress:       ", pcc_stress, 3)
-      call print_stress("non-SCF stress:   ", nonSCF_stress, 3)
-      if(flag_dft_D2) call print_stress("DFT-D2 stress:    ", disp_stress, 3)
-      call print_stress("Total stress:     ", stress, 0)
+      call print_stress(trim(prefix)//" Hartree stress:   ", Hartree_stress, 3 + min_layer)
+      call print_stress(trim(prefix)//" PCC stress:       ", pcc_stress, 3 + min_layer)
+      call print_stress(trim(prefix)//" non-SCF stress:   ", nonSCF_stress, 3 + min_layer)
+      if(flag_dft_D2) call print_stress(trim(prefix)//"DFT-D2 stress:    ", disp_stress, 3 + min_layer)
+      call print_stress(trim(prefix)//" Total stress:     ", stress, 0 + min_layer)
       volume = rcellx*rcelly*rcellz
       ! We need pressure in GPa, and only diagonal terms output
       scale = -HaBohr3ToGPa/volume
       !call print_stress("Total pressure:   ", stress*scale, 0)
-      if(inode==ionode.AND.iprint_MD>=0) &
-           write(io_lun,'(/4x,a18,f15.8,a4)') "Average pressure:   ", &
+      if(inode==ionode.AND.iprint_MD + min_layer>=0) &
+           write(io_lun,'(/4x,a,f15.8,a4)') trim(prefix)//" Average pressure:   ", &
            third*scale*(stress(1,1) + stress(2,2) + stress(3,3))," GPa"
-      if (flag_atomic_stress .and. iprint_MD > 2) call check_atomic_stress
+      if (flag_atomic_stress .and. iprint_MD + min_layer > 2) call check_atomic_stress
     end if
 
     call my_barrier()
-    if(iprint_MD>3) deallocate(s_pulay_for,phi_pulay_for)
-    if (inode == ionode .and. iprint_MD > 1 .and. write_forces) &
-         write (io_lun, fmt='(4x,"Finished force")')
+    if(iprint_MD + min_layer>3) deallocate(s_pulay_for,phi_pulay_for)
+    if (inode == ionode .and. iprint_MD + min_layer > 1 .and. write_forces) &
+         write (io_lun, fmt='(4x,a)') trim(prefix)//"Finished force"
 
     call start_timer(tmr_std_allocation)
     if (flag_pcc_global) then
@@ -717,16 +727,16 @@ contains
 
     return
 
-101 format('Force on atom ',i9)
-102 format('Force H-F    : ',3f15.10)
-112 format('Force H-Fnl  : ',3f15.10)
-103 format('Force pulay  : ',3f15.10)
-104 format('Force KE     : ',3f15.10)
-106 format('Force Ion-Ion: ',3f15.10)
-107 format('Force nonSC  : ',3f15.10)
-108 format('Force PCC    : ',3f15.10)
-105 format('Force Total  : ',3f15.10)
-109 format('Force disp   : ',3f15.10)
+101 format(a,'Force on atom ',i9)
+102 format(a,'Force H-F    : ',3f15.10)
+112 format(a,'Force H-Fnl  : ',3f15.10)
+103 format(a,'Force pulay  : ',3f15.10)
+104 format(a,'Force KE     : ',3f15.10)
+106 format(a,'Force Ion-Ion: ',3f15.10)
+107 format(a,'Force nonSC  : ',3f15.10)
+108 format(a,'Force PCC    : ',3f15.10)
+105 format(a,'Force Total  : ',3f15.10)
+109 format(a,'Force disp   : ',3f15.10)
 
   end subroutine force
   !!***
@@ -4312,7 +4322,7 @@ subroutine print_stress(label, str_mat, print_level)
   integer, intent(in)                       :: print_level
 
   ! local variables
-  character(20) :: fmt = '(4x,a18,3f15.8,a3)'
+  character(20) :: fmt = '(4x,a,3f15.8,a3)'
   character(20) :: blank = ''
 
   if (inode==ionode) then

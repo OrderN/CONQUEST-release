@@ -134,7 +134,7 @@ contains
                                            blips, PAOs, atomf, sf,     &
                                            ni_in_cell, nspin_SF,       &
                                            flag_perform_cdft,          &
-                                           IPRINT_TIME_THRES1
+                                           IPRINT_TIME_THRES1, min_layer
     use matrix_data,                 only: Srange
     use mult_module,                 only: matS, matSatomf, AtomF_to_SF_transform
     use io_module,                   only: dump_matrix
@@ -199,7 +199,7 @@ contains
     end if
 
     ! get the new InvS matrix
-    call  Iter_Hott_InvS(iprint_ops, InvSMaxSteps, &
+    call  Iter_Hott_InvS(iprint_ops + min_layer, InvSMaxSteps, &
                          InvSDeltaOmegaTolerance, ni_in_cell, &
                          inode, ionode, flag_do_SFtransform)
 
@@ -747,7 +747,7 @@ contains
     type(matrix_store_global)    :: InfoGlob
 
     if (atomf.ne.sf .and. .not.flag_do_SFtransform) then
-       if (inode.eq.ionode.and.output_level>=2) write(io_lun,*) &
+       if (inode.eq.ionode.and.output_level>=3) write(io_lun,*) &
           'Now we have only Spao but not Ssf yet, so InvS is not calculated at present.'
     else
        matI = allocate_temp_matrix(TSrange,0)
@@ -777,10 +777,10 @@ contains
              n_orbs = n_orbs + real(nsf_species(species(i)),double)
           end do
           ! First construct the identity
-          if (inode.eq.ionode.and.output_level>=2) write(io_lun,*) 'Zeroing data'
+          if (inode.eq.ionode.and.output_level>=3) write(io_lun,*) 'Zeroing data'
           call matrix_scale(zero,matI)
           call matrix_scale(zero,matT(1))
-          if (inode.eq.ionode.and.output_level>=2) write(io_lun,*) 'Creating I'
+          if (inode.eq.ionode.and.output_level>=3) write(io_lun,*) 'Creating I'
           ip = 1
           nb = 1
           do np = 1,bundle%groups_on_node
@@ -822,7 +822,7 @@ contains
                enddo
                call gsum(tot)
                eps = 1.0_double/(tot)
-               if(output_level>1.and.inode==ionode) write(io_lun,*) 'Eps, tot: ',eps,tot
+               if(output_level>2.and.inode==ionode) write(io_lun,*) 'Eps, tot: ',eps,tot
                call matrix_scale(zero,matT(spin_SF))
                call matrix_sum(zero,matT(spin_SF),eps,matS(spin_SF))
             enddo ! spin_SF
