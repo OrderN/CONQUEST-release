@@ -143,7 +143,7 @@
 module DiagModule
 
   use datatypes
-  use global_module,          only: io_lun, area_DM, iprint_DM, flag_diagonalisation
+  use global_module,          only: io_lun, area_DM, iprint_DM, min_layer, flag_diagonalisation
   use GenComms,               only: cq_abort, inode, ionode, myid
   use timer_module,           only: start_timer, stop_timer
   use timer_stdclocks_module, only: tmr_std_matrices
@@ -475,7 +475,7 @@ contains
     use datatypes
     use numbers
     use units
-    use global_module,   only: iprint_DM, ni_in_cell, numprocs,       &
+    use global_module,   only: iprint_DM, min_layer, ni_in_cell, numprocs,       &
          area_DM, flag_fix_spin_population,     &
          nspin, spin_factor, flag_DeltaSCF, flag_excite, &
          flag_local_excitation, dscf_HOMO_thresh, &
@@ -535,7 +535,8 @@ contains
 
     real(double), dimension(:),allocatable :: abs_wf
 
-    if (iprint_DM >= 2 .AND. myid == 0) &
+    min_layer = min_layer - 1 
+    if (iprint_DM + min_layer >= 2 .AND. myid == 0) &
          write (io_lun, fmt='(10x,"Entering FindEvals")')
     prim_size = 0
     do i = 1, bundle%n_prim
@@ -553,7 +554,7 @@ contains
     ! First diagonalisation - get eigenvalues only (so that we can find Efermi)
     time0 = mtime ()
 
-    if (iprint_DM >= 2 .and. (inode == ionode)) &
+    if (iprint_DM + min_layer >= 2 .and. (inode == ionode)) &
          write (io_lun, fmt='(10x,"In FindEvals, tolerance is ", g20.12)') &
          abstol
 
@@ -574,7 +575,7 @@ contains
     end do ! spin
     ! Allocate matrices to store band K matrices
     time1 = mtime()
-    if (iprint_DM >= 2 .AND. myid == 0) &
+    if (iprint_DM + min_layer >= 2 .AND. myid == 0) &
          write (io_lun, 2) myid, time1 - time0
     ! If we are trying to localise a level, we do NOT want to excite just yet
     if(flag_DeltaSCF.AND.flag_excite.AND.flag_local_excitation) then
@@ -605,7 +606,7 @@ contains
                 end if
              end do
           end do
-          if(myid==0.AND.iprint_DM>=2) write(io_lun,fmt='(2x,"WF band limits set to: ",2i6)') &
+          if(myid==0.AND.iprint_DM + min_layer>=2) write(io_lun,fmt='(2x,"WF band limits set to: ",2i6)') &
                n_band_min, n_band_max
           max_wf = n_band_max - n_band_min + 1
           allocate(out_wf(max_wf))
@@ -666,7 +667,7 @@ contains
              if(E_DOS_min>w(1,i,1)) E_DOS_min = w(1,i,1)
              if(E_DOS_max<w(matrix_size,i,1)) E_DOS_max = w(matrix_size,i,1)
           end do
-          if(myid==0.AND.iprint_DM>=2) write(io_lun,fmt='(2x,"DOS limits set automatically: ",2f12.5)') &
+          if(myid==0.AND.iprint_DM + min_layer>=2) write(io_lun,fmt='(2x,"DOS limits set automatically: ",2f12.5)') &
                E_DOS_min, E_DOS_max
        end if
        dE_DOS = (E_DOS_max - E_DOS_min)/real(n_DOS-1,double)
@@ -735,7 +736,7 @@ contains
              end do
              call gsum(setA)
              call gsum(setB)
-             if(inode==ionode.AND.iprint_DM>2) &
+             if(inode==ionode.AND.iprint_DM + min_layer>2) &
                   write(io_lun,fmt='(4x,"DeltaSCF HOMO search: Band, coefficients A/B: ",i5,2f12.5)') band,setA,setB
              if(setA>dscf_HOMO_thresh) then
                 dscf_source_level = band
@@ -788,7 +789,7 @@ contains
           end do
           call gsum(setA)
           call gsum(setB)
-          if(inode==ionode.AND.iprint_DM>2) &
+          if(inode==ionode.AND.iprint_DM + min_layer>2) &
                write(io_lun,fmt='(4x,"DeltaSCF LUMO search: Band, coefficients A/B: ",i5,2f12.5)') band,setA,setB
           if(setA>dscf_LUMO_thresh) then
              dscf_target_level = band
@@ -799,7 +800,7 @@ contains
        call findFermi(electrons, w, matrix_size, nkp, Efermi, occ)
     end if ! DeltaSCF localised excitation
     ! Now write out eigenvalues and occupancies
-    if (iprint_DM == 2 .AND. myid == 0) then
+    if (iprint_DM + min_layer == 2 .AND. myid == 0) then
        bandE = zero
        do i = 1, nkp
           write (io_lun, 7) i, kk(1,i), kk(2,i), kk(3,i)
@@ -837,7 +838,7 @@ contains
              write(io_lun, 4) en_conv * two * bandE(1), en_units(energy_units)
           end if
        end do ! do i = 1, nkp
-    else if (iprint_DM >= 3 .AND. myid == 0) then
+    else if (iprint_DM + min_layer >= 3 .AND. myid == 0) then
        bandE = zero
        do i = 1, nkp
           write (io_lun, 7) i, kk(1,i), kk(2,i), kk(3,i)
@@ -861,7 +862,7 @@ contains
              write(io_lun, 4) en_conv * two * bandE(1), en_units(energy_units)
           end if
        end do ! do i = 1, nkp
-    end if ! if(iprint_DM>=1.AND.myid==0)
+    end if ! if(iprint_DM + min_layer>=1.AND.myid==0)
 
     time0 = mtime()
     do spin = 1, nspin
@@ -916,7 +917,7 @@ contains
                    end if
                 end if
                 ! Build K and K_dn from the eigenvectors
-                if (iprint_DM >= 4 .and. inode == ionode) &
+                if (iprint_DM + min_layer >= 4 .and. inode == ionode) &
                      write (io_lun, *) myid, ' Calling buildK ', &
                      Hrange, matK(spin)
                 ! Pass band-by-band K matrices if we are outputting densities
@@ -948,7 +949,7 @@ contains
                          entropy_local(spin) = &
                               locc(spin) * log(locc(spin)) + &
                               (one - locc(spin)) * log (one - locc(spin))
-                         if (iprint_DM > 3 .and. inode == ionode) &
+                         if (iprint_DM + min_layer > 3 .and. inode == ionode) &
                               write (io_lun, &
                               fmt='(2x,"Spin, Occ, wt: ", i1, 2f12.8, &
                               &" ent: ", f20.12)') &
@@ -1105,26 +1106,26 @@ contains
        deallocate(total_DOS)
     end if
 
-    if (iprint_DM > 3 .and. inode == ionode) &
+    if (iprint_DM + min_layer > 3 .and. inode == ionode) &
          write (io_lun, *) "Entropy, TS: ", entropy, kT * entropy
     ! store entropy as TS instead of S
     entropy = entropy * kT
     time1 = mtime()
-    if (iprint_DM >= 2 .and. inode == ionode) &
+    if (iprint_DM + min_layer >= 2 .and. inode == ionode) &
          write (io_lun, 3) myid, time1 - time0
 
     ! -------------------------------------------------------------
     ! End diagonalisation
     ! -------------------------------------------------------------
     ! Write out the Fermi Energy
-    if (iprint_DM >= 1 .and. inode == ionode) then
+    if (iprint_DM + min_layer >= 1 .and. inode == ionode) then
        do spin = 1, nspin
           write (io_lun, 13) spin, en_conv * Efermi(spin), &
                en_units(energy_units)
        end do
     end if
     ! Write out the band energy and trace of K
-    if (iprint_DM >= 1) then
+    if (iprint_DM + min_layer >= 1) then
        ! for tr(K.H)
        bandE_total = zero
        do spin = 1, nspin
@@ -1168,7 +1169,7 @@ contains
     call reg_dealloc_mem(area_DM, matrix_size * prim_size * nspin, type_cplx)
     ! global
     call endDiag
-
+    min_layer = min_layer + 1
     return
 
 2   format(10x,'Proc: ',i5, ' Time taken for eval diag: ',f20.8,' ms')
@@ -2530,7 +2531,7 @@ contains
 
     use datatypes
     use numbers
-    use global_module, only: iprint_DM, nspin
+    use global_module, only: iprint_DM, nspin, min_layer
     use GenComms,      only: myid
 
     implicit none
@@ -2556,7 +2557,7 @@ contains
        electrons_total = two * electrons(1)
     end if
 
-    if (iprint_DM >= 2 .and. (inode == ionode)) then
+    if (iprint_DM + min_layer >= 2 .and. (inode == ionode)) then
        if (nspin == 1) then
           write (io_lun, 1) myid, electrons_total
        else
@@ -2567,7 +2568,7 @@ contains
     ! find the correct bracket trapping Ef
     labspin: do spin = 1, nspin
 
-       if (iprint_DM >= 2 .and. nspin == 2 .and. inode == ionode) &
+       if (iprint_DM + min_layer >= 2 .and. nspin == 2 .and. inode == ionode) &
             write (io_lun, 3) myid, spin
        select case (flag_smear_type)
 
@@ -2587,7 +2588,7 @@ contains
 
           if (thisElec(spin) < electrons(spin)) then ! found a lower bound
 
-             if (iprint_DM >= 4 .and. (inode == ionode)) &
+             if (iprint_DM + min_layer >= 4 .and. (inode == ionode)) &
                   write (io_lun, 4) myid, Ef(spin)
              lowEf(spin) = Ef(spin)
              lowElec(spin) = thisElec(spin)
@@ -2608,14 +2609,14 @@ contains
                 lowElec(spin) = highElec(spin)
                 highEf(spin) = highEf(spin) + incEf(spin)
                 call occupy(occ, eig, highEf, highElec, nbands, nkp, spin=spin)
-                if (iprint_DM >= 4 .and. inode == ionode) &
+                if (iprint_DM + min_layer >= 4 .and. inode == ionode) &
                      write (io_lun, 5) myid, highEf(spin), highElec(spin)
                 ibrkt = ibrkt + 1
              end do ! while (highElec(spin) < electrons(spin))
 
           else ! found an upper bound
 
-             if (iprint_DM >= 4 .AND. inode == ionode) &
+             if (iprint_DM + min_layer >= 4 .AND. inode == ionode) &
                   write (io_lun, 6) myid, Ef(spin)
              highEf(spin) = Ef(spin)
              highElec(spin) = thisElec(spin)
@@ -2636,14 +2637,14 @@ contains
                 highElec(spin) = lowElec(spin)
                 lowEf(spin) = lowEf(spin) - incEf(spin)
                 call occupy(occ, eig, lowEf, lowElec, nbands, nkp, spin=spin)
-                if (iprint_DM >= 4 .AND. inode == ionode) &
+                if (iprint_DM + min_layer >= 4 .AND. inode == ionode) &
                      write (io_lun, 5) myid, lowEf(spin), lowElec(spin)
                 ibrkt = ibrkt + 1
              end do
 
           end if ! if (thisElec(spin) < electrons(spin))
 
-          if (iprint_DM > 3 .and. inode == ionode) &
+          if (iprint_DM + min_layer > 3 .and. inode == ionode) &
                write (io_lun, 12) myid, lowEf(spin), highEf(spin)
 
        case (1) ! Methfessel-Paxton smearing
@@ -2706,11 +2707,11 @@ contains
              lowElec(spin) = highElec(spin)
              highEf(spin) = lowEf(spin) + incEf(spin)
              call occupy(occ, eig, highEf, highElec, nbands, nkp, spin=spin)
-             if (iprint_DM >= 4 .and. inode == ionode) &
+             if (iprint_DM + min_layer >= 4 .and. inode == ionode) &
                   write (io_lun, 5) myid, highEf(spin), highElec(spin)
           end do
 
-          if (iprint_DM > 3 .and. inode == ionode) &
+          if (iprint_DM + min_layer > 3 .and. inode == ionode) &
                write (io_lun, 12) myid, lowEf(spin), highEf(spin)
 
        case default
@@ -2736,7 +2737,7 @@ contains
           call occupy(occ, eig, Ef, thisElec, nbands, nkp, spin=spin)
        end do
 
-       if (iprint_DM >= 2 .AND. inode == ionode) then
+       if (iprint_DM + min_layer >= 2 .AND. inode == ionode) then
           if (nspin == 1) then
              write (io_lun, 10) Ef(spin)
           else
@@ -2802,7 +2803,7 @@ contains
 
     use datatypes
     use numbers
-    use global_module, only: iprint_DM, nspin, spin_factor
+    use global_module, only: iprint_DM, nspin, spin_factor, min_layer
     use GenComms,      only: myid
 
     implicit none
@@ -2826,7 +2827,7 @@ contains
 
     case (0) ! Fermi smearing
 
-       if (iprint_DM >= 2 .AND. inode == ionode) &
+       if (iprint_DM + min_layer >= 2 .AND. inode == ionode) &
             write (io_lun, 1) myid, electrons_total
        ! Take first guess as double filling each band at first k point
        ne = int(electrons_total / two)
@@ -2841,7 +2842,7 @@ contains
        ! Find two values than bracket true Ef
        incEf(:) = one
        if (thisElec < electrons_total) then ! found lower bound
-          if (iprint_DM >= 4 .and. inode == ionode) &
+          if (iprint_DM + min_layer >= 4 .and. inode == ionode) &
                write (io_lun, 2) myid, Ef(1) ! Ef(1) = Ef(2) always
           lowEf(:) = Ef(:)
           lowElec = thisElec
@@ -2862,12 +2863,12 @@ contains
              highEf(:) = highEf(:) + incEf(:)
              call occupy(occ, eig, highEf, electrons, nbands, nkp)
              highElec = spin_factor * sum(electrons(:))
-             if (iprint_DM >= 4 .and. inode == ionode) &
+             if (iprint_DM + min_layer >= 4 .and. inode == ionode) &
                   write (io_lun, 3) myid, highEf(1), highElec
              ibrkt = ibrkt + 1
           end do
        else ! found upper bound
-          if (iprint_DM >= 4 .and. inode == ionode) &
+          if (iprint_DM + min_layer >= 4 .and. inode == ionode) &
                write (io_lun, 6) myid, Ef(1)
           highEf(:) = Ef(:)
           highElec = thisElec
@@ -2888,12 +2889,12 @@ contains
              lowEf(:) = lowEf(:) - incEf(:)
              call occupy(occ, eig, lowEf, electrons, nbands, nkp)
              lowElec = spin_factor * sum(electrons(:))
-             if (iprint_DM >= 4 .and. inode == ionode) &
+             if (iprint_DM + min_layer >= 4 .and. inode == ionode) &
                   write (io_lun, 3) myid, lowEf(1), lowElec
              ibrkt = ibrkt + 1
           end do
        end if
-       if (iprint_DM > 3 .AND. inode == ionode) &
+       if (iprint_DM + min_layer > 3 .AND. inode == ionode) &
             write (io_lun, 5) myid, lowEf(1), highEf(1)
        ! search method to use in the case of Methmessel Paxton smearing
 
@@ -2959,7 +2960,7 @@ contains
           highEf(:) = lowEf(:) + incEf(:)
           call occupy(occ, eig, highEf, electrons, nbands, nkp)
           highElec = spin_factor * sum(electrons(:))
-          if (iprint_DM >= 4 .and. inode == ionode) &
+          if (iprint_DM + min_layer >= 4 .and. inode == ionode) &
                write (io_lun, 3) myid, highEf(1), highElec
        end do
 
@@ -2988,7 +2989,7 @@ contains
        thisElec = spin_factor * sum(electrons(:))
     end do
 
-    if (iprint_DM >= 2 .and. inode == ionode) write (io_lun, 8) Ef(1)
+    if (iprint_DM + min_layer >= 2 .and. inode == ionode) write (io_lun, 8) Ef(1)
 
     return
 
@@ -3059,7 +3060,7 @@ contains
   subroutine occupy(occu, ebands, Ef, electrons, nbands, nkp, spin)
     use datatypes
     use numbers
-    use global_module, only: iprint_DM, nspin
+    use global_module, only: iprint_DM, nspin, min_layer
     use GenComms,      only: myid
 
     implicit none
@@ -3105,7 +3106,7 @@ contains
        end do kp
     end do labspin
 
-    if (iprint_DM >=5 .and. (inode == ionode)) then
+    if (iprint_DM + min_layer >=5 .and. (inode == ionode)) then
        if (nspin == 1) then
           write (io_lun, 1) myid, Ef(1), two * electrons(1)
        else if (present (spin)) then
@@ -3431,7 +3432,7 @@ contains
          matrix_size
     use global_module,   only: numprocs, iprint_DM, id_glob,         &
          ni_in_cell, x_atom_cell, y_atom_cell, &
-         z_atom_cell, max_wf, out_wf
+         z_atom_cell, max_wf, out_wf, min_layer
     use mpi
     use GenBlas,         only: dot
     use GenComms,        only: myid
@@ -3477,7 +3478,7 @@ contains
     real(double) :: occ_correction
 
     call start_timer(tmr_std_matrices)
-    if(iprint_DM>3.AND.myid==0) write(io_lun,fmt='(10x,"Entering &
+    if(iprint_DM + min_layer>3.AND.myid==0) write(io_lun,fmt='(10x,"Entering &
          &buildK ",i4)') matA
 
     if(PRESENT(matBand)) then
@@ -3502,17 +3503,17 @@ contains
     send_prim = 0
     num_send = 0
     norb_send = 0
-    if(iprint_DM>3.AND.myid==0) write(io_lun,*) 'buildK: Stage one'
+    if(iprint_DM + min_layer>3.AND.myid==0) write(io_lun,*) 'buildK: Stage one'
     ! Step one - work out which processors we need to exchange data with
     do part = 1,bundle%groups_on_node ! Loop over primary set partitions
-       if(iprint_DM>=5.AND.myid==0) write(io_lun,1) myid,part
+       if(iprint_DM + min_layer>=5.AND.myid==0) write(io_lun,1) myid,part
        if(bundle%nm_nodgroup(part)>0) then ! If there are atoms in partition
           CC = parts%ngnode(parts%inode_beg(myid+1)+part-1)
           do memb = 1,bundle%nm_nodgroup(part) ! Loop over atoms
-             if(iprint_DM>=5.AND.myid==0) write(io_lun,2) myid,memb
+             if(iprint_DM + min_layer>=5.AND.myid==0) write(io_lun,2) myid,memb
              prim_atom = bundle%nm_nodbeg(part)+memb-1
              do neigh = 1, mat(part,range)%n_nab(memb) ! Loop over neighbours of atom
-                if(iprint_DM>=5.AND.myid==0) write(io_lun,3) myid,neigh
+                if(iprint_DM + min_layer>=5.AND.myid==0) write(io_lun,3) myid,neigh
                 ist = mat(part,range)%i_acc(memb)+neigh-1
                 ! Establish FSC number of neighbour
                 Col_FSC_part = BCS_parts%lab_cell(mat(part,range)%i_part(ist))
@@ -3523,12 +3524,12 @@ contains
                 FSC_atom = id_glob(parts%icell_beg(Col_FSC_part)+Col_FSC_seq-1)
                 ! Find if we have seen this before
                 flag = .false.
-                if(iprint_DM>=5.AND.myid==0) write(io_lun,*) 'prim, neigh, FSC: ',prim_atom, neigh, FSC_atom
-                if(iprint_DM>=5.AND.myid==0) write(io_lun,*) 'curr_loc_atoms: ',current_loc_atoms(owning_proc)
+                if(iprint_DM + min_layer>=5.AND.myid==0) write(io_lun,*) 'prim, neigh, FSC: ',prim_atom, neigh, FSC_atom
+                if(iprint_DM + min_layer>=5.AND.myid==0) write(io_lun,*) 'curr_loc_atoms: ',current_loc_atoms(owning_proc)
                 if(current_loc_atoms(owning_proc)>0) then
                    do i=1,current_loc_atoms(owning_proc)
                       if(atom_list(owning_proc,i)==FSC_atom) then
-                         if(iprint_DM>=5.AND.myid==0) write(io_lun,*) 'Loc atom: ',i, LocalAtom(FSC_atom)
+                         if(iprint_DM + min_layer>=5.AND.myid==0) write(io_lun,*) 'Loc atom: ',i, LocalAtom(FSC_atom)
                          ints(owning_proc,LocalAtom(FSC_atom)) = ints(owning_proc,LocalAtom(FSC_atom)) + 1
                          send_prim(owning_proc,prim_atom) = nsf_species(bundle%species(prim_atom))
                          flag = .true.
@@ -3550,22 +3551,22 @@ contains
        end if ! End if nm_nodgroup > 0
     end do ! End do part=1,groups_on_node
     ! Find max value of current_loc_atoms and interactions
-    if(iprint_DM>3.AND.myid==0) write(io_lun,*) 'buildK: Stage two'
+    if(iprint_DM + min_layer>3.AND.myid==0) write(io_lun,*) 'buildK: Stage two'
     maxloc = 0
     maxint = 0
     maxsend = 0
     do i=1,numprocs
-       if(iprint_DM>=4.AND.myid==0) write(io_lun,*) myid,' Curr loc atoms: ',i,current_loc_atoms(i)
+       if(iprint_DM + min_layer>=4.AND.myid==0) write(io_lun,*) myid,' Curr loc atoms: ',i,current_loc_atoms(i)
        if(current_loc_atoms(i)>maxloc) maxloc = current_loc_atoms(i)
        do j=1,bundle%mx_iprim ! Needs to be mx_iprim because goes over primary atoms on REMOTE processors
           if(ints(i,j)>maxint) maxint = ints(i,j)
           if(send_prim(i,j)>0) num_send(i) = num_send(i) + 1
           norb_send(i) = norb_send(i) + send_prim(i,j)
-          if(iprint_DM>=5.AND.myid==0) write(io_lun,4) myid,j,send_prim(i,j),num_send(i)
+          if(iprint_DM + min_layer>=5.AND.myid==0) write(io_lun,4) myid,j,send_prim(i,j),num_send(i)
        end do
        if(num_send(i)>maxsend) maxsend = num_send(i)
     end do
-    if(iprint_DM>=4.AND.myid==0) write(io_lun,*) myid,' Maxima: ',maxloc, maxint, maxsend
+    if(iprint_DM + min_layer>=4.AND.myid==0) write(io_lun,*) myid,' Maxima: ',maxloc, maxint, maxsend
     ! Allocate recv_info
     allocate(send_info(numprocs,maxsend),send_orbs(numprocs,maxsend),send_off(numprocs,maxsend), &
          prim_orbs(bundle%mx_iprim),STAT=stat)
@@ -3609,14 +3610,14 @@ contains
        if(stat/=0) call cq_abort('buildK: Error allocating recv_info !',stat)
     end do
     do part = 1,bundle%groups_on_node ! Loop over primary set partitions
-       if(iprint_DM>=5.AND.myid==0) write(io_lun,1) myid,part
+       if(iprint_DM + min_layer>=5.AND.myid==0) write(io_lun,1) myid,part
        if(bundle%nm_nodgroup(part)>0) then ! If there are atoms in partition
           CC = parts%ngnode(parts%inode_beg(myid+1)+part-1)
           do memb = 1,bundle%nm_nodgroup(part) ! Loop over atoms
-             if(iprint_DM>=5.AND.myid==0) write(io_lun,2) myid,memb
+             if(iprint_DM + min_layer>=5.AND.myid==0) write(io_lun,2) myid,memb
              prim_atom = bundle%nm_nodbeg(part)+memb-1
              do neigh = 1, mat(part,range)%n_nab(memb) ! Loop over neighbours of atom
-                if(iprint_DM>=5.AND.myid==0) write(io_lun,3) myid,neigh
+                if(iprint_DM + min_layer>=5.AND.myid==0) write(io_lun,3) myid,neigh
                 ist = mat(part,range)%i_acc(memb)+neigh-1
                 ! Establish FSC number of neighbour
                 Col_FSC_part = BCS_parts%lab_cell(mat(part,range)%i_part(ist))
@@ -3627,10 +3628,10 @@ contains
                 FSC_atom = id_glob(parts%icell_beg(Col_FSC_part)+Col_FSC_seq-1)
                 ! Work out a map from primary atom + FSC + identifier to distance and position in data_Matrix
                 locatom = LocalAtom(FSC_atom) ! Which atom in the list on the remote proc is this ?
-                if(iprint_DM>=5.AND.myid==0) write(io_lun,*) myid,' own, FSC, loc: ',owning_proc, FSC_atom, locatom, &
+                if(iprint_DM + min_layer>=5.AND.myid==0) write(io_lun,*) myid,' own, FSC, loc: ',owning_proc, FSC_atom, locatom, &
                      recv_info(owning_proc)%ints(locatom)
                 recv_info(owning_proc)%ints(locatom) = recv_info(owning_proc)%ints(locatom) + 1
-                if(iprint_DM>=5.AND.myid==0) write(io_lun,*) myid,' ints: ',recv_info(owning_proc)%ints(locatom)
+                if(iprint_DM + min_layer>=5.AND.myid==0) write(io_lun,*) myid,' ints: ',recv_info(owning_proc)%ints(locatom)
                 gcspart = BCS_parts%icover_ibeg(mat(part,range)%i_part(ist))+mat(part,range)%i_seq(ist)-1
                 !recv_info(owning_proc)%ndimi(locatom) = mat(part,range)%ndimi(memb)
                 recv_info(owning_proc)%ndimj(locatom) = mat(part,range)%ndimj(ist)
@@ -3656,7 +3657,7 @@ contains
     do i=1,matrix_size ! Effectively all bands
        if(abs(occs(i))>RD_ERR) then
           len = i !len+1
-          if(myid==0.AND.iprint_DM>=4) write(io_lun,*) 'Occ is ',occs(i)
+          if(myid==0.AND.iprint_DM + min_layer>=4) write(io_lun,*) 'Occ is ',occs(i)
        end if
     end do
     ! DRB for WF output - means that we transfer the coefficients into the conduction band
@@ -3671,7 +3672,7 @@ contains
     else
        len_occ = len
     end if
-    if(iprint_DM>3.AND.myid==0) write(io_lun,*) 'buildK: Stage three len:',len, matA
+    if(iprint_DM + min_layer>3.AND.myid==0) write(io_lun,*) 'buildK: Stage three len:',len, matA
     ! Step three - loop over processors, send and recv data and build K
     allocate(send_fsc(bundle%mx_iprim),recv_to_FSC(bundle%mx_iprim),mapchunk(bundle%mx_iprim),STAT=stat)
     if(stat/=0) call cq_abort('buildK: Error allocating send_fsc, recv_to_FSC and mapchunk',stat)
@@ -3686,11 +3687,11 @@ contains
     do i=1,numprocs
        send_size = len*norb_send(send_proc+1)!num_send(send_proc+1)*nsf
        recv_size = len*recv_info(recv_proc+1)%orbs!current_loc_atoms(recv_proc+1)*nsf
-       if(iprint_DM>=4.AND.myid==0) write(io_lun,*) 'Send and recv sizes: ',send_size, recv_size
+       if(iprint_DM + min_layer>=4.AND.myid==0) write(io_lun,*) 'Send and recv sizes: ',send_size, recv_size
        ! Fill SendBuffer
        allocate(SendBuffer(len,norb_send(send_proc+1)),STAT=stat)
        if(stat/=0) call cq_abort('buildK: Unable to allocate SendBuffer !',stat)
-       if(iprint_DM>=4.AND.myid==0) write(io_lun,*) 'Filling SendBuffer'
+       if(iprint_DM + min_layer>=4.AND.myid==0) write(io_lun,*) 'Filling SendBuffer'
        orb_count = 0
        do j=1,num_send(send_proc+1)
           do nsf1=1,send_orbs(send_proc+1,j)
@@ -3699,11 +3700,11 @@ contains
           end do
           ! We also need to send a list of what FSC each primary atom sent corresponds to - use bundle%ig_prim
           send_FSC(j) = bundle%ig_prim(send_info(send_proc+1,j))
-          if(iprint_DM>=4.AND.myid==0) write(io_lun,*) 'Building send_FSC: ',send_info(send_proc+1,j), &
+          if(iprint_DM + min_layer>=4.AND.myid==0) write(io_lun,*) 'Building send_FSC: ',send_info(send_proc+1,j), &
                bundle%ig_prim(send_info(send_proc+1,j)),send_FSC(j)
        end do
        if(orb_count/=norb_send(send_proc+1)) call cq_abort("Orbital mismatch in buildK: ",orb_count,norb_send(send_proc+1))
-       if(iprint_DM>=4.AND.myid==0) write(io_lun,*) 'Sending'
+       if(iprint_DM + min_layer>=4.AND.myid==0) write(io_lun,*) 'Sending'
        ! Now send
        if(send_size>0) then
           if(send_proc/=myid) then
@@ -3712,36 +3713,37 @@ contains
           end if
        end if
        ! Now receive data
-       if(iprint_DM>=4.AND.myid==0) write(io_lun,*) 'Alloc RecvBuffer ',len,recv_info(recv_proc+1)%orbs
+       if(iprint_DM + min_layer>=4.AND.myid==0) write(io_lun,*) 'Alloc RecvBuffer ',len,recv_info(recv_proc+1)%orbs
        !allocate(RecvBuffer(len,current_loc_atoms(recv_proc+1)*nsf),STAT=stat)
        allocate(RecvBuffer(len,recv_info(recv_proc+1)%orbs),STAT=stat)
        if(stat/=0) call cq_abort('buildK: Unable to allocate RecvBuffer !',stat)
-       if(iprint_DM>=4.AND.myid==0) write(io_lun,*) 'Recving'
+       if(iprint_DM + min_layer>=4.AND.myid==0) write(io_lun,*) 'Recving'
        if(recv_size>0) then
           if(recv_proc/=myid) then
              call MPI_recv(recv_to_FSC,current_loc_atoms(recv_proc+1),MPI_INTEGER,recv_proc,recvtag,MPI_COMM_WORLD,mpi_stat,ierr)
-             if(iprint_DM>=4.AND.myid==0) write(io_lun,*) 'Got recv_to_FSC'
+             if(iprint_DM + min_layer>=4.AND.myid==0) write(io_lun,*) 'Got recv_to_FSC'
              call MPI_recv(RecvBuffer,recv_size,MPI_DOUBLE_COMPLEX,&
                   recv_proc,recvtag+1,MPI_COMM_WORLD,mpi_stat,ierr)
-             if(iprint_DM>=4.AND.myid==0) write(io_lun,*) 'Got RecvBuffer'
+             if(iprint_DM + min_layer>=4.AND.myid==0) write(io_lun,*) 'Got RecvBuffer'
           else
-             if(iprint_DM>=4.AND.myid==0) write(io_lun,*) 'On-proc: getting recv_to_FSC'
+             if(iprint_DM + min_layer>=4.AND.myid==0) write(io_lun,*) 'On-proc: getting recv_to_FSC'
              recv_to_FSC(1:current_loc_atoms(recv_proc+1)) = send_FSC(1:current_loc_atoms(recv_proc+1))
-             if(iprint_DM>=4.AND.myid==0) write(io_lun,*) 'On-proc: getting RecvBuffer'
+             if(iprint_DM + min_layer>=4.AND.myid==0) write(io_lun,*) 'On-proc: getting RecvBuffer'
              RecvBuffer(1:len,1:recv_info(recv_proc+1)%orbs) = SendBuffer(1:len,1:recv_info(recv_proc+1)%orbs)
           end if
-          if(iprint_DM>=4.AND.myid==0) write(io_lun,*) 'Doing the mapchunk', recv_to_FSC
+          if(iprint_DM + min_layer>=4.AND.myid==0) write(io_lun,*) 'Doing the mapchunk', recv_to_FSC
           do j=1,current_loc_atoms(recv_proc+1)
              mapchunk(j) = LocalAtom(recv_to_FSC(j))
           end do
-          if(iprint_DM>=4.AND.myid==0) write(io_lun,*) 'filling buffer'
+          if(iprint_DM + min_layer>=4.AND.myid==0) write(io_lun,*) 'filling buffer'
           do j=1,len_occ ! This is a loop over eigenstates
              RecvBuffer(j,1:recv_info(recv_proc+1)%orbs) = RecvBuffer(j,1:recv_info(recv_proc+1)%orbs)*occ_correction*occs(j)
           end do
           orb_count = 0
           do atom = 1,current_loc_atoms(recv_proc+1)
              locatom = mapchunk(atom)
-             if(iprint_DM>=4.AND.myid==0) write(io_lun,*) 'Atom, loc: ',atom,locatom,recv_info(recv_proc+1)%ints(locatom)
+             if(iprint_DM + min_layer>=4.AND.myid==0) write(io_lun,*) 'Atom, loc: ',atom, &
+                  locatom,recv_info(recv_proc+1)%ints(locatom)
              ! Scale the eigenvector coefficients we've received
              ! The factor of 0.5 is because the occupation numbers are from 0->2 (we expect 0->1 in K)
              ! The occupation numbers contain the k-point weight
@@ -3754,10 +3756,12 @@ contains
              ! N.B. the routine used for dot is zdotc which takes the complex conjugate of the first vector
              do inter = 1,recv_info(recv_proc+1)%ints(locatom)
                 prim = recv_info(recv_proc+1)%prim_atom(inter,locatom)
-                if(iprint_DM>=4.AND.myid==0) write(io_lun,*) 'Inter: ',inter,prim
-                phase = kps(1)*recv_info(recv_proc+1)%dx(inter,locatom) + kps(2)*recv_info(recv_proc+1)%dy(inter,locatom) + &
+                if(iprint_DM + min_layer>=4.AND.myid==0) write(io_lun,*) 'Inter: ',inter,prim
+                phase = kps(1)*recv_info(recv_proc+1)%dx(inter,locatom) + &
+                     kps(2)*recv_info(recv_proc+1)%dy(inter,locatom) + &
                      kps(3)*recv_info(recv_proc+1)%dz(inter,locatom)
-                if(iprint_DM>=5.AND.myid==0) write(io_lun,*) 'Prim, where, phase: ',prim, whereMat, phase
+                if(iprint_DM + min_layer>=5.AND.myid==0) write(io_lun,*) 'Prim, where, phase: ', &
+                     prim, whereMat, phase
                 rfac = cos(phase)
                 ifac = sin(phase)
                 do row_sup = 1,recv_info(recv_proc+1)%ndimj(locatom)
@@ -3780,20 +3784,20 @@ contains
              orb_count = orb_count + recv_info(recv_proc+1)%ndimj(locatom)
           end do ! atom=current_loc_atoms
        end if ! recv_size>0
-       if(iprint_DM>=4.AND.myid==0) write(io_lun,*) 'Calling MPI_Wait'
+       if(iprint_DM + min_layer>=4.AND.myid==0) write(io_lun,*) 'Calling MPI_Wait'
        if(send_size>0.AND.myid/=send_proc) then
           call MPI_Wait(req1,mpi_stat,ierr)
           call MPI_Wait(req2,mpi_stat,ierr)
        end if
-       if(iprint_DM>=4.AND.myid==0) write(io_lun,*) 'Calling dealloc'
+       if(iprint_DM + min_layer>=4.AND.myid==0) write(io_lun,*) 'Calling dealloc'
        deallocate(RecvBuffer,STAT=stat)
        if(stat/=0) call cq_abort("buildK: Failed to dealloc buffer",stat)
-       if(iprint_DM>=4.AND.myid==0) write(io_lun,*) 'Calling dealloc'
+       if(iprint_DM + min_layer>=4.AND.myid==0) write(io_lun,*) 'Calling dealloc'
        deallocate(SendBuffer,STAT=stat)
        if(stat/=0) call cq_abort("buildK: Failed to dealloc buffer",stat)
        ! Increment/decrement recv and send, and wrap
        ! Remember that we go from 0->numprocs-1
-       if(iprint_DM>=4.AND.myid==0) write(io_lun,*) 'Doing proc thang'
+       if(iprint_DM + min_layer>=4.AND.myid==0) write(io_lun,*) 'Doing proc thang'
        send_proc = send_proc +1
        if(send_proc.GT.numprocs-1) send_proc = 0
        recv_proc = recv_proc -1
@@ -4264,7 +4268,7 @@ contains
 
     use datatypes
     use numbers
-    use global_module,   only: iprint_DM, flag_SpinDependentSF
+    use global_module,   only: iprint_DM, flag_SpinDependentSF, min_layer
     use mult_module,     only: matH, matS
     use ScalapackFormat, only: matrix_size, proc_rows, proc_cols,     &
          nkpoints_max, pgid, N_kpoints_in_pg, pg_kpoints, N_procs_in_pg, proc_groups
@@ -4291,7 +4295,7 @@ contains
     orfac = -one
     il = 0
     iu = 0
-    if (iprint_DM > 3 .and. (inode == ionode)) &
+    if (iprint_DM + min_layer > 3 .and. (inode == ionode)) &
          write (io_lun, *) myid, ' Calling DistributeCQ_to_SC for H'
     ! Form the Hamiltonian and overlap for this k-point and send them to appropriate processors
     if(PRESENT(kpassed)) then
@@ -4303,7 +4307,7 @@ contains
        call DistributeCQ_to_SC(DistribS, matS(spin_SF), index_kpoint, SCSmat(:,:,spin))
     end if
     ! Now, if this processor is involved, do the diagonalisation
-    if (iprint_DM > 3 .and. inode == ionode) &
+    if (iprint_DM + min_layer > 3 .and. inode == ionode) &
          write (io_lun, *) myid, 'Proc row, cols, me: ', &
          proc_rows, proc_cols, me, index_kpoint, nkpoints_max
     if (index_kpoint <= N_kpoints_in_pg(pgid)) then
@@ -4406,14 +4410,14 @@ contains
 
     ! check if we get the correct map
     call blacs_gridinfo(context, numrows, numcols, merow, mecol)
-    if (iprint_DM > 3 .AND. myid == 0) then
+    if (iprint_DM + min_layer > 3 .AND. myid == 0) then
        write (io_lun, fmt="(10x, 'process_grid info: ', i5, i5)") numrows, numcols
        write (io_lun, 1) myid, me, merow, mecol
     end if
     ! Sizes of local "chunk", used to initialise submatrix info for ScaLAPACK
     row_size = proc_start(myid+1)%rows * block_size_r
     col_size = proc_start(myid+1)%cols * block_size_c
-    if (iprint_DM > 3 .AND. myid == 0) write (io_lun, 12) myid, row_size, col_size
+    if (iprint_DM + min_layer > 3 .AND. myid == 0) write (io_lun, 12) myid, row_size, col_size
 
     ! Register the description of the distribution of H
     call descinit(desca, matrix_size, matrix_size, block_size_r, block_size_c, 0, 0, context, row_size, info)

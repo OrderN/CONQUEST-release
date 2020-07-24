@@ -119,7 +119,7 @@ contains
        flag_use_libxc = .true.
        call xc_f90_version(vmajor, vminor)
        if(inode==ionode.AND.iprint_ops>0) then
-          write(io_lun,'("LibXC version: ",I1,".",I1)') vmajor, vminor
+          write(io_lun,'(4x,"LibXC version: ",I2,".",I2)') vmajor, vminor
        end if
        ! Identify the functional
        if(-flag_functional_type<1000) then ! Only exchange OR combined exchange-correlation
@@ -187,11 +187,11 @@ contains
              end select
 
              if(iprint_ops>2) then
-                write(io_lun,'("The functional ", a, " is ", a, ", and it belongs to the ", a, &
+                write(io_lun,'(4x,"The functional ", a, " is ", a, ", and it belongs to the ", a, &
                      " family")') &
                      trim(name), trim(kind), trim(family)
              else if(iprint_ops>0) then
-                write(io_lun,'(2x,"Using the ",a," functional ",a)') trim(family),trim(name)
+                write(io_lun,'(4x,"Using the ",a," functional ",a)') trim(family),trim(name)
              else
                 select case(xc_f90_info_kind(xc_info(i)))
                 case (XC_EXCHANGE)

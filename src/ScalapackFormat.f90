@@ -275,7 +275,7 @@ contains
     if(myid==0.AND.iprint_DM>3) write(io_lun,1) blocks_r,blocks_c
     maxrow = floor(real(blocks_r/proc_rows))+1
     maxcol = floor(real(blocks_c/proc_cols))+1
-    if(iprint_DM>1.AND.myid==0) write(io_lun,*) 'maxrow, maxcol: ',maxrow,maxcol
+    if(iprint_DM>3.AND.myid==0) write(io_lun,*) 'maxrow, maxcol: ',maxrow,maxcol
     call start_timer(tmr_std_allocation)
     allocate(mapx(numprocs,maxrow,maxcol),mapy(numprocs,maxrow,maxcol),STAT=stat)
     if(stat/=0) call cq_abort("ScalapackFormat: Could not alloc map",stat)
@@ -492,9 +492,9 @@ contains
     integer :: i, j, n, nrow, ncol, prow, pcol, proc
     integer :: ng
 
-    if(iprint_DM>2.AND.myid==0) write(io_lun,*) myid,' Starting Ref To SC Blocks'
+    if(iprint_DM>2.AND.myid==0) write(io_lun,fmt='(4x,a)') ' Starting Ref To SC Blocks'
     ! Construct processor ids
-    if(iprint_DM>1.AND.myid==0) write(io_lun,fmt="(2x,'Scalapack Processor Grid')") 
+    if(iprint_DM>2.AND.myid==0) write(io_lun,fmt="(4x,'Scalapack Processor Grid')") 
     do ng = 1, proc_groups
        n = 1
        do i=1,proc_rows
@@ -503,7 +503,7 @@ contains
              if(n>N_procs_in_pg(ng)) call cq_abort('Ref2SC: Too many processors in group',ng,n)
              n = n + 1
           end do
-          if(iprint_DM>1.AND.myid==0) write(io_lun,*) (procid(ng,i,j),j=1,proc_cols)
+          if(iprint_DM>2.AND.myid==0) write(io_lun,*) (procid(ng,i,j),j=1,proc_cols)
        end do
     end do
     ! now build list of blocks and where they go
@@ -602,13 +602,13 @@ contains
     integer :: i,j,m,n,row,col,proc,ng
     integer :: row_max_n, col_max_n, loc_max_row, loc_max_col
 
-    if(iprint_DM>1.AND.myid==0) write(io_lun,3)
+    if(iprint_DM>2.AND.myid==0) write(io_lun,3)
     if(iprint_DM>3.AND.myid==0) write(io_lun,4)
     ! The first row_max_n procs have 1 more block than the rest
     row_max_n = mod(blocks_r,proc_rows)
     col_max_n = mod(blocks_c,proc_cols)
-    if(iprint_DM>1.AND.myid==0) write(io_lun,*) 'N for row, col: ',row_max_n, col_max_n
-    if(iprint_DM>1.AND.myid==0) write(io_lun,*) 'Loc_max_row, col: ',&
+    if(iprint_DM>2.AND.myid==0) write(io_lun,fmt='(4x,a,2i4)') 'N for row, col: ',row_max_n, col_max_n
+    if(iprint_DM>2.AND.myid==0) write(io_lun,fmt='(4x,a,2i4)') 'Loc_max_row, col: ',&
          aint(real(blocks_r/proc_rows)),aint(real(blocks_c/proc_cols))
     my_row = 0
     ! first record proc_start(:)%rows and %cols map, this is proc proc dependent

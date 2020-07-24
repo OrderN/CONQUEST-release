@@ -140,7 +140,7 @@ contains
     use minimise,             only: get_E_and_F
     use global_module,        only: runtype, flag_self_consistent, &
                                     flag_out_wf, flag_write_DOS, wf_self_con, &
-                                    flag_opt_cell, optcell_method
+                                    flag_opt_cell, optcell_method, min_layer
     use input_module,         only: leqi
     use store_matrix,         only: dump_pos_and_matrices
 
@@ -176,20 +176,20 @@ contains
                         flag_ff, flag_wf, level=backtrace_level)
        !
     else if ( leqi(runtype, 'cg')    ) then
-        if (flag_opt_cell) then
-           select case(optcell_method)
-           case(1)
+       if (flag_opt_cell) then
+          select case(optcell_method)
+          case(1)
              call cell_cg_run(fixed_potential, vary_mu, total_energy)
-           case(2)
+          case(2)
              call full_cg_run_double_loop(fixed_potential, vary_mu, &
-                                          total_energy)
-           case(3)
+                  total_energy)
+          case(3)
              call full_cg_run_single_vector(fixed_potential, vary_mu, &
-                                            total_energy)
-           end select
-        else
-            call cg_run(fixed_potential, vary_mu, total_energy)
-        end if
+                  total_energy)
+          end select
+       else
+          call cg_run(fixed_potential, vary_mu, total_energy)
+       end if
        !
     else if ( leqi(runtype, 'md')    ) then
        call md_run(fixed_potential,     vary_mu, total_energy)
@@ -271,7 +271,7 @@ contains
                              y_atom_cell, z_atom_cell, id_glob,    &
                              atom_coord, &
                              area_general, iprint_MD,              &
-                             IPRINT_TIME_THRES1
+                             IPRINT_TIME_THRES1, min_layer
     use group_module,  only: parts
     use minimise,      only: get_E_and_F
     use move_atoms,    only: adapt_backtrack_linemin, safemin2, cg_line_min, safe, backtrack
@@ -327,6 +327,7 @@ contains
     energy1 = zero
     dE = zero
     ! Find energy and forces
+    min_layer = min_layer - 1
     call get_E_and_F(fixed_potential, vary_mu, energy0, .true., .true.)
     call dump_pos_and_matrices
     call get_maxf(max)
@@ -334,6 +335,7 @@ contains
       write(io_lun,'(/4x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," E: ",e16.8," dE: ",f12.8/)') & 
            0, max, energy0, dE
     end if
+    min_layer = min_layer + 1
 
     iter = 1
     ggold = zero
@@ -404,6 +406,7 @@ contains
        end if
        old_force = tot_force
        ! Minimise in this direction
+       !min_layer = min_layer - 1
        if(cg_line_min==safe) then
           call safemin2(x_new_pos, y_new_pos, z_new_pos, cg, energy0,&
                energy1, fixed_potential, vary_mu, energy1)
@@ -419,6 +422,7 @@ contains
        ! Analyse forces
        g0 = dot(length, tot_force, 1, tot_force, 1)
        call get_maxf(max)
+       !min_layer = min_layer + 1
        ! Output and energy changes
        dE = energy1 - energy0
 
@@ -583,7 +587,7 @@ contains
                               flag_move_atom,rcellx, rcelly, rcellz,  &
                               flag_Multisite,flag_SFcoeffReuse, &
                               atom_coord, flag_quench_MD, atomic_stress, &
-                              non_atomic_stress, flag_heat_flux
+                              non_atomic_stress, flag_heat_flux, min_layer
     use group_module,   only: parts
     use minimise,       only: get_E_and_F
     use move_atoms,     only: velocityVerlet, updateIndices,           &
@@ -692,11 +696,13 @@ contains
     call mdl%get_cons_qty
 
     ! Find energy and forces
+    min_layer = min_layer - 1
     if (flag_fire_qMD) then
        call get_E_and_F(fixed_potential, vary_mu, energy0, .true., .true.)
     else
        call get_E_and_F(fixed_potential, vary_mu, energy0, .true., .false.)
     end if
+    min_layer = min_layer + 1
     mdl%dft_total_energy = energy0
 
     ! XL-BOMD
@@ -793,6 +799,7 @@ contains
        !   may change after the atomic positions are updated.
        call check_move_atoms(flag_movable)
        
+       min_layer = min_layer - 1
        if (flag_fire_qMD) then
           call get_E_and_F(fixed_potential, vary_mu, energy1, .true., .true.,iter)
           call check_stop(done, iter)   !2019/Nov/14
@@ -810,6 +817,7 @@ contains
           call dump_pos_and_matrices(index=0,MDstep=iter,velocity=ion_velocity)
           call vVerlet_v_dthalf(MDtimestep,ion_velocity,tot_force,flag_movable,second_call)
        end if
+       min_layer = min_layer + 1
        ! Update DFT energy
        mdl%dft_total_energy = energy1
        !******
@@ -1880,7 +1888,7 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
                               y_atom_cell, z_atom_cell, id_glob,    &
                               atom_coord, area_general, flag_pulay_simpleStep, &
                               flag_diagonalisation, nspin, flag_LmatrixReuse, &
-                              flag_SFcoeffReuse
+                              flag_SFcoeffReuse, min_layer
     use group_module,   only: parts
     use minimise,       only: get_E_and_F
     use move_atoms,     only: pulayStep, velocityVerlet,            &
@@ -1955,10 +1963,12 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
     energy1 = zero
     dE = zero
     ! Find energy and forces
+    min_layer = min_layer - 1
     call get_E_and_F(fixed_potential, vary_mu, energy0, .true., &
                      .false.)
     call dump_pos_and_matrices
     call get_maxf(max)
+    min_layer = min_layer + 1
     iter = 0
     ggold = zero
     energy1 = energy0
@@ -2148,7 +2158,7 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
                              atom_coord, rcellx, rcelly, rcellz,   &
                              area_general, iprint_MD,              &
                              IPRINT_TIME_THRES1, cell_en_tol,      &
-                             cell_constraint_flag, cell_stress_tol
+                             cell_constraint_flag, cell_stress_tol, min_layer
     use group_module,  only: parts
     use minimise,      only: get_E_and_F
     use move_atoms,    only: safemin_cell, enthalpy, enthalpy_tolerance
@@ -2199,7 +2209,9 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
     energy1 = zero
     dE = zero
     ! Find energy and forces
+    min_layer = min_layer - 1
     call get_E_and_F(fixed_potential, vary_mu, energy0, .true., .true.)
+    min_layer = min_layer + 1
     iter = 1
     reset_iter = 1
     ggold = zero
@@ -2275,9 +2287,11 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
 
        ! Minimise in this direction. Constraint information is also used within
        ! safemin_cell. Look in move_atoms.module.f90 for further information.
+       min_layer = min_layer - 1
        call safemin_cell(new_rcellx, new_rcelly, new_rcellz, search_dir_x, &
                          search_dir_y, search_dir_z, search_dir_mean, press, &
                          enthalpy0, enthalpy1, fixed_potential, vary_mu)
+       min_layer = min_layer + 1
        ! Output positions to UpdatedAtoms.dat
        if (myid == 0 .and. iprint_gen > 1) then
           do i = 1, ni_in_cell
@@ -2485,7 +2499,7 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
                              atom_coord, area_general, iprint_MD,  &
                              IPRINT_TIME_THRES1,                   &
                              cell_en_tol, cell_stress_tol,         &
-                             rcellx, rcelly, rcellz
+                             rcellx, rcelly, rcellz, min_layer
     use group_module,  only: parts
     use minimise,      only: get_E_and_F
     use move_atoms,    only: safemin2, safemin_cell, enthalpy, &
@@ -2557,9 +2571,11 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
     dE = zero
 
     ! Find energy and forces
+    min_layer = min_layer - 1
     call get_E_and_F(fixed_potential, vary_mu, energy0, .true., .true.)
     call dump_pos_and_matrices
     call get_maxf(max)
+    min_layer = min_layer + 1
     press = target_pressure/HaBohr3ToGPa
     enthalpy0 = enthalpy(energy0, press)
     dH = zero
@@ -2630,9 +2646,11 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
           z_new_pos(j) = z_atom_cell(j)
         end do
         old_force = tot_force
+        min_layer = min_layer - 1
         ! Minimise in this direction
-          call safemin2(x_new_pos, y_new_pos, z_new_pos, cg, energy0, &
+        call safemin2(x_new_pos, y_new_pos, z_new_pos, cg, energy0, &
                         energy1, fixed_potential, vary_mu, energy1)
+        min_layer = min_layer + 1
         ! Output positions
         if (inode==ionode .and. iprint_gen > 1) then
           write(io_lun,'(4x,a4,a15)') "Atom", "Position"
@@ -2721,9 +2739,11 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
 
       ! Minimise in this direction. Constraint information is also used within
       ! safemin_cell. Look in move_atoms.module.f90 for further information.
+      min_layer = min_layer - 1
       call safemin_cell(new_rcellx, new_rcelly, new_rcellz, search_dir_x, &
                         search_dir_y, search_dir_z, search_dir_mean, press, &
                         enthalpy0, enthalpy1, fixed_potential, vary_mu)
+      min_layer = min_layer + 1
       ! Output positions to UpdatedAtoms.dat
       if (inode==ionode .and. iprint_gen > 1) then
         write(io_lun,'(4x,a4,a15)') "Atom", "Position"
@@ -2861,7 +2881,7 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
                              atom_coord, rcellx, rcelly, rcellz,   &
                              area_general, iprint_MD,              &
                              IPRINT_TIME_THRES1,                   &
-                             cell_stress_tol
+                             cell_stress_tol, min_layer
     use group_module,  only: parts
     use minimise,      only: get_E_and_F
     use move_atoms,    only: safemin_full, cq_to_vector, enthalpy, &
@@ -2927,9 +2947,11 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
     cell_ref(3) = rcellz
 
     ! Find energy and forces
+    min_layer = min_layer - 1
     call get_E_and_F(fixed_potential, vary_mu, energy0, .true., .true.)
     call dump_pos_and_matrices
     call get_maxf(max)
+    min_layer = min_layer + 1
     enthalpy0 = enthalpy(energy0, press)
     if (inode==ionode) then
       write(io_lun,'(/4x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," H: ",e16.8," dH: ",f12.8/)') &
@@ -2984,9 +3006,10 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
       end do
       force_old = force
       ! Minimise in this direction
+      min_layer = min_layer - 1
       call safemin_full(config, cg, cell_ref, enthalpy0, enthalpy1, &
                         press, fixed_potential, vary_mu, enthalpy1)
-
+      min_layer = min_layer + 1
       ! Output positions
       if (inode==ionode .and. iprint_gen > 1) then
         write(io_lun,'(4x,a4,a15)') "Atom", "Position"

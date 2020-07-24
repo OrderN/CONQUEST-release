@@ -213,7 +213,7 @@ contains
                                            area_ops, nspin, nspin_SF,   &
                                            spin_factor, blips,          &
                                            flag_analytic_blip_int,      &
-                                           flag_neutral_atom
+                                           flag_neutral_atom, min_layer
     use functions_on_grid,           only: atomfns, H_on_atomfns,       &
                                            gridfunctions
     use io_module,                   only: dump_matrix, dump_blips,     &
@@ -319,10 +319,10 @@ contains
        !
        ! from here on, workspace support becomes h_on_atomfns...
        ! in fact, what we are getting here is (H_local - T) acting on support
-       call get_h_on_atomfns(iprint_ops, fixed_potential, electrons, rho, size)
+       call get_h_on_atomfns(iprint_ops + min_layer, fixed_potential, electrons, rho, size)
        !
        !
-       if (inode == ionode .and. iprint_ops > 2) &
+       if (inode == ionode .and. iprint_ops > 3) &
             write (io_lun, *) 'Doing integration'
        ! Do the integration - support holds <phi| and workspace_support
        ! holds H|phi>. Inode starts from 1, and myid starts from 0. 
@@ -332,7 +332,7 @@ contains
                                        matHatomf(spin), atomfns, &
                                        H_on_atomfns(spin))
        end do
-       if (inode == ionode .and. iprint_ops > 2) write (io_lun, *) 'Done integration'
+       if (inode == ionode .and. iprint_ops > 3) write (io_lun, *) 'Done integration'
        !
        !
        if (iprint_ops > 4) then
@@ -361,29 +361,29 @@ contains
           !if (inode==ionode) print*, 'exx_pulay_r0 = ', exx_pulay_r0
           if  ( exx_niter < exx_siter ) then
              ! For first H building use pure DFT. To be improved for Hartree-Fock
-             if (inode == ionode .and. iprint_exx > 2) &
+             if (inode == ionode .and. iprint_exx > 3) &
                   write (io_lun, *) 'EXX: first guess from DFT'
              !
           else
              !
-             if (inode == ionode .and. iprint_exx > 2) &
+             if (inode == ionode .and. iprint_exx > 3) &
                   write (io_lun, *) 'EXX: setting get_X_matrix'
              call get_X_params(backtrace_level)
 
              call exx_global_write() 
              !
-             !if (inode == ionode .and. iprint_exx > 2) &
+             !if (inode == ionode .and. iprint_exx > 3) &
                   !write (io_lun, *) 'EXX: doing get_X_matrix'
              do spin = 1, nspin
-                if (inode == ionode .and. iprint_exx > 2) &
+                if (inode == ionode .and. iprint_exx > 3) &
                 write (io_lun, *) 'EXX: doing get_X_matrix: ', print_exxspin(spin)
                 call get_X_matrix(spin,backtrace_level)
              end do
              !
-             !if (inode == ionode .and. iprint_exx > 2) &
+             !if (inode == ionode .and. iprint_exx > 3) &
                   !write (io_lun, *) 'EXX: done get_X_matrix'
              do spin = 1, nspin
-                if (inode == ionode .and. iprint_exx > 2) &
+                if (inode == ionode .and. iprint_exx > 3) &
                 write (io_lun, *) 'EXX: done get_X_matrix: ', print_exxspin(spin)
                 call matrix_sum(one, matHatomf(spin),-exx_alpha*half, matXatomf(spin)) 
              end do
@@ -444,7 +444,7 @@ contains
     !
     !
     ! dump charges if required
-    if (flag_DumpChargeDensity .or. iprint_SC > 2) then
+    if (flag_DumpChargeDensity .or. iprint_SC > 3) then
        if(nspin==1) then
           allocate(rho_total(size), STAT=stat)
           if (stat /= 0) call cq_abort("Error allocating rho_total: ", size)
@@ -692,7 +692,7 @@ contains
     end if
     
     electrons_tot = spin_factor * sum(electrons(:))
-    if (inode == ionode .and. output_level >= 2) then
+    if (inode == ionode .and. output_level >= 3) then
        write (io_lun, '(10x,a)') &
             'get_h_on_atomfns: Electron Count, up, down and total:'
        write (io_lun, '(10x, 3f25.15)') &

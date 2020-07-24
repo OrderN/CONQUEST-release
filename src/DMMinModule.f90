@@ -176,7 +176,8 @@ contains
                              ne_in_cell, ne_spin_in_cell, flag_dump_L,  &
                              flag_SkipEarlyDM, flag_XLBOMD,             &
                              flag_propagateX, flag_dissipation,         &
-                             integratorXL, runtype, flag_exx, flag_diagonalisation
+                             integratorXL, runtype, flag_exx,           &
+                             flag_diagonalisation, min_layer
     use mult_module,   only: matrix_transpose, matT, matTtran, matL,    &
                              matS, matrix_sum, matK
     use McWeeny,       only: InitMcW, McWMin

@@ -119,11 +119,7 @@ contains
        flag_use_libxc = .true.
        call xc_f90_version(vmajor, vminor, vmicro)
        if(inode==ionode.AND.iprint_ops>0) then
-          if(vmajor>2) then
-             write(io_lun,'("LibXC version: ",I1,".",I1,".",I2)') vmajor, vminor, vmicro
-          else
-             write(io_lun,'("LibXC version: ",I1,".",I1)') vmajor, vminor
-          end if
+          write(io_lun,'(4x,"LibXC version: ",I2,".",I2,".",I2)') vmajor, vminor, vmicro
        end if
        ! Identify the functional
        if(-flag_functional_type<1000) then ! Only exchange OR combined exchange-correlation
@@ -193,22 +189,31 @@ contains
 
              if(iprint_ops>2) then
                 if(vmajor>2) then
-                   write(io_lun,'("The functional ", a, " is ", a, ", it belongs to the ", a, &
+                   write(io_lun,'(4x,"The functional ", a, " is ", a, ", it belongs to the ", a, &
                    &     " family and is defined in the reference(s):")') &
                         trim(name), trim(kind), trim(family)
                    j = 0
                    call xc_f90_info_refs(xc_info(i), j, ref)
                    do while(j >= 0)
-                      write(io_lun, '(a,i1,2a)') '[', j, '] ', trim(ref)
+                      write(io_lun, '(4x,a,i1,2a)') '[', j, '] ', trim(ref)
                       call xc_f90_info_refs(xc_info(i), j, ref)
                    end do
                 else
-                   write(io_lun,'("The functional ", a, " is ", a, ", and it belongs to the ", a, &
+                   write(io_lun,'(4x,"The functional ", a, " is ", a, ", and it belongs to the ", a, &
                    &     " family")') &
                         trim(name), trim(kind), trim(family)
                 end if
              else if(iprint_ops>0) then
-                write(io_lun,'(2x,"Using the ",a," functional ",a)') trim(family),trim(name)
+                select case(xc_f90_info_kind(xc_info(i)))
+                case (XC_EXCHANGE)
+                   write(io_lun,'(4x,"Using the ",a," X functional ",a)') trim(family),trim(name)
+                case (XC_CORRELATION)
+                   write(io_lun,'(4x,"Using the ",a," C functional ",a)') trim(family),trim(name)
+                case (XC_EXCHANGE_CORRELATION)
+                   write(io_lun,'(4x,"Using the ",a," XC functional ",a)') trim(family),trim(name)
+                case default
+                   write(io_lun,'(4x,"Using the ",a," functional ",a)') trim(family),trim(name)
+                end select
              else
                 select case(xc_f90_info_kind(xc_info(i)))
                 case (XC_EXCHANGE)

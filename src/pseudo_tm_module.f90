@@ -117,6 +117,7 @@ contains
   subroutine init_pseudo_tm(ecore, ncf_out) 
     
     use datatypes,      only: double
+    use numbers,        only: zero
     use global_module,  only: iprint_pseudo, flag_neutral_atom
     use block_module,   only: n_pts_in_block
     use GenComms,       only: cq_abort, myid, inode, ionode
@@ -175,7 +176,11 @@ contains
     call stop_timer(tmr_std_pseudopot)    ! This is timed inside set_tm_pseudo
     call set_tm_pseudo         !contained in this module
     call start_timer(tmr_std_pseudopot)
-    call get_energy_shift(ecore)   !contained in this module
+    if(flag_neutral_atom) then
+       ecore = zero
+    else
+       call get_energy_shift(ecore)   !contained in this module
+    end if
     call stop_timer(tmr_std_pseudopot)
 
 !****lat<$
@@ -1910,17 +1915,17 @@ contains
           call calc_energy_shift(pseudo(ispecies),nfac2, eshift2, vlocG0_2)
           call calc_energy_shift(pseudo(ispecies),nfac3, eshift3, vlocG0_3)
           !if(abs(eshift2-eshift3) > eps) write(io_lun,fmt='(10x,"WARNING!!!   eshift")')
-          if(inode == ionode.AND.iprint_pseudo>0) then
+          if(inode == ionode.AND.iprint_pseudo>2) then
              write (io_lun, &
-                    '(10x,a11,i2,a12,3i3,a19,d15.7,/,63x,d15.7,/,63x,d15.7)') &
+                    '(4x,a11,i2,a12,3i3,a19,d15.7,/,63x,d15.7,/,63x,d15.7)') &
                    'ispecies = ', ispecies, '  eshift for', &
                    nfac1, nfac2, nfac3, ' times fine mesh = ', &
                    eshift1, eshift2, eshift3
              write (io_lun,'(55x,a8,d15.7)') ' diff = ', eshift2 - eshift3
           end if
-          if(inode == ionode.AND.iprint_pseudo>0) then
+          if(inode == ionode.AND.iprint_pseudo>2) then
              write (io_lun, &
-                    '(10x,a11,i2,a12,3i3,a19,d15.7,/,63x,d15.7,/,63x,d15.7)') &
+                    '(4x,a11,i2,a12,3i3,a19,d15.7,/,63x,d15.7,/,63x,d15.7)') &
                    'ispecies = ', ispecies, '  eshift for', &
                    nfac1, nfac2, nfac3, ' times fine mesh = ', &
                    vlocG0_1, vlocG0_2, vlocG0_3
@@ -2096,8 +2101,8 @@ contains
             intvloc = intvloc +  four *pi * rr * wos(imesh) * &
                  (vlocal + z * erfarg )
             !(vlocal + z * erf(sqrt(beta) *rr) )
-            if(imesh==nmesh_vloc.AND.inode==ionode.AND.iprint_pseudo>1) &
-                 write(io_lun,fmt='(2x,"Sum of local potential and core charge: ",3f12.8)') &
+            if(imesh==nmesh_vloc.AND.inode==ionode.AND.iprint_pseudo>2) &
+                 write(io_lun,fmt='(4x,"Sum of local potential and core charge: ",3f12.8)') &
                  vlocal + z, vlocal, z
          enddo
          call start_timer(tmr_std_allocation)
@@ -2107,7 +2112,7 @@ contains
          !write(io_lun,*) 'Int. vloc: ',intvloc
          !intvloc = intvloc + pi*z/beta
          if(PRESENT(vlocG0)) vlocG0 = intvloc
-         !write(io_lun,*) 'Int. vloc, eshift: ',intvloc,eshift, beta, pi*z/beta, z/beta
+         !write(io_lun,*) 'Int. vloc, eshift: ',intvloc,eshift!, beta, pi*z/beta, z/beta
       else
          nmesh = pseudo%chlocal%n
          nmesh_vloc = (nmesh-1) * nfac + 1
@@ -2168,7 +2173,7 @@ contains
             func2%f(imesh) = rho* four * pi * rr
             zcore=zcore + func1%f(imesh)*wos(imesh)
          enddo
-         if(inode == ionode.AND.iprint_pseudo>1) write(io_lun,fmt='(2x,"Integral of interpolated chlocal ",f8.3)') zcore
+         if(inode == ionode.AND.iprint_pseudo>2) write(io_lun,fmt='(4x,"Integral of interpolated chlocal ",f8.3)') zcore
          zcore = - zcore   ! makes zcore positive
 
          !Makes vlocal & integrates vlocal

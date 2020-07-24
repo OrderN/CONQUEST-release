@@ -754,7 +754,7 @@ contains
          IPRINT_TIME_THRES1, flag_pcc_global,    &
          id_glob,                                &
          flag_LmatrixReuse, flag_diagonalisation, nspin, &
-         flag_SFcoeffReuse 
+         flag_SFcoeffReuse, min_layer
     use minimise,       only: get_E_and_F, sc_tolerance, L_tolerance, &
          n_L_iterations
     use GenComms,       only: my_barrier, myid, inode, ionode,        &
@@ -801,6 +801,7 @@ contains
 
     integer :: ig, both, mat, update_var
 
+    write(io_lun,*) 'min_layer is ',min_layer
     call start_timer(tmr_std_moveatoms)
 
     if(flag_SFcoeffReuse) then
@@ -871,8 +872,10 @@ contains
                fixed_potential, vary_mu, n_L_iterations, &
                L_tolerance, e3)
        end if
+       min_layer = min_layer - 1
        call get_E_and_F(fixed_potential, vary_mu, e3, .false., &
             .false.)
+       min_layer = min_layer + 1
        ! Now, we call dump_pos_and_matrices here. : 2018.Jan19 TM
        !  but if we want to use the information of the matrices in the beginning of this line minimisation
        !  you can comment the following line, in the future. 
@@ -965,6 +968,7 @@ contains
          IPRINT_TIME_THRES1)
     ! We've just moved the atoms - we need a self-consistent ground state before
     ! we can minimise blips !
+    min_layer = min_layer - 1
     if (flag_vary_basis .or. .NOT.flag_LFD_NonSCF) then
        call new_SC_potl(.false., sc_tolerance, reset_L,           &
             fixed_potential, vary_mu, n_L_iterations, &
@@ -976,6 +980,7 @@ contains
     else
        call get_E_and_F(fixed_potential, vary_mu, energy_out, .true., .false.)
     end if
+    min_layer = min_layer + 1
 
     ! 2018.Jan19  TM
     call dump_pos_and_matrices
@@ -1070,6 +1075,7 @@ contains
             IPRINT_TIME_THRES1)
        ! We've just moved the atoms - we need a self-consistent ground
        ! state before we can minimise blips !
+       min_layer = min_layer - 1
        if(flag_vary_basis .or. .NOT.flag_LFD_NonSCF) then
           call new_SC_potl(.false., sc_tolerance, reset_L,           &
                fixed_potential, vary_mu, n_L_iterations, &
@@ -1083,7 +1089,7 @@ contains
           call get_E_and_F(fixed_potential, vary_mu, energy_out, &
                .true., .false.)
        end if
-
+       min_layer = min_layer + 1
        ! 2018.Jan19  TM : probably we don't need to call dump_pos_and_matrices here, since
        !                  we will call it after calling safemin2
        call dump_pos_and_matrices
@@ -1136,7 +1142,7 @@ contains
          IPRINT_TIME_THRES1, flag_pcc_global,    &
          id_glob,                                &
          flag_LmatrixReuse, flag_diagonalisation, nspin, &
-         flag_SFcoeffReuse 
+         flag_SFcoeffReuse, min_layer
     use minimise,       only: get_E_and_F, sc_tolerance, L_tolerance, &
          n_L_iterations
     use GenComms,       only: my_barrier, myid, inode, ionode,        &
@@ -1155,7 +1161,7 @@ contains
     use multisiteSF_module, only: flag_LFD_NonSCF
     use mult_module, ONLY: allocate_temp_matrix, free_temp_matrix, matrix_sum
     use global_module, ONLY: atomf, sf
-    use io_module, ONLY: dump_matrix
+    use io_module, ONLY: dump_matrix, return_prefix
     use force_module,      only: force
 
     implicit none
@@ -1182,15 +1188,19 @@ contains
 
     integer :: ig, both, mat
 
+    character(len=10) :: subname = "back_lm:  "
+    character(len=120) :: prefix
+
+    prefix = return_prefix(subname, min_layer)
     call start_timer(tmr_std_moveatoms)
 
     iter = 0
     old_alpha = zero
     alpha = one
     e0 = total_energy
-    if (inode == ionode .and. iprint_MD > 0) &
+    if (inode == ionode .and. iprint_MD + min_layer > 0) &
          write (io_lun, &
-         fmt='(4x,"In backtrack_linemin, initial energy is ",f16.6," ",a2)') &
+         fmt='(4x,a,f16.6," ",a2)') trim(prefix)//" Initial energy is ",&
          en_conv * energy_in, en_units(energy_units)
 
     c1 = 0.1_double
@@ -1203,9 +1213,9 @@ contains
        grad_f_dot_p = grad_f_dot_p - direction(2,i)*tot_force(2,j)
        grad_f_dot_p = grad_f_dot_p - direction(3,i)*tot_force(3,j)
     end do
-    if(inode==ionode.AND.iprint_MD>1) &
-         write(io_lun, fmt='(2x,"Starting backtrack_linemin, magnitude of grad_f.p is ",e16.6)') &
-         sqrt(-grad_f_dot_p/ni_in_cell)
+    if(inode==ionode.AND.iprint_MD + min_layer>1) &
+         write(io_lun, fmt='(4x,a,e16.6)') &
+         trim(prefix)//" Magnitude of grad_f.p is ",sqrt(-grad_f_dot_p/ni_in_cell)
     done = .false.
     do while (.not. done)
        iter = iter+1
@@ -1222,20 +1232,21 @@ contains
        else
           call update_pos_and_matrices(updateLorK,direction)
        endif
-       if (inode == ionode .and. iprint_MD > 2) then
+       if (inode == ionode .and. iprint_MD + min_layer > 2) then
           do i=1,ni_in_cell
-             write (io_lun,fmt='(2x,"Position: ",i3,3f13.8)') i, &
+             write (io_lun,fmt='(4x,a,i3,3f13.8)') trim(prefix)//"Position: ",i, &
                   x_atom_cell(i), y_atom_cell(i), z_atom_cell(i)
           end do
        end if
        call update_H(fixed_potential)
        ! Write out atomic positions
-       if (iprint_MD > 2) then
+       if (iprint_MD + min_layer > 2) then
           call write_atomic_positions("UpdatedAtoms_tmp.dat", &
                trim(pdb_template))
        end if
        ! We've just moved the atoms - we need a self-consistent ground
        ! state before we can minimise blips !
+       min_layer = min_layer - 1
        if (flag_vary_basis .or. .NOT.flag_LFD_NonSCF) then
           call new_SC_potl(.false., sc_tolerance, reset_L,           &
                fixed_potential, vary_mu, n_L_iterations, &
@@ -1243,16 +1254,18 @@ contains
        end if
        call get_E_and_F(fixed_potential, vary_mu, e3, .false., &
             .false.)
+       min_layer = min_layer + 1
        !call dump_pos_and_matrices
        ! e3 is f(x + alpha p)
        armijo = e0 + c1 * alpha * grad_f_dot_p
 
-       if (inode == ionode .and. iprint_MD > 1) then
+       if (inode == ionode .and. iprint_MD + min_layer > 1) then
           write (io_lun, &
-               fmt='(4x,"In backtrack_linemin, iter ",i3," step and energy &
-               &are ",2f16.6," ",a2)') &
+               fmt='(4x,a,i3," step and energy &
+               &are ",2f16.6," ",a2)') trim(prefix)//" Iter ",&
                iter, alpha, en_conv * e3, en_units(energy_units)
-          write(io_lun, fmt='(6x,"Armijo threshold is ",f16.6," ",a2)') armijo, en_units(energy_units)
+          write(io_lun, fmt='(4x,a,f16.6," ",a2)') trim(prefix)//"Armijo threshold is ", &
+               armijo, en_units(energy_units)
        end if
        if(e3<armijo) then ! success
           done = .true.
@@ -1265,8 +1278,10 @@ contains
     energy_out = e3
     call dump_pos_and_matrices
     ! Now find forces
+    min_layer = min_layer - 1
     call force(fixed_potential, vary_mu, n_L_iterations, &
          L_tolerance, sc_tolerance, energy_out, .true.)
+    min_layer = min_layer + 1
     ! Evaluate new grad f dot p
     grad_fp_dot_p = zero
     do i=1, ni_in_cell
@@ -1275,19 +1290,17 @@ contains
        grad_fp_dot_p = grad_f_dot_p - direction(2,i)*tot_force(2,j)
        grad_fp_dot_p = grad_f_dot_p - direction(3,i)*tot_force(3,j)
     end do
-    if(inode==ionode.AND.iprint_MD>3) &
-         write(io_lun,fmt='(6x,"In backtrack_linemin, second Wolfe: ",e11.4," < ",e11.4)') &
+    if(inode==ionode.AND.iprint_MD + min_layer>3) &
+         write(io_lun,fmt='(4x,a,e11.4," < ",e11.4)') &
+         trim(prefix)//" Second Wolfe: ",&
          abs(grad_fp_dot_p), c2*abs(grad_f_dot_p)
 
     dE = e0 - energy_out
-    if (inode == ionode .and. iprint_MD > 2) then
+    if (inode == ionode .and. iprint_MD + min_layer >= 0) then
        write (io_lun, &
-            fmt='(4x,"In backtrack_linemin, exit after ",i4," &
-            &iterations with energy ",f16.6," ",a2)') &
+            fmt='(4x,a,i4," &
+            &iterations with energy ",f16.6," ",a2)') trim(prefix)//" Exit after ",&
             iter, en_conv * energy_out, en_units(energy_units)
-    else if (inode == ionode .and. iprint_MD > 0) then
-       write (io_lun, fmt='(/4x,"In backtrack_linemin, final energy is   ",f16.6," ",a2)') &
-            en_conv * energy_out, en_units(energy_units)
     end if
 
     call stop_timer(tmr_std_moveatoms)
@@ -1323,7 +1336,7 @@ contains
          IPRINT_TIME_THRES1, flag_pcc_global,    &
          id_glob,                                &
          flag_LmatrixReuse, flag_diagonalisation, nspin, &
-         flag_SFcoeffReuse 
+         flag_SFcoeffReuse, min_layer
     use minimise,       only: get_E_and_F, sc_tolerance, L_tolerance, &
          n_L_iterations
     use GenComms,       only: my_barrier, myid, inode, ionode,        &
@@ -1423,6 +1436,7 @@ contains
        end if
        ! We've just moved the atoms - we need a self-consistent ground
        ! state before we can minimise blips !
+       min_layer = min_layer - 1
        if (flag_vary_basis .or. .NOT.flag_LFD_NonSCF) then
           call new_SC_potl(.false., sc_tolerance, reset_L,           &
                fixed_potential, vary_mu, n_L_iterations, &
@@ -1430,6 +1444,7 @@ contains
        end if
        call get_E_and_F(fixed_potential, vary_mu, e3, .false., &
             .false.)
+       min_layer = min_layer + 1
        !call dump_pos_and_matrices
        ! e3 is f(x + alpha p)
        armijo = e0 + c1 * alpha * grad_f_dot_p
@@ -1457,8 +1472,10 @@ contains
        alpha = (one+scale)*alpha
     end if
     ! Now find forces
+    min_layer = min_layer - 1
     call force(fixed_potential, vary_mu, n_L_iterations, &
          L_tolerance, sc_tolerance, energy_out, .true.)
+    min_layer = min_layer + 1
     grad_fp_dot_p = zero
     do i=1, ni_in_cell
        j = id_glob(i)
@@ -1532,7 +1549,7 @@ contains
                                   flag_reset_dens_on_atom_move,           &
                                   IPRINT_TIME_THRES1, flag_pcc_global, &
                                   flag_diagonalisation, cell_constraint_flag, &
-                                  flag_SFcoeffReuse
+                                  flag_SFcoeffReuse, min_layer
     use minimise,           only: get_E_and_F, sc_tolerance, L_tolerance, &
                                   n_L_iterations
     use GenComms,           only: my_barrier, myid, inode, ionode, cq_abort, &
@@ -1634,6 +1651,7 @@ contains
        call stop_print_timer(tmr_l_tmp1, "atom updates", IPRINT_TIME_THRES1)
        ! We've just moved the atoms - we need a self-consistent ground
        ! state before we can minimise blips !
+       min_layer = min_layer - 1
        if (flag_vary_basis .or. .NOT.flag_LFD_NonSCF) then
           call new_SC_potl(.false., sc_tolerance, reset_L,           &
                fixed_potential, vary_mu, n_L_iterations, &
@@ -1641,6 +1659,7 @@ contains
        end if
        call get_E_and_F(fixed_potential, vary_mu, e3, .false., &
             .false.)
+       min_layer = min_layer + 1
        call dump_pos_and_matrices
 
        h3 = enthalpy(e3, target_press)
@@ -1714,6 +1733,7 @@ contains
          "safemin_cell - Final interpolation and updates", &
          IPRINT_TIME_THRES1)
     ! We've just moved the atoms - we need a self-consistent ground state before we can minimise blips !
+    min_layer = min_layer - 1
     if (flag_vary_basis .or. .NOT.flag_LFD_NonSCF) then
        call new_SC_potl(.false., sc_tolerance, reset_L,           &
             fixed_potential, vary_mu, n_L_iterations, &
@@ -1726,6 +1746,7 @@ contains
     else
        call get_E_and_F(fixed_potential, vary_mu, energy_out, .true., .false.)
     end if
+    min_layer = min_layer + 1
     call dump_pos_and_matrices
     enthalpy_out = enthalpy(energy_out, target_press)
 
@@ -1761,6 +1782,7 @@ contains
             IPRINT_TIME_THRES1)
        ! We've just moved the atoms - we need a self-consistent ground
        ! state before we can minimise blips !
+       min_layer = min_layer - 1
        if(flag_vary_basis .or. .NOT.flag_LFD_NonSCF) then
           call new_SC_potl(.false., sc_tolerance, reset_L,           &
                fixed_potential, vary_mu, n_L_iterations, &
@@ -1775,6 +1797,7 @@ contains
           call get_E_and_F(fixed_potential, vary_mu, energy_out, &
                .true., .false.)
        end if
+       min_layer = min_layer + 1
        ! we may not need to call dump_pos_and_matrices here. (if it would be called in the part after calling safemin_cell)
        call dump_pos_and_matrices  
     end if
@@ -1823,7 +1846,7 @@ contains
                               flag_self_consistent,                   &
                               IPRINT_TIME_THRES1, flag_pcc_global,    &
                               flag_LmatrixReuse, flag_SFcoeffReuse,   &
-                              atom_coord
+                              atom_coord, min_layer
     use minimise,       only: get_E_and_F, sc_tolerance, L_tolerance, &
                               n_L_iterations
     use GenComms,       only: inode, ionode, cq_abort
@@ -1935,6 +1958,7 @@ contains
        call stop_print_timer(tmr_l_tmp1, "atom updates", IPRINT_TIME_THRES1)
        ! We've just moved the atoms - we need a self-consistent ground
        ! state before we can minimise blips !
+       min_layer = min_layer - 1
        if (flag_vary_basis .or. .NOT.flag_LFD_NonSCF) then
           call new_SC_potl(.false., sc_tolerance, reset_L,           &
                fixed_potential, vary_mu, n_L_iterations, &
@@ -1942,6 +1966,7 @@ contains
        end if
        call get_E_and_F(fixed_potential, vary_mu, e3, .false., &
             .false.)
+       min_layer = min_layer + 1
        ! Now, we call dump_pos_and_matrices here. : 2018.Jan19 TM
        !  but if we want to use the information of the matrices in the beginning of this line minimisation
        !  you can comment the following line, in the future. 
@@ -2027,6 +2052,7 @@ contains
          IPRINT_TIME_THRES1)
     ! We've just moved the atoms - we need a self-consistent ground state before
     ! we can minimise blips !
+    min_layer = min_layer - 1
     if (flag_vary_basis .or. .NOT.flag_LFD_NonSCF) then
        call new_SC_potl(.false., sc_tolerance, reset_L,           &
             fixed_potential, vary_mu, n_L_iterations, &
@@ -2038,6 +2064,7 @@ contains
     else
        call get_E_and_F(fixed_potential, vary_mu, energy_out, .true., .false.)
     end if
+    min_layer = min_layer + 1
 
     ! 2018.Jan19  TM
     call dump_pos_and_matrices
@@ -2142,6 +2169,7 @@ contains
             IPRINT_TIME_THRES1)
        ! We've just moved the atoms - we need a self-consistent ground
        ! state before we can minimise blips !
+       min_layer = min_layer - 1
        if(flag_vary_basis .or. .NOT.flag_LFD_NonSCF) then
           call new_SC_potl(.false., sc_tolerance, reset_L,           &
                fixed_potential, vary_mu, n_L_iterations, &
@@ -2155,6 +2183,7 @@ contains
           call get_E_and_F(fixed_potential, vary_mu, energy_out, &
                .true., .false.)
        end if
+       min_layer = min_layer + 1
 
        ! 2018.Jan19  TM : probably we don't need to call dump_pos_and_matrices here, since
        !                  we will call it after calling safemin2
@@ -3934,7 +3963,7 @@ contains
          rcellz, flag_self_consistent,           &
          flag_reset_dens_on_atom_move,           &
          IPRINT_TIME_THRES1, flag_pcc_global, &
-         flag_diagonalisation, cell_constraint_flag
+         flag_diagonalisation, cell_constraint_flag, min_layer
     use minimise,           only: get_E_and_F, sc_tolerance, L_tolerance, &
          n_L_iterations
     use GenComms,           only: my_barrier, myid, inode, ionode,        &

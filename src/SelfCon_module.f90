@@ -175,7 +175,7 @@ contains
     use numbers
     use global_module,   only: iprint_SC, flag_self_consistent,         &
                                flag_SCconverged, IPRINT_TIME_THRES2,    &
-                               nspin, spin_factor
+                               nspin, spin_factor, min_layer
     use H_matrix_module, only: get_H_matrix
     use DMMin,           only: FindMinDM
     use energy,          only: get_energy
@@ -212,7 +212,6 @@ contains
     call start_backtrace(t=backtrace_timer,who='new_SC_potl',where=area,&
          level=backtrace_level,echo=.true.)
 !****lat>$
-
     call start_timer(tmr_std_chargescf)
 
     ! Build H matrix *with NL and KE*
@@ -224,6 +223,7 @@ contains
     call start_timer(tmr_l_tmp1,WITH_LEVEL)
     if (.not. flag_self_consistent) then
        call stop_timer(tmr_std_chargescf)
+       min_layer = min_layer - 1
        call FindMinDM(n_L_iterations, vary_mu, L_tol, &
                       reset_L, .false.)
        call start_timer(tmr_std_chargescf)
@@ -231,14 +231,15 @@ contains
        call stop_print_timer(tmr_l_tmp1, "new_SC_potl (except H build)", &
                              IPRINT_TIME_THRES2)
        call stop_timer(tmr_std_chargescf)
+       min_layer = min_layer + 1
        return
     end if
-    if (inode == ionode .and. iprint_SC > 0) &
+    if (inode == ionode .and. iprint_SC + min_layer > 0) &
          write (io_lun, &
                 fmt='(4x,"Starting self-consistency.  Tolerance: ",e12.5,/)') &
                self_tol
     if (record) then
-       if (inode == ionode .and. iprint_SC > 1) &
+       if (inode == ionode .and. iprint_SC + min_layer > 1) &
             write (io_lun, *) 'Original tol: ', L_tol
        SC_tol  = self_tol
        DMM_tol = L_tol
@@ -280,7 +281,7 @@ contains
        if (.not. done) then ! Late stage strategy
           call start_timer(tmr_l_tmp1, WITH_LEVEL)
           reset_L = .true. !.false.
-          if (inode == ionode .and. iprint_SC > 0) &
+          if (inode == ionode .and. iprint_SC + min_layer > 0) &
                write (io_lun, *) '********** LateSC **********'
 
           call lateSC(record, done, ndone, SC_tol, reset_L,     &
@@ -303,7 +304,7 @@ contains
     call start_timer(tmr_l_tmp1, WITH_LEVEL)
 
     if (record) then ! Fit the C and beta coefficients
-       if (inode == ionode .and. iprint_SC > 1) then
+       if (inode == ionode .and. iprint_SC + min_layer > 1) then
           write (io_lun, *) '  List of residuals and energies'
           if (ndone > 0) then
              do i = 1, ndone
@@ -312,7 +313,7 @@ contains
           end if
        end if
        call fit_coeff(SCC, SCBeta, SCE, SCR, ndone)
-       if (inode == ionode .and. iprint_SC > 1) &
+       if (inode == ionode .and. iprint_SC + min_layer > 1) &
             write (io_lun, 6) SCC, SCBeta
     end if
 
@@ -877,13 +878,13 @@ contains
     use GenBlas
     use dimens,         only: n_my_grid_points, grid_point_volume
     use GenComms,       only: gsum, cq_abort, inode, ionode, my_barrier
-    use io_module,      only: dump_charge
+    use io_module,      only: dump_charge, return_prefix
     use hartree_module, only: kerker, kerker_and_wdmetric, wdmetric
     use global_module,  only: ne_in_cell, iprint_SC, area_SC,  &
                               flag_continue_on_SC_fail,        &
                               flag_SCconverged,                &
                               flag_fix_spin_population, nspin, &
-                              spin_factor
+                              spin_factor, min_layer
     use memory_module,  only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use maxima_module,  only: maxngrid
     use store_matrix,   only: dump_pos_and_matrices, unit_SCF_save
@@ -919,7 +920,10 @@ contains
 
     type(cq_timer)    :: backtrace_timer
     integer           :: backtrace_level
+    character(len=12) :: subname = "PulayMixSC: "
+    character(len=120) :: prefix
 
+    prefix = return_prefix(subname, min_layer)
 !****lat<$
     if (       present(level) ) backtrace_level = level+1
     if ( .not. present(level) ) backtrace_level = -10
@@ -935,24 +939,24 @@ contains
     R_pul   = zero
 
     ! write out start information
-    if (inode == ionode .and. iprint_SC>0) then
-       write (io_lun, '(8x,a,f6.3,a,f6.3)') &
-             'Starting Pulay mixing, A_up = ', A(1), ' A_dn = ', A(2)
+    if (inode == ionode .and. iprint_SC + min_layer>0) then
+       write (io_lun, '(4x,a,f6.3,a,f6.3)') &
+             trim(prefix)//' Starting Pulay mixing, A_up = ', A(1), ' A_dn = ', A(2)
        if (nspin == 2) then
           if (flag_fix_spin_population) then
-             write (io_lun, '(8x,"Spin populations are fixed.")')
+             write (io_lun, '(4x,a)') trim(prefix)//" Spin populations are fixed."
           else
-             write (io_lun, '(8x,"Spin populations are to be relaxed.")')
+             write (io_lun, '(4x,a)') trim(prefix)//" Spin populations are to be relaxed."
           end if
        else
-          write (io_lun, '(8x,"Spin non-polarised calculation.")')
+          write (io_lun, '(4x,a)') trim(prefix)//" Spin non-polarised calculation."
        end if
        if (flag_Kerker) &
-            write (io_lun, '(10x,a,f6.3)') &
-                  'with Kerker preconditioning, q0 = ', q0
+            write (io_lun, '(4x,a,f6.3)') &
+                  trim(prefix)//' with Kerker preconditioning, q0 = ', q0
        if (flag_wdmetric) &
-            write (io_lun, '(10x,a,f6.3)') &
-                  'with wave dependent metric, q1 = ', q1
+            write (io_lun, '(4x,a,f6.3)') &
+                  trim(prefix)//' with wave dependent metric, q1 = ', q1
     end if
 
     ! set counters
@@ -1004,23 +1008,24 @@ contains
     end if
     ! print residual information
     if (inode==ionode) then
-       if (iprint_SC>1) then
-          write (io_lun, '(8x,a,i5,a,e12.5)') &
-               'Pulay iteration ', iter, ' RMS residual:             ', RA
-          write (io_lun, '(8x,a,i5,a,e12.5)') &
-               'Pulay iteration ', iter, ' absolute residual (tot) : ', RB
-          write (io_lun, '(8x,a,i5,a,e12.5)') &
-               'Pulay iteration ', iter, ' absolute residual (frac): ', RC
-      else if(iprint_SC>0) then
-          write (io_lun, '(8x,a,i5,a,e12.5)') &
-               'Pulay iteration ', iter, ' residual:             ', R0
+       if (iprint_SC + min_layer>1) then
+          write (io_lun, '(4x,a,i5,a,e12.5)') &
+               trim(prefix)//' Pulay iteration ', iter, ' RMS residual:             ', RA
+          write (io_lun, '(4x,a,i5,a,e12.5)') &
+               trim(prefix)//' Pulay iteration ', iter, ' absolute residual (tot) : ', RB
+          write (io_lun, '(4x,a,i5,a,e12.5)') &
+               trim(prefix)//' Pulay iteration ', iter, ' absolute residual (frac): ', RC
+      else if(iprint_SC + min_layer>0) then
+          write (io_lun, '(4x,a,i5,a,e12.5)') &
+               trim(prefix)//' Pulay iteration ', iter, ' residual:             ', R0
       end if
     end if
     ! check if they have reached tolerance
     if (R0 < self_tol .AND. iter >= minitersSC) then ! If we've done minimum number
-       if (inode == ionode .and. iprint_SC>=0) &
-            write (io_lun,fmt='(4x,"Reached SCF tolerance of ",e12.5, &
-            &" after ",i6," iterations")') R0, iter
+       if (inode == ionode .and. iprint_SC + min_layer>=0) &
+            write (io_lun,fmt='(4x,a,e12.5, &
+            &" after ",i6," iterations")') trim(prefix)//" Reached SCF tolerance of ", &
+            R0, iter
        done = .true.
        call deallocate_PulayMiXSC_spin
        return
@@ -1057,8 +1062,8 @@ contains
 
        ! print out charge
        !  2019Dec30 tsuyoshi: flag_DumpChargeDensity is introduced, but ...
-       !                      is it okay with iprint_SC > 1 ?
-       if (flag_DumpChargeDensity .and. iprint_SC > 1) then
+       !                      is it okay with iprint_SC + min_layer > 1 ?
+       if (flag_DumpChargeDensity .and. iprint_SC + min_layer > 1) then
           if (nspin == 1) then
              rho_tot(:) = spin_factor * rho(:,1)
              call dump_charge(rho_tot, n_my_grid_points, inode, spin=0)
@@ -1106,23 +1111,24 @@ contains
        end if
        ! print residual information
        if (inode==ionode) then
-          if (iprint_SC>1) then
-             write (io_lun, '(8x,a,i5,a,e12.5)') &
-                  'Pulay iteration ', iter, ' RMS residual:             ', RA
-             write (io_lun, '(8x,a,i5,a,e12.5)') &
-                  'Pulay iteration ', iter, ' absolute residual (tot) : ', RB
-             write (io_lun, '(8x,a,i5,a,e12.5)') &
-                  'Pulay iteration ', iter, ' absolute residual (frac): ', RC
-          else if(iprint_SC>0) then
-             write (io_lun, '(8x,a,i5,a,e12.5)') &
-                  'Pulay iteration ', iter, ' residual:             ', R0
+          if (iprint_SC + min_layer>1) then
+             write (io_lun, '(4x,a,i5,a,e12.5)') &
+                  trim(prefix)//' Pulay iteration ', iter, ' RMS residual:             ', RA
+             write (io_lun, '(4x,a,i5,a,e12.5)') &
+                  trim(prefix)//' Pulay iteration ', iter, ' absolute residual (tot) : ', RB
+             write (io_lun, '(4x,a,i5,a,e12.5)') &
+                  trim(prefix)//' Pulay iteration ', iter, ' absolute residual (frac): ', RC
+          else if(iprint_SC + min_layer>0) then
+             write (io_lun, '(4x,a,i5,a,e12.5)') &
+                  trim(prefix)//' Pulay iteration ', iter, ' residual:             ', R0
           end if
        end if
        ! check if they have reached tolerance
        if (R0 < self_tol .AND. iter >= minitersSC) then ! Passed minimum number of iterations
-          if (inode == ionode .and. iprint_SC>=0) &
-               write (io_lun,fmt='(4x,"Reached SCF tolerance of ",e12.5, &
-               &" after ",i6," iterations")') R0, iter
+          if (inode == ionode .and. iprint_SC + min_layer>=0) &
+               write (io_lun,fmt='(4x,a,e12.5, &
+               &" after ",i6," iterations")') trim(prefix)//" Reached SCF tolerance of ", &
+               R0, iter
           done = .true.
           call deallocate_PulayMiXSC_spin
           return
@@ -1138,8 +1144,9 @@ contains
        if (R0 > R0_old) &
             icounter_fail = icounter_fail + 1
        if (icounter_fail > mx_fail) then
-          if (inode == ionode .and. iprint_SC>0) &
-               write (io_lun, *) ' Pulay iteration is reset !!  at ', iter, &
+          if (inode == ionode .and. iprint_SC + min_layer>0) &
+               write (io_lun, fmt='(4x,a,i3,a)') &
+               trim(prefix)//' Pulay iteration is reset !!  at ', iter, &
                ' th iteration'
           reset_Pulay = .true.
        end if
