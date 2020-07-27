@@ -4296,13 +4296,15 @@ contains
   !!       changed matS to be spin_SF dependent
   !!   2019/Nov/14  tsuyoshi
   !!       removed glob2node_old, n_proc_old
+  !!   2019/Jul/27  tsuyoshi
+  !!       added atom_vels (from global_module), and removed local velocity_global
   !!
   !!  SOURCE
   !!
  subroutine update_pos_and_matrices(update_method, velocity)
   use datatypes
   use numbers,         only: half, zero, one, very_small
-  use global_module,   only: flag_diagonalisation, atom_coord, atom_coord_diff, &
+  use global_module,   only: flag_diagonalisation, atom_coord, atom_vels, atom_coord_diff, &
                              rcellx, rcelly, rcellz, ni_in_cell, nspin, nspin_SF, id_glob
     ! n_proc_old and glob2node_old have been removed
   use GenComms,        only: my_barrier, inode, ionode, cq_abort, gcopy
@@ -4331,7 +4333,6 @@ contains
   type(matrix_store_global) :: InfoGlob
   type(InfoMatrixFile),pointer :: InfoMat(:)
 
-  real(double), dimension(3,ni_in_cell) :: velocity_global
   integer :: i
 
  !Switch on Debugging
@@ -4387,9 +4388,9 @@ contains
      call wrap_xyz_atom_cell
      call update_atom_coord
      do i=1,ni_in_cell
-        velocity_global(1,id_glob(i)) = velocity(1,i)
-        velocity_global(2,id_glob(i)) = velocity(2,i)
-        velocity_global(3,id_glob(i)) = velocity(3,i)
+        atom_vels(1,id_glob(i)) = velocity(1,i)
+        atom_vels(2,id_glob(i)) = velocity(2,i)
+        atom_vels(3,id_glob(i)) = velocity(3,i)
      end do
   !Before calling this routine, we need 1) call dump_InfoMatGlobal or 2) call set_InfoMatGlobal
   ! Then, we use InfoGlob read from the file or use InfoGlob as it is (in the case of 2))
@@ -4408,9 +4409,9 @@ contains
   !       coord_next.dat is made in "updateIndices3", at present.
      call updateIndices3(fixed_potential, velocity)
      do i=1,ni_in_cell
-        velocity(1,i) = velocity_global(1,id_glob(i))
-        velocity(2,i) = velocity_global(2,id_glob(i))
-        velocity(3,i) = velocity_global(3,id_glob(i))
+        velocity(1,i) = atom_vels(1,id_glob(i))
+        velocity(2,i) = atom_vels(2,id_glob(i))
+        velocity(3,i) = atom_vels(3,id_glob(i))
      end do
 
  !
