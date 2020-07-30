@@ -1,7 +1,7 @@
 #!/bin/bash
 
 source ../../src/env_cq_pao 
-source $CQ_PREFIX/pseudo-and-pao/src/cq_periodic_2014.sh
+source $CQ_PREFIX/pseudo-and-pao/src/cq_periodic_table.sh
 
 function extrema() {
 awk 'BEGIN {min=1000; max=0;}; \
