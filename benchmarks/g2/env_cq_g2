@@ -1,0 +1,39 @@
+#!/bin/bash
+#
+# **<lat>** 2014/09/10
+# env_g2_tests - settings for running Conquesti g2 test
+#
+# BIN_DIR = path of compiled executables
+#     Usually this is /src,
+# PAO_DIR = path of pseudopotential & numerical atomic orbitals required 
+#     by the g2
+#
+PREFIX=/Users/lioneltruflandier/Conquest-develop
+CQ_BINDIR=$PREFIX/bin
+CQ_PAODIR=$PREFIX/pseudo-and-pao/lib
+#
+# For now the *.ion files are within the example directories 
+# PAO_DIR is not requested
+#
+# To run the Conquest program on a parallel machine, you may have to
+# add the appropriate options, ie specifying the mpi/omp command 
+# and the maximum number of processors/cores for large scale
+#
+MPI_PREFIX="" 
+MPI_NPROCS=
+OMP_PREFIX=""
+#export OMP_NUM_THREADS=4
+#
+#
+# function to test the exit status of a job
+check_failure () {
+    # usage: check_failure $?
+    if test $1 != 0
+    then
+        $ECHO "Error condition encountered during test: exit status = $1"
+        $ECHO "Aborting"
+        exit 1
+    fi
+}
+
+export -f check_failure 
