@@ -13,6 +13,7 @@ CQ_ATOMLIST="cq_pao.list"
 CQ_PAO_COMMAND=$CQ_BINDIR/MakeIonFiles
 CQ_PAO_OUTPUT="Conquest_ion_out"
 CQ_PAO_SRC=$CQ_PAODIR/src
+CQ_PAO_LIB=lib
 CQ_ION_FILE="CQ.ion"
 CQ_SPEC_FILE="CQ.spec"
 CQ_BLOCK_FILE="CQ.block"
@@ -71,6 +72,12 @@ else
     exit 1
 fi
 #
+#
+#
+if [ ! -d "$CQ_PAO_LIB" ] ; then
+    mkdir $CQ_PAO_LIB
+fi
+#
 # Run MakeIonFiles for the set of atoms
 #
 while read file  ; do
@@ -83,9 +90,9 @@ while read file  ; do
 	check_failure $?
 	$ECHO "  done"
 	$CQ_PAO_SRC/cq_generate_PAOblock.sh $file$CQ_ION_FILE
-	cp $file$CQ_ION_FILE $CQ_PAODIR/lib
-	cp $file$CQ_SPEC_FILE $CQ_PAODIR/lib
-	cp $file$CQ_BLOCK_FILE $CQ_PAODIR/lib	
+	cp $file$CQ_ION_FILE $CQ_PAODIR/$CQ_PAO_LIB
+	cp $file$CQ_SPEC_FILE $CQ_PAODIR/$CQ_PAO_LIB
+	cp $file$CQ_BLOCK_FILE $CQ_PAODIR/$CQ_PAO_LIB
 	cd ../..
     fi
 	

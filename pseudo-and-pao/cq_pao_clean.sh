@@ -66,6 +66,11 @@ while read file  ; do
     #
 done < $CQ_ATOMLIST
 #
-cd lib
-rm -f *.ion *.spec *.block
-cd ..
+if [ -d lib ] ; then
+   rm -r lib 
+   $ECHO "  lib directory has been removed"
+fi
+
+#cd lib
+#rm -f *.ion *.spec *.block
+#cd ..
