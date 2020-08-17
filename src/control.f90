@@ -671,6 +671,8 @@ contains
         if (flag_move_atom(j,i) .eqv. .false.) md_ndof = md_ndof-1
       end do
     end do
+    !2020/Jul/30 TM
+     if(flag_FixCOM) md_ndof = md_ndof-3
 
     if (inode==ionode .and. iprint_gen > 0) &
       write(io_lun,'(4x,"Welcome to md_run. Doing ",i6," steps")') &
@@ -962,6 +964,7 @@ contains
                               flag_MDcontinue, flag_read_velocity, &
                               flag_MDdebug, iprint_MD, flag_atomic_stress, &
                               atomic_stress, area_moveatoms, &
+                              id_glob, atom_vels, &
                               flag_full_stress, flag_heat_flux
     use move_atoms,     only: init_velocity
     use md_control,     only: type_thermostat, type_barostat, md_tau_T, &
@@ -982,7 +985,7 @@ contains
 
     ! local variables
     character(50)  :: file_velocity='velocity.dat'
-    integer       :: stat
+    integer       :: stat, i
 
     if (inode==ionode .and. iprint_MD > 1) then
        write(io_lun,'(2x,a)') "Welcome to init_md"
@@ -1007,6 +1010,14 @@ contains
              call init_velocity(ni_in_cell, temp_ion, ion_velocity)
           end if
        end if
+
+     ! atom_vels : 2020/Jul/30
+      do i=1,ni_in_cell
+        atom_vels(1,id_glob(i)) = ion_velocity(1,i)
+        atom_vels(2,id_glob(i)) = ion_velocity(2,i)
+        atom_vels(3,id_glob(i)) = ion_velocity(3,i)
+      end do
+      
     end if
 
     if (.not. present(second_call)) then

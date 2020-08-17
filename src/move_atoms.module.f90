@@ -206,6 +206,9 @@ contains
   !!    - Bug fix on call for update_atom_coord
   !!   2016/01/13 08:31 dave
   !!    Removed call to set_density (now included in update_H)
+  !!   2020/07/28 tsuyoshi
+  !!    Velocities for fixed atoms are forced to be zero.
+  !!    (though this subroutine is not used now.)
   !!  TODO
   !!   Proper buffer zones for matrix mults so initialisation doesn't have
   !!   to be done at every step 03/07/2001 dave
@@ -270,9 +273,11 @@ contains
        !Now, we assume forces are forced to be zero, when
        ! flagx, y or z is false. But, I(TM) think we should
        ! have the followings, in the future. 
-       !if(.not.flagx) velocity(1,atom) = zero
-       !if(.not.flagy) velocity(2,atom) = zero
-       !if(.not.flagz) velocity(3,atom) = zero
+       !  2020/Jul/28 TM activated the following three lines, 
+       !   though this subroutine is not used now.
+       if(.not.flagx) velocity(1,atom) = zero
+       if(.not.flagy) velocity(2,atom) = zero
+       if(.not.flagz) velocity(3,atom) = zero
     end do
     ! Maybe fiddle with KE
     KE = zero
@@ -3758,6 +3763,8 @@ contains
   !!    Moved ionode criterion for generation of velocities from init_ensemble
   !!   2019/05/23 zamaan
   !!    Zeroed COM velocity after initialisation
+  !!   2020/07/28 tsuyoshi
+  !!    Zeroed velocity for the fixed degree of freedom
   !!  SOURCE
   !!
   subroutine init_velocity(ni_in_cell, temp, velocity)
@@ -3811,7 +3818,11 @@ contains
           ! Positions are calculated as v*dt in bohr unit. (m in amu, dt in fs)
           v0 = sqrt(temp*fac_Kelvin2Hartree/(massa*fac)) 
           do dir=1,3
-             u0 = myrng%rng_normal()
+             if(flag_move_atom(dir,iglob)) then
+              u0 = myrng%rng_normal()
+             else
+              u0 = zero
+             endif
              velocity(dir,ia) = v0 * u0
              KE = KE + half * massa * fac * velocity(dir,ia)**2
           end do
