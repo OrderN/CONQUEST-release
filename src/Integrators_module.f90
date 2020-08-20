@@ -227,7 +227,6 @@ contains
          if(flag_quench_MD) massa = fac
          gatom = id_glob(atom)
          do k = 1, 3
-         !ori   if (.NOT.flag_movable(ibeg_atom+k-1)) cycle
             v(k,atom) = v(k,atom) + half*dt*f(k,gatom)/massa
             if (.NOT.flag_movable(ibeg_atom+k-1)) v(k,atom) = zero
          enddo
@@ -238,7 +237,7 @@ contains
     !     speca = species_glob(gatom)
     !     massa = mass(speca)*fac
     !     do k = 1,3
-    !      atom_vels(k,atom) = atom_vels(k,atom) + half*dt*f(k,gatom)/massa
+    !      atom_vels(k,gatom) = atom_vels(k,gatom) + half*dt*f(k,gatom)/massa
     !      if(.NOT.flag_move_atom(k,gatom)) atom_vels(k,gatom) = zero
     !     enddo
     !   enddo
