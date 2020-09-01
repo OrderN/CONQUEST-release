@@ -887,10 +887,10 @@ contains
          MSSF_Smear_center, MSSF_Smear_shift, MSSF_Smear_width, &
          flag_LFD_ReadTVEC, LFD_TVEC_read,                      &
          LFD_kT, LFD_ChemP, flag_LFD_useChemPsub,               &
-         flag_LFD_nonSCF, LFD_ThreshE, LFD_ThreshD,           &
+         flag_LFD_nonSCF, LFD_ThreshE, LFD_ThreshD,             &
          LFD_Thresh_EnergyRise, LFD_max_iteration,              &
          flag_LFD_MD_UseAtomicDensity,  flag_MSSF_nonminimal,   &
-         n_dumpSFcoeff,                                         &
+         n_dumpSFcoeff, flag_mix_LFD_SCF,                       &
          MSSF_nonminimal_offset ! nonmin_mssf
     use control,    only: md_ensemble
     use md_control, only: md_tau_T, md_n_nhc, md_n_ys, md_n_mts, md_nhc_mass, &
@@ -1453,6 +1453,7 @@ contains
           endif
        endif ! flag_LFD_ReadTVEC
        flag_LFD_nonSCF = fdf_boolean('Multisite.LFD.NonSCF',.false.)
+       flag_mix_LFD_SCF = fdf_boolean('Multisite.LFD.MixLFDSCF',.true.)
        if (.NOT.flag_LFD_nonSCF) then ! Expected behaviour
           LFD_threshE = fdf_double('Multisite.LFD.Min.ThreshE',1.0e-6_double)
           LFD_threshD = fdf_double('Multisite.LFD.Min.ThreshD',1.0e-6_double)
