@@ -1453,7 +1453,7 @@ contains
           endif
        endif ! flag_LFD_ReadTVEC
        flag_LFD_nonSCF = fdf_boolean('Multisite.LFD.NonSCF',.false.)
-       flag_mix_LFD_SCF = fdf_boolean('Multisite.LFD.MixLFDSCF',.false.)
+       flag_mix_LFD_SCF = fdf_boolean('Multisite.LFD.MixLFDSCF',.true.)
        if (.NOT.flag_LFD_nonSCF) then ! Expected behaviour
           LFD_threshE = fdf_double('Multisite.LFD.Min.ThreshE',1.0e-6_double)
           LFD_threshD = fdf_double('Multisite.LFD.Min.ThreshD',1.0e-6_double)
