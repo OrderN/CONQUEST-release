@@ -46,6 +46,8 @@ module pao_minimisation
   integer, parameter :: full = 3
   real(double), save :: InitStep_paomin = 5.0_double
 
+  logical :: flag_vary_basis_nonSCF
+
 !!***
 
 contains
@@ -118,6 +120,8 @@ contains
   !!    Removed dump_matrix(SFcoeff), which will be changed to dump_pos_and_matrices in near future
   !!   2019/12/30 tsuyoshi
   !!    introduced dump_pos_and_matrices (every n_dumpSFcoeff iterations)
+  !!   2020/09/02 14:27 dave
+  !!    Introduce option for non-SCF optimisation (efficient when LFD-SCF is well converged)
   !!  SOURCE
   !!
   subroutine vary_pao(n_support_iterations, fixed_potential, vary_mu, &
@@ -160,7 +164,8 @@ contains
                                          matSFcoeff, matSFcoeff_tran,  &
                                          matdSFcoeff, matdSFcoeff_e,   &
                                          matrix_scale, matrix_transpose
-    use multisiteSF_module,        only: normalise_SFcoeff, n_dumpSFcoeff
+    use multisiteSF_module,        only: normalise_SFcoeff, n_dumpSFcoeff, flag_mix_LFD_SCF
+    use SelfCon,                   only: new_SC_potl
 
     implicit none
 
@@ -177,7 +182,7 @@ contains
     integer      :: i, part, nsf1, npao2, neigh, proc, ind_part, atom, local_atom, &
                     nsf_local, n_nab_local, npao_local, gcspart, ist, wheremat
     integer      :: length, n_iterations, spin_SF, stat
-    logical      :: orig_SC, reset_L, my_atom
+    logical      :: orig_SC, reset_L, my_atom, orig_mix_LFD_SCF, orig_SCF
     real(double) :: diff, total_energy_0, total_energy_test, last_step, &
                     dN_dot_de, dN_dot_dN, summ, E2, E1, g1, g2, &
                     tmp0, val0, val1
@@ -189,26 +194,24 @@ contains
                                                grad_copy_dH,     &
                                                grad_copy_dS
 
-
+    ! Turn off mixed LFD/SCF if we are optimising the basis
+    if(flag_mix_LFD_SCF) then
+       orig_mix_LFD_SCF = .true.
+       flag_mix_LFD_SCF = .false.
+    end if
+    ! Do basis variation non-self-consistently if option selected
+    if(flag_vary_basis_nonSCF) then
+       orig_SCF = flag_self_consistent
+       flag_self_consistent = .false.
+    end if
     reset_L = .true.
 
     length = mat_p(matSFcoeff(1))%length
 
-    call start_timer (tmr_std_allocation)
-    if (TestBasisGrads) then
-       allocate(grad_copy(length),    &
-                grad_copy_dH(length), &
-                grad_copy_dS(length), STAT=stat)
-       if (stat /= 0) &
-            call cq_abort("vary_pao: failed to allocate tmp2 matrices: ", &
-                          length, stat)
-       call reg_alloc_mem(area_minE, 3 * length, type_dbl)
-    end if
-    call stop_timer (tmr_std_allocation)
-
     ! Set tolerances for self-consistency and L minimisation
     con_tolerance = zero ! SCC*expected_reduction**SCBeta
     tolerance = zero     ! PulayC*(0.1_double*expected_reduction)**PulayBeta
+    tolerance = L_tolerance
     if (con_tolerance < sc_tolerance) &
          con_tolerance = sc_tolerance
     if (con_tolerance < ten * tolerance) &
@@ -244,205 +247,6 @@ contains
     call get_H_matrix(.true., fixed_potential, electrons, density, &
                       maxngrid)
     call build_PAO_coeff_grad(full)
-
-    if (TestBasisGrads) then
-       do spin_SF = 1, nspin_SF
-          grad_copy = mat_p(matdSFcoeff(spin_SF))%matrix
-          !call dump_matrix("dSFcoeff1",matdSFcoeff(1), inode)
-          ! Test PAO gradients
-          ! Preserve unperturbed energy and gradient
-          E1 = band_energy
-          call matrix_scale(zero, matdSFcoeff(spin_SF))
-          call matrix_scale(zero, matdSFcoeff_e(spin_SF))
-          call build_PAO_coeff_grad(GdS)
-          !call dump_matrix("dSFcoeff2",matdSFcoeff(1), inode)
-          grad_copy_dS = mat_p(matdSFcoeff(spin_SF))%matrix
-          call matrix_scale(zero, matdSFcoeff(spin_SF))
-          call matrix_scale(zero, matdSFcoeff_e(spin_SF))
-          call build_PAO_coeff_grad(KdH)
-          !call dump_matrix("dSFcoeff3",matdSFcoeff(1), inode)
-          ! LT 2011/12/06: Note that grad_copy_dH stores the value as the
-          ! sum of contribution from both spin components if not flag_SpinDependentSF
-          grad_copy_dH = mat_p(matdSFcoeff(spin_SF))%matrix
-          ! LT 2011/12/06: end
-          do proc = 1, numprocs
-             local_atom = 0
-             if (inode == proc) then
-                my_atom = .true.
-             else
-                my_atom = .false.
-             end if
-             do part = 1, parts%ng_on_node(proc)
-                ind_part = parts%ngnode(parts%inode_beg(proc) + part - 1)
-                do atom = 1, parts%nm_group(ind_part)
-                   local_atom = local_atom + 1 ! Is this really primary atom ?
-                   nsf_local = 0
-                   n_nab_local = 0
-                   npao_local = 0
-                   if (my_atom) then
-                      write (io_lun,*) 'primary, prim(glob) ', &
-                                       local_atom, bundle%ig_prim(local_atom)
-                      nsf_local   = mat(part,SFcoeff_range)%ndimi(atom)
-                      n_nab_local = mat(part,SFcoeff_range)%n_nab(atom)
-                   endif
-                   call my_barrier
-                   call gsum(nsf_local)
-                   call gsum(n_nab_local)
-                   ! which coefficient to be shifted
-                   do neigh = 1, n_nab_local
-                      if (my_atom) then
-                         ist = mat(part,SFcoeff_range)%i_acc(atom) + neigh - 1
-                         gcspart = BCS_parts%icover_ibeg(mat(part,SFcoeff_range)%i_part(ist)) + &
-                                   mat(part,SFcoeff_range)%i_seq(ist) - 1
-                         npao_local = mat(part,SFcoeff_range)%ndimj(ist)
-                      endif
-                      call my_barrier
-                      call gsum(npao_local)
-                      do nsf1 = 1, nsf_local
-                         do npao2 = 1, npao_local
-                            if (my_atom) then
-                               wheremat = matrix_pos(matSFcoeff(spin_SF), local_atom, &
-                                                     halo(SFcoeff_range)%i_halo(gcspart), nsf1, npao2)
-                               val0 = mat_p(matSFcoeff(spin_SF))%matrix(wheremat)
-                               tmp0 = val0*0.0001_double
-                               val1 = val0 + tmp0
-                            endif
-                            if (TestTot) then
-                               ! Shift coefficient a little
-                               if (my_atom) then
-                                  mat_p(matSFcoeff(spin_SF))%matrix(wheremat) = val1
-                                  call matrix_scale(zero,matSFcoeff_tran(spin_SF))
-                                  call matrix_transpose(matSFcoeff(spin_SF), matSFcoeff_tran(spin_SF))
-                               endif
-                               call my_barrier()
-                               ! Recalculate energy and gradient
-                               call get_S_matrix(inode, ionode, build_AtomF_matrix=.false.)
-                               call get_H_matrix(.false., fixed_potential, &
-                                                 electrons, density, maxngrid)
-                               call FindMinDM(n_cg_L_iterations, vary_mu, &
-                                              L_tolerance, &
-                                              .false., .false.)
-                               call get_energy(E2)
-                               E2 = band_energy
-                               call matrix_scale(zero, matdSFcoeff(spin_SF))
-                               call matrix_scale(zero, matdSFcoeff_e(spin_SF))
-                               call build_PAO_coeff_grad(full)
-                               if (my_atom) then
-                                  g1 = mat_p(matdSFcoeff(spin_SF))%matrix(wheremat)
-                                  mat_p(matdSFcoeff(spin_SF))%matrix = grad_copy
-                                  g2 = mat_p(matdSFcoeff(spin_SF))%matrix(wheremat)
-                                  write (io_lun, *) 'Tot: Numerical, analytic grad: ', &
-                                                    (E2 - E1) / tmp0, - half * (g1 + g2)
-                                  write (io_lun, *) 'Tot:Components: ', &
-                                                    tmp0, E1, E2, g1, g2
-                               end if
-                               ! Shift coefficient back
-                               if (my_atom) then
-                                  mat_p(matSFcoeff(spin_SF))%matrix(wheremat) = val0
-                                  call matrix_scale(zero,matSFcoeff_tran(spin_SF))
-                                  call matrix_transpose(matSFcoeff(spin_SF), matSFcoeff_tran(spin_SF))
-                               endif
-                               call my_barrier()
-                               call get_S_matrix(inode, ionode, build_AtomF_matrix=.false.)
-                               call get_H_matrix(.false., fixed_potential, &
-                                                 electrons, density, maxngrid)
-                               call my_barrier()
-                            end if ! (TestTot)
-                            if (TestS .or. TestBoth) then
-                               ! Shift coefficient a little
-                               ! tmp0 = 0.0001_double * val0
-                               if (my_atom) then
-                                  mat_p(matSFcoeff(spin_SF))%matrix(wheremat) = val1
-                                  call matrix_scale(zero,matSFcoeff_tran(spin_SF))
-                                  call matrix_transpose(matSFcoeff(spin_SF), matSFcoeff_tran(spin_SF))
-                               endif
-                               call my_barrier()
-                               ! Recalculate energy and gradient
-                               call get_S_matrix(inode, ionode, build_AtomF_matrix=.false.)
-                               call FindMinDM(n_cg_L_iterations, vary_mu, &
-                                              L_tolerance, &
-                                              .false., .false.)
-                               call get_energy(E2)
-                               E2 = band_energy
-                               call matrix_scale(zero, matdSFcoeff(spin_SF))
-                               call matrix_scale(zero, matdSFcoeff_e(spin_SF))
-                               call build_PAO_coeff_grad(GdS)
-                               if (my_atom) then
-                                  g1 = mat_p(matdSFcoeff(spin_SF))%matrix(wheremat)
-                                  mat_p(matdSFcoeff(spin_SF))%matrix = grad_copy_dS
-                                  g2 = mat_p(matdSFcoeff(spin_SF))%matrix(wheremat)
-                                  write (io_lun,*) 'GdS: Numerical, analytic grad: ',&
-                                                   (E2 - E1) / tmp0, - half * (g1 + g2)
-                                  write (io_lun,*) 'GdS:Components: ', &
-                                                   tmp0, E1, E2, g1, g2
-                               end if
-                               ! Shift coefficient back
-                               if (my_atom) then
-                                  mat_p(matSFcoeff(spin_SF))%matrix(wheremat) = val0
-                                  call matrix_scale(zero,matSFcoeff_tran(spin_SF))
-                                  call matrix_transpose(matSFcoeff(spin_SF), matSFcoeff_tran(spin_SF))
-                               endif
-                               call my_barrier()
-                               call get_S_matrix(inode, ionode, build_AtomF_matrix=.false.)
-                               call my_barrier()
-                            end if ! TestS .or. TestBoth
-                            ! ** Test H ** !
-                            if (TestH .or. TestBoth) then
-                               ! Shift coefficient a little
-                               ! tmp0 = 0.0001_double * val0
-                               if (my_atom) then
-                                  mat_p(matSFcoeff(spin_SF))%matrix(wheremat) = val1
-                                  call matrix_scale(zero,matSFcoeff_tran(spin_SF))
-                                  call matrix_transpose(matSFcoeff(spin_SF), matSFcoeff_tran(spin_SF))
-                               endif
-                               call my_barrier()
-                               ! Recalculate energy and gradient
-                               call get_H_matrix(.false., fixed_potential, &
-                                                 electrons, density, maxngrid)
-                               call FindMinDM(n_cg_L_iterations, vary_mu, &
-                                              L_tolerance, &
-                                              .false., .false.)
-                               call get_energy(E2)
-                               E2 = band_energy
-                               call matrix_scale(zero, matdSFcoeff(spin_SF))
-                               call matrix_scale(zero, matdSFcoeff_e(spin_SF))
-                               call build_PAO_coeff_grad(KdH)
-                               if(my_atom) then
-                                  g1 = mat_p(matdSFcoeff(spin_SF))%matrix(wheremat)
-                                  mat_p(matdSFcoeff(spin_SF))%matrix = grad_copy_dH
-                                  g2 = mat_p(matdSFcoeff(spin_SF))%matrix(wheremat)
-                                  write (io_lun, *) 'KdH: Numerical, analytic grad: ',&
-                                                    (E2 - E1) / tmp0, - half * (g1 + g2)
-                                  write (io_lun, *) 'KdH:Components: ', &
-                                                    tmp0, E1, E2, g1, g2
-                               end if
-                               ! Shift coefficient back
-                               if (my_atom) then
-                                  mat_p(matSFcoeff(spin_SF))%matrix(wheremat) = val0
-                                  call matrix_scale(zero,matSFcoeff_tran(spin_SF))
-                                  call matrix_transpose(matSFcoeff(spin_SF), matSFcoeff_tran(spin_SF))
-                               endif
-                               call my_barrier()
-                               call get_H_matrix(.false., fixed_potential, &
-                                                 electrons, density, maxngrid)
-!                               call get_H_matrix(.true., fixed_potential, &
-!                                                 electrons, density, maxngrid)
-                            end if ! TestH .or. TestBoth
-                         end do ! npao2
-                      end do ! nsf1
-                   end do ! neigh
-                end do ! atom
-             end do ! part
-          end do ! proc
-       end do ! spin_SF
-       call start_timer(tmr_std_allocation)
-       deallocate(grad_copy, grad_copy_dH, grad_copy_dS, STAT=stat)
-       if (stat /= 0) &
-            call cq_abort("vary_pao: failed to &
-                          &deallocate tmp2 matrices: ", stat)
-       call reg_dealloc_mem(area_minE, 3 * length, type_dbl)
-       call stop_timer(tmr_std_allocation)
-    end if ! TestBasisGrads
 
     ! What about preconditioning ?
     call my_barrier()
@@ -520,8 +324,6 @@ contains
        ! Temporarily turn off basis variation so that we don't do
        ! unnecessary calculations
        flag_vary_basis = .false.
-       !orig_SC = flag_self_consistent
-       !flag_self_consistent = .false.
        call line_minimise_pao(search_direction, fixed_potential,     &
                               vary_mu, n_cg_L_iterations, tolerance, &
                               con_tolerance, total_energy_0,         &
@@ -535,16 +337,25 @@ contains
           call matrix_transpose(matSFcoeff(spin_SF), matSFcoeff_tran(spin_SF))
        enddo
 
-    ! Write out current SF coefficients every n_dumpSFcoeff, if n_dumpSFcoeff > 0)
-     if (n_dumpSFcoeff > 0 .and. mod(n_iterations,n_dumpSFcoeff) == 1) then
-       call dump_pos_and_matrices(index = unit_MSSF_save)
-     endif
+       ! Write out current SF coefficients every n_dumpSFcoeff, if n_dumpSFcoeff > 0)
+       if (n_dumpSFcoeff > 0 .and. mod(n_iterations,n_dumpSFcoeff) == 1) then
+          call dump_pos_and_matrices(index = unit_MSSF_save)
+       endif
 
        flag_vary_basis = .true.
 
        ! Find change in energy for convergence
        diff = total_energy_last - total_energy_0
-       if (abs(diff / total_energy_0) <= energy_tolerance) then
+       if (abs(diff / total_energy_0) <= energy_tolerance) then ! Success
+          ! Turn back on SCF
+          if(flag_vary_basis_nonSCF.AND.orig_SCF) then
+             flag_self_consistent = .true.
+             call new_SC_potl(.false., con_tolerance, reset_L,             &
+                  fixed_potential, vary_mu, n_cg_L_iterations, &
+                  tolerance, total_energy_0)
+          end if
+          ! Turn back on mixed LFD/SCF if we are optimising the basis
+          if(orig_mix_LFD_SCF) flag_mix_LFD_SCF = .true.
           if (inode == ionode) write (io_lun, 18) total_energy_0
           convergence_flag = .true.
           total_energy_last = total_energy_0
@@ -571,11 +382,6 @@ contains
        enddo
        ! Generate dS and dH
        call build_PAO_coeff_grad(full)
-       !if(inode==1) then
-       !   gradient(:,:,2:mx_at_prim) = zero
-       !else
-       !   gradient = zero
-       !end if
        do spin_SF = 1, nspin_SF
           summ = dot(length, mat_p(matdSFcoeff(spin_SF))%matrix, 1, mat_p(matdSFcoeff(spin_SF))%matrix, 1)
           call gsum(summ)
@@ -584,7 +390,15 @@ contains
        enddo
        total_energy_last = total_energy_0
     end do ! n_iterations
-
+    ! Turn SCF back on if originally selected
+    if(flag_vary_basis_nonSCF.AND.orig_SCF) then
+       flag_self_consistent = .true.
+       call new_SC_potl(.false., con_tolerance, reset_L,             &
+            fixed_potential, vary_mu, n_cg_L_iterations, &
+            tolerance, total_energy_0)
+    end if
+    ! Turn back on mixed LFD/SCF if we are optimising the basis
+    if(orig_mix_LFD_SCF) flag_mix_LFD_SCF = .true.
     deallocate(search_direction, last_sd, Psd, STAT=stat)
     if (stat /= 0) call cq_abort("vary_pao: Error dealloc mem")
     call reg_dealloc_mem(area_minE, 3*length*nspin_SF, type_dbl)
@@ -603,41 +417,6 @@ contains
   end subroutine vary_pao
   !!***
   
-  !!****f* pao_minimisation/filtration
-  !!
-  !! NAME
-  !! filtration
-  !! 
-  !! PUPOSE
-  !! To generate a minimal basis for solving the self-consistent Kohn Sham equations
-  !! using the method introduced by Rayson see Phys. Rev. B 89, 205104
-  !!
-  !!
-
- subroutine filtration()
- !! i) Need to define or input a cutoff radius r which will be centred on  each individual atom
- !! ii) Start a loop through each individual atom i (i=1..N) N-total number of atoms
- !!      a) The distance of the nearest neighbours and next nearest neighbours to atom i need to 
- !!         be evaluated  to see if they lie within the radius r
- !!      b) If the neighbours are within the radius then store the correspoding atom number to a
- !!         new  set F 
- !! iii) For the atom numbers in F take the corresponding rows and colums in the hamiltonian H and
- !!      overlap matrix S to define new sub-matrices H' and S'
- !!  iv) For these sub-matrices solve the general eigenvalue problem using diagonalisation to find
- !!        eigenvectors(c) and eigenvalues(l) H'c=S'cl
- !!   v) Define a filtration function f, for now a Fermi-Dirac function in the high temperature limit
- !!  vi) Use this filtration function to construct a minimal basis by calculation f(c)
- !!      f(c)=cf(l)c'S'
- !!      where c' is the transpose of c
- !!  vii) Define an NxN matrix of zeroes k
- !!  viii) Using the set F take the corresponding rows and columns of the matrix k and assign to it
- !!        a value of f(c)
- !!  ix)   We know have the filtered matrix k
-
- end subroutine filtration
-
-
-
   !!****f* pao_minimisation/pulay_min_pao *
   !! PURPOSE
   !! INPUTS
@@ -1642,88 +1421,216 @@ contains
   end subroutine build_PAO_coeff_grad
   !*****
 
-                   !*** Test gradients ***!
-                   ! Shift coefficient
-                   !if(inode==ionode) tmp = 0.001_double*blips_on_atom(bundle%ig_prim(iprim))%supp_func(nsf1)%coefficients(npao1)
-                   ! blips_on_atom(bundle%ig_prim(iprim))%supp_func(nsf1)%coefficients(npao1) = &
-                   !      blips_on_atom(bundle%ig_prim(iprim))%supp_func(nsf1)%coefficients(npao1) + tmp
-                   !write(io_lun,*) 'On this proc, global(iprim) is ',iprim,bundle%ig_prim(iprim)
-                   !%%!  tmp = 0.001_double*blips_on_atom(1)%supp_func(nsf1)%coefficients(npao1)
-                   !%%!  blips_on_atom(1)%supp_func(nsf1)%coefficients(npao1) = &
-                   !%%!       blips_on_atom(1)%supp_func(nsf1)%coefficients(npao1) + tmp
-                   !%%!  ! Get gradient
-                   !%%!  ! 1. Generate data_dS
-                   !%%!  call get_S_matrix(support, inode, ionode, ntwof, SUPPORT_SIZE)
-                   !%%!  ! 3. Generate data_dH
-                   !%%!  call PAO_to_grid(inode-1,support,ntwof,SUPPORT_SIZE)
-                   !%%!  call get_H_matrix( iprint_minE, .true., fixed_potential, &
-                   !%%!       total_energy_test, electrons, ewald_energy, core_correction, &
-                   !%%!       potential, density, pseudopotential, &
-                   !%%!       support, workspace_support, inode, ionode, &
-                   !%%!       N_GRID_MAX, ntwof, SUPPORT_SIZE)
-                   !%%!  call FindMinDM(n_cg_L_iterations, number_of_bands, vary_mu, &
-                   !%%!       L_tolerance, mu, inode, ionode, .false., .false.)
-                   !%%!  call get_energy(E2, core_correction, ewald_energy)
-                   !%%!  !call new_SC_potl( .false., con_tolerance, &
-                   !%%!  !     reset_L, fixed_potential, vary_mu, n_cg_L_iterations, &
-                   !%%!  !     number_of_bands, tolerance, mu,&
-                   !%%!  !     E2, ewald_energy, core_correction,&
-                   !%%!  !     potential, pseudopotential, density,&
-                   !%%!  !     support, workspace_support, workspace2_support,&
-                   !%%!  !     inode, ionode,&
-                   !%%!  !     N_GRID_MAX, ntwof, SUPPORT_SIZE)
-                   !%%!  gradient(npao1,nsf1,iprim) = zero
-                   !%%!  point = mat(part,Srange)%offset+mat(part,Srange)%i_acc(memb)
-                   !%%!  sum = dot(nsf*mat(part,Srange)%n_nab(memb),data_M12(nsf1,1:,point:),1,data_dS(npao1,1:,point:),1)
-                   !%%!  gradient(npao1,nsf1,iprim) = gradient(npao1,nsf1,iprim) + four*sum
-                   !%%!  !tmpgrad = four*sum
-                   !%%!  point = mat(part,Hrange)%offset+mat(part,Hrange)%i_acc(memb)
-                   !%%!  sum = dot(nsf*mat(part,Hrange)%n_nab(memb),data_K(nsf1,1:,point:),1,data_dH(npao1,1:,point:),1)
-                   !%%!  gradient(npao1,nsf1,iprim) = gradient(npao1,nsf1,iprim) + four*sum
-                   !%%!  !H2 = data_H(nsf1,npao,point)
-                   !%%!  !H2a = data_H(nsf1,3,point)
-                   !%%!  !E2 = nl_energy
-                   !%%!  !BE2 = band_energy
-                   !%%!  tmpgrad = gradient(npao1,nsf1,iprim)
-                   !%%!  ! Shift coefficient
-                   !%%!  !blips_on_atom(bundle%ig_prim(iprim))%supp_func(nsf1)%coefficients(npao1) = &
-                   !%%!  !     blips_on_atom(bundle%ig_prim(iprim))%supp_func(nsf1)%coefficients(npao1) - tmp
-                   !%%!  blips_on_atom(1)%supp_func(nsf1)%coefficients(npao1) = &
-                   !%%!       blips_on_atom(1)%supp_func(nsf1)%coefficients(npao1) - tmp
-                   !%%!  ! Get gradient
-                   !%%!  ! 1. Generate data_dS
-                   !%%!  call get_S_matrix(support, inode, ionode, ntwof, SUPPORT_SIZE)
-                   !%%!  ! 3. Generate data_dH
-                   !%%!  call PAO_to_grid(inode-1,support,ntwof,SUPPORT_SIZE)
-                   !%%!  call get_H_matrix( iprint_minE, .true., fixed_potential, &
-                   !%%!       total_energy_test, electrons, ewald_energy, core_correction, &
-                   !%%!       potential, density, pseudopotential, &
-                   !%%!       support, workspace_support, inode, ionode, &
-                   !%%!       N_GRID_MAX, ntwof, SUPPORT_SIZE)
-                   !%%!  call FindMinDM(n_cg_L_iterations, number_of_bands, vary_mu, &
-                   !%%!       L_tolerance, mu, inode, ionode, .false., .false.)
-                   !%%!  call get_energy(E1, core_correction, ewald_energy)
-                   !%%!  !call new_SC_potl( .false., con_tolerance, &
-                   !%%!  !     reset_L, fixed_potential, vary_mu, n_cg_L_iterations, &
-                   !%%!  !     number_of_bands, tolerance, mu,&
-                   !%%!  !     E1, ewald_energy, core_correction,&
-                   !%%!  !     potential, pseudopotential, density,&
-                   !%%!  !     support, workspace_support, workspace2_support,&
-                   !%%!  !     inode, ionode,&
-                   !%%!  !     N_GRID_MAX, ntwof, SUPPORT_SIZE)
-                   !write(io_lun,*) 'Numerical, analytic grad: ',(E2-E1)/tmp, 0.5_double*(tmpgrad+gradient(npao1,nsf1,iprim))
-                   ! BE1 = band_energy
-                   !%%! H1 = data_H(nsf1,1,point)
-                   !%%! H1a = data_H(nsf1,3,point)
-                   !%%! E1 = nl_energy
-                   !write(io_lun,*) 'Numerical, analytic grad: ',(BE2-BE1)/tmp, 0.5_double*(tmpgrad+four*sum)
-                   !write(io_lun,*) 'Numerical, analytic grad: ',(E2-E1)/tmp, 0.5_double*(tmpgrad+gradient(npao1,nsf1,iprim))
-                   !%%! write(io_lun,*) 'M Numerical, analytic: ',(H2-H1)/tmp,data_dH(npao1,1,point)
-                   !%%! write(io_lun\,*) 'M Numerical, analytic: ',(H2a-H1a)/tmp,data_dH(npao1,3,point)
-                   !sum = dot(nsf*mat(part,Srange)%n_nab(memb),data_K(nsf1,1:,point:),1,data_dC_NL(npao1,1,point),1)
-                   !gradient(npao1,nsf1,iprim) = gradient(npao1,nsf1,iprim) + sum
-                   !sum = dot(nsf*mat(part,Srange)%n_nab(memb),data_K(nsf1,1:,point:),1,data_dHloc(npao1,1,point),1)
-                   !gradient(npao1,nsf1,iprim) = gradient(npao1,nsf1,iprim) + sum
-
+  ! Basis gradient test from vary_pao
+  !%%! 
+  !%%!     call start_timer (tmr_std_allocation)
+  !%%!     if (TestBasisGrads) then
+  !%%!        allocate(grad_copy(length),    &
+  !%%!                 grad_copy_dH(length), &
+  !%%!                 grad_copy_dS(length), STAT=stat)
+  !%%!        if (stat /= 0) &
+  !%%!             call cq_abort("vary_pao: failed to allocate tmp2 matrices: ", &
+  !%%!                           length, stat)
+  !%%!        call reg_alloc_mem(area_minE, 3 * length, type_dbl)
+  !%%!     end if
+  !%%!     call stop_timer (tmr_std_allocation)
+  !%%!   !%%!     if (TestBasisGrads) then
+  !%%!        do spin_SF = 1, nspin_SF
+  !%%!           grad_copy = mat_p(matdSFcoeff(spin_SF))%matrix
+  !%%!           !call dump_matrix("dSFcoeff1",matdSFcoeff(1), inode)
+  !%%!           ! Test PAO gradients
+  !%%!           ! Preserve unperturbed energy and gradient
+  !%%!           E1 = band_energy
+  !%%!           call matrix_scale(zero, matdSFcoeff(spin_SF))
+  !%%!           call matrix_scale(zero, matdSFcoeff_e(spin_SF))
+  !%%!           call build_PAO_coeff_grad(GdS)
+  !%%!           !call dump_matrix("dSFcoeff2",matdSFcoeff(1), inode)
+  !%%!           grad_copy_dS = mat_p(matdSFcoeff(spin_SF))%matrix
+  !%%!           call matrix_scale(zero, matdSFcoeff(spin_SF))
+  !%%!           call matrix_scale(zero, matdSFcoeff_e(spin_SF))
+  !%%!           call build_PAO_coeff_grad(KdH)
+  !%%!           !call dump_matrix("dSFcoeff3",matdSFcoeff(1), inode)
+  !%%!           ! LT 2011/12/06: Note that grad_copy_dH stores the value as the
+  !%%!           ! sum of contribution from both spin components if not flag_SpinDependentSF
+  !%%!           grad_copy_dH = mat_p(matdSFcoeff(spin_SF))%matrix
+  !%%!           ! LT 2011/12/06: end
+  !%%!           do proc = 1, numprocs
+  !%%!              local_atom = 0
+  !%%!              if (inode == proc) then
+  !%%!                 my_atom = .true.
+  !%%!              else
+  !%%!                 my_atom = .false.
+  !%%!              end if
+  !%%!              do part = 1, parts%ng_on_node(proc)
+  !%%!                 ind_part = parts%ngnode(parts%inode_beg(proc) + part - 1)
+  !%%!                 do atom = 1, parts%nm_group(ind_part)
+  !%%!                    local_atom = local_atom + 1 ! Is this really primary atom ?
+  !%%!                    nsf_local = 0
+  !%%!                    n_nab_local = 0
+  !%%!                    npao_local = 0
+  !%%!                    if (my_atom) then
+  !%%!                       write (io_lun,*) 'primary, prim(glob) ', &
+  !%%!                                        local_atom, bundle%ig_prim(local_atom)
+  !%%!                       nsf_local   = mat(part,SFcoeff_range)%ndimi(atom)
+  !%%!                       n_nab_local = mat(part,SFcoeff_range)%n_nab(atom)
+  !%%!                    endif
+  !%%!                    call my_barrier
+  !%%!                    call gsum(nsf_local)
+  !%%!                    call gsum(n_nab_local)
+  !%%!                    ! which coefficient to be shifted
+  !%%!                    do neigh = 1, n_nab_local
+  !%%!                       if (my_atom) then
+  !%%!                          ist = mat(part,SFcoeff_range)%i_acc(atom) + neigh - 1
+  !%%!                          gcspart = BCS_parts%icover_ibeg(mat(part,SFcoeff_range)%i_part(ist)) + &
+  !%%!                                    mat(part,SFcoeff_range)%i_seq(ist) - 1
+  !%%!                          npao_local = mat(part,SFcoeff_range)%ndimj(ist)
+  !%%!                       endif
+  !%%!                       call my_barrier
+  !%%!                       call gsum(npao_local)
+  !%%!                       do nsf1 = 1, nsf_local
+  !%%!                          do npao2 = 1, npao_local
+  !%%!                             if (my_atom) then
+  !%%!                                wheremat = matrix_pos(matSFcoeff(spin_SF), local_atom, &
+  !%%!                                                      halo(SFcoeff_range)%i_halo(gcspart), nsf1, npao2)
+  !%%!                                val0 = mat_p(matSFcoeff(spin_SF))%matrix(wheremat)
+  !%%!                                tmp0 = val0*0.0001_double
+  !%%!                                val1 = val0 + tmp0
+  !%%!                             endif
+  !%%!                             if (TestTot) then
+  !%%!                                ! Shift coefficient a little
+  !%%!                                if (my_atom) then
+  !%%!                                   mat_p(matSFcoeff(spin_SF))%matrix(wheremat) = val1
+  !%%!                                   call matrix_scale(zero,matSFcoeff_tran(spin_SF))
+  !%%!                                   call matrix_transpose(matSFcoeff(spin_SF), matSFcoeff_tran(spin_SF))
+  !%%!                                endif
+  !%%!                                call my_barrier()
+  !%%!                                ! Recalculate energy and gradient
+  !%%!                                call get_S_matrix(inode, ionode, build_AtomF_matrix=.false.)
+  !%%!                                call get_H_matrix(.false., fixed_potential, &
+  !%%!                                                  electrons, density, maxngrid)
+  !%%!                                call FindMinDM(n_cg_L_iterations, vary_mu, &
+  !%%!                                               L_tolerance, &
+  !%%!                                               .false., .false.)
+  !%%!                                call get_energy(E2)
+  !%%!                                E2 = band_energy
+  !%%!                                call matrix_scale(zero, matdSFcoeff(spin_SF))
+  !%%!                                call matrix_scale(zero, matdSFcoeff_e(spin_SF))
+  !%%!                                call build_PAO_coeff_grad(full)
+  !%%!                                if (my_atom) then
+  !%%!                                   g1 = mat_p(matdSFcoeff(spin_SF))%matrix(wheremat)
+  !%%!                                   mat_p(matdSFcoeff(spin_SF))%matrix = grad_copy
+  !%%!                                   g2 = mat_p(matdSFcoeff(spin_SF))%matrix(wheremat)
+  !%%!                                   write (io_lun, *) 'Tot: Numerical, analytic grad: ', &
+  !%%!                                                     (E2 - E1) / tmp0, - half * (g1 + g2)
+  !%%!                                   write (io_lun, *) 'Tot:Components: ', &
+  !%%!                                                     tmp0, E1, E2, g1, g2
+  !%%!                                end if
+  !%%!                                ! Shift coefficient back
+  !%%!                                if (my_atom) then
+  !%%!                                   mat_p(matSFcoeff(spin_SF))%matrix(wheremat) = val0
+  !%%!                                   call matrix_scale(zero,matSFcoeff_tran(spin_SF))
+  !%%!                                   call matrix_transpose(matSFcoeff(spin_SF), matSFcoeff_tran(spin_SF))
+  !%%!                                endif
+  !%%!                                call my_barrier()
+  !%%!                                call get_S_matrix(inode, ionode, build_AtomF_matrix=.false.)
+  !%%!                                call get_H_matrix(.false., fixed_potential, &
+  !%%!                                                  electrons, density, maxngrid)
+  !%%!                                call my_barrier()
+  !%%!                             end if ! (TestTot)
+  !%%!                             if (TestS .or. TestBoth) then
+  !%%!                                ! Shift coefficient a little
+  !%%!                                ! tmp0 = 0.0001_double * val0
+  !%%!                                if (my_atom) then
+  !%%!                                   mat_p(matSFcoeff(spin_SF))%matrix(wheremat) = val1
+  !%%!                                   call matrix_scale(zero,matSFcoeff_tran(spin_SF))
+  !%%!                                   call matrix_transpose(matSFcoeff(spin_SF), matSFcoeff_tran(spin_SF))
+  !%%!                                endif
+  !%%!                                call my_barrier()
+  !%%!                                ! Recalculate energy and gradient
+  !%%!                                call get_S_matrix(inode, ionode, build_AtomF_matrix=.false.)
+  !%%!                                call FindMinDM(n_cg_L_iterations, vary_mu, &
+  !%%!                                               L_tolerance, &
+  !%%!                                               .false., .false.)
+  !%%!                                call get_energy(E2)
+  !%%!                                E2 = band_energy
+  !%%!                                call matrix_scale(zero, matdSFcoeff(spin_SF))
+  !%%!                                call matrix_scale(zero, matdSFcoeff_e(spin_SF))
+  !%%!                                call build_PAO_coeff_grad(GdS)
+  !%%!                                if (my_atom) then
+  !%%!                                   g1 = mat_p(matdSFcoeff(spin_SF))%matrix(wheremat)
+  !%%!                                   mat_p(matdSFcoeff(spin_SF))%matrix = grad_copy_dS
+  !%%!                                   g2 = mat_p(matdSFcoeff(spin_SF))%matrix(wheremat)
+  !%%!                                   write (io_lun,*) 'GdS: Numerical, analytic grad: ',&
+  !%%!                                                    (E2 - E1) / tmp0, - half * (g1 + g2)
+  !%%!                                   write (io_lun,*) 'GdS:Components: ', &
+  !%%!                                                    tmp0, E1, E2, g1, g2
+  !%%!                                end if
+  !%%!                                ! Shift coefficient back
+  !%%!                                if (my_atom) then
+  !%%!                                   mat_p(matSFcoeff(spin_SF))%matrix(wheremat) = val0
+  !%%!                                   call matrix_scale(zero,matSFcoeff_tran(spin_SF))
+  !%%!                                   call matrix_transpose(matSFcoeff(spin_SF), matSFcoeff_tran(spin_SF))
+  !%%!                                endif
+  !%%!                                call my_barrier()
+  !%%!                                call get_S_matrix(inode, ionode, build_AtomF_matrix=.false.)
+  !%%!                                call my_barrier()
+  !%%!                             end if ! TestS .or. TestBoth
+  !%%!                             ! ** Test H ** !
+  !%%!                             if (TestH .or. TestBoth) then
+  !%%!                                ! Shift coefficient a little
+  !%%!                                ! tmp0 = 0.0001_double * val0
+  !%%!                                if (my_atom) then
+  !%%!                                   mat_p(matSFcoeff(spin_SF))%matrix(wheremat) = val1
+  !%%!                                   call matrix_scale(zero,matSFcoeff_tran(spin_SF))
+  !%%!                                   call matrix_transpose(matSFcoeff(spin_SF), matSFcoeff_tran(spin_SF))
+  !%%!                                endif
+  !%%!                                call my_barrier()
+  !%%!                                ! Recalculate energy and gradient
+  !%%!                                call get_H_matrix(.false., fixed_potential, &
+  !%%!                                                  electrons, density, maxngrid)
+  !%%!                                call FindMinDM(n_cg_L_iterations, vary_mu, &
+  !%%!                                               L_tolerance, &
+  !%%!                                               .false., .false.)
+  !%%!                                call get_energy(E2)
+  !%%!                                E2 = band_energy
+  !%%!                                call matrix_scale(zero, matdSFcoeff(spin_SF))
+  !%%!                                call matrix_scale(zero, matdSFcoeff_e(spin_SF))
+  !%%!                                call build_PAO_coeff_grad(KdH)
+  !%%!                                if(my_atom) then
+  !%%!                                   g1 = mat_p(matdSFcoeff(spin_SF))%matrix(wheremat)
+  !%%!                                   mat_p(matdSFcoeff(spin_SF))%matrix = grad_copy_dH
+  !%%!                                   g2 = mat_p(matdSFcoeff(spin_SF))%matrix(wheremat)
+  !%%!                                   write (io_lun, *) 'KdH: Numerical, analytic grad: ',&
+  !%%!                                                     (E2 - E1) / tmp0, - half * (g1 + g2)
+  !%%!                                   write (io_lun, *) 'KdH:Components: ', &
+  !%%!                                                     tmp0, E1, E2, g1, g2
+  !%%!                                end if
+  !%%!                                ! Shift coefficient back
+  !%%!                                if (my_atom) then
+  !%%!                                   mat_p(matSFcoeff(spin_SF))%matrix(wheremat) = val0
+  !%%!                                   call matrix_scale(zero,matSFcoeff_tran(spin_SF))
+  !%%!                                   call matrix_transpose(matSFcoeff(spin_SF), matSFcoeff_tran(spin_SF))
+  !%%!                                endif
+  !%%!                                call my_barrier()
+  !%%!                                call get_H_matrix(.false., fixed_potential, &
+  !%%!                                                  electrons, density, maxngrid)
+  !%%! !                               call get_H_matrix(.true., fixed_potential, &
+  !%%! !                                                 electrons, density, maxngrid)
+  !%%!                             end if ! TestH .or. TestBoth
+  !%%!                          end do ! npao2
+  !%%!                       end do ! nsf1
+  !%%!                    end do ! neigh
+  !%%!                 end do ! atom
+  !%%!              end do ! part
+  !%%!           end do ! proc
+  !%%!        end do ! spin_SF
+  !%%!        call start_timer(tmr_std_allocation)
+  !%%!        deallocate(grad_copy, grad_copy_dH, grad_copy_dS, STAT=stat)
+  !%%!        if (stat /= 0) &
+  !%%!             call cq_abort("vary_pao: failed to &
+  !%%!                           &deallocate tmp2 matrices: ", stat)
+  !%%!        call reg_dealloc_mem(area_minE, 3 * length, type_dbl)
+  !%%!        call stop_timer(tmr_std_allocation)
+  !%%!     end if ! TestBasisGrads
 
 end module pao_minimisation

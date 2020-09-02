@@ -1592,14 +1592,14 @@ contains
          level=backtrace_level,echo=.true.)
 !****lat>$
 
-    call get_H_matrix(.false., fixed_potential, electrons, rhoin, &
-         size, backtrace_level)
-
     if(flag_Multisite .and. flag_LFD .and. flag_mix_LFD_SCF) then
        call initial_SFcoeff(.false.,.false.,fixed_potential,.false.)
        call get_S_matrix(inode, ionode, build_AtomF_matrix=.false.)
        call get_H_matrix(.false., fixed_potential, electrons, rhoin, &
-            size, backtrace_level,.false.)
+            size, backtrace_level)
+    else
+       call get_H_matrix(.false., fixed_potential, electrons, rhoin, &
+            size, backtrace_level)
     end if
     if (flag_perform_cDFT) then
        call cdft_min(reset_L, fixed_potential, vary_mu, &

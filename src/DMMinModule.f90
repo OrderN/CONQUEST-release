@@ -889,7 +889,7 @@ contains
        call get_electronic_density(density, electrons, atomfns,    &
                                    H_on_atomfns(1), inode, ionode, &
                                    maxngrid)
-       call get_H_matrix(.true., .false., electrons, density, maxngrid)
+       call get_H_matrix(.false., .false., electrons, density, maxngrid)
     end if
 
     ! Get the gradient at the starting point (?) this updates matM3

@@ -909,7 +909,7 @@ contains
     use XC, only : flag_functional_type, functional_hartree_fock, functional_hyb_pbe0, &
          flag_different_functional
     use biblio, only: flag_dump_bib
-
+    use pao_minimisation, only: flag_vary_basis_nonSCF
     !2019/12/27 tsuyoshi
     use density_module,  only: method_UpdateChargeDensity,DensityMatrix,AtomicCharge
 
@@ -1509,6 +1509,7 @@ contains
     flag_atomic_stress    = fdf_boolean('AtomMove.AtomicStress', .false.)
     !
     flag_vary_basis       = fdf_boolean('minE.VaryBasis', .false.)
+    flag_vary_basis_nonSCF = fdf_boolean('minE.VaryBasis_nonSCF',.false.)
     if(.NOT.flag_vary_basis) then
        flag_precondition_blips = .false.
     else 
