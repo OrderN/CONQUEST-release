@@ -110,6 +110,7 @@ module SelfCon
   real(double), save :: q1
   logical,      save :: flag_linear_mixing
   real(double), save :: EndLinearMixing
+  real(double), save :: End_Mix_LFD_SCF
 
   integer,      save :: n_dumpSCF
   !!***
@@ -883,12 +884,12 @@ contains
                               flag_continue_on_SC_fail,        &
                               flag_SCconverged,                &
                               flag_fix_spin_population, nspin, &
-                              spin_factor
+                              spin_factor, flag_LFD, flag_Multisite
     use memory_module,  only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use maxima_module,  only: maxngrid
     use store_matrix,   only: dump_pos_and_matrices, unit_SCF_save
     use density_module, only: flag_DumpChargeDensity
-
+    use multisiteSF_module, only: flag_mix_LFD_SCF
     implicit none
 
     ! Passed variables
@@ -916,7 +917,8 @@ contains
     logical      :: reset_Pulay    = .false.
     integer      :: spin, dotn
     real(double) :: R0_old, RA_old, RB_old, RC_old
-
+    logical      :: flag_orig_mix = .false.
+    
     type(cq_timer)    :: backtrace_timer
     integer           :: backtrace_level
 
@@ -1102,6 +1104,11 @@ contains
              R0 = RB
           end if
        end if
+       ! If the residual is small, do not continue with mixed LFD/SCF
+       if(flag_Multisite .and. flag_LFD .and. flag_mix_LFD_SCF .and. RA<End_Mix_LFD_SCF) then
+          flag_orig_mix = flag_mix_LFD_SCF
+          flag_mix_LFD_SCF = .false.
+       end if
        ! print residual information
        if (inode==ionode) then
           if (iprint_SC>1) then
@@ -1120,12 +1127,20 @@ contains
        if (R0 < self_tol .AND. iter >= minitersSC) then ! Passed minimum number of iterations
           if (inode == ionode) write (io_lun,1) iter
           done = .true.
+          if(flag_orig_mix) then
+             flag_mix_LFD_SCF = .true.
+             flag_orig_mix = .false.
+          end if
           call deallocate_PulayMiXSC_spin
           return
        end if
        if (R0 < EndLinearMixing) then
           if (inode == ionode) &
                write (io_lun, '(8x,"Reached transition to LateSC")')
+          if(flag_orig_mix) then
+             flag_mix_LFD_SCF = .true.
+             flag_orig_mix = .false.
+          end if
           call deallocate_PulayMiXSC_spin
           return
        end if
@@ -1175,6 +1190,10 @@ contains
        end if
 
     end do ! iter (SCF)
+    if(flag_orig_mix) then
+       flag_mix_LFD_SCF = .true.
+       flag_orig_mix = .false.
+    end if
 
     ndone = n_iters
     call deallocate_PulayMixSC_spin

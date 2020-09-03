@@ -832,7 +832,7 @@ contains
     use SelfCon, only: A, flag_linear_mixing, EndLinearMixing, q0, q1,&
          n_exact, maxitersSC, maxearlySC, maxpulaySC,   &
          atomch_output, flag_Kerker, flag_wdmetric, minitersSC, &
-         flag_newresidual, flag_newresid_abs, n_dumpSCF
+         flag_newresidual, flag_newresid_abs, n_dumpSCF, End_Mix_LFD_SCF
     use density_module, only: flag_InitialAtomicSpin, flag_DumpChargeDensity
     use S_matrix_module, only: InvSTolerance, InvSMaxSteps,&
          InvSDeltaOmegaTolerance
@@ -1454,6 +1454,7 @@ contains
        endif ! flag_LFD_ReadTVEC
        flag_LFD_nonSCF = fdf_boolean('Multisite.LFD.NonSCF',.false.)
        flag_mix_LFD_SCF = fdf_boolean('Multisite.LFD.MixLFDSCF',.true.)
+       End_Mix_LFD_SCF = fdf_double('Multisite.LFD.StopMixLFDSCF',1.0e-5_double)
        if (.NOT.flag_LFD_nonSCF) then ! Expected behaviour
           LFD_threshE = fdf_double('Multisite.LFD.Min.ThreshE',1.0e-6_double)
           LFD_threshD = fdf_double('Multisite.LFD.Min.ThreshD',1.0e-6_double)
