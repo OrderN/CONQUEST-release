@@ -1610,15 +1610,15 @@ contains
     call start_backtrace(t=backtrace_timer,who='get_new_rho',where=area,&
          level=backtrace_level,echo=.true.)
 !****lat>$
-
+    ! Build new H matrix with new density
+    call get_H_matrix(.false., fixed_potential, electrons, rhoin, &
+         size, backtrace_level)
     if(flag_Multisite .and. flag_LFD .and. flag_mix_LFD_SCF) then
        call initial_SFcoeff(.false.,.false.,fixed_potential,.false.)
        call get_S_matrix(inode, ionode, build_AtomF_matrix=.false.)
+       ! Don't build the atomf matrix, but transform to SF representation
        call get_H_matrix(.false., fixed_potential, electrons, rhoin, &
-            size, backtrace_level)
-    else
-       call get_H_matrix(.false., fixed_potential, electrons, rhoin, &
-            size, backtrace_level)
+            size, backtrace_level, build_AtomF_matrix=.false.)
     end if
     if (flag_perform_cDFT) then
        call cdft_min(reset_L, fixed_potential, vary_mu, &
