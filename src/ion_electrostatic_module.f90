@@ -1375,9 +1375,6 @@ contains
     ! SYM 2014/10/22 14:34: Summ all the stress contributions
     if (flag_stress) then
        do dir1=1,3
-          write(*,*) 'Stress contributions: ', ewald_intra_stress(dir1,dir1), ewald_inter_stress(dir1,dir1), &
-              ewald_recip_stress(dir1,dir1), &
-              ewald_gaussian_self_stress(dir1,dir1)
          do dir2=1,3
             ion_interaction_stress(dir1,dir2) = &
               ewald_intra_stress(dir1,dir2) + ewald_inter_stress(dir1,dir2) + &
