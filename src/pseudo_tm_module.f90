@@ -1295,8 +1295,8 @@ contains
                                       r(dir2) * r_from_i
                                     if (flag_atomic_stress) then
                                       atomic_stress(dir1,dir2,ig_atom) = &
-                                        atomic_stress(dir1,dir2,ig_atom) * &
-                                        (fr_1(dir1) * elec_here + fr_2(dir2))*&
+                                        atomic_stress(dir1,dir2,ig_atom) + &
+                                        (fr_1(dir1) * elec_here + fr_2(dir1))*&
                                         r(dir2) * r_from_i
                                     end if
                                   end do
