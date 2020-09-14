@@ -1248,7 +1248,7 @@ contains
                      i = bundle%ig_prim(iprim)
                      do isf = 1, natomf_species(bundle%species(iprim))
                         ! only accumulate phi-pulay force 3 times in total (not 9)
-                        if (flag_full_stress) then
+                        if (flag_stress .and. flag_full_stress) then
                            if (dir1 == dir2) then
                               p_force(dir1, i) = p_force(dir1, i) - &
                                  return_matrix_value(mat_tmp, np, ni, 0, 0, isf, isf, 1)
@@ -3150,7 +3150,6 @@ contains
   subroutine matrix_diagonal_stress(matA, matB, stress, range, inode, diagonal)
 
     use datatypes
-    use global_module, only: atomic_stress
     use primary_module, only : bundle
     use matrix_module, only: matrix, matrix_halo
     use matrix_data, only : mat, halo

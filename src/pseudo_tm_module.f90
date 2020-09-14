@@ -957,6 +957,8 @@ contains
 !!    Off-diagonal stress tensor elements
 !!   2019/05/08 zamaan
 !!    Added atomic stress contributions
+!!   2020/09/08 17:18 dave (via tsuyoshi)
+!!    Bug fix for local_HF_force
 !!  SOURCE
 !!
   subroutine loc_pp_derivative_tm ( hf_force, density, size )
@@ -1283,7 +1285,7 @@ contains
                               fr_2 = front * r(dir1)
                               HF_force(dir1,ig_atom) = &
                                 HF_force(dir1,ig_atom) + &
-                                fr_1(dir1) * elec_here * fr_2(dir1)
+                                fr_1(dir1) * elec_here + fr_2(dir1)
                               if (flag_stress) then
                                 if (flag_full_stress) then
                                   do dir2=1,3
@@ -1293,8 +1295,8 @@ contains
                                       r(dir2) * r_from_i
                                     if (flag_atomic_stress) then
                                       atomic_stress(dir1,dir2,ig_atom) = &
-                                        atomic_stress(dir1,dir2,ig_atom) * &
-                                        (fr_1(dir1) * elec_here + fr_2(dir2))*&
+                                        atomic_stress(dir1,dir2,ig_atom) + &
+                                        (fr_1(dir1) * elec_here + fr_2(dir1))*&
                                         r(dir2) * r_from_i
                                     end if
                                   end do
