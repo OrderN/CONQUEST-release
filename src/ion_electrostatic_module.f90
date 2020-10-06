@@ -621,6 +621,10 @@ contains
          ewald_g_vector_y(number_of_g_vectors), &
          ewald_g_vector_z(number_of_g_vectors),&
          ewald_g_factor(number_of_g_vectors),STAT=stat)
+    ewald_g_vector_x = zero
+    ewald_g_vector_y = zero
+    ewald_g_vector_z = zero
+    ewald_g_factor = zero
     if(stat/=0) &
          call cq_abort("set_ewald: error allocating ewald_g_vector ",&
          number_of_g_vectors,stat)
@@ -949,6 +953,8 @@ contains
 !!    Modifications to compute off-diagonal stress tensor elements
 !!   2019/05/08 zamaan
 !!    Added atomic stress contributions
+!!   2020/09/08 17:18 dave
+!!    Bug fix for reciprocal-space component of stress
 !!  SOURCE
 !!  
   subroutine ewald()
@@ -978,7 +984,7 @@ contains
     integer :: i, ip, ig_atom_beg, j, n, nc, ni, nj, nn, stat, direction, dir1, dir2, iatom, jatom
     real(double) :: arg_1, arg_2, coeff_1, dummy, ewald_real_energy, ewald_real_sum_inter, ewald_real_sum_intra, &
          &ewald_real_sum_ip, ewald_recip_energy, ewald_total_energy, g_dot_r, q_i, q_j, rij, rijx, rijy, rijz, &
-         rij_squared, x, y, z, one_over_g_squared
+         rij_squared, x, y, z, one_over_g_squared, delta_ab, one_over_four_gamma
     real(double), dimension(3) :: egv_n, rij_vec
     real(double), allocatable, dimension(:) :: ewald_recip_force_x, ewald_recip_force_y, ewald_recip_force_z, &
          &ewald_intra_force_x, ewald_intra_force_y, ewald_intra_force_z, &
@@ -1026,6 +1032,7 @@ contains
     call reg_alloc_mem(area_general,2*number_of_g_vectors,type_dbl)
     call structure_factor(inode,ionode)
     ! ... loop over reciprocal lattice vectors
+    one_over_four_gamma = one/(four*ewald_gamma)
     do n = 1, number_of_g_vectors
        ewald_recip_energy = ewald_recip_energy + &
             &(struc_fac_r(n)*struc_fac_r(n) + struc_fac_i(n)*struc_fac_i(n)) * &
@@ -1041,21 +1048,26 @@ contains
        one_over_g_squared = &
          one/(egv_n(1)*egv_n(1) + egv_n(2)*egv_n(2) + egv_n(3)*egv_n(3))
        if (flag_stress) then
-         do dir1=1,3
+          do dir1=1,3
            if (flag_full_stress) then
-             do dir2=1,3
-               ewald_recip_stress(dir1,dir2) = ewald_recip_stress(dir1,dir2)+ &
-                 ewald_g_factor(n) * (struc_fac_r(n)*struc_fac_r(n) + &
-                 struc_fac_i(n)*struc_fac_i(n)) * &
-                 ((two*egv_n(dir1)*egv_n(dir2) * & ! off-diagonal - zamaan
-                  (one/(four*ewald_gamma)) + one_over_g_squared - one))
+              do dir2=1,3
+                 if(dir2==dir1) then
+                    delta_ab = one
+                 else
+                    delta_ab = zero
+                 end if
+                 ewald_recip_stress(dir1,dir2) = ewald_recip_stress(dir1,dir2)+ &
+                      ewald_g_factor(n) * (struc_fac_r(n)*struc_fac_r(n) + &
+                      struc_fac_i(n)*struc_fac_i(n)) * &
+                      (two*egv_n(dir1)*egv_n(dir2) * &
+                      (one_over_four_gamma + one_over_g_squared) - delta_ab)
              end do
            else
              ewald_recip_stress(dir1,dir1) = ewald_recip_stress(dir1,dir1) + &
-               ewald_g_factor(n) * (struc_fac_r(n)*struc_fac_r(n) + &
-               struc_fac_i(n)*struc_fac_i(n)) * &
-               ((two*egv_n(dir1)*egv_n(dir1) * &
-                (one/(four*ewald_gamma)) + one_over_g_squared - one))
+                  ewald_g_factor(n) * (struc_fac_r(n)*struc_fac_r(n) + &
+                  struc_fac_i(n)*struc_fac_i(n)) * &
+                  (two*egv_n(dir1)*egv_n(dir1) * &
+                  (one_over_four_gamma + one_over_g_squared) - one)
            end if
          end do
        end if
@@ -1098,7 +1110,7 @@ contains
     enddo
     ! Correctly scale stress
     if (flag_stress) then
-      do dir1=1,3 
+       do dir1=1,3 
         do dir2=1,3
           ewald_recip_stress(dir1,dir2) = ewald_recip_stress(dir1,dir2) * &
                                           two * pi/(ewald_real_cell_volume)
@@ -1362,7 +1374,7 @@ contains
     call gsum(ewald_total_force_z,ni_in_cell)
     ! SYM 2014/10/22 14:34: Summ all the stress contributions
     if (flag_stress) then
-      do dir1=1,3
+       do dir1=1,3
          do dir2=1,3
             ion_interaction_stress(dir1,dir2) = &
               ewald_intra_stress(dir1,dir2) + ewald_inter_stress(dir1,dir2) + &

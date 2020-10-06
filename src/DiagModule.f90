@@ -3415,6 +3415,8 @@ contains
   !!    Added code to calculate K matrix for individual bands (to allow output of charge density from bands)
   !!   2018/10/08 16:38 dave
   !!    Changing MPI tags to conform to MPI standard
+  !!   2020/08/24 16:09 dave
+  !!    Bugfix: deallocate ndimj in recv_info
   !!  SOURCE
   !!
   subroutine buildK(range, matA, occs, kps, weight, localEig,matBand,locw)
@@ -3803,7 +3805,8 @@ contains
     deallocate(send_fsc,recv_to_FSC,mapchunk,STAT=stat)
     if(stat/=0) call cq_abort('buildK: Error deallocating send_fsc, recv_to_FSC and mapchunk !',stat)
     do i=numprocs,1,-1
-       deallocate(recv_info(i)%ints,recv_info(i)%prim_atom,recv_info(i)%locj,&
+       deallocate(recv_info(i)%ints,recv_info(i)%ndimj, &
+            recv_info(i)%prim_atom,recv_info(i)%locj,&
             recv_info(i)%dx,recv_info(i)%dy,recv_info(i)%dz,STAT=stat)
        if(stat/=0) call cq_abort('buildK: Error deallocating recvinfo !',i,stat)
     end do
