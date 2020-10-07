@@ -164,6 +164,8 @@ contains
   !!    Correct bug in wrapping with non-fractional coordinates and Angstroms
   !!   2020/07/27 tsuyoshi
   !!    Added atom_vels  
+  !!   2020/10/07 tsuyoshi
+  !!    Removed allocation of atom_vels (moved to "control")
   !!  SOURCE
   !!
   subroutine read_atomic_positions(filename)
@@ -174,7 +176,7 @@ contains
                               ni_in_cell,                            &
                               flag_fractional_atomic_coords, rcellx, &
                               rcelly, rcellz, id_glob, iprint_init,  &
-                              id_glob_inv, atom_coord, atom_vels, species_glob, &
+                              id_glob_inv, atom_coord, species_glob, &
                               flag_move_atom, area_init, shift_in_bohr, &
                               runtype,atom_coord_diff,id_glob_old,id_glob_inv_old
     use species_module, only: species, species_label, n_species
@@ -261,7 +263,6 @@ first:    do
           ! Allocate array for coordinates
           allocate(flag_move_atom(3,ni_in_cell),&
                    atom_coord(3,ni_in_cell),&
-                   atom_vels(3,ni_in_cell),&
                    species_glob(ni_in_cell),STAT=stat)
           if(stat/=0) &
                call cq_abort("Failure to allocate coordinates: ",ni_in_cell)
@@ -432,7 +433,7 @@ second:   do
          !2010.06.25 TM (Angstrom Units in coords file, but not pdb)
 
           allocate(flag_move_atom(3,ni_in_cell),atom_coord(3,ni_in_cell),&
-                   atom_vels(3,ni_in_cell),species_glob(ni_in_cell),STAT=stat)
+                   species_glob(ni_in_cell),STAT=stat)
           if(stat/=0) &
                call cq_abort("Failure to allocate coordinates: ",ni_in_cell)
           call reg_alloc_mem(area_init, 6*ni_in_cell,type_dbl)
@@ -494,7 +495,7 @@ second:   do
     call gcopy(ni_in_cell)
     if(inode/=ionode) &
          allocate(flag_move_atom(3,ni_in_cell), atom_coord(3,ni_in_cell),&
-                  atom_vels(3,ni_in_cell),species_glob(ni_in_cell), STAT=stat)
+                  species_glob(ni_in_cell), STAT=stat)
     if(stat/=0) call cq_abort("Failure to allocate coordinates: ",ni_in_cell)
     allocate(id_glob(ni_in_cell), id_glob_inv(ni_in_cell),&
              x_atom_cell(ni_in_cell), y_atom_cell(ni_in_cell),&
@@ -509,7 +510,6 @@ second:   do
     rcellx = r_super_x
     rcelly = r_super_y
     rcellz = r_super_z
-    atom_vels = zero
     allocate(atom_coord_diff(3,ni_in_cell), STAT=stat)
     if (stat.NE.0) call cq_abort('Error allocating atom_coord_diff: ', 3, ni_in_cell)
     allocate(id_glob_old(ni_in_cell),id_glob_inv_old(ni_in_cell), STAT=stat)
