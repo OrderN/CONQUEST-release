@@ -518,6 +518,9 @@ contains
     call stop_backtrace(t=backtrace_timer,who='read_and_write')
     !****lat>$
 
+    !**** TM 2020.Jul.30
+    call check_compatibility
+
     call my_barrier()
 
     return
@@ -2203,7 +2206,7 @@ contains
     md_cell_constraint = fdf_string(20, 'MD.CellConstraint', 'volume')
 
     !**** TM 2017.Nov.3rd
-    call check_compatibility
+    !call check_compatibility
     !****lat<$
     call stop_backtrace(t=backtrace_timer,who='read_input')
     !****lat>$
@@ -2211,21 +2214,52 @@ contains
     call my_barrier()
 
     return
+  end subroutine read_input
+  !!***
 
-  contains
+  ! ------------------------------------------------------------------------------
+  ! subroutine check_compatibility
+  ! ------------------------------------------------------------------------------
+  !!****f* initial_read/check_compatibility *
+  !!
+  !!  NAME
+  !!   check_compatibility
+  !!  USAGE
+  !!
+  !!  PURPOSE
+  !!   checks the compatibility between keywords mainly defined in read_input
+  !!  INPUTS
+  !!
+  !!  USES
+  !!
+  !!  AUTHOR
+  !!   T. Miyazaki
+  !!  CREATION DATE
+  !!   2017/11/03 
+  !!  MODIFICATION HISTORY
+  !!   2020/07/30 tsuyoshi
+  !!    - Moved from read_input
+  !!  SOURCE
+  !!
 
-    ! ------------------------------------------------------------------------------
-    ! subroutine check_compatibility
-    ! ------------------------------------------------------------------------------
+
     ! this subroutine checks the compatibility between keywords defined in read_input
     !       2017.11(Nov).03   Tsuyoshi Miyazaki
     ! 
     ! we don't need to worry about which parameter is defined first.
     !
     subroutine check_compatibility 
-
-
+      use global_module, only: flag_move_atom, ni_in_cell, &
+                               runtype, flag_XLBOMD, flag_diagonalisation, &
+                               flag_LmatrixReuse, flag_SFcoeffReuse, flag_DumpMatrices, &
+                               flag_FixCOM
+      use input_module,  only: leqi
+      use density_module,only: method_UpdateChargeDensity,DensityMatrix,AtomicCharge
+      use GenComms,      only: cq_warn
+      
       implicit none
+      logical :: flag_FixedAtoms
+      integer :: ig, k
 
       character(len=80) :: sub_name = "check_compatibility"
 
@@ -2258,9 +2292,23 @@ contains
          endif
       endif
 
+      !flag_FixCOM  &  flag_move_atom  2020/Jul/30
+
+      flag_FixedAtoms = .false.
+      do ig = 1, ni_in_cell
+       do k = 1,3
+        if(.NOT.flag_move_atom(k,ig)) flag_FixedAtoms = .true.
+       enddo
+      enddo
+
+      if(flag_FixedAtoms .and. flag_FixCOM) then
+         flag_FixCOM = .false.
+         call cq_warn(sub_name,&
+           'flag_FixCOM should be false when some of the atomic positions are fixed')
+      endif
+
       return
     end subroutine check_compatibility
-  end subroutine read_input
   !!***
 
   ! ------------------------------------------------------------------------------

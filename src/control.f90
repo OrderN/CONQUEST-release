@@ -671,6 +671,8 @@ contains
         if (flag_move_atom(j,i) .eqv. .false.) md_ndof = md_ndof-1
       end do
     end do
+    !2020/Jul/30 TM
+     if(flag_FixCOM) md_ndof = md_ndof-3
 
     if (inode==ionode .and. iprint_gen > 0) &
       write(io_lun,'(4x,"Welcome to md_run. Doing ",i6," steps")') &
@@ -948,6 +950,9 @@ contains
   !!    Removed unnecessary references to stress tensor
   !!   2019/05/22 14:44 dave & tsuyoshi
   !!    Tweak for initial velocities
+  !!   2020/10/07 tsuyoshi
+  !!    allocation of atom_vels has been moved from read_atomic_positions
+  !!    (introduced atom_vels in July, 2020.)
   !!  SOURCE
   !!  
   subroutine init_md(baro, thermo, mdl, md_ndof, nequil, second_call)
@@ -962,6 +967,7 @@ contains
                               flag_MDcontinue, flag_read_velocity, &
                               flag_MDdebug, iprint_MD, flag_atomic_stress, &
                               atomic_stress, area_moveatoms, &
+                              id_glob, atom_vels, &
                               flag_full_stress, flag_heat_flux
     use move_atoms,     only: init_velocity
     use md_control,     only: type_thermostat, type_barostat, md_tau_T, &
@@ -982,7 +988,7 @@ contains
 
     ! local variables
     character(50)  :: file_velocity='velocity.dat'
-    integer       :: stat
+    integer       :: stat, i
 
     if (inode==ionode .and. iprint_MD > 1) then
        write(io_lun,'(2x,a)') "Welcome to init_md"
@@ -996,6 +1002,22 @@ contains
             ni_in_cell, stat)
        call reg_alloc_mem(area_moveatoms, 3*ni_in_cell, type_dbl)
     end if
+
+!  2020/10/7 Tsuyoshi Miyazaki
+!   Order of atoms is different between ion_velocity and atom_vels:
+!   we are planning to remove ion_velocity in the future.
+!       global_labelling :  atom_coord & atom_vels
+!     partition_labelling:  x(or y or z)_atom_cell & ion_velocity
+!
+    if (.not. allocated(atom_vels)) then
+       allocate(atom_vels(3,ni_in_cell), STAT=stat)
+       if (stat /= 0) &
+            call cq_abort("Error allocating atom_vels in init_md: ", &
+            ni_in_cell, stat)
+       call reg_alloc_mem(area_moveatoms, 3*ni_in_cell, type_dbl)
+       atom_vels = zero
+    end if
+
     if (.not. flag_MDcontinue) then
        ! I've moved the velocity initialisation here to make reading the new
        ! unified md checkpoint file easier - zamaan
@@ -1007,6 +1029,14 @@ contains
              call init_velocity(ni_in_cell, temp_ion, ion_velocity)
           end if
        end if
+
+     ! atom_vels : 2020/Jul/30
+      do i=1,ni_in_cell
+        atom_vels(1,id_glob(i)) = ion_velocity(1,i)
+        atom_vels(2,id_glob(i)) = ion_velocity(2,i)
+        atom_vels(3,id_glob(i)) = ion_velocity(3,i)
+      end do
+      
     end if
 
     if (.not. present(second_call)) then
@@ -1098,6 +1128,9 @@ contains
   !!   Zamaan Raza
   !!  CREATION DATE
   !!   2019/05/08
+  !!  MODIFICATION HISTORY
+  !!   2020/10/07 tsuyoshi
+  !!    added deallocation of atom_vels
   !!  SOURCE
   !!  
   subroutine end_md(th, baro)
@@ -1105,7 +1138,7 @@ contains
     use GenComms,         only: inode, ionode
     use global_module,    only: area_moveatoms, atomic_stress, &
                                 flag_atomic_stress, flag_MDdebug, &
-                                iprint_MD, ni_in_cell, area_moveatoms
+                                iprint_MD, ni_in_cell, area_moveatoms, atom_vels
     use memory_module,    only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use md_control,       only: type_thermostat, type_barostat, &
                                 md_nhc_mass, md_nhc_cell_mass, &
@@ -1128,8 +1161,12 @@ contains
       call reg_dealloc_mem(area_moveatoms, 8*th%n_nhc, type_dbl)
     end if        
 
+    deallocate(atom_vels, STAT=stat)
+    if (stat /= 0) call cq_abort("Error deallocating atom_vels in end_md: ", &
+                                 ni_in_cell, stat)
+    call reg_dealloc_mem(area_moveatoms, 3 * ni_in_cell, type_dbl)
     deallocate(ion_velocity, STAT=stat)
-    if (stat /= 0) call cq_abort("Error deallocating velocity in md_run: ", &
+    if (stat /= 0) call cq_abort("Error deallocating velocity in end_md: ", &
                                  ni_in_cell, stat)
     call reg_dealloc_mem(area_moveatoms, 3 * ni_in_cell, type_dbl)
     if (flag_atomic_stress) then

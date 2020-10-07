@@ -56,7 +56,7 @@ module species_module
   integer :: n_species
   logical :: species_from_files
   !
-  integer, target,   allocatable, dimension(:) :: species
+  integer,           allocatable, dimension(:) :: species
   real(double),      allocatable, dimension(:) :: charge, charge_up, charge_dn, mass
   character(len=50), allocatable, dimension(:) :: ps_file
   character(len=40), allocatable, dimension(:) :: ch_file

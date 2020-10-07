@@ -151,6 +151,8 @@
 !!    Removed flag_MDold
 !!   2019/11/18 14:37 dave
 !!    Added flag_variable_cell
+!!   2020/07/27 tsuyoshi
+!!    Added atom_vels 
 !!  SOURCE
 !!
 module global_module
@@ -165,7 +167,7 @@ module global_module
   integer :: io_lun                 ! Output unit
   integer, allocatable, dimension(:) :: id_glob      ! global label of atom in sim cell (CC)
   integer, allocatable, dimension(:) :: id_glob_inv  ! gives global number for a CC atom
-  integer, dimension(:), allocatable :: species_glob ! gives species 
+  integer, dimension(:), allocatable, target :: species_glob ! gives species 
   integer :: numprocs               ! number of processors
   real(double), target :: rcellx,rcelly,rcellz  ! cell side lengths
   real(double), allocatable, dimension(:), target :: x_atom_cell ! position of atom in sim cell (CC)
@@ -177,6 +179,7 @@ module global_module
   ! atom_coord : Use global labelling, in the future this array should
   ! be used instead of x, y, z_atom_cell. by T. Miyazaki
   real(double), dimension(:,:), allocatable, target :: atom_coord ! Atomic coordinates
+  real(double), dimension(:,:), allocatable, target :: atom_vels  ! Atomic velocities 
   integer,      dimension(:,:), allocatable :: sorted_coord ! Atom IDs of atoms sorted according to x, y, z coords
   logical,      dimension(:,:), allocatable :: flag_move_atom  ! Move atoms ?
   integer,      dimension(:),   allocatable :: flag_cdft_atom
