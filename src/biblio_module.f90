@@ -122,6 +122,7 @@ contains
     integer :: lun
     character(len=400)                :: str
 
+   if(inode == ionode) then
     call io_assign(lun) 
     if (first) then
        open(unit=lun,file=bibtex_file,status='replace')
@@ -141,6 +142,8 @@ contains
     write(lun,'("}")')
 
     call io_close(lun)
+
+   endif !(inode == ionode) 
 
   end subroutine write_bib
   !!***
