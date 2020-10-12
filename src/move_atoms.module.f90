@@ -4326,7 +4326,7 @@ contains
   use store_matrix,    only: matrix_store_global, InfoMatrixFile, grab_InfoMatGlobal, grab_matrix2, &
                              set_atom_coord_diff
   use UpdateInfo, only: Matrix_CommRebuild, Report_UpdateMatrix
-  use memory_module,   only: reg_alloc_mem, type_dbl
+  use memory_module,   only: reg_alloc_mem, type_dbl, reg_dealloc_mem
 
 
   implicit none
@@ -4438,6 +4438,13 @@ contains
         velocity(2,i) = atom_vels(2,id_glob(i))
         velocity(3,i) = atom_vels(3,id_glob(i))
      end do
+
+! 2020/Oct/12 TM   
+!  if we want to reduce the memory size ...  
+!      deallocate(atom_vels, STAT=stat)
+!       if (stat /= 0) &
+!            call cq_abort("Error deallocating atom_vels in init_md: stat=", stat)
+!       call reg_dealloc_mem(area_moveatoms, 3*ni_in_cell, type_dbl)
 
  !
  ! Then, matrices will be read from the corresponding files
