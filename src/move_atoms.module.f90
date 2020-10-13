@@ -4316,7 +4316,8 @@ contains
   use datatypes
   use numbers,         only: half, zero, one, very_small
   use global_module,   only: flag_diagonalisation, atom_coord, atom_vels, atom_coord_diff, &
-                             rcellx, rcelly, rcellz, ni_in_cell, nspin, nspin_SF, id_glob
+                             rcellx, rcelly, rcellz, ni_in_cell, nspin, nspin_SF, id_glob, &
+                             area_moveatoms
     ! n_proc_old and glob2node_old have been removed
   use GenComms,        only: my_barrier, inode, ionode, cq_abort, gcopy
   use mult_module,     only: matL, L_trans, matK, matS, S_trans, matSFcoeff, SFcoeff_trans, &
@@ -4325,6 +4326,8 @@ contains
   use store_matrix,    only: matrix_store_global, InfoMatrixFile, grab_InfoMatGlobal, grab_matrix2, &
                              set_atom_coord_diff
   use UpdateInfo, only: Matrix_CommRebuild, Report_UpdateMatrix
+  use memory_module,   only: reg_alloc_mem, type_dbl, reg_dealloc_mem
+
 
   implicit none
   integer, intent(in) :: update_method
@@ -4344,7 +4347,7 @@ contains
   type(matrix_store_global) :: InfoGlob
   type(InfoMatrixFile),pointer :: InfoMat(:)
 
-  integer :: i
+  integer :: i, stat
 
  !Switch on Debugging
  !  flag_debug_move_atoms = .true.
@@ -4396,6 +4399,17 @@ contains
 
 
  !First updating information of atomic positions, neighbour lists, etc...
+ !  2020/10/7 Tsuyoshi Miyazaki
+ !   we are planning to use `atom_vels` and remove `velocity` (= direction in CG).
+    if (.not. allocated(atom_vels)) then
+       allocate(atom_vels(3,ni_in_cell), STAT=stat)
+       if (stat /= 0) &
+            call cq_abort("Error allocating atom_vels in init_md: ", &
+            ni_in_cell, stat)
+       call reg_alloc_mem(area_moveatoms, 3*ni_in_cell, type_dbl)
+       atom_vels = zero
+    end if
+
      call wrap_xyz_atom_cell
      call update_atom_coord
      do i=1,ni_in_cell
@@ -4424,6 +4438,13 @@ contains
         velocity(2,i) = atom_vels(2,id_glob(i))
         velocity(3,i) = atom_vels(3,id_glob(i))
      end do
+
+! 2020/Oct/12 TM   
+!  if we want to reduce the memory size ...  
+!      deallocate(atom_vels, STAT=stat)
+!       if (stat /= 0) &
+!            call cq_abort("Error deallocating atom_vels in init_md: stat=", stat)
+!       call reg_dealloc_mem(area_moveatoms, 3*ni_in_cell, type_dbl)
 
  !
  ! Then, matrices will be read from the corresponding files
