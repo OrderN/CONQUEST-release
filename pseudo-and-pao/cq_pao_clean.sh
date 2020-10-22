@@ -19,7 +19,7 @@ CQ_OUTFILELIST="Conquest_ion_out\
         *.ion"
 #
 if [[ "$1" == "-h" || "$1" == ""  ]]; then
-    $ECHO "  Usage: $ ./cq_pao_clean.sh -xc dirname"
+    $ECHO "  Usage: $ ./cq_pao_clean.sh -xc dirname -lib"
     $ECHO "          where dirname is the directory of the xc functional"
     $ECHO
     exit 1
@@ -66,7 +66,7 @@ while read file  ; do
     #
 done < $CQ_ATOMLIST
 #
-if [ -d lib ] ; then
+if [ "$3" == "-lib" ]; then
    rm -r lib 
    $ECHO "  lib directory has been removed"
 fi

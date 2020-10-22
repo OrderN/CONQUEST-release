@@ -90,9 +90,9 @@ while read file  ; do
 	check_failure $?
 	$ECHO "  done"
 	$CQ_PAO_SRC/cq_generate_PAOblock.sh $file$CQ_ION_FILE
-	cp $file$CQ_ION_FILE $CQ_PAODIR/$CQ_PAO_LIB
-	cp $file$CQ_SPEC_FILE $CQ_PAODIR/$CQ_PAO_LIB
-	cp $file$CQ_BLOCK_FILE $CQ_PAODIR/$CQ_PAO_LIB
+	cp $file$CQ_ION_FILE $CQ_PAODIR/$CQ_PAO_LIB/$file'_'$XC_DIR'_'$CQ_ION_FILE
+	cp $file$CQ_SPEC_FILE $CQ_PAODIR/$CQ_PAO_LIB/$file'_'$XC_DIR'_'$CQ_SPEC_FILE
+	cp $file$CQ_BLOCK_FILE $CQ_PAODIR/$CQ_PAO_LIB/$file'_'$XC_DIR'_'$CQ_BLOCK_FILE
 	cd ../..
     fi
 	
