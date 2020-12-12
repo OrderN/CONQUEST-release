@@ -66,10 +66,14 @@ module exx_types
   real(double), dimension(:,:,:,:,:),   allocatable :: vhf_kj
   real(double), dimension(:,:,:,:),     allocatable :: Phy_k
 
+  real(double), dimension(:,:,:,:,:),   allocatable :: rho_ki
+  real(double), dimension(:,:,:,:,:),   allocatable :: vhf_lj
+
+  
   ! Work matrix
   real(double), dimension(:,:,:),       allocatable :: work_in_3d
   real(double), dimension(:,:,:),       allocatable :: work_out_3d
-
+    
   ! For the Poisson equation/FFTW in reciprocal space
   type(fftw3d)          :: fftwrho3d
 
@@ -104,8 +108,7 @@ module exx_types
   integer                   :: isf_order
 
   real(double)   :: edge, volume, screen
-
-  ! Grid settings
+ ! Grid settings
   integer                 :: extent
   integer                 :: ngrid
   real(double)            :: r_int
@@ -133,6 +136,8 @@ module exx_types
   
   ! User settings
   integer :: exx_scheme      ! 4center ERIs or 3center reduction integrals
+  !character(100) :: exx_scheme
+  
   integer :: exx_mem         ! reduced memory allocation 
   logical :: exx_phil        ! on-the-fly or storage of phi_l
   logical :: exx_phik        ! on-the-fly or storage of phi_k
@@ -142,6 +147,7 @@ module exx_types
   logical :: exx_screen      ! screening
   logical :: exx_screen_pao  ! method for screening
   logical :: exx_gto         ! testing
+  logical :: exx_store_eris  ! store ERIs at first exx call
   real(double) :: exx_cutoff ! cutoff for screening (experimental)
   real(double) :: exx_radius ! radius for integration
   real(double) :: exx_hgrid  ! radius for integration
@@ -154,12 +160,21 @@ module exx_types
   ! I/O
   integer :: unit_global_write 
   integer :: unit_matrix_write 
-  integer :: unit_output_write 
   integer :: unit_timers_write
   integer :: unit_memory_write 
-  integer :: unit_screen_write 
+  integer :: unit_screen_write
+  integer :: unit_exx_debug
+  integer :: unit_eri_debug  
   !=================================================================<<
 
+  type store_eris
+     integer :: part
+     real(double), dimension(:), allocatable :: store_eris
+  end type store_eris
+
+  ! Electron repulsion integrals
+  type(store_eris), dimension(:), allocatable :: eris
+  
   type prim_atomic_data
      integer  :: pr
 

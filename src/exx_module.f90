@@ -56,6 +56,7 @@ module exx_module
 
 contains
 
+  
   subroutine exx_scal_rho_3d(inode,extent,r_int,scheme,cutoff,omega,n_gauss, &
                              p_gauss,w_gauss)
 
@@ -311,8 +312,8 @@ contains
 
     use exx_types, only: exx_scheme, exx_phil, exx_mem, exx_screen, exx_alloc, exx_cutoff
     use exx_types, only: exx_cartesian, exx_overlap, exx_radius, exx_screen_pao, exx_hgrid
-    use exx_types, only: unit_output_write, exx_phik, exx_gto, exx_debug
-    use exx_types, only: tmr_std_exx_setup
+    use exx_types, only: exx_phik, exx_gto, exx_debug
+    use exx_types, only: tmr_std_exx_setup, exx_store_eris
 
     use atomic_density, only: atomic_density_table
     use species_module, only: n_species
@@ -357,8 +358,8 @@ contains
     exx_screen      = .false.
     exx_screen_pao  = .false.
     exx_gto         = .false.
+    exx_store_eris  = .false.
     exx_cutoff      = zero              ! do not touch  
-    unit            = unit_output_write ! do not touch  
     !if (exx_mem == 2) exx_alloc = .false.  
     !
     ! Find out the finest grid spacing from input
@@ -423,8 +424,15 @@ contains
     ! Below for output purpose
     if (exx_scheme==1) then
        eri_scheme = "3center reduction integrals"
-    else
+    else if ( exx_scheme==2 ) then
        eri_scheme = "4center eris"
+    else if ( exx_scheme==3 ) then
+       eri_scheme = "4center eris + storage"
+    else
+       eri_scheme  = "none"
+       exx_psolver = "none"
+       solver = 'none'
+       scheme = trim(exx_psolver) 
     end if
     !
     if (exx_phil) then
@@ -477,27 +485,27 @@ contains
        mem_scheme   = 'high'
     end if
     !
-    if ( inode == ionode .and. exx_debug ) then
-       write(unit,2) ('Entering in the Hartree-Fock module')
-       write(unit,41) eri_scheme
-       write(unit,42) phil_scheme
-       write(unit,43) alloc_scheme
-       write(unit,48) mem_scheme
-       write(unit,44) exx_screen, scr_scheme, screen, screen*BohrToAng
+    !if ( inode == ionode .and. exx_debug ) then
+    !   write(unit,2) ('Entering in the Hartree-Fock module')
+    !   write(unit,41) eri_scheme
+    !   write(unit,42) phil_scheme
+    !   write(unit,43) alloc_scheme
+    !   write(unit,48) mem_scheme
+    !   write(unit,44) exx_screen, scr_scheme, screen, screen*BohrToAng
        
-       write(unit,46) exx_overlap
-       write(unit,47) pao_scheme
-       write(unit,20)
-       write(unit,21) r_max, r_max*BohrToAng
-       write(unit,22) r_int, r_int*BohrToAng
-       write(unit,23) grid_spacing, grid_spacing*BohrToAng
-       write(unit,24) ngrid
-       write(unit,25) 
-       write(unit,26) edge, edge*BohrToAng
-       write(unit,27) volume, volume*BohrToAng**3
-       write(unit,28) ngrid**3
+    !   write(unit,46) exx_overlap
+    !   write(unit,47) pao_scheme
+    !   write(unit,20)
+    !   write(unit,21) r_max, r_max*BohrToAng
+    !   write(unit,22) r_int, r_int*BohrToAng
+    !   write(unit,23) grid_spacing, grid_spacing*BohrToAng
+    !   write(unit,24) ngrid
+    !   write(unit,25) 
+    !   write(unit,26) edge, edge*BohrToAng
+    !   write(unit,27) volume, volume*BohrToAng**3
+    !   write(unit,28) ngrid**3
 
-    end if
+    !end if
 
     if (exx_psolver == 'fftw') then       
        scheme = trim(scheme)//'/'//trim(p_scheme)
@@ -920,9 +928,9 @@ contains
     hl%xyz_cv(3) = BCS_parts%zcover(part_cover+ind-1)
     !
     ! Calculate R_iu
-    hl%xyz(1) = - hl%xyz_hl(1) + kl%xyz_hl(1)
-    hl%xyz(2) = - hl%xyz_hl(2) + kl%xyz_hl(2)
-    hl%xyz(3) = - hl%xyz_hl(3) + kl%xyz_hl(3)
+    hl%xyz(1) = - hl%xyz_cv(1) + kl%xyz_hl(1)
+    hl%xyz(2) = - hl%xyz_cv(2) + kl%xyz_hl(2)
+    hl%xyz(3) = - hl%xyz_cv(3) + kl%xyz_hl(3)
     hl%r      = sqrt(dot_product(hl%xyz,hl%xyz))
     !
     ! Calculate D_iu
@@ -937,11 +945,17 @@ contains
           write(unit,'(I8,6X,A9,2X,A,I8,A2,I3,A,6X,A2,1X,I8,1X,4F12.4,3X,I3,2I8,1X,F7.3)')     &
                part,'{k\gamma}','{',hl%global_num,'\ ',hl%nsup,'}', hl%name, hl%global_num, &
                xyz_Ang(1), xyz_Ang(2), xyz_Ang(3), zero, hl%spec, ind, hl%nsup, hl%radi
-       else
+       else if  (which == 'l') then
           write(unit,'(I8,6X,A9,2X,A,I8,A2,I3,A,6X,A2,1X,I8,1X,4F12.4,3X,I3,2I8,1X,F7.3)')     &
                part,'{l\delta}','{',hl%global_num,'\ ',hl%nsup,'}', hl%name, hl%global_num, &
                xyz_Ang(1), xyz_Ang(2), xyz_Ang(3), zero, hl%spec, ind, hl%nsup, hl%radi
+       else if  (which == 'j') then
+          write(unit,'(I8,6X,A9,2X,A,I8,A2,I3,A,6X,A2,1X,I8,1X,4F12.4,3X,I3,2I8,1X,F7.3)')     &
+               part,'{j\beta}','{',hl%global_num,'\ ',hl%nsup,'}', hl%name, hl%global_num, &
+               xyz_Ang(1), xyz_Ang(2), xyz_Ang(3), zero, hl%spec, ind, hl%nsup, hl%radi
        end if
+
+       
     end if    
     call stop_timer(tmr_std_exx_fetch,.true.)
 

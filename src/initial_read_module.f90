@@ -1877,7 +1877,9 @@ contains
        exx_scf_tol   = sc_tolerance
        ! Grid spacing for PAO discretisation in EXX
        exx_hgrid  = fdf_double ('EXX.GridSpacing',zero)
-       exx_radius = fdf_double ('EXX.IntegRadius',0.00_double) 
+       exx_radius = fdf_double ('EXX.IntegRadius',0.00_double)
+       exx_scheme = fdf_integer('EXX.Scheme', 3) 
+       exx_debug  = fdf_boolean('EXX.Debug',.false.)
        ! debug mode
        exx_Kij       = .true.
        exx_Kkl       = .true.
@@ -1886,9 +1888,7 @@ contains
        exx_alloc     = .false.
        exx_psolver   = 'fftw'
        p_scheme      = 'pulay'
-       exx_scheme    = 1
        exx_mem       = 1
-       exx_debug     = .false.
     end if
 !!$
 !!$
