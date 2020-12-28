@@ -55,253 +55,293 @@ module exx_module
   !!***
 
 contains
-
-  
-  subroutine exx_scal_rho_3d(inode,extent,r_int,scheme,cutoff,omega,n_gauss, &
-                             p_gauss,w_gauss)
-
-    use datatypes
-    use numbers,           ONLY: twopi, pi, sqrt_pi, very_small
-    use numbers,           ONLY: zero, one, two, four, three_halves
-     
-    implicit none
-
-    ! << Passed variables >>    
-    character(*), intent(in) :: scheme
-    integer,      intent(in) :: extent
-    integer,      intent(in) :: inode
-    real(double), intent(in) :: r_int
-
-    real(double), intent(in) :: cutoff
-    real(double), intent(in) :: omega
-
-    integer,      intent(in) :: n_gauss
-    real(double), optional, intent(in) :: p_gauss(n_gauss)    
-    real(double), optional, intent(in) :: w_gauss(n_gauss)    
-  
-    ! << Local variables >>
-    real(double),dimension(3) :: G
-    real(double)              :: charge_G
+  !
+  !
+  subroutine initialise_exx( scheme )
+    !
+    use timer_stdclocks_module, only: tmr_std_exx
+    use global_module, only: iprint_exx
+    use timer_module,  only: start_timer, stop_timer    
+    use species_module,only: nsf_species
+    use mult_module,   only: S_X_SX, mult 
     
-    real(double), parameter   :: magic_number = 0.1864d0 ! 32/43 = nombre magic !
+    use exx_types,     only: extent, exx_psolver, p_scheme, r_int, eris
+    use exx_types,     only: ewald_alpha, ewald_charge, ewald_rho, ewald_pot
+    use exx_types,     only: p_omega, p_ngauss, p_gauss, w_gauss, pulay_radius
+    use exx_poisson,   only: exx_scal_rho_3d, exx_ewald_rho, exx_ewald_pot
+    
+    use exx_types,     only: tmr_std_exx_setup, unit_eri_debug, unit_exx_debug
+    use exx_types,     only: unit_memory_write, unit_timers_write
+    use exx_memory,    only: exx_mem_alloc
+    
+    integer, intent(in) :: scheme
+            
+    character(len=20) :: filename1, filename2, filename3, filename4, filename5, filename6
+    integer :: maxsuppfuncs, stat
 
-    real(double)              :: r_G, r_A, v_G, v_R, sphere, fftwnorm, tmp, alpha
-    real(double)              :: rho_zero, Gkernel, Gkernel_zero, arg, factor, delta    
-    real(double)              :: max_, min_
+    maxsuppfuncs = maxval(nsf_species)
+    !
+    call start_timer(tmr_std_exx)   
+    !
+    call start_timer(tmr_std_exx_setup)    
+    !
+    if ( iprint_exx > 3 ) then
+       
+       call io_assign(unit_timers_write)
+       call get_file_name('exx_timers',numprocs,inode,filename3)
+       open(unit_timers_write,file=filename3)
+       !
+       !
+       call io_assign(unit_memory_write)
+       call get_file_name('exx_memory',numprocs,inode,filename4)
+       open(unit_memory_write,file=filename4)
+       
+    end if
+    
+    if ( exx_debug ) then
+       
+       call io_assign(unit_exx_debug)
+       call get_file_name('exx_debug',numprocs,inode,filename5)
+       open(unit_exx_debug,file=filename5)       
+       
+       call io_assign(unit_eri_debug)
+       call get_file_name('eri_debug',numprocs,inode,filename6)
+       open(unit_eri_debug,file=filename6)       
 
-    integer                   :: gauss
-    integer                   :: nx, ny, nz, ngrid   
-    integer                   ::  x,  y,  z    
-    integer                   ::  i,  j,  k
+       !call exx_write_head(unit_exx_debug,inode,bundle%groups_on_node) 
+       !
+       !call exx_global_write()
+       !
+    end if
+    !
+    maxsuppfuncs = maxval(nsf_species)
+    !
+    if ( scheme > 0 ) then
+       call exx_mem_alloc(extent,0,0,'work_3d' ,'alloc')
+    end if
+    !
+    !DRB! This appears to set up the different Poisson solvers
+    if (exx_psolver == 'fftw')     then
+       call exx_mem_alloc(extent,0,0,'fftw_3d','alloc')  
+       call exx_mem_alloc(extent,0,0,'reckernel_3d','alloc')
 
-    ngrid     = 2*extent+1
-    fftwnorm  = sqrt(real(ngrid**3,double)) 
+       poisson_fftw: select case(p_scheme)          
 
-    r_A    = real(2,double)*r_int
-    r_G    = zero
-    G      = zero
+       case('default')
+          call exx_scal_rho_3d(inode,extent,r_int,p_scheme,pulay_radius, &
+               p_omega,p_ngauss,p_gauss,w_gauss,reckernel_3d)
 
-    v_G    = (twopi**3)*real(1,double)/(real(2,double)*r_int)**3
-    v_R    = (real(2,double)*r_int)**3
-    sphere = ((twopi*real(1,double)/(real(2,double)*r_int))**3)*(1.0d0/6.0d0*pi)
+       case('ewald')
+          call exx_mem_alloc(extent,0,0,'ewald_3d','alloc')
+          call exx_ewald_rho(ewald_rho,extent,ewald_alpha,r_int)
+          call exx_ewald_pot(ewald_pot,extent,ewald_alpha,r_int)          
+          call exx_scal_rho_3d(inode,extent,r_int,p_scheme,pulay_radius, &
+               p_omega,p_ngauss,p_gauss,w_gauss,reckernel_3d)
 
-    reckernel_3d = zero
+       case('pulay')
+          call exx_scal_rho_3d(inode,extent,r_int,p_scheme,pulay_radius, &
+               p_omega,p_ngauss,p_gauss,w_gauss,reckernel_3d)
 
-    poisson_scheme: select case(scheme)       
-    case('default')
-       delta  = zero
-    case('ewald')
-       delta  = zero
-    case('pulay')
-       delta  = zero
-    case('yukawa')
-       delta  = omega
-    case('gauss')
-       delta  = zero
-    case default
-       delta  = zero
-    end select poisson_scheme
+       case('yukawa')
+          call exx_scal_rho_3d(inode,extent,r_int,p_scheme,pulay_radius, &
+               p_omega,p_ngauss,p_gauss,w_gauss,reckernel_3d)
 
-    grid_x_loop: do nx = -extent, extent
-       x = nx + extent + 1
-       if (nx <= 0) then
-          G(1) = twopi*( real(nx+extent+delta,double))/r_A
-       else 
-          G(1) = twopi*(-real(extent-nx+(one-delta),double))/r_A
+       case('gauss')
+          call cq_abort('EXX: Gaussian representation if 1/r for solving &
+               &the Poisson equation &
+               &is currently under testing...')
+          !call createBeylkin(p_gauss,w_gauss,r_int)     
+          !call exx_scal_rho_3d(inode,extent,r_int,p_scheme,pulay_radius, &
+          !     p_omega,p_ngauss,p_gauss,w_gauss)
+
+       case default
+          call exx_scal_rho_3d(inode,extent,r_int,p_scheme,pulay_radius, &
+               p_omega,p_ngauss,p_gauss,w_gauss,reckernel_3d)
+
+       end select poisson_fftw
+
+    else if (exx_psolver == 'isf') then
+       call cq_abort('EXX: ISF Poisson solver is not available yet ; &
+            &under optimisation...')
+       !call exx_mem_alloc(extent,0,0,'isf_rho','alloc')
+       !call createKernel('F',ngrid,ngrid,ngrid,grid_spacing,grid_spacing,grid_spacing,isf_order,&
+       !     0,1,kernel)       
+
+    end if
+    call stop_timer(tmr_std_exx_setup,.true.)    
+    
+    if ( scheme > 0 ) then
+       call exx_mem_alloc(extent,maxsuppfuncs,0,'phi_i','alloc')       
+       call exx_mem_alloc(extent,maxsuppfuncs,0,'phi_j','alloc')
+       call exx_mem_alloc(extent,maxsuppfuncs,0,'phi_k','alloc')
+       call exx_mem_alloc(extent,maxsuppfuncs,0,'phi_l','alloc')
+       !
+       if ( scheme == 1 ) then
+          call exx_mem_alloc(extent,maxsuppfuncs,0,'Phy_k','alloc')
+          call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'Ome_kj','alloc')       
+          call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'rho_kj','alloc')       
+          call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'vhf_kj','alloc')
+          !
+       else if ( scheme == 2 ) then       
+          call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'rho_ki','alloc')       
+          call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'vhf_lj','alloc')
+          !
+       else if ( scheme == 3 ) then       
+          call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'rho_ki','alloc')       
+          call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'vhf_lj','alloc')
+          !
+          !if ( niter == 1 ) then
+          allocate( eris( mult(S_X_SX)%ahalo%np_in_halo ), STAT=stat)
+          if(stat/=0) call cq_abort('Error allocating memory to eris/exx !',stat)
+          !end if
+          !for now allocated here ; should not ; better to have this before
+          ! SCF calculation ; note that here it is never deallocated!
+          !eris_size = int( sqrt(dble(size( mat_p(matX(  exxspin  ))%matrix ))) )
+          !print*, 'inode', inode, inode, size( mat_p(matX(  exxspin  ))%matrix), eris_size, &
+          !     & mat_p(matX(  exxspin  ))%length, mat_p(matX(  exxspin  ))%sf1_type, mat_p(matX(  exxspin  ))%sf2_type
+          !call exx_mem_alloc(eris_size**4,0,0,'eris','alloc')
+          !
+          !
        end if
-       
-       grid_y_loop: do ny = -extent, extent
-          y  = ny + extent + 1 
-          if (ny <= 0) then                         
-             G(2) = twopi*( real(ny+extent+delta,double))/r_A
-          else
-             G(2) = twopi*(-real(extent-ny+(one-delta),double))/r_A
-          end if
-
-          grid_z_loop: do nz = -extent, extent             
-             z  = nz + extent + 1             
-             if (nz <= 0) then
-                G(3) = twopi*( real(nz+extent+delta,double))/r_A 
-             else                
-                G(3) = twopi*(-real(extent-nz+(one-delta),double))/r_A
-             end if
-             
-             r_G = sqrt(dot_product(G,G))                         
-
-             !if (scheme == 'yukawa') then
-             !   if (r_G > 0.1d0) then
-             !      delta = zero
-             !   end if
-             !end if
-
-             if (r_G == zero) then                
-
-                !write(*,*) x, y, z
-                poisson_zero: select case(scheme)
-                case('default')
-                   reckernel_3d(x,y,z) = cmplx(0,0,double_cplx)          
-                case('ewald')
-                   reckernel_3d(x,y,z) = cmplx(0,0,double_cplx)          
-                case('pulay')
-                   reckernel_3d(x,y,z) = cmplx(cutoff**2/two,0,double_cplx)     
-                case('yukawa')
-                   reckernel_3d(x,y,z) = cmplx(0,0,double_cplx) 
-                case('gauss')
-                   Gkernel_zero = zero
-                   do gauss = 1, n_gauss
-                      Gkernel_zero = Gkernel_zero + &
-                           w_gauss(gauss)*sqrt_pi/(four*p_gauss(gauss)**three_halves)
-                   end do
-                   reckernel_3d(x,y,z) = cmplx(Gkernel_zero,double_cplx)          
-                case default 
-                   reckernel_3d(x,y,z) = cmplx(zero,zero,double_cplx)          
-                end select poisson_zero
-             else
-                poisson_xyz: select case(scheme)
-                case('default')
-                   reckernel_3d(x,y,z) = cmplx(one/r_G**2,zero,double_cplx)
-                case('ewald')
-                   reckernel_3d(x,y,z) = cmplx(one/r_G**2,zero,double_cplx)
-                case('pulay')
-                   reckernel_3d(x,y,z) = (one - cos(r_G*cutoff))/r_G**2
-                case('yukawa')
-                   reckernel_3d(x,y,z) = cmplx(one/r_G**2,zero,double_cplx)
-                case('gauss')
-                   Gkernel = zero
-                   arg     = zero
-                   factor  = zero
-
-                   do gauss = 1, n_gauss                      
-                      factor  = w_gauss(gauss)*sqrt(pi)/(four*p_gauss(gauss)**three_halves)
-                      arg     = -(r_G/(two*sqrt(p_gauss(gauss))))**two
-                      Gkernel = Gkernel + factor*exp(arg)
-                      max_ = max(max_,arg)
-                      min_ = min(min_,arg)
-
-                   end do
-                   reckernel_3d(x,y,z) = cmplx(Gkernel,zero,double_cplx)
-                case default
-                   reckernel_3d(x,y,z) = cmplx(one/r_G**2,zero,double_cplx)
-                end select poisson_xyz
-             end if
-
-          end do grid_z_loop
-       end do grid_y_loop
-    end do grid_x_loop    
-
-    return
-  end subroutine exx_scal_rho_3d  
-  !
-  !
-  !
-  !
-  subroutine exx_v_on_grid(inode,extent,rho,potential,r_int,poisson,scheme,&
-       alpha,omega,n_gauss,p_gauss,w_gauss)
+       !
+       !
+    end if
     
-    use numbers,   ONLY: zero, one, fourpi
-    use exx_types, ONLY: reckernel_3d                 ! FFTW
-    use exx_types, ONLY: kernel, isf_rho, isf_pot_ion ! ISF  
-    use exx_types, ONLY: pulay_radius, ewald_rho, ewald_pot, ewald_charge
-    use exx_types, ONLY: tmr_std_exx_poisson
-
-    implicit none
-
-    ! << Input variables >>
-    integer,      intent(in) :: inode
-    integer,      intent(in) :: extent 
-    real(double), intent(in) :: r_int
-    character(*), intent(in) :: poisson    
-
-    real(double), dimension(2*extent+1,2*extent+1,2*extent+1), &
-         intent(in)  :: rho
+  end subroutine initialise_exx
+  !
+  !
+  subroutine finalise_exx( scheme )
+    !
+    use global_module, only: iprint_exx, area_exx
+    use timer_stdclocks_module, only: tmr_std_exx
+    use timer_module,  only: start_timer, stop_timer, print_timer
+    use species_module,only: nsf_species
+    use memory_module, only: write_mem_use
     
-    character(*), intent(in) :: scheme
-    real(double), intent(in) :: alpha
-    real(double), intent(in) :: omega        
-    integer,      intent(in) :: n_gauss
-    real(double), dimension(n_gauss) :: p_gauss, w_gauss
-
-    ! << Output variables >>
-    real(double), dimension(2*extent+1,2*extent+1,2*extent+1), &
-         intent(out) :: potential
+    use exx_types,     only: extent, exx_psolver ,kernel, p_scheme
+    use exx_types,     only: tmr_std_exx_setup, unit_eri_debug, unit_exx_debug
+    use exx_types,     only: tmr_std_exx_evalpao, tmr_std_exx_poisson, tmr_std_exx_matmult
+    use exx_types,     only: tmr_std_exx_accumul, tmr_std_exx_allocat, tmr_std_exx_dealloc
+    use exx_types,     only: tmr_std_exx_fetch, tmr_std_exx_barrier, tmr_std_exx_kernel
+    use exx_types,     only: tmr_std_exx_kernel
+    use exx_types,     only: exx_total_time
     
-    ! << Local variables >>    
-    integer       :: ng, i, j, k
-    real(double)  :: fftwnorm, normr
-    real(double)  :: grid_spacing
-    real(double)  :: r(3)
-    logical, parameter :: accumulate = .true.
+    use exx_types,     only: unit_memory_write, unit_eri_debug, unit_exx_debug, unit_timers_write
+    use exx_memory,    only: exx_mem_alloc
+    !
+    integer, intent(in) :: scheme
+    integer :: maxsuppfuncs
 
-    ! ... For Poisson/ISF real space FFT >>
-    real(kind=8)          :: isf_eh, isf_exc, isf_vxc, isf_spacing
+    maxsuppfuncs = maxval(nsf_species)
+    
+    if ( scheme > 0 ) then
+       call exx_mem_alloc(extent,0,0,'work_3d' ,'dealloc')
+       !
+       call exx_mem_alloc(extent,maxsuppfuncs,0,'phi_i','dealloc')       
+       call exx_mem_alloc(extent,maxsuppfuncs,0,'phi_j','dealloc')
+       call exx_mem_alloc(extent,maxsuppfuncs,0,'phi_k','dealloc')    
+       call exx_mem_alloc(extent,maxsuppfuncs,0,'phi_l','dealloc')
+       !
+       if ( scheme == 1 ) then
+          call exx_mem_alloc(extent,maxsuppfuncs,0,'Phy_k','dealloc')
+          call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'Ome_kj','dealloc')   
+          call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'rho_kj','dealloc')       
+          call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'vhf_kj','dealloc')
+          !
+       else if( scheme == 2 ) then
+          call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'rho_ki','dealloc')       
+          call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'vhf_lj','dealloc')
+          !
+       else if( scheme == 3 ) then
+          call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'rho_ki','dealloc')       
+          call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'vhf_lj','dealloc')
+          !
+       end if
+       !
+    end if
+    !
+    !
+    if (exx_psolver == 'fftw')  then
+       call exx_mem_alloc(extent,0,0,'fftw_3d',     'dealloc')  
+       call exx_mem_alloc(extent,0,0,'reckernel_3d','dealloc')
+       select case(p_scheme)
+       case('default')         
+       case('gauss')          
+       case('pulay')
+       case('ewald')
+          call exx_mem_alloc(extent,0,0,'ewald_3d','dealloc')
+       case default
+       end select
 
-    ! ... Dummy variables >>
-    real(double), dimension(:,:,:), allocatable :: dum_pot_ion, dum_rho
+    else if (exx_psolver == 'isf') then
+       call exx_mem_alloc(extent,0,0,'isf_rho','dealloc')
+       deallocate(kernel)
+    end if
+    !
+    !if (inode == ionode) then
+    call write_mem_use(unit_memory_write,area_exx)
+    !end if
+    !
+    call start_timer(tmr_std_exx_barrier)
+    call my_barrier()
+    call stop_timer(tmr_std_exx_barrier,.true.)
+    !
+    call stop_timer(tmr_std_exx,.true.)
+    !    
+    ! Timers and elapse time
+    exx_total_time = &
+         tmr_std_exx_evalpao%t_tot + &
+         tmr_std_exx_poisson%t_tot + &
+         tmr_std_exx_matmult%t_tot + &
+         tmr_std_exx_accumul%t_tot + &
+         tmr_std_exx_allocat%t_tot + &
+         tmr_std_exx_dealloc%t_tot + &
+         tmr_std_exx_setup%t_tot   + &
+         tmr_std_exx_write%t_tot   + &
+         tmr_std_exx_fetch%t_tot   + &
+         tmr_std_exx_barrier%t_tot
 
-    ng           = 2*extent+1
-    fftwnorm     = sqrt(real(ng**3,double))   
-    grid_spacing = r_int/real(extent,double)
-
-    !call start_timer(tmr_std_exx_poisson)    
-
-    select case(poisson)
-
-    case('fftw')       
-       potential = zero
-
-       ! setup[rho(r)] 
-       fftwrho3d%arrayin  = cmplx(rho,zero,double_cplx)
-
-       ! FFT_F[rho(r)] => rho(G)      
-       call fft3_exec_wrapper( fftwrho3d%arrayin, ng , +1 )
-
-       ! scale[rho_(G)] = 4pi*rho(G)/|G|^2
-       fftwrho3d%arrayin = fourpi*fftwrho3d%arrayin*reckernel_3d
+    if ( iprint_exx > 3 ) then
        
-       ! FFT_B[4pi*rho(G)/|G|^2] = V(r')
-       call fft3_exec_wrapper( fftwrho3d%arrayin, ng , -1 )
-       
-       ! Normalization
-       potential = real(fftwrho3d%arrayin) / fftwnorm**2
+       call print_timer(tmr_std_exx_setup,  "exx_setup   time:", unit_timers_write)    
+       call print_timer(tmr_std_exx_write,  "exx_write   time:", unit_timers_write)    
+       !call print_timer(tmr_std_exx_kernel, "exx_kernel  time:", unit_timers_write)    
+       call print_timer(tmr_std_exx_fetch,  "exx_fetch   time:", unit_timers_write)    
+       call print_timer(tmr_std_exx_evalpao,"exx_evalpao time:", unit_timers_write)    
+       call print_timer(tmr_std_exx_poisson,"exx_poisson time:", unit_timers_write)
+       call print_timer(tmr_std_exx_matmult,"exx_matmult time:", unit_timers_write)    
+       call print_timer(tmr_std_exx_accumul,"exx_accumul time:", unit_timers_write)    
+       call print_timer(tmr_std_exx_allocat,"exx_allocat time:", unit_timers_write)    
+       call print_timer(tmr_std_exx_dealloc,"exx_dealloc time:", unit_timers_write)    
+       call print_timer(tmr_std_exx_barrier,"exx_barrier time:", unit_timers_write)    
+       write(unit_timers_write,*)
+       call print_timer(tmr_std_exx_kernel, "exx_kernel  time:", unit_timers_write)    
+       call print_timer(tmr_std_exx,        "exx_total   time:", unit_timers_write)    
 
-    case('isf')       
-       !
-       call cq_abort('EXX: not available yet')
-       !
-       !isf_rho     = rho
-       !potential   = zero
-       !isf_pot_ion = zero
-       !
-       !call PSolver('F','G',0,1,ng,ng,ng,0,grid_spacing,grid_spacing,grid_spacing, &
-       !     isf_rho,kernel,isf_pot_ion,isf_eh,isf_exc,isf_vxc,zero,.false.,1)       
-       !potential = isf_rho
-       !
-    end select
+       write(unit=unit_timers_write,fmt='("Timing: Proc ",i6,": Time spent in ", a50, " = ", &
+            &f12.5," s")') inode, 'get_X_matrix',  tmr_std_exx%t_tot
 
-    !call stop_timer(tmr_std_exx_poisson,accumulate)    
+       write(unit=unit_timers_write,fmt='("Timing: Proc ",i6,": Time spent in ", a50, " = ", &
+            &f12.5," s")') inode, 'timer calls',  tmr_std_exx%t_tot-exx_total_time 
+       !call io_close(unit_matrix_write)
 
-    return
-  end subroutine exx_v_on_grid
+       !call io_close(unit_output_write)
+       !call io_close(unit_screen_write)
+       !
+       !call io_close(unit_eri_debug)
+       !call io_close(unit_exx_debug)
+       call io_close(unit_memory_write)
+       call io_close(unit_timers_write)
+       !
+       !
+    end if
+
+    if ( exx_debug ) then
+       call io_close(unit_eri_debug)
+       call io_close(unit_exx_debug)       
+    end if
+    
+  end subroutine finalise_exx
   !
   !
   subroutine get_X_params(level)
@@ -638,158 +678,6 @@ contains
   end subroutine get_X_params
   !
   !
-  subroutine exx_ewald_charge(rho,extent,dv,charge)
-
-    use numbers,   ONLY: zero
-
-    implicit none
-
-    integer                   :: extent
-    real(double), dimension(2*extent+1,2*extent+1,2*extent+1), &
-         intent(in)           :: rho
-    real(double), intent(in)  :: dv
-    real(double), intent(out) :: charge
-    integer                   :: i, j, k
-    
-    charge = zero
-    
-    do i = 1, 2*extent+1
-       do j = 1, 2*extent+1
-          do k = 1, 2*extent+1                                    
-             charge = charge + rho(i,j,k)*dv
-          end do
-       end do
-    end do
-    
-    return
-  end subroutine exx_ewald_charge
-
-  subroutine exx_ewald_rho(gauss,extent,alpha,r_int)
-    
-    use numbers,         ONLY: zero, one, two, three_halves
-    use numbers,         ONLY: twopi, pi, three_halves
-
-    implicit none
-    
-    integer,      intent(in)    :: extent
-    real(double), intent(inout) :: alpha
-    real(double), intent(in)    :: r_int
-    real(double), dimension(2*extent+1,2*extent+1,2*extent+1), &
-         intent(inout)          :: gauss
-
-    real(double)             :: gnorm, dv, factor
-    real(double)             :: grid_spacing
-    real(double)             :: r(3)
-
-    integer                  :: i, j, k
-    
-    grid_spacing = r_int/real(extent,double)     
-    factor       = (alpha/pi)**three_halves
-    !factor   = one
-    dv           = grid_spacing**3
-
-    gauss    = zero
-    gnorm    = zero
-    do i = -extent, extent      
-       r(1) = real(i,double)*grid_spacing
-       do j = -extent, extent
-          r(2) = real(j,double)*grid_spacing
-          do k = -extent, extent
-             r(3) = real(k,double)*grid_spacing
-             
-             gauss(extent+i+1,extent+j+1,extent+k+1) = &
-                  exp(-dot_product(r,r)*alpha)             
-             gnorm = &
-                  gnorm + gauss(extent+i+1,extent+j+1,extent+k+1)*dv
-
-          end do
-       end do
-    end do
-
-    gauss = gauss*factor
-    gnorm = gnorm*factor
-
-    return
-  end subroutine exx_ewald_rho
-  
-  subroutine exx_ewald_pot(potential,extent,alpha,r_int)
-    
-    use numbers,         ONLY: zero, one, two, twopi, pi
-    use functions,      ONLY: erfc_cq
-
-    implicit none
-
-    integer,      intent(in)    :: extent
-    real(double), intent(inout) :: alpha
-    real(double), intent(in)    :: r_int
-    real(double), dimension(2*extent+1,2*extent+1,2*extent+1), &
-         intent(inout)          :: potential
-
-    real(double)             :: arg, factor, dv
-    real(double)             :: grid_spacing, r(3)
-
-    integer                  :: i, j, k
-    
-    grid_spacing = r_int/real(extent,double)     
-    dv           = grid_spacing**3   
-
-    potential    = zero
-    do i = -extent, extent      
-       r(1) = real(i,double)*grid_spacing
-       do j = -extent, extent      
-          r(2) = real(j,double)*grid_spacing
-          do k = -extent, extent      
-             r(3) = real(k,double)*grid_spacing
-             
-             if (i == 0 .and. j == 0 .and. k==0) then
-                potential(extent+i+1,extent+j+1,extent+k+1) = two*sqrt(alpha/pi)
-             else
-                arg    = sqrt(dot_product(r,r))*sqrt(alpha)
-                factor = one/sqrt(dot_product(r,r))
-                potential(extent+i+1,extent+j+1,extent+k+1) = (one - erfc_cq(arg))*factor             
-             end if
-             
-          end do
-       end do
-    end do
-
-    return
-  end subroutine exx_ewald_pot
-
-!!$ For ISF real-space Poisson solver
-!!$
-!!$subroutine createBeylkin(p_gauss,w_gauss,r_int)
-!!$
-!!$    use numbers, ONLY: zero, one, two, twopi, pi
-!!$    
-!!$    implicit none
-!!$
-!!$    ! << Passed variables >>
-!!$    real(double), intent(in) :: r_int
-!!$
-!!$    ! << Local variables >>
-!!$    integer, parameter :: n_gauss = 89
-!!$    real(double)       :: ur_gauss,dr_gauss,acc_gauss
-!!$    real(double)       :: norm, vol, factor1, factor2 
-!!$    real(double)       :: p_gauss(n_gauss)
-!!$    real(double)       :: w_gauss(n_gauss)
-!!$
-!!$    p_gauss = zero
-!!$    w_gauss = zero
-!!$
-!!$    vol     = (real(2,double)*r_int)**3
-!!$    norm    = sqrt(vol)
-!!$
-!!$    factor1 = one/norm
-!!$    factor2 = one/vol
-!!$        
-!!$    call gequad(n_gauss,p_gauss,w_gauss,ur_gauss,dr_gauss,acc_gauss)
-!!$        
-!!$    return
-!!$  end subroutine createBeylkin
-
-
-  !
 !!$  subroutine get_neighdat(nb,ia,hl,ind,part,verbose,unit)
 !!$    
 !!$    use numbers,        only: three
@@ -880,8 +768,11 @@ contains
     use numbers,        only: zero, one, two, twopi, pi
     !
     use matrix_data, only: mat, Hrange, Srange
-    use exx_types, only: neigh_atomic_data
-    use exx_types, only: tmr_std_exx_fetch
+    use exx_types,   only: neigh_atomic_data
+    use exx_types,   only: tmr_std_exx_fetch
+    use pao_format,  only: pao
+    !
+    use species_module, only: nsf_species
     !
     implicit none
     !
@@ -895,9 +786,13 @@ contains
     !
     real(double)      :: xyz_Ang(3)      
     character(len=20) :: filename
+    integer           :: l1, acz1, m1, count, max_nsup
     integer, optional :: unit
     !
     call start_timer(tmr_std_exx_fetch)
+    !
+    max_nsup = maxval(nsf_species) 
+    !
     ! Get u(v) data
     hl%npc = part_cover
     hl%nic = ind
@@ -940,6 +835,26 @@ contains
     xyz_Ang(2) = hl%xyz_hl(2)
     xyz_Ang(3) = hl%xyz_hl(3)
     !
+    !if (.not. allocated( hl%l1  )) allocate( hl%l1  ( max_nsup ) )
+    !if (.not. allocated( hl%acz1)) allocate( hl%acz1( max_nsup ) )
+    !if (.not. allocated( hl%m1  )) allocate( hl%m1  ( max_nsup ) )
+    !
+    !count = 1
+    !angu_loop: do l1 = 0, pao(hl%spec)%greatest_angmom     
+    !   zeta_loop: do acz1 = 1, pao(hl%spec)%angmom(l1)%n_zeta_in_angmom
+    
+    !      magn_loop: do m1 = -l1, l1                      
+    !         !print*, inode, max_nsup, l1, acz1, m1, count
+    !         hl%l1  (count) =    l1
+    !         hl%acz1(count) =  acz1
+    !         hl%m1  (count) =    m1
+    !                      
+    !         count = count + 1
+    !      end do magn_loop
+    !   end do zeta_loop
+    !end do angu_loop
+
+    
     if ( exx_debug ) then
        if (which == 'k') then
           write(unit,'(I8,6X,A9,2X,A,I8,A2,I3,A,6X,A2,1X,I8,1X,4F12.4,3X,I3,2I8,1X,F7.3)')     &

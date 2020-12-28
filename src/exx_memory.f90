@@ -38,7 +38,7 @@ module exx_memory
 
   use global_module,             ONLY: area_exx, io_lun
   use timer_module,              ONLY: start_timer, stop_timer, print_timer
-  use memory_module,             ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl
+  use memory_module,             ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl, type_cplx
   use GenComms,                  ONLY: cq_abort
 
   use fft_interface_module,      ONLY: fft3_init_wrapper
@@ -231,7 +231,7 @@ contains
           allocate(reckernel_3d(2*extent+1,2*extent+1,2*extent+1), STAT=stat)
           if(stat/=0) call cq_abort('Error allocating memory to reckernel_3d/exx !',stat)
           call reg_alloc_mem(area_exx,(2*extent+1)*(2*extent+1)*(2*extent+1),&
-               type_dbl,matrix,lun)
+               type_cplx,matrix,lun)
           reckernel_3d = zero
           !write(unit,*) 'reckernel_3d allocated'
           !
@@ -261,11 +261,11 @@ contains
           allocate(fftwrho3d%arrayin(2*extent+1,2*extent+1,2*extent+1), STAT=stat)
           if(stat/=0) call cq_abort('Error allocating memory to fftwin3d/exx !',stat)
           call reg_alloc_mem(area_exx,2*(2*extent+1)*(2*extent+1)*(2*extent+1),&
-               type_dbl,'fftw_in ',lun)
+               type_cplx,'fftw_in ',lun)
           allocate(fftwrho3d%arrayout(2*extent+1,2*extent+1,2*extent+1), STAT=stat)
           if(stat/=0) call cq_abort('Error allocating memory to fftwout3d/exx !',stat)
           call reg_alloc_mem(area_exx,2*(2*extent+1)*(2*extent+1)*(2*extent+1),&
-               type_dbl,'fftw_out',lun)
+               type_cplx,'fftw_out',lun)
           !
           !**<lat>** don't touch
           !

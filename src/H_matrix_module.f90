@@ -215,7 +215,8 @@ contains
                                            area_ops, nspin, nspin_SF,   &
                                            spin_factor, blips,          &
                                            flag_analytic_blip_int,      &
-                                           flag_neutral_atom
+                                           flag_neutral_atom,           &
+                                           flag_self_consistent
     use functions_on_grid,           only: atomfns, H_on_atomfns,       &
                                            gridfunctions
     use io_module,                   only: dump_matrix, dump_blips,     &
@@ -356,7 +357,7 @@ contains
        !
        !
 !****lat<$
-       if (flag_exx) then
+       if (flag_exx .and. flag_self_consistent ) then
           !
           exx_store_eris = .false.
           !
@@ -366,6 +367,10 @@ contains
           !if (inode==ionode) print*, 'exx_pulay_r0 = ', exx_pulay_r0
           !
           if  ( exx_niter == 1 .and. exx_scheme /= 3 ) then
+             !
+             if (inode == ionode .and. iprint_exx > 2) &
+                  write (io_lun, *) 'EXX: setting get_X_matrix'
+             call get_X_params(backtrace_level)
              !
              ! For first H building use pure DFT since we need K to get X 
              ! (X is the exchange matrix)
@@ -391,14 +396,15 @@ contains
              !
           else if ( exx_niter > 1 ) then
              !
-             if (inode == ionode .and. iprint_exx > 2) &
-                  write (io_lun, *) 'EXX: setting get_X_matrix'
-             call get_X_params(backtrace_level)
-
-             call exx_global_write() 
+             !if (inode == ionode .and. iprint_exx > 2) &
+             !     write (io_lun, *) 'EXX: setting get_X_matrix'
+             !call get_X_params(backtrace_level)
+             !
+             !call exx_global_write() 
              !
              !if (inode == ionode .and. iprint_exx > 2) &
-                  !write (io_lun, *) 'EXX: doing get_X_matrix'
+             !write (io_lun, *) 'EXX: doing get_X_matrix'
+             !
              do spin = 1, nspin
                 if (inode == ionode .and. iprint_exx > 2) &
                 write (io_lun, *) 'EXX: doing get_X_matrix: ', print_exxspin(spin)

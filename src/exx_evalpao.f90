@@ -85,7 +85,7 @@ contains
     mx = -extent ; px = extent
     my = mx      ; py = px 
     mz = my      ; pz = py
-
+ 
     call start_timer(tmr_std_exx_evalpao)    
 
     !Define the overlap box
@@ -146,7 +146,7 @@ contains
        py = py -ijk(2)+1
        pz = pz -ijk(3)+1
     end if overlap_box
-
+    
     grid_x_loop: do nx = mx, px
        x = xyz(1) + real(nx,double)*grid_spacing + rst(1)
 
@@ -163,7 +163,6 @@ contains
              !if(r < very_small) then
              !   r = zero
              !end if
-
              !print*, '1 cycle start'
 
              count1  = 1
@@ -176,7 +175,7 @@ contains
 
                       pao_val = zero
                       y_val   = zero             
-                         
+                      
                       call evaluate_pao(spec,l1,acz,m1,x,y,z,pao_val,exx_cartesian)
 
                       ! Put pao_val directly into phi_on_grid

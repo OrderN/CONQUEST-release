@@ -2,7 +2,7 @@
 ! ------------------------------------------------------------------------------
 ! $Id: $
 ! -----------------------------------------------------------
-! Module exx_types.f90
+! Module exx_types.f90105
 ! -----------------------------------------------------------
 ! Code area 13: EXX
 ! -----------------------------------------------------------
@@ -76,8 +76,11 @@ module exx_types
     
   ! For the Poisson equation/FFTW in reciprocal space
   type(fftw3d)          :: fftwrho3d
+  type(fftw3d)          :: fftwrho3d_filter
 
   complex(double), dimension(:,:,:),    allocatable :: reckernel_3d
+  complex(double), dimension(:,:,:),    allocatable :: reckernel_3d_filter
+
   real(double),    dimension(:,:,:),    allocatable :: ewald_rho
   real(double),    dimension(:,:,:),    allocatable :: ewald_pot
   real(double) :: ewald_charge
@@ -88,6 +91,9 @@ module exx_types
   real(double), dimension(:,:,:),       allocatable :: isf_pot_ion
   real(double), pointer   :: kernel(:)   
 
+  ! Filter ERIs
+   real(double) :: exx_filter_thr
+  
   ! Poisson solver settings
   character(100), parameter :: p_scheme_default = 'v(G=0)=0'
   character(100)            :: p_scheme
@@ -109,7 +115,7 @@ module exx_types
 
   real(double)   :: edge, volume, screen
  ! Grid settings
-  integer                 :: extent
+  integer                 :: extent, exx_filter_extent
   integer                 :: ngrid
   real(double)            :: r_int
   real(double)            :: grid_spacing
@@ -120,7 +126,6 @@ module exx_types
   type(cq_timer), save :: tmr_std_exx_write
   type(cq_timer), save :: tmr_std_exx_kernel
   type(cq_timer), save :: tmr_std_exx_fetch
-  type(cq_timer), save :: tmr_std_exx_fetch_K
   type(cq_timer), save :: tmr_std_exx_accumul
 
   type(cq_timer), save :: tmr_std_exx_matmult
@@ -132,6 +137,8 @@ module exx_types
   type(cq_timer), save :: tmr_std_exx_evalpao
   type(cq_timer), save :: tmr_std_exx_evalgto
   type(cq_timer), save :: tmr_std_exx_splitpao
+  type(cq_timer), save :: tmr_std_exx_barrier
+
   real(double)         :: exx_total_time
   
   ! User settings
@@ -147,6 +154,7 @@ module exx_types
   logical :: exx_screen      ! screening
   logical :: exx_screen_pao  ! method for screening
   logical :: exx_gto         ! testing
+  logical :: exx_filter
   logical :: exx_store_eris  ! store ERIs at first exx call
   real(double) :: exx_cutoff ! cutoff for screening (experimental)
   real(double) :: exx_radius ! radius for integration
@@ -154,8 +162,6 @@ module exx_types
 
   ! For debuging/testing
   logical :: exx_debug 
-  logical :: exx_Kij
-  logical :: exx_Kkl
 
   ! I/O
   integer :: unit_global_write 
@@ -164,12 +170,15 @@ module exx_types
   integer :: unit_memory_write 
   integer :: unit_screen_write
   integer :: unit_exx_debug
-  integer :: unit_eri_debug  
+  integer :: unit_eri_debug
+  character(len=20) :: file_exx_debug, file_exx_memory, file_exx_timers
+  character(len=20) :: file_eri_debug  
   !=================================================================<<
 
   type store_eris
      integer :: part
      real(double), dimension(:), allocatable :: store_eris
+     logical,      dimension(:), allocatable :: filter_eris     
   end type store_eris
 
   ! Electron repulsion integrals
@@ -215,6 +224,11 @@ module exx_types
      real(double), dimension(3) :: xyz
      real(double) :: r
      real(double) :: d
+     !
+     integer, dimension(:), allocatable ::   l1
+     integer, dimension(:), allocatable :: acz1
+     integer, dimension(:), allocatable ::   m1
+          
   end type neigh_atomic_data
 
 end module exx_types

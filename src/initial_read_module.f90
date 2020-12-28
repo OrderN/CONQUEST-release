@@ -746,6 +746,8 @@ contains
   !!    Keywords for equilibration
   !!   2020/01/07 tsuyoshi 
   !!     Default setting of MakeInitialChargeFromK has been changed
+  !!   2020/12/14 lionel
+  !!     EXX: added filtering option for EXX and cleaning
   !!  TODO
   !!  SOURCE
   !!
@@ -883,10 +885,11 @@ contains
     use constraint_module,     only: flag_RigidBonds,constraints,SHAKE_tol, &
          RATTLE_tol,maxiterSHAKE,maxiterRATTLE, &
          const_range,n_bond
-    use exx_types, only: exx_scheme, exx_mem, exx_overlap, exx_alloc,       &
+    use exx_types, only: exx_scheme, exx_mem, exx_overlap, exx_alloc, &
          exx_cartesian, exx_radius, exx_hgrid, exx_psolver, &
-         exx_debug, exx_Kij, exx_Kkl, p_scheme
-    use multisiteSF_module, only: flag_MSSF_smear, MSSF_Smear_Type,                      &
+         exx_debug, p_scheme, exx_filter, & 
+         exx_filter_thr, exx_filter_extent
+    use multisiteSF_module, only: flag_MSSF_smear, MSSF_Smear_Type, &
          MSSF_Smear_center, MSSF_Smear_shift, MSSF_Smear_width, &
          flag_LFD_ReadTVEC, LFD_TVEC_read,                      &
          LFD_kT, LFD_ChemP, flag_LFD_useChemPsub,               &
@@ -1877,14 +1880,15 @@ contains
        exx_scf_tol   = sc_tolerance
        ! Grid spacing for PAO discretisation in EXX
        exx_hgrid  = fdf_double ('EXX.GridSpacing',zero)
-       exx_radius = fdf_double ('EXX.IntegRadius',0.00_double)
-       exx_scheme = fdf_integer('EXX.Scheme', 3) 
-       exx_debug  = fdf_boolean('EXX.Debug',.false.)
+       exx_radius = fdf_double ('EXX.IntegRadius',zero)
+       exx_scheme = fdf_integer('EXX.Scheme',       3 ) 
+       exx_debug  = fdf_boolean('EXX.Debug',  .false. )
+       exx_overlap= fdf_boolean('EXX.Overlap',.false.  )
+       exx_filter = fdf_boolean('EXX.Filter', .true.  )
+       exx_filter_extent = fdf_integer('EXX.FilterGrid', 2 )
+       exx_filter_thr    = fdf_double('EXX.Threshold',  1.0e-10_double )
        ! debug mode
-       exx_Kij       = .true.
-       exx_Kkl       = .true.
        exx_cartesian = .true. 
-       exx_overlap   = .true. 
        exx_alloc     = .false.
        exx_psolver   = 'fftw'
        p_scheme      = 'pulay'

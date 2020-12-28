@@ -109,6 +109,8 @@ contains
   !!    Changes to new XC interface
   !!   2019/12/26 tsuyoshi
   !!    Removed flag_no_atomic_densities
+  !!   2020/12/13 lionel
+  !!    Added EXX initialise and finalise
   !!  SOURCE
   !!
   subroutine initialise(vary_mu, fixed_potential, mu, total_energy)
@@ -120,7 +122,8 @@ contains
                                  flag_only_dispersion, flag_neutral_atom, &
                                  flag_atomic_stress, flag_heat_flux, &
                                  flag_full_stress, area_moveatoms, &
-                                 atomic_stress, non_atomic_stress
+                                 atomic_stress, non_atomic_stress, &
+                                 flag_self_consistent, flag_exx
     use GenComms,          only: inode, ionode, my_barrier, end_comms, &
                                  cq_abort
     use initial_read,      only: read_and_write
@@ -131,9 +134,11 @@ contains
     use cover_module,      only: make_cs, D2_CS
     use dimens,            only: r_dft_d2
     use DFT_D2
-    use pseudo_tm_module,   only: make_neutral_atom
+    use pseudo_tm_module,       only: make_neutral_atom
     use angular_coeff_routines, only: set_fact
     use maxima_module,          only: lmax_ps, lmax_pao
+    use exx_module,             only: initialise_exx, finalise_exx, get_X_params
+    use exx_types,              only: exx_scheme    
     use XC, only: init_xc
     
     implicit none
@@ -219,9 +224,17 @@ contains
       non_atomic_stress = zero
     end if
 
+    !if ( flag_exx .and. flag_self_consistent ) then
+       !call get_X_params( )
+       !call initialise_exx(exx_scheme)       
+    !end if
+    
     call initial_H(start, start_L, find_chdens, fixed_potential, &
                    vary_mu, total_energy,std_level_loc+1)
-
+    !if ( flag_exx .and. flag_self_consistent ) then
+    !   call finalise_exx(exx_scheme)       
+    !end if
+    
     call stop_timer(tmr_std_initialisation)
 
 !****lat<$

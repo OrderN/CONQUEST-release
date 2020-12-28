@@ -25,6 +25,7 @@ EXX_OBJS=   exx_module.o \
             exx_types.o \
             exx_memory.o \
             exx_io.o \
-            exx_evalpao.o 
+            exx_evalpao.o \
+            exx_poisson.o
 #            fft_fftw3.o
 
