@@ -123,7 +123,7 @@ contains
                                  flag_atomic_stress, flag_heat_flux, &
                                  flag_full_stress, area_moveatoms, &
                                  atomic_stress, non_atomic_stress, &
-                                 flag_self_consistent, flag_exx
+                                 flag_self_consistent
     use GenComms,          only: inode, ionode, my_barrier, end_comms, &
                                  cq_abort
     use initial_read,      only: read_and_write
@@ -137,8 +137,8 @@ contains
     use pseudo_tm_module,       only: make_neutral_atom
     use angular_coeff_routines, only: set_fact
     use maxima_module,          only: lmax_ps, lmax_pao
-    use exx_module,             only: initialise_exx, finalise_exx, get_X_params
-    use exx_types,              only: exx_scheme    
+    !use exx_module,             only: initialise_exx, finalise_exx, get_X_params
+    !use exx_types,              only: exx_scheme
     use XC, only: init_xc
     
     implicit none

@@ -24,7 +24,8 @@ contains
     use numbers,      only: zero, one, two, three, four, five, six, fifteen, sixteen
     use numbers,      only: half, quarter, very_small, pi, twopi, fourpi
     use exx_types,    only: unit_matrix_write, tmr_std_exx_evalpao
-    use exx_types,    only: exx_overlap, exx_cartesian
+    use exx_types,    only: exx_overlap, exx_cartesian, exx_gto
+    use exx_evalgto,  only: exx_gto_on_grid
 
     use angular_coeff_routines, only: evaluate_pao
     use dimens,                 only: r_h   
@@ -77,6 +78,10 @@ contains
     real(double),  parameter :: eg_a_norm = sqrt(fifteen/(sixteen*pi)) 
     real(double),  parameter :: eg_b_norm = sqrt(five/(sixteen*pi))     
 
+    if (exx_gto) then
+       call exx_gto_on_grid(inode,atom,spec,extent,xyz,nsuppfuncs,phi_on_grid,r_int,rst)
+    else
+    
     ngrid        = 2*extent+1
     grid_spacing = r_int/real(extent,double)                   
     phi_on_grid  = zero
@@ -190,7 +195,9 @@ contains
           end do grid_z_loop
        end do grid_y_loop
     end do grid_x_loop
-
+    
+ end if
+    
     call stop_timer(tmr_std_exx_evalpao,.true.)
 
     return 

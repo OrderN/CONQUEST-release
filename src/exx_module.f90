@@ -10,7 +10,7 @@
 !!***h* Conquest/exx_module *
 !!  NAME
 !!   exx_module
-!!
+!! 
 !!  PURPOSE
 !!   Holds routines called in exx_kernel_module
 !!   to compute exact exchange
@@ -65,7 +65,7 @@ contains
     use species_module,only: nsf_species
     use mult_module,   only: S_X_SX, mult 
     
-    use exx_types,     only: extent, exx_psolver, p_scheme, r_int, eris
+    use exx_types,     only: extent, exx_psolver, exx_pscheme, r_int, eris
     use exx_types,     only: ewald_alpha, ewald_charge, ewald_rho, ewald_pot
     use exx_types,     only: p_omega, p_ngauss, p_gauss, w_gauss, pulay_radius
     use exx_poisson,   only: exx_scal_rho_3d, exx_ewald_rho, exx_ewald_pot
@@ -125,25 +125,25 @@ contains
        call exx_mem_alloc(extent,0,0,'fftw_3d','alloc')  
        call exx_mem_alloc(extent,0,0,'reckernel_3d','alloc')
 
-       poisson_fftw: select case(p_scheme)          
+       poisson_fftw: select case(exx_pscheme)          
 
        case('default')
-          call exx_scal_rho_3d(inode,extent,r_int,p_scheme,pulay_radius, &
+          call exx_scal_rho_3d(inode,extent,r_int,exx_pscheme,pulay_radius, &
                p_omega,p_ngauss,p_gauss,w_gauss,reckernel_3d)
 
        case('ewald')
           call exx_mem_alloc(extent,0,0,'ewald_3d','alloc')
           call exx_ewald_rho(ewald_rho,extent,ewald_alpha,r_int)
           call exx_ewald_pot(ewald_pot,extent,ewald_alpha,r_int)          
-          call exx_scal_rho_3d(inode,extent,r_int,p_scheme,pulay_radius, &
+          call exx_scal_rho_3d(inode,extent,r_int,exx_pscheme,pulay_radius, &
                p_omega,p_ngauss,p_gauss,w_gauss,reckernel_3d)
 
        case('pulay')
-          call exx_scal_rho_3d(inode,extent,r_int,p_scheme,pulay_radius, &
+          call exx_scal_rho_3d(inode,extent,r_int,exx_pscheme,pulay_radius, &
                p_omega,p_ngauss,p_gauss,w_gauss,reckernel_3d)
 
        case('yukawa')
-          call exx_scal_rho_3d(inode,extent,r_int,p_scheme,pulay_radius, &
+          call exx_scal_rho_3d(inode,extent,r_int,exx_pscheme,pulay_radius, &
                p_omega,p_ngauss,p_gauss,w_gauss,reckernel_3d)
 
        case('gauss')
@@ -151,11 +151,11 @@ contains
                &the Poisson equation &
                &is currently under testing...')
           !call createBeylkin(p_gauss,w_gauss,r_int)     
-          !call exx_scal_rho_3d(inode,extent,r_int,p_scheme,pulay_radius, &
+          !call exx_scal_rho_3d(inode,extent,r_int,exx_pscheme,pulay_radius, &
           !     p_omega,p_ngauss,p_gauss,w_gauss)
 
        case default
-          call exx_scal_rho_3d(inode,extent,r_int,p_scheme,pulay_radius, &
+          call exx_scal_rho_3d(inode,extent,r_int,exx_pscheme,pulay_radius, &
                p_omega,p_ngauss,p_gauss,w_gauss,reckernel_3d)
 
        end select poisson_fftw
@@ -218,7 +218,7 @@ contains
     use species_module,only: nsf_species
     use memory_module, only: write_mem_use
     
-    use exx_types,     only: extent, exx_psolver ,kernel, p_scheme
+    use exx_types,     only: extent, exx_psolver ,kernel, exx_pscheme
     use exx_types,     only: tmr_std_exx_setup, unit_eri_debug, unit_exx_debug
     use exx_types,     only: tmr_std_exx_evalpao, tmr_std_exx_poisson, tmr_std_exx_matmult
     use exx_types,     only: tmr_std_exx_accumul, tmr_std_exx_allocat, tmr_std_exx_dealloc
@@ -264,7 +264,7 @@ contains
     if (exx_psolver == 'fftw')  then
        call exx_mem_alloc(extent,0,0,'fftw_3d',     'dealloc')  
        call exx_mem_alloc(extent,0,0,'reckernel_3d','dealloc')
-       select case(p_scheme)
+       select case(exx_pscheme)
        case('default')         
        case('gauss')          
        case('pulay')
@@ -346,7 +346,7 @@ contains
   !
   subroutine get_X_params(level)
     
-    use exx_types, only: exx_psolver,p_scheme,p_scheme_default,p_cutoff,p_factor,p_omega
+    use exx_types, only: exx_psolver,exx_pscheme,exx_pscheme_default,p_cutoff,p_factor,p_omega
     use exx_types, only: pulay_factor,pulay_radius, magic_number,ewald_alpha,isf_order
     use exx_types, only: extent,ngrid,r_int,grid_spacing,volume,edge,screen
 
@@ -397,10 +397,8 @@ contains
     exx_phik        = .false.
     exx_screen      = .false.
     exx_screen_pao  = .false.
-    exx_gto         = .false.
     exx_store_eris  = .false.
     exx_cutoff      = zero              ! do not touch  
-    !if (exx_mem == 2) exx_alloc = .false.  
     !
     ! Find out the finest grid spacing from input
     ! Input grid spacing from input (Bohr unit)
@@ -493,16 +491,16 @@ contains
        pao_scheme = 'spherical'
     end if
     !
-    if (exx_mem == 1) then
-       mem_scheme = 'high'
-    else if (exx_mem == 2) then
-       mem_scheme = 'low'
-    else if (exx_mem == 3) then
-       mem_scheme = 'medium'
-    else
-       mem_scheme = 'low'
-       exx_mem    = 2
-    end if
+    !if (exx_mem == 1) then
+    !   mem_scheme = 'high'
+    !else if (exx_mem == 2) then
+    !   mem_scheme = 'low'
+    !else if (exx_mem == 3) then
+    !   mem_scheme = 'medium'
+    !else
+    !   mem_scheme = 'low'
+    !   exx_mem    = 2
+    !end if
     !
     if (exx_screen) then
        if (exx_cutoff > very_small) then
@@ -522,48 +520,48 @@ contains
     if (exx_scheme==2) then
        phil_scheme  = 'on-the-fly'
        alloc_scheme = 'on-the-fly'
-       mem_scheme   = 'high'
+       !mem_scheme   = 'high'
     end if
     !
-    !if ( inode == ionode .and. exx_debug ) then
-    !   write(unit,2) ('Entering in the Hartree-Fock module')
-    !   write(unit,41) eri_scheme
-    !   write(unit,42) phil_scheme
-    !   write(unit,43) alloc_scheme
-    !   write(unit,48) mem_scheme
-    !   write(unit,44) exx_screen, scr_scheme, screen, screen*BohrToAng
+    if ( inode == ionode .and. exx_debug ) then
+       write(unit,2) ('Entering in the Hartree-Fock module')
+       write(unit,41) eri_scheme
+       write(unit,42) phil_scheme
+       write(unit,43) alloc_scheme
+       !write(unit,48) mem_scheme
+       write(unit,44) exx_screen, scr_scheme, screen, screen*BohrToAng
        
-    !   write(unit,46) exx_overlap
-    !   write(unit,47) pao_scheme
-    !   write(unit,20)
-    !   write(unit,21) r_max, r_max*BohrToAng
-    !   write(unit,22) r_int, r_int*BohrToAng
-    !   write(unit,23) grid_spacing, grid_spacing*BohrToAng
-    !   write(unit,24) ngrid
-    !   write(unit,25) 
-    !   write(unit,26) edge, edge*BohrToAng
-    !   write(unit,27) volume, volume*BohrToAng**3
-    !   write(unit,28) ngrid**3
+       write(unit,46) exx_overlap
+       write(unit,47) pao_scheme
+       write(unit,20)
+       write(unit,21) r_max, r_max*BohrToAng
+       write(unit,22) r_int, r_int*BohrToAng
+       write(unit,23) grid_spacing, grid_spacing*BohrToAng
+       write(unit,24) ngrid
+       write(unit,25) 
+       write(unit,26) edge, edge*BohrToAng
+       write(unit,27) volume, volume*BohrToAng**3
+       write(unit,28) ngrid**3
 
-    !end if
+    end if
 
     if (exx_psolver == 'fftw') then       
-       scheme = trim(scheme)//'/'//trim(p_scheme)
-       poisson_fftw: select case(p_scheme)          
+       scheme = trim(scheme)//'/'//trim(exx_pscheme)
+       poisson_fftw: select case(exx_pscheme)          
           
        case('default')
-          scheme = trim(scheme)//trim(p_scheme_default)
+          scheme = trim(scheme)//trim(exx_pscheme_default)
           if ( inode == ionode ) then
-             !write(unit,30) solver, scheme
-             !write(unit,31) ('G=0 component neglected... warning: inaccurate !')
+             write(unit,30) solver, scheme
+             write(unit,31) ('G=0 component neglected... warning: inaccurate !')
           end if
        case('ewald')
           if (ewald_alpha < very_small) then
              ewald_alpha = real(3.0,double)
           end if
           if ( inode == ionode ) then
-             !write(unit,30) solver, scheme
-             !write(unit,32) ewald_alpha
+             write(unit,30) solver, scheme
+             write(unit,32) ewald_alpha
           end if
           
        case('pulay')
@@ -578,35 +576,35 @@ contains
           end if 
           pulay_radius = pulay_factor*pulay_radius
           if ( inode == ionode ) then
-             !write(unit,30) solver, scheme
-             !write(unit,33) pulay_factor
-             !write(unit,34) pulay_radius
+             write(unit,30) solver, scheme
+             write(unit,33) pulay_factor
+             write(unit,34) pulay_radius
           end if
        case('yukawa')
           if (p_omega < very_small) then
              p_omega = magic_number
              p_omega = -log(threshold*r_int)/r_int
           end if
-          !write(unit,30) solver, scheme
-          !write(unit,35) p_omega
+          write(unit,30) solver, scheme
+          write(unit,35) p_omega
           
        case('gauss')
           if ( inode == ionode ) then
-             !write(unit,30) solver, scheme
+             write(unit,30) solver, scheme
           end if
        case default
-          scheme = trim(p_scheme_default)
+          scheme = trim(exx_pscheme_default)
           if ( inode == ionode ) then
-             !write(unit,30) solver, scheme
-             !write(unit,31) ('WARNING: G=0 component neglected !')
+             write(unit,30) solver, scheme
+             write(unit,31) ('WARNING: G=0 component neglected !')
           end if
           
        end select poisson_fftw
        
     else if (exx_psolver == 'isf') then
        if ( inode == ionode ) then
-          !write(unit,30) solver, scheme
-          !write(unit,36) isf_order
+          write(unit,30) solver, scheme
+          write(unit,36) isf_order
        end if
     end if
    

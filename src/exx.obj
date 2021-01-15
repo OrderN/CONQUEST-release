@@ -26,6 +26,9 @@ EXX_OBJS=   exx_module.o \
             exx_memory.o \
             exx_io.o \
             exx_evalpao.o \
-            exx_poisson.o
+            exx_poisson.o \
+            exx_evalgto.o \
+            exx_erigto.o \
+            gto_format.o \
+            read_gto_info.o
 #            fft_fftw3.o
-

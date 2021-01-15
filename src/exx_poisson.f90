@@ -177,7 +177,8 @@ contains
     use exx_types, ONLY: kernel, isf_rho, isf_pot_ion ! ISF  
     use exx_types, ONLY: pulay_radius, ewald_rho, ewald_pot, ewald_charge
     use exx_types, ONLY: tmr_std_exx_poisson
-
+    use Poisson_Solver, only: PSolver
+    
     implicit none
 
     ! << Input variables >>
@@ -222,10 +223,11 @@ contains
 
     !call start_timer(tmr_std_exx_poisson)    
 
+    potential = zero
+
     select case(poisson)
 
     case('fftw')       
-       potential = zero
 
        ! setup[rho(r)] 
        fftwrho%arrayin  = cmplx(rho,zero,double_cplx)
@@ -244,15 +246,14 @@ contains
 
     case('isf')       
        !
-       call cq_abort('EXX: not available yet')
+       !call cq_abort('EXX: not available yet')
        !
-       !isf_rho     = rho
-       !potential   = zero
-       !isf_pot_ion = zero
+       isf_rho     = rho
+       isf_pot_ion = zero
        !
-       !call PSolver('F','G',0,1,ng,ng,ng,0,grid_spacing,grid_spacing,grid_spacing, &
-       !     isf_rho,kernel,isf_pot_ion,isf_eh,isf_exc,isf_vxc,zero,.false.,1)       
-       !potential = isf_rho
+       call PSolver('F','G',0,1,ng,ng,ng,0,grid_spacing,grid_spacing,grid_spacing, &
+            isf_rho,kernel,isf_pot_ion,isf_eh,isf_exc,isf_vxc,zero,.false.,1)       
+       potential = isf_rho
        !
     end select
 

@@ -169,7 +169,7 @@ contains
           !
        case('Phy_k')! allocate Phy_k
           allocate(Phy_k(2*extent+1,2*extent+1,2*extent+1,nsf1), STAT=stat)
-          if(stat/=0) call cq_abort('Error allocating memory to Phy_j/exx !',stat)
+          if(stat/=0) call cq_abort('Error allocating memory to Phy_k/exx !',stat)
           call reg_alloc_mem(area_exx,nsf1*(2*extent+1)*(2*extent+1)*(2*extent+1),&
                type_dbl,matrix,lun)
           Phy_k = zero
@@ -205,7 +205,7 @@ contains
           call reg_alloc_mem(area_exx,(2*extent+1)*(2*extent+1)*(2*extent+1),&
                type_dbl,'ewald_rho',lun)
           ewald_rho = zero          
-          allocate(ewald_pot(2*extent+1,2*extent+1,2*extent+1), STAT=stat)
+          allocate(ewald_pot(2*extent+1,2*extent+1,2*extent+1), STAT=stat) 
           if(stat/=0) call cq_abort('Error allocglobating memory to ewald_pot/exx !',stat)
           call reg_alloc_mem(area_exx,(2*extent+1)*(2*extent+1)*(2*extent+1),&
                type_dbl,'ewald_pot',lun)

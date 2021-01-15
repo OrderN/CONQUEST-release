@@ -76,7 +76,7 @@ module exx_types
     
   ! For the Poisson equation/FFTW in reciprocal space
   type(fftw3d)          :: fftwrho3d
-  type(fftw3d)          :: fftwrho3d_filter
+  type(fftw3d)          :: fftwrho3d_filter 
 
   complex(double), dimension(:,:,:),    allocatable :: reckernel_3d
   complex(double), dimension(:,:,:),    allocatable :: reckernel_3d_filter
@@ -95,8 +95,8 @@ module exx_types
    real(double) :: exx_filter_thr
   
   ! Poisson solver settings
-  character(100), parameter :: p_scheme_default = 'v(G=0)=0'
-  character(100)            :: p_scheme
+  character(100), parameter :: exx_pscheme_default = 'v(G=0)=0'
+  character(100)            :: exx_pscheme
   character(100)            :: exx_psolver
   real(double)              :: p_cutoff
   real(double)              :: p_factor
@@ -150,7 +150,7 @@ module exx_types
   logical :: exx_phik        ! on-the-fly or storage of phi_k
   logical :: exx_overlap     ! compute overlap local boxes
   logical :: exx_alloc       ! on-the-fly or global memory allocation
-  logical :: exx_cartesian   ! cartesian or spherial representation for PAO
+  logical :: exx_cartesian   ! cartesian or spherical calculation for PAO on grid
   logical :: exx_screen      ! screening
   logical :: exx_screen_pao  ! method for screening
   logical :: exx_gto         ! testing
