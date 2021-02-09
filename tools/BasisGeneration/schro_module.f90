@@ -388,10 +388,10 @@ contains
                   paos%psi(zeta,i_shell)%f,paos%psi(1,i_shell)%f)
           else
              ! Set radius of polarisation PAO
-             paos%cutoff(zeta,i_shell) = paos%cutoff(zeta,i_shell-1)
+             paos%cutoff(zeta,i_shell) = paos%cutoff(zeta,paos%polarised_shell) !i_shell-1)
              call find_polarisation(i_species,en,ell,paos%cutoff(zeta,i_shell),&
-                  paos%psi(zeta,i_shell-1)%f,paos%psi(zeta,i_shell)%f,&
-                  paos%energy(zeta,i_shell-1),vha,vxc,paos%pol_pf)
+                 paos%psi(zeta,paos%polarised_shell)%f,paos%psi(zeta,i_shell)%f,&
+                 paos%energy(zeta,paos%polarised_shell),vha,vxc,paos%pol_pf)
           end if
        end do
     end if ! paos%flag_perturb_polarise
