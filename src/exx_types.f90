@@ -154,6 +154,8 @@ module exx_types
   logical :: exx_screen      ! screening
   logical :: exx_screen_pao  ! method for screening
   logical :: exx_gto         ! testing
+  logical :: exx_gto_poisson ! testing
+
   logical :: exx_filter
   logical :: exx_store_eris  ! store ERIs at first exx call
   real(double) :: exx_cutoff ! cutoff for screening (experimental)
@@ -171,8 +173,9 @@ module exx_types
   integer :: unit_screen_write
   integer :: unit_exx_debug
   integer :: unit_eri_debug
+  integer :: unit_eri_filter_debug
   character(len=20) :: file_exx_debug, file_exx_memory, file_exx_timers
-  character(len=20) :: file_eri_debug  
+  character(len=20) :: file_eri_debug, file_eri_filter_debug
   !=================================================================<<
 
   type store_eris

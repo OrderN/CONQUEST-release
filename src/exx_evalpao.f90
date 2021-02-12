@@ -24,8 +24,8 @@ contains
     use numbers,      only: zero, one, two, three, four, five, six, fifteen, sixteen
     use numbers,      only: half, quarter, very_small, pi, twopi, fourpi
     use exx_types,    only: unit_matrix_write, tmr_std_exx_evalpao
-    use exx_types,    only: exx_overlap, exx_cartesian, exx_gto
-    use exx_evalgto,  only: exx_gto_on_grid
+    use exx_types,    only: exx_overlap, exx_cartesian, exx_gto, exx_gto_poisson
+    use exx_evalgto,  only: exx_gto_on_grid_new
 
     use angular_coeff_routines, only: evaluate_pao
     use dimens,                 only: r_h   
@@ -78,126 +78,126 @@ contains
     real(double),  parameter :: eg_a_norm = sqrt(fifteen/(sixteen*pi)) 
     real(double),  parameter :: eg_b_norm = sqrt(five/(sixteen*pi))     
 
-    if (exx_gto) then
-       call exx_gto_on_grid(inode,atom,spec,extent,xyz,nsuppfuncs,phi_on_grid,r_int,rst)
+    if (exx_gto_poisson) then
+       call exx_gto_on_grid_new(inode,atom,spec,extent,xyz,nsuppfuncs,phi_on_grid,r_int,rst)
     else
-    
-    ngrid        = 2*extent+1
-    grid_spacing = r_int/real(extent,double)                   
-    phi_on_grid  = zero
-    !sfsum        = zero
 
-    mx = -extent ; px = extent
-    my = mx      ; py = px 
-    mz = my      ; pz = py
- 
-    call start_timer(tmr_std_exx_evalpao)    
+       ngrid        = 2*extent+1
+       grid_spacing = r_int/real(extent,double)                   
+       phi_on_grid  = zero
+       !sfsum        = zero
 
-    !Define the overlap box
-    overlap_box: if (exx_overlap) then
-       do i = 1, 3
-          n    = xyz(i)/ grid_spacing
-          rest = n - real(aint(n))
+       mx = -extent ; px = extent
+       my = mx      ; py = px 
+       mz = my      ; pz = py
 
-          if (abs(rest) >= half) then
-             int = ceiling(abs(n))
-             int = sign(int,n)
-             xyz_delta(i) = int - n
+       call start_timer(tmr_std_exx_evalpao)    
 
-          else if (abs(rest) < half) then
-             int = floor(abs(n))
-             int = sign(int,n)
-             xyz_delta(i) = int - n
+       !Define the overlap box
+       overlap_box: if (exx_overlap) then
+          do i = 1, 3
+             n    = xyz(i)/ grid_spacing
+             rest = n - real(aint(n))
 
-          else if ((rest == zero)) then
-             int = n
-             xyz_delta(i) = zero
+             if (abs(rest) >= half) then
+                int = ceiling(abs(n))
+                int = sign(int,n)
+                xyz_delta(i) = int - n
 
-          end if
+             else if (abs(rest) < half) then
+                int = floor(abs(n))
+                int = sign(int,n)
+                xyz_delta(i) = int - n
 
-          ijk_delta(i) = int
-          xyz_delta(i) = xyz_delta(i)*grid_spacing 
-       end do
+             else if ((rest == zero)) then
+                int = n
+                xyz_delta(i) = zero
 
-       do i = 1, 3       
-          if (ijk_delta(i) > 0) then
-             ijk(i) = ijk_delta(i) + 1                                 
-             njk(i) = ngrid 
-             kji(i) = 1
-             nji(i) = ngrid - ijk_delta(i)
+             end if
 
-          else if (ijk_delta(i) < 0) then
-             ijk(i) = 1
-             njk(i) = ngrid + ijk_delta(i)
-             kji(i) = -ijk_delta(i) + 1
-             nji(i) = ngrid 
+             ijk_delta(i) = int
+             xyz_delta(i) = xyz_delta(i)*grid_spacing 
+          end do
 
-          else
-             ijk(i) = 1
-             njk(i) = ngrid
-             kji(i) = 1
-             nji(i) = ngrid
+          do i = 1, 3       
+             if (ijk_delta(i) > 0) then
+                ijk(i) = ijk_delta(i) + 1                                 
+                njk(i) = ngrid 
+                kji(i) = 1
+                nji(i) = ngrid - ijk_delta(i)
 
-          end if
-          !write(*,'(5F12.6,4I6)') xyz(i), n, int, rest, &
-          !     xyz_delta(i), ijk(i), njk(i), kji(i), nji(i)
-          !write(*,'(4I6)') ijk(i), njk(i), kji(i), nji(i)
+             else if (ijk_delta(i) < 0) then
+                ijk(i) = 1
+                njk(i) = ngrid + ijk_delta(i)
+                kji(i) = -ijk_delta(i) + 1
+                nji(i) = ngrid 
 
-       end do
-       mx = mx +kji(1)-1
-       my = my +kji(2)-1
-       mz = mz +kji(3)-1
-       px = px -ijk(1)+1
-       py = py -ijk(2)+1
-       pz = pz -ijk(3)+1
-    end if overlap_box
-    
-    grid_x_loop: do nx = mx, px
-       x = xyz(1) + real(nx,double)*grid_spacing + rst(1)
+             else
+                ijk(i) = 1
+                njk(i) = ngrid
+                kji(i) = 1
+                nji(i) = ngrid
 
-       grid_y_loop: do ny = my, py
-          y = xyz(2) + real(ny,double)*grid_spacing + rst(2)
+             end if
+             !write(*,'(5F12.6,4I6)') xyz(i), n, int, rest, &
+             !     xyz_delta(i), ijk(i), njk(i), kji(i), nji(i)
+             !write(*,'(4I6)') ijk(i), njk(i), kji(i), nji(i)
 
-          grid_z_loop: do nz = mz, pz
-             z = xyz(3) + real(nz,double)*grid_spacing + rst(3)
+          end do
+          mx = mx +kji(1)-1
+          my = my +kji(2)-1
+          mz = mz +kji(3)-1
+          px = px -ijk(1)+1
+          py = py -ijk(2)+1
+          pz = pz -ijk(3)+1
+       end if overlap_box
+       !print*,
+       grid_x_loop: do nx = mx, px
+          x = xyz(1) + real(nx,double)*grid_spacing + rst(1)
 
-             !norm = sqrt((x-xyz(1))**2+(y-xyz(2))**2+(z-xyz(3))**2)
-             !if (norm <= r_h) then
+          grid_y_loop: do ny = my, py
+             y = xyz(2) + real(ny,double)*grid_spacing + rst(2)
 
-             r = sqrt(x*x+y*y+z*z)             
-             !if(r < very_small) then
-             !   r = zero
-             !end if
-             !print*, '1 cycle start'
+             grid_z_loop: do nz = mz, pz
+                z = xyz(3) + real(nz,double)*grid_spacing + rst(3)
 
-             count1  = 1
-             !sfsum   = zero
-             angu_loop: do l1 = 0, pao(spec)%greatest_angmom
+                !norm = sqrt((x-xyz(1))**2+(y-xyz(2))**2+(z-xyz(3))**2)
+                !if (norm <= r_h) then
 
-                zeta_loop: do acz = 1, pao(spec)%angmom(l1)%n_zeta_in_angmom
+                r = sqrt(x*x+y*y+z*z)             
+                !if(r < very_small) then
+                !   r = zero
+                !end if
+                !print*, '1 cycle start'
 
-                   magn_loop: do m1 = -l1, l1                      
+                count1  = 1
+                !sfsum   = zero
+                angu_loop: do l1 = 0, pao(spec)%greatest_angmom
 
-                      pao_val = zero
-                      y_val   = zero             
-                      
-                      call evaluate_pao(spec,l1,acz,m1,x,y,z,pao_val,exx_cartesian)
+                   zeta_loop: do acz = 1, pao(spec)%angmom(l1)%n_zeta_in_angmom
 
-                      ! Put pao_val directly into phi_on_grid
-                      ! (only for primitive PAOs and not for blips)
-                      phi_on_grid(nx+extent+1,ny+extent+1,nz+extent+1,count1) = pao_val
+                      magn_loop: do m1 = -l1, l1                      
 
-                      count1 = count1 + 1
-                   end do magn_loop
-                end do zeta_loop
-             end do angu_loop
+                         pao_val = zero
+                         y_val   = zero             
 
-          end do grid_z_loop
-       end do grid_y_loop
-    end do grid_x_loop
-    
- end if
-    
+                         call evaluate_pao(spec,l1,acz,m1,x,y,z,pao_val,exx_cartesian)
+
+                         ! Put pao_val directly into phi_on_grid
+                         ! (only for primitive PAOs and not for blips)
+                         phi_on_grid(nx+extent+1,ny+extent+1,nz+extent+1,count1) = pao_val
+                         !print*, x,  pao_val
+                         count1 = count1 + 1
+                      end do magn_loop
+                   end do zeta_loop
+                end do angu_loop
+
+             end do grid_z_loop
+          end do grid_y_loop
+       end do grid_x_loop
+
+    end if
+
     call stop_timer(tmr_std_exx_evalpao,.true.)
 
     return 

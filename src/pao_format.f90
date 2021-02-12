@@ -70,7 +70,7 @@ module pao_format
 
   type angmom_pao
      integer :: n_zeta_in_angmom
-     type(table), pointer, dimension(:) :: zeta
+     type(table), pointer,  dimension(:) :: zeta
      real(double), pointer, dimension(:) :: occ
      integer, pointer, dimension(:) :: prncpl
      integer, pointer, dimension(:) :: semicore  ! Flags whether a given zeta is semi-core

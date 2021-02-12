@@ -218,7 +218,7 @@ contains
                       do l1 = 0,pao(the_species)%greatest_angmom
                          do acz = 1,pao(the_species)%angmom(l1)%n_zeta_in_angmom
                             do m1=-l1,l1
-                               call evaluate_pao(the_species,l1,acz,m1,x,y,z,val)
+                               call evaluate_pao(the_species,l1,acz,m1,x,y,z,val,.false.)
                                if(position+(count1-1)*n_pts_in_block > gridfunctions(pao_fns)%size) &
                                     call cq_abort('single_pao_to_grid: position error ', &
                                     position, gridfunctions(pao_fns)%size)

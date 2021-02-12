@@ -125,8 +125,10 @@ contains
          tmr_std_exx_fetch,   tmr_std_exx_kernel,  &
          unit_timers_write,   unit_memory_write,   &
          unit_exx_debug,      unit_eri_debug,      &
+         unit_eri_filter_debug, &         
          file_exx_timers,     file_exx_memory,     &
-         file_exx_debug,      file_eri_debug
+         file_exx_debug,      file_eri_debug,      &
+         file_eri_filter_debug
 
     use exx_types, only: exx_alloc
          
@@ -134,7 +136,7 @@ contains
          ewald_alpha, ewald_rho, ewald_pot,   &
          pulay_radius, p_omega, p_ngauss, p_gauss, w_gauss, &
          exx_psolver,exx_pscheme, kernel,    &
-         exx_total_time, eris, exx_filter
+         exx_total_time, eris, exx_filter, exx_gto
     !
     use exx_poisson, only: exx_scal_rho_3d, exx_ewald_rho, exx_ewald_pot
     use exx_types,   only: isf_order, ngrid
@@ -230,23 +232,33 @@ contains
 
     if ( exx_debug ) then
 
-       if  ( (niter == 1 .and. scheme == 3) .or. (niter == 2 .and. (scheme == 1 .or. (scheme == 2 )) ))  then
+       if  ( (niter == 1 .and. scheme == 3) .or. (niter == 2 .and. (scheme == 1 .or. scheme == 2)) )  then
           call io_assign(unit_exx_debug)
           call get_file_name('exx_debug',numprocs,inode,file_exx_debug)
           open(unit_exx_debug,file=file_exx_debug)
           !
+          call io_assign(unit_eri_debug)
+          call get_file_name('eri_debug',numprocs,inode,file_eri_debug)
+          open(unit_eri_debug,file=file_eri_debug)       
+          !
+          call io_assign(unit_eri_filter_debug)
+          call get_file_name('eri_filter_debug',numprocs,inode,file_eri_filter_debug)
+          open(unit_eri_filter_debug,file=file_eri_filter_debug)
+          !
        else
           open(unit_exx_debug,file=file_exx_debug,status='old', position='append')
+          open(unit_eri_debug,file=file_eri_debug,status='old', position='append')       
+          open(unit_eri_filter_debug,file=file_eri_filter_debug,status='old', position='append')
           !
        end if
 
-       call io_assign(unit_eri_debug)
-       call get_file_name('eri_debug',numprocs,inode,file_eri_debug)
+       !call io_assign(unit_eri_debug)
+       !call get_file_name('eri_debug',numprocs,inode,file_eri_debug)
        !inquire(file=filename6, exist=exist)
        !if ( exist ) then
        !   open(unit_eri_debug,file=filename6,status='old', position='append')
        !else
-       open(unit_eri_debug,file=file_eri_debug)
+       !open(unit_eri_debug,file=file_eri_debug)
        !end if
        !
        !call exx_write_head(unit_exx_debug,inode,bundle%groups_on_node) 
@@ -290,7 +302,7 @@ contains
                p_omega,p_ngauss,p_gauss,w_gauss,reckernel_3d)
 
        case('gauss')
-          call cq_abort('EXX: Gaussian representation if 1/r for solving &
+          call cq_abort('EXX Gaussian representation if 1/r for solving &
                &the Poisson equation &
                &is currently under testing...')
           !call createBeylkin(p_gauss,w_gauss,r_int)     
@@ -411,7 +423,7 @@ contains
             0,0,'XX',xyz_ghost,r_ghost,0,0,0,zero,zero,0)
     end if
     !
-    !call hf_write_info(unit1,inode,10,bundle%groups_on_node,0,0,0,0, &
+    !call hf_write_info(unit1,inode,10,bundle%groups_on_node,0,0,0,0, &omput
     !     0,0,'XX',xyz_ghost,r_ghost,0,0,0,zero,zero,0)
     !
     xyz_ghost = zero
@@ -629,17 +641,33 @@ contains
              !
              ! Third call to compute and store ERIs
              !       
-             call m_kern_exx_eri( k_off,kpart,ib_nd_acc_rem,ibind_rem,nbnab_rem,&
-                  ibpart_rem,ibseq_rem,ibndimj_rem, & 
-                  !atrans, &
-                  b_rem,  &
-                  mat_p(matX(  exxspin  ))%matrix,      &
-                  mult(S_X_SX)%ahalo,mult(S_X_SX)%chalo,mult(S_X_SX)%ltrans, &
-                  mult(S_X_SX)%bmat(  exxspin  )%mx_abs,mult(S_X_SX)%parts%mx_mem_grp, &
-                  mult(S_X_SX)%prim%mx_iprim, &
-                  !lena,     &
-                  lenb_rem, &
-                  mat_p(matX(  exxspin  ))%length, backup_eris)
+             if ( exx_gto ) then
+
+                call m_kern_exx_eri_gto( k_off,kpart,ib_nd_acc_rem,ibind_rem,nbnab_rem,&
+                     ibpart_rem,ibseq_rem,ibndimj_rem, & 
+                     !atrans, &
+                     b_rem,  &
+                     mat_p(matX(  exxspin  ))%matrix,      &
+                     mult(S_X_SX)%ahalo,mult(S_X_SX)%chalo,mult(S_X_SX)%ltrans, &
+                     mult(S_X_SX)%bmat(  exxspin  )%mx_abs,mult(S_X_SX)%parts%mx_mem_grp, &
+                     mult(S_X_SX)%prim%mx_iprim, &
+                     !lena,     &
+                     lenb_rem, &
+                     mat_p(matX(  exxspin  ))%length, backup_eris)
+             else
+                
+                call m_kern_exx_eri( k_off,kpart,ib_nd_acc_rem,ibind_rem,nbnab_rem,&
+                     ibpart_rem,ibseq_rem,ibndimj_rem, & 
+                     !atrans, &
+                     b_rem,  &
+                     mat_p(matX(  exxspin  ))%matrix,      &
+                     mult(S_X_SX)%ahalo,mult(S_X_SX)%chalo,mult(S_X_SX)%ltrans, &
+                     mult(S_X_SX)%bmat(  exxspin  )%mx_abs,mult(S_X_SX)%parts%mx_mem_grp, &
+                     mult(S_X_SX)%prim%mx_iprim, &
+                     !lena,     &
+                     lenb_rem, &
+                     mat_p(matX(  exxspin  ))%length, backup_eris)
+             end if
              
           else
 
@@ -846,7 +874,8 @@ contains
 
     if ( exx_debug ) then
        call io_close(unit_eri_debug)
-       call io_close(unit_exx_debug)       
+       call io_close(unit_exx_debug)
+       call io_close(unit_eri_filter_debug)       
     end if
     
     !****lat<$
@@ -915,21 +944,35 @@ contains
     implicit none
     !
     ! Passed variables
-    type(matrix_halo)  :: ahalo, chalo
-    type(matrix_trans) :: at
-    integer            :: mx_absb, mx_part, mx_iprim, lenb, lenc
-    integer            :: kpart, k_off
-    real(double)       :: b(lenb)
-    real(double)       :: c(lenc)
-    !integer, optional  :: debug
+    type(matrix_halo),  intent(in)    :: ahalo, chalo
+    type(matrix_trans), intent(in)    :: at
+    integer,            intent(in)    :: mx_absb, mx_part, mx_iprim, lenb, lenc
+    integer,            intent(in)    :: kpart, k_off
+    real(double),       intent(in)    :: b(lenb)
+    real(double),       intent(inout) :: c(lenc)
     !
     ! Remote indices
-    integer(integ) :: ib_nd_acc(mx_part)
-    integer(integ) :: ibaddr(mx_part)
-    integer(integ) :: nbnab(mx_part)
-    integer(integ) :: ibpart(mx_part*mx_absb)
-    integer(integ) :: ibseq(mx_part*mx_absb)
-    integer(integ) :: bndim2(mx_part*mx_absb)
+    integer(integ), intent(in) :: ib_nd_acc(mx_part)
+    integer(integ), intent(in) :: ibaddr(mx_part)
+    integer(integ), intent(in) :: nbnab(mx_part)
+    integer(integ), intent(in) :: ibpart(mx_part*mx_absb)
+    integer(integ), intent(in) :: ibseq(mx_part*mx_absb)
+    integer(integ), intent(in) :: bndim2(mx_part*mx_absb)
+    
+!!$    type(matrix_halo)  :: ahalo, chalo
+!!$    type(matrix_trans) :: at
+!!$    integer            :: mx_absb, mx_part, mx_iprim, lenb, lenc
+!!$    integer            :: kpart, k_off
+!!$    real(double)       :: b(lenb)
+!!$    real(double)       :: c(lenc)
+!!$    !
+!!$    ! Remote indices
+!!$    integer(integ) :: ib_nd_acc(mx_part)
+!!$    integer(integ) :: ibaddr(mx_part)
+!!$    integer(integ) :: nbnab(mx_part)
+!!$    integer(integ) :: ibpart(mx_part*mx_absb)
+!!$    integer(integ) :: ibseq(mx_part*mx_absb)
+!!$    integer(integ) :: bndim2(mx_part*mx_absb)
     !
     ! Local variables
     integer :: jbnab2ch(mx_absb)  ! Automatic array
@@ -943,12 +986,8 @@ contains
     integer :: np, ni
     !
     real(double), dimension(3) :: xyz_zero  = zero
-    !real(double), dimension(3) :: xyz_ij    = zero
-    !real(double), dimension(3) :: xyz_kl    = zero
     real(double)               ::   dr,dv,K_val
     real(double)               ::   exx_mat_elem
-    !real(double)               ::   screen_ij, range_ij
-    !real(double)               ::   screen_kl, range_kl
     !
     type(prim_atomic_data)  :: ia !i_alpha
     type(neigh_atomic_data) :: jb !j_beta
@@ -1112,24 +1151,14 @@ contains
                    call exx_phi_on_grid(inode,jb%global_num,jb%spec,extent, &
                         jb%xyz,jb%nsup,phi_j,r_int,xyz_zero)             
                    !
-                   !Ome_kj = zero
-                   !
                    call start_timer(tmr_std_exx_accumul)
                    rho_kj = zero
                    do nsf1 = 1, kg%nsup                         
-                      do nsf2 = 1, jb%nsup                                   
+                      do nsf2 = 1, jb%nsup
+                         !
                          rho_kj(:,:,:,nsf1,nsf2) = &
-                              Phy_k(:,:,:,nsf1) * phi_j(:,:,:,nsf2)  
-                         !do r = 1, 2*extent+1
-                         !   do s = 1, 2*extent+1
-                         !      do t = 1, 2*extent+1                         
-                         !         if(isnan(rho_kj(r,s,t,nsf1,nsf2))) write(*,*) 'rho: ',r,s,t,nsf1,nsf2
-
-                         !         if(isnan(Phy_k(r,s,t,nsf1))) write(*,*) 'Phy: ',r,s,t,nsf1,nsf2
-                         !         if(isnan(phi_j(r,s,t,nsf2))) write(*,*) 'phi: ',r,s,t,nsf1,nsf2
-                         !      end do
-                         !   end do
-                         !end do
+                              Phy_k(:,:,:,nsf1) * phi_j(:,:,:,nsf2)
+                         !
                       end do
                    end do
                    !
@@ -1162,13 +1191,6 @@ contains
                          !
                          vhf_kj(:,:,:,nsf1,nsf2) = work_out_3d
                          !
-                         !do r = 1, 2*extent+1
-                         !   do s = 1, 2*extent+1
-                         !      do t = 1, 2*extent+1                         
-                         !         if(isnan(vhf_kj(r,s,t,nsf1,nsf2))) write(*,*) 'vhf: ',r,s,t,nsf1,nsf2
-                         !      end do
-                         !   end do
-                         !end do                         
                          call stop_timer(tmr_std_exx_poisson,.true.)
                       end do
                    end do
@@ -1224,15 +1246,11 @@ contains
                       !
                       !
                    end do ! nsf2
+                   !
                    call stop_timer(tmr_std_exx_matmult,.true.)
                    !
                    if ( exx_alloc ) call exx_mem_alloc(extent,jb%nsup,jb%nsup,'Ome_kj','dealloc')                   
                    !
-!!$
-!!$
-                   ! end if !( screen ij )
-!!$
-!!$
                 end if ! ( ncbeg /=0 )
              end if ! ( j_in_halo /=0 )
              !
@@ -1287,7 +1305,7 @@ contains
        ibpart, ibseq, bndim2, b, c, ahalo, chalo, & 
        at, mx_absb, mx_part, mx_iprim, lenb, lenc, backup_eris )
 
-    use numbers,        only: zero, one
+    use numbers,        only: zero, one, pi
     use matrix_module,  only: matrix_halo, matrix_trans
     use global_module,  only: area_exx
     !
@@ -1297,9 +1315,13 @@ contains
     use mult_module,    only: return_matrix_value, S_X_SX
     use cover_module,   only: BCS_parts
     !
+    use gto_format_new, only: gto
+    !
     use species_module, only: nsf_species
     !
     use exx_evalpao,    only: exx_phi_on_grid
+    !
+    use exx_evalgto,    only: exx_gto_on_grid_prim
     !
     use exx_types, only: prim_atomic_data, neigh_atomic_data, &
          tmr_std_exx_accumul, tmr_std_exx_poisson,  &
@@ -1310,7 +1332,8 @@ contains
          unit_exx_debug, unit_eri_debug
     !
     use exx_types,  only: phi_i, phi_j, phi_k, phi_l, eris, &
-         rho_ki, vhf_lj, work_in_3d, work_out_3d, fftwrho3d
+         rho_ki, vhf_lj, work_in_3d, work_out_3d, fftwrho3d,&
+         exx_gto, exx_gto_poisson
     use exx_types, only: exx_alloc
     !
     use exx_memory, only: exx_mem_alloc
@@ -1319,6 +1342,8 @@ contains
     !
     use exx_poisson,only: exx_v_on_grid, exx_ewald_charge
     !
+    use exx_erigto, only: eri_gto_hoh
+    !    
     implicit none
     !
     ! Passed variables
@@ -1328,16 +1353,15 @@ contains
     integer,            intent(in)    :: kpart, k_off
     real(double),       intent(in)    :: b(lenb)
     real(double),       intent(inout) :: c(lenc)
-    logical,            intent(in)    :: backup_eris
-    !integer, optional  :: debug
+    logical, intent(in) :: backup_eris
     !
     ! Remote indices
-    integer(integ) :: ib_nd_acc(mx_part)
-    integer(integ) :: ibaddr(mx_part)
-    integer(integ) :: nbnab(mx_part)
-    integer(integ) :: ibpart(mx_part*mx_absb)
-    integer(integ) :: ibseq(mx_part*mx_absb)
-    integer(integ) :: bndim2(mx_part*mx_absb)
+    integer(integ), intent(in) :: ib_nd_acc(mx_part)
+    integer(integ), intent(in) :: ibaddr(mx_part)
+    integer(integ), intent(in) :: nbnab(mx_part)
+    integer(integ), intent(in) :: ibpart(mx_part*mx_absb)
+    integer(integ), intent(in) :: ibseq(mx_part*mx_absb)
+    integer(integ), intent(in) :: bndim2(mx_part*mx_absb)
     !
     ! Local variables
     integer :: jbnab2ch(mx_absb)  ! Automatic array
@@ -1351,13 +1375,9 @@ contains
     integer :: np, ni
     !
     real(double), dimension(3) :: xyz_zero  = zero
-    !real(double), dimension(3) :: xyz_ij    = zero
-    !real(double), dimension(3) :: xyz_kl    = zero
     !
     real(double)               ::   dr,dv,K_val
     real(double)               ::   exx_mat_elem
-    !real(double)               ::   screen_ij, range_ij
-    !real(double)               ::   screen_kl, range_kl
     !
     type(prim_atomic_data)  :: ia !i_alpha
     type(neigh_atomic_data) :: jb !j_beta
@@ -1368,6 +1388,32 @@ contains
     integer                 :: nsf_kg, nsf_ld, nsf_ia, nsf_jb
     integer                 :: r, s, t, count
     !
+    ! GTO
+    integer          :: i_nx, j_nx, k_nx, l_nx
+    integer          :: i_ny, j_ny, k_ny, l_ny
+    integer          :: i_nz, j_nz, k_nz, l_nz
+    character(len=8) :: i_nt, j_nt, k_nt, l_nt
+    integer          :: ia_gto, jb_gto, kg_gto, ld_gto
+    real(double)     :: ai, aj, ak, al, di, dj, dk, dl 
+    real(double)     :: i_norm, j_norm, k_norm, l_norm
+    real(double)     :: xi, xj, xk, xl 
+    real(double)     :: yi, yj, yk, yl 
+    real(double)     :: zi, zj, zk, zl 
+
+    real(double) :: eri_gto, eri_pao, test
+
+    !real(double),allocatable,dimension(:,:,:) :: phi_on_grid_ia, phi_on_grid_jb, &
+    !     phi_on_grid_kg, phi_on_grid_ld, work_out_3d_, work_in_3d_
+    !integer :: ii, jj, kk
+    !real(double), allocatable  :: pao_eris(:)
+    !real(double), allocatable  :: gto_eris(:)   
+    !real(double), allocatable  :: pao_eris2(:)
+
+    !if (exx_gto) then
+    !   allocate(pao_eris(1000000)) ; pao_eris = 0.0
+    !   allocate(gto_eris(1000000)) ; gto_eris = 0.0
+    !   allocate(pao_eris2(1000000)) ; pao_eris2 = 0.0
+    !end if
     !
     dr = grid_spacing
     dv = dr**3
@@ -1388,12 +1434,16 @@ contains
        call get_halodat(kg,kg,k_in_part,ahalo%i_hbeg(ahalo%lab_hcover(kpart)), &
             ahalo%lab_hcell(kpart),'k',.true.,unit_exx_debug)
        !
-       !print*, 'k',k, 'global_num',kg%global_num,'spe',kg%spec
+       !print*, 'k',k, 'global_num',kg%global_num,'spe',kg%spec,'nsup', kg%nsup
        !
        if ( exx_alloc ) call exx_mem_alloc(extent,kg%nsup,0,'phi_k','alloc')
        !
        call exx_phi_on_grid(inode,kg%global_num,kg%spec,extent, &
-            xyz_zero,kg%nsup,phi_k,r_int,xyz_zero)             
+            kg%xyz,kg%nsup,phi_k,r_int,xyz_zero)             
+       !
+       xk = kg%xyz_cv(1)
+       yk = kg%xyz_cv(2)
+       zk = kg%xyz_cv(3)
        !
        jbnab2ch = 0
        !print*, 'nbnab: ',nbnab(k_in_part),k_in_part
@@ -1410,8 +1460,6 @@ contains
        !print*, 'jbnab2ch', jbnab2ch
        !print*
        !
-       !Phy_k = zero
-       !
 !!$
 !!$ ****[ l do loop ]****
 !!$
@@ -1423,12 +1471,16 @@ contains
                BCS_parts%lab_cell(BCS_parts%inv_lab_cover(lpart)), &
                'l',.true.,unit_exx_debug)
           !
-          !write(*,*) 'l',l, 'global_num',ld%global_num,'spe',ld%spec
+          !write(*,*) 'l',l, 'global_num',ld%global_num,'spe',ld%spec, 'nsup', ld%nsup
           !
           if ( exx_alloc ) call exx_mem_alloc(extent,ld%nsup,0,'phi_l','alloc')
           !
           call exx_phi_on_grid(inode,ld%global_num,ld%spec,extent,     &
-               ld%xyz,ld%nsup,phi_l,r_int,xyz_zero)             
+               ld%xyz,ld%nsup,phi_l,r_int,xyz_zero)
+          !
+          xl = ld%xyz_cv(1)
+          yl = ld%xyz_cv(2)
+          zl = ld%xyz_cv(3)
           !
           ld_loop: do nsf_ld = 1, ld%nsup
              !
@@ -1452,17 +1504,19 @@ contains
                    icad  = (i_in_prim - 1) * chalo%ni_in_halo !***
                    !nbbeg = nb_nd_kbeg
                    !
-                   !print*, 'i_in_prim', i_in_prim, 'nd1', nd1, 'ni', ni, 'np', np
-                   !
                    call get_iprimdat(ia,kg,ni,i_in_prim,np,.true.,unit_exx_debug)          
                    !
-                   !print*, 'i',i, 'global_num',ia%ip,'spe',ia%spec
+                   !print*, 'i',i, 'global_num',ia%ip,'spe',ia%spec, 'nsup', ia%nsup
                    !
                    if ( exx_alloc ) call exx_mem_alloc(extent,ia%nsup,0,'phi_i','alloc')
                    !
                    call exx_phi_on_grid(inode,ia%ip,ia%spec,extent, &
                         ia%xyz,ia%nsup,phi_i,r_int,xyz_zero)             
                    !
+                   xi = ia%xyz_ip(1)
+                   yi = ia%xyz_ip(2)
+                   zi = ia%xyz_ip(3)
+
                    !print*, size(chalo%i_h2d), shape(chalo%i_h2d)
                    ! 
 !!$
@@ -1486,10 +1540,17 @@ contains
                                  BCS_parts%lab_cell(BCS_parts%inv_lab_cover(jpart)), &
                                  'j',.true.,unit_exx_debug)
                             !
+                            !print*, 'j',j, 'global_num',jb%global_num,'spe',jb%spec,'nsup', jb%nsup
+
+                            !
                             if ( exx_alloc ) call exx_mem_alloc(extent,jb%nsup,0,'phi_j','alloc')
                             !
                             call exx_phi_on_grid(inode,jb%global_num,jb%spec,extent, &
                                  jb%xyz,jb%nsup,phi_j,r_int,xyz_zero)
+                            !
+                            xj = jb%xyz_cv(1)
+                            yj = jb%xyz_cv(2)
+                            zj = jb%xyz_cv(3)
                             !
                             jb_loop: do nsf_jb = 1, jb%nsup                                         
                                !
@@ -1504,106 +1565,208 @@ contains
                                   work_in_3d = work_in_3d - ewald_rho*ewald_charge
                                end if
                                !
-                               !if ( eris(kpart)%filter_eris( count ) ) then
                                call exx_v_on_grid(inode,extent,work_in_3d,work_out_3d,r_int,   &
                                     exx_psolver,exx_pscheme,pulay_radius,p_omega,p_ngauss,p_gauss,&
                                     w_gauss,fftwrho3d,reckernel_3d)
-                               !end if
                                !
                                if (exx_psolver=='fftw' .and. exx_pscheme=='ewald') then
-                                   work_out_3d = work_out_3d + ewald_pot*ewald_charge
+                                  work_out_3d = work_out_3d + ewald_pot*ewald_charge
                                end if
                                !
-                               !if ( exx_alloc ) call exx_mem_alloc(extent,1,1,'vhf_lj','alloc')
-                               !                            
-                               !vhf_lj(:,:,:,1,1) = work_out_3d
-                               !                                                              !
                                call stop_timer(tmr_std_exx_poisson,.true.)
 
                                ia_loop: do nsf_ia = 1, ia%nsup
                                   !
                                   exx_mat_elem = zero
                                   !
-                                  !if ( eris(kpart)%filter_eris( count ) ) then
-                                  !
                                   call start_timer(tmr_std_exx_accumul)
-                                  !
-                                  !rho_ki(:,:,:,nsf_kg,nsf_ia) = phi_k(:,:,:,nsf_kg)*phi_i(:,:,:,nsf_ia)
                                   !
                                   do r = 1, 2*extent+1
                                      do s = 1, 2*extent+1
                                         do t = 1, 2*extent+1                         
-                                           
+
                                            exx_mat_elem = exx_mat_elem &                                    
                                                 + phi_k(r,s,t,nsf_kg) * phi_i(r,s,t,nsf_ia) * K_val   &
                                                 * work_out_3d(r,s,t) * dv
-                                           
+
                                         end do
                                      end do
                                   end do
                                   !
                                   call stop_timer(tmr_std_exx_accumul,.true.)
                                   !
-                                  !
-                                  !end if
-                                  !
-                                  write(*,'(4X,I8,X,"isf",4X,A,2I4,A,2I4,A,A,2A4,&
-                                       A,2A4,A,1F16.10,12F12.6)') &
-                                       count,&
-                                       !'(',i_alpha%labcell,k_gamma%global_num,'|', &
-                                       !l_delta%global_num, j_beta%global_num,')' , &
-                                       '(',nsf_ia,nsf_jb,'|', &
-                                       nsf_kg,nsf_ld,')' , &                                                   
-                                       '[',ia%name,kg%name,'|',ld%name,jb%name,']' , &
-                                        exx_mat_elem!,  xi, yi, zi, xk, yk, zk, xl, yl, zl, xj, yj, zj     
- 
                                   if ( exx_debug ) then
-                                     write(unit_eri_debug,'(I3,A,I2,A,I3,A,I2,A,I3,A,I2,A,I3,A,I2,A,A,F20.16,5F16.12)') &
-                                          kg%global_num,'{',nsf_kg,'}', ld%global_num,'{',nsf_ld,'}',&
-                                          ia%ip,'{',nsf_ia,'}', jb%global_num,'{',nsf_jb,'}', '!', exx_mat_elem, &
-                                          K_val, kg%r, ld%r, ia%r, jb%r
+
+                                     write(unit_eri_debug,10) count, exx_mat_elem, &
+                                          '[',ia%ip, kg%global_num,'|',ld%global_num, jb%global_num,']', &
+                                          '(',nsf_ia,nsf_kg,  '|',nsf_ld,nsf_jb,  ')' , &
+                                          '[',ia%name,kg%name,'|',ld%name,jb%name,']' , &
+                                          ia%xyz_ip(3), kg%xyz_cv(3), ld%xyz_cv(3), jb%xyz_cv(3)
+
                                   end if
                                   !
+                                  !#####################################################################@
+!!$                                  if (exx_gto) then
+!!$                                     !
+!!$                                     i_nx = gto( ia%spec )%sf( nsf_ia )%nx ; i_ny = gto( ia%spec )%sf( nsf_ia )%ny
+!!$                                     j_nx = gto( jb%spec )%sf( nsf_jb )%nx ; j_ny = gto( jb%spec )%sf( nsf_jb )%ny 
+!!$                                     k_nx = gto( kg%spec )%sf( nsf_kg )%nx ; k_ny = gto( kg%spec )%sf( nsf_kg )%ny
+!!$                                     l_nx = gto( ld%spec )%sf( nsf_ld )%nx ; l_ny = gto( ld%spec )%sf( nsf_ld )%ny
+!!$
+!!$                                     i_nz = gto( ia%spec )%sf( nsf_ia )%nz ; i_nt = trim(gto( ia%spec )%sf( nsf_ia )%nt)
+!!$                                     j_nz = gto( jb%spec )%sf( nsf_jb )%nz ; j_nt = trim(gto( jb%spec )%sf( nsf_jb )%nt)
+!!$                                     k_nz = gto( kg%spec )%sf( nsf_kg )%nz ; k_nt = trim(gto( kg%spec )%sf( nsf_kg )%nt)
+!!$                                     l_nz = gto( ld%spec )%sf( nsf_ld )%nz ; l_nt = trim(gto( ld%spec )%sf( nsf_ld )%nt)
+!!$
+!!$
+!!$
+!!$
+!!$                                     eri_gto = zero ; eri_pao = zero
+!!$                                     prim_ld: do ld_gto = 1, gto( ld%spec )%sf( nsf_ld )%ngto
+!!$                                        prim_kg: do kg_gto = 1, gto( kg%spec )%sf( nsf_kg )%ngto
+!!$                                           prim_jb: do jb_gto = 1, gto( jb%spec )%sf( nsf_jb )%ngto
+!!$                                              prim_ia: do ia_gto = 1, gto( ia%spec )%sf( nsf_ia )%ngto
+!!$
+!!$                                                 ai = gto( ia%spec )%sf( nsf_ia )%a( ia_gto )                                     
+!!$                                                 aj = gto( jb%spec )%sf( nsf_jb )%a( jb_gto )
+!!$                                                 ak = gto( kg%spec )%sf( nsf_kg )%a( kg_gto )
+!!$                                                 al = gto( ld%spec )%sf( nsf_ld )%a( ld_gto )
+!!$
+!!$                                                 di = gto( ia%spec )%sf( nsf_ia )%d( ia_gto )                                     
+!!$                                                 dj = gto( jb%spec )%sf( nsf_jb )%d( jb_gto )
+!!$                                                 dk = gto( kg%spec )%sf( nsf_kg )%d( kg_gto )
+!!$                                                 dl = gto( ld%spec )%sf( nsf_ld )%d( ld_gto )
+!!$
+!!$                                                 i_norm  = gto( ia%spec )%sf( nsf_ia )%norm
+!!$                                                 j_norm  = gto( jb%spec )%sf( nsf_jb )%norm
+!!$                                                 k_norm  = gto( kg%spec )%sf( nsf_kg )%norm
+!!$                                                 l_norm  = gto( ld%spec )%sf( nsf_ld )%norm
+!!$
+!!$
+!!$                                                 !i_norm  = 1.0d0
+!!$                                                 !j_norm  = 1.0d0
+!!$                                                 !k_norm  = 1.0d0
+!!$                                                 !l_norm  = 1.0d0
+!!$
+!!$                                                 eri_gto = eri_gto + di*dj*dk*dl*eri_gto_hoh( &
+!!$                                                      xi, yi, zi, i_norm, i_nx, i_ny, i_nz, ai, &
+!!$                                                      xk, yk, zk, k_norm, k_nx, k_ny, k_nz, ak, &
+!!$                                                      xl, yl, zl, l_norm, l_nx, l_ny, l_nz, al, &
+!!$                                                      xj, yj, zj, j_norm, j_nx, j_ny, j_nz, aj)
+
+
+
+!!$                                  allocate(phi_on_grid_ia(2*extent+1,2*extent+1,2*extent+1))
+!!$                                  phi_on_grid_ia = zero
+!!$                                  allocate(phi_on_grid_jb(2*extent+1,2*extent+1,2*extent+1))
+!!$                                  phi_on_grid_jb = zero
+!!$                                  allocate(phi_on_grid_kg(2*extent+1,2*extent+1,2*extent+1))
+!!$                                  phi_on_grid_kg = zero
+!!$                                  allocate(phi_on_grid_ld(2*extent+1,2*extent+1,2*extent+1))
+!!$                                  phi_on_grid_ld = zero
+!!$                                  allocate(work_out_3d_(2*extent+1,2*extent+1,2*extent+1))
+!!$                                  work_out_3d_ = zero
+!!$                                  allocate(work_in_3d_(2*extent+1,2*extent+1,2*extent+1))
+!!$                                  work_in_3d_ = zero
+!!$
+!!$
+!!$                                  call exx_gto_on_grid_prim(inode,ia%ip, &
+!!$                                       ia%spec, &
+!!$                                       extent,  ia%xyz,       &
+!!$                                       phi_on_grid_ia,r_int,xyz_zero,i_nx,i_ny,i_nz,ai)
+!!$
+!!$                                  call exx_gto_on_grid_prim(inode,jb%global_num,&
+!!$                                       jb%spec,  &
+!!$                                       extent, jb%xyz,&
+!!$                                       phi_on_grid_jb,r_int,xyz_zero,j_nx,j_ny,j_nz,aj)
+!!$
+!!$                                  call exx_gto_on_grid_prim(inode,kg%global_num,&
+!!$                                       kg%spec,&
+!!$                                       extent,kg%xyz,&
+!!$                                       phi_on_grid_kg,r_int,xyz_zero,k_nx,k_ny,k_nz,ak)
+!!$
+!!$                                  call exx_gto_on_grid_prim(inode,ld%global_num,&
+!!$                                       ld%spec,&
+!!$                                       extent,ld%xyz,&
+!!$                                       phi_on_grid_ld,r_int,xyz_zero,l_nx,l_ny,l_nz,al)
+!!$
+!!$
+!!$                                  work_in_3d_(:,:,:) = phi_on_grid_ld(:,:,:) * &
+!!$                                       phi_on_grid_jb(:,:,:)
+!!$
+!!$                                  !call hf_v_on_grid(inode,extent,work_in_3d,&
+!!$                                  !     work_out_3d,r_int, &
+!!$                                  !     exx_psolver,p_scheme,pulay_radius,p_omega,&
+!!$                                  !     p_ngauss,p_gauss, &
+!!$                                  !     w_gauss)
+!!$
+!!$                                  call exx_v_on_grid(inode,extent,work_in_3d_,work_out_3d_,&
+!!$                                       r_int,   &
+!!$                                       exx_psolver,exx_pscheme,pulay_radius,p_omega,&
+!!$                                       p_ngauss,p_gauss,&
+!!$                                       w_gauss,fftwrho3d,reckernel_3d)
+!!$
+!!$                                  work_in_3d_ = phi_on_grid_ia(:,:,:) * phi_on_grid_kg(:,:,:)
+!!$
+!!$                                  !eri_pao = zero
+!!$                                  do ii = 1, 2*extent + 1
+!!$                                     do jj = 1, 2*extent + 1
+!!$                                        do kk = 1, 2*extent + 1       
+!!$                                           eri_pao = eri_pao + &
+!!$                                                work_in_3d_ (ii,jj,kk) * &
+!!$                                                work_out_3d_(ii,jj,kk) * dv 
+!!$                                                !i_norm * j_norm * k_norm * l_norm
+!!$                                        end do
+!!$                                     end do
+!!$                                  end do
+!!$
+!!$                                  !eri_pao = eri_pao 
+!!$                                  
+!!$                                  deallocate(phi_on_grid_ia)
+!!$                                  deallocate(phi_on_grid_jb)
+!!$                                  deallocate(phi_on_grid_kg) 
+!!$                                  deallocate(phi_on_grid_ld) 
+!!$                                  deallocate(work_out_3d_) 
+!!$                                  deallocate(work_in_3d_) 
+
+
+!!$
+!!$                                              end do prim_ia
+!!$                                           end do prim_jb
+!!$                                        end do prim_kg
+!!$                                     end do prim_ld
+
+
+                                     !pao_eris2(count) = eri_pao
+
+                                     !gto_eris(count) = eri_gto
+
+!!$                                  if ( backup_eris ) then
+!!$                                     !
+!!$                                     eris(kpart)%store_eris( count ) = eri_gto
+!!$                                     !
+!!$                                  else                                     
+!!$                                     c(ncaddr + nsf_ia - 1) = c(ncaddr + nsf_ia - 1) + eri_gto
+!!$                                     !
+!!$                                  end if
+!!$                                  
+!!$                               end if
+
                                   if ( backup_eris ) then
                                      !
                                      eris(kpart)%store_eris( count ) = exx_mat_elem
                                      !
-                                  else                                     
+                                  else
+                                     !
                                      c(ncaddr + nsf_ia - 1) = c(ncaddr + nsf_ia - 1) + exx_mat_elem
                                      !
                                   end if
-                                  !
-                                  !#####################################################################@
-                                  
-                                  !li = gto( ia%spec )%shell( i )%nx( a ) 
-                                  !lj = gto( jb%spec )%shell( j )%nx( b ) 
-                                  !lk = gto( kg%spec )%shell( k )%nx( g ) 
-                                  !ll = gto( ld%spec )%shell( l )%nx( d ) 
-                                  
-                                  !mi = gto( ia%spec )%shell( i )%ny( a ) 
-                                  !mj = gto( jb%spec )%shell( j )%ny( b ) 
-                                  !mk = gto( kg%spec )%shell( k )%ny( g ) 
-                                  !ml = gto( ld%spec )%shell( l )%ny( d ) 
-                                  
-                                  !ni = gto( ia%spec )%shell( i )%nz( a ) 
-                                  !nj = gto( jb%spec )%shell( j )%nz( b ) 
-                                  !nk = gto( kg%spec )%shell( k )%nz( g ) 
-                                  !nl = gto( ld%spec )%shell( l )%nz( d ) 
-                                  
-                                  !ti = trim(gto( ia%spec )%shell( i )%nt( a ))
-                                  !tj = trim(gto( jb%spec )%shell( j )%nt( b ))
-                                  !tk = trim(gto( kg%spec )%shell( k )%nt( g ))
-                                  !tl = trim(gto( ld%spec )%shell( l )%nt( d ))
-                                  
-                                  !#####################################################################@
-                                  !
+                                  !                             
                                   count = count + 1
                                   !
-                               end do ia_loop ! nsf1
+                               end do ia_loop 
                                !
-                               !if ( exx_alloc ) call exx_mem_alloc(extent,1,1,'vhf_lj','dealloc')                                
-                               !
-                            end do jb_loop ! nsf2
+                            end do jb_loop
                             !
                          end if
                          !
@@ -1611,39 +1774,490 @@ contains
                       !
                       if ( exx_alloc ) call exx_mem_alloc(extent,jb%nsup,0,'phi_j','dealloc')                                
                       !
+!!$
+!!$ ****[ j end loop ]****
+!!$                      
+                      !
                    end do j_loop
                    !
                    if ( exx_alloc ) call exx_mem_alloc(extent,ia%nsup,0,'phi_i','dealloc')  
                    !
-                end do i_loop
-!!$
-!!$ ****[ j end loop ]****
-!!$
-             end do kg_loop  ! End of l = 1, nbnab(k_in_part)
 !!$
 !!$ ****[ i end loop ]****
 !!$
+                   !
+                end do i_loop
+                !
+             end do kg_loop
+             !
           end do ld_loop
           !
-          nbbeg = nbbeg + ld%nsup*kg%nsup !nd3 * nd2                
+          if ( exx_alloc ) call exx_mem_alloc(extent,ld%nsup,0,'phi_l','dealloc')  
           !
 !!$
 !!$ ****[ l end loop ]****
 !!$
           !
-          if ( exx_alloc ) call exx_mem_alloc(extent,ld%nsup,0,'phi_l','dealloc')  
-          !          
        end do l_loop
+       !
+       nbbeg = nbbeg + ld%nsup*kg%nsup             
+       !
+       if ( exx_alloc ) call exx_mem_alloc(extent,kg%nsup,0,'phi_k','dealloc')
+       !
 !!$
 !!$ ****[ k end loop ]****
 !!$
        !
-       if ( exx_alloc ) call exx_mem_alloc(extent,kg%nsup,0,'phi_k','dealloc')  
+    end do k_loop
+    !
+10  format(I8,X,F16.10,X,A,2I4,A,2I4,A,4X,A,2I4,A,2I4,A,A,2A4,A,2A4,A,X,8F12.6)
+
+    !write(*,*) 'PRINT'
+    !do i = 1, count
+    !   write(*,'(4X,I12,6F16.10)') i, pao_eris(i), pao_eris2(i), gto_eris(i), pao_eris(i) - gto_eris(i)
+    !end do
+    !write(*,'(4X,"sum",2F24.10)') sum( pao_eris ), sum(pao_eris2), sum( gto_eris )
+
+    return
+  end subroutine m_kern_exx_eri
+  !
+  !!****f* exx_kernel_default/m_kern_exx_gto *
+  !!
+  !!  NAME
+  !!   m_kern_exx_gto
+  !!
+  !!  PURPOSE
+  !!   Compute EXX matrix using GTO-ERI engine. For now
+  !!   default is the Taketa, Huzinaga, and O-ohata (HOH)
+  !!   approach as given in exx_erigto module
+  !!
+  !!  INPUTS
+  !!
+  !!  AUTHOR
+  !!   L.A.Truflandier
+  !!
+  !!  CREATION DATE
+  !!   2021/01/27
+  !!
+  !!  MODIFICATION HISTORY
+  !!
+  !!  SOURCE
+  !!
+  subroutine m_kern_exx_eri_gto(k_off, kpart, ib_nd_acc, ibaddr, nbnab, &
+       ibpart, ibseq, bndim2, b, c, ahalo, chalo, & 
+       at, mx_absb, mx_part, mx_iprim, lenb, lenc, backup_eris )
+
+    use numbers,        only: zero, one, pi
+    use matrix_module,  only: matrix_halo, matrix_trans
+    use global_module,  only: area_exx
+    !
+    use basic_types,    only: primary_set
+    use primary_module, only: bundle 
+    use matrix_data,    only: Hrange, SXrange, Xrange, Srange
+    use mult_module,    only: return_matrix_value, S_X_SX
+    use cover_module,   only: BCS_parts
+    !
+    use gto_format_new, only: gto
+    !
+    use species_module, only: nsf_species
+    !
+    use exx_evalpao,    only: exx_phi_on_grid
+    !
+    use exx_evalgto,    only: exx_gto_on_grid_prim
+    !
+    use exx_types, only: prim_atomic_data, neigh_atomic_data, &
+         tmr_std_exx_accumul, tmr_std_exx_poisson,  &
+         tmr_std_exx_poisson, grid_spacing, r_int, extent,&
+         ewald_charge, ewald_rho, ewald_pot, eris,  &
+         pulay_radius, p_omega, p_ngauss, p_gauss, w_gauss, &
+         exx_psolver,exx_pscheme, &
+         unit_exx_debug, unit_eri_debug
+    !
+    use exx_types,  only: phi_i, phi_j, phi_k, phi_l, eris, &
+         rho_ki, vhf_lj, work_in_3d, work_out_3d, fftwrho3d,&
+         exx_gto, exx_gto_poisson
+    use exx_types, only: exx_alloc
+    !
+    use exx_memory, only: exx_mem_alloc
+    !
+    use exx_module, only: get_halodat, get_iprimdat
+    !
+    use exx_poisson,only: exx_v_on_grid, exx_ewald_charge
+    !
+    use exx_erigto, only: eri_gto_hoh
+    !    
+    implicit none
+    !
+    ! Passed variables
+    type(matrix_halo),  intent(in)    :: ahalo, chalo
+    type(matrix_trans), intent(in)    :: at
+    integer,            intent(in)    :: mx_absb, mx_part, mx_iprim, lenb, lenc
+    integer,            intent(in)    :: kpart, k_off
+    real(double),       intent(in)    :: b(lenb)
+    real(double),       intent(inout) :: c(lenc)
+    logical, intent(in) :: backup_eris
+    !
+    ! Remote indices
+    integer(integ), intent(in) :: ib_nd_acc(mx_part)
+    integer(integ), intent(in) :: ibaddr(mx_part)
+    integer(integ), intent(in) :: nbnab(mx_part)
+    integer(integ), intent(in) :: ibpart(mx_part*mx_absb)
+    integer(integ), intent(in) :: ibseq(mx_part*mx_absb)
+    integer(integ), intent(in) :: bndim2(mx_part*mx_absb)
+    !
+    ! Local variables
+    integer :: jbnab2ch(mx_absb)  ! Automatic array
+    integer :: nbkbeg, k, k_in_part, k_in_halo, j, jpart, jseq
+    integer :: i, i_in_prim, icad, nbbeg, j_in_halo, ncbeg
+    integer :: nb_nd_kbeg
+    integer :: nd1, nd3
+    integer :: nbaddr, ncaddr
+    integer :: lbnab2ch(mx_absb)  ! Automatic array
+    integer :: l, lseq, lpart
+    integer :: np, ni
+    !
+    real(double), dimension(3) :: xyz_zero  = zero
+    !
+    type(prim_atomic_data)  :: ia ! i_alpha
+    type(neigh_atomic_data) :: jb ! j_beta
+    type(neigh_atomic_data) :: kg ! k_gamma
+    type(neigh_atomic_data) :: ld ! l_delta
+    !
+    integer                 :: nsf_kg, nsf_ld, nsf_ia, nsf_jb
+    !
+    ! GTO
+    integer          :: i_nx, j_nx, k_nx, l_nx
+    integer          :: i_ny, j_ny, k_ny, l_ny
+    integer          :: i_nz, j_nz, k_nz, l_nz
+    character(len=8) :: i_nt, j_nt, k_nt, l_nt
+    integer          :: ia_gto, jb_gto, kg_gto, ld_gto
+    real(double)     :: ai, aj, ak, al, di, dj, dk, dl 
+    real(double)     :: i_norm, j_norm, k_norm, l_norm
+    real(double)     :: xi, xj, xk, xl 
+    real(double)     :: yi, yj, yk, yl 
+    real(double)     :: zi, zj, zk, zl
+    real(double)     :: K_val
+    !
+    integer      :: count
+    real(double) :: eri_gto, eri_pao, test
+
+    !real(double)               ::   dr,dv,K_val
+    !real(double)               ::   exx_mat_elem
+    !
+    !real(double),allocatable,dimension(:,:,:) :: phi_on_grid_ia, phi_on_grid_jb, &
+    !     phi_on_grid_kg, phi_on_grid_ld, work_out_3d_, work_in_3d_
+    !integer :: ii, jj, kk
+    !real(double), allocatable  :: pao_eris(:)
+    !real(double), allocatable  :: gto_eris(:)   
+    !real(double), allocatable  :: pao_eris2(:)
+    !real :: dr, dv
+    !
+    !dr = grid_spacing
+    !dv = dr**3
+    !
+    count = 1
+    !
+!!$
+!!$ ****[ k loop ]****
+!!$
+    k_loop: do k = 1, ahalo%nh_part(kpart)
+       !
+       k_in_halo  = ahalo%j_beg(kpart) + k - 1
+       k_in_part  = ahalo%j_seq(k_in_halo)
+       nbkbeg     = ibaddr     (k_in_part) 
+       nb_nd_kbeg = ib_nd_acc  (k_in_part)
+       nd3        = ahalo%ndimj(k_in_halo)
+       call get_halodat(kg,kg,k_in_part,ahalo%i_hbeg(ahalo%lab_hcover(kpart)), &
+            ahalo%lab_hcell(kpart),'k',.true.,unit_exx_debug)
+       !
+       !print*, 'k',k, 'global_num',kg%global_num,'spe',kg%spec,'nsup', kg%nsup
+       !
+       xk = kg%xyz_cv(1)
+       yk = kg%xyz_cv(2)
+       zk = kg%xyz_cv(3)
+       !
+       jbnab2ch = 0
+       !print*, 'nbnab: ',nbnab(k_in_part),k_in_part
+       do j = 1, nbnab(k_in_part)
+          jpart = ibpart(nbkbeg+j-1) + k_off
+          jseq  = ibseq (nbkbeg+j-1)
+          jbnab2ch(j) = chalo%i_halo(chalo%i_hbeg(jpart)+jseq-1)
+          !print*, 'jbnab2ch',j, jbnab2ch(j)
+       end do
+       !
+       nbbeg = nb_nd_kbeg
+       !
+       !print*, 'size jbnab2ch', size(jbnab2ch)
+       !print*, 'jbnab2ch', jbnab2ch
+       !print*
+!!$
+!!$ ****[ l do loop ]****
+!!$
+       l_loop: do l = 1, nbnab(k_in_part)
+          !l_in_halo = lbnab2ch(l)                
+          lpart = ibpart(nbkbeg+l-1) + k_off
+          lseq  = ibseq (nbkbeg+l-1)
+          call get_halodat(ld,kg,lseq,chalo%i_hbeg(lpart),         &
+               BCS_parts%lab_cell(BCS_parts%inv_lab_cover(lpart)), &
+               'l',.true.,unit_exx_debug)
+          !
+          !write(*,*) 'l',l, 'global_num',ld%global_num,'spe',ld%spec, 'nsup', ld%nsup
+          !
+          xl = ld%xyz_cv(1)
+          yl = ld%xyz_cv(2)
+          zl = ld%xyz_cv(3)
+          !
+          ld_loop: do nsf_ld = 1, ld%nsup
+             !
+             nbaddr = nbbeg + kg%nsup * (nsf_ld - 1)
+             !
+             kg_loop: do nsf_kg = 1, kg%nsup                         
+                !
+                if ( backup_eris ) then
+                   K_val = real(1,double)
+                else
+                   K_val = b(nbaddr+nsf_kg-1)
+                end if
+!!$
+!!$ ****[ i loop ]****
+!!$
+                i_loop: do i = 1, at%n_hnab(k_in_halo)
+                   i_in_prim = at%i_prim(at%i_beg(k_in_halo)+i-1)
+                   nd1 = ahalo%ndimi      (i_in_prim)
+                   ni  = bundle%iprim_seq (i_in_prim)
+                   np  = bundle%iprim_part(i_in_prim)
+                   icad  = (i_in_prim - 1) * chalo%ni_in_halo !***
+                   !nbbeg = nb_nd_kbeg
+                   !
+                   call get_iprimdat(ia,kg,ni,i_in_prim,np,.true.,unit_exx_debug)          
+                   !
+                   !print*, 'i',i, 'global_num',ia%ip,'spe',ia%spec, 'nsup', ia%nsup
+                   !
+                   xi = ia%xyz_ip(1)
+                   yi = ia%xyz_ip(2)
+                   zi = ia%xyz_ip(3)
+                   ! 
+!!$
+!!$ ****[ j loop ]****
+!!$
+                   j_loop: do j = 1, nbnab(k_in_part)                 
+                      j_in_halo = jbnab2ch(j) !***
+                      !
+                      !print*, j, icad, j_in_halo
+                      !   
+                      if ( j_in_halo /= 0 ) then
+                         !
+                         ncbeg = chalo%i_h2d(icad + j_in_halo) !***
+                         !
+                         if ( ncbeg /= 0 ) then 
+                            jpart = ibpart(nbkbeg+j-1) + k_off
+                            jseq  = ibseq (nbkbeg+j-1)
+                            !
+                            call get_halodat(jb,kg,jseq,chalo%i_hbeg(jpart),         &
+                                 BCS_parts%lab_cell(BCS_parts%inv_lab_cover(jpart)), &
+                                 'j',.true.,unit_exx_debug)
+                            !
+                            !print*, 'j',j, 'global_num',jb%global_num,'spe',jb%spec,'nsup', jb%nsup
+                            !
+                            xj = jb%xyz_cv(1)
+                            yj = jb%xyz_cv(2)
+                            zj = jb%xyz_cv(3)
+                            !
+                            jb_loop: do nsf_jb = 1, jb%nsup                                         
+                               !
+                               ncaddr = ncbeg + ia%nsup * (nsf_jb - 1)
+                               !
+                               ia_loop: do nsf_ia = 1, ia%nsup
+                                  !
+                                  eri_gto = zero
+                                  !
+                                  if ( eris(kpart)%filter_eris( count ) ) then
+                                     
+                                     i_nx = gto( ia%spec )%sf( nsf_ia )%nx ; i_ny = gto( ia%spec )%sf( nsf_ia )%ny
+                                     j_nx = gto( jb%spec )%sf( nsf_jb )%nx ; j_ny = gto( jb%spec )%sf( nsf_jb )%ny 
+                                     k_nx = gto( kg%spec )%sf( nsf_kg )%nx ; k_ny = gto( kg%spec )%sf( nsf_kg )%ny
+                                     l_nx = gto( ld%spec )%sf( nsf_ld )%nx ; l_ny = gto( ld%spec )%sf( nsf_ld )%ny
+
+                                     i_nz = gto( ia%spec )%sf( nsf_ia )%nz ; i_nt = trim(gto( ia%spec )%sf( nsf_ia )%nt)
+                                     j_nz = gto( jb%spec )%sf( nsf_jb )%nz ; j_nt = trim(gto( jb%spec )%sf( nsf_jb )%nt)
+                                     k_nz = gto( kg%spec )%sf( nsf_kg )%nz ; k_nt = trim(gto( kg%spec )%sf( nsf_kg )%nt)
+                                     l_nz = gto( ld%spec )%sf( nsf_ld )%nz ; l_nt = trim(gto( ld%spec )%sf( nsf_ld )%nt)
+
+                                     prim_ld: do ld_gto = 1, gto( ld%spec )%sf( nsf_ld )%ngto
+                                        prim_kg: do kg_gto = 1, gto( kg%spec )%sf( nsf_kg )%ngto
+                                           prim_jb: do jb_gto = 1, gto( jb%spec )%sf( nsf_jb )%ngto
+                                              prim_ia: do ia_gto = 1, gto( ia%spec )%sf( nsf_ia )%ngto
+
+                                                 ai = gto( ia%spec )%sf( nsf_ia )%a( ia_gto )
+                                                 aj = gto( jb%spec )%sf( nsf_jb )%a( jb_gto )
+                                                 ak = gto( kg%spec )%sf( nsf_kg )%a( kg_gto )
+                                                 al = gto( ld%spec )%sf( nsf_ld )%a( ld_gto )
+
+                                                 di = gto( ia%spec )%sf( nsf_ia )%d( ia_gto )
+                                                 dj = gto( jb%spec )%sf( nsf_jb )%d( jb_gto )
+                                                 dk = gto( kg%spec )%sf( nsf_kg )%d( kg_gto )
+                                                 dl = gto( ld%spec )%sf( nsf_ld )%d( ld_gto )
+
+                                                 i_norm  = gto( ia%spec )%sf( nsf_ia )%norm
+                                                 j_norm  = gto( jb%spec )%sf( nsf_jb )%norm
+                                                 k_norm  = gto( kg%spec )%sf( nsf_kg )%norm
+                                                 l_norm  = gto( ld%spec )%sf( nsf_ld )%norm
+
+                                                 eri_gto = eri_gto + di*dj*dk*dl*eri_gto_hoh( &
+                                                      xi, yi, zi, i_norm, i_nx, i_ny, i_nz, ai, &
+                                                      xk, yk, zk, k_norm, k_nx, k_ny, k_nz, ak, &
+                                                      xl, yl, zl, l_norm, l_nx, l_ny, l_nz, al, &
+                                                      xj, yj, zj, j_norm, j_nx, j_ny, j_nz, aj)
+
+
+
+!!$                                  allocate(phi_on_grid_ia(2*extent+1,2*extent+1,2*extent+1))
+!!$                                  phi_on_grid_ia = zero
+!!$                                  allocate(phi_on_grid_jb(2*extent+1,2*extent+1,2*extent+1))
+!!$                                  phi_on_grid_jb = zero
+!!$                                  allocate(phi_on_grid_kg(2*extent+1,2*extent+1,2*extent+1))
+!!$                                  phi_on_grid_kg = zero
+!!$                                  allocate(phi_on_grid_ld(2*extent+1,2*extent+1,2*extent+1))
+!!$                                  phi_on_grid_ld = zero
+!!$                                  allocate(work_out_3d_(2*extent+1,2*extent+1,2*extent+1))
+!!$                                  work_out_3d_ = zero
+!!$                                  allocate(work_in_3d_(2*extent+1,2*extent+1,2*extent+1))
+!!$                                  work_in_3d_ = zero
+!!$
+!!$
+!!$                                  call exx_gto_on_grid_prim(inode,ia%ip, &
+!!$                                       ia%spec, &
+!!$                                       extent,  ia%xyz,       &
+!!$                                       phi_on_grid_ia,r_int,xyz_zero,i_nx,i_ny,i_nz,ai)
+!!$
+!!$                                  call exx_gto_on_grid_prim(inode,jb%global_num,&
+!!$                                       jb%spec,  &
+!!$                                       extent, jb%xyz,&
+!!$                                       phi_on_grid_jb,r_int,xyz_zero,j_nx,j_ny,j_nz,aj)
+!!$
+!!$                                  call exx_gto_on_grid_prim(inode,kg%global_num,&
+!!$                                       kg%spec,&
+!!$                                       extent,kg%xyz,&
+!!$                                       phi_on_grid_kg,r_int,xyz_zero,k_nx,k_ny,k_nz,ak)
+!!$
+!!$                                  call exx_gto_on_grid_prim(inode,ld%global_num,&
+!!$                                       ld%spec,&
+!!$                                       extent,ld%xyz,&
+!!$                                       phi_on_grid_ld,r_int,xyz_zero,l_nx,l_ny,l_nz,al)
+!!$
+!!$
+!!$                                  work_in_3d_(:,:,:) = phi_on_grid_ld(:,:,:) * &
+!!$                                       phi_on_grid_jb(:,:,:)
+!!$
+!!$                                  !call hf_v_on_grid(inode,extent,work_in_3d,&
+!!$                                  !     work_out_3d,r_int, &
+!!$                                  !     exx_psolver,p_scheme,pulay_radius,p_omega,&
+!!$                                  !     p_ngauss,p_gauss, &
+!!$                                  !     w_gauss)
+!!$
+!!$                                  call exx_v_on_grid(inode,extent,work_in_3d_,work_out_3d_,&
+!!$                                       r_int,   &
+!!$                                       exx_psolver,exx_pscheme,pulay_radius,p_omega,&
+!!$                                       p_ngauss,p_gauss,&
+!!$                                       w_gauss,fftwrho3d,reckernel_3d)
+!!$
+!!$                                  work_in_3d_ = phi_on_grid_ia(:,:,:) * phi_on_grid_kg(:,:,:)
+!!$
+!!$                                  !eri_pao = zero
+!!$                                  do ii = 1, 2*extent + 1
+!!$                                     do jj = 1, 2*extent + 1
+!!$                                        do kk = 1, 2*extent + 1       
+!!$                                           eri_pao = eri_pao + &
+!!$                                                work_in_3d_ (ii,jj,kk) * &
+!!$                                                work_out_3d_(ii,jj,kk) * dv 
+!!$                                                !i_norm * j_norm * k_norm * l_norm
+!!$                                        end do
+!!$                                     end do
+!!$                                  end do
+!!$
+!!$                                  !eri_pao = eri_pao 
+!!$                                  
+!!$                                  deallocate(phi_on_grid_ia)
+!!$                                  deallocate(phi_on_grid_jb)
+!!$                                  deallocate(phi_on_grid_kg) 
+!!$                                  deallocate(phi_on_grid_ld) 
+!!$                                  deallocate(work_out_3d_) 
+!!$                                  deallocate(work_in_3d_) 
+
+
+                                                 
+                                              end do prim_ia
+                                           end do prim_jb
+                                        end do prim_kg
+                                     end do prim_ld
+                                     !
+                                  end if
+                                  
+                                  if (exx_debug) then
+                                     
+                                     write(unit_eri_debug,10) count, eri_gto, &
+                                          '[',ia%ip, kg%global_num,'|',ld%global_num, jb%global_num,']', &
+                                          '(',nsf_ia,nsf_kg,  '|',nsf_ld,nsf_jb,  ')' , &
+                                          '[',ia%name,kg%name,'|',ld%name,jb%name,']' , &
+                                          '(',i_nt,k_nt,'|',l_nt,j_nt,')', &
+                                          ai, ak, al, aj
+                                          !zi, zk, zl, zj, ai, ak, al, aj 
+                                  end if
+                                  !
+                                  if ( backup_eris ) then
+                                     !                                     
+                                     eris(kpart)%store_eris( count ) = eri_gto
+                                     !
+                                  else
+                                     c(ncaddr + nsf_ia - 1) = c(ncaddr + nsf_ia - 1) + eri_gto
+                                     !
+                                  end if
+                                  !                               
+                                  count = count + 1
+                                  !
+                               end do ia_loop
+                               !
+                            end do jb_loop
+                            !
+                         end if
+                         !
+                      end if
+                      !
+!!$
+!!$ ****[ j end loop ]****
+!!$                      
+                      !
+                   end do j_loop
+                   !
+!!$
+!!$ ****[ i end loop ]****
+!!$
+                   !
+                end do i_loop
+                !
+             end do kg_loop
+             !
+          end do ld_loop 
+          !
+!!$
+!!$ ****[ l end loop ]****
+!!$
+          !
+       end do l_loop
+       !
+       nbbeg = nbbeg + ld%nsup*kg%nsup
+       !
+!!$
+!!$ ****[ k end loop ]****
+!!$
        !
     end do k_loop
     !
+
+10  format(I8,X,F16.10,X,A,2I4,A,2I4,A,4X,A,2I4,A,2I4,A,A,2A4,A,2A4,A,X,A,2A4,A,2A4,A,X,8F12.6)
+
     return
-  end subroutine m_kern_exx_eri
+  end subroutine m_kern_exx_eri_gto  
   !
   !!****f* exx_kernel_default/m_kern_exx_dummy *
   !!
@@ -1651,11 +2265,19 @@ contains
   !!   m_kern_exx_dummy
   !!
   !!  PURPOSE
-  !! 
+  !!   (1) count the the number of ERIs on each proc
+  !!   to allocate arrays when storage is required
+  !!   (2) if filter_eris = .true. prepare EXX calculation
+  !!   such as filtering and screening using coarse grid Poisson
+  !!   solver for ERI evaluation. Filtering is used only if
+  !!   GTO fitting and GTO-ERI engine are used.
+  !!   (3) if compute_exx =.true. compute EXX matrix using
+  !!   stored ERIs
+  !!   
   !!  INPUTS
   !!
   !!  AUTHOR
-  !!   L.A.Truflandier/D.R.Bowler
+  !!   L.A.Truflandier
   !!
   !!  CREATION DATE
   !!   2020/10/27
@@ -1681,9 +2303,6 @@ contains
     use mult_module,    only: matK, return_matrix_value, S_X_SX
     use cover_module,   only: BCS_parts
     !
-    !use group_module,   only: parts 
-    !use pao_format,     only: pao
-    !
     use species_module, only: nsf_species
     !
     use angular_coeff_routines, only: calc_mat_elem_gen
@@ -1696,6 +2315,8 @@ contains
          exx_psolver, exx_pscheme
     !
     use exx_types,  only: eris, exx_filter_thr, exx_filter_extent
+    use exx_types,  only: unit_eri_filter_debug
+
     use exx_module, only: get_halodat, get_iprimdat
     !
     use exx_poisson,only: exx_v_on_grid, exx_scal_rho_3d
@@ -1703,24 +2324,23 @@ contains
     implicit none
     !
     ! Passed variables
-    type(matrix_halo)  :: ahalo, chalo
-    type(matrix_trans) :: at
-    !
-    integer            :: mx_absb, mx_part, mx_iprim, lenb, lenc
-    integer            :: kpart, k_off, count_eris
-    real(double)       :: b(lenb)
-    real(double)       :: c(lenc)
-    !
-    logical            :: compute_exx
-    logical            :: filter_eris
+    type(matrix_halo),  intent(in)    :: ahalo, chalo
+    type(matrix_trans), intent(in)    :: at
+    integer,            intent(in)    :: mx_absb, mx_part, mx_iprim, lenb, lenc
+    integer,            intent(in)    :: kpart, k_off
+    real(double),       intent(in)    :: b(lenb)
+    real(double),       intent(inout) :: c(lenc)
+    integer, intent(inout) :: count_eris
+    logical, intent(in)    :: compute_exx
+    logical, intent(in)    :: filter_eris
     !
     ! Remote indices
-    integer(integ) :: ib_nd_acc(mx_part)
-    integer(integ) :: ibaddr(mx_part)
-    integer(integ) :: nbnab(mx_part)
-    integer(integ) :: ibpart(mx_part*mx_absb)
-    integer(integ) :: ibseq(mx_part*mx_absb)
-    integer(integ) :: bndim2(mx_part*mx_absb)
+    integer(integ), intent(in) :: ib_nd_acc(mx_part)
+    integer(integ), intent(in) :: ibaddr(mx_part)
+    integer(integ), intent(in) :: nbnab(mx_part)
+    integer(integ), intent(in) :: ibpart(mx_part*mx_absb)
+    integer(integ), intent(in) :: ibseq(mx_part*mx_absb)
+    integer(integ), intent(in) :: bndim2(mx_part*mx_absb)
     !
     ! Local variables
     integer :: jbnab2ch(mx_absb)  ! Automatic array
@@ -1734,13 +2354,9 @@ contains
     integer :: np, ni
     !
     real(double), dimension(3) :: xyz_zero  = zero
-    !real(double), dimension(3) :: xyz_ij    = zero
-    !real(double), dimension(3) :: xyz_kl    = zero
     !
-    real(double)               ::   dr, dv, K_val, S_val
+    real(double)               ::   dr, dv, K_val
     real(double)               ::   exx_mat_elem
-    !real(double)               ::   screen_ij, range_ij
-    !real(double)               ::   screen_kl, range_kl
     !
     type(prim_atomic_data)  :: ia !i_alpha
     type(neigh_atomic_data) :: jb !j_beta
@@ -1750,7 +2366,6 @@ contains
     integer                 :: maxsuppfuncs
     integer                 :: nsf_kg, nsf_ld, nsf_ia, nsf_jb
     integer                 :: r, s, t, stat
-    !integer                 :: count_kg, count_ld
     !
     real(double), dimension(:,:,:,:),   allocatable :: phi_i_filter,  phi_j_filter
     real(double), dimension(:,:,:,:),   allocatable :: phi_k_filter,  phi_l_filter
@@ -1760,7 +2375,7 @@ contains
     dr = grid_spacing
     dv = dr**3
     !
-    count_eris = 1
+    count_eris = 0
     !    
     maxsuppfuncs = maxval(nsf_species)    
     !
@@ -1776,14 +2391,6 @@ contains
        !
        allocate( phi_l_filter(2*exx_filter_extent+1,2*exx_filter_extent+1,2*exx_filter_extent+1,maxsuppfuncs), STAT=stat )
        if(stat/=0) call cq_abort('Error allocating memory to phi_l_filter/exx !',stat)
-       !
-       allocate( rho_ki_filter(2*exx_filter_extent+1,2*exx_filter_extent+1,2*exx_filter_extent+1,&
-            maxsuppfuncs,maxsuppfuncs), STAT=stat)
-       if(stat/=0) call cq_abort('Error allocating memory to rho_ki_filter/exx !',stat)
-       !
-       allocate( vhf_lj_filter(2*exx_filter_extent+1,2*exx_filter_extent+1,2*exx_filter_extent+1,&
-            maxsuppfuncs,maxsuppfuncs), STAT=stat)
-       if(stat/=0) call cq_abort('Error allocating memory to vhf_lj_filter/exx !',stat)
        !
        allocate( work_in(2*exx_filter_extent+1,2*exx_filter_extent+1,2*exx_filter_extent+1), STAT=stat)
        if(stat/=0) call cq_abort('Error allocating memory to work_in_filter/exx !',stat)
@@ -1852,11 +2459,11 @@ contains
           !
           !write(*,*) 'l',l, 'global_num',ld%global_num,'spe',ld%spec
           !
-          if ( filter_eris ) then             
+          if ( filter_eris ) then
+             !
              call exx_phi_on_grid(inode,ld%global_num,ld%spec,exx_filter_extent, &
                   ld%xyz,maxsuppfuncs,phi_l_filter,r_int,xyz_zero)
-             !print*, maxval(abs(phi_l_filter))
- 
+             !
           end if
           !
           ! count_ld = 0
@@ -1864,25 +2471,7 @@ contains
              !
              nbaddr = nbbeg + kg%nsup * (nsf_ld - 1)
              !
-             !count_ld = count_ld + 1
-             !
-             !count_kg = 0
              kg_loop: do nsf_kg = 1, kg%nsup
-
-                !count_kg = count_kg + 1
-                !
-                !if (inode == ionode) write(io_lun,*) 'k',k, 'global_num',kg%global_num,'spe',kg%spec, kg%l1(count_kg),  &
-                !     kg%acz1(count_kg), kg%m1(count_kg)
-                !
-                !if (inode == ionode) write(io_lun,*) 'l',l, 'global_num',ld%global_num,'spe',ld%spec, ld%l1(count_ld),  &
-                !     ld%acz1(count_ld), ld%m1(count_ld)
-                !
-                !if (inode == ionode) write(io_lun,*)
-                !
-                !call calc_mat_elem_gen(1,kg%spec,kg%l1(count_kg),kg%acz1(count_kg),kg%m1(count_kg),ld%spec,ld%l1(count_ld),&
-                !     ld%acz1(count_ld),ld%m1(count_ld),ld%xyz(1),ld%xyz(2),&
-                !     ld%xyz(3),S_val)
-                !
                 !
                 K_val = b(nbaddr+nsf_kg-1)
                 !
@@ -1897,8 +2486,6 @@ contains
                    icad  = (i_in_prim - 1) * chalo%ni_in_halo !***
                    !nbbeg = nb_nd_kbeg
                    !
-                   !print*, 'i_in_prim', i_in_prim, 'nd1', nd1, 'ni', ni, 'np', np
-                   !
                    call get_iprimdat(ia,kg,ni,i_in_prim,np,.true.,unit_exx_debug)          
                    !
                    !print*, 'i',i, 'global_num',ia%ip,'spe',ia%spec
@@ -1906,7 +2493,6 @@ contains
                    if ( filter_eris ) then                      
                       call exx_phi_on_grid(inode,ia%ip,ia%spec,exx_filter_extent, &
                            ia%xyz,maxsuppfuncs,phi_i_filter,r_int,xyz_zero)
-                      !print*,'phi_i_filter', maxval(abs(phi_i_filter))
                    end if
                    ! 
 !!$
@@ -1933,71 +2519,32 @@ contains
                             if ( filter_eris ) then                               
                                call exx_phi_on_grid(inode,jb%global_num,jb%spec,exx_filter_extent, &
                                     jb%xyz,maxsuppfuncs,phi_j_filter,r_int,xyz_zero)
-                               !print*, 'phi_j_filter', maxval(abs(phi_j_filter))
                             end if
-                            !
-                            !count_ld = 0
                             !
                             jb_loop: do nsf_jb = 1, jb%nsup                                         
                                !
-                               !count_ld = count_ld + 1
-                               
                                ncaddr = ncbeg + ia%nsup * (nsf_jb - 1)
-                               !
-                               !if (inode == ionode) write(io_lun,*) 'k',k, 'global_num',kg%global_num,'spe',kg%spec, &
-                               !     kg%l1(count_kg),  &
-                               !     kg%acz1(count_kg), kg%m1(count_kg)
-                               !
-                               !if (inode == ionode) write(io_lun,*) 'l',j, 'global_num',jb%global_num,'spe',jb%spec, &
-                               !     jb%l1(count_ld),  &
-                               !     jb%acz1(count_ld), jb%m1(count_ld)
-                               !                               
-                               !call calc_mat_elem_gen(1,kg%spec,kg%l1(count_kg),kg%acz1(count_kg),kg%m1(count_kg),&
-                               !     jb%spec,jb%l1(count_ld),&
-                               !     jb%acz1(count_ld),jb%m1(count_ld),jb%xyz(1),jb%xyz(2),&
-                               !     jb%xyz(3),S_val)
                                !
                                if ( filter_eris ) then
                                   work_out = zero
                                   work_in  = phi_l_filter(:,:,:,nsf_ld)*phi_j_filter(:,:,:,nsf_jb)
                                   !
-                                  !print*, 'work_in', maxval(abs(work_in))
-                                  !                                  
                                   call exx_v_on_grid(inode,exx_filter_extent,work_in,work_out,r_int, &
                                        exx_psolver,exx_pscheme,pulay_radius,p_omega,p_ngauss,p_gauss,   &
                                        w_gauss,fftwrho3d_filter,reckernel_3d_filter)
-                                  !
-                                  !print*, 'work_out', maxval(abs(work_out))
-                                  !
-                                  vhf_lj_filter(:,:,:,nsf_ld,nsf_jb) = work_out
                                   !
                                end if
                                !
                                ia_loop: do nsf_ia = 1, ia%nsup
                                   !
                                   if ( compute_exx ) then
-                                     !print*, 'kpart =', kpart, 'count_eris =', count_eris
+                                     !
                                      c(ncaddr + nsf_ia - 1) = c(ncaddr + nsf_ia - 1) + &
-                                          eris(kpart)%store_eris(count_eris) * K_val
-                                                                          
-                                     !write(unit_eri_debug,'(I3,A,I2,A,I3,A,I2,A,I3,A,I2,A,I3,A,I2,A,A,6F16.12)') &
-                                     !     kg%global_num,'{',nsf_kg,'}', ld%global_num,'{',nsf_ld,'}',&
-                                     !     ia%ip,'{',nsf_ia,'}', jb%global_num,'{',nsf_jb,'}', '!',   &
-                                     !     eris(kpart)%store_eris(count_eris), K_val,                 &
-                                     !     kg%r, ld%r, ia%r, jb%r
-                                     
+                                          eris(kpart)%store_eris(count_eris + 1) * K_val
+                                     !
                                   else
                                      !
                                      if ( filter_eris ) then
-                                        !
-                                        rho_ki_filter(:,:,:,nsf_kg,nsf_ia) = phi_k_filter(:,:,:,nsf_kg) &
-                                             *phi_i_filter(:,:,:,nsf_ia)
-                                        !
-                                        !print*, 'vhf_lj_filter', maxval(abs(rho_ki_filter))
-                                        !print*, 'rho_ki_filter', maxval(abs(rho_ki_filter))
-                                        !print*, 'shape(vhf_lj_filter)', shape(vhf_lj_filter)
-                                        !print*, 'shape(rho_ki_filter)', shape(rho_ki_filter)
-                                        !
                                         !
                                         exx_mat_elem = zero
                                         !
@@ -2005,24 +2552,30 @@ contains
                                            do s = 1, 2*exx_filter_extent+1
                                               do t = 1, 2*exx_filter_extent+1                         
                                                  
-                                                 exx_mat_elem = exx_mat_elem &                                    
-                                                      + rho_ki_filter(r,s,t,nsf_kg,nsf_ia)    &
-                                                      * vhf_lj_filter(r,s,t,nsf_ld,nsf_jb) * dv
+                                                 exx_mat_elem = exx_mat_elem &      
+                                                      + phi_k_filter(r,s,t,nsf_kg)  &
+                                                      * phi_i_filter(r,s,t,nsf_ia)  &
+                                                      * work_out(r,s,t) * dv
                                               end do
                                            end do
                                         end do
                                         !
                                         if ( abs(exx_mat_elem) < exx_filter_thr ) then
                                            !
-                                           eris(kpart)%filter_eris( count_eris ) = .false.
+                                           eris(kpart)%filter_eris( count_eris + 1) = .false.
                                            !
                                         end if
-                                        !                                                                        
-                                        write(unit_eri_debug,'(I3,A,I2,A,I3,A,I2,A,I3,A,I2,A,I3,A,I2,A,A,F20.16,X,L,5F16.12)') &
-                                             kg%global_num,'{',nsf_kg,'}', ld%global_num,'{',nsf_ld,'}',&
-                                             ia%ip,'{',nsf_ia,'}', jb%global_num,'{',nsf_jb,'}', '!',   &
-                                             exx_mat_elem, eris(kpart)%filter_eris(count_eris), &
-                                             K_val, kg%r, ld%r, ia%r, jb%r
+                                        !
+                                        if (exx_debug) then
+                                           
+                                           write(unit_eri_filter_debug,10) count_eris+1, exx_mat_elem, &
+                                                eris(kpart)%filter_eris(count_eris + 1),               &
+                                                '[',ia%ip, kg%global_num,'|',ld%global_num, jb%global_num,']', &
+                                                '(',nsf_ia,nsf_kg,  '|',nsf_ld,nsf_jb,  ')' , &
+                                                '[',ia%name,kg%name,'|',ld%name,jb%name,']' , &
+                                                K_val, kg%r, ld%r, ia%r, jb%r
+                                           
+                                        end if
                                         !
                                      end if
                                      !
@@ -2032,30 +2585,32 @@ contains
                                   !
                                   count_eris = count_eris + 1
                                   !
-                               end do ia_loop ! nsf1
+                               end do ia_loop
                                !
                                !
-                            end do jb_loop ! nsf2
+                            end do jb_loop
                             !
                          end if
                          !
                       end if
-
-                   end do j_loop
-
-                end do i_loop
+                      !
 !!$
 !!$ ****[ j end loop ]****
 !!$
-
-             end do kg_loop  ! End of l = 1, nbnab(k_in_part)
+                      !
+                   end do j_loop
+                   !
 !!$
 !!$ ****[ i end loop ]****
 !!$
+                   !
+                end do i_loop
+                
+             end do kg_loop
+             !
           end do ld_loop
-
           !
-          nbbeg = nbbeg + ld%nsup*kg%nsup !nd3 * nd2                
+          nbbeg = nbbeg + ld%nsup*kg%nsup       
           !
 !!$
 !!$ ****[ l end loop ]****
@@ -2082,12 +2637,6 @@ contains
        deallocate( phi_l_filter, STAT=stat )
        if(stat/=0) call cq_abort('Error allocating memory to phi_l_filter/exx !',stat)
        !
-       deallocate( rho_ki_filter, STAT=stat)
-       if(stat/=0) call cq_abort('Error allocating memory to rho_ki_filter/exx !',stat)
-       !
-       deallocate( vhf_lj_filter, STAT=stat)
-       if(stat/=0) call cq_abort('Error allocating memory to vhf_lj_filter/exx !',stat)
-       !
        deallocate( work_in, STAT=stat)
        if(stat/=0) call cq_abort('Error allocating memory to work_in_filter/exx !',stat)
        !
@@ -2104,6 +2653,9 @@ contains
        if(stat/=0) call cq_abort('Error allocating memory to reckernel_3d_filter/exx !',stat)
 
     end if
+
+10  format(I8,X,F16.10,X,L,X,A,2I4,A,2I4,A,4X,A,2I4,A,2I4,A,A,2A4,A,2A4,A,X,8F12.6)
+    
     
     return
   end subroutine m_kern_exx_dummy

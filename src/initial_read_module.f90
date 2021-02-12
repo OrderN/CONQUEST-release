@@ -190,9 +190,11 @@ contains
          flag_diagonalisation, flag_vary_basis, &
          flag_MDcontinue, flag_SFcoeffReuse,    &
          flag_exx
-    use exx_types,     only: exx_gto
-    use read_gto_info, only: read_gto
-    use gto_format,    only: gto
+    use exx_types,     only: exx_gto, exx_gto_poisson
+    !use read_gto_info, only: read_gto
+    use read_gto_info, only: read_gto_new
+    !use gto_format,    only: gto
+    use gto_format_new,    only: gto
     
     use cdft_data, only: cDFT_NAtoms, & 
          cDFT_NumberAtomGroups, cDFT_AtomList
@@ -293,14 +295,15 @@ contains
     call my_barrier()
     !
     ! If EXX with GTO open and read species' GTO files
-    if ( flag_exx .and. exx_gto ) then
+    if ( flag_exx .and. (exx_gto .or. exx_gto_poisson) ) then
        !
        allocate(gto_file(n_species),STAT=stat)
        if(stat /= 0) call cq_abort("Error allocating gto_file in read_and_write: ",n_species,stat)
        allocate(gto(n_species),STAT=stat)       
        if(stat /= 0) call cq_abort ("Error allocating gto in read_and_write",stat)
        !
-       call read_gto(inode,ionode,n_species)
+       call read_gto_new(inode,ionode,n_species)
+       !call read_gto(inode,ionode,n_species)
        !
     end if
     !
@@ -533,21 +536,6 @@ contains
     ! Set up various lengths, volumes, reciprocals etc. for convenient use
     call set_dimensions(inode, ionode,HNL_fac, non_local, n_species, &
          non_local_species, core_radius)
-
-
-    ! If EXX with GTO open and read species' GTO files
-    !if ( flag_exx .and. exx_gto ) then
-    !   !
-    !   allocate(gto_file(n_species),STAT=stat)
-    !   if(stat /= 0) call cq_abort("Error allocating gto_file in read_and_write: ",n_species,stat)
-    !   allocate(gto(n_species),STAT=stat)       
-    !   if(stat /= 0) call cq_abort ("Error allocating gto in read_and_write",stat)
-    !   !
-    !   call read_gto(inode,ionode,n_species)
-    !   !
-    !end if
-    !
-    !call my_barrier()
     ! 
     ! write out some information on the run
     if (inode == ionode) &
@@ -930,7 +918,7 @@ contains
     use exx_types, only: exx_scheme, exx_mem, exx_overlap, exx_alloc,    &
          exx_cartesian, exx_radius, exx_hgrid, exx_psolver, ewald_alpha, &
          exx_debug, exx_pscheme, exx_filter, exx_filter_thr, exx_filter_extent, &
-         exx_gto
+         exx_gto, exx_gto_poisson
     use multisiteSF_module, only: flag_MSSF_smear, MSSF_Smear_Type, &
          MSSF_Smear_center, MSSF_Smear_shift, MSSF_Smear_width, &
          flag_LFD_ReadTVEC, LFD_TVEC_read,                      &
@@ -1921,7 +1909,8 @@ contains
        ! To control accuracy during scf
        exx_scf_tol   = sc_tolerance
        !
-       exx_gto    = fdf_boolean('EXX.GTO', .false.)
+       exx_gto        = fdf_boolean('EXX.GTO', .false.)
+       exx_gto_poisson= fdf_boolean('EXX.GTOPoisson', .false.)
        exx_hgrid  = fdf_double ('EXX.GridSpacing',zero)
        exx_radius = fdf_double ('EXX.IntegRadius',zero)
        exx_scheme = fdf_integer('EXX.Scheme',       3 ) 
@@ -1930,11 +1919,12 @@ contains
        !
        exx_filter = fdf_boolean('EXX.Filter', .false.  )
        exx_filter_extent = fdf_integer('EXX.FilterGrid', 2 )
-       exx_filter_thr    = fdf_double('EXX.Threshold',  1.0e-10_double )
+       exx_filter_thr    = fdf_double('EXX.FilterThreshold',  1.0e-10_double )
        !
-       exx_cartesian = fdf_boolean('EXX.PAOCartesian',     .true.)
-       exx_alloc     = fdf_boolean('EXX.DynamicAllocation',.true.)
-       exx_psolver   = fdf_string (20,'EXX.PoissonSolver', 'fftw')
+       exx_cartesian  = fdf_boolean('EXX.PAOCartesian',     .true.)
+       exx_alloc      = fdf_boolean('EXX.DynamicAllocation',.true.)
+       exx_psolver    = fdf_string (20,'EXX.PoissonSolver', 'fftw')
+
        if(exx_psolver == 'fftw') then
           exx_pscheme   = fdf_string (20,'EXX.FFTWSolver','ewald')
           if(exx_pscheme == 'ewald') then

@@ -949,7 +949,7 @@ contains
     if ( present(system) ) then
        cartesian = system
     else
-       cartesian = .true.
+       cartesian = .false.
     end if
     !
     !compute radius
@@ -2276,7 +2276,7 @@ contains
              y_val =  eg_b_norm*(3*z*z-r*r)
           case(-1 ) ! d_{yz}
              y_val =  t2g_norm*(y*z)
-          case(-2 ) ! d_{yz}             
+          case(-2 ) ! d_{xy}             
              y_val = -t2g_norm*(x*y) ! take care phase factor
           case default
              call cq_abort('evaluate_pao/problem with (l,m) =',l,m)
