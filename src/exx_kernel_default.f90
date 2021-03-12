@@ -1401,19 +1401,6 @@ contains
     real(double)     :: zi, zj, zk, zl 
 
     real(double) :: eri_gto, eri_pao, test
-
-    !real(double),allocatable,dimension(:,:,:) :: phi_on_grid_ia, phi_on_grid_jb, &
-    !     phi_on_grid_kg, phi_on_grid_ld, work_out_3d_, work_in_3d_
-    !integer :: ii, jj, kk
-    !real(double), allocatable  :: pao_eris(:)
-    !real(double), allocatable  :: gto_eris(:)   
-    !real(double), allocatable  :: pao_eris2(:)
-
-    !if (exx_gto) then
-    !   allocate(pao_eris(1000000)) ; pao_eris = 0.0
-    !   allocate(gto_eris(1000000)) ; gto_eris = 0.0
-    !   allocate(pao_eris2(1000000)) ; pao_eris2 = 0.0
-    !end if
     !
     dr = grid_spacing
     dv = dr**3
@@ -1605,153 +1592,6 @@ contains
 
                                   end if
                                   !
-                                  !#####################################################################@
-!!$                                  if (exx_gto) then
-!!$                                     !
-!!$                                     i_nx = gto( ia%spec )%sf( nsf_ia )%nx ; i_ny = gto( ia%spec )%sf( nsf_ia )%ny
-!!$                                     j_nx = gto( jb%spec )%sf( nsf_jb )%nx ; j_ny = gto( jb%spec )%sf( nsf_jb )%ny 
-!!$                                     k_nx = gto( kg%spec )%sf( nsf_kg )%nx ; k_ny = gto( kg%spec )%sf( nsf_kg )%ny
-!!$                                     l_nx = gto( ld%spec )%sf( nsf_ld )%nx ; l_ny = gto( ld%spec )%sf( nsf_ld )%ny
-!!$
-!!$                                     i_nz = gto( ia%spec )%sf( nsf_ia )%nz ; i_nt = trim(gto( ia%spec )%sf( nsf_ia )%nt)
-!!$                                     j_nz = gto( jb%spec )%sf( nsf_jb )%nz ; j_nt = trim(gto( jb%spec )%sf( nsf_jb )%nt)
-!!$                                     k_nz = gto( kg%spec )%sf( nsf_kg )%nz ; k_nt = trim(gto( kg%spec )%sf( nsf_kg )%nt)
-!!$                                     l_nz = gto( ld%spec )%sf( nsf_ld )%nz ; l_nt = trim(gto( ld%spec )%sf( nsf_ld )%nt)
-!!$
-!!$
-!!$
-!!$
-!!$                                     eri_gto = zero ; eri_pao = zero
-!!$                                     prim_ld: do ld_gto = 1, gto( ld%spec )%sf( nsf_ld )%ngto
-!!$                                        prim_kg: do kg_gto = 1, gto( kg%spec )%sf( nsf_kg )%ngto
-!!$                                           prim_jb: do jb_gto = 1, gto( jb%spec )%sf( nsf_jb )%ngto
-!!$                                              prim_ia: do ia_gto = 1, gto( ia%spec )%sf( nsf_ia )%ngto
-!!$
-!!$                                                 ai = gto( ia%spec )%sf( nsf_ia )%a( ia_gto )                                     
-!!$                                                 aj = gto( jb%spec )%sf( nsf_jb )%a( jb_gto )
-!!$                                                 ak = gto( kg%spec )%sf( nsf_kg )%a( kg_gto )
-!!$                                                 al = gto( ld%spec )%sf( nsf_ld )%a( ld_gto )
-!!$
-!!$                                                 di = gto( ia%spec )%sf( nsf_ia )%d( ia_gto )                                     
-!!$                                                 dj = gto( jb%spec )%sf( nsf_jb )%d( jb_gto )
-!!$                                                 dk = gto( kg%spec )%sf( nsf_kg )%d( kg_gto )
-!!$                                                 dl = gto( ld%spec )%sf( nsf_ld )%d( ld_gto )
-!!$
-!!$                                                 i_norm  = gto( ia%spec )%sf( nsf_ia )%norm
-!!$                                                 j_norm  = gto( jb%spec )%sf( nsf_jb )%norm
-!!$                                                 k_norm  = gto( kg%spec )%sf( nsf_kg )%norm
-!!$                                                 l_norm  = gto( ld%spec )%sf( nsf_ld )%norm
-!!$
-!!$
-!!$                                                 !i_norm  = 1.0d0
-!!$                                                 !j_norm  = 1.0d0
-!!$                                                 !k_norm  = 1.0d0
-!!$                                                 !l_norm  = 1.0d0
-!!$
-!!$                                                 eri_gto = eri_gto + di*dj*dk*dl*eri_gto_hoh( &
-!!$                                                      xi, yi, zi, i_norm, i_nx, i_ny, i_nz, ai, &
-!!$                                                      xk, yk, zk, k_norm, k_nx, k_ny, k_nz, ak, &
-!!$                                                      xl, yl, zl, l_norm, l_nx, l_ny, l_nz, al, &
-!!$                                                      xj, yj, zj, j_norm, j_nx, j_ny, j_nz, aj)
-
-
-
-!!$                                  allocate(phi_on_grid_ia(2*extent+1,2*extent+1,2*extent+1))
-!!$                                  phi_on_grid_ia = zero
-!!$                                  allocate(phi_on_grid_jb(2*extent+1,2*extent+1,2*extent+1))
-!!$                                  phi_on_grid_jb = zero
-!!$                                  allocate(phi_on_grid_kg(2*extent+1,2*extent+1,2*extent+1))
-!!$                                  phi_on_grid_kg = zero
-!!$                                  allocate(phi_on_grid_ld(2*extent+1,2*extent+1,2*extent+1))
-!!$                                  phi_on_grid_ld = zero
-!!$                                  allocate(work_out_3d_(2*extent+1,2*extent+1,2*extent+1))
-!!$                                  work_out_3d_ = zero
-!!$                                  allocate(work_in_3d_(2*extent+1,2*extent+1,2*extent+1))
-!!$                                  work_in_3d_ = zero
-!!$
-!!$
-!!$                                  call exx_gto_on_grid_prim(inode,ia%ip, &
-!!$                                       ia%spec, &
-!!$                                       extent,  ia%xyz,       &
-!!$                                       phi_on_grid_ia,r_int,xyz_zero,i_nx,i_ny,i_nz,ai)
-!!$
-!!$                                  call exx_gto_on_grid_prim(inode,jb%global_num,&
-!!$                                       jb%spec,  &
-!!$                                       extent, jb%xyz,&
-!!$                                       phi_on_grid_jb,r_int,xyz_zero,j_nx,j_ny,j_nz,aj)
-!!$
-!!$                                  call exx_gto_on_grid_prim(inode,kg%global_num,&
-!!$                                       kg%spec,&
-!!$                                       extent,kg%xyz,&
-!!$                                       phi_on_grid_kg,r_int,xyz_zero,k_nx,k_ny,k_nz,ak)
-!!$
-!!$                                  call exx_gto_on_grid_prim(inode,ld%global_num,&
-!!$                                       ld%spec,&
-!!$                                       extent,ld%xyz,&
-!!$                                       phi_on_grid_ld,r_int,xyz_zero,l_nx,l_ny,l_nz,al)
-!!$
-!!$
-!!$                                  work_in_3d_(:,:,:) = phi_on_grid_ld(:,:,:) * &
-!!$                                       phi_on_grid_jb(:,:,:)
-!!$
-!!$                                  !call hf_v_on_grid(inode,extent,work_in_3d,&
-!!$                                  !     work_out_3d,r_int, &
-!!$                                  !     exx_psolver,p_scheme,pulay_radius,p_omega,&
-!!$                                  !     p_ngauss,p_gauss, &
-!!$                                  !     w_gauss)
-!!$
-!!$                                  call exx_v_on_grid(inode,extent,work_in_3d_,work_out_3d_,&
-!!$                                       r_int,   &
-!!$                                       exx_psolver,exx_pscheme,pulay_radius,p_omega,&
-!!$                                       p_ngauss,p_gauss,&
-!!$                                       w_gauss,fftwrho3d,reckernel_3d)
-!!$
-!!$                                  work_in_3d_ = phi_on_grid_ia(:,:,:) * phi_on_grid_kg(:,:,:)
-!!$
-!!$                                  !eri_pao = zero
-!!$                                  do ii = 1, 2*extent + 1
-!!$                                     do jj = 1, 2*extent + 1
-!!$                                        do kk = 1, 2*extent + 1       
-!!$                                           eri_pao = eri_pao + &
-!!$                                                work_in_3d_ (ii,jj,kk) * &
-!!$                                                work_out_3d_(ii,jj,kk) * dv 
-!!$                                                !i_norm * j_norm * k_norm * l_norm
-!!$                                        end do
-!!$                                     end do
-!!$                                  end do
-!!$
-!!$                                  !eri_pao = eri_pao 
-!!$                                  
-!!$                                  deallocate(phi_on_grid_ia)
-!!$                                  deallocate(phi_on_grid_jb)
-!!$                                  deallocate(phi_on_grid_kg) 
-!!$                                  deallocate(phi_on_grid_ld) 
-!!$                                  deallocate(work_out_3d_) 
-!!$                                  deallocate(work_in_3d_) 
-
-
-!!$
-!!$                                              end do prim_ia
-!!$                                           end do prim_jb
-!!$                                        end do prim_kg
-!!$                                     end do prim_ld
-
-
-                                     !pao_eris2(count) = eri_pao
-
-                                     !gto_eris(count) = eri_gto
-
-!!$                                  if ( backup_eris ) then
-!!$                                     !
-!!$                                     eris(kpart)%store_eris( count ) = eri_gto
-!!$                                     !
-!!$                                  else                                     
-!!$                                     c(ncaddr + nsf_ia - 1) = c(ncaddr + nsf_ia - 1) + eri_gto
-!!$                                     !
-!!$                                  end if
-!!$                                  
-!!$                               end if
-
                                   if ( backup_eris ) then
                                      !
                                      eris(kpart)%store_eris( count ) = exx_mat_elem
@@ -1884,10 +1724,10 @@ contains
     !
     use exx_poisson,only: exx_v_on_grid, exx_ewald_charge
     !
-    use exx_erigto, only: eri_gto_hoh
-    !    
-    implicit none
+    use exx_erigto, only: eri_gto_hoh, compute_eri_hoh
     !
+    implicit none
+
     ! Passed variables
     type(matrix_halo),  intent(in)    :: ahalo, chalo
     type(matrix_trans), intent(in)    :: at
@@ -1929,6 +1769,8 @@ contains
     integer          :: i_nx, j_nx, k_nx, l_nx
     integer          :: i_ny, j_ny, k_ny, l_ny
     integer          :: i_nz, j_nz, k_nz, l_nz
+    integer          :: i_n,  j_n,  k_n,  l_n
+
     character(len=8) :: i_nt, j_nt, k_nt, l_nt
     integer          :: ia_gto, jb_gto, kg_gto, ld_gto
     real(double)     :: ai, aj, ak, al, di, dj, dk, dl 
@@ -1936,24 +1778,14 @@ contains
     real(double)     :: xi, xj, xk, xl 
     real(double)     :: yi, yj, yk, yl 
     real(double)     :: zi, zj, zk, zl
+    real(double)     :: ci, cj, ck, cl
+
     real(double)     :: K_val
     !
     integer      :: count
     real(double) :: eri_gto, eri_pao, test
 
-    !real(double)               ::   dr,dv,K_val
-    !real(double)               ::   exx_mat_elem
-    !
-    !real(double),allocatable,dimension(:,:,:) :: phi_on_grid_ia, phi_on_grid_jb, &
-    !     phi_on_grid_kg, phi_on_grid_ld, work_out_3d_, work_in_3d_
-    !integer :: ii, jj, kk
-    !real(double), allocatable  :: pao_eris(:)
-    !real(double), allocatable  :: gto_eris(:)   
-    !real(double), allocatable  :: pao_eris2(:)
-    !real :: dr, dv
-    !
-    !dr = grid_spacing
-    !dv = dr**3
+    !TYPE(libint_t), DIMENSION(1) :: erieval
     !
     count = 1
     !
@@ -2072,136 +1904,24 @@ contains
                                   eri_gto = zero
                                   !
                                   if ( eris(kpart)%filter_eris( count ) ) then
-                                     
-                                     i_nx = gto( ia%spec )%sf( nsf_ia )%nx ; i_ny = gto( ia%spec )%sf( nsf_ia )%ny
-                                     j_nx = gto( jb%spec )%sf( nsf_jb )%nx ; j_ny = gto( jb%spec )%sf( nsf_jb )%ny 
-                                     k_nx = gto( kg%spec )%sf( nsf_kg )%nx ; k_ny = gto( kg%spec )%sf( nsf_kg )%ny
-                                     l_nx = gto( ld%spec )%sf( nsf_ld )%nx ; l_ny = gto( ld%spec )%sf( nsf_ld )%ny
-
-                                     i_nz = gto( ia%spec )%sf( nsf_ia )%nz ; i_nt = trim(gto( ia%spec )%sf( nsf_ia )%nt)
-                                     j_nz = gto( jb%spec )%sf( nsf_jb )%nz ; j_nt = trim(gto( jb%spec )%sf( nsf_jb )%nt)
-                                     k_nz = gto( kg%spec )%sf( nsf_kg )%nz ; k_nt = trim(gto( kg%spec )%sf( nsf_kg )%nt)
-                                     l_nz = gto( ld%spec )%sf( nsf_ld )%nz ; l_nt = trim(gto( ld%spec )%sf( nsf_ld )%nt)
-
-                                     prim_ld: do ld_gto = 1, gto( ld%spec )%sf( nsf_ld )%ngto
-                                        prim_kg: do kg_gto = 1, gto( kg%spec )%sf( nsf_kg )%ngto
-                                           prim_jb: do jb_gto = 1, gto( jb%spec )%sf( nsf_jb )%ngto
-                                              prim_ia: do ia_gto = 1, gto( ia%spec )%sf( nsf_ia )%ngto
-
-                                                 ai = gto( ia%spec )%sf( nsf_ia )%a( ia_gto )
-                                                 aj = gto( jb%spec )%sf( nsf_jb )%a( jb_gto )
-                                                 ak = gto( kg%spec )%sf( nsf_kg )%a( kg_gto )
-                                                 al = gto( ld%spec )%sf( nsf_ld )%a( ld_gto )
-
-                                                 di = gto( ia%spec )%sf( nsf_ia )%d( ia_gto )
-                                                 dj = gto( jb%spec )%sf( nsf_jb )%d( jb_gto )
-                                                 dk = gto( kg%spec )%sf( nsf_kg )%d( kg_gto )
-                                                 dl = gto( ld%spec )%sf( nsf_ld )%d( ld_gto )
-
-                                                 i_norm  = gto( ia%spec )%sf( nsf_ia )%norm
-                                                 j_norm  = gto( jb%spec )%sf( nsf_jb )%norm
-                                                 k_norm  = gto( kg%spec )%sf( nsf_kg )%norm
-                                                 l_norm  = gto( ld%spec )%sf( nsf_ld )%norm
-
-                                                 eri_gto = eri_gto + di*dj*dk*dl*eri_gto_hoh( &
-                                                      xi, yi, zi, i_norm, i_nx, i_ny, i_nz, ai, &
-                                                      xk, yk, zk, k_norm, k_nx, k_ny, k_nz, ak, &
-                                                      xl, yl, zl, l_norm, l_nx, l_ny, l_nz, al, &
-                                                      xj, yj, zj, j_norm, j_nx, j_ny, j_nz, aj)
-
-
-
-!!$                                  allocate(phi_on_grid_ia(2*extent+1,2*extent+1,2*extent+1))
-!!$                                  phi_on_grid_ia = zero
-!!$                                  allocate(phi_on_grid_jb(2*extent+1,2*extent+1,2*extent+1))
-!!$                                  phi_on_grid_jb = zero
-!!$                                  allocate(phi_on_grid_kg(2*extent+1,2*extent+1,2*extent+1))
-!!$                                  phi_on_grid_kg = zero
-!!$                                  allocate(phi_on_grid_ld(2*extent+1,2*extent+1,2*extent+1))
-!!$                                  phi_on_grid_ld = zero
-!!$                                  allocate(work_out_3d_(2*extent+1,2*extent+1,2*extent+1))
-!!$                                  work_out_3d_ = zero
-!!$                                  allocate(work_in_3d_(2*extent+1,2*extent+1,2*extent+1))
-!!$                                  work_in_3d_ = zero
-!!$
-!!$
-!!$                                  call exx_gto_on_grid_prim(inode,ia%ip, &
-!!$                                       ia%spec, &
-!!$                                       extent,  ia%xyz,       &
-!!$                                       phi_on_grid_ia,r_int,xyz_zero,i_nx,i_ny,i_nz,ai)
-!!$
-!!$                                  call exx_gto_on_grid_prim(inode,jb%global_num,&
-!!$                                       jb%spec,  &
-!!$                                       extent, jb%xyz,&
-!!$                                       phi_on_grid_jb,r_int,xyz_zero,j_nx,j_ny,j_nz,aj)
-!!$
-!!$                                  call exx_gto_on_grid_prim(inode,kg%global_num,&
-!!$                                       kg%spec,&
-!!$                                       extent,kg%xyz,&
-!!$                                       phi_on_grid_kg,r_int,xyz_zero,k_nx,k_ny,k_nz,ak)
-!!$
-!!$                                  call exx_gto_on_grid_prim(inode,ld%global_num,&
-!!$                                       ld%spec,&
-!!$                                       extent,ld%xyz,&
-!!$                                       phi_on_grid_ld,r_int,xyz_zero,l_nx,l_ny,l_nz,al)
-!!$
-!!$
-!!$                                  work_in_3d_(:,:,:) = phi_on_grid_ld(:,:,:) * &
-!!$                                       phi_on_grid_jb(:,:,:)
-!!$
-!!$                                  !call hf_v_on_grid(inode,extent,work_in_3d,&
-!!$                                  !     work_out_3d,r_int, &
-!!$                                  !     exx_psolver,p_scheme,pulay_radius,p_omega,&
-!!$                                  !     p_ngauss,p_gauss, &
-!!$                                  !     w_gauss)
-!!$
-!!$                                  call exx_v_on_grid(inode,extent,work_in_3d_,work_out_3d_,&
-!!$                                       r_int,   &
-!!$                                       exx_psolver,exx_pscheme,pulay_radius,p_omega,&
-!!$                                       p_ngauss,p_gauss,&
-!!$                                       w_gauss,fftwrho3d,reckernel_3d)
-!!$
-!!$                                  work_in_3d_ = phi_on_grid_ia(:,:,:) * phi_on_grid_kg(:,:,:)
-!!$
-!!$                                  !eri_pao = zero
-!!$                                  do ii = 1, 2*extent + 1
-!!$                                     do jj = 1, 2*extent + 1
-!!$                                        do kk = 1, 2*extent + 1       
-!!$                                           eri_pao = eri_pao + &
-!!$                                                work_in_3d_ (ii,jj,kk) * &
-!!$                                                work_out_3d_(ii,jj,kk) * dv 
-!!$                                                !i_norm * j_norm * k_norm * l_norm
-!!$                                        end do
-!!$                                     end do
-!!$                                  end do
-!!$
-!!$                                  !eri_pao = eri_pao 
-!!$                                  
-!!$                                  deallocate(phi_on_grid_ia)
-!!$                                  deallocate(phi_on_grid_jb)
-!!$                                  deallocate(phi_on_grid_kg) 
-!!$                                  deallocate(phi_on_grid_ld) 
-!!$                                  deallocate(work_out_3d_) 
-!!$                                  deallocate(work_in_3d_) 
-
-
-                                                 
-                                              end do prim_ia
-                                           end do prim_jb
-                                        end do prim_kg
-                                     end do prim_ld
+                                     !
+                                     call compute_eri_hoh( nsf_ia, nsf_jb, nsf_kg, nsf_ld, &
+                                          ia%spec,   jb%spec,   kg%spec,   ld%spec,  &
+                                          ia%xyz_ip, jb%xyz_cv, kg%xyz_cv, ld%xyz_cv,&
+                                          i_nt, j_nt, k_nt, l_nt,&
+                                          eri_gto )
                                      !
                                   end if
-                                  
+                                  !
                                   if (exx_debug) then
-                                     
+
                                      write(unit_eri_debug,10) count, eri_gto, &
                                           '[',ia%ip, kg%global_num,'|',ld%global_num, jb%global_num,']', &
                                           '(',nsf_ia,nsf_kg,  '|',nsf_ld,nsf_jb,  ')' , &
                                           '[',ia%name,kg%name,'|',ld%name,jb%name,']' , &
                                           '(',i_nt,k_nt,'|',l_nt,j_nt,')', &
                                           ai, ak, al, aj
-                                          !zi, zk, zl, zj, ai, ak, al, aj 
+                                     !zi, zk, zl, zj, ai, ak, al, aj 
                                   end if
                                   !
                                   if ( backup_eris ) then
@@ -2237,7 +1957,7 @@ contains
                 !
              end do kg_loop
              !
-          end do ld_loop 
+          end do ld_loop
           !
 !!$
 !!$ ****[ l end loop ]****
@@ -2253,11 +1973,11 @@ contains
        !
     end do k_loop
     !
-
-10  format(I8,X,F16.10,X,A,2I4,A,2I4,A,4X,A,2I4,A,2I4,A,A,2A4,A,2A4,A,X,A,2A4,A,2A4,A,X,8F12.6)
+    !
+10  format(I8,X,F16.10,X,A,2I4,A,2I4,A,4X,A,2I4,A,2I4,A,A,2A4,A,2A4,A,X,A,2A8,A,2A8,A,X,8F12.6)
 
     return
-  end subroutine m_kern_exx_eri_gto  
+  end subroutine m_kern_exx_eri_gto
   !
   !!****f* exx_kernel_default/m_kern_exx_dummy *
   !!

@@ -15,7 +15,7 @@ contains
     use exx_types,      ONLY: exx_overlap, exx_cartesian, exx_gto
     use GenComms,               ONLY: cq_abort
 
-    use angular_coeff_routines, ONLY: evaluate_pao
+    use angular_coeff_routines, ONLY: evaluate_pao, re_cart_norm
     use dimens,                 ONLY: r_h   
     use gto_format_new,         ONLY: gto
 
@@ -121,11 +121,13 @@ contains
        pz = pz -ijk(3)+1
     end if overlap_box
     
-    do i = 1, gto( spec )%nsf_tot
+    do i = 1, gto( spec )%nsf_gto_tot
 
        ex = gto( spec )%sf( i )%nx
        ey = gto( spec )%sf( i )%ny
        ez = gto( spec )%sf( i )%nz
+
+       factor = re_cart_norm( l1,m1-l1-1 ) !call re_cart_norm(l1,m1-l1-1,factor)
        
        grid_x_loop: do nx = mx, px
           x = xyz(1) + real(nx,double)*grid_spacing + rst(1)
@@ -145,8 +147,8 @@ contains
 
                    a = gto( spec )%sf( i )%a( p )
 
-                   gto_rad = gto_rad + exp(-a*r**2)
-                   !gto_rad = gto_rad + d*exp(-a*r**2)
+                   !gto_rad = gto_rad + exp(-a*r**2)
+                   gto_rad = gto_rad + d*exp(-a*r**2)
                    
                 end do primitive
                 
@@ -172,7 +174,7 @@ contains
     use exx_types,      ONLY: exx_overlap, exx_cartesian, exx_gto
     use GenComms,               ONLY: cq_abort
 
-    use angular_coeff_routines, ONLY: evaluate_pao
+    use angular_coeff_routines, ONLY: evaluate_pao, re_cart_norm
     use dimens,                 ONLY: r_h   
     use gto_format_new,         ONLY: gto
 
@@ -208,11 +210,11 @@ contains
     real(double)        :: xyz_delta(3)
 
     integer             :: count1, ierr, stat
-    integer             :: i, j, p, l1, m1, acz1, ngrid
+    integer             :: i, j, p, l1, m1, acz1, n1, ngrid
     integer             :: ijk_delta(3), ijk(3), kji(3), njk(3), nji(3)
 
     real(double)        :: gto_rad, gto_cart, gto_val
-    real(double)        :: a, d, factor
+    real(double)        :: a, d, factor, c
 
     ngrid        = 2*extent+1
     grid_spacing = r_int/real(extent,double)                   
@@ -277,21 +279,29 @@ contains
        py = py -ijk(2)+1
        pz = pz -ijk(3)+1
     end if overlap_box
-    
+
     count1 = 1
     angu_loop: do l1 = 0, gto(spec)%greatest_angmom
 
-       if (l1 == 0) factor = a1g_norm
-       if (l1 == 1) factor = t1u_norm 
+       !if (l1 == 0) factor = a1g_norm
+       !if (l1 == 1) factor = t1u_norm 
 
        zeta_loop: do acz1 = 1, gto(spec)%angmom(l1)%n_zeta_in_angmom
 
-          magn_loop: do m1 = 1, gto(spec)%angmom(l1)%nf 
+          !magn_loop: do m1 = 1, gto(spec)%angmom(l1)%nf_gto
 
-             ex = gto(spec)%angmom(l1)%nx(m1)
-             ey = gto(spec)%angmom(l1)%ny(m1)
-             ez = gto(spec)%angmom(l1)%nz(m1)
-             
+          magn_loop: do m1 = -l1, +l1
+
+             factor = re_cart_norm(l1,m1)! call re_cart_norm(l1,m1-l1-1,factor)
+
+             !sph_loop: do n1 = 1, gto(nsp)%angmom(l1)%transform_sph(m1)%size
+
+             !ex = gto(spec)%angmom(l1)%nx(m1)
+             !ey = gto(spec)%angmom(l1)%ny(m1)
+             !ez = gto(spec)%angmom(l1)%nz(m1)
+
+             !factor = re_cart_norm(l1,m1)! call re_cart_norm(l1,m1-l1-1,factor)
+
              grid_x_loop: do nx = mx, px
                 x = xyz(1) + real(nx,double)*grid_spacing + rst(1)
 
@@ -300,25 +310,34 @@ contains
 
                    grid_z_loop: do nz = mz, pz
                       z = xyz(3) + real(nz,double)*grid_spacing + rst(3)
-
+                      
                       r = sqrt(x*x+y*y+z*z)  
 
-                      gto_cart = (x**real(ex))*(y**real(ey))*(z**real(ez))
+                      gto_cart = zero
+                      sph_loop: do n1 = 1, gto(spec)%angmom(l1)%transform_sph(m1)%size
 
-                      gto_rad = zero
+                         ex = gto(spec)%angmom(l1)%transform_sph(m1)%nx(n1)
+                         ey = gto(spec)%angmom(l1)%transform_sph(m1)%ny(n1)
+                         ez = gto(spec)%angmom(l1)%transform_sph(m1)%nz(n1)
+                         c  = gto(spec)%angmom(l1)%transform_sph(m1)%c( n1)
+
+                         gto_cart = gto_cart + c * x**real(ex) * y**real(ey) * z**real(ez)
+
+                      end do sph_loop
+                      !
+                      gto_rad = zero 
                       primitive: do p = 1, gto(spec)%angmom(l1)%zeta(acz1)%ngto 
 
                          a = gto(spec)%angmom(l1)%zeta(acz1)%a(p)
                          d = gto(spec)%angmom(l1)%zeta(acz1)%d(p)
-                         
-                         !gto_rad = gto_rad + exp(-a*r**2)
+
                          gto_rad = gto_rad + d*exp(-a*r**2)
 
                       end do primitive
-
+                      
                       gto_val = gto_rad * gto_cart * factor 
                       phi_on_grid(nx+extent+1,ny+extent+1,nz+extent+1,count1) = gto_val
-
+                      
                    end do grid_z_loop
                 end do grid_y_loop
              end do grid_x_loop
@@ -328,10 +347,10 @@ contains
        end do zeta_loop
     end do angu_loop
 
-call stop_timer(tmr_std_exx_evalgto,.true.)
+    call stop_timer(tmr_std_exx_evalgto,.true.)
 
-return 
-end subroutine exx_gto_on_grid_new
+    return 
+  end subroutine exx_gto_on_grid_new
 
   
   subroutine exx_gto_on_grid(inode,atom,spec,extent,xyz,nsuppfuncs,phi_on_grid,r_int,rst)
@@ -603,5 +622,86 @@ end subroutine exx_gto_on_grid_new
     return 
   end subroutine exx_gto_on_grid_prim
   !
+!!$  subroutine re_cart_norm(l,m,norm)
+!!$    
+!!$    use datatypes
+!!$    use numbers
+!!$    use GenComms,ONLY: cq_abort
+!!$
+!!$    implicit none
+!!$    !
+!!$    !
+!!$    integer,      intent(in) :: l, m
+!!$    real(double), intent(out):: norm        
+!!$    !
+!!$    real(double),  parameter :: a1g_norm  = sqrt(one/(four*pi))
+!!$    real(double),  parameter :: t1u_norm  = sqrt(three/(four*pi))
+!!$    real(double),  parameter :: t2g_norm  = sqrt(fifteen/(four*pi))
+!!$    real(double),  parameter :: eg_a_norm = sqrt(fifteen/(sixteen*pi)) 
+!!$    real(double),  parameter :: eg_b_norm = sqrt(five/(sixteen*pi))     
+!!$    !
+!!$    real(double),  parameter :: f0_norm = sqrt(seven/(sixteen*pi))
+!!$    real(double),  parameter :: f1_norm = sqrt( 21.0_double/(sixteen*two*pi))
+!!$    real(double),  parameter :: f2_norm = sqrt(105.0_double/(sixteen*pi)) 
+!!$    real(double),  parameter :: f3_norm = sqrt( 35.0_double/(sixteen*two*pi)) 
+!!$    !
+!!$    integer :: i
+!!$    !
+!!$    if(l == 0) then !s-type function
+!!$       !
+!!$       norm = a1g_norm
+!!$       !
+!!$    else if(l == 1) then !p-type function
+!!$       !
+!!$       norm = t1u_norm
+!!$       !
+!!$    else if(l == 2) then !d-type function
+!!$       !
+!!$       select case( m )
+!!$
+!!$       case( 3 ) ! d_{x2-y2}
+!!$          norm = 1.0d0
+!!$       case( 2 ) ! d_{x2-y2}
+!!$          norm = eg_a_norm !(x*x-y*y) 
+!!$       case( 1 ) ! d_{xz}
+!!$          norm = t2g_norm !(x*z)         
+!!$       case( 0 ) ! d_{z2}
+!!$          norm = eg_b_norm!(3*z*z-r*r)
+!!$       case(-1 ) ! d_{yz}
+!!$          norm = t2g_norm !(y*z)
+!!$       case(-2 ) ! d_{xy}             
+!!$          norm =-t2g_norm !(x*y) ! take care phase factor
+!!$       case default
+!!$          call cq_abort('re_cart_norm/problem with (l,m) =',l,m)
+!!$       end select
+!!$       !
+!!$    else if(l == 3) then !f-type function
+!!$       !
+!!$       select case( m )
+!!$       case( 3 ) ! f_{x3-xy2}
+!!$          norm = f3_norm !*(x*x - 3*y*y)*x
+!!$       case( 2 ) ! f_{zx2-zy2}
+!!$          norm = f2_norm !*(x*x - y*y)*z
+!!$       case( 1 ) ! f_{xz2}
+!!$          norm = f1_norm !*(5*z*z - r*r)*x
+!!$       case( 0 ) ! f_{z3}
+!!$          norm = f0_norm !*(5*z*z - 3*r*r)*z
+!!$       case(-1 ) ! f_{yz2}             
+!!$          norm = f1_norm !(5*z*z - r*r)*y
+!!$       case(-2 ) ! f_{xyz}             
+!!$          norm = f2_norm !x*y*z
+!!$       case(-3 ) ! f_{3yx2-y3}             
+!!$          norm = f3_norm !(3*x*x - y*y)*y
+!!$       case default
+!!$          call cq_abort('re_cart_norm/problem with (l,m) =',l,m)
+!!$       end select
+!!$       !
+!!$    else if( l > 3) then
+!!$       call cq_abort('re_cart_norm/not implemented for l > 3')
+!!$    else                               
+!!$       call cq_abort('re_cart_norm/problem with l =',l)
+!!$    end if
+!!$    
+!!$  end subroutine re_cart_norm
   
 end module exx_evalgto

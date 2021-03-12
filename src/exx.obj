@@ -30,5 +30,8 @@ EXX_OBJS=   exx_module.o \
             exx_evalgto.o \
             exx_erigto.o \
             gto_format.o \
-            read_gto_info.o
+            read_gto_info.o \
+            libint_module.o \
+            libint_f.o 
 #            fft_fftw3.o
+#            libint_f.o \

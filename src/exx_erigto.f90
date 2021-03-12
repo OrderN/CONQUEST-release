@@ -3,7 +3,20 @@ module exx_erigto
   use datatypes
   use numbers,  ONLY: pi,zero,one,two,four,half,three_halves
 
+
+  USE ISO_C_BINDING, ONLY: C_DOUBLE, C_F_POINTER, C_F_PROCPOINTER, C_NULL_PTR
+  use libint_f,  only: libint_t, libint2_static_init, libint2_static_cleanup,&
+       libint2_build, libint2_max_am_eri, libint2_cleanup_eri, &
+       compute_eri_f, libint2_init_eri, print_eri
+
+  
   implicit none
+  
+  TYPE(libint_t), DIMENSION(1) :: erieval
+
+  INTEGER, PARAMETER :: dp = C_DOUBLE
+
+  
   ! The equations herein are based upon
   ! 'Gaussian Expansion Methods for Molecular Orbitals' H. Taketa,
   ! S. Huzinaga, and K. O-ohata. H. Phys. Soc. Japan, 21, 2313, 1966.
@@ -357,7 +370,7 @@ contains
     real(double) :: gammp
     real(double) :: gammcf,gamser,gln
 
-    if(x.lt.0..or.a.le.0.) pause 'bad arguments in gammp'
+    if(x.lt.0..or.a.le.0.) stop 'exx_erigto: error, bad arguments in gammp'
     if(x.lt.a+one)then
        call gser(gamser,a,x,gln)
        gammp=exp(gln)*gamser
@@ -383,7 +396,7 @@ contains
 
     gln=gammln(a)
     if(x.le.0.)then
-       if(x.lt.0.)pause 'x < 0 in gser'
+       if(x.lt.0.) stop 'exx_erigto: error, x < 0 in gser'
        gamser=zero
        return
     endif
@@ -396,7 +409,7 @@ contains
        sum=sum+del
        if(abs(del).lt.abs(sum)*EPS) goto 1
 11  end do
-    pause 'a too large, ITMAX too small in gser'
+    stop 'exx_erigto: error, a too large, ITMAX too small in gser'
 1   gamser=sum*exp(-x+a*log(x)-gln)
     return
   end subroutine gser
@@ -462,7 +475,7 @@ contains
        h=h*del
        if(abs(del-one).lt.EPS) goto 1
 11  end do
-    pause 'a too large, ITMAX too small in gcf'
+    stop 'exx_erigto: error, a too large, ITMAX too small in gcf'
 1   gammcf=exp(-x+a*log(x)-gln)*h
     return
   end subroutine gcf
@@ -626,6 +639,208 @@ contains
     dlgamma = y
   end function dlgamma
   !
+  !
+  !
+  subroutine compute_eri_hoh(i,j,k,l,i_nsp,j_nsp,k_nsp,l_nsp,i_xyz,j_xyz,k_xyz,l_xyz,&
+        i_nt, j_nt, k_nt, l_nt, eri_gto)
+
+    use gto_format_new, only: gto
+        
+    implicit none
+
+    integer,      intent(in)  :: i,j,k,l
+    integer,      intent(in)  :: i_nsp,j_nsp,k_nsp,l_nsp
+    real(double), intent(in)  :: i_xyz(3),j_xyz(3),k_xyz(3),l_xyz(3)
+    real(double), intent(out) :: eri_gto
+    character(len=8), intent(out) :: i_nt, j_nt, k_nt, l_nt
+
+    integer          :: i_nx, j_nx, k_nx, l_nx
+    integer          :: i_ny, j_ny, k_ny, l_ny
+    integer          :: i_nz, j_nz, k_nz, l_nz
+    integer          :: i_n,  j_n,  k_n,  l_n
+    
+    integer          :: ia_gto, jb_gto, kg_gto, ld_gto
+    real(double)     :: ai, aj, ak, al, di, dj, dk, dl 
+    real(double)     :: i_norm, j_norm, k_norm, l_norm
+    real(double)     :: ci, cj, ck, cl
+    
+    real(double), dimension(5) :: F
+
+    i_nt = trim(gto( i_nsp )%sf( i )%nt)
+    j_nt = trim(gto( j_nsp )%sf( j )%nt)
+    k_nt = trim(gto( k_nsp )%sf( k )%nt)
+    l_nt = trim(gto( l_nsp )%sf( l )%nt)
+
+    spherical_ia: do i_n = 1,  gto( i_nsp )%sf( i )%sph_size
+       spherical_jb: do j_n = 1,  gto( j_nsp )%sf( j )%sph_size
+          spherical_kg: do k_n = 1,  gto( k_nsp )%sf( k )%sph_size
+             spherical_ld: do l_n = 1,  gto( l_nsp )%sf( l )%sph_size
+
+                i_nx = gto( i_nsp )%sf( i )%sph_nx( i_n )
+                i_ny = gto( i_nsp )%sf( i )%sph_ny( i_n )
+                i_nz = gto( i_nsp )%sf( i )%sph_nz( i_n )
+                ci   = gto( i_nsp )%sf( i )%sph_c ( i_n )
 
 
+                j_nx = gto( j_nsp )%sf( j )%sph_nx( j_n )
+                j_ny = gto( j_nsp )%sf( j )%sph_ny( j_n ) 
+                j_nz = gto( j_nsp )%sf( j )%sph_nz( j_n )
+                cj   = gto( j_nsp )%sf( j )%sph_c ( j_n )
+
+                k_nx = gto( k_nsp )%sf( k )%sph_nx( k_n )
+                k_ny = gto( k_nsp )%sf( k )%sph_ny( k_n )                                        
+                k_nz = gto( k_nsp )%sf( k )%sph_nz( k_n )
+                ck   = gto( k_nsp )%sf( k )%sph_c ( k_n )
+
+                l_nx = gto( l_nsp )%sf( l )%sph_nx( l_n )
+                l_ny = gto( l_nsp )%sf( l )%sph_ny( l_n )
+                l_nz = gto( l_nsp )%sf( l )%sph_nz( l_n )
+                cl   = gto( l_nsp )%sf( l )%sph_c ( l_n )
+                
+                prim_ld: do ld_gto = 1, gto( l_nsp )%sf( l )%ngto
+                   prim_kg: do kg_gto = 1, gto( k_nsp )%sf( k )%ngto
+                      prim_jb: do jb_gto = 1, gto( j_nsp )%sf( j )%ngto
+                         prim_ia: do ia_gto = 1, gto( i_nsp )%sf( i )%ngto
+
+                            ai = gto( i_nsp )%sf( i )%a( ia_gto )
+                            aj = gto( j_nsp )%sf( j )%a( jb_gto )
+                            ak = gto( k_nsp )%sf( k )%a( kg_gto )
+                            al = gto( l_nsp )%sf( l )%a( ld_gto )
+
+                            di = gto( i_nsp )%sf( i )%d( ia_gto )
+                            dj = gto( j_nsp )%sf( j )%d( jb_gto )
+                            dk = gto( k_nsp )%sf( k )%d( kg_gto )
+                            dl = gto( l_nsp )%sf( l )%d( ld_gto )
+
+                            i_norm  = gto( i_nsp )%sf( i )%norm
+                            j_norm  = gto( j_nsp )%sf( j )%norm
+                            k_norm  = gto( k_nsp )%sf( k )%norm
+                            l_norm  = gto( l_nsp )%sf( l )%norm
+
+                            eri_gto = eri_gto + (ci*cj*ck*cl) * (di*dj*dk*dl) * &
+                                 eri_gto_hoh( &
+                                 i_xyz(1), i_xyz(2), i_xyz(3), i_norm, i_nx, i_ny, i_nz, ai, &
+                                 k_xyz(1), k_xyz(2), k_xyz(3), k_norm, k_nx, k_ny, k_nz, ak, &
+                                 l_xyz(1), l_xyz(2), l_xyz(3), l_norm, l_nx, l_ny, l_nz, al, &
+                                 j_xyz(1), j_xyz(2), j_xyz(3), j_norm, j_nx, j_ny, j_nz, aj)
+
+
+                            !call compute_eri(1, ai, ia%xyz_ip, &
+                            !     1, aj, jb%xyz_cv, &
+                            !     1, ak, kg%xyz_cv, &
+                            !     1, al, ld%xyz_cv)
+
+                            !F = [0.41608906765397796d0,  0.044889937015574935d0, &
+                            !     0.013706554295511562d0, 0.0063780699489852013d0, &
+                            !     0.39523364424416996d0]
+                            
+                            F(1) = 1.0d0
+
+                            
+                            print*,  eri_gto_hoh( &
+                                 i_xyz(1), i_xyz(2), i_xyz(3), 1.0d0, i_nx, i_ny, i_nz, ai, &
+                                 k_xyz(1), k_xyz(2), k_xyz(3), 1.0d0, k_nx, k_ny, k_nz, ak, &
+                                 l_xyz(1), l_xyz(2), l_xyz(3), 1.0d0, l_nx, l_ny, l_nz, al, &
+                                 j_xyz(1), j_xyz(2), j_xyz(3), 1.0d0, j_nx, j_ny, j_nz, aj)
+
+
+                            CALL libint2_static_init()
+                            CALL libint2_init_eri(erieval, 0, C_NULL_PTR)
+                            CALL compute_eri_f(1, 0, &
+                                 0, [1.0d0], [ai], i_xyz, &
+                                 0, [1.0d0], [ak], k_xyz, &
+                                 0, [1.0d0], [al], l_xyz, &
+                                 0, [1.0d0], [aj], j_xyz, &
+                                 F, erieval)
+                            CALL print_eri(0, 0, 0, 0, 0, erieval)
+                            CALL libint2_cleanup_eri(erieval)
+
+!!$                                  allocate(phi_on_grid_ia(2*extent+1,2*extent+1,2*extent+1))
+!!$                                  phi_on_grid_ia = zero
+!!$                                  allocate(phi_on_grid_jb(2*extent+1,2*extent+1,2*extent+1))
+!!$                                  phi_on_grid_jb = zero
+!!$                                  allocate(phi_on_grid_kg(2*extent+1,2*extent+1,2*extent+1))
+!!$                                  phi_on_grid_kg = zero
+!!$                                  allocate(phi_on_grid_ld(2*extent+1,2*extent+1,2*extent+1))
+!!$                                  phi_on_grid_ld = zero
+!!$                                  allocate(work_out_3d_(2*extent+1,2*extent+1,2*extent+1))
+!!$                                  work_out_3d_ = zero
+!!$                                  allocate(work_in_3d_(2*extent+1,2*extent+1,2*extent+1))
+!!$                                  work_in_3d_ = zero
+!!$
+!!$
+!!$                                  call exx_gto_on_grid_prim(inode,ia%ip, &
+!!$                                       i_nsp, &
+!!$                                       extent,  ia%xyz,       &
+!!$                                       phi_on_grid_ia,r_int,xyz_zero,i_nx,i_ny,i_nz,ai)
+!!$
+!!$                                  call exx_gto_on_grid_prim(inode,jb%global_num,&
+!!$                                       j_nsp,  &
+!!$                                       extent, jb%xyz,&
+!!$                                       phi_on_grid_jb,r_int,xyz_zero,j_nx,j_ny,j_nz,aj)
+!!$
+!!$                                  call exx_gto_on_grid_prim(inode,kg%global_num,&
+!!$                                       k_nsp,&
+!!$                                       extent,kg%xyz,&
+!!$                                       phi_on_grid_kg,r_int,xyz_zero,k_nx,k_ny,k_nz,ak)
+!!$
+!!$                                  call exx_gto_on_grid_prim(inode,ld%global_num,&
+!!$                                       l_nsp,&
+!!$                                       extent,ld%xyz,&
+!!$                                       phi_on_grid_ld,r_int,xyz_zero,l_nx,l_ny,l_nz,al)
+!!$
+!!$
+!!$                                  work_in_3d_(:,:,:) = phi_on_grid_ld(:,:,:) * &
+!!$                                       phi_on_grid_jb(:,:,:)
+!!$
+!!$                                  !call hf_v_on_grid(inode,extent,work_in_3d,&
+!!$                                  !     work_out_3d,r_int, &
+!!$                                  !     exx_psolver,p_scheme,pulay_radius,p_omega,&
+!!$                                  !     p_ngauss,p_gauss, &
+!!$                                  !     w_gauss)
+!!$
+!!$                                  call exx_v_on_grid(inode,extent,work_in_3d_,work_out_3d_,&
+!!$                                       r_int,   &
+!!$                                       exx_psolver,exx_pscheme,pulay_radius,p_omega,&
+!!$                                       p_ngauss,p_gauss,&
+!!$                                       w_gauss,fftwrho3d,reckernel_3d)
+!!$
+!!$                                  work_in_3d_ = phi_on_grid_ia(:,:,:) * phi_on_grid_kg(:,:,:)
+!!$
+!!$                                  !eri_pao = zero
+!!$                                  do ii = 1, 2*extent + 1
+!!$                                     do jj = 1, 2*extent + 1
+!!$                                        do kk = 1, 2*extent + 1       
+!!$                                           eri_pao = eri_pao + &
+!!$                                                work_in_3d_ (ii,jj,kk) * &
+!!$                                                work_out_3d_(ii,jj,kk) * dv 
+!!$                                                !i_norm * j_norm * k_norm * l_norm
+!!$                                        end do
+!!$                                     end do
+!!$                                  end do
+!!$
+!!$                                  !eri_pao = eri_pao 
+!!$                                  
+!!$                                  deallocate(phi_on_grid_ia)
+!!$                                  deallocate(phi_on_grid_jb)
+!!$                                  deallocate(phi_on_grid_kg) 
+!!$                                  deallocate(phi_on_grid_ld) 
+!!$                                  deallocate(work_out_3d_) 
+!!$                                  deallocate(work_in_3d_) 
+
+
+
+                         end do prim_ia
+                      end do prim_jb
+                   end do prim_kg
+                end do prim_ld
+                !
+
+             end do spherical_ld
+          end do spherical_kg
+       end do spherical_jb
+    end do spherical_ia
+
+  end subroutine compute_eri_hoh
+  !
 end module exx_erigto

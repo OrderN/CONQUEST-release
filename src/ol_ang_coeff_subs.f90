@@ -34,6 +34,9 @@
 !!    Remove calculation of (-1)**m throughout (replace with test for m even/odd
 !!    and scaling factor of 1 or -1; also added numbers for module use.  Also
 !!    introduced a universal epsilon parameter for small angles
+!!   2021/02/14 17:30 lionel
+!!    Added function for the norm of the cartesian spherical harmonics (re_cart_norm)
+!!    Now re_cart_hrmnc depends on re_cart_norm
 !!  SOURCE
 !!
 
@@ -2186,12 +2189,113 @@ contains
     call stop_timer(tmr_std_basis)
     return
   end subroutine set_prefac_real
+ !!***
+
+!!****f* angular_coeff_routines/re_cart_norm *
+!!
+!!  NAME 
+!!   re_sph_hrmnc
+!!  USAGE
+!!   re_cart_nom(l,m,norm)
+!!  PURPOSE
+!!   return the value of the cartesian spherical harmonic
+!!  INPUTS
+!!   l,m angular momenta
+!!  USES
+!!   datatypes
+!!  AUTHOR
+!!   L Truflandier
+!!  CREATION DATE
+!!   20/01/21
+!!  MODIFICATION HISTORY
+!!
+!!  SOURCE
+!!  
+  function re_cart_norm(l,m)
+    
+    use datatypes
+    use numbers
+    use GenComms,ONLY: cq_abort
+
+    implicit none
+    !
+    integer,      intent(in) :: l, m
+    !
+    real(double),  parameter :: a1g_norm  = sqrt(one/(four*pi))
+    real(double),  parameter :: t1u_norm  = sqrt(three/(four*pi))
+    real(double),  parameter :: t2g_norm  = sqrt(fifteen/(four*pi))
+    real(double),  parameter :: eg_a_norm = sqrt(fifteen/(sixteen*pi)) 
+    real(double),  parameter :: eg_b_norm = sqrt(five/(sixteen*pi))     
+    !
+    real(double),  parameter :: f0_norm = sqrt(seven/(sixteen*pi))
+    real(double),  parameter :: f1_norm = sqrt( 21.0_double/(sixteen*two*pi))
+    real(double),  parameter :: f2_norm = sqrt(105.0_double/(sixteen*pi)) 
+    real(double),  parameter :: f3_norm = sqrt( 35.0_double/(sixteen*two*pi)) 
+    !
+    real(double) :: norm, re_cart_norm 
+    !
+    if(l == 0) then !s-type function
+       !
+       norm = a1g_norm
+       !
+    else if(l == 1) then !p-type function
+       !
+       norm = t1u_norm
+       !
+    else if(l == 2) then !d-type function
+       !
+       select case( m )
+          
+       case( 2 ) ! d_{x2-y2}
+          norm = eg_a_norm !(x*x-y*y) 
+       case( 1 ) ! d_{xz}
+          norm = t2g_norm !(x*z)         
+       case( 0 ) ! d_{z2}
+          norm = eg_b_norm!(3*z*z-r*r)
+       case(-1 ) ! d_{yz}
+          norm = t2g_norm !(y*z)
+       case(-2 ) ! d_{xy}             
+          norm = t2g_norm !(x*y) 
+       case default
+          call cq_abort('re_cart_norm/problem with (l,m) =',l,m)
+       end select
+       !
+    else if(l == 3) then !f-type function
+       !
+       select case( m )
+       case( 3 ) ! f_{x3-xy2}
+          norm = f3_norm !*(x*x - 3*y*y)*x
+       case( 2 ) ! f_{zx2-zy2}
+          norm = f2_norm !*(x*x - y*y)*z
+       case( 1 ) ! f_{xz2}
+          norm = f1_norm !*(5*z*z - r*r)*x
+       case( 0 ) ! f_{z3}
+          norm = f0_norm !*(5*z*z - 3*r*r)*z
+       case(-1 ) ! f_{yz2}             
+          norm = f1_norm !(5*z*z - r*r)*y
+       case(-2 ) ! f_{xyz}             
+          norm = f2_norm !x*y*z
+       case(-3 ) ! f_{3yx2-y3}             
+          norm = f3_norm !(3*x*x - y*y)*y
+       case default
+          call cq_abort('re_cart_norm/problem with (l,m) =',l,m)
+       end select
+       !
+    else if( l > 3) then
+       call cq_abort('re_cart_norm/not implemented for l > 3')
+    else                               
+       call cq_abort('re_cart_norm/problem with l =',l)
+    end if
+
+    re_cart_norm = norm
+    
+  end function re_cart_norm
 !!***
 
 !!****f* angular_coeff_routines/re_cart_hrmnc *
 !!
 !!  NAME 
-!!   re_sph_hrmnc
+!!   re_cart_hrmnc
 !!  USAGE
 !!   re_cart_hrmnc(l,m,x,y,z)
 !!  PURPOSE
@@ -2209,7 +2313,6 @@ contains
 !!
 !!  SOURCE
 !!
-
   function re_cart_hrmnc(l,m,x,y,z)
     
     use datatypes
@@ -2223,17 +2326,6 @@ contains
     integer,      intent(in) :: l, m
     real(double), intent(in) :: x, y, z
     !
-    real(double),  parameter :: a1g_norm  = sqrt(one/(four*pi))
-    real(double),  parameter :: t1u_norm  = sqrt(three/(four*pi))
-    real(double),  parameter :: t2g_norm  = sqrt(fifteen/(four*pi))
-    real(double),  parameter :: eg_a_norm = sqrt(fifteen/(sixteen*pi)) 
-    real(double),  parameter :: eg_b_norm = sqrt(five/(sixteen*pi))     
-    !
-    real(double),  parameter :: f0_norm = sqrt(seven/(sixteen*pi))
-    real(double),  parameter :: f1_norm = sqrt( 21.0_double/(sixteen*two*pi))
-    real(double),  parameter :: f2_norm = sqrt(105.0_double/(sixteen*pi)) 
-    real(double),  parameter :: f3_norm = sqrt( 35.0_double/(sixteen*two*pi)) 
-    !
     real(double) :: r, re_cart_hrmnc, y_val
     integer :: i
     !
@@ -2242,7 +2334,7 @@ contains
     !
     if(l == 0) then !s-type function
        !
-       y_val = a1g_norm
+       y_val = one
        !
     else if(l == 1) then !p-type function
        !
@@ -2250,13 +2342,13 @@ contains
           !
           select case( m )
           case( 1 ) !p_x
-             y_val = t1u_norm*x
+             y_val = x
           case( 0 ) !p_z
-             y_val = t1u_norm*z 
+             y_val = z 
           case(-1 ) !p_y
-             y_val = t1u_norm*y 
+             y_val = y
           case default
-             call cq_abort('evaluate_pao/problem with (l,m) =',l,m)
+             call cq_abort('re_cart_hrmnc/problem with (l,m) =',l,m)
           end select
           !
        else
@@ -2269,17 +2361,17 @@ contains
           !
           select case( m )
           case( 2 ) ! d_{x2-y2}
-             y_val =  eg_a_norm*(x*x-y*y) 
+             y_val =  (x*x-y*y)
           case( 1 ) ! d_{xz}
-             y_val =  t2g_norm*(x*z)         
+             y_val =  (x*z)         
           case( 0 ) ! d_{z2}
-             y_val =  eg_b_norm*(3*z*z-r*r)
+             y_val =  (3*z*z-r*r)
           case(-1 ) ! d_{yz}
-             y_val =  t2g_norm*(y*z)
+             y_val =  (y*z)
           case(-2 ) ! d_{xy}             
-             y_val = -t2g_norm*(x*y) ! take care phase factor
+             y_val = -(x*y) ! take care phase factor
           case default
-             call cq_abort('evaluate_pao/problem with (l,m) =',l,m)
+             call cq_abort('re_cart_hrmnc/problem with (l,m) =',l,m)
           end select
           !
        else
@@ -2292,21 +2384,21 @@ contains
           !          
           select case( m )
           case( 3 ) ! f_{x3-xy2}
-             y_val = f3_norm*(x*x - 3*y*y)*x
+             y_val = (x*x - 3*y*y)*x             
           case( 2 ) ! f_{zx2-zy2}
-             y_val = f2_norm*(x*x - y*y)*z
+             y_val = (x*x - y*y)*z             
           case( 1 ) ! f_{xz2}
-             y_val = f1_norm*(5*z*z - r*r)*x
+             y_val = (5*z*z - r*r)*x             
           case( 0 ) ! f_{z3}
-             y_val = f0_norm*(5*z*z - 3*r*r)*z
+             y_val = (5*z*z - 3*r*r)*z
           case(-1 ) ! f_{yz2}             
-             y_val = f1_norm*(5*z*z - r*r)*y
+             y_val = (5*z*z - r*r)*y             
           case(-2 ) ! f_{xyz}             
-             y_val = f2_norm*x*y*z
+             y_val = x*y*z
           case(-3 ) ! f_{3yx2-y3}             
-             y_val = f3_norm*(3*x*x - y*y)*y
+             y_val = (3*x*x - y*y)*y
           case default
-             call cq_abort('evaluate_pao/problem with (l,m) =',l,m)
+             call cq_abort('re_cart_hrmnc/problem with (l,m) =',l,m)
           end select
           !
        else
@@ -2314,12 +2406,12 @@ contains
        end if r_f
        !
     else if( l > 3) then
-       call cq_abort('evaluate_pao/not implemented for l > 3')
+       call cq_abort('re_cart_hrmnc/not implemented for l > 3')
     else                               
-       call cq_abort('evaluate_pao/problem with l =',l)
+       call cq_abort('re_cart_hrmnc/problem with l =',l)
     end if
        
-    re_cart_hrmnc = y_val
+    re_cart_hrmnc = y_val * re_cart_norm(l,m)
     
   end function re_cart_hrmnc
 !!***
