@@ -3297,6 +3297,8 @@ contains
   !!    factor applied (as above in non-SCF routine)
   !!   2019/05/08 zamaan
   !!    Added atomic stress contributions
+  !!   2021/03/23 15:52 dave
+  !!    Bugfix: correct calculation of rsq implemented, variables tidied
   !!  SOURCE
   !!
   subroutine get_nonSC_correction_force(HF_force, density_out, inode, &
@@ -3350,8 +3352,7 @@ contains
     integer        :: i, j, my_block, n, the_species, iatom, spin, spin_2
     integer        :: ix, iy, iz, iblock, ipoint, igrid, stat, dir1, dir2
     integer        :: ipart, jpart, ind_part, ia, ii, icover, ig_atom
-    real(double)   :: derivative, h_energy, rx, ry, rz, rsq, r_from_i,  &
-                      x, y, z, step
+    real(double)   :: derivative, h_energy, rsq, r_from_i, step
     real(double)   :: dcellx_block, dcelly_block, dcellz_block
     real(double)   :: dcellx_grid, dcelly_grid, dcellz_grid
     real(double)   :: xatom, yatom, zatom
@@ -3647,7 +3648,7 @@ contains
                          r(1) = xblock + dx - xatom
                          r(2) = yblock + dy - yatom
                          r(3) = zblock + dz - zatom
-                         rsq = rx * rx + ry * ry + rz * rz
+                         rsq = r(1)*r(1) + r(2)*r(2) + r(3)*r(3)
                          if (rsq < loc_cutoff2) then
                             r_from_i = sqrt(rsq)
                             if (r_from_i > RD_ERR) then
@@ -3812,7 +3813,7 @@ contains
                             r(1) = xblock + dx - xatom
                             r(2) = yblock + dy - yatom
                             r(3) = zblock + dz - zatom
-                            rsq = rx * rx + ry * ry + rz * rz
+                            rsq = r(1)*r(1) + r(2)*r(2) + r(3)*r(3)
                             if (rsq < pcc_cutoff2) then
                                r_from_i = sqrt( rsq )
                                if ( r_from_i > RD_ERR ) then
