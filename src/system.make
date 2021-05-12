@@ -34,6 +34,7 @@ LIBS= $(FFT_LIB) $(XC_LIB) -lscalapack $(BLAS)
 #XC_LIBRARY = LibXC_v2
 #XC_LIBRARY = LibXC_v3
 XC_LIBRARY = LibXC_v4
+#XC_LIBRARY = LibXC_v5
 XC_LIB = -lxcf90 -lxc
 XC_COMPFLAGS = -I/usr/local/include
 
