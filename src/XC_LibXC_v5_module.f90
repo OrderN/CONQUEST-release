@@ -22,6 +22,9 @@
 !!    Added spin_factor in module use statements
 !!   2019/04/09 zamaan
 !!    Off-diagonal elements of stress tensor added
+!!   2021/05/12 tsuyoshi and others
+!!    Created interface for LibXC v5
+!!    Main changes involve XC types
 !! SOURCE
 !!
 module XC
@@ -38,7 +41,6 @@ module XC
   real(double), dimension(3,3), public :: XC_GGA_stress
   real(double), public :: s_6  ! For DFT D2
   logical, public :: flag_is_GGA ! Needed for non-SC forces
-  logical, public :: flag_is_MGGA
 
   ! Numerical flag choosing functional type
   integer, public :: flag_functional_type
@@ -542,6 +544,8 @@ contains
   !!   2018/02/15 11:56 dave
   !!    Bug fix: only scale sigma and build_gradient if we have a GGA functional
   !!    Changed to use flag_is_GGA
+  !!   2021/05/17 10:45 dave
+  !!    Tidying and small changes
   !!  SOURCE
   !!
   subroutine get_libxc_potential(density, xc_potential, xc_epsilon, xc_energy, size, x_energy)
@@ -563,7 +567,6 @@ contains
     real(double), dimension(:,:), intent(out) :: xc_potential
     real(double), dimension(:),   intent(out) :: xc_epsilon
     ! optional
-    !real(double), dimension(:), intent(out), optional :: x_epsilon, c_epsilon
     real(double), intent(out), optional :: x_energy
 
     ! local variables
@@ -572,18 +575,9 @@ contains
     real(double), dimension(:), allocatable :: alt_dens
     real(double), dimension(:,:,:), allocatable :: grad_density
     real(double) :: rho_tot
-    integer :: stat, i, spin, n, j, k
+    integer :: stat, i, spin, nxc, j
     logical :: flag_exchange_e = .false.
-    !logical :: flag_exchange_v = .false.
 
-    integer :: gpao(3), gpao_K
-    integer :: gpao_Vmgga, mat_Vmgga
-    integer :: nxc, dir, blk, n_point, i_count_alpha, n_i, m, atom, point, nsf1
-    real(double), allocatable, dimension(:,:) :: tau, vtau
-    real(double), allocatable, dimension(:,:) :: lap, vlap
-    real(double) :: energy_kin(nspin), energy_tau, XC_energy_tau
-
-    !flag_exchange_v = PRESENT(x_epsilon)
     flag_exchange_e = PRESENT(x_energy)
     ! Storage space for individual components
     allocate(vrho(n_my_grid_points*nspin),eps(n_my_grid_points),alt_dens(n_my_grid_points*nspin))
@@ -631,7 +625,6 @@ contains
     xc_epsilon = zero
     xc_potential = zero
     XC_GGA_stress = zero
-    XC_energy_tau = zero
     ! If we have spin, re-order density to have spin index first
     ! Otherwise scale
     if(nspin>1) then
@@ -789,10 +782,6 @@ contains
        xc_epsilon(1:n_my_grid_points) = xc_epsilon(1:n_my_grid_points) + eps(1:n_my_grid_points)
 
        if(nxc==1) then
-          !if(flag_exchange_v) then
-          !   write(*,*) 'Finding x_eps'
-          !   x_epsilon(1:n_my_grid_points) = eps(1:n_my_grid_points)
-          !end if
           if(flag_exchange_e) then
              x_energy = zero
              do i=1,n_my_grid_points
@@ -801,14 +790,14 @@ contains
              end do
           end if
        end if
-    end do ! n,xc_terms
+    end do ! nxc = n_xc_terms
 
     deallocate(vrho,eps,alt_dens)
     if(flag_is_GGA)then
        deallocate(grad_density,sigma,vsigma,ng,temp)
        if (flag_stress) then
           XC_GGA_stress = XC_GGA_stress*grid_point_volume
-         call gsum(XC_GGA_stress,3,3)
+          call gsum(XC_GGA_stress,3,3)
        end if
     end if
     ! Sum to get energy

@@ -518,11 +518,11 @@ contains
   !!   2018/02/15 11:56 dave
   !!    Bug fix: only scale sigma and build_gradient if we have a GGA functional
   !!    Changed to use flag_is_GGA
+  !!   2021/05/17 10:45 dave
+  !!    Tidying and small changes
   !!  SOURCE
   !!
-  subroutine get_libxc_potential(density, xc_potential, xc_epsilon,     &
-       xc_energy, size, &!x_epsilon, c_epsilon, &
-       x_energy)
+  subroutine get_libxc_potential(density, xc_potential, xc_epsilon, xc_energy, size, x_energy)
 
     use datatypes
     use numbers
@@ -541,20 +541,17 @@ contains
     real(double), dimension(:,:), intent(out) :: xc_potential
     real(double), dimension(:),   intent(out) :: xc_epsilon
     ! optional
-    !real(double), dimension(:), intent(out), optional :: x_epsilon, c_epsilon
-    real(double),               intent(out), optional :: x_energy
+    real(double), intent(out), optional :: x_energy
 
     ! local variables
-    real(double), dimension(:),   allocatable :: sigma, eps, vrho, vsigma, temp ! Temporary variables
+    real(double), dimension(:), allocatable :: sigma, eps, vrho, vsigma, temp ! Temporary variables
     complex(double), dimension(:,:), allocatable :: ng
     real(double), dimension(:), allocatable :: alt_dens
     real(double), dimension(:,:,:), allocatable :: grad_density
     real(double) :: rho_tot
-    integer :: stat, i, spin, n, j
+    integer :: stat, i, spin, nxc, j
     logical :: flag_exchange_e = .false.
-    !logical :: flag_exchange_v = .false.
 
-    !flag_exchange_v = PRESENT(x_epsilon)
     flag_exchange_e = PRESENT(x_energy)
     ! Storage space for individual components
     allocate(vrho(n_my_grid_points*nspin),eps(n_my_grid_points),alt_dens(n_my_grid_points*nspin))
@@ -619,15 +616,15 @@ contains
        end if
     end if
     ! Create XC energy and potential
-    do n = 1,n_xc_terms
+    do nxc = 1,n_xc_terms
        vrho = zero
        eps = zero
        if(nspin>1) then
-          select case (i_xc_family(n))
+          select case (i_xc_family(nxc))
           case(XC_FAMILY_LDA)
-             call xc_f90_lda_exc_vxc(xc_func(n),n_my_grid_points,alt_dens(1),eps(1),vrho(1))
+             call xc_f90_lda_exc_vxc(xc_func(nxc),n_my_grid_points,alt_dens(1),eps(1),vrho(1))
           case(XC_FAMILY_GGA)
-             call xc_f90_gga_exc_vxc(xc_func(n),n_my_grid_points,alt_dens(1),sigma(1), &
+             call xc_f90_gga_exc_vxc(xc_func(nxc),n_my_grid_points,alt_dens(1),sigma(1), &
                   eps(1),vrho(1),vsigma(1))
              ! Calculate the second term, from d (n eps_xc) / d sigma
              ng = zero
@@ -703,11 +700,11 @@ contains
              end do
           end do
        else ! No spin
-          select case (i_xc_family(n))
+          select case (i_xc_family(nxc))
           case(XC_FAMILY_LDA)
-             call xc_f90_lda_exc_vxc(xc_func(n),n_my_grid_points,alt_dens(1),eps(1),vrho(1))
+             call xc_f90_lda_exc_vxc(xc_func(nxc),n_my_grid_points,alt_dens(1),eps(1),vrho(1))
           case(XC_FAMILY_GGA)
-             call xc_f90_gga_exc_vxc(xc_func(n),n_my_grid_points,alt_dens(1),sigma(1), &
+             call xc_f90_gga_exc_vxc(xc_func(nxc),n_my_grid_points,alt_dens(1),sigma(1), &
                   eps(1),vrho(1),vsigma(1))
              ! Calculate the second term, from d (n eps_xc) / d sigma
              ng = zero
@@ -744,11 +741,7 @@ contains
                vrho(1:n_my_grid_points)
        end if
        xc_epsilon(1:n_my_grid_points) = xc_epsilon(1:n_my_grid_points) + eps(1:n_my_grid_points)
-       if(n==1) then
-          !if(flag_exchange_v) then
-          !   write(*,*) 'Finding x_eps'
-          !   x_epsilon(1:n_my_grid_points) = eps(1:n_my_grid_points)
-          !end if
+       if(nxc==1) then
           if(flag_exchange_e) then
              x_energy = zero
              do i=1,n_my_grid_points
@@ -757,13 +750,13 @@ contains
              end do
           end if
        end if
-    end do
+    end do ! nxc = n_xc_terms
     deallocate(vrho,eps,alt_dens)
     if(flag_is_GGA)then
        deallocate(grad_density,sigma,vsigma,ng,temp)
        if (flag_stress) then
-         XC_GGA_stress = XC_GGA_stress*grid_point_volume
-         call gsum(XC_GGA_stress,3,3)
+          XC_GGA_stress = XC_GGA_stress*grid_point_volume
+          call gsum(XC_GGA_stress,3,3)
        end if
     end if
     ! Sum to get energy

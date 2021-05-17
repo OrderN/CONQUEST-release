@@ -9,6 +9,7 @@ LINKFLAGS= -L/usr/local/lib
 ARFLAGS=
 
 # Compilation flags
+# NB for gcc10 you need to add -fallow-argument-mismatch
 COMPFLAGS= -O3 $(XC_COMPFLAGS)
 COMPFLAGS_F77= $(COMPFLAGS)
 
