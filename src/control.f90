@@ -2189,7 +2189,7 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
     use minimise,       only: get_E_and_F
     use move_atoms,     only: pulayStep, velocityVerlet,            &
                               updateIndices, updateIndices3, update_atom_coord,     &
-                              safemin2, update_H, update_pos_and_matrices, backtrack_linemin
+                              safemin2, update_H, update_pos_and_matrices, single_step
     use move_atoms,     only: updateL, updateLorK, updateSFcoeff
     use GenComms,       only: gsum, myid, inode, ionode, gcopy, my_barrier
     use GenBlas,        only: dot, syev
@@ -2221,7 +2221,7 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
                     temp, KE, guess_step, step, test_dot, lambda_max, alpha
     integer      :: i,j,k,iter,length, jj, lun, stat, npmod, pul_mx, &
                     i_first, i_last, n_store, n_dim, info, n_hist, &
-                    nfile, symm, iter_low, iter_high, this_iter
+                    nfile, symm, iter_loc, iter_high, this_iter
     logical      :: done
 
     step = MDtimestep
@@ -2264,6 +2264,7 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
     call dump_pos_and_matrices
     call get_maxf(max)
     iter = 0
+    iter_loc = 0
     ggold = zero
     energy1 = energy0
     cg_new = -tot_force ! The L-BFGS is in terms of grad E
@@ -2286,13 +2287,9 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
        end if
        ! Book-keeping
        iter = iter + 1
-       npmod = mod(iter, LBFGS_history)
+       iter_loc = iter_loc + 1
+       npmod = mod(iter_loc, LBFGS_history)
        if(npmod==0) npmod = LBFGS_history
-       n_store = min(iter,LBFGS_history) ! Number of stored states
-       if(inode==ionode) write(io_lun,fmt='(4x,"Number of stored histories ",i3)') n_store
-       allocate(mod_dr(n_store),Sij(n_store,n_store),lambda(n_store),&
-            omega(n_store,n_store))
-       mod_dr = zero
        do i=1,ni_in_cell
           jj = id_glob(i)
           posnStore (1,jj,npmod) = x_atom_cell(i)
@@ -2305,39 +2302,51 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
           cg(:,i) = -cg_new(:,jj) ! Search downhill
        end do
        ! Set up limits for sums
-       if(iter>LBFGS_history) then
-          iter_low = iter-LBFGS_history+1
-       else
-          iter_low = 1
-       end if
        if (myid == 0 .and. iprint_MD > 2) &
             write(io_lun,fmt='(2x,"SQNM iteration ",i4)') iter
        ! Line search
-       call backtrack_linemin(cg, energy0, energy1, fixed_potential, vary_mu, energy1)
-       ! Update stored position difference and force difference
-       do i=1,ni_in_cell
-          jj = id_glob(i)
-          posnStore (1,jj,npmod) = x_atom_cell(i) - posnStore (1,jj,npmod)
-          if(abs(posnStore(1,jj,npmod)/r_super_x)>0.7_double) posnStore(1,jj,npmod) &
-               = posnStore(1,jj,npmod) &
-               - nint(posnStore(1,jj,npmod)/r_super_x)*r_super_x
-          posnStore (2,jj,npmod) = y_atom_cell(i) - posnStore (2,jj,npmod)
-          if(abs(posnStore(2,jj,npmod)/r_super_y)>0.7_double) posnStore(2,jj,npmod) &
-               = posnStore(2,jj,npmod) &
-               - nint(posnStore(2,jj,npmod)/r_super_y)*r_super_y
-          posnStore (3,jj,npmod) = z_atom_cell(i) - posnStore (3,jj,npmod)
-          if(abs(posnStore(3,jj,npmod)/r_super_z)>0.7_double) posnStore(3,jj,npmod) &
-               = posnStore(3,jj,npmod) &
-               - nint(posnStore(3,jj,npmod)/r_super_z)*r_super_z
-          forceStore(:,jj,npmod) = -tot_force(:,jj) - forceStore(:,jj,npmod)
-          ! New search direction
-       end do
+       call single_step(cg, energy0, energy1, fixed_potential, vary_mu, energy1)
+       if(energy1>energy0) then
+          if(inode==ionode) write(io_lun,fmt='(4x,"Energy rise: resetting history")')
+          do i=1,ni_in_cell
+             jj = id_glob(i)
+             cg(:,i) = tot_force(:,jj) ! Search downhill
+          end do
+          call single_step(cg, energy0, energy1, fixed_potential, vary_mu, energy1)
+          npmod = 1
+          iter_loc = 1
+          alpha = half*alpha
+       else
+          ! Update stored position difference and force difference
+          do i=1,ni_in_cell
+             jj = id_glob(i)
+             posnStore (1,jj,npmod) = x_atom_cell(i) - posnStore (1,jj,npmod)
+             if(abs(posnStore(1,jj,npmod)/r_super_x)>0.7_double) posnStore(1,jj,npmod) &
+                  = posnStore(1,jj,npmod) &
+                  - nint(posnStore(1,jj,npmod)/r_super_x)*r_super_x
+             posnStore (2,jj,npmod) = y_atom_cell(i) - posnStore (2,jj,npmod)
+             if(abs(posnStore(2,jj,npmod)/r_super_y)>0.7_double) posnStore(2,jj,npmod) &
+                  = posnStore(2,jj,npmod) &
+                  - nint(posnStore(2,jj,npmod)/r_super_y)*r_super_y
+             posnStore (3,jj,npmod) = z_atom_cell(i) - posnStore (3,jj,npmod)
+             if(abs(posnStore(3,jj,npmod)/r_super_z)>0.7_double) posnStore(3,jj,npmod) &
+                  = posnStore(3,jj,npmod) &
+                  - nint(posnStore(3,jj,npmod)/r_super_z)*r_super_z
+             forceStore(:,jj,npmod) = -tot_force(:,jj) - forceStore(:,jj,npmod)
+             ! New search direction
+          end do
+       end if
+       n_store = min(iter_loc,LBFGS_history) ! Number of stored states
+       if(inode==ionode) write(io_lun,fmt='(4x,"Number of stored histories ",i3)') n_store
+       allocate(mod_dr(n_store),Sij(n_store,n_store),lambda(n_store),&
+            omega(n_store,n_store))
+       mod_dr = zero
+       ! Normalise dR and dg
        do i=1,n_store
           mod_dr(i) = sqrt(dot(length,posnStore(:,:,i),1,posnStore(:,:,i),1))
           posnStore(:,:,i) = posnStore(:,:,i)/mod_dr(i)
           forceStore(:,:,i) = forceStore(:,:,i)/mod_dr(i)
        end do
-       ! Normalise dR and dg
        cg_new = -tot_force ! The L-BFGS is in terms of grad E
        ! Add call to write_atomic_positions and write_xsf (2020/01/17: smujahed)
        call write_atomic_positions("UpdatedAtoms.dat", trim(pdb_template))
@@ -2371,10 +2380,6 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
              n_dim = n_dim - 1
           end if
        end do
-       if(n_dim==0) then
-          if(inode==ionode) write(io_lun,fmt='(4x,"Eigenvalues of Sij are ",(f7.5))') lambda
-          call cq_abort("Issue with subspace in SQNM")
-       end if
        if(inode==ionode) write(io_lun,fmt='(4x,"Number of eigenstates kept: ",i3)') n_dim
        ! Build dr_tilde and dg_tilde
        allocate(dr_tilde(3,ni_in_cell,n_dim), dg_tilde(3,ni_in_cell,n_dim))
@@ -2392,9 +2397,10 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
        allocate(Hij(n_dim,n_dim))
        Hij = zero
        do i=1,n_dim
-          do j=1,n_dim
+          do j=i,n_dim
              Hij(j,i) = half*(dot(length,dr_tilde(:,:,i),1,dg_tilde(:,:,j),1) + &
                   dot(length,dr_tilde(:,:,j),1,dg_tilde(:,:,i),1))
+             if(j>i) Hij(i,j) = Hij(j,i)
           end do
        end do
        ! Find eigenvectors
@@ -2407,7 +2413,7 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
           if(info<0) call cq_abort("Error in SQNM calling dsyev: ",info)
           if(info>0.and.inode==ionode) write(io_lun,fmt='(4x,"Possible error in SQNM; dsyev returned ",i4)') info
        else
-          kappa = one
+          kappa = one !Hij(1,1)
           vi = one
        end if
        if(inode==ionode) write(io_lun,fmt='(4x,"Kappa: ",(f7.4))') kappa
@@ -2421,6 +2427,7 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
              ri_vec(:,:) = ri_vec(:,:) + vi(j,i)*dg_tilde(:,:,j)
           end do
           ri_vec(:,:) = ri_vec(:,:) - kappa(i)*vi_tilde(:,:,i)
+          !kappa_prime(i) = sqrt(0.0025_double + kappa(i)*kappa(i))
           kappa_prime(i) = sqrt(dot(length,ri_vec,1,ri_vec,1) + kappa(i)*kappa(i))
        end do
        if(inode==ionode) write(io_lun,fmt='(4x,"Kappa prime: ",(f7.4))') kappa_prime
@@ -2432,7 +2439,8 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
        gg = dot(length, cg_new, 1, cg_new, 1)
        ! Analyse forces
        g0 = dot(length, tot_force, 1, tot_force, 1)
-       if(dot(length,cg_new,1,-tot_force,1)/(g0*gg)>0.2_double) then
+       if(inode==ionode) write(io_lun,fmt='(4x,"Dot: ",f12.7)') dot(length,cg_new,1,-tot_force,1)/sqrt(g0*gg)
+       if(dot(length,cg_new,1,-tot_force,1)/sqrt(g0*gg)>0.2_double) then
           alpha = alpha*1.1_double
        else
           alpha = alpha*0.85_double
