@@ -1523,13 +1523,24 @@ contains
     call get_E_and_F(fixed_potential, vary_mu, e3, .false., &
          .false.)
     if (inode == ionode .and. iprint_MD > 1) then
-       write (io_lun, &
-            fmt='(4x,"In backtrack_linemin, iter ",i3," step and energy &
-            &are ",2f16.6," ",a2)') &
-            iter, alpha, en_conv * e3, en_units(energy_units)
+       write (io_lun, fmt='(4x,"After single step, energy is ",f16.6," ",a2)') &
+            en_conv * e3, en_units(energy_units)
     end if
     energy_out = e3
-    if(energy_out>energy_in) return ! We'll need to reset - no need to call force
+    if(energy_out>energy_in) then
+       do i = 1, ni_in_cell
+          x_atom_cell(i) = x_atom_cell(i) - alpha * direction(1,i)
+          y_atom_cell(i) = y_atom_cell(i) - alpha * direction(2,i)
+          z_atom_cell(i) = z_atom_cell(i) - alpha * direction(3,i)
+       end do
+       !if(flag_SFcoeffReuse) then
+       !   call update_pos_and_matrices(updateSFcoeff,direction)
+       !else
+       !   call update_pos_and_matrices(updateLorK,direction)
+       !endif
+       !call update_H(fixed_potential)
+       return ! We'll need to reset - no need to call force
+    end if
     call dump_pos_and_matrices
     ! Now find forces
     call force(fixed_potential, vary_mu, n_L_iterations, &
