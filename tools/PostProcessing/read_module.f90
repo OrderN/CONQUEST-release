@@ -10,13 +10,13 @@ contains
   ! Read Conquest_input file for parameters from simulation, output parameters and coordinates
   subroutine read_input
 
-    use global_module, ONLY: flag_read_blocks, flag_assign_blocks, flag_fractional_atomic_coords, nspin, &
-         flag_wf_range_Ef
+    use global_module, ONLY: flag_assign_blocks, flag_fractional_atomic_coords, nspin, &
+         flag_wf_range_Ef, E_DOS_min, E_DOS_max, sigma_DOS, n_DOS
     use local
     use input_module
     use numbers
     use io_module, ONLY: pdb_format, pdb_template, read_atomic_positions
-    use dimens, ONLY: r_super_x, r_super_y, r_super_z
+    use dimens, ONLY: r_super_x, r_super_y, r_super_z, GridCutoff
     use species_module, ONLY: n_species, species_label, species_file, mass, type_species, charge, nsf_species
     use units, ONLY: HaToeV
     use block_module, only: n_pts_in_block, in_block_x,in_block_y,in_block_z, blocks_raster, blocks_hilbert
@@ -27,10 +27,12 @@ contains
     implicit none
 
     character(len=80) :: input_string
-    integer :: i, j
+    integer :: i, j, n_grid_x, n_grid_y, n_grid_z
     integer :: n_kp_lines
     logical :: flag_kp_lines, flag_spin_polarisation
-    character(len=5)  :: ps_type !To find which pseudo we use
+    real(double) :: dk
+    character(len=5) :: ps_type !To find which pseudo we use
+    character(len=3) :: job
 
     ! Load the Conquest_input files
     call load_input
@@ -38,6 +40,16 @@ contains
     flag_spin_polarisation   = fdf_boolean('Spin.SpinPolarised', .false.)
     nspin = 1
     if(flag_spin_polarisation) nspin = 2
+    ! Grid spacing
+    n_grid_x   = fdf_integer('Grid.PointsAlongX',0)
+    n_grid_y   = fdf_integer('Grid.PointsAlongY',0)
+    n_grid_z   = fdf_integer('Grid.PointsAlongZ',0)    
+    if(n_grid_x>0.AND.n_grid_y>0.AND.n_grid_z>0) then
+       dk = pi/min(n_grid_x, n_grid_y, n_grid_z)
+       GridCutoff = half*dk*dk
+    else
+       GridCutoff = fdf_double('Grid.GridCutoff',50.0_double)
+    end if
     ! Block size in grid points
     in_block_x = fdf_integer('Grid.InBlockX',4)
     in_block_y = fdf_integer('Grid.InBlockY',4)
@@ -53,7 +65,7 @@ contains
        block_file = 'hilbert_make_blk.dat'
     end if
     ! If we don't read blocks, we'll need to have a rastering routine
-    flag_read_blocks = fdf_boolean('Grid.ReadBlocksCharge',.false.)
+    !flag_read_blocks = fdf_boolean('Grid.ReadBlocksCharge',.false.)
     ! Atomic coordinates - file, format etc
     flag_fractional_atomic_coords = &
          fdf_boolean('IO.FractionalAtomicCoords',.true.)
@@ -67,20 +79,52 @@ contains
     n_species = fdf_integer('General.NumberOfSpecies',1)
     ! And read the positions
     call read_atomic_positions(trim(input_string))
-    flag_only_charge = fdf_boolean('Process.OnlyCharge',.true.)
-    if(flag_only_charge) charge_stub = fdf_string(80,'Process.ChargeStub','chden')
+    ! Find job to perform
+    job = fdf_string(3,'Process.Job','pos') ! Default to converting output
+    if(leqi(job,'pos').or.leqi(job,'coo')) then
+       i_job = 1
+       ! Allow user to specify output filename
+       root_file = fdf_string(50,'Process.RootFile',trim(input_string))
+    else if(leqi(job,'chg').or.leqi(job,'cha').or.leqi(job,'den')) then
+       i_job = 2
+    else if(leqi(job,'ban')) then
+       i_job = 3
+    else if(leqi(job,'ter').or.leqi(job,'th')) then
+       i_job = 4
+       ! Allow user to specify output filename
+       root_file = fdf_string(50,'Process.RootFile','STM')
+    else if(leqi(job,'stm')) then
+       i_job = 5
+       ! Allow user to specify output filename
+       root_file = fdf_string(50,'Process.RootFile','STM')
+    else if(leqi(job,'dos')) then
+       i_job = 6
+    else if(leqi(job,'pdo').or.leqi(job,'pro')) then
+       i_job = 7
+    end if
+    ! 
+    charge_stub = fdf_string(80,'Process.ChargeStub','chden')
     ! STM parameters
     ! NB Bias will be in volts
     stm_bias = fdf_double('STM.BiasVoltage',zero)
     ! Allow for Fermi level offset, also in volts
     fermi_offset = fdf_double('STM.FermiOffset',zero)
     ! Restrict the area that we consider
-    stm_z_min = fdf_double('Process.MinZ',zero)
-    stm_z_max = fdf_double('Process.MaxZ',r_super_z)
-    stm_x_min = fdf_double('Process.MinX',zero)
-    stm_x_max = fdf_double('Process.MaxX',r_super_x)
-    stm_y_min = fdf_double('Process.MinY',zero)
-    stm_y_max = fdf_double('Process.MaxY',r_super_y)
+    stm_x_min = zero
+    stm_y_min = zero
+    stm_x_max = r_super_x
+    stm_y_max = r_super_y
+    if(i_job==4.or.i_job==5) then
+       stm_z_min = fdf_double('Process.MinZ',zero)
+       stm_z_max = fdf_double('Process.MaxZ',r_super_z)
+    else
+       stm_z_min = zero
+       stm_z_max = r_super_z
+    end if
+    !stm_x_min = fdf_double('Process.MinX',zero)
+    !stm_x_max = fdf_double('Process.MaxX',r_super_x)
+    !stm_y_min = fdf_double('Process.MinY',zero)
+    !stm_y_max = fdf_double('Process.MaxY',r_super_y)
     ! Broadening of the energy levels - in Ha
     stm_broad = fdf_double('STM.Sigma',0.001_double)
     stm_broad = stm_broad*HaToeV
@@ -91,8 +135,6 @@ contains
        n_kp_lines = fdf_integer('Diag.NumKptLines',1)
        nkp = nkp*n_kp_lines
     end if
-    ! Allow user to specify output filename
-    root_file = fdf_string(50,'Process.RootFile','STM')
     ! Repeat the cell
     nrptx = fdf_integer('Process.RepeatX',1)
     nrpty = fdf_integer('Process.RepeatY',1)
@@ -100,17 +142,17 @@ contains
     nsampx = fdf_integer('Process.SampleX',1)
     nsampy = fdf_integer('Process.SampleY',1)
     nsampz = fdf_integer('Process.SampleZ',1)
-    if(flag_only_charge) then
-       ! Read in details of band output
-       flag_by_kpoint = fdf_boolean('IO.outputWF_by_kpoint',.false.)
-       ! Have a specific number of bands been output ?
+    ! Read in details of band output from Conquest
+    ! Energy limits (relative to Ef or absolute)
+    E_wf_min = fdf_double('IO.min_wf_E',zero)
+    E_wf_max = fdf_double('IO.max_wf_E',zero)
+    if(abs(E_wf_max-E_wf_min)>1e-8_double) flag_wf_range = .true.
+    flag_wf_range_Ef = fdf_boolean('IO.WFRangeRelative',.true.)
+    ! If not energy limits, then specific number of bands
+    if(flag_wf_range) then
+       n_bands_active = 0
+    else
        n_bands_active=fdf_integer('IO.maxnoWF',0)
-       !if(n_bands_active==0) then
-       !   write(*,*) 'Please specify band numbers you want converted using'
-       !   write(*,*) 'IO.maxnoWF for number of bands and %block WaveFunctionsOut'
-       !   write(*,*) 'to specify bands'
-       !   stop
-       !end if
        if(n_bands_active>0) then
           allocate(band_no(n_bands_active))
           if (fdf_block('WaveFunctionsOut')) then
@@ -124,22 +166,48 @@ contains
              call fdf_endblock
           end if
        end if
-       flag_range = .false.
-       E_wf_min = fdf_double('IO.min_wf_E',zero)
-       E_wf_max = fdf_double('IO.max_wf_E',zero)
-       if(abs(E_wf_max-E_wf_min)>1e-8_double) flag_range = .true.
-       ! Is the range relative to Ef (T) or absolute (F)
-       flag_wf_range_Ef = fdf_boolean('IO.WFRangeRelative',.true.)
     end if
+    ! Now read details of bands to output from processing
+    ! Energy limits
+    E_procwf_min = fdf_double('Process.min_wf_E',zero)
+    E_procwf_max = fdf_double('Process.max_wf_E',zero)
+    ! Is the range relative to Ef (T) or absolute (F)
+    flag_procwf_range_Ef = fdf_boolean('Process.WFRangeRelative',.true.)
+    if(abs(E_procwf_max-E_procwf_min)>1e-8_double) then
+       flag_proc_range = .true.
+    else
+       n_bands_process = fdf_integer('Process.noWF',0)
+       if(n_bands_process>0) then
+          allocate(band_proc_no(n_bands_process))
+          if (fdf_block('WaveFunctionsProcess')) then
+             if(1+block_end-block_start<n_bands_process) then
+                write(*,*) "Too few wf no in WaveFunctionsOut: ",1+block_end-block_start,n_bands_process
+                stop
+             end if
+             do i=1,n_bands_process
+                read(unit=input_array(block_start+i-1),fmt=*) band_proc_no(i)
+             end do
+             call fdf_endblock
+          end if
+          flag_proc_range = .false.
+       end if
+    end if
+    ! Output format
     ps_type = fdf_string(4,'Process.OutputFormat','cube')
     if(leqi(ps_type,'cube')) then
        flag_output = cube
-    else if(leqi(ps_type,'dx')) then
-       flag_output = dx
+    !else if(leqi(ps_type,'dx')) then
+    !   flag_output = dx
     else
-       write(*,*) "Output format ",root_file," not recognised.  Choose cube or dx."
+       write(*,*) "Output format ",ps_type," not recognised.  Only cube available at present."
        stop
     end if
+    flag_by_kpoint = fdf_boolean('Process.outputWF_by_kpoint',.false.)
+    ! DOS
+    E_DOS_min = fdf_double('IO.min_DOS_E',zero)
+    E_DOS_max = fdf_double('IO.max_DOS_E',zero)
+    sigma_DOS = fdf_double('IO.sigma_DOS',0.001_double)
+    n_DOS = fdf_integer('IO.n_DOS',201)
     ! Now read PS files for atomic information
     call allocate_species_vars
     ps_type = fdf_string(5,'General.PseudopotentialType','haman') 
@@ -252,169 +320,164 @@ contains
     return
   end subroutine read_block_input
 
-  subroutine read_eigenvalues_bands
+  subroutine read_eigenvalues
 
     use datatypes
     use numbers
     use local, ONLY: nkp, n_eval_window, efermi, kx, ky, kz, wtk, efermi, stm_bias, stm_broad, &
          n_bands_active, eigenvalues, band_no, flag_only_charge, flag_by_kpoint, E_wf_min, E_wf_max, &
-         flag_range
+         flag_wf_range, n_bands_total, band_active_kp, band_active_all, n_bands_process, band_proc_no
     use units, ONLY: HaToeV
-    use global_module, only: flag_wf_range_Ef
+    use global_module, only: flag_wf_range_Ef, nspin
     
     implicit none
 
-    integer :: idum, n_evals,nk,nev, i
-    real(double) :: Emin, Emax, eval, Eband
+    ! Local variables
+    integer :: idum, n_evals,i_kp,i_eval, i, i_spin, i_low, i_high
+    real(double), dimension(2) :: Emin, Emax
+    real(double) :: eval, Eband
     integer, dimension(:), allocatable :: active_bands
     real(double), dimension(:,:),allocatable :: tmp_evals ! Read and store
     character(len=80) :: str, str2
     
     open(unit=17,file='eigenvalues.dat')
     read(17,*) str,n_evals,str2,idum
+    n_bands_total = n_evals
     if(idum/=nkp) then
        write(*,fmt='("Reading k-points from eigenvalues file, not setting from input file")')
        nkp = idum
     end if
     ! Fermi level
-    read(17,fmt='(a6,f12.5)') str,efermi
-    write(*,fmt='(4x,"Fermi level: ",f12.5," Ha")') efermi
+    efermi = zero
+    if(nspin==1) then
+       read(17,fmt='(a6,f12.5)') str,efermi(1)
+       write(*,fmt='(4x,"Fermi level: ",f12.5," Ha")') efermi(1)
+    else
+       read(17,fmt='(a6,2f12.5)') str,efermi(1), efermi(2)
+       write(*,fmt='(4x,"Fermi levels: ",2f12.5," Ha")') efermi
+    end if
     read(17,*) str
     ! Allocate memory
     allocate(kx(nkp),ky(nkp),kz(nkp),wtk(nkp))
-    allocate(tmp_evals(n_evals,nkp))
+    allocate(eigenvalues(n_evals,nkp,nspin), band_active_kp(n_evals,nkp,nspin), band_active_all(n_evals,nspin))
+    eigenvalues = zero
+    band_active_kp = 0
+    band_active_all = 0
     ! Active bands lie within the energy window specified for STM images
-    n_bands_active = 0
     Emin = E_wf_min
     Emax = E_wf_max
     if(flag_wf_range_Ef) then
        Emin = efermi + Emin
        Emax = efermi + Emax
     end if
-    write(*,fmt='(2x,"Searching for bands between ",f9.3,"Ha and ",f9.3,"Ha")') Emin, Emax
+    if(nspin==1) then
+       write(*,fmt='(2x,"Reading bands between ",f9.3,"Ha and ",f9.3,"Ha")') Emin(1), Emax(1)
+    else
+       write(*,fmt='(2x,"SpinU reading bands between ",f9.3,"Ha and ",f9.3,"Ha")') Emin(1), Emax(1)
+       write(*,fmt='(2x,"SpinD reading bands between ",f9.3,"Ha and ",f9.3,"Ha")') Emin(2), Emax(2)
+    end if
     ! Now loop over k-points and read eigenvalues
-    do nk = 1,nkp
-       read(17,*) idum,kx(nk),ky(nk),kz(nk),wtk(nk)
-       do nev = 1,n_evals
-          read(17,*) idum,eval
-          tmp_evals(nev,nk) = eval
-          if(eval>Emin.AND.eval<Emax) n_bands_active = n_bands_active+1
+    i_low = n_evals+1
+    i_high = 0
+    do i_spin = 1, nspin
+       do i_kp = 1,nkp
+          read(17,*) idum,kx(i_kp),ky(i_kp),kz(i_kp),wtk(i_kp)
+          do i_eval = 1,n_evals
+             read(17,*) idum, eval
+             eigenvalues(i_eval,i_kp,i_spin) = eval
+             if(flag_wf_range) then
+                if(eval>Emin(i_spin).AND.eval<Emax(i_spin)) then
+                   band_active_kp(i_eval, i_kp, i_spin) = 1
+                   band_active_all(i_eval, i_spin) = 1
+                   if(i_eval<i_low) i_low = i_eval
+                   if(i_eval>i_high) i_high = i_eval
+                end if
+             end if
+          end do
        end do
+       if(flag_wf_range) then
+          write(*,fmt='(2x,"Bands ",I5," to ",I5," are active")') i_low, i_high
+       else
+          do i_eval=1,n_bands_process
+             band_active_kp(band_proc_no(i_eval),:,i_spin) = 1
+             band_active_all(band_proc_no(i_eval),i_spin) = 1
+          end do
+       end if
     end do
     close(unit=17)
-    allocate(band_no(n_bands_active))
-    i = 1
-    do nk = 1,nkp
-       do nev = 1,n_evals
-          if(tmp_evals(nev,nk)>Emin.AND.tmp_evals(nev,nk)<Emax) then
-             band_no(i) = nev
-             i = i+1
-          end if
-       end do
-    end do
-    deallocate(tmp_evals)
-  end subroutine read_eigenvalues_bands
+    !n_bands_active = sum(band_active_all)
+  end subroutine read_eigenvalues
 
-  ! For STM output, we need to read in eigenvalues
-  ! Added band-by-band allocation for charge only 2016/04/19 08:10 dave
-  ! Changing to STM version (see band version above)
-  subroutine read_eigenvalues_stm
+  subroutine read_psi_coeffs
 
     use datatypes
     use numbers
-    use local, ONLY: nkp, n_eval_window, efermi, kx, ky, kz, wtk, efermi, stm_bias, stm_broad, &
-         n_bands_active, eigenvalues, band_no, flag_only_charge, flag_by_kpoint, E_wf_min, E_wf_max, &
-         flag_range, fermi_offset
-    use units, ONLY: HaToeV
-    use global_module, only: flag_wf_range_Ef
-    
+    use species_module, ONLY: nsf_species
+    use global_module, ONLY: ni_in_cell, species_glob, nspin
+    use local, ONLY: nkp, nprocs, n_bands_total, band_active_kp, eigenvalues, evec_coeff, n_bands_active
+
     implicit none
 
-    integer :: idum, n_evals,nk,nev
-    real(double) :: Emin, Emax, eval, Eband
-    integer, dimension(:), allocatable :: active_bands
-    real(double), dimension(:,:),allocatable :: tmp_evals ! Read and store
-    character(len=80) :: str, str2
-    
-    open(unit=17,file='eigenvalues.dat')
-    read(17,*) str,n_evals,str2,idum
-    if(idum/=nkp) then
-       write(*,fmt='("Warning ! Kpoints from input incompatible with eigenvalues: ",2i5)') idum,nkp
-       write(*,fmt='("This is not a problem if you set k-points automatically.")')
-       nkp = idum
-    end if
-    ! Fermi level
-    read(17,fmt='(a6,f12.5)') str,efermi
-    efermi = efermi*HaToeV
-    write(*,fmt='(4x,"Fermi level: ",f12.5," eV")') efermi
-    if(abs(fermi_offset)>1e-8_double) then
-       efermi = efermi + fermi_offset
-       write(*,fmt='(4x,"After applying offset, Fermi level: ",f12.5," eV")') efermi
-    end if
-    read(17,*) str
-    ! Allocate memory
-    allocate(kx(nkp),ky(nkp),kz(nkp),wtk(nkp))
-    allocate(tmp_evals(n_evals,nkp))
-    ! Active bands lie within the energy window specified for STM images
-    allocate(active_bands(n_evals))
-    active_bands = 0
-    ! Allow for thermal broadening
-    if(stm_bias<0) then
-       Emax = efermi + two*stm_broad
-       Emin = efermi + stm_bias - two*stm_broad
-    else
-       Emin = efermi - two*stm_broad
-       Emax = efermi + stm_bias + two*stm_broad
-    end if
-    write(*,fmt='(4x,"Limits on integration: ",2f12.5," eV")') Emin+two*stm_broad, Emax-two*stm_broad
-    write(*,fmt='(4x,"Thermal broadening at edges: ",f12.5," eV")') stm_broad
-    ! Now loop over k-points and read eigenvalues
-    do nk = 1,nkp
-       read(17,*) idum,kx(nk),ky(nk),kz(nk),wtk(nk)
-       do nev = 1,n_evals
-          read(17,*) idum,eval
-          ! Convert to eV (for easy comparison with STM)
-          eval = eval*HaToeV
-          tmp_evals(nev,nk) = eval
-          if(eval>Emin.AND.eval<Emax) active_bands(nev) = 1
-          if(flag_only_charge.AND.flag_range.AND.(eval>E_wf_min.AND.eval<E_wf_max)) active_bands(nev) = 1
-       end do
-    end do
-    close(unit=17)
-    ! Allocate space for active bands
-    idum = 0
-    do nev = 1, n_evals
-       if(active_bands(nev)==1) idum = idum+1
-    end do
-    n_bands_active = idum
-    allocate(eigenvalues(nkp,n_bands_active))
-    allocate(band_no(n_bands_active))
-    ! Store active bands
-    eigenvalues = -1e30_double ! Clearly not active
-    idum = 0
-    do nev=1,n_evals
-       if(active_bands(nev)==1) then
-          idum = idum + 1
-          band_no(idum) = nev
-          if(.NOT.flag_only_charge) then
-             if(flag_wf_range_Ef) then
-                do nk=1,nkp
-                   Eband = tmp_evals(nev,nk)-efermi
-                   if(Eband>Emin.AND.Eband<Emax) &
-                        eigenvalues(nk,idum) = tmp_evals(nev,nk)
-                end do
-             else
-                do nk=1,nkp
-                   if(tmp_evals(nev,nk)>Emin.AND.tmp_evals(nev,nk)<Emax) &
-                        eigenvalues(nk,idum) = tmp_evals(nev,nk)
-                end do
-             end if
-          end if
-       end if
-    end do
-    deallocate(active_bands,tmp_evals)
-  end subroutine read_eigenvalues_stm
+    ! Local variables
+    integer :: i_sf, i_proc, i_kp, i, i_band, i_prim, n_prim, i_glob, i_atom, i_spin
+    real(double) :: eval
+    complex(double_cplx) :: coeff
+    character(len=80) :: filename, str
 
+    ! Allocate space
+    allocate(evec_coeff(maxval(nsf_species), ni_in_cell, n_bands_total, nkp, nspin))
+    evec_coeff = zero
+    if(nspin==1) then
+       ! Read coefficients
+       do i_proc = 1, nprocs
+          write(filename,'("Process",I0.7,"WF.dat")') i_proc
+          open(unit=17,file=filename)
+          do i_kp = 1, nkp
+             read(17,*) n_prim ! Number of atoms on process
+             do i_band = 1, n_bands_total
+                if(band_active_kp(i_band, i_kp, 1) == 1) then
+                   read(17,*) i, eval
+                   ! Loop over primary atoms
+                   do i_prim = 1, n_prim
+                      read(17,*) i_atom ! Global number of atom
+                      ! Loop over SFs
+                      do i_sf = 1, nsf_species(species_glob(i_atom))
+                         read(17,*) evec_coeff(i_sf, i_atom, i_band, i_kp, 1)
+                      end do ! nsf
+                   end do ! n_prim primary atoms
+                end if
+             end do ! bands
+          end do ! nkp kpoints
+          close(unit=17)
+       end do! nprocs processes
+    else
+       ! Read coefficients
+       do i_spin = 1, nspin
+          do i_proc = 1, nprocs
+             write(filename,'("Process",I0.7,"WF",I0.1,".dat")') i_proc, i_spin
+             open(unit=17,file=filename)
+             do i_kp = 1, nkp
+                read(17,*) n_prim ! Number of atoms on process
+                do i_band = 1, n_bands_total
+                   if(band_active_kp(i_kp, i_band, i_spin) == 1) then
+                      read(17,*) i, eval
+                      ! Loop over primary atoms
+                      do i_prim = 1, n_prim
+                         read(17,*) i_atom ! Global number of atom
+                         ! Loop over SFs
+                         do i_sf = 1, nsf_species(species_glob(i_atom))
+                            read(17,*) evec_coeff(i_sf, i_atom, i_band, i_kp, i_spin)
+                         end do ! nsf
+                      end do ! n_prim primary atoms
+                   end if
+                end do ! bands
+             end do ! nkp kpoints
+             close(unit=17)
+          end do! nprocs processes
+       end do ! Spin
+    end if
+  end subroutine read_psi_coeffs
+ 
   subroutine allocate_species_vars
 
     use numbers
@@ -432,11 +495,14 @@ contains
 
     allocate(npao_species(n_species),STAT=stat)
     allocate(nsf_species(n_species),STAT=stat)
+    nsf_species = zero
     allocate(type_species(n_species),STAT=stat)
     allocate(atomicnum(n_species),STAT=stat)
     allocate(RadiusSupport(n_species),STAT=stat)
+    RadiusSupport = zero
     allocate(InvSRange(n_species),STAT=stat)
     allocate(RadiusAtomf(n_species),STAT=stat)
+    RadiusAtomf = zero
     if(stat/=0) call cq_abort("Error allocating atomicnum in allocate_species_vars: ",n_species,stat)
     allocate(charge(n_species),STAT=stat)
     allocate(charge_up(n_species),STAT=stat)

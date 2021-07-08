@@ -919,19 +919,12 @@ contains
                 if (iprint_DM >= 4 .and. inode == ionode) &
                      write (io_lun, *) myid, ' Calling buildK ', &
                      Hrange, matK(spin)
-                ! Pass band-by-band K matrices if we are outputting densities
-                if(wf_self_con .and. flag_out_wf) then
-                   if(flag_out_wf_by_kp) then
-                      call buildK(Hrange, matK(spin), occ(:,kp,spin), &
-                           kk(:,kp), wtk(kp), expH(:,:,spin),matBand_kp(:,kp))
-                   else
-                      call buildK(Hrange, matK(spin), occ(:,kp,spin), &
-                           kk(:,kp), wtk(kp), expH(:,:,spin),matBand)
-                   end if
-                else
-                   call buildK(Hrange, matK(spin), occ(:,kp,spin), &
-                        kk(:,kp), wtk(kp), expH(:,:,spin))
+                ! Output wavefunction coefficients
+                if(wf_self_con .and. flag_out_wf) then 
+                   call write_wavefn_coeffs(w(:,kp,spin),expH(:,:,spin),spin)
                 end if
+                call buildK(Hrange, matK(spin), occ(:,kp,spin), &
+                     kk(:,kp), wtk(kp), expH(:,:,spin))
                 ! Build matrix needed for Pulay force
                 ! We scale the occupation number for this k-point by the
                 ! eigenvalues in order to build the matrix M12
@@ -979,97 +972,8 @@ contains
     end do ! spin
 
     !------ output WFs  --------
-    if (wf_self_con .and. flag_out_wf) then
-       allocate(abs_wf(maxngrid),STAT=stat)
-       if (stat /= 0) call cq_abort('wf_out: Failed to allocate wfs', stat)
-       call reg_alloc_mem(area_DM, maxngrid, type_dbl)
-       atom_fns_K = allocate_temp_fn_on_grid(atomf)
-       if(flag_out_wf_by_kp) then
-          if(inode==ionode) call write_eigenvalues(w,matrix_size,nkp,nspin,kk,wtk,Efermi)
-          do i=1,nkp
-             do wf_no=1,max_wf
-                write(io_lun,fmt='(2x,"Band : ",i4," k-point: ",i3)') out_wf(wf_no),i
-                if(nspin>1) then
-                   do spin = 1, nspin
-                      abs_wf(:)=zero
-                      if (atomf.ne.sf) then
-                         call SF_to_AtomF_transform(matBand_kp(wf_no,i), matBand_atomf, spin, Hrange)
-                         call get_band_density(abs_wf,spin,atomfns,atom_fns_K,matBand_atomf,maxngrid)
-                      else                     
-                         call get_band_density(abs_wf,spin,atomfns,atom_fns_K,matBand_kp(wf_no,i),maxngrid)
-                      endif
-                      if(i==1) then
-                         call wf_output(spin,abs_wf,wf_no,kk(:,i),w(out_wf(wf_no),i,spin),i)
-                      else
-                         call wf_output(spin,abs_wf,wf_no,kk(:,i),w(out_wf(wf_no),i,spin),i)
-                      end if
-                      call my_barrier()
-                   end do
-                else
-                   abs_wf(:)=zero
-                   spin = 1
-                   if (atomf.ne.sf) then
-                      call SF_to_AtomF_transform(matBand_kp(wf_no,i), matBand_atomf, spin, Hrange)
-                      call get_band_density(abs_wf,spin,atomfns,atom_fns_K,matBand_atomf,maxngrid)
-                   else
-                      call get_band_density(abs_wf,spin,atomfns,atom_fns_K,matBand_kp(wf_no,i),maxngrid)
-                   endif
-                   if(i==1) then
-                      call wf_output(0,abs_wf,wf_no,kk(:,i),w(out_wf(wf_no),i,spin),i)
-                   else
-                      call wf_output(0,abs_wf,wf_no,kk(:,i),w(out_wf(wf_no),i,spin))
-                   end if
-                   call my_barrier()
-                end if
-             end do
-          end do
-       else
-          if(inode==ionode) call write_eigenvalues(w,matrix_size,nkp,nspin,kk,wtk,Efermi)
-          if(nspin>1) then
-             do wf_no=1,max_wf
-                do spin = 1, nspin
-                   abs_wf(:)=zero
-                   if (atomf.ne.sf) then
-                      call SF_to_AtomF_transform(matBand(wf_no), matBand_atomf, spin, Hrange)
-                      call get_band_density(abs_wf,spin,atomfns,atom_fns_K,matBand_atomf,maxngrid)
-                   else
-                      call get_band_density(abs_wf,spin,atomfns,atom_fns_K,matBand(wf_no),maxngrid)
-                   endif
-                   call wf_output(spin,abs_wf,wf_no)
-                   call my_barrier()
-                end do
-             end do
-          else
-             spin = 1
-             do wf_no=1,max_wf
-                abs_wf(:)=zero
-                if (atomf.ne.sf) then
-                   call SF_to_AtomF_transform(matBand(wf_no), matBand_atomf, spin, Hrange)
-                   call get_band_density(abs_wf,spin,atomfns,atom_fns_K,matBand_atomf,maxngrid)
-                else
-                   call get_band_density(abs_wf,spin,atomfns,atom_fns_K,matBand(wf_no),maxngrid)
-                endif
-                call wf_output(0,abs_wf,wf_no)
-                call my_barrier()
-             end do
-          end if
-       end if
-       deallocate(abs_wf,STAT=stat)
-       if (stat /= 0) call cq_abort('Find Evals: Failed to deallocate wfs',stat)
-       call reg_dealloc_mem(area_DM, maxngrid, type_dbl)
-       call free_temp_fn_on_grid(atom_fns_K)
-       if (atomf.ne.sf) call free_temp_matrix(matBand_atomf)
-       if(flag_out_wf_by_kp) then
-          do j=nkp,1,-1
-             do i=max_wf,1,-1
-                call free_temp_matrix(matBand_kp(i,j))
-             end do
-          end do
-       else
-          do i=max_wf,1,-1
-             call free_temp_matrix(matBand(i))
-          end do
-       end if
+    if (wf_self_con .and. (flag_out_wf.OR.flag_write_DOS)) then
+       if(inode==ionode) call write_eigenvalues(w,matrix_size,nkp,nspin,kk,wtk,Efermi)
     end if
     if(wf_self_con.AND.flag_write_DOS) then
        ! output DOS
@@ -4167,7 +4071,56 @@ contains
     end do ! iwf
   end subroutine accumulate_DOS
   !!***
- 
+
+  subroutine write_wavefn_coeffs(eval, evec, spin)
+
+    use datatypes
+    use numbers,         only: zero
+    use global_module,   only: E_wf_max, E_wf_min, nspin, flag_wf_range_Ef
+    use ScalapackFormat, only: matrix_size
+    use species_module,  only: nsf_species, natomf_species
+    use input_module,    only: io_assign, io_close
+    use primary_module,  only: bundle
+
+    implicit none
+
+    ! Passed variables
+    integer :: spin
+    complex(double_cplx), dimension(:,:), intent(in) :: evec
+    real(double), dimension(:) :: eval
+
+    ! Local variables
+    integer :: lun, iwf, acc, atom, isf1
+    character(len=50) :: filename
+    real(double) :: offset
+
+    offset = zero
+    if(flag_wf_range_Ef) offset = Efermi(spin)
+    call io_assign (lun)
+    if(nspin>1) then
+       write(filename,'("Process",I0.7,"WF",I0.1,".dat")') myid+1, spin
+    else
+       write(filename,'("Process",I0.7,"WF.dat")') myid+1
+    end if
+    open (unit = lun, file = filename,position='append')
+    write(lun,*) bundle%n_prim
+    do iwf=1,matrix_size ! Effectively all bands
+       if(eval(iwf)-offset>=E_wf_min.AND.eval(iwf)-offset<=E_wf_max) then
+          write(lun,*) iwf,eval(iwf)
+          acc = 0
+          do atom=1,bundle%n_prim
+             write(lun,*) bundle%ig_prim(atom)
+             do isf1 = 1,nsf_species(bundle%species(atom))
+                write(lun,*) evec(iwf,acc+isf1)
+             end do
+             acc = acc + nsf_species(bundle%species(atom))
+          end do
+       end if
+    end do ! iwf
+    call io_close(lun)
+    return
+  end subroutine write_wavefn_coeffs
+
   !!****f*  DiagModule/weight_pDOS
   !!
   !!  NAME

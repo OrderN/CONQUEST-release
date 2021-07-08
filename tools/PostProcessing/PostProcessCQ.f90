@@ -8,6 +8,7 @@ program ConvertCharge
   use local
   use output
   use memory_module,     only: init_reg_mem
+  use stm
   
   implicit none
 
@@ -17,27 +18,57 @@ program ConvertCharge
   call write_banner
   ! Load input and read
   call read_input
-  ! Read blocks
-  call read_block_input
-  ! Calculate active processes/blocks
-  call assign_blocks
-  ! STM output
-  ! Read eigenvalues and calculate weight for bands by kpt
-  if(flag_only_charge) then
-     if(flag_range.and.n_bands_active==0) call read_eigenvalues_bands
-     call read_write_charge
-  else
-     call read_eigenvalues_stm
-     ! Read charge and accumulate
-     call read_acc_charge
-     ! Write output files
-     if(flag_output==dx) then
-        call write_dx_coords
-        call write_dx_density
-     else
-        call write_cube
+  ! Now select job
+  if(i_job==1) then ! Convert coordinates
+     call write_xyz
+  else if(i_job==2) then ! Convert chden to cube
+     ! Read blocks
+     call read_block_input
+     ! Calculate active processes/blocks
+     call assign_blocks
+     call process_charge
+  else if(i_job==3) then ! Create band-resolved charge densities
+     ! Read blocks to get grid
+     call read_block_input
+     call process_bands
+  else if(i_job==4) then ! STM via TH sum over band densities
+     ! Read blocks to get grid
+     call read_block_input
+     call tersoff_hamann
+  else if(i_job==5) then ! STM via Paz-Soler TH
+     write(*,*) "Paz-Soler simulation is still under development and not available by default"
+     if(.false.) then
+        ! Read blocks
+        call read_block_input
+        ! Calculate active processes/blocks
+        call assign_blocks
+        call make_stm_current
      end if
+  else if(i_job==6) then ! DOS output
+     call process_dos
+  else if(i_job==7) then ! pDOS output
+     write(*,*) "Projected DOS will be implemented soon..."
   end if
+  ! Read eigenvalues and calculate weight for bands by kpt
+  !if(flag_only_charge) then
+  !   if(flag_range.and.n_bands_active==0) call read_eigenvalues_bands
+  !   call read_write_charge
+  !else
+  !   call read_eigenvalues_stm
+  !   ! STM output
+  !   call make_stm_current
+  !   call end_comms
+  !   return
+  !   ! Read charge and accumulate
+  !   call read_acc_charge
+  !   ! Write output files
+  !   !if(flag_output==dx) then
+  !   !   call write_dx_coords
+  !   !   call write_dx_density
+  !   !else
+  !   !   call write_cube
+  !   !end if
+  !end if
   call end_comms
 end program ConvertCharge
   

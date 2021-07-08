@@ -6,9 +6,55 @@ module output
   implicit none
   
   real(double), dimension(95) :: atrad
+  character(len=2)            :: pte(103)
 
+  data pte /  "H ", "He", "Li", "Be", "B ", "C ", "N ", "O ", "F ", "Ne", &
+         "Na", "Mg", "Al", "Si", "P ", "S ", "Cl", "Ar", "K ", "Ca", &
+         "Sc", "Ti", "V ", "Cr", "Mn", "Fe", "Co", "Ni", "Cu", "Zn", &
+         "Ga", "Ge", "As", "Se", "Br", "Kr", "Rb", "Sr", "Y ", "Zr", &
+         "Nb", "Mo", "Tc", "Ru", "Rh", "Pd", "Ag", "Cd", "In", "St", &
+         "Sb", "Te", "I ", "Xe", "Cs", "Ba", "La", "Ce", "Pr", "Nd", &
+         "Pm", "Sm", "Eu", "Gd", "Tb", "Dy", "Ho", "Er", "Tm", "Yb", &
+         "Lu", "Hf", "Ta", "W ", "Re", "Os", "Ir", "Pt", "Au", "Hg", &
+         "Tl", "Pb", "Bi", "Po", "At", "Rn", "Fr", "Ra", "Ac", "Th", &
+         "Pa", "U ", "Np", "Pu", "Am", "Cm", "Bk", "Cf", "Es", "Fm", &
+         "Md", "No", "Lr"/
 contains
 
+  subroutine write_xyz(ci)
+
+    use datatypes
+    use numbers
+    use local, ONLY: root_file
+    use global_module, ONLY: ni_in_cell, atom_coord, species_glob
+    use units, ONLY: BohrToAng, AngToBohr
+    use pseudo_tm_info, ONLY: pseudo
+
+    implicit none
+
+    ! Passed variables
+    character(len=50), OPTIONAL :: ci
+
+    ! Local variables
+    integer :: i
+    character(len=50) :: filename
+
+    ! Open file
+    if(PRESENT(ci)) then
+       filename = trim(ci)//".xyz"
+    else
+       filename = trim(root_file)//".xyz"
+    end if
+    open(unit=17,file=filename)
+    write(17,fmt='(i7)') ni_in_cell
+    write(17,fmt='("Comment")')
+    do i=1,ni_in_cell
+       write(17,fmt='(a2,3f10.3)') pte(int(pseudo(species_glob(i))%z)), &
+            atom_coord(1,i)*BohrToAng, atom_coord(2,i)*BohrToAng, atom_coord(3,i)*BohrToAng
+    end do
+    close(17)
+    return
+  end subroutine write_xyz
   ! Write OpenDX file for charge or current density
   subroutine write_dx_density(ci)
 
@@ -146,7 +192,7 @@ contains
     close(unit=17)
   end subroutine write_dx_coords
   
-  subroutine write_cube(ci)
+  subroutine write_cube(data,ci)
 
     use datatypes
     use numbers
@@ -158,6 +204,7 @@ contains
     
     implicit none
 
+    real(double), dimension(nptsx,nptsy,nptsz) :: data
     character(len=50), OPTIONAL :: ci
     
     character(len=50) :: filename
@@ -225,9 +272,9 @@ contains
                    do nz=1,nptsz,nsampz
                       icount = icount + 1
                       if ((icount==nz_total).or.(mod(icount,6)==0)) then
-                         write(17,fmt='(e13.5)') current(nx,ny,nz)/gpv
+                         write(17,fmt='(e13.5)') data(nx,ny,nz)!/gpv
                       else
-                         write(17,fmt='(e13.5)',advance='no') current(nx,ny,nz)/gpv
+                         write(17,fmt='(e13.5)',advance='no') data(nx,ny,nz)!/gpv
                       endif
                    end do
                 end do
