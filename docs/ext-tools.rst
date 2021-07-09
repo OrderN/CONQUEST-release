@@ -4,6 +4,165 @@
 External tools
 ==============
 
+.. _et_post_process:
+
+Post-processing for charge density, band density, DOS, STM
+----------------------------------------------------------
+
+The utility ``PostProcessCQ`` allows users to post-process the output
+of a CONQUEST calculation, to produce the charge density, band
+densities, DOS and STM images in useful forms (at present, as a CUBE
+file which can be read by the `VESTA
+<https://jp-minerals.org/vesta/en/>`_ code which is freely available).
+
+There are a number of different analyses which can be performed:
+coordinate conversion (to formats which can be plotted); conversion of
+total charge density to CUBE file format; production of band-resolved
+(optionally k-point resolved) densities in CUBE file format; simple
+Tersoff-Hamann STM simulation; and calculation of densities of states
+(projected DOS is under development).  You should ensure that all the
+files produced during the CONQUEST run are available for the
+post-processing (including ``chden.nnn``, ``make_blk.dat`` or
+``hilbert_make_blk.dat``) as well as the input files.
+
+Go to :ref:`top <ext-tools>`.
+
+Coordinate conversion
++++++++++++++++++++++
+
+Set ``Process.Job coo`` to output an xyz file for plotting.  Read the
+file specified by ``IO.Coordinates`` and adds a ``.xyz`` suffix.  We
+plan to expand this conversion to other formats in the future.
+
+Go to :ref:`top <ext-tools>`.
+
+Charge density
+++++++++++++++
+
+Setting ``Process.Job`` to ``cha``, ``chg`` or ``den`` will convert
+the files ``chden.nnn`` which are written by CONQUEST to a cube file.
+The processing will use the files ``chden.nnn``, ``Conquest_input``
+and ``hilbert_make_blk.dat`` or ``raster_make_blk.dat``.  Parameters that can
+be set include:
+
+::
+   
+   Process.ChargeStub string (default: chden)
+
+The ChargeStub simply defines the filename which will be used for
+output.
+
+Go to :ref:`top <ext-tools>`.
+
+Band density
+++++++++++++
+
+Setting ``Process.Job`` to ``ban`` produces band densities from wave
+function coefficients output by CONQUEST.  The CONQUEST run must have
+the following tags set:
+
+::
+
+   IO.outputWF T
+   IO.WFRangeRelative T/F
+
+The wavefunction range can be relative to the Fermi level
+(``IO.WFRangeRelative T``) otherwise it is absolute.  A set of bands
+whose coefficients are output are specified either with an energy
+range:
+
+::
+
+   IO.min_wf_E real (Ha)
+   IO.max_wf_E real (Ha)
+
+(the default is to produce *all* bands) or with a list of bands:
+
+::
+
+   IO.maxnoWF n
+
+   %block WaveFunctionsOut
+   n entries, each a band number
+   %endblock
+
+Either of these will produce a file containing all eigenvalues at all
+k-points (``eigenvalues.dat``) and a series of files containing the
+wavefunction expansion coefficients for the selected bands
+(``ProcessnnnnnnnWF.dat``).  From these, band densities can be
+produced in post-processing, using similar tags; either a range:
+
+::
+
+   Process.min_wf_E real (Ha)
+   Process.max_wf_E real (Ha)
+   Process.WFRangeRelative T/F
+
+or an explicit list of bands:
+
+::
+
+   Process.noWF n
+
+   %block WaveFunctionsProcess
+   n entries, each a band number
+   %endblock
+
+Note that the bands to be processed must be a subset of the bands
+output by CONQUEST.  The bands can be output summed over k-points or
+at individual k-points by setting ``Process.outputWF_by_kpoint`` to
+``F`` or ``T`` respectively.
+
+Go to :ref:`top <ext-tools>`.
+
+Tersoff-Hamann STM simulation
++++++++++++++++++++++++++++++
+
+Setting ``Process.Job ter`` will use a very simple Tersoff-Hamann
+approach to STM simulation, summing over band densities between the
+Fermi level and the bias voltage (this is often surprisingly
+accurate).  The following parameters can be set:
+
+::
+
+   STM.BiasVoltage    real (eV)
+   STM.FermiOffset    real (eV)
+   Process.MinZ       real (Bohr)
+   Process.MaxZ       real (Bohr)
+   Process.RootFile   string (default: STM)
+
+The ``FermiOffset`` tag allows the user to shift the Fermi level (to simulate
+charging or an external field).  The height of the simulation cell
+in which the STM image is calculated is set by the ``MinZ`` and
+``MaxZ`` tags, and the filename by the ``RootFile`` tag.
+
+Go to :ref:`top <ext-tools>`.
+
+Density of states
++++++++++++++++++
+
+Setting ``Process.Job dos`` will produce a total density of states
+(DOS) for the system, using the eigenvalues output by CONQUEST.  The
+following parameters can be set:
+
+::
+
+   IO.min_DOS_E real    (Ha)
+   IO.max_DOS_E real    (Ha)
+   IO.sigma_DOS real    (Ha, default 0.001)
+   IO.n_DOS     integer (default 201)
+
+The limits for the DOS are set by the first two parameters (note that
+CONQUEST will output all eigenvalues).  The broadening applied to each
+state is set by ``sigma_DOS``, while the number of bins is set by
+``n_DOS``.  We recommend that, for accurate DOS, CONQUEST should be
+run non-self-consistently with a very high k-point density, using a
+well-converged input charge density.
+
+Atom-projected DOS will be available soon.
+
+Go to :ref:`top <ext-tools>`.
+
 .. _et_md_scripts:
 
 Molecular dynamics analysis
