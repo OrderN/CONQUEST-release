@@ -22,13 +22,15 @@
 !!    Added spin_factor in module use statements
 !!   2019/04/09 zamaan
 !!    Off-diagonal elements of stress tensor added
+!!   2021/05/12 tsuyoshi, dave and others
+!!    Created interface for LibXC v5
+!!    Main changes involve XC types and function calls
 !! SOURCE
 !!
 module XC
 
   use datatypes
   use global_module, only: area_ops, io_lun, iprint_ops, spin_factor
-  use xc_f90_types_m
   use xc_f90_lib_m
 
   implicit none
@@ -39,6 +41,7 @@ module XC
   real(double), dimension(3,3), public :: XC_GGA_stress
   real(double), public :: s_6  ! For DFT D2
   logical, public :: flag_is_GGA ! Needed for non-SC forces
+
   ! Numerical flag choosing functional type
   integer, public :: flag_functional_type
   ! Allow user to specify different functional to pseudopotentials
@@ -50,7 +53,8 @@ module XC
   ! LibXC variables
   integer :: n_xc_terms
   integer, dimension(2) :: i_xc_family
-  type(xc_f90_pointer_t), dimension(:), allocatable :: xc_func, xc_info
+  type(xc_f90_func_t), dimension(:), allocatable :: xc_func
+  type(xc_f90_func_info_t), dimension(:), allocatable :: xc_info
   logical :: flag_use_libxc
 
   ! Conquest functional identifiers
@@ -107,8 +111,8 @@ contains
     integer :: vmajor, vminor, vmicro, i, j
     integer, dimension(2) :: xcpart
     character(len=120) :: name, kind, family, ref
-    type(xc_f90_pointer_t) :: temp_xc_func
-    type(xc_f90_pointer_t) :: temp_xc_info
+    type(xc_f90_func_t) :: temp_xc_func
+    type(xc_f90_func_info_t) :: temp_xc_info
 
     ! Test for LibXC or CQ
     if(flag_functional_type<0) then
@@ -119,7 +123,11 @@ contains
        flag_use_libxc = .true.
        call xc_f90_version(vmajor, vminor, vmicro)
        if(inode==ionode.AND.iprint_ops>0) then
-          write(io_lun,'("LibXC version: ",I1,".",I1,".",I2)') vmajor, vminor, vmicro
+          if(vmajor>2) then
+             write(io_lun,'("LibXC version: ",I1,".",I1,".",I2)') vmajor, vminor, vmicro
+          else
+             write(io_lun,'("LibXC version: ",I1,".",I1)') vmajor, vminor
+          end if
        end if
        ! Identify the functional
        if(-flag_functional_type<1000) then ! Only exchange OR combined exchange-correlation
@@ -131,11 +139,13 @@ contains
           i = floor(-flag_functional_type/1000.0_double)
           ! Temporary init to find exchange or correlation
           if(nspin==1) then
-             call xc_f90_func_init(temp_xc_func, temp_xc_info, i, XC_UNPOLARIZED)
+             call xc_f90_func_init(temp_xc_func, i, XC_UNPOLARIZED)
+             temp_xc_info = xc_f90_func_get_info(temp_xc_func)
           else if(nspin==2) then
-             call xc_f90_func_init(temp_xc_func, temp_xc_info, i, XC_POLARIZED)
+             call xc_f90_func_init(temp_xc_func, i, XC_POLARIZED)
+             temp_xc_info = xc_f90_func_get_info(temp_xc_func)
           end if
-          select case(xc_f90_info_kind(temp_xc_info))
+          select case(xc_f90_func_info_get_kind(temp_xc_info))
           case(XC_EXCHANGE)
              xcpart(1) = i
              xcpart(2) = -flag_functional_type - xcpart(1)*1000
@@ -149,16 +159,19 @@ contains
        allocate(xc_func(n_xc_terms),xc_info(n_xc_terms))
        do i=1,n_xc_terms
           if(nspin==1) then
-             call xc_f90_func_init(xc_func(i), xc_info(i), xcpart(i), XC_UNPOLARIZED)
+             call xc_f90_func_init(xc_func(i), xcpart(i), XC_UNPOLARIZED)
+             xc_info(i) = xc_f90_func_get_info(xc_func(i))
           else if(nspin==2) then
-             call xc_f90_func_init(xc_func(i), xc_info(i), xcpart(i), XC_POLARIZED)
+             call xc_f90_func_init(xc_func(i), xcpart(i), XC_POLARIZED)
+             xc_info(i) = xc_f90_func_get_info(xc_func(i))
           end if
           ! Consistent threshold with Conquest
-          call xc_f90_info_name(xc_info(i), name)
-          i_xc_family(i) = xc_f90_info_family(xc_info(i))
+          if(vmajor>2) call xc_f90_func_set_dens_threshold(xc_func(i),RD_ERR)
+          name = xc_f90_func_info_get_name(xc_info(i))
+          i_xc_family(i) = xc_f90_func_info_get_family(xc_info(i))
           if(i_xc_family(i)==XC_FAMILY_GGA) flag_is_GGA = .true.
           if(inode==ionode) then
-             select case(xc_f90_info_kind(xc_info(i)))
+             select case(xc_f90_func_info_get_kind(xc_info(i)))
              case (XC_EXCHANGE)
                 write(kind, '(a)') 'an exchange functional'
              case (XC_CORRELATION)
@@ -187,9 +200,21 @@ contains
              end select
 
              if(iprint_ops>2) then
-                write(io_lun,'("The functional ", a, " is ", a, ", and it belongs to the ", a, &
-                     " family")') &
-                     trim(name), trim(kind), trim(family)
+                if(vmajor>2) then
+                   write(io_lun,'("The functional ", a, " is ", a, ", it belongs to the ", a, &
+                   &     " family and is defined in the reference(s):")') &
+                        trim(name), trim(kind), trim(family)
+                   j = 0
+                   ref = xc_f90_func_reference_get_ref(xc_f90_func_info_get_references(xc_info(i),j))
+                   do while(j >= 0)
+                      write(io_lun, '(a,i1,2a)') '[', j, '] ', trim(ref)
+                      ref = xc_f90_func_reference_get_ref(xc_f90_func_info_get_references(xc_info(i),j))
+                   end do
+                else
+                   write(io_lun,'("The functional ", a, " is ", a, ", and it belongs to the ", a, &
+                   &     " family")') &
+                        trim(name), trim(kind), trim(family)
+                end if
              else if(iprint_ops>0) then
                 write(io_lun,'(2x,"Using the ",a," functional ",a)') trim(family),trim(name)
              else
@@ -247,6 +272,7 @@ contains
        else
           flag_is_GGA = .false.
        end if
+
     end if ! if selecting LibXC or CQ
   end subroutine init_xc
   !!***
@@ -518,11 +544,11 @@ contains
   !!   2018/02/15 11:56 dave
   !!    Bug fix: only scale sigma and build_gradient if we have a GGA functional
   !!    Changed to use flag_is_GGA
+  !!   2021/05/17 10:45 dave
+  !!    Tidying and small changes (mainly using stride for vsigma and vrho indexing)
   !!  SOURCE
   !!
-  subroutine get_libxc_potential(density, xc_potential, xc_epsilon,     &
-       xc_energy, size, &!x_epsilon, c_epsilon, &
-       x_energy)
+  subroutine get_libxc_potential(density, xc_potential, xc_epsilon, xc_energy, size, x_energy)
 
     use datatypes
     use numbers
@@ -541,20 +567,17 @@ contains
     real(double), dimension(:,:), intent(out) :: xc_potential
     real(double), dimension(:),   intent(out) :: xc_epsilon
     ! optional
-    !real(double), dimension(:), intent(out), optional :: x_epsilon, c_epsilon
-    real(double),               intent(out), optional :: x_energy
+    real(double), intent(out), optional :: x_energy
 
     ! local variables
-    real(double), dimension(:),   allocatable :: sigma, eps, vrho, vsigma, temp ! Temporary variables
+    real(double), dimension(:), allocatable :: sigma, eps, vrho, vsigma, temp ! Temporary variables
     complex(double), dimension(:,:), allocatable :: ng
     real(double), dimension(:), allocatable :: alt_dens
     real(double), dimension(:,:,:), allocatable :: grad_density
     real(double) :: rho_tot
-    integer :: stat, i, spin, n, j
+    integer :: stat, i, spin, nxc, j
     logical :: flag_exchange_e = .false.
-    !logical :: flag_exchange_v = .false.
 
-    !flag_exchange_v = PRESENT(x_epsilon)
     flag_exchange_e = PRESENT(x_energy)
     ! Storage space for individual components
     allocate(vrho(n_my_grid_points*nspin),eps(n_my_grid_points),alt_dens(n_my_grid_points*nspin))
@@ -619,27 +642,34 @@ contains
        end if
     end if
     ! Create XC energy and potential
-    do n = 1,n_xc_terms
+    do nxc = 1,n_xc_terms
        vrho = zero
        eps = zero
        if(nspin>1) then
-          select case (i_xc_family(n))
+          select case( i_xc_family(nxc) )
           case(XC_FAMILY_LDA)
-             call xc_f90_lda_exc_vxc(xc_func(n),n_my_grid_points,alt_dens(1),eps(1),vrho(1))
+             call xc_f90_lda_exc_vxc( xc_func(nxc), int(n_my_grid_points,kind=wide), &
+                alt_dens, eps, vrho )
           case(XC_FAMILY_GGA)
-             call xc_f90_gga_exc_vxc(xc_func(n),n_my_grid_points,alt_dens(1),sigma(1), &
-                  eps(1),vrho(1),vsigma(1))
+             call xc_f90_gga_exc_vxc( xc_func(nxc), int(n_my_grid_points,kind=wide), &
+                alt_dens, sigma, eps, vrho, vsigma )
+          end select
+
+          ! d e_xc/d n
+          do spin=1,nspin
+             xc_potential(:,spin) = xc_potential(:,spin) + vrho(spin::nspin)
+          end do
+
+          if(flag_is_GGA) then
              ! Calculate the second term, from d (n eps_xc) / d sigma
              ng = zero
              ! FFT d n Exc/d sigma \nabla n to reciprocal space
              ! spin up
              temp = zero
              do i=1,3
-                do j=1,n_my_grid_points
-                   ! d eps / d sigma(up.up) grad rho(up) + d eps / d sigma(up.down) grad rho(down)
-                   temp(j) = two*vsigma(1+(j-1)*3)*grad_density(j,i,1) + &
-                        vsigma(2+(j-1)*3)*grad_density(j,i,2)
-                end do
+                ! d eps / d sigma(up.up) grad rho(up) + d eps / d sigma(up.down) grad rho(down)
+                ! Note the stride here which comes from LibXC putting the spin index first
+                temp(:) = two*vsigma(1::3)*grad_density(:,i,1) + vsigma(2::3)*grad_density(:,i,2)
                 ! For non-orthogonal stresses, introduce another loop and dot with grad_density(:,j)
                 if (flag_stress) then
                   if (flag_full_stress) then
@@ -667,11 +697,9 @@ contains
              temp = zero
              ng = zero
              do i=1,3
-                do j=1,n_my_grid_points
-                   ! d eps / d sigma(down.down) grad rho(down) + d eps / d sigma(up.down) grad rho(up)
-                   temp(j) = vsigma(2+(j-1)*3)*grad_density(j,i,1) + &
-                        two*vsigma(3+(j-1)*3)*grad_density(j,i,2)
-                end do
+                ! d eps / d sigma(down.down) grad rho(down) + d eps / d sigma(up.down) grad rho(up)
+                ! Again, note stride
+                temp(:) = vsigma(2::3)*grad_density(:,i,1) + two*vsigma(3::3)*grad_density(:,i,2)
                 ! For non-orthogonal stresses, introduce another loop and dot with grad_density(:,j)
                 if (flag_stress) then
                   if (flag_full_stress) then
@@ -695,21 +723,24 @@ contains
              call fft3(temp(:), ng(:,1), size, +1)
              xc_potential(1:n_my_grid_points,2) = xc_potential(1:n_my_grid_points,2) + &
                   temp(1:n_my_grid_points)
-          end select
-          ! d e_xc/d n
-          do i=1,n_my_grid_points
-             do spin=1,nspin
-                xc_potential(i,spin) = xc_potential(i,spin) +vrho(spin + (i-1)*nspin)
-             end do
-          end do
+          end if ! flag_is_GGA
+
        else ! No spin
-          select case (i_xc_family(n))
+          select case (i_xc_family(nxc))
           case(XC_FAMILY_LDA)
-             call xc_f90_lda_exc_vxc(xc_func(n),n_my_grid_points,alt_dens(1),eps(1),vrho(1))
+             call xc_f90_lda_exc_vxc( xc_func(nxc), int(n_my_grid_points,kind=wide), &
+                alt_dens,  eps, vrho )
           case(XC_FAMILY_GGA)
-             call xc_f90_gga_exc_vxc(xc_func(n),n_my_grid_points,alt_dens(1),sigma(1), &
-                  eps(1),vrho(1),vsigma(1))
-             ! Calculate the second term, from d (n eps_xc) / d sigma
+             call xc_f90_gga_exc_vxc( xc_func(nxc), int(n_my_grid_points,kind=wide), &
+                alt_dens, sigma,  eps, vrho, vsigma )
+          end select
+
+          ! d e_xc/d n
+          xc_potential(1:n_my_grid_points,1) = xc_potential(1:n_my_grid_points,1) + &
+               vrho(1:n_my_grid_points)
+
+          if(flag_is_GGA) then
+             ! Calculate the second term in the potential, from d (n eps_xc) / d sigma
              ng = zero
              ! FFT d n Exc/d sigma \nabla n to reciprocal space
              temp = zero
@@ -738,17 +769,13 @@ contains
              call fft3(vsigma(:), ng(:,1), size, +1)
              xc_potential(1:n_my_grid_points,1) = xc_potential(1:n_my_grid_points,1) + &
                   vsigma(1:n_my_grid_points)
-          end select
-          ! d e_xc/d n
-          xc_potential(1:n_my_grid_points,1) = xc_potential(1:n_my_grid_points,1) + &
-               vrho(1:n_my_grid_points)
-       end if
+          end if ! flag_is_GGA
+      
+       end if ! nspin
+
        xc_epsilon(1:n_my_grid_points) = xc_epsilon(1:n_my_grid_points) + eps(1:n_my_grid_points)
-       if(n==1) then
-          !if(flag_exchange_v) then
-          !   write(*,*) 'Finding x_eps'
-          !   x_epsilon(1:n_my_grid_points) = eps(1:n_my_grid_points)
-          !end if
+
+       if(nxc==1) then
           if(flag_exchange_e) then
              x_energy = zero
              do i=1,n_my_grid_points
@@ -757,13 +784,14 @@ contains
              end do
           end if
        end if
-    end do
+    end do ! nxc = n_xc_terms
+
     deallocate(vrho,eps,alt_dens)
     if(flag_is_GGA)then
        deallocate(grad_density,sigma,vsigma,ng,temp)
        if (flag_stress) then
-         XC_GGA_stress = XC_GGA_stress*grid_point_volume
-         call gsum(XC_GGA_stress,3,3)
+          XC_GGA_stress = XC_GGA_stress*grid_point_volume
+          call gsum(XC_GGA_stress,3,3)
        end if
     end if
     ! Sum to get energy
@@ -806,6 +834,8 @@ contains
   !!    Non-spin GGA implementation started
   !!   2018/02/23 15:09 dave
   !!    Bug fix: moved scaling of diff_rho inside GGA if loop
+  !!   2021/05/20 11:52 dave
+  !!    Tidying select clause
   !!  SOURCE
   !!
   subroutine get_libxc_dpotential(density, dxc_potential, size, density_out)
@@ -909,28 +939,29 @@ contains
     ! Loop over terms and calculate potential
     do j = 1,n_xc_terms
        vrho = zero
-       if(nspin>1) then
+       if(nspin>1) then ! NB no spin-polarised GGA NSC forces
           select case (i_xc_family(j))
           case(XC_FAMILY_LDA)
-             call xc_f90_lda_fxc(xc_func(j),n_my_grid_points,alt_dens(1),vrho(1))
-             do i=1,n_my_grid_points
-                dxc_potential(i,1,1) = dxc_potential(i,1,1) +vrho(1 + (i-1)*3)
-                dxc_potential(i,1,2) = dxc_potential(i,1,2) +vrho(2 + (i-1)*3)
-                dxc_potential(i,2,1) = dxc_potential(i,2,1) +vrho(2 + (i-1)*3)
-                dxc_potential(i,2,2) = dxc_potential(i,2,2) +vrho(3 + (i-1)*3)
-             end do
+             call xc_f90_lda_fxc(xc_func(j),int(n_my_grid_points,kind=wide),alt_dens,vrho)
+             dxc_potential(:,1,1) = dxc_potential(:,1,1) +vrho(1::3)
+             dxc_potential(:,1,2) = dxc_potential(:,1,2) +vrho(2::3)
+             dxc_potential(:,2,1) = dxc_potential(:,2,1) +vrho(2::3)
+             dxc_potential(:,2,2) = dxc_potential(:,2,2) +vrho(3::3)
           end select
        else
           select case (i_xc_family(j))
           case(XC_FAMILY_LDA)
-             call xc_f90_lda_fxc(xc_func(j),n_my_grid_points,alt_dens(1),vrho(1))
+             call xc_f90_lda_fxc(xc_func(j),int(n_my_grid_points,kind=wide),alt_dens,vrho)
              dxc_potential(1:n_my_grid_points,1,1) = dxc_potential(1:n_my_grid_points,1,1) + &
                   vrho(1:n_my_grid_points)
           case(XC_FAMILY_GGA)
-             call xc_f90_gga_vxc(xc_func(j),n_my_grid_points,alt_dens(1),sigma(1),vrho(1),&
-                  vsigma(1))
-             call xc_f90_gga_fxc(xc_func(j),n_my_grid_points,alt_dens(1),sigma(1),&
-                  v2rho2(1),v2rhosigma(1),v2sigma2(1))
+             call xc_f90_gga_vxc(xc_func(j),int(n_my_grid_points,kind=wide),alt_dens,sigma,vrho,&
+                  vsigma)
+             call xc_f90_gga_fxc(xc_func(j),int(n_my_grid_points,kind=wide),alt_dens,sigma,&
+                  v2rho2,v2rhosigma,v2sigma2)
+          end select
+
+          if(flag_is_GGA) then ! NB refer to JCTC 5, 1499 (2009) for L1-4 and details
              ! Add term L1 (in paper) to potential
              dxc_potential(1:n_my_grid_points,1,1) = dxc_potential(1:n_my_grid_points,1,1) + &
                   diff_rho(1:n_my_grid_points) * v2rho2(1:n_my_grid_points)
@@ -951,11 +982,10 @@ contains
 
              ! Add term L2 to potential (L2 in paper - confusingly this is L3 in CQ code below) 
              ! NB the 1/|grad_density| factor cancels with dsigma/dg
-             do n=1, n_my_grid_points
-                do i=1,3
-                   dxc_potential(n,1,1) = dxc_potential(n,1,1) + two * (tmp3(n,i) &
-                        * v2rhosigma(n) * grad_density(n,i,1) )
-                end do
+             do i=1,3
+                dxc_potential(1:n_my_grid_points,1,1) = dxc_potential(1:n_my_grid_points,1,1) + &
+                     two * tmp3(1:n_my_grid_points,i) * v2rhosigma(1:n_my_grid_points) * &
+                     grad_density(1:n_my_grid_points,i,1)
              end do
              
              ! Build the term M from paper (in CQ routines below, this is called L4)
@@ -979,11 +1009,10 @@ contains
              
              ! Terms L3 and L4 (using M) in paper
              ! (In CQ GGA routines below, these are referred to as L2, L5 and L4)
-             do n=1, n_my_grid_points
-                do i=1,3
-                   tmp3(n,i) = tmp3(n,i) &
-                        + two * diff_rho(n) * v2rhosigma(n)* grad_density(n,i,1)
-                end do
+             do i=1,3
+                tmp3(1:n_my_grid_points,i) = tmp3(1:n_my_grid_points,i) + &
+                     two * diff_rho(1:n_my_grid_points) * v2rhosigma(1:n_my_grid_points) * &
+                     grad_density(1:n_my_grid_points,i,1)
              end do
 
              ! This process of FFT, scale by iG and FFT back avoids convolution
@@ -1002,11 +1031,9 @@ contains
              ! Use first component of tmp3 to store final vector
              call fft3(tmp3(:,1), tmp1, size, 1)
 
-             do n=1, n_my_grid_points
-                dxc_potential(n,1,1) = dxc_potential(n,1,1) - tmp3(n,1)
-             end do
-          end select
-       end if
+             dxc_potential(1:n_my_grid_points,1,1) = dxc_potential(1:n_my_grid_points,1,1) - tmp3(1:n_my_grid_points,1)
+          end if ! flag_is_GGA
+       end if ! nspin
     end do
     deallocate(vrho,alt_dens)
     if(flag_is_GGA) then
@@ -2239,6 +2266,8 @@ contains
   !!     Removed rcellx references (redundant)
   !!   2018/06/15 12:25 dave
   !!    Removed spin_factor from use statement (global to module now)
+  !!   2019/05/13 10:36 dave
+  !!    Bug fix for generalised stress
   !! SOURCE
   !!
   subroutine get_xc_potential_GGA_PBE(density, xc_potential,            &
@@ -2408,8 +2437,6 @@ contains
   !!     Removed rcellx references (redundant)
   !!   2018/06/15 12:25 dave
   !!    Removed spin_factor from use statement (global to module now)
-  !!   2019/05/13 10:36 dave
-  !!    Bug fix for generalised stress
   !! SOURCE
   !!
   subroutine get_xc_potential_hyb_PBE0(density, xc_potential, exx_a,     &
@@ -2506,7 +2533,7 @@ contains
               end if
             end if
           end do ! dir1
-       end do
+       end do ! spin
     end do ! rr
     call gsum(xc_energy)
     if (present(x_energy)) call gsum(x_energy)

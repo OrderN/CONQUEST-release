@@ -206,6 +206,9 @@ contains
   !!    - Bug fix on call for update_atom_coord
   !!   2016/01/13 08:31 dave
   !!    Removed call to set_density (now included in update_H)
+  !!   2020/07/28 tsuyoshi
+  !!    Velocities for fixed atoms are forced to be zero.
+  !!    (though this subroutine is not used now.)
   !!  TODO
   !!   Proper buffer zones for matrix mults so initialisation doesn't have
   !!   to be done at every step 03/07/2001 dave
@@ -270,9 +273,11 @@ contains
        !Now, we assume forces are forced to be zero, when
        ! flagx, y or z is false. But, I(TM) think we should
        ! have the followings, in the future. 
-       !if(.not.flagx) velocity(1,atom) = zero
-       !if(.not.flagy) velocity(2,atom) = zero
-       !if(.not.flagz) velocity(3,atom) = zero
+       !  2020/Jul/28 TM activated the following three lines, 
+       !   though this subroutine is not used now.
+       if(.not.flagx) velocity(1,atom) = zero
+       if(.not.flagy) velocity(2,atom) = zero
+       if(.not.flagz) velocity(3,atom) = zero
     end do
     ! Maybe fiddle with KE
     KE = zero
@@ -3758,6 +3763,8 @@ contains
   !!    Moved ionode criterion for generation of velocities from init_ensemble
   !!   2019/05/23 zamaan
   !!    Zeroed COM velocity after initialisation
+  !!   2020/07/28 tsuyoshi
+  !!    Zeroed velocity for the fixed degree of freedom
   !!  SOURCE
   !!
   subroutine init_velocity(ni_in_cell, temp, velocity)
@@ -3811,7 +3818,11 @@ contains
           ! Positions are calculated as v*dt in bohr unit. (m in amu, dt in fs)
           v0 = sqrt(temp*fac_Kelvin2Hartree/(massa*fac)) 
           do dir=1,3
-             u0 = myrng%rng_normal()
+             if(flag_move_atom(dir,iglob)) then
+              u0 = myrng%rng_normal()
+             else
+              u0 = zero
+             endif
              velocity(dir,ia) = v0 * u0
              KE = KE + half * massa * fac * velocity(dir,ia)**2
           end do
@@ -4296,14 +4307,17 @@ contains
   !!       changed matS to be spin_SF dependent
   !!   2019/Nov/14  tsuyoshi
   !!       removed glob2node_old, n_proc_old
+  !!   2019/Jul/27  tsuyoshi
+  !!       added atom_vels (from global_module), and removed local velocity_global
   !!
   !!  SOURCE
   !!
  subroutine update_pos_and_matrices(update_method, velocity)
   use datatypes
   use numbers,         only: half, zero, one, very_small
-  use global_module,   only: flag_diagonalisation, atom_coord, atom_coord_diff, &
-                             rcellx, rcelly, rcellz, ni_in_cell, nspin, nspin_SF, id_glob
+  use global_module,   only: flag_diagonalisation, atom_coord, atom_vels, atom_coord_diff, &
+                             rcellx, rcelly, rcellz, ni_in_cell, nspin, nspin_SF, id_glob, &
+                             area_moveatoms
     ! n_proc_old and glob2node_old have been removed
   use GenComms,        only: my_barrier, inode, ionode, cq_abort, gcopy
   use mult_module,     only: matL, L_trans, matK, matS, S_trans, matSFcoeff, SFcoeff_trans, &
@@ -4312,6 +4326,8 @@ contains
   use store_matrix,    only: matrix_store_global, InfoMatrixFile, grab_InfoMatGlobal, grab_matrix2, &
                              set_atom_coord_diff
   use UpdateInfo, only: Matrix_CommRebuild, Report_UpdateMatrix
+  use memory_module,   only: reg_alloc_mem, type_dbl, reg_dealloc_mem
+
 
   implicit none
   integer, intent(in) :: update_method
@@ -4331,8 +4347,7 @@ contains
   type(matrix_store_global) :: InfoGlob
   type(InfoMatrixFile),pointer :: InfoMat(:)
 
-  real(double), dimension(3,ni_in_cell) :: velocity_global
-  integer :: i
+  integer :: i, stat
 
  !Switch on Debugging
  !  flag_debug_move_atoms = .true.
@@ -4384,12 +4399,23 @@ contains
 
 
  !First updating information of atomic positions, neighbour lists, etc...
+ !  2020/10/7 Tsuyoshi Miyazaki
+ !   we are planning to use `atom_vels` and remove `velocity` (= direction in CG).
+    if (.not. allocated(atom_vels)) then
+       allocate(atom_vels(3,ni_in_cell), STAT=stat)
+       if (stat /= 0) &
+            call cq_abort("Error allocating atom_vels in init_md: ", &
+            ni_in_cell, stat)
+       call reg_alloc_mem(area_moveatoms, 3*ni_in_cell, type_dbl)
+       atom_vels = zero
+    end if
+
      call wrap_xyz_atom_cell
      call update_atom_coord
      do i=1,ni_in_cell
-        velocity_global(1,id_glob(i)) = velocity(1,i)
-        velocity_global(2,id_glob(i)) = velocity(2,i)
-        velocity_global(3,id_glob(i)) = velocity(3,i)
+        atom_vels(1,id_glob(i)) = velocity(1,i)
+        atom_vels(2,id_glob(i)) = velocity(2,i)
+        atom_vels(3,id_glob(i)) = velocity(3,i)
      end do
   !Before calling this routine, we need 1) call dump_InfoMatGlobal or 2) call set_InfoMatGlobal
   ! Then, we use InfoGlob read from the file or use InfoGlob as it is (in the case of 2))
@@ -4408,10 +4434,17 @@ contains
   !       coord_next.dat is made in "updateIndices3", at present.
      call updateIndices3(fixed_potential, velocity)
      do i=1,ni_in_cell
-        velocity(1,i) = velocity_global(1,id_glob(i))
-        velocity(2,i) = velocity_global(2,id_glob(i))
-        velocity(3,i) = velocity_global(3,id_glob(i))
+        velocity(1,i) = atom_vels(1,id_glob(i))
+        velocity(2,i) = atom_vels(2,id_glob(i))
+        velocity(3,i) = atom_vels(3,id_glob(i))
      end do
+
+! 2020/Oct/12 TM   
+!  if we want to reduce the memory size ...  
+!      deallocate(atom_vels, STAT=stat)
+!       if (stat /= 0) &
+!            call cq_abort("Error deallocating atom_vels in init_md: stat=", stat)
+!       call reg_dealloc_mem(area_moveatoms, 3*ni_in_cell, type_dbl)
 
  !
  ! Then, matrices will be read from the corresponding files

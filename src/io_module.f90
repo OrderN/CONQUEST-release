@@ -162,6 +162,10 @@ contains
   !!    Allocate atom_coord_diff for all calculations
   !!   2019/04/04 14:17 dave
   !!    Correct bug in wrapping with non-fractional coordinates and Angstroms
+  !!   2020/07/27 tsuyoshi
+  !!    Added atom_vels  
+  !!   2020/10/07 tsuyoshi
+  !!    Removed allocation of atom_vels (moved to "control")
   !!  SOURCE
   !!
   subroutine read_atomic_positions(filename)
@@ -428,11 +432,11 @@ second:   do
           endif
          !2010.06.25 TM (Angstrom Units in coords file, but not pdb)
 
-          allocate(flag_move_atom(3,ni_in_cell),atom_coord(3,&
-                   ni_in_cell),species_glob(ni_in_cell),STAT=stat)
+          allocate(flag_move_atom(3,ni_in_cell),atom_coord(3,ni_in_cell),&
+                   species_glob(ni_in_cell),STAT=stat)
           if(stat/=0) &
                call cq_abort("Failure to allocate coordinates: ",ni_in_cell)
-          call reg_alloc_mem(area_init, 3*ni_in_cell,type_dbl)
+          call reg_alloc_mem(area_init, 6*ni_in_cell,type_dbl)
           call reg_alloc_mem(area_init, 4*ni_in_cell,type_int)
           do i=1,ni_in_cell
              read(lun,*) x,y,z,species_glob(i),movex,movey,movez
