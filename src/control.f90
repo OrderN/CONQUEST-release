@@ -2218,7 +2218,7 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
     real(double), allocatable, dimension(:,:,:) :: posnStore, dr_tilde, dg_tilde, vi_tilde
     real(double), allocatable, dimension(:,:,:) :: forceStore
     real(double) :: energy0, energy1, max, g0, dE, gg, ggold, gamma, &
-                    temp, KE, guess_step, step, test_dot, lambda_max, alpha
+                    temp, KE, guess_step, step, test_dot, lambda_max, alpha, f_dot_sd
     integer      :: i,j,k,iter,length, jj, lun, stat, npmod, pul_mx, &
                     i_first, i_last, n_store, n_dim, info, n_hist, &
                     nfile, symm, iter_loc, iter_high, this_iter
@@ -2307,15 +2307,15 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
        ! Line search
        call single_step(cg, energy0, energy1, fixed_potential, vary_mu, energy1)
        if(energy1>energy0) then
-          if(inode==ionode) write(io_lun,fmt='(4x,"Energy rise: resetting history")')
+          if(inode==ionode.AND.iprint_MD>1) write(io_lun,fmt='(4x,"Energy rise: resetting history")')
           do i=1,ni_in_cell
-             jj = id_glob(i)
-             cg(:,i) = tot_force(:,jj) ! Search downhill
+             cg_new(:,i) = -tot_force(:,i) ! Search downhill
           end do
-          call single_step(cg, energy0, energy1, fixed_potential, vary_mu, energy1)
+          !call single_step(cg, energy0, energy1, fixed_potential, vary_mu, energy1)
           npmod = 1
-          iter_loc = 1
+          iter_loc = 0
           alpha = half*alpha
+          iter = iter - 1
        else
           ! Update stored position difference and force difference
           do i=1,ni_in_cell
@@ -2335,160 +2335,163 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
              forceStore(:,jj,npmod) = -tot_force(:,jj) - forceStore(:,jj,npmod)
              ! New search direction
           end do
-       end if
-       n_store = min(iter_loc,LBFGS_history) ! Number of stored states
-       if(inode==ionode) write(io_lun,fmt='(4x,"Number of stored histories ",i3)') n_store
-       allocate(mod_dr(n_store),Sij(n_store,n_store),lambda(n_store),&
-            omega(n_store,n_store))
-       mod_dr = zero
-       ! Normalise dR and dg
-       do i=1,n_store
-          mod_dr(i) = sqrt(dot(length,posnStore(:,:,i),1,posnStore(:,:,i),1))
-          posnStore(:,:,i) = posnStore(:,:,i)/mod_dr(i)
-          forceStore(:,:,i) = forceStore(:,:,i)/mod_dr(i)
-       end do
-       cg_new = -tot_force ! The L-BFGS is in terms of grad E
-       ! Add call to write_atomic_positions and write_xsf (2020/01/17: smujahed)
-       call write_atomic_positions("UpdatedAtoms.dat", trim(pdb_template))
-       if (flag_write_xsf) call write_xsf('trajectory.xsf', iter)
-       ! Build significant subspace
-       Sij = zero
-       omega = zero
-       do i = 1, n_store
-          do j=i,n_store
-             Sij(j,i) = dot(length,posnStore(:,:,j),1,posnStore(:,:,i),1)
-             if(j>i) Sij(i,j) = Sij(j,i)
+          n_store = min(iter_loc,LBFGS_history) ! Number of stored states
+          if(inode==ionode.AND.iprint_MD>2) write(io_lun,fmt='(4x,"Number of stored histories ",i3)') n_store
+          allocate(mod_dr(n_store),Sij(n_store,n_store),lambda(n_store),&
+               omega(n_store,n_store))
+          mod_dr = zero
+          ! Normalise dR and dg
+          do i=1,n_store
+             mod_dr(i) = sqrt(dot(length,posnStore(:,:,i),1,posnStore(:,:,i),1))
           end do
-       end do
-       ! Solve for eigenvectors of Sij
-       omega = Sij
-       if(n_store>1) then
-          call syev('U',n_store,omega,n_store,lambda,info)
-          if(info<0) call cq_abort("Error in SQNM calling dsyev: ",info)
-          if(info>0.and.inode==ionode) write(io_lun,fmt='(4x,"Possible error in SQNM; dsyev returned ",i4)') info
-       else
-          lambda = one
-          omega = one
-       end if
-       if(inode==ionode) then
-          write(io_lun,fmt='(4x,"Eigenvalues of Sij: ",(f7.4))') lambda
-       end if
-       lambda_max = maxval(lambda)
-       n_dim = n_store
-       do i=1, n_store
-          if(lambda(i)/lambda_max<1.0e-4_double) then
-             n_dim = n_dim - 1
+          posnStore(:,:,npmod) = posnStore(:,:,npmod)/mod_dr(npmod)
+          forceStore(:,:,npmod) = forceStore(:,:,npmod)/mod_dr(npmod)
+          cg_new = -tot_force ! The L-BFGS is in terms of grad E
+          ! Add call to write_atomic_positions and write_xsf (2020/01/17: smujahed)
+          call write_atomic_positions("UpdatedAtoms.dat", trim(pdb_template))
+          if (flag_write_xsf) call write_xsf('trajectory.xsf', iter)
+          ! Build significant subspace
+          Sij = zero
+          omega = zero
+          do i = 1, n_store
+             do j=i,n_store
+                Sij(j,i) = dot(length,posnStore(:,:,j),1,posnStore(:,:,i),1)
+                if(j>i) Sij(i,j) = Sij(j,i)
+             end do
+          end do
+          ! Solve for eigenvectors of Sij
+          omega = Sij
+          if(n_store>1) then
+             call syev('U',n_store,omega,n_store,lambda,info)
+             if(info<0) call cq_abort("Error in SQNM calling dsyev: ",info)
+             if(info>0.and.inode==ionode) write(io_lun,fmt='(4x,"Possible error in SQNM; dsyev returned ",i4)') info
+          else
+             lambda = one
+             omega = one
           end if
-       end do
-       if(inode==ionode) write(io_lun,fmt='(4x,"Number of eigenstates kept: ",i3)') n_dim
-       ! Build dr_tilde and dg_tilde
-       allocate(dr_tilde(3,ni_in_cell,n_dim), dg_tilde(3,ni_in_cell,n_dim))
-       dr_tilde = zero
-       dg_tilde = zero
-       do i=1,n_dim
-          do j=1,n_store
-             dr_tilde(:,:,i) = dr_tilde(:,:,i) + omega(j,i+(n_store-n_dim))*posnStore(:,:,j)
-             dg_tilde(:,:,i) = dg_tilde(:,:,i) + omega(j,i+(n_store-n_dim))*forceStore(:,:,j)
-          end do
-          dr_tilde(:,:,i) = dr_tilde(:,:,i)/sqrt(lambda(i+(n_store-n_dim)))
-          dg_tilde(:,:,i) = dg_tilde(:,:,i)/sqrt(lambda(i+(n_store-n_dim)))
-       end do
-       ! Construct approximate Hessian projected onto subspace
-       allocate(Hij(n_dim,n_dim))
-       Hij = zero
-       do i=1,n_dim
-          do j=i,n_dim
-             Hij(j,i) = half*(dot(length,dr_tilde(:,:,i),1,dg_tilde(:,:,j),1) + &
-                  dot(length,dr_tilde(:,:,j),1,dg_tilde(:,:,i),1))
-             if(j>i) Hij(i,j) = Hij(j,i)
-          end do
-       end do
-       ! Find eigenvectors
-       allocate(kappa(n_dim),vi(n_dim,n_dim),kappa_prime(n_dim))
-       kappa = zero
-       kappa_prime = zero
-       vi = Hij
-       if(n_dim>1) then
-          call syev('U',n_dim,vi,n_dim,kappa,info)
-          if(info<0) call cq_abort("Error in SQNM calling dsyev: ",info)
-          if(info>0.and.inode==ionode) write(io_lun,fmt='(4x,"Possible error in SQNM; dsyev returned ",i4)') info
-       else
-          kappa = one !Hij(1,1)
-          vi = one
-       end if
-       if(inode==ionode) write(io_lun,fmt='(4x,"Kappa: ",(f7.4))') kappa
-       ! Build v tilde
-       allocate(vi_tilde(3,ni_in_cell,n_dim),ri_vec(3,ni_in_cell))
-       vi_tilde = zero
-       do i=1,n_dim
-          ri_vec = zero
-          do j=1,n_dim
-             vi_tilde(:,:,i) = vi_tilde(:,:,i) + vi(j,i)*dr_tilde(:,:,j)
-             ri_vec(:,:) = ri_vec(:,:) + vi(j,i)*dg_tilde(:,:,j)
-          end do
-          ri_vec(:,:) = ri_vec(:,:) - kappa(i)*vi_tilde(:,:,i)
-          !kappa_prime(i) = sqrt(0.0025_double + kappa(i)*kappa(i))
-          kappa_prime(i) = sqrt(dot(length,ri_vec,1,ri_vec,1) + kappa(i)*kappa(i))
-       end do
-       if(inode==ionode) write(io_lun,fmt='(4x,"Kappa prime: ",(f7.4))') kappa_prime
-       ! Build preconditioned search
-       cg_new = -alpha*tot_force
-       do i=1,n_dim
-          cg_new = cg_new - (one/kappa_prime(i) - alpha)*dot(length,tot_force,1,vi_tilde(:,:,i),1)*vi_tilde(:,:,i)
-       end do
-       gg = dot(length, cg_new, 1, cg_new, 1)
-       ! Analyse forces
-       g0 = dot(length, tot_force, 1, tot_force, 1)
-       if(inode==ionode) write(io_lun,fmt='(4x,"Dot: ",f12.7)') dot(length,cg_new,1,-tot_force,1)/sqrt(g0*gg)
-       if(dot(length,cg_new,1,-tot_force,1)/sqrt(g0*gg)>0.2_double) then
-          alpha = alpha*1.1_double
-       else
-          alpha = alpha*0.85_double
-       end if
-       if(inode==ionode) write(io_lun,fmt='(4x,"Alpha set to: ",f9.5)') alpha
-       max = zero
-       do i = 1, ni_in_cell
-          do k = 1, 3
-             if (abs(tot_force(k,i)) > max) max = abs(tot_force(k,i))
-          end do
-       end do
-       if (iter > MDn_steps) then
-          done = .true.
-          if (myid == 0) &
-               write (io_lun, fmt='(4x,"Exceeded number of MD steps: ",i4)') iter
-       end if
-       if (abs(max) < MDcgtol) then
-          done = .true.
-          if (inode==ionode) then
-             write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," E: ",e16.8," dE: ",f12.8)') & 
-                  iter, max, energy1, en_conv*dE
-             if (iprint_MD > 1) then
-                write(io_lun,'(4x,"Force Residual:     ",f20.10," ",a2,"/",a2)') &
-                   for_conv*sqrt(g0/ni_in_cell), en_units(energy_units), & 
-                   d_units(dist_units)
-                write(io_lun,'(4x,"Maximum force:      ",f20.10)') max
-                write(io_lun,'(4x,"Force tolerance:    ",f20.10)') MDcgtol
-                write(io_lun,'(4x,"Energy change:      ",f20.10," ",a2)') &
-                   en_conv*dE, en_units(energy_units)
+          if(inode==ionode.AND.iprint_MD>2) then
+             write(io_lun,fmt='(4x,"Eigenvalues of Sij: ",(f7.4))') lambda
+          end if
+          lambda_max = maxval(lambda)
+          n_dim = n_store
+          do i=1, n_store
+             if(lambda(i)/lambda_max<1.0e-4_double) then
+                n_dim = n_dim - 1
              end if
-             write(io_lun, fmt='(4x,"Maximum force below threshold: ",f12.5)') max
-             write(io_lun,'(2x,a,i4,a)') "GeomOpt converged in ", iter, " iterations"
+          end do
+          if(inode==ionode.AND.iprint_MD>2) write(io_lun,fmt='(4x,"Number of eigenstates kept: ",i3)') n_dim
+          ! Build dr_tilde and dg_tilde
+          allocate(dr_tilde(3,ni_in_cell,n_dim), dg_tilde(3,ni_in_cell,n_dim))
+          dr_tilde = zero
+          dg_tilde = zero
+          do i=1,n_dim
+             do j=1,n_store
+                dr_tilde(:,:,i) = dr_tilde(:,:,i) + omega(j,i+(n_store-n_dim))*posnStore(:,:,j)
+                dg_tilde(:,:,i) = dg_tilde(:,:,i) + omega(j,i+(n_store-n_dim))*forceStore(:,:,j)
+             end do
+             dr_tilde(:,:,i) = dr_tilde(:,:,i)/sqrt(lambda(i+(n_store-n_dim)))
+             dg_tilde(:,:,i) = dg_tilde(:,:,i)/sqrt(lambda(i+(n_store-n_dim)))
+          end do
+          ! Construct approximate Hessian projected onto subspace
+          allocate(Hij(n_dim,n_dim))
+          Hij = zero
+          do i=1,n_dim
+             do j=i,n_dim
+                Hij(j,i) = half*(dot(length,dr_tilde(:,:,i),1,dg_tilde(:,:,j),1) + &
+                     dot(length,dr_tilde(:,:,j),1,dg_tilde(:,:,i),1))
+                if(j>i) Hij(i,j) = Hij(j,i)
+             end do
+          end do
+          ! Find eigenvectors
+          allocate(kappa(n_dim),vi(n_dim,n_dim),kappa_prime(n_dim))
+          kappa = zero
+          kappa_prime = zero
+          vi = Hij
+          if(n_dim>1) then
+             call syev('U',n_dim,vi,n_dim,kappa,info)
+             if(info<0) call cq_abort("Error in SQNM calling dsyev: ",info)
+             if(info>0.and.inode==ionode) write(io_lun,fmt='(4x,"Possible error in SQNM; dsyev returned ",i4)') info
+          else
+             kappa = one !Hij(1,1)
+             vi = one
           end if
-       end if
-       deallocate(dr_tilde,dg_tilde,Hij,kappa,vi,kappa_prime,vi_tilde,ri_vec)
-       deallocate(mod_dr,Sij,lambda,omega)
-       if (.not. done) call check_stop(done, iter)
-       if(done) exit
-       if (.not. done) call check_stop(done, iter)
-       dE = energy0 - energy1
-       energy0 = energy1
-    end do
+          if(inode==ionode.AND.iprint_MD>3) write(io_lun,fmt='(4x,"Kappa: ",(f7.4))') kappa
+          ! Build v tilde
+          allocate(vi_tilde(3,ni_in_cell,n_dim),ri_vec(3,ni_in_cell))
+          vi_tilde = zero
+          do i=1,n_dim
+             ri_vec = zero
+             do j=1,n_dim
+                vi_tilde(:,:,i) = vi_tilde(:,:,i) + vi(j,i)*dr_tilde(:,:,j)
+                ri_vec(:,:) = ri_vec(:,:) + vi(j,i)*dg_tilde(:,:,j)
+             end do
+             ri_vec(:,:) = ri_vec(:,:) - kappa(i)*vi_tilde(:,:,i)
+             !kappa_prime(i) = sqrt(0.0025_double + kappa(i)*kappa(i))
+             kappa_prime(i) = sqrt(dot(length,ri_vec,1,ri_vec,1) + kappa(i)*kappa(i))
+          end do
+          if(inode==ionode.AND.iprint_MD>3) write(io_lun,fmt='(4x,"Kappa prime: ",(f7.4))') kappa_prime
+          ! Build preconditioned search
+          cg_new = -alpha*tot_force
+          do i=1,n_dim
+             cg_new = cg_new - (one/kappa_prime(i) - alpha)*dot(length,tot_force,1,vi_tilde(:,:,i),1)*vi_tilde(:,:,i)
+          end do
+          gg = dot(length, cg_new, 1, cg_new, 1)
+          ! Analyse forces
+          g0 = dot(length, tot_force, 1, tot_force, 1)
+          f_dot_sd = dot(length,cg_new,1,-tot_force,1)/sqrt(g0*gg)
+          if(inode==ionode.AND.iprint_MD>2) &
+               write(io_lun,fmt='(4x,"Dot product of search direction and force: ",f12.7)') f_dot_sd
+          ! Now adjust alpha
+          if(f_dot_sd/sqrt(g0*gg)>0.2_double) then
+             alpha = alpha*1.1_double
+          else
+             alpha = alpha*0.85_double
+          end if
+          if(inode==ionode.AND.iprint_MD>2) write(io_lun,fmt='(4x,"Alpha set to: ",f9.5)') alpha
+          max = zero
+          do i = 1, ni_in_cell
+             do k = 1, 3
+                if (abs(tot_force(k,i)) > max) max = abs(tot_force(k,i))
+             end do
+          end do
+          if (iter > MDn_steps) then
+             done = .true.
+             if (myid == 0) &
+                  write (io_lun, fmt='(4x,"Exceeded number of MD steps: ",i4)') iter
+          end if
+          if (abs(max) < MDcgtol) then
+             done = .true.
+             if (inode==ionode) then
+                write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," E: ",e16.8," dE: ",f12.8)') & 
+                     iter, max, energy1, en_conv*dE
+                if (iprint_MD > 1) then
+                   write(io_lun,'(4x,"Force Residual:     ",f20.10," ",a2,"/",a2)') &
+                        for_conv*sqrt(g0/ni_in_cell), en_units(energy_units), & 
+                        d_units(dist_units)
+                   write(io_lun,'(4x,"Maximum force:      ",f20.10)') max
+                   write(io_lun,'(4x,"Force tolerance:    ",f20.10)') MDcgtol
+                   write(io_lun,'(4x,"Energy change:      ",f20.10," ",a2)') &
+                        en_conv*dE, en_units(energy_units)
+                end if
+                write(io_lun, fmt='(4x,"Maximum force below threshold: ",f12.5)') max
+                write(io_lun,'(2x,a,i4,a)') "GeomOpt converged in ", iter, " iterations"
+             end if
+          end if
+          deallocate(dr_tilde,dg_tilde,Hij,kappa,vi,kappa_prime,vi_tilde,ri_vec)
+          deallocate(mod_dr,Sij,lambda,omega)
+          if (.not. done) call check_stop(done, iter)
+          if(done) exit
+          if (.not. done) call check_stop(done, iter)
+          dE = energy0 - energy1
+          energy0 = energy1
+       end if ! Energy has gone down
+    end do ! .not. done i.e. until max iterations or force tolerance reached
     deallocate(cg, STAT=stat)
     if (stat /= 0) &
          call cq_abort("Error deallocating cg in control: ", &
                        ni_in_cell, stat)
     call reg_dealloc_mem(area_general, 6 * ni_in_cell, type_dbl)
-
+    deallocate(posnStore, forceStore, cg_new, x_new_pos, y_new_pos, z_new_pos)
   end subroutine sqnm
   !!***
 
