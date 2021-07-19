@@ -26,7 +26,7 @@ contains
     
     implicit none
 
-    character(len=80) :: input_string
+    character(len=80) :: input_string, proc_coords
     integer :: i, j, n_grid_x, n_grid_y, n_grid_z
     integer :: n_kp_lines
     logical :: flag_kp_lines, flag_spin_polarisation
@@ -70,21 +70,30 @@ contains
     flag_fractional_atomic_coords = &
          fdf_boolean('IO.FractionalAtomicCoords',.true.)
     input_string = fdf_string(80,'IO.Coordinates',' ')
+    proc_coords = fdf_string(80,'Process.Coordinates',input_string)
     pdb_format = fdf_boolean ('IO.PdbIn',.false.)
     if ( pdb_format ) then
-       pdb_template = fdf_string(80,'IO.PdbTemplate',input_string)
+       pdb_template = fdf_string(80,'IO.PdbTemplate',proc_coords)
     else
        pdb_template = fdf_string(80,'IO.PdbTemplate',' ')
     end if
     n_species = fdf_integer('General.NumberOfSpecies',1)
     ! And read the positions
-    call read_atomic_positions(trim(input_string))
+    call read_atomic_positions(trim(proc_coords))
     ! Find job to perform
     job = fdf_string(3,'Process.Job','pos') ! Default to converting output
     if(leqi(job,'pos').or.leqi(job,'coo')) then
        i_job = 1
        ! Allow user to specify output filename
-       root_file = fdf_string(50,'Process.RootFile',trim(input_string))
+       root_file = fdf_string(50,'Process.RootFile',trim(proc_coords))
+       input_string = fdf_string(3,'Process.CoordFormat','xyz')
+       if(leqi(input_string,'xyz')) then
+          coord_format=1
+       else if(leqi(input_string,'cel')) then
+          coord_format=2
+       else
+          call cq_abort("Unrecognised output format: "//trim(input_string))
+       end if
     else if(leqi(job,'chg').or.leqi(job,'cha').or.leqi(job,'den')) then
        i_job = 2
     else if(leqi(job,'ban')) then
@@ -143,28 +152,31 @@ contains
     nsampy = fdf_integer('Process.SampleY',1)
     nsampz = fdf_integer('Process.SampleZ',1)
     ! Read in details of band output from Conquest
-    ! Energy limits (relative to Ef or absolute)
-    E_wf_min = fdf_double('IO.min_wf_E',zero)
-    E_wf_max = fdf_double('IO.max_wf_E',zero)
-    if(abs(E_wf_max-E_wf_min)>1e-8_double) flag_wf_range = .true.
-    flag_wf_range_Ef = fdf_boolean('IO.WFRangeRelative',.true.)
-    ! If not energy limits, then specific number of bands
-    if(flag_wf_range) then
-       n_bands_active = 0
-    else
-       n_bands_active=fdf_integer('IO.maxnoWF',0)
-       if(n_bands_active>0) then
-          allocate(band_no(n_bands_active))
-          if (fdf_block('WaveFunctionsOut')) then
-             if(1+block_end-block_start<n_bands_active) then
-                write(*,*) "Too few wf no in WaveFunctionsOut: ",1+block_end-block_start,n_bands_active
-                stop
-             end if
-             do i=1,n_bands_active
-                read(unit=input_array(block_start+i-1),fmt=*) band_no(i)
-             end do
-             call fdf_endblock
+    n_bands_active=fdf_integer('IO.maxnoWF',0)
+    if(n_bands_active>0) then
+       allocate(band_no(n_bands_active))
+       if (fdf_block('WaveFunctionsOut')) then
+          if(1+block_end-block_start<n_bands_active) then
+             write(*,*) "Too few wf no in WaveFunctionsOut: ",1+block_end-block_start,n_bands_active
+             stop
           end if
+          do i=1,n_bands_active
+             read(unit=input_array(block_start+i-1),fmt=*) band_no(i)
+          end do
+          call fdf_endblock
+       else
+          call cq_abort("You specified bands with IO.maxnoWF but didn't give the WaveFunctionsOut block")
+       end if
+       flag_wf_range = .false.
+    else
+       ! Energy limits (relative to Ef or absolute)
+       E_wf_min = fdf_double('IO.min_wf_E',zero)
+       E_wf_max = fdf_double('IO.max_wf_E',zero)
+       if(abs(E_wf_max-E_wf_min)>1e-8_double) then
+          flag_wf_range = .true.
+          flag_wf_range_Ef = fdf_boolean('IO.WFRangeRelative',.true.)
+       else
+          flag_wf_range_Ef = fdf_boolean('IO.WFRangeRelative',.false.)
        end if
     end if
     ! Now read details of bands to output from processing

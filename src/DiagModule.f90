@@ -482,7 +482,7 @@ contains
          dscf_LUMO_thresh, dscf_source_level, dscf_target_level, &
          dscf_target_spin, dscf_source_spin, flag_cdft_atom,  &
          dscf_HOMO_limit, dscf_LUMO_limit, &
-         flag_out_wf,wf_self_con, max_wf, paof, sf, atomf, flag_out_wf_by_kp, &
+         flag_out_wf,wf_self_con, max_wf, paof, sf, atomf, &
          out_wf, n_DOS, E_DOS_max, E_DOS_min, flag_write_DOS, sigma_DOS, &
          flag_write_projected_DOS, flag_normalise_pDOS, flag_pDOS_angmom, flag_pDOS_lm, &
          E_wf_min, E_wf_max, flag_wf_range_Ef, &
@@ -3937,11 +3937,32 @@ contains
   end subroutine accumulate_DOS
   !!***
 
+  !!****f*  DiagModule/write_wavefn_coeffs
+  !!
+  !!  NAME 
+  !!   write_wavefn_coeffs
+  !!  USAGE
+  !! 
+  !!  PURPOSE
+  !!   write_wavefn_coeffs
+  !!  INPUTS
+  !! 
+  !!  USES
+  !! 
+  !!  AUTHOR
+  !!   D. R. Bowler
+  !!  CREATION DATE
+  !!   2021/07/09
+  !!  MODIFICATION HISTORY
+  !!   2021/07/19 14:59 dave
+  !!    Added support for writing out specific bands
+  !!  SOURCE
+  !!
   subroutine write_wavefn_coeffs(eval, evec, spin)
 
     use datatypes
     use numbers,         only: zero
-    use global_module,   only: E_wf_max, E_wf_min, nspin, flag_wf_range_Ef
+    use global_module,   only: E_wf_max, E_wf_min, nspin, flag_wf_range_Ef, max_wf, out_wf
     use ScalapackFormat, only: matrix_size
     use species_module,  only: nsf_species, natomf_species
     use input_module,    only: io_assign, io_close
@@ -3955,7 +3976,7 @@ contains
     real(double), dimension(:) :: eval
 
     ! Local variables
-    integer :: lun, iwf, acc, atom, isf1
+    integer :: lun, iwf, acc, atom, isf1, wf_no
     character(len=50) :: filename
     real(double) :: offset
 
@@ -3969,19 +3990,34 @@ contains
     end if
     open (unit = lun, file = filename,position='append')
     write(lun,*) bundle%n_prim
-    do iwf=1,matrix_size ! Effectively all bands
-       if(eval(iwf)-offset>=E_wf_min.AND.eval(iwf)-offset<=E_wf_max) then
-          write(lun,*) iwf,eval(iwf)
+    if(max_wf>0) then
+       do iwf=1,max_wf
+          wf_no = out_wf(iwf)
+          write(lun,*) wf_no,eval(wf_no)
           acc = 0
           do atom=1,bundle%n_prim
              write(lun,*) bundle%ig_prim(atom)
              do isf1 = 1,nsf_species(bundle%species(atom))
-                write(lun,*) evec(iwf,acc+isf1)
+                write(lun,*) evec(wf_no,acc+isf1)
              end do
              acc = acc + nsf_species(bundle%species(atom))
           end do
-       end if
-    end do ! iwf
+       end do ! iwf
+    else
+       do iwf=1,matrix_size ! Effectively all bands
+          if(eval(iwf)-offset>=E_wf_min.AND.eval(iwf)-offset<=E_wf_max) then
+             write(lun,*) iwf,eval(iwf)
+             acc = 0
+             do atom=1,bundle%n_prim
+                write(lun,*) bundle%ig_prim(atom)
+                do isf1 = 1,nsf_species(bundle%species(atom))
+                   write(lun,*) evec(iwf,acc+isf1)
+                end do
+                acc = acc + nsf_species(bundle%species(atom))
+             end do
+          end if
+       end do ! iwf
+    end if
     call io_close(lun)
     return
   end subroutine write_wavefn_coeffs

@@ -151,6 +151,8 @@
 !!    Removed flag_MDold
 !!   2019/11/18 14:37 dave
 !!    Added flag_variable_cell
+!!   2021/07/19 15:00 dave
+!!    Removed flag for wavefunction output by k-point
 !!  SOURCE
 !!
 module global_module
@@ -369,7 +371,6 @@ module global_module
   
   ! Wavefunction output
   logical :: flag_out_wf                        !output WFs?
-  logical :: flag_out_wf_by_kp                  !output WFs k-point by k-point
   integer,allocatable,dimension(:)::out_wf      !which bands to output  
   integer::max_wf                               !total no of bands
   logical :: wf_self_con                        !flag to select output at the end of SCF cycle

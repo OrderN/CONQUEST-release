@@ -37,7 +37,8 @@ module local
   character(len=80) :: charge_stub
 
   integer :: i_job ! Job type
-  
+  integer :: coord_format ! Output format: xyz (1) or cell (2)
+
   type block_set
      integer :: process, num_blocks
      integer, pointer, dimension(:) :: num, nx, ny, nz, active

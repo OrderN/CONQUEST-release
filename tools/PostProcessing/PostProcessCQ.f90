@@ -20,7 +20,11 @@ program ConvertCharge
   call read_input
   ! Now select job
   if(i_job==1) then ! Convert coordinates
-     call write_xyz
+     if(coord_format==1) then
+        call write_xyz
+     else if(coord_format==2) then
+        call write_cell
+     end if
   else if(i_job==2) then ! Convert chden to cube
      ! Read blocks
      call read_block_input

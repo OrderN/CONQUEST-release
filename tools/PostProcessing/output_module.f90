@@ -39,6 +39,7 @@ contains
     integer :: i
     character(len=50) :: filename
 
+    write(*,fmt='(4x,"Writing out coordinates in XYZ format")')
     ! Open file
     if(PRESENT(ci)) then
        filename = trim(ci)//".xyz"
@@ -55,6 +56,51 @@ contains
     close(17)
     return
   end subroutine write_xyz
+
+  ! Output CASTEP cell file
+  subroutine write_cell(ci)
+
+    use datatypes
+    use numbers
+    use local, ONLY: root_file
+    use global_module, ONLY: ni_in_cell, atom_coord, species_glob
+    use units, ONLY: BohrToAng, AngToBohr
+    use pseudo_tm_info, ONLY: pseudo
+    use dimens, ONLY: r_super_x, r_super_y, r_super_z
+
+    implicit none
+
+    ! Passed variables
+    character(len=50), OPTIONAL :: ci
+
+    ! Local variables
+    integer :: i
+    character(len=50) :: filename
+
+    write(*,fmt='(4x,"Writing out coordinates in CASTEP .cell format")')
+    ! Open file
+    if(PRESENT(ci)) then
+       filename = trim(ci)//".cell"
+    else
+       filename = trim(root_file)//".cell"
+    end if
+    open(unit=17,file=filename)
+    write(17,fmt='("%BLOCK LATTICE_CART")')
+    write(17,fmt='("Bohr")')
+    write(17,fmt='(3f17.12)') r_super_x, zero, zero
+    write(17,fmt='(3f17.12)') zero, r_super_y, zero
+    write(17,fmt='(3f17.12)') zero, zero, r_super_z
+    write(17,fmt='("%ENDBLOCK LATTICE_CART")')
+    write(17,fmt='("%BLOCK POSITIONS_FRAC")')
+    do i=1,ni_in_cell
+       write(17,fmt='(a2,3f12.8)') pte(int(pseudo(species_glob(i))%z)), &
+            atom_coord(1,i)/r_super_x, atom_coord(2,i)/r_super_y, atom_coord(3,i)/r_super_z
+    end do
+    write(17,fmt='("%ENDBLOCK POSITIONS_FRAC")')
+    close(17)
+    return
+  end subroutine write_cell
+  
   ! Write OpenDX file for charge or current density
   subroutine write_dx_density(ci)
 

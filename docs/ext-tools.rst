@@ -25,14 +25,33 @@ files produced during the CONQUEST run are available for the
 post-processing (including ``chden.nnn``, ``make_blk.dat`` or
 ``hilbert_make_blk.dat``) as well as the input files.
 
+**Note** that the utility reads the ``Conquest_input`` file, taking some
+flags from the CONQUEST run that generated the output, and some
+utility-specific flags that are detailed below.
+
 Go to :ref:`top <ext-tools>`.
 
 Coordinate conversion
 +++++++++++++++++++++
 
-Set ``Process.Job coo`` to output an xyz file for plotting.  Read the
-file specified by ``IO.Coordinates`` and adds a ``.xyz`` suffix.  We
-plan to expand this conversion to other formats in the future.
+Set ``Process.Job coo`` to output a coordinate file for further
+processing or plotting.  The utility will read the file specified by
+``Process.Coordinates`` (which defaults to the file specified by
+``IO.Coordinates``).  The output format is selected by specifying the
+``Process.CoordFormat`` tag.  The default output format is XYZ (which
+adds a ``.xyz`` suffix to the file name) using ``xyz``.  The CASTEP
+.cell output format can also be selected using ``cell``.  We plan to
+expand this conversion to other formats in the future.
+
+**Note** that for a structural relaxation or molecular dynamics
+calculation, if you do not specify ``Process.Coordinates`` then the
+``IO.Coordinates`` file will be the *input* structure, not the output
+structure.
+
+::
+
+   Process.Coordinates string (default: IO.Coordinates value)
+   Process.CoordFormat string (default: xyz)
 
 Go to :ref:`top <ext-tools>`.
 
@@ -51,6 +70,9 @@ be set include:
 
 The ChargeStub simply defines the filename which will be used for
 output.
+
+**Note** that to output the ``chden.nnn`` files from CONQUEST, you must
+set the flag ``IO.DumpChargeDensity`` to true in the CONQUEST run.
 
 Go to :ref:`top <ext-tools>`.
 
