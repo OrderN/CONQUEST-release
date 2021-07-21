@@ -318,7 +318,7 @@ contains
     use datatypes
     use numbers
     use local, ONLY: nkp, wtk, efermi, current, nptsx, nptsy, nptsz, eigenvalues, stm_bias, &
-         n_bands_total, root_file, grid_z
+         n_bands_total, root_file, grid_z, band_full_to_active
     use output, ONLY: write_dx_density, write_cube, write_dx_coords
     use global_module, only : nspin
     use read, ONLY: read_eigenvalues, read_psi_coeffs
@@ -356,7 +356,7 @@ contains
           do kp = 1,nkp
              if(eigenvalues(band,kp,ispin) >= Emin(ispin) .and. &
                   eigenvalues(band,kp,ispin) <= Emax(ispin)) then
-                call pao_to_grid(band, kp, ispin, psi)
+                call pao_to_grid(band_full_to_active(band), kp, ispin, psi)
                 current = current + wtk(kp)*psi*conjg(psi)
              end if
           end do ! kp

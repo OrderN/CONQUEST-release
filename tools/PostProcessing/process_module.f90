@@ -99,7 +99,7 @@ contains
     use datatypes
     use numbers
     use local, ONLY: nkp, efermi, current, nptsx, nptsy, nptsz, eigenvalues, flag_by_kpoint, &
-         n_bands_total, band_active_kp, flag_proc_range, &
+         n_bands_total, band_active_kp, flag_proc_range, band_full_to_active, &
          E_procwf_min, E_procwf_max, flag_procwf_range_Ef, band_proc_no, n_bands_process
     use output, ONLY: write_cube
     use global_module, only : nspin
@@ -133,8 +133,9 @@ contains
                 current = zero
                 do kp = 1,nkp
                    if(eigenvalues(band,kp,ispin) >= Emin(ispin) .and. &
-                        eigenvalues(band,kp,ispin) <= Emax(ispin)) then
-                      call pao_to_grid(band, kp, ispin, psi)
+                        eigenvalues(band,kp,ispin) <= Emax(ispin) .and. &
+                        band_active_kp(band,kp,ispin)==1) then
+                      call pao_to_grid(band_full_to_active(band), kp, ispin, psi)
                       current = psi*conjg(psi)
                       write(ci,'("Band",I0.6,"den_kp",I0.3,"S",I0.1)') band, kp, ispin
                       call write_cube(current,ci)
@@ -147,8 +148,9 @@ contains
                 idum1=0
                 do kp = 1,nkp
                    if(eigenvalues(band,kp,ispin) >= Emin(ispin) .and. &
-                        eigenvalues(band,kp,ispin) <= Emax(ispin)) then
-                      call pao_to_grid(band, kp, ispin, psi)
+                        eigenvalues(band,kp,ispin) <= Emax(ispin) .and. &
+                        band_active_kp(band,kp,ispin)==1) then
+                      call pao_to_grid(band_full_to_active(band), kp, ispin, psi)
                       current = current + psi*conjg(psi)
                       idum1 = 1
                    end if
@@ -168,7 +170,7 @@ contains
                 do kp = 1,nkp
                    ! This clause is needed in case the user chose an energy range that only selects some k-points
                    if(band_active_kp(band_proc_no(band),kp,ispin)==1) then
-                      call pao_to_grid(band_proc_no(band), kp, ispin, psi)
+                      call pao_to_grid(band_full_to_active(band_proc_no(band)), kp, ispin, psi)
                       current = psi*conjg(psi)
                       write(ci,'("Band",I0.6,"den_kp",I0.3,"S",I0.1)') band_proc_no(band), kp, ispin
                       call write_cube(current,ci)
@@ -181,7 +183,7 @@ contains
                 do kp = 1,nkp
                    ! This clause is needed in case the user chose an energy range that only selects some k-points
                    if(band_active_kp(band_proc_no(band),kp,ispin)==1) then
-                      call pao_to_grid(band_proc_no(band), kp, ispin, psi)
+                      call pao_to_grid(band_full_to_active(band_proc_no(band)), kp, ispin, psi)
                       current = current + psi*conjg(psi)
                    end if
                 end do ! kp
@@ -197,7 +199,7 @@ contains
   subroutine process_dos
 
     use datatypes
-    use numbers, ONLY: zero, RD_ERR, twopi, half, one
+    use numbers, ONLY: zero, RD_ERR, twopi, half, one, two, four
     use local, ONLY: eigenvalues, n_bands_total, nkp, wtk, efermi
     use read, ONLY: read_eigenvalues, read_psi_coeffs
     use global_module, ONLY: nspin, n_DOS, E_DOS_min, E_DOS_max, sigma_DOS
@@ -207,44 +209,86 @@ contains
     
     ! Local variables
     integer :: i_band, i_kp, i_spin, n_DOS_wid, n_band, n_min, n_max, i
-    real(double) :: Ebin, dE_DOS, a, pf_DOS
-    real(double), dimension(:,:), allocatable :: total_DOS
-    
+    real(double) :: Ebin, dE_DOS, a, pf_DOS, spin_fac
+    real(double), dimension(:,:), allocatable :: total_DOS, iDOS
+    real(double), dimension(:,:), allocatable :: occ
+
+    if(nspin==1) then
+       spin_fac = two
+    else if(nspin==2) then
+       spin_fac = one
+    end if
     ! Read eigenvalues
     call read_eigenvalues
-    allocate(total_DOS(n_DOS,nspin))
+    allocate(total_DOS(n_DOS,nspin),iDOS(n_DOS,nspin),occ(n_bands_total,nkp))
     total_DOS = zero
+    iDOS = zero
     ! Set limits on DOS output
-    if(abs(E_DOS_min)<RD_ERR .and. abs(E_DOS_max)<RD_ERR) then
-       E_DOS_min = 1e30_double
-       E_DOS_max = -1e30_double
-       do i=1,nkp
-          if(E_DOS_min>eigenvalues(1,i,1)) E_DOS_min = eigenvalues(1,i,1)
-          if(E_DOS_max<eigenvalues(n_bands_total,i,1)) E_DOS_max = eigenvalues(n_bands_total,i,1)
-       end do
-       write(*,fmt='(2x,"DOS limits set automatically: ",2f12.5)') E_DOS_min, E_DOS_max
+    if(abs(E_DOS_min)<RD_ERR) then
+       E_DOS_min = minval(eigenvalues(1,:,:))
+       write(*,fmt='(2x,"DOS lower limit set automatically: ",f12.5," Ha")') E_DOS_min
+    else
+       write(*,fmt='(2x,"DOS lower limit set by user: ",f12.5," Ha")') E_DOS_min
     end if
+    if(abs(E_DOS_max)<RD_ERR) then
+       E_DOS_max = maxval(eigenvalues(n_bands_total,:,:))
+       write(*,fmt='(2x,"DOS upper limit set automatically: ",f12.5," Ha")') E_DOS_max
+    else
+       write(*,fmt='(2x,"DOS upper limit set by user: ",f12.5," Ha")') E_DOS_max
+    end if
+    write(*,fmt='(2x,"Dividing DOS into ",i5," bins")') n_DOS
+    ! Adjust limits to allow full peak to be seen
+    E_DOS_min = E_DOS_min - two*sigma_DOS
+    E_DOS_max = E_DOS_max + two*sigma_DOS
     ! Spacing, width, prefactor
     dE_DOS = (E_DOS_max - E_DOS_min)/real(n_DOS-1,double)
+    ! Set sigma automatically
+    if(abs(sigma_DOS)<RD_ERR) then
+       sigma_DOS = four*dE_DOS
+       write(*,fmt='(2x,"Sigma set automatically: ",f12.5," Ha")') sigma_DOS
+    else
+       write(*,fmt='(2x,"Sigma set by user: ",f12.5," Ha")') sigma_DOS
+    end if
     n_DOS_wid = floor(6.0_double*sigma_DOS/dE_DOS) ! How many bins either side of state we consider
     pf_DOS = one/(sigma_DOS*sqrt(twopi))
     ! Accumulate DOS over bands and k-points for each spin
     do i_spin = 1, nspin
+       occ = zero
+       call occupy(occ,eigenvalues,efermi,i_spin)
        do i_kp = 1, nkp
           do i_band=1,n_bands_total ! All bands
-             n_band = floor((eigenvalues(i_band, i_kp, i_spin) - E_DOS_min)/dE_DOS) + 1
-             n_min = n_band - n_DOS_wid
-             if(n_min<1) n_min = 1
-             n_max = n_band + n_DOS_wid
-             if(n_max>n_DOS) n_max = n_DOS
-             do i = n_min, n_max
-                Ebin = real(i-1,double)*dE_DOS + E_DOS_min
-                a = (Ebin-eigenvalues(i_band, i_kp, i_spin))/sigma_DOS
-                total_DOS(i,i_spin) = total_DOS(i,i_spin) + wtk(i_kp)*pf_DOS*exp(-half*a*a)
-             end do
+             if(eigenvalues(i_band, i_kp, i_spin)>E_DOS_min .and. &
+                  eigenvalues(i_band, i_kp, i_spin)<E_DOS_max) then
+                n_band = floor((eigenvalues(i_band, i_kp, i_spin) - E_DOS_min)/dE_DOS) + 1
+                n_min = n_band - n_DOS_wid
+                if(n_min<1) n_min = 1
+                n_max = n_band + n_DOS_wid
+                if(n_max>n_DOS) n_max = n_DOS
+                do i = n_min, n_max
+                   Ebin = real(i-1,double)*dE_DOS + E_DOS_min
+                   a = (Ebin-eigenvalues(i_band, i_kp, i_spin))/sigma_DOS
+                   total_DOS(i,i_spin) = total_DOS(i,i_spin) + wtk(i_kp)*pf_DOS*exp(-half*a*a)
+                   iDOS(i,i_spin) = iDOS(i,i_spin) + occ(i_band,i_spin)*wtk(i_kp)*pf_DOS*exp(-half*a*a)
+                end do
+             end if
           end do
        end do
+       ! Now integrate DOS
+       do i = 2, n_DOS
+          iDOS(i,i_spin) = iDOS(i,i_spin) + iDOS(i-1,i_spin)
+       end do
     end do
+    ! Include spin factor
+    iDOS = iDOS*dE_DOS*spin_fac
+    total_DOS = total_DOS*spin_fac
+    if(nspin==1) then
+       write(*,fmt='(2x,"DOS integrates to ",f12.3," electrons")') iDOS(n_DOS,1)
+    else
+       write(*,fmt='(2x,"Spin Up DOS integrates to ",f12.3," electrons")') iDOS(n_DOS,1)
+       write(*,fmt='(2x,"Spin Dn DOS integrates to ",f12.3," electrons")') iDOS(n_DOS,2)
+    end if
+    ! Since we write out DOS against eV we need this conversion to get the integral right
+    total_DOS = total_DOS/HaToeV
     ! Write out DOS, shifted to Ef = 0
     open(unit=17, file="DOS.dat")
     do i_spin = 1, nspin
@@ -252,7 +296,8 @@ contains
        write(17,fmt='("# Original Fermi-level: ",f12.5," eV")') HaToeV*efermi(i_spin)
        write(17,fmt='("# DOS shifted relative to Fermi-level")')
        do i=1, n_DOS
-          write(17,fmt='(2f12.5)') HaToeV*(E_DOS_min + dE_DOS*real(i-1,double)-efermi(i_spin)), total_DOS(i,i_spin)
+          write(17,fmt='(3f14.5)') HaToeV*(E_DOS_min + dE_DOS*real(i-1,double)-efermi(i_spin)), &
+               total_DOS(i,i_spin), iDOS(i,i_spin)
        end do
        write(17,fmt='("&")')
     end do
@@ -712,5 +757,199 @@ contains
        end if ! if active block
     end do ! iblock
   end subroutine read_domain
-  
+
+  subroutine occupy(occu, ebands, Ef, spin)
+
+    use datatypes
+    use numbers
+    use local, ONLY: nkp, n_bands_total, kT, flag_smear_type, iMethfessel_Paxton, wtk
+
+    implicit none
+
+    ! Passed variables
+    real(double), dimension(:) :: Ef
+    real(double), dimension(:,:) :: occu
+    real(double), dimension(:,:,:) :: ebands
+    integer :: spin
+
+    ! Local variables
+    integer :: i_kp, i_band
+
+    do i_kp = 1, nkp
+       do i_band = 1, n_bands_total
+          select case(flag_smear_type)
+          case (0) ! Fermi smearing
+             occu(i_band,i_kp) = &
+                  fermi(ebands(i_band,i_kp,spin) - Ef(spin), kT)
+          case (1) ! Methfessel Paxton smearing
+             occu(i_band,i_kp) = &
+                  MP_step(ebands(i_band,i_kp,spin) - Ef(spin), &
+                  iMethfessel_Paxton, kT)
+          end select
+       end do
+    end do
+    return
+  end subroutine occupy
+  ! -----------------------------------------------------------------------------
+  ! Function fermi
+  ! -----------------------------------------------------------------------------
+
+  !!****f* DiagModule/fermi *
+  !!
+  !!  NAME
+  !!   fermi - evaluate fermi function
+  !!  USAGE
+  !!   fermi(E,kT)
+  !!  PURPOSE
+  !!   Evaluates the fermi occupation of an energy
+  !!
+  !!   I'm assuming (for the sake of argument) that if both the energy and
+  !!   the smearing (kT) are zero then we get an occupation of 0.5 - this is
+  !!   certainly the limit if E and kT are equal and heading to zero, or if
+  !!   E is smaller than kT and both head for zero.
+  !!  INPUTS
+  !!   real(double), intent(in) :: E - energy
+  !!   real(double), intent(in) :: kT - smearing energy
+  !!  USES
+  !!   datatypes, numbers
+  !!  AUTHOR
+  !!   D.R.Bowler
+  !!  CREATION DATE
+  !!   23/04/2002
+  !!  MODIFICATION HISTORY
+  !!   2006/10/02 17:54 dave
+  !!    Small fix to prevent maths overflows by only calculating
+  !!    exponential if x well bounded
+  !!   2012/01/22 L.Tong
+  !!    Small change to use FORTRAN 90 function declaration notation
+  !!    This works better with etags
+  !!  SOURCE
+  !!
+  function fermi(E,kT)
+
+    use datatypes
+    use numbers, only: zero, one, half
+
+    implicit none
+
+    ! result
+    real(double) :: fermi
+
+    ! Passed variables
+    real(double), intent(in) :: E
+    real(double), intent(in) :: kT
+
+    ! Local variables
+    real(double) :: x
+    real(double), parameter :: cutoff = 10.0_double
+
+    if(kT==zero) then
+       if(E>zero) then
+          fermi = zero
+       else if(E<zero) then
+          fermi = one
+       else if(E==zero) then
+          fermi = half
+       end if
+    else
+       x = E/kT
+       if(x > cutoff) then
+          fermi = zero
+       elseif(x < -cutoff) then
+          fermi = one
+       else
+          fermi = one/(one + exp(x))
+       endif
+    end if
+  end function fermi
+  !!***
+
+
+  ! -----------------------------------------------------------------------------
+  ! Function MP_step
+  ! -----------------------------------------------------------------------------
+
+  !!****f* DiagModule/MP_step *
+  !!
+  !!  NAME
+  !!   MP_step - evaluate Methfessel-Paxton step function
+  !!  USAGE
+  !!   MP_step(E,order,smear)
+  !!  PURPOSE
+  !!   Evaluates the order (order) Methfessel-Paxton approximation to
+  !!   step function
+  !!  INPUTS
+  !!   real(double), intent(in) :: E - energy
+  !!   integer, intent(in) :: order - order of Methfessel expansion
+  !!   real(double), intent(in) :: smear - smearing energy, nothing to
+  !!                               do with physical temperature
+  !!  USES
+  !!   datatypes, numbers
+  !!  AUTHOR
+  !!   L.Tong (lt)
+  !!  CREATION DATE
+  !!   2010/06/15 00:17
+  !!  MODIFICATION HISTORY
+  !!   2012/01/22 L.Tong
+  !!     - Small change to use FORTRAN 90 function declaration notation
+  !!       This works better with etags
+  !!  SOURCE
+  !!
+  function MP_step(E,order,smear)
+
+    use datatypes
+    use numbers, only: zero, one, half, two, four, pi
+    use functions, ONLY: erfc_cq
+
+    implicit none
+
+    ! Result
+    real(double) :: MP_step
+
+    ! Passed variables
+    real(double), intent(in) :: E
+    integer,      intent(in) :: order
+    real(double), intent(in) :: smear
+
+    ! Internal variables
+    real(double) :: x, A, H0, H1, H2, nd, x2
+    integer      :: n
+
+    ! in case of smear==0, we have the exact step function
+    if(smear==zero) then
+       if(E>zero) then
+          MP_step = zero
+       else if(E<zero) then
+          MP_step = one
+       else if(E==zero) then
+          MP_step = half
+       end if
+    else if(smear>zero) then
+       x = E/smear
+       if(order==0) then
+          MP_step = half*erfc_cq(x)
+       else
+          x2 = x*x
+          A = one/sqrt(pi)
+          H0 = one
+          H1 = two*x
+          MP_step = half*erfc_cq(x)
+          nd = one
+          do n=1,order
+             A = A/((-four)*real(n,double))
+             MP_step = MP_Step + A*H1*exp(-x2)
+             H2 = two*x*H1 - two*nd*H0
+             H0 = H1
+             H1 = H2
+             nd = nd + one
+             H2 = two*x*H1 - two*nd*H0
+             H0 = H1
+             H1 = H2
+             nd = nd + one
+          end do
+       end if
+    end if
+  end function MP_step
+  !!***
+
 end module process

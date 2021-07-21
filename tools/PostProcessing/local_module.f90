@@ -10,7 +10,7 @@ module local
   integer :: nprocs
 
   integer :: nkp, n_eval_window, n_bands_active, n_bands_total, n_bands_process
-  integer, dimension(:), allocatable :: band_no, active_bands, band_proc_no
+  integer, dimension(:), allocatable :: band_no, active_bands, band_proc_no, band_full_to_active
   real(double), dimension(2) :: efermi ! Allow two Fermi levels with spin
   real(double), dimension(:), allocatable :: kx,ky,kz, wtk
   real(double), dimension(:,:,:), allocatable :: eigenvalues
@@ -45,4 +45,10 @@ module local
   end type block_set
 
   type(block_set), allocatable, dimension(:) :: block_store
+
+  ! From DiagModule
+  real(double) :: kT
+  ! Flags controlling Methfessel-Paxton approximation to step-function
+  integer :: flag_smear_type, iMethfessel_Paxton
+  
 end module local

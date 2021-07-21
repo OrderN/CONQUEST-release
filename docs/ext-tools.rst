@@ -13,7 +13,7 @@ The utility ``PostProcessCQ`` allows users to post-process the output
 of a CONQUEST calculation, to produce the charge density, band
 densities, DOS and STM images in useful forms (at present, as a CUBE
 file which can be read by the `VESTA
-<https://jp-minerals.org/vesta/en/>`_ code which is freely available).
+<https://jp-minerals.org/vesta/en/>`_ code, which is freely available).
 
 There are a number of different analyses which can be performed:
 coordinate conversion (to formats which can be plotted); conversion of
@@ -22,8 +22,9 @@ total charge density to CUBE file format; production of band-resolved
 Tersoff-Hamann STM simulation; and calculation of densities of states
 (projected DOS is under development).  You should ensure that all the
 files produced during the CONQUEST run are available for the
-post-processing (including ``chden.nnn``, ``make_blk.dat`` or
-``hilbert_make_blk.dat``) as well as the input files.
+post-processing (including ``eigenvalues.dat``, ``chden.nnn``,
+``make_blk.dat`` or ``hilbert_make_blk.dat``) as well as the input
+files.
 
 **Note** that the utility reads the ``Conquest_input`` file, taking some
 flags from the CONQUEST run that generated the output, and some
@@ -45,8 +46,8 @@ expand this conversion to other formats in the future.
 
 **Note** that for a structural relaxation or molecular dynamics
 calculation, if you do not specify ``Process.Coordinates`` then the
-``IO.Coordinates`` file will be the *input* structure, not the output
-structure.
+``IO.Coordinates`` file, which will be converted, will be the *input*
+structure, not the output structure.  Parameters that can be set are:
 
 ::
 
@@ -61,15 +62,15 @@ Charge density
 Setting ``Process.Job`` to ``cha``, ``chg`` or ``den`` will convert
 the files ``chden.nnn`` which are written by CONQUEST to a cube file.
 The processing will use the files ``chden.nnn``, ``Conquest_input``
-and ``hilbert_make_blk.dat`` or ``raster_make_blk.dat``.  Parameters that can
-be set include:
+and ``hilbert_make_blk.dat`` or ``raster_make_blk.dat``.  Parameters
+that can be set include:
 
 ::
    
    Process.ChargeStub string (default: chden)
 
-The ChargeStub simply defines the filename which will be used for
-output.
+The ChargeStub simply defines the filename which will be read, and
+used for output.
 
 **Note** that to output the ``chden.nnn`` files from CONQUEST, you must
 set the flag ``IO.DumpChargeDensity`` to true in the CONQUEST run.
@@ -86,19 +87,17 @@ the following tags set:
 ::
 
    IO.outputWF T
-   IO.WFRangeRelative T/F
 
-The wavefunction range can be relative to the Fermi level
-(``IO.WFRangeRelative T``) otherwise it is absolute.  A set of bands
-whose coefficients are output are specified either with an energy
-range:
+A set of bands whose coefficients are output are specified either with
+an energy range (the default is to produce *all* bands):
 
 ::
 
+   IO.WFRangeRelative T/F
    IO.min_wf_E real (Ha)
    IO.max_wf_E real (Ha)
 
-(the default is to produce *all* bands) or with a list of bands:
+or with a list of bands:
 
 ::
 
@@ -108,8 +107,10 @@ range:
    n entries, each a band number
    %endblock
 
-Either of these will produce a file containing all eigenvalues at all
-k-points (``eigenvalues.dat``) and a series of files containing the
+The wavefunction range can be relative to the Fermi level
+(``IO.WFRangeRelative T``) otherwise it is absolute.  Either of these
+will produce a file containing all eigenvalues at all k-points
+(``eigenvalues.dat``) and a series of files containing the
 wavefunction expansion coefficients for the selected bands
 (``ProcessnnnnnnnWF.dat``).  From these, band densities can be
 produced in post-processing, using similar tags; either a range:
@@ -131,8 +132,8 @@ or an explicit list of bands:
    %endblock
 
 Note that the bands to be processed must be a subset of the bands
-output by CONQUEST.  The bands can be output summed over k-points or
-at individual k-points by setting ``Process.outputWF_by_kpoint`` to
+output by CONQUEST.  The bands can be output summed over k-points, or
+at individual k-points, by setting ``Process.outputWF_by_kpoint`` to
 ``F`` or ``T`` respectively.
 
 Go to :ref:`top <ext-tools>`.

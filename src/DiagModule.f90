@@ -925,9 +925,9 @@ contains
     end do ! spin
 
     !------ output WFs  --------
-    if (wf_self_con .and. (flag_out_wf.OR.flag_write_DOS)) then
-       if(inode==ionode) call write_eigenvalues(w,matrix_size,nkp,nspin,kk,wtk,Efermi)
-    end if
+    !if (wf_self_con .and. (flag_out_wf.OR.flag_write_DOS)) then
+    if(inode==ionode) call write_eigenvalues(w,matrix_size,nkp,nspin,kk,wtk,Efermi)
+    !end if
     if(wf_self_con.AND.flag_write_DOS) then
        ! output DOS
        if(inode==ionode) call dump_DOS(total_DOS,Efermi)

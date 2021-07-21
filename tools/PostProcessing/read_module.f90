@@ -144,6 +144,11 @@ contains
        n_kp_lines = fdf_integer('Diag.NumKptLines',1)
        nkp = nkp*n_kp_lines
     end if
+    ! Smearing parameters from Conquest
+    kT = fdf_double('Diag.kT',0.001_double)
+    ! Method to approximate step function for occupation number
+    flag_smear_type = fdf_integer('Diag.SmearingType',0)
+    iMethfessel_Paxton = fdf_integer('Diag.MPOrder',0)
     ! Repeat the cell
     nrptx = fdf_integer('Process.RepeatX',1)
     nrpty = fdf_integer('Process.RepeatY',1)
@@ -151,7 +156,7 @@ contains
     nsampx = fdf_integer('Process.SampleX',1)
     nsampy = fdf_integer('Process.SampleY',1)
     nsampz = fdf_integer('Process.SampleZ',1)
-    ! Read in details of band output from Conquest
+    ! Read in details of bands output from Conquest
     n_bands_active=fdf_integer('IO.maxnoWF',0)
     if(n_bands_active>0) then
        allocate(band_no(n_bands_active))
@@ -216,10 +221,11 @@ contains
     end if
     flag_by_kpoint = fdf_boolean('Process.outputWF_by_kpoint',.false.)
     ! DOS
-    E_DOS_min = fdf_double('IO.min_DOS_E',zero)
-    E_DOS_max = fdf_double('IO.max_DOS_E',zero)
-    sigma_DOS = fdf_double('IO.sigma_DOS',0.001_double)
-    n_DOS = fdf_integer('IO.n_DOS',201)
+    ! Add flag for window relative to Fermi level
+    E_DOS_min = fdf_double('Process.min_DOS_E',zero)
+    E_DOS_max = fdf_double('Process.max_DOS_E',zero)
+    sigma_DOS = fdf_double('Process.sigma_DOS',zero) ! Adjust to minimum of 4*energy spacing
+    n_DOS = fdf_integer('Process.n_DOS',1001)
     ! Now read PS files for atomic information
     call allocate_species_vars
     ps_type = fdf_string(5,'General.PseudopotentialType','haman') 
@@ -338,7 +344,8 @@ contains
     use numbers
     use local, ONLY: nkp, n_eval_window, efermi, kx, ky, kz, wtk, efermi, stm_bias, stm_broad, &
          n_bands_active, eigenvalues, band_no, flag_only_charge, flag_by_kpoint, E_wf_min, E_wf_max, &
-         flag_wf_range, n_bands_total, band_active_kp, band_active_all, n_bands_process, band_proc_no
+         flag_wf_range, n_bands_total, band_active_kp, band_active_all, n_bands_process, band_proc_no, &
+         band_full_to_active
     use units, ONLY: HaToeV
     use global_module, only: flag_wf_range_Ef, nspin
     
@@ -372,6 +379,8 @@ contains
     ! Allocate memory
     allocate(kx(nkp),ky(nkp),kz(nkp),wtk(nkp))
     allocate(eigenvalues(n_evals,nkp,nspin), band_active_kp(n_evals,nkp,nspin), band_active_all(n_evals,nspin))
+    allocate(band_full_to_active(n_evals))
+    band_full_to_active = 0
     eigenvalues = zero
     band_active_kp = 0
     band_active_all = 0
@@ -382,11 +391,13 @@ contains
        Emin = efermi + Emin
        Emax = efermi + Emax
     end if
-    if(nspin==1) then
-       write(*,fmt='(2x,"Reading bands between ",f9.3,"Ha and ",f9.3,"Ha")') Emin(1), Emax(1)
-    else
-       write(*,fmt='(2x,"SpinU reading bands between ",f9.3,"Ha and ",f9.3,"Ha")') Emin(1), Emax(1)
-       write(*,fmt='(2x,"SpinD reading bands between ",f9.3,"Ha and ",f9.3,"Ha")') Emin(2), Emax(2)
+    if(flag_wf_range) then
+       if(nspin==1) then
+          write(*,fmt='(2x,"Reading bands between ",f9.3,"Ha and ",f9.3,"Ha")') Emin(1), Emax(1)
+       else
+          write(*,fmt='(2x,"SpinU reading bands between ",f9.3,"Ha and ",f9.3,"Ha")') Emin(1), Emax(1)
+          write(*,fmt='(2x,"SpinD reading bands between ",f9.3,"Ha and ",f9.3,"Ha")') Emin(2), Emax(2)
+       end if
     end if
     ! Now loop over k-points and read eigenvalues
     i_low = n_evals+1
@@ -398,7 +409,7 @@ contains
              read(17,*) idum, eval
              eigenvalues(i_eval,i_kp,i_spin) = eval
              if(flag_wf_range) then
-                if(eval>Emin(i_spin).AND.eval<Emax(i_spin)) then
+                if(eval>=Emin(i_spin).AND.eval<=Emax(i_spin)) then
                    band_active_kp(i_eval, i_kp, i_spin) = 1
                    band_active_all(i_eval, i_spin) = 1
                    if(i_eval<i_low) i_low = i_eval
@@ -408,25 +419,36 @@ contains
           end do
        end do
        if(flag_wf_range) then
-          write(*,fmt='(2x,"Bands ",I5," to ",I5," are active")') i_low, i_high
+          write(*,fmt='(2x,"Bands ",I5," to ",I5," were written out by CONQUEST")') i_low, i_high
+          n_bands_active = i_high - i_low + 1
        else
-          do i_eval=1,n_bands_process
-             band_active_kp(band_proc_no(i_eval),:,i_spin) = 1
-             band_active_all(band_proc_no(i_eval),i_spin) = 1
+          do i_eval=1,n_bands_active
+             band_active_kp(band_no(i_eval),:,i_spin) = 1
+             band_active_all(band_no(i_eval),i_spin) = 1
+             band_full_to_active(band_no(i_eval)) = i_eval
           end do
+          write(*,fmt='(2x,"Active bands: ",(I5))') band_no
        end if
     end do
+    if(flag_wf_range) then
+       allocate(band_no(n_bands_active))
+       do i_eval = 1, n_bands_active
+          band_no(i_eval) = i_low + i_eval - 1
+          band_full_to_active(i_low+i_eval-1) = i_eval
+       end do
+    end if
     close(unit=17)
     !n_bands_active = sum(band_active_all)
   end subroutine read_eigenvalues
 
+  ! Here we will read ALL the bands written out by Conquest (n_bands_active)
   subroutine read_psi_coeffs
 
     use datatypes
     use numbers
     use species_module, ONLY: nsf_species
     use global_module, ONLY: ni_in_cell, species_glob, nspin
-    use local, ONLY: nkp, nprocs, n_bands_total, band_active_kp, eigenvalues, evec_coeff, n_bands_active
+    use local, ONLY: nkp, nprocs, n_bands_active, band_active_kp, eigenvalues, evec_coeff, n_bands_active, band_no
 
     implicit none
 
@@ -437,7 +459,7 @@ contains
     character(len=80) :: filename, str
 
     ! Allocate space
-    allocate(evec_coeff(maxval(nsf_species), ni_in_cell, n_bands_total, nkp, nspin))
+    allocate(evec_coeff(maxval(nsf_species), ni_in_cell, n_bands_active, nkp, nspin))
     evec_coeff = zero
     if(nspin==1) then
        ! Read coefficients
@@ -446,8 +468,8 @@ contains
           open(unit=17,file=filename)
           do i_kp = 1, nkp
              read(17,*) n_prim ! Number of atoms on process
-             do i_band = 1, n_bands_total
-                if(band_active_kp(i_band, i_kp, 1) == 1) then
+             do i_band = 1, n_bands_active
+                if(band_active_kp(band_no(i_band), i_kp, 1) == 1) then
                    read(17,*) i, eval
                    ! Loop over primary atoms
                    do i_prim = 1, n_prim
@@ -470,7 +492,7 @@ contains
              open(unit=17,file=filename)
              do i_kp = 1, nkp
                 read(17,*) n_prim ! Number of atoms on process
-                do i_band = 1, n_bands_total
+                do i_band = 1, n_bands_active
                    if(band_active_kp(i_kp, i_band, i_spin) == 1) then
                       read(17,*) i, eval
                       ! Loop over primary atoms
