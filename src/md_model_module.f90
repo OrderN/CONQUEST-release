@@ -24,10 +24,10 @@ module md_model
   use GenComms,         only: inode, ionode
   use input_module,     only: leqi
   use force_module,     only: tot_force, stress
-  use global_module,    only: ni_in_cell, io_lun, atom_coord, iprint_MD, &
+  use global_module,    only: ni_in_cell, io_lun, atom_coord, &
+                              atom_vels, species_glob, iprint_MD, &
                               flag_MDcontinue, flag_MDdebug, x_atom_cell, &
                               y_atom_cell, z_atom_cell, rcellx, rcelly, rcellz
-  use species_module,   only: species
   use md_control,       only: md_n_nhc, ion_velocity, type_thermostat, &
                               type_barostat, lattice_vec, &
                               flag_extended_system, md_cell_constraint, heat_flux
@@ -162,7 +162,7 @@ contains
     mdl%natoms = ni_in_cell
     mdl%ensemble = ensemble
     mdl%timestep = timestep
-    mdl%species       => species
+    mdl%species       => species_glob
     mdl%lat_a         => rcellx
     mdl%lat_b         => rcelly
     mdl%lat_c         => rcellz
@@ -171,7 +171,7 @@ contains
     mdl%pos_z         => z_atom_cell
     mdl%atom_coords   => atom_coord
     mdl%atom_force    => tot_force
-    mdl%atom_velocity => ion_velocity
+    mdl%atom_velocity => atom_vels
     mdl%lattice_vec   => lattice_vec
     mdl%stress        => stress
     mdl%J_v           => heat_flux

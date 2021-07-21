@@ -118,6 +118,9 @@ contains
   !!    Removed calls to dump K matrix (now done in DMMinModule)
   !!   2019/10/24 11:52 dave
   !!    Changed function calls to FindMinDM
+  !!   2020/08/24 11:15 dave
+  !!    Test implementation for performing LFD at each SCF step alongside
+  !!    full SCF for each LFD
   !!  SOURCE
   !!
   !subroutine get_E_and_F(fixed_potential, vary_mu, total_energy, &
@@ -142,12 +145,12 @@ contains
     use energy,            only: get_energy, xc_energy, final_energy
     use GenComms,          only: cq_abort, inode, ionode
     use blip_minimisation, only: vary_support
-    use pao_minimisation,  only: vary_pao, pulay_min_pao
+    use pao_minimisation,  only: vary_pao, pulay_min_pao, LFD_SCF
     use timer_module
     use input_module,      only: leqi
     use vdWDFT_module,     only: vdWXC_energy, vdWXC_energy_slow
     use density_module,    only: density
-    use multisiteSF_module,only: flag_LFD_nonSCF, LFD_SCF
+    use multisiteSF_module,only: flag_LFD_nonSCF, flag_mix_LFD_SCF
     use units
 
     implicit none
@@ -208,8 +211,8 @@ contains
     call start_timer(tmr_l_energy, WITH_LEVEL)
     ! Now choose what we vary
     if (.NOT.flag_LFD_nonSCF) then ! Vary everything, this flag is only for PAO-based multi-site SFs
-       ! minimise by repeating LFD with updated SCF density
-       call LFD_SCF(fixed_potential, vary_mu, n_L_iterations, L_tolerance, &
+       ! minimise by repeating LFD with updated SCF density if flag set
+       if(.NOT.flag_mix_LFD_SCF) call LFD_SCF(fixed_potential, vary_mu, n_L_iterations, L_tolerance, &
                          sc_tolerance, expected_reduction, total_energy, density)
        ! Numerical optimisation subsequently 
        if (flag_vary_basis) then

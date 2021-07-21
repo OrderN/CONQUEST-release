@@ -518,6 +518,9 @@ contains
     call stop_backtrace(t=backtrace_timer,who='read_and_write')
     !****lat>$
 
+    !**** TM 2020.Jul.30
+    call check_compatibility
+
     call my_barrier()
 
     return
@@ -887,10 +890,10 @@ contains
          MSSF_Smear_center, MSSF_Smear_shift, MSSF_Smear_width, &
          flag_LFD_ReadTVEC, LFD_TVEC_read,                      &
          LFD_kT, LFD_ChemP, flag_LFD_useChemPsub,               &
-         flag_LFD_nonSCF, LFD_ThreshE, LFD_ThreshD,           &
+         flag_LFD_nonSCF, LFD_ThreshE, LFD_ThreshD,             &
          LFD_Thresh_EnergyRise, LFD_max_iteration,              &
          flag_LFD_MD_UseAtomicDensity,  flag_MSSF_nonminimal,   &
-         n_dumpSFcoeff,                                         &
+         n_dumpSFcoeff, flag_mix_LFD_SCF,                       &
          MSSF_nonminimal_offset ! nonmin_mssf
     use control,    only: md_ensemble
     use md_control, only: md_tau_T, md_n_nhc, md_n_ys, md_n_mts, md_nhc_mass, &
@@ -1453,6 +1456,7 @@ contains
           endif
        endif ! flag_LFD_ReadTVEC
        flag_LFD_nonSCF = fdf_boolean('Multisite.LFD.NonSCF',.false.)
+       flag_mix_LFD_SCF = fdf_boolean('Multisite.LFD.MixLFDSCF',.true.)
        if (.NOT.flag_LFD_nonSCF) then ! Expected behaviour
           LFD_threshE = fdf_double('Multisite.LFD.Min.ThreshE',1.0e-6_double)
           LFD_threshD = fdf_double('Multisite.LFD.Min.ThreshD',1.0e-6_double)
@@ -2207,7 +2211,7 @@ contains
     md_cell_constraint = fdf_string(20, 'MD.CellConstraint', 'volume')
 
     !**** TM 2017.Nov.3rd
-    call check_compatibility
+    !call check_compatibility
     !****lat<$
     call stop_backtrace(t=backtrace_timer,who='read_input')
     !****lat>$
@@ -2215,21 +2219,52 @@ contains
     call my_barrier()
 
     return
+  end subroutine read_input
+  !!***
 
-  contains
+  ! ------------------------------------------------------------------------------
+  ! subroutine check_compatibility
+  ! ------------------------------------------------------------------------------
+  !!****f* initial_read/check_compatibility *
+  !!
+  !!  NAME
+  !!   check_compatibility
+  !!  USAGE
+  !!
+  !!  PURPOSE
+  !!   checks the compatibility between keywords mainly defined in read_input
+  !!  INPUTS
+  !!
+  !!  USES
+  !!
+  !!  AUTHOR
+  !!   T. Miyazaki
+  !!  CREATION DATE
+  !!   2017/11/03 
+  !!  MODIFICATION HISTORY
+  !!   2020/07/30 tsuyoshi
+  !!    - Moved from read_input
+  !!  SOURCE
+  !!
 
-    ! ------------------------------------------------------------------------------
-    ! subroutine check_compatibility
-    ! ------------------------------------------------------------------------------
+
     ! this subroutine checks the compatibility between keywords defined in read_input
     !       2017.11(Nov).03   Tsuyoshi Miyazaki
     ! 
     ! we don't need to worry about which parameter is defined first.
     !
     subroutine check_compatibility 
-
-
+      use global_module, only: flag_move_atom, ni_in_cell, &
+                               runtype, flag_XLBOMD, flag_diagonalisation, &
+                               flag_LmatrixReuse, flag_SFcoeffReuse, flag_DumpMatrices, &
+                               flag_FixCOM
+      use input_module,  only: leqi
+      use density_module,only: method_UpdateChargeDensity,DensityMatrix,AtomicCharge
+      use GenComms,      only: cq_warn
+      
       implicit none
+      logical :: flag_FixedAtoms
+      integer :: ig, k
 
       character(len=80) :: sub_name = "check_compatibility"
 
@@ -2262,9 +2297,23 @@ contains
          endif
       endif
 
+      !flag_FixCOM  &  flag_move_atom  2020/Jul/30
+
+      flag_FixedAtoms = .false.
+      do ig = 1, ni_in_cell
+       do k = 1,3
+        if(.NOT.flag_move_atom(k,ig)) flag_FixedAtoms = .true.
+       enddo
+      enddo
+
+      if(flag_FixedAtoms .and. flag_FixCOM) then
+         flag_FixCOM = .false.
+         call cq_warn(sub_name,&
+           'flag_FixCOM should be false when some of the atomic positions are fixed')
+      endif
+
       return
     end subroutine check_compatibility
-  end subroutine read_input
   !!***
 
   ! ------------------------------------------------------------------------------
