@@ -21,21 +21,26 @@ program ConvertCharge
   ! Now select job
   if(i_job==1) then ! Convert coordinates
      if(coord_format==1) then
+        write(*,fmt='(2x,"Converting coordinates to XYZ format"/)')
         call write_xyz
      else if(coord_format==2) then
+        write(*,fmt='(2x,"Converting coordinates to CASTEP cell format"/)')
         call write_cell
      end if
   else if(i_job==2) then ! Convert chden to cube
+     write(*,fmt='(2x,"Converting charge density to cube format"/)')
      ! Read blocks
      call read_block_input
      ! Calculate active processes/blocks
      call assign_blocks
      call process_charge
   else if(i_job==3) then ! Create band-resolved charge densities
+     write(*,fmt='(2x,"Creating band-resolved charge densities in cube format"/)')
      ! Read blocks to get grid
      call read_block_input
      call process_bands
   else if(i_job==4) then ! STM via TH sum over band densities
+     write(*,fmt='(2x,"Creating Tersoff-Hamman simulated STM image in cube format"/)')
      ! Read blocks to get grid
      call read_block_input
      call tersoff_hamann
@@ -49,6 +54,7 @@ program ConvertCharge
         call make_stm_current
      end if
   else if(i_job==6) then ! DOS output
+     write(*,fmt='(2x,"Creating density of states (DOS)"/)')
      call process_dos
   else if(i_job==7) then ! pDOS output
      write(*,*) "Projected DOS will be implemented soon..."

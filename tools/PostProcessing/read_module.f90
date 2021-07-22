@@ -245,7 +245,6 @@ contains
                j, mass(j),       &
                species_label(j)
           type_species(j)=j
-          write(*,*) 'Species ',j,species_label(j)
        end do
        call fdf_endblock
     end if
@@ -254,8 +253,6 @@ contains
           charge(i)        = fdf_double ('Atom.ValenceCharge',zero)
           nsf_species(i)   = fdf_integer('Atom.NumberOfSupports',0)
           call fdf_endblock
-       else
-          write(*,*) "Can't find species block: ",species_label(i)
        end if
     end do
     call setup_pseudo_info ! Get atomic number of species
@@ -363,7 +360,7 @@ contains
     read(17,*) str,n_evals,str2,idum
     n_bands_total = n_evals
     if(idum/=nkp) then
-       write(*,fmt='("Reading k-points from eigenvalues file, not setting from input file")')
+       write(*,fmt='(4x,"Reading k-points from eigenvalues file, not setting from input file")')
        nkp = idum
     end if
     ! Fermi level

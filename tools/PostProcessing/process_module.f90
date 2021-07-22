@@ -199,7 +199,7 @@ contains
   subroutine process_dos
 
     use datatypes
-    use numbers, ONLY: zero, RD_ERR, twopi, half, one, two, four
+    use numbers, ONLY: zero, RD_ERR, twopi, half, one, two, four, six
     use local, ONLY: eigenvalues, n_bands_total, nkp, wtk, efermi
     use read, ONLY: read_eigenvalues, read_psi_coeffs
     use global_module, ONLY: nspin, n_DOS, E_DOS_min, E_DOS_max, sigma_DOS
@@ -210,6 +210,7 @@ contains
     ! Local variables
     integer :: i_band, i_kp, i_spin, n_DOS_wid, n_band, n_min, n_max, i
     real(double) :: Ebin, dE_DOS, a, pf_DOS, spin_fac
+    real(double), dimension(nspin) :: total_electrons
     real(double), dimension(:,:), allocatable :: total_DOS, iDOS
     real(double), dimension(:,:), allocatable :: occ
 
@@ -236,21 +237,23 @@ contains
     else
        write(*,fmt='(2x,"DOS upper limit set by user: ",f12.5," Ha")') E_DOS_max
     end if
-    write(*,fmt='(2x,"Dividing DOS into ",i5," bins")') n_DOS
-    ! Adjust limits to allow full peak to be seen
-    E_DOS_min = E_DOS_min - two*sigma_DOS
-    E_DOS_max = E_DOS_max + two*sigma_DOS
     ! Spacing, width, prefactor
     dE_DOS = (E_DOS_max - E_DOS_min)/real(n_DOS-1,double)
+    write(*,fmt='(2x,"Dividing DOS into ",i5," bins of width ",f12.6," Ha")') n_DOS, dE_DOS
     ! Set sigma automatically
     if(abs(sigma_DOS)<RD_ERR) then
        sigma_DOS = four*dE_DOS
-       write(*,fmt='(2x,"Sigma set automatically: ",f12.5," Ha")') sigma_DOS
+       write(*,fmt='(2x,"Sigma set automatically: ",f12.6," Ha")') sigma_DOS
     else
-       write(*,fmt='(2x,"Sigma set by user: ",f12.5," Ha")') sigma_DOS
+       write(*,fmt='(2x,"Sigma set by user: ",f12.6," Ha")') sigma_DOS
+       if(six*sigma_DOS < dE_DOS) write(*,fmt='(4x,"Sigma is much less than bin size: this may cause errors")')
     end if
-    n_DOS_wid = floor(6.0_double*sigma_DOS/dE_DOS) ! How many bins either side of state we consider
+    ! Adjust limits to allow full peak to be seen
+    E_DOS_min = E_DOS_min - two*sigma_DOS
+    E_DOS_max = E_DOS_max + two*sigma_DOS
+    n_DOS_wid = floor(six*sigma_DOS/dE_DOS) ! How many bins either side of state we consider
     pf_DOS = one/(sigma_DOS*sqrt(twopi))
+    total_electrons = zero
     ! Accumulate DOS over bands and k-points for each spin
     do i_spin = 1, nspin
        occ = zero
@@ -268,7 +271,8 @@ contains
                    Ebin = real(i-1,double)*dE_DOS + E_DOS_min
                    a = (Ebin-eigenvalues(i_band, i_kp, i_spin))/sigma_DOS
                    total_DOS(i,i_spin) = total_DOS(i,i_spin) + wtk(i_kp)*pf_DOS*exp(-half*a*a)
-                   iDOS(i,i_spin) = iDOS(i,i_spin) + occ(i_band,i_spin)*wtk(i_kp)*pf_DOS*exp(-half*a*a)
+                   total_electrons(i_spin) = total_electrons(i_spin) + occ(i_band,i_spin)*wtk(i_kp)*pf_DOS*exp(-half*a*a)
+                   iDOS(i,i_spin) = iDOS(i,i_spin) + wtk(i_kp)*pf_DOS*exp(-half*a*a)
                 end do
              end if
           end do
@@ -280,12 +284,13 @@ contains
     end do
     ! Include spin factor
     iDOS = iDOS*dE_DOS*spin_fac
+    total_electrons = total_electrons*dE_DOS*spin_fac
     total_DOS = total_DOS*spin_fac
     if(nspin==1) then
-       write(*,fmt='(2x,"DOS integrates to ",f12.3," electrons")') iDOS(n_DOS,1)
+       write(*,fmt='(2x,"DOS integrates to ",f12.3," electrons")') total_electrons(1)
     else
-       write(*,fmt='(2x,"Spin Up DOS integrates to ",f12.3," electrons")') iDOS(n_DOS,1)
-       write(*,fmt='(2x,"Spin Dn DOS integrates to ",f12.3," electrons")') iDOS(n_DOS,2)
+       write(*,fmt='(2x,"Spin Up DOS integrates to ",f12.3," electrons")') total_electrons(1)
+       write(*,fmt='(2x,"Spin Dn DOS integrates to ",f12.3," electrons")') total_electrons(2)
     end if
     ! Since we write out DOS against eV we need this conversion to get the integral right
     total_DOS = total_DOS/HaToeV
