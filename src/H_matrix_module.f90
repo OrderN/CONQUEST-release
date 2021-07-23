@@ -709,7 +709,8 @@ contains
             dot(n_my_grid_points, h_potential, 1, density_atom, 1) * &
             grid_point_volume
        call gsum(hartree_energy_drho_atom_rho)
-       delta_E_hartree = zero
+       ! This is the effective correction term
+       delta_E_hartree = - hartree_energy_drho - hartree_energy_drho_atom_rho
     else
        call hartree(rho_tot, h_potential, maxngrid, hartree_energy_total_rho)
        !
@@ -1707,6 +1708,110 @@ contains
   end subroutine get_onsite_T
 !!***
 
+  ! -----------------------------------------------------------
+  ! Subroutine get_output_energies
+  ! -----------------------------------------------------------
+
+  !!****f* H_matrix_module/get_output_energies *
+  !!
+  !!  NAME
+  !!   get_output_energies
+  !!  USAGE
+  !!
+  !!  PURPOSE
+  !!   Calculate the Hartree and XC energies for a given density
+  !!   Used to find the correct DFT energy which requires the Ha
+  !!   and XC energies for the output densities
+  !!   Also finds the local PS/neutral atom energy, which integrates
+  !!   the potential with the density (as opposed to taking the trace
+  !!   of K with the appropriate matrix).
+  !!
+  !!   It's not immediately obvious where to put this subroutine, but
+  !!   it's in H_matrix_module because it closely parallels the energy
+  !!   calculations in get_h_on_atomfns
+  !!  INPUTS
+  !!
+  !!
+  !!  USES
+  !!
+  !!  AUTHOR
+  !!   D.R.Bowler
+  !!  CREATION DATE
+  !!   2021/07/22
+  !!  MODIFICATION HISTORY
+  !!  SOURCE
+  !!
+  subroutine get_output_energies(rho, size)
+
+    use datatypes
+    use numbers
+    use global_module,          only: flag_pcc_global, nspin, spin_factor, &
+                                      flag_neutral_atom, area_ops
+    use hartree_module,         only: get_hartree_energy
+    use XC,                     only: get_xc_energy
+    use energy,                 only: hartree_energy_total_rho,  &
+                                      xc_energy,       &
+                                      local_ps_energy, &
+                                      hartree_energy_drho, hartree_energy_drho_input
+    use density_module,         only: density_pcc, density_atom
+    use maxima_module,          only: maxngrid
+    use memory_module,          only: reg_alloc_mem,              &
+                                      reg_dealloc_mem, type_dbl
+    use GenComms,               only: cq_abort, gsum
+    use pseudopotential_common, only: pseudopotential, flag_neutral_atom_projector
+    use dimens,                 only: grid_point_volume, n_my_grid_points
+    use GenBlas,                only: dot
+
+    implicit none
+
+    ! Passed variables
+    integer :: size
+    real(double), dimension(:,:) :: rho
+
+    ! Local variables
+    real(double), allocatable, dimension(:,:) :: density_wk
+    integer :: spin, stat
+
+    ! Workspace to store various forms of density
+    allocate(density_wk(size,nspin), STAT=stat)
+    if (stat /= 0) call cq_abort("Error allocating density_wk: ", stat)
+    call reg_alloc_mem(area_ops, size * nspin, type_dbl)
+    ! Construct total density in density_wk
+    density_wk = zero
+    do spin = 1, nspin
+       density_wk(:,1) = density_wk(:,1) + spin_factor*rho(:,spin)
+    end do
+    ! Calculate Hartree energy of density (or drho for NA)
+    if( flag_neutral_atom ) then
+       if(.NOT.flag_neutral_atom_projector) then
+          local_ps_energy = &
+               dot(n_my_grid_points, pseudopotential, 1, density_wk(:,1), 1) * &
+               grid_point_volume
+          call gsum(local_ps_energy)
+       end if
+       hartree_energy_drho_input = hartree_energy_drho
+       density_wk(:,1) = density_wk(:,1) - density_atom(:)
+       call get_hartree_energy(density_wk, maxngrid, hartree_energy_drho)
+       write(io_lun,fmt='(2x,"Output density Hartree energy (delta rho): ",f19.12)') hartree_energy_drho
+    else
+       call get_hartree_energy(density_wk, maxngrid, hartree_energy_total_rho)
+    end if
+    !  
+    ! Construct XC energy of density
+    if (flag_pcc_global) then
+       density_wk = zero
+       do spin = 1, nspin
+          density_wk(:,spin) = rho(:,spin) + half * density_pcc(:)
+       end do
+       call get_xc_energy(density_wk, xc_energy, size)
+    else
+       call get_xc_energy(rho, xc_energy, size)
+    end if
+    write(io_lun,fmt='(2x,"Output density XC energy: ",f19.12)') xc_energy
+    deallocate(density_wk)
+    call reg_dealloc_mem(area_ops, size*nspin, type_dbl)
+  end subroutine get_output_energies
+!!***
 
   ! -----------------------------------------------------------
   ! Subroutine matrix_scale_diag

@@ -39,6 +39,9 @@
 !!    - Adding neutral atom energy expressions
 !!   2016/03/02 17:19 dave
 !!    - Moved ion-ion energies into this module, removed hartree_energy_atom_rho
+!!   2021/07/23 16:46 dave
+!!    Changes to make the DFT energy correct, in particular creating hartree_energy_drho_input which
+!!    stores the value of hartree_energy_drho made from the input charge density when we have check_DFT T
 !!  SOURCE
 !!
 module energy
@@ -71,6 +74,7 @@ module energy
   
   ! Neutral atom potential
   real(double) :: hartree_energy_drho          ! Self-energy for drho = rho - rho_atom
+  real(double) :: hartree_energy_drho_input    ! Self-energy for drho with input charge
   real(double) :: hartree_energy_drho_atom_rho ! Energy for rho_atom in drho potential
   real(double) :: screened_ion_interaction_energy
   
@@ -233,8 +237,11 @@ contains
 
     ! Find total pure DFT energy
     if(flag_neutral_atom) then
-       total_energy = band_energy - hartree_energy_drho - hartree_energy_drho_atom_rho + &
-            screened_ion_interaction_energy + delta_E_xc
+       ! NB I have changed this to use delta_E_hartree = -hartree_energy_drho -hartree_energy_drho_atom_rho
+       ! which is calculated in H_matrix_module so that we can calculate hartree_energy_drho for the output
+       ! DRB 2021/07/23 16:33
+       total_energy = band_energy + delta_E_hartree + delta_E_xc + &
+            screened_ion_interaction_energy 
     else
        total_energy = band_energy  + delta_E_hartree + delta_E_xc + &
             ion_interaction_energy + core_correction
@@ -526,11 +533,13 @@ contains
 
     ! Find total pure DFT energy
     if(flag_neutral_atom) then
-       total_energy1 = band_energy     - &
-            hartree_energy_drho - &
-            hartree_energy_drho_atom_rho + &
-            screened_ion_interaction_energy + &
-            delta_E_xc
+       ! NB I have changed this to use delta_E_hartree = -hartree_energy_drho -hartree_energy_drho_atom_rho
+       ! which is calculated in H_matrix_module so that we can calculate hartree_energy_drho for the output
+       ! DRB 2021/07/23 16:33
+       total_energy1 = band_energy     + &
+            delta_E_hartree + &
+            delta_E_xc + &
+            screened_ion_interaction_energy
     else
        total_energy1 = band_energy     + &
             delta_E_hartree + &
@@ -573,7 +582,7 @@ contains
           !
           write (io_lun, 6) en_conv *    band_energy,  en_units(energy_units)
           if(flag_neutral_atom) then
-             write (io_lun,67) en_conv * hartree_energy_drho,  en_units(energy_units)
+             write (io_lun,67) en_conv * hartree_energy_drho_input,  en_units(energy_units)
              write (io_lun,68) en_conv * screened_ion_interaction_energy,  en_units(energy_units)
           else
              write (io_lun, 7) en_conv * hartree_energy_total_rho,  en_units(energy_units)
@@ -599,12 +608,7 @@ contains
           end if
           write (io_lun,43) en_conv*       nl_energy,  en_units(energy_units)
           write (io_lun, 2)
-          if(flag_neutral_atom) then
-             write (io_lun,11) en_conv*(- hartree_energy_drho - hartree_energy_drho_atom_rho), &
-                  en_units(energy_units)
-          else
-             write (io_lun,11) en_conv* delta_E_hartree, en_units(energy_units)
-          end if
+          write (io_lun,11) en_conv* delta_E_hartree, en_units(energy_units)
           write (io_lun,12) en_conv* delta_E_xc,      en_units(energy_units)
           if (flag_dft_d2) &
                write (io_lun,17) en_conv*disp_energy,en_units(energy_units)

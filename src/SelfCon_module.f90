@@ -1558,7 +1558,7 @@ contains
     use DMMin,             only: FindMinDM
     use global_module,     only: iprint_SC, atomf, flag_perform_cDFT, &
                                  nspin, spin_factor, flag_diagonalisation, flag_LFD, flag_Multisite
-    use H_matrix_module,   only: get_H_matrix
+    use H_matrix_module,   only: get_output_energies
     use S_matrix_module,   only: get_S_matrix
     !use DiagModule,        only: diagon
     use energy,            only: get_energy, flag_check_DFT
@@ -1639,7 +1639,8 @@ contains
     !For DFT energy with charge density constructed by density matrix --
     !TM Nov2007
     if (flag_check_DFT) then
-       call get_H_matrix(.false., fixed_potential, electrons, rhoout, size)
+       ! Find Hartree, XC and local PS (i.e. NA) energies with output density
+       call get_output_energies(rhoout, size)
        call get_energy(total_energy, flag_check_DFT, backtrace_level)
     endif
 

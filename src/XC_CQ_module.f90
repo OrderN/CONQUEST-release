@@ -31,6 +31,8 @@
 !!    Added spin_factor in module use statements
 !!   2019/04/08 zamaan
 !!    Added off-diagonal elements of XC stress tensor contributions
+!!   2021/07/22 14:26 dave
+!!    Added get_xc_energy routine (and associated)
 !! SOURCE
 !!
 module XC
@@ -52,7 +54,7 @@ module XC
   logical, public :: flag_different_functional
 
   ! Public methods
-  public :: get_xc_potential, get_dxc_potential, init_xc
+  public :: get_xc_potential, get_dxc_potential, init_xc, get_xc_energy
 
   ! Conquest functional identifiers
   integer, parameter :: functional_lda_pz81        = 1
@@ -1908,484 +1910,544 @@ contains
   end subroutine get_xc_potential_hyb_PBE0
   !!*****
 
-
-  !!****f* XC_module/get_xc_potential_GGA_PBE_obsolete *
+  !!****f* XC/get_xc_energy *
   !!
   !!  NAME
-  !!   get_xc_potential_GGA_PBE_obsolete
+  !!   get_xc_energy
   !!  USAGE
   !!
   !!  PURPOSE
-  !!   Calculates the exchange-correlation potential
-  !!   on the grid within GGA using the
-  !!   Perdew-Burke-Ernzerhof. It also calculates the
-  !!   total exchange-correlation energy.
+  !!   Interface to CQ routines
+  !!  INPUTS
   !!
-  !!   Note that this is the functional described in
-  !!   Phys. Rev. Lett. 77, 3865 (1996)
+  !!  USES
   !!
-  !!   It is also (depending on an optional parameter)
-  !!     either revPBE, Phys. Rev. Lett. 80, 890 (1998),
-  !!     or RPBE, Phys. Rev. B 59, 7413 (1999)
+  !!  AUTHOR
+  !!   D. R. Bowler
+  !!  CREATION DATE
+  !!   2021/07/22
+  !!  MODIFICATION HISTORY
+  !!  SOURCE
+  !!
+  subroutine get_xc_energy(density, xc_energy, size)
+
+    use datatypes
+    use numbers
+    use global_module,               only: exx_niter, exx_siter, exx_alpha, nspin
+
+    implicit none
+
+    ! Passed variables
+    integer                    :: size
+    real(double)               :: xc_energy
+    real(double), dimension(size,nspin) :: density
+
+    ! Local variables
+    real(double) :: loc_x_energy, exx_tmp
+
+    select case(flag_functional_type)
+    case (functional_lda_pz81)
+       ! NOT SPIN POLARISED
+       call get_xc_energy_LDA_PZ81(density(:,1), xc_energy, size)
+       !
+       !
+    case (functional_lda_gth96)
+       ! NOT SPIN POLARISED
+       call get_GTH_xc_energy(density(:,1), xc_energy, size)
+       !
+       !
+    case (functional_lda_pw92)
+       call get_xc_energy_LSDA_PW92(density, xc_energy, size)
+       !
+       !
+    case (functional_gga_pbe96)
+       call get_xc_energy_GGA_PBE(density, xc_energy, size)
+       !
+       !
+    case (functional_gga_pbe96_rev98)
+       call get_xc_energy_GGA_PBE(density, xc_energy, size, functional_gga_pbe96_rev98 )
+       !
+       !
+    case (functional_gga_pbe96_r99)
+       call get_xc_energy_GGA_PBE(density, xc_energy, size, functional_gga_pbe96_r99 )
+       !
+       !
+    case (functional_gga_pbe96_wc)
+       call get_xc_energy_GGA_PBE(density, xc_energy, size, functional_gga_pbe96_wc )
+       !
+       !
+    case (functional_hyb_pbe0)
+       !
+       if ( exx_niter < exx_siter ) then
+          exx_tmp = one
+       else
+          exx_tmp = one - exx_alpha
+       end if
+       !
+       call get_xc_energy_hyb_PBE0(density, xc_energy, size, exx_tmp, functional_gga_pbe96 )
+       !
+       !
+    case (functional_hartree_fock)
+       ! **<lat>**
+       ! not optimal but experimental
+       if (exx_niter < exx_siter) then
+          ! for the first call of get_H_matrix using Hartree-Fock method
+          ! to get something not to much stupid ; use pure exchange functional
+          ! in near futur such as Xalpha
+          call get_xc_energy_LSDA_PW92(density, xc_energy, size)
+       else
+          xc_energy    = zero
+       end if
+       !
+       !
+    case default
+       call get_xc_energy_LSDA_PW92(density, xc_energy, size)
+       !
+       !
+    end select
+    return
+  end subroutine get_xc_energy
+  !!***
+
+  !!****f* XC_module/get_xc_energy_LDA_PZ81 *
+  !!
+  !!  NAME
+  !!   get_xc_energy_LDA_PZ81
+  !!  USAGE
+  !!
+  !!  PURPOSE
+  !!   Calculates the exchange-correlation energy
+  !!   on the grid within LDA using the Ceperley-Alder
+  !!   interpolation formula. 
+  !!
+  !!   Note that this is the Perdew-Zunger parameterisation of the
+  !!   Ceperley-Alder results for a homogeneous electron gas, as
+  !!   described in Phys. Rev. B 23, 5048 (1981), with Ceperley-Alder in
+  !!   Phys. Rev. Lett. 45, 566 (1980)
+  !!       Exchange energy: It can be found in:
+  !!                        Phys. Rev. B 45, 13244 (1992)
+  !!                      **See Eq. 26
+  !!       Correlation energy: The correlation functional is PZ-81
+  !!                           Phys. Rev. B 23, 5048 (1981)
+  !!                         **See Appendix C, and specially Table XII,
+  !!                             Eq. C1 for the xc hole (rs),
+  !!                             Eqs. C3 & C4, for rs > 1 and
+  !!                             Eqs. C5 & C6, for rs < 1
   !!  INPUTS
   !!
   !!
   !!  USES
   !!
   !!  AUTHOR
-  !!   A.S. Torralba
+  !!   E.H.Hernandez/DRB
   !!  CREATION DATE
-  !!   11/11/05
+  !!   02/03/95 and 2021/07/22
   !!  MODIFICATION HISTORY
-  !!   17/07/06 rgradient(1,:) used for storage of final result, before transform,
-  !!            instead of direct transform of the sum
-  !!            rgradient(1,:) + rgradient(2,:) + rgradient(3,:)
-  !!          (this was less efficient)
-  !!   15:55, 27/04/2007 drb
-  !!     Changed recip_vector, grad_density to (n,3) for speed
-  !!   2008/11/13 ast
-  !!     Added revPBE and RPBE
-  !!   2011/12/12 L.Tong
-  !!     Removed third, it is now defined in numbers_module
-  !!   2012/04/11 L.Tong
-  !!     Added optional parameters x_epsilon and c_epsilon to output
-  !!     the exchange and correlation parts of xc_epsilon respectively.
-  !!   2017/08/29 jack baker & dave
-  !!     Removed rcellx references (redundant)
   !!  SOURCE
   !!
-  subroutine get_xc_potential_GGA_PBE_obsolete(density, xc_potential, &
-                                               xc_epsilon, xc_energy, &
-                                               size, flavour,         &
-                                               x_epsilon, c_epsilon)
+  subroutine get_xc_energy_LDA_PZ81(density, xc_energy, size)
 
     use datatypes
     use numbers
-    use dimens,        only: grid_point_volume, n_my_grid_points
-    use GenComms,      only: gsum, cq_abort
-    use fft_module,    only: fft3, recip_vector
+    use GenComms,               only: gsum
+    use dimens,                 only: grid_point_volume, n_my_grid_points
+
+    implicit none
+
+    ! Passed variables
+    integer,                    intent(in)  :: size
+    real(double),               intent(out) :: xc_energy
+    real(double), dimension(:), intent(in)  :: density
+
+    ! Local variables
+    integer      :: n
+    real(double) :: denominator, e_correlation, e_exchange, ln_rs, &
+                    numerator, rcp_rs, rho, rs, rs_ln_rs, sq_rs,   &
+                    v_correlation, v_exchange
+    real(double), parameter :: alpha  = -0.45817_double
+    real(double), parameter :: beta_1 =  1.0529_double
+    real(double), parameter :: beta_2 =  0.3334_double
+    real(double), parameter :: gamma  = -0.1423_double
+    real(double), parameter :: p =  0.0311_double
+    real(double), parameter :: q = -0.048_double
+    real(double), parameter :: r =  0.0020_double
+    real(double), parameter :: s = -0.0116_double
+
+    xc_energy = zero
+
+    do n = 1, n_my_grid_points ! loop over grid pts and store potl on each
+       rho = spin_factor * density(n)  ! DRB Added to correct for lack of spin 2018/06/11
+       if (rho > RD_ERR) then ! Find radius of hole
+          rcp_rs = ( four_thirds * pi * rho )**(third)
+       else
+          rcp_rs = zero
+       end if
+       e_exchange = alpha * rcp_rs
+       if (rcp_rs>zero) then
+          rs = one/rcp_rs
+       else
+          rs = zero
+       end if
+       sq_rs = sqrt(rs)
+       if (rs>=one) then
+          denominator = one / (one + beta_1 * sq_rs + beta_2 * rs)
+          numerator   = one + seven_sixths * beta_1 * sq_rs +  &
+               four_thirds * beta_2 * rs
+          e_correlation = gamma * denominator
+       else if ((rs<one).and.(rs>RD_ERR)) then
+          ln_rs    = log(rs)
+          rs_ln_rs = rs * ln_rs
+          e_correlation = p * ln_rs + q  + r * rs_ln_rs + s * rs
+       else
+          e_correlation = zero
+       end if
+       xc_energy       = xc_energy  + (e_exchange + e_correlation) * spin_factor * density(n)  ! DRB Added to correct for lack of spin 2018/06/11
+    end do ! do n_my_grid_points
+    call gsum(xc_energy)
+    ! and 'integrate' the energy over the volume of the grid point
+    xc_energy = xc_energy * grid_point_volume
+
+    return
+  end subroutine get_xc_energy_LDA_PZ81
+  !!***
+
+
+  !!****f* XC_module/get_GTH_xc_energy *
+  !!
+  !!  NAME
+  !!   get_xc_energy
+  !!  USAGE
+  !!
+  !!  PURPOSE
+  !!   Calculates the exchange-correlation energy
+  !!   on the grid within LDA using the Ceperley-Alder
+  !!   interpolation formula. It also calculates the
+  !!   total exchange-correlation energy.
+  !!
+  !!   Note that this is the Goedecker/Teter/Hutter formula which
+  !!   involves only ratios of polynomials, and is rather easy to
+  !!   differentiate.  See PRB 54, 1703 (1996)
+  !!  INPUTS
+  !!
+  !!
+  !!  USES
+  !!
+  !!  AUTHOR
+  !!   D.R.Bowler
+  !!  CREATION DATE
+  !!   14:45, 25/03/2003 and 2021/07/22 14:51 
+  !!  MODIFICATION HISTORY
+  !!  SOURCE
+  !!
+  subroutine get_GTH_xc_energy(density, xc_energy, size)
+
+    use datatypes
+    use numbers
+    use global_module,          only: io_lun
+    use GenComms,               only: cq_abort, gsum
+    use dimens,                 only: grid_point_volume, n_my_grid_points
 
     implicit none
 
     ! Passed variables
     integer,      intent(in)  :: size
-    real(double), intent(in)  :: density(size)
-    real(double), intent(out) :: xc_potential(size), xc_epsilon(size)
     real(double), intent(out) :: xc_energy
-    ! optional
-    integer,intent(in), optional :: flavour
-    real(double), dimension(size), optional, intent(out) :: x_epsilon, c_epsilon
+    real(double), dimension(:), intent(in)  :: density
 
-    !     Local variables
-    integer :: n
-    integer :: selector
-
-    real(double), allocatable, dimension(:)   :: grad_density
-    real(double), allocatable, dimension(:,:) :: grad_density_xyz
-    real(double), allocatable, dimension(:)   :: ex_lda, ec_lda
-    real(double) :: rho, grad_rho, rho1_3, rho1_6, ks, s, s2, t, t2,   &
-                    A, At2, factor0, factor1, factor2, factor3,        &
-                    factor4, denominator0, numerator1, denominator1,   &
-                    num_den1, numerator2, dt2_drho, dA_drho,           &
-                    dnumerator1_drho, ddenominator1_drho,              &
-                    dnumerator1_dt2, dnumerator1_dA,                   &
-                    ddenominator1_dt2, ddenominator1_dA, dfactor2_dt2, &
-                    dfactor2_dnumerator1, dfactor2_ddenominator1,      &
-                    dfactor2_drho, dfactor3_dfactor2, dfactor3_drho
-    real(double) :: xc_energy_lda_total,                               &
-                    e_correlation_lda,                                 &
-                    de_correlation_lda,                                &
-                    e_exchange, e_correlation,                         &
-                    de_exchange, de_correlation,                       &
-                    dde_exchange, dde_correlation
-    real(double) :: df_dgrad_rho
-    real(double) :: kappa, mu_kappa
-    real(double) :: rpbe_exp
-    ! Gradient in reciprocal space
-    complex(double_cplx), allocatable, dimension(:,:) :: rgradient
-
-    !     From Phys. Rev. Lett. 77, 3865 (1996)
-    real(double), parameter :: mu = 0.21951_double
-    real(double), parameter :: beta = 0.066725_double
-    real(double), parameter :: gamma = 0.031091_double
-    real(double), parameter :: kappa_ori = 0.804_double
-
-    !     From Phys. Rev. Lett. 80, 890 (1998)
-    real(double), parameter :: kappa_alt = 1.245_double
-
-    !     Precalculated constants
-    real(double), parameter :: mu_kappa_ori = 0.27302_double     ! mu/kappa_ori
-    real(double), parameter :: mu_kappa_alt = 0.17631_double     ! mu/kappa_alt
-    real(double), parameter :: two_mu = 0.43902_double           ! 2*mu
-    real(double), parameter :: beta_gamma = 2.146119_double      ! beta/gamma
-    real(double), parameter :: beta_X_gamma = 0.002074546_double ! beta*gamma
-    real(double), parameter :: k01 = 0.16162045967_double        ! 1/(2*(3*pi*pi)**(1/3))
-    real(double), parameter :: k02 = -0.16212105381_double       ! -3*mu*((4*pi/3)**(1/3))/(2*pi*alpha)
-                                                                 ! =mu*k00*k01(LDA_PW92)=mu*k04
-    real(double), parameter :: k03 = 1.98468639_double           ! ((4/pi)*(3*pi*pi)**(1/3))**(1/2)
-    real(double), parameter :: k04 = -0.738558852965_double      ! -3*((4*pi/3)**(1/3))/(2*pi*alpha) = k00*k01 in LDA_PW92
-    real(double), parameter :: k05 = 0.05240415_double           ! -2*k01*k02
-    real(double), parameter :: k06 = -0.593801317784_double      ! k04*kappa_ori
-    real(double), parameter :: k07 = -0.984745137287_double      ! 4*k04/3
-    real(double), parameter :: seven_thirds = 2.333333333_double ! 7/3
-
-    integer :: stat
-    !      Selector options
-    integer, parameter :: fx_original    = 1                     ! Used in PBE and revPBE
-    integer, parameter :: fx_alternative = 2                     ! Used in RPBE
-
-    ! Choose between PBE or revPBE parameters
-    if(PRESENT(flavour)) then
-      if(flavour==functional_gga_pbe96_rev98) then
-        kappa=kappa_alt
-        mu_kappa=mu_kappa_alt
-      else
-        kappa=kappa_ori
-        mu_kappa=mu_kappa_ori
-      end if
-    else
-      kappa=kappa_ori
-      mu_kappa=mu_kappa_ori
-    end if
-
-    if (present(x_epsilon)) then
-       allocate(ex_lda(size), STAT=stat)
-       if (stat /= 0) &
-            call cq_abort("Error allocating ex_lda for PBE functional: ", stat)
-    end if
-
-    if (present(c_epsilon)) then
-       allocate(ec_lda(size), STAT=stat)
-       if (stat /= 0) &
-            call cq_abort("Error allocating ec_lda for PBE functional ", stat)
-    end if
-
-    allocate(grad_density(size), grad_density_xyz(size,3),&
-             rgradient(size,3),STAT = stat)
-    !initialisation  2010.Oct.30 TM
-    grad_density(:) = zero
-    grad_density_xyz(:,:) = zero
-    rgradient(:,:) = zero
-    xc_epsilon(:) = zero
-    xc_potential(:) = zero
-    if (present(x_epsilon)) then
-       x_epsilon = zero
-       ex_lda = zero
-    end if
-    if (present(c_epsilon)) then
-       c_epsilon = zero
-       ec_lda = zero
-    end if
-    if (stat /= 0) &
-         call cq_abort("Error allocating arrays for PBE functional: ", stat)
-
-    ! Choose functional form
-    if (present(flavour)) then
-       if (flavour == functional_gga_pbe96_r99) then
-          selector = fx_alternative
-       else
-          selector = fx_original
-       end if
-    else
-       selector = fx_original
-    end if
-
-    ! Build the gradient of the density
-    call build_gradient(density, grad_density_xyz, size)
-
-    grad_density(:) = sqrt(grad_density_xyz(:,1)**2 + &
-                           grad_density_xyz(:,2)**2 + &
-                           grad_density_xyz(:,3)**2)
-
-    ! Get the LDA part of the functional
-    if (present(x_epsilon) .and. present(c_epsilon)) then
-       call get_xc_potential_LDA_PW92(density, xc_potential, xc_epsilon, &
-                                      xc_energy_lda_total, size,         &
-                                      x_epsilon=ex_lda,                  &
-                                      c_epsilon=ec_lda)
-    else if (present(x_epsilon)) then
-       call get_xc_potential_LDA_PW92(density, xc_potential, xc_epsilon, &
-                                      xc_energy_lda_total, size,         &
-                                      x_epsilon=ex_lda)
-    else if (present(c_epsilon)) then
-       call get_xc_potential_LDA_PW92(density, xc_potential, xc_epsilon, &
-                                      xc_energy_lda_total, size,         &
-                                      c_epsilon=ec_lda)
-    else
-       call get_xc_potential_LDA_PW92(density, xc_potential, xc_epsilon, &
-                                      xc_energy_lda_total, size)
-    end if
+    ! Local variables
+    integer n
+    real(double) :: denominator, e_correlation, e_exchange, ln_rs,    &
+                    numerator, rcp_rs, rho, rs, rs_ln_rs, sq_rs,      &
+                    v_correlation, v_exchange, drs_dRho, t1, t2, dt1, &
+                    dt2
+    real(double), parameter :: a0=0.4581652932831429_double
+    real(double), parameter :: a1=2.217058676663745_double
+    real(double), parameter :: a2=0.7405551735357053_double
+    real(double), parameter :: a3=0.01968227878617998_double
+    real(double), parameter :: b1=1.000000000000000_double
+    real(double), parameter :: b2=4.504130959426697_double
+    real(double), parameter :: b3=1.110667363742916_double
+    real(double), parameter :: b4=0.02359291751427506_double
 
     xc_energy = zero
     do n = 1, n_my_grid_points ! loop over grid pts and store potl on each
-       rho = density(n)
-       grad_rho = grad_density(n)
-
-       !!!!!!   XC GGA ENERGY
-
-       ! Exchange
-
-       if (rho > RD_ERR) then
-          rho1_3 = rho ** third
-          rho1_6 = sqrt (rho1_3)
-          s = k01 * grad_rho / (rho ** four_thirds)
-          s2 = s * s
-          if(selector == fx_alternative) then           ! RPBE
-            rpbe_exp = exp(-mu_kappa * s2)
-            e_exchange = k06*rho1_3*(1.0_double-rpbe_exp)
-          else                                          ! PBE, revPBE
-            denominator0 = 1.0 / (1.0 + mu_kappa * s2)
-            factor0 = k02 * rho1_3
-            factor1 = s2 * denominator0
-            ! NOTE: This doesn't look like in Phys. Rev. Lett. 77:18,
-            !       3865 (1996) because the 1 in Fx, has been
-            !       multiplied by Ex-LDA and is implicit in
-            !       xc_energy_lda(n), in the total energy below
-            e_exchange = factor0 * factor1
-          end if
+       rho = spin_factor * density(n)  ! DRB Added to correct for lack of spin 2018/06/11
+       if (rho > RD_ERR) then ! Find radius of hole
+          rcp_rs = ( four*third * pi * rho )**(third)
+          rs     = one/rcp_rs
        else
-          e_exchange = zero
+          rcp_rs = zero
+          rs     = zero
        end if
-
-       if (present(x_epsilon)) x_epsilon(n) = e_exchange + ex_lda(n)
-
-       ! Correlation
-
-       if (rho > RD_ERR) then
-          e_correlation_lda = xc_epsilon(n) - k04 * rho1_3
-
-          ! t=grad_rho/(2*rho*ks); ks=sqrt(4*kf/pi); kf=(3*pi*pi*rho)**(1/3); s=grad_rho/(2*rho*kf)
-          ks = k03 * rho1_6
-          t = grad_rho / ( 2 * ks * rho )
-          t2 = t * t
-
-          A = exp(-e_correlation_lda / gamma) - 1.0
-          if (A > RD_ERR) then
-             A = beta_gamma / A
-          else
-             A = beta_gamma * BIG
-          end if
-
-          At2 = A * t2
-          numerator1 = 1.0 + At2
-          denominator1 = 1.0 + At2 + At2 * At2
-          num_den1 = numerator1 / denominator1
-
-          factor2 = t2 * num_den1
-          factor3 = gamma * log(one + beta_gamma * factor2)
-
-          e_correlation = factor3;  !gamma * log( 1.0 + beta_gamma * t2 * num_den1 )
-       else
-          e_correlation = zero
+       if (rs > zero) then
+          drs_dRho = -rs / (3.0 * rho)
+          t1  = a0 + rs*(a1 + rs * (a2 + rs * a3))
+          t2  = rs * (b1 + rs * (b2 + rs * (b3 + rs * b4)))
+          dt1 = a1 + rs * (2.0 * a2 + rs * 3.0 * a3)
+          dt2 = b1 + rs * (2.0 * b2 + rs * (3.0 * b3 + rs * 4.0 * b4))
+          xc_energy = xc_energy - (t1/t2)*rho
        end if
-
-       if (present(c_epsilon)) c_epsilon(n) = e_correlation + ec_lda(n)
-
-       !*ast* TEST-POINT 1
-       ! Both exchange and correlation
-       xc_energy = xc_energy + (xc_epsilon(n) + e_exchange + e_correlation)*rho
-       ! Only LDA part
-       !xc_energy = xc_energy + (xc_epsilon(n))*rho
-       ! LDA + exchange
-       !xc_energy = xc_energy + (xc_epsilon(n) + e_exchange)*rho
-       ! Only exchange
-       !xc_energy = xc_energy + (e_exchange)*rho
-       ! LDA + correlation
-       !xc_energy = xc_energy + (xc_epsilon(n) + e_correlation)*rho
-       ! Only correlation
-       !xc_energy = xc_energy + (e_correlation)*rho
-
-       !!!!!!   POTENTIAL
-
-       !!!   Terms due to df/drho
-
-       ! Exchange
-
-       if (rho > RD_ERR) then
-          if(selector == fx_alternative) then           ! RPBE
-            de_exchange = k07 * rho1_3 * (kappa - (two_mu * s2 + kappa) * rpbe_exp)
-          else                                          ! PBE, revPBE
-            de_exchange = four_thirds * factor0 * factor1 * ( 1 - 2* denominator0 )
-          end if
-       else
-          de_exchange = zero
-       end if
-
-       ! Correlation
-
-       if (rho > RD_ERR) then
-          de_correlation_lda = ( xc_potential(n) &
-                               - four_thirds * k04 * rho1_3 &
-                               - e_correlation_lda ) / rho
-
-          dt2_drho = -seven_thirds * t2 / rho
-          dA_drho  = A * A * exp(-e_correlation_lda / gamma ) * de_correlation_lda / beta
-          dnumerator1_dt2   = A
-          dnumerator1_dA    = t2
-          factor4 = 1.0 + 2 * At2
-          ddenominator1_dt2 = A * factor4
-          ddenominator1_dA  = t2 * factor4
-          dnumerator1_drho   = dnumerator1_dt2 * dt2_drho &
-                             + dnumerator1_dA * dA_drho
-          ddenominator1_drho = ddenominator1_dt2 * dt2_drho &
-                             + ddenominator1_dA * dA_drho
-          dfactor2_dt2 = num_den1
-          dfactor2_dnumerator1   = t2 / denominator1
-          dfactor2_ddenominator1 = -factor2 / denominator1
-          dfactor2_drho = dfactor2_dt2 * dt2_drho &
-                        + dfactor2_dnumerator1 * dnumerator1_drho &
-                        + dfactor2_ddenominator1 * ddenominator1_drho
-          dfactor3_dfactor2 = beta / ( 1.0 + beta_gamma * factor2 )
-          dfactor3_drho = dfactor3_dfactor2 * dfactor2_drho
-          de_correlation = factor3 + rho * dfactor3_drho
-       else
-          de_correlation = zero
-       end if
-
-       !*ast* TEST-POINT 2
-       xc_potential(n) = xc_potential(n) + de_exchange + de_correlation
-       ! Only LDA part
-       !xc_potential(n) = xc_potential(n)
-       ! LDA + exchange
-       !xc_potential(n) = xc_potential(n) + de_exchange
-       ! Only exchange
-       !xc_potential(n) = de_exchange
-       ! LDA + correlation
-       !xc_potential(n) = xc_potential(n) + de_correlation
-       ! Only correlation
-       !xc_potential(n) = de_correlation
-
-       !!!   Terms due to df/d|grad_rho|
-
-       ! Exchange
-
-       if (rho > RD_ERR) then
-          if(selector == fx_alternative) then           ! RPBE
-             dde_exchange = -k05 * s * rpbe_exp
-          else                                          ! PBE, revPBE
-             dde_exchange = -k05 * s * denominator0 * denominator0!factor1 * denominator0
-          end if
-       else
-          dde_exchange = zero
-       end if
-
-       ! Correlation
-
-       if (rho > RD_ERR) then
-          numerator2 = beta_X_gamma * t * ( 1.0 + 2.0 * At2 ) &
-                     / (( gamma * denominator1 + beta * t2 * numerator1 ) * denominator1)
-          dde_correlation = numerator2 / ks;
-       else
-          dde_correlation = zero
-       end if
-
-       ! Normalisation (modulus of gradient)
-
-       !*ast* TEST-POINT 3
-       if(abs(grad_density(n)) > RD_ERR) then  !DEBUG
-       df_dgrad_rho = (dde_exchange + dde_correlation) / grad_density(n)
-       else                 !DEBUG
-       df_dgrad_rho = zero   !DEBUG
-       endif                !DEBUG
-       ! Only LDA part
-       !df_dgrad_rho = 0.0
-       ! LDA + exchange
-       !df_dgrad_rho = dde_exchange / grad_density(n)
-       ! Only exchange
-       !df_dgrad_rho = dde_exchange / grad_density(n)
-       ! LDA + correlation
-       !df_dgrad_rho = dde_correlation / grad_density(n)
-       ! Only correlation
-       !df_dgrad_rho = dde_correlation / grad_density(n)
-
-
-       ! Gradient times derivative of energy
-
-       grad_density_xyz(n,1) = grad_density_xyz(n,1)*df_dgrad_rho
-       grad_density_xyz(n,2) = grad_density_xyz(n,2)*df_dgrad_rho
-       grad_density_xyz(n,3) = grad_density_xyz(n,3)*df_dgrad_rho
-
-       !xc_epsilon  !2010.Oct.30 TM
-       xc_epsilon(n) = xc_epsilon(n) + e_exchange + e_correlation
-       !*ast* TEST-POINT 4
-       !TM delta_E_xc = delta_E_xc + (xc_epsilon(n) + e_exchange + e_correlation)*rho
-       ! Only LDA part
-       !delta_E_xc = delta_E_xc + (xc_epsilon(n))*rho
-       ! LDA + exchange
-       !delta_E_xc = delta_E_xc + (xc_epsilon(n) + e_exchange)*rho
-       ! Only exchange
-       !delta_E_xc = delta_E_xc + (e_exchange)*rho
-       ! LDA + correlation
-       !delta_E_xc = delta_E_xc + (xc_epsilon(n) + e_correlation)*rho
-       ! Only correlation
-       !delta_E_xc = delta_E_xc + (e_correlation)*rho
-
     end do ! do n_my_grid_points
-
-
-    !!!   Final steps of the energy calculation
-
-    ! Add the energies and 'integrate' over the volume of the grid points
-
     call gsum(xc_energy)
+    ! and 'integrate' the energy over the volume of the grid point
     xc_energy = xc_energy * grid_point_volume
-
-    ! Fourier transform the gradient, component by component
-
-    call fft3(grad_density_xyz(:,1), rgradient(:,1), size, -1 )
-    call fft3(grad_density_xyz(:,2), rgradient(:,2), size, -1 )
-    call fft3(grad_density_xyz(:,3), rgradient(:,3), size, -1 )
-
-    !!!   Get the second term of the potential by taking derivatives
-
-    ! First, get the scalar product of the (normalised) gradient and the wave vector (times i)
-
-    rgradient(:,1) = -rgradient(:,1)*minus_i*recip_vector(:,1)
-    rgradient(:,1) = rgradient(:,1) - rgradient(:,2)*minus_i*recip_vector(:,2)
-    rgradient(:,1) = rgradient(:,1) - rgradient(:,3)*minus_i*recip_vector(:,3)
-
-    ! Add terms of the scalar product and then Fourier transform back the resultant vector
-    ! NOTE: Store the result in the modulus of the gradient (not needed anymore) to save memory
-
-    call fft3( grad_density, rgradient(:,1), size, 1 )
-
-    ! Finally, get the potential
-    ! NOTE that here grad_density is NOT the modulus of the gradient,
-    !      but a term of the potential (see Fourier transform above)
-
-    do n=1,n_my_grid_points
-        xc_potential(n) = xc_potential(n) - grad_density(n)
-    end do
-
-    ! I changed the order of deallocation, because I was told that deallocation
-    ! of the latest allocated array should be done first.
-    ! (though I am not sure whether it is true or not)   2010.Oct.30 TM
-
-    if(allocated(rgradient)) then
-       deallocate(rgradient,STAT=stat)
-       if(stat/=0) call cq_abort("Error deallocating rgradient",stat)
-    end if
-    if(allocated(grad_density_xyz)) then
-       deallocate(grad_density_xyz,STAT=stat)
-       if(stat/=0) call cq_abort("Error deallocating grad_density_xyz",stat)
-    end if
-    if(allocated(grad_density)) then
-       deallocate(grad_density,STAT=stat)
-       if(stat/=0) call cq_abort("Error deallocating grad_density",stat)
-    end if
-    if (allocated(ex_lda)) then
-       deallocate(ex_lda,STAT=stat)
-       if (stat /= 0) call cq_abort("Error deallocating ex_lda", stat)
-    end if
-    if (allocated(ec_lda)) then
-       deallocate(ec_lda,STAT=stat)
-       if (stat /= 0) call cq_abort("Error deallocating ec_lda", stat)
-    end if
-
     return
-  end subroutine get_xc_potential_GGA_PBE_obsolete
+  end subroutine get_GTH_xc_energy
   !!***
 
+  !!****f* XC_module/get_xc_energy_LSDA_PW92 *
+  !!
+  !!  NAME
+  !!   get_xc_energy_LSDA_PW92
+  !!  USAGE
+  !!
+  !!  PURPOSE
+  !!   Calculates the spin polarized exchange-correlation
+  !!   energy on the grid within LDA using the Ceperley-Alder
+  !!   interpolation formula. It also calculates the total
+  !!   exchange-correlation energy.
+  !!
+  !!   Note that this is the Perdew-Wang parameterisation of the
+  !!   Ceperley-Alder results for a homogeneous electron gas, as
+  !!   described in Phys. Rev. B 45, 13244 (1992), with Ceperley-Alder
+  !!   in Phys. Rev. Lett. 45, 566 (1980) INPUTS
+  !!
+  !!  USES
+  !!
+  !!  AUTHOR
+  !!   L. Tong and DRB
+  !!  CREATION DATE
+  !!   22/03/2011 and 2021/07/22 14:52
+  !!  MODIFICATION HISTORY
+  !!  SOURCE
+  !!
+  subroutine get_xc_energy_LSDA_PW92(density, xc_energy_total, size)
+
+    use datatypes
+    use numbers
+    use GenComms,               only: cq_abort, gsum
+    use dimens,                 only: grid_point_volume, n_my_grid_points
+    use global_module,          only: nspin
+
+    implicit none
+
+    ! Passed variables
+    ! size of the real space grid
+    integer,                      intent(in)  :: size
+    real(double),                 intent(out) :: xc_energy_total
+    real(double), dimension(:,:), intent(in)  :: density
+
+    ! Local variables
+    integer      :: rr, spin
+    real(double) :: eps_x, eps_c, rho_tot_r
+    real(double), dimension(nspin) :: rho_r, Vx, Vc
+
+    ! initialisation
+    xc_energy_total = zero
+
+    ! loop over grid points on each node
+    do rr = 1, n_my_grid_points
+       rho_r(1:nspin) = density(rr,1:nspin)
+       rho_tot_r      = rho_r(1) + rho_r(nspin)
+       call Vxc_of_r_LSDA_PW92(nspin, rho_r, eps_x=eps_x, eps_c=eps_c,&
+                               Vx=Vx, Vc=Vc)
+
+       xc_energy_total = xc_energy_total + (eps_x + eps_c)  * rho_tot_r
+    end do
+    call gsum(xc_energy_total)
+    xc_energy_total = xc_energy_total * grid_point_volume
+    return
+  end subroutine get_xc_energy_LSDA_PW92
+  !!***
+
+  !!****f* XC_module/get_xc_energy_GGA_PBE
+  !! PURPOSE
+  !!   Calculates the exchange-correlation energy
+  !!   on the grid within GGA using three flavours of
+  !!   Perdew-Burke-Ernzerhof. It also calculates the
+  !!   total exchange-correlation energy.
+  !!
+  !!   flavour not defined
+  !!     use original PBE, PRL 77, 3865 (1996)
+  !!   flavour = functional_gga_pbe96_rev98:
+  !!     use revPBE, PRL 80, 890 (1998)
+  !!   flavour = functional_gga_pbe96_r99:
+  !!     use RPBE, PRB 59, 7413 (1999)
+  !!
+  !! USAGE
+  !!   call get_xc_energy_GGA_PBE(density, xc_potential,      &
+  !!                                 xc_epsilon, xc_energy, size,&
+  !!                                 flavour)
+  !! INPUTS
+  !!   integer      size                : size of the real space grid
+  !!   integer      flavour             : flavour of PBE functional (optional)
+  !!   real(double) density(size,nspin) : spin dependent density
+  !! OUTPUT
+  !!   real(double) xc_energy                : total xc-energy (sum over spin)
+  !!   real(double) xc_epsilon(size)         : xc-energy density
+  !!   real(double) xc_potential(size,nspin) : xc-potnetial
+  !! AUTHOR
+  !!   L.Tong and DRB
+  !! CREATION DATE 
+  !!   2012/04/27 and 2021/07/22 14:54 dave
+  !! MODIFICATION HISTORY
+  !! SOURCE
+  !!
+  subroutine get_xc_energy_GGA_PBE(density, xc_energy, grid_size, flavour)
+
+    use datatypes
+    use numbers
+    use global_module, only: nspin, flag_stress, flag_full_stress
+    use dimens,        only: grid_point_volume, n_my_grid_points
+    use GenComms,      only: gsum, cq_abort
+    use fft_module,    only: fft3, recip_vector
+    use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_dbl
+
+    implicit none
+
+    ! passed variables
+    integer,                      intent(in)  :: grid_size
+    real(double), dimension(:,:), intent(in)  :: density
+    real(double),                 intent(out) :: xc_energy
+    integer,      optional,       intent(in)  :: flavour
+
+    ! local variables
+    integer      :: PBE_type
+    integer      :: rr, spin, stat, dir1, dir2
+    real(double) :: eps_x, eps_c, rho_tot_r
+    real(double),         dimension(nspin)        :: rho_r
+    real(double),         dimension(3,nspin)      :: grho_r
+    real(double),         dimension(:,:,:), allocatable :: grad_density
+
+    allocate(grad_density(grid_size,3,nspin), STAT=stat)
+    if (stat /= 0) call cq_abort("get_xc_potential_GGA_PBE: Error alloc mem: ", grid_size)
+    call reg_alloc_mem(area_ops, grid_size*3*nspin, type_dbl)
+
+    if (present(flavour)) then
+       PBE_type = flavour
+    else
+       PBE_type = functional_gga_pbe96
+    end if
+
+    ! initialisation
+    grad_density = zero
+    xc_energy    = zero
+
+    ! Build the gradient of the density
+    do spin = 1, nspin
+       call build_gradient(density(:,spin), grad_density(:,:,spin), grid_size)
+    end do
+
+    do rr = 1, n_my_grid_points
+       rho_tot_r = density(rr,1) + density(rr,nspin)
+       do spin = 1, nspin
+          rho_r(spin)      = density(rr,spin)
+          grho_r(1:3,spin) = grad_density(rr,1:3,spin)
+       end do
+       call eps_xc_of_r_GGA_PBE(nspin, PBE_type, rho_r, grho_r, &
+                                eps_x=eps_x, eps_c=eps_c)
+       xc_energy      = xc_energy + rho_tot_r * (eps_x + eps_c)
+    end do ! rr
+    call gsum(xc_energy)
+    xc_energy = xc_energy * grid_point_volume
+    deallocate(grad_density, STAT=stat)
+    if (stat /= 0) call cq_abort("get_xc_potential_GGA_PBE: Error dealloc mem")
+    call reg_dealloc_mem(area_ops, grid_size*3*nspin, type_dbl)
+
+  end subroutine get_xc_energy_GGA_PBE
+  !!*****
+
+
+  !!****f* XC_module/get_xc_energy_hyb_PBE0
+  !! PURPOSE
+  !!
+  !!   Work routine based on get_xc_energy_GGA_PBE.
+  !!   It will be recoded in near futur to handle any hybrid functional.
+  !!   For now just handle one coefficient as in PBE0.
+  !! USAGE
+  !!
+  !! INPUTS
+  !!
+  !!   integer      size                : size of the real space grid
+  !!   integer      flavour             : flavour of PBE functional (optional)
+  !!   real(double) density(size,nspin) : spin dependent density
+  !! OUTPUT
+  !!   real(double) xc_energy                : total xc-energy (sum over spin)
+  !!
+  !! AUTHOR
+  !!   L.Tong/L.Truflandier/DRB
+  !! CREATION DATE
+  !!   2014/09/24 and 2021/07/22 15:00 dave
+  !! MODIFICATION HISTORY
+  !! SOURCE
+  !!
+  subroutine get_xc_energy_hyb_PBE0(density, xc_energy, grid_size, exx_a, flavour )
+    use datatypes
+    use numbers
+    use global_module, only: nspin, flag_full_stress, flag_stress
+    use dimens,        only: grid_point_volume, n_my_grid_points
+    use GenComms,      only: gsum, cq_abort
+    use fft_module,    only: fft3, recip_vector
+    use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_dbl
+
+    implicit none
+
+    ! passed variables
+    integer,                      intent(in)  :: grid_size
+    real(double), dimension(:,:), intent(in)  :: density
+    real(double),                 intent(out) :: xc_energy
+    integer,      optional,       intent(in)  :: flavour
+    real(double),                 intent(in)  :: exx_a
+
+    ! local variables
+    integer      :: PBE_type
+    integer      :: rr, spin, stat, dir1, dir2
+    real(double) :: eps_x, eps_c, rho_tot_r
+    real(double),         dimension(nspin)        :: rho_r
+    real(double),         dimension(3,nspin)      :: grho_r
+    real(double),         dimension(:,:,:), allocatable :: grad_density
+
+    allocate(grad_density(grid_size,3,nspin), STAT=stat)
+    if (stat /= 0) call cq_abort("get_xc_potential_GGA_PBE: Error alloc mem: ", grid_size)
+    call reg_alloc_mem(area_ops, grid_size*3*nspin, type_dbl)
+
+    if (present(flavour)) then
+       PBE_type = flavour
+    else
+       PBE_type = functional_gga_pbe96
+    end if
+
+    ! setup exx_a
+
+    ! Initialisation
+    grad_density = zero
+    xc_energy    = zero
+
+    ! Build the gradient of the density
+    do spin = 1, nspin
+       call build_gradient(density(:,spin), grad_density(:,:,spin), grid_size)
+    end do
+
+    do rr = 1, n_my_grid_points
+       rho_tot_r = density(rr,1) + density(rr,nspin)
+       do spin = 1, nspin
+          rho_r(spin)      = density(rr,spin)
+          grho_r(1:3,spin) = grad_density(rr,1:3,spin)
+       end do
+       call eps_xc_of_r_GGA_PBE(nspin, PBE_type, rho_r, grho_r, &
+                                eps_x    =eps_x, &
+                                eps_c    =eps_c)
+       xc_energy      = xc_energy + rho_tot_r * (exx_a * eps_x + eps_c)
+    end do ! rr
+    call gsum(xc_energy)
+    xc_energy = xc_energy * grid_point_volume
+    deallocate(grad_density, STAT=stat)
+    if (stat /= 0) call cq_abort("get_xc_potential_GGA_PBE: Error dealloc mem")
+    call reg_dealloc_mem(area_ops, grid_size*3*nspin, type_dbl)
+
+    return
+  end subroutine get_xc_energy_hyb_PBE0
+  !!*****
 
   !!****f* XC_module/build_gradient *
   !!
