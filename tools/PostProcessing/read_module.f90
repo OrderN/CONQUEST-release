@@ -29,7 +29,7 @@ contains
     character(len=80) :: input_string, proc_coords
     integer :: i, j, n_grid_x, n_grid_y, n_grid_z
     integer :: n_kp_lines
-    logical :: flag_kp_lines, flag_spin_polarisation
+    logical :: flag_kp_lines, flag_spin_polarisation, flag_Multisite
     real(double) :: dk
     character(len=5) :: ps_type !To find which pseudo we use
     character(len=3) :: job
@@ -80,6 +80,7 @@ contains
     n_species = fdf_integer('General.NumberOfSpecies',1)
     ! And read the positions
     call read_atomic_positions(trim(proc_coords))
+    flag_Multisite = fdf_boolean('Basis.MultisiteSF', .false.)
     ! Find job to perform
     job = fdf_string(3,'Process.Job','pos') ! Default to converting output
     if(leqi(job,'pos').or.leqi(job,'coo')) then
@@ -98,12 +99,15 @@ contains
        i_job = 2
     else if(leqi(job,'ban')) then
        i_job = 3
+       if(flag_Multisite) call cq_abort("Not yet compatible with multi-site support functions")
     else if(leqi(job,'ter').or.leqi(job,'th')) then
        i_job = 4
+       if(flag_Multisite) call cq_abort("Not yet compatible with multi-site support functions")
        ! Allow user to specify output filename
        root_file = fdf_string(50,'Process.RootFile','STM')
     else if(leqi(job,'stm')) then
        i_job = 5
+       if(flag_Multisite) call cq_abort("Not yet compatible with multi-site support functions")
        ! Allow user to specify output filename
        root_file = fdf_string(50,'Process.RootFile','STM')
     else if(leqi(job,'dos')) then
@@ -226,6 +230,7 @@ contains
     E_DOS_max = fdf_double('Process.max_DOS_E',zero)
     sigma_DOS = fdf_double('Process.sigma_DOS',zero) ! Adjust to minimum of 4*energy spacing
     n_DOS = fdf_integer('Process.n_DOS',1001)
+    flag_total_iDOS = fdf_boolean('Process.TotalIntegratedDOS',.false.)
     ! Now read PS files for atomic information
     call allocate_species_vars
     ps_type = fdf_string(5,'General.PseudopotentialType','haman') 

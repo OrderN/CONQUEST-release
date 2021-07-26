@@ -33,7 +33,8 @@ module local
   integer, parameter :: dx = 1
   integer, parameter :: cube = 2
   
-  logical :: flag_only_charge, flag_by_kpoint, flag_wf_range, flag_proc_range, flag_procwf_range_Ef
+  logical :: flag_only_charge, flag_by_kpoint, flag_wf_range, flag_proc_range, flag_procwf_range_Ef, &
+       flag_total_iDOS
   character(len=80) :: charge_stub
 
   integer :: i_job ! Job type

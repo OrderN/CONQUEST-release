@@ -30,6 +30,10 @@ files.
 flags from the CONQUEST run that generated the output, and some
 utility-specific flags that are detailed below.
 
+**Note also** that band density and STM simulation are not at present
+compatible with multi-site support functions (MSSF), though we hope
+to implement this soon.
+
 Go to :ref:`top <ext-tools>`.
 
 Coordinate conversion
@@ -170,17 +174,25 @@ following parameters can be set:
 
 ::
 
-   IO.min_DOS_E real    (Ha)
-   IO.max_DOS_E real    (Ha)
-   IO.sigma_DOS real    (Ha, default 0.001)
-   IO.n_DOS     integer (default 201)
+   Process.min_DOS_E real    (Ha, default lowest eigenvalue)
+   Process.max_DOS_E real    (Ha, default highest eigenvalue)
+   Process.sigma_DOS real    (Ha, default 0.001)
+   Process.n_DOS     integer (default 201)
 
 The limits for the DOS are set by the first two parameters (note that
-CONQUEST will output all eigenvalues).  The broadening applied to each
-state is set by ``sigma_DOS``, while the number of bins is set by
-``n_DOS``.  We recommend that, for accurate DOS, CONQUEST should be
+CONQUEST will output all eigenvalues, so the limits on these are set
+by the eigenspectrum).  The broadening applied to each state is set by
+``sigma_DOS``, while the number of bins is set by ``n_DOS``.  The
+integrated DOS are also calculated; the user can choose whether this
+is the total integrated DOS (i.e. from the lowest eigenvalue,
+regardless of the lower limit for DOS) or just the local integrated
+DOS (i.e. over the interval specified for the DOS) by setting
+``Process.TotalIntegratedDOS`` to ``T`` or ``F``, respectively.
+
+We recommend that, for accurate DOS, CONQUEST should be
 run non-self-consistently with a very high k-point density, using a
-well-converged input charge density.
+well-converged input charge density: set ``minE.SelfConsistent F`` and
+``General.LoadRho T``.
 
 Atom-projected DOS will be available soon.
 

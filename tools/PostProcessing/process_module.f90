@@ -200,7 +200,7 @@ contains
 
     use datatypes
     use numbers, ONLY: zero, RD_ERR, twopi, half, one, two, four, six
-    use local, ONLY: eigenvalues, n_bands_total, nkp, wtk, efermi
+    use local, ONLY: eigenvalues, n_bands_total, nkp, wtk, efermi, flag_total_iDOS
     use read, ONLY: read_eigenvalues, read_psi_coeffs
     use global_module, ONLY: nspin, n_DOS, E_DOS_min, E_DOS_max, sigma_DOS
     use units, ONLY: HaToeV
@@ -210,7 +210,7 @@ contains
     ! Local variables
     integer :: i_band, i_kp, i_spin, n_DOS_wid, n_band, n_min, n_max, i
     real(double) :: Ebin, dE_DOS, a, pf_DOS, spin_fac
-    real(double), dimension(nspin) :: total_electrons
+    real(double), dimension(nspin) :: total_electrons, iDOS_low
     real(double), dimension(:,:), allocatable :: total_DOS, iDOS
     real(double), dimension(:,:), allocatable :: occ
 
@@ -239,7 +239,6 @@ contains
     end if
     ! Spacing, width, prefactor
     dE_DOS = (E_DOS_max - E_DOS_min)/real(n_DOS-1,double)
-    write(*,fmt='(2x,"Dividing DOS into ",i5," bins of width ",f12.6," Ha")') n_DOS, dE_DOS
     ! Set sigma automatically
     if(abs(sigma_DOS)<RD_ERR) then
        sigma_DOS = four*dE_DOS
@@ -251,9 +250,13 @@ contains
     ! Adjust limits to allow full peak to be seen
     E_DOS_min = E_DOS_min - two*sigma_DOS
     E_DOS_max = E_DOS_max + two*sigma_DOS
+    ! Recalculate dE_DOS now that we've broadened it
+    dE_DOS = (E_DOS_max - E_DOS_min)/real(n_DOS-1,double)
+    write(*,fmt='(2x,"Dividing DOS into ",i5," bins of width ",f12.6," Ha")') n_DOS, dE_DOS
     n_DOS_wid = floor(six*sigma_DOS/dE_DOS) ! How many bins either side of state we consider
     pf_DOS = one/(sigma_DOS*sqrt(twopi))
     total_electrons = zero
+    iDOS_low = zero ! Integral of DOS to lowest energy bound
     ! Accumulate DOS over bands and k-points for each spin
     do i_spin = 1, nspin
        occ = zero
@@ -274,20 +277,29 @@ contains
                    total_electrons(i_spin) = total_electrons(i_spin) + occ(i_band,i_spin)*wtk(i_kp)*pf_DOS*exp(-half*a*a)
                    iDOS(i,i_spin) = iDOS(i,i_spin) + wtk(i_kp)*pf_DOS*exp(-half*a*a)
                 end do
+             else if(eigenvalues(i_band, i_kp, i_spin)<E_DOS_min) then
+                iDOS_low(i_spin) = iDOS_low(i_spin) + wtk(i_kp)
              end if
           end do
        end do
        ! Now integrate DOS
+       write(*,*) 'iDOS_low is ',iDOS_low
        do i = 2, n_DOS
           iDOS(i,i_spin) = iDOS(i,i_spin) + iDOS(i-1,i_spin)
        end do
     end do
     ! Include spin factor
     iDOS = iDOS*dE_DOS*spin_fac
+    if(flag_total_iDOS) then
+       do i_spin = 1, nspin
+          iDOS(:,i_spin) = iDOS(:,i_spin) + spin_fac*iDOS_low(i_spin)
+       end do
+    end if
     total_electrons = total_electrons*dE_DOS*spin_fac
     total_DOS = total_DOS*spin_fac
     if(nspin==1) then
-       write(*,fmt='(2x,"DOS integrates to ",f12.3," electrons")') total_electrons(1)
+       write(*,fmt='(2x,"DOS between ",f11.3," and ",f11.3," Ha integrates to ",f12.3," electrons")') &
+            E_DOS_min, E_DOS_max, total_electrons(1)
     else
        write(*,fmt='(2x,"Spin Up DOS integrates to ",f12.3," electrons")') total_electrons(1)
        write(*,fmt='(2x,"Spin Dn DOS integrates to ",f12.3," electrons")') total_electrons(2)
@@ -300,6 +312,11 @@ contains
        write(17,fmt='("# Spin ",I1)') i_spin
        write(17,fmt='("# Original Fermi-level: ",f12.5," eV")') HaToeV*efermi(i_spin)
        write(17,fmt='("# DOS shifted relative to Fermi-level")')
+       if(flag_total_iDOS) then
+          write(17,fmt='("#  Energy (eV)     DOS (/eV)    Total iDOS")')
+       else
+          write(17,fmt='("#  Energy (eV)     DOS (/eV)    Local iDOS")')
+       end if
        do i=1, n_DOS
           write(17,fmt='(3f14.5)') HaToeV*(E_DOS_min + dE_DOS*real(i-1,double)-efermi(i_spin)), &
                total_DOS(i,i_spin), iDOS(i,i_spin)
