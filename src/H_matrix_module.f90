@@ -180,6 +180,8 @@ contains
   !!   Changed matS, matKE, matNL and matNA to be spin_SF dependent
   !!  2019/01/31 16:00 nakata
   !!   Moved dump_matrix(NSmatrix) to sub:get_S_matrix
+  !!  2021/07/19 15:46 dave
+  !!   Removed writing out of charge density
   !! SOURCE
   !!
   subroutine get_H_matrix(rebuild_KE_NL, fixed_potential, electrons, &
@@ -217,8 +219,7 @@ contains
     use functions_on_grid,           only: atomfns, H_on_atomfns,       &
                                            gridfunctions
     use io_module,                   only: dump_matrix, dump_blips,     &
-                                           dump_charge, write_matrix,   &
-                                           dump_charge
+                                           write_matrix
     use dimens,                      only: n_my_grid_points
     use memory_module,               only: reg_alloc_mem,               &
                                            reg_dealloc_mem, type_dbl
@@ -238,7 +239,6 @@ contains
     use exx_io,                      only: exx_global_write
 !****lat>$
     use energy, only: local_ps_energy
-    use density_module,              only: flag_DumpChargeDensity
     
     implicit none
 
@@ -441,24 +441,6 @@ contains
           call dump_matrix("NKE_dn", matKE(2), inode)
        end if
     endif
-    !
-    !
-    ! dump charges if required
-    if (flag_DumpChargeDensity .or. iprint_SC > 2) then
-       if(nspin==1) then
-          allocate(rho_total(size), STAT=stat)
-          if (stat /= 0) call cq_abort("Error allocating rho_total: ", size)
-          call reg_alloc_mem(area_ops, size, type_dbl)
-          rho_total(:) = spin_factor * rho(:,1)
-          call dump_charge(rho_total, size, inode, spin=0)
-          deallocate(rho_total, STAT=stat)
-          if (stat /= 0) call cq_abort("Error deallocating rho_total")
-          call reg_dealloc_mem(area_ops, size, type_dbl)
-       else if (nspin == 2) then
-          call dump_charge(rho(:,1), size, inode, spin=1)
-          call dump_charge(rho(:,2), size, inode, spin=2)
-       end if
-    end if
     !
     !
     ! Store the new H matrix for cDFT

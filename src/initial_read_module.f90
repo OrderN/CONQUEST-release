@@ -798,7 +798,7 @@ contains
          restart_T,restart_X,flag_XLBOMD,flag_propagateX,              &
          flag_propagateL,flag_dissipation,integratorXL, flag_FixCOM,   &
          flag_exx, exx_alpha, exx_scf, exx_scf_tol, exx_siter,         &
-         flag_out_wf,flag_out_wf_by_kp,max_wf,out_wf,wf_self_con, flag_fire_qMD, &
+         flag_out_wf,max_wf,out_wf,wf_self_con, flag_fire_qMD, &
          flag_write_DOS, flag_write_projected_DOS, &
          flag_normalise_pDOS, flag_pDOS_angmom, flag_pDOS_lm, &
          E_DOS_min, E_DOS_max, sigma_DOS, n_DOS, E_wf_min, E_wf_max, flag_wf_range_Ef, &
@@ -1585,29 +1585,34 @@ contains
     flag_out_wf=fdf_boolean('IO.outputWF',.false.)
     if (flag_out_wf) then
        if (flag_diagonalisation .and. leqi(runtype,'static')) then
-          flag_out_wf_by_kp=fdf_boolean('IO.outputWF_by_kpoint',.false.)
           wf_self_con=.false.
           ! The user can either specify which bands explicitly
           max_wf=fdf_integer('IO.maxnoWF',0)
-          if(max_wf>0) allocate(out_wf(max_wf))
-          if (fdf_block('WaveFunctionsOut')) then
-             if(1+block_end-block_start<max_wf) &
-                  call cq_abort("Too few wf no in WaveFunctionsOut:"&
-                  ,1+block_end-block_start,max_wf)
-             do i=1,max_wf
-                read(unit=input_array(block_start+i-1),fmt=*) out_wf(i)
-             end do
-             call fdf_endblock
-          end if
-          ! Or specify an energy range
-          E_wf_min = fdf_double('IO.min_wf_E',zero)
-          E_wf_max = fdf_double('IO.max_wf_E',zero)
-          ! Is the range relative to Ef (T) or absolute (F)
-          flag_wf_range_Ef = fdf_boolean('IO.WFRangeRelative',.true.)
-          if(flag_wf_range_Ef.AND.abs(E_wf_min)<very_small.AND.abs(E_wf_max)<very_small) then
-             flag_out_wf = .false.
+          if(max_wf>0) then
+             allocate(out_wf(max_wf))
+             if (fdf_block('WaveFunctionsOut')) then
+                if(1+block_end-block_start<max_wf) &
+                     call cq_abort("Too few wf no in WaveFunctionsOut:"&
+                     ,1+block_end-block_start,max_wf)
+                do i=1,max_wf
+                   read(unit=input_array(block_start+i-1),fmt=*) out_wf(i)
+                end do
+                call fdf_endblock
+             else
+                call cq_abort("You specified bands with IO.maxnoWF but didn't give the WaveFunctionsOut block")
+             end if
              flag_wf_range_Ef = .false.
-             if(inode==ionode) write(io_lun,'(2x,"Setting IO.outputWF F as no bands range given")')
+          else
+             ! Or specify an energy range
+             E_wf_min = fdf_double('IO.min_wf_E',zero)
+             E_wf_max = fdf_double('IO.max_wf_E',zero)
+             ! Is the range relative to Ef (T) or absolute (F)
+             flag_wf_range_Ef = fdf_boolean('IO.WFRangeRelative',.true.)
+             if(flag_wf_range_Ef.AND.abs(E_wf_min)<very_small.AND.abs(E_wf_max)<very_small) then
+                flag_out_wf = .false.
+                flag_wf_range_Ef = .false.
+                if(inode==ionode) write(io_lun,'(2x,"Setting IO.outputWF F as no bands range given")')
+             end if
           end if
        else
           call cq_abort("Won't output WFs for Order(N) or non-static runs")
