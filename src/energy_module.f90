@@ -134,6 +134,9 @@ contains
   !!    Tidying up output for neutral atom
   !!   2018/05/24 19:00 nakata
   !!    Changed matKE, matNL and matNA to be spin_SF dependent
+  !!   2021/07/26 11:13 dave
+  !!    Removed output of hartree_energy_drho_atom_rho (now included
+  !!    in delta_E_hartree)
   !!  SOURCE
   !!
   subroutine get_energy(total_energy, printDFT, level)
@@ -263,7 +266,7 @@ contains
              if(flag_neutral_atom) then
                 write (io_lun, 1) en_conv*band_energy,     en_units(energy_units)
                 write (io_lun,33) en_conv*hartree_energy_drho,  en_units(energy_units)
-                write (io_lun,36) en_conv*hartree_energy_drho_atom_rho,  en_units(energy_units)
+                !write (io_lun,36) en_conv*hartree_energy_drho_atom_rho,  en_units(energy_units)
                 write (io_lun, 4) en_conv*(xc_energy+exx_energy), en_units(energy_units)
                 write (io_lun,23) en_conv*x_energy,               en_units(energy_units)
                 write (io_lun,24) en_conv*(xc_energy-x_energy),   en_units(energy_units)
@@ -272,7 +275,7 @@ contains
                 write (io_lun, 7) en_conv*nl_energy,       en_units(energy_units)
                 write (io_lun, 8) en_conv*kinetic_energy,  en_units(energy_units)
                 write (io_lun,39) en_conv*screened_ion_interaction_energy,    en_units(energy_units)
-                write (io_lun,11) en_conv*( -hartree_energy_drho), en_units(energy_units)
+                write (io_lun,11) en_conv*delta_E_hartree, en_units(energy_units)
                 write (io_lun,12) en_conv*delta_E_xc,      en_units(energy_units)
              else
                 write (io_lun, 1) en_conv*band_energy,     en_units(energy_units)
@@ -409,7 +412,7 @@ contains
 24  format(10x,'C only  Energy                   : ',f25.15,' ',a2)
 33  format(10x,'Hartree Energy (delta rho)       : ',f25.15,' ',a2)
 35  format(10x,'Neutral Atom  Energy             : ',f25.15,' ',a2)
-36  format(10x,'Hartree Energy (drho-atom rho)   : ',f25.15,' ',a2)
+!36  format(10x,'Hartree Energy (drho-atom rho)   : ',f25.15,' ',a2)
 39  format(10x,'Screened Ion-Ion Energy          : ',f25.15,' ',a2)
 
   end subroutine get_energy
@@ -582,7 +585,7 @@ contains
           !
           write (io_lun, 6) en_conv *    band_energy,  en_units(energy_units)
           if(flag_neutral_atom) then
-             write (io_lun,67) en_conv * hartree_energy_drho_input,  en_units(energy_units)
+             write (io_lun,67) en_conv * hartree_energy_drho,  en_units(energy_units)
              write (io_lun,68) en_conv * screened_ion_interaction_energy,  en_units(energy_units)
           else
              write (io_lun, 7) en_conv * hartree_energy_total_rho,  en_units(energy_units)

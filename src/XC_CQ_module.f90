@@ -33,6 +33,8 @@
 !!    Added off-diagonal elements of XC stress tensor contributions
 !!   2021/07/22 14:26 dave
 !!    Added get_xc_energy routine (and associated)
+!!   2021/07/26 11:53 dave
+!!    Removed redundant LDA_PW92 routine
 !! SOURCE
 !!
 module XC
@@ -637,174 +639,6 @@ contains
     return
   end subroutine get_GTH_xc_potential
   !!***
-
-
-  !!****f* XC_module/get_xc_potential_LDA_PW92 (Obsolete)*
-  !!
-  !!  NAME
-  !!   get_xc_potential_LDA_PW92 (Obsolete)
-  !!  USAGE
-  !!
-  !!  PURPOSE
-  !!   Calculates the exchange-correlation potential on the grid within
-  !!   LDA using the Ceperley-Alder interpolation formula. It also
-  !!   calculates the total exchange-correlation energy.
-  !!
-  !!   Note that this is the Perdew-Wang parameterisation of the
-  !!   Ceperley-Alder results for a homogeneous electron gas, as
-  !!   described in Phys. Rev. B 45, 13244 (1992), with Ceperley-Alder
-  !!   in Phys. Rev. Lett. 45, 566 (1980)
-  !!  INPUTS
-  !!
-  !!  USES
-  !!
-  !!  AUTHOR
-  !!   A.S. Torralba
-  !!  CREATION DATE
-  !!   01/11/05
-  !!  MODIFICATION HISTORY
-  !!   2008/03/03 18:32 dave
-  !!    Removed dsqrt
-  !!   2011/03/22 L.Tong
-  !!    Removed local definition of third, it is now defined in numbers
-  !!    module Changed 1 to one in the log() functions
-  !!   2012/04/03 L.Tong
-  !!   - Added optional variables x_epsilon and c_epsilon so that if
-  !!     present they will store the output for the exchange and
-  !!     correlation parts of xc_epsilon respectively
-  !!   2012/04/25 L.Tong
-  !!   *** THIS SUBROUTINE IS NOW OBSOLETE, USE THE LSDA VERSION ***
-  !!  SOURCE
-  !!
-  subroutine get_xc_potential_LDA_PW92(density, xc_potential,       &
-                                       xc_epsilon, xc_energy_total, &
-                                       size, x_epsilon, c_epsilon)
-
-    use datatypes
-    use numbers
-    use GenComms, only: gsum
-    use dimens,   only: grid_point_volume, n_my_grid_points
-
-    implicit none
-
-    ! Passed variables
-    integer,                    intent(in)  :: size
-    real(double),               intent(out) :: xc_energy_total
-    real(double), dimension(:), intent(in)  :: density
-    real(double), dimension(:), intent(out) :: xc_epsilon, xc_potential
-    ! optional
-    real(double), dimension(:), intent(out), optional :: x_epsilon, c_epsilon
-
-    ! Local variables
-    integer      :: n
-    real(double) :: prefactor, postfactor, denominator, &
-                    e_correlation, e_exchange,          &
-                    rcp_rs, rho, rs, sq_rs,             &
-                    v_correlation, v_exchange,          &
-                    delta_prefactor, delta_postfactor
-
-
-    ! From Table I, Phys. Rev. B 45, 13244 (1992), for reference
-    real(double), parameter :: alpha  = 1.0421234_double
-    real(double), parameter :: alpha1 = 0.21370_double
-    real(double), parameter :: beta1  = 7.5957_double
-    real(double), parameter :: beta2  = 3.5876_double
-    real(double), parameter :: beta3  = 1.6382_double
-    real(double), parameter :: beta4  = 0.49294_double
-    real(double), parameter :: A      = 0.031091_double
-
-    ! Precalculated constants
-    real(double), parameter :: k00 = 1.611991954_double     ! (4*pi/3)**(1/3)
-    real(double), parameter :: k01 = -0.458165347_double    ! -3/(2*pi*alpha)
-    real(double), parameter :: k02 = -0.062182_double       ! -2*A
-    real(double), parameter :: k03 = -0.0132882934_double   ! -2*A*alpha1
-    real(double), parameter :: k04 = 0.4723158174_double    ! 2*A*beta1
-    real(double), parameter :: k05 = 0.2230841432_double    ! 2*A*beta2
-    real(double), parameter :: k06 = 0.1018665524_double    ! 2*A*beta3
-    real(double), parameter :: k07 = 0.03065199508_double   ! 2*A*beta4
-    real(double), parameter :: k08 = -0.008858862267_double ! 2*k03/3
-    real(double), parameter :: k09 = 0.0787193029_double    ! k04/6
-    real(double), parameter :: k10 = 0.074361381067_double  ! k05/3
-    real(double), parameter :: k11 = 0.0509332762_double    ! k06/2
-    real(double), parameter :: k12 = 0.0204346633867_double ! 2*k07/3
-
-    xc_energy_total = zero
-    if (present(x_epsilon)) x_epsilon = zero
-    if (present(c_epsilon)) c_epsilon = zero
-
-    do n = 1, n_my_grid_points ! loop over grid pts and store potl on each
-       rho = spin_factor * density(n)  ! DRB Added to correct for lack of spin 2018/06/11
-
-       if (rho > RD_ERR) then ! Find radius of hole
-          rcp_rs = k00 * ( rho**third )
-       else
-          rcp_rs = zero
-       end if
-
-       ! ENERGY
-
-       ! Exchange
-       e_exchange = k01 * rcp_rs
-       if (present(x_epsilon)) x_epsilon(n) = e_exchange
-
-       ! Correlation
-       if (rcp_rs > zero) then
-          rs = one/rcp_rs
-       else
-          rs = zero
-       end if
-       sq_rs = sqrt(rs)
-
-       prefactor = k02 + k03*rs
-       denominator = sq_rs * ( k04 + sq_rs * ( k05 + sq_rs * ( k06 + k07 * sq_rs)))
-       if (denominator > zero) then
-          postfactor = log( one + one/denominator )
-       else
-          postfactor = 0
-       end if
-
-       e_correlation = prefactor * postfactor
-       if (present(c_epsilon)) c_epsilon(n) = e_correlation
-
-       ! Both exchange and correlation
-
-       xc_epsilon(n)   = e_exchange + e_correlation
-       xc_energy_total = xc_energy_total + xc_epsilon(n)*rho
-
-       ! POTENTIAL
-
-       ! Exchange
-
-       v_exchange = four_thirds * e_exchange
-
-       ! Correlation
-       !   (derivative of rho * e_correlation)
-
-       ! NOTE: delta_prefactor is actually the derivative of rho*prefactor
-       !       delta_postfactor is rho times the derivative of postfactor
-       delta_prefactor  = k02 + k08*rs
-       if (sq_rs > zero) then
-          delta_postfactor = &
-               sq_rs * (k09 + sq_rs*(k10 + sq_rs*(k11 + k12 * sq_rs))) / &
-                       (denominator * (1 + denominator))
-       else
-          delta_postfactor = 0
-       end if
-
-       v_correlation = delta_prefactor * postfactor + prefactor * delta_postfactor
-
-       xc_potential(n) = v_exchange + v_correlation
-
-
-    end do ! do n_my_grid_points
-    call gsum(xc_energy_total)
-    ! and 'integrate' the energy over the volume of the grid point
-    xc_energy_total = xc_energy_total * grid_point_volume
-
-    return
-  end subroutine get_xc_potential_LDA_PW92
-  !!***
-
 
   !!****f* XC_modue/Vxc_of_r_LSDA_PW92 *
   !! PURPOSE
@@ -1943,7 +1777,7 @@ contains
     real(double), dimension(size,nspin) :: density
 
     ! Local variables
-    real(double) :: loc_x_energy, exx_tmp
+    real(double) :: exx_tmp
 
     select case(flag_functional_type)
     case (functional_lda_pz81)
@@ -2101,7 +1935,7 @@ contains
        else
           e_correlation = zero
        end if
-       xc_energy       = xc_energy  + (e_exchange + e_correlation) * spin_factor * density(n)  ! DRB Added to correct for lack of spin 2018/06/11
+       xc_energy = xc_energy + (e_exchange + e_correlation) * spin_factor * density(n)
     end do ! do n_my_grid_points
     call gsum(xc_energy)
     ! and 'integrate' the energy over the volume of the grid point

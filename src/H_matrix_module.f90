@@ -1739,6 +1739,8 @@ contains
   !!  CREATION DATE
   !!   2021/07/22
   !!  MODIFICATION HISTORY
+  !!   2021/07/26 10:54 dave
+  !!    Added local PS for nonNA runs, tidied output
   !!  SOURCE
   !!
   subroutine get_output_energies(rho, size)
@@ -1746,7 +1748,7 @@ contains
     use datatypes
     use numbers
     use global_module,          only: flag_pcc_global, nspin, spin_factor, &
-                                      flag_neutral_atom, area_ops
+                                      flag_neutral_atom, area_ops, iprint_ops
     use hartree_module,         only: get_hartree_energy
     use XC,                     only: get_xc_energy
     use energy,                 only: hartree_energy_total_rho,  &
@@ -1757,7 +1759,7 @@ contains
     use maxima_module,          only: maxngrid
     use memory_module,          only: reg_alloc_mem,              &
                                       reg_dealloc_mem, type_dbl
-    use GenComms,               only: cq_abort, gsum
+    use GenComms,               only: cq_abort, gsum, inode, ionode
     use pseudopotential_common, only: pseudopotential, flag_neutral_atom_projector
     use dimens,                 only: grid_point_volume, n_my_grid_points
     use GenBlas,                only: dot
@@ -1788,13 +1790,24 @@ contains
                dot(n_my_grid_points, pseudopotential, 1, density_wk(:,1), 1) * &
                grid_point_volume
           call gsum(local_ps_energy)
+          if(inode==ionode .and. iprint_ops>3) &
+               write(io_lun,fmt='(2x,"Output density neutral atom energy (delta rho): ",f19.12)') local_ps_energy
        end if
        hartree_energy_drho_input = hartree_energy_drho
        density_wk(:,1) = density_wk(:,1) - density_atom(:)
        call get_hartree_energy(density_wk, maxngrid, hartree_energy_drho)
-       write(io_lun,fmt='(2x,"Output density Hartree energy (delta rho): ",f19.12)') hartree_energy_drho
+       if(inode==ionode .and. iprint_ops>3) &
+            write(io_lun,fmt='(2x,"Output density Hartree energy (delta rho): ",f19.12)') hartree_energy_drho
     else
+       local_ps_energy = &
+            dot(n_my_grid_points, pseudopotential, 1, density_wk(:,1), 1) * &
+            grid_point_volume
+       call gsum(local_ps_energy)
+       if(inode==ionode .and. iprint_ops>3) &
+            write(io_lun,fmt='(2x,"Output density local PS energy (delta rho): ",f19.12)') local_ps_energy
        call get_hartree_energy(density_wk, maxngrid, hartree_energy_total_rho)
+       if(inode==ionode .and. iprint_ops>3) &
+            write(io_lun,fmt='(2x,"Output density Hartree energy (delta rho): ",f19.12)') hartree_energy_drho
     end if
     !  
     ! Construct XC energy of density
@@ -1807,7 +1820,8 @@ contains
     else
        call get_xc_energy(rho, xc_energy, size)
     end if
-    write(io_lun,fmt='(2x,"Output density XC energy: ",f19.12)') xc_energy
+    if(inode==ionode .and. iprint_ops>3) &
+         write(io_lun,fmt='(2x,"Output density XC energy: ",f19.12)') xc_energy
     deallocate(density_wk)
     call reg_dealloc_mem(area_ops, size*nspin, type_dbl)
   end subroutine get_output_energies

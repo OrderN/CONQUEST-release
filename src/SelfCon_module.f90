@@ -1546,6 +1546,8 @@ contains
   !!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
   !!   2020/08/24 11:21 dave
   !!    Add option to allow LFD at each SCF step
+  !!   2021/07/26 11:49 dave
+  !!    Fix module use for get_H_matrix
   !!  SOURCE
   !!
   subroutine get_new_rho(record, reset_L, fixed_potential, vary_mu,  &
@@ -1558,7 +1560,7 @@ contains
     use DMMin,             only: FindMinDM
     use global_module,     only: iprint_SC, atomf, flag_perform_cDFT, &
                                  nspin, spin_factor, flag_diagonalisation, flag_LFD, flag_Multisite
-    use H_matrix_module,   only: get_output_energies
+    use H_matrix_module,   only: get_H_matrix, get_output_energies
     use S_matrix_module,   only: get_S_matrix
     !use DiagModule,        only: diagon
     use energy,            only: get_energy, flag_check_DFT
@@ -1599,7 +1601,7 @@ contains
        call initial_SFcoeff(.false.,.false.,fixed_potential,.false.)
        call get_S_matrix(inode, ionode, build_AtomF_matrix=.false.)
        call get_H_matrix(.false., fixed_potential, electrons, rhoin, &
-            size, backtrace_level,.false.)
+            size, level=backtrace_level,build_AtomF_matrix=.false.)
     end if
     if (flag_perform_cDFT) then
        call cdft_min(reset_L, fixed_potential, vary_mu, &
