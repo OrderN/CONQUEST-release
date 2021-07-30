@@ -42,6 +42,8 @@
 !!   2021/07/23 16:46 dave
 !!    Changes to make the DFT energy correct, in particular creating hartree_energy_drho_input which
 !!    stores the value of hartree_energy_drho made from the input charge density when we have check_DFT T
+!!   2021/07/30 12:15 dave
+!!    Remove check_DFT
 !!  SOURCE
 !!
 module energy
@@ -78,8 +80,6 @@ module energy
   real(double) :: hartree_energy_drho_atom_rho ! Energy for rho_atom in drho potential
   real(double) :: screened_ion_interaction_energy
   
-  logical :: flag_check_DFT = .false.
-
   ! To avoid cyclic dependancy with DiagModule, the local variables here record information needed
   ! from DiagModule
   logical :: flag_check_Diag = .false.

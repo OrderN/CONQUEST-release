@@ -1565,7 +1565,7 @@ contains
     use H_matrix_module,   only: get_H_matrix, get_output_energies
     use S_matrix_module,   only: get_S_matrix
     !use DiagModule,        only: diagon
-    use energy,            only: get_energy, flag_check_DFT
+    use energy,            only: get_energy
     use functions_on_grid, only: atomfns, allocate_temp_fn_on_grid, &
                                  free_temp_fn_on_grid
     use density_module,    only: get_electronic_density
