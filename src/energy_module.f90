@@ -137,6 +137,9 @@ contains
   !!   2021/07/26 11:13 dave
   !!    Removed output of hartree_energy_drho_atom_rho (now included
   !!    in delta_E_hartree)
+  !!   2021/07/28 10:55 dave
+  !!    Change behaviour to print Harris etc always, and DFT only if
+  !!    printDFT = T
   !!  SOURCE
   !!
   subroutine get_energy(total_energy, printDFT, level)
@@ -181,15 +184,6 @@ contains
     real(double), dimension(nspin) :: electrons
     real(double) :: electrons_tot
 
-    ! For Now,
-    ! If printDFT does not exist (as in the previous version),
-    !  DFT energy will be printed out if iprint_gen >= 2
-    !
-    ! If it exists,
-    !  printDFT = .true.  -> prints out only DFT energy
-    !  printDFT = .false. -> prints out Energies except DFT energy
-    !
-
 !****lat<$
     if (       present(level) ) backtrace_level = level+1
     if ( .not. present(level) ) backtrace_level = -10
@@ -200,7 +194,6 @@ contains
     print_DFT    = .false.
     print_Harris = .true.
     if (present(printDFT)) then
-       if (printDFT)     print_Harris = .false.
        print_DFT = printDFT
     else
        if (iprint_gen >= 2) print_DFT = .true.

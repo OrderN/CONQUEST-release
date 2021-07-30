@@ -121,6 +121,8 @@ contains
   !!   2020/08/24 11:15 dave
   !!    Test implementation for performing LFD at each SCF step alongside
   !!    full SCF for each LFD
+  !!   2021/07/30 10:20 dave
+  !!    Remove extraneous get_energy call in vdW if clause
   !!  SOURCE
   !!
   !subroutine get_E_and_F(fixed_potential, vary_mu, total_energy, &
@@ -307,7 +309,8 @@ contains
     end if
     ! calculate vdW energy correction to xc energy
     if (flag_vdWDFT) then
-       call get_energy(total_energy)
+       ! I don't think that this should be here DRB 2021/07/28
+       !call get_energy(total_energy)
        if (inode == ionode) &
             write (io_lun, '(/,10x,a,/)') &
                    'Calculating van der Waals correction...'
@@ -325,25 +328,6 @@ contains
                 (total_energy + vdW_energy_correction) * en_conv, &
                 en_units(energy_units)
        end if
-! LT_debug 2012/04/30 begin
-!        flag_vdWDFT_slow = .false.
-!        if (flag_vdWDFT_slow) then
-!           if (inode == ionode) &
-!                write (io_lun, '(/,8x,a,/)') &
-!                      'Calculating van der Waals correction the slow way...'
-!           call vdWXC_energy_slow(density, vdW_xc_energy)
-!           vdW_energy_correction = vdW_xc_energy - xc_energy
-!           if (inode == ionode) then
-!              write (io_lun, '(10x,a,f25.15," ",a2)') &
-!                    'van der Waals correction to XC-energy : ', &
-!                    vdW_energy_correction * en_conv, en_units(energy_units)
-!              write (io_lun, '(10x,a,f25.15," ",a2)') &
-!                    'Harris-Foulkes Energy after vdW correction : ', &
-!                    (total_energy + vdW_energy_correction) * en_conv, &
-!                    en_units(energy_units)
-!           end if
-!        end if
-! LT_debug 2012/04/30 end
     end if
 
 !****lat<$

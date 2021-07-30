@@ -1548,6 +1548,8 @@ contains
   !!    Add option to allow LFD at each SCF step
   !!   2021/07/26 11:49 dave
   !!    Fix module use for get_H_matrix
+  !!   2021/07/28 10:13 dave
+  !!    Correctly calculate DFT energy (Ha, XC and local contributions use output density)
   !!  SOURCE
   !!
   subroutine get_new_rho(record, reset_L, fixed_potential, vary_mu,  &
@@ -1621,13 +1623,6 @@ contains
                                    dontM1,  dontM2, dontM3, dontM4,  &
                                    dontphi, dontE, level=backtrace_level)
        end if
-       ! Get total energy
-       if (flag_check_DFT) then
-          call get_energy(total_energy=total_energy,printDFT=.false., &
-               level=backtrace_level)
-       else
-          call get_energy(total_energy=total_energy,level=backtrace_level)
-       endif
     end if ! if (flag_perform_cDFT) then
 
     ! And get the output density
@@ -1638,13 +1633,10 @@ contains
     call start_timer(tmr_std_chargescf)
     call free_temp_fn_on_grid(temp_supp_fn)
 
-    !For DFT energy with charge density constructed by density matrix --
-    !TM Nov2007
-    if (flag_check_DFT) then
-       ! Find Hartree, XC and local PS (i.e. NA) energies with output density
-       call get_output_energies(rhoout, size)
-       call get_energy(total_energy, flag_check_DFT, backtrace_level)
-    endif
+    ! Now build DFT energy from output charge
+    ! Find Hartree, XC and local PS (i.e. NA) energies with output density
+    call get_output_energies(rhoout, size)
+    call get_energy(total_energy, .true., backtrace_level) ! Output DFT energy
 
 !****lat<$
     call stop_backtrace(t=backtrace_timer,who='get_new_rho',echo=.true.)
