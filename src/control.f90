@@ -2305,17 +2305,19 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
        if (myid == 0 .and. iprint_MD > 2) &
             write(io_lun,fmt='(2x,"SQNM iteration ",i4)') iter
        ! Line search
-       call single_step(cg, energy0, energy1, fixed_potential, vary_mu, energy1)
+       call single_step(cg, energy0, energy1, fixed_potential, vary_mu)
        if(energy1>energy0) then
           if(inode==ionode.AND.iprint_MD>1) write(io_lun,fmt='(4x,"Energy rise: resetting history")')
           do i=1,ni_in_cell
-             cg_new(:,i) = -tot_force(:,i) ! Search downhill
+             cg_new(:,i) = forceStore(:,i,npmod) ! Revert force
+             jj = id_glob(i)
+             cg(:,i) = -cg_new(:,jj) ! Search downhill
           end do
-          !call single_step(cg, energy0, energy1, fixed_potential, vary_mu, energy1)
+          call single_step(cg, energy0, energy1, fixed_potential, vary_mu)
+          if(energy1>energy0) call cq_abort("Energy rise twice in succession: check SCF and other tolerances")
           npmod = 1
           iter_loc = 0
           alpha = half*alpha
-          iter = iter - 1
        else
           ! Update stored position difference and force difference
           do i=1,ni_in_cell
@@ -2481,7 +2483,6 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
           deallocate(mod_dr,Sij,lambda,omega)
           if (.not. done) call check_stop(done, iter)
           if(done) exit
-          if (.not. done) call check_stop(done, iter)
           dE = energy0 - energy1
           energy0 = energy1
        end if ! Energy has gone down

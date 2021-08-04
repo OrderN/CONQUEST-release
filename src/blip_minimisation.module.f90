@@ -30,6 +30,7 @@
 !!
 module blip_minimisation
 
+  use datatypes
   use global_module,          only: io_lun, area_basis
   use timer_module,           only: start_timer, stop_timer
   use timer_stdclocks_module, only: tmr_std_basis, tmr_std_allocation
@@ -37,6 +38,7 @@ module blip_minimisation
 
   implicit none
 
+  real(double), save :: dE_blip
 !!***
 
 contains
@@ -371,6 +373,7 @@ contains
                              inode)
        ! Find change in energy for convergence
        diff = total_energy_last - total_energy_0
+       dE_blip = diff
        if (abs(diff / total_energy_0) <= energy_tolerance) then
           if (inode == ionode) &
                write (io_lun, 18) total_energy_0 * en_conv, &

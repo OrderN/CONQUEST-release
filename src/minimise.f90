@@ -28,6 +28,8 @@
 !!    Added timers
 !!   2015/06/10 15:48 cor & dave
 !!    Wavefunction output
+!!   2021/08/02 14:48 dave
+!!    Introduced dE_elec_opt for comparison to structural optimisation
 !!  SOURCE
 !!
 module minimise
@@ -44,6 +46,7 @@ module minimise
   integer      :: n_L_iterations, n_support_iterations
   real(double) :: L_tolerance, sc_tolerance, energy_tolerance, &
                   expected_reduction
+  real(double) :: dE_elec_opt
 
   ! Area identification
   integer, parameter, private :: area = 6
@@ -121,18 +124,19 @@ contains
   !!   2020/08/24 11:15 dave
   !!    Test implementation for performing LFD at each SCF step alongside
   !!    full SCF for each LFD
+  !!   2021/08/02 14:53 dave
+  !!    Add dE_elec_opt as change in energy in highest level electronic optimisation
+  !!    for comparison with dE from structural optimisation
   !!  SOURCE
   !!
-  !subroutine get_E_and_F(fixed_potential, vary_mu, total_energy, &
-  !                       find_forces, write_forces)
   subroutine get_E_and_F(fixed_potential, vary_mu, total_energy, &
                          find_forces, write_forces, iter, level)
 
     use datatypes
     use force_module,      only: force
-    use DMMin,             only: FindMinDM
+    use DMMin,             only: FindMinDM, dE_DMM
     use SelfCon,           only: new_SC_potl, atomch_output,           &
-                                 get_atomic_charge
+                                 get_atomic_charge, dE_SCF
     use global_module,     only: flag_vary_basis,                      &
                                  flag_self_consistent, flag_basis_set, &
                                  blips, PAOs, IPRINT_TIME_THRES1,      &
@@ -141,11 +145,11 @@ contains
                                  flag_LmatrixReuse,McWFreq,            &
                                  flag_multisite,                       &
                                  io_lun, flag_out_wf, wf_self_con, flag_write_DOS, &
-                                 flag_diagonalisation, nspin
+                                 flag_diagonalisation, nspin, flag_LFD
     use energy,            only: get_energy, xc_energy, final_energy
     use GenComms,          only: cq_abort, inode, ionode
-    use blip_minimisation, only: vary_support
-    use pao_minimisation,  only: vary_pao, pulay_min_pao, LFD_SCF
+    use blip_minimisation, only: vary_support, dE_blip
+    use pao_minimisation,  only: vary_pao, pulay_min_pao, LFD_SCF, dE_PAO
     use timer_module
     use input_module,      only: leqi
     use vdWDFT_module,     only: vdWXC_energy, vdWXC_energy_slow
@@ -207,13 +211,17 @@ contains
       endif
     endif
 
+    dE_DMM = zero
+    dE_SCF = zero
+    dE_PAO = zero
+    dE_blip = zero
     ! Start timing the energy calculation
     call start_timer(tmr_l_energy, WITH_LEVEL)
     ! Now choose what we vary
-    if (.NOT.flag_LFD_nonSCF) then ! Vary everything, this flag is only for PAO-based multi-site SFs
+    if (flag_Multisite .and. (.NOT.flag_LFD_nonSCF)) then ! Vary everything, PAO-based multi-site SFs
        ! minimise by repeating LFD with updated SCF density if flag set
-       if(.NOT.flag_mix_LFD_SCF) call LFD_SCF(fixed_potential, vary_mu, n_L_iterations, L_tolerance, &
-                         sc_tolerance, expected_reduction, total_energy, density)
+       if(flag_LFD .and. (.NOT.flag_mix_LFD_SCF)) call LFD_SCF(fixed_potential, vary_mu, &
+            n_L_iterations, L_tolerance, sc_tolerance, expected_reduction, total_energy, density)
        ! Numerical optimisation subsequently 
        if (flag_vary_basis) then
           if (UsePulay) then
@@ -227,6 +235,12 @@ contains
                            sc_tolerance, energy_tolerance,        &
                            total_energy, expected_reduction)
           end if
+          dE_elec_opt = dE_PAO
+       else ! Or SCF if necessary
+          call new_SC_potl(.false., sc_tolerance, reset_L,           &
+               fixed_potential, vary_mu, n_L_iterations, &
+               L_tolerance, total_energy, backtrace_level)
+          dE_elec_opt = dE_SCF
        endif
     else if (flag_vary_basis) then ! Vary everything: DM, charge density, basis set
        if (flag_basis_set == blips) then
@@ -234,6 +248,7 @@ contains
                             vary_mu, n_L_iterations, L_tolerance,  &
                             sc_tolerance, energy_tolerance,        &
                             total_energy, expected_reduction)
+          dE_elec_opt = dE_blip
        else if (flag_basis_set == PAOs) then
           if (flag_multisite .and. flag_LFD_NonSCF) then
              if (inode==ionode) write(io_lun,'(/3x,A/)') &
@@ -255,6 +270,7 @@ contains
                            sc_tolerance, energy_tolerance,        &
                            total_energy, expected_reduction)
           end if
+          dE_elec_opt = dE_PAO
        else
           call cq_abort("get_E_and_F: basis set undefined: ", &
                         flag_basis_set)
@@ -263,9 +279,11 @@ contains
        call new_SC_potl(.false., sc_tolerance, reset_L,           &
                         fixed_potential, vary_mu, n_L_iterations, &
                         L_tolerance, total_energy, backtrace_level)
+       dE_elec_opt = dE_SCF
     else ! Ab initio TB: vary only DM
        call FindMinDM(n_L_iterations, vary_mu, L_tolerance, &
                       reset_L, .false., backtrace_level)
+       dE_elec_opt = dE_DMM
        call get_energy(total_energy, level=backtrace_level)
     end if
     ! Once ground state is reached, if we are doing deltaSCF, perform excitation
@@ -385,7 +403,9 @@ contains
 !****lat<$
     call stop_backtrace(t=backtrace_timer,who='get_E_and_F',echo=.true.)
 !****lat>$
-
+    if(inode==ionode) &
+         write(io_lun,fmt='(4x,"Change in energy during last step of electronic optimisation: ",e12.5)') &
+         dE_elec_opt
     return
   end subroutine get_E_and_F
   !!***
