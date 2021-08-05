@@ -64,6 +64,9 @@
 !!    Changed function calls to FindMinDM
 !!   2019/12/30 tsuyoshi
 !!    Introduced n_dumpSCF for dumping Kmatrix2.i99.p*****
+!!   2021/07/29 nakata
+!!    Modified subroutine:get_atomic_charge for nlm-resolved atomic charges.
+!!    Added flags: flag_atomch_nlm, flag_atomch_lm, flag_atomch_l.
 !!  SOURCE
 !!
 module SelfCon
@@ -97,6 +100,9 @@ module SelfCon
   logical, parameter :: MixLin = .true.
   integer :: n_exact
   logical :: atomch_output
+  logical :: flag_atomch_nlm
+  logical :: flag_atomch_lm
+  logical :: flag_atomch_l
 
   logical, save :: flag_Kerker
   logical, save :: flag_wdmetric
@@ -1679,93 +1685,339 @@ contains
   !!   - Rewrote spin implementation
   !!   2018/11/13 17:30 nakata
   !!   - Changed matS to be spin_SF dependent
-  !!   2019/11/21 nakata 
+  !!   2019/11/21 nakata
   !!   - Introduced spin-up/down atomic charge
   !!   2019/11/21 10:51 dave
   !!   - Tweak to use gsum for 2D array for charge
+  !!   2020/09/03 22:00 nakata
+  !!   - Added nlm-resolved atomic charges
+  !!
   subroutine get_atomic_charge()
 
     use datatypes
     use numbers
     use global_module,  only: ni_in_cell, area_SC, nspin, spin_factor, &
-                              flag_SpinDependentSF
+                              flag_SpinDependentSF, species_glob, sf, atomf
     use primary_module, only: bundle
-    use matrix_data,    only: Srange
-    use mult_module,    only: matK, matS, atom_trace, matrix_sum, &
+    use matrix_data,    only: Srange, aSa_range, Hrange
+    use mult_module,    only: matK, matS, matKatomf, matSatomf, SF_to_AtomF_transform, &
+                              atom_trace, matrix_sum, &
                               allocate_temp_matrix, free_temp_matrix
     use atoms,          only: atoms_on_node
     use GenComms,       only: gsum, inode, ionode, cq_abort
     use input_module,   only: io_assign, io_close
-    use memory_module,  only: reg_alloc_mem, reg_dealloc_mem, type_dbl
+    use memory_module,  only: reg_alloc_mem, reg_dealloc_mem, type_dbl, type_int
+    use species_module, ONLY: npao_species
+    use pao_format
 
     implicit none
 
     ! Local variables
-    integer :: chun, stat, n,l, glob_ind, spin, spin_SF
-    integer, dimension(nspin) :: temp_mat
-    real(double), dimension(:,:), allocatable :: charge, node_charge
+    integer :: chun, stat, glob_ind, spin, spin_SF, ispin, &
+               natom_node, iatom, ipao, ll, mm, nn, &
+               npao, npao_node, inlm_glob, inlm_node, atom_spec
+    integer :: temp_mat
+    integer, dimension(:), allocatable :: ist_nlm
+    real(double), dimension(:,:), allocatable :: charge, node_charge, charge_nlm, node_charge_nlm
+    real(double), dimension(2) :: charge_ll
+    real(double), dimension(7,2) :: charge_mm  ! up to f-orbital(m=7)
+    logical :: flag_resolved
 
     call start_timer(tmr_std_chargescf)
+
+    flag_resolved = .false.
+    if (flag_atomch_l .or. flag_atomch_lm .or. flag_atomch_nlm)  flag_resolved = .true.
+
+    if (flag_resolved) then
+       if (atomf.ne.sf) then
+          do ispin = 1, nspin
+             call SF_to_AtomF_transform(matK(ispin), matKatomf(ispin), ispin, Hrange)
+          enddo
+       endif
+    endif
+
     ! prepare arrays and suitable matrices
-    l = bundle%n_prim
-    call start_timer(tmr_std_allocation)
-    allocate(charge(ni_in_cell,nspin), STAT=stat)
-    if (stat /= 0) call cq_abort("get_atomic_charge: Error alloc mem: ", ni_in_cell)
-    call reg_alloc_mem(area_SC, ni_in_cell, type_dbl)
-    allocate(node_charge(l,nspin), STAT=stat)
-    if (stat /= 0) &
-         call cq_abort("Error allocating charge arrays in get_atomic_charge.", &
-                       stat)
-    call reg_alloc_mem(area_SC, nspin * l, type_dbl)
-    call stop_timer(tmr_std_allocation)
+    if (flag_resolved) then
+       call start_timer(tmr_std_allocation)
+       allocate(ist_nlm(ni_in_cell), STAT=stat)
+       if (stat /= 0) call cq_abort("get_atomic_charge_nlm: Error alloc mem: ", ni_in_cell)
+       call reg_alloc_mem(area_SC, ni_in_cell, type_int)
+       call stop_timer(tmr_std_allocation)
+
+       npao = 0
+       ist_nlm(:) = 0
+       do iatom = 1, ni_in_cell
+          ist_nlm(iatom) = npao + 1
+          npao = npao + npao_species(species_glob(iatom))
+       enddo
+       npao_node = 0
+       do iatom = 1, bundle%n_prim
+          glob_ind = atoms_on_node(iatom, inode)
+          npao_node = npao_node + npao_species(species_glob(glob_ind))
+       enddo
+
+       call start_timer(tmr_std_allocation)
+       allocate(charge_nlm(npao,nspin), STAT=stat)
+       if (stat /= 0) call cq_abort("get_atomic_charge: Error alloc mem: ", npao*nspin)
+       call reg_alloc_mem(area_SC, npao*nspin, type_dbl)
+       allocate(node_charge_nlm(npao_node,nspin), STAT=stat)
+       if (stat /= 0) &
+          call cq_abort("Error allocating charge arrays in get_atomic_charge.", npao_node*nspin)
+       call reg_alloc_mem(area_SC, npao_node*nspin, type_dbl)
+       temp_mat = allocate_temp_matrix(aSa_range, 0)
+       call stop_timer(tmr_std_allocation)
+    else
+       natom_node = bundle%n_prim
+       call start_timer(tmr_std_allocation)
+       allocate(charge(ni_in_cell,nspin), STAT=stat)
+       if (stat /= 0) call cq_abort("get_atomic_charge: Error alloc mem: ", ni_in_cell)
+       call reg_alloc_mem(area_SC, ni_in_cell, type_dbl)
+       allocate(node_charge(natom_node,nspin), STAT=stat)
+       if (stat /= 0) &
+            call cq_abort("Error allocating charge arrays in get_atomic_charge.", &
+                          stat)
+       call reg_alloc_mem(area_SC, natom_node*nspin, type_dbl)
+       temp_mat = allocate_temp_matrix(Srange, 0)
+       call stop_timer(tmr_std_allocation)
+    endif ! (flag_resolved)
+
     ! perform charge summation
     ! automatically called on each node
-    node_charge = zero
-    charge = zero
-    spin_SF = 1
-    do spin = 1, nspin
-       if (flag_SpinDependentSF) spin_SF = spin
-       temp_mat(spin) = allocate_temp_matrix(Srange, 0)
-       call matrix_sum(zero, temp_mat(spin), one, matK(spin))
-       call atom_trace(temp_mat(spin), matS(spin_SF), l, node_charge(:,spin))
-       ! sum from the node_charge into the total charge array
-       do n = 1, l
-          glob_ind = atoms_on_node(n, inode)
-          charge(glob_ind,spin) = charge(glob_ind,spin) + &
-                                  spin_factor * node_charge(n,spin)
+    if (flag_resolved) then
+       node_charge_nlm = zero
+       charge_nlm = zero
+       do spin = 1, nspin
+          call matrix_sum(zero, temp_mat, one, matKatomf(spin))
+          call atom_trace(temp_mat, matSatomf, npao_node, node_charge_nlm(:,spin), .true.)
+          ! sum from the node_charge into the total charge array
+          inlm_node = 0
+          do iatom = 1, bundle%n_prim
+             glob_ind = atoms_on_node(iatom, inode)
+             do ipao = 1, npao_species(species_glob(glob_ind))
+                inlm_glob = ist_nlm(glob_ind) + ipao - 1
+                inlm_node = inlm_node         + 1
+                charge_nlm(inlm_glob,spin) = charge_nlm(inlm_glob,spin) + &
+                                             spin_factor * node_charge_nlm(inlm_node,spin)
+             end do
+          end do
+       enddo
+       call gsum(charge_nlm, npao, nspin)
+    else
+       node_charge = zero
+       charge = zero
+       spin_SF = 1
+       do spin = 1, nspin
+          if (flag_SpinDependentSF) spin_SF = spin
+          call matrix_sum(zero, temp_mat, one, matK(spin))
+          call atom_trace(temp_mat, matS(spin_SF), natom_node, node_charge(:,spin), .false.)
+          ! sum from the node_charge into the total charge array
+          do iatom = 1, bundle%n_prim
+             glob_ind = atoms_on_node(iatom, inode)
+             charge(glob_ind,spin) = charge(glob_ind,spin) + &
+                                     spin_factor * node_charge(iatom,spin)
+          end do
        end do
-    end do
-    call gsum(charge, ni_in_cell, nspin)
+       call gsum(charge, ni_in_cell, nspin)
+    endif ! flag_resolved
 
     ! output
     if (inode == ionode) then
        ! write (*, *) 'Writing charge on individual atoms...'
        call io_assign(chun)
        open(unit = chun, file='AtomCharge.dat')
-       if (nspin.eq.1) then
-          do n = 1, ni_in_cell
-             write (chun, fmt='(f15.10)') charge(n,1)
-          end do
+       if (flag_resolved) then
+          ipao = 0
+          if (nspin.eq.1) then
+             do iatom = 1, ni_in_cell
+                charge_ll(1) = zero
+                do ll = 1, npao_species(species_glob(iatom))
+                   ipao = ipao + 1
+                   charge_ll(1) = charge_ll(1) + charge_nlm(ipao,1)
+                enddo 
+                write (chun, fmt='(f15.10)') charge_ll(1)
+             end do
+          else
+             do iatom = 1, ni_in_cell
+                charge_ll(1) = zero
+                charge_ll(2) = zero
+                do ll = 1, npao_species(species_glob(iatom))
+                   ipao = ipao + 1
+                   charge_ll(1) = charge_ll(1) + charge_nlm(ipao,1)
+                   charge_ll(2) = charge_ll(2) + charge_nlm(ipao,2)
+                enddo
+                write (chun, fmt='(3f15.10)') charge_ll(1)+charge_ll(2), charge_ll(1), charge_ll(2)
+             end do
+          endif
        else
-          do n = 1, ni_in_cell
-             write (chun, fmt='(3f15.10)') charge(n,1)+charge(n,2), charge(n,1), charge(n,2)
-          end do
-       endif
+          if (nspin.eq.1) then
+             do iatom = 1, ni_in_cell
+                write (chun, fmt='(f15.10)') charge(iatom,1)
+             end do
+          else
+             do iatom = 1, ni_in_cell
+                write (chun, fmt='(3f15.10)') charge(iatom,1)+charge(iatom,2), charge(iatom,1), charge(iatom,2)
+             end do
+          endif
+       endif ! flag_resolved
        call io_close(chun)
-    end if
+    endif ! inode
+!
+    if (inode == ionode .and. flag_resolved) then
+       call io_assign(chun)
+       open(unit = chun, file='AtomCharge_nlm.dat')
+       ipao = 0
+       if (nspin.eq.1) then
+          if (flag_atomch_nlm) then
+             write (chun, fmt='(A8,A4,A3,A3,A3,A15)') &
+                   '#   ID  ','spec','  n','  l','  m','  atom charge  '
+          else if (flag_atomch_lm) then
+             write (chun, fmt='(A8,A4,A3,A3,A15)') &
+                   '#   ID  ','spec','  l','  m','  atom charge  '
+          else if (flag_atomch_l) then
+             write (chun, fmt='(A8,A4,A3,A15)') &
+                   '#   ID  ','spec','  l','  atom charge  '
+          endif
+       else
+          if (flag_atomch_nlm) then
+             write (chun, fmt='(A8,A4,A3,A3,A3,3A15)') &
+                   '#   ID  ','spec','  n','  l','  m',&
+                   '  atom charge  ',' spin-up charge',' spin-dn charge'
+          else if (flag_atomch_lm) then
+             write (chun, fmt='(A8,A4,A3,A3,3A15)') &
+                   '#   ID  ','spec','  l','  m',   &
+                   '  atom charge  ',' spin-up charge',' spin-dn charge'
+          else if (flag_atomch_l) then
+             write (chun, fmt='(A8,A4,A3,3A15)') &
+                   '#   ID  ','spec','  l',      &
+                   '  atom charge  ',' spin-up charge',' spin-dn charge'
+          endif
+       endif
+!
+       if (nspin.eq.1) then
+          if (flag_atomch_nlm) then
+             do iatom = 1, ni_in_cell
+                atom_spec = species_glob(iatom)
+                do ll = 0, pao(atom_spec)%greatest_angmom
+                   do nn = 1, pao(atom_spec)%angmom(ll)%n_zeta_in_angmom
+                      do mm = -ll,ll
+                         ipao = ipao + 1
+                         write (chun, fmt='(I8,I4,I3,I3,I3,f15.10)') &
+                               iatom, atom_spec, nn, ll, mm, charge_nlm(ipao,1)
+                      enddo ! mm
+                   enddo ! nn
+                enddo !ll
+             end do ! iatom
+          else if (flag_atomch_lm) then
+             do iatom = 1, ni_in_cell
+                atom_spec = species_glob(iatom)
+                do ll = 0, pao(atom_spec)%greatest_angmom
+                   charge_mm(:,1) = zero
+                   do nn = 1, pao(atom_spec)%angmom(ll)%n_zeta_in_angmom
+                      do mm = -ll,ll
+                         ipao = ipao + 1
+                         charge_mm(mm,1) = charge_mm(mm,1) + charge_nlm(ipao,1)
+                      enddo ! mm
+                   enddo ! nn
+                   do mm = -ll,ll
+                      write (chun, fmt='(I8,I4,I3,I3,I3,f15.10)') &
+                             iatom, atom_spec, ll, mm, charge_mm(mm,1)
+                   enddo
+                enddo !ll
+             end do ! iatom
+          else if (flag_atomch_l) then
+             do iatom = 1, ni_in_cell
+                atom_spec = species_glob(iatom)
+                do ll = 0, pao(atom_spec)%greatest_angmom
+                   charge_ll(1) = zero
+                   do nn = 1, pao(atom_spec)%angmom(ll)%n_zeta_in_angmom
+                      do mm = -ll,ll
+                         ipao = ipao + 1
+                         charge_ll(1) = charge_ll(1) + charge_nlm(ipao,1)
+                      enddo ! mm
+                   enddo ! nn
+                   write (chun, fmt='(I8,I4,I3,f15.10)') &
+                          iatom, atom_spec, ll, charge_ll(1)
+                enddo !ll
+             end do ! iatom
+          endif ! nlm-resolved
+       else ! spin
+          if (flag_atomch_nlm) then
+             do iatom = 1, ni_in_cell
+                atom_spec = species_glob(iatom)
+                do ll = 0, pao(atom_spec)%greatest_angmom
+                   do nn = 1, pao(atom_spec)%angmom(ll)%n_zeta_in_angmom
+                      do mm = -ll,ll
+                         ipao = ipao + 1
+                         write (chun, fmt='(I8,I4,I3,I3,I3,3f15.10)') &
+                               iatom, atom_spec, nn, ll, mm, &
+                               charge_nlm(ipao,1)+charge_nlm(ipao,2),charge_nlm(ipao,1),charge_nlm(ipao,2)
+                      enddo ! mm
+                   enddo ! nn
+                enddo !ll
+             end do ! iatom
+          else if (flag_atomch_lm) then
+             do iatom = 1, ni_in_cell
+                atom_spec = species_glob(iatom)
+                do ll = 0, pao(atom_spec)%greatest_angmom
+                   charge_mm(:,:) = zero
+                   do nn = 1, pao(atom_spec)%angmom(ll)%n_zeta_in_angmom
+                      do mm = -ll,ll
+                         ipao = ipao + 1
+                         charge_mm(mm,1) = charge_mm(mm,1) + charge_nlm(ipao,1)
+                         charge_mm(mm,2) = charge_mm(mm,2) + charge_nlm(ipao,2)
+                      enddo ! mm
+                   enddo ! nn
+                   do mm = -ll,ll
+                      write (chun, fmt='(I8,I4,I3,I3,3f15.10)') &
+                             iatom, atom_spec, ll, mm, &
+                             charge_mm(mm,1)+charge_mm(mm,2),charge_mm(mm,1),charge_mm(mm,2)
+                   enddo
+                enddo !ll
+             end do ! iatom
+          else if (flag_atomch_l) then
+             do iatom = 1, ni_in_cell
+                atom_spec = species_glob(iatom)
+                do ll = 0, pao(atom_spec)%greatest_angmom
+                   charge_ll(:) = zero
+                   do nn = 1, pao(atom_spec)%angmom(ll)%n_zeta_in_angmom
+                      do mm = -ll,ll
+                         ipao = ipao + 1
+                         charge_ll(1) = charge_ll(1) + charge_nlm(ipao,1)
+                         charge_ll(2) = charge_ll(2) + charge_nlm(ipao,2)
+                      enddo ! mm
+                   enddo ! nn
+                   write (chun, fmt='(I8,I4,I3,3f15.10)') &
+                          iatom, atom_spec, ll, &
+                          charge_ll(1)+charge_ll(2),charge_ll(1),charge_ll(2)
+                enddo !ll
+             end do ! iatom
+          endif ! nlm-resolved
+       endif ! spin
+       call io_close(chun)
+    end if ! inode and flag_resolved
 
     call start_timer(tmr_std_allocation)
-    deallocate(node_charge, STAT=stat)
-    if (stat /= 0) &
-         call cq_abort("Error deallocating charge arrays in get_atomic_charge.", &
-                       stat)
-    call reg_dealloc_mem(area_SC, nspin * l, type_dbl)
-    deallocate(charge, STAT=stat)
-    if (stat /= 0) call cq_abort("get_atomic_charge: Error dealloc mem")
-    call reg_dealloc_mem(area_SC, ni_in_cell, type_dbl)
-    do spin = nspin, 1, -1
-       call free_temp_matrix(temp_mat(spin))
-    end do
+    call free_temp_matrix(temp_mat)
+    if (flag_resolved) then
+       deallocate(node_charge_nlm, STAT=stat)
+       if (stat /= 0) &
+            call cq_abort("Error deallocating charge arrays in get_atomic_charge.", stat)
+       call reg_dealloc_mem(area_SC, nspin*npao_node, type_dbl)
+       deallocate(charge_nlm, STAT=stat)
+       if (stat /= 0) call cq_abort("get_atomic_charge: Error dealloc mem")
+       call reg_dealloc_mem(area_SC, nspin*npao, type_dbl)
+       deallocate(ist_nlm, STAT=stat)
+       if (stat /= 0) call cq_abort("get_atomic_charge: Error dealloc mem")
+       call reg_dealloc_mem(area_SC, ni_in_cell, type_int)
+    else
+       deallocate(node_charge, STAT=stat)
+       if (stat /= 0) &
+            call cq_abort("Error deallocating charge arrays in get_atomic_charge.", stat)
+       call reg_dealloc_mem(area_SC, nspin*natom_node, type_dbl)
+       deallocate(charge, STAT=stat)
+       if (stat /= 0) call cq_abort("get_atomic_charge: Error dealloc mem")
+       call reg_dealloc_mem(area_SC, ni_in_cell, type_dbl)
+    endif
     call stop_timer (tmr_std_allocation)
     call stop_timer (tmr_std_chargescf)
 

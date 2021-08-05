@@ -2809,48 +2809,106 @@ contains
   !!   Call as atom_trace(A,B,prim%n_prim,res) where A and B are
   !!   matrix labels (e.g. matK, matS), len is bundle%n_prim and res
   !!   is a real(double) array of size len passed in.
-  !! D.R. Bowler, 2008/03/21
   !!
-  subroutine atom_trace(A, B, len, res)
+  !!  AUTHOR
+  !!   D.R. Bowler
+  !!  CREATION DATE
+  !!   21/03/2008
+  !!  MODIFICATION HISTORY
+  !!   19/02/2002 nakata
+  !!    Added PAO-by-PAO matrix_product_trace e.g. for nlm-resolved atom charges
+  !!    and a passed variable flag_nlm_resolved.
+  !!
+  subroutine atom_trace(matA, matB, len, res, flag_nlm_resolved)
 
     use datatypes
     use numbers,        only: zero
-    use matrix_data,    only: mat
+    use matrix_data,    only: mat, halo
+    use group_module,   only: parts
     use primary_module, only: bundle
     use GenBlas,        only: dot
+    use cover_module,   only: BCS_parts
+    use global_module,  only: id_glob, species_glob
+    use species_module, only: npao_species
 
     implicit none
 
     ! Input variables
-    integer :: A,B, len
+    integer :: matA, matB, len
     real(double), dimension(len) :: res
+    logical :: flag_nlm_resolved
 
     ! Local variables
-    integer :: iprim, np, i, l, Ah, ist
+    integer :: Ah, wheremat, ind_nlm, len_i
+    integer :: np, iatom, atom_num, iprim, atom_i, spec_i, npao_i, ipao, &
+               jatom, ist, gcspart, neigh_global_part, neigh_global_num, &
+               spec_j, npao_j, j_in_halo, jpao
+    real(double) :: val, valA, valB
 
 !    call start_timer(tmr_std_matrices)
     res = zero
-    Ah = matrix_index(A)
+    Ah = matrix_index(matA) ! = Arange
     iprim = 0
-    if (matrix_index(A) == matrix_index(B)) then ! The matrices are the same range
-       do np = 1, bundle%groups_on_node ! Loop over partitions on processor
-          if (bundle%nm_nodgroup(np) > 0) then ! if there are atoms in partition
-             do i = 1, bundle%nm_nodgroup(np) ! loop over atoms in partition
-                iprim = iprim + 1   ! count no. of atoms
-                ist = mat(np,Ah)%nd_offset + mat(np,Ah)%i_nd_acc(i)
-                if (i < bundle%nm_nodgroup(np)) then 
-                   ! if still going through partition atoms:
-                   l = mat(np,Ah)%i_nd_acc(i+1) - mat(np,Ah)%i_nd_acc(i)
-                else ! if finished all atoms in partition
-                   l = mat(np,Ah)%part_nd_nabs - mat(np,Ah)%i_nd_acc(i) + 1
-                end if
-                ! atomic charge for iprim atom:
-                res(iprim) = dot(l, mat_p(A)%matrix(ist:ist+l-1), 1, &
-                                 mat_p(B)%matrix(ist:ist+l-1),1)
-             end do
-          end if
-       end do ! recovered the charges per processor, need to gsum
-    end if
+    atom_i = 0
+    ind_nlm = 0
+    if (matrix_index(matA) == matrix_index(matB)) then  ! The matrices are the same range
+       if (.not.flag_nlm_resolved) then
+          ! Atom-by-atom matrix_product_trace
+          do np = 1, bundle%groups_on_node  ! Loop over primary set partitions
+             if (bundle%nm_nodgroup(np) > 0) then  ! if there are atoms in partition
+                do iatom = 1, bundle%nm_nodgroup(np)  ! loop over atoms in partition
+                   iprim = iprim + 1   ! count no. of atoms
+                   
+                   ist = mat(np,Ah)%nd_offset + mat(np,Ah)%i_nd_acc(iatom)
+                   if (iatom < bundle%nm_nodgroup(np)) then
+                      ! if still going through partition atoms:
+                      len_i = mat(np,Ah)%i_nd_acc(iatom+1) - mat(np,Ah)%i_nd_acc(iatom)
+                   else ! if finished all atoms in partition
+                      len_i = mat(np,Ah)%part_nd_nabs - mat(np,Ah)%i_nd_acc(iatom) + 1
+                   end if
+                   ! atomic charge for iprim atom:
+                   res(iprim) = dot(len_i, mat_p(matA)%matrix(ist:ist+len_i-1), 1, &
+                                           mat_p(matB)%matrix(ist:ist+len_i-1), 1)
+                end do
+             end if
+          end do ! recovered the charges per processor, need to gsum
+       else
+          ! PAO-by-PAO matrix_product_trace
+          do np = 1, bundle%groups_on_node  ! Loop over primary set partitions
+             if (bundle%nm_nodgroup(np) > 0) then  ! if there are atoms in partition
+                do iatom = 1, bundle%nm_nodgroup(np)  ! loop over primary atoms in partition
+                   atom_num = bundle%nm_nodbeg(np) + iatom - 1
+                   iprim = iprim + 1
+                   atom_i = bundle%ig_prim(iprim)     ! global number of i
+                   spec_i = bundle%species(atom_num)
+                   npao_i = npao_species(spec_i)      ! number of PAOs of atom_i
+                   ! Loop over PAOs on i
+                   do ipao = 1, npao_i
+                      val = zero
+                      ind_nlm = ind_nlm + 1
+                      do jatom = 1, mat(np,Ah)%n_nab(iatom) ! Loop over neighbours j of i
+                         ist = mat(np,Ah)%i_acc(iatom)+jatom-1
+                         gcspart = BCS_parts%icover_ibeg(mat(np,Ah)%i_part(ist))+mat(np,Ah)%i_seq(ist)-1
+                         neigh_global_part = BCS_parts%lab_cell(mat(np,Ah)%i_part(ist))
+                         neigh_global_num  = id_glob(parts%icell_beg(neigh_global_part)+mat(np,Ah)%i_seq(ist)-1)
+                         spec_j = species_glob(neigh_global_num)
+                         npao_j = npao_species(spec_j)
+                         j_in_halo = halo(Ah)%i_halo(gcspart)
+                         ! Loop over PAOs on j
+                         do jpao = 1, npao_j 
+                            wheremat = matrix_pos(matA,iprim,j_in_halo,ipao,jpao)
+                            valA = mat_p(matA)%matrix(wheremat)
+                            valB = mat_p(matB)%matrix(wheremat)
+                            val = val + valA * valB
+                         enddo ! jpao 
+                      enddo ! jatom
+                      res(ind_nlm) = val
+                   enddo ! ipao
+                enddo ! iatom
+             endif ! bundle%nm_nodgroup
+          enddo ! np
+       endif ! flag_nlm_resolved
+    endif ! matrix_index
     ! call stop_timer(tmr_std_matrices)
 
     return
