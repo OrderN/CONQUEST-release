@@ -51,5 +51,19 @@ module local
   real(double) :: kT
   ! Flags controlling Methfessel-Paxton approximation to step-function
   integer :: flag_smear_type, iMethfessel_Paxton
-  
+
+  ! MSSF storage
+  type neighbour
+     integer :: i_glob
+     integer :: n_pao, n_sf
+     real(double) :: dx, dy, dz
+     real(double), dimension(:,:), allocatable :: coeff
+  end type neighbour
+
+  type MSSF_coeff
+     integer :: n_neigbours
+     type(neighbour), dimension(:), allocatable :: neigh_coeff
+  end type MSSF_coeff
+
+  type(MSSF_coeff), dimension(:), allocatable :: MSSF_coeffs
 end module local

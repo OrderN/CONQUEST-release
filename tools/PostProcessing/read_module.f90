@@ -11,7 +11,7 @@ contains
   subroutine read_input
 
     use global_module, ONLY: flag_assign_blocks, flag_fractional_atomic_coords, nspin, &
-         flag_wf_range_Ef, E_DOS_min, E_DOS_max, sigma_DOS, n_DOS
+         flag_wf_range_Ef, E_DOS_min, E_DOS_max, sigma_DOS, n_DOS, flag_Multisite
     use local
     use input_module
     use numbers
@@ -29,7 +29,7 @@ contains
     character(len=80) :: input_string, proc_coords
     integer :: i, j, n_grid_x, n_grid_y, n_grid_z
     integer :: n_kp_lines
-    logical :: flag_kp_lines, flag_spin_polarisation, flag_Multisite
+    logical :: flag_kp_lines, flag_spin_polarisation
     real(double) :: dk
     character(len=5) :: ps_type !To find which pseudo we use
     character(len=3) :: job
@@ -80,6 +80,7 @@ contains
     n_species = fdf_integer('General.NumberOfSpecies',1)
     ! And read the positions
     call read_atomic_positions(trim(proc_coords))
+    write(*,*) 'Read positions'
     flag_Multisite = fdf_boolean('Basis.MultisiteSF', .false.)
     ! Find job to perform
     job = fdf_string(3,'Process.Job','pos') ! Default to converting output
@@ -99,7 +100,7 @@ contains
        i_job = 2
     else if(leqi(job,'ban')) then
        i_job = 3
-       if(flag_Multisite) call cq_abort("Not yet compatible with multi-site support functions")
+       !if(flag_Multisite) call cq_abort("Not yet compatible with multi-site support functions")
     else if(leqi(job,'ter').or.leqi(job,'th')) then
        i_job = 4
        if(flag_Multisite) call cq_abort("Not yet compatible with multi-site support functions")
@@ -213,6 +214,7 @@ contains
           flag_proc_range = .false.
        end if
     end if
+    write(*,*) 'Done bands'
     ! Output format
     ps_type = fdf_string(4,'Process.OutputFormat','cube')
     if(leqi(ps_type,'cube')) then
@@ -260,7 +262,9 @@ contains
           call fdf_endblock
        end if
     end do
+    write(*,*) 'Doing pseudos'
     call setup_pseudo_info ! Get atomic number of species
+    write(*,*) 'Done pseudos'
     call io_close(fdf_out)
     return
   end subroutine read_input
@@ -514,6 +518,55 @@ contains
     end if
   end subroutine read_psi_coeffs
  
+  subroutine read_MSSF_coeffs
+
+    use datatypes
+    use numbers
+    use global_module, ONLY: ni_in_cell
+    use local, ONLY: MSSF_coeffs, nprocs
+
+    implicit none
+
+    ! Local variables
+    integer :: i_sf, i_proc, i_kp, i, i_band, i_prim, n_prim, i_glob, i_atom, i_spin, i_nab, i_pao
+    integer :: max_nsf, max_pao, max_neighbours, n_sf, n_neighbours, i_glob_nab, n_pao
+    integer, dimension(:), allocatable :: i_MSSF_count
+    real(double) :: dx, dy, dz, coeff
+    character(len=80) :: filename, str
+
+    allocate(i_MSSF_count(ni_in_cell), MSSF_coeffs(ni_in_cell))
+    i_MSSF_count = 0
+    do i_proc = 1, nprocs
+       write(filename,'("Process",I0.7,"MSSF.dat")') i_proc
+       open(unit=17,file=filename)
+       read(17,*) n_prim, max_nsf, max_neighbours, max_pao
+       write(*,*) 'Proc: ',i_proc, n_prim, max_nsf, max_neighbours, max_pao
+       do i_prim = 1, n_prim
+          read(17,*) i_glob, n_sf, n_neighbours
+          write(*,*) 'Prim: ',i_prim, i_glob, n_sf, n_neighbours
+          allocate(MSSF_coeffs(i_prim)%neigh_coeff(n_neighbours))
+          do i_nab = 1, n_neighbours
+             read(17,*) i_glob_nab, dx, dy, dz, n_pao
+             write(*,*) 'Nab: ', i_nab, i_glob_nab, dx, dy, dz, n_pao
+             allocate(MSSF_coeffs(i_prim)%neigh_coeff(i_nab)%coeff(n_pao,n_sf))
+             MSSF_coeffs(i_prim)%neigh_coeff(i_nab)%coeff = zero
+             MSSF_coeffs(i_prim)%neigh_coeff(i_nab)%i_glob = i_glob_nab
+             MSSF_coeffs(i_prim)%neigh_coeff(i_nab)%n_pao = n_pao
+             MSSF_coeffs(i_prim)%neigh_coeff(i_nab)%n_sf = n_sf
+             MSSF_coeffs(i_prim)%neigh_coeff(i_nab)%dx = dx
+             MSSF_coeffs(i_prim)%neigh_coeff(i_nab)%dy = dy
+             MSSF_coeffs(i_prim)%neigh_coeff(i_nab)%dz = dz
+             i_MSSF_count(i_glob_nab) = i_MSSF_count(i_glob_nab) + 1
+             do i_sf = 1, n_sf
+                do i_pao = 1, n_pao
+                   read(17,*) MSSF_coeffs(i_prim)%neigh_coeff(i_nab)%coeff(i_pao,i_sf)
+                end do ! i_pao
+             end do ! i_sf
+          end do ! i_nab
+       end do ! i_prim
+    end do ! i_proc
+  end subroutine read_MSSF_coeffs
+  
   subroutine allocate_species_vars
 
     use numbers

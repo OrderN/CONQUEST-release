@@ -102,8 +102,8 @@ contains
          n_bands_total, band_active_kp, flag_proc_range, band_full_to_active, &
          E_procwf_min, E_procwf_max, flag_procwf_range_Ef, band_proc_no, n_bands_process
     use output, ONLY: write_cube
-    use global_module, only : nspin
-    use read, ONLY: read_eigenvalues, read_psi_coeffs
+    use global_module, only : nspin, flag_Multisite
+    use read, ONLY: read_eigenvalues, read_psi_coeffs, read_MSSF_coeffs
 
     implicit none
 
@@ -118,6 +118,8 @@ contains
     call read_eigenvalues
     ! Read eigenvector coefficients
     call read_psi_coeffs
+    if(flag_Multisite) call read_MSSF_coeffs
+    
     allocate(current(nptsx,nptsy,nptsz))
     allocate(psi(nptsx,nptsy,nptsz))
     if(flag_proc_range) then
@@ -508,6 +510,7 @@ contains
     return
   end subroutine pao_dpao_to_grid
 
+  ! This is really band_to_grid as it loops over all atoms and PAOs
   subroutine pao_to_grid(i_band, i_kp, i_spin, psi)
 
     use datatypes
@@ -656,6 +659,159 @@ contains
     end do ! i_atom
     return
   end subroutine pao_to_grid
+
+  ! This is really band_to_grid as it loops over all atoms and MSSFs
+  subroutine mssf_to_grid(i_band, i_kp, i_spin, psi)
+
+    use datatypes
+    use numbers
+    use units
+    use global_module, ONLY: ni_in_cell, atom_coord, species_glob
+    use pao_format, ONLY: pao
+    use local, ONLY: nptsx, nptsy, nptsz, grid_x, grid_y, grid_z, stm_x_min, stm_x_max, &
+         stm_y_min, stm_y_max, stm_z_min, stm_z_max, evec_coeff, kx, ky, kz, i_job
+    use dimens, ONLY: RadiusAtomf, r_super_x, r_super_y, r_super_z
+
+    implicit none
+
+    ! Passed variables
+    integer :: i_band, i_kp, i_spin
+    complex(double_cplx), dimension(nptsx, nptsy, nptsz) :: psi
+
+    ! Local variables
+    integer :: i_atom, i_grid_x, i_grid_y, i_grid_z, i_l, i_zeta, i_m, ix, iy, iz
+    integer :: i_spec, j, npao
+    integer :: minx, maxx, miny, maxy, minz, maxz
+    real(double) :: dr, dx, dy, dz, sph_rl, f_r, df_r, dx_dr, dy_dr, dz_dr, del_r
+    real(double) :: a, b, c, d, r1, r2, r3, r4, rr, kr, krx, kry, krz
+    real(double), dimension(3) :: dsph_rl, dg
+    complex(double_cplx) :: phase, phase_shift
+    
+    psi = zero
+    ! Grid spacing
+    dg(1) = grid_x!/BohrToAng
+    dg(2) = grid_y!/BohrToAng
+    dg(3) = grid_z!/BohrToAng
+    ! Loop over atoms
+    do i_atom = 1, ni_in_cell
+       i_spec = species_glob(i_atom)
+       !write(*,*) 'Atom, spec, pos: ',i_atom, i_spec, atom_coord(3, i_atom) + RadiusAtomf(i_spec), stm_z_min
+       if(atom_coord(3, i_atom) + RadiusAtomf(i_spec) >= stm_z_min) then ! Is the atom in STM region?
+          kr = kx(i_kp)*atom_coord(1, i_atom) + ky(i_kp)*atom_coord(2, i_atom) + kz(i_kp)*atom_coord(3, i_atom)
+          !phase = cmplx(cos(kr),sin(kr))
+          ! Find grid limits
+          minx = floor( (atom_coord(1, i_atom) - RadiusAtomf(i_spec))/dg(1) )    
+          maxx = floor( (atom_coord(1, i_atom) + RadiusAtomf(i_spec))/dg(1) ) + 1
+          miny = floor( (atom_coord(2, i_atom) - RadiusAtomf(i_spec))/dg(2) )    
+          maxy = floor( (atom_coord(2, i_atom) + RadiusAtomf(i_spec))/dg(2) ) + 1
+          minz = floor( (atom_coord(3, i_atom) - RadiusAtomf(i_spec))/dg(3) )    
+          maxz = floor( (atom_coord(3, i_atom) + RadiusAtomf(i_spec))/dg(3) ) + 1
+          ! Account for STM limits
+          !if(stm_x_min>zero.and.minx<0) then
+          !   if(minx+nptsx>floor(stm_x_min
+          !if(stm_x_min>zero) minx = max(minx, floor(stm_x_min/dg(1)) )
+          !if(stm_x_max<r_super_x) maxx = min(maxx, floor(stm_x_max/dg(1)+1) )
+          !if(stm_y_min>zero) miny = max(miny, floor(stm_y_min/dg(2)) )
+          !if(stm_y_max<r_super_y) maxy = min(maxy, floor(stm_y_max/dg(2)+1) )
+          if(i_job==4.or.i_job==5) then ! STM not band density
+             if(stm_z_min>zero) then
+                minz = minz - floor(stm_z_min/dg(3))
+             end if
+             if(minz<1) minz = 1
+             maxz = min(maxz, nptsz)
+          end if
+          ! Loop over grid points
+          do i_grid_z = minz, maxz
+             ! Find z grid position and dz
+             dz = dg(3)*real(i_grid_z-1,double)+stm_z_min - atom_coord(3,i_atom)
+             iz = i_grid_z
+             ! Wrap if we're making band densities, but not for STM simulation
+             krz = zero
+             if(i_job==3) then
+                if(i_grid_z<1) then
+                   iz = i_grid_z + nptsz
+                   krz = kz(i_kp)*r_super_z
+                end if
+                if(i_grid_z>nptsz) then
+                   iz = i_grid_z - nptsz
+                   krz = -kz(i_kp)*r_super_z
+                end if
+             end if
+             do i_grid_y = miny, maxy
+                ! Find y grid position and dy and wrap grid point
+                dy = dg(2)*real(i_grid_y-1,double)+stm_y_min - atom_coord(2,i_atom)
+                iy = i_grid_y
+                kry = zero
+                if(i_grid_y<1) then
+                   iy = i_grid_y + nptsy
+                   kry = ky(i_kp)*r_super_y
+                end if
+                if(i_grid_y>nptsy) then
+                   iy = i_grid_y - nptsy
+                   kry = -ky(i_kp)*r_super_y
+                end if
+                do i_grid_x = minx, maxx
+                   ! Find x grid position and dx and wrap grid point
+                   dx = dg(1)*real(i_grid_x-1,double)+stm_x_min - atom_coord(1,i_atom)
+                   ix = i_grid_x
+                   krx = zero
+                   if(i_grid_x<1) then
+                      ix = i_grid_x + nptsx
+                      krx = kx(i_kp)*r_super_x
+                   end if
+                   if(i_grid_x>nptsx) then
+                      ix = i_grid_x - nptsx
+                      krx = -kx(i_kp)*r_super_x
+                   end if
+                   ! Calculate dr
+                   dr = sqrt(dx*dx + dy*dy + dz*dz)
+                   if(dr<=RadiusAtomf(i_spec)) then
+                      phase = cmplx(cos(kr+krx+kry+krz),sin(kr+krx+kry+krz))
+                      npao = 1
+                      ! Loop over l
+                      do i_l = 0, pao(i_spec)%greatest_angmom
+                         ! Loop over zeta
+                         do i_zeta = 1, pao(i_spec)%angmom(i_l)%n_zeta_in_angmom
+                            ! Find f(r), df/dr
+                            del_r = pao(i_spec)%angmom(i_l)%zeta(i_zeta)%delta
+                            j = floor(dr/del_r) + 1
+                            if(j+1<=pao(i_spec)%angmom(i_l)%zeta(i_zeta)%length) then
+                               rr = real(j,double)*del_r
+                               a = (rr - dr)/del_r
+                               b = one - a
+                               c = a * ( a * a - one ) * del_r * del_r / six
+                               d = b * ( b * b - one ) * del_r * del_r / six
+                               r1 = pao(i_spec)%angmom(i_l)%zeta(i_zeta)%table(j)
+                               r2 = pao(i_spec)%angmom(i_l)%zeta(i_zeta)%table(j+1)
+                               r3 = pao(i_spec)%angmom(i_l)%zeta(i_zeta)%table2(j)
+                               r4 = pao(i_spec)%angmom(i_l)%zeta(i_zeta)%table2(j+1)
+                               f_r = a*r1 + b*r2 + c*r3 + d*r4
+                            else
+                               f_r = zero
+                            end if
+                            ! Loop over m
+                            do i_m = -i_l, i_l
+                               ! Get spherical harmonic and gradient
+                               ! NB returns r^l times spherical harmonic
+                               call spherical_harmonic_rl(dx, dy, dz, i_l, i_m, sph_rl, dsph_rl)
+                               ! Accumulate into psi, grad psi
+                               ! Loop over atoms whose MSSF this atom contributes to
+                               ! Work out which coefficient we use (which j image)
+                               ! Loop over MSSFs on atom
+                               psi(ix, iy, iz) = psi(ix, iy, iz) + &
+                                    phase*evec_coeff(npao,i_atom,i_band, i_kp, i_spin) * sph_rl * f_r
+                               npao = npao + 1
+                            end do ! i_m
+                         end do ! i_zeta
+                      end do ! i_l
+                   end if ! dr <= RadiusAtomf
+                end do ! i_grid_x
+             end do ! i_grid_y
+          end do ! i_grid_z
+       end if ! Atom is in STM region
+    end do ! i_atom
+    return
+  end subroutine mssf_to_grid
 
   ! Return spherical harmonic times r^l (and derivative of this)
   subroutine spherical_harmonic_rl(x, y, z, l, m, sph, dsph)
