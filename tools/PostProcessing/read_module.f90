@@ -16,7 +16,7 @@ contains
     use input_module
     use numbers
     use io_module, ONLY: pdb_format, pdb_template, read_atomic_positions
-    use dimens, ONLY: r_super_x, r_super_y, r_super_z, GridCutoff
+    use dimens, ONLY: r_super_x, r_super_y, r_super_z, GridCutoff, RadiusMS
     use species_module, ONLY: n_species, species_label, species_file, mass, type_species, charge, nsf_species
     use units, ONLY: HaToeV
     use block_module, only: n_pts_in_block, in_block_x,in_block_y,in_block_z, blocks_raster, blocks_hilbert
@@ -100,7 +100,6 @@ contains
        i_job = 2
     else if(leqi(job,'ban')) then
        i_job = 3
-       !if(flag_Multisite) call cq_abort("Not yet compatible with multi-site support functions")
     else if(leqi(job,'ter').or.leqi(job,'th')) then
        i_job = 4
        if(flag_Multisite) call cq_abort("Not yet compatible with multi-site support functions")
@@ -115,6 +114,9 @@ contains
        i_job = 6
     else if(leqi(job,'pdo').or.leqi(job,'pro')) then
        i_job = 7
+    else if(leqi(job,'mss')) then
+       i_job = 8
+       if(.NOT.flag_Multisite) call cq_abort("Multisite SFs not set, but you are asking to output MSSF")
     end if
     ! 
     charge_stub = fdf_string(80,'Process.ChargeStub','chden')
@@ -233,6 +235,23 @@ contains
     sigma_DOS = fdf_double('Process.sigma_DOS',zero) ! Adjust to minimum of 4*energy spacing
     n_DOS = fdf_integer('Process.n_DOS',1001)
     flag_total_iDOS = fdf_boolean('Process.TotalIntegratedDOS',.false.)
+    ! MSSF
+    if(i_job==8) then
+       n_mssf_process = fdf_integer('Process.noMSSF',0)
+       if(n_mssf_process==0) call cq_abort("Please set Process.noMSSF to specify atoms for MSSF")
+       allocate(mssf_proc_no(n_mssf_process))
+       if(fdf_block('MSSFProcess')) then
+          if(1+block_end-block_start<n_mssf_process) then
+             call cq_abort("Too few wf no in WaveFunctionsOut: ",1+block_end-block_start,n_mssf_process)
+          end if
+          do i=1,n_mssf_process
+             read(unit=input_array(block_start+i-1),fmt=*) mssf_proc_no(i)
+          end do
+          call fdf_endblock
+       else
+          call cq_abort('Missing MSSFProcess block to specify atoms')
+       end if
+    end if
     ! Now read PS files for atomic information
     call allocate_species_vars
     ps_type = fdf_string(5,'General.PseudopotentialType','haman') 
@@ -259,6 +278,7 @@ contains
        if(fdf_block(species_label(i))) then
           charge(i)        = fdf_double ('Atom.ValenceCharge',zero)
           nsf_species(i)   = fdf_integer('Atom.NumberOfSupports',0)
+          if(flag_Multisite) RadiusMS(i) = fdf_double('Atom.MultisiteRange',zero)
           call fdf_endblock
        end if
     end do
@@ -523,13 +543,13 @@ contains
     use datatypes
     use numbers
     use global_module, ONLY: ni_in_cell
-    use local, ONLY: MSSF_coeffs, nprocs
+    use local, ONLY: MSSF_coeffs, nprocs, nab_glob
 
     implicit none
 
     ! Local variables
     integer :: i_sf, i_proc, i_kp, i, i_band, i_prim, n_prim, i_glob, i_atom, i_spin, i_nab, i_pao
-    integer :: max_nsf, max_pao, max_neighbours, n_sf, n_neighbours, i_glob_nab, n_pao
+    integer :: max_nsf, max_pao, max_neighbours, n_sf, n_neighbours, i_glob_nab, n_pao, n_MSSF_nab
     integer, dimension(:), allocatable :: i_MSSF_count
     real(double) :: dx, dy, dz, coeff
     character(len=80) :: filename, str
@@ -543,34 +563,62 @@ contains
        write(*,*) 'Proc: ',i_proc, n_prim, max_nsf, max_neighbours, max_pao
        do i_prim = 1, n_prim
           read(17,*) i_glob, n_sf, n_neighbours
+          MSSF_coeffs(i_glob)%n_neighbours = n_neighbours
+          MSSF_coeffs(i_glob)%n_sf = n_sf
           write(*,*) 'Prim: ',i_prim, i_glob, n_sf, n_neighbours
-          allocate(MSSF_coeffs(i_prim)%neigh_coeff(n_neighbours))
+          allocate(MSSF_coeffs(i_glob)%neigh_coeff(n_neighbours))
           do i_nab = 1, n_neighbours
              read(17,*) i_glob_nab, dx, dy, dz, n_pao
              write(*,*) 'Nab: ', i_nab, i_glob_nab, dx, dy, dz, n_pao
-             allocate(MSSF_coeffs(i_prim)%neigh_coeff(i_nab)%coeff(n_pao,n_sf))
-             MSSF_coeffs(i_prim)%neigh_coeff(i_nab)%coeff = zero
-             MSSF_coeffs(i_prim)%neigh_coeff(i_nab)%i_glob = i_glob_nab
-             MSSF_coeffs(i_prim)%neigh_coeff(i_nab)%n_pao = n_pao
-             MSSF_coeffs(i_prim)%neigh_coeff(i_nab)%n_sf = n_sf
-             MSSF_coeffs(i_prim)%neigh_coeff(i_nab)%dx = dx
-             MSSF_coeffs(i_prim)%neigh_coeff(i_nab)%dy = dy
-             MSSF_coeffs(i_prim)%neigh_coeff(i_nab)%dz = dz
+             allocate(MSSF_coeffs(i_glob)%neigh_coeff(i_nab)%coeff(n_pao,n_sf))
+             MSSF_coeffs(i_glob)%neigh_coeff(i_nab)%coeff = zero
+             MSSF_coeffs(i_glob)%neigh_coeff(i_nab)%i_glob = i_glob_nab
+             MSSF_coeffs(i_glob)%neigh_coeff(i_nab)%n_pao = n_pao
+             MSSF_coeffs(i_glob)%neigh_coeff(i_nab)%dx = dx
+             MSSF_coeffs(i_glob)%neigh_coeff(i_nab)%dy = dy
+             MSSF_coeffs(i_glob)%neigh_coeff(i_nab)%dz = dz
              i_MSSF_count(i_glob_nab) = i_MSSF_count(i_glob_nab) + 1
              do i_sf = 1, n_sf
                 do i_pao = 1, n_pao
-                   read(17,*) MSSF_coeffs(i_prim)%neigh_coeff(i_nab)%coeff(i_pao,i_sf)
+                   read(17,*) MSSF_coeffs(i_glob)%neigh_coeff(i_nab)%coeff(i_pao,i_sf)
                 end do ! i_pao
              end do ! i_sf
           end do ! i_nab
        end do ! i_prim
     end do ! i_proc
+    ! Now build table of i neighbours of each j
+    !allocate(nab_glob(ni_in_cell))
+    !do i_glob = 1, ni_in_cell
+    !   n_MSSF_nab = i_MSSF_count(i_glob)
+    !   allocate(nab_glob(i_glob)%i_glob(n_MSSF_nab), nab_glob(i_glob)%disp(n_MSSF_nab,3), &
+    !        nab_glob(i_glob)%neigh(n_MSSF_nab))
+    !   nab_glob(i_glob)%i_glob = 0
+    !   nab_glob(i_glob)%neigh  = 0
+    !   nab_glob(i_glob)%disp   = zero
+    !   nab_glob(i_glob)%i_count = 0
+    !end do
+    !write(*,*) 'Building reverse map'
+    !do i_glob = 1, ni_in_cell
+    !   do i_nab = 1, MSSF_coeffs(i_glob)%n_neighbours
+    !      i_glob_nab = MSSF_coeffs(i_glob)%neigh_coeff(i_nab)%i_glob
+    !      nab_glob(i_glob_nab)%i_count = nab_glob(i_glob_nab)%i_count + 1
+    !      nab_glob(i_glob_nab)%i_glob(nab_glob(i_glob_nab)%i_count) = i_glob
+    !      nab_glob(i_glob_nab)%neigh(nab_glob(i_glob_nab)%i_count) = i_nab
+    !      nab_glob(i_glob_nab)%disp(nab_glob(i_glob_nab)%i_count,1) = &
+    !           MSSF_coeffs(i_glob)%neigh_coeff(i_nab)%dx
+    !      nab_glob(i_glob_nab)%disp(nab_glob(i_glob_nab)%i_count,2) = &
+    !           MSSF_coeffs(i_glob)%neigh_coeff(i_nab)%dy
+    !      nab_glob(i_glob_nab)%disp(nab_glob(i_glob_nab)%i_count,3) = &
+    !           MSSF_coeffs(i_glob)%neigh_coeff(i_nab)%dz
+    !   end do
+    !end do
+    !write(*,*) 'Built'
   end subroutine read_MSSF_coeffs
   
   subroutine allocate_species_vars
 
     use numbers
-    use dimens,         only: atomicnum, RadiusSupport, RadiusAtomf, InvSRange
+    use dimens,         only: atomicnum, RadiusSupport, RadiusAtomf, InvSRange, RadiusMS
     use memory_module,  only: reg_alloc_mem, type_dbl
     use species_module, only: charge, charge_up, charge_dn
     use species_module, only: mass, npao_species, type_species, nsf_species
@@ -589,6 +637,8 @@ contains
     allocate(atomicnum(n_species),STAT=stat)
     allocate(RadiusSupport(n_species),STAT=stat)
     RadiusSupport = zero
+    allocate(RadiusMS(n_species),STAT=stat)
+    RadiusMS = zero
     allocate(InvSRange(n_species),STAT=stat)
     allocate(RadiusAtomf(n_species),STAT=stat)
     RadiusAtomf = zero

@@ -9,8 +9,8 @@ module local
   ! Processes used
   integer :: nprocs
 
-  integer :: nkp, n_eval_window, n_bands_active, n_bands_total, n_bands_process
-  integer, dimension(:), allocatable :: band_no, active_bands, band_proc_no, band_full_to_active
+  integer :: nkp, n_eval_window, n_bands_active, n_bands_total, n_bands_process, n_mssf_process
+  integer, dimension(:), allocatable :: band_no, active_bands, band_proc_no, band_full_to_active, mssf_proc_no
   real(double), dimension(2) :: efermi ! Allow two Fermi levels with spin
   real(double), dimension(:), allocatable :: kx,ky,kz, wtk
   real(double), dimension(:,:,:), allocatable :: eigenvalues
@@ -55,15 +55,25 @@ module local
   ! MSSF storage
   type neighbour
      integer :: i_glob
-     integer :: n_pao, n_sf
+     integer :: n_pao
      real(double) :: dx, dy, dz
      real(double), dimension(:,:), allocatable :: coeff
   end type neighbour
 
   type MSSF_coeff
-     integer :: n_neigbours
+     integer :: n_neighbours, n_sf
      type(neighbour), dimension(:), allocatable :: neigh_coeff
   end type MSSF_coeff
 
   type(MSSF_coeff), dimension(:), allocatable :: MSSF_coeffs
+
+  ! Map from atom j to atom i (where the PAO belongs to j, MSSF to i)
+  type nab_glob_coeff
+     integer :: i_count ! Location of current atom i
+     integer, dimension(:), allocatable :: i_glob
+     integer, dimension(:), allocatable :: neigh
+     real(double), dimension(:,:), allocatable :: disp
+  end type nab_glob_coeff
+
+  type(nab_glob_coeff), dimension(:), allocatable :: nab_glob
 end module local

@@ -111,7 +111,7 @@ contains
     real(double) :: weight, rbx, rby, rbz, sq, test
     real(double), dimension(2) :: Emin, Emax
     character(len=50) :: filename, ci
-    complex(double_cplx), dimension(:,:,:), allocatable :: psi
+    complex(double_cplx), dimension(:,:,:), allocatable :: psi, psi_sum
 
     write(*,*) 'Processing bands'
     ! Read eigenvalues
@@ -119,9 +119,12 @@ contains
     ! Read eigenvector coefficients
     call read_psi_coeffs
     if(flag_Multisite) call read_MSSF_coeffs
+    !if(flag_Multisite) call write_one_MSSF
     
     allocate(current(nptsx,nptsy,nptsz))
     allocate(psi(nptsx,nptsy,nptsz))
+    !allocate(psi_sum(nptsx,nptsy,nptsz))
+    !psi_sum = zero
     if(flag_proc_range) then
        Emin = E_procwf_min
        Emax = E_procwf_max
@@ -137,7 +140,11 @@ contains
                    if(eigenvalues(band,kp,ispin) >= Emin(ispin) .and. &
                         eigenvalues(band,kp,ispin) <= Emax(ispin) .and. &
                         band_active_kp(band,kp,ispin)==1) then
-                      call pao_to_grid(band_full_to_active(band), kp, ispin, psi)
+                      if(flag_Multisite) then
+                         call mssf_to_grid_alt(band_full_to_active(band), kp, ispin, psi)
+                      else
+                         call pao_to_grid(band_full_to_active(band), kp, ispin, psi)
+                      end if
                       current = psi*conjg(psi)
                       write(ci,'("Band",I0.6,"den_kp",I0.3,"S",I0.1)') band, kp, ispin
                       call write_cube(current,ci)
@@ -152,7 +159,13 @@ contains
                    if(eigenvalues(band,kp,ispin) >= Emin(ispin) .and. &
                         eigenvalues(band,kp,ispin) <= Emax(ispin) .and. &
                         band_active_kp(band,kp,ispin)==1) then
-                      call pao_to_grid(band_full_to_active(band), kp, ispin, psi)
+                      write(*,*) 'Band: ',band,eigenvalues(band,kp,ispin)
+                      if(flag_Multisite) then
+                         call mssf_to_grid_alt(band_full_to_active(band), kp, ispin, psi)
+                      else
+                         call pao_to_grid(band_full_to_active(band), kp, ispin, psi)
+                      end if
+                      !psi_sum = psi_sum + psi*conjg(psi)
                       current = current + psi*conjg(psi)
                       idum1 = 1
                    end if
@@ -172,7 +185,11 @@ contains
                 do kp = 1,nkp
                    ! This clause is needed in case the user chose an energy range that only selects some k-points
                    if(band_active_kp(band_proc_no(band),kp,ispin)==1) then
-                      call pao_to_grid(band_full_to_active(band_proc_no(band)), kp, ispin, psi)
+                      if(flag_Multisite) then
+                         call mssf_to_grid_alt(band_full_to_active(band_proc_no(band)), kp, ispin, psi)
+                      else
+                         call pao_to_grid(band_full_to_active(band_proc_no(band)), kp, ispin, psi)
+                      end if
                       current = psi*conjg(psi)
                       write(ci,'("Band",I0.6,"den_kp",I0.3,"S",I0.1)') band_proc_no(band), kp, ispin
                       call write_cube(current,ci)
@@ -185,7 +202,11 @@ contains
                 do kp = 1,nkp
                    ! This clause is needed in case the user chose an energy range that only selects some k-points
                    if(band_active_kp(band_proc_no(band),kp,ispin)==1) then
-                      call pao_to_grid(band_full_to_active(band_proc_no(band)), kp, ispin, psi)
+                      if(flag_Multisite) then
+                         call mssf_to_grid_alt(band_full_to_active(band_proc_no(band)), kp, ispin, psi)
+                      else
+                         call pao_to_grid(band_full_to_active(band_proc_no(band)), kp, ispin, psi)
+                      end if
                       current = current + psi*conjg(psi)
                    end if
                 end do ! kp
@@ -195,8 +216,36 @@ contains
           end if
        end do
     end if
+    !current = zero
+    !current = real(psi_sum)!*conjg(psi_sum)
+    !write(ci,'("BandSum")') 
+    !call write_cube(current,ci)
     return
   end subroutine process_bands
+
+  subroutine process_mssf
+
+    use datatypes
+    use numbers
+    use local, ONLY: mssf_proc_no, n_mssf_process
+    use output, ONLY: write_cube
+    use global_module, only : nspin, flag_Multisite
+    use read, ONLY: read_eigenvalues, read_psi_coeffs, read_MSSF_coeffs
+
+    implicit none
+
+    integer :: i_mssf
+    character(len=50) :: filename, ci
+    complex(double_cplx), dimension(:,:,:), allocatable :: psi, psi_sum
+
+    write(*,*) 'Processing MSSF'
+    call read_MSSF_coeffs
+    do i_mssf = 1, n_mssf_process
+       write(*,*) 'Processing atom: ',mssf_proc_no(i_mssf)
+       call write_one_MSSF(mssf_proc_no(i_mssf))
+    end do
+    return
+  end subroutine process_mssf
 
   subroutine process_dos
 
@@ -669,8 +718,9 @@ contains
     use global_module, ONLY: ni_in_cell, atom_coord, species_glob
     use pao_format, ONLY: pao
     use local, ONLY: nptsx, nptsy, nptsz, grid_x, grid_y, grid_z, stm_x_min, stm_x_max, &
-         stm_y_min, stm_y_max, stm_z_min, stm_z_max, evec_coeff, kx, ky, kz, i_job
-    use dimens, ONLY: RadiusAtomf, r_super_x, r_super_y, r_super_z
+         stm_y_min, stm_y_max, stm_z_min, stm_z_max, evec_coeff, kx, ky, kz, i_job, &
+         nab_glob, MSSF_coeffs
+    use dimens, ONLY: RadiusAtomf, r_super_x, r_super_y, r_super_z, RadiusSupport
 
     implicit none
 
@@ -680,12 +730,169 @@ contains
 
     ! Local variables
     integer :: i_atom, i_grid_x, i_grid_y, i_grid_z, i_l, i_zeta, i_m, ix, iy, iz
-    integer :: i_spec, j, npao
+    integer :: i_spec, j, npao, i_mssf, i_nsf, i_glob_nabi, i_nabi
     integer :: minx, maxx, miny, maxy, minz, maxz
     real(double) :: dr, dx, dy, dz, sph_rl, f_r, df_r, dx_dr, dy_dr, dz_dr, del_r
-    real(double) :: a, b, c, d, r1, r2, r3, r4, rr, kr, krx, kry, krz
+    real(double) :: a, b, c, d, r1, r2, r3, r4, rr, kr, krx, kry, krz, b_ia_jb
+    real(double) :: dx_mssf, dy_mssf, dz_mssf, dr_mssf
     real(double), dimension(3) :: dsph_rl, dg
-    complex(double_cplx) :: phase, phase_shift
+    complex(double_cplx) :: phase, phase_shift, c_ia_nk
+    
+    psi = zero
+    ! Grid spacing
+    dg(1) = grid_x!/BohrToAng
+    dg(2) = grid_y!/BohrToAng
+    dg(3) = grid_z!/BohrToAng
+    ! Loop over atoms
+    do i_atom = 1, ni_in_cell
+       write(*,*) 'Atom: ',i_atom
+       i_spec = species_glob(i_atom)
+       !phase = cmplx(cos(kr),sin(kr))
+       ! Find grid limits
+       minx = floor( (atom_coord(1, i_atom) - RadiusAtomf(i_spec))/dg(1) )    
+       maxx = floor( (atom_coord(1, i_atom) + RadiusAtomf(i_spec))/dg(1) ) + 1
+       miny = floor( (atom_coord(2, i_atom) - RadiusAtomf(i_spec))/dg(2) )    
+       maxy = floor( (atom_coord(2, i_atom) + RadiusAtomf(i_spec))/dg(2) ) + 1
+       minz = floor( (atom_coord(3, i_atom) - RadiusAtomf(i_spec))/dg(3) )    
+       maxz = floor( (atom_coord(3, i_atom) + RadiusAtomf(i_spec))/dg(3) ) + 1
+       ! Loop over grid points
+       do i_grid_z = minz, maxz
+          ! Find z grid position and dz
+          dz = dg(3)*real(i_grid_z-1,double) - atom_coord(3,i_atom)
+          iz = i_grid_z
+          krz = zero
+          if(i_grid_z<1) then
+             iz = i_grid_z + nptsz
+             krz = kz(i_kp)*r_super_z
+          end if
+          if(i_grid_z>nptsz) then
+             iz = i_grid_z - nptsz
+             krz = -kz(i_kp)*r_super_z
+          end if
+          do i_grid_y = miny, maxy
+             ! Find y grid position and dy and wrap grid point
+             dy = dg(2)*real(i_grid_y-1,double) - atom_coord(2,i_atom)
+             iy = i_grid_y
+             kry = zero
+             if(i_grid_y<1) then
+                iy = i_grid_y + nptsy
+                kry = ky(i_kp)*r_super_y
+             end if
+             if(i_grid_y>nptsy) then
+                iy = i_grid_y - nptsy
+                kry = -ky(i_kp)*r_super_y
+             end if
+             do i_grid_x = minx, maxx
+                ! Find x grid position and dx and wrap grid point
+                dx = dg(1)*real(i_grid_x-1,double) - atom_coord(1,i_atom)
+                ix = i_grid_x
+                krx = zero
+                if(i_grid_x<1) then
+                   ix = i_grid_x + nptsx
+                   krx = kx(i_kp)*r_super_x
+                end if
+                if(i_grid_x>nptsx) then
+                   ix = i_grid_x - nptsx
+                   krx = -kx(i_kp)*r_super_x
+                end if
+                ! Calculate dr
+                dr = sqrt(dx*dx + dy*dy + dz*dz)
+                if(dr<=RadiusAtomf(i_spec)) then
+                   npao = 1
+                   ! Loop over l
+                   do i_l = 0, pao(i_spec)%greatest_angmom
+                      ! Loop over zeta
+                      do i_zeta = 1, pao(i_spec)%angmom(i_l)%n_zeta_in_angmom
+                         ! Find f(r), df/dr
+                         del_r = pao(i_spec)%angmom(i_l)%zeta(i_zeta)%delta
+                         j = floor(dr/del_r) + 1
+                         if(j+1<=pao(i_spec)%angmom(i_l)%zeta(i_zeta)%length) then
+                            rr = real(j,double)*del_r
+                            a = (rr - dr)/del_r
+                            b = one - a
+                            c = a * ( a * a - one ) * del_r * del_r / six
+                            d = b * ( b * b - one ) * del_r * del_r / six
+                            r1 = pao(i_spec)%angmom(i_l)%zeta(i_zeta)%table(j)
+                            r2 = pao(i_spec)%angmom(i_l)%zeta(i_zeta)%table(j+1)
+                            r3 = pao(i_spec)%angmom(i_l)%zeta(i_zeta)%table2(j)
+                            r4 = pao(i_spec)%angmom(i_l)%zeta(i_zeta)%table2(j+1)
+                            f_r = a*r1 + b*r2 + c*r3 + d*r4
+                         else
+                            f_r = zero
+                         end if
+                         ! Loop over m
+                         do i_m = -i_l, i_l
+                            c_ia_nk = evec_coeff(npao,i_atom,i_band, i_kp, i_spin)
+                            ! Get spherical harmonic and gradient
+                            ! NB returns r^l times spherical harmonic
+                            call spherical_harmonic_rl(dx, dy, dz, i_l, i_m, sph_rl, dsph_rl)
+                            ! Loop over MSSF we contribute to
+                            do i_mssf = 1, nab_glob(i_atom)%i_count
+                               i_glob_nabi = nab_glob(i_atom)%i_glob(i_mssf)
+                               kr = kx(i_kp)*atom_coord(1, nab_glob(i_atom)%i_glob(i_mssf)) + &
+                                    ky(i_kp)*atom_coord(2, nab_glob(i_atom)%i_glob(i_mssf)) + &
+                                    kz(i_kp)*atom_coord(3, nab_glob(i_atom)%i_glob(i_mssf))
+                               phase = cmplx(cos(kr+krx+kry+krz),sin(kr+krx+kry+krz))
+                               i_nabi = nab_glob(i_atom)%neigh(i_mssf)
+                               ! Calculate displacement using dx, dy, dz and check range
+                               dx_mssf = dx - nab_glob(i_atom)%disp(i_mssf,1)
+                               dy_mssf = dy - nab_glob(i_atom)%disp(i_mssf,2)
+                               dz_mssf = dz - nab_glob(i_atom)%disp(i_mssf,3)
+                               dr_mssf = sqrt(dx_mssf*dx_mssf + dy_mssf*dy_mssf + dz_mssf*dz_mssf)
+                               !write(*,*) 'Loc: ',dx_mssf, dy_mssf, dz_mssf
+                               if(dr_mssf < RadiusSupport(species_glob(i_glob_nabi))) then
+                                  ! Loop over MSSFs on atom
+                                  do i_nsf = 1, MSSF_coeffs(i_glob_nabi)%n_sf
+                                     ! Coeff
+                                     b_ia_jb = MSSF_coeffs(i_glob_nabi)% &
+                                          neigh_coeff(i_nabi)%coeff(npao,i_nsf)
+                                     psi(ix, iy, iz) = psi(ix, iy, iz) + &
+                                          phase * c_ia_nk * b_ia_jb * sph_rl * f_r
+                                  end do ! i_nsf
+                               end if
+                            end do ! i_mssf
+                            npao = npao + 1
+                         end do ! i_m
+                      end do ! i_zeta
+                   end do ! i_l
+                end if ! dr <= RadiusAtomf
+             end do ! i_grid_x
+          end do ! i_grid_y
+       end do ! i_grid_z
+    end do ! i_atom
+    return
+  end subroutine mssf_to_grid
+
+  ! This is really band_to_grid as it loops over all atoms and MSSFs
+  ! Loop over c_ia and then over neighbours jb - less efficient but
+  ! should be simpler indexing
+  subroutine mssf_to_grid_alt(i_band, i_kp, i_spin, psi)
+
+    use datatypes
+    use numbers
+    use units
+    use global_module, ONLY: ni_in_cell, atom_coord, species_glob
+    use pao_format, ONLY: pao
+    use local, ONLY: nptsx, nptsy, nptsz, grid_x, grid_y, grid_z, stm_x_min, stm_x_max, &
+         stm_y_min, stm_y_max, stm_z_min, stm_z_max, evec_coeff, kx, ky, kz, i_job, &
+         nab_glob, MSSF_coeffs
+    use dimens, ONLY: RadiusAtomf, r_super_x, r_super_y, r_super_z, RadiusSupport
+
+    implicit none
+
+    ! Passed variables
+    integer :: i_band, i_kp, i_spin
+    complex(double_cplx), dimension(nptsx, nptsy, nptsz) :: psi
+
+    ! Local variables
+    integer :: i_atom, i_grid_x, i_grid_y, i_grid_z, i_l, i_zeta, i_m, ix, iy, iz
+    integer :: i_spec, j, npao, i_mssf, i_nsf, i_glob_nabi, i_nabi
+    integer :: minx, maxx, miny, maxy, minz, maxz, j_spec
+    real(double) :: dr, dx, dy, dz, sph_rl, f_r, df_r, dx_dr, dy_dr, dz_dr, del_r
+    real(double) :: a, b, c, d, r1, r2, r3, r4, rr, kr, krx, kry, krz, b_ia_jb
+    real(double) :: dx_mssf, dy_mssf, dz_mssf, dr_mssf
+    real(double), dimension(3) :: dsph_rl, dg
+    complex(double_cplx) :: phase, phase_shift, c_ia_nk
     
     psi = zero
     ! Grid spacing
@@ -695,96 +902,205 @@ contains
     ! Loop over atoms
     do i_atom = 1, ni_in_cell
        i_spec = species_glob(i_atom)
-       !write(*,*) 'Atom, spec, pos: ',i_atom, i_spec, atom_coord(3, i_atom) + RadiusAtomf(i_spec), stm_z_min
-       if(atom_coord(3, i_atom) + RadiusAtomf(i_spec) >= stm_z_min) then ! Is the atom in STM region?
-          kr = kx(i_kp)*atom_coord(1, i_atom) + ky(i_kp)*atom_coord(2, i_atom) + kz(i_kp)*atom_coord(3, i_atom)
-          !phase = cmplx(cos(kr),sin(kr))
-          ! Find grid limits
-          minx = floor( (atom_coord(1, i_atom) - RadiusAtomf(i_spec))/dg(1) )    
-          maxx = floor( (atom_coord(1, i_atom) + RadiusAtomf(i_spec))/dg(1) ) + 1
-          miny = floor( (atom_coord(2, i_atom) - RadiusAtomf(i_spec))/dg(2) )    
-          maxy = floor( (atom_coord(2, i_atom) + RadiusAtomf(i_spec))/dg(2) ) + 1
-          minz = floor( (atom_coord(3, i_atom) - RadiusAtomf(i_spec))/dg(3) )    
-          maxz = floor( (atom_coord(3, i_atom) + RadiusAtomf(i_spec))/dg(3) ) + 1
-          ! Account for STM limits
-          !if(stm_x_min>zero.and.minx<0) then
-          !   if(minx+nptsx>floor(stm_x_min
-          !if(stm_x_min>zero) minx = max(minx, floor(stm_x_min/dg(1)) )
-          !if(stm_x_max<r_super_x) maxx = min(maxx, floor(stm_x_max/dg(1)+1) )
-          !if(stm_y_min>zero) miny = max(miny, floor(stm_y_min/dg(2)) )
-          !if(stm_y_max<r_super_y) maxy = min(maxy, floor(stm_y_max/dg(2)+1) )
-          if(i_job==4.or.i_job==5) then ! STM not band density
-             if(stm_z_min>zero) then
-                minz = minz - floor(stm_z_min/dg(3))
-             end if
-             if(minz<1) minz = 1
-             maxz = min(maxz, nptsz)
+       kr = kx(i_kp)*atom_coord(1, i_atom) + ky(i_kp)*atom_coord(2, i_atom) + kz(i_kp)*atom_coord(3, i_atom)
+       ! Find grid limits
+       minx = floor( (atom_coord(1, i_atom) - RadiusSupport(i_spec))/dg(1) )
+       maxx = floor( (atom_coord(1, i_atom) + RadiusSupport(i_spec))/dg(1) ) + 1
+       miny = floor( (atom_coord(2, i_atom) - RadiusSupport(i_spec))/dg(2) )    
+       maxy = floor( (atom_coord(2, i_atom) + RadiusSupport(i_spec))/dg(2) ) + 1
+       minz = floor( (atom_coord(3, i_atom) - RadiusSupport(i_spec))/dg(3) )    
+       maxz = floor( (atom_coord(3, i_atom) + RadiusSupport(i_spec))/dg(3) ) + 1
+       ! Loop over grid points
+       do i_grid_z = minz, maxz
+          ! Find z grid position and dz
+          dz = dg(3)*real(i_grid_z-1,double) - atom_coord(3,i_atom)
+          iz = i_grid_z
+          krz = zero
+          if(i_grid_z<1) then
+             iz = i_grid_z + nptsz
+             krz = kz(i_kp)*r_super_z
           end if
-          ! Loop over grid points
-          do i_grid_z = minz, maxz
-             ! Find z grid position and dz
-             dz = dg(3)*real(i_grid_z-1,double)+stm_z_min - atom_coord(3,i_atom)
-             iz = i_grid_z
-             ! Wrap if we're making band densities, but not for STM simulation
-             krz = zero
-             if(i_job==3) then
-                if(i_grid_z<1) then
-                   iz = i_grid_z + nptsz
-                   krz = kz(i_kp)*r_super_z
-                end if
-                if(i_grid_z>nptsz) then
-                   iz = i_grid_z - nptsz
-                   krz = -kz(i_kp)*r_super_z
-                end if
+          if(i_grid_z>nptsz) then
+             iz = i_grid_z - nptsz
+             krz = -kz(i_kp)*r_super_z
+          end if
+          do i_grid_y = miny, maxy
+             ! Find y grid position and dy and wrap grid point
+             dy = dg(2)*real(i_grid_y-1,double) - atom_coord(2,i_atom)
+             iy = i_grid_y
+             kry = zero
+             if(i_grid_y<1) then
+                iy = i_grid_y + nptsy
+                kry = ky(i_kp)*r_super_y
              end if
-             do i_grid_y = miny, maxy
-                ! Find y grid position and dy and wrap grid point
-                dy = dg(2)*real(i_grid_y-1,double)+stm_y_min - atom_coord(2,i_atom)
-                iy = i_grid_y
-                kry = zero
-                if(i_grid_y<1) then
-                   iy = i_grid_y + nptsy
-                   kry = ky(i_kp)*r_super_y
+             if(i_grid_y>nptsy) then
+                iy = i_grid_y - nptsy
+                kry = -ky(i_kp)*r_super_y
+             end if
+             do i_grid_x = minx, maxx
+                ! Find x grid position and dx and wrap grid point
+                dx = dg(1)*real(i_grid_x-1,double) - atom_coord(1,i_atom)
+                ix = i_grid_x
+                krx = zero
+                if(i_grid_x<1) then
+                   ix = i_grid_x + nptsx
+                   krx = kx(i_kp)*r_super_x
                 end if
-                if(i_grid_y>nptsy) then
-                   iy = i_grid_y - nptsy
-                   kry = -ky(i_kp)*r_super_y
+                if(i_grid_x>nptsx) then
+                   ix = i_grid_x - nptsx
+                   krx = -kx(i_kp)*r_super_x
                 end if
-                do i_grid_x = minx, maxx
-                   ! Find x grid position and dx and wrap grid point
-                   dx = dg(1)*real(i_grid_x-1,double)+stm_x_min - atom_coord(1,i_atom)
-                   ix = i_grid_x
-                   krx = zero
-                   if(i_grid_x<1) then
-                      ix = i_grid_x + nptsx
-                      krx = kx(i_kp)*r_super_x
-                   end if
-                   if(i_grid_x>nptsx) then
-                      ix = i_grid_x - nptsx
-                      krx = -kx(i_kp)*r_super_x
-                   end if
-                   ! Calculate dr
-                   dr = sqrt(dx*dx + dy*dy + dz*dz)
-                   if(dr<=RadiusAtomf(i_spec)) then
-                      phase = cmplx(cos(kr+krx+kry+krz),sin(kr+krx+kry+krz))
+                ! Calculate dr
+                dr = sqrt(dx*dx + dy*dy + dz*dz)
+                if(dr < RadiusSupport(i_spec)) then
+                   phase = cmplx(cos(kr+krx+kry+krz),sin(kr+krx+kry+krz))
+                   do i_mssf = 1, MSSF_coeffs(i_atom)%n_neighbours
+                      j_spec = species_glob(MSSF_coeffs(i_atom)%neigh_coeff(i_mssf)%i_glob)
+                      dx_mssf = dx - MSSF_coeffs(i_atom)%neigh_coeff(i_mssf)%dx
+                      dy_mssf = dy - MSSF_coeffs(i_atom)%neigh_coeff(i_mssf)%dy
+                      dz_mssf = dz - MSSF_coeffs(i_atom)%neigh_coeff(i_mssf)%dz
+                      dr_mssf = sqrt(dx_mssf*dx_mssf + dy_mssf*dy_mssf + dz_mssf*dz_mssf)
+                      if(dr_mssf<=RadiusAtomf(j_spec)) then
+                         npao = 1
+                         ! Loop over l
+                         do i_l = 0, pao(j_spec)%greatest_angmom
+                            ! Loop over zeta
+                            do i_zeta = 1, pao(j_spec)%angmom(i_l)%n_zeta_in_angmom
+                               ! Find f(r), df/dr
+                               del_r = pao(j_spec)%angmom(i_l)%zeta(i_zeta)%delta
+                               j = floor(dr_mssf/del_r) + 1
+                               if(j+1<=pao(j_spec)%angmom(i_l)%zeta(i_zeta)%length) then
+                                  rr = real(j,double)*del_r
+                                  a = (rr - dr_mssf)/del_r
+                                  b = one - a
+                                  c = a * ( a * a - one ) * del_r * del_r / six
+                                  d = b * ( b * b - one ) * del_r * del_r / six
+                                  r1 = pao(j_spec)%angmom(i_l)%zeta(i_zeta)%table(j)
+                                  r2 = pao(j_spec)%angmom(i_l)%zeta(i_zeta)%table(j+1)
+                                  r3 = pao(j_spec)%angmom(i_l)%zeta(i_zeta)%table2(j)
+                                  r4 = pao(j_spec)%angmom(i_l)%zeta(i_zeta)%table2(j+1)
+                                  f_r = a*r1 + b*r2 + c*r3 + d*r4
+                               else
+                                  f_r = zero
+                               end if
+                               ! Loop over m
+                               do i_m = -i_l, i_l
+                                  ! Get spherical harmonic and gradient
+                                  ! NB returns r^l times spherical harmonic
+                                  call spherical_harmonic_rl(dx_mssf, dy_mssf, dz_mssf, i_l, i_m, sph_rl, dsph_rl)
+                                  ! Loop over MSSF we contribute to
+                                  ! Loop over MSSFs on atom
+                                  do i_nsf = 1, MSSF_coeffs(i_atom)%n_sf
+                                     ! Coeff
+                                     c_ia_nk = evec_coeff(i_nsf,i_atom,i_band, i_kp, i_spin)
+                                     b_ia_jb = MSSF_coeffs(i_atom)%neigh_coeff(i_mssf)%coeff(npao,i_nsf)
+                                     psi(ix, iy, iz) = psi(ix, iy, iz) + &
+                                          phase * c_ia_nk * b_ia_jb * sph_rl * f_r
+                                  end do ! i_nsf
+                                  npao = npao + 1
+                               end do ! i_m
+                            end do ! i_zeta
+                         end do ! i_l
+                      end if ! dr <= RadiusAtomf
+                   end do
+                end if ! dr_mssf < RadiusSupport
+             end do ! i_grid_x
+          end do ! i_grid_y
+       end do ! i_grid_z
+    end do ! i_atom
+    return
+  end subroutine mssf_to_grid_alt
+
+  ! This is really band_to_grid as it loops over all atoms and MSSFs
+  subroutine write_one_MSSF(i_atom)
+
+    use datatypes
+    use numbers
+    use units
+    use global_module, ONLY: ni_in_cell, atom_coord, species_glob
+    use pao_format, ONLY: pao
+    use local, ONLY: nptsx, nptsy, nptsz, grid_x, grid_y, grid_z, stm_x_min, stm_x_max, &
+         stm_y_min, stm_y_max, stm_z_min, stm_z_max, evec_coeff, kx, ky, kz, i_job, &
+         nab_glob, MSSF_coeffs
+    use dimens, ONLY: RadiusAtomf, r_super_x, r_super_y, r_super_z, RadiusMS, RadiusSupport
+    use output, ONLY: write_mssf_cube
+    
+    implicit none
+
+    ! Passed variables
+    integer :: i_atom
+
+    ! Local variables
+    integer :: i_grid_x, i_grid_y, i_grid_z, i_l, i_zeta, i_m, ix, iy, iz
+    integer :: i_spec, j, npao, i_mssf, i_nsf, i_nab, j_spec, npx, npy, npz
+    integer :: minx, maxx, miny, maxy, minz, maxz
+    real(double), dimension(:,:,:), allocatable :: psi
+    real(double) :: dr, dx, dy, dz, sph_rl, f_r, df_r, dx_dr, dy_dr, dz_dr, del_r
+    real(double) :: a, b, c, d, r1, r2, r3, r4, rr, kr, krx, kry, krz, c_ia_nk, b_ia_jb
+    real(double) :: dx_mssf, dy_mssf, dz_mssf
+    real(double), dimension(3) :: dsph_rl, dg
+    complex(double_cplx) :: phase, phase_shift
+    character(len=50) :: ci
+
+    ! Grid spacing
+    dg(1) = grid_x!/BohrToAng
+    dg(2) = grid_y!/BohrToAng
+    dg(3) = grid_z!/BohrToAng
+    ! Find grid limits
+    i_spec = species_glob(i_atom)
+    minx = floor( - RadiusSupport(i_spec))/dg(1)    
+    maxx = floor(   RadiusSupport(i_spec))/dg(1) + 1
+    miny = floor( - RadiusSupport(i_spec))/dg(2)    
+    maxy = floor(   RadiusSupport(i_spec))/dg(2) + 1
+    minz = floor( - RadiusSupport(i_spec))/dg(3)    
+    maxz = floor(   RadiusSupport(i_spec))/dg(3) + 1
+    npx = maxx - minx + 1
+    npy = maxy - miny + 1
+    npz = maxz - minz + 1
+    allocate(psi(npx,npy,npz))
+    write(*,*) 'Atom, SF: ',i_atom,MSSF_coeffs(i_atom)%n_sf
+    do i_nsf = 1, MSSF_coeffs(i_atom)%n_sf
+       psi = zero
+       ! Loop over grid points
+       do i_grid_z = minz, maxz
+          ! Find z grid position and dz
+          dz = dg(3)*real(i_grid_z-1,double)
+          iz = i_grid_z - minz + 1
+          do i_grid_y = miny, maxy
+             ! Find y grid position and dy and wrap grid point
+             dy = dg(2)*real(i_grid_y-1,double)
+             iy = i_grid_y - miny + 1
+             do i_grid_x = minx, maxx
+                ! Find x grid position and dx and wrap grid point
+                dx = dg(1)*real(i_grid_x-1,double)
+                ix = i_grid_x - minx + 1
+                ! Calculate dr
+                dr = sqrt(dx*dx + dy*dy + dz*dz)
+                if(dr<=RadiusSupport(i_spec)) then
+                   do i_nab = 1, MSSF_coeffs(i_atom)%n_neighbours
+                      dx_dr = dx - MSSF_coeffs(i_atom)%neigh_coeff(i_nab)%dx
+                      dy_dr = dy - MSSF_coeffs(i_atom)%neigh_coeff(i_nab)%dy
+                      dz_dr = dz - MSSF_coeffs(i_atom)%neigh_coeff(i_nab)%dz
+                      dr = sqrt(dx_dr*dx_dr + dy_dr*dy_dr + dz_dr*dz_dr)
+                      j_spec = species_glob(MSSF_coeffs(i_atom)%neigh_coeff(i_nab)%i_glob)
                       npao = 1
                       ! Loop over l
-                      do i_l = 0, pao(i_spec)%greatest_angmom
+                      do i_l = 0, pao(j_spec)%greatest_angmom
                          ! Loop over zeta
-                         do i_zeta = 1, pao(i_spec)%angmom(i_l)%n_zeta_in_angmom
+                         do i_zeta = 1, pao(j_spec)%angmom(i_l)%n_zeta_in_angmom
                             ! Find f(r), df/dr
-                            del_r = pao(i_spec)%angmom(i_l)%zeta(i_zeta)%delta
+                            del_r = pao(j_spec)%angmom(i_l)%zeta(i_zeta)%delta
                             j = floor(dr/del_r) + 1
-                            if(j+1<=pao(i_spec)%angmom(i_l)%zeta(i_zeta)%length) then
+                            if(j+1<=pao(j_spec)%angmom(i_l)%zeta(i_zeta)%length) then
                                rr = real(j,double)*del_r
                                a = (rr - dr)/del_r
                                b = one - a
                                c = a * ( a * a - one ) * del_r * del_r / six
                                d = b * ( b * b - one ) * del_r * del_r / six
-                               r1 = pao(i_spec)%angmom(i_l)%zeta(i_zeta)%table(j)
-                               r2 = pao(i_spec)%angmom(i_l)%zeta(i_zeta)%table(j+1)
-                               r3 = pao(i_spec)%angmom(i_l)%zeta(i_zeta)%table2(j)
-                               r4 = pao(i_spec)%angmom(i_l)%zeta(i_zeta)%table2(j+1)
+                               r1 = pao(j_spec)%angmom(i_l)%zeta(i_zeta)%table(j)
+                               r2 = pao(j_spec)%angmom(i_l)%zeta(i_zeta)%table(j+1)
+                               r3 = pao(j_spec)%angmom(i_l)%zeta(i_zeta)%table2(j)
+                               r4 = pao(j_spec)%angmom(i_l)%zeta(i_zeta)%table2(j+1)
                                f_r = a*r1 + b*r2 + c*r3 + d*r4
                             else
                                f_r = zero
@@ -793,25 +1109,25 @@ contains
                             do i_m = -i_l, i_l
                                ! Get spherical harmonic and gradient
                                ! NB returns r^l times spherical harmonic
-                               call spherical_harmonic_rl(dx, dy, dz, i_l, i_m, sph_rl, dsph_rl)
+                               call spherical_harmonic_rl(dx_dr, dy_dr, dz_dr, i_l, i_m, sph_rl, dsph_rl)
                                ! Accumulate into psi, grad psi
-                               ! Loop over atoms whose MSSF this atom contributes to
-                               ! Work out which coefficient we use (which j image)
-                               ! Loop over MSSFs on atom
-                               psi(ix, iy, iz) = psi(ix, iy, iz) + &
-                                    phase*evec_coeff(npao,i_atom,i_band, i_kp, i_spin) * sph_rl * f_r
+                               ! Coeff
+                               b_ia_jb = MSSF_coeffs(i_atom)%neigh_coeff(i_nab)%coeff(npao,i_nsf)
+                               psi(ix, iy, iz) = psi(ix, iy, iz) + b_ia_jb * sph_rl * f_r
                                npao = npao + 1
                             end do ! i_m
                          end do ! i_zeta
                       end do ! i_l
-                   end if ! dr <= RadiusAtomf
-                end do ! i_grid_x
-             end do ! i_grid_y
-          end do ! i_grid_z
-       end if ! Atom is in STM region
-    end do ! i_atom
+                   end do ! i_nab
+                end if ! dr <= RadiusAtomf
+             end do ! i_grid_x
+          end do ! i_grid_y
+       end do ! i_grid_z
+       write(ci,'("Atom",I0.6,"MSSF",I0.3)') i_atom, i_nsf
+       call write_mssf_cube(psi,npx, npy, npz, ci)
+    end do
     return
-  end subroutine mssf_to_grid
+  end subroutine write_one_MSSF
 
   ! Return spherical harmonic times r^l (and derivative of this)
   subroutine spherical_harmonic_rl(x, y, z, l, m, sph, dsph)

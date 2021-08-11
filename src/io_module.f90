@@ -1366,69 +1366,6 @@ second:   do
   end subroutine dump_charge
   !!***
 
-
-  !!****f* io_module/dump_band_charge
-  !! PURPOSE
-  !! INPUTS
-  !! OUTPUT
-  !! RETURN VALUE
-  !! AUTHOR
-  !!   David Bowler
-  !! CREATION DATE 
-  !!   2015/07/02 08:22 dave
-  !! MODIFICATION HISTORY
-  !!   2015/07/02 08:23 dave
-  !!    This was dump_charge2 (which served no purpose that I could see)
-  !! SOURCE
-  !!
-  subroutine dump_band_charge(stub, density, size, inode, spin,kp,energy,num_kpts)
-
-    use datatypes
-    use block_module, only: n_pts_in_block
-    use primary_module, only: domain
-    use global_module, only: numprocs
-    !use set_blipgrid_module, only: naba_atoms_of_blocks, supp
-
-    ! Passed variables
-    integer :: size, inode
-    real(double), dimension(size) :: density
-    character(len=*) :: stub
-    integer :: spin 
-    real(double), optional :: energy
-    real(double), optional, dimension(3) :: kp
-    integer, optional :: num_kpts
-
-    ! Local variables
-    integer :: lun, block, n_point, n_i, n
-    character(len=50) :: filename
-
-    ! Build a filename based on node number
-    select case (spin)
-    case (0)
-       call get_file_name (stub//'den', numprocs, inode, filename)
-    case (1)
-       call get_file_name (stub//'den_up', numprocs, inode, filename)
-    case (2)
-       call get_file_name (stub//'den_dn', numprocs, inode, filename)
-    end select
-    ! Open file
-    call io_assign (lun)
-    open (unit = lun, file = filename, position = 'append')
-    ! We need to write a header of the k-point and energy if split-down
-    if(present(num_kpts)) then
-       write(lun,fmt='(2i10)') num_kpts, domain%groups_on_node * n_pts_in_block
-    end if
-    if(present(kp).AND.present(energy)) then
-       write(lun,fmt='(3f12.5,f17.11)') kp(1:3),energy
-    end if
-    do n=1, domain%groups_on_node * n_pts_in_block
-       write (unit=lun, fmt='(g13.6)') density(n)
-    end do
-    call io_close (lun)
-    return
-  end subroutine dump_band_charge
-  !!***
-
   !!****f* io_module/write_eigenvalues
   !! PURPOSE
   !!  Writes out eigenvalues

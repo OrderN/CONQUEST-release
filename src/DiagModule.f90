@@ -3965,11 +3965,17 @@ contains
 
     use datatypes
     use numbers,         only: zero
-    use global_module,   only: E_wf_max, E_wf_min, nspin, flag_wf_range_Ef, max_wf, out_wf
+    use global_module,   only: E_wf_max, E_wf_min, nspin, flag_wf_range_Ef, max_wf, out_wf, &
+         flag_Multisite, id_glob, species_glob
     use ScalapackFormat, only: matrix_size
-    use species_module,  only: nsf_species, natomf_species
+    use species_module,  only: nsf_species, npao_species
     use input_module,    only: io_assign, io_close
     use primary_module,  only: bundle
+    use group_module,    only: parts
+    use cover_module,    only: BCS_parts
+    use matrix_data,     only: mat, halo, SFcoeff_range
+    use mult_module,     only: matSFcoeff, matrix_pos, mat_p
+    use pao_format,      only: pao
 
     implicit none
 
@@ -3979,9 +3985,13 @@ contains
     real(double), dimension(:) :: eval
 
     ! Local variables
-    integer :: lun, iwf, acc, atom, isf1, wf_no
-    character(len=50) :: filename
+    integer :: lun, iwf, acc, atom, isf1, wf_no, max_neighbours
+    integer :: part, memb, neigh, ist, atom_spec, iprim
+    integer :: gcspart, neigh_global_part, neigh_global_num, neigh_species
+    integer :: l2, nacz2, m2, wheremat, count_pao_j, spec_j, j_in_halo, sf1, nsf_i
+    real(double) :: dx, dy, dz, r2
     real(double) :: offset
+    character(len=50) :: filename
 
     offset = zero
     if(flag_wf_range_Ef) offset = Efermi(spin)
@@ -4022,6 +4032,59 @@ contains
        end do ! iwf
     end if
     call io_close(lun)
+    if(flag_Multisite .and. spin==1) then ! Write table of neighbours
+       iprim = 0
+       call io_assign (lun)
+       write(filename,'("Process",I0.7,"MSSF.dat")') myid+1
+       open (unit = lun, file = filename,position='append')
+       max_neighbours = 0
+       do part = 1,bundle%groups_on_node ! Loop over primary set partitions
+          if(bundle%nm_nodgroup(part)>0) then ! If there are atoms in partition
+             do memb = 1,bundle%nm_nodgroup(part) ! Loop over atoms
+                max_neighbours = max(max_neighbours, mat(part,SFcoeff_range)%n_nab(memb))
+             end do
+          end if
+       end do
+       write(lun,*) bundle%n_prim, maxval(nsf_species), max_neighbours, maxval(npao_species)
+       do part = 1,bundle%groups_on_node ! Loop over primary set partitions
+          if(bundle%nm_nodgroup(part)>0) then ! If there are atoms in partition
+             do memb = 1,bundle%nm_nodgroup(part) ! Loop over atoms
+                iprim=iprim+1
+                nsf_i  = mat(part,SFcoeff_range)%ndimi(memb)   ! number of SFs of i
+                write(lun,*) bundle%ig_prim(iprim), nsf_i, mat(part,SFcoeff_range)%n_nab(memb)
+                do neigh = 1, mat(part,SFcoeff_range)%n_nab(memb) ! Loop over neighbours of atom
+                   ist = mat(part,SFcoeff_range)%i_acc(memb)+neigh-1
+                   ! Build the distances between atoms
+                   gcspart = BCS_parts%icover_ibeg(mat(part,SFcoeff_range)%i_part(ist)) + &
+                        mat(part,SFcoeff_range)%i_seq(ist)-1
+                   ! Displacement vector
+                   dx = BCS_parts%xcover(gcspart)-bundle%xprim(iprim)
+                   dy = BCS_parts%ycover(gcspart)-bundle%yprim(iprim)
+                   dz = BCS_parts%zcover(gcspart)-bundle%zprim(iprim)
+                   neigh_global_part = BCS_parts%lab_cell(mat(part,SFcoeff_range)%i_part(ist)) 
+                   neigh_global_num  = id_glob(parts%icell_beg(neigh_global_part)+mat(part,SFcoeff_range)%i_seq(ist)-1)
+                   spec_j    = species_glob(neigh_global_num)
+                   j_in_halo = halo(SFcoeff_range)%i_halo(gcspart)
+                   write(lun,*) neigh_global_num, dx, dy, dz, npao_species(spec_j)
+                   ! Loop over SFs on i
+                   do sf1 = 1, nsf_i                 
+                      count_pao_j = 1
+                      do l2 = 0, pao(spec_j)%greatest_angmom
+                         do nacz2 = 1, pao(spec_j)%angmom(l2)%n_zeta_in_angmom
+                            do m2 = -l2,l2
+                               wheremat = matrix_pos(matSFcoeff(spin),iprim,j_in_halo,sf1,count_pao_j)
+                               write(lun,*) mat_p(matSFcoeff(spin))%matrix(wheremat)
+                               count_pao_j = count_pao_j + 1
+                            enddo ! m2
+                         enddo ! nacz2
+                      enddo !l2
+                   end do ! neigh
+                end do ! sf1
+             end do ! memb
+          end if ! nm_nodgroup > 0
+       end do ! part       
+       call io_close(lun)
+    end if
     return
   end subroutine write_wavefn_coeffs
 

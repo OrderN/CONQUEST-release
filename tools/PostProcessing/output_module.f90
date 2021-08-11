@@ -331,6 +331,75 @@ contains
     close(unit=17)
   end subroutine write_cube
 
+  subroutine write_mssf_cube(data,npx,npy,npz,ci)
+
+    use datatypes
+    use numbers
+    use local, ONLY: root_file, stm_x_min, stm_y_min, stm_z_min, nsampx, nsampy, nsampz
+    use dimens, ONLY: r_super_x, r_super_y, r_super_z, volume, atomicnum
+    use local, ONLY: current, root_file, grid_x, grid_y, grid_z, gpv, nrptx, nrpty, nrptz
+    use global_module, ONLY: ni_in_cell, atom_coord, species_glob
+    use units, ONLY: BohrToAng, AngToBohr
+    
+    implicit none
+
+    integer :: npx, npy, npz
+    real(double), dimension(npx,npy,npz) :: data
+    character(len=50), OPTIONAL :: ci
+    
+    character(len=50) :: filename
+
+    integer :: i, j, icount, nrx, nry, nrz, nx, ny, nz, isym, nz_total
+    logical :: SymSamp
+    character(len=3), dimension(7) :: asymm = (/'X  ','Y  ','XY ','Z  ','XZ ','YZ ','XYZ'/)
+    real(double) :: shiftx, shifty, shiftz
+
+    ! Check sampling points are symmetric or not
+    SymSamp = .true.
+    ! Open file
+    if(PRESENT(ci)) then
+       filename = trim(ci)//".cube"
+    else
+       filename = trim(root_file)//".cube"
+    end if
+    open(unit=17,file=filename)
+    ! Header - improve this later
+    write(17,fmt='("Conquest charge")')
+    write(17,fmt='("Sampling points symmetric")')
+    ! Atoms, origin location
+    write(17,fmt='(i5,3f12.6,i5)') ni_in_cell, zero, zero, zero, 1
+    ! Numbers of grid points, grid increment (i.e. spacing)
+    write(17,fmt='(i5,3f12.6)') npx,grid_x,zero,zero
+    write(17,fmt='(i5,3f12.6)') npy,zero,grid_y,zero
+    write(17,fmt='(i5,3f12.6)') npz,zero,zero,grid_z
+    ! Atomic coordinates
+    shiftx = npx*grid_x/two - atom_coord(1,2)
+    shifty = npy*grid_y/two - atom_coord(2,2)
+    shiftz = npz*grid_z/two - atom_coord(3,2)
+    do i=1,ni_in_cell
+       write(17,fmt='(i5,4f12.6)') atomicnum(species_glob(i)),real(atomicnum(species_glob(i)),double),&
+            atom_coord(1,i) + shiftx, &
+            atom_coord(2,i) + shifty, &
+            atom_coord(3,i) + shiftz
+    end do
+    ! Charge density, z fastest
+    nz_total = npz
+    do nx=1,npx
+       do ny=1,npy
+          icount = 0
+          do nz=1,npz
+             icount = icount + 1
+             if ((icount==nz_total).or.(mod(icount,6)==0)) then
+                write(17,fmt='(e13.5)') data(nx,ny,nz)!/gpv
+             else
+                write(17,fmt='(e13.5)',advance='no') data(nx,ny,nz)!/gpv
+             endif
+          end do
+       end do
+    end do
+    close(unit=17)
+  end subroutine write_mssf_cube
+
   ! Taken from density_module.f90
   subroutine assign_atomic_radii
 

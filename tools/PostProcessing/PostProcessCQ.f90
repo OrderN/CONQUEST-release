@@ -58,6 +58,11 @@ program ConvertCharge
      call process_dos
   else if(i_job==7) then ! pDOS output
      write(*,*) "Projected DOS will be implemented soon..."
+  else if(i_job==8) then
+     write(*,fmt='(2x,"Outputting MSSF")')
+     ! Read blocks
+     call read_block_input
+     call process_mssf
   end if
   ! Read eigenvalues and calculate weight for bands by kpt
   !if(flag_only_charge) then
