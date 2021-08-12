@@ -560,16 +560,16 @@ contains
        write(filename,'("Process",I0.7,"MSSF.dat")') i_proc
        open(unit=17,file=filename)
        read(17,*) n_prim, max_nsf, max_neighbours, max_pao
-       write(*,*) 'Proc: ',i_proc, n_prim, max_nsf, max_neighbours, max_pao
+       !write(*,*) 'Proc: ',i_proc, n_prim, max_nsf, max_neighbours, max_pao
        do i_prim = 1, n_prim
           read(17,*) i_glob, n_sf, n_neighbours
           MSSF_coeffs(i_glob)%n_neighbours = n_neighbours
           MSSF_coeffs(i_glob)%n_sf = n_sf
-          write(*,*) 'Prim: ',i_prim, i_glob, n_sf, n_neighbours
+          !write(*,*) 'Prim: ',i_prim, i_glob, n_sf, n_neighbours
           allocate(MSSF_coeffs(i_glob)%neigh_coeff(n_neighbours))
           do i_nab = 1, n_neighbours
              read(17,*) i_glob_nab, dx, dy, dz, n_pao
-             write(*,*) 'Nab: ', i_nab, i_glob_nab, dx, dy, dz, n_pao
+             !write(*,*) 'Nab: ', i_nab, i_glob_nab, dx, dy, dz, n_pao
              allocate(MSSF_coeffs(i_glob)%neigh_coeff(i_nab)%coeff(n_pao,n_sf))
              MSSF_coeffs(i_glob)%neigh_coeff(i_nab)%coeff = zero
              MSSF_coeffs(i_glob)%neigh_coeff(i_nab)%i_glob = i_glob_nab

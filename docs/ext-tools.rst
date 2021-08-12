@@ -19,20 +19,20 @@ There are a number of different analyses which can be performed:
 coordinate conversion (to formats which can be plotted); conversion of
 total charge density to CUBE file format; production of band-resolved
 (optionally k-point resolved) densities in CUBE file format; simple
-Tersoff-Hamann STM simulation; and calculation of densities of states
-(projected DOS is under development).  You should ensure that all the
-files produced during the CONQUEST run are available for the
-post-processing (including ``eigenvalues.dat``, ``chden.nnn``,
-``make_blk.dat`` or ``hilbert_make_blk.dat``) as well as the input
-files.
+Tersoff-Hamann STM simulation; plotting of multi-site support
+functions; and calculation of densities of states (projected DOS is
+under development).  You should ensure that all the files produced
+during the CONQUEST run are available for the post-processing
+(including ``eigenvalues.dat``, ``chden.nnn``, ``make_blk.dat`` or
+``hilbert_make_blk.dat``, ``Processnnnnnnn[WF|MSSF].dat``) as well as the input files.
 
 **Note** that the utility reads the ``Conquest_input`` file, taking some
 flags from the CONQUEST run that generated the output, and some
 utility-specific flags that are detailed below.
 
-**Note also** that band density and STM simulation are not at present
-compatible with multi-site support functions (MSSF), though we hope
-to implement this soon.
+**Note also** that STM simulation is not at present
+compatible with multi-site support functions (MSSF), though this
+will be implemented soon.
 
 Go to :ref:`top <ext-tools>`.
 
@@ -116,8 +116,10 @@ The wavefunction range can be relative to the Fermi level
 will produce a file containing all eigenvalues at all k-points
 (``eigenvalues.dat``) and a series of files containing the
 wavefunction expansion coefficients for the selected bands
-(``ProcessnnnnnnnWF.dat``).  From these, band densities can be
-produced in post-processing, using similar tags; either a range:
+(``ProcessnnnnnnnWF.dat``; if you are using multi-site support
+functions then the expansion coefficients ``ProcessnnnnnnnMSSF.dat``
+will also be written out).  From these, band densities can be produced
+in post-processing, using similar tags; either a range:
 
 ::
 
@@ -139,6 +141,27 @@ Note that the bands to be processed must be a subset of the bands
 output by CONQUEST.  The bands can be output summed over k-points, or
 at individual k-points, by setting ``Process.outputWF_by_kpoint`` to
 ``F`` or ``T`` respectively.
+
+Go to :ref:`top <ext-tools>`.
+
+Multi-site support function output
+++++++++++++++++++++++++++++++++++
+
+Setting ``Process.Job mssf`` will write out multi-site support
+functions (MSSF) for a set of atoms specified by the user in cube file
+format.  The number of atoms, and their indices, are set as follows:
+
+::
+
+   Process.noMSSF n
+
+   %block MSSFProcess
+   n entries, each an atom number
+   %endblock
+
+The resulting cube files are centred on the atom specified (both the
+MSSF and the atomic positions), with the size of the grid set by the
+MSSF radius, not the simulation cell.
 
 Go to :ref:`top <ext-tools>`.
 

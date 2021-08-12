@@ -159,7 +159,7 @@ contains
                    if(eigenvalues(band,kp,ispin) >= Emin(ispin) .and. &
                         eigenvalues(band,kp,ispin) <= Emax(ispin) .and. &
                         band_active_kp(band,kp,ispin)==1) then
-                      write(*,*) 'Band: ',band,eigenvalues(band,kp,ispin)
+                      !write(*,*) 'Band: ',band,eigenvalues(band,kp,ispin)
                       if(flag_Multisite) then
                          call mssf_to_grid_alt(band_full_to_active(band), kp, ispin, psi)
                       else
@@ -734,7 +734,7 @@ contains
     integer :: minx, maxx, miny, maxy, minz, maxz
     real(double) :: dr, dx, dy, dz, sph_rl, f_r, df_r, dx_dr, dy_dr, dz_dr, del_r
     real(double) :: a, b, c, d, r1, r2, r3, r4, rr, kr, krx, kry, krz, b_ia_jb
-    real(double) :: dx_mssf, dy_mssf, dz_mssf, dr_mssf
+    real(double) :: dx_mssf, dy_mssf, dz_mssf, dr_mssf, rem
     real(double), dimension(3) :: dsph_rl, dg
     complex(double_cplx) :: phase, phase_shift, c_ia_nk
     
@@ -761,39 +761,33 @@ contains
           dz = dg(3)*real(i_grid_z-1,double) - atom_coord(3,i_atom)
           iz = i_grid_z
           krz = zero
-          if(i_grid_z<1) then
-             iz = i_grid_z + nptsz
-             krz = kz(i_kp)*r_super_z
-          end if
-          if(i_grid_z>nptsz) then
-             iz = i_grid_z - nptsz
-             krz = -kz(i_kp)*r_super_z
+          if(i_grid_z<1 .or. i_grid_z>nptsz) then
+             rem = mod(i_grid_z,nptsz)
+             if(i_grid_z<1) rem = rem + nptsz
+             iz = rem
+             krz = kz(i_kp)*r_super_z*(rem - i_grid_z)/nptsz
           end if
           do i_grid_y = miny, maxy
              ! Find y grid position and dy and wrap grid point
              dy = dg(2)*real(i_grid_y-1,double) - atom_coord(2,i_atom)
              iy = i_grid_y
              kry = zero
-             if(i_grid_y<1) then
-                iy = i_grid_y + nptsy
-                kry = ky(i_kp)*r_super_y
-             end if
-             if(i_grid_y>nptsy) then
-                iy = i_grid_y - nptsy
-                kry = -ky(i_kp)*r_super_y
+             if(i_grid_y<1 .or. i_grid_y>nptsy) then
+                rem = mod(i_grid_y,nptsy)
+                if(i_grid_y<1) rem = rem + nptsy
+                iy = rem
+                kry = ky(i_kp)*r_super_y*(rem - i_grid_y)/nptsy
              end if
              do i_grid_x = minx, maxx
                 ! Find x grid position and dx and wrap grid point
                 dx = dg(1)*real(i_grid_x-1,double) - atom_coord(1,i_atom)
                 ix = i_grid_x
                 krx = zero
-                if(i_grid_x<1) then
-                   ix = i_grid_x + nptsx
-                   krx = kx(i_kp)*r_super_x
-                end if
-                if(i_grid_x>nptsx) then
-                   ix = i_grid_x - nptsx
-                   krx = -kx(i_kp)*r_super_x
+                if(i_grid_x<1 .or. i_grid_x>nptsx) then
+                   rem = mod(i_grid_x,nptsx)
+                   if(i_grid_x<1) rem = rem + nptsx
+                   ix = rem
+                   krx = kx(i_kp)*r_super_x*(rem - i_grid_x)/nptsx
                 end if
                 ! Calculate dr
                 dr = sqrt(dx*dx + dy*dy + dz*dz)
