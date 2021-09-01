@@ -2264,27 +2264,19 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
     call dump_pos_and_matrices
     call get_maxf(max)
     iter = 0
+    if (inode==ionode) then
+       write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," E: ",e18.10)') & 
+            iter, for_conv*max, en_conv*energy0
+    end if
     iter_loc = 0
     ggold = zero
     energy1 = energy0
     cg_new = -tot_force ! The L-BFGS is in terms of grad E
+    if (inode==ionode .and. iprint_MD > 1) then
+       g0 = dot(length,cg_new,1,cg_new,1)
+       write(io_lun,'(4x,"Search direction has magnitude ",f20.10)') sqrt(g0/ni_in_cell)
+    end if
     do while (.not. done)
-       if (inode==ionode) then
-          write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," E: ",e16.8," dE: ",f12.8)') & 
-               iter, max, energy1, en_conv*dE
-          if (iprint_MD > 1) then
-             g0 = dot(length, tot_force, 1, tot_force, 1)
-             write(io_lun,'(4x,"Force Residual:     ",f20.10," ",a2,"/",a2)') &
-                  for_conv*sqrt(g0/ni_in_cell), en_units(energy_units), & 
-                  d_units(dist_units)
-             write(io_lun,'(4x,"Maximum force:      ",f20.10)') max
-             write(io_lun,'(4x,"Force tolerance:    ",f20.10)') MDcgtol
-             write(io_lun,'(4x,"Energy change:      ",f20.10," ",a2)') &
-                  en_conv*dE, en_units(energy_units)
-             g0 = dot(length,cg_new,1,cg_new,1)
-             write(io_lun,'(4x,"Search direction has magnitude ",f20.10)') sqrt(g0/ni_in_cell)
-          end if
-       end if
        ! Book-keeping
        iter = iter + 1
        iter_loc = iter_loc + 1
@@ -2456,6 +2448,24 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
                 if (abs(tot_force(k,i)) > max) max = abs(tot_force(k,i))
              end do
           end do
+          dE = energy0 - energy1
+          energy0 = energy1
+          if (inode==ionode) then
+             write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," E: ",e18.10," dE: ",f12.8)') & 
+                  iter, for_conv*max, en_conv*energy1, en_conv*dE
+             if (iprint_MD > 1) then
+                g0 = dot(length, tot_force, 1, tot_force, 1)
+                write(io_lun,'(4x,"Force Residual:     ",f20.10," ",a2,"/",a2)') &
+                     for_conv*sqrt(g0/ni_in_cell), en_units(energy_units), & 
+                     d_units(dist_units)
+                write(io_lun,'(4x,"Maximum force:      ",f20.10)') for_conv*max
+                write(io_lun,'(4x,"Force tolerance:    ",f20.10)') for_conv*MDcgtol
+                write(io_lun,'(4x,"Energy change:      ",f20.10," ",a2)') &
+                     en_conv*dE, en_units(energy_units)
+                g0 = dot(length,cg_new,1,cg_new,1)
+                write(io_lun,'(4x,"Search direction has magnitude ",f20.10)') sqrt(g0/ni_in_cell)
+             end if
+          end if
           if (iter > MDn_steps) then
              done = .true.
              if (myid == 0) &
@@ -2464,17 +2474,6 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
           if (abs(max) < MDcgtol) then
              done = .true.
              if (inode==ionode) then
-                write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," E: ",e16.8," dE: ",f12.8)') & 
-                     iter, max, energy1, en_conv*dE
-                if (iprint_MD > 1) then
-                   write(io_lun,'(4x,"Force Residual:     ",f20.10," ",a2,"/",a2)') &
-                        for_conv*sqrt(g0/ni_in_cell), en_units(energy_units), & 
-                        d_units(dist_units)
-                   write(io_lun,'(4x,"Maximum force:      ",f20.10)') max
-                   write(io_lun,'(4x,"Force tolerance:    ",f20.10)') MDcgtol
-                   write(io_lun,'(4x,"Energy change:      ",f20.10," ",a2)') &
-                        en_conv*dE, en_units(energy_units)
-                end if
                 write(io_lun, fmt='(4x,"Maximum force below threshold: ",f12.5)') max
                 write(io_lun,'(2x,a,i4,a)') "GeomOpt converged in ", iter, " iterations"
              end if
@@ -2483,8 +2482,6 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
           deallocate(mod_dr,Sij,lambda,omega)
           if (.not. done) call check_stop(done, iter)
           if(done) exit
-          dE = energy0 - energy1
-          energy0 = energy1
        end if ! Energy has gone down
     end do ! .not. done i.e. until max iterations or force tolerance reached
     deallocate(cg, STAT=stat)
