@@ -420,9 +420,7 @@ contains
     !
     ! Li, Be (npao set to one because l=0)
     if(paos%l(paos%n_shells)==1 .AND. paos%inner(paos%n_shells)==0) paos%npao(paos%n_shells) = 1
-    ! We need sign change if s orbital is outermost and there is a semi-core p orbital
-    if(paos%l(paos%n_shells)==1 .AND. paos%polarised_shell==val%n_occ &
-         .AND. paos%inner(paos%n_shells)>0) paos%pol_pf = -one
+    ! Remove pol_pf here as it is now incorporated into find_polarisation DRB 2021/09/02
     ! Use Vl if perturbing a p orbital with a valence or semi-core d orbital
     if(paos%l(paos%n_shells)==2) then
        do i=1,val%n_occ
