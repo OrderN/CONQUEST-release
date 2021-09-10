@@ -827,7 +827,6 @@ contains
                    end do
                    ! Loop over MSSF we contribute to, calculate phase and accumulate into psi
                    do i_mssf = 1, nab_glob(i_atom)%i_count
-                      i_nabi = nab_glob(i_atom)%neigh(i_mssf)
                       i_glob_nabi = nab_glob(i_atom)%i_glob(i_mssf)
                       ! Calculate displacement and hence phase
                       iz = i_grid_z + floor((atom_coord(3,i_glob_nabi) + &
