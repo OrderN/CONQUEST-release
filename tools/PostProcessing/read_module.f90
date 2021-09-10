@@ -542,7 +542,7 @@ contains
 
     use datatypes
     use numbers
-    use global_module, ONLY: ni_in_cell
+    use global_module, ONLY: ni_in_cell, nspin
     use local, ONLY: MSSF_coeffs, nprocs, nab_glob
 
     implicit none
@@ -553,7 +553,7 @@ contains
     integer, dimension(:), allocatable :: i_MSSF_count
     real(double) :: dx, dy, dz, coeff
     character(len=80) :: filename, str
-
+    
     allocate(i_MSSF_count(ni_in_cell), MSSF_coeffs(ni_in_cell))
     i_MSSF_count = 0
     do i_proc = 1, nprocs
@@ -565,12 +565,13 @@ contains
           read(17,*) i_glob, n_sf, n_neighbours
           MSSF_coeffs(i_glob)%n_neighbours = n_neighbours
           MSSF_coeffs(i_glob)%n_sf = n_sf
-          !write(*,*) 'Prim: ',i_prim, i_glob, n_sf, n_neighbours
+          !write(*,*) 'Prim: ', i_glob, n_sf, n_neighbours
           allocate(MSSF_coeffs(i_glob)%neigh_coeff(n_neighbours))
           do i_nab = 1, n_neighbours
              read(17,*) i_glob_nab, dx, dy, dz, n_pao
              !write(*,*) 'Nab: ', i_nab, i_glob_nab, dx, dy, dz, n_pao
              allocate(MSSF_coeffs(i_glob)%neigh_coeff(i_nab)%coeff(n_pao,n_sf))
+             allocate(MSSF_coeffs(i_glob)%neigh_coeff(i_nab)%coeff_sum(n_pao))
              MSSF_coeffs(i_glob)%neigh_coeff(i_nab)%coeff = zero
              MSSF_coeffs(i_glob)%neigh_coeff(i_nab)%i_glob = i_glob_nab
              MSSF_coeffs(i_glob)%neigh_coeff(i_nab)%n_pao = n_pao
@@ -587,32 +588,32 @@ contains
        end do ! i_prim
     end do ! i_proc
     ! Now build table of i neighbours of each j
-    !allocate(nab_glob(ni_in_cell))
-    !do i_glob = 1, ni_in_cell
-    !   n_MSSF_nab = i_MSSF_count(i_glob)
-    !   allocate(nab_glob(i_glob)%i_glob(n_MSSF_nab), nab_glob(i_glob)%disp(n_MSSF_nab,3), &
-    !        nab_glob(i_glob)%neigh(n_MSSF_nab))
-    !   nab_glob(i_glob)%i_glob = 0
-    !   nab_glob(i_glob)%neigh  = 0
-    !   nab_glob(i_glob)%disp   = zero
-    !   nab_glob(i_glob)%i_count = 0
-    !end do
-    !write(*,*) 'Building reverse map'
-    !do i_glob = 1, ni_in_cell
-    !   do i_nab = 1, MSSF_coeffs(i_glob)%n_neighbours
-    !      i_glob_nab = MSSF_coeffs(i_glob)%neigh_coeff(i_nab)%i_glob
-    !      nab_glob(i_glob_nab)%i_count = nab_glob(i_glob_nab)%i_count + 1
-    !      nab_glob(i_glob_nab)%i_glob(nab_glob(i_glob_nab)%i_count) = i_glob
-    !      nab_glob(i_glob_nab)%neigh(nab_glob(i_glob_nab)%i_count) = i_nab
-    !      nab_glob(i_glob_nab)%disp(nab_glob(i_glob_nab)%i_count,1) = &
-    !           MSSF_coeffs(i_glob)%neigh_coeff(i_nab)%dx
-    !      nab_glob(i_glob_nab)%disp(nab_glob(i_glob_nab)%i_count,2) = &
-    !           MSSF_coeffs(i_glob)%neigh_coeff(i_nab)%dy
-    !      nab_glob(i_glob_nab)%disp(nab_glob(i_glob_nab)%i_count,3) = &
-    !           MSSF_coeffs(i_glob)%neigh_coeff(i_nab)%dz
-    !   end do
-    !end do
-    !write(*,*) 'Built'
+    allocate(nab_glob(ni_in_cell))
+    do i_glob = 1, ni_in_cell
+       n_MSSF_nab = i_MSSF_count(i_glob)
+       allocate(nab_glob(i_glob)%i_glob(n_MSSF_nab), nab_glob(i_glob)%disp(n_MSSF_nab,3), &
+            nab_glob(i_glob)%neigh(n_MSSF_nab))
+       nab_glob(i_glob)%i_glob = 0
+       nab_glob(i_glob)%neigh  = 0
+       nab_glob(i_glob)%disp   = zero
+       nab_glob(i_glob)%i_count = 0
+    end do
+    write(*,*) 'Building reverse map'
+    do i_glob = 1, ni_in_cell
+       do i_nab = 1, MSSF_coeffs(i_glob)%n_neighbours
+          i_glob_nab = MSSF_coeffs(i_glob)%neigh_coeff(i_nab)%i_glob
+          nab_glob(i_glob_nab)%i_count = nab_glob(i_glob_nab)%i_count + 1
+          nab_glob(i_glob_nab)%i_glob(nab_glob(i_glob_nab)%i_count) = i_glob
+          nab_glob(i_glob_nab)%neigh(nab_glob(i_glob_nab)%i_count) = i_nab
+          nab_glob(i_glob_nab)%disp(nab_glob(i_glob_nab)%i_count,1) = &
+               MSSF_coeffs(i_glob)%neigh_coeff(i_nab)%dx
+          nab_glob(i_glob_nab)%disp(nab_glob(i_glob_nab)%i_count,2) = &
+               MSSF_coeffs(i_glob)%neigh_coeff(i_nab)%dy
+          nab_glob(i_glob_nab)%disp(nab_glob(i_glob_nab)%i_count,3) = &
+               MSSF_coeffs(i_glob)%neigh_coeff(i_nab)%dz
+       end do
+    end do
+    write(*,*) 'Built'
   end subroutine read_MSSF_coeffs
   
   subroutine allocate_species_vars

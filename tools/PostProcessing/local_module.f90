@@ -58,6 +58,7 @@ module local
      integer :: n_pao
      real(double) :: dx, dy, dz
      real(double), dimension(:,:), allocatable :: coeff
+     complex(double_cplx), dimension(:), allocatable :: coeff_sum
   end type neighbour
 
   type MSSF_coeff
