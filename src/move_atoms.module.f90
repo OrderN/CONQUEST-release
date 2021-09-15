@@ -1413,7 +1413,8 @@ contains
   !! CREATION DATE 
   !!   2021/05/28
   !! MODIFICATION HISTORY
-  !!   
+  !!   2021/09/15 14:41 dave
+  !!    Tweak to output
   !! SOURCE
   !!
   subroutine single_step(direction, energy_in, &
@@ -1547,12 +1548,7 @@ contains
     call force(fixed_potential, vary_mu, n_L_iterations, &
          L_tolerance, sc_tolerance, energy_out, .true.)
     dE = e0 - energy_out
-    if (inode == ionode .and. iprint_MD > 2) then
-       write (io_lun, &
-            fmt='(4x,"In single_step, exit after ",i4," &
-            &iterations with energy ",f16.6," ",a2)') &
-            iter, en_conv * energy_out, en_units(energy_units)
-    else if (inode == ionode .and. iprint_MD > 0) then
+    if (inode == ionode .and. iprint_MD > 0) then
        write (io_lun, fmt='(/4x,"In single_step, final energy is   ",f16.6," ",a2)') &
             en_conv * energy_out, en_units(energy_units)
     end if
