@@ -2311,6 +2311,7 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
           npmod = 1
           iter_loc = 1
           ! In the original paper, this is alpha = alpha/2 but heuristically this seems better
+          ! DRB 2021/09/15
           alpha = one
        endif
        ! Update stored position difference and force difference
