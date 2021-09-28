@@ -1,4 +1,6 @@
 General.NumberOfSpecies 1
+# The 5d shell really is semi-core so adjust the cutoff
+General.SemicoreEnergy -0.5
 
 %block SpeciesLabels
 1  Tl
