@@ -2169,9 +2169,10 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
   !!   S.Mujahed
   !!   D.R.Bowler
   !!  CREATION DATE
-  !!  01/06/17 J.S.Baker
+  !!   01/06/17 J.S.Baker
   !!  MODIFICATION HISTORY
-  !!
+  !!   2021/10/13 08:44 dave
+  !!   Changes to account for stress tolerance from user being in GPa
   !!  SOURCE
   !!
   subroutine cell_cg_run(fixed_potential, vary_mu, total_energy)
@@ -2216,7 +2217,7 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
     real(double) :: new_rcellx, new_rcelly, new_rcellz, search_dir_x, search_dir_y,&
                     search_dir_z, stressx, stressy, stressz, RMSstress, newRMSstress,&
                     dRMSstress, search_dir_mean, mean_stress, max_stress, &
-                    stress_diff, volume
+                    stress_diff, volume, stress_target
 
     call reg_alloc_mem(area_general, 6 * ni_in_cell, type_dbl)
 
@@ -2242,6 +2243,8 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
     energy1 = energy0
 
     press = target_pressure/HaBohr3ToGPa
+    ! Stress tolerance in Ha/Bohr3
+    stress_target = cell_stress_tol/HaBohr3ToGPa
     enthalpy0 = enthalpy(energy0, press)
     enthalpy1 = enthalpy0
     dH = zero
@@ -2342,30 +2345,30 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
        reset_iter = reset_iter +1
 
        if (inode==ionode) then
-         write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxStr: ",f12.8," H: ",e16.8," dH: ",f12.8)') &
-              iter, max_stress, enthalpy1, en_conv*dH
-         if (iprint_MD > 1) then
-           write(io_lun,'(4x,"Maximum stress         ",3f10.6)') &
-             max_stress
-           write(io_lun,'(4x,"Stress tolerance:   ",f20.10)') &
-             cell_stress_tol
-           write(io_lun,'(4x,"Change in stress: ",f15.8," ",a2)') max_stress, &
-             en_units(energy_units)
-           write(io_lun,'(4x,"Enthalpy change:    ",f20.10," ",a2)') &
-             en_conv*dH, en_units(energy_units)
-           write(io_lun,'(4x,"Enthalpy tolerance: ",f20.10)') &
-             enthalpy_tolerance
-         end if
+          write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxStr: ",f12.8," H: ",e16.8," dH: ",f12.8)') &
+               iter, max_stress*volume, enthalpy1, en_conv*dH
+          if (iprint_MD > 1) then
+             write(io_lun,'(4x,"Maximum stress         ",e14.6," Ha/Bohr**3")') max_stress
+             write(io_lun,'(4x,"Simulation cell volume ",e14.6," Bohr**3")') volume
+             write(io_lun,'(4x,"Maximum stress         ",f14.6," GPa")') &
+                  max_stress*HaBohr3ToGPa
+             write(io_lun,'(4x,"Stress tolerance:      ",f14.6," GPa")') &
+                  cell_stress_tol
+             !write(io_lun,'(4x,"Change in stress:      ",e14.6," ",a2)') max_stress*volume, &
+             !     en_units(energy_units)
+             write(io_lun,'(4x,"Enthalpy change:       ",e14.6," ",a2)') &
+                  en_conv*dH, en_units(energy_units)
+             write(io_lun,'(4x,"Enthalpy tolerance:    ",e14.6," ",a2)') &
+                  en_conv*enthalpy_tolerance, en_units(energy_units)
+          else if (iprint_MD > 0) then
+             write (io_lun, 4) en_conv*dH, en_units(energy_units)
+             write (io_lun, 5) dRMSstress, "Ha"
+             write(io_lun,'(4x,"Maximum stress: ",f15.8," ",a2)') max_stress*volume, &
+                  en_units(energy_units)
+          end if
        end if
 
        iter = iter + 1
-       if (myid == 0 .and. iprint_MD > 0) then
-           write (io_lun, 4) en_conv*dH, en_units(energy_units)
-           write (io_lun, 5) dRMSstress, "Ha"
-           write(io_lun,'(4x,"Change in stress: ",f15.8," ",a2)') max_stress, &
-                 en_units(energy_units)
-       end if
-
        ! First exit is if too many steps have been taken. Default is 50.
        if (iter > MDn_steps) then
           done = .true.
@@ -2374,9 +2377,8 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
                      iter
        end if
 
-       ! Second exit is if the desired energy tolerence has ben reached
-       ! Will replace with stress tolerance when more reliable
-       if (abs(dH)<enthalpy_tolerance .and. max_stress < cell_stress_tol) then
+       ! Second exit is if the desired enthalpy and stress tolerancex have ben reached
+       if (abs(dH)<enthalpy_tolerance .and. max_stress < stress_target) then
           if (inode==ionode) &
                write(io_lun,'(2x,a,i4,a)') "GeomOpt converged in ", &
                iter, " iterations"

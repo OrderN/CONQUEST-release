@@ -123,10 +123,10 @@ contains
   !!    full SCF for each LFD
   !!   2021/07/30 10:20 dave
   !!    Remove extraneous get_energy call in vdW if clause
+  !!   2021/10/13 08:58 dave
+  !!    Add call to new_SC_potl when doing MSSF/LFD without optimisation
   !!  SOURCE
   !!
-  !subroutine get_E_and_F(fixed_potential, vary_mu, total_energy, &
-  !                       find_forces, write_forces)
   subroutine get_E_and_F(fixed_potential, vary_mu, total_energy, &
                          find_forces, write_forces, iter, level)
 
@@ -229,7 +229,11 @@ contains
                            sc_tolerance, energy_tolerance,        &
                            total_energy, expected_reduction)
           end if
-       endif
+       else
+          call new_SC_potl(.false., sc_tolerance, reset_L,           &
+                        fixed_potential, vary_mu, n_L_iterations, &
+                        L_tolerance, total_energy, backtrace_level)
+       endif ! flag_vary_basis
     else if (flag_vary_basis) then ! Vary everything: DM, charge density, basis set
        if (flag_basis_set == blips) then
           call vary_support(n_support_iterations, fixed_potential, &

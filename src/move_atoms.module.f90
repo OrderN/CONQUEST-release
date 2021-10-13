@@ -1683,7 +1683,7 @@ contains
     type(cq_timer) :: tmr_l_iter, tmr_l_tmp1
     real(double)   :: k0, k1, k2, k3, lambda, k3old, orcellx, orcelly, orcellz, scale, ratio
     real(double)   :: e0, e1, e2, e3, tmp, bottom, xvec, yvec, zvec, r2, &
-                      h0, h1, h2, h3, dH, energy_out
+                      h0, h1, h2, h3, dH, energy_out, top
     real(double), save :: kmin = zero, dE = zero
     real(double), dimension(:), allocatable :: store_density
     real(double), dimension(3,ni_in_cell) :: direction
@@ -1791,15 +1791,16 @@ contains
          write (io_lun, fmt='(4x,"In safemin_cell, brackets are: ",6f18.10)') &
          k1, h1, k2, h2, k3, h3
     bottom = ((k1-k3)*(h1-h2)-(k1-k2)*(h1-h3))
-    if (abs(bottom) > RD_ERR) then
-       kmin = 0.5_double * (((k1*k1 - k3*k3)*(h1 - h2) -    &
-            (k1*k1 - k2*k2) * (h1 - h3)) / &
-            ((k1-k3)*(h1-h2) - (k1-k2)*(h1-h3)))
+    top = half*((k1*k1 - k3*k3)*(h1 - h2) - (k1*k1 - k2*k2) * (h1 - h3))
+    ! Check for very small numerator and denominator
+    if (abs(bottom) > RD_ERR.or.(abs(top)<RD_ERR.and.abs(bottom)<RD_ERR)) then
+       kmin = top/bottom
     else
        if (inode == ionode .and. iprint_MD > 0) then
           write (io_lun, fmt='(4x,"Error in safemin_cell !")')
           write (io_lun, fmt='(4x,"Interpolation failed: ",6f15.10)') &
                k1, h1, k2, h2, k3, h3
+          write(io_lun, fmt='(4x,"Numerator: ",f15.10," Denominator: ",f15.10)') top, bottom
        end if
        kmin = k2
     end if
@@ -1886,8 +1887,6 @@ contains
                fixed_potential, vary_mu, n_L_iterations, &
                L_tolerance, e3)
        end if
-       h3 = enthalpy(e3, target_press)
-       enthalpy_out = e3
        if (iprint_MD > 0) then
           call get_E_and_F(fixed_potential, vary_mu, energy_out, &
                .true., .true.)
@@ -1896,7 +1895,8 @@ contains
                .true., .false.)
        end if
        ! we may not need to call dump_pos_and_matrices here. (if it would be called in the part after calling safemin_cell)
-       call dump_pos_and_matrices  
+       call dump_pos_and_matrices
+       enthalpy_out = enthalpy(energy_out, target_press)
     end if
     dH = h0 - enthalpy_out
 7   format(4x,3f15.8)
