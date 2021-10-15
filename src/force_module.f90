@@ -210,7 +210,7 @@ contains
   !!   2019/12/10 10:43 dave
   !!    Remove redundant argument (expected_reduction)
   !!   2021/10/06 11:54 dave
-  !!    Zero components of stress where unit cell is constrained
+  !!    Zero components of stress where unit cell is constrained; simplify pressure conversion
   !!  SOURCE
   !!
   subroutine force(fixed_potential, vary_mu, n_cg_L_iterations, &
@@ -668,10 +668,8 @@ contains
       call print_stress("non-SCF stress:   ", nonSCF_stress, 3)
       call print_stress("Total stress:     ", stress, 0)
       volume = rcellx*rcelly*rcellz
-      ! Include Ha/cubic bohr to GPa conversion and 1/volume factor
-      ! Factor of 1e21 comes from Ang to m (1e30) and Pa to GPa (1e-9) 
-      scale = -(HaToeV*eVToJ*1e21_double)/(volume*BohrToAng*BohrToAng*BohrToAng)
       ! We need pressure in GPa, and only diagonal terms output
+      scale = -HaBohr3ToGPa/volume
       !call print_stress("Total pressure:   ", stress*scale, 0)
       if(inode==ionode.AND.iprint_MD>=0) &
            write(io_lun,'(/4x,a18,3f15.8,a4)') "Total pressure:   ",stress(1,1)*scale,&

@@ -117,11 +117,11 @@ coordinates* (``AtomMove.OptCellMethod 1``) using the following input:
    AtomMove.OptCellMethod 1
    AtomMove.TargetPressure 1.0
    AtomMove.ReuseL T
-   AtomMove.EnthalpyTolerance 1E-6
-   AtomMove.StressTolerance 0.01
+   AtomMove.EnthalpyTolerance 1E-5
+   AtomMove.StressTolerance 0.1
 
 Here, we specify the target pressure in GPa and two new tolerances, the enthalpy
-tolerance in Ha and the stress tolerance in GPa.
+tolerance (in Ha) and the stress (or pressure) tolerance (in GPa).
 
 Go to :ref:`top <strucrelax>`.
 
@@ -144,8 +144,8 @@ the ionic positions and lattice vectors. This can be done by setting
    AtomMove.TargetPressure 1.0
    AtomMove.ReuseL T
    AtomMove.MaxForceTol 5e-4
-   AtomMove.EnthalpyTolerance 1E-6
-   AtomMove.StressTolerance 0.01
+   AtomMove.EnthalpyTolerance 1E-5
+   AtomMove.StressTolerance 0.1
 
 Note that the enthalpy will generally converge much more rapidly than the force
 and stress, and that it may be necessary to tighten ``minE.SCTolerance``
