@@ -70,7 +70,8 @@ module initial_read
   integer, save :: index_MatrixFile
   
   ! System signature
-  character(len=80) :: titles
+  ! Moved here from read_and_write so that it can be used for extended XYZ output
+  character(len=80), save :: titles
 
 !!***
 

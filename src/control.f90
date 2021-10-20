@@ -1415,6 +1415,9 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
   !!   Zamaan Raza
   !!  CREATION DATE
   !!   2018/08/11 10:27
+  !!  MODIFIED
+  !!   2021/10/19 Jianbo Lin
+  !!    Added call for extended XYZ output (includes forces)
   !!  SOURCE
   !!  
   subroutine write_md_data(iter, thermo, baro, mdl, nequil)
