@@ -29,6 +29,8 @@
 !!    Added timers
 !!   2014/09/15 18:30 lat
 !!    fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
+!!   2021/08/02 14:41 dave
+!!    Added dE_PAO to allow comparison with dE from structural optimisation
 !!  SOURCE
 !!
 module pao_minimisation
@@ -45,6 +47,7 @@ module pao_minimisation
   integer, parameter :: KdH = 2
   integer, parameter :: full = 3
   real(double), save :: InitStep_paomin = 5.0_double
+  real(double), save :: dE_PAO
 
 !!***
 
@@ -538,6 +541,7 @@ contains
 
        ! Find change in energy for convergence
        diff = total_energy_last - total_energy_0
+       dE_PAO = diff
        if (abs(diff / total_energy_0) <= energy_tolerance) then
           if (inode == ionode) write (io_lun, 18) total_energy_0
           convergence_flag = .true.
@@ -878,6 +882,7 @@ contains
 !       end if
 
        diff = total_energy_last - total_energy_0
+       dE_PAO = diff
        total_energy_last = total_energy_0
        if (abs(diff / total_energy_0) <= energy_tolerance) then
           if (inode == ionode) write (io_lun, 18) total_energy_0
@@ -1036,6 +1041,7 @@ contains
 
        ! Check convergency by energy (diff_E) and density (R0)
        ! energy
+       dE_PAO = total_energy_last - total_energy_0
        diff_E = (total_energy_last - total_energy_0) / ni_in_cell
        ! density
        resid = zero

@@ -433,7 +433,6 @@ contains
     use io_module,          only: write_atomic_positions, pdb_template
     use density_module,     only: density, set_density_pcc
     use maxima_module,      only: maxngrid
-    use multisiteSF_module, only: flag_LFD_NonSCF
     use timer_module
 
     implicit none
@@ -571,7 +570,7 @@ contains
        call stop_print_timer(tmr_l_tmp1, "atom updates", IPRINT_TIME_THRES1)
        ! We've just moved the atoms - we need a self-consistent ground
        ! state before we can minimise blips !
-       if (flag_vary_basis .or. .NOT.flag_LFD_NonSCF) then
+       if (flag_vary_basis) then
           call new_SC_potl(.false., sc_tolerance, reset_L,           &
                            fixed_potential, vary_mu, n_L_iterations, &
                            L_tolerance, e3)
@@ -661,7 +660,7 @@ contains
                           "safemin - Final interpolation and updates", &
                           IPRINT_TIME_THRES1)
     ! We've just moved the atoms - we need a self-consistent ground state before we can minimise blips !
-    if (flag_vary_basis .or. .NOT.flag_LFD_NonSCF) then
+    if (flag_vary_basis) then
        call new_SC_potl(.false., sc_tolerance, reset_L,           &
                         fixed_potential, vary_mu, n_L_iterations, &
                         L_tolerance, e3)
@@ -718,7 +717,7 @@ contains
                              IPRINT_TIME_THRES1)
        ! We've just moved the atoms - we need a self-consistent ground
        ! state before we can minimise blips !
-       if(flag_vary_basis .or. .NOT.flag_LFD_NonSCF) then
+       if(flag_vary_basis) then
           call new_SC_potl(.false., sc_tolerance, reset_L,           &
                            fixed_potential, vary_mu, n_L_iterations, &
                            L_tolerance, e3)
@@ -809,7 +808,6 @@ contains
     use timer_module
     use dimens, ONLY: r_super_x, r_super_y, r_super_z
     use store_matrix, ONLY: dump_pos_and_matrices
-    use multisiteSF_module, only: flag_LFD_NonSCF
     !for Debugging
     use mult_module, ONLY: allocate_temp_matrix, free_temp_matrix, matrix_sum
     use global_module, ONLY: atomf, sf
@@ -941,7 +939,7 @@ contains
        call stop_print_timer(tmr_l_tmp1, "atom updates", IPRINT_TIME_THRES1)
        ! We've just moved the atoms - we need a self-consistent ground
        ! state before we can minimise blips !
-       if (flag_vary_basis .or. .NOT.flag_LFD_NonSCF) then
+       if (flag_vary_basis) then
           call new_SC_potl(.false., sc_tolerance, reset_L,           &
                fixed_potential, vary_mu, n_L_iterations, &
                L_tolerance, e3)
@@ -1057,7 +1055,7 @@ contains
          IPRINT_TIME_THRES1)
     ! We've just moved the atoms - we need a self-consistent ground state before
     ! we can minimise blips !
-    if (flag_vary_basis .or. .NOT.flag_LFD_NonSCF) then
+    if (flag_vary_basis) then
        call new_SC_potl(.false., sc_tolerance, reset_L,           &
             fixed_potential, vary_mu, n_L_iterations, &
             L_tolerance, e3)
@@ -1175,7 +1173,7 @@ contains
             IPRINT_TIME_THRES1)
        ! We've just moved the atoms - we need a self-consistent ground
        ! state before we can minimise blips !
-       if(flag_vary_basis .or. .NOT.flag_LFD_NonSCF) then
+       if(flag_vary_basis) then
           call new_SC_potl(.false., sc_tolerance, reset_L,           &
                fixed_potential, vary_mu, n_L_iterations, &
                L_tolerance, e3)
@@ -1263,7 +1261,6 @@ contains
     use timer_module
     use dimens, ONLY: r_super_x, r_super_y, r_super_z
     use store_matrix, ONLY: dump_pos_and_matrices
-    use multisiteSF_module, only: flag_LFD_NonSCF
     use mult_module, ONLY: allocate_temp_matrix, free_temp_matrix, matrix_sum
     use global_module, ONLY: atomf, sf
     use io_module, ONLY: dump_matrix
@@ -1347,7 +1344,7 @@ contains
        end if
        ! We've just moved the atoms - we need a self-consistent ground
        ! state before we can minimise blips !
-       if (flag_vary_basis .or. .NOT.flag_LFD_NonSCF) then
+       if (flag_vary_basis) then
           call new_SC_potl(.false., sc_tolerance, reset_L,           &
                fixed_potential, vary_mu, n_L_iterations, &
                L_tolerance, e3)
@@ -1406,6 +1403,162 @@ contains
   end subroutine backtrack_linemin
 !!***
   
+  !!****f* move_atoms/single_step *
+  !! PURPOSE
+  !!  Carry out single step
+  !! INPUTS
+  !!
+  !! AUTHOR
+  !!   David Bowler
+  !! CREATION DATE 
+  !!   2021/05/28
+  !! MODIFICATION HISTORY
+  !!   2021/09/15 14:41 dave
+  !!    Tweak to output
+  !! SOURCE
+  !!
+  subroutine single_step(direction, energy_in, &
+                      energy_out, fixed_potential, vary_mu)
+
+    ! Module usage
+    use datatypes
+    use numbers
+    use units
+    use global_module,  only: iprint_MD, x_atom_cell, y_atom_cell,    &
+         z_atom_cell, flag_vary_basis,           &
+         atom_coord, ni_in_cell, rcellx, rcelly, &
+         rcellz, flag_self_consistent,           &
+         flag_reset_dens_on_atom_move,           &
+         IPRINT_TIME_THRES1, flag_pcc_global,    &
+         id_glob,                                &
+         flag_LmatrixReuse, flag_diagonalisation, nspin, &
+         flag_SFcoeffReuse 
+    use minimise,       only: get_E_and_F, sc_tolerance, L_tolerance, &
+         n_L_iterations, dE_elec_opt
+    use GenComms,       only: my_barrier, myid, inode, ionode,        &
+         cq_abort, gcopy, cq_warn
+    use SelfCon,        only: new_SC_potl
+    use GenBlas,        only: dot
+    use force_module,   only: tot_force
+    use io_module,      only: write_atomic_positions, pdb_template
+    use density_module, only: density, set_density_pcc
+    use maxima_module,  only: maxngrid
+    use matrix_data, ONLY: Lrange, Hrange, SFcoeff_range, SFcoeffTr_range, HTr_range
+    use mult_module, ONLY: matL,L_trans, matK, matSFcoeff
+    use timer_module
+    use dimens, ONLY: r_super_x, r_super_y, r_super_z
+    use store_matrix, ONLY: dump_pos_and_matrices
+    use mult_module, ONLY: allocate_temp_matrix, free_temp_matrix, matrix_sum
+    use global_module, ONLY: atomf, sf
+    use io_module, ONLY: dump_matrix
+    use force_module,      only: force
+
+    implicit none
+
+    ! Passed variables
+    real(double) :: energy_in, energy_out
+    real(double), dimension(3,ni_in_cell) :: direction
+    ! Shared variables needed by get_E_and_F for now (!)
+    logical           :: vary_mu, fixed_potential
+
+    ! Local variables
+    integer        :: i, j, iter, lun, gatom, stat, nfile, symm
+    logical        :: reset_L = .false.
+    logical        :: done
+    type(cq_timer) :: tmr_l_iter, tmr_l_tmp1
+    real(double)   :: alpha_new, armijo, grad_f_dot_p, grad_fp_dot_p, old_alpha
+    real(double)   :: e0, e1, e2, e3, tmp, bottom
+    real(double), save :: kmin = zero, dE = zero
+    real(double), dimension(:), allocatable :: store_density
+    real(double) :: k3_old, k3_local, kmin_old
+    real(double) :: alpha = one
+    real(double) :: c1, c2
+
+    integer :: ig, both, mat
+    character(len=80) :: sub_name = "single_step"
+
+    call start_timer(tmr_std_moveatoms)
+
+    alpha = one
+    e0 = energy_in
+    e3 = e0
+    if (inode == ionode .and. iprint_MD > 0) &
+         write (io_lun, &
+         fmt='(4x,"In single_step, initial energy is ",f16.6," ",a2)') &
+         en_conv * energy_in, en_units(energy_units)
+    ! Take a step along search direction
+    do i = 1, ni_in_cell
+       x_atom_cell(i) = x_atom_cell(i) + alpha * direction(1,i)
+       y_atom_cell(i) = y_atom_cell(i) + alpha * direction(2,i)
+       z_atom_cell(i) = z_atom_cell(i) + alpha * direction(3,i)
+    end do
+
+    ! Update and find new energy
+    if(flag_SFcoeffReuse) then
+       call update_pos_and_matrices(updateSFcoeff,direction)
+    else
+       call update_pos_and_matrices(updateLorK,direction)
+    endif
+    if (inode == ionode .and. iprint_MD > 2) then
+       do i=1,ni_in_cell
+          write (io_lun,fmt='(2x,"Position: ",i3,3f13.8)') i, &
+               x_atom_cell(i), y_atom_cell(i), z_atom_cell(i)
+       end do
+    end if
+    call update_H(fixed_potential)
+    ! Write out atomic positions
+    if (iprint_MD > 2) then
+       call write_atomic_positions("UpdatedAtoms_tmp.dat", &
+            trim(pdb_template))
+    end if
+    ! We've just moved the atoms - we need a self-consistent ground
+    ! state before we can minimise blips !
+    if (flag_vary_basis) then
+       call new_SC_potl(.false., sc_tolerance, reset_L,           &
+            fixed_potential, vary_mu, n_L_iterations, &
+            L_tolerance, e3)
+    end if
+    call get_E_and_F(fixed_potential, vary_mu, e3, .false., &
+         .false.)
+    if (inode == ionode .and. iprint_MD > 1) then
+       write (io_lun, fmt='(4x,"After single step, energy is ",f16.6," ",a2)') &
+            en_conv * e3, en_units(energy_units)
+    end if
+    energy_out = e3
+    if(inode==ionode .and. abs(energy_out - energy_in) < abs(dE_elec_opt)) then
+       call cq_warn(sub_name, "Electronic structure dE is similar to atom movement dE; increase tolerance", &
+            dE_elec_opt, energy_out - energy_in)
+    end if
+    if(energy_out>energy_in) then
+       do i = 1, ni_in_cell
+          x_atom_cell(i) = x_atom_cell(i) - alpha * direction(1,i)
+          y_atom_cell(i) = y_atom_cell(i) - alpha * direction(2,i)
+          z_atom_cell(i) = z_atom_cell(i) - alpha * direction(3,i)
+       end do
+       if(flag_SFcoeffReuse) then
+          call update_pos_and_matrices(updateSFcoeff,direction)
+       else
+          call update_pos_and_matrices(updateLorK,direction)
+       endif
+       call update_H(fixed_potential)
+       return ! We'll need to reset - no need to call force
+    end if
+    call dump_pos_and_matrices
+    ! Now find forces
+    call force(fixed_potential, vary_mu, n_L_iterations, &
+         L_tolerance, sc_tolerance, energy_out, .true.)
+    dE = e0 - energy_out
+    if (inode == ionode .and. iprint_MD > 0) then
+       write (io_lun, fmt='(/4x,"In single_step, final energy is   ",f16.6," ",a2)') &
+            en_conv * energy_out, en_units(energy_units)
+    end if
+
+    call stop_timer(tmr_std_moveatoms)
+    return
+  end subroutine single_step
+!!***
+  
+
   !!****f* move_atoms/adapt_backtrack_linemin *
   !! PURPOSE
   !!  Carry out back-tracking line minimisation
@@ -1450,7 +1603,6 @@ contains
     use timer_module
     use dimens, ONLY: r_super_x, r_super_y, r_super_z
     use store_matrix, ONLY: dump_pos_and_matrices
-    use multisiteSF_module, only: flag_LFD_NonSCF
     use mult_module, ONLY: allocate_temp_matrix, free_temp_matrix, matrix_sum
     use global_module, ONLY: atomf, sf
     use io_module, ONLY: dump_matrix
@@ -1534,7 +1686,7 @@ contains
        end if
        ! We've just moved the atoms - we need a self-consistent ground
        ! state before we can minimise blips !
-       if (flag_vary_basis .or. .NOT.flag_LFD_NonSCF) then
+       if (flag_vary_basis) then
           call new_SC_potl(.false., sc_tolerance, reset_L,           &
                fixed_potential, vary_mu, n_L_iterations, &
                L_tolerance, e3)
@@ -1654,7 +1806,6 @@ contains
     use io_module,          only: write_atomic_positions, pdb_template
     use density_module,     only: density, set_density_pcc
     use maxima_module,      only: maxngrid
-    use multisiteSF_module, only: flag_LFD_NonSCF
     use timer_module
     use dimens,             only: r_super_x, r_super_y, r_super_z, &
                                   r_super_x_squared, r_super_y_squared, &
@@ -1748,7 +1899,7 @@ contains
        call stop_print_timer(tmr_l_tmp1, "atom updates", IPRINT_TIME_THRES1)
        ! We've just moved the atoms - we need a self-consistent ground
        ! state before we can minimise blips !
-       if (flag_vary_basis .or. .NOT.flag_LFD_NonSCF) then
+       if (flag_vary_basis) then
           call new_SC_potl(.false., sc_tolerance, reset_L,           &
                fixed_potential, vary_mu, n_L_iterations, &
                L_tolerance, e3)
@@ -1831,7 +1982,7 @@ contains
          "safemin_cell - Final interpolation and updates", &
          IPRINT_TIME_THRES1)
     ! We've just moved the atoms - we need a self-consistent ground state before we can minimise blips !
-    if (flag_vary_basis .or. .NOT.flag_LFD_NonSCF) then
+    if (flag_vary_basis) then
        call new_SC_potl(.false., sc_tolerance, reset_L,           &
             fixed_potential, vary_mu, n_L_iterations, &
             L_tolerance, e3)
@@ -1881,7 +2032,7 @@ contains
             IPRINT_TIME_THRES1)
        ! We've just moved the atoms - we need a self-consistent ground
        ! state before we can minimise blips !
-       if(flag_vary_basis .or. .NOT.flag_LFD_NonSCF) then
+       if(flag_vary_basis) then
           call new_SC_potl(.false., sc_tolerance, reset_L,           &
                fixed_potential, vary_mu, n_L_iterations, &
                L_tolerance, e3)
@@ -1952,7 +2103,6 @@ contains
     use density_module, only: set_density_pcc
     use timer_module
     use store_matrix, ONLY: dump_pos_and_matrices
-    use multisiteSF_module, only: flag_LFD_NonSCF
 
     implicit none
 
@@ -2059,7 +2209,7 @@ contains
        call stop_print_timer(tmr_l_tmp1, "atom updates", IPRINT_TIME_THRES1)
        ! We've just moved the atoms - we need a self-consistent ground
        ! state before we can minimise blips !
-       if (flag_vary_basis .or. .NOT.flag_LFD_NonSCF) then
+       if (flag_vary_basis) then
           call new_SC_potl(.false., sc_tolerance, reset_L,           &
                fixed_potential, vary_mu, n_L_iterations, &
                L_tolerance, e3)
@@ -2154,7 +2304,7 @@ contains
          IPRINT_TIME_THRES1)
     ! We've just moved the atoms - we need a self-consistent ground state before
     ! we can minimise blips !
-    if (flag_vary_basis .or. .NOT.flag_LFD_NonSCF) then
+    if (flag_vary_basis) then
        call new_SC_potl(.false., sc_tolerance, reset_L,           &
             fixed_potential, vary_mu, n_L_iterations, &
             L_tolerance, e3)
@@ -2271,7 +2421,7 @@ contains
             IPRINT_TIME_THRES1)
        ! We've just moved the atoms - we need a self-consistent ground
        ! state before we can minimise blips !
-       if(flag_vary_basis .or. .NOT.flag_LFD_NonSCF) then
+       if(flag_vary_basis) then
           call new_SC_potl(.false., sc_tolerance, reset_L,           &
                fixed_potential, vary_mu, n_L_iterations, &
                L_tolerance, e3)
@@ -4077,7 +4227,6 @@ contains
     use io_module,          only: write_atomic_positions, pdb_template
     use density_module,     only: density, set_density_pcc
     use maxima_module,      only: maxngrid
-    use multisiteSF_module, only: flag_LFD_NonSCF
     use timer_module
     use dimens, ONLY: r_super_x, r_super_y, r_super_z, &
          r_super_x_squared, r_super_y_squared, r_super_z_squared, volume, &

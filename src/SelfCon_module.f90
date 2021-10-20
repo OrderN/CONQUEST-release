@@ -111,6 +111,9 @@ module SelfCon
   logical,      save :: flag_linear_mixing
   real(double), save :: EndLinearMixing
 
+  ! Monitor change in energy from step to step of SCF cycle (for comparison with other minimisations)
+  real(double), save :: dE_SCF
+
   integer,      save :: n_dumpSCF
   !!***
 
@@ -1001,11 +1004,13 @@ contains
        return
     end if
 
+    dE_SCF = total_energy
     ! store rho and calculate residuals and store in pulay history slot 1
     call update_pulay_history(1, rho, reset_L, fixed_potential,     &
                               vary_mu, n_L_iterations, L_tol,       &
                               total_energy, rho_pul, R_pul, KR_pul, &
                               Rcov_pul, backtrace_level)
+    dE_SCF = total_energy - dE_SCF
 
     ! Evaluate magnitute of residual, note do not include cross terms
     RA = zero
@@ -1091,6 +1096,7 @@ contains
           end if
        end if
 
+       dE_SCF = total_energy
        ! calculate cyclic index for storing pulay history
        iPulay = mod(iter - IterPulayReset + 1, maxpulaySC)
        if (iPulay == 0) iPulay = maxpulaySC
@@ -1102,6 +1108,7 @@ contains
                                  vary_mu, n_L_iterations, L_tol,        &
                                  total_energy, rho_pul, R_pul, KR_pul,  &
                                  Rcov_pul, backtrace_level)
+       dE_SCF = total_energy - dE_SCF
 
        ! Evaluate magnitute of residual, note no cross terms
        RA = zero

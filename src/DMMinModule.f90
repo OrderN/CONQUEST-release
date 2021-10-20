@@ -58,6 +58,8 @@
 !!   2019/10/24 08:30 dave
 !!    Added inode and ionode as use-associated from GenComms in module header
 !!    for efficiency and best practice; also iprint_DM
+!!   2021/08/02 14:46 dave
+!!    Added dE_DMM for comparison to structural optimisation
 !!  SOURCE
 !!
 module DMMin
@@ -76,6 +78,7 @@ module DMMin
   real(double)      :: LinTol_DMM
   real(double)      :: minpulaystepDMM ! min step size for pulay minimisation
   real(double)      :: maxpulaystepDMM ! max step size for pulay minimisation
+  real(double), save:: dE_DMM
   !integer, parameter :: mx_pulay = 5
   !real(double), parameter :: LinTol = 0.1_double
   
@@ -1191,6 +1194,7 @@ contains
        end if
        ! get deltaE
        deltaE = energy1_tot - energy0_tot
+       dE_DMM = deltaE
        ! Find the residual
        if (flag_global_tolerance) then
           g1 = zero
