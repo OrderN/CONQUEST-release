@@ -369,26 +369,27 @@ contains
     !
     if(paos%flag_perturb_polarise) then       
        i_shell = paos%n_shells
-       ell = paos%l(i_shell)
+       ! NB we pass l-1 here as the angular momentum of the shell being perturbed
+       ell = paos%l(i_shell)-1
+       ! Note that npao is set to the value of n for the shell being perturbed
        en = paos%npao(i_shell)
        do zeta = 1,paos%nzeta(i_shell)
           allocate(paos%psi(zeta,i_shell)%f(nmesh))
           paos%psi(zeta,i_shell)%f = zero
-          ! NB we pass l-1 here as we need to perturb the shell below
-          ell = paos%l(i_shell)-1
-          en = paos%npao(i_shell)
           if(iprint>2) then
              write(*,fmt='(2x,"Perturbative polarisation")')
              write(*,fmt='(2x,"Species ",i2," n=",i2," l=",i2," zeta=",i2, " Rc=",f4.1," bohr")') &
                   i_species, en, ell, zeta, paos%cutoff(zeta,i_shell)
              write(*,fmt='(4x,"Prefactor scaled by ",f5.1)') paos%pol_pf
+             write(*,fmt='(4x,"Energy: ",f12.5)') paos%energy(zeta,paos%polarised_shell)
+             write(*,fmt='(4x,"Polarising shell: ",i2)') paos%polarised_shell
           end if
           if(zeta>1.AND.paos%flag_zetas==1) then
              call find_split_norm(en,ell+1,paos%cutoff(zeta,i_shell),&
                   paos%psi(zeta,i_shell)%f,paos%psi(1,i_shell)%f)
           else
              ! Set radius of polarisation PAO
-             paos%cutoff(zeta,i_shell) = paos%cutoff(zeta,paos%polarised_shell) !i_shell-1)
+             paos%cutoff(zeta,i_shell) = paos%cutoff(zeta,paos%polarised_shell)
              call find_polarisation(i_species,en,ell,paos%cutoff(zeta,i_shell),&
                  paos%psi(zeta,paos%polarised_shell)%f,paos%psi(zeta,i_shell)%f,&
                  paos%energy(zeta,paos%polarised_shell),vha,vxc,paos%pol_pf)
@@ -1217,8 +1218,14 @@ contains
     l_half_sq = real(ell+1,double) + half
     l_half_sq = l_half_sq*l_half_sq
     l_l_plus_one = real((ell+2)*(ell+1),double)
+    ! NB The values of n and l we have here are for the perturbed function, so this is correct
     n_nodes = en - ell - 1
     if(iprint>2) write(*,fmt='(2x,"For this polarisation function, we require ",i2," nodes")') n_nodes
+    ! This is needed when we are perturbing a valence state with a semi-core state
+    if(n_nodes>0 .and. pf_sign>zero .and. psi_l(1)<zero) then
+       pf_sign = -one
+       if(iprint>5) write(*,fmt='(4x,"Changing sign of function as required")')
+    end if
     zval = pseudo(i_species)%z
     dx_sq_over_twelve = alpha*alpha/twelve
     alpha_sq_over_four = alpha*alpha/four
@@ -1309,10 +1316,12 @@ contains
        end if
     end do
     if(loop>=n_loop) then
-       do i=1,nmax
-          write(50,*) rr(i),psi_pol(i),-rr(i)*rr(i)*psi_l(i)
-       end do
-       call flush(50)
+       if(iprint>5) then
+          do i=1,nmax
+             write(50,*) rr(i),psi_pol(i),-rr(i)*rr(i)*psi_l(i)
+          end do
+          call flush(50)
+       end if
        call cq_abort("ERROR in perturbative polarisation routines - prefactor not found")
     else
        if(iprint>2) write(*,fmt='("Finished perturbative polarisation search with prefactor ",f13.5)') prefac

@@ -250,6 +250,16 @@ IO.DumpL (*boolean*)
 
     *default*: T
 
+IO.DumpChargeDensity (*boolean*) Whether to write out the charge
+    density.  If T, then the charge density will be written out at
+    self-consistency; additionally, if ``IO.Iprint_SC`` is larger than
+    2, the charge density will be written out at every step of the SCF
+    cycle.  The resulting ``chden.nnn`` files can be converted to cube
+    format files using the :ref:`post-processing utility
+    <et_post_process>`.
+
+    *default*: T
+
 IO.TimingOn (*boolean*)
     Whether time information will be measured and written to output
 
