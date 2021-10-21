@@ -108,6 +108,11 @@ module io_module
   !  flag_MatrixFile_BinaryFormat_Dump_END.  
   !   (during the job, we need to keep the format of the file, prepared in the last job.)
   logical          :: flag_MatrixFile_BinaryFormat_Dump_END ! set from Conquest_input
+  
+  ! System signature
+  ! Moved here from read_and_write so that it can be used for extended XYZ output
+  ! Moved here from initial_read_module to slove the dependence problem
+  character(len=80), save :: titles
 
 !!***
 
@@ -2738,7 +2743,6 @@ second:   do
     use species_module, only: species_label
     use GenComms,       only: inode, ionode, cq_abort
     use units,          only: BohrToAng, for_conv
-    use initial_read,   only: titles
 
     ! Passed variables
     character(len=*)                      :: filename
@@ -2748,7 +2752,7 @@ second:   do
     ! Local variables
     integer                    :: lun, i, j, title_length
     character(len=2)           :: atom_name
-    character(len=256)         :: comment
+    character(len=432)         :: comment
     character(len=45)          :: vec_a, vec_b, vec_c, energy_str
     character(len=80)          :: titles_xyz
 
@@ -2758,7 +2762,6 @@ second:   do
       call io_assign(lun)
       if(append_coords) then
          open(unit=lun,file=filename,position='append')
-         write(lun,*)
       else
          open(unit=lun,file=filename)
       end if
@@ -2781,7 +2784,7 @@ second:   do
       comment=TRIM(comment)//' Properties=species:S:1:pos:R:3:forces:R:3 potential_energy='
       write(energy_str,'(f0.8)') energy0
       comment = TRIM(comment)//TRIM(energy_str)//' pbc="T T T" '
-      write(lun,'(a)') comment
+      write(lun,'(a)') TRIM(comment)
 
       do i=1,ni_in_cell
         atom_name = adjustr(species_label(species_glob(i))(1:2))
