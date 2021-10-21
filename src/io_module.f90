@@ -2762,7 +2762,6 @@ second:   do
       call io_assign(lun)
       if(append_coords) then
          open(unit=lun,file=filename,position='append')
-         write(lun,*)
       else
          open(unit=lun,file=filename)
       end if
