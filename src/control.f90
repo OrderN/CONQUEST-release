@@ -2191,7 +2191,7 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
                               y_atom_cell, z_atom_cell, id_glob,    &
                               atom_coord, area_general, flag_pulay_simpleStep, &
                               flag_diagonalisation, nspin, flag_LmatrixReuse, &
-                              flag_SFcoeffReuse
+                              flag_SFcoeffReuse, flag_move_atom
     use group_module,   only: parts
     use minimise,       only: get_E_and_F
     use move_atoms,     only: pulayStep, velocityVerlet,            &
@@ -2437,6 +2437,16 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
        cg_new = -alpha*tot_force
        do i=1,n_dim
           cg_new = cg_new - (one/kappa_prime(i) - alpha)*dot(length,tot_force,1,vi_tilde(:,:,i),1)*vi_tilde(:,:,i)
+       end do
+       ! Zero search direction for fixed atoms and find maximum force
+       max = zero
+       do i = 1, ni_in_cell
+          do k = 1, 3
+             if (abs(tot_force(k,i)) > max) max = abs(tot_force(k,i))
+             if (.not. flag_move_atom(k,i)) then
+                cg_new(k,i) = zero
+             end if
+          end do
        end do
        gg = dot(length, cg_new, 1, cg_new, 1)
        ! Analyse forces
