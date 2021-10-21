@@ -1418,12 +1418,15 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
   !!   Zamaan Raza
   !!  CREATION DATE
   !!   2018/08/11 10:27
+  !!  MODIFIED
+  !!   2021/10/19 Jianbo Lin
+  !!    Added call for extended XYZ output (includes forces)
   !!  SOURCE
   !!  
   subroutine write_md_data(iter, thermo, baro, mdl, nequil)
 
     use GenComms,      only: inode, ionode
-    use io_module,     only: write_xsf
+    use io_module,     only: write_xsf, write_extxyz
     use global_module, only: iprint_MD, flag_baroDebug, flag_thermoDebug, &
          flag_heat_flux
     use md_model,      only: type_md_model, md_tdep
@@ -1431,7 +1434,8 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
          write_md_checkpoint, flag_write_xsf, &
          md_thermo_file, md_baro_file, &
          md_trajectory_file, md_frames_file, &
-         md_stats_file, md_heat_flux_file
+         md_stats_file, md_heat_flux_file, &
+         flag_write_extxyz
 
     ! Passed variables
     type(type_barostat), intent(inout)    :: baro
@@ -1445,6 +1449,8 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
     call write_md_checkpoint(thermo, baro)
     call mdl%dump_stats(md_stats_file, nequil)
     if (flag_write_xsf) call write_xsf(md_trajectory_file, iter)
+    if (flag_write_extxyz) &
+       call write_extxyz('trajectory.xyz', mdl%dft_total_energy, mdl%atom_force)
     if (flag_heat_flux) call mdl%dump_heat_flux(md_heat_flux_file)
     if (mod(iter, MDfreq) == 0) then
        call mdl%dump_frame(md_frames_file)
