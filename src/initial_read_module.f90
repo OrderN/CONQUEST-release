@@ -68,10 +68,6 @@ module initial_read
 
   ! Index number for loading DM etc
   integer, save :: index_MatrixFile
-  
-  ! System signature
-  ! Moved here from read_and_write so that it can be used for extended XYZ output
-  character(len=80), save :: titles
 
 !!***
 
@@ -170,7 +166,7 @@ contains
     use io_module,              only: read_mult,                       &
          read_atomic_positions,           &
          pdb_template, pdb_format,        &
-         print_process_info
+         print_process_info, titles
     use group_module,           only: parts, part_method
     use construct_module,       only: init_group, init_primary
     use maxima_module,          only: maxpartsproc, maxatomsproc
