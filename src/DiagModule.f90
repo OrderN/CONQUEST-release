@@ -4044,7 +4044,7 @@ contains
                             do m1 = -l1,l1
                                ipao = ipao + 1
                                ! l, m so shift m1 by l1+1 so it runs from 1 to 2*l1+1
-                               fac_angmom(l1+1,m1+l1+1) = fac_angmom(l1+1,m1+l1+1) + &
+                               fac_angmom(l1+1,m1+l1+1) = fac_angmom(l1+1,m1+l1+1) &
                                                         + weight_pDOS(ipao,iwf)
                             enddo
                          else
@@ -4078,7 +4078,7 @@ contains
 !
              !-- project DOS onto atoms
              do i=n_min,n_max
-                projDOS(i,atom) = projDOS(i,atom) + tmp(i)*fac
+                projDOS(i,bundle%ig_prim(atom)) = projDOS(i,bundle%ig_prim(atom)) + tmp(i)*fac
              end do
 !
              if (flag_pDOS_angmom) then
@@ -4089,8 +4089,8 @@ contains
                       do m1=-l1,l1
                          fac = fac_angmom(l1+1,m1+l1+1)
                          do i=n_min,n_max
-                            projDOS_angmom(i,atom,l1+1,m1+l1+1) = projDOS_angmom(i,atom,l1+1,m1+l1+1) + &
-                                                                  tmp(i)*fac
+                            projDOS_angmom(i,bundle%ig_prim(atom),l1+1,m1+l1+1) = &
+                                 projDOS_angmom(i,bundle%ig_prim(atom),l1+1,m1+l1+1) + tmp(i)*fac
                          end do
                       end do
                    end do
@@ -4099,7 +4099,8 @@ contains
                    do l1 = 0, pao(atom_spec)%greatest_angmom
                       fac = fac_angmom(l1+1,1)
                       do i=n_min,n_max
-                         projDOS_angmom(i,atom,l1+1,1) = projDOS_angmom(i,atom,l1+1,1) + tmp(i)*fac
+                         projDOS_angmom(i,bundle%ig_prim(atom),l1+1,1) = &
+                              projDOS_angmom(i,bundle%ig_prim(atom),l1+1,1) + tmp(i)*fac
                       end do
                    end do
                 end if ! flag_pDOS_lm
