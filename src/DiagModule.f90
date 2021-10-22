@@ -3970,6 +3970,8 @@ contains
   !!    Changed the projection weight from C*C^T to tr(K(iwf)S)
   !!    weight_pDOS is (atom,wf) for flag_pDOS_angmom=F and (pao,wf) for flag_pDOS_angmom=T.
   !!    The variable name "weight" is changed to "weight_k" (weight of k-point).
+  !!   2021/10/22 15:33 dave
+  !!    Added test for MSSF to accumulate projDOS, projDOS_angmom by global atom number
   !!  SOURCE
   !!
   subroutine accumulate_DOS(weight_k,eval,DOS,projDOS,projDOS_angmom,weight_pDOS)
@@ -3977,7 +3979,7 @@ contains
     use datatypes
     use numbers,         only: half, zero
     use global_module,   only: n_DOS, E_DOS_max, E_DOS_min, sigma_DOS, flag_write_projected_DOS, &
-                               atomf, id_glob, flag_pDOS_angmom, flag_pDOS_lm, max_wf, out_wf
+                               atomf, sf, id_glob, flag_pDOS_angmom, flag_pDOS_lm, max_wf, out_wf
     use ScalapackFormat, only: matrix_size
     use primary_module,  only: bundle
     use GenComms,        only: cq_abort
@@ -4078,7 +4080,11 @@ contains
 !
              !-- project DOS onto atoms
              do i=n_min,n_max
-                projDOS(i,bundle%ig_prim(atom)) = projDOS(i,bundle%ig_prim(atom)) + tmp(i)*fac
+                if(atomf==sf) then
+                   projDOS(i,atom) = projDOS(i,bundle%ig_prim(atom)) + tmp(i)*fac
+                else
+                   projDOS(i,bundle%ig_prim(atom)) = projDOS(i,bundle%ig_prim(atom)) + tmp(i)*fac
+                end if
              end do
 !
              if (flag_pDOS_angmom) then
@@ -4089,8 +4095,13 @@ contains
                       do m1=-l1,l1
                          fac = fac_angmom(l1+1,m1+l1+1)
                          do i=n_min,n_max
-                            projDOS_angmom(i,bundle%ig_prim(atom),l1+1,m1+l1+1) = &
-                                 projDOS_angmom(i,bundle%ig_prim(atom),l1+1,m1+l1+1) + tmp(i)*fac
+                            if(atomf==sf) then
+                               projDOS_angmom(i,atom,l1+1,m1+l1+1) = &
+                                    projDOS_angmom(i,atom,l1+1,m1+l1+1) + tmp(i)*fac
+                            else
+                               projDOS_angmom(i,bundle%ig_prim(atom),l1+1,m1+l1+1) = &
+                                    projDOS_angmom(i,bundle%ig_prim(atom),l1+1,m1+l1+1) + tmp(i)*fac
+                            end if
                          end do
                       end do
                    end do
@@ -4099,8 +4110,13 @@ contains
                    do l1 = 0, pao(atom_spec)%greatest_angmom
                       fac = fac_angmom(l1+1,1)
                       do i=n_min,n_max
-                         projDOS_angmom(i,bundle%ig_prim(atom),l1+1,1) = &
-                              projDOS_angmom(i,bundle%ig_prim(atom),l1+1,1) + tmp(i)*fac
+                         if(atomf==sf) then
+                            projDOS_angmom(i,atom,l1+1,1) = &
+                                 projDOS_angmom(i,atom,l1+1,1) + tmp(i)*fac
+                         else
+                            projDOS_angmom(i,bundle%ig_prim(atom),l1+1,1) = &
+                                 projDOS_angmom(i,bundle%ig_prim(atom),l1+1,1) + tmp(i)*fac
+                         end if
                       end do
                    end do
                 end if ! flag_pDOS_lm
