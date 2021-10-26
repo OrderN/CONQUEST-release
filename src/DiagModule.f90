@@ -475,6 +475,8 @@ contains
   !!   2021/07/30 19:00 nakata
   !!    Added spin indices to matBand and matBand_atomf
   !!    Changed the position of call (accumulate_DOS)
+  !!   2021/10/26 15:16 dave
+  !!    Bug fix for pDOS (MSSF and atom functions now treated the same)
   !!  SOURCE
   !!
   subroutine FindEvals(electrons)
@@ -604,8 +606,7 @@ contains
        total_DOS = zero
        ! Only if projecting DOS onto atoms
        if(flag_write_projected_DOS) then
-          if (atomf==sf) allocate(pDOS(n_DOS,bundle%n_prim,nspin))
-          if (atomf/=sf) allocate(pDOS(n_DOS,ni_in_cell,   nspin))
+          allocate(pDOS(n_DOS,bundle%n_prim,nspin))
           pDOS = zero
           if (flag_pDOS_angmom) then
              Nangmom = 0
@@ -615,11 +616,9 @@ contains
              Nangmom = Nangmom + 1 ! Nangmom should be 1 larger than greatest_angmom
              if(flag_pDOS_lm) then
                 ! NB we want (2*l+1) for m component but Nangmom = l+1 so 2*l+1 = 2*Nangmom-1
-                if (atomf==sf) allocate(pDOS_angmom(n_DOS,bundle%n_prim,Nangmom,2*Nangmom-1,nspin)) 
-                if (atomf/=sf) allocate(pDOS_angmom(n_DOS,ni_in_cell,   Nangmom,2*Nangmom-1,nspin))
+                allocate(pDOS_angmom(n_DOS,bundle%n_prim,Nangmom,2*Nangmom-1,nspin)) 
              else
-                if (atomf==sf) allocate(pDOS_angmom(n_DOS,bundle%n_prim,Nangmom,1,nspin)) ! 1 for m component (not used)
-                if (atomf/=sf) allocate(pDOS_angmom(n_DOS,ni_in_cell,   Nangmom,1,nspin))
+                allocate(pDOS_angmom(n_DOS,bundle%n_prim,Nangmom,1,nspin)) ! 1 for m component (not used)
              end if
              pDOS_angmom = zero
           endif
@@ -947,7 +946,8 @@ contains
                       call get_weight_pDOS(matBand, wtpDOS(:,:,spin), spin)
                       if (flag_pDOS_angmom) then
                          call accumulate_DOS(wtk(kp),w(:,kp,spin),total_DOS(:,spin), &
-                                             projDOS=pDOS(:,:,spin),projDOS_angmom=pDOS_angmom(:,:,:,:,spin), &
+                                             projDOS=pDOS(:,:,spin), &
+                                             projDOS_angmom=pDOS_angmom(:,:,:,:,spin), &
                                              weight_pDOS=wtpDOS(:,:,spin))
                       else
                          call accumulate_DOS(wtk(kp),w(:,kp,spin),total_DOS(:,spin), &
@@ -1115,29 +1115,12 @@ contains
                 call free_temp_matrix(matBand(i,spin))
              end do
           end do
-          if (atomf==sf) then
-             if (.not.flag_pDOS_angmom) call dump_projected_DOS(pDOS,Efermi)
-             if (     flag_pDOS_angmom) call dump_projected_DOS(pDOS,Efermi,pDOS_angmom=pDOS_angmom,Nangmom=Nangmom)
+          if (flag_pDOS_angmom) then
+             call dump_projected_DOS(pDOS,Efermi, pDOS_angmom=pDOS_angmom, Nangmom=Nangmom)
+             deallocate(pDOS_angmom)
           else
-             call gsum(pDOS(:,:,:),n_DOS,ni_in_cell,nspin)
-             if(flag_pDOS_angmom) then
-                if(flag_pDOS_lm) then
-                   do spin = 1, nspin
-                      call gsum(pDOS_angmom(:,:,:,:,spin),n_DOS,ni_in_cell,Nangmom,2*Nangmom-1)
-                   enddo
-                else
-                   do spin = 1, nspin
-                      call gsum(pDOS_angmom(:,:,:,1,spin),n_DOS,ni_in_cell,Nangmom)
-                   enddo
-                end if
-                if (inode==ionode) then
-                   call dump_projected_DOS(pDOS,Efermi,pDOS_angmom=pDOS_angmom,Nangmom=Nangmom)
-                end if
-             else
-                if (inode==ionode) call dump_projected_DOS(pDOS,Efermi)
-             endif
-          endif
-          if (flag_pDOS_angmom) deallocate(pDOS_angmom)
+             call dump_projected_DOS(pDOS,Efermi)
+          end if
           deallocate(pDOS)
        end if
        deallocate(total_DOS)
@@ -3972,6 +3955,8 @@ contains
   !!    The variable name "weight" is changed to "weight_k" (weight of k-point).
   !!   2021/10/22 15:33 dave
   !!    Added test for MSSF to accumulate projDOS, projDOS_angmom by global atom number
+  !!   2021/10/26 15:17 dave
+  !!    Now treats MSSF and atom functions in the same way
   !!  SOURCE
   !!
   subroutine accumulate_DOS(weight_k,eval,DOS,projDOS,projDOS_angmom,weight_pDOS)
@@ -3979,7 +3964,7 @@ contains
     use datatypes
     use numbers,         only: half, zero
     use global_module,   only: n_DOS, E_DOS_max, E_DOS_min, sigma_DOS, flag_write_projected_DOS, &
-                               atomf, sf, id_glob, flag_pDOS_angmom, flag_pDOS_lm, max_wf, out_wf
+                               id_glob, flag_pDOS_angmom, flag_pDOS_lm, max_wf, out_wf
     use ScalapackFormat, only: matrix_size
     use primary_module,  only: bundle
     use GenComms,        only: cq_abort
@@ -4080,11 +4065,7 @@ contains
 !
              !-- project DOS onto atoms
              do i=n_min,n_max
-                if(atomf==sf) then
-                   projDOS(i,atom) = projDOS(i,bundle%ig_prim(atom)) + tmp(i)*fac
-                else
-                   projDOS(i,bundle%ig_prim(atom)) = projDOS(i,bundle%ig_prim(atom)) + tmp(i)*fac
-                end if
+                projDOS(i,atom) = projDOS(i,atom) + tmp(i)*fac
              end do
 !
              if (flag_pDOS_angmom) then
@@ -4095,13 +4076,8 @@ contains
                       do m1=-l1,l1
                          fac = fac_angmom(l1+1,m1+l1+1)
                          do i=n_min,n_max
-                            if(atomf==sf) then
-                               projDOS_angmom(i,atom,l1+1,m1+l1+1) = &
-                                    projDOS_angmom(i,atom,l1+1,m1+l1+1) + tmp(i)*fac
-                            else
-                               projDOS_angmom(i,bundle%ig_prim(atom),l1+1,m1+l1+1) = &
-                                    projDOS_angmom(i,bundle%ig_prim(atom),l1+1,m1+l1+1) + tmp(i)*fac
-                            end if
+                            projDOS_angmom(i,atom,l1+1,m1+l1+1) = &
+                                 projDOS_angmom(i,atom,l1+1,m1+l1+1) + tmp(i)*fac
                          end do
                       end do
                    end do
@@ -4110,13 +4086,8 @@ contains
                    do l1 = 0, pao(atom_spec)%greatest_angmom
                       fac = fac_angmom(l1+1,1)
                       do i=n_min,n_max
-                         if(atomf==sf) then
-                            projDOS_angmom(i,atom,l1+1,1) = &
-                                 projDOS_angmom(i,atom,l1+1,1) + tmp(i)*fac
-                         else
-                            projDOS_angmom(i,bundle%ig_prim(atom),l1+1,1) = &
-                                 projDOS_angmom(i,bundle%ig_prim(atom),l1+1,1) + tmp(i)*fac
-                         end if
+                         projDOS_angmom(i,atom,l1+1,1) = &
+                              projDOS_angmom(i,atom,l1+1,1) + tmp(i)*fac
                       end do
                    end do
                 end if ! flag_pDOS_lm
@@ -4200,6 +4171,7 @@ contains
     ! -------------------------------------------------
 
     if (flag_pDOS_angmom) then
+       ! Since we want to break down pDOS by l and m, we have to transform MSSF to atom functions
        if (atomf.ne.sf) then
           matDM = allocate_temp_matrix(aHa_range,0,atomf,atomf)
        endif
@@ -4212,7 +4184,8 @@ contains
           call matrix_sum(zero, temp_mat, one, matDM)    ! matDM = matBand_atomf
           call atom_trace(temp_mat, matSatomf, npao_node, weight_pDOS(:,wf_no), .true.)
        enddo
-    else 
+    else
+       ! Since we are only projecting onto the atom, need not distinguish MSSF from atom functions
        spin_SF = 1
        if (flag_SpinDependentSF) spin_SF = ispin
        do wf_no=1,max_wf

@@ -1560,13 +1560,15 @@ second:   do
   !!    Added orbital angular momentum resolved DOS (pDOS_angmom)
   !!   2018/10/22 14:22 dave & jsb
   !!    Adding (l,m)-projected DOS
+  !!   2021/10/26 15:13 dave
+  !!    Remove MSSF/atomic function difference
   !! SOURCE
   !!
   subroutine dump_projected_DOS(pDOS,Ef,pDOS_angmom,Nangmom)
 
     use datatypes
     use global_module, only: n_DOS, E_DOS_max, E_DOS_min, sigma_DOS, flag_pDOS_angmom, &
-                             nspin, atomf, sf, ni_in_cell, flag_pDOS_lm
+                             nspin, ni_in_cell, flag_pDOS_lm
     use primary_module,  only: bundle
 
     ! Passed variables
@@ -1576,17 +1578,13 @@ second:   do
     integer, OPTIONAL :: Nangmom
 
     ! Local variables
-    integer :: lun, i, j, k, iprim, natom, tmp_col
+    integer :: lun, i, j, k, iprim, tmp_col
     real(double) :: dE, thisE
     character(len=50) :: filename, fmt_DOS
     character(len=200) :: colstr
 
-    if (atomf==sf) natom = bundle%n_prim
-    if (atomf/=sf) natom = ni_in_cell
-
-    do iprim = 1,natom
-       if (atomf==sf) write(filename,'("Atom",I0.7,"DOS.dat")') bundle%ig_prim(iprim)
-       if (atomf/=sf) write(filename,'("Atom",I0.7,"DOS.dat")') iprim ! iprim is equal to global ID if atomf = paof (MSSFs)
+    do iprim = 1, bundle%n_prim
+       write(filename,'("Atom",I0.7,"DOS.dat")') bundle%ig_prim(iprim)
        ! Open file
        call io_assign (lun)
        open (unit = lun, file = filename)
