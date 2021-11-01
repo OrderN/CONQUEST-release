@@ -2719,6 +2719,8 @@ second:   do
   !!   Writes atomic positions, including atomic forces, lattice vectors, 
   !!  energy, system signature, etc. to an extended format .xyz file   
   !!  which can be directly recognized by Python Library named ASE.
+  !!  The units are Angstrom, eV and eV/Angstrom for distance, energy and
+  !!  forces.
   !!  
   !!  INPUTS
   !!  
@@ -2742,7 +2744,7 @@ second:   do
                               species_glob
     use species_module, only: species_label
     use GenComms,       only: inode, ionode, cq_abort
-    use units,          only: BohrToAng, for_conv
+    use units,          only: BohrToAng, HaToeV
 
     ! Passed variables
     character(len=*)                      :: filename
@@ -2755,6 +2757,7 @@ second:   do
     character(len=432)         :: comment
     character(len=45)          :: vec_a, vec_b, vec_c, energy_str
     character(len=80)          :: titles_xyz
+    real(double)               :: for_conv_loc, en_conv_loc, dist_conv_loc
 
     if(inode==ionode) then
       if (iprint_init>2) write(io_lun, &
@@ -2765,6 +2768,10 @@ second:   do
       else
          open(unit=lun,file=filename)
       end if
+
+      en_conv_loc = HaToeV
+      dist_conv_loc = BohrToAng
+      for_conv_loc = en_conv_loc/dist_conv_loc
       write(lun,'(i0)') ni_in_cell
 	  
       ! Transfer space to underbar in the titles
@@ -2782,14 +2789,14 @@ second:   do
       write(vec_c,fmt='(3f15.8)') zero, zero, r_super_z*BohrToAng
       comment=TRIM(comment)//' Lattice="'//ADJUSTL(vec_a)//ADJUSTL(vec_b)//TRIM(ADJUSTL(vec_c))//'" '
       comment=TRIM(comment)//' Properties=species:S:1:pos:R:3:forces:R:3 potential_energy='
-      write(energy_str,'(f0.8)') energy0
+      write(energy_str,'(f0.8)') energy0 * en_conv_loc
       comment = TRIM(comment)//TRIM(energy_str)//' pbc="T T T" '
       write(lun,'(a)') TRIM(comment)
 
       do i=1,ni_in_cell
         atom_name = adjustr(species_label(species_glob(i))(1:2))
-        write(lun,'(a4,6f16.8)') atom_name, atom_coord(:,i)*BohrToAng, &
-                 (for_conv * atom_force(j,i), j = 1, 3)
+        write(lun,'(a4,6f16.8)') atom_name, atom_coord(:,i)*dist_conv_loc, &
+                 (for_conv_loc*atom_force(j,i), j = 1, 3)
                  ! species_glob(i),flag_move_atom(1,i),flag_move_atom(2,i), &
       end do
       call io_close(lun)
