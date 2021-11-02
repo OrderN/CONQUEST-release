@@ -209,6 +209,8 @@ contains
   !!    Initialise atomic_stress, the array for storing atomic stress contributions
   !!   2019/12/10 10:43 dave
   !!    Remove redundant argument (expected_reduction)
+  !!   2021/10/06 11:54 dave
+  !!    Zero components of stress where unit cell is constrained; simplify pressure conversion
   !!  SOURCE
   !!
   subroutine force(fixed_potential, vary_mu, n_cg_L_iterations, &
@@ -242,7 +244,7 @@ contains
                                       flag_neutral_atom, flag_stress, &
                                       rcellx, rcelly, rcellz, &
                                       flag_atomic_stress, non_atomic_stress, &
-                                      flag_heat_flux
+                                      flag_heat_flux, cell_constraint_flag
     use density_module,         only: get_electronic_density, density, &
                                       build_Becke_weight_forces
     use functions_on_grid,      only: atomfns, H_on_atomfns
@@ -257,6 +259,7 @@ contains
                                        delta_E_xc, xc_energy, hartree_energy_drho
     use hartree_module, only: Hartree_stress
     use XC, ONLY: XC_GGA_stress
+    use input_module,         only: leqi
 
     implicit none
 
@@ -624,7 +627,24 @@ contains
          end do
       end if
       if (flag_atomic_stress) call gsum(atomic_stress,3,3,ni_in_cell)
-
+      ! If we constrain the cell, zero the appropriate stresses
+      if (leqi(cell_constraint_flag, 'a')) then
+         stress(1,1) = zero
+      else if (leqi(cell_constraint_flag, 'b')) then
+         stress(2,2) = zero
+      else if (leqi(cell_constraint_flag, 'c')) then
+         stress(3,3) = zero
+      else if (leqi(cell_constraint_flag, 'c a') .or. leqi(cell_constraint_flag, 'a c')) then
+         stress(1,1) = zero
+         stress(3,3) = zero
+      else if (leqi(cell_constraint_flag, 'a b') .or. leqi(cell_constraint_flag, 'b a')) then
+         stress(1,1) = zero
+         stress(2,2) = zero
+      else if (leqi(cell_constraint_flag, 'b c') .or. leqi(cell_constraint_flag, 'c b')) then
+         stress(2,2) = zero
+         stress(3,3) = zero
+      end if
+      ! Output
       if (inode == ionode) then       
          write (io_lun,fmt='(/4x,"                  ",3a15)') "X","Y","Z"
          if(iprint_MD > 1) write(io_lun,fmt='(4x,"Stress contributions:")')
@@ -648,10 +668,8 @@ contains
       call print_stress("non-SCF stress:   ", nonSCF_stress, 3)
       call print_stress("Total stress:     ", stress, 0)
       volume = rcellx*rcelly*rcellz
-      ! Include Ha/cubic bohr to GPa conversion and 1/volume factor
-      ! Factor of 1e21 comes from Ang to m (1e30) and Pa to GPa (1e-9) 
-      scale = -(HaToeV*eVToJ*1e21_double)/(volume*BohrToAng*BohrToAng*BohrToAng)
       ! We need pressure in GPa, and only diagonal terms output
+      scale = -HaBohr3ToGPa/volume
       !call print_stress("Total pressure:   ", stress*scale, 0)
       if(inode==ionode.AND.iprint_MD>=0) &
            write(io_lun,'(/4x,a18,3f15.8,a4)') "Total pressure:   ",stress(1,1)*scale,&

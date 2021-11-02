@@ -775,6 +775,8 @@ contains
   !!    Removed calls to dump K matrix (now done in DMMinModule)
   !!   2018/07/11 12:07 dave
   !!    Tidying: only output on ionode, remove redundant call to wrap_xyz
+  !!   2021/10/15 17:44 dave
+  !!    Updates to fix second interpolation
   !! SOURCE
   !!
   subroutine safemin2(start_x, start_y, start_z, direction, energy_in, &
@@ -998,9 +1000,8 @@ contains
          k1, e1, k2, e2, k3, e3
     bottom = ((k1-k3)*(e1-e2)-(k1-k2)*(e1-e3))
     if (abs(bottom) > very_small) then
-       kmin = 0.5_double * (((k1*k1 - k3*k3)*(e1 - e2) -    &
-            (k1*k1 - k2*k2) * (e1 - e3)) / &
-            ((k1-k3)*(e1-e2) - (k1-k2)*(e1-e3)))
+       kmin = half * ((k1*k1 - k3*k3)*(e1 - e2) -    &
+            (k1*k1 - k2*k2) * (e1 - e3)) / bottom
     else
        if (inode == ionode) then
           write (io_lun, fmt='(4x,"Error in safemin2 !")')
@@ -1077,23 +1078,12 @@ contains
          kmin, en_conv*energy_out, en_units(energy_units)
     ! If interpolation step failed, do interpolation AGAIN
     if (energy_out > e2 .and. abs(bottom) > RD_ERR) then
-       if(e1<e3) then ! Keep k1
-          if(k2<kmin) then
-             k3 = kmin
-             e3 = energy_out
-          else
-             k3 = k2
-             e3 = e2
-             k2 = kmin
-             e2 = energy_out
-          end if
-       else ! Keep k3
-          if(k2<kmin) then
-             k1 = k2
-             e1 = e2
-             k2 = kmin
-             e2 = energy_out
-          end if
+       if(kmin<k2) then ! kmin lies between k1 and k2
+          k1 = kmin
+          e1 = energy_out
+       else             ! kmin lies between k2 and k3
+          k3 = kmin
+          e3 = energy_out
        end if
        kmin_old = kmin
        if (inode == ionode .and. iprint_MD > 1) &
@@ -1101,29 +1091,11 @@ contains
             k1, e1, k2, e2, k3, e3
        bottom = ((k1-k3)*(e1-e2)-(k1-k2)*(e1-e3))
        if (abs(bottom) > very_small) then
-          kmin = 0.5_double * (((k1*k1 - k3*k3)*(e1 - e2) -    &
-               (k1*k1 - k2*k2) * (e1 - e3)) / &
-               ((k1-k3)*(e1-e2) - (k1-k2)*(e1-e3)))
+          kmin = half * ((k1*k1 - k3*k3)*(e1 - e2) -    &
+               (k1*k1 - k2*k2) * (e1 - e3)) / bottom
           if (inode == ionode .and. iprint_MD > 1) &
                write (io_lun, &
                fmt='(4x,"In safemin2, second interpolation step is ", f15.10)') kmin
-          if(kmin<k1.OR.kmin>k3) then
-             if(inode == ionode .and. iprint_MD > 0) &
-                  write(io_lun,*) 'Second interpolation outside limits: ',k1,k3,kmin
-             dE = e0 - energy_out
-             kmin = kmin_old
-             if (inode == ionode .and. iprint_MD > 0) then
-                write (io_lun, &
-                     fmt='(4x,"In safemin2, exit after ",i4," &
-                     &iterations with energy ",f20.10," ",a2)') &
-                     iter, en_conv * energy_out, en_units(energy_units)
-             else if (inode == ionode) then
-                write (io_lun, fmt='(/4x,"Final energy: ",f20.10," ",a2)') &
-                     en_conv * energy_out, en_units(energy_units)
-             end if
-             if (inode.EQ.ionode) write (io_lun,*) "Get out of safemin2 !" !db
-             return
-          end if
        else
           dE = e0 - energy_out
           if (inode == ionode .and. iprint_MD > 0) then
@@ -1191,7 +1163,7 @@ contains
        !                  we will call it after calling safemin2
        call dump_pos_and_matrices
 
-    end if
+    end if ! energy_out > e2
     dE = e0 - energy_out
 7   format(4x,3f15.8)
     if (inode == ionode .and. iprint_MD > 0) then
@@ -1775,6 +1747,8 @@ contains
   !!   2019/02/28 zamaan
   !!    Modified to minimise enthalpy instead of energy, relax to target
   !!    pressure
+  !!   2021/10/15 17:48 dave
+  !!    Added second interpolation
   !! SOURCE
 
   subroutine safemin_cell(start_rcellx, start_rcelly, start_rcellz, &
@@ -1834,7 +1808,7 @@ contains
     type(cq_timer) :: tmr_l_iter, tmr_l_tmp1
     real(double)   :: k0, k1, k2, k3, lambda, k3old, orcellx, orcelly, orcellz, scale, ratio
     real(double)   :: e0, e1, e2, e3, tmp, bottom, xvec, yvec, zvec, r2, &
-                      h0, h1, h2, h3, dH, energy_out
+                      h0, h1, h2, h3, dH, energy_out, top
     real(double), save :: kmin = zero, dE = zero
     real(double), dimension(:), allocatable :: store_density
     real(double), dimension(3,ni_in_cell) :: direction
@@ -1942,15 +1916,16 @@ contains
          write (io_lun, fmt='(4x,"In safemin_cell, brackets are: ",6f18.10)') &
          k1, h1, k2, h2, k3, h3
     bottom = ((k1-k3)*(h1-h2)-(k1-k2)*(h1-h3))
-    if (abs(bottom) > RD_ERR) then
-       kmin = 0.5_double * (((k1*k1 - k3*k3)*(h1 - h2) -    &
-            (k1*k1 - k2*k2) * (h1 - h3)) / &
-            ((k1-k3)*(h1-h2) - (k1-k2)*(h1-h3)))
+    top = half*((k1*k1 - k3*k3)*(h1 - h2) - (k1*k1 - k2*k2) * (h1 - h3))
+    ! Check for very small numerator and denominator
+    if (abs(bottom) > RD_ERR .or. (abs(top)<RD_ERR .and. abs(bottom)<RD_ERR)) then
+       kmin = top/bottom
     else
        if (inode == ionode .and. iprint_MD > 0) then
           write (io_lun, fmt='(4x,"Error in safemin_cell !")')
           write (io_lun, fmt='(4x,"Interpolation failed: ",6f15.10)') &
                k1, h1, k2, h2, k3, h3
+          write(io_lun, fmt='(4x,"Numerator: ",f15.10," Denominator: ",f15.10)') top, bottom
        end if
        kmin = k2
     end if
@@ -2002,13 +1977,40 @@ contains
          fmt='(4x,"In safemin_cell, Interpolation step and enthalpy &
          &are ",f15.10,f20.10," ",a2)') &
          kmin, en_conv*enthalpy_out, en_units(energy_units)
-    if (enthalpy_out > h2 .and. abs(bottom) > RD_ERR) then
+    if (enthalpy_out > h2 .and. (abs(bottom) > RD_ERR .or. (abs(top)<RD_ERR.and.abs(bottom)<RD_ERR))) then
        ! The interpolation failed - go back
-       call start_timer(tmr_l_tmp1,WITH_LEVEL)
-       if (inode == ionode .and. iprint_MD > 0) &
-            write (io_lun,fmt='(/4x,"Interpolation failed; reverting"/)')
-       kmin = k2
-       ! DRB added 2017/05/24 17:13
+       if(kmin<k2) then ! kmin lies between k1 and k2
+          k1 = kmin
+          e1 = enthalpy_out
+       else             ! kmin lies between k2 and k3
+          k3 = kmin
+          e3 = enthalpy_out
+       end if
+       if (inode == ionode .and. iprint_MD > 1) &
+            write (io_lun, fmt='(4x,"In safemin_cell, brackets are: ",6f18.10)') &
+            k1, h1, k2, h2, k3, h3
+       bottom = ((k1-k3)*(h1-h2)-(k1-k2)*(h1-h3))
+       top = half*((k1*k1 - k3*k3)*(h1 - h2) - (k1*k1 - k2*k2) * (h1 - h3))
+       if (abs(bottom) > RD_ERR .or. (abs(top)<RD_ERR .and. abs(bottom)<RD_ERR)) then
+          kmin = top/bottom
+          if (inode == ionode .and. iprint_MD > 1) &
+               write (io_lun, &
+               fmt='(4x,"In safemin_cell, second interpolation step is ", f15.10)') kmin
+       else
+          dH = h0 - enthalpy_out
+          if (inode == ionode .and. iprint_MD > 1) then
+             write (io_lun, &
+                  fmt='(4x,"In safemin_cell, exit after ",i4," &
+                  &iterations with enthalpy ",f20.10," ",a2)') &
+                  iter, en_conv * enthalpy_out, en_units(energy_units)
+          else if (inode == ionode) then
+             write (io_lun, fmt='(/4x,"Final enthalpy: ",f20.10," ",a2)') &
+                  en_conv * enthalpy_out, en_units(energy_units)
+          end if
+          if (inode==ionode .and. iprint_MD > 1) &
+            write (io_lun,'(2x,a)') "Get out of safemin_cell!" 
+          return
+       end if
        ! Keep previous cell to allow scaling
        call update_cell_dims(start_rcellx, start_rcelly, &
             start_rcellz, search_dir_x, search_dir_y, search_dir_z,&
@@ -2037,8 +2039,6 @@ contains
                fixed_potential, vary_mu, n_L_iterations, &
                L_tolerance, e3)
        end if
-       h3 = enthalpy(e3, target_press)
-       enthalpy_out = e3
        if (iprint_MD > 0) then
           call get_E_and_F(fixed_potential, vary_mu, energy_out, &
                .true., .true.)
@@ -2047,7 +2047,8 @@ contains
                .true., .false.)
        end if
        ! we may not need to call dump_pos_and_matrices here. (if it would be called in the part after calling safemin_cell)
-       call dump_pos_and_matrices  
+       call dump_pos_and_matrices
+       enthalpy_out = enthalpy(energy_out, target_press)
     end if
     dH = h0 - enthalpy_out
 7   format(4x,3f15.8)
@@ -2069,7 +2070,12 @@ contains
   !!****f* move_atoms/safemin_full *
   !! PURPOSE
   !!  Carry out line minimisation of cell + ionic degrees of freedom 
-  !! in conjunction with reusing L-matrix (adapted from safemin2)
+  !!  in conjunction with reusing L-matrix (adapted from safemin2)
+  !!
+  !!  Beware! The search direction here uses force/atom_coord ordering
+  !!  in contrast to other routines (which use x_atom_cell ordering).
+  !!  This is consistently used in update routines, but requires the
+  !!  re-ordering before and after update_pos_and_matrices
   !! INPUTS
   !!
   !! AUTHOR
@@ -2077,7 +2083,9 @@ contains
   !! CREATION DATE 
   !!   2019/02/06
   !! MODIFICATION HISTORY
-  !!
+  !!  2021/10/15 17:51 dave
+  !!   Use dummy array to update force after atoms moved in update_pos_and_matrices
+  !!   Also update second interpolation
   !! SOURCE
   !!
   subroutine safemin_full(config, force, cell_ref, enthalpy_in, enthalpy_out, &
@@ -2094,7 +2102,7 @@ contains
                               flag_self_consistent,                   &
                               IPRINT_TIME_THRES1, flag_pcc_global,    &
                               flag_LmatrixReuse, flag_SFcoeffReuse,   &
-                              atom_coord
+                              atom_coord, id_glob
     use minimise,       only: get_E_and_F, sc_tolerance, L_tolerance, &
                               n_L_iterations
     use GenComms,       only: inode, ionode, cq_abort
@@ -2120,7 +2128,7 @@ contains
     logical        :: done
     type(cq_timer) :: tmr_l_iter, tmr_l_tmp1
     real(double)   :: k0, k1, k2, k3, lambda, k3old, energy_out
-    real(double)   :: e0, e1, e2, e3, h0, h1, h2, h3, tmp, bottom
+    real(double)   :: e0, e1, e2, e3, h0, h1, h2, h3, tmp, bottom, top
     real(double), save :: kmin = zero, dH = zero
     real(double), dimension(:), allocatable :: store_density
     real(double) :: k3_old, k3_local, kmin_old
@@ -2163,7 +2171,7 @@ contains
     h2 = h0
     h3 = h2
     if (kmin < 1.0e-3) then
-       kmin = 0.3_double
+       kmin = 0.2_double ! Heuristic for now
     else
        kmin = 0.75_double * kmin
     end if
@@ -2183,11 +2191,18 @@ contains
 
        if (ionode==inode) write(io_lun,*) "CG: 1st stage"
 
+       ! Re-order force into dummy for update_pos_and_matrices
+       do i=1,ni_in_cell
+          dummy(:,i) = force(:,id_glob(i))
+       end do
        if (flag_SFcoeffReuse) then
-          call update_pos_and_matrices(updateSFcoeff, force(:,1:ni_in_cell))
+          call update_pos_and_matrices(updateSFcoeff, dummy)
        else
-          call update_pos_and_matrices(updateLorK, force(:,1:ni_in_cell))
+          call update_pos_and_matrices(updateLorK, dummy)
        end if
+       do i=1,ni_in_cell
+          force(:,id_glob(i)) = dummy(:,i)
+       end do
 
        if (inode==ionode .and. iprint_MD>2) then
           write(io_lun,'(4x,a)') "atom_coord:"
@@ -2260,15 +2275,15 @@ contains
          write (io_lun, fmt='(4x,"In safemin_full, brackets are: ",6f18.10)') &
          k1, h1, k2, h2, k3, h3
     bottom = ((k1-k3)*(h1-h2)-(k1-k2)*(h1-h3))
-    if (abs(bottom) > very_small) then
-       kmin = 0.5_double * (((k1*k1 - k3*k3)*(h1 - h2) -    &
-            (k1*k1 - k2*k2) * (h1 - h3)) / &
-            ((k1-k3)*(h1-h2) - (k1-k2)*(h1-h3)))
+    top = half*((k1*k1 - k3*k3)*(h1 - h2) - (k1*k1 - k2*k2) * (h1 - h3))
+    if (abs(bottom) > RD_ERR .or. (abs(top)<RD_ERR .and. abs(bottom)<RD_ERR)) then
+       kmin = top/bottom
     else
        if (inode == ionode) then
           write (io_lun, fmt='(4x,"Error in safemin_full !")')
           write (io_lun, fmt='(4x,"Interpolation failed: ",6f15.10)') &
                k1, h1, k2, h2, k3, h3
+          write(io_lun, fmt='(4x,"Numerator: ",f15.10," Denominator: ",f15.10)') top, bottom
        end if
        kmin = k2
     end if
@@ -2278,11 +2293,18 @@ contains
     k3_local = kmin - k3
 
     if(inode==ionode.AND.iprint_MD>0) write (io_lun,*) "CG: 2nd stage"
+    ! Re-order force into dummy for update_pos_and_matrices
+    do i=1,ni_in_cell
+       dummy(:,i) = force(:,id_glob(i))
+    end do
     if(flag_SFcoeffReuse) then
-       call update_pos_and_matrices(updateSFcoeff,force(:,1:ni_in_cell))
+       call update_pos_and_matrices(updateSFcoeff,dummy)
     else
-       call update_pos_and_matrices(updateLorK,force(:,1:ni_in_cell))
+       call update_pos_and_matrices(updateLorK,dummy)
     endif
+    do i=1,ni_in_cell
+       force(:,id_glob(i)) = dummy(:,i)
+    end do
 
     if (inode == ionode .and. iprint_MD > 1) then
        write(io_lun,'(4x,a)') "atom_coord:"
@@ -2326,54 +2348,25 @@ contains
          &are ",f15.10,f20.10," ",a2)') &
          kmin, en_conv*enthalpy_out, en_units(energy_units)
     ! If interpolation step failed, do interpolation AGAIN
-    if (enthalpy_out > h2 .and. abs(bottom) > RD_ERR) then
-       if(h1<h3) then ! Keep k1
-          if(k2<kmin) then
-             k3 = kmin
-             h3 = enthalpy_out
-          else
-             k3 = k2
-             h3 = h2
-             k2 = kmin
-             h2 = enthalpy_out
-          end if
-       else ! Keep k3
-          if(k2<kmin) then
-             k1 = k2
-             h1 = h2
-             k2 = kmin
-             h2 = enthalpy_out
-          end if
+    if (enthalpy_out > h2 .and. (abs(bottom) > RD_ERR .or. (abs(top)<RD_ERR .and. abs(bottom)<RD_ERR))) then
+       if(kmin<k2) then ! kmin lies between k1 and k2
+          k1 = kmin
+          h1 = enthalpy_out
+       else             ! kmin lies between k2 and k3
+          k3 = kmin
+          h3 = enthalpy_out
        end if
        kmin_old = kmin
        if (inode == ionode .and. iprint_MD > 1) &
             write (io_lun, fmt='(4x,"In safemin_full, brackets are: ",6f18.10)') &
             k1, h1, k2, h2, k3, h3
        bottom = ((k1-k3)*(h1-h2)-(k1-k2)*(h1-h3))
-       if (abs(bottom) > very_small) then
-          kmin = 0.5_double * (((k1*k1 - k3*k3)*(h1 - h2) -    &
-               (k1*k1 - k2*k2) * (h1 - h3)) / &
-               ((k1-k3)*(h1-h2) - (k1-k2)*(h1-h3)))
+       top = half*((k1*k1 - k3*k3)*(h1 - h2) - (k1*k1 - k2*k2) * (h1 - h3))
+       if (abs(bottom) > RD_ERR .or. (abs(top)<RD_ERR .and. abs(bottom)<RD_ERR)) then
+          kmin = top/bottom
           if (inode == ionode .and. iprint_MD > 1) &
                write (io_lun, &
                fmt='(4x,"In safemin_full, second interpolation step is ", f15.10)') kmin
-          if(kmin<k1.OR.kmin>k3) then
-             if(inode == ionode .and. iprint_MD > 1) &
-                  write(io_lun,*) 'Second interpolation outside limits: ',k1,k3,kmin
-             dH = h0 - enthalpy_out
-             kmin = kmin_old
-             if (inode == ionode .and. iprint_MD > 1) then
-                write (io_lun, &
-                     fmt='(4x,"In safemin_full, exit after ",i4," &
-                     &iterations with enthlapy ",f20.10," ",a2)') &
-                     iter, en_conv * enthalpy_out, en_units(energy_units)
-             else if (inode == ionode) then
-                write (io_lun, fmt='(/4x,"Final enthalpy: ",f20.10," ",a2)') &
-                     en_conv * enthalpy_out, en_units(energy_units)
-             end if
-             if (inode.EQ.ionode) write (io_lun,*) "Get out of safemin_full !" !db
-             return
-          end if
        else
           dH = h0 - enthalpy_out
           if (inode == ionode .and. iprint_MD > 1) then
@@ -2395,11 +2388,18 @@ contains
        k3_local = kmin-kmin_old!03/07/2013
 
        write (io_lun,*) "CG: 3rd stage"
+       ! Re-order force into dummy for update_pos_and_matrices
+       do i=1,ni_in_cell
+          dummy(:,i) = force(:,id_glob(i))
+       end do
        if(flag_SFcoeffReuse) then
-          call update_pos_and_matrices(updateSFcoeff, force(:,1:ni_in_cell))
+          call update_pos_and_matrices(updateSFcoeff,dummy)
        else
-          call update_pos_and_matrices(updateLorK, force(:,1:ni_in_cell))
+          call update_pos_and_matrices(updateLorK,dummy)
        endif
+       do i=1,ni_in_cell
+          force(:,id_glob(i)) = dummy(:,i)
+       end do
 
        if (inode == ionode .and. iprint_MD > 2) then
           write(io_lun,'(4x,a)') "atom_coord:"
@@ -2438,6 +2438,7 @@ contains
        ! 2018.Jan19  TM : probably we don't need to call dump_pos_and_matrices here, since
        !                  we will call it after calling safemin2
        call dump_pos_and_matrices
+       enthalpy_out = enthalpy(energy_out, target_press)
 
     end if
     dH = h0 - enthalpy_out
@@ -4831,7 +4832,7 @@ contains
         -(stress(i,i) + target_press*vol)/one_plus_strain(i)
     end do
     do i=1,ni_in_cell
-      config(1,i) = atom_coord(1,i)/rcellx
+      config(1,i) = atom_coord(1,i)/rcellx ! Fractional coordinates
       config(2,i) = atom_coord(2,i)/rcelly
       config(3,i) = atom_coord(3,i)/rcellz
       force(1,i) = tot_force(1,i)*rcellx

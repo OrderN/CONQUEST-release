@@ -129,6 +129,8 @@ contains
   !!   2021/08/02 14:53 dave
   !!    Add dE_elec_opt as change in energy in highest level electronic optimisation
   !!    for comparison with dE from structural optimisation
+  !!   2021/10/13 08:58 dave
+  !!    Add call to new_SC_potl when doing MSSF/LFD without optimisation
   !!  SOURCE
   !!
   subroutine get_E_and_F(fixed_potential, vary_mu, total_energy, &
@@ -243,7 +245,7 @@ contains
                fixed_potential, vary_mu, n_L_iterations, &
                L_tolerance, total_energy, backtrace_level)
           dE_elec_opt = dE_SCF
-       endif
+       endif ! flag_vary_basis
     else if (flag_vary_basis) then ! Vary everything: DM, charge density, basis set
        if (flag_basis_set == blips) then
           call vary_support(n_support_iterations, fixed_potential, &

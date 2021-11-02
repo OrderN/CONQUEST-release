@@ -870,12 +870,12 @@ AtomMove.OptCellMethod (*integer*)
 AtomMove.EnthalpyTolerance (*real*)
     Enthalpy tolerance for cell optimisation
 
-    *default*: 1\ :math:`\times`\ 10\ :math:`^{-5}` Ha/Bohr
+    *default*: 1\ :math:`\times`\ 10\ :math:`^{-5}` Ha
 
 AtomMove.StressTolerance (*real*)
     Stress tolerance for cell optimisation
 
-    *default*: 0.5\ :math:`\times`\ 10\ :math:`^{-2}` GPa
+    *default*: 0.1 GPa
 
 AtomMove.TargetPressure (*real*)
     External pressure for NPT molecular dynamics and cell optimisation

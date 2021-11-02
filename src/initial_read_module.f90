@@ -1503,7 +1503,8 @@ contains
     optcell_method        = fdf_integer('AtomMove.OptCellMethod', 1)
     cell_constraint_flag  = fdf_string(20,'AtomMove.OptCell.Constraint','none')
     cell_en_tol           = fdf_double('AtomMove.OptCell.EnTol',0.00001_double)
-    cell_stress_tol       = fdf_double('AtomMove.StressTolerance',0.005_double)
+    ! It makes sense to use GPa here so I'm changing the default to 0.1GPa
+    cell_stress_tol       = fdf_double('AtomMove.StressTolerance',0.1_double) !005_double)
     flag_stop_on_empty_bundle = fdf_boolean('AtomMove.StopOnEmptyBundle',.false.)
     enthalpy_tolerance    = fdf_double('AtomMove.EnthalpyTolerance', 1.0e-5_double)
     flag_stress           = fdf_boolean('AtomMove.CalcStress', .true.)

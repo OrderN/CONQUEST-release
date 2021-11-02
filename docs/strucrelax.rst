@@ -14,7 +14,8 @@ conjugate gradients at present, though L-BFGS will be implemented.
 
 Setting ``AtomMove.WriteXSF T`` for all flavours of optimisation will dump the
 trajectory to the file ``trajectory.xsf``, which can be visualised using `VMD
-<https://www.ks.uiuc.edu/Research/vmd/>`_. Setting ``AtomMove.AppendCoords T``
+<https://www.ks.uiuc.edu/Research/vmd/>`_ and `XCrysDen <http://http://www.xcrysden.org>`_.
+Setting ``AtomMove.AppendCoords T``
 will append the structure at each step to ``UpdatedAtoms.dat`` in the format of a
 CONQUEST structure input.
 
@@ -105,10 +106,10 @@ Go to :ref:`top <strucrelax>`.
 
 .. _sr_cell:
 
-Cell optimisation
------------------
+Simulation cell optimisation
+----------------------------
 
-The unit cell can be optimised with respect to enthalpy *with fixed fractional
+The simulation cell can be optimised with respect to enthalpy *with fixed fractional
 coordinates* (``AtomMove.OptCellMethod 1``) using the following input:
 
 ::
@@ -118,11 +119,8 @@ coordinates* (``AtomMove.OptCellMethod 1``) using the following input:
    AtomMove.OptCellMethod 1
    AtomMove.TargetPressure 1.0
    AtomMove.ReuseDM T
-   AtomMove.EnthalpyTolerance 1E-6
-   AtomMove.StressTolerance 0.01
-
-Here, we specify the target pressure in GPa and two new tolerances, the enthalpy
-tolerance in Ha and the stress tolerance in Ha per cubic Bohr.
+   AtomMove.EnthalpyTolerance 1E-5
+   AtomMove.StressTolerance 0.1
 
 Go to :ref:`top <strucrelax>`.
 
@@ -132,9 +130,10 @@ Combined optimisation
 ---------------------
 
 For simple crystals, the fractional ionic coordinates vary trivially with
-changes in the lattice vectors; however for more complicated systems such as
+changes in the simulation cell lengths; however for more complicated systems such as
 molecular crystals and amorphous materials, it is necessary simultaneously relax
-the ionic positions and lattice vectors. This can be done by setting
+the ionic positions and simulation cell lengths (recalling that CONQUEST only
+allows *orthorhombic* unit cells). This can be done by setting
 ``AtomMove.OptCellMethod 3``
 
 ::
@@ -145,8 +144,8 @@ the ionic positions and lattice vectors. This can be done by setting
    AtomMove.TargetPressure 1.0
    AtomMove.ReuseDM T
    AtomMove.MaxForceTol 5e-4
-   AtomMove.EnthalpyTolerance 1E-6
-   AtomMove.StressTolerance 0.01
+   AtomMove.EnthalpyTolerance 1E-5
+   AtomMove.StressTolerance 0.1
 
 Note that the enthalpy will generally converge much more rapidly than the force
 and stress, and that it may be necessary to tighten ``minE.SCTolerance``
@@ -157,8 +156,8 @@ Due to the nature of the complex partitioning system, large and sudden changes i
 may cause the calculation to crash, particlularly in the case of combined
 optimisation. In such cases, it may help to try ``AtomMove.OptCellMethod 2``,
 which uses a simple but robust double-loop minimisation: a full ionic conjugate
-gradients relaxation for the inner loop and a single cell steepest descent
-relaxation for the outer loop. This is considerably less efficient, but
+gradients relaxation followed by a full simulation cell conjugate gradients
+relaxation. This is considerably less efficient, but
 may help in particularly problematic cases.
 
 Go to :ref:`top <strucrelax>`.
