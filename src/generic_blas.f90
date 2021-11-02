@@ -538,6 +538,24 @@ contains
     call dpotri(uplo,n,a,lda,info)
   end subroutine two_potri
 
+  subroutine syev(uplo,n,a,lda,w,info)
+
+    implicit none
+
+    character :: uplo
+    integer :: n, lda, info
+    real(double), dimension(lda,n) :: a
+    real(double), dimension(n) :: w
+
+    integer :: lwork
+    real(double), dimension(:), allocatable :: work
+
+    lwork = max(n*n,3*n)
+    allocate(work(lwork))
+    call dsyev('V',uplo,n,a,lda,w,work,lwork,info)
+    deallocate(work)
+  end subroutine syev
+
 !!****f* GenBlas/v1dot *
 !!
 !!  NAME 

@@ -166,7 +166,7 @@ contains
     use io_module,              only: read_mult,                       &
          read_atomic_positions,           &
          pdb_template, pdb_format,        &
-         print_process_info
+         print_process_info, titles
     use group_module,           only: parts, part_method
     use construct_module,       only: init_group, init_primary
     use maxima_module,          only: maxpartsproc, maxatomsproc
@@ -224,7 +224,7 @@ contains
     ! Local variables
     character(len=80) :: sub_name = "read_and_write"
     type(cq_timer)    :: backtrace_timer
-    character(len=80) :: titles, def
+    character(len=80) :: def
     character(len=80) :: atom_coord_file
     character(len=80) :: part_coord_file
 
@@ -901,7 +901,7 @@ contains
          flag_write_xsf, md_cell_nhc, md_nhc_cell_mass, &
          md_calc_xlmass, md_equil_steps, md_equil_press, &
          md_tau_T_equil, md_tau_P_equil, md_p_drag, &
-         md_t_drag, md_cell_constraint
+         md_t_drag, md_cell_constraint, flag_write_extxyz
     use md_model,   only: md_tdep
     use move_atoms,         only: threshold_resetCD, &
          flag_stop_on_empty_bundle, &
@@ -2004,6 +2004,7 @@ contains
     flag_SFcoeffReuse = fdf_boolean('AtomMove.ReuseSFcoeff',.true.)
     flag_LmatrixReuse = fdf_boolean('AtomMove.ReuseDM',.true.)
     flag_write_xsf    = fdf_boolean('AtomMove.WriteXSF', .true.)
+    flag_write_extxyz = fdf_boolean('AtomMove.WriteExtXYZ', .false.)
     ! tsuyoshi 2019/12/30
     if(flag_SFcoeffReuse .and. .not.flag_LmatrixReuse) then
        call cq_warn(sub_name,' AtomMove.ReuseDM should be true if AtomMove.ReuseSFcoeff is true.')

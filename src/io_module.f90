@@ -108,6 +108,11 @@ module io_module
   !  flag_MatrixFile_BinaryFormat_Dump_END.  
   !   (during the job, we need to keep the format of the file, prepared in the last job.)
   logical          :: flag_MatrixFile_BinaryFormat_Dump_END ! set from Conquest_input
+  
+  ! System signature
+  ! Moved here from read_and_write so that it can be used for extended XYZ output
+  ! Moved here from initial_read_module to slove the dependence problem
+  character(len=80), save :: titles
 
 !!***
 
@@ -2704,6 +2709,99 @@ second:   do
       call io_close(lun)
     end if
   end subroutine write_xsf
+  !!***
+
+  !!****f* io_module/write_extxyz *
+  !!
+  !!  NAME 
+  !!   write_extxyz
+  !!  PURPOSE
+  !!   Writes atomic positions, including atomic forces, lattice vectors, 
+  !!  energy, system signature, etc. to an extended format .xyz file   
+  !!  which can be directly recognized by Python Library named ASE.
+  !!  The units are Angstrom, eV and eV/Angstrom for distance, energy and
+  !!  forces.
+  !!  
+  !!  INPUTS
+  !!  
+  !!  USES
+  !! 
+  !!  AUTHOR
+  !!   Jianbo Lin
+  !!  CREATION DATE
+  !!   2021/10/18
+  !!  MODIFICATION HISTORY
+  !!   
+  !!  SOURCE
+  !!
+  subroutine write_extxyz(filename, energy0, atom_force)
+
+    use datatypes
+    use timer_module
+    use numbers,        only: zero
+    use dimens,         only: r_super_x, r_super_y, r_super_z
+    use global_module,  only: ni_in_cell, iprint_init, atom_coord, &
+                              species_glob
+    use species_module, only: species_label
+    use GenComms,       only: inode, ionode, cq_abort
+    use units,          only: BohrToAng, HaToeV
+
+    ! Passed variables
+    character(len=*)                      :: filename
+    real(double)                          :: energy0
+    real(double), dimension(3,ni_in_cell) :: atom_force
+
+    ! Local variables
+    integer                    :: lun, i, j, title_length
+    character(len=2)           :: atom_name
+    character(len=432)         :: comment
+    character(len=45)          :: vec_a, vec_b, vec_c, energy_str
+    character(len=80)          :: titles_xyz
+    real(double)               :: for_conv_loc, en_conv_loc, dist_conv_loc
+
+    if(inode==ionode) then
+      if (iprint_init>2) write(io_lun, &
+          '(2x,"Writing atomic positions to ",a,".xyz")') filename
+      call io_assign(lun)
+      if(append_coords) then
+         open(unit=lun,file=filename,position='append')
+      else
+         open(unit=lun,file=filename)
+      end if
+
+      en_conv_loc = HaToeV
+      dist_conv_loc = BohrToAng
+      for_conv_loc = en_conv_loc/dist_conv_loc
+      write(lun,'(i0)') ni_in_cell
+	  
+      ! Transfer space to underbar in the titles
+      titles_xyz = TRIM(titles)
+      title_length = len(TRIM(titles))
+      do i=1, title_length
+        if (titles_xyz(i:i) == ' ') titles_xyz(i:i) = '_' 
+      end do
+      ! Add information about system signature
+      comment = 'config_type='//TRIM(titles_xyz)
+
+      ! Add information about lattice and energy
+      write(vec_a,fmt='(3f15.8)') r_super_x*BohrToAng, zero, zero
+      write(vec_b,fmt='(3f15.8)') zero, r_super_y*BohrToAng, zero
+      write(vec_c,fmt='(3f15.8)') zero, zero, r_super_z*BohrToAng
+      comment=TRIM(comment)//' Lattice="'//ADJUSTL(vec_a)//ADJUSTL(vec_b)//TRIM(ADJUSTL(vec_c))//'" '
+      comment=TRIM(comment)//' Properties=species:S:1:pos:R:3:forces:R:3 potential_energy='
+      write(energy_str,'(f0.8)') energy0 * en_conv_loc
+      comment = TRIM(comment)//TRIM(energy_str)//' pbc="T T T" '
+      write(lun,'(a)') TRIM(comment)
+
+      do i=1,ni_in_cell
+        atom_name = adjustr(species_label(species_glob(i))(1:2))
+        write(lun,'(a4,6f16.8)') atom_name, atom_coord(:,i)*dist_conv_loc, &
+                 (for_conv_loc*atom_force(j,i), j = 1, 3)
+                 ! species_glob(i),flag_move_atom(1,i),flag_move_atom(2,i), &
+      end do
+      call io_close(lun)
+    end if
+  end subroutine write_extxyz
   !!***
 
   !!****f* io_module/write_xyz *

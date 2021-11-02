@@ -1,4 +1,5 @@
 General.NumberOfSpecies 1
+# The 5s should be semi-core, so adjust cutoff
 General.SemicoreEnergy -0.9
 
 %block SpeciesLabels

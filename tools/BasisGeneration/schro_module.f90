@@ -209,11 +209,12 @@ contains
   ! Changes
   !
   ! 2019/07/15 11:33 dave
-  !  Temporarily remove orthogonalisation to semi-core states
-  !  as this breaks the normalisation.  Longer term: decide it
-  !  the orthogonalisation is really needed (in which case we
-  !  need to normalise again) or not (in which case we leave it
-  !  out).
+  ! 2021/09/27 16:31 dave
+  !  Restore orthogonalisation to semi-core states and correctly
+  !  normalise resulting functions.
+  ! 2021/09/28 14:38 dave
+  !  Remove orthogonalisation (!) because it breaks Ba perturbative
+  !  polarisation (see below)
   subroutine solve_for_occupied_paos(i_species,vha,vxc,atomic_density)
 
     use datatypes
@@ -266,7 +267,14 @@ contains
                 ! Accumulate atomic charge density
                 atomic_density = atomic_density + val%occ(i_shell)*psi*psi
              end if
-             ! Orthogonalise to semi-core state
+             ! These lines orthogonalise to semi-core states where necessary
+             ! They are left for completeness, but I found that they can cause
+             ! problems with the perturbative polarisation for Ba (basically the
+             ! orthogonalisation means that the 6s shell which we perturb is not
+             ! negative near r=0 which breaks the sign-change detection in the
+             ! perturbative polarisation routines and means they fail).  If we can
+             ! sort this out, we could restore this, but I think that it's not
+             ! very important.  Dave Bowler, 2021/09/28 14:38
              !if(paos%inner(i_shell)>0) then
              !   ! Dot product of two
              !   dot_p = zero
@@ -274,17 +282,18 @@ contains
              !      dot_p = dot_p + rr(i)**(2*ell+2)*paos%psi(zeta,i_shell)%f(i)* &
              !           paos%psi(1,val%inner(i_shell))%f(i)*drdi(i)
              !   end do
-             !   write(*,fmt='(2x,"Orthogonalising to semi-core; overlap is ",f10.5)') dot_p
-             !   ! Orthgonalise
+             !   if(iprint>2) write(*,fmt='(2x,"Orthogonalising to semi-core; overlap is ",f10.5)') dot_p
+             !   ! Orthogonalise
              !   paos%psi(zeta,i_shell)%f = paos%psi(zeta,i_shell)%f - &
              !        dot_p * paos%psi(1,val%inner(i_shell))%f
-             !   ! Check
+             !   ! Normalise
              !   dot_p = zero
              !   do i=1,nmesh
              !      dot_p = dot_p + rr(i)**(2*ell+2)*paos%psi(zeta,i_shell)%f(i)* &
-             !           paos%psi(1,val%inner(i_shell))%f(i)*drdi(i)
+             !           paos%psi(zeta,i_shell)%f(i)*drdi(i)
              !   end do
-             !   if(abs(dot_p)>RD_ERR) write(*,fmt='(2x,"Warning: following orthogonalisation, overlap is ",f10.5)') dot_p
+             !   if(iprint>2) write(*,fmt='(2x,"Normalising: ",f10.5)') dot_p
+             !   paos%psi(zeta,i_shell)%f = paos%psi(zeta,i_shell)%f/sqrt(dot_p)
              !end if ! Inner shell orthogonalisation
           end if ! Split-norm or confined state
        end do ! zeta = 1, paos%nzeta
@@ -298,11 +307,11 @@ contains
   ! Changes
   !
   ! 2019/07/15 11:33 dave
-  !  Temporarily remove orthogonalisation to semi-core states
-  !  as this breaks the normalisation.  Longer term: decide it
-  !  the orthogonalisation is really needed (in which case we
-  !  need to normalise again) or not (in which case we leave it
-  !  out).
+  ! 2021/09/27 16:31 dave
+  !  Restore orthogonalisation to semi-core states and correctly
+  !  normalise resulting functions.  Particularly important for
+  !  elements such as Ga or Ge with semi-core d shell and l=2
+  !  polarisation shell
   subroutine solve_for_polarisation(i_species,vha,vxc)
 
     use datatypes
@@ -349,18 +358,26 @@ contains
                   paos%psi(zeta,i_shell)%f,paos%energy(zeta,i_shell), &
                   vha,vxc,paos%width(i_shell),paos%prefac(i_shell))
              ! Orthogonalise to semi-core state
-             !if(paos%inner(i_shell)>0) then
-             !   ! Dot product of two
-             !   dot_p = zero
-             !   do i=1,nmesh
-             !      dot_p = dot_p + rr(i)**(2*ell+2)*paos%psi(zeta,i_shell)%f(i)* &
-             !           paos%psi(1,paos%inner(i_shell))%f(i)*drdi(i)
-             !   end do
-             !   write(*,fmt='(2x,"Orthogonalising to semi-core; overlap is ",f10.5)') dot_p
-             !   ! Orthgonalise
-             !   paos%psi(zeta,i_shell)%f = paos%psi(zeta,i_shell)%f - &
-             !        dot_p * paos%psi(1,paos%inner(i_shell))%f
-             !end if
+             if(paos%inner(i_shell)>0) then
+                ! Dot product of two
+                dot_p = zero
+                do i=1,nmesh
+                   dot_p = dot_p + rr(i)**(2*ell+2)*paos%psi(zeta,i_shell)%f(i)* &
+                        paos%psi(1,paos%inner(i_shell))%f(i)*drdi(i)
+                end do
+                if(iprint>2) write(*,fmt='(2x,"Orthogonalising to semi-core; overlap is ",f10.5)') dot_p
+                ! Orthogonalise
+                paos%psi(zeta,i_shell)%f = paos%psi(zeta,i_shell)%f - &
+                     dot_p * paos%psi(1,paos%inner(i_shell))%f
+                ! Normalise
+                dot_p = zero
+                do i=1,nmesh
+                   dot_p = dot_p + rr(i)**(2*ell+2)*paos%psi(zeta,i_shell)%f(i)* &
+                        paos%psi(zeta,i_shell)%f(i)*drdi(i)
+                end do
+                if(iprint>2) write(*,fmt='(2x,"Normalising: ",f10.5)') dot_p
+                paos%psi(zeta,i_shell)%f = paos%psi(zeta,i_shell)%f/sqrt(dot_p)
+             end if
           end if
        end do
     end do
@@ -393,6 +410,30 @@ contains
              call find_polarisation(i_species,en,ell,paos%cutoff(zeta,i_shell),&
                  paos%psi(zeta,paos%polarised_shell)%f,paos%psi(zeta,i_shell)%f,&
                  paos%energy(zeta,paos%polarised_shell),vha,vxc,paos%pol_pf)
+             ! Orthogonalise to semi-core state
+             if(paos%inner(i_shell)>0) then
+                ! Dot product of two
+                ! NB r^(2l+4) is because each psi needs to be scaled by r^(l+1)
+                ! to remove the Siesta normalisation, and then the integral needs
+                ! another r^2.  Also below when normalising.
+                dot_p = zero
+                do i=1,nmesh
+                   dot_p = dot_p + rr(i)**(2*ell+4)*paos%psi(zeta,i_shell)%f(i)* &
+                        paos%psi(1,paos%inner(i_shell))%f(i)*drdi(i)
+                end do
+                if(iprint>2) write(*,fmt='(2x,"Orthogonalising to semi-core; overlap is ",f10.5)') dot_p
+                ! Orthgonalise
+                paos%psi(zeta,i_shell)%f = paos%psi(zeta,i_shell)%f - &
+                     dot_p * paos%psi(1,paos%inner(i_shell))%f
+                ! Normalise
+                dot_p = zero
+                do i=1,nmesh
+                   dot_p = dot_p + rr(i)**(2*ell+4)*paos%psi(zeta,i_shell)%f(i)* &
+                        paos%psi(zeta,i_shell)%f(i)*drdi(i)
+                end do
+                if(iprint>2) write(*,fmt='(2x,"Normalising: ",f10.5)') dot_p
+                paos%psi(zeta,i_shell)%f = paos%psi(zeta,i_shell)%f/sqrt(dot_p)
+             end if
           end if
        end do
     end if ! paos%flag_perturb_polarise
@@ -1237,10 +1278,12 @@ contains
     ! compatibility with old Siesta pseudopotentials and for cases where we do not have semi-local
     ! potentials for l+1
     if((ell+1>pseudo(i_species)%lmax).OR.flag_use_Vl) then
-       if(ell+1>pseudo(i_species)%lmax) then
-          write(*,*) 'lmax is ',pseudo(i_species)%lmax,' so perturbing using l not l+1'
-       else
-          write(*,*) 'Using V_{l} not V_{l+1} for perturbation'
+       if(iprint>2) then
+          if(ell+1>pseudo(i_species)%lmax) then
+             write(*,*) 'lmax is ',pseudo(i_species)%lmax,' so perturbing using l not l+1'
+          else
+             write(*,*) 'Using V_{l} not V_{l+1} for perturbation'
+          end if
        end if
        !l_l_plus_one = real((ell)*(ell+1),double)
        do i=1,nmesh
@@ -1256,14 +1299,8 @@ contains
     ! Energy bounds - allow for unbound states
     nmax = nmesh ! Adjust later to confine
     ! Test
-    !Rc = 8.0_double
     call convert_r_to_i(Rc,nmax)
     nmax = nmax - 1
-    ! NEW !
-    write(*,*) 'Rc and rr(nmax) are: ',Rc,rr(nmax)
-    !Rc = rr(nmax)
-    ! NEW !
-    !write(*,*) "# Nmax is ",nmax
     ! Numerov
     do i=1,nmax
        g(i) = (drdi_squared(i)*(two*(energy - potential(i))-l_l_plus_one/rr_squared(i)) - alpha_sq_over_four)/twelve

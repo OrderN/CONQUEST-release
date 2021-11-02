@@ -1,4 +1,6 @@
 General.NumberOfSpecies 1
+# The 3p shell is really semi-core, so adjust the cutoff
+General.SemicoreEnergy -0.69
 
 %block SpeciesLabels
 1  K
