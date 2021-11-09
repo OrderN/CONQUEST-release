@@ -199,7 +199,7 @@ contains
           call cq_abort("Error ! Unknown Atom.BasisSize specification: "//input_string(1:7))
        end if
        !
-       ! Basis block
+       ! Basis block: existence 
        !
        input_string = fdf_string(80,'Atom.BasisBlock','none')
        if(.NOT.(leqi(input_string(1:4),'none'))) then
@@ -211,50 +211,49 @@ contains
           if(val%n_occ>paos%n_shells) &
                call cq_abort("More valence shells in PP than in Atom.BasisBlock ", &
                val%n_occ,paos%n_shells)
-          ! Close species block
-          call fdf_endblock
+       end if
+       !
+       ! Polarisation
+       !
+       flag_default = .true.
+       ! If there are no polarisation orbitals, change default
+       if(basis_size == minimal .or. paos%n_shells==val%n_occ) flag_default = .false.
+       paos%flag_perturb_polarise = fdf_boolean("Atom.Perturbative_Polarised",flag_default)
+       if(paos%flag_perturb_polarise .and. flag_default) then
+          ! This is for compatibility but should be false
+          flag_use_Vl = fdf_boolean('Atom.UseVl',flag_gen_use_Vl)
+          ! Do we have state to polarise? 
+          paos%polarised_n = fdf_integer("Atom.PolarisedN",0)
+          paos%polarised_l = fdf_integer("Atom.PolarisedL",-1)
+          paos%polarised_shell = 0
           !
-          ! Polarisation
+          ! Default to outer shell (or previous if outer shell has l=2)
           !
-          flag_default = .true.
-          ! If there are no polarisation orbitals, change default
-          if(basis_size == minimal .or. paos%n_shells==val%n_occ) flag_default = .false.
-          paos%flag_perturb_polarise = fdf_boolean("Atom.Perturbative_Polarised",flag_default)
-          if(paos%flag_perturb_polarise .and. flag_default) then
-             ! This is for compatibility but should be false
-             flag_use_Vl = fdf_boolean('Atom.UseVl',flag_gen_use_Vl)
-             ! Do we have state to polarise? 
-             paos%polarised_n = fdf_integer("Atom.PolarisedN",0)
-             paos%polarised_l = fdf_integer("Atom.PolarisedL",-1)
-             paos%polarised_shell = 0
-             !
-             ! Default to outer shell (or previous if outer shell has l=2)
-             !
-             if(paos%polarised_n==0.AND.paos%polarised_l==-1) then
-                ! Outer-most occupied shell
-                i = val%n_occ
-                ! If it is l=2 (or more!) then default to one lower
-                if(val%l(i)>1) i = i-1
-                if(i==0) &
-                     call cq_abort("We have one shell with l=2; I can't polarise this automatically.")
-                paos%polarised_n = val%n(i)
-                paos%polarised_l = val%l(i)
-                paos%polarised_shell = i
-                write(*,fmt='(4x,"Polarising shell ",i2," with n=",i2," and l=",i2)') &
-                     i, paos%polarised_n, paos%polarised_l
-             end if
-          else if(paos%flag_perturb_polarise .and. (.not.flag_default)) then
-             call cq_abort("Can't set Atom.Perturbative_Polarised T with no polarisation orbitals")
+          if(paos%polarised_n==0.AND.paos%polarised_l==-1) then
+             ! Outer-most occupied shell
+             i = val%n_occ
+             ! If it is l=2 (or more!) then default to one lower
+             if(val%l(i)>1) i = i-1
+             if(i==0) &
+                  call cq_abort("We have one shell with l=2; I can't polarise this automatically.")
+             paos%polarised_n = val%n(i)
+             paos%polarised_l = val%l(i)
+             paos%polarised_shell = i
+             write(*,fmt='(4x,"Polarising shell ",i2," with n=",i2," and l=",i2)') &
+                  i, paos%polarised_n, paos%polarised_l
           end if
+       else if(paos%flag_perturb_polarise .and. (.not.flag_default)) then
+          call cq_abort("Can't set Atom.Perturbative_Polarised T with no polarisation orbitals")
+       end if
+       ! Close species block
+       call fdf_endblock
+       !
+       ! Basis block: read
+       !
+       if(.NOT.(leqi(input_string(1:4),'none'))) then
           call read_basis_block(input_string)
           flag_default_cutoffs = .false.
        else
-          ! Close species block
-          call fdf_endblock
-          flag_default = .true.
-          ! If there are no polarisation orbitals, change default
-          if(basis_size == minimal) flag_default = .false.
-          paos%flag_perturb_polarise = fdf_boolean("Atom.Perturbative_Polarised",flag_default)
           flag_default_cutoffs = .true.
        end if
     else
