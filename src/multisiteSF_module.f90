@@ -233,7 +233,7 @@ contains
 !!
 !!  SOURCE
 !!
-  subroutine normalise_SFcoeff
+  subroutine normalise_SFcoeff_old
     
     use datatypes
     use numbers
@@ -330,6 +330,74 @@ contains
     call stop_timer(tmr_std_basis)
 !
   return
+  end subroutine normalise_SFcoeff_old
+!!***
+
+!!****f* multisiteSF_module/normalise_SFcoeff *
+!!
+!!  NAME
+!!   normalise_SFcoeff_full
+!!
+!!  PURPOSE
+!!   Normalise SF coefficients
+!!
+!!  INPUTS
+!!
+!!  USES
+!!
+!!  AUTHOR
+!!   D. R. Bowler
+!!  CREATION DATE
+!!   2021/11/10
+!!  MODIFICATION HISTORY
+!!
+!!  SOURCE
+!!
+  subroutine normalise_SFcoeff
+
+    use datatypes
+    use numbers
+    use global_module,  only: nspin_SF
+    use matrix_data,    only: Srange, SFcoeff_range, mat
+    use mult_module,    only: matS, matSatomf, AtomF_to_SF_transform, &
+         return_matrix_value, scale_matrix_value, matSFcoeff, matSFcoeff_tran, &
+         matrix_transpose, matrix_scale
+    use primary_module, only: bundle
+
+    ! Local variables
+    integer :: spin_SF, iprim, part, memb, nsf_i, sf1, pao2, neigh, ist
+    real(double) :: val, fac
+
+    do spin_SF = 1,nspin_SF
+       ! Create matS in the SF basis
+       call matrix_scale(zero,matSFcoeff_tran(spin_SF))
+       call matrix_transpose(matSFcoeff(spin_SF), matSFcoeff_tran(spin_SF))
+       call AtomF_to_SF_transform(matS(spin_SF),matSatomf,spin_SF,Srange)
+       ! Loop over primary atoms and normalise
+       iprim = 0
+       do part = 1,bundle%groups_on_node ! Loop over primary set partitions
+          if(bundle%nm_nodgroup(part)>0) then ! If there are atoms in partition
+             do memb = 1,bundle%nm_nodgroup(part) ! Loop over atom i
+                iprim  = iprim+1
+                nsf_i  = mat(part,SFcoeff_range)%ndimi(memb)
+                ! Loop over SFs on i
+                do sf1 = 1, nsf_i
+                   ! Find normalisation factor
+                   val = return_matrix_value(matS(spin_SF),part,memb,iprim,1,sf1,sf1,1) ! Onsite
+                   fac = one/sqrt(val)
+                   ! Apply to coefficients
+                   do neigh = 1, mat(part,SFcoeff_range)%n_nab(memb) ! Loop over neighbours j of i
+                      ist = mat(part,SFcoeff_range)%i_acc(memb)+neigh-1
+                      do pao2 = 1, mat(part,SFcoeff_range)%ndimj(ist)
+                         call scale_matrix_value(matSFcoeff(spin_SF),part,memb,iprim,neigh,sf1,pao2,fac)
+                      end do ! pao2
+                   end do ! neigh
+                end do ! sf1
+             end do ! memb
+          end if ! bundle
+       end do ! part
+    end do ! spin_SF
+    return
   end subroutine normalise_SFcoeff
 !!***
 
