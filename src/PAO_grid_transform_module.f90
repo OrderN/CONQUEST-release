@@ -680,9 +680,9 @@ contains
                             end if
                             do m1=-l1,l1
                                call spherical_harmonic_rl(x, y, z, l1, m1, val)
-                               if(position+(count1-1)*n_pts_in_block > gridfunctions(pao_fns)%size) &
-                                    call cq_abort('single_pao_to_grid: position error ', &
-                                    position, gridfunctions(pao_fns)%size)
+                               !if(position+(count1-1)*n_pts_in_block > gridfunctions(pao_fns)%size) &
+                               !     call cq_abort('single_pao_to_grid: position error ', &
+                               !     position, gridfunctions(pao_fns)%size)
                                gridfunctions(pao_fns)%griddata(position+(count1-1)*n_pts_in_block) = val*f_r
                                count1 = count1+1
                             end do ! m1
@@ -857,61 +857,50 @@ contains
                          else
                             dx_dr = z/r_from_i
                          end if
-                         do l1 = 0,pao(the_species)%greatest_angmom
-                            do acz = 1,pao(the_species)%angmom(l1)%n_zeta_in_angmom
-                               del_r = pao(the_species)%angmom(l1)%zeta(acz)%cutoff/ &
-                                    real(pao(the_species)%angmom(l1)%zeta(acz)%length-1,double)
-                               j = floor(r_from_i/del_r)+1
-                               if(j+1<=pao(the_species)%angmom(l1)%zeta(acz)%length) then
-                                  rr = real(j,double)*del_r
-                                  a = (rr - r_from_i)/del_r
-                                  b = one - a
-                                  c = a * ( a * a - one ) * del_r * del_r / six
-                                  d = b * ( b * b - one ) * del_r * del_r / six
-                                  r1 = pao(the_species)%angmom(l1)%zeta(acz)%table(j)
-                                  r2 = pao(the_species)%angmom(l1)%zeta(acz)%table(j+1)
-                                  r3 = pao(the_species)%angmom(l1)%zeta(acz)%table2(j)
-                                  r4 = pao(the_species)%angmom(l1)%zeta(acz)%table2(j+1)
-                                  f_r = a*r1 + b*r2 + c*r3 + d*r4
-                                  ! Re-use a and b before redefining
-                                  c = -del_r*(three*a*a-one)/six
-                                  d =  del_r*(three*b*b-one)/six
-                                  a = -one/del_r
-                                  b = -a
-                                  df_r = a*r1 + b*r2 + c*r3 + d*r4
-                               else
-                                  f_r = zero
-                                  df_r = zero
-                               end if
-                               if(abs(r_from_i)<RD_ERR) then
-                                  f_r = zero
-                                  df_r = zero
-                               end if
-                               do m1=-l1,l1
-                                  call dspherical_harmonic_rl(x, y, z, l1, m1, val, dval, direction)
-                                  if(position+(count1-1)*n_pts_in_block > gridfunctions(pao_fns)%size) &
-                                       call cq_abort('single_pao_to_grad: position error ', &
-                                       position, gridfunctions(pao_fns)%size)
-                                  gridfunctions(pao_fns)%griddata(position+(count1-1)*n_pts_in_block) = &
-                                       (val * df_r * dx_dr + dval * f_r)
-                                  count1 = count1+1
-                               end do ! m1
-                            end do ! acz
-                         end do ! l1
-                      else                         
-                         do l1 = 0,pao(the_species)%greatest_angmom
-                            do acz = 1,pao(the_species)%angmom(l1)%n_zeta_in_angmom
-                               do m1=-l1,l1
-                                  if(position+(count1-1)*n_pts_in_block > gridfunctions(pao_fns)%size) &
-                                       call cq_abort('single_pao_to_grad: position error ', &
-                                       position, gridfunctions(pao_fns)%size)
-                                  gridfunctions(pao_fns)%griddata(position+(count1-1)*n_pts_in_block) = &
-                                       zero
-                                  count1 = count1+1
-                               end do ! m1
-                            end do ! acz
-                         end do ! l1
+                      else
+                         dx_dr = zero
                       end if
+                      do l1 = 0,pao(the_species)%greatest_angmom
+                         do acz = 1,pao(the_species)%angmom(l1)%n_zeta_in_angmom
+                            del_r = pao(the_species)%angmom(l1)%zeta(acz)%cutoff/ &
+                                 real(pao(the_species)%angmom(l1)%zeta(acz)%length-1,double)
+                            j = floor(r_from_i/del_r)+1
+                            if(j+1<=pao(the_species)%angmom(l1)%zeta(acz)%length) then
+                               rr = real(j,double)*del_r
+                               a = (rr - r_from_i)/del_r
+                               b = one - a
+                               c = a * ( a * a - one ) * del_r * del_r / six
+                               d = b * ( b * b - one ) * del_r * del_r / six
+                               r1 = pao(the_species)%angmom(l1)%zeta(acz)%table(j)
+                               r2 = pao(the_species)%angmom(l1)%zeta(acz)%table(j+1)
+                               r3 = pao(the_species)%angmom(l1)%zeta(acz)%table2(j)
+                               r4 = pao(the_species)%angmom(l1)%zeta(acz)%table2(j+1)
+                               f_r = a*r1 + b*r2 + c*r3 + d*r4
+                               ! Re-use a and b before redefining
+                               c = -del_r*(three*a*a-one)/six
+                               d =  del_r*(three*b*b-one)/six
+                               a = -one/del_r
+                               b = -a
+                               df_r = a*r1 + b*r2 + c*r3 + d*r4
+                            else
+                               f_r = zero
+                               df_r = zero
+                            end if
+                            if(abs(r_from_i)<RD_ERR) then
+                               f_r = zero
+                               df_r = zero
+                            end if
+                            do m1=-l1,l1
+                               call dspherical_harmonic_rl(x, y, z, l1, m1, val, dval, direction)
+                               !if(position+(count1-1)*n_pts_in_block > gridfunctions(pao_fns)%size) &
+                               !     call cq_abort('single_pao_to_grad: position error ', &
+                               !     position, gridfunctions(pao_fns)%size)
+                               gridfunctions(pao_fns)%griddata(position+(count1-1)*n_pts_in_block) = &
+                                    (val * df_r * dx_dr + dval * f_r)
+                               count1 = count1+1
+                            end do ! m1
+                         end do ! acz
+                      end do ! l1
                    enddo ! ip=1,npoint
                 endif! (npoint > 0) then
                 no_of_ib_ia = no_of_ib_ia + npao_species(the_species)*n_pts_in_block
