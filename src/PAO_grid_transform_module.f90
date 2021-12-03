@@ -538,4 +538,517 @@ contains
   end subroutine check_block
 !!***
 
+  ! Test analytic gradients
+  subroutine single_PAO_to_grid2(pao_fns)
+
+    use datatypes
+    use primary_module, ONLY: bundle
+    use GenComms, ONLY: my_barrier, cq_abort, mtime
+    use dimens, ONLY: r_h
+    use GenComms, ONLY: inode, ionode
+    use numbers
+    use global_module, ONLY: rcellx,rcelly,rcellz,id_glob,ni_in_cell, iprint_basis, species_glob, atomf
+    use species_module, ONLY: species, npao_species
+    !  At present, these arrays are dummy arguments.
+    use block_module, ONLY : nx_in_block,ny_in_block,nz_in_block, n_pts_in_block
+    use group_module, ONLY : blocks, parts
+    use primary_module, ONLY: domain
+    use cover_module, ONLY: DCS_parts
+    use set_blipgrid_module, ONLY : naba_atoms_of_blocks
+    use angular_coeff_routines, ONLY : evaluate_pao
+    use functions_on_grid, ONLY: gridfunctions, fn_on_grid
+    use pao_format
+
+    implicit none 
+    integer,intent(in) :: pao_fns
+
+    !local
+    real(double):: dcellx_block,dcelly_block,dcellz_block
+    integer :: ipart,jpart,ind_part,ia,ii,icover,ig_atom
+    real(double):: xatom,yatom,zatom,alpha,step
+    real(double):: xblock,yblock,zblock
+    integer :: the_species
+    integer :: j,iblock,the_l,ipoint, igrid
+    real(double) :: r_from_i
+    real(double) :: rr,a,b,c,d,x,y,z,nl_potential,f_r, del_r
+    integer :: no_of_ib_ia, offset_position
+    integer :: position,iatom
+    integer :: stat, nl, npoint, ip, this_nsf
+    integer :: i,m, m1min, m1max,acz,m1,l1,count1
+    integer     , allocatable :: ip_store(:)
+    real(double), allocatable :: x_store(:)
+    real(double), allocatable :: y_store(:)
+    real(double), allocatable :: z_store(:)
+    real(double), allocatable :: r_store(:)
+    real(double) :: coulomb_energy
+    real(double) :: rcut
+    real(double) :: r1, r2, r3, r4, core_charge, gauss_charge
+    real(double) :: val, theta, phi, r_tmp
+
+    call start_timer(tmr_std_basis)
+    call start_timer(tmr_std_allocation)
+    allocate(ip_store(n_pts_in_block),x_store(n_pts_in_block),y_store(n_pts_in_block),z_store(n_pts_in_block), &
+         r_store(n_pts_in_block))
+    call stop_timer(tmr_std_allocation)
+    ! --  Start of subroutine  ---
+
+    dcellx_block=rcellx/blocks%ngcellx
+    dcelly_block=rcelly/blocks%ngcelly
+    dcellz_block=rcellz/blocks%ngcellz
+
+    call my_barrier()
+
+    no_of_ib_ia = 0
+    gridfunctions(pao_fns)%griddata = zero
+
+    ! loop arround grid points in the domain, and for each
+    ! point, get the PAO values
+
+    do iblock = 1, domain%groups_on_node ! primary set of blocks
+       xblock=(domain%idisp_primx(iblock)+domain%nx_origin-1)*dcellx_block
+       yblock=(domain%idisp_primy(iblock)+domain%ny_origin-1)*dcelly_block
+       zblock=(domain%idisp_primz(iblock)+domain%nz_origin-1)*dcellz_block
+       if(naba_atoms_of_blocks(atomf)%no_of_part(iblock) > 0) then ! if there are naba atoms
+          iatom=0
+          do ipart=1,naba_atoms_of_blocks(atomf)%no_of_part(iblock)
+             jpart=naba_atoms_of_blocks(atomf)%list_part(ipart,iblock)
+             if(jpart > DCS_parts%mx_gcover) then 
+                call cq_abort('single_PAO_to_grid: JPART ERROR ',ipart,jpart)
+             endif
+             ind_part=DCS_parts%lab_cell(jpart)
+             do ia=1,naba_atoms_of_blocks(atomf)%no_atom_on_part(ipart,iblock)
+                iatom=iatom+1
+                ii = naba_atoms_of_blocks(atomf)%list_atom(iatom,iblock)
+                icover= DCS_parts%icover_ibeg(jpart)+ii-1
+                ig_atom= id_glob(parts%icell_beg(ind_part)+ii-1)
+
+                if(parts%icell_beg(ind_part) + ii-1 > ni_in_cell) then
+                   call cq_abort('single_PAO_to_grid: globID ERROR ', &
+                        ii,parts%icell_beg(ind_part))
+                endif
+                if(icover > DCS_parts%mx_mcover) then
+                   call cq_abort('single_PAO_to_grid: icover ERROR ', &
+                        icover,DCS_parts%mx_mcover)
+                endif
+
+                xatom=DCS_parts%xcover(icover)
+                yatom=DCS_parts%ycover(icover)
+                zatom=DCS_parts%zcover(icover)
+                the_species=species_glob(ig_atom)
+
+                !calculates distances between the atom and integration grid points
+                !in the block and stores which integration grids are neighbours.
+                rcut = r_h + RD_ERR
+                call check_block (xblock,yblock,zblock,xatom,yatom,zatom, rcut, &  ! in
+                     npoint,ip_store,r_store,x_store,y_store,z_store,n_pts_in_block) !out
+                r_from_i = sqrt((xatom-xblock)**2+(yatom-yblock)**2+ &
+                     (zatom-zblock)**2 )
+
+                if(npoint > 0) then
+                   !offset_position = (no_of_ib_ia-1) * npao * n_pts_in_block
+                   offset_position = no_of_ib_ia
+                   do ip=1,npoint
+                      ipoint=ip_store(ip)
+                      position= offset_position + ipoint
+                      if(position > gridfunctions(pao_fns)%size) call cq_abort &
+                           ('single_pao_to_grid: position error ', position, gridfunctions(pao_fns)%size)
+
+                      r_from_i = r_store(ip)
+                      x = x_store(ip)
+                      y = y_store(ip)
+                      z = z_store(ip)
+                      ! For this point-atom offset, we accumulate the PAO on the grid
+                      count1 = 1
+                      do l1 = 0,pao(the_species)%greatest_angmom
+                         do acz = 1,pao(the_species)%angmom(l1)%n_zeta_in_angmom
+                            del_r = pao(the_species)%angmom(l1)%zeta(acz)%cutoff/ &
+                                 real(pao(the_species)%angmom(l1)%zeta(acz)%length-1,double)
+                            j = floor(r_from_i/del_r)+1
+                            if(j+1<=pao(the_species)%angmom(l1)%zeta(acz)%length) then
+                               rr = real(j,double)*del_r
+                               a = (rr - r_from_i)/del_r
+                               b = one - a
+                               c = a * ( a * a - one ) * del_r * del_r / six
+                               d = b * ( b * b - one ) * del_r * del_r / six
+                               r1 = pao(the_species)%angmom(l1)%zeta(acz)%table(j)
+                               r2 = pao(the_species)%angmom(l1)%zeta(acz)%table(j+1)
+                               r3 = pao(the_species)%angmom(l1)%zeta(acz)%table2(j)
+                               r4 = pao(the_species)%angmom(l1)%zeta(acz)%table2(j+1)
+                               f_r = a*r1 + b*r2 + c*r3 + d*r4
+                            else
+                               f_r = zero
+                            end if
+                            do m1=-l1,l1
+                               call spherical_harmonic_rl(x, y, z, l1, m1, val)
+                               if(position+(count1-1)*n_pts_in_block > gridfunctions(pao_fns)%size) &
+                                    call cq_abort('single_pao_to_grid: position error ', &
+                                    position, gridfunctions(pao_fns)%size)
+                               gridfunctions(pao_fns)%griddata(position+(count1-1)*n_pts_in_block) = val*f_r
+                               count1 = count1+1
+                            end do ! m1
+                         end do ! acz
+                      end do ! l1
+                   enddo ! ip=1,npoint
+                endif! (npoint > 0) then
+                no_of_ib_ia = no_of_ib_ia + npao_species(the_species)*n_pts_in_block
+             enddo ! naba_atoms
+          enddo ! naba_part
+       endif !(naba_atoms_of_blocks(atomf)%no_of_part(iblock) > 0) !naba atoms?
+    enddo ! iblock : primary set of blocks
+    call my_barrier()
+    call start_timer(tmr_std_allocation)
+    deallocate(ip_store,x_store,y_store,z_store,r_store)
+    call stop_timer(tmr_std_allocation)
+    call stop_timer(tmr_std_basis)
+    return
+  end subroutine single_PAO_to_grid2
+!!***
+
+!!****f* PAO_grid_transform_module/single_PAO_to_grad *
+!!
+!!  NAME 
+!!   single_PAO_to_grad
+!!  USAGE
+!! 
+!!  PURPOSE
+!!   Projects the gradient of PAO functions onto the grid (rather than support functions)
+!!   Used for gradients of energy wrt atomic coordinates
+!!
+!!   This subroutine is based on sub:single_PAO_to_grid in PAO_grid_transform_module.f90.
+!!
+!!  INPUTS
+!! 
+!!  USES
+!! 
+!!  AUTHOR
+!!   A. Nakata
+!!  CREATION DATE
+!!   2016/11/10
+!!  MODIFICATION HISTORY
+!!
+!!  SOURCE
+!!
+  subroutine single_PAO_to_grad2(direction, pao_fns)
+
+    use datatypes
+    use primary_module, ONLY: bundle
+    use GenComms, ONLY: my_barrier, cq_abort, mtime
+    use dimens, ONLY: r_h
+    use GenComms, ONLY: inode, ionode
+    use numbers
+    use global_module, ONLY: rcellx,rcelly,rcellz,id_glob,ni_in_cell, iprint_basis, species_glob, atomf
+    use species_module, ONLY: species, npao_species
+    !  At present, these arrays are dummy arguments.
+    use block_module, ONLY : nx_in_block,ny_in_block,nz_in_block, n_pts_in_block
+    use group_module, ONLY : blocks, parts
+    use primary_module, ONLY: domain
+    use cover_module, ONLY: DCS_parts
+    use set_blipgrid_module, ONLY : naba_atoms_of_blocks
+    use angular_coeff_routines, ONLY : pao_elem_derivative_2
+    use functions_on_grid, ONLY: gridfunctions, fn_on_grid
+    use pao_format
+
+    implicit none 
+    integer,intent(in) :: pao_fns
+    integer,intent(in) :: direction
+
+    !local
+    real(double):: dcellx_block,dcelly_block,dcellz_block
+    integer :: ipart,jpart,ind_part,ia,ii,icover,ig_atom
+    real(double):: xatom,yatom,zatom,alpha,step
+    real(double):: xblock,yblock,zblock
+    integer :: the_species
+    integer :: j,iblock,the_l,ipoint, igrid
+    real(double) :: r_from_i, f_r, df_r
+    real(double) :: rr,a,b,c,d,x,y,z,nl_potential, dx_dr, del_r
+    integer :: no_of_ib_ia, offset_position
+    integer :: position,iatom
+    integer :: stat, nl, npoint, ip
+    integer :: i,m, m1min, m1max,acz,m1,l1,count1
+    integer     , allocatable :: ip_store(:)
+    real(double), allocatable :: x_store(:)
+    real(double), allocatable :: y_store(:)
+    real(double), allocatable :: z_store(:)
+    real(double), allocatable :: r_store(:)
+    real(double) :: coulomb_energy
+    real(double) :: rcut
+    real(double) :: r1, r2, r3, r4, core_charge, gauss_charge
+    real(double) :: val, theta, phi, r_tmp, dval
+
+    call start_timer(tmr_std_basis)
+    call start_timer(tmr_std_allocation)
+    allocate(ip_store(n_pts_in_block),x_store(n_pts_in_block),y_store(n_pts_in_block),z_store(n_pts_in_block), &
+         r_store(n_pts_in_block))
+    call stop_timer(tmr_std_allocation)
+    ! --  Start of subroutine  ---
+
+    dcellx_block=rcellx/blocks%ngcellx
+    dcelly_block=rcelly/blocks%ngcelly
+    dcellz_block=rcellz/blocks%ngcellz
+
+    call my_barrier()
+
+    no_of_ib_ia = 0
+    gridfunctions(pao_fns)%griddata = zero
+
+    ! loop arround grid points in the domain, and for each
+    ! point, get the d_PAO/d_R values
+
+    do iblock = 1, domain%groups_on_node ! primary set of blocks
+       xblock=(domain%idisp_primx(iblock)+domain%nx_origin-1)*dcellx_block
+       yblock=(domain%idisp_primy(iblock)+domain%ny_origin-1)*dcelly_block
+       zblock=(domain%idisp_primz(iblock)+domain%nz_origin-1)*dcellz_block
+       if(naba_atoms_of_blocks(atomf)%no_of_part(iblock) > 0) then ! if there are naba atoms
+          iatom=0
+          do ipart=1,naba_atoms_of_blocks(atomf)%no_of_part(iblock)
+             jpart=naba_atoms_of_blocks(atomf)%list_part(ipart,iblock)
+             if(jpart > DCS_parts%mx_gcover) then 
+                call cq_abort('single_PAO_to_grad: JPART ERROR ',ipart,jpart)
+             endif
+             ind_part=DCS_parts%lab_cell(jpart)
+             do ia=1,naba_atoms_of_blocks(atomf)%no_atom_on_part(ipart,iblock)
+                iatom=iatom+1
+                ii = naba_atoms_of_blocks(atomf)%list_atom(iatom,iblock)
+                icover= DCS_parts%icover_ibeg(jpart)+ii-1
+                ig_atom= id_glob(parts%icell_beg(ind_part)+ii-1)
+
+                if(parts%icell_beg(ind_part) + ii-1 > ni_in_cell) then
+                   call cq_abort('single_PAO_to_grad: globID ERROR ', &
+                        ii,parts%icell_beg(ind_part))
+                endif
+                if(icover > DCS_parts%mx_mcover) then
+                   call cq_abort('single_PAO_to_grad: icover ERROR ', &
+                        icover,DCS_parts%mx_mcover)
+                endif
+
+                xatom=DCS_parts%xcover(icover)
+                yatom=DCS_parts%ycover(icover)
+                zatom=DCS_parts%zcover(icover)
+                the_species=species_glob(ig_atom)
+
+                !calculates distances between the atom and integration grid points
+                !in the block and stores which integration grids are neighbours.
+                rcut = r_h + RD_ERR
+                call check_block (xblock,yblock,zblock,xatom,yatom,zatom, rcut, &  ! in
+                     npoint,ip_store,r_store,x_store,y_store,z_store,n_pts_in_block) !out
+                r_from_i = sqrt((xatom-xblock)**2+(yatom-yblock)**2+ &
+                     (zatom-zblock)**2 )
+
+                if(npoint > 0) then
+                   !offset_position = (no_of_ib_ia-1) * npao * n_pts_in_block
+                   offset_position = no_of_ib_ia
+                   do ip=1,npoint
+                      ipoint=ip_store(ip)
+                      position= offset_position + ipoint
+                      if(position > gridfunctions(pao_fns)%size) call cq_abort &
+                           ('single_pao_to_grad: position error ', position, gridfunctions(pao_fns)%size)
+
+                      r_from_i = r_store(ip)
+                      x = x_store(ip)
+                      y = y_store(ip)
+                      z = z_store(ip)
+                      ! For this point-atom offset, we accumulate the PAO on the grid
+                      count1 = 1
+                      if(abs(r_from_i)>RD_ERR) then
+                         if(direction==1) then
+                            dx_dr = x/r_from_i
+                         else if(direction==2) then
+                            dx_dr = y/r_from_i
+                         else
+                            dx_dr = z/r_from_i
+                         end if
+                         do l1 = 0,pao(the_species)%greatest_angmom
+                            do acz = 1,pao(the_species)%angmom(l1)%n_zeta_in_angmom
+                               del_r = pao(the_species)%angmom(l1)%zeta(acz)%cutoff/ &
+                                    real(pao(the_species)%angmom(l1)%zeta(acz)%length-1,double)
+                               j = floor(r_from_i/del_r)+1
+                               if(j+1<=pao(the_species)%angmom(l1)%zeta(acz)%length) then
+                                  rr = real(j,double)*del_r
+                                  a = (rr - r_from_i)/del_r
+                                  b = one - a
+                                  c = a * ( a * a - one ) * del_r * del_r / six
+                                  d = b * ( b * b - one ) * del_r * del_r / six
+                                  r1 = pao(the_species)%angmom(l1)%zeta(acz)%table(j)
+                                  r2 = pao(the_species)%angmom(l1)%zeta(acz)%table(j+1)
+                                  r3 = pao(the_species)%angmom(l1)%zeta(acz)%table2(j)
+                                  r4 = pao(the_species)%angmom(l1)%zeta(acz)%table2(j+1)
+                                  f_r = a*r1 + b*r2 + c*r3 + d*r4
+                                  ! Re-use a and b before redefining
+                                  c = -del_r*(three*a*a-one)/six
+                                  d =  del_r*(three*b*b-one)/six
+                                  a = -one/del_r
+                                  b = -a
+                                  df_r = a*r1 + b*r2 + c*r3 + d*r4
+                               else
+                                  f_r = zero
+                                  df_r = zero
+                               end if
+                               if(abs(r_from_i)<RD_ERR) then
+                                  f_r = zero
+                                  df_r = zero
+                               end if
+                               do m1=-l1,l1
+                                  call dspherical_harmonic_rl(x, y, z, l1, m1, val, dval, direction)
+                                  if(position+(count1-1)*n_pts_in_block > gridfunctions(pao_fns)%size) &
+                                       call cq_abort('single_pao_to_grad: position error ', &
+                                       position, gridfunctions(pao_fns)%size)
+                                  gridfunctions(pao_fns)%griddata(position+(count1-1)*n_pts_in_block) = &
+                                       (val * df_r * dx_dr + dval * f_r)
+                                  count1 = count1+1
+                               end do ! m1
+                            end do ! acz
+                         end do ! l1
+                      else                         
+                         do l1 = 0,pao(the_species)%greatest_angmom
+                            do acz = 1,pao(the_species)%angmom(l1)%n_zeta_in_angmom
+                               do m1=-l1,l1
+                                  if(position+(count1-1)*n_pts_in_block > gridfunctions(pao_fns)%size) &
+                                       call cq_abort('single_pao_to_grad: position error ', &
+                                       position, gridfunctions(pao_fns)%size)
+                                  gridfunctions(pao_fns)%griddata(position+(count1-1)*n_pts_in_block) = &
+                                       zero
+                                  count1 = count1+1
+                               end do ! m1
+                            end do ! acz
+                         end do ! l1
+                      end if
+                   enddo ! ip=1,npoint
+                endif! (npoint > 0) then
+                no_of_ib_ia = no_of_ib_ia + npao_species(the_species)*n_pts_in_block
+             enddo ! naba_atoms
+          enddo ! naba_part
+       endif !(naba_atoms_of_blocks(atomf)%no_of_part(iblock) > 0) !naba atoms?
+    enddo ! iblock : primary set of blocks
+    call my_barrier()
+    call start_timer(tmr_std_allocation)
+    deallocate(ip_store,x_store,y_store,z_store,r_store)
+    call stop_timer(tmr_std_allocation)
+    call stop_timer(tmr_std_basis)
+    return
+  end subroutine single_PAO_to_grad2
+  !!***
+
+  ! Return spherical harmonic times r^l (and derivative of this)
+  subroutine spherical_harmonic_rl(x, y, z, l, m, sph)
+    
+    use datatypes
+    use numbers
+
+    implicit none
+
+    ! Passed variables
+    integer :: l, m
+    real(double) :: x, y, z, sph
+    real(double), dimension(3) :: dsph
+
+    ! Local variables
+    real(double) :: r
+    real(double) :: prefac
+
+    dsph = zero
+    if(l==0) then
+       prefac = one/sqrt(fourpi)
+       sph = prefac
+    else if(l==1) then
+       prefac = sqrt(3/fourpi)
+       select case(m)
+       case(-1) ! py
+          sph = prefac*y
+       case(0)  ! pz
+          sph = prefac*z
+       case(1)  ! px
+          sph = prefac*x
+       end select
+    else if(l==2) then
+       select case(m)
+       case(-2) ! xy
+          prefac = sqrt(fifteen/fourpi)
+          ! I have no idea why we need -xy here but it's necessary for consistency
+          sph = -prefac*x*y
+       case(-1) ! yz
+          prefac = sqrt(fifteen/fourpi)
+          sph = prefac*y*z
+       case(0) ! 3z^2 - r^2
+          prefac = sqrt(five/(sixteen*pi))
+          sph = prefac*(two*z*z - x*x - y*y)
+       case(1) ! xz
+          prefac = sqrt(fifteen/fourpi)
+          sph = prefac*z*x
+       case(2) ! x^2 - y^2
+          prefac = sqrt(fifteen/(sixteen*pi))
+          sph = prefac*(x*x - y*y)
+       end select
+    end if
+  end subroutine spherical_harmonic_rl
+
+  ! Return spherical harmonic times lr^(l-1) and dsph times r^l
+  subroutine dspherical_harmonic_rl(x, y, z, l, m, sph, dsph, dir)
+    
+    use datatypes
+    use numbers
+
+    implicit none
+
+    ! Passed variables
+    integer :: l, m, dir
+    real(double) :: x, y, z, sph, dsph
+    !real(double), dimension(3) :: dsph
+
+    ! Local variables
+    real(double) :: r
+    real(double) :: prefac
+
+    dsph = zero
+    if(l==0) then
+       prefac = one/sqrt(fourpi)
+       sph = prefac
+       dsph = zero
+    else if(l==1) then
+       prefac = sqrt(3/fourpi)
+       select case(m)
+       case(-1) ! py
+          sph = prefac*y
+          if(dir==2) dsph = prefac
+       case(0)  ! pz
+          sph = prefac*z
+          if(dir==3) dsph = prefac
+       case(1)  ! px
+          sph = prefac*x
+          if(dir==1) dsph = prefac
+       end select
+    else if(l==2) then
+       select case(m)
+       case(-2) ! xy
+          prefac = sqrt(fifteen/fourpi)
+          ! I have no idea why we need -xy here but it's necessary for consistency
+          sph = -prefac*x*y
+          if(dir==1) dsph = -prefac*y
+          if(dir==2) dsph = -prefac*x
+       case(-1) ! yz
+          prefac = sqrt(fifteen/fourpi)
+          sph = prefac*y*z
+          if(dir==2) dsph = prefac*z
+          if(dir==3) dsph = prefac*y
+       case(0) ! 3z^2 - r^2
+          prefac = sqrt(five/(sixteen*pi))
+          sph = prefac*(two*z*z - x*x - y*y)
+          if(dir==1) dsph = -prefac*two*x
+          if(dir==2) dsph = -prefac*two*y
+          if(dir==3) dsph =  prefac*four*z
+       case(1) ! xz
+          prefac = sqrt(fifteen/fourpi)
+          sph = prefac*z*x
+          if(dir==1) dsph = prefac*z
+          if(dir==3) dsph = prefac*x
+       case(2) ! x^2 - y^2
+          prefac = sqrt(fifteen/(sixteen*pi))
+          sph = prefac*(x*x - y*y)
+          if(dir==1) dsph =  prefac*two*x
+          if(dir==2) dsph = -prefac*two*y
+       end select
+    end if
+  end subroutine dspherical_harmonic_rl
+
+  
+  
 end module PAO_grid_transform_module
