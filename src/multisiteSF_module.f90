@@ -505,7 +505,7 @@ contains
     ! Local variables
     integer :: wheremat
     real(double) :: val
-    integer :: nsf_i, sf1, l2, ll2, nacz2, m2, spin_SF
+    integer :: nsf_i, sf1, l2, ll2, nacz2, nacz22, m2, spin_SF
     integer :: count, count_pao_j
 
 
@@ -542,14 +542,23 @@ contains
              do nacz2 = 1, pao(atom_spec)%angmom(l2)%n_zeta_in_angmom
                 ! Count indexes which angular momentum channel we're in
                 count = 1
-                if (l2>0.AND.pao(atom_spec)%angmom(l2)%n_zeta_in_angmom>0) then
-                   do ll2 = 0,l2-1
-                      if (pao(atom_spec)%angmom(ll2)%n_zeta_in_angmom>0) count = count + (2*ll2+1)
-                   end do
-                end if
+                do ll2 = 0, l2-1
+                   if (pao(atom_spec)%angmom(ll2)%n_zeta_in_angmom>0) then
+                      count = count + (2*ll2+1)
+                      ! Check for semi-core (very crude!)
+                      if(pao(atom_spec)%angmom(ll2)%n_zeta_in_angmom>1 .and. &
+                           pao(atom_spec)%angmom(ll2)%prncpl(2) /= &
+                           pao(atom_spec)%angmom(ll2)%prncpl(1)) count = count + (2*ll2+1)
+                   end if
+                end do
+                ! Check for semi-core in this shell
+                if(pao(atom_spec)%angmom(l2)%n_zeta_in_angmom>1 .and. &
+                     nacz2>1 .and. pao(atom_spec)%angmom(l2)%prncpl(2) /= &
+                        pao(atom_spec)%angmom(l2)%prncpl(1)) count = count + (2*l2+1)
                 do m2 = -l2,l2
                    if (sf1==count) then
-                      if (nacz2==1) then
+                      if (nacz2==1 .or. (nacz2==2.and.pao(atom_spec)%angmom(l2)%prncpl(2) /= &
+                           pao(atom_spec)%angmom(l2)%prncpl(1))) then
                          val = one
                       else
                          val = 0.1_double
