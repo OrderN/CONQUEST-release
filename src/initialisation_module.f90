@@ -1515,7 +1515,7 @@ contains
     use numbers,                only: very_small
     use global_module,          only: x_atom_cell,y_atom_cell,        &
                                       z_atom_cell, ni_in_cell,        &
-                                      iprint_index, flag_basis_set, PAOs
+                                      iprint_index
     use block_module,           only: n_pts_in_block
     use maxima_module,          only: maxblocks
     use group_module,           only: blocks, parts
@@ -1526,7 +1526,7 @@ contains
     use set_blipgrid_module,    only: set_blipgrid
     use set_bucket_module,      only: set_bucket
     use GenComms,               only: my_barrier
-    use dimens,                 only: RadiusAtomf, RadiusSupport
+    use dimens,                 only: RadiusAtomf
     use pseudopotential_common, only: core_radius
     use input_module,           only: leqi
 
@@ -1579,11 +1579,7 @@ contains
     !if(iprint_index > 4) write(io_lun,*) ' DCS & BCS has been prepared for myid = ',myid
     !Makes variables used in Blip-Grid transforms
     ! See (naba_blk_module.f90), (set_blipgrid_module.f90), (make_table.f90)
-    if(flag_basis_set==PAOs) then
-       call set_blipgrid(myid, RadiusAtomf, core_radius)
-    else
-       call set_blipgrid(myid, RadiusSupport, core_radius)
-    end if
+    call set_blipgrid(myid, RadiusAtomf, core_radius)
     !if(iprint_index > 4) write(io_lun,*) 'Node ',myid+1,' Done set_blipgrid'
 
     !Makes variables used in calculation (integration) of matrix elements

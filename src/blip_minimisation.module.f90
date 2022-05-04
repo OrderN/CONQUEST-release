@@ -385,29 +385,6 @@ contains
              total_energy_0
        if (inode == ionode .AND. iprint_basis > 2) &
             write (io_lun,fmt='(6x,"Returned !")')
-       ! Normalise
-          iprim=0
-          do np=1,bundle%groups_on_node
-             if(bundle%nm_nodgroup(np) > 0) then
-                do ni=1,bundle%nm_nodgroup(np)
-                   iprim=iprim+1
-                   do isf=1,mat(np,Srange)%ndimi(ni)
-                      factor = return_matrix_value(matS(spin_SF),np,ni,iprim,0,isf,isf,1)
-                      if(factor>RD_ERR) then
-                         factor=one/sqrt(factor)
-                      else
-                         factor = zero
-                      end if
-                      do n_blip=1,blips_on_atom(iprim)%supp_func(isf)%ncoeffs
-                         blips_on_atom(iprim)%supp_func(isf)%coefficients(n_blip) = &
-                              factor * blips_on_atom(iprim)%supp_func(isf)%coefficients(n_blip)
-                      enddo ! n_blip
-                   enddo ! isf
-                enddo ! ni
-             endif ! if the partition has atoms
-          enddo ! np
-          ! Update S after normalisation
-          call get_S_matrix(inode, ionode)
        call dump_blip_coeffs(coefficient_array, coeff_array_size, &
                              inode)
        ! Find change in energy for convergence
@@ -787,7 +764,7 @@ contains
                         blips_on_atom(iprim)%supp_func(i1)%coefficients / sqrt(norm)
                 end do ! i1 = this_nsf
              else
-                ! We need to call do_local_blip_to_grid to do grid-based on-site integrals
+                ! We will need to call do_local_blip_to_grid to do grid-based on-site integrals
                 do i1 = 1,this_nsf
                    norm = return_matrix_value(matS(spin_SF),np,ni,iprim,0,i1,i1,1)
                    blips_on_atom(iprim)%supp_func(i1)%coefficients = &
