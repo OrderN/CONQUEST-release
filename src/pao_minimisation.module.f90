@@ -1325,6 +1325,8 @@ contains
   !!     the coefficients for each primary atom in the appropriate part of the array)
   !!   2017/02/23 dave
   !!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
+  !!   2022/05/04 11:55 dave
+  !!    - Starting to think about pre-conditioning and stopping semi-core states from varying
   !!  SOURCE
   !!
   subroutine build_PAO_coeff_grad(flag)
@@ -1415,6 +1417,50 @@ contains
     call matrix_scale(-two*spin_factor, matdSFcoeff(spin_SF)) ! -2*spin_factor
     if (.not. flag_diagonalisation) call matrix_scale(-spin_factor, matdSFcoeff_e(spin_SF)) ! -spin_factor
 
+    ! Preconditioning will happen here
+    ! First, zero out gradient for semi-core states (one PAO only)
+    ! Not yet complete so commented out
+    !do part = 1,bundle%groups_on_node ! Loop over primary set partitions
+    !   if(bundle%nm_nodgroup(part)>0) then ! If there are atoms in partition
+    !      do memb = 1,bundle%nm_nodgroup(part) ! Loop over atoms
+    !         atom_num = bundle%nm_nodbeg(part)+memb-1
+    !         iprim=iprim+1
+    !         ! Atomic species
+    !         atom_spec = bundle%species(atom_num)
+    !         do neigh = 1, mat(part,SFcoeff_range)%n_nab(memb) ! Loop over neighbours of atom
+    !            ist = mat(part,SFcoeff_range)%i_acc(memb)+neigh-1
+    !            ! Build the distances between atoms
+    !            gcspart = BCS_parts%icover_ibeg(mat(part,SFcoeff_range)%i_part(ist))+mat(part,SFcoeff_range)%i_seq(ist)-1
+    !            ! Displacement vector
+    !            dx = BCS_parts%xcover(gcspart)-bundle%xprim(atom_num)
+    !            dy = BCS_parts%ycover(gcspart)-bundle%yprim(atom_num)
+    !            dz = BCS_parts%zcover(gcspart)-bundle%zprim(atom_num)
+    !            r2 = dx*dx + dy*dy + dz*dz
+    !            r2 = sqrt(r2)
+    !            if (r2.le.RD_ERR) then    ! only on-site
+    !               ! We need to know the species of neighbour
+    !               neigh_global_part = BCS_parts%lab_cell(mat(part,SFcoeff_range)%i_part(ist))
+    !               neigh_global_num  = id_glob(parts%icell_beg(neigh_global_part)+mat(part,SFcoeff_range)%i_seq(ist)-1)
+    !               neigh_species = species_glob(neigh_global_num)
+    !               do sf1 = 1, nsf_i
+    !                  count_pao_j = 1
+    !                  do l2 = 0, pao(atom_spec)%greatest_angmom
+    !                     do nacz2 = 1, pao(atom_spec)%angmom(l2)%n_zeta_in_angmom
+    !                        ! If we have semi-core state, zero the gradient
+    !                        do m2 = -l2,l2
+    !                           do spin_SF = 1, nspin_SF
+    !                              wheremat = matrix_pos(matSFcoeff(spin_SF),iprim,j_in_halo,sf1,count_pao_j)
+    !                              call store_matrix_value_pos(matSFcoeff(spin_SF),wheremat,val)
+    !                           enddo
+    !                        end do
+    !                     end do
+    !                  end do
+    !               end do
+    !            end if
+    !         end do
+    !      end do
+    !   end if
+    !end do
     call stop_timer(tmr_std_matrices)
 
     return
