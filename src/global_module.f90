@@ -151,6 +151,10 @@
 !!    Removed flag_MDold
 !!   2019/11/18 14:37 dave
 !!    Added flag_variable_cell
+!!   2020/07/27 tsuyoshi
+!!    Added atom_vels 
+!!   2021/07/19 15:00 dave
+!!    Removed flag for wavefunction output by k-point
 !!  SOURCE
 !!
 module global_module
@@ -165,7 +169,7 @@ module global_module
   integer :: io_lun                 ! Output unit
   integer, allocatable, dimension(:) :: id_glob      ! global label of atom in sim cell (CC)
   integer, allocatable, dimension(:) :: id_glob_inv  ! gives global number for a CC atom
-  integer, dimension(:), allocatable :: species_glob ! gives species 
+  integer, dimension(:), allocatable, target :: species_glob ! gives species 
   integer :: numprocs               ! number of processors
   real(double), target :: rcellx,rcelly,rcellz  ! cell side lengths
   real(double), allocatable, dimension(:), target :: x_atom_cell ! position of atom in sim cell (CC)
@@ -177,6 +181,7 @@ module global_module
   ! atom_coord : Use global labelling, in the future this array should
   ! be used instead of x, y, z_atom_cell. by T. Miyazaki
   real(double), dimension(:,:), allocatable, target :: atom_coord ! Atomic coordinates
+  real(double), dimension(:,:), allocatable, target :: atom_vels  ! Atomic velocities 
   integer,      dimension(:,:), allocatable :: sorted_coord ! Atom IDs of atoms sorted according to x, y, z coords
   logical,      dimension(:,:), allocatable :: flag_move_atom  ! Move atoms ?
   integer,      dimension(:),   allocatable :: flag_cdft_atom
@@ -369,7 +374,6 @@ module global_module
   
   ! Wavefunction output
   logical :: flag_out_wf                        !output WFs?
-  logical :: flag_out_wf_by_kp                  !output WFs k-point by k-point
   integer,allocatable,dimension(:)::out_wf      !which bands to output  
   integer::max_wf                               !total no of bands
   logical :: wf_self_con                        !flag to select output at the end of SCF cycle

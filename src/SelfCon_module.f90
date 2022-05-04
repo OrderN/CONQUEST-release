@@ -111,6 +111,9 @@ module SelfCon
   logical,      save :: flag_linear_mixing
   real(double), save :: EndLinearMixing
 
+  ! Monitor change in energy from step to step of SCF cycle (for comparison with other minimisations)
+  real(double), save :: dE_SCF
+
   integer,      save :: n_dumpSCF
   !!***
 
@@ -373,6 +376,9 @@ contains
   !!   - Added experimental backtrace
   !!   2019/08/16 14:10 dave
   !!    get_new_rho is now in this module
+  !!   2021/07/19 15:50 dave
+  !!    Added dump charge at convergence (and at every iteration if iprint
+  !!    is high enough)
   !!  SOURCE
   !!
   subroutine lateSC(record, done, ndone, self_tol, reset_L,          &
@@ -391,9 +397,11 @@ contains
                               flag_continue_on_SC_fail, &
                               flag_SCconverged,         &
                               flag_fix_spin_population, &
-                              ne_spin_in_cell, nspin, spin_factor
+                              ne_spin_in_cell, nspin, spin_factor, iprint_SC
     use maxima_module,  only: maxngrid
     use memory_module,  only: reg_alloc_mem, reg_dealloc_mem, type_dbl
+    use density_module, only: flag_DumpChargeDensity
+    use io_module,      only: dump_charge
 
     implicit none
 
@@ -417,6 +425,7 @@ contains
     real(double) :: R0, R1, E0, E1, dE, tmp_tot
     real(double), dimension(:,:,:), allocatable :: rho_pul, resid_pul
     real(double), dimension(:,:),   allocatable :: rho1
+    real(double), dimension(:),   allocatable :: rho_tot
     real(double), dimension(maxpulaySC,maxpulaySC,nspin) :: Aij
     real(double), dimension(maxpulaySC,nspin) :: alph
     real(double), dimension(nspin) :: R, tmp
@@ -437,6 +446,7 @@ contains
     if (stat /= 0) &
          call cq_abort("late_SC: Error alloc mem: ", maxngrid, maxpulaySC)
     call reg_alloc_mem(area_SC, (2*maxpulaySC+1)*nspin*maxngrid, type_dbl)
+    if (flag_DumpChargeDensity .and. nspin==1) allocate(rho_tot(maxngrid))
 
     done = .false.
     linear = .true.
@@ -511,6 +521,17 @@ contains
             write (io_lun, *) '********** Late iter ', n_iters
 
        n_pulay = n_pulay + 1
+
+       ! print out charge
+       if (flag_DumpChargeDensity .and. iprint_SC > 2) then
+          if (nspin == 1) then
+             rho_tot(:) = spin_factor * rho(:,1)
+             call dump_charge(rho_tot, n_my_grid_points, inode, spin=0)
+          else
+             call dump_charge(rho(:,1), n_my_grid_points, inode, spin=1)
+             call dump_charge(rho(:,2), n_my_grid_points, inode, spin=2)
+          end if
+       end if
 
        ! Storage for pulay charges/residuals
        npmod = mod(n_pulay, maxpulaySC) + 1
@@ -787,6 +808,18 @@ contains
        end if
     end do
 
+    ! print out charge
+    if (flag_DumpChargeDensity) then
+       if (nspin == 1) then
+          rho_tot(:) = spin_factor * rho(:,1)
+          call dump_charge(rho_tot, n_my_grid_points, inode, spin=0)
+          deallocate(rho_tot)
+       else
+          call dump_charge(rho(:,1), n_my_grid_points, inode, spin=1)
+          call dump_charge(rho(:,2), n_my_grid_points, inode, spin=2)
+       end if
+    end if
+
     ndone = n_iters
 
     if (inode == ionode) &
@@ -866,6 +899,9 @@ contains
   !!    Bug fix to changes in residual calculation
   !!   2019/12/30 tsuyoshi
   !!    flag_DumpChargeDensity is introduced to control dump_charge
+  !!   2021/07/19 15:48 dave
+  !!    Changed so that charge density is only output at every iteration
+  !!    given iprint_SC>2.  Always output at SCF if flag is set.
   !! SOURCE
   !!
   subroutine PulayMixSC_spin(done, ndone, self_tol, reset_L, &
@@ -968,11 +1004,13 @@ contains
        return
     end if
 
+    dE_SCF = total_energy
     ! store rho and calculate residuals and store in pulay history slot 1
     call update_pulay_history(1, rho, reset_L, fixed_potential,     &
                               vary_mu, n_L_iterations, L_tol,       &
                               total_energy, rho_pul, R_pul, KR_pul, &
                               Rcov_pul, backtrace_level)
+    dE_SCF = total_energy - dE_SCF
 
     ! Evaluate magnitute of residual, note do not include cross terms
     RA = zero
@@ -1047,16 +1085,8 @@ contains
     ! do SCF loop
     do iter = 2, maxitersSC
 
-       ! calculate cyclic index for storing pulay history
-       iPulay = mod(iter - IterPulayReset + 1, maxpulaySC)
-       if (iPulay == 0) iPulay = maxpulaySC
-       ! calculated the number of pulay histories stored
-       pul_mx = min(iter - IterPulayReset + 1, maxpulaySC)
-
        ! print out charge
-       !  2019Dec30 tsuyoshi: flag_DumpChargeDensity is introduced, but ...
-       !                      is it okay with iprint_SC > 1 ?
-       if (flag_DumpChargeDensity .and. iprint_SC > 1) then
+       if (flag_DumpChargeDensity .and. iprint_SC > 2) then
           if (nspin == 1) then
              rho_tot(:) = spin_factor * rho(:,1)
              call dump_charge(rho_tot, n_my_grid_points, inode, spin=0)
@@ -1066,11 +1096,19 @@ contains
           end if
        end if
 
+       dE_SCF = total_energy
+       ! calculate cyclic index for storing pulay history
+       iPulay = mod(iter - IterPulayReset + 1, maxpulaySC)
+       if (iPulay == 0) iPulay = maxpulaySC
+       ! calculated the number of pulay histories stored
+       pul_mx = min(iter - IterPulayReset + 1, maxpulaySC)
+
        ! Calculate residuals and update pulay history (store in iPulay-th slot)
        call update_pulay_history(iPulay, rho, reset_L, fixed_potential, &
                                  vary_mu, n_L_iterations, L_tol,        &
                                  total_energy, rho_pul, R_pul, KR_pul,  &
                                  Rcov_pul, backtrace_level)
+       dE_SCF = total_energy - dE_SCF
 
        ! Evaluate magnitute of residual, note no cross terms
        RA = zero
@@ -1118,6 +1156,17 @@ contains
        end if
        ! check if they have reached tolerance
        if (R0 < self_tol .AND. iter >= minitersSC) then ! Passed minimum number of iterations
+          ! print out charge
+          if (flag_DumpChargeDensity) then
+             if (nspin == 1) then
+                rho_tot(:) = spin_factor * rho(:,1)
+                call dump_charge(rho_tot, n_my_grid_points, inode, spin=0)
+             else
+                call dump_charge(rho(:,1), n_my_grid_points, inode, spin=1)
+                call dump_charge(rho(:,2), n_my_grid_points, inode, spin=2)
+             end if
+          end if
+
           if (inode == ionode) write (io_lun,1) iter
           done = .true.
           call deallocate_PulayMiXSC_spin
@@ -1544,6 +1593,12 @@ contains
   !!    Renamed supportfns -> atomfns
   !!   2017/02/23 dave
   !!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
+  !!   2020/08/24 11:21 dave
+  !!    Add option to allow LFD at each SCF step
+  !!   2021/07/26 11:49 dave
+  !!    Fix module use for get_H_matrix
+  !!   2021/07/28 10:13 dave
+  !!    Correctly calculate DFT energy (Ha, XC and local contributions use output density)
   !!  SOURCE
   !!
   subroutine get_new_rho(record, reset_L, fixed_potential, vary_mu,  &
@@ -1555,15 +1610,17 @@ contains
     use mult_module,       only: LNV_matrix_multiply
     use DMMin,             only: FindMinDM
     use global_module,     only: iprint_SC, atomf, flag_perform_cDFT, &
-                                 nspin, spin_factor, flag_diagonalisation
-    use H_matrix_module,   only: get_H_matrix
+                                 nspin, spin_factor, flag_diagonalisation, flag_LFD, flag_Multisite
+    use H_matrix_module,   only: get_H_matrix, get_output_energies
+    use S_matrix_module,   only: get_S_matrix
     !use DiagModule,        only: diagon
-    use energy,            only: get_energy, flag_check_DFT
+    use energy,            only: get_energy
     use functions_on_grid, only: atomfns, allocate_temp_fn_on_grid, &
                                  free_temp_fn_on_grid
     use density_module,    only: get_electronic_density
     use GenComms,          only: inode, ionode
     use cdft_module,       only: cdft_min
+    use multisiteSF_module, only: initial_SFcoeff, flag_mix_LFD_SCF
 
     implicit none
 
@@ -1591,6 +1648,12 @@ contains
     call get_H_matrix(.false., fixed_potential, electrons, rhoin, &
          size, backtrace_level)
 
+    if(flag_Multisite .and. flag_LFD .and. flag_mix_LFD_SCF) then
+       call initial_SFcoeff(.false.,.false.,fixed_potential,.false.)
+       call get_S_matrix(inode, ionode, build_AtomF_matrix=.false.)
+       call get_H_matrix(.false., fixed_potential, electrons, rhoin, &
+            size, level=backtrace_level,build_AtomF_matrix=.false.)
+    end if
     if (flag_perform_cDFT) then
        call cdft_min(reset_L, fixed_potential, vary_mu, &
                      n_CG_L_iterations, tolerance, total_energy)
@@ -1609,13 +1672,6 @@ contains
                                    dontM1,  dontM2, dontM3, dontM4,  &
                                    dontphi, dontE, level=backtrace_level)
        end if
-       ! Get total energy
-       if (flag_check_DFT) then
-          call get_energy(total_energy=total_energy,printDFT=.false., &
-               level=backtrace_level)
-       else
-          call get_energy(total_energy=total_energy,level=backtrace_level)
-       endif
     end if ! if (flag_perform_cDFT) then
 
     ! And get the output density
@@ -1626,12 +1682,10 @@ contains
     call start_timer(tmr_std_chargescf)
     call free_temp_fn_on_grid(temp_supp_fn)
 
-    !For DFT energy with charge density constructed by density matrix --
-    !TM Nov2007
-    if (flag_check_DFT) then
-       call get_H_matrix(.false., fixed_potential, electrons, rhoout, size)
-       call get_energy(total_energy, flag_check_DFT, backtrace_level)
-    endif
+    ! Now build DFT energy from output charge
+    ! Find Hartree, XC and local PS (i.e. NA) energies with output density
+    call get_output_energies(rhoout, size)
+    call get_energy(total_energy, .true., backtrace_level) ! Output DFT energy
 
 !****lat<$
     call stop_backtrace(t=backtrace_timer,who='get_new_rho',echo=.true.)

@@ -4,11 +4,10 @@
 Structural relaxation
 =====================
 
-This section describes how to find the zero-Kelvin equilibrium structure, given
+This section describes how to find the zero-Kelvin equilibrium atomic structure, given
 a starting structure with non-zero forces and/or stresses. CONQUEST
-can employ a variety of algorithms 
-algorithm to minimise energy with respect to
-atomic positions, including: L-BFGS; conjugate gradients; and damped
+can employ a variety of algorithms to minimise energy with respect to
+atomic positions, including: stabilised quasi-Newton method (SQNM); L-BFGS; conjugate gradients; and damped
 molecular dynamics (both MDMin and FIRE approaches).  The minimisation
 of energy or enthalpy with respect to cell vectors is restricted to
 conjugate gradients at present, though L-BFGS will be implemented.
@@ -19,7 +18,7 @@ trajectory to the file ``trajectory.xsf``, which can be visualised using `VMD
 will append the structure at each step to ``UpdatedAtoms.dat`` in the format of a
 CONQUEST structure input.
 
-For the L-BFGS and conjugate gradients relaxations, the progress of the calculation can be
+For the SQNM, L-BFGS and conjugate gradients relaxations, the progress of the calculation can be
 monitored by searching for the word ``GeomOpt``; grepping will print the
 following:
 
@@ -53,13 +52,15 @@ following flags are essential:
 
 ::
 
-   AtomMove.TypeOfRun lbfgs
+   AtomMove.TypeOfRun sqnm
    AtomMove.MaxForceTol 5e-4
    AtomMove.ReuseDM T
 
-The parameter ``AtomMove.TypeOfRun`` can take the value ``lbfgs`` or
-``cg`` for iterative optimisation.  Both algorithms are robust and
-relatively efficient in most instances; L-BFGS is preferred. The
+The parameter ``AtomMove.TypeOfRun`` can take the values ``sqnm``, ``lbfgs`` or
+``cg`` for iterative optimisation.  All three algorithms are robust and
+relatively efficient in most instances; SQNM :cite:`sr-Schaefer2015` is recommended in most cases,
+though if the initial forces are large it may be worth performing quenched
+MD to reduce them (see below) before applying SQNM. The
 parameter ``AtomMove.MaxForceTol`` specifies the force
 convergence criterion in Ha/bohr, i.e. the calculation will terminate
 when the largest force component on any atom is below this value.
@@ -76,8 +77,8 @@ converge with respect to the force tolerance; this may necessitate a tighter
 ``minE.LTolerance`` for O(N) calculations).  A grid which is too
 coarse can also cause problems with structural relaxation to high tolerances.
 
-For problematic cases where the conjugate gradients algorithm fails to find a
-downhill search direction, it may be worth trying quenched molecular dyanamics,
+For large initial forces or problematic cases where the relaxation algorithms fail to find a
+downhill search direction, it may be worth trying quenched molecular dynamics,
 which propagates the equations of motion following a simple NVE
 approach, but resets the velocities to zero when the dot product of
 force and velocity is zero.
@@ -116,12 +117,12 @@ coordinates* (``AtomMove.OptCellMethod 1``) using the following input:
    AtomMove.OptCell T
    AtomMove.OptCellMethod 1
    AtomMove.TargetPressure 1.0
-   AtomMove.ReuseL T
+   AtomMove.ReuseDM T
    AtomMove.EnthalpyTolerance 1E-6
    AtomMove.StressTolerance 0.01
 
 Here, we specify the target pressure in GPa and two new tolerances, the enthalpy
-tolerance in Ha and the stress tolerance in GPa.
+tolerance in Ha and the stress tolerance in Ha per cubic Bohr.
 
 Go to :ref:`top <strucrelax>`.
 
@@ -142,7 +143,7 @@ the ionic positions and lattice vectors. This can be done by setting
    AtomMove.OptCell T
    AtomMove.OptCellMethod 3
    AtomMove.TargetPressure 1.0
-   AtomMove.ReuseL T
+   AtomMove.ReuseDM T
    AtomMove.MaxForceTol 5e-4
    AtomMove.EnthalpyTolerance 1E-6
    AtomMove.StressTolerance 0.01

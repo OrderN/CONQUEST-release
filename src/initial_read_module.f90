@@ -166,7 +166,7 @@ contains
     use io_module,              only: read_mult,                       &
          read_atomic_positions,           &
          pdb_template, pdb_format,        &
-         print_process_info
+         print_process_info, titles
     use group_module,           only: parts, part_method
     use construct_module,       only: init_group, init_primary
     use maxima_module,          only: maxpartsproc, maxatomsproc
@@ -224,7 +224,7 @@ contains
     ! Local variables
     character(len=80) :: sub_name = "read_and_write"
     type(cq_timer)    :: backtrace_timer
-    character(len=80) :: titles, def
+    character(len=80) :: def
     character(len=80) :: atom_coord_file
     character(len=80) :: part_coord_file
 
@@ -519,6 +519,9 @@ contains
     call stop_backtrace(t=backtrace_timer,who='read_and_write')
     !****lat>$
 
+    !**** TM 2020.Jul.30
+    call check_compatibility
+
     call my_barrier()
 
     return
@@ -796,7 +799,7 @@ contains
          restart_T,restart_X,flag_XLBOMD,flag_propagateX,              &
          flag_propagateL,flag_dissipation,integratorXL, flag_FixCOM,   &
          flag_exx, exx_alpha, exx_scf, exx_scf_tol, exx_siter,         &
-         flag_out_wf,flag_out_wf_by_kp,max_wf,out_wf,wf_self_con, flag_fire_qMD, &
+         flag_out_wf,max_wf,out_wf,wf_self_con, flag_fire_qMD, &
          flag_write_DOS, flag_write_projected_DOS, &
          flag_normalise_pDOS, flag_pDOS_angmom, flag_pDOS_lm, &
          E_DOS_min, E_DOS_max, sigma_DOS, n_DOS, E_wf_min, E_wf_max, flag_wf_range_Ef, &
@@ -863,7 +866,6 @@ contains
          flag_MatrixFile_BinaryFormat_Dump_END
 
     use group_module,     only: part_method, HILBERT, PYTHON
-    use energy,           only: flag_check_DFT
     use H_matrix_module,  only: locps_output, locps_choice
     use pao_minimisation, only: InitStep_paomin
     use timer_module,     only: time_threshold,lun_tmr, TimingOn, &
@@ -888,10 +890,10 @@ contains
          MSSF_Smear_center, MSSF_Smear_shift, MSSF_Smear_width, &
          flag_LFD_ReadTVEC, LFD_TVEC_read,                      &
          LFD_kT, LFD_ChemP, flag_LFD_useChemPsub,               &
-         flag_LFD_nonSCF, LFD_ThreshE, LFD_ThreshD,           &
+         flag_LFD_nonSCF, LFD_ThreshE, LFD_ThreshD,             &
          LFD_Thresh_EnergyRise, LFD_max_iteration,              &
          flag_LFD_MD_UseAtomicDensity,  flag_MSSF_nonminimal,   &
-         n_dumpSFcoeff,                                         &
+         n_dumpSFcoeff, flag_mix_LFD_SCF,                       &
          MSSF_nonminimal_offset ! nonmin_mssf
     use control,    only: md_ensemble
     use md_control, only: md_tau_T, md_n_nhc, md_n_ys, md_n_mts, md_nhc_mass, &
@@ -900,7 +902,7 @@ contains
          flag_write_xsf, md_cell_nhc, md_nhc_cell_mass, &
          md_calc_xlmass, md_equil_steps, md_equil_press, &
          md_tau_T_equil, md_tau_P_equil, md_p_drag, &
-         md_t_drag, md_cell_constraint
+         md_t_drag, md_cell_constraint, flag_write_extxyz
     use md_model,   only: md_tdep
     use move_atoms,         only: threshold_resetCD, &
          flag_stop_on_empty_bundle, &
@@ -1454,6 +1456,7 @@ contains
           endif
        endif ! flag_LFD_ReadTVEC
        flag_LFD_nonSCF = fdf_boolean('Multisite.LFD.NonSCF',.false.)
+       flag_mix_LFD_SCF = fdf_boolean('Multisite.LFD.MixLFDSCF',.true.)
        if (.NOT.flag_LFD_nonSCF) then ! Expected behaviour
           LFD_threshE = fdf_double('Multisite.LFD.Min.ThreshE',1.0e-6_double)
           LFD_threshD = fdf_double('Multisite.LFD.Min.ThreshD',1.0e-6_double)
@@ -1582,29 +1585,34 @@ contains
     flag_out_wf=fdf_boolean('IO.outputWF',.false.)
     if (flag_out_wf) then
        if (flag_diagonalisation .and. leqi(runtype,'static')) then
-          flag_out_wf_by_kp=fdf_boolean('IO.outputWF_by_kpoint',.false.)
           wf_self_con=.false.
           ! The user can either specify which bands explicitly
           max_wf=fdf_integer('IO.maxnoWF',0)
-          if(max_wf>0) allocate(out_wf(max_wf))
-          if (fdf_block('WaveFunctionsOut')) then
-             if(1+block_end-block_start<max_wf) &
-                  call cq_abort("Too few wf no in WaveFunctionsOut:"&
-                  ,1+block_end-block_start,max_wf)
-             do i=1,max_wf
-                read(unit=input_array(block_start+i-1),fmt=*) out_wf(i)
-             end do
-             call fdf_endblock
-          end if
-          ! Or specify an energy range
-          E_wf_min = fdf_double('IO.min_wf_E',zero)
-          E_wf_max = fdf_double('IO.max_wf_E',zero)
-          ! Is the range relative to Ef (T) or absolute (F)
-          flag_wf_range_Ef = fdf_boolean('IO.WFRangeRelative',.true.)
-          if(flag_wf_range_Ef.AND.abs(E_wf_min)<very_small.AND.abs(E_wf_max)<very_small) then
-             flag_out_wf = .false.
+          if(max_wf>0) then
+             allocate(out_wf(max_wf))
+             if (fdf_block('WaveFunctionsOut')) then
+                if(1+block_end-block_start<max_wf) &
+                     call cq_abort("Too few wf no in WaveFunctionsOut:"&
+                     ,1+block_end-block_start,max_wf)
+                do i=1,max_wf
+                   read(unit=input_array(block_start+i-1),fmt=*) out_wf(i)
+                end do
+                call fdf_endblock
+             else
+                call cq_abort("You specified bands with IO.maxnoWF but didn't give the WaveFunctionsOut block")
+             end if
              flag_wf_range_Ef = .false.
-             if(inode==ionode) write(io_lun,'(2x,"Setting IO.outputWF F as no bands range given")')
+          else
+             ! Or specify an energy range
+             E_wf_min = fdf_double('IO.min_wf_E',zero)
+             E_wf_max = fdf_double('IO.max_wf_E',zero)
+             ! Is the range relative to Ef (T) or absolute (F)
+             flag_wf_range_Ef = fdf_boolean('IO.WFRangeRelative',.true.)
+             if(flag_wf_range_Ef.AND.abs(E_wf_min)<very_small.AND.abs(E_wf_max)<very_small) then
+                flag_out_wf = .false.
+                flag_wf_range_Ef = .false.
+                if(inode==ionode) write(io_lun,'(2x,"Setting IO.outputWF F as no bands range given")')
+             end if
           end if
        else
           call cq_abort("Won't output WFs for Order(N) or non-static runs")
@@ -1758,7 +1766,6 @@ contains
        UseGemm = .false.
     endif
 
-    flag_check_DFT     = fdf_boolean('General.CheckDFT',.true.)
     flag_quench_MD     = fdf_boolean('AtomMove.QuenchMD',.false.)
     flag_fire_qMD = fdf_boolean('AtomMove.FIRE',.false.)
     ! If we're doing MD, then the centre of mass should generally be fixed,
@@ -1997,6 +2004,7 @@ contains
     flag_SFcoeffReuse = fdf_boolean('AtomMove.ReuseSFcoeff',.true.)
     flag_LmatrixReuse = fdf_boolean('AtomMove.ReuseDM',.true.)
     flag_write_xsf    = fdf_boolean('AtomMove.WriteXSF', .true.)
+    flag_write_extxyz = fdf_boolean('AtomMove.WriteExtXYZ', .false.)
     ! tsuyoshi 2019/12/30
     if(flag_SFcoeffReuse .and. .not.flag_LmatrixReuse) then
        call cq_warn(sub_name,' AtomMove.ReuseDM should be true if AtomMove.ReuseSFcoeff is true.')
@@ -2203,7 +2211,7 @@ contains
     md_cell_constraint = fdf_string(20, 'MD.CellConstraint', 'volume')
 
     !**** TM 2017.Nov.3rd
-    call check_compatibility
+    !call check_compatibility
     !****lat<$
     call stop_backtrace(t=backtrace_timer,who='read_input')
     !****lat>$
@@ -2211,21 +2219,52 @@ contains
     call my_barrier()
 
     return
+  end subroutine read_input
+  !!***
 
-  contains
+  ! ------------------------------------------------------------------------------
+  ! subroutine check_compatibility
+  ! ------------------------------------------------------------------------------
+  !!****f* initial_read/check_compatibility *
+  !!
+  !!  NAME
+  !!   check_compatibility
+  !!  USAGE
+  !!
+  !!  PURPOSE
+  !!   checks the compatibility between keywords mainly defined in read_input
+  !!  INPUTS
+  !!
+  !!  USES
+  !!
+  !!  AUTHOR
+  !!   T. Miyazaki
+  !!  CREATION DATE
+  !!   2017/11/03 
+  !!  MODIFICATION HISTORY
+  !!   2020/07/30 tsuyoshi
+  !!    - Moved from read_input
+  !!  SOURCE
+  !!
 
-    ! ------------------------------------------------------------------------------
-    ! subroutine check_compatibility
-    ! ------------------------------------------------------------------------------
+
     ! this subroutine checks the compatibility between keywords defined in read_input
     !       2017.11(Nov).03   Tsuyoshi Miyazaki
     ! 
     ! we don't need to worry about which parameter is defined first.
     !
     subroutine check_compatibility 
-
-
+      use global_module, only: flag_move_atom, ni_in_cell, &
+                               runtype, flag_XLBOMD, flag_diagonalisation, &
+                               flag_LmatrixReuse, flag_SFcoeffReuse, flag_DumpMatrices, &
+                               flag_FixCOM
+      use input_module,  only: leqi
+      use density_module,only: method_UpdateChargeDensity,DensityMatrix,AtomicCharge
+      use GenComms,      only: cq_warn
+      
       implicit none
+      logical :: flag_FixedAtoms
+      integer :: ig, k
 
       character(len=80) :: sub_name = "check_compatibility"
 
@@ -2258,9 +2297,23 @@ contains
          endif
       endif
 
+      !flag_FixCOM  &  flag_move_atom  2020/Jul/30
+
+      flag_FixedAtoms = .false.
+      do ig = 1, ni_in_cell
+       do k = 1,3
+        if(.NOT.flag_move_atom(k,ig)) flag_FixedAtoms = .true.
+       enddo
+      enddo
+
+      if(flag_FixedAtoms .and. flag_FixCOM) then
+         flag_FixCOM = .false.
+         call cq_warn(sub_name,&
+           'flag_FixCOM should be false when some of the atomic positions are fixed')
+      endif
+
       return
     end subroutine check_compatibility
-  end subroutine read_input
   !!***
 
   ! ------------------------------------------------------------------------------

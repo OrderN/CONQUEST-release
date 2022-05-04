@@ -210,6 +210,85 @@ contains
   end subroutine hartree
   !!***
 
+  !!****f* hartree_module/get_hartree_energy *
+  !!
+  !!  NAME 
+  !!   get_hartree_energy
+  !!  USAGE
+  !! 
+  !!  PURPOSE
+  !!   Takes the charge density on the grid, normalised such that
+  !!   the sum over all points is equal to the number of electrons,
+  !!   and evaluates the hartree energy
+  !!  INPUTS
+  !!   real(double), dimension(N_GRID_MAX) :: chden - charge density
+  !!   real(double) :: energy - hartee energy due to charge
+  !!  USES
+  !! 
+  !!  AUTHOR
+  !!   D. R. Bowler
+  !!  CREATION DATE
+  !!   2021/07/22
+  !!  MODIFICATION HISTORY
+  !!
+  !!  SOURCE
+  !!
+  subroutine get_hartree_energy(chden, size, energy)
+
+    use datatypes
+    use numbers    
+    use dimens,        only: grid_point_volume, &
+                             one_over_grid_point_volume, n_grid_z
+    use fft_module,    only: fft3, hartree_factor, z_columns_node, i0, recip_vector
+    use GenComms,      only: gsum,  inode, cq_abort
+    use global_module, only: area_SC, flag_full_stress, flag_stress
+    use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_dbl
+
+    implicit none
+
+    ! Passed variables
+    integer      :: size
+    real(double) :: energy
+    real(double), dimension(size), intent(in)  :: chden
+
+    ! Local variables
+    integer :: i, stat, dir1, dir2
+
+    complex(double_cplx), allocatable, dimension(:) :: chdenr
+
+    real(double) :: dumi, dumr, rp, ip, rp2, ip2, rv2
+    ! refcoul is energy of two electrons seperated by one unit of distance.
+    real(double), parameter :: refcoul = one
+    ! harcon is the constant needed for energy and potential. It assumes that
+    ! the hartree_factor correctly described the G vector at every point in
+    ! reciprocal space.  MUST BE IN HARTREES
+    real(double), parameter :: harcon = refcoul/pi
+    logical :: second_stress
+
+    allocate(chdenr(size), STAT=stat)
+    if (stat /= 0) &
+         call cq_abort("Error allocating chdenr in get_hartree_energy: ", size, stat)
+    call reg_alloc_mem(area_SC, 2*size, type_dbl)
+    ! FFT
+    call fft3(chden, chdenr, size, -1)
+    energy = zero
+    do i = 1, z_columns_node(inode)*n_grid_z
+       ! Energy is sum over n(G)^2/G^2
+       rp = real(chdenr(i), double)
+       ip = aimag(chdenr(i))
+       energy = energy + (rp * rp + ip * ip) * hartree_factor(i)
+    end do
+    ! Sum over processes
+    call gsum(energy)
+    energy = energy * grid_point_volume * half * harcon 
+    deallocate(chdenr, STAT=stat)
+    if (stat /= 0) &
+         call cq_abort("Error deallocating chdenr in get_hartree_energy: ", size, stat)
+    call reg_dealloc_mem(area_SC, 2*size, type_dbl)
+    return
+  end subroutine get_hartree_energy
+  !!***
+
   subroutine kerker_obsolete(resid,size,q0)
 
     use datatypes

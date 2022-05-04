@@ -206,6 +206,9 @@ contains
   !!    - Bug fix on call for update_atom_coord
   !!   2016/01/13 08:31 dave
   !!    Removed call to set_density (now included in update_H)
+  !!   2020/07/28 tsuyoshi
+  !!    Velocities for fixed atoms are forced to be zero.
+  !!    (though this subroutine is not used now.)
   !!  TODO
   !!   Proper buffer zones for matrix mults so initialisation doesn't have
   !!   to be done at every step 03/07/2001 dave
@@ -270,9 +273,11 @@ contains
        !Now, we assume forces are forced to be zero, when
        ! flagx, y or z is false. But, I(TM) think we should
        ! have the followings, in the future. 
-       !if(.not.flagx) velocity(1,atom) = zero
-       !if(.not.flagy) velocity(2,atom) = zero
-       !if(.not.flagz) velocity(3,atom) = zero
+       !  2020/Jul/28 TM activated the following three lines, 
+       !   though this subroutine is not used now.
+       if(.not.flagx) velocity(1,atom) = zero
+       if(.not.flagy) velocity(2,atom) = zero
+       if(.not.flagz) velocity(3,atom) = zero
     end do
     ! Maybe fiddle with KE
     KE = zero
@@ -428,7 +433,6 @@ contains
     use io_module,          only: write_atomic_positions, pdb_template
     use density_module,     only: density, set_density_pcc
     use maxima_module,      only: maxngrid
-    use multisiteSF_module, only: flag_LFD_NonSCF
     use timer_module
 
     implicit none
@@ -566,7 +570,7 @@ contains
        call stop_print_timer(tmr_l_tmp1, "atom updates", IPRINT_TIME_THRES1)
        ! We've just moved the atoms - we need a self-consistent ground
        ! state before we can minimise blips !
-       if (flag_vary_basis .or. .NOT.flag_LFD_NonSCF) then
+       if (flag_vary_basis) then
           call new_SC_potl(.false., sc_tolerance, reset_L,           &
                            fixed_potential, vary_mu, n_L_iterations, &
                            L_tolerance, e3)
@@ -656,7 +660,7 @@ contains
                           "safemin - Final interpolation and updates", &
                           IPRINT_TIME_THRES1)
     ! We've just moved the atoms - we need a self-consistent ground state before we can minimise blips !
-    if (flag_vary_basis .or. .NOT.flag_LFD_NonSCF) then
+    if (flag_vary_basis) then
        call new_SC_potl(.false., sc_tolerance, reset_L,           &
                         fixed_potential, vary_mu, n_L_iterations, &
                         L_tolerance, e3)
@@ -713,7 +717,7 @@ contains
                              IPRINT_TIME_THRES1)
        ! We've just moved the atoms - we need a self-consistent ground
        ! state before we can minimise blips !
-       if(flag_vary_basis .or. .NOT.flag_LFD_NonSCF) then
+       if(flag_vary_basis) then
           call new_SC_potl(.false., sc_tolerance, reset_L,           &
                            fixed_potential, vary_mu, n_L_iterations, &
                            L_tolerance, e3)
@@ -804,7 +808,6 @@ contains
     use timer_module
     use dimens, ONLY: r_super_x, r_super_y, r_super_z
     use store_matrix, ONLY: dump_pos_and_matrices
-    use multisiteSF_module, only: flag_LFD_NonSCF
     !for Debugging
     use mult_module, ONLY: allocate_temp_matrix, free_temp_matrix, matrix_sum
     use global_module, ONLY: atomf, sf
@@ -936,7 +939,7 @@ contains
        call stop_print_timer(tmr_l_tmp1, "atom updates", IPRINT_TIME_THRES1)
        ! We've just moved the atoms - we need a self-consistent ground
        ! state before we can minimise blips !
-       if (flag_vary_basis .or. .NOT.flag_LFD_NonSCF) then
+       if (flag_vary_basis) then
           call new_SC_potl(.false., sc_tolerance, reset_L,           &
                fixed_potential, vary_mu, n_L_iterations, &
                L_tolerance, e3)
@@ -1052,7 +1055,7 @@ contains
          IPRINT_TIME_THRES1)
     ! We've just moved the atoms - we need a self-consistent ground state before
     ! we can minimise blips !
-    if (flag_vary_basis .or. .NOT.flag_LFD_NonSCF) then
+    if (flag_vary_basis) then
        call new_SC_potl(.false., sc_tolerance, reset_L,           &
             fixed_potential, vary_mu, n_L_iterations, &
             L_tolerance, e3)
@@ -1170,7 +1173,7 @@ contains
             IPRINT_TIME_THRES1)
        ! We've just moved the atoms - we need a self-consistent ground
        ! state before we can minimise blips !
-       if(flag_vary_basis .or. .NOT.flag_LFD_NonSCF) then
+       if(flag_vary_basis) then
           call new_SC_potl(.false., sc_tolerance, reset_L,           &
                fixed_potential, vary_mu, n_L_iterations, &
                L_tolerance, e3)
@@ -1258,7 +1261,6 @@ contains
     use timer_module
     use dimens, ONLY: r_super_x, r_super_y, r_super_z
     use store_matrix, ONLY: dump_pos_and_matrices
-    use multisiteSF_module, only: flag_LFD_NonSCF
     use mult_module, ONLY: allocate_temp_matrix, free_temp_matrix, matrix_sum
     use global_module, ONLY: atomf, sf
     use io_module, ONLY: dump_matrix
@@ -1342,7 +1344,7 @@ contains
        end if
        ! We've just moved the atoms - we need a self-consistent ground
        ! state before we can minimise blips !
-       if (flag_vary_basis .or. .NOT.flag_LFD_NonSCF) then
+       if (flag_vary_basis) then
           call new_SC_potl(.false., sc_tolerance, reset_L,           &
                fixed_potential, vary_mu, n_L_iterations, &
                L_tolerance, e3)
@@ -1401,6 +1403,162 @@ contains
   end subroutine backtrack_linemin
 !!***
   
+  !!****f* move_atoms/single_step *
+  !! PURPOSE
+  !!  Carry out single step
+  !! INPUTS
+  !!
+  !! AUTHOR
+  !!   David Bowler
+  !! CREATION DATE 
+  !!   2021/05/28
+  !! MODIFICATION HISTORY
+  !!   2021/09/15 14:41 dave
+  !!    Tweak to output
+  !! SOURCE
+  !!
+  subroutine single_step(direction, energy_in, &
+                      energy_out, fixed_potential, vary_mu)
+
+    ! Module usage
+    use datatypes
+    use numbers
+    use units
+    use global_module,  only: iprint_MD, x_atom_cell, y_atom_cell,    &
+         z_atom_cell, flag_vary_basis,           &
+         atom_coord, ni_in_cell, rcellx, rcelly, &
+         rcellz, flag_self_consistent,           &
+         flag_reset_dens_on_atom_move,           &
+         IPRINT_TIME_THRES1, flag_pcc_global,    &
+         id_glob,                                &
+         flag_LmatrixReuse, flag_diagonalisation, nspin, &
+         flag_SFcoeffReuse 
+    use minimise,       only: get_E_and_F, sc_tolerance, L_tolerance, &
+         n_L_iterations, dE_elec_opt
+    use GenComms,       only: my_barrier, myid, inode, ionode,        &
+         cq_abort, gcopy, cq_warn
+    use SelfCon,        only: new_SC_potl
+    use GenBlas,        only: dot
+    use force_module,   only: tot_force
+    use io_module,      only: write_atomic_positions, pdb_template
+    use density_module, only: density, set_density_pcc
+    use maxima_module,  only: maxngrid
+    use matrix_data, ONLY: Lrange, Hrange, SFcoeff_range, SFcoeffTr_range, HTr_range
+    use mult_module, ONLY: matL,L_trans, matK, matSFcoeff
+    use timer_module
+    use dimens, ONLY: r_super_x, r_super_y, r_super_z
+    use store_matrix, ONLY: dump_pos_and_matrices
+    use mult_module, ONLY: allocate_temp_matrix, free_temp_matrix, matrix_sum
+    use global_module, ONLY: atomf, sf
+    use io_module, ONLY: dump_matrix
+    use force_module,      only: force
+
+    implicit none
+
+    ! Passed variables
+    real(double) :: energy_in, energy_out
+    real(double), dimension(3,ni_in_cell) :: direction
+    ! Shared variables needed by get_E_and_F for now (!)
+    logical           :: vary_mu, fixed_potential
+
+    ! Local variables
+    integer        :: i, j, iter, lun, gatom, stat, nfile, symm
+    logical        :: reset_L = .false.
+    logical        :: done
+    type(cq_timer) :: tmr_l_iter, tmr_l_tmp1
+    real(double)   :: alpha_new, armijo, grad_f_dot_p, grad_fp_dot_p, old_alpha
+    real(double)   :: e0, e1, e2, e3, tmp, bottom
+    real(double), save :: kmin = zero, dE = zero
+    real(double), dimension(:), allocatable :: store_density
+    real(double) :: k3_old, k3_local, kmin_old
+    real(double) :: alpha = one
+    real(double) :: c1, c2
+
+    integer :: ig, both, mat
+    character(len=80) :: sub_name = "single_step"
+
+    call start_timer(tmr_std_moveatoms)
+
+    alpha = one
+    e0 = energy_in
+    e3 = e0
+    if (inode == ionode .and. iprint_MD > 0) &
+         write (io_lun, &
+         fmt='(4x,"In single_step, initial energy is ",f16.6," ",a2)') &
+         en_conv * energy_in, en_units(energy_units)
+    ! Take a step along search direction
+    do i = 1, ni_in_cell
+       x_atom_cell(i) = x_atom_cell(i) + alpha * direction(1,i)
+       y_atom_cell(i) = y_atom_cell(i) + alpha * direction(2,i)
+       z_atom_cell(i) = z_atom_cell(i) + alpha * direction(3,i)
+    end do
+
+    ! Update and find new energy
+    if(flag_SFcoeffReuse) then
+       call update_pos_and_matrices(updateSFcoeff,direction)
+    else
+       call update_pos_and_matrices(updateLorK,direction)
+    endif
+    if (inode == ionode .and. iprint_MD > 2) then
+       do i=1,ni_in_cell
+          write (io_lun,fmt='(2x,"Position: ",i3,3f13.8)') i, &
+               x_atom_cell(i), y_atom_cell(i), z_atom_cell(i)
+       end do
+    end if
+    call update_H(fixed_potential)
+    ! Write out atomic positions
+    if (iprint_MD > 2) then
+       call write_atomic_positions("UpdatedAtoms_tmp.dat", &
+            trim(pdb_template))
+    end if
+    ! We've just moved the atoms - we need a self-consistent ground
+    ! state before we can minimise blips !
+    if (flag_vary_basis) then
+       call new_SC_potl(.false., sc_tolerance, reset_L,           &
+            fixed_potential, vary_mu, n_L_iterations, &
+            L_tolerance, e3)
+    end if
+    call get_E_and_F(fixed_potential, vary_mu, e3, .false., &
+         .false.)
+    if (inode == ionode .and. iprint_MD > 1) then
+       write (io_lun, fmt='(4x,"After single step, energy is ",f16.6," ",a2)') &
+            en_conv * e3, en_units(energy_units)
+    end if
+    energy_out = e3
+    if(inode==ionode .and. abs(energy_out - energy_in) < abs(dE_elec_opt)) then
+       call cq_warn(sub_name, "Electronic structure dE is similar to atom movement dE; increase tolerance", &
+            dE_elec_opt, energy_out - energy_in)
+    end if
+    if(energy_out>energy_in) then
+       do i = 1, ni_in_cell
+          x_atom_cell(i) = x_atom_cell(i) - alpha * direction(1,i)
+          y_atom_cell(i) = y_atom_cell(i) - alpha * direction(2,i)
+          z_atom_cell(i) = z_atom_cell(i) - alpha * direction(3,i)
+       end do
+       if(flag_SFcoeffReuse) then
+          call update_pos_and_matrices(updateSFcoeff,direction)
+       else
+          call update_pos_and_matrices(updateLorK,direction)
+       endif
+       call update_H(fixed_potential)
+       return ! We'll need to reset - no need to call force
+    end if
+    call dump_pos_and_matrices
+    ! Now find forces
+    call force(fixed_potential, vary_mu, n_L_iterations, &
+         L_tolerance, sc_tolerance, energy_out, .true.)
+    dE = e0 - energy_out
+    if (inode == ionode .and. iprint_MD > 0) then
+       write (io_lun, fmt='(/4x,"In single_step, final energy is   ",f16.6," ",a2)') &
+            en_conv * energy_out, en_units(energy_units)
+    end if
+
+    call stop_timer(tmr_std_moveatoms)
+    return
+  end subroutine single_step
+!!***
+  
+
   !!****f* move_atoms/adapt_backtrack_linemin *
   !! PURPOSE
   !!  Carry out back-tracking line minimisation
@@ -1445,7 +1603,6 @@ contains
     use timer_module
     use dimens, ONLY: r_super_x, r_super_y, r_super_z
     use store_matrix, ONLY: dump_pos_and_matrices
-    use multisiteSF_module, only: flag_LFD_NonSCF
     use mult_module, ONLY: allocate_temp_matrix, free_temp_matrix, matrix_sum
     use global_module, ONLY: atomf, sf
     use io_module, ONLY: dump_matrix
@@ -1529,7 +1686,7 @@ contains
        end if
        ! We've just moved the atoms - we need a self-consistent ground
        ! state before we can minimise blips !
-       if (flag_vary_basis .or. .NOT.flag_LFD_NonSCF) then
+       if (flag_vary_basis) then
           call new_SC_potl(.false., sc_tolerance, reset_L,           &
                fixed_potential, vary_mu, n_L_iterations, &
                L_tolerance, e3)
@@ -1649,7 +1806,6 @@ contains
     use io_module,          only: write_atomic_positions, pdb_template
     use density_module,     only: density, set_density_pcc
     use maxima_module,      only: maxngrid
-    use multisiteSF_module, only: flag_LFD_NonSCF
     use timer_module
     use dimens,             only: r_super_x, r_super_y, r_super_z, &
                                   r_super_x_squared, r_super_y_squared, &
@@ -1743,7 +1899,7 @@ contains
        call stop_print_timer(tmr_l_tmp1, "atom updates", IPRINT_TIME_THRES1)
        ! We've just moved the atoms - we need a self-consistent ground
        ! state before we can minimise blips !
-       if (flag_vary_basis .or. .NOT.flag_LFD_NonSCF) then
+       if (flag_vary_basis) then
           call new_SC_potl(.false., sc_tolerance, reset_L,           &
                fixed_potential, vary_mu, n_L_iterations, &
                L_tolerance, e3)
@@ -1826,7 +1982,7 @@ contains
          "safemin_cell - Final interpolation and updates", &
          IPRINT_TIME_THRES1)
     ! We've just moved the atoms - we need a self-consistent ground state before we can minimise blips !
-    if (flag_vary_basis .or. .NOT.flag_LFD_NonSCF) then
+    if (flag_vary_basis) then
        call new_SC_potl(.false., sc_tolerance, reset_L,           &
             fixed_potential, vary_mu, n_L_iterations, &
             L_tolerance, e3)
@@ -1876,7 +2032,7 @@ contains
             IPRINT_TIME_THRES1)
        ! We've just moved the atoms - we need a self-consistent ground
        ! state before we can minimise blips !
-       if(flag_vary_basis .or. .NOT.flag_LFD_NonSCF) then
+       if(flag_vary_basis) then
           call new_SC_potl(.false., sc_tolerance, reset_L,           &
                fixed_potential, vary_mu, n_L_iterations, &
                L_tolerance, e3)
@@ -1947,7 +2103,6 @@ contains
     use density_module, only: set_density_pcc
     use timer_module
     use store_matrix, ONLY: dump_pos_and_matrices
-    use multisiteSF_module, only: flag_LFD_NonSCF
 
     implicit none
 
@@ -2054,7 +2209,7 @@ contains
        call stop_print_timer(tmr_l_tmp1, "atom updates", IPRINT_TIME_THRES1)
        ! We've just moved the atoms - we need a self-consistent ground
        ! state before we can minimise blips !
-       if (flag_vary_basis .or. .NOT.flag_LFD_NonSCF) then
+       if (flag_vary_basis) then
           call new_SC_potl(.false., sc_tolerance, reset_L,           &
                fixed_potential, vary_mu, n_L_iterations, &
                L_tolerance, e3)
@@ -2149,7 +2304,7 @@ contains
          IPRINT_TIME_THRES1)
     ! We've just moved the atoms - we need a self-consistent ground state before
     ! we can minimise blips !
-    if (flag_vary_basis .or. .NOT.flag_LFD_NonSCF) then
+    if (flag_vary_basis) then
        call new_SC_potl(.false., sc_tolerance, reset_L,           &
             fixed_potential, vary_mu, n_L_iterations, &
             L_tolerance, e3)
@@ -2266,7 +2421,7 @@ contains
             IPRINT_TIME_THRES1)
        ! We've just moved the atoms - we need a self-consistent ground
        ! state before we can minimise blips !
-       if(flag_vary_basis .or. .NOT.flag_LFD_NonSCF) then
+       if(flag_vary_basis) then
           call new_SC_potl(.false., sc_tolerance, reset_L,           &
                fixed_potential, vary_mu, n_L_iterations, &
                L_tolerance, e3)
@@ -3758,6 +3913,8 @@ contains
   !!    Moved ionode criterion for generation of velocities from init_ensemble
   !!   2019/05/23 zamaan
   !!    Zeroed COM velocity after initialisation
+  !!   2020/07/28 tsuyoshi
+  !!    Zeroed velocity for the fixed degree of freedom
   !!  SOURCE
   !!
   subroutine init_velocity(ni_in_cell, temp, velocity)
@@ -3811,7 +3968,11 @@ contains
           ! Positions are calculated as v*dt in bohr unit. (m in amu, dt in fs)
           v0 = sqrt(temp*fac_Kelvin2Hartree/(massa*fac)) 
           do dir=1,3
-             u0 = myrng%rng_normal()
+             if(flag_move_atom(dir,iglob)) then
+              u0 = myrng%rng_normal()
+             else
+              u0 = zero
+             endif
              velocity(dir,ia) = v0 * u0
              KE = KE + half * massa * fac * velocity(dir,ia)**2
           end do
@@ -4041,6 +4202,10 @@ contains
   !!  CREATION DATE
   !!   30/05/17
   !!  MODIFICATION HISTORY
+  !!   2020/04/24 08:15 dave
+  !!    Bug fix for constrained ratios
+  !!   2020/05/15 12:26 dave
+  !!    Update to remove unnecessary code (a/c and c/a etc are the same)
   !!  SOURCE
   !!
   subroutine update_cell_dims(start_rcellx, start_rcelly, start_rcellz, &
@@ -4062,7 +4227,6 @@ contains
     use io_module,          only: write_atomic_positions, pdb_template
     use density_module,     only: density, set_density_pcc
     use maxima_module,      only: maxngrid
-    use multisiteSF_module, only: flag_LFD_NonSCF
     use timer_module
     use dimens, ONLY: r_super_x, r_super_y, r_super_z, &
          r_super_x_squared, r_super_y_squared, r_super_z_squared, volume, &
@@ -4121,18 +4285,18 @@ contains
         rcellx = start_rcellx + k * search_dir_x
 
     ! Fix a single ratio?
-    else if (leqi(cell_constraint_flag, 'c/a') .or. leqi(cell_constraint_flag, 'a/c')) then
-        rcellx = start_rcellx + k * (start_rcellx/start_rcellz)*search_dir_z
-        rcelly = start_rcelly + k * search_dir_y
-        rcellz = start_rcellz + k * (start_rcellz/start_rcellx)*search_dir_x
-    else if (leqi(cell_constraint_flag, 'a/b') .or. leqi(cell_constraint_flag, 'b/a')) then
-        rcellx = start_rcellx + k * (start_rcellx/start_rcelly)*search_dir_y
-        rcelly = start_rcelly + k * (start_rcelly/start_rcellx)*search_dir_x
-        rcellz = start_rcellz + k * search_dir_z
-    else if (leqi(cell_constraint_flag, 'b/c') .or. leqi(cell_constraint_flag, 'c/b')) then
-        rcellx = start_rcellx + k * search_dir_x
-        rcelly = start_rcelly + k * (start_rcelly/start_rcellz)*search_dir_z
-        rcellz = start_rcellz + k * (start_rcellz/start_rcelly)*search_dir_y
+    else if (leqi(cell_constraint_flag, 'a/c') .OR. leqi(cell_constraint_flag, 'c/a')) then
+       rcellx = start_rcellx + k * search_dir_x
+       rcelly = start_rcelly + k * search_dir_y
+       rcellz = start_rcellz + k * (start_rcellz/start_rcellx)*search_dir_x
+    else if (leqi(cell_constraint_flag, 'a/b') .OR. leqi(cell_constraint_flag, 'b/a')) then
+       rcellx = start_rcellx + k * search_dir_x
+       rcelly = start_rcelly + k * (start_rcelly/start_rcellx)*search_dir_x
+       rcellz = start_rcellz + k * search_dir_z
+    else if (leqi(cell_constraint_flag, 'b/c') .OR. leqi(cell_constraint_flag, 'c/b')) then
+       rcellx = start_rcellx + k * search_dir_x
+       rcelly = start_rcelly + k * search_dir_y
+       rcellz = start_rcellz + k * (start_rcellz/start_rcelly)*search_dir_y
     end if
 
     r_super_x = rcellx
@@ -4292,14 +4456,17 @@ contains
   !!       changed matS to be spin_SF dependent
   !!   2019/Nov/14  tsuyoshi
   !!       removed glob2node_old, n_proc_old
+  !!   2019/Jul/27  tsuyoshi
+  !!       added atom_vels (from global_module), and removed local velocity_global
   !!
   !!  SOURCE
   !!
  subroutine update_pos_and_matrices(update_method, velocity)
   use datatypes
   use numbers,         only: half, zero, one, very_small
-  use global_module,   only: flag_diagonalisation, atom_coord, atom_coord_diff, &
-                             rcellx, rcelly, rcellz, ni_in_cell, nspin, nspin_SF, id_glob
+  use global_module,   only: flag_diagonalisation, atom_coord, atom_vels, atom_coord_diff, &
+                             rcellx, rcelly, rcellz, ni_in_cell, nspin, nspin_SF, id_glob, &
+                             area_moveatoms
     ! n_proc_old and glob2node_old have been removed
   use GenComms,        only: my_barrier, inode, ionode, cq_abort, gcopy
   use mult_module,     only: matL, L_trans, matK, matS, S_trans, matSFcoeff, SFcoeff_trans, &
@@ -4308,6 +4475,8 @@ contains
   use store_matrix,    only: matrix_store_global, InfoMatrixFile, grab_InfoMatGlobal, grab_matrix2, &
                              set_atom_coord_diff
   use UpdateInfo, only: Matrix_CommRebuild, Report_UpdateMatrix
+  use memory_module,   only: reg_alloc_mem, type_dbl, reg_dealloc_mem
+
 
   implicit none
   integer, intent(in) :: update_method
@@ -4327,8 +4496,7 @@ contains
   type(matrix_store_global) :: InfoGlob
   type(InfoMatrixFile),pointer :: InfoMat(:)
 
-  real(double), dimension(3,ni_in_cell) :: velocity_global
-  integer :: i
+  integer :: i, stat
 
  !Switch on Debugging
  !  flag_debug_move_atoms = .true.
@@ -4380,12 +4548,23 @@ contains
 
 
  !First updating information of atomic positions, neighbour lists, etc...
+ !  2020/10/7 Tsuyoshi Miyazaki
+ !   we are planning to use `atom_vels` and remove `velocity` (= direction in CG).
+    if (.not. allocated(atom_vels)) then
+       allocate(atom_vels(3,ni_in_cell), STAT=stat)
+       if (stat /= 0) &
+            call cq_abort("Error allocating atom_vels in init_md: ", &
+            ni_in_cell, stat)
+       call reg_alloc_mem(area_moveatoms, 3*ni_in_cell, type_dbl)
+       atom_vels = zero
+    end if
+
      call wrap_xyz_atom_cell
      call update_atom_coord
      do i=1,ni_in_cell
-        velocity_global(1,id_glob(i)) = velocity(1,i)
-        velocity_global(2,id_glob(i)) = velocity(2,i)
-        velocity_global(3,id_glob(i)) = velocity(3,i)
+        atom_vels(1,id_glob(i)) = velocity(1,i)
+        atom_vels(2,id_glob(i)) = velocity(2,i)
+        atom_vels(3,id_glob(i)) = velocity(3,i)
      end do
   !Before calling this routine, we need 1) call dump_InfoMatGlobal or 2) call set_InfoMatGlobal
   ! Then, we use InfoGlob read from the file or use InfoGlob as it is (in the case of 2))
@@ -4404,10 +4583,17 @@ contains
   !       coord_next.dat is made in "updateIndices3", at present.
      call updateIndices3(fixed_potential, velocity)
      do i=1,ni_in_cell
-        velocity(1,i) = velocity_global(1,id_glob(i))
-        velocity(2,i) = velocity_global(2,id_glob(i))
-        velocity(3,i) = velocity_global(3,id_glob(i))
+        velocity(1,i) = atom_vels(1,id_glob(i))
+        velocity(2,i) = atom_vels(2,id_glob(i))
+        velocity(3,i) = atom_vels(3,id_glob(i))
      end do
+
+! 2020/Oct/12 TM   
+!  if we want to reduce the memory size ...  
+!      deallocate(atom_vels, STAT=stat)
+!       if (stat /= 0) &
+!            call cq_abort("Error deallocating atom_vels in init_md: stat=", stat)
+!       call reg_dealloc_mem(area_moveatoms, 3*ni_in_cell, type_dbl)
 
  !
  ! Then, matrices will be read from the corresponding files

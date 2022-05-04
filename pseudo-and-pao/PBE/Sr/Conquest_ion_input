@@ -1,4 +1,5 @@
 General.NumberOfSpecies 1
+# The 4p shell is really semi-core so adjust the cutoff
 General.SemicoreEnergy -0.8
 
 %block SpeciesLabels
