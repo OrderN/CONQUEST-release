@@ -352,6 +352,7 @@ contains
        atomf = sf
        nspin_SF = 1
        flag_SpinDependentSF = .false.
+       flag_SFcoeffReuse = .false.
     else if (flag_basis_set==PAOs) then
        flag_one_to_one = .true. ! primitive SFs
        atomf = sf

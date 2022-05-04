@@ -630,6 +630,7 @@ contains
        ! Change blips: start from blip0
        call copy(lengthBlip, data_blip0, 1, coefficient_array, 1)
        call axpy(lengthBlip, k3, search_direction, 1, coefficient_array, 1)
+       call normalise_support()
        ! Find new self-consistent energy 
        ! 1. Get new S matrix (includes blip-to-grid transform)
        call get_S_matrix(inode, ionode)
@@ -639,7 +640,7 @@ contains
                                    dontM2, dontM3, dontM4, dontphi,   &
                                    dontE)
        end if
-       reset_L = .true.
+       reset_L = .false.!.true.
        ! 3. Get a new self-consistent potential and Hamiltonian
        ! I've not put a call to get_H_matrix here because it's
        ! currently in new_SC_potl
@@ -686,6 +687,7 @@ contains
     ! Change blips: start from blip0
     call copy(lengthBlip, data_blip0, 1, coefficient_array, 1)
     call axpy(lengthBlip, kmin, search_direction, 1, coefficient_array, 1)
+    call normalise_support()
     ! Find new self-consistent energy 
     ! 1. Get new S matrix (includes blip-to-grid transform)
     call get_S_matrix(inode, ionode)
@@ -695,7 +697,7 @@ contains
                                 dontM2, dontM3, dontM4, dontphi,    &
                                 dontE)
     end if
-    reset_L = .true.
+    reset_L = .false.!.true.
     ! 3. Get a new self-consistent potential and Hamiltonian
     ! I've not put a call to get_H_matrix here because it's currently
     ! in new_SC_potl
@@ -708,6 +710,7 @@ contains
        call copy(lengthBlip, data_blip0, 1, coefficient_array, 1)
        call axpy(lengthBlip, kmin, search_direction, 1, &
                  coefficient_array, 1)
+       call normalise_support()
        ! Find new self-consistent energy 
        ! 1. Get new S matrix (includes blip-to-grid transform)
        call get_S_matrix(inode, ionode)
@@ -717,7 +720,7 @@ contains
                                    dontM2, dontM3, dontM4, dontphi,   &
                                    dontE)
        end if
-       reset_L = .true.
+       reset_L = .false.!.true.
        ! 3. Get a new self-consistent potential and Hamiltonian
        ! I've not put a call to get_H_matrix here because it's
        ! currently in new_SC_potl
@@ -747,4 +750,53 @@ contains
   end subroutine line_minimise_support
   !!***
 
+  subroutine normalise_support
+
+    use datatypes
+    use numbers
+    use global_module,               only: flag_onsite_blip_ana
+    use S_matrix_module, ONLY: get_onsite_S
+    use mult_module, ONLY: return_matrix_value, matS
+    use primary_module ,             only: bundle
+    use species_module,              only: nsf_species
+    use support_spec_format,         only: blips_on_atom
+    
+    ! Local variables
+    integer :: np, ni, iprim, spec, this_nsf, i1, spin_SF
+
+    real(double) :: norm
+
+    return ! Remove normalisation
+    spin_SF = 1 ! spin-dependent SF is not available with blips at present
+    ! Generate on-site elements and normalise
+    iprim = 0
+    ! Loop over primary set atoms
+    do np = 1, bundle%groups_on_node
+       if (bundle%nm_nodgroup(np) > 0) then
+          do ni = 1, bundle%nm_nodgroup(np)
+             iprim = iprim + 1
+             spec = bundle%species(iprim)
+             this_nsf = nsf_species(spec)
+             if (flag_onsite_blip_ana) then
+                call get_onsite_S(blips_on_atom(iprim), matS(spin_SF), &
+                     np, ni, iprim, this_nsf, spec)
+                ! Normalise by 1/sqrt(S_ii)
+                do i1 = 1,this_nsf
+                   norm = return_matrix_value(matS(spin_SF),np,ni,iprim,0,i1,i1,1)
+                   blips_on_atom(iprim)%supp_func(i1)%coefficients = &
+                        blips_on_atom(iprim)%supp_func(i1)%coefficients / sqrt(norm)
+                end do ! i1 = this_nsf
+             else
+                ! We need to call do_local_blip_to_grid to do grid-based on-site integrals
+                do i1 = 1,this_nsf
+                   norm = return_matrix_value(matS(spin_SF),np,ni,iprim,0,i1,i1,1)
+                   blips_on_atom(iprim)%supp_func(i1)%coefficients = &
+                        blips_on_atom(iprim)%supp_func(i1)%coefficients / sqrt(norm)
+                end do ! i1 = this_nsf
+             end if
+          end do ! ni = bundle%nm_nodgroup
+       end if ! bundle%nm_nodgroup > 0
+    end do ! np = bundle%groupd_on_node
+  end subroutine normalise_support
+  
 end module blip_minimisation

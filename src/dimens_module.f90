@@ -170,7 +170,7 @@ contains
     use matrix_data
     use GenComms,      only: cq_abort, cq_warn
     use global_module, only: iprint_init, atomf, sf, flag_Multisite, flag_exx, flag_diagonalisation, &
-         flag_basis_set, PAOs
+         flag_basis_set, PAOs, blips
     use block_module,  only: in_block_x, in_block_y, in_block_z, n_pts_in_block
     use pseudopotential_common, only: pseudo_type, OLDPS, SIESTA, ABINIT, flag_neutral_atom_projector
 
@@ -267,7 +267,9 @@ contains
        if(flag_basis_set==PAOs) then
           RadiusAtomf(n) = max_grid*(floor(RadiusAtomf(n)/max_grid)+two)
           RadiusSupport(n) = max(RadiusSupport(n), RadiusAtomf(n))
+          RadiusSupport(n) = max(RadiusSupport(n), core_radius(n))
        end if
+       if(flag_basis_set==blips) RadiusAtomf(n) = RadiusSupport(n)
        r_core    = max(r_core,core_radius(n))
        r_h       = max(r_h,RadiusSupport(n))
        r_t       = max(r_t,InvSRange(n))
