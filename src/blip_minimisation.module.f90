@@ -366,8 +366,8 @@ contains
             write (io_lun, fmt='(6x,"Calling minimise")')
 
        call my_barrier()
-       ! This performs non-SCF line minimisation only after 5 iterations; experimental
-       if(n_iterations>5) then
+       ! This performs non-SCF line minimisation from start; seems effective
+       if(n_iterations>0) then
           orig_SC = flag_self_consistent
           flag_self_consistent = .false.
        end if
@@ -377,8 +377,8 @@ contains
                                   con_tolerance, total_energy_0, &
                                   expected_reduction, last_step)
        if(orig_SC) flag_self_consistent = orig_SC
-       ! This performs an SCF update after line minimisation where necessary
-       if(flag_self_consistent.and.(n_iterations<4 .or. mod(n_iterations,3)==0)) then ! Update SCF
+       ! This performs an SCF update after line minimisation from start
+       if(flag_self_consistent) then !.and.(n_iterations<3 .or. mod(n_iterations,1)==0)) then ! Update SCF
           call new_SC_potl(.false., con_tolerance, .false.,             &
                fixed_potential, vary_mu, n_L_iterations, &
                tolerance, total_energy_0)
@@ -746,7 +746,7 @@ contains
 
     real(double) :: norm
 
-    return ! Remove normalisation
+    !return ! Remove normalisation
     spin_SF = 1 ! spin-dependent SF is not available with blips at present
     ! Generate on-site elements and normalise
     iprim = 0
