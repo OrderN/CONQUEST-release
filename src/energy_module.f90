@@ -44,6 +44,8 @@
 !!    stores the value of hartree_energy_drho made from the input charge density when we have check_DFT T
 !!   2021/07/30 12:15 dave
 !!    Remove check_DFT
+!!   2022/05/19 14:25 dave
+!!    Add surface dipole correction
 !!  SOURCE
 !!
 module energy
@@ -140,6 +142,8 @@ contains
   !!   2021/07/28 10:55 dave
   !!    Change behaviour to print Harris etc always, and DFT only if
   !!    printDFT = T
+  !!   2022/05/19 14:25 dave
+  !!    Add surface dipole correction energy terms
   !!  SOURCE
   !!
   subroutine get_energy(total_energy, printDFT, level)
@@ -163,6 +167,8 @@ contains
                                       flag_neutral_atom_projector
     use DFT_D2,                 only: disp_energy
     use density_module,         only: electron_number
+    use density_module,         only: electron_number, flag_surface_dipole_correction, &
+         surface_dipole_energy_elec, surface_dipole_energy_ion
     
 
     implicit none
@@ -251,6 +257,18 @@ contains
     ! Add contribution from exact-exchange (EXX)
     !if (flag_exx)          total_energy = total_energy + exx_energy
 
+    ! For Harris-Foulkes, we need dipole correction energy of rho_i - rho_e
+    if(flag_surface_dipole_correction) then
+       ! This option is currently not read but would allow Neugebauer & Scheffler Eq. 9 rather than Bengtsson Eq. 13
+       !if(flag_dipole_internal) then
+          total_energy = total_energy + &
+               half*(surface_dipole_energy_ion-surface_dipole_energy_elec)
+       !else
+       !   total_energy = total_energy + &
+       !        surface_dipole_energy_ion ! Electronic comes from Tr[KH]
+       !end if
+    end if
+
     ! Write out data
     if (inode == ionode) then
        if(print_Harris) then
@@ -290,6 +308,10 @@ contains
                      en_conv*cdft_energy, en_units(energy_units)
 
              if (flag_dft_d2) write (io_lun,17) en_conv*disp_energy, en_units(energy_units)
+             if (flag_surface_dipole_correction) &
+                  write(io_lun,'(10x,"Surface Dipole Correction Energy : ",f25.15," ",a2)') en_conv * &
+                  half*(surface_dipole_energy_ion+surface_dipole_energy_elec), &
+                  en_units(energy_units)
           end if
 
           if (abs(entropy) >= RD_ERR) then
@@ -350,6 +372,19 @@ contains
        end if
        if (flag_perform_cdft) total_energy2 = total_energy2 + cdft_energy
        if (flag_dft_d2)       total_energy2 = total_energy2 + disp_energy
+       ! For DFT, we need dipole correction energy of rho_i + rho_e
+       if(flag_surface_dipole_correction) then
+          !if(flag_dipole_internal) then
+             total_energy2 = total_energy2 + &
+                  half*(surface_dipole_energy_ion+surface_dipole_energy_elec)
+          !else
+          !   total_energy2 = total_energy2 + &
+          !        surface_dipole_energy_ion+surface_dipole_energy_elec
+          !end if
+       end if
+       if (inode == ionode) then
+          write(io_lun,13) en_conv*total_energy2, en_units(energy_units)
+       end if
 
        if (inode == ionode) then
           write(io_lun,13) en_conv*total_energy2, en_units(energy_units)
@@ -440,6 +475,8 @@ contains
   !!    Activated "electrons_tot2" calculation
   !!   2019/12/03 08:09 dave
   !!    Removed broken code for electrons via Tr[KS]
+  !!   2022/05/19 14:32 dave
+  !!    Add surface dipole correction energy
   !!  SOURCE
   !!
   subroutine final_energy(level)
@@ -462,7 +499,8 @@ contains
                                       flag_vdWDFT,                    &
                                       flag_exx, exx_alpha, flag_neutral_atom
     use DFT_D2,                 only: disp_energy
-    use density_module,         only: electron_number
+    use density_module,         only: electron_number, flag_surface_dipole_correction, &
+         surface_dipole_energy_elec, surface_dipole_energy_ion
     use pseudopotential_common, only: core_correction, &
                                       flag_neutral_atom_projector
 
@@ -550,6 +588,16 @@ contains
     ! Add contribution from dispersion (DFT-D2)
     if (flag_dft_d2)       total_energy1 = total_energy1 + disp_energy
 
+    ! For Harris-Foulkes, we need dipole correction energy of rho_i - rho_e
+    if(flag_surface_dipole_correction) then
+       !if(flag_dipole_internal) then
+          total_energy1 = total_energy1 + &
+            half*(surface_dipole_energy_ion-surface_dipole_energy_elec)
+       !else
+       !   total_energy1 = total_energy1 + &
+       !     surface_dipole_energy_ion
+       !end if
+    end if
     !Write out data
     !...
     !
@@ -610,6 +658,10 @@ contains
                write (io_lun,17) en_conv*disp_energy,en_units(energy_units)
           if (flag_perform_cdft) &          
                write (io_lun,18) en_conv*cdft_energy,en_units(energy_units)
+          if (flag_surface_dipole_correction) &
+                  write(io_lun,'(10x," |  Surface Dipole Energy   = ",f25.15," ",a2)') en_conv * &
+                  half*(surface_dipole_energy_ion+surface_dipole_energy_elec), &
+                  en_units(energy_units)
           write (io_lun, 2)
        end if
     end if
@@ -683,6 +735,15 @@ contains
     end if
     if (flag_perform_cdft) total_energy2 = total_energy2 + cdft_energy
     if (flag_dft_d2)       total_energy2 = total_energy2 + disp_energy
+    if(flag_surface_dipole_correction) then
+       !if(flag_dipole_internal) then
+          total_energy2 = total_energy2 + &
+            half*(surface_dipole_energy_ion+surface_dipole_energy_elec)
+       !else
+       !   total_energy2 = total_energy2 + &
+       !     surface_dipole_energy_ion+surface_dipole_energy_elec
+       !end if
+    end if
 
     ! One-electron energy
     one_electron_energy = local_ps_energy + &
