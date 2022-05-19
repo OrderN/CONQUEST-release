@@ -746,6 +746,8 @@ contains
   !!    Keywords for equilibration
   !!   2020/01/07 tsuyoshi 
   !!     Default setting of MakeInitialChargeFromK has been changed
+  !!   2022/05/19 11:54 dave
+  !!     Add input parameters for surface dipole correction
   !!  TODO
   !!  SOURCE
   !!
@@ -837,6 +839,7 @@ contains
          atomch_output, flag_Kerker, flag_wdmetric, minitersSC, &
          flag_newresidual, flag_newresid_abs, n_dumpSCF
     use density_module, only: flag_InitialAtomicSpin, flag_DumpChargeDensity
+    use density_module, only: flag_surface_dipole_correction, surface_normal, flag_output_average_potential
     use S_matrix_module, only: InvSTolerance, InvSMaxSteps,&
          InvSDeltaOmegaTolerance
     use blip,          only: blip_info, init_blip_flag, alpha, beta
@@ -1546,6 +1549,19 @@ contains
     ! number of electrons. If the error of electron number (per total electron number) 
     ! is larger than the following value, we use atomic charge density. (in update_H)
     threshold_resetCD     = fdf_double('SC.Threshold.Reset',0.1_double)
+    flag_surface_dipole_correction = fdf_boolean('SC.SurfaceDipoleCorrection',.false.)
+    flag_output_average_potential  = fdf_boolean('SC.OutputAveragePotential',.false.)
+    ! Leave this for average potential output without correction
+    tmp = fdf_string(1,'SC.SurfaceNormal','z')
+    if(leqi(tmp,'x')) then
+       surface_normal = 1
+    else if(leqi(tmp,'y')) then
+       surface_normal = 2
+    else if(leqi(tmp,'z')) then
+       surface_normal = 3
+    else
+       call cq_abort('Unrecognised surface normal direction specified: '//tmp)
+    end if
     tmp = fdf_string(4,'AtomMove.CGLineMin','safe')
     if(leqi(tmp,'safe')) then
        cg_line_min = safe

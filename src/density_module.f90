@@ -132,7 +132,7 @@ module density_module
   logical :: flag_DumpChargeDensity
 
   ! Surface dipole correction
-  logical :: flag_surface_dipole_correction, flag_dipole_internal
+  logical :: flag_surface_dipole_correction, flag_output_average_potential
   integer :: surface_normal                                    ! x=1, y=2, z=3 to select arrays
   real(double) :: surface_dipole_density, sdde         ! \int a rho_av(a) da
   real(double) :: surface_dipole_energy_elec     ! Eq 13 in Bengtsson
@@ -998,7 +998,6 @@ contains
     ! identify the on-set of the slab; this should really be controlled by the user 
     zero_start = n_grid_norm+1
     zero_end = 0
-    write(*,*) 'Start: ',min_dens_loc
     do point=2,n_grid_norm ! If there is a vacuum gap on the low-z side of the slab, find it
        if(abs(density_average(point))>1e-5_double.AND. &
             abs(density_average(point-1))<1e-5_double) then ! We've reached the end of the empty portion
@@ -1029,15 +1028,15 @@ contains
        if(zero_end<zero_start) zero_end = zero_end + n_grid_norm
        min_dens_loc = half*(zero_start+zero_end)
        if(min_dens_loc>n_grid_norm) min_dens_loc = min_dens_loc - n_grid_norm
-       write(io_lun,fmt='(4x,"Empty portion bounded by ",2i6)') zero_start, zero_end
-       write(io_lun,fmt='(4x,"Placing potential discontinuity mid-vacuum at grid point ",i6)') min_dens_loc
+       if(iprint_SC>2) then
+          write(io_lun,fmt='(4x,"Empty portion bounded by ",2i6)') zero_start, zero_end
+          write(io_lun,fmt='(4x,"Placing potential discontinuity mid-vacuum at grid point ",i6)') min_dens_loc
+       end if
        if(abs(density_average(min_dens_loc))>1e-5_double) write(io_lun,*) 'Possible error: large density: ', &
             min_dens_loc, density_average(min_dens_loc)
     else
-       write(io_lun,fmt='(4x,"Placing potential discontinuity at grid point ",i6)') min_dens_loc
+       if(iprint_SC>2) write(io_lun,fmt='(4x,"Placing potential discontinuity at grid point ",i6)') min_dens_loc
     end if
-    ! Select this for Bengtsson
-    !min_dens_loc = 1
     ! Store location of dipole correction
     dipole_correction_location = real(min_dens_loc-1,double)*grid_spacing_norm
     ! Calculate surface dipole density
@@ -1086,10 +1085,8 @@ contains
                 beta = real(gridpos-1,double)/real(n_grid_norm,double)
                 shift = one
                 if((min_dens_loc - gridpos)>0) shift = zero
-                ! Neugebauer & Scheffler
+                ! Neugebauer & Scheffler Eq. 14 and Bengtsson Eq. 7 adapted
                 locpot = fourpi*surface_dipole_density*(beta - shift)
-                ! Bengtsson
-                ! locpot = fourpi*surface_dipole_density*(beta - half)
                 h_potential(m+point) = h_potential(m+point) + locpot
                 surface_dipole_energy_elec = &
                      surface_dipole_energy_elec + &
@@ -1111,18 +1108,14 @@ contains
        surface_dipole_energy_ion = surface_dipole_energy_ion - &
             charge(species(atom))* fourpi*surface_dipole_density*(beta - shift)
     end do
-    if(inode==ionode) then
-       call io_assign(lun)
-       open(lun,file="AveragedPotential.dat")
-    end if
     call gsum(planar_average,n_grid_norm)
     planar_average = planar_average/real(n_grid_plane,double)
-    if(inode==ionode) then
+    if(flag_output_average_potential.and.(inode==ionode)) then
+       call io_assign(lun)
+       open(lun,file="AveragedPotential.dat")
        do n=1,n_grid_norm
           write(lun,*) n,planar_average(n), density_average(n)
        end do
-    end if
-    if(inode==ionode) then
        call io_close(lun)
     end if
     deallocate(planar_average)
