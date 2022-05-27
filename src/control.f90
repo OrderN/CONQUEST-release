@@ -1919,8 +1919,10 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
   !!  CREATION DATE
   !!   2019/12/10
   !!  MODIFICATION HISTORY
-  !!  2020/01/17 smujahed
-  !!  - Added call to subroutine write_xsf to write trajectory file
+  !!   2020/01/17 smujahed
+  !!    - Added call to subroutine write_xsf to write trajectory file
+  !!   2022/05/27 10:05 dave
+  !!    Bug fix: define g0 on all processes, not just ionode
   !!  SOURCE
   !!
   subroutine lbfgs(fixed_potential, vary_mu, total_energy)
@@ -2016,19 +2018,20 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
     energy1 = energy0
     cg_new = -tot_force ! The L-BFGS is in terms of grad E
     do while (.not. done)
+       ! Define g0 consistently on all processes
+       g0 = dot(length, cg_new, 1, cg_new, 1)
        if (inode==ionode) then
           write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," E: ",e16.8," dE: ",f12.8)') & 
                iter, max, energy1, en_conv*dE
           if (iprint_MD > 1) then
-             g0 = dot(length, tot_force, 1, tot_force, 1)
+             temp = dot(length, tot_force, 1, tot_force, 1)
              write(io_lun,'(4x,"Force Residual:     ",f20.10," ",a2,"/",a2)') &
-                  for_conv*sqrt(g0/ni_in_cell), en_units(energy_units), & 
+                  for_conv*sqrt(temp/ni_in_cell), en_units(energy_units), & 
                   d_units(dist_units)
              write(io_lun,'(4x,"Maximum force:      ",f20.10)') max
              write(io_lun,'(4x,"Force tolerance:    ",f20.10)') MDcgtol
              write(io_lun,'(4x,"Energy change:      ",f20.10," ",a2)') &
                   en_conv*dE, en_units(energy_units)
-             g0 = dot(length,cg_new,1,cg_new,1)
              write(io_lun,'(4x,"Search direction has magnitude ",f20.10)') sqrt(g0/ni_in_cell)
           end if
        end if
