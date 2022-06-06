@@ -839,7 +839,7 @@ contains
          atomch_output, flag_Kerker, flag_wdmetric, minitersSC, &
          flag_newresidual, flag_newresid_abs, n_dumpSCF
     use density_module, only: flag_InitialAtomicSpin, flag_DumpChargeDensity
-    use density_module, only: flag_surface_dipole_correction, surface_normal, flag_output_average_potential
+    use density_module, only: flag_surface_dipole_correction, surface_normal, flag_output_average_potential, discontinuity_location
     use S_matrix_module, only: InvSTolerance, InvSMaxSteps,&
          InvSDeltaOmegaTolerance
     use blip,          only: blip_info, init_blip_flag, alpha, beta
@@ -1551,7 +1551,7 @@ contains
     threshold_resetCD     = fdf_double('SC.Threshold.Reset',0.1_double)
     flag_surface_dipole_correction = fdf_boolean('SC.SurfaceDipoleCorrection',.false.)
     flag_output_average_potential  = fdf_boolean('SC.OutputAveragePotential',.false.)
-    ! Leave this for average potential output without correction
+    if(flag_surface_dipole_correction) discontinuity_location = fdf_integer('SC.DiscontinuityLocation',0)
     tmp = fdf_string(1,'SC.SurfaceNormal','z')
     if(leqi(tmp,'x')) then
        surface_normal = 1
@@ -2543,6 +2543,9 @@ contains
     use datestamp,            only: datestr, commentver
     use pseudopotential_common, only: flag_neutral_atom_projector, maxL_neutral_atom_projector, &
          numN_neutral_atom_projector
+    use density_module,       only: flag_surface_dipole_correction, surface_normal, &
+         discontinuity_location
+
 
     implicit none
 
@@ -2629,7 +2632,16 @@ contains
                maxval(numN_neutral_atom_projector),maxL_neutral_atom_projector
        end if
     end if
-
+    if(flag_surface_dipole_correction) then
+       write(io_lun,fmt='(/10x,"Applying surface dipole correction along axis ",i2)') surface_normal
+       if(discontinuity_location==0) then
+          write(io_lun,fmt='(10x,"No location for discontinuity specified! &
+               &It will be placed at point of lowest density")')
+       else
+          write(io_lun,fmt='(10x,"User-specified location for discontinuity: ",i5)') &
+               discontinuity_location
+       end if
+    end if
     if(read_phi) then
        write(io_lun,262)
        do n=1, n_species

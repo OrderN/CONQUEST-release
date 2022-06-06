@@ -133,7 +133,8 @@ module density_module
 
   ! Surface dipole correction
   logical :: flag_surface_dipole_correction, flag_output_average_potential
-  integer :: surface_normal                                    ! x=1, y=2, z=3 to select arrays
+  integer :: surface_normal                 ! x=1, y=2, z=3 to select arrays
+  integer :: discontinuity_location         ! User parameter
   real(double) :: surface_dipole_density, sdde         ! \int a rho_av(a) da
   real(double) :: surface_dipole_energy_elec     ! Eq 13 in Bengtsson
   real(double) :: surface_dipole_energy_ion      ! Eq 13 in Bengtsson
@@ -965,6 +966,7 @@ contains
        atom_cell_norm  => z_atom_cell
     end select
     ! Calculate average density along surface normal
+    ! Note that we find the density by summing over all processes (below)
     allocate(density_average(n_grid_norm))
     density_average = zero
     ! Sum over grid
@@ -984,58 +986,24 @@ contains
     end do ! nb
     call gsum(density_average,n_grid_norm)
     density_average = density_average/real(n_grid_plane,double)
-    ! Find the mid-vacuum point
-    min_dens = 1e30_double
-    do point=1,n_grid_norm
-       if(abs(density_average(point))<min_dens) then
-          min_dens_loc = point
-          min_dens = abs(density_average(point))
-       end if
-    end do
-    ! Seek the limits of any empty portion of space
-    ! NB I have chosen a threshold of 1e-5 deliberately; with Kerker preconditioning,
-    ! there is a degree of noise in the vacuum and we need a value this large to correctly
-    ! identify the on-set of the slab; this should really be controlled by the user 
-    zero_start = n_grid_norm+1
-    zero_end = 0
-    do point=2,n_grid_norm ! If there is a vacuum gap on the low-z side of the slab, find it
-       if(abs(density_average(point))>1e-5_double.AND. &
-            abs(density_average(point-1))<1e-5_double) then ! We've reached the end of the empty portion
-          zero_end = point - 1
-          exit
-       end if
-    end do
-    if(zero_end==0) then
-       if(abs(density_average(1))>1e-5_double.AND. &
-            abs(density_average(n_grid_norm))<1e-5_double) then ! We've reached the end of the empty portion
-          zero_end = n_grid_norm
-       end if
-    end if
-    do point= n_grid_norm-1, 1, -1
-       if(abs(density_average(point))>1e-5_double.AND. &
-            abs(density_average(point+1))<1e-5_double) then ! We're starting the empty portion
-          zero_start = point
-          exit
-       end if
-    end do
-    if(zero_start==n_grid_norm+1) then
-       if(abs(density_average(n_grid_norm))>1e-5_double.AND. &
-            abs(density_average(1))<1e-5_double) then ! We're starting the empty portion
-          zero_start = 1
-       end if
-    end if
-    if(zero_end>0.AND.zero_start<n_grid_norm+1) then
-       if(zero_end<zero_start) zero_end = zero_end + n_grid_norm
-       min_dens_loc = half*(zero_start+zero_end)
-       if(min_dens_loc>n_grid_norm) min_dens_loc = min_dens_loc - n_grid_norm
-       if(iprint_SC>2) then
-          write(io_lun,fmt='(4x,"Empty portion bounded by ",2i6)') zero_start, zero_end
-          write(io_lun,fmt='(4x,"Placing potential discontinuity mid-vacuum at grid point ",i6)') min_dens_loc
-       end if
-       if(abs(density_average(min_dens_loc))>1e-5_double) write(io_lun,*) 'Possible error: large density: ', &
-            min_dens_loc, density_average(min_dens_loc)
+    ! Find the mid-vacuum point: this should be set by the user, otherwise
+    ! default to the point of lowest average density
+    if(discontinuity_location==0) then
+       min_dens = 1e30_double
+       do point=1,n_grid_norm
+          if(abs(density_average(point))<min_dens) then
+             min_dens_loc = point
+             min_dens = abs(density_average(point))
+          end if
+       end do
+       if(inode==ionode.AND.iprint_SC>2) &
+            write(io_lun,fmt='(4x,"Placing discontinuity at grid point ",i5,&
+            &" where density is ",f12.5)') min_dens_loc, min_dens
     else
-       if(iprint_SC>2) write(io_lun,fmt='(4x,"Placing potential discontinuity at grid point ",i6)') min_dens_loc
+       min_dens_loc = discontinuity_location
+       min_dens = abs(density_average(min_dens_loc))
+       if(min_dens>1e-5 .and. inode==ionode) &
+            write(io_lun,fmt='(8x,"Warning! Possibly large density at discontinuity point: ",f12.5)') min_dens
     end if
     ! Store location of dipole correction
     dipole_correction_location = real(min_dens_loc-1,double)*grid_spacing_norm
@@ -1052,11 +1020,6 @@ contains
     end do
     ! Apply grid-point spacing twice: once for integral, once to convert point to x
     surface_dipole_density = surface_dipole_density * grid_spacing_norm * grid_spacing_norm
-    ! Add ionic contribution - for now do for all atoms but could do just on partition and sum
-    do atom = 1, ni_in_cell
-       surface_dipole_density = surface_dipole_density - &
-            atom_cell_norm(atom)*charge(species(atom))/r_super_area
-    end do
     sdde = surface_dipole_density
     ! Add ionic contribution - for now do for all atoms but could do just on partition and sum
     do atom = 1, ni_in_cell
@@ -1090,7 +1053,7 @@ contains
                 h_potential(m+point) = h_potential(m+point) + locpot
                 surface_dipole_energy_elec = &
                      surface_dipole_energy_elec + &
-                     density_average(gridpos)*locpot
+                     rho_tot(m+point)*locpot
                 planar_average(gridpos) = planar_average(gridpos) + &
                      pseudopotential(m+point) + h_potential(m+point)
              end do
@@ -1108,6 +1071,9 @@ contains
        surface_dipole_energy_ion = surface_dipole_energy_ion - &
             charge(species(atom))* fourpi*surface_dipole_density*(beta - shift)
     end do
+    if(inode==ionode.AND.iprint_SC>3) &
+         write(io_lun,fmt='(8x,"Dipole energy for electrons and ions: ",2f12.5)') &
+         surface_dipole_energy_elec, surface_dipole_energy_ion
     call gsum(planar_average,n_grid_norm)
     planar_average = planar_average/real(n_grid_plane,double)
     if(flag_output_average_potential.and.(inode==ionode)) then

@@ -261,11 +261,11 @@ contains
     if(flag_surface_dipole_correction) then
        ! This option is currently not read but would allow Neugebauer & Scheffler Eq. 9 rather than Bengtsson Eq. 13
        !if(flag_dipole_internal) then
-          total_energy = total_energy + &
-               half*(surface_dipole_energy_ion-surface_dipole_energy_elec)
-       !else
        !   total_energy = total_energy + &
-       !        surface_dipole_energy_ion ! Electronic comes from Tr[KH]
+       !        half*(surface_dipole_energy_ion-surface_dipole_energy_elec)
+       !else
+          total_energy = total_energy + &
+               surface_dipole_energy_ion ! Electronic comes from Tr[KH]
        !end if
     end if
 
@@ -310,8 +310,9 @@ contains
              if (flag_dft_d2) write (io_lun,17) en_conv*disp_energy, en_units(energy_units)
              if (flag_surface_dipole_correction) &
                   write(io_lun,'(10x,"Surface Dipole Correction Energy : ",f25.15," ",a2)') en_conv * &
-                  half*(surface_dipole_energy_ion+surface_dipole_energy_elec), &
-                  en_units(energy_units)
+                  surface_dipole_energy_ion, en_units(energy_units)
+                  !half*(surface_dipole_energy_ion+surface_dipole_energy_elec), &
+                  !en_units(energy_units)
           end if
 
           if (abs(entropy) >= RD_ERR) then
@@ -375,11 +376,11 @@ contains
        ! For DFT, we need dipole correction energy of rho_i + rho_e
        if(flag_surface_dipole_correction) then
           !if(flag_dipole_internal) then
-             total_energy2 = total_energy2 + &
-                  half*(surface_dipole_energy_ion+surface_dipole_energy_elec)
+          !total_energy2 = total_energy2 + &
+          !     half*(surface_dipole_energy_ion+surface_dipole_energy_elec)
           !else
-          !   total_energy2 = total_energy2 + &
-          !        surface_dipole_energy_ion+surface_dipole_energy_elec
+          total_energy2 = total_energy2 + &
+               surface_dipole_energy_ion+surface_dipole_energy_elec
           !end if
        end if
        if (inode == ionode) then
@@ -591,11 +592,11 @@ contains
     ! For Harris-Foulkes, we need dipole correction energy of rho_i - rho_e
     if(flag_surface_dipole_correction) then
        !if(flag_dipole_internal) then
-          total_energy1 = total_energy1 + &
-            half*(surface_dipole_energy_ion-surface_dipole_energy_elec)
+       !total_energy1 = total_energy1 + &
+       !     half*(surface_dipole_energy_ion-surface_dipole_energy_elec)
        !else
-       !   total_energy1 = total_energy1 + &
-       !     surface_dipole_energy_ion
+       total_energy1 = total_energy1 + &
+            surface_dipole_energy_ion
        !end if
     end if
     !Write out data
@@ -660,8 +661,8 @@ contains
                write (io_lun,18) en_conv*cdft_energy,en_units(energy_units)
           if (flag_surface_dipole_correction) &
                   write(io_lun,'(10x," |  Surface Dipole Energy   = ",f25.15," ",a2)') en_conv * &
-                  half*(surface_dipole_energy_ion+surface_dipole_energy_elec), &
-                  en_units(energy_units)
+                  surface_dipole_energy_ion, en_units(energy_units)
+                  !half*(surface_dipole_energy_ion+surface_dipole_energy_elec), &
           write (io_lun, 2)
        end if
     end if
@@ -737,11 +738,11 @@ contains
     if (flag_dft_d2)       total_energy2 = total_energy2 + disp_energy
     if(flag_surface_dipole_correction) then
        !if(flag_dipole_internal) then
-          total_energy2 = total_energy2 + &
-            half*(surface_dipole_energy_ion+surface_dipole_energy_elec)
+       !total_energy2 = total_energy2 + &
+       !     half*(surface_dipole_energy_ion+surface_dipole_energy_elec)
        !else
-       !   total_energy2 = total_energy2 + &
-       !     surface_dipole_energy_ion+surface_dipole_energy_elec
+       total_energy2 = total_energy2 + &
+            surface_dipole_energy_ion+surface_dipole_energy_elec
        !end if
     end if
 

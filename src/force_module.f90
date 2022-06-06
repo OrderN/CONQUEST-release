@@ -244,11 +244,15 @@ contains
                                       flag_neutral_atom, flag_stress, &
                                       rcellx, rcelly, rcellz, &
                                       flag_atomic_stress, non_atomic_stress, &
-                                      flag_heat_flux, cell_constraint_flag
+                                      flag_heat_flux, cell_constraint_flag, &
+                                      atom_coord, species_glob
     use density_module,         only: get_electronic_density, density, &
-                                      build_Becke_weight_forces
+         build_Becke_weight_forces, &
+         flag_surface_dipole_correction, &
+         surface_dipole_density, surface_normal, surface_dipole_energy_elec, &
+         surface_dipole_energy_ion
     use functions_on_grid,      only: atomfns, H_on_atomfns
-    use dimens,                 only: n_my_grid_points
+    use dimens,                 only: n_my_grid_points, r_super_x, r_super_y, r_super_z
     use matrix_data,            only: Hrange
     use mult_module,            only: matK, matKatomf, SF_to_AtomF_transform
     use maxima_module,          only: maxngrid
@@ -260,6 +264,7 @@ contains
     use hartree_module, only: Hartree_stress
     use XC, ONLY: XC_GGA_stress
     use input_module,         only: leqi
+    use species_module, only: charge
 
     implicit none
 
@@ -272,7 +277,8 @@ contains
     ! Local variables
     integer        :: i, j, ii, stat, max_atom, max_compt, ispin, &
                       direction, dir1, dir2
-    real(double)   :: max_force, volume, scale
+    real(double)   :: max_force, volume, scale, r_super_norm
+    real(double), dimension(3) :: dipole_correction_force
     type(cq_timer) :: tmr_l_tmp1
     type(cq_timer) :: backtrace_timer
     integer        :: backtrace_level
@@ -372,6 +378,9 @@ contains
          else
             GPV_stress(dir1,dir1) = (hartree_energy_total_rho + &
               local_ps_energy - core_correction) ! core contains 1/V term
+         end if
+         if(flag_surface_dipole_correction) then
+            GPV_stress(dir1,dir1) = GPV_stress(dir1,dir1) + surface_dipole_energy_elec
          end if
          if(flag_self_consistent) then
             XC_stress(dir1,dir1) = xc_energy + &
@@ -507,8 +516,28 @@ contains
              en_units(energy_units), d_units(dist_units)
        write (io_lun, fmt='(18x,"    Atom   X              Y              Z")')
     end if
-    ! Calculate forces and write out
+    select case(surface_normal)
+    case(1) ! X
+       r_super_norm = r_super_x
+    case(2) ! Y
+       r_super_norm = r_super_y
+    case(3) ! Z
+       r_super_norm = r_super_z
+    end select
     do i = 1, ni_in_cell
+       if(flag_surface_dipole_correction) then
+          dipole_correction_force = zero
+          dipole_correction_force(surface_normal) = charge(species_glob(i)) * fourpi * &
+               surface_dipole_density / r_super_norm
+          ! Mathematically, we need something like this term for the stress, except
+          ! that I don't think that stress can be defined sensibly when there is a vacuum
+          ! gap as there should be along the surface normal! I have left this here for
+          ! information, but I don't think that it should be included.  DRB 2022/06/06
+          !
+          !dipole_correction_stress(surface_normal) = &
+          !     dipole_correction_stress(surface_normal) + &
+          !     atom_coord(surface_normal,i) * dipole_correction_force(surface_normal)
+       end if
        do j = 1, 3
           ! Force components that are always needed
           tot_force(j,i) = HF_force(j,i) + HF_NL_force(j,i) + &
@@ -533,6 +562,8 @@ contains
                tot_force(j,i) = tot_force(j,i) + disp_force(j,i)
           if(flag_neutral_atom_projector) &
                tot_force(j,i) = tot_force(j,i) + NA_force(j,i)
+          if(flag_surface_dipole_correction) &
+               tot_force(j,i) = tot_force(j,i) + dipole_correction_force(j)
           ! Zero force on fixed atoms
           if (.not. flag_move_atom(j,i)) then
              tot_force(j,i) = zero
@@ -560,6 +591,8 @@ contains
              else
                 write(io_lun, 106) (for_conv * ion_interaction_force(j,i), j = 1, 3)
              end if
+             if(flag_surface_dipole_correction) &
+                  write(io_lun, fmt='("Force dipole : ",3f15.10)') (for_conv * dipole_correction_force(j), j = 1, 3)
              if (flag_pcc_global) write(io_lun, 108) (for_conv *   pcc_force(j,i), j = 1, 3)
              if (flag_dft_d2) write (io_lun, 109) (for_conv * disp_force(j,i), j = 1, 3)
              if (flag_perform_cdft) write (io_lun, fmt='("Force cDFT : ",3f15.10)') &
@@ -602,7 +635,6 @@ contains
                if (flag_neutral_atom_projector) then
                  stress(dir1,dir2) = stress(dir1,dir2) + NA_stress(dir1,dir2)
                end if
-
             end do
          end do
       else
