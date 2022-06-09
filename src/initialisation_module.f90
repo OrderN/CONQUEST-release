@@ -109,6 +109,8 @@ contains
   !!    Changes to new XC interface
   !!   2019/12/26 tsuyoshi
   !!    Removed flag_no_atomic_densities
+  !!   2022/06/09 08:35 dave
+  !!    Changed name of D2 set-up routine, added only to module use
   !!  SOURCE
   !!
   subroutine initialise(vary_mu, fixed_potential, mu, total_energy)
@@ -130,7 +132,7 @@ contains
     use primary_module,    only: bundle
     use cover_module,      only: make_cs, D2_CS
     use dimens,            only: r_dft_d2
-    use DFT_D2
+    use DFT_D2,            only: set_para_D2, dispersion_D2
     use pseudo_tm_module,   only: make_neutral_atom
     use angular_coeff_routines, only: set_fact
     use maxima_module,          only: lmax_ps, lmax_pao
@@ -173,7 +175,7 @@ contains
     if (flag_only_dispersion) then
       call make_cs(inode-1, r_dft_d2, D2_CS, parts, bundle, ni_in_cell, &
                    x_atom_cell, y_atom_cell, z_atom_cell)
-      call read_para_D2
+      call set_para_D2
       call dispersion_D2
       call end_comms()
       stop
@@ -308,6 +310,8 @@ contains
   !!    Removed r_super_x references (redundant)
   !!   2018/01/22 12:41 JST dave
   !!    Adding check for maximum angular momentum for Bessel functions
+  !!   2022/06/09 08:36 dave
+  !!    Change name of D2 set-up routine
   !!  SOURCE
   !!
   subroutine set_up(find_chdens,level)
@@ -368,7 +372,7 @@ contains
     use angular_coeff_routines, only: set_fact, set_prefac, set_prefac_real
     use numbers,                only: zero
     use cDFT_module,            only: init_cdft
-    use DFT_D2,                 only: read_para_D2
+    use DFT_D2,                 only: set_para_D2
     use input_module,           ONLY: leqi
     use UpdateInfo,             ONLY: make_glob2node
     use XLBOMD_module,          ONLY: immi_XL
@@ -558,7 +562,7 @@ contains
         write (io_lun, '(8x,"+++ D2_CS%nx_origin, y, z:",3i8)') &
               D2_CS%nx_origin, D2_CS%ny_origin, D2_CS%nz_origin
       end if
-      call read_para_D2
+      call set_para_D2
       if (inode == ionode) then                               !! DEBUG !!
          write (io_lun, '(a, f10.5)') &                       !! DEBUG !!
                "Sbrt: make_cs for DFT-D2, the cutoff is ", &  !! DEBUG !!
