@@ -222,6 +222,25 @@ contains
                   disp_force(3, ia_glob) = disp_force(3, ia_glob) + emp_energy * emp_force * unit_vec_z
                   if(flag_stress) then
                      if(flag_full_stress) then
+                        ! NB force direction is set by unit_vec so tracks first index
+                        disp_stress(1,1) = disp_stress(1,1) + emp_energy * emp_force &
+                             * rijx * unit_vec_x
+                        disp_stress(1,2) = disp_stress(1,2) + emp_energy * emp_force &
+                             * rijy * unit_vec_x
+                        disp_stress(1,3) = disp_stress(1,3) + emp_energy * emp_force &
+                             * rijz * unit_vec_x
+                        disp_stress(2,1) = disp_stress(2,1) + emp_energy * emp_force &
+                             * rijx * unit_vec_y
+                        disp_stress(2,2) = disp_stress(2,2) + emp_energy * emp_force &
+                             * rijy * unit_vec_y
+                        disp_stress(2,3) = disp_stress(2,3) + emp_energy * emp_force &
+                             * rijz * unit_vec_y
+                        disp_stress(3,1) = disp_stress(3,1) + emp_energy * emp_force &
+                             * rijx * unit_vec_z
+                        disp_stress(3,2) = disp_stress(3,2) + emp_energy * emp_force &
+                             * rijy * unit_vec_z
+                        disp_stress(3,3) = disp_stress(3,3) + emp_energy * emp_force &
+                             * rijz * unit_vec_z
                      else
                         disp_stress(1,1) = disp_stress(1,1) + emp_energy * emp_force &
                              * rijx * unit_vec_x
