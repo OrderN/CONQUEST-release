@@ -29,11 +29,58 @@ module functions
 
 contains
 
+
+  ! -----------------------------------------------------------
+  ! Function prime
+  ! -----------------------------------------------------------
+
+  !!****f* initial_read_module/is_prime *
+  !!
+  !!  NAME
+  !!   prime
+  !!  USAGE
+  !!   prime(n)
+  !!  PURPOSE
+  !!   Return if n is a prime number
+  !!  INPUTS
+  !!   integer :: n
+  !!  AUTHOR
+  !!   LAT
+  !!  CREATION DATE
+  !!   2021/06/14
+  !!  SOURCE
+  !!
+
+  logical function is_prime(n)
+
+    use datatypes
+    
+    implicit none
+
+    integer, intent(in) :: n
+    !
+    integer :: i, inf, sup
+    !
+    is_prime = .true.
+    !
+    inf = 2
+    sup = int( sqrt( real(n,double) ) + 1 )
+    !
+    do i = inf, sup
+       if ( mod(n,i) == 0 ) then
+          is_prime = .false.
+       end if
+    end do
+    !
+    return
+    !
+  end function is_prime
+    
   ! -----------------------------------------------------------
   ! Function erfc
   ! -----------------------------------------------------------
 
-  !!****f* DiagModle/erfc *
+  !!****f* DiagModule/erfc *
   !!
   !!  NAME
   !!   erfc
