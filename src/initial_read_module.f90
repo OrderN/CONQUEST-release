@@ -2757,6 +2757,8 @@ contains
   !!    Removed gcopy and myid checks
   !!   2019/12/05 08:12 dave
   !!    Bug fix: only write out on ionode
+  !!   2022/07/16 lionel
+  !!    Added printing fractional k-points when read from block
   !!  SOURCE
   !!
   subroutine readDiagInfo
@@ -2977,6 +2979,14 @@ contains
              end do
              call fdf_endblock
              wtk = wtk/sum
+             ! Write out fractional k-points and weight (the easiest way not the cleverest)
+             if(iprint_init>0.AND.inode==ionode) then
+                write(io_lun,7) nkp
+                do i=1,nkp
+                   write(io_lun,fmt='(8x,i5,3f15.6,f12.3)')&
+                        i,kk(1,i)/(two*pi)*rcellx,kk(2,i)/(two*pi)*rcellx,kk(3,i)/(two*pi)*rcellx,wtk(i)
+                end do
+             end if
           else ! Force gamma point dependence
              if(inode==ionode) write(io_lun,4)
              nkp = 1
