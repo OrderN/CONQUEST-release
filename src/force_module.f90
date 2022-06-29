@@ -211,6 +211,8 @@ contains
   !!    Remove redundant argument (expected_reduction)
   !!   2021/10/06 11:54 dave
   !!    Zero components of stress where unit cell is constrained; simplify pressure conversion
+  !!   2022/06/08 16:12 dave
+  !!    Add dispersion (D2) stress
   !!  SOURCE
   !!
   subroutine force(fixed_potential, vary_mu, n_cg_L_iterations, &
@@ -254,7 +256,7 @@ contains
     use maxima_module,          only: maxngrid
     use memory_module,          only: reg_alloc_mem, reg_dealloc_mem,  &
                                       type_dbl
-    use DFT_D2,                 only: disp_force
+    use DFT_D2,                 only: disp_force, disp_stress
     use energy,                  only: hartree_energy_total_rho, local_ps_energy, &
                                        delta_E_xc, xc_energy, hartree_energy_drho
     use hartree_module, only: Hartree_stress
@@ -627,6 +629,7 @@ contains
          end do
       end if
       if (flag_atomic_stress) call gsum(atomic_stress,3,3,ni_in_cell)
+      if (flag_dft_d2) stress = stress + disp_stress
       ! If we constrain the cell, zero the appropriate stresses
       if (leqi(cell_constraint_flag, 'a')) then
          stress(1,1) = zero
@@ -666,6 +669,7 @@ contains
       call print_stress("Hartree stress:   ", Hartree_stress, 3)
       call print_stress("PCC stress:       ", pcc_stress, 3)
       call print_stress("non-SCF stress:   ", nonSCF_stress, 3)
+      if(flag_dft_D2) call print_stress("DFT-D2 stress:    ", disp_stress, 3)
       call print_stress("Total stress:     ", stress, 0)
       volume = rcellx*rcelly*rcellz
       ! We need pressure in GPa, and only diagonal terms output
