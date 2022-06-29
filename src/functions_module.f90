@@ -31,10 +31,10 @@ contains
 
 
   ! -----------------------------------------------------------
-  ! Function prime
+  ! Function is_prime
   ! -----------------------------------------------------------
 
-  !!****f* initial_read_module/is_prime *
+  !!****f* functions/is_prime *
   !!
   !!  NAME
   !!   prime
@@ -80,7 +80,7 @@ contains
   ! Function erfc
   ! -----------------------------------------------------------
 
-  !!****f* DiagModule/erfc *
+  !!****f* functions/erfc *
   !!
   !!  NAME
   !!   erfc

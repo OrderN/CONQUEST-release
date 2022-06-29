@@ -2792,7 +2792,6 @@ contains
     real(double)   :: a, sum, dkx, dky, dkz
     integer        :: proc_per_group
     logical        :: ms_is_prime
-    integer        :: test_prime
     
     ! k-point mesh type
     logical        :: mp_mesh, done, flag_lines_kpoints, flag_gamma
