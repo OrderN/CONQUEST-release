@@ -2757,6 +2757,9 @@ contains
   !!    Removed gcopy and myid checks
   !!   2019/12/05 08:12 dave
   !!    Bug fix: only write out on ionode
+  !!   2022/14/06 lat
+  !!    Added cq_warn when matrix size is a prime number
+  !!    and set block_size_r = block_size_c = 1
   !!   2022/07/16 lionel
   !!    Added printing fractional k-points when read from block
   !!   2022/06/29 12:00 dave
@@ -2766,11 +2769,12 @@ contains
   subroutine readDiagInfo
 
     use datatypes
+    use functions, only: is_prime
     use global_module,   only: iprint_init, rcellx, rcelly, rcellz,  &
          area_general, ni_in_cell, numprocs,   &
          species_glob, io_lun
     use numbers,         only: zero, one, two, pi, RD_ERR, half
-    use GenComms,        only: cq_abort, gcopy
+    use GenComms,        only: cq_abort, cq_warn, gcopy
     use input_module
     use ScalapackFormat, only: proc_rows, proc_cols, block_size_r,   &
          block_size_c, proc_groups, matrix_size
@@ -2786,11 +2790,13 @@ contains
     implicit none
 
     ! Local variables
+    character(len=80) :: sub_name = "readDiagInfo"
     type(cq_timer) :: backtrace_timer
     integer        :: stat, i, j, k, nk_st, nkp_lines
     real(double)   :: a, sum, dkx, dky, dkz
     integer        :: proc_per_group
-
+    logical        :: ms_is_prime
+    
     ! k-point mesh type
     logical        :: mp_mesh, done, flag_lines_kpoints, flag_gamma
     integer,      dimension(1:3)              :: mp
@@ -2865,10 +2871,15 @@ contains
        end if
     end if
     ! Read/choose ScaLAPACK block sizes
-    matrix_size = 0 
+    matrix_size = 0
     do i=1,ni_in_cell
        matrix_size = matrix_size + nsf_species(species_glob(i))
     end do
+    
+    ! Test if matrix_size is a prime number
+    ms_is_prime = is_prime(matrix_size)
+    if ( ms_is_prime ) call cq_warn(sub_name,'matrix size is a prime number', matrix_size)
+    
     if(fdf_defined('Diag.BlockSizeR')) then
        block_size_r = fdf_integer('Diag.BlockSizeR',1)
        block_size_c = fdf_integer('Diag.BlockSizeC',1)
@@ -2880,6 +2891,10 @@ contains
        if(a - real(floor(a))>1e-8_double) &
             call cq_abort('block_size_c not a factor of matrix size ! ',&
             matrix_size, block_size_c)
+    else if (  ms_is_prime ) then
+       block_size_r = 1
+       block_size_c = block_size_r
+       call cq_warn(sub_name,'prime: set block_size_c = block_size_r = 1 ')
     else
        done = .false.
        block_size_r = matrix_size/max(proc_rows,proc_cols)+1
