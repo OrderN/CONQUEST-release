@@ -403,9 +403,9 @@ contains
        ! Minimise in this direction
        if(cg_line_min==safe) then
           call safemin2(x_new_pos, y_new_pos, z_new_pos, cg, energy0,&
-               energy1, fixed_potential, vary_mu, energy1)
+               energy1, fixed_potential, vary_mu)
        else if(cg_line_min==backtrack) then
-          call adapt_backtrack_linemin(cg, energy0, energy1, fixed_potential, vary_mu, energy1)
+          call adapt_backtrack_linemin(cg, energy0, energy1, fixed_potential, vary_mu)
        end if
        ! Output positions
        if (myid == 0 .and. iprint_gen > 1) then
@@ -1779,7 +1779,7 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
           call dump_pos_and_matrices
        else
           call safemin2(x_new_pos, y_new_pos, z_new_pos, cg, energy0, &
-               energy1, fixed_potential, vary_mu, energy1)
+               energy1, fixed_potential, vary_mu)
        end if
        ! Analyse forces
        g0 = dot(length, tot_force, 1, tot_force, 1)
@@ -1939,7 +1939,7 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
     use minimise,       only: get_E_and_F
     use move_atoms,     only: pulayStep, velocityVerlet,            &
                               updateIndices, updateIndices3, update_atom_coord,     &
-                              safemin2, update_H, update_pos_and_matrices, backtrack_linemin
+                              update_H, update_pos_and_matrices, backtrack_linemin
     use move_atoms,     only: updateL, updateLorK, updateSFcoeff
     use GenComms,       only: gsum, myid, inode, ionode, gcopy, my_barrier
     use GenBlas,        only: dot
@@ -2059,7 +2059,7 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
        if (myid == 0 .and. iprint_MD > 2) &
             write(io_lun,fmt='(2x,"L-BFGS iteration ",i4)') iter
        ! Line search
-       call backtrack_linemin(cg, energy0, energy1, fixed_potential, vary_mu, energy1)
+       call backtrack_linemin(cg, energy0, energy1, fixed_potential, vary_mu)
        ! Update stored position difference and force difference
        do i=1,ni_in_cell
           jj = id_glob(i)
@@ -2206,8 +2206,8 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
     use minimise,       only: get_E_and_F
     use move_atoms,     only: pulayStep, velocityVerlet,            &
                               updateIndices, updateIndices3, update_atom_coord,     &
-                              safemin2, update_H, update_pos_and_matrices, single_step
-    use move_atoms,     only: updateL, updateLorK, updateSFcoeff
+                              update_H, update_pos_and_matrices, single_step
+    use move_atoms,     only: updateL, updateLorK, updateSFcoeff, backtrack_linemin
     use GenComms,       only: gsum, myid, inode, ionode, gcopy, my_barrier
     use GenBlas,        only: dot, syev
     use force_module,   only: tot_force
@@ -2314,7 +2314,11 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
        if (myid == 0 .and. iprint_MD > 2) &
             write(io_lun,fmt='(2x,"SQNM iteration ",i4)') iter
        ! Line search
-       call single_step(cg, energy0, energy1, fixed_potential, vary_mu)
+       if(iter==1) then
+          call backtrack_linemin(cg, energy0, energy1, fixed_potential, vary_mu)
+       else
+          call single_step(cg, energy0, energy1, fixed_potential, vary_mu)
+       end if
        if(energy1>energy0) then
           if(inode==ionode.AND.iprint_MD>1) write(io_lun,fmt='(4x,"Energy rise: resetting history")')
           cg_new = -tot_force
@@ -2322,7 +2326,8 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
              jj = id_glob(i)
              cg(:,i) = -cg_new(:,jj) ! Search downhill
           end do
-          call single_step(cg, energy0, energy1, fixed_potential, vary_mu)
+          call backtrack_linemin(cg, energy0, energy1, fixed_potential, vary_mu)
+          !call single_step(cg, energy0, energy1, fixed_potential, vary_mu)
           if(energy1>energy0) call cq_abort("Energy rise twice in succession: check SCF and other tolerances")
           npmod = 1
           iter_loc = 1
@@ -2907,8 +2912,7 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
          rcellx, rcelly, rcellz
     use group_module,  only: parts
     use minimise,      only: get_E_and_F
-    use move_atoms,    only: safemin2, safemin_cell, enthalpy, &
-         enthalpy_tolerance
+    use move_atoms,    only: enthalpy, enthalpy_tolerance
     use GenComms,      only: inode, ionode
     use GenBlas,       only: dot
     use force_module,  only: tot_force, stress
@@ -3150,8 +3154,7 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
                              rcellx, rcelly, rcellz
     use group_module,  only: parts
     use minimise,      only: get_E_and_F
-    use move_atoms,    only: safemin2, safemin_cell, enthalpy, &
-                             enthalpy_tolerance
+    use move_atoms,    only: safemin_cell, enthalpy, enthalpy_tolerance
     use GenComms,      only: inode, ionode
     use GenBlas,       only: dot
     use force_module,  only: tot_force, stress
@@ -3549,7 +3552,7 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
       force_old = force
       ! Minimise in this direction
       call safemin_full(config, cg, cell_ref, enthalpy0, enthalpy1, &
-                        press, fixed_potential, vary_mu, enthalpy1)
+                        press, fixed_potential, vary_mu)
 
       ! Output positions
       if (inode==ionode .and. iprint_gen > 1) then

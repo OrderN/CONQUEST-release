@@ -777,10 +777,12 @@ contains
   !!    Tidying: only output on ionode, remove redundant call to wrap_xyz
   !!   2021/10/15 17:44 dave
   !!    Updates to fix second interpolation
+  !!   2022/07/29 11:52 dave
+  !!    Removed redundant (and erroneous) total_energy passed variable
   !! SOURCE
   !!
   subroutine safemin2(start_x, start_y, start_z, direction, energy_in, &
-                      energy_out, fixed_potential, vary_mu, total_energy)
+                      energy_out, fixed_potential, vary_mu)
 
     ! Module usage
     use datatypes
@@ -823,7 +825,6 @@ contains
     real(double), dimension(ni_in_cell)   :: start_x, start_y, start_z
     ! Shared variables needed by get_E_and_F for now (!)
     logical           :: vary_mu, fixed_potential
-    real(double)      :: total_energy
     character(len=40) :: output_file
 
 
@@ -852,7 +853,7 @@ contains
     ! for debugging
 
     !allocate(store_density(maxngrid))
-    e0 = total_energy
+    e0 = energy_in
     if (inode == ionode .and. iprint_MD > 0) &
          write (io_lun, &
          fmt='(4x,"In safemin2, initial energy is ",f20.10," ",a2)') &
@@ -1203,7 +1204,7 @@ contains
   !! SOURCE
   !!
   subroutine backtrack_linemin(direction, energy_in, &
-                      energy_out, fixed_potential, vary_mu, total_energy)
+                      energy_out, fixed_potential, vary_mu)
 
     ! Module usage
     use datatypes
@@ -1245,7 +1246,6 @@ contains
     real(double), dimension(3,ni_in_cell) :: direction
     ! Shared variables needed by get_E_and_F for now (!)
     logical           :: vary_mu, fixed_potential
-    real(double)      :: total_energy
 
     ! Local variables
     integer        :: i, j, iter, lun, gatom, stat, nfile, symm
@@ -1267,7 +1267,7 @@ contains
     iter = 0
     old_alpha = zero
     alpha = one
-    e0 = total_energy
+    e0 = energy_in
     if (inode == ionode .and. iprint_MD > 0) &
          write (io_lun, &
          fmt='(4x,"In backtrack_linemin, initial energy is ",f16.6," ",a2)') &
@@ -1359,7 +1359,7 @@ contains
          write(io_lun,fmt='(6x,"In backtrack_linemin, second Wolfe: ",e11.4," < ",e11.4)') &
          abs(grad_fp_dot_p), c2*abs(grad_f_dot_p)
 
-    dE = e0 - energy_out
+    dE = energy_in - energy_out
     if (inode == ionode .and. iprint_MD > 2) then
        write (io_lun, &
             fmt='(4x,"In backtrack_linemin, exit after ",i4," &
@@ -1545,7 +1545,7 @@ contains
   !! SOURCE
   !!
   subroutine adapt_backtrack_linemin(direction, energy_in, &
-                      energy_out, fixed_potential, vary_mu, total_energy)
+                      energy_out, fixed_potential, vary_mu)
 
     ! Module usage
     use datatypes
@@ -1587,7 +1587,6 @@ contains
     real(double), dimension(3,ni_in_cell) :: direction
     ! Shared variables needed by get_E_and_F for now (!)
     logical           :: vary_mu, fixed_potential
-    real(double)      :: total_energy
 
     ! Local variables
     integer        :: i, j, iter, lun, gatom, stat, nfile, symm
@@ -1609,7 +1608,7 @@ contains
 
     iter = 0
     old_alpha = zero
-    e0 = total_energy
+    e0 = energy_in
     if (inode == ionode .and. iprint_MD > 0) &
          write (io_lun, &
          fmt='(4x,"In backtrack_linemin, initial energy is ",f16.6," ",a2)') &
@@ -1704,7 +1703,7 @@ contains
     if(inode==ionode.AND.iprint_MD>3) &
          write(io_lun,fmt='(6x,"In backtrack_linemin, second Wolfe: ",e11.4," < ",e11.4)') &
          abs(grad_fp_dot_p), c2*abs(grad_f_dot_p)
-    dE = e0 - energy_out
+    dE = energy_in - energy_out
     if (inode == ionode .and. iprint_MD > 0) then
        write (io_lun, &
             fmt='(4x,"In backtrack_linemin, exit after ",i4," &
@@ -2089,8 +2088,7 @@ contains
   !! SOURCE
   !!
   subroutine safemin_full(config, force, cell_ref, enthalpy_in, enthalpy_out, &
-                          target_press, fixed_potential, vary_mu, &
-                          total_enthalpy)
+                          target_press, fixed_potential, vary_mu)
 
     ! Module usage
     use datatypes
@@ -2119,8 +2117,6 @@ contains
     real(double), dimension(:,:) :: config, force
     real(double), dimension(:)   :: cell_ref
     logical           :: vary_mu, fixed_potential
-    real(double)      :: total_enthalpy
-
 
     ! Local variables
     integer        :: i, j, iter, lun, gatom, stat, nfile, symm
@@ -2151,7 +2147,7 @@ contains
 
     call start_timer(tmr_std_moveatoms)
 
-    h0 = total_enthalpy
+    h0 = enthalpy_in
     if (inode == ionode .and. iprint_MD > 1) &
          write (io_lun, &
          fmt='(4x,"In safemin_full, initial enthalpy is ",f20.10," ",a2)') &
@@ -4244,7 +4240,6 @@ contains
     integer iter
     ! Shared variables needed by get_E_and_F for now (!)
     logical           :: vary_mu, fixed_potential
-    real(double)      :: total_energy
     character(len=40) :: output_file
 
     ! local variables
