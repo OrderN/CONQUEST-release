@@ -94,6 +94,7 @@ module move_atoms
   integer :: cg_line_min
   integer, parameter :: safe = 0
   integer, parameter :: backtrack = 1
+  integer, parameter :: adapt_backtrack = 2
   ! Table to show the methods to update  (for update_pos_and_matrix)
    integer, parameter :: updatePos  = 0
    integer, parameter :: updateL    = 1

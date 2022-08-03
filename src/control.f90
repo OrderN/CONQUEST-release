@@ -261,6 +261,8 @@ contains
   !!    Added choice of line minimiser: standard safemin2 or backtracking
   !!   2021/10/15 17:36 dave
   !!    total_energy now returns final energy
+  !!   2022/08/03 15:23 dave
+  !!    Add option for backtrack or adaptive backtracking
   !!  SOURCE
   !!
   subroutine cg_run(fixed_potential, vary_mu, total_energy)
@@ -275,7 +277,8 @@ contains
                              IPRINT_TIME_THRES1
     use group_module,  only: parts
     use minimise,      only: get_E_and_F
-    use move_atoms,    only: adapt_backtrack_linemin, safemin2, cg_line_min, safe, backtrack
+    use move_atoms,    only: adapt_backtrack_linemin, backtrack_linemin, &
+                             safemin2, cg_line_min, safe, adapt_backtrack, backtrack
     use GenComms,      only: gsum, myid, inode, ionode
     use GenBlas,       only: dot
     use force_module,  only: tot_force
@@ -405,6 +408,8 @@ contains
           call safemin2(x_new_pos, y_new_pos, z_new_pos, cg, energy0,&
                energy1, fixed_potential, vary_mu)
        else if(cg_line_min==backtrack) then
+          call backtrack_linemin(cg, energy0, energy1, fixed_potential, vary_mu)
+       else if(cg_line_min==adapt_backtrack) then
           call adapt_backtrack_linemin(cg, energy0, energy1, fixed_potential, vary_mu)
        end if
        ! Output positions
