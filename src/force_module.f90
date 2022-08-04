@@ -4202,42 +4202,21 @@ contains
                             end if
                             j = floor(r_from_i/step_pcc) + 1
                             if(j+1<=pseudo(the_species)%chpcc%n) then
-                               if(r_from_i<step_pcc) then
-                                  ! Interpolate linearly from zero to gradient at r=step_pcc
-                                  ! Needed as gradient should be zero at r=0 and isn't in many
-                                  ! cases (ONCVPSP hard PCC charge and transition to linear grid)
-                                  a = zero ! Find gradient at step_pcc
-                                  b = one - a
-                                  c = a * ( a * a - one ) * step_pcc * step_pcc / six
-                                  d = b * ( b * b - one ) * step_pcc * step_pcc / six
-                                  da = -one/step_pcc
-                                  db =  one/step_pcc
-                                  dc = -step_pcc*(three*a*a - one)/six
-                                  dd =  step_pcc*(three*b*b - one)/six
-                                  r1=pseudo(the_species)%chpcc%f(j)
-                                  r2=pseudo(the_species)%chpcc%f(j+1)
-                                  r3=pseudo(the_species)%chpcc%d2(j)
-                                  r4=pseudo(the_species)%chpcc%d2(j+1)
-                                  ! Store derivative at r=step_pcc in v_pcc
-                                  v_pcc = da*r1 + db*r2 + dc*r3 + dd*r4
-                                  derivative_pcc = v_pcc*r_from_i/step_pcc ! Linearly interpolate
-                               else
-                                  rr = real(j,double) * step_pcc
-                                  a = ( rr - r_from_i ) / step_pcc
-                                  b = one - a
-                                  c = a * ( a * a - one ) * step_pcc * step_pcc / six
-                                  d = b * ( b * b - one ) * step_pcc * step_pcc / six
-                                  da = -one/step_pcc
-                                  db =  one/step_pcc
-                                  dc = -step_pcc*(three*a*a - one)/six
-                                  dd =  step_pcc*(three*b*b - one)/six
+                               rr = real(j,double) * step_pcc
+                               a = ( rr - r_from_i ) / step_pcc
+                               b = one - a
+                               c = a * ( a * a - one ) * step_pcc * step_pcc / six
+                               d = b * ( b * b - one ) * step_pcc * step_pcc / six
+                               da = -one/step_pcc
+                               db =  one/step_pcc
+                               dc = -step_pcc*(three*a*a - one)/six
+                               dd =  step_pcc*(three*b*b - one)/six
 
-                                  r1=pseudo(the_species)%chpcc%f(j)
-                                  r2=pseudo(the_species)%chpcc%f(j+1)
-                                  r3=pseudo(the_species)%chpcc%d2(j)
-                                  r4=pseudo(the_species)%chpcc%d2(j+1)
-                                  derivative_pcc = da*r1 + db*r2 + dc*r3 + dd*r4
-                               endif
+                               r1=pseudo(the_species)%chpcc%f(j)
+                               r2=pseudo(the_species)%chpcc%f(j+1)
+                               r3=pseudo(the_species)%chpcc%d2(j)
+                               r4=pseudo(the_species)%chpcc%d2(j+1)
+                               derivative_pcc = da*r1 + db*r2 + dc*r3 + dd*r4
                                ! the factor of half here is because for
                                ! spin polarised calculations, I have
                                ! assumed contribution from pcc_density is
