@@ -7,7 +7,7 @@ Structural relaxation
 This section describes how to find the zero-Kelvin equilibrium atomic structure, given
 a starting structure with non-zero forces and/or stresses. CONQUEST
 can employ a variety of algorithms to minimise energy with respect to
-atomic positions, including: stabilised quasi-Newton method (SQNM); L-BFGS; conjugate gradients; and damped
+atomic positions, including: stabilised quasi-Newton method (SQNM); L-BFGS; conjugate gradients (CG); and damped
 molecular dynamics (both MDMin and FIRE approaches).  The minimisation
 of energy or enthalpy with respect to cell vectors is restricted to
 conjugate gradients at present, though L-BFGS will be implemented.
@@ -70,7 +70,7 @@ The parameter
 diagonalisation or L-matrix for O(N) calculations) from the
 previous step will be used as an initial guess for the SCF cycle after
 propagating the atoms; this should generally decrease the number of SCF cycles
-per ionic step.
+per ionic step.  When using CG, the line minimiser can be chosen: ``safe`` uses a robust though sometimes slow line minimiser; ``backtrack`` uses a simple back-tracking line minimiser (starting with a step size of 1 and reducing if necessary to ensure the energy goes down); ``adapt`` uses an adaptive back-tracking line minimiser (which increases the starting step size if the energy goes down on the first step).  In many cases the back-tracking line minimiser is more efficient, though the efficiency of the adaptive approach varies with problem.
 
 If the self-consistency tolerance is too low, the optimisation may fail to
 converge with respect to the force tolerance; this may necessitate a tighter
