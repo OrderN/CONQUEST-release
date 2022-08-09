@@ -95,6 +95,7 @@ module move_atoms
   integer, parameter :: safe = 0
   integer, parameter :: backtrack = 1
   integer, parameter :: adapt_backtrack = 2
+  integer, parameter :: max_back_iters = 11
   ! Table to show the methods to update  (for update_pos_and_matrix)
    integer, parameter :: updatePos  = 0
    integer, parameter :: updateL    = 1
@@ -799,9 +800,9 @@ contains
          flag_LmatrixReuse, flag_diagonalisation, nspin, &
          flag_SFcoeffReuse 
     use minimise,       only: get_E_and_F, sc_tolerance, L_tolerance, &
-         n_L_iterations
+         n_L_iterations, dE_elec_opt
     use GenComms,       only: my_barrier, myid, inode, ionode,        &
-         cq_abort, gcopy
+         cq_abort, gcopy, cq_warn
     use SelfCon,        only: new_SC_potl
     use GenBlas,        only: dot
     use force_module,   only: tot_force
@@ -841,6 +842,7 @@ contains
     real(double) :: k3_old, k3_local, kmin_old
 
     integer :: ig, both, mat
+    character(len=80) :: sub_name = "safemin2"
 
     ! for debugging
     integer :: mat_SFcoeff_old, mat_K_old
@@ -950,6 +952,10 @@ contains
        end if
        call get_E_and_F(fixed_potential, vary_mu, e3, .false., &
             .false.)
+       if(inode==ionode .and. abs(e3 - energy_in) < abs(dE_elec_opt)) then
+          call cq_warn(sub_name, "Electronic structure dE is similar to atom movement dE; increase tolerance", &
+               dE_elec_opt, e3 - energy_in)
+       end if
        ! Now, we call dump_pos_and_matrices here. : 2018.Jan19 TM
        !  but if we want to use the information of the matrices in the beginning of this line minimisation
        !  you can comment the following line, in the future. 
@@ -1069,6 +1075,10 @@ contains
     else
        call get_E_and_F(fixed_potential, vary_mu, energy_out, .true., .false.)
     end if
+    if(inode==ionode .and. abs(energy_out - energy_in) < abs(dE_elec_opt)) then
+       call cq_warn(sub_name, "Electronic structure dE is similar to atom movement dE; increase tolerance", &
+            dE_elec_opt, energy_out - energy_in)
+    end if
 
     ! 2018.Jan19  TM
     call dump_pos_and_matrices
@@ -1160,6 +1170,10 @@ contains
           call get_E_and_F(fixed_potential, vary_mu, energy_out, &
                .true., .false.)
        end if
+       if(inode==ionode .and. abs(energy_out - energy_in) < abs(dE_elec_opt)) then
+          call cq_warn(sub_name, "Electronic structure dE is similar to atom movement dE; increase tolerance", &
+               dE_elec_opt, energy_out - energy_in)
+       end if
 
        ! 2018.Jan19  TM : probably we don't need to call dump_pos_and_matrices here, since
        !                  we will call it after calling safemin2
@@ -1202,6 +1216,8 @@ contains
   !! MODIFICATION HISTORY
   !!  2020/01/08 12:52 dave
   !!   Bug fix: reset alpha to one on entry
+  !!  2022/08/09 09:00 dave
+  !!   Added maximum number of iterations in loop
   !! SOURCE
   !!
   subroutine backtrack_linemin(direction, energy_in, &
@@ -1221,9 +1237,9 @@ contains
          flag_LmatrixReuse, flag_diagonalisation, nspin, &
          flag_SFcoeffReuse 
     use minimise,       only: get_E_and_F, sc_tolerance, L_tolerance, &
-         n_L_iterations
+         n_L_iterations, dE_elec_opt
     use GenComms,       only: my_barrier, myid, inode, ionode,        &
-         cq_abort, gcopy
+         cq_abort, gcopy, cq_warn
     use SelfCon,        only: new_SC_potl
     use GenBlas,        only: dot
     use force_module,   only: tot_force
@@ -1262,6 +1278,7 @@ contains
     real(double) :: c1, c2
 
     integer :: ig, both, mat
+    character(len=80) :: sub_name = "backtrack_linemin"
 
     call start_timer(tmr_std_moveatoms)
 
@@ -1269,6 +1286,7 @@ contains
     old_alpha = zero
     alpha = one
     e0 = energy_in
+    e3 = e0
     if (inode == ionode .and. iprint_MD > 0) &
          write (io_lun, &
          fmt='(4x,"In backtrack_linemin, initial energy is ",f16.6," ",a2)') &
@@ -1288,7 +1306,7 @@ contains
          write(io_lun, fmt='(2x,"Starting backtrack_linemin, magnitude of grad_f.p is ",e16.6)') &
          sqrt(-grad_f_dot_p/ni_in_cell)
     done = .false.
-    do while (.not. done)
+    do while ((.not. done) .and. iter<max_back_iters)
        iter = iter+1
        ! Take a step along search direction
        do i = 1, ni_in_cell
@@ -1324,6 +1342,10 @@ contains
        end if
        call get_E_and_F(fixed_potential, vary_mu, e3, .false., &
             .false.)
+       if(inode==ionode .and. abs(e3 - energy_in) < abs(dE_elec_opt)) then
+          call cq_warn(sub_name, "Electronic structure dE is similar to atom movement dE; increase tolerance", &
+               dE_elec_opt, e3 - energy_in)
+       end if
        !call dump_pos_and_matrices
        ! e3 is f(x + alpha p)
        armijo = e0 + c1 * alpha * grad_f_dot_p
@@ -1343,7 +1365,12 @@ contains
           alpha = max(alpha_new, 0.1_double*alpha)
        end if
     end do ! while (.not. done)
+    if(.not. done) call cq_abort("Failed to reduce energy in backtrack_linemin.  Final step size: ",alpha)
     energy_out = e3
+    if(inode==ionode .and. abs(energy_out - energy_in) < abs(dE_elec_opt)) then
+       call cq_warn(sub_name, "Electronic structure dE is similar to atom movement dE; increase tolerance", &
+            dE_elec_opt, energy_out - energy_in)
+    end if
     call dump_pos_and_matrices
     ! Now find forces
     call force(fixed_potential, vary_mu, n_L_iterations, &
@@ -1543,6 +1570,8 @@ contains
   !! CREATION DATE 
   !!   2019/12/09
   !! MODIFICATION HISTORY
+  !!   2022/08/09 09:00 dave
+  !!    Added maximum number of iterations in loop
   !! SOURCE
   !!
   subroutine adapt_backtrack_linemin(direction, energy_in, &
@@ -1610,6 +1639,7 @@ contains
     iter = 0
     old_alpha = zero
     e0 = energy_in
+    e3 = e0
     if (inode == ionode .and. iprint_MD > 0) &
          write (io_lun, &
          fmt='(4x,"In backtrack_linemin, initial energy is ",f16.6," ",a2)') &
@@ -1629,7 +1659,7 @@ contains
          write(io_lun, fmt='(2x,"Starting backtrack_linemin, grad_f.p is ",f16.6)') grad_f_dot_p
     done = .false.
     iter = 0
-    do while (.not. done)
+    do while ((.not. done) .and. iter<max_back_iters)
        iter = iter+1
        ! Take a step along sesarch direction
        do i = 1, ni_in_cell
@@ -1684,6 +1714,7 @@ contains
           alpha = max(alpha_new, 0.1_double*alpha)
        end if
     end do ! while (.not. done)
+    if(.not. done) call cq_abort("Failed to reduce energy in adapt_backtrack_linemin.  Final step size: ",alpha)
     energy_out = e3
     call dump_pos_and_matrices
     ! Test increase of alpha
@@ -4204,6 +4235,8 @@ contains
   !!    Bug fix for constrained ratios
   !!   2020/05/15 12:26 dave
   !!    Update to remove unnecessary code (a/c and c/a etc are the same)
+  !!   2022/08/09 09:01 dave
+  !!    Restrict output of cell ratios to ionode and iprint_MD>2
   !!  SOURCE
   !!
   subroutine update_cell_dims(start_rcellx, start_rcelly, start_rcellz, &
@@ -4330,17 +4363,14 @@ contains
        x_atom_cell(j) = (rcellx/orcellx)*x_atom_cell(j)
        y_atom_cell(j) = (rcelly/orcelly)*y_atom_cell(j)
        z_atom_cell(j) = (rcellz/orcellz)*z_atom_cell(j)
-       if (inode == ionode .and. iprint_MD > 2) &
+       if (inode == ionode .and. iprint_MD > 3) &
             write (io_lun,*) 'Position: ', j, x_atom_cell(j), &
             y_atom_cell(j), z_atom_cell(j)
     end do
-    write(io_lun,*) "Iteration ", iter
-    write(io_lun,*) "rcellx/start_rcellx = ", rcellx/start_rcellx
-    write(io_lun,*) "rcelly/start_rcelly = ", rcelly/start_rcelly
-    write(io_lun,*) "rcellz/start_rcellz = ", rcellz/start_rcellz
-    !write(io_lun,*) 'new sim cell dims', start_rcellx, start_rcellx, start_rcellx
-    write(io_lun,*) 'current sim cell dims', rcellx, rcelly, rcellz
-
+    if(inode==ionode.and.iprint_MD>2) then
+       write(io_lun,fmt='(4x,"Scaling cell dimenstions by: ",3f9.6)') rcellx/start_rcellx, rcelly/start_rcelly, rcellz/start_rcellz
+       write(io_lun,fmt='(4x,"Updated cell dimensions: ",f10.6," a0 x",f10.6," a0 x",f10.6," a0")') rcellx, rcelly, rcellz
+    end if
   end subroutine update_cell_dims
   !!***
 
