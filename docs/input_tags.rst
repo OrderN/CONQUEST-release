@@ -390,7 +390,7 @@ Grid.GridCutoff (*real*)
     the value chosen will automatically be forced to be a factor of 3, 4 and 5 only
     (to fit with default FFT routines)
 
-    Default: 20 Ha.
+    Default: 50 Ha.
 
 Go to :ref:`top <input_tags>`.
 
@@ -545,7 +545,7 @@ DM.SolutionMethod (*string*)
     density matrix elements) or an O(N) method (ordern a combination of the
     techniques of Li et al. :cite:`e-Li1993` and Palser and Manolopoulos :cite:`e-Palser1998`.)
 
-    *default*: ordern
+    *default*: diagon
 
 DM.L\_range (*real*)
     Cutoff applied to L matrix (total energy will converge with increasing range;
