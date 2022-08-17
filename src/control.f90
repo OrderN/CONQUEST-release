@@ -2188,7 +2188,7 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
   !!****f* control/sqnm *
   !!
   !!  NAME 
-  !!   lbfgs
+  !!   sqnm
   !!  USAGE
   !!   
   !!  PURPOSE
@@ -2549,7 +2549,8 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
   !!
   !!  PURPOSE
   !!   Performs stabilised Quasi-Newton minimisation to optimise
-  !!   simulation cell size.  Based on J. Chem. Phys. 142, 034112 (2015)
+  !!   simulation cell size.  Based on algorithm for ionic
+  !!   optimisation in J. Chem. Phys. 142, 034112 (2015)
   !!  INPUTS
   !!
   !!  USES
@@ -2559,6 +2560,8 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
   !!  CREATION DATE
   !!   2022/08/11
   !!  MODIFICATION HISTORY
+  !!   2022/08/17 15:18 dave
+  !!    Introduced scaling to improve conditioning in arxiv/2206.07339
   !!  SOURCE
   !!
   subroutine cell_sqnm(fixed_potential, vary_mu, total_energy)
@@ -2603,7 +2606,7 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
 
     ! Local variables
     real(double), allocatable, dimension(:,:)   :: omega, vi, Sij, Hij
-    real(double), dimension(3)     :: cg, cg_new
+    real(double), dimension(3)     :: cg, cg_new, orcell
     real(double), allocatable, dimension(:)     :: mod_dr, lambda, kappa, kappa_prime, ri_vec
     real(double), allocatable, dimension(:,:) :: posnStore, dr_tilde, dg_tilde, vi_tilde
     real(double), allocatable, dimension(:,:) :: forceStore
@@ -2617,8 +2620,17 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
     real(double) :: new_rcellx, new_rcelly, new_rcellz, search_dir_x, search_dir_y,&
                     search_dir_z, stressx, stressy, stressz, RMSstress, newRMSstress,&
                     dRMSstress, search_dir_mean, mean_stress, max_stress, &
-                    stress_diff, volume, stress_target
+                    stress_diff, volume, stress_target, orcellx, orcelly, orcellz, wscal
 
+    ! Store original cell size
+    orcellx = rcellx
+    orcelly = rcelly
+    orcellz = rcellz
+    orcell(1) = rcellx
+    orcell(2) = rcelly
+    orcell(3) = rcellz
+    ! Scaling: w = 2 Bohr x sqrt(Natoms)
+    wscal = two*sqrt(real(ni_in_cell,double))
     step = MDtimestep
     allocate(posnStore(3,LBFGS_history), &
              forceStore(3,LBFGS_history), STAT=stat)
@@ -2686,17 +2698,19 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
        npmod = mod(iter_loc, LBFGS_history)
        if(npmod==0) npmod = LBFGS_history
        volume = rcellx*rcelly*rcellz
-       posnStore (1,npmod) = rcellx
-       posnStore (2,npmod) = rcelly
-       posnStore (3,npmod) = rcellz
+       posnStore (1,npmod) = wscal*rcellx/orcellx
+       posnStore (2,npmod) = wscal*rcelly/orcelly
+       posnStore (3,npmod) = wscal*rcellz/orcellz
        if (leqi(cell_constraint_flag, 'volume')) then
           forceStore(1,npmod) = -third*(stress(1,1)+stress(2,2)+stress(3,3)) + press*volume
           cg(1) = -cg_new(1)
        else
-          do i=1,3
-             forceStore(i,npmod) = -stress(i,i) + press*volume
-             cg(i) = -cg_new(i)
-          end do
+          forceStore(1,npmod) = (-stress(1,1) + press*volume)*orcellx/wscal
+          forceStore(2,npmod) = (-stress(2,2) + press*volume)*orcelly/wscal
+          forceStore(3,npmod) = (-stress(3,3) + press*volume)*orcellz/wscal
+          cg(1) = -cg_new(1)
+          cg(2) = -cg_new(2)
+          cg(3) = -cg_new(3)
        end if
        new_rcellx = rcellx
        new_rcelly = rcelly
@@ -2725,12 +2739,12 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
           alpha = one
        endif
        ! Update stored position difference and force difference
-       posnStore (1,npmod) = rcellx - posnStore (1,npmod)
-       posnStore (2,npmod) = rcelly - posnStore (2,npmod)
-       posnStore (3,npmod) = rcellz - posnStore (3,npmod)
-       do i=1,3
-          forceStore(i,npmod) = -stress(i,i) + press*volume - forceStore(i,npmod)
-       end do
+       posnStore (1,npmod) = rcellx*wscal/orcellx - posnStore (1,npmod)
+       posnStore (2,npmod) = rcelly*wscal/orcelly - posnStore (2,npmod)
+       posnStore (3,npmod) = rcellz*wscal/orcellz - posnStore (3,npmod)
+       forceStore(1,npmod) = (-stress(1,1) + press*volume)*orcellx/wscal - forceStore(1,npmod)
+       forceStore(2,npmod) = (-stress(2,2) + press*volume)*orcelly/wscal - forceStore(2,npmod)
+       forceStore(3,npmod) = (-stress(3,3) + press*volume)*orcellz/wscal - forceStore(3,npmod)
        n_store = min(iter_loc,LBFGS_history) ! Number of stored states
        if(inode==ionode.AND.iprint_MD>2) write(io_lun,fmt='(4x,"Number of stored histories ",i3)') n_store
        allocate(mod_dr(n_store),Sij(n_store,n_store),lambda(n_store),&
@@ -2837,9 +2851,11 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
        do i=1,n_dim
           temp = zero
           do j=1,3
-             temp = temp + stress(j,j)*vi_tilde(j,i)
+             temp = temp + (stress(j,j)-press*volume)*orcell(j)*vi_tilde(j,i)/wscal
           end do
-          cg_new = cg_new - (one/kappa_prime(i) - alpha)*temp*vi_tilde(:,i)
+          do j=1,3
+             cg_new(j) = cg_new(j) - (one/kappa_prime(i) - alpha)*temp*vi_tilde(j,i)*wscal/orcell(j)
+          end do
        end do
        ! Zero search direction for fixed atoms and find maximum force
        gg = dot(length, cg_new, 1, cg_new, 1)
@@ -3442,7 +3458,7 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
           exit
        end if
        ! Relax cell
-       !if ( leqi(runtype, 'cg')    ) then
+       if ( leqi(runtype, 'cg')    ) then
           call cell_cg_run(fixed_potential, vary_mu, energy1)
        else if ( leqi(runtype, 'sqnm')    ) then
           call cell_sqnm(fixed_potential, vary_mu, energy1)
