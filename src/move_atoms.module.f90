@@ -1611,6 +1611,7 @@ contains
     ! Passed variables
     real(double) :: energy_in, energy_out
     real(double), dimension(3) :: direction
+
     ! Shared variables needed by get_E_and_F for now (!)
     logical           :: vary_mu, fixed_potential
 
@@ -1802,6 +1803,7 @@ contains
     ! Passed variables
     real(double) :: energy_in, energy_out
     real(double), dimension(3) :: direction
+
     ! Shared variables needed by get_E_and_F for now (!)
     logical           :: vary_mu, fixed_potential
 
@@ -5190,6 +5192,8 @@ contains
   !!       added atom_vels (from global_module), and removed local velocity_global
   !!   2022/08/23 08:33 dave
   !!    Made velocity optional (mainly for cell updates)
+  !!   2022/09/19 08:20 dave
+  !!    Added dummy variable for when velocity is not passed
   !!  SOURCE
   !!
   subroutine update_pos_and_matrices(update_method, velocity)
@@ -5228,6 +5232,7 @@ contains
     type(InfoMatrixFile),pointer :: InfoMat(:)
 
     integer :: i, stat
+    real(double), dimension(:,:), allocatable :: dummy
 
     !Switch on Debugging
     !  flag_debug_move_atoms = .true.
@@ -5316,13 +5321,19 @@ contains
     !    I (TM) should make new routine like "updateIndices4" using InfoGlob, soon.  ! 2017.Nov.13  Tsuyoshi Miyazaki
     !   (NOTE) If CONQUEST stops before calling "finalise", coord_next.dat should be used in the next job.
     !       coord_next.dat is made in "updateIndices3", at present.
-    call updateIndices3(fixed_potential, velocity)
     if(present(velocity)) then
+       call updateIndices3(fixed_potential, velocity)
        do i=1,ni_in_cell
           velocity(1,i) = atom_vels(1,id_glob(i))
           velocity(2,i) = atom_vels(2,id_glob(i))
           velocity(3,i) = atom_vels(3,id_glob(i))
        end do
+    else
+       ! Allocate a dummy velocity...
+       allocate(dummy(3,ni_in_cell))
+       dummy = zero
+       call updateIndices3(fixed_potential, dummy)
+       deallocate(dummy)
     end if
     ! 2020/Oct/12 TM   
     !  if we want to reduce the memory size ...  

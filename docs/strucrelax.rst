@@ -155,9 +155,9 @@ tolerance, if it is even possible.
 Due to the nature of the complex partitioning system, large and sudden changes in volume
 may cause the calculation to crash, particlularly in the case of combined
 optimisation. In such cases, it may help to try ``AtomMove.OptCellMethod 2``,
-which uses a simple but robust double-loop minimisation: a full ionic conjugate
-gradients relaxation followed by a full simulation cell conjugate gradients
-relaxation. This is considerably less efficient, but
+which uses a simple but robust double-loop minimisation: a full ionic 
+relaxation (using either cg or sqnm) followed by a full simulation cell 
+relaxation (using cg). This is considerably less efficient, but
 may help in particularly problematic cases.
 
 Go to :ref:`top <strucrelax>`.
