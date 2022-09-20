@@ -1100,7 +1100,7 @@ contains
                 if (.not.flag_SpinDependentSF .and. spin.eq.2) then
                    if(inode==ionode  .and. iprint_basis + min_layer>2) &
                         write(io_lun,fmt='(4x,a)') &
-                        trim(prefix)//'Take average of matSFcoeff(1) and matSFcoeff(2) into matSFcoeff(1)'
+                        trim(prefix)//' Take average of matSFcoeff(1) and matSFcoeff(2) into matSFcoeff(1)'
                    matSFcoeff_2 = allocate_temp_matrix(SFcoeff_range,0,sf,atomf)
                    call matrix_scale(zero,matSFcoeff_2)
                    call LFD_put_TVEC_to_SFcoeff(np,i,mat(:,SFcoeff_range),mat_p(matSFcoeff_2)%matrix, &
@@ -1162,9 +1162,9 @@ contains
        call io_close(lun12)
     endif
 
-    if(myid==0 .and. inode==ionode  .and. iprint_basis + min_layer>1) then
+    if(myid==0 .and. inode==ionode  .and. iprint_basis + min_layer>2) then
        t1 = mtime()
-       write(io_lun,'(4x,A,f20.8,A)') trim(prefix)//'Time for Localised Filter Diagonalisation: ',t1-t0,' ms'
+       write(io_lun,'(4x,A,f20.8,A)') trim(prefix)//' Time for Localised Filter Diagonalisation: ',t1-t0,' ms'
     end if
     if (inode==ionode .and. iprint_basis + min_layer>2) write(io_lun,fmt='(4x,a)') trim(prefix)//'Exiting'
 !

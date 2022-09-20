@@ -1046,7 +1046,7 @@ contains
     end if
     ! print residual information
     if (inode==ionode) then
-       if (iprint_SC + min_layer>1) then
+       if (iprint_SC + min_layer>2) then
           write (io_lun, '(4x,a,i5,a,e12.5)') &
                trim(prefix)//' Pulay iteration ', iter, ' RMS residual:             ', RA
           write (io_lun, '(4x,a,i5,a,e12.5)') &
@@ -1151,7 +1151,7 @@ contains
        end if
        ! print residual information
        if (inode==ionode) then
-          if (iprint_SC + min_layer>1) then
+          if (iprint_SC + min_layer>2) then
              write (io_lun, '(4x,a,i5,a,e12.5)') &
                   trim(prefix)//' Pulay iteration ', iter, ' RMS residual:             ', RA
              write (io_lun, '(4x,a,i5,a,e12.5)') &

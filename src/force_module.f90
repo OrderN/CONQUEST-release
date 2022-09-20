@@ -577,7 +577,7 @@ contains
              if (flag_pcc_global) write(io_lun, 108) trim(prefix),(for_conv *   pcc_force(j,i), j = 1, 3)
              if (flag_dft_d2) write (io_lun, 109) trim(prefix),(for_conv * disp_force(j,i), j = 1, 3)
              if (flag_perform_cdft) write (io_lun, fmt='(4x,a,3f15.10)') &
-                  trim(prefix)//"Force cDFT : ",(for_conv*cdft_force(j,i),j=1,3)
+                  trim(prefix)//" Force cDFT : ",(for_conv*cdft_force(j,i),j=1,3)
              if (flag_self_consistent) then
                 write (io_lun, 105) trim(prefix),(for_conv * tot_force(j,i),   j = 1, 3)
              else
@@ -665,7 +665,7 @@ contains
       ! Output
       if (inode == ionode) then       
          write (io_lun,fmt='(/4x,a,3a15)') trim(prefix)//"                  ","X","Y","Z"
-         if(iprint_MD + min_layer > 1) write(io_lun,fmt='(4x,a)') trim(prefix)//"Stress contributions:"
+         if(iprint_MD + min_layer > 1) write(io_lun,fmt='(4x,a)') trim(prefix)//" Stress contributions:"
       end if
       call print_stress(trim(prefix)//" K.E. stress:      ", KE_stress, 3 + min_layer)
       call print_stress(trim(prefix)//" S-Pulay stress:   ", SP_stress, 3 + min_layer)
@@ -685,7 +685,7 @@ contains
       call print_stress(trim(prefix)//" Hartree stress:   ", Hartree_stress, 3 + min_layer)
       call print_stress(trim(prefix)//" PCC stress:       ", pcc_stress, 3 + min_layer)
       call print_stress(trim(prefix)//" non-SCF stress:   ", nonSCF_stress, 3 + min_layer)
-      if(flag_dft_D2) call print_stress(trim(prefix)//"DFT-D2 stress:    ", disp_stress, 3 + min_layer)
+      if(flag_dft_D2) call print_stress(trim(prefix)//" DFT-D2 stress:    ", disp_stress, 3 + min_layer)
       call print_stress(trim(prefix)//" Total stress:     ", stress, 0 + min_layer)
       volume = rcellx*rcelly*rcellz
       ! We need pressure in GPa, and only diagonal terms output
@@ -700,7 +700,7 @@ contains
     call my_barrier()
     if(iprint_MD + min_layer>3) deallocate(s_pulay_for,phi_pulay_for)
     if (inode == ionode .and. iprint_MD + min_layer > 1 .and. write_forces) &
-         write (io_lun, fmt='(4x,a)') trim(prefix)//"Finished force"
+         write (io_lun, fmt='(4x,a)') trim(prefix)//" Finished force"
 
     call start_timer(tmr_std_allocation)
     if (flag_pcc_global) then
