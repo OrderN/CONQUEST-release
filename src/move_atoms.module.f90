@@ -53,7 +53,7 @@
 !!   2018/09/07 tsuyoshi
 !!    introduced flag_debug_move_atoms for debugging
 !!   2019/02/28 zamaan
-!!    New subroutinee safemin_full plus dependencies for cell optimisation by 
+!!    New subroutine safemin_full plus dependencies for cell optimisation by 
 !!    minimising a single vector
 !!   2019/05/21 zamaan
 !!    Removed old RNG, replaced calls with new one from rng module
@@ -94,6 +94,8 @@ module move_atoms
   integer :: cg_line_min
   integer, parameter :: safe = 0
   integer, parameter :: backtrack = 1
+  integer, parameter :: adapt_backtrack = 2
+  integer, parameter :: max_back_iters = 11
   ! Table to show the methods to update  (for update_pos_and_matrix)
    integer, parameter :: updatePos  = 0
    integer, parameter :: updateL    = 1
@@ -777,10 +779,12 @@ contains
   !!    Tidying: only output on ionode, remove redundant call to wrap_xyz
   !!   2021/10/15 17:44 dave
   !!    Updates to fix second interpolation
+  !!   2022/07/29 11:52 dave
+  !!    Removed redundant (and erroneous) total_energy passed variable
   !! SOURCE
   !!
   subroutine safemin2(start_x, start_y, start_z, direction, energy_in, &
-                      energy_out, fixed_potential, vary_mu, total_energy)
+                      energy_out, fixed_potential, vary_mu)
 
     ! Module usage
     use datatypes
@@ -796,9 +800,9 @@ contains
          flag_LmatrixReuse, flag_diagonalisation, nspin, &
          flag_SFcoeffReuse 
     use minimise,       only: get_E_and_F, sc_tolerance, L_tolerance, &
-         n_L_iterations
+         n_L_iterations, dE_elec_opt
     use GenComms,       only: my_barrier, myid, inode, ionode,        &
-         cq_abort, gcopy
+         cq_abort, gcopy, cq_warn
     use SelfCon,        only: new_SC_potl
     use GenBlas,        only: dot
     use force_module,   only: tot_force
@@ -823,7 +827,6 @@ contains
     real(double), dimension(ni_in_cell)   :: start_x, start_y, start_z
     ! Shared variables needed by get_E_and_F for now (!)
     logical           :: vary_mu, fixed_potential
-    real(double)      :: total_energy
     character(len=40) :: output_file
 
 
@@ -839,6 +842,7 @@ contains
     real(double) :: k3_old, k3_local, kmin_old
 
     integer :: ig, both, mat
+    character(len=80) :: sub_name = "safemin2"
 
     ! for debugging
     integer :: mat_SFcoeff_old, mat_K_old
@@ -852,7 +856,7 @@ contains
     ! for debugging
 
     !allocate(store_density(maxngrid))
-    e0 = total_energy
+    e0 = energy_in
     if (inode == ionode .and. iprint_MD > 0) &
          write (io_lun, &
          fmt='(4x,"In safemin2, initial energy is ",f20.10," ",a2)') &
@@ -948,6 +952,10 @@ contains
        end if
        call get_E_and_F(fixed_potential, vary_mu, e3, .false., &
             .false.)
+       if(inode==ionode .and. abs(e3 - energy_in) < abs(dE_elec_opt)) then
+          call cq_warn(sub_name, "Electronic structure dE is similar to atom movement dE; increase tolerance", &
+               dE_elec_opt, e3 - energy_in)
+       end if
        ! Now, we call dump_pos_and_matrices here. : 2018.Jan19 TM
        !  but if we want to use the information of the matrices in the beginning of this line minimisation
        !  you can comment the following line, in the future. 
@@ -1067,6 +1075,10 @@ contains
     else
        call get_E_and_F(fixed_potential, vary_mu, energy_out, .true., .false.)
     end if
+    if(inode==ionode .and. abs(energy_out - energy_in) < abs(dE_elec_opt)) then
+       call cq_warn(sub_name, "Electronic structure dE is similar to atom movement dE; increase tolerance", &
+            dE_elec_opt, energy_out - energy_in)
+    end if
 
     ! 2018.Jan19  TM
     call dump_pos_and_matrices
@@ -1158,6 +1170,10 @@ contains
           call get_E_and_F(fixed_potential, vary_mu, energy_out, &
                .true., .false.)
        end if
+       if(inode==ionode .and. abs(energy_out - energy_in) < abs(dE_elec_opt)) then
+          call cq_warn(sub_name, "Electronic structure dE is similar to atom movement dE; increase tolerance", &
+               dE_elec_opt, energy_out - energy_in)
+       end if
 
        ! 2018.Jan19  TM : probably we don't need to call dump_pos_and_matrices here, since
        !                  we will call it after calling safemin2
@@ -1200,10 +1216,12 @@ contains
   !! MODIFICATION HISTORY
   !!  2020/01/08 12:52 dave
   !!   Bug fix: reset alpha to one on entry
+  !!  2022/08/09 09:00 dave
+  !!   Added maximum number of iterations in loop
   !! SOURCE
   !!
   subroutine backtrack_linemin(direction, energy_in, &
-                      energy_out, fixed_potential, vary_mu, total_energy)
+                      energy_out, fixed_potential, vary_mu)
 
     ! Module usage
     use datatypes
@@ -1219,9 +1237,9 @@ contains
          flag_LmatrixReuse, flag_diagonalisation, nspin, &
          flag_SFcoeffReuse 
     use minimise,       only: get_E_and_F, sc_tolerance, L_tolerance, &
-         n_L_iterations
+         n_L_iterations, dE_elec_opt
     use GenComms,       only: my_barrier, myid, inode, ionode,        &
-         cq_abort, gcopy
+         cq_abort, gcopy, cq_warn
     use SelfCon,        only: new_SC_potl
     use GenBlas,        only: dot
     use force_module,   only: tot_force
@@ -1245,7 +1263,6 @@ contains
     real(double), dimension(3,ni_in_cell) :: direction
     ! Shared variables needed by get_E_and_F for now (!)
     logical           :: vary_mu, fixed_potential
-    real(double)      :: total_energy
 
     ! Local variables
     integer        :: i, j, iter, lun, gatom, stat, nfile, symm
@@ -1261,13 +1278,15 @@ contains
     real(double) :: c1, c2
 
     integer :: ig, both, mat
+    character(len=80) :: sub_name = "backtrack_linemin"
 
     call start_timer(tmr_std_moveatoms)
 
     iter = 0
     old_alpha = zero
     alpha = one
-    e0 = total_energy
+    e0 = energy_in
+    e3 = e0
     if (inode == ionode .and. iprint_MD > 0) &
          write (io_lun, &
          fmt='(4x,"In backtrack_linemin, initial energy is ",f16.6," ",a2)') &
@@ -1287,7 +1306,7 @@ contains
          write(io_lun, fmt='(2x,"Starting backtrack_linemin, magnitude of grad_f.p is ",e16.6)') &
          sqrt(-grad_f_dot_p/ni_in_cell)
     done = .false.
-    do while (.not. done)
+    do while ((.not. done) .and. iter<max_back_iters)
        iter = iter+1
        ! Take a step along search direction
        do i = 1, ni_in_cell
@@ -1323,6 +1342,10 @@ contains
        end if
        call get_E_and_F(fixed_potential, vary_mu, e3, .false., &
             .false.)
+       if(inode==ionode .and. abs(e3 - energy_in) < abs(dE_elec_opt)) then
+          call cq_warn(sub_name, "Electronic structure dE is similar to atom movement dE; increase tolerance", &
+               dE_elec_opt, e3 - energy_in)
+       end if
        !call dump_pos_and_matrices
        ! e3 is f(x + alpha p)
        armijo = e0 + c1 * alpha * grad_f_dot_p
@@ -1342,7 +1365,12 @@ contains
           alpha = max(alpha_new, 0.1_double*alpha)
        end if
     end do ! while (.not. done)
+    if(.not. done) call cq_abort("Failed to reduce energy in backtrack_linemin.  Final step size: ",alpha)
     energy_out = e3
+    if(inode==ionode .and. abs(energy_out - energy_in) < abs(dE_elec_opt)) then
+       call cq_warn(sub_name, "Electronic structure dE is similar to atom movement dE; increase tolerance", &
+            dE_elec_opt, energy_out - energy_in)
+    end if
     call dump_pos_and_matrices
     ! Now find forces
     call force(fixed_potential, vary_mu, n_L_iterations, &
@@ -1359,7 +1387,7 @@ contains
          write(io_lun,fmt='(6x,"In backtrack_linemin, second Wolfe: ",e11.4," < ",e11.4)') &
          abs(grad_fp_dot_p), c2*abs(grad_f_dot_p)
 
-    dE = e0 - energy_out
+    dE = energy_in - energy_out
     if (inode == ionode .and. iprint_MD > 2) then
        write (io_lun, &
             fmt='(4x,"In backtrack_linemin, exit after ",i4," &
@@ -1530,6 +1558,711 @@ contains
   end subroutine single_step
 !!***
   
+  !!****f* move_atoms/backtrack_linemin_cell *
+  !! PURPOSE
+  !!  Carry out back-tracking line minimisation
+  !! INPUTS
+  !!
+  !! AUTHOR
+  !!   David Bowler
+  !! CREATION DATE
+  !!   2022/08/12
+  !! MODIFICATION HISTORY
+  !! SOURCE
+  !!
+  subroutine backtrack_linemin_cell(direction, energy_in, &
+                      energy_out, fixed_potential, vary_mu)
+
+    ! Module usage
+    use datatypes
+    use numbers
+    use units
+    use global_module,  only: iprint_MD, x_atom_cell, y_atom_cell,    &
+         z_atom_cell, flag_vary_basis,           &
+         atom_coord, ni_in_cell, rcellx, rcelly, &
+         rcellz, flag_self_consistent,           &
+         flag_reset_dens_on_atom_move,           &
+         IPRINT_TIME_THRES1, flag_pcc_global,    &
+         id_glob,                                &
+         flag_LmatrixReuse, flag_diagonalisation, nspin, &
+         flag_SFcoeffReuse
+    use minimise,       only: get_E_and_F, sc_tolerance, L_tolerance, &
+         n_L_iterations, dE_elec_opt
+    use GenComms,       only: my_barrier, myid, inode, ionode,        &
+         cq_abort, gcopy, cq_warn
+    use SelfCon,        only: new_SC_potl
+    use GenBlas,        only: dot
+    use force_module,   only: tot_force
+    use io_module,      only: write_atomic_positions, pdb_template
+    use density_module, only: density, set_density_pcc
+    use maxima_module,  only: maxngrid
+    use matrix_data, ONLY: Lrange, Hrange, SFcoeff_range, SFcoeffTr_range, HTr_range
+    use mult_module, ONLY: matL,L_trans, matK, matSFcoeff
+    use timer_module
+    use dimens, ONLY: r_super_x, r_super_y, r_super_z
+    use store_matrix, ONLY: dump_pos_and_matrices
+    use mult_module, ONLY: allocate_temp_matrix, free_temp_matrix, matrix_sum
+    use global_module, ONLY: atomf, sf
+    use io_module, ONLY: dump_matrix
+    use force_module,      only: force, stress
+
+    implicit none
+
+    ! Passed variables
+    real(double) :: energy_in, energy_out
+    real(double), dimension(3) :: direction
+
+    ! Shared variables needed by get_E_and_F for now (!)
+    logical           :: vary_mu, fixed_potential
+
+    ! Local variables
+    integer        :: i, j, iter, lun, gatom, stat, nfile, symm
+    logical        :: reset_L = .false.
+    logical        :: done
+    type(cq_timer) :: tmr_l_iter, tmr_l_tmp1
+    real(double)   :: alpha_new, armijo, grad_f_dot_p, grad_fp_dot_p, old_alpha
+    real(double)   :: e0, e1, e2, e3, tmp, bottom
+    real(double), save :: kmin = zero, dE = zero
+    real(double), dimension(:), allocatable :: store_density
+    real(double) :: k3_old, k3_local, kmin_old
+    real(double) :: alpha = one
+    real(double) :: c1, c2, orcellx, orcelly, orcellz
+
+    integer :: ig, both, mat
+    character(len=80) :: sub_name = "backtrack_linemin_cell"
+
+    call start_timer(tmr_std_moveatoms)
+
+    iter = 0
+    old_alpha = zero
+    alpha = one
+    orcellx = rcellx
+    orcelly = rcelly
+    orcellz = rcellz
+    e0 = energy_in
+    e3 = e0
+    if (inode == ionode .and. iprint_MD > 0) &
+         write (io_lun, &
+         fmt='(4x,"In backtrack_linemin, initial energy is ",f16.6," ",a2)') &
+         en_conv * energy_in, en_units(energy_units)
+
+    c1 = 0.01_double
+    c2 = 0.9_double
+    ! grad f dot p  Note that the ordering of direction and tot_force is different
+    grad_f_dot_p = zero
+    ! Plus here I think
+    grad_f_dot_p = grad_f_dot_p + direction(1)*stress(1,1)
+    grad_f_dot_p = grad_f_dot_p + direction(2)*stress(2,2)
+    grad_f_dot_p = grad_f_dot_p + direction(3)*stress(3,3)
+    if(inode==ionode.AND.iprint_MD>1) &
+         write(io_lun, fmt='(2x,"Starting backtrack_linemin, magnitude of grad_f.p is ",e16.6)') &
+         sqrt(-grad_f_dot_p/three)
+    done = .false.
+    do while ((.not. done) .and. iter<max_back_iters)
+       iter = iter+1
+       ! Take a step along search direction
+       ! Take a step along search direction
+       call update_cell_dims(orcellx, orcelly, orcellz, &
+            direction(1), direction(2), direction(3), direction(1), alpha)
+
+       ! Update and find new energy
+       if(flag_SFcoeffReuse) then
+          call update_pos_and_matrices(updateSFcoeff)
+       else
+          call update_pos_and_matrices(updateLorK)
+       endif
+       if (inode == ionode .and. iprint_MD > 2) then
+          do i=1,ni_in_cell
+             write (io_lun,fmt='(2x,"Position: ",i3,3f13.8)') i, &
+                  x_atom_cell(i), y_atom_cell(i), z_atom_cell(i)
+          end do
+       end if
+       call update_H(fixed_potential)
+       ! Write out atomic positions
+       if (iprint_MD > 2) then
+          call write_atomic_positions("UpdatedAtoms_tmp.dat", &
+               trim(pdb_template))
+       end if
+       ! We've just moved the atoms - we need a self-consistent ground
+       ! state before we can minimise blips !
+       if (flag_vary_basis) then
+          call new_SC_potl(.false., sc_tolerance, reset_L,           &
+               fixed_potential, vary_mu, n_L_iterations, &
+               L_tolerance, e3)
+       end if
+       call get_E_and_F(fixed_potential, vary_mu, e3, .false., &
+            .false.)
+       if(inode==ionode .and. abs(e3 - energy_in) < abs(dE_elec_opt)) then
+          call cq_warn(sub_name, "Electronic structure dE is similar to atom movement dE; increase tolerance", &
+               dE_elec_opt, e3 - energy_in)
+       end if
+       !call dump_pos_and_matrices
+       ! e3 is f(x + alpha p)
+       armijo = e0 + c1 * alpha * grad_f_dot_p
+
+       if (inode == ionode .and. iprint_MD > 1) then
+          write (io_lun, &
+               fmt='(4x,"In backtrack_linemin, iter ",i3," step and energy &
+               &are ",2f16.6," ",a2)') &
+               iter, alpha, en_conv * e3, en_units(energy_units)
+          write(io_lun, fmt='(6x,"Armijo threshold is ",f16.6," ",a2)') armijo, en_units(energy_units)
+       end if
+       if(e3<armijo) then ! success
+          done = .true.
+       else
+          old_alpha = alpha
+          alpha_new = (-half * alpha * grad_f_dot_p) / ((e3 - e0)/alpha - grad_f_dot_p)
+          alpha = max(alpha_new, 0.1_double*alpha)
+       end if
+    end do ! while (.not. done)
+    if(.not. done) call cq_abort("Failed to reduce energy in backtrack_linemin.  Final step size: ",alpha)
+    energy_out = e3
+    if(inode==ionode .and. abs(energy_out - energy_in) < abs(dE_elec_opt)) then
+       call cq_warn(sub_name, "Electronic structure dE is similar to atom movement dE; increase tolerance", &
+            dE_elec_opt, energy_out - energy_in)
+    end if
+    call dump_pos_and_matrices
+    ! Now find forces
+    call force(fixed_potential, vary_mu, n_L_iterations, &
+         L_tolerance, sc_tolerance, energy_out, .true.)
+    ! Evaluate new grad f dot p
+    grad_fp_dot_p = zero
+    grad_fp_dot_p = grad_f_dot_p + direction(1)*stress(1,1)
+    grad_fp_dot_p = grad_f_dot_p + direction(2)*stress(2,2)
+    grad_fp_dot_p = grad_f_dot_p + direction(3)*stress(3,3)
+    if(inode==ionode.AND.iprint_MD>3) &
+         write(io_lun,fmt='(6x,"In backtrack_linemin, second Wolfe: ",e11.4," < ",e11.4)') &
+         abs(grad_fp_dot_p), c2*abs(grad_f_dot_p)
+
+    dE = energy_in - energy_out
+    if (inode == ionode .and. iprint_MD > 2) then
+       write (io_lun, &
+            fmt='(4x,"In backtrack_linemin, exit after ",i4," &
+            &iterations with energy ",f16.6," ",a2)') &
+            iter, en_conv * energy_out, en_units(energy_units)
+    else if (inode == ionode .and. iprint_MD > 0) then
+       write (io_lun, fmt='(/4x,"In backtrack_linemin, final energy is   ",f16.6," ",a2)') &
+            en_conv * energy_out, en_units(energy_units)
+    end if
+
+    call stop_timer(tmr_std_moveatoms)
+    return
+  end subroutine backtrack_linemin_cell
+!!***
+
+  !!****f* move_atoms/single_step_cell *
+  !! PURPOSE
+  !!  Carry out single step
+  !! INPUTS
+  !!
+  !! AUTHOR
+  !!   David Bowler
+  !! CREATION DATE
+  !!   2022/08/12
+  !! MODIFICATION HISTORY
+  !! SOURCE
+  !!
+  subroutine single_step_cell(direction, energy_in, &
+                      energy_out, fixed_potential, vary_mu)
+
+    ! Module usage
+    use datatypes
+    use numbers
+    use units
+    use global_module,  only: iprint_MD, x_atom_cell, y_atom_cell,    &
+         z_atom_cell, flag_vary_basis,           &
+         atom_coord, ni_in_cell, rcellx, rcelly, &
+         rcellz, flag_self_consistent,           &
+         flag_reset_dens_on_atom_move,           &
+         IPRINT_TIME_THRES1, flag_pcc_global,    &
+         id_glob,                                &
+         flag_LmatrixReuse, flag_diagonalisation, nspin, &
+         flag_SFcoeffReuse
+    use minimise,       only: get_E_and_F, sc_tolerance, L_tolerance, &
+         n_L_iterations, dE_elec_opt
+    use GenComms,       only: my_barrier, myid, inode, ionode,        &
+         cq_abort, gcopy, cq_warn
+    use SelfCon,        only: new_SC_potl
+    use GenBlas,        only: dot
+    use force_module,   only: tot_force
+    use io_module,      only: write_atomic_positions, pdb_template
+    use density_module, only: density, set_density_pcc
+    use maxima_module,  only: maxngrid
+    use matrix_data, ONLY: Lrange, Hrange, SFcoeff_range, SFcoeffTr_range, HTr_range
+    use mult_module, ONLY: matL,L_trans, matK, matSFcoeff
+    use timer_module
+    use dimens, ONLY: r_super_x, r_super_y, r_super_z
+    use store_matrix, ONLY: dump_pos_and_matrices
+    use mult_module, ONLY: allocate_temp_matrix, free_temp_matrix, matrix_sum
+    use global_module, ONLY: atomf, sf
+    use io_module, ONLY: dump_matrix
+    use force_module,      only: force, stress
+
+    implicit none
+
+    ! Passed variables
+    real(double) :: energy_in, energy_out
+    real(double), dimension(3) :: direction
+
+    ! Shared variables needed by get_E_and_F for now (!)
+    logical           :: vary_mu, fixed_potential
+
+    ! Local variables
+    integer        :: i, j, iter, lun, gatom, stat, nfile, symm
+    logical        :: reset_L = .false.
+    logical        :: done
+    type(cq_timer) :: tmr_l_iter, tmr_l_tmp1
+    real(double)   :: alpha_new, armijo, grad_f_dot_p, grad_fp_dot_p, old_alpha
+    real(double)   :: e0, e1, e2, e3, tmp, bottom
+    real(double), save :: kmin = zero, dE = zero
+    real(double), dimension(:), allocatable :: store_density
+    real(double) :: k3_old, k3_local, kmin_old
+    real(double) :: alpha = one
+    real(double) :: orcellx, orcelly, orcellz
+
+    integer :: ig, both, mat
+    character(len=80) :: sub_name = "single_step"
+
+    call start_timer(tmr_std_moveatoms)
+    alpha = one
+    orcellx = rcellx
+    orcelly = rcelly
+    orcellz = rcellz
+    e0 = energy_in
+    e3 = e0
+    if (inode == ionode .and. iprint_MD > 0) &
+         write (io_lun, &
+         fmt='(4x,"In single_step, initial energy is ",f16.6," ",a2)') &
+         en_conv * energy_in, en_units(energy_units)
+    ! Take a step along search direction
+    call update_cell_dims(rcellx, rcelly, rcellz, &
+         direction(1), direction(2), direction(3), direction(1), alpha)
+
+    ! Update and find new energy
+    if(flag_SFcoeffReuse) then
+       call update_pos_and_matrices(updateSFcoeff)
+    else
+       call update_pos_and_matrices(updateLorK)
+    endif
+    call update_H(fixed_potential)
+    ! Write out atomic positions
+    if (iprint_MD > 2) then
+       call write_atomic_positions("UpdatedAtoms_tmp.dat", &
+            trim(pdb_template))
+    end if
+    ! We've just moved the atoms - we need a self-consistent ground
+    ! state before we can minimise blips !
+    if (flag_vary_basis) then
+       call new_SC_potl(.false., sc_tolerance, reset_L,           &
+            fixed_potential, vary_mu, n_L_iterations, &
+            L_tolerance, e3)
+    end if
+    call get_E_and_F(fixed_potential, vary_mu, e3, .false., &
+         .false.)
+    if (inode == ionode .and. iprint_MD > 1) then
+       write (io_lun, fmt='(4x,"After single step, energy is ",f16.6," ",a2)') &
+            en_conv * e3, en_units(energy_units)
+    end if
+    energy_out = e3
+    if(inode==ionode .and. abs(energy_out - energy_in) < abs(dE_elec_opt)) then
+       call cq_warn(sub_name, "Electronic structure dE is similar to atom movement dE; increase tolerance", &
+            dE_elec_opt, energy_out - energy_in)
+    end if
+    if(energy_out>energy_in) then
+       call update_cell_dims(rcellx, rcelly, rcellz, &
+            direction(1), direction(2), direction(3), direction(1), -alpha)
+       if(flag_SFcoeffReuse) then
+          call update_pos_and_matrices(updateSFcoeff)
+       else
+          call update_pos_and_matrices(updateLorK)
+       endif
+       call update_H(fixed_potential)
+       return ! We'll need to reset - no need to call force
+    end if
+    call dump_pos_and_matrices
+    ! Now find forces
+    call force(fixed_potential, vary_mu, n_L_iterations, &
+         L_tolerance, sc_tolerance, energy_out, .true.)
+    dE = e0 - energy_out
+    if (inode == ionode .and. iprint_MD > 0) then
+       write (io_lun, fmt='(/4x,"In single_step, final energy is   ",f16.6," ",a2)') &
+            en_conv * energy_out, en_units(energy_units)
+    end if
+
+    call stop_timer(tmr_std_moveatoms)
+    return
+  end subroutine single_step_cell
+!!***
+
+  !!****f* move_atoms/backtrack_linemin_full *
+  !! PURPOSE
+  !!  Carry out back-tracking line minimisation
+  !! INPUTS
+  !!
+  !! AUTHOR
+  !!   David Bowler
+  !! CREATION DATE
+  !!   2022/08/23
+  !! MODIFICATION HISTORY
+  !! SOURCE
+  !!
+  subroutine backtrack_linemin_full(direction, energy_in, &
+                      energy_out, fixed_potential, vary_mu)
+
+    ! Module usage
+    use datatypes
+    use numbers
+    use units
+    use global_module,  only: iprint_MD, x_atom_cell, y_atom_cell,    &
+         z_atom_cell, flag_vary_basis,           &
+         atom_coord, ni_in_cell, rcellx, rcelly, &
+         rcellz, flag_self_consistent,           &
+         flag_reset_dens_on_atom_move,           &
+         IPRINT_TIME_THRES1, flag_pcc_global,    &
+         id_glob,                                &
+         flag_LmatrixReuse, flag_diagonalisation, nspin, &
+         flag_SFcoeffReuse
+    use minimise,       only: get_E_and_F, sc_tolerance, L_tolerance, &
+         n_L_iterations, dE_elec_opt
+    use GenComms,       only: my_barrier, myid, inode, ionode,        &
+         cq_abort, gcopy, cq_warn
+    use SelfCon,        only: new_SC_potl
+    use GenBlas,        only: dot
+    use force_module,   only: tot_force
+    use io_module,      only: write_atomic_positions, pdb_template
+    use density_module, only: density, set_density_pcc
+    use maxima_module,  only: maxngrid
+    use matrix_data, ONLY: Lrange, Hrange, SFcoeff_range, SFcoeffTr_range, HTr_range
+    use mult_module, ONLY: matL,L_trans, matK, matSFcoeff
+    use timer_module
+    use dimens, ONLY: r_super_x, r_super_y, r_super_z
+    use store_matrix, ONLY: dump_pos_and_matrices
+    use mult_module, ONLY: allocate_temp_matrix, free_temp_matrix, matrix_sum
+    use global_module, ONLY: atomf, sf
+    use io_module, ONLY: dump_matrix
+    use force_module,      only: force, stress
+
+    implicit none
+
+    ! Passed variables
+    real(double) :: energy_in, energy_out
+    real(double), dimension(3,ni_in_cell+1) :: direction
+    ! Shared variables needed by get_E_and_F for now (!)
+    logical           :: vary_mu, fixed_potential
+
+    ! Local variables
+    integer        :: i, j, iter, lun, gatom, stat, nfile, symm
+    logical        :: reset_L = .false.
+    logical        :: done
+    type(cq_timer) :: tmr_l_iter, tmr_l_tmp1
+    real(double)   :: alpha_new, armijo, grad_f_dot_p, grad_fp_dot_p, old_alpha
+    real(double)   :: e0, e1, e2, e3, tmp, bottom
+    real(double), save :: kmin = zero, dE = zero
+    real(double), dimension(:), allocatable :: store_density
+    real(double) :: k3_old, k3_local, kmin_old
+    real(double) :: alpha = one
+    real(double) :: c1, c2, orcellx, orcelly, orcellz, wscal
+
+    integer :: ig, both, mat
+    character(len=80) :: sub_name = "backtrack_linemin_cell"
+
+    call start_timer(tmr_std_moveatoms)
+
+    iter = 0
+    old_alpha = zero
+    alpha = one
+    orcellx = rcellx
+    orcelly = rcelly
+    orcellz = rcellz
+    ! Scaling: w = 2 Bohr x sqrt(Natoms)
+    wscal = two*sqrt(real(ni_in_cell,double))
+    e0 = energy_in
+    e3 = e0
+    if (inode == ionode .and. iprint_MD > 0) &
+         write (io_lun, &
+         fmt='(4x,"In backtrack_linemin, initial energy is ",f16.6," ",a2)') &
+         en_conv * energy_in, en_units(energy_units)
+
+    c1 = 0.01_double
+    c2 = 0.9_double
+    ! grad f dot p  Note that the ordering of direction and tot_force is different
+    grad_f_dot_p = zero
+    do i=1, ni_in_cell
+       j = id_glob(i)
+       grad_f_dot_p = grad_f_dot_p - direction(1,i)*tot_force(1,j)*rcellx*rcellx/(orcellx*orcellx)
+       grad_f_dot_p = grad_f_dot_p - direction(2,i)*tot_force(2,j)*rcelly*rcelly/(orcelly*orcelly)
+       grad_f_dot_p = grad_f_dot_p - direction(3,i)*tot_force(3,j)*rcellz*rcellz/(orcellz*orcellz)
+    end do
+    ! Plus here I think
+    grad_f_dot_p = grad_f_dot_p + direction(1,ni_in_cell+1)*stress(1,1)*orcellx*orcellx/wscal
+    grad_f_dot_p = grad_f_dot_p + direction(2,ni_in_cell+1)*stress(2,2)*orcelly*orcelly/wscal
+    grad_f_dot_p = grad_f_dot_p + direction(3,ni_in_cell+1)*stress(3,3)*orcellz*orcellz/wscal
+    if(inode==ionode.AND.iprint_MD>1) &
+         write(io_lun, fmt='(2x,"Starting backtrack_linemin, magnitude of grad_f.p is ",e16.6)') &
+         sqrt(-grad_f_dot_p/three)
+    done = .false.
+    do while ((.not. done) .and. iter<max_back_iters)
+       iter = iter+1
+       ! Take a step along search direction: ions
+       do i = 1, ni_in_cell
+          x_atom_cell(i) = x_atom_cell(i) + (alpha - old_alpha) * direction(1,i)
+          y_atom_cell(i) = y_atom_cell(i) + (alpha - old_alpha) * direction(2,i)
+          z_atom_cell(i) = z_atom_cell(i) + (alpha - old_alpha) * direction(3,i)
+       end do
+       ! Take a step along search direction: cell
+       call update_cell_dims(orcellx, orcelly, orcellz, &
+            direction(1,ni_in_cell+1), direction(2,ni_in_cell+1), direction(3,ni_in_cell+1), &
+            direction(1,ni_in_cell+1), alpha)
+
+       ! Update and find new energy
+       if(flag_SFcoeffReuse) then
+          call update_pos_and_matrices(updateSFcoeff,direction(:,1:ni_in_cell))
+       else
+          call update_pos_and_matrices(updateLorK,direction(:,1:ni_in_cell))
+       endif
+       if (inode == ionode .and. iprint_MD > 2) then
+          do i=1,ni_in_cell
+             write (io_lun,fmt='(2x,"Position: ",i3,3f13.8)') i, &
+                  x_atom_cell(i), y_atom_cell(i), z_atom_cell(i)
+          end do
+       end if
+       call update_H(fixed_potential)
+       ! Write out atomic positions
+       if (iprint_MD > 2) then
+          call write_atomic_positions("UpdatedAtoms_tmp.dat", &
+               trim(pdb_template))
+       end if
+       ! We've just moved the atoms - we need a self-consistent ground
+       ! state before we can minimise blips !
+       if (flag_vary_basis) then
+          call new_SC_potl(.false., sc_tolerance, reset_L,           &
+               fixed_potential, vary_mu, n_L_iterations, &
+               L_tolerance, e3)
+       end if
+       call get_E_and_F(fixed_potential, vary_mu, e3, .false., &
+            .false.)
+       if(inode==ionode .and. abs(e3 - energy_in) < abs(dE_elec_opt)) then
+          call cq_warn(sub_name, "Electronic structure dE is similar to atom movement dE; increase tolerance", &
+               dE_elec_opt, e3 - energy_in)
+       end if
+       !call dump_pos_and_matrices
+       ! e3 is f(x + alpha p)
+       armijo = e0 + c1 * alpha * grad_f_dot_p
+
+       if (inode == ionode .and. iprint_MD > 1) then
+          write (io_lun, &
+               fmt='(4x,"In backtrack_linemin, iter ",i3," step and energy &
+               &are ",2f16.6," ",a2)') &
+               iter, alpha, en_conv * e3, en_units(energy_units)
+          write(io_lun, fmt='(6x,"Armijo threshold is ",f16.6," ",a2)') armijo, en_units(energy_units)
+       end if
+       if(e3<armijo) then ! success
+          done = .true.
+       else
+          old_alpha = alpha
+          alpha_new = (-half * alpha * grad_f_dot_p) / ((e3 - e0)/alpha - grad_f_dot_p)
+          alpha = max(alpha_new, 0.1_double*alpha)
+       end if
+    end do ! while (.not. done)
+    if(.not. done) call cq_abort("Failed to reduce energy in backtrack_linemin.  Final step size: ",alpha)
+    energy_out = e3
+    if(inode==ionode .and. abs(energy_out - energy_in) < abs(dE_elec_opt)) then
+       call cq_warn(sub_name, "Electronic structure dE is similar to atom movement dE; increase tolerance", &
+            dE_elec_opt, energy_out - energy_in)
+    end if
+    call dump_pos_and_matrices
+    ! Now find forces
+    call force(fixed_potential, vary_mu, n_L_iterations, &
+         L_tolerance, sc_tolerance, energy_out, .true.)
+    ! Evaluate new grad f dot p
+    grad_fp_dot_p = zero
+    do i=1, ni_in_cell
+       j = id_glob(i)
+       grad_f_dot_p = grad_f_dot_p - direction(1,i)*tot_force(1,j)*rcellx*rcellx/(orcellx*orcellx)
+       grad_f_dot_p = grad_f_dot_p - direction(2,i)*tot_force(2,j)*rcelly*rcelly/(orcelly*orcelly)
+       grad_f_dot_p = grad_f_dot_p - direction(3,i)*tot_force(3,j)*rcellz*rcellz/(orcellz*orcellz)
+    end do
+    ! Plus here I think
+    grad_f_dot_p = grad_f_dot_p + direction(1,ni_in_cell+1)*stress(1,1)*orcellx*orcellx/wscal
+    grad_f_dot_p = grad_f_dot_p + direction(2,ni_in_cell+1)*stress(2,2)*orcelly*orcelly/wscal
+    grad_f_dot_p = grad_f_dot_p + direction(3,ni_in_cell+1)*stress(3,3)*orcellz*orcellz/wscal
+    if(inode==ionode.AND.iprint_MD>3) &
+         write(io_lun,fmt='(6x,"In backtrack_linemin, second Wolfe: ",e11.4," < ",e11.4)') &
+         abs(grad_fp_dot_p), c2*abs(grad_f_dot_p)
+
+    dE = energy_in - energy_out
+    if (inode == ionode .and. iprint_MD > 2) then
+       write (io_lun, &
+            fmt='(4x,"In backtrack_linemin, exit after ",i4," &
+            &iterations with energy ",f16.6," ",a2)') &
+            iter, en_conv * energy_out, en_units(energy_units)
+    else if (inode == ionode .and. iprint_MD > 0) then
+       write (io_lun, fmt='(/4x,"In backtrack_linemin, final energy is   ",f16.6," ",a2)') &
+            en_conv * energy_out, en_units(energy_units)
+    end if
+
+    call stop_timer(tmr_std_moveatoms)
+    return
+  end subroutine backtrack_linemin_full
+!!***
+
+  !!****f* move_atoms/single_step_full *
+  !! PURPOSE
+  !!  Carry out single step
+  !! INPUTS
+  !!
+  !! AUTHOR
+  !!   David Bowler
+  !! CREATION DATE
+  !!   2022/08/23
+  !! MODIFICATION HISTORY
+  !! SOURCE
+  !!
+  subroutine single_step_full(direction, energy_in, &
+                      energy_out, fixed_potential, vary_mu)
+
+    ! Module usage
+    use datatypes
+    use numbers
+    use units
+    use global_module,  only: iprint_MD, x_atom_cell, y_atom_cell,    &
+         z_atom_cell, flag_vary_basis,           &
+         atom_coord, ni_in_cell, rcellx, rcelly, &
+         rcellz, flag_self_consistent,           &
+         flag_reset_dens_on_atom_move,           &
+         IPRINT_TIME_THRES1, flag_pcc_global,    &
+         id_glob,                                &
+         flag_LmatrixReuse, flag_diagonalisation, nspin, &
+         flag_SFcoeffReuse
+    use minimise,       only: get_E_and_F, sc_tolerance, L_tolerance, &
+         n_L_iterations, dE_elec_opt
+    use GenComms,       only: my_barrier, myid, inode, ionode,        &
+         cq_abort, gcopy, cq_warn
+    use SelfCon,        only: new_SC_potl
+    use GenBlas,        only: dot
+    use force_module,   only: tot_force
+    use io_module,      only: write_atomic_positions, pdb_template
+    use density_module, only: density, set_density_pcc
+    use maxima_module,  only: maxngrid
+    use matrix_data, ONLY: Lrange, Hrange, SFcoeff_range, SFcoeffTr_range, HTr_range
+    use mult_module, ONLY: matL,L_trans, matK, matSFcoeff
+    use timer_module
+    use dimens, ONLY: r_super_x, r_super_y, r_super_z
+    use store_matrix, ONLY: dump_pos_and_matrices
+    use mult_module, ONLY: allocate_temp_matrix, free_temp_matrix, matrix_sum
+    use global_module, ONLY: atomf, sf
+    use io_module, ONLY: dump_matrix
+    use force_module,      only: force, stress
+
+    implicit none
+
+    ! Passed variables
+    real(double) :: energy_in, energy_out
+    real(double), dimension(3,ni_in_cell+1) :: direction
+    ! Shared variables needed by get_E_and_F for now (!)
+    logical           :: vary_mu, fixed_potential
+
+    ! Local variables
+    integer        :: i, j, iter, lun, gatom, stat, nfile, symm
+    logical        :: reset_L = .false.
+    logical        :: done
+    type(cq_timer) :: tmr_l_iter, tmr_l_tmp1
+    real(double)   :: alpha_new, armijo, grad_f_dot_p, grad_fp_dot_p, old_alpha
+    real(double)   :: e0, e1, e2, e3, tmp, bottom
+    real(double), save :: kmin = zero, dE = zero
+    real(double), dimension(:), allocatable :: store_density
+    real(double) :: k3_old, k3_local, kmin_old
+    real(double) :: alpha = one
+    real(double), dimension(3,ni_in_cell) :: dummy
+    real(double) :: orcellx, orcelly, orcellz
+
+    integer :: ig, both, mat
+    character(len=80) :: sub_name = "single_step"
+
+    call start_timer(tmr_std_moveatoms)
+    dummy = zero
+    alpha = one
+    orcellx = rcellx
+    orcelly = rcelly
+    orcellz = rcellz
+    e0 = energy_in
+    e3 = e0
+    if (inode == ionode .and. iprint_MD > 0) &
+         write (io_lun, &
+         fmt='(4x,"In single_step, initial energy is ",f16.6," ",a2)') &
+         en_conv * energy_in, en_units(energy_units)
+    ! Take a step along search direction
+    do i = 1, ni_in_cell
+       x_atom_cell(i) = x_atom_cell(i) + alpha * direction(1,i)
+       y_atom_cell(i) = y_atom_cell(i) + alpha * direction(2,i)
+       z_atom_cell(i) = z_atom_cell(i) + alpha * direction(3,i)
+    end do
+    call update_cell_dims(rcellx, rcelly, rcellz, &
+         direction(1,ni_in_cell+1), direction(2,ni_in_cell+1), direction(3,ni_in_cell+1), &
+         direction(1,ni_in_cell+1), alpha)
+
+    ! Update and find new energy
+    if(flag_SFcoeffReuse) then
+       call update_pos_and_matrices(updateSFcoeff,direction(:,1:ni_in_cell))
+    else
+       call update_pos_and_matrices(updateLorK,direction(:,1:ni_in_cell))
+    endif
+    call update_H(fixed_potential)
+    ! Write out atomic positions
+    if (iprint_MD > 2) then
+       call write_atomic_positions("UpdatedAtoms_tmp.dat", &
+            trim(pdb_template))
+    end if
+    ! We've just moved the atoms - we need a self-consistent ground
+    ! state before we can minimise blips !
+    if (flag_vary_basis) then
+       call new_SC_potl(.false., sc_tolerance, reset_L,           &
+            fixed_potential, vary_mu, n_L_iterations, &
+            L_tolerance, e3)
+    end if
+    call get_E_and_F(fixed_potential, vary_mu, e3, .false., &
+         .false.)
+    if (inode == ionode .and. iprint_MD > 1) then
+       write (io_lun, fmt='(4x,"After single step, energy is ",f16.6," ",a2)') &
+            en_conv * e3, en_units(energy_units)
+    end if
+    energy_out = e3
+    if(inode==ionode .and. abs(energy_out - energy_in) < abs(dE_elec_opt)) then
+       call cq_warn(sub_name, "Electronic structure dE is similar to atom movement dE; increase tolerance", &
+            dE_elec_opt, energy_out - energy_in)
+    end if
+    if(energy_out>energy_in) then
+       do i = 1, ni_in_cell
+          x_atom_cell(i) = x_atom_cell(i) - alpha * direction(1,i)
+          y_atom_cell(i) = y_atom_cell(i) - alpha * direction(2,i)
+          z_atom_cell(i) = z_atom_cell(i) - alpha * direction(3,i)
+       end do
+       call update_cell_dims(rcellx, rcelly, rcellz, &
+            direction(1,ni_in_cell+1), direction(2,ni_in_cell+1), direction(3,ni_in_cell+1), &
+            direction(1,ni_in_cell+1), -alpha)
+       if(flag_SFcoeffReuse) then
+          call update_pos_and_matrices(updateSFcoeff,direction(:,1:ni_in_cell))
+       else
+          call update_pos_and_matrices(updateLorK,direction(:,1:ni_in_cell))
+       endif
+       call update_H(fixed_potential)
+       return ! We'll need to reset - no need to call force
+    end if
+    call dump_pos_and_matrices
+    ! Now find forces
+    call force(fixed_potential, vary_mu, n_L_iterations, &
+         L_tolerance, sc_tolerance, energy_out, .true.)
+    dE = e0 - energy_out
+    if (inode == ionode .and. iprint_MD > 0) then
+       write (io_lun, fmt='(/4x,"In single_step, final energy is   ",f16.6," ",a2)') &
+            en_conv * energy_out, en_units(energy_units)
+    end if
+
+    call stop_timer(tmr_std_moveatoms)
+    return
+  end subroutine single_step_full
+!!***
+
 
   !!****f* move_atoms/adapt_backtrack_linemin *
   !! PURPOSE
@@ -1542,10 +2275,12 @@ contains
   !! CREATION DATE 
   !!   2019/12/09
   !! MODIFICATION HISTORY
+  !!   2022/08/09 09:00 dave
+  !!    Added maximum number of iterations in loop
   !! SOURCE
   !!
   subroutine adapt_backtrack_linemin(direction, energy_in, &
-                      energy_out, fixed_potential, vary_mu, total_energy)
+                      energy_out, fixed_potential, vary_mu)
 
     ! Module usage
     use datatypes
@@ -1587,7 +2322,6 @@ contains
     real(double), dimension(3,ni_in_cell) :: direction
     ! Shared variables needed by get_E_and_F for now (!)
     logical           :: vary_mu, fixed_potential
-    real(double)      :: total_energy
 
     ! Local variables
     integer        :: i, j, iter, lun, gatom, stat, nfile, symm
@@ -1609,7 +2343,8 @@ contains
 
     iter = 0
     old_alpha = zero
-    e0 = total_energy
+    e0 = energy_in
+    e3 = e0
     if (inode == ionode .and. iprint_MD > 0) &
          write (io_lun, &
          fmt='(4x,"In backtrack_linemin, initial energy is ",f16.6," ",a2)') &
@@ -1629,7 +2364,7 @@ contains
          write(io_lun, fmt='(2x,"Starting backtrack_linemin, grad_f.p is ",f16.6)') grad_f_dot_p
     done = .false.
     iter = 0
-    do while (.not. done)
+    do while ((.not. done) .and. iter<max_back_iters)
        iter = iter+1
        ! Take a step along sesarch direction
        do i = 1, ni_in_cell
@@ -1684,6 +2419,7 @@ contains
           alpha = max(alpha_new, 0.1_double*alpha)
        end if
     end do ! while (.not. done)
+    if(.not. done) call cq_abort("Failed to reduce energy in adapt_backtrack_linemin.  Final step size: ",alpha)
     energy_out = e3
     call dump_pos_and_matrices
     ! Test increase of alpha
@@ -1704,7 +2440,7 @@ contains
     if(inode==ionode.AND.iprint_MD>3) &
          write(io_lun,fmt='(6x,"In backtrack_linemin, second Wolfe: ",e11.4," < ",e11.4)') &
          abs(grad_fp_dot_p), c2*abs(grad_f_dot_p)
-    dE = e0 - energy_out
+    dE = energy_in - energy_out
     if (inode == ionode .and. iprint_MD > 0) then
        write (io_lun, &
             fmt='(4x,"In backtrack_linemin, exit after ",i4," &
@@ -1852,7 +2588,7 @@ contains
        ! constraints.
        call update_cell_dims(start_rcellx, start_rcelly, &
             start_rcellz, search_dir_x, search_dir_y, search_dir_z,&
-            k3, iter, search_dir_mean)
+            search_dir_mean, k3)
 
        if(flag_SFcoeffReuse) then
           call update_pos_and_matrices(updateSFcoeff,direction)
@@ -1933,7 +2669,7 @@ contains
     if (inode == ionode .and. iprint_MD > 0) write(io_lun,*) 'kmin is ',kmin
     call update_cell_dims(start_rcellx, start_rcelly, &
          start_rcellz, search_dir_x, search_dir_y, search_dir_z,&
-         kmin, iter, search_dir_mean)
+         search_dir_mean, kmin)
     if(flag_SFcoeffReuse) then
        call update_pos_and_matrices(updateSFcoeff,direction)
     else
@@ -2014,7 +2750,7 @@ contains
        ! Keep previous cell to allow scaling
        call update_cell_dims(start_rcellx, start_rcelly, &
             start_rcellz, search_dir_x, search_dir_y, search_dir_z,&
-            kmin, iter, search_dir_mean)
+            search_dir_mean, kmin)
        if(flag_SFcoeffReuse) then
           call update_pos_and_matrices(updateSFcoeff,direction)
        else
@@ -2089,8 +2825,7 @@ contains
   !! SOURCE
   !!
   subroutine safemin_full(config, force, cell_ref, enthalpy_in, enthalpy_out, &
-                          target_press, fixed_potential, vary_mu, &
-                          total_enthalpy)
+                          target_press, fixed_potential, vary_mu)
 
     ! Module usage
     use datatypes
@@ -2119,8 +2854,6 @@ contains
     real(double), dimension(:,:) :: config, force
     real(double), dimension(:)   :: cell_ref
     logical           :: vary_mu, fixed_potential
-    real(double)      :: total_enthalpy
-
 
     ! Local variables
     integer        :: i, j, iter, lun, gatom, stat, nfile, symm
@@ -2151,7 +2884,7 @@ contains
 
     call start_timer(tmr_std_moveatoms)
 
-    h0 = total_enthalpy
+    h0 = enthalpy_in
     if (inode == ionode .and. iprint_MD > 1) &
          write (io_lun, &
          fmt='(4x,"In safemin_full, initial enthalpy is ",f20.10," ",a2)') &
@@ -4207,11 +4940,13 @@ contains
   !!    Bug fix for constrained ratios
   !!   2020/05/15 12:26 dave
   !!    Update to remove unnecessary code (a/c and c/a etc are the same)
+  !!   2022/08/09 09:01 dave
+  !!    Restrict output of cell ratios to ionode and iprint_MD>2
   !!  SOURCE
   !!
   subroutine update_cell_dims(start_rcellx, start_rcelly, start_rcellz, &
                               search_dir_x, search_dir_y, search_dir_z, &
-                              k, iter, search_dir_mean)
+                              search_dir_mean, k)
     use datatypes
     use numbers
     use units
@@ -4241,10 +4976,9 @@ contains
     ! Passed variables
     real(double) :: start_rcellx, start_rcelly, start_rcellz,&
          search_dir_x, search_dir_y, search_dir_z, k, search_dir_mean
-    integer iter
+
     ! Shared variables needed by get_E_and_F for now (!)
     logical           :: vary_mu, fixed_potential
-    real(double)      :: total_energy
     character(len=40) :: output_file
 
     ! local variables
@@ -4334,17 +5068,14 @@ contains
        x_atom_cell(j) = (rcellx/orcellx)*x_atom_cell(j)
        y_atom_cell(j) = (rcelly/orcelly)*y_atom_cell(j)
        z_atom_cell(j) = (rcellz/orcellz)*z_atom_cell(j)
-       if (inode == ionode .and. iprint_MD > 2) &
+       if (inode == ionode .and. iprint_MD > 3) &
             write (io_lun,*) 'Position: ', j, x_atom_cell(j), &
             y_atom_cell(j), z_atom_cell(j)
     end do
-    write(io_lun,*) "Iteration ", iter
-    write(io_lun,*) "rcellx/start_rcellx = ", rcellx/start_rcellx
-    write(io_lun,*) "rcelly/start_rcelly = ", rcelly/start_rcelly
-    write(io_lun,*) "rcellz/start_rcellz = ", rcellz/start_rcellz
-    !write(io_lun,*) 'new sim cell dims', start_rcellx, start_rcellx, start_rcellx
-    write(io_lun,*) 'current sim cell dims', rcellx, rcelly, rcellz
-
+    if(inode==ionode.and.iprint_MD>2) then
+       write(io_lun,fmt='(4x,"Scaling cell dimenstions by: ",3f9.6)') rcellx/start_rcellx, rcelly/start_rcelly, rcellz/start_rcellz
+       write(io_lun,fmt='(4x,"Updated cell dimensions: ",f10.6," a0 x",f10.6," a0 x",f10.6," a0")') rcellx, rcelly, rcellz
+    end if
   end subroutine update_cell_dims
   !!***
 
@@ -4459,190 +5190,205 @@ contains
   !!       removed glob2node_old, n_proc_old
   !!   2019/Jul/27  tsuyoshi
   !!       added atom_vels (from global_module), and removed local velocity_global
-  !!
+  !!   2022/08/23 08:33 dave
+  !!    Made velocity optional (mainly for cell updates)
+  !!   2022/09/19 08:20 dave
+  !!    Added dummy variable for when velocity is not passed
   !!  SOURCE
   !!
- subroutine update_pos_and_matrices(update_method, velocity)
-  use datatypes
-  use numbers,         only: half, zero, one, very_small
-  use global_module,   only: flag_diagonalisation, atom_coord, atom_vels, atom_coord_diff, &
-                             rcellx, rcelly, rcellz, ni_in_cell, nspin, nspin_SF, id_glob, &
-                             area_moveatoms
+  subroutine update_pos_and_matrices(update_method, velocity)
+    use datatypes
+    use numbers,         only: half, zero, one, very_small
+    use global_module,   only: flag_diagonalisation, atom_coord, atom_vels, atom_coord_diff, &
+         rcellx, rcelly, rcellz, ni_in_cell, nspin, nspin_SF, id_glob, &
+         area_moveatoms
     ! n_proc_old and glob2node_old have been removed
-  use GenComms,        only: my_barrier, inode, ionode, cq_abort, gcopy
-  use mult_module,     only: matL, L_trans, matK, matS, S_trans, matSFcoeff, SFcoeff_trans, &
-                             matrix_scale, matrix_transpose, matSFcoeff_tran
-  use matrix_data,     only: Lrange, Hrange, Srange, SFcoeff_range
-  use store_matrix,    only: matrix_store_global, InfoMatrixFile, grab_InfoMatGlobal, grab_matrix2, &
-                             set_atom_coord_diff
-  use UpdateInfo, only: Matrix_CommRebuild, Report_UpdateMatrix
-  use memory_module,   only: reg_alloc_mem, type_dbl, reg_dealloc_mem
+    use GenComms,        only: my_barrier, inode, ionode, cq_abort, gcopy
+    use mult_module,     only: matL, L_trans, matK, matS, S_trans, matSFcoeff, SFcoeff_trans, &
+         matrix_scale, matrix_transpose, matSFcoeff_tran
+    use matrix_data,     only: Lrange, Hrange, Srange, SFcoeff_range
+    use store_matrix,    only: matrix_store_global, InfoMatrixFile, grab_InfoMatGlobal, grab_matrix2, &
+         set_atom_coord_diff
+    use UpdateInfo, only: Matrix_CommRebuild, Report_UpdateMatrix
+    use memory_module,   only: reg_alloc_mem, type_dbl, reg_dealloc_mem
 
 
-  implicit none
-  integer, intent(in) :: update_method
-  real(double), intent(inout) :: velocity(3, ni_in_cell)
-  logical :: flag_L, flag_K, flag_S, flag_SFcoeff, flag_X
-  integer :: nfile, symm, ig, spin_SF
-  logical :: fixed_potential 
-   ! should be removed in the future (calling update_H is outside of this routine)
-  real(double) :: scale_x, scale_y, scale_z, rms_change
-  real(double) :: small_change = 0.3_double
-  
- !H_trans is not prepared. If we need to symmetrise K, we need H_trans
-  integer :: H_trans = 1
- 
- !InfoGlob and Info can be defined locally.
- ! for extrapolation, we need to prepare multiple InfoGlob and Info.
-  type(matrix_store_global) :: InfoGlob
-  type(InfoMatrixFile),pointer :: InfoMat(:)
+    implicit none
+    integer, intent(in) :: update_method
+    real(double), optional :: velocity(3, ni_in_cell)
+    logical :: flag_L, flag_K, flag_S, flag_SFcoeff, flag_X
+    integer :: nfile, symm, ig, spin_SF
+    logical :: fixed_potential 
+    ! should be removed in the future (calling update_H is outside of this routine)
+    real(double) :: scale_x, scale_y, scale_z, rms_change
+    real(double) :: small_change = 0.3_double
 
-  integer :: i, stat
+    !H_trans is not prepared. If we need to symmetrise K, we need H_trans
+    integer :: H_trans = 1
 
- !Switch on Debugging
- !  flag_debug_move_atoms = .true.
+    !InfoGlob and Info can be defined locally.
+    ! for extrapolation, we need to prepare multiple InfoGlob and Info.
+    type(matrix_store_global) :: InfoGlob
+    type(InfoMatrixFile),pointer :: InfoMat(:)
 
- !!! Note: for developers  !!!
- !  if you want to update some new matrix, you should
- !   1)define  updateXXX
- !   2)define  flagXXX
- !   3)check mult_module, and add "use mult_module, ONLY: matXXX, XXX_trans (if symm is needed).
- !   4)add if(flagXXX) statement
- !
+    integer :: i, stat
+    real(double), dimension(:,:), allocatable :: dummy
 
- flag_L=.false.
- flag_K=.false.
- flag_S=.false.
- flag_X=.false.
- flag_SFcoeff=.false.
+    !Switch on Debugging
+    !  flag_debug_move_atoms = .true.
 
- select case(update_method)
-  case(updatePos)
-   if(inode .eq. ionode) write(io_lun,*) 'Update_Pos_and_Matrices:: only Positions are updated '
-  case(updateL)
-   flag_L = .true.
-  case(updateK)
-   flag_K = .true.
-  case(updateLorK)
-   if(flag_diagonalisation) then
-     flag_K=.true.
-   else
-     flag_L=.true.
-   endif
-  case(updateS)
-   flag_S=.true.
-  case(updateX)
-   if(inode .eq. ionode) write(io_lun,*) 'Update_Pos_and_Matrices:: updateX is not implemented yet.'
-  case(updateSFcoeff)
-   flag_SFcoeff=.true.
-   if(flag_diagonalisation) then
-     flag_K=.true.
-   else
-     flag_L=.true.
-   endif
-  case(extrplL)
-   if(inode .eq. ionode) write(io_lun,*) 'Update_Pos_and_Matrices:: updateX is not implemented yet.'
-   ! TM plans to implement  L(n)=2L(n-1)-L(n-2)
-  case default
-   if(inode .eq. ionode) write(io_lun,*) 'Update_Pos_and_Matrices:: Invalid Flag !',update_method
- end select ! case (update_method)
+!!! Note: for developers  !!!
+    !  if you want to update some new matrix, you should
+    !   1)define  updateXXX
+    !   2)define  flagXXX
+    !   3)check mult_module, and add "use mult_module, ONLY: matXXX, XXX_trans (if symm is needed).
+    !   4)add if(flagXXX) statement
+    !
+
+    flag_L=.false.
+    flag_K=.false.
+    flag_S=.false.
+    flag_X=.false.
+    flag_SFcoeff=.false.
+
+    select case(update_method)
+    case(updatePos)
+       if(inode .eq. ionode) write(io_lun,*) 'Update_Pos_and_Matrices:: only Positions are updated '
+    case(updateL)
+       flag_L = .true.
+    case(updateK)
+       flag_K = .true.
+    case(updateLorK)
+       if(flag_diagonalisation) then
+          flag_K=.true.
+       else
+          flag_L=.true.
+       endif
+    case(updateS)
+       flag_S=.true.
+    case(updateX)
+       if(inode .eq. ionode) write(io_lun,*) 'Update_Pos_and_Matrices:: updateX is not implemented yet.'
+    case(updateSFcoeff)
+       flag_SFcoeff=.true.
+       if(flag_diagonalisation) then
+          flag_K=.true.
+       else
+          flag_L=.true.
+       endif
+    case(extrplL)
+       if(inode .eq. ionode) write(io_lun,*) 'Update_Pos_and_Matrices:: updateX is not implemented yet.'
+       ! TM plans to implement  L(n)=2L(n-1)-L(n-2)
+    case default
+       if(inode .eq. ionode) write(io_lun,*) 'Update_Pos_and_Matrices:: Invalid Flag !',update_method
+    end select ! case (update_method)
 
 
- !First updating information of atomic positions, neighbour lists, etc...
- !  2020/10/7 Tsuyoshi Miyazaki
- !   we are planning to use `atom_vels` and remove `velocity` (= direction in CG).
-    if (.not. allocated(atom_vels)) then
-       allocate(atom_vels(3,ni_in_cell), STAT=stat)
-       if (stat /= 0) &
-            call cq_abort("Error allocating atom_vels in init_md: ", &
-            ni_in_cell, stat)
-       call reg_alloc_mem(area_moveatoms, 3*ni_in_cell, type_dbl)
-       atom_vels = zero
+    !First updating information of atomic positions, neighbour lists, etc...
+    !  2020/10/7 Tsuyoshi Miyazaki
+    !   we are planning to use `atom_vels` and remove `velocity` (= direction in CG).
+    if(present(velocity)) then
+       if (.not. allocated(atom_vels)) then
+          allocate(atom_vels(3,ni_in_cell), STAT=stat)
+          if (stat /= 0) &
+               call cq_abort("Error allocating atom_vels in init_md: ", &
+               ni_in_cell, stat)
+          call reg_alloc_mem(area_moveatoms, 3*ni_in_cell, type_dbl)
+          atom_vels = zero
+       end if
     end if
 
-     call wrap_xyz_atom_cell
-     call update_atom_coord
-     do i=1,ni_in_cell
-        atom_vels(1,id_glob(i)) = velocity(1,i)
-        atom_vels(2,id_glob(i)) = velocity(2,i)
-        atom_vels(3,id_glob(i)) = velocity(3,i)
-     end do
-  !Before calling this routine, we need 1) call dump_InfoMatGlobal or 2) call set_InfoMatGlobal
-  ! Then, we use InfoGlob read from the file or use InfoGlob as it is (in the case of 2))
-  !       Now, we just assume 1).
-     call grab_InfoMatGlobal(InfoGlob,index=0)
-     call set_atom_coord_diff(InfoGlob)
+    call wrap_xyz_atom_cell
+    call update_atom_coord
+    if(present(velocity)) then
+       do i=1,ni_in_cell
+          atom_vels(1,id_glob(i)) = velocity(1,i)
+          atom_vels(2,id_glob(i)) = velocity(2,i)
+          atom_vels(3,id_glob(i)) = velocity(3,i)
+       end do
+    end if
+    !Before calling this routine, we need 1) call dump_InfoMatGlobal or 2) call set_InfoMatGlobal
+    ! Then, we use InfoGlob read from the file or use InfoGlob as it is (in the case of 2))
+    !       Now, we just assume 1).
+    call grab_InfoMatGlobal(InfoGlob,index=0)
+    call set_atom_coord_diff(InfoGlob)
 
-  ! Since the order of the atoms in x,y,z_atom_cell and velocity (or direction in CG) changes 
-  ! depending on their partitions, they are rearranged in updateIndices3.
-  ! (these arrays should be replaced by atom_coord and atom_veloc in the future.)
-  !    updateIndices3 : deallocates member of parts, bundles, covering sets, domain, ...
-  !                     and allocates them following the new atomic positions.
-  !   Now, old informaiton is stored in InfoGlob, thus some of the information is redundant 
-  !    I (TM) should make new routine like "updateIndices4" using InfoGlob, soon.  ! 2017.Nov.13  Tsuyoshi Miyazaki
-  !   (NOTE) If CONQUEST stops before calling "finalise", coord_next.dat should be used in the next job.
-  !       coord_next.dat is made in "updateIndices3", at present.
-     call updateIndices3(fixed_potential, velocity)
-     do i=1,ni_in_cell
-        velocity(1,i) = atom_vels(1,id_glob(i))
-        velocity(2,i) = atom_vels(2,id_glob(i))
-        velocity(3,i) = atom_vels(3,id_glob(i))
-     end do
+    ! Since the order of the atoms in x,y,z_atom_cell and velocity (or direction in CG) changes 
+    ! depending on their partitions, they are rearranged in updateIndices3.
+    ! (these arrays should be replaced by atom_coord and atom_veloc in the future.)
+    !    updateIndices3 : deallocates member of parts, bundles, covering sets, domain, ...
+    !                     and allocates them following the new atomic positions.
+    !   Now, old informaiton is stored in InfoGlob, thus some of the information is redundant 
+    !    I (TM) should make new routine like "updateIndices4" using InfoGlob, soon.  ! 2017.Nov.13  Tsuyoshi Miyazaki
+    !   (NOTE) If CONQUEST stops before calling "finalise", coord_next.dat should be used in the next job.
+    !       coord_next.dat is made in "updateIndices3", at present.
+    if(present(velocity)) then
+       call updateIndices3(fixed_potential, velocity)
+       do i=1,ni_in_cell
+          velocity(1,i) = atom_vels(1,id_glob(i))
+          velocity(2,i) = atom_vels(2,id_glob(i))
+          velocity(3,i) = atom_vels(3,id_glob(i))
+       end do
+    else
+       ! Allocate a dummy velocity...
+       allocate(dummy(3,ni_in_cell))
+       dummy = zero
+       call updateIndices3(fixed_potential, dummy)
+       deallocate(dummy)
+    end if
+    ! 2020/Oct/12 TM   
+    !  if we want to reduce the memory size ...  
+    !      deallocate(atom_vels, STAT=stat)
+    !       if (stat /= 0) &
+    !            call cq_abort("Error deallocating atom_vels in init_md: stat=", stat)
+    !       call reg_dealloc_mem(area_moveatoms, 3*ni_in_cell, type_dbl)
 
-! 2020/Oct/12 TM   
-!  if we want to reduce the memory size ...  
-!      deallocate(atom_vels, STAT=stat)
-!       if (stat /= 0) &
-!            call cq_abort("Error deallocating atom_vels in init_md: stat=", stat)
-!       call reg_dealloc_mem(area_moveatoms, 3*ni_in_cell, type_dbl)
+    !
+    ! Then, matrices will be read from the corresponding files
+    !
+    if(flag_L) then
+       call grab_matrix2('L',inode,nfile,InfoMat,InfoGlob,index=0,n_matrix=nspin)
+       call my_barrier()
+       call Matrix_CommRebuild(InfoGlob,InfoMat,Lrange,L_trans,matL,nfile,symm,n_matrix=nspin)
+       if(flag_debug_move_atoms) call Report_UpdateMatrix("Lmat")
+    endif
 
- !
- ! Then, matrices will be read from the corresponding files
- !
-  if(flag_L) then
-     call grab_matrix2('L',inode,nfile,InfoMat,InfoGlob,index=0,n_matrix=nspin)
-     call my_barrier()
-     call Matrix_CommRebuild(InfoGlob,InfoMat,Lrange,L_trans,matL,nfile,symm,n_matrix=nspin)
-      if(flag_debug_move_atoms) call Report_UpdateMatrix("Lmat")
-  endif
+    if(flag_K) then
+       call grab_matrix2('K',inode,nfile,InfoMat,InfoGlob,index=0,n_matrix=nspin)
+       call my_barrier()
+       call Matrix_CommRebuild(InfoGlob,InfoMat,Hrange,H_trans,matK,nfile,n_matrix=nspin)
+       if(flag_debug_move_atoms) call Report_UpdateMatrix("Kmat")
+    endif
 
-  if(flag_K) then
-     call grab_matrix2('K',inode,nfile,InfoMat,InfoGlob,index=0,n_matrix=nspin)
-     call my_barrier()
-     call Matrix_CommRebuild(InfoGlob,InfoMat,Hrange,H_trans,matK,nfile,n_matrix=nspin)
-      if(flag_debug_move_atoms) call Report_UpdateMatrix("Kmat")
-  endif
+    if(flag_S) then
+       ! If we introduce spin-dependent support, matS -> matS(nspin_SF)
+       call grab_matrix2('S',inode,nfile,InfoMat,InfoGlob,index=0,n_matrix=nspin_SF)
+       call my_barrier()
+       call Matrix_CommRebuild(InfoGlob,InfoMat,Srange,S_trans,matS,nfile,symm,n_matrix=nspin_SF)
+       if(flag_debug_move_atoms) call Report_UpdateMatrix("Smat")
+    endif
 
-  if(flag_S) then
-    ! If we introduce spin-dependent support, matS -> matS(nspin_SF)
-     call grab_matrix2('S',inode,nfile,InfoMat,InfoGlob,index=0,n_matrix=nspin_SF)
-     call my_barrier()
-     call Matrix_CommRebuild(InfoGlob,InfoMat,Srange,S_trans,matS,nfile,symm,n_matrix=nspin_SF)
-      if(flag_debug_move_atoms) call Report_UpdateMatrix("Smat")
-  endif
+    if(flag_SFcoeff) then
+       do spin_SF = 1,nspin_SF
+          call matrix_scale(zero,matSFcoeff(spin_SF))
+       enddo !spin_SF = 1,nspin_SF
 
-  if(flag_SFcoeff) then
-     do spin_SF = 1,nspin_SF
-      call matrix_scale(zero,matSFcoeff(spin_SF))
-     enddo !spin_SF = 1,nspin_SF
+       call grab_matrix2('SFcoeff',inode,nfile,InfoMat,InfoGlob,index=0,n_matrix=nspin_SF)
+       call my_barrier()
+       call Matrix_CommRebuild(InfoGlob,InfoMat,SFcoeff_range,SFcoeff_trans,matSFcoeff,nfile,n_matrix=nspin_SF)
+       if(flag_debug_move_atoms) call Report_UpdateMatrix("SFc1")
 
-     call grab_matrix2('SFcoeff',inode,nfile,InfoMat,InfoGlob,index=0,n_matrix=nspin_SF)
-     call my_barrier()
-     call Matrix_CommRebuild(InfoGlob,InfoMat,SFcoeff_range,SFcoeff_trans,matSFcoeff,nfile,n_matrix=nspin_SF)
-      if(flag_debug_move_atoms) call Report_UpdateMatrix("SFc1")
+       do spin_SF = 1,nspin_SF
+          call matrix_scale(zero,matSFcoeff_tran(spin_SF))
+          call matrix_transpose(matSFcoeff(spin_SF), matSFcoeff_tran(spin_SF))
+       enddo
+    endif
 
-     do spin_SF = 1,nspin_SF
-      call matrix_scale(zero,matSFcoeff_tran(spin_SF))
-      call matrix_transpose(matSFcoeff(spin_SF), matSFcoeff_tran(spin_SF))
-     enddo
-  endif
+    !Switch off Debugging
+    !  flag_debug_move_atoms = .false.
 
- !Switch off Debugging
- !  flag_debug_move_atoms = .false.
-
- return
- end subroutine update_pos_and_matrices
- !!***
+    return
+  end subroutine update_pos_and_matrices
+  !!***
 
   !!****f* control/propagate_vector *
   !!

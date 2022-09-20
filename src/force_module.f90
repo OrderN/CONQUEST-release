@@ -4013,6 +4013,11 @@ contains
   !!    factor applied (as above in non-SCF routine)
   !!   2019/05/08 zamaan
   !!    Added atomic stress contributions
+  !!   2022/08/03 15:25 dave
+  !!    In some rare cases we have a spurious large force when an atom is 
+  !!    only a small distance from a grid point; this comes from a hard PCC charge
+  !!    giving a gradient at r=0 that is not zero.  We now linearly interpolate between
+  !!    zero and the gradient at the second grid point (an approximation, but reasonable)
   !!  SOURCE
   !!
   subroutine get_pcc_force(pcc_force, inode, ionode, n_atoms, size, density_out,xc_energy_ret)
@@ -4185,6 +4190,7 @@ contains
                          r(2) = yblock + dy - yatom
                          r(3) = zblock + dz - zatom
                          rsq = r(1)*r(1) + r(2)*r(2) + r(3)*r(3)
+                         fr_pcc = zero
                          if (rsq < pcc_cutoff2) then
                             r_from_i = sqrt(rsq)
                             if (r_from_i > RD_ERR) then
@@ -4210,7 +4216,6 @@ contains
                                r2=pseudo(the_species)%chpcc%f(j+1)
                                r3=pseudo(the_species)%chpcc%d2(j)
                                r4=pseudo(the_species)%chpcc%d2(j+1)
-                               v_pcc = a*r1 + b*r2 + c*r3 + d*r4
                                derivative_pcc = da*r1 + db*r2 + dc*r3 + dd*r4
                                ! the factor of half here is because for
                                ! spin polarised calculations, I have
@@ -4221,10 +4226,8 @@ contains
                                do dir1=1,3
                                   fr_pcc(dir1) = r_pcc(dir1)*derivative_pcc
                                end do
-                            end if
-                         else
-                            fr_pcc = zero
-                         end if
+                            end if ! j+1<=pseudo(the_species)%chpcc%n
+                         end if ! rsq < pcc_cutoff2
                          do spin = 1, nspin
                             do dir1=1,3
                                pcc_force(dir1,ig_atom) = &

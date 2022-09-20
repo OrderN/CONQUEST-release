@@ -905,7 +905,7 @@ contains
     use md_model,   only: md_tdep
     use move_atoms,         only: threshold_resetCD, &
          flag_stop_on_empty_bundle, &
-         enthalpy_tolerance, cg_line_min, safe, backtrack
+         enthalpy_tolerance, cg_line_min, safe, backtrack, adapt_backtrack
     use Integrators, only: fire_alpha0, fire_f_inc, fire_f_dec, fire_f_alpha, fire_N_min, &
          fire_N_max, fire_max_step, fire_N_below_thresh
     use XC, only : flag_functional_type, functional_hartree_fock, functional_hyb_pbe0, &
@@ -1551,6 +1551,8 @@ contains
        cg_line_min = safe
     else if(leqi(tmp,'back')) then
        cg_line_min = backtrack
+    else if(leqi(tmp,'adap')) then
+       cg_line_min = adapt_backtrack
     end if
 !!$
 !!$

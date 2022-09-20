@@ -128,13 +128,15 @@ contains
 !!   2019/06/10 zamaan
 !!    Added two new methods for relaxation of both cell and ionic
 !!    coordinates.
+!!   2022/09/16 16:51 dave
+!!    Added SQNM options for ion/cell optimisation (only partly complete)
 !!  SOURCE
 !!
   subroutine control_run(fixed_potential, vary_mu, total_energy)
 
     use datatypes
     use dimens,               only: r_core_squared, r_h
-    use GenComms,             only: my_barrier, cq_abort
+    use GenComms,             only: my_barrier, cq_abort, cq_warn
     use pseudopotential_data, only: set_pseudopotential
     use force_module,         only: tot_force
     use minimise,             only: get_E_and_F
@@ -174,7 +176,7 @@ contains
            case(1)
              call cell_cg_run(fixed_potential, vary_mu, total_energy)
            case(2)
-             call full_cg_run_double_loop(fixed_potential, vary_mu, &
+             call full_double_loop(fixed_potential, vary_mu, &
                                           total_energy)
            case(3)
              call full_cg_run_single_vector(fixed_potential, vary_mu, &
@@ -197,7 +199,23 @@ contains
        call lbfgs(fixed_potential,vary_mu, total_energy)
        !
     else if ( leqi(runtype, 'sqnm') ) then
-       call sqnm(fixed_potential,vary_mu, total_energy)
+       if (flag_opt_cell) then
+          select case(optcell_method)
+          case(1)
+             call cq_warn("control_run","SQNM cell optimisation not implemented; using CG.")
+             call cell_cg_run(fixed_potential, vary_mu, total_energy)
+             !call cell_sqnm(fixed_potential, vary_mu, total_energy)
+          case(2)
+             call cq_warn("control_run","SQNM cell optimisation not implemented; using CG.")
+             call full_double_loop(fixed_potential, vary_mu, &
+                  total_energy)
+          case(3)
+             call cq_abort("SQNM cell+ion optimisation not available yet.")
+             !call full_sqnm(fixed_potential, vary_mu, total_energy)
+          end select
+       else
+          call sqnm(fixed_potential, vary_mu, total_energy)
+       end if
        !
     else if ( leqi(runtype, 'dummy') ) then
        call dummy_run(fixed_potential,  vary_mu, total_energy)
@@ -261,6 +279,10 @@ contains
   !!    Added choice of line minimiser: standard safemin2 or backtracking
   !!   2021/10/15 17:36 dave
   !!    total_energy now returns final energy
+  !!   2022/08/03 15:23 dave
+  !!    Add option for backtrack or adaptive backtracking
+  !!   2022/09/16 17:10 dave
+  !!    Added test for forces below threshold at the start of the run
   !!  SOURCE
   !!
   subroutine cg_run(fixed_potential, vary_mu, total_energy)
@@ -275,7 +297,8 @@ contains
                              IPRINT_TIME_THRES1
     use group_module,  only: parts
     use minimise,      only: get_E_and_F
-    use move_atoms,    only: adapt_backtrack_linemin, safemin2, cg_line_min, safe, backtrack
+    use move_atoms,    only: adapt_backtrack_linemin, backtrack_linemin, &
+                             safemin2, cg_line_min, safe, adapt_backtrack, backtrack
     use GenComms,      only: gsum, myid, inode, ionode
     use GenBlas,       only: dot
     use force_module,  only: tot_force
@@ -331,6 +354,15 @@ contains
     if (inode==ionode) then
       write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," E: ",e16.8," dE: ",f12.8)') & 
            0, max, energy0, dE
+    end if
+    ! Check for trivial case where forces are converged
+    if (abs(max) < MDcgtol) then
+       done = .true.
+       if (myid == 0) then
+          write(io_lun,'(2x,a,i4,a)') "GeomOpt converged in ", iter, " iterations"
+          write (io_lun, fmt='(4x,"Maximum force below threshold: ",f12.5)') max
+       end if
+       return
     end if
 
     iter = 1
@@ -403,9 +435,11 @@ contains
        ! Minimise in this direction
        if(cg_line_min==safe) then
           call safemin2(x_new_pos, y_new_pos, z_new_pos, cg, energy0,&
-               energy1, fixed_potential, vary_mu, energy1)
+               energy1, fixed_potential, vary_mu)
        else if(cg_line_min==backtrack) then
-          call adapt_backtrack_linemin(cg, energy0, energy1, fixed_potential, vary_mu, energy1)
+          call backtrack_linemin(cg, energy0, energy1, fixed_potential, vary_mu)
+       else if(cg_line_min==adapt_backtrack) then
+          call adapt_backtrack_linemin(cg, energy0, energy1, fixed_potential, vary_mu)
        end if
        ! Output positions
        if (myid == 0 .and. iprint_gen > 1) then
@@ -1779,7 +1813,7 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
           call dump_pos_and_matrices
        else
           call safemin2(x_new_pos, y_new_pos, z_new_pos, cg, energy0, &
-               energy1, fixed_potential, vary_mu, energy1)
+               energy1, fixed_potential, vary_mu)
        end if
        ! Analyse forces
        g0 = dot(length, tot_force, 1, tot_force, 1)
@@ -1923,6 +1957,8 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
   !!    - Added call to subroutine write_xsf to write trajectory file
   !!   2022/05/27 10:05 dave
   !!    Bug fix: define g0 on all processes, not just ionode
+  !!   2022/09/16 17:10 dave
+  !!    Added test for forces below threshold at the start of the run
   !!  SOURCE
   !!
   subroutine lbfgs(fixed_potential, vary_mu, total_energy)
@@ -1931,21 +1967,21 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
     use numbers
     use units
     use global_module,  only: iprint_MD, ni_in_cell, x_atom_cell,   &
-                              y_atom_cell, z_atom_cell, id_glob,    &
-                              atom_coord, area_general, flag_pulay_simpleStep, &
-                              flag_diagonalisation, nspin, flag_LmatrixReuse, &
-                              flag_SFcoeffReuse
+         y_atom_cell, z_atom_cell, id_glob,    &
+         atom_coord, area_general, flag_pulay_simpleStep, &
+         flag_diagonalisation, nspin, flag_LmatrixReuse, &
+         flag_SFcoeffReuse
     use group_module,   only: parts
     use minimise,       only: get_E_and_F
     use move_atoms,     only: pulayStep, velocityVerlet,            &
-                              updateIndices, updateIndices3, update_atom_coord,     &
-                              safemin2, update_H, update_pos_and_matrices, backtrack_linemin
+         updateIndices, updateIndices3, update_atom_coord,     &
+         update_H, update_pos_and_matrices, backtrack_linemin
     use move_atoms,     only: updateL, updateLorK, updateSFcoeff
     use GenComms,       only: gsum, myid, inode, ionode, gcopy, my_barrier
     use GenBlas,        only: dot
     use force_module,   only: tot_force
     use io_module,      only: write_atomic_positions, pdb_template, &
-                              check_stop, write_xsf
+         check_stop, write_xsf
     use memory_module,  only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use primary_module, only: bundle
     use store_matrix,   only: dump_pos_and_matrices
@@ -1968,25 +2004,25 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
     real(double), allocatable, dimension(:,:,:) :: posnStore
     real(double), allocatable, dimension(:,:,:) :: forceStore
     real(double) :: energy0, energy1, max, g0, dE, gg, ggold, gamma, &
-                    temp, KE, guess_step, step, test_dot
+         temp, KE, guess_step, step, test_dot
     integer      :: i,j,k,iter,length, jj, lun, stat, npmod, pul_mx, &
-                    i_first, i_last, &
-                    nfile, symm, iter_low, iter_high, this_iter
+         i_first, i_last, &
+         nfile, symm, iter_low, iter_high, this_iter
     logical      :: done
 
     step = MDtimestep
     allocate(posnStore(3,ni_in_cell,LBFGS_history), &
-             forceStore(3,ni_in_cell,LBFGS_history), STAT=stat)
+         forceStore(3,ni_in_cell,LBFGS_history), STAT=stat)
     if (stat /= 0) &
          call cq_abort("Error allocating cg in control: ", ni_in_cell, stat)
     allocate(cg(3,ni_in_cell), cg_new(3,ni_in_cell), STAT=stat)
     if (stat /= 0) &
          call cq_abort("Error allocating cg in control: ", ni_in_cell, stat)
     allocate(x_new_pos(ni_in_cell), y_new_pos(ni_in_cell), &
-             z_new_pos(ni_in_cell), STAT=stat)
+         z_new_pos(ni_in_cell), STAT=stat)
     if (stat /= 0) &
          call cq_abort("Error allocating _new_pos in control: ", &
-                       ni_in_cell, stat)
+         ni_in_cell, stat)
     call reg_alloc_mem(area_general, 6 * ni_in_cell, type_dbl)
     allocate(alpha(LBFGS_history), beta(LBFGS_history), rho(LBFGS_history))
     if (myid == 0) &
@@ -2004,15 +2040,35 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
     length = 3 * ni_in_cell
     if (myid == 0 .and. iprint_MD > 0) &
          write (io_lun, 2) MDn_steps, MDcgtol, en_units(energy_units), & 
-                   d_units(dist_units)
+         d_units(dist_units)
     energy0 = total_energy
     energy1 = zero
     dE = zero
     ! Find energy and forces
     call get_E_and_F(fixed_potential, vary_mu, energy0, .true., &
-                     .false.)
+         .false.)
     call dump_pos_and_matrices
     call get_maxf(max)
+    ! Check for trivial case where forces are converged
+    if (abs(max) < MDcgtol) then
+       done = .true.
+       if (inode==ionode) then
+          write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," E: ",e16.8," dE: ",f12.8)') & 
+               iter, max, energy1, en_conv*dE
+          if (iprint_MD > 1) then
+             write(io_lun,'(4x,"Force Residual:     ",f20.10," ",a2,"/",a2)') &
+                  for_conv*sqrt(g0/ni_in_cell), en_units(energy_units), & 
+                  d_units(dist_units)
+             write(io_lun,'(4x,"Maximum force:      ",f20.10)') max
+             write(io_lun,'(4x,"Force tolerance:    ",f20.10)') MDcgtol
+             write(io_lun,'(4x,"Energy change:      ",f20.10," ",a2)') &
+                  en_conv*dE, en_units(energy_units)
+          end if
+          write(io_lun, fmt='(4x,"Maximum force below threshold: ",f12.5)') max
+          write(io_lun,'(2x,a,i4,a)') "GeomOpt converged in ", iter, " iterations"
+       end if
+       return
+    end if
     iter = 0
     ggold = zero
     energy1 = energy0
@@ -2059,7 +2115,7 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
        if (myid == 0 .and. iprint_MD > 2) &
             write(io_lun,fmt='(2x,"L-BFGS iteration ",i4)') iter
        ! Line search
-       call backtrack_linemin(cg, energy0, energy1, fixed_potential, vary_mu, energy1)
+       call backtrack_linemin(cg, energy0, energy1, fixed_potential, vary_mu)
        ! Update stored position difference and force difference
        do i=1,ni_in_cell
           jj = id_glob(i)
@@ -2141,12 +2197,12 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
                   iter, max, energy1, en_conv*dE
              if (iprint_MD > 1) then
                 write(io_lun,'(4x,"Force Residual:     ",f20.10," ",a2,"/",a2)') &
-                   for_conv*sqrt(g0/ni_in_cell), en_units(energy_units), & 
-                   d_units(dist_units)
+                     for_conv*sqrt(g0/ni_in_cell), en_units(energy_units), & 
+                     d_units(dist_units)
                 write(io_lun,'(4x,"Maximum force:      ",f20.10)') max
                 write(io_lun,'(4x,"Force tolerance:    ",f20.10)') MDcgtol
                 write(io_lun,'(4x,"Energy change:      ",f20.10," ",a2)') &
-                   en_conv*dE, en_units(energy_units)
+                     en_conv*dE, en_units(energy_units)
              end if
              write(io_lun, fmt='(4x,"Maximum force below threshold: ",f12.5)') max
              write(io_lun,'(2x,a,i4,a)') "GeomOpt converged in ", iter, " iterations"
@@ -2161,19 +2217,19 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
     deallocate(cg, STAT=stat)
     if (stat /= 0) &
          call cq_abort("Error deallocating cg in control: ", &
-                       ni_in_cell, stat)
+         ni_in_cell, stat)
     call reg_dealloc_mem(area_general, 6 * ni_in_cell, type_dbl)
 
 1   format(4x,'Atom ',i8,' Position ',3f15.8)
 2   format(4x,'L-BFGS structural relaxation. Maximum of ',i4,&
-           ' steps with tolerance of ',f8.4,a2,"/",a2)
+         ' steps with tolerance of ',f8.4,a2,"/",a2)
   end subroutine lbfgs
   !!***
 
   !!****f* control/sqnm *
   !!
   !!  NAME 
-  !!   lbfgs
+  !!   sqnm
   !!  USAGE
   !!   
   !!  PURPOSE
@@ -2190,6 +2246,8 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
   !!  MODIFICATION HISTORY
   !!   2021/09/15 14:36 dave
   !!    Bug fix for force restoration when energy rises
+  !!   2022/09/16 17:10 dave
+  !!    Added test for forces below threshold at the start of the run
   !!  SOURCE
   !!
   subroutine sqnm(fixed_potential, vary_mu, total_energy)
@@ -2198,21 +2256,21 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
     use numbers
     use units
     use global_module,  only: iprint_MD, ni_in_cell, x_atom_cell,   &
-                              y_atom_cell, z_atom_cell, id_glob,    &
-                              atom_coord, area_general, flag_pulay_simpleStep, &
-                              flag_diagonalisation, nspin, flag_LmatrixReuse, &
-                              flag_SFcoeffReuse, flag_move_atom
+         y_atom_cell, z_atom_cell, id_glob,    &
+         atom_coord, area_general, flag_pulay_simpleStep, &
+         flag_diagonalisation, nspin, flag_LmatrixReuse, &
+         flag_SFcoeffReuse, flag_move_atom
     use group_module,   only: parts
     use minimise,       only: get_E_and_F
     use move_atoms,     only: pulayStep, velocityVerlet,            &
-                              updateIndices, updateIndices3, update_atom_coord,     &
-                              safemin2, update_H, update_pos_and_matrices, single_step
-    use move_atoms,     only: updateL, updateLorK, updateSFcoeff
+         updateIndices, updateIndices3, update_atom_coord,     &
+         update_H, update_pos_and_matrices, single_step
+    use move_atoms,     only: updateL, updateLorK, updateSFcoeff, backtrack_linemin
     use GenComms,       only: gsum, myid, inode, ionode, gcopy, my_barrier
     use GenBlas,        only: dot, syev
     use force_module,   only: tot_force
     use io_module,      only: write_atomic_positions, pdb_template, &
-                              check_stop, write_xsf
+         check_stop, write_xsf
     use memory_module,  only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use primary_module, only: bundle
     use store_matrix,   only: dump_pos_and_matrices
@@ -2235,25 +2293,25 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
     real(double), allocatable, dimension(:,:,:) :: posnStore, dr_tilde, dg_tilde, vi_tilde
     real(double), allocatable, dimension(:,:,:) :: forceStore
     real(double) :: energy0, energy1, max, g0, dE, gg, ggold, gamma, &
-                    temp, KE, guess_step, step, test_dot, lambda_max, alpha, f_dot_sd
+         temp, KE, guess_step, step, test_dot, lambda_max, alpha, f_dot_sd
     integer      :: i,j,k,iter,length, jj, lun, stat, npmod, pul_mx, &
-                    i_first, i_last, n_store, n_dim, info, n_hist, &
-                    nfile, symm, iter_loc, iter_high, this_iter
+         i_first, i_last, n_store, n_dim, info, n_hist, &
+         nfile, symm, iter_loc, iter_high, this_iter
     logical      :: done
 
     step = MDtimestep
     allocate(posnStore(3,ni_in_cell,LBFGS_history), &
-             forceStore(3,ni_in_cell,LBFGS_history), STAT=stat)
+         forceStore(3,ni_in_cell,LBFGS_history), STAT=stat)
     if (stat /= 0) &
          call cq_abort("Error allocating cg in control: ", ni_in_cell, stat)
     allocate(cg(3,ni_in_cell), cg_new(3,ni_in_cell), STAT=stat)
     if (stat /= 0) &
          call cq_abort("Error allocating cg in control: ", ni_in_cell, stat)
     allocate(x_new_pos(ni_in_cell), y_new_pos(ni_in_cell), &
-             z_new_pos(ni_in_cell), STAT=stat)
+         z_new_pos(ni_in_cell), STAT=stat)
     if (stat /= 0) &
          call cq_abort("Error allocating _new_pos in control: ", &
-                       ni_in_cell, stat)
+         ni_in_cell, stat)
     call reg_alloc_mem(area_general, 6 * ni_in_cell, type_dbl)
     if (myid == 0) &
          write (io_lun, fmt='(/4x,"Starting SQNM atomic relaxation"/)')
@@ -2271,19 +2329,27 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
     alpha = one
     if (myid == 0 .and. iprint_MD > 0) &
          write (io_lun, fmt='(4x,"SQNM structural relaxation. Maximum of ",i4, " steps with tolerance of ",&
-              &f8.4,a2,"/",a2)') MDn_steps, MDcgtol, en_units(energy_units), d_units(dist_units)
+         &f8.4,a2,"/",a2)') MDn_steps, MDcgtol, en_units(energy_units), d_units(dist_units)
     energy0 = total_energy
     energy1 = zero
     dE = zero
     ! Find energy and forces
     call get_E_and_F(fixed_potential, vary_mu, energy0, .true., &
-                     .false.)
+         .false.)
     call dump_pos_and_matrices
     call get_maxf(max)
     iter = 0
     if (inode==ionode) then
        write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," E: ",e18.10)') & 
             iter, for_conv*max, en_conv*energy0
+    end if
+    ! Check for trivial case where forces are converged
+    if (abs(max) < MDcgtol) then
+       done = .true.
+       if (inode==ionode) then
+          write(io_lun, fmt='(4x,"Maximum force below threshold: ",f12.5)') max
+       end if
+       return
     end if
     iter_loc = 0
     ggold = zero
@@ -2314,7 +2380,11 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
        if (myid == 0 .and. iprint_MD > 2) &
             write(io_lun,fmt='(2x,"SQNM iteration ",i4)') iter
        ! Line search
-       call single_step(cg, energy0, energy1, fixed_potential, vary_mu)
+       if(iter==1) then
+          call backtrack_linemin(cg, energy0, energy1, fixed_potential, vary_mu)
+       else
+          call single_step(cg, energy0, energy1, fixed_potential, vary_mu)
+       end if
        if(energy1>energy0) then
           if(inode==ionode.AND.iprint_MD>1) write(io_lun,fmt='(4x,"Energy rise: resetting history")')
           cg_new = -tot_force
@@ -2322,7 +2392,8 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
              jj = id_glob(i)
              cg(:,i) = -cg_new(:,jj) ! Search downhill
           end do
-          call single_step(cg, energy0, energy1, fixed_potential, vary_mu)
+          call backtrack_linemin(cg, energy0, energy1, fixed_potential, vary_mu)
+          !call single_step(cg, energy0, energy1, fixed_potential, vary_mu)
           if(energy1>energy0) call cq_abort("Energy rise twice in succession: check SCF and other tolerances")
           npmod = 1
           iter_loc = 1
@@ -2515,10 +2586,879 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
     deallocate(cg, STAT=stat)
     if (stat /= 0) &
          call cq_abort("Error deallocating cg in control: ", &
-                       ni_in_cell, stat)
+         ni_in_cell, stat)
     call reg_dealloc_mem(area_general, 6 * ni_in_cell, type_dbl)
     deallocate(posnStore, forceStore, cg_new, x_new_pos, y_new_pos, z_new_pos)
   end subroutine sqnm
+  !!***
+
+  !!****f* control/cell_sqnm *
+  !!
+  !!  NAME
+  !!   cell_sqnm
+  !!  USAGE
+  !!
+  !!  PURPOSE
+  !!   Performs stabilised Quasi-Newton minimisation to optimise
+  !!   simulation cell size.  Based on algorithm for ionic
+  !!   optimisation in J. Chem. Phys. 142, 034112 (2015) and updated
+  !!   paper arXiv 2206.07339
+  !!
+  !!   Note that the arXiv paper works in terms of dE/dA_{lat} which
+  !!   is converted from stress as dE/dA = stress/{a|b|c}
+  !!
+  !!  ** NB not yet functional: do not use 2022/09/16 16:52 dave **
+  !!
+  !!  INPUTS
+  !!
+  !!  USES
+  !!
+  !!  AUTHOR
+  !!   D.R.Bowler
+  !!  CREATION DATE
+  !!   2022/08/11
+  !!  MODIFICATION HISTORY
+  !!   2022/08/17 15:18 dave
+  !!    Introduced scaling to improve conditioning in arxiv/2206.07339
+  !!  SOURCE
+  !!
+  subroutine cell_sqnm(fixed_potential, vary_mu, total_energy)
+
+    ! Module usage
+    use numbers
+    use units
+    use global_module,  only: iprint_MD, ni_in_cell, x_atom_cell,   &
+         y_atom_cell, z_atom_cell, id_glob,    &
+         atom_coord, area_general, flag_pulay_simpleStep, &
+         flag_diagonalisation, nspin, flag_LmatrixReuse, &
+         flag_SFcoeffReuse, flag_move_atom,      &
+         cell_constraint_flag, cell_stress_tol, &
+         rcellx, rcelly, rcellz
+    use group_module,   only: parts
+    use minimise,       only: get_E_and_F
+    use move_atoms,     only: pulayStep, velocityVerlet,            &
+         updateIndices, updateIndices3, update_atom_coord,     &
+         update_H, update_pos_and_matrices, single_step_cell
+    use move_atoms,     only: updateL, updateLorK, updateSFcoeff, backtrack_linemin_cell, &
+         enthalpy, enthalpy_tolerance
+    use GenComms,       only: gsum, myid, inode, ionode, gcopy, my_barrier
+    use GenBlas,        only: dot, syev
+    use force_module,   only: tot_force, stress
+    use io_module,      only: write_atomic_positions, pdb_template, &
+         check_stop, write_xsf
+    use memory_module,  only: reg_alloc_mem, reg_dealloc_mem, type_dbl
+    use primary_module, only: bundle
+    use store_matrix,   only: dump_pos_and_matrices
+    use mult_module, ONLY: matK, S_trans, matrix_scale, matL, L_trans
+    use matrix_data, ONLY: Hrange, Lrange
+    use dimens,        only: r_super_x, r_super_y, r_super_z
+    use md_control,    only: flag_write_xsf, target_pressure
+    use input_module,         only: leqi
+
+    implicit none
+
+    ! Passed variables
+    ! Shared variables needed by get_E_and_F for now (!)
+    logical :: vary_mu, fixed_potential
+    real(double) :: total_energy
+
+    ! Local variables
+    real(double), allocatable, dimension(:,:)   :: omega, vi, Sij, Hij
+    real(double), dimension(3)     :: cg, cg_new, orcell
+    real(double), allocatable, dimension(:)     :: mod_dr, lambda, kappa, kappa_prime, ri_vec
+    real(double), allocatable, dimension(:,:) :: posnStore, dr_tilde, dg_tilde, vi_tilde
+    real(double), allocatable, dimension(:,:) :: forceStore
+    real(double) :: energy0, energy1, max, g0, dE, gg, ggold, gamma, &
+         temp, KE, guess_step, step, test_dot, lambda_max, alpha, f_dot_sd, &
+         enthalpy0, enthalpy1, dH, press
+    integer      :: i,j,k,iter,length, jj, lun, stat, npmod, pul_mx, &
+         i_first, i_last, n_store, n_dim, info, n_hist, &
+         nfile, symm, iter_loc, iter_high, this_iter
+    logical      :: done
+    real(double) :: search_dir_x, search_dir_y,&
+         search_dir_z, stressx, stressy, stressz, RMSstress, newRMSstress,&
+         dRMSstress, search_dir_mean, mean_stress, max_stress, &
+         stress_diff, volume, stress_target, orcellx, orcelly, orcellz, wscal
+
+    ! Store original cell size
+    orcellx = rcellx
+    orcelly = rcelly
+    orcellz = rcellz
+    orcell(1) = rcellx
+    orcell(2) = rcelly
+    orcell(3) = rcellz
+    ! Scaling: w = 2 Bohr x sqrt(Natoms)
+    wscal = two*sqrt(real(ni_in_cell,double))
+    step = MDtimestep
+    allocate(posnStore(3,LBFGS_history), &
+         forceStore(3,LBFGS_history), STAT=stat)
+    if (stat /= 0) &
+         call cq_abort("Error allocating in cell_sqnm: ", ni_in_cell, stat)
+    call reg_alloc_mem(area_general, 6 * LBFGS_history, type_dbl)
+    if (myid == 0) &
+         write (io_lun, fmt='(/4x,"Starting SQNM cell relaxation"/)')
+    posnStore = zero
+    forceStore = zero
+    search_dir_x = zero
+    search_dir_y = zero
+    search_dir_z = zero
+    search_dir_mean = zero
+    ! Do we need to add MD.MaxCGDispl ?
+    done = .false.
+    length = 3
+    alpha = one
+    if (myid == 0 .and. iprint_MD > 0) &
+         write (io_lun, fmt='(4x,"SQNM cell optimisation. Maximum of ",i4, " steps with tolerance of ",&
+         &f8.4,a2,"/",a2)') MDn_steps, MDcgtol, en_units(energy_units), d_units(dist_units)
+    energy0 = total_energy
+    energy1 = zero
+    dE = zero
+    ! Find energy and forces
+    call get_E_and_F(fixed_potential, vary_mu, energy0, .true., &
+         .false.)
+    call dump_pos_and_matrices
+    call get_maxf(max)
+    iter = 0
+    press = target_pressure/HaBohr3ToGPa
+    ! Stress tolerance in Ha/Bohr3
+    stress_target = cell_stress_tol/HaBohr3ToGPa
+    enthalpy0 = enthalpy(energy0, press)
+    enthalpy1 = enthalpy0
+    dH = zero
+    max_stress = zero
+    volume = rcellx*rcelly*rcellz
+    do i=1,3
+       stress_diff = abs(press*volume + stress(i,i))/volume
+       if (stress_diff > max_stress) max_stress = stress_diff
+    end do
+    if (inode==ionode) then
+       write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxStr: ",f12.8," H: ",e16.8," dH: ",f12.8)') &
+            iter, max_stress*volume, enthalpy1, en_conv*dH
+    end if
+    iter_loc = 0
+    ggold = zero
+    energy1 = energy0
+    if (leqi(cell_constraint_flag, 'volume')) then
+       cg_new(1) = third*(stress(1,1)+stress(2,2)+stress(3,3)) - press*volume
+    else
+       !do i = 1,3
+       cg_new(1) = (stress(1,1) - press*volume)*orcellx/(rcellx*wscal)
+       cg_new(2) = (stress(2,2) - press*volume)*orcelly/(rcelly*wscal)
+       cg_new(3) = (stress(3,3) - press*volume)*orcellz/(rcellz*wscal)
+       !end do
+    end if
+    if (inode==ionode .and. iprint_MD > 1) then
+       g0 = dot(length,cg_new,1,cg_new,1)
+       write(io_lun,'(4x,"Search direction has magnitude ",f20.10)') sqrt(g0/three)
+    end if
+    do while (.not. done)
+       ! Book-keeping
+       iter = iter + 1
+       iter_loc = iter_loc + 1
+       npmod = mod(iter_loc, LBFGS_history)
+       if(npmod==0) npmod = LBFGS_history
+       volume = rcellx*rcelly*rcellz
+       posnStore (1,npmod) = wscal*rcellx/orcellx
+       posnStore (2,npmod) = wscal*rcelly/orcelly
+       posnStore (3,npmod) = wscal*rcellz/orcellz
+       if (leqi(cell_constraint_flag, 'volume')) then
+          forceStore(1,npmod) = -third*(stress(1,1)+stress(2,2)+stress(3,3)) + press*volume
+          cg(1) = -cg_new(1)
+       else
+          forceStore(1,npmod) = (-stress(1,1) + press*volume)*orcellx/(wscal*rcellx)
+          forceStore(2,npmod) = (-stress(2,2) + press*volume)*orcelly/(wscal*rcelly)
+          forceStore(3,npmod) = (-stress(3,3) + press*volume)*orcellz/(wscal*rcellz)
+          cg(1) = -cg_new(1)*wscal/orcellx
+          cg(2) = -cg_new(2)*wscal/orcelly
+          cg(3) = -cg_new(3)*wscal/orcellz
+       end if
+       write(*,*) 'Search direction: ',cg
+       ! Set up limits for sums
+       if (myid == 0 .and. iprint_MD > 2) &
+            write(io_lun,fmt='(2x,"SQNM iteration ",i4)') iter
+       ! Take a step downhill
+       if(iter==1) then
+          call backtrack_linemin_cell(cg, enthalpy0, enthalpy1, fixed_potential, vary_mu)
+       else
+          call single_step_cell(cg, enthalpy0, enthalpy1, fixed_potential, vary_mu)
+       end if
+       if(enthalpy1>enthalpy0) then
+          if(inode==ionode.AND.iprint_MD>1) write(io_lun,fmt='(4x,"Energy rise: resetting history")')
+          cg_new(1) = (stress(1,1) - press*volume)*orcellx/(wscal*rcellx)
+          cg_new(2) = (stress(2,2) - press*volume)*orcelly/(wscal*rcelly)
+          cg_new(3) = (stress(3,3) - press*volume)*orcellz/(wscal*rcellz)
+          cg(1) = -cg_new(1)*wscal/orcellx
+          cg(2) = -cg_new(2)*wscal/orcelly
+          cg(3) = -cg_new(3)*wscal/orcellz
+          !do i=1,3
+          !cg_new(i) = (stress(i,i) - press*volume)*orcell(i)/wscal
+          !cg(i) = -cg_new(i)*wscal/orcell(i) ! Search downhill
+          !end do
+          call backtrack_linemin_cell(cg, enthalpy0, enthalpy1, fixed_potential, vary_mu)
+          if(enthalpy1>enthalpy0) call cq_abort("Energy rise twice in succession: check SCF and other tolerances")
+          npmod = 1
+          iter_loc = 1
+          ! In the original paper, this is alpha = alpha/2 but heuristically this seems better
+          ! DRB 2021/09/15
+          alpha = one
+       endif
+       ! Update stored position difference and force difference
+       posnStore (1,npmod) = rcellx*wscal/orcellx - posnStore (1,npmod)
+       posnStore (2,npmod) = rcelly*wscal/orcelly - posnStore (2,npmod)
+       posnStore (3,npmod) = rcellz*wscal/orcellz - posnStore (3,npmod)
+       forceStore(1,npmod) = (-stress(1,1) + press*volume)*orcellx/(wscal*rcellx) - forceStore(1,npmod)
+       forceStore(2,npmod) = (-stress(2,2) + press*volume)*orcelly/(wscal*rcelly) - forceStore(2,npmod)
+       forceStore(3,npmod) = (-stress(3,3) + press*volume)*orcellz/(wscal*rcellz) - forceStore(3,npmod)
+       n_store = min(iter_loc,LBFGS_history) ! Number of stored states
+       if(inode==ionode.AND.iprint_MD>2) write(io_lun,fmt='(4x,"Number of stored histories ",i3)') n_store
+       allocate(mod_dr(n_store),Sij(n_store,n_store),lambda(n_store),&
+            omega(n_store,n_store))
+       mod_dr = zero
+       ! Normalise dR and dg
+       do i=1,n_store
+          mod_dr(i) = sqrt(dot(length,posnStore(:,i),1,posnStore(:,i),1))
+       end do
+       posnStore(:,npmod) = posnStore(:,npmod)/mod_dr(npmod)
+       forceStore(:,npmod) = forceStore(:,npmod)/mod_dr(npmod)
+       ! Add call to write_atomic_positions and write_xsf (2020/01/17: smujahed)
+       call write_atomic_positions("UpdatedAtoms.dat", trim(pdb_template))
+       if (flag_write_xsf) call write_xsf('trajectory.xsf', iter)
+       ! Build significant subspace
+       Sij = zero
+       omega = zero
+       do i = 1, n_store
+          do j=i,n_store
+             Sij(j,i) = dot(length,posnStore(:,j),1,posnStore(:,i),1)
+             if(j>i) Sij(i,j) = Sij(j,i)
+          end do
+       end do
+       ! Solve for eigenvectors of Sij
+       omega = Sij
+       if(n_store>1) then
+          call syev('U',n_store,omega,n_store,lambda,info)
+          if(info<0) call cq_abort("Error in SQNM calling dsyev: ",info)
+          if(info>0.and.inode==ionode) write(io_lun,fmt='(4x,"Possible error in SQNM; dsyev returned ",i4)') info
+       else
+          lambda = one
+          omega = one
+       end if
+       if(inode==ionode.AND.iprint_MD>2) then
+          write(io_lun,fmt='(4x,"Eigenvalues of Sij: ",(f7.4))') lambda
+       end if
+       lambda_max = maxval(lambda)
+       n_dim = n_store
+       do i=1, n_store
+          if(lambda(i)/lambda_max<1.0e-4_double) then
+             n_dim = n_dim - 1
+          end if
+       end do
+       if(inode==ionode.AND.iprint_MD>2) write(io_lun,fmt='(4x,"Number of eigenstates kept: ",i3)') n_dim
+       ! Build dr_tilde and dg_tilde
+       allocate(dr_tilde(3,n_dim), dg_tilde(3,n_dim))
+       dr_tilde = zero
+       dg_tilde = zero
+       do i=1,n_dim
+          do j=1,n_store
+             dr_tilde(:,i) = dr_tilde(:,i) + omega(j,i+(n_store-n_dim))*posnStore(:,j)
+             dg_tilde(:,i) = dg_tilde(:,i) + omega(j,i+(n_store-n_dim))*forceStore(:,j)
+          end do
+          dr_tilde(:,i) = dr_tilde(:,i)/sqrt(lambda(i+(n_store-n_dim)))
+          dg_tilde(:,i) = dg_tilde(:,i)/sqrt(lambda(i+(n_store-n_dim)))
+       end do
+       ! Construct approximate Hessian projected onto subspace
+       allocate(Hij(n_dim,n_dim))
+       Hij = zero
+       do i=1,n_dim
+          do j=i,n_dim
+             Hij(j,i) = half*(dot(length,dr_tilde(:,i),1,dg_tilde(:,j),1) + &
+                  dot(length,dr_tilde(:,j),1,dg_tilde(:,i),1))
+             if(j>i) Hij(i,j) = Hij(j,i)
+          end do
+       end do
+       ! Find eigenvectors
+       allocate(kappa(n_dim),vi(n_dim,n_dim),kappa_prime(n_dim))
+       kappa = zero
+       kappa_prime = zero
+       vi = Hij
+       if(n_dim>1) then
+          call syev('U',n_dim,vi,n_dim,kappa,info)
+          if(info<0) call cq_abort("Error in SQNM calling dsyev: ",info)
+          if(info>0.and.inode==ionode) write(io_lun,fmt='(4x,"Possible error in SQNM; dsyev returned ",i4)') info
+       else
+          kappa = one !Hij(1,1)
+          vi = one
+       end if
+       if(inode==ionode.AND.iprint_MD>3) write(io_lun,fmt='(4x,"Kappa: ",(f7.4))') kappa
+       ! Build v tilde
+       allocate(vi_tilde(3,n_dim),ri_vec(3))
+       vi_tilde = zero
+       do i=1,n_dim
+          ri_vec = zero
+          do j=1,n_dim
+             vi_tilde(:,i) = vi_tilde(:,i) + vi(j,i)*dr_tilde(:,j)
+             ri_vec(:) = ri_vec(:) + vi(j,i)*dg_tilde(:,j)
+          end do
+          ri_vec(:) = ri_vec(:) - kappa(i)*vi_tilde(:,i)
+          !kappa_prime(i) = sqrt(0.0025_double + kappa(i)*kappa(i))
+          kappa_prime(i) = sqrt(dot(length,ri_vec,1,ri_vec,1) + kappa(i)*kappa(i))
+       end do
+       if(inode==ionode.AND.iprint_MD>3) write(io_lun,fmt='(4x,"Kappa prime: ",(f7.4))') kappa_prime
+       ! Build preconditioned search
+       if (leqi(cell_constraint_flag, 'volume')) then
+          cg_new(1) = third*(stress(1,1)+stress(2,2)+stress(3,3)) - press*volume
+       else
+          cg_new(1) = (stress(1,1) - press*volume)*orcellx/(wscal*rcellx)
+          cg_new(2) = (stress(2,2) - press*volume)*orcelly/(wscal*rcelly)
+          cg_new(3) = (stress(3,3) - press*volume)*orcellz/(wscal*rcellz)
+          !do i = 1,3
+          !   cg_new(i) = (stress(i,i) - press*volume)*orcell(i)/wscal
+          !end do
+       end if
+       cg_new = alpha*cg_new
+       do i=1,n_dim
+          temp = zero
+          !do j=1,3
+          temp = temp + (stress(1,1)-press*volume)*orcell(1)*vi_tilde(1,i)/(wscal*rcellx)
+          temp = temp + (stress(2,2)-press*volume)*orcell(2)*vi_tilde(2,i)/(wscal*rcelly)
+          temp = temp + (stress(3,3)-press*volume)*orcell(3)*vi_tilde(3,i)/(wscal*rcellz)
+          !end do
+          do j=1,3
+             cg_new(j) = cg_new(j) - (one/kappa_prime(i) - alpha)*temp*vi_tilde(j,i)
+          end do
+       end do
+       ! Zero search direction for fixed atoms and find maximum force
+       gg = dot(length, cg_new, 1, cg_new, 1)
+       ! Analyse forces
+       g0 = stress(1,1)*stress(1,1) + stress(2,2)*stress(2,2) + stress(3,3)*stress(3,3)
+       temp = -cg_new(1)*stress(1,1) - cg_new(2)*stress(2,2) - cg_new(3)*stress(3,3)
+       f_dot_sd = temp/sqrt(g0*gg)
+       if(inode==ionode.AND.iprint_MD>2) &
+            write(io_lun,fmt='(4x,"Dot product of search direction and force: ",f12.7)') f_dot_sd
+       ! Now adjust alpha
+       if(f_dot_sd>0.2_double) then
+          alpha = alpha*1.1_double
+       else
+          alpha = alpha*0.85_double
+       end if
+       if(inode==ionode.AND.iprint_MD>2) write(io_lun,fmt='(4x,"Alpha set to: ",f9.5)') alpha
+       max_stress = zero
+       volume = rcellx*rcelly*rcellz
+       do i=1,3
+          stress_diff = abs(press*volume + stress(i,i))/volume
+          if (stress_diff > max_stress) max_stress = stress_diff
+       end do
+       dH = enthalpy0 - enthalpy1
+       newRMSstress = sqrt(((stress(1,1)*stress(1,1)) + &
+            (stress(2,2)*stress(2,2)) + &
+            (stress(3,3)*stress(3,3)))/3)
+       dRMSstress = RMSstress - newRMSstress
+       enthalpy0 = enthalpy1
+       ! Check exit criteria
+       volume = rcellx*rcelly*rcellz
+       max_stress = zero
+       do i=1,3
+          stress_diff = abs(press*volume + stress(i,i))/volume
+          if (stress_diff > max_stress) max_stress = stress_diff
+       end do
+       if (inode==ionode) then
+          write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxStr: ",f12.8," H: ",e16.8," dH: ",f12.8)') &
+               iter, max_stress*volume, enthalpy1, en_conv*dH
+          if (iprint_MD > 1) then
+             write(io_lun,'(4x,"Maximum stress         ",e14.6," Ha/Bohr**3")') max_stress
+             write(io_lun,'(4x,"Simulation cell volume ",e14.6," Bohr**3")') volume
+             write(io_lun,'(4x,"Maximum stress         ",f14.6," GPa")') &
+                  max_stress*HaBohr3ToGPa
+             write(io_lun,'(4x,"Stress tolerance:      ",f14.6," GPa")') &
+                  cell_stress_tol
+             !write(io_lun,'(4x,"Change in stress:      ",e14.6," ",a2)') max_stress*volume, &
+             !     en_units(energy_units)
+             write(io_lun,'(4x,"Enthalpy change:       ",e14.6," ",a2)') &
+                  en_conv*dH, en_units(energy_units)
+             write(io_lun,'(4x,"Enthalpy tolerance:    ",e14.6," ",a2)') &
+                  en_conv*enthalpy_tolerance, en_units(energy_units)
+          else if (iprint_MD > 0) then
+             write (io_lun, fmt='(4x,"Enthalpy change: ",f15.8," ",a2)') en_conv*dH, en_units(energy_units)
+             write (io_lun, fmt='(4x,"RMS Stress change: ",f15.8," ",a2)') dRMSstress, "Ha"
+             write(io_lun,'(4x,"Maximum stress: ",f15.8," ",a2)') max_stress*volume, &
+                  en_units(energy_units)
+          end if
+       end if
+       if (iter > MDn_steps) then
+          done = .true.
+          if (myid == 0) &
+               write (io_lun, fmt='(4x,"Exceeded number of MD steps: ",i4)') iter
+       end if
+       if (abs(dH)<enthalpy_tolerance .and. max_stress < stress_target) then
+          if (inode==ionode) &
+               write(io_lun,'(2x,a,i4,a)') "GeomOpt converged in ", &
+               iter, " iterations"
+          done = .true.
+          if (myid == 0 .and. iprint_md > 0) &
+               write (io_lun, fmt='(4x,"Enthalpy change below threshold: ",f20.10," ",a2)') &
+               dH*en_conv, en_units(energy_units)
+          write (io_lun, fmt='(4x,"Maximum stress below threshold:   ",f20.10," GPa")') &
+               max_stress*HaBohr3ToGPa
+       end if
+       deallocate(dr_tilde,dg_tilde,Hij,kappa,vi,kappa_prime,vi_tilde,ri_vec)
+       deallocate(mod_dr,Sij,lambda,omega)
+       if (.not. done) call check_stop(done, iter)
+       if(done) exit
+    end do ! .not. done i.e. until max iterations or force tolerance reached
+    deallocate(posnStore, forceStore)
+  end subroutine cell_sqnm
+  !!***
+
+  !!****f* control/full_sqnm *
+  !!
+  !!  NAME 
+  !!   sqnm
+  !!  USAGE
+  !!   
+  !!  PURPOSE
+  !!   Performs stabilised Quasi-Newton minimisation
+  !!   optimisation for ionic positions and simulation cell
+  !!   Based on J. Chem. Phys. 142, 034112 (2015) and
+  !!   arXiv/2206.07339
+  !!
+  !!  ** NB not yet functional: do not use 2022/09/16 16:52 dave **
+  !!
+  !!  INPUTS
+  !! 
+  !!  USES
+  !! 
+  !!  AUTHOR
+  !!   D.R.Bowler
+  !!  CREATION DATE
+  !!   2022/08/19
+  !!  MODIFICATION HISTORY
+  !!  SOURCE
+  !!
+  subroutine full_sqnm(fixed_potential, vary_mu, total_energy)
+
+    ! Module usage
+    use numbers
+    use units
+    use global_module,  only: iprint_MD, ni_in_cell, x_atom_cell,   &
+         y_atom_cell, z_atom_cell, id_glob,    &
+         atom_coord, area_general, flag_pulay_simpleStep, &
+         flag_diagonalisation, nspin, flag_LmatrixReuse, &
+         flag_SFcoeffReuse, flag_move_atom, rcellx, rcelly, rcellz, &
+         cell_constraint_flag, cell_stress_tol
+    use group_module,   only: parts
+    use minimise,       only: get_E_and_F
+    use move_atoms,     only: pulayStep, velocityVerlet,            &
+         updateIndices, updateIndices3, update_atom_coord,     &
+         update_H, update_pos_and_matrices, single_step_full, enthalpy
+    use move_atoms,     only: updateL, updateLorK, updateSFcoeff, backtrack_linemin_full
+    use GenComms,       only: gsum, myid, inode, ionode, gcopy, my_barrier
+    use GenBlas,        only: dot, syev
+    use force_module,   only: tot_force, stress
+    use io_module,      only: write_atomic_positions, pdb_template, &
+         check_stop, write_xsf
+    use memory_module,  only: reg_alloc_mem, reg_dealloc_mem, type_dbl
+    use primary_module, only: bundle
+    use store_matrix,   only: dump_pos_and_matrices
+    use mult_module, ONLY: matK, S_trans, matrix_scale, matL, L_trans
+    use matrix_data, ONLY: Hrange, Lrange
+    use dimens,        only: r_super_x, r_super_y, r_super_z
+    use md_control,    only: flag_write_xsf, target_pressure
+
+    implicit none
+
+    ! Passed variables
+    ! Shared variables needed by get_E_and_F for now (!)
+    logical :: vary_mu, fixed_potential
+    real(double) :: total_energy
+
+    ! Local variables
+    real(double), allocatable, dimension(:,:)   :: cg, cg_new, Sij, Hij, omega, vi, ri_vec
+    real(double), allocatable, dimension(:)     :: x_new_pos, y_new_pos, z_new_pos
+    real(double), allocatable, dimension(:)     :: mod_dr, lambda, kappa, kappa_prime
+    real(double), allocatable, dimension(:,:,:) :: posnStore, dr_tilde, dg_tilde, vi_tilde
+    real(double), allocatable, dimension(:,:,:) :: forceStore
+    real(double), dimension(3)     :: orcell, rcell
+    real(double) :: energy0, energy1, max, g0, dE, gg, ggold, gamma, &
+         temp, KE, guess_step, step, test_dot, lambda_max, alpha, f_dot_sd, &
+         orcellx, orcelly, orcellz, wscal, press, volume, enthalpy0, enthalpy1, dH, &
+         max_stress, stress_diff, stress_target
+    integer      :: i,j,k,iter,length, jj, lun, stat, npmod, pul_mx, &
+         i_first, i_last, n_store, n_dim, info, n_hist, &
+         nfile, symm, iter_loc, iter_high, this_iter
+    logical      :: done
+
+    ! Store original cell size
+    orcellx = rcellx
+    orcelly = rcelly
+    orcellz = rcellz
+    orcell(1) = rcellx
+    orcell(2) = rcelly
+    orcell(3) = rcellz
+    ! Scaling: w = 2 Bohr x sqrt(Natoms)
+    wscal = two*sqrt(real(ni_in_cell,double))
+    step = MDtimestep
+    allocate(posnStore(3,ni_in_cell+1,LBFGS_history), &
+         forceStore(3,ni_in_cell+1,LBFGS_history), STAT=stat)
+    if (stat /= 0) &
+         call cq_abort("Error allocating cg in control: ", ni_in_cell, stat)
+    allocate(cg(3,ni_in_cell+1), cg_new(3,ni_in_cell+1), STAT=stat)
+    if (stat /= 0) &
+         call cq_abort("Error allocating cg in control: ", ni_in_cell, stat)
+    allocate(x_new_pos(ni_in_cell), y_new_pos(ni_in_cell), &
+         z_new_pos(ni_in_cell), STAT=stat)
+    if (stat /= 0) &
+         call cq_abort("Error allocating _new_pos in control: ", &
+         ni_in_cell, stat)
+    call reg_alloc_mem(area_general, 6 * ni_in_cell, type_dbl)
+    if (myid == 0) &
+         write (io_lun, fmt='(/4x,"Starting SQNM cell/atomic relaxation"/)')
+    if (myid == 0 .and. iprint_MD > 1) then
+       do i = 1, ni_in_cell
+          write (io_lun, fmt='(4x,"Atom ",i8," Position ",3f15.8)') i, x_atom_cell(i), y_atom_cell(i), &
+               z_atom_cell(i)
+       end do
+    end if
+    posnStore = zero
+    forceStore = zero
+    ! Do we need to add MD.MaxCGDispl ?
+    done = .false.
+    length = 3 * ni_in_cell + 3
+    alpha = one
+    if (myid == 0 .and. iprint_MD > 0) &
+         write (io_lun, fmt='(4x,"SQNM structural relaxation. Maximum of ",i4, " steps with tolerance of ",&
+         &f8.4,a2,"/",a2)') MDn_steps, MDcgtol, en_units(energy_units), d_units(dist_units)
+    energy0 = total_energy
+    energy1 = zero
+    dE = zero
+    ! Find energy and forces
+    call get_E_and_F(fixed_potential, vary_mu, energy0, .true., &
+         .false.)
+    call dump_pos_and_matrices
+    call get_maxf(max)
+    iter = 0
+    press = target_pressure/HaBohr3ToGPa
+    ! Stress tolerance in Ha/Bohr3
+    stress_target = cell_stress_tol/HaBohr3ToGPa
+    enthalpy0 = enthalpy(energy0, press)
+    enthalpy1 = enthalpy0
+    dH = zero
+    max_stress = zero
+    volume = rcellx*rcelly*rcellz
+    do i=1,3
+       stress_diff = abs(press*volume + stress(i,i))/volume
+       if (stress_diff > max_stress) max_stress = stress_diff
+    end do
+    if (inode==ionode) then
+       write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," E: ",e18.10)') & 
+            iter, for_conv*max, en_conv*energy0
+       write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxStr: ",f12.8," MaxF: ",f12.8," H: ",e16.8," dH: ",f12.8)') &
+            iter, max_stress*volume, for_conv*max, en_conv*enthalpy1, en_conv*dH
+    end if
+    iter_loc = 0
+    ggold = zero
+    energy1 = energy0
+    cg_new(1,1:ni_in_cell) = -tot_force(1,:)*rcellx/orcellx
+    cg_new(2,1:ni_in_cell) = -tot_force(2,:)*rcellx/orcellx
+    cg_new(3,1:ni_in_cell) = -tot_force(3,:)*rcellx/orcellx
+    cg_new(1,ni_in_cell+1) = (stress(1,1) - press*volume)*orcell(1)/wscal
+    cg_new(2,ni_in_cell+1) = (stress(2,2) - press*volume)*orcell(2)/wscal
+    cg_new(3,ni_in_cell+1) = (stress(3,3) - press*volume)*orcell(3)/wscal
+    if (inode==ionode .and. iprint_MD > 1) then
+       ! This needs scaling
+       g0 = dot(length,cg_new,1,cg_new,1)
+       write(io_lun,'(4x,"Search direction has magnitude ",f20.10)') sqrt(g0/ni_in_cell)
+    end if
+    do while (.not. done)
+       ! Book-keeping
+       iter = iter + 1
+       iter_loc = iter_loc + 1
+       npmod = mod(iter_loc, LBFGS_history)
+       if(npmod==0) npmod = LBFGS_history
+       ! Ions
+       do i=1,ni_in_cell
+          jj = id_glob(i)
+          posnStore (1,jj,npmod) = x_atom_cell(i)*orcellx/rcellx
+          posnStore (2,jj,npmod) = y_atom_cell(i)*orcelly/rcelly
+          posnStore (3,jj,npmod) = z_atom_cell(i)*orcellz/rcellz
+          forceStore(1,jj,npmod) = -tot_force(1,jj)*rcellx/orcellx
+          forceStore(2,jj,npmod) = -tot_force(2,jj)*rcelly/orcelly
+          forceStore(3,jj,npmod) = -tot_force(3,jj)*rcellz/orcellz
+          x_new_pos(i) = x_atom_cell(i)
+          y_new_pos(i) = y_atom_cell(i)
+          z_new_pos(i) = z_atom_cell(i)
+          cg(1,i) = -cg_new(1,jj)*orcellx/rcellx ! Search downhill
+          cg(2,i) = -cg_new(2,jj)*orcelly/rcelly ! Search downhill
+          cg(3,i) = -cg_new(3,jj)*orcellz/rcellz ! Search downhill
+       end do
+       ! Cell
+       posnStore(1,ni_in_cell+1,npmod) = wscal*rcellx/orcellx
+       posnStore(2,ni_in_cell+1,npmod) = wscal*rcelly/orcelly
+       posnStore(3,ni_in_cell+1,npmod) = wscal*rcellz/orcellz
+       forceStore(1,ni_in_cell+1,npmod) = (-stress(1,1) + press*volume)*orcellx/wscal
+       forceStore(2,ni_in_cell+1,npmod) = (-stress(2,2) + press*volume)*orcelly/wscal
+       forceStore(3,ni_in_cell+1,npmod) = (-stress(3,3) + press*volume)*orcellz/wscal
+       cg(1,ni_in_cell+1) = -cg_new(1,ni_in_cell+1)*wscal/orcellx
+       cg(2,ni_in_cell+1) = -cg_new(2,ni_in_cell+1)*wscal/orcelly
+       cg(3,ni_in_cell+1) = -cg_new(3,ni_in_cell+1)*wscal/orcellz
+       ! Set up limits for sums
+       if (myid == 0 .and. iprint_MD > 2) &
+            write(io_lun,fmt='(2x,"SQNM iteration ",i4)') iter
+       ! Line search
+       if(iter==1) then
+          call backtrack_linemin_full(cg, energy0, energy1, fixed_potential, vary_mu)
+       else
+          call single_step_full(cg, energy0, energy1, fixed_potential, vary_mu)
+       end if
+       if(energy1>energy0) then
+          if(inode==ionode.AND.iprint_MD>1) write(io_lun,fmt='(4x,"Energy rise: resetting history")')
+          cg_new(:,1:ni_in_cell) = -tot_force
+          do i=1,ni_in_cell
+             jj = id_glob(i)
+             cg(1,i) = -cg_new(1,jj)*orcellx/rcellx ! Search downhill
+             cg(2,i) = -cg_new(2,jj)*orcelly/rcelly ! Search downhill
+             cg(3,i) = -cg_new(3,jj)*orcellz/rcellz ! Search downhill
+          end do
+          do i=1,3
+             cg_new(i,ni_in_cell+1) = (stress(i,i) - press*volume)*orcell(i)/wscal
+             cg(i,ni_in_cell+1) = -cg_new(i,ni_in_cell+1)*wscal/orcell(i)
+          end do
+          call backtrack_linemin_full(cg, energy0, energy1, fixed_potential, vary_mu)
+          !call single_step(cg, energy0, energy1, fixed_potential, vary_mu)
+          if(energy1>energy0) call cq_abort("Energy rise twice in succession: check SCF and other tolerances")
+          npmod = 1
+          iter_loc = 1
+          ! In the original paper, this is alpha = alpha/2 but heuristically this seems better
+          ! DRB 2021/09/15
+          alpha = one
+       endif
+       ! Update stored position difference and force difference
+       do i=1,ni_in_cell
+          jj = id_glob(i)
+          posnStore (1,jj,npmod) = x_atom_cell(i)*orcellx/rcellx - posnStore (1,jj,npmod)
+          if(abs(posnStore(1,jj,npmod)/r_super_x)>0.7_double) posnStore(1,jj,npmod) &
+               = posnStore(1,jj,npmod) &
+               - nint(posnStore(1,jj,npmod)/r_super_x)*r_super_x
+          posnStore (2,jj,npmod) = y_atom_cell(i)*orcelly/rcelly - posnStore (2,jj,npmod)
+          if(abs(posnStore(2,jj,npmod)/r_super_y)>0.7_double) posnStore(2,jj,npmod) &
+               = posnStore(2,jj,npmod) &
+               - nint(posnStore(2,jj,npmod)/r_super_y)*r_super_y
+          posnStore (3,jj,npmod) = z_atom_cell(i)*orcellz/rcellz - posnStore (3,jj,npmod)
+          if(abs(posnStore(3,jj,npmod)/r_super_z)>0.7_double) posnStore(3,jj,npmod) &
+               = posnStore(3,jj,npmod) &
+               - nint(posnStore(3,jj,npmod)/r_super_z)*r_super_z
+          forceStore(1,jj,npmod) = -tot_force(1,jj)*rcellx/orcellx - forceStore(1,jj,npmod)
+          forceStore(2,jj,npmod) = -tot_force(2,jj)*rcelly/orcelly - forceStore(2,jj,npmod)
+          forceStore(3,jj,npmod) = -tot_force(3,jj)*rcellz/orcellz - forceStore(3,jj,npmod)
+          ! New search direction
+       end do
+       posnStore (1,ni_in_cell+1,npmod) = rcellx*wscal/orcellx - posnStore (1,ni_in_cell+1,npmod)
+       posnStore (2,ni_in_cell+1,npmod) = rcelly*wscal/orcelly - posnStore (2,ni_in_cell+1,npmod)
+       posnStore (3,ni_in_cell+1,npmod) = rcellz*wscal/orcellz - posnStore (3,ni_in_cell+1,npmod)
+       forceStore(1,ni_in_cell+1,npmod) = (-stress(1,1) + press*volume)*orcellx/wscal - forceStore(1,ni_in_cell+1,npmod)
+       forceStore(2,ni_in_cell+1,npmod) = (-stress(2,2) + press*volume)*orcelly/wscal - forceStore(2,ni_in_cell+1,npmod)
+       forceStore(3,ni_in_cell+1,npmod) = (-stress(3,3) + press*volume)*orcellz/wscal - forceStore(3,ni_in_cell+1,npmod)
+       n_store = min(iter_loc,LBFGS_history) ! Number of stored states
+       if(inode==ionode.AND.iprint_MD>2) write(io_lun,fmt='(4x,"Number of stored histories ",i3)') n_store
+       allocate(mod_dr(n_store),Sij(n_store,n_store),lambda(n_store),&
+            omega(n_store,n_store))
+       mod_dr = zero
+       ! Normalise dR and dg
+       do i=1,n_store
+          mod_dr(i) = sqrt(dot(length,posnStore(:,:,i),1,posnStore(:,:,i),1))
+       end do
+       posnStore(:,:,npmod) = posnStore(:,:,npmod)/mod_dr(npmod)
+       forceStore(:,:,npmod) = forceStore(:,:,npmod)/mod_dr(npmod)
+       !cg_new = -tot_force ! The L-BFGS is in terms of grad E
+       ! Add call to write_atomic_positions and write_xsf (2020/01/17: smujahed)
+       call write_atomic_positions("UpdatedAtoms.dat", trim(pdb_template))
+       if (flag_write_xsf) call write_xsf('trajectory.xsf', iter)
+       ! Build significant subspace
+       Sij = zero
+       omega = zero
+       do i = 1, n_store
+          do j=i,n_store
+             Sij(j,i) = dot(length,posnStore(:,:,j),1,posnStore(:,:,i),1)
+             if(j>i) Sij(i,j) = Sij(j,i)
+          end do
+       end do
+       ! Solve for eigenvectors of Sij
+       omega = Sij
+       if(n_store>1) then
+          call syev('U',n_store,omega,n_store,lambda,info)
+          if(info<0) call cq_abort("Error in SQNM calling dsyev: ",info)
+          if(info>0.and.inode==ionode) write(io_lun,fmt='(4x,"Possible error in SQNM; dsyev returned ",i4)') info
+       else
+          lambda = one
+          omega = one
+       end if
+       if(inode==ionode.AND.iprint_MD>2) then
+          write(io_lun,fmt='(4x,"Eigenvalues of Sij: ",(f7.4))') lambda
+       end if
+       lambda_max = maxval(lambda)
+       n_dim = n_store
+       do i=1, n_store
+          if(lambda(i)/lambda_max<1.0e-4_double) then
+             n_dim = n_dim - 1
+          end if
+       end do
+       if(inode==ionode.AND.iprint_MD>2) write(io_lun,fmt='(4x,"Number of eigenstates kept: ",i3)') n_dim
+       ! Build dr_tilde and dg_tilde
+       allocate(dr_tilde(3,ni_in_cell+1,n_dim), dg_tilde(3,ni_in_cell+1,n_dim))
+       dr_tilde = zero
+       dg_tilde = zero
+       do i=1,n_dim
+          do j=1,n_store
+             dr_tilde(:,:,i) = dr_tilde(:,:,i) + omega(j,i+(n_store-n_dim))*posnStore(:,:,j)
+             dg_tilde(:,:,i) = dg_tilde(:,:,i) + omega(j,i+(n_store-n_dim))*forceStore(:,:,j)
+          end do
+          dr_tilde(:,:,i) = dr_tilde(:,:,i)/sqrt(lambda(i+(n_store-n_dim)))
+          dg_tilde(:,:,i) = dg_tilde(:,:,i)/sqrt(lambda(i+(n_store-n_dim)))
+       end do
+       ! Construct approximate Hessian projected onto subspace
+       allocate(Hij(n_dim,n_dim))
+       Hij = zero
+       do i=1,n_dim
+          do j=i,n_dim
+             Hij(j,i) = half*(dot(length,dr_tilde(:,:,i),1,dg_tilde(:,:,j),1) + &
+                  dot(length,dr_tilde(:,:,j),1,dg_tilde(:,:,i),1))
+             if(j>i) Hij(i,j) = Hij(j,i)
+          end do
+       end do
+       ! Find eigenvectors
+       allocate(kappa(n_dim),vi(n_dim,n_dim),kappa_prime(n_dim))
+       kappa = zero
+       kappa_prime = zero
+       vi = Hij
+       if(n_dim>1) then
+          call syev('U',n_dim,vi,n_dim,kappa,info)
+          if(info<0) call cq_abort("Error in SQNM calling dsyev: ",info)
+          if(info>0.and.inode==ionode) write(io_lun,fmt='(4x,"Possible error in SQNM; dsyev returned ",i4)') info
+       else
+          kappa = one !Hij(1,1)
+          vi = one
+       end if
+       if(inode==ionode.AND.iprint_MD>3) write(io_lun,fmt='(4x,"Kappa: ",(f7.4))') kappa
+       ! Build v tilde
+       allocate(vi_tilde(3,ni_in_cell+1,n_dim),ri_vec(3,ni_in_cell+1))
+       vi_tilde = zero
+       do i=1,n_dim
+          ri_vec = zero
+          do j=1,n_dim
+             vi_tilde(:,:,i) = vi_tilde(:,:,i) + vi(j,i)*dr_tilde(:,:,j)
+             ri_vec(:,:) = ri_vec(:,:) + vi(j,i)*dg_tilde(:,:,j)
+          end do
+          ri_vec(:,:) = ri_vec(:,:) - kappa(i)*vi_tilde(:,:,i)
+          !kappa_prime(i) = sqrt(0.0025_double + kappa(i)*kappa(i))
+          kappa_prime(i) = sqrt(dot(length,ri_vec,1,ri_vec,1) + kappa(i)*kappa(i))
+       end do
+       if(inode==ionode.AND.iprint_MD>3) write(io_lun,fmt='(4x,"Kappa prime: ",(f7.4))') kappa_prime
+       ! Build preconditioned search
+       cg_new(1,1:ni_in_cell) = -alpha*tot_force(1,:)*rcellx/orcellx
+       cg_new(2,1:ni_in_cell) = -alpha*tot_force(2,:)*rcellx/orcellx
+       cg_new(3,1:ni_in_cell) = -alpha*tot_force(3,:)*rcellx/orcellx
+       cg_new(1,ni_in_cell+1) =  alpha*(stress(1,1) - press*volume)*orcell(1)/wscal
+       cg_new(2,ni_in_cell+1) =  alpha*(stress(2,2) - press*volume)*orcell(2)/wscal
+       cg_new(3,ni_in_cell+1) =  alpha*(stress(3,3) - press*volume)*orcell(3)/wscal
+       rcell(1) = rcellx
+       rcell(2) = rcelly
+       rcell(3) = rcellz
+       do i=1,n_dim
+          temp = zero
+          do j=1,3
+             temp = temp + dot(ni_in_cell,tot_force(j,:),1,vi_tilde(j,:,i),1)*rcell(j)/orcell(j)
+             temp = temp + (stress(j,j)-press*volume)*orcell(j)*vi_tilde(j,ni_in_cell+1,i)/wscal
+          end do
+          do j=1,3
+             cg_new(j,1:ni_in_cell) = cg_new(j,1:ni_in_cell) - (one/kappa_prime(i) - alpha)* &
+                  temp*vi_tilde(j,1:ni_in_cell,i)
+             cg_new(j,ni_in_cell+1) = cg_new(j,ni_in_cell+1) - (one/kappa_prime(i) - alpha)* &
+                  temp*vi_tilde(j,ni_in_cell+1,i)
+          end do
+       end do
+       ! Zero search direction for fixed atoms and find maximum force
+       max = zero
+       do i = 1, ni_in_cell
+          do k = 1, 3
+             if (abs(tot_force(k,i)) > max) max = abs(tot_force(k,i))
+             if (.not. flag_move_atom(k,i)) then
+                cg_new(k,i) = zero
+             end if
+          end do
+       end do
+       gg = dot(length, cg_new, 1, cg_new, 1)
+       ! Analyse forces
+       g0 = zero
+       g0 = g0 + dot(ni_in_cell,tot_force(1,:),1,tot_force(1,:),1)*rcellx*rcellx/(orcellx*orcellx)
+       g0 = g0 + dot(ni_in_cell,tot_force(2,:),1,tot_force(2,:),1)*rcelly*rcelly/(orcelly*orcelly)
+       g0 = g0 + dot(ni_in_cell,tot_force(3,:),1,tot_force(3,:),1)*rcellz*rcellz/(orcellz*orcellz)
+       g0 = g0 + (stress(1,1)-press*volume)*(stress(1,1)-press*volume)*orcellx*orcellx/(wscal*wscal)
+       g0 = g0 + (stress(2,2)-press*volume)*(stress(2,2)-press*volume)*orcelly*orcelly/(wscal*wscal)
+       g0 = g0 + (stress(3,3)-press*volume)*(stress(3,3)-press*volume)*orcellz*orcellz/(wscal*wscal)
+       f_dot_sd = zero
+       f_dot_sd = f_dot_sd - dot(ni_in_cell,cg_new(1,1:ni_in_cell),1,tot_force(1,:),1)*rcellx/orcellx
+       f_dot_sd = f_dot_sd - dot(ni_in_cell,cg_new(2,1:ni_in_cell),1,tot_force(2,:),1)*rcelly/orcelly
+       f_dot_sd = f_dot_sd - dot(ni_in_cell,cg_new(3,1:ni_in_cell),1,tot_force(3,:),1)*rcellz/orcellz
+       f_dot_sd = f_dot_sd + cg_new(1,ni_in_cell+1)*(stress(1,1)-press*volume)*orcellx/wscal
+       f_dot_sd = f_dot_sd + cg_new(2,ni_in_cell+1)*(stress(2,2)-press*volume)*orcelly/wscal
+       f_dot_sd = f_dot_sd + cg_new(3,ni_in_cell+1)*(stress(3,3)-press*volume)*orcellz/wscal
+       f_dot_sd = f_dot_sd/sqrt(g0*gg)
+       !f_dot_sd = dot(length,cg_new,1,-tot_force,1)/sqrt(g0*gg)
+       if(inode==ionode.AND.iprint_MD>2) &
+            write(io_lun,fmt='(4x,"Dot product of search direction and force: ",f12.7)') f_dot_sd
+       ! Now adjust alpha
+       if(f_dot_sd>0.2_double) then
+          alpha = alpha*1.1_double
+       else
+          alpha = alpha*0.85_double
+       end if
+       if(inode==ionode.AND.iprint_MD>2) write(io_lun,fmt='(4x,"Alpha set to: ",f9.5)') alpha
+       max = zero
+       do i = 1, ni_in_cell
+          do k = 1, 3
+             if (abs(tot_force(k,i)) > max) max = abs(tot_force(k,i))
+          end do
+       end do
+       dE = energy0 - energy1
+       energy0 = energy1
+       if (inode==ionode) then
+          write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," E: ",e18.10," dE: ",f12.8)') & 
+               iter, for_conv*max, en_conv*energy1, en_conv*dE
+          if (iprint_MD > 1) then
+             g0 = dot(length, tot_force, 1, tot_force, 1)
+             write(io_lun,'(4x,"Force Residual:     ",f20.10," ",a2,"/",a2)') &
+                  for_conv*sqrt(g0/ni_in_cell), en_units(energy_units), & 
+                  d_units(dist_units)
+             write(io_lun,'(4x,"Maximum force:      ",f20.10)') for_conv*max
+             write(io_lun,'(4x,"Force tolerance:    ",f20.10)') for_conv*MDcgtol
+             write(io_lun,'(4x,"Energy change:      ",f20.10," ",a2)') &
+                  en_conv*dE, en_units(energy_units)
+             g0 = dot(length,cg_new,1,cg_new,1)
+             write(io_lun,'(4x,"Search direction has magnitude ",f20.10)') sqrt(g0/ni_in_cell)
+          end if
+       end if
+       if (iter > MDn_steps) then
+          done = .true.
+          if (myid == 0) &
+               write (io_lun, fmt='(4x,"Exceeded number of MD steps: ",i4)') iter
+       end if
+       if (abs(max) < MDcgtol) then
+          done = .true.
+          if (inode==ionode) then
+             write(io_lun, fmt='(4x,"Maximum force below threshold: ",f12.5)') max
+             write(io_lun,'(2x,a,i4,a)') "GeomOpt converged in ", iter, " iterations"
+          end if
+       end if
+       deallocate(dr_tilde,dg_tilde,Hij,kappa,vi,kappa_prime,vi_tilde,ri_vec)
+       deallocate(mod_dr,Sij,lambda,omega)
+       if (.not. done) call check_stop(done, iter)
+       if(done) exit
+    end do ! .not. done i.e. until max iterations or force tolerance reached
+    deallocate(cg, STAT=stat)
+    if (stat /= 0) &
+         call cq_abort("Error deallocating cg in control: ", &
+         ni_in_cell, stat)
+    call reg_dealloc_mem(area_general, 6 * ni_in_cell, type_dbl)
+    deallocate(posnStore, forceStore, cg_new, x_new_pos, y_new_pos, z_new_pos)
+  end subroutine full_sqnm
   !!***
 
   !!****f* control/cell_cg_run *
@@ -2545,6 +3485,8 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
   !!    Changes to account for stress tolerance from user being in GPa
   !!   2021/10/15 17:37 dave
   !!    Tweak output and iteration update
+  !!   2022/09/16 16:57 dave
+  !!    Added backtrack line minimiser
   !!  SOURCE
   !!
   subroutine cell_cg_run(fixed_potential, vary_mu, total_energy)
@@ -2553,19 +3495,20 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
     use numbers
     use units
     use global_module, only: iprint_gen, ni_in_cell, x_atom_cell,  &
-                             y_atom_cell, z_atom_cell, id_glob,    &
-                             atom_coord, rcellx, rcelly, rcellz,   &
-                             area_general, iprint_MD,              &
-                             IPRINT_TIME_THRES1, cell_en_tol,      &
-                             cell_constraint_flag, cell_stress_tol
+         y_atom_cell, z_atom_cell, id_glob,    &
+         atom_coord, rcellx, rcelly, rcellz,   &
+         area_general, iprint_MD,              &
+         IPRINT_TIME_THRES1, cell_en_tol,      &
+         cell_constraint_flag, cell_stress_tol
     use group_module,  only: parts
     use minimise,      only: get_E_and_F
-    use move_atoms,    only: safemin_cell, enthalpy, enthalpy_tolerance
+    use move_atoms,    only: safemin_cell, enthalpy, enthalpy_tolerance, &
+         backtrack_linemin_cell, adapt_backtrack, backtrack, safe, cg_line_min
     use GenComms,      only: gsum, myid, inode, ionode
     use GenBlas,       only: dot
     use force_module,  only: stress, tot_force
     use io_module,     only: write_atomic_positions, pdb_template, &
-                             check_stop
+         check_stop
     use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use timer_module
     use io_module,      only: leqi
@@ -2582,16 +3525,15 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
 
     ! Local variables
     real(double)   :: energy0, energy1, max, g0, dE, gg, ggold, gamma, &
-                      enthalpy0, enthalpy1, dH, press
+         enthalpy0, enthalpy1, dH, press
     integer        :: i,j,k,iter,length, jj, lun, stat, reset_iter
     logical        :: done
     type(cq_timer) :: tmr_l_iter
     real(double) :: new_rcellx, new_rcelly, new_rcellz, search_dir_x, search_dir_y,&
-                    search_dir_z, stressx, stressy, stressz, RMSstress, newRMSstress,&
-                    dRMSstress, search_dir_mean, mean_stress, max_stress, &
-                    stress_diff, volume, stress_target
-
-    call reg_alloc_mem(area_general, 6 * ni_in_cell, type_dbl)
+         search_dir_z, stressx, stressy, stressz, RMSstress, newRMSstress,&
+         dRMSstress, search_dir_mean, mean_stress, max_stress, &
+         stress_diff, volume, stress_target
+    real(double), dimension(3) :: cg
 
     if (myid == 0 .and. iprint_gen > 0) &
          write (io_lun, fmt='(/4x,"Starting CG lattice vector relaxation"/)')
@@ -2623,14 +3565,24 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
     max_stress = zero
     volume = rcellx*rcelly*rcellz
     do i=1,3
-      stress_diff = abs(press*volume + stress(i,i))/volume
-      if (stress_diff > max_stress) max_stress = stress_diff
+       stress_diff = abs(press*volume + stress(i,i))/volume
+       if (stress_diff > max_stress) max_stress = stress_diff
     end do
     if (inode==ionode) then
-      write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxStr: ",f12.8," H: ",e16.8," dH: ",f12.8)') &
-           0, max_stress, enthalpy0, zero
+       write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxStr: ",f12.8," H: ",e16.8," dH: ",f12.8)') &
+            0, max_stress, enthalpy0, zero
     end if
-
+    ! Check for trivial case where pressure is converged
+    if(max_stress < stress_target) then
+       if (inode==ionode) &
+            write(io_lun,'(2x,a,i4,a)') "GeomOpt converged in ", &
+            iter, " iterations"
+       done = .true.
+       if (myid == 0 .and. iprint_gen > 0) &
+            write (io_lun, fmt='(4x,"Maximum stress below threshold:   ",f20.10," GPa")') &
+            max_stress*HaBohr3ToGPa
+       return
+    end if
     call dump_pos_and_matrices(index=0,MDstep=iter)
     do while (.not. done)
        call start_timer(tmr_l_iter, WITH_LEVEL)
@@ -2646,11 +3598,11 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
        ! get_gamma_cell_cg.
        call get_gamma_cell_cg(ggold, gg, gamma, stressx, stressy, stressz)
        if (myid == 0 .and. iprint_gen > 0) &
-           write(io_lun, 3) iter, gamma
+            write(io_lun, 3) iter, gamma
 
        if (inode == ionode .and. iprint_MD > 2) &
             write (io_lun,*) ' CHECK :: energy residual = ', &
-                               dE
+            dE
        if (inode == ionode .and. iprint_MD > 2) &
             write (io_lun,*) ' CHECK :: gamma = ', gamma
 
@@ -2670,15 +3622,15 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
        ! If the volume constraint is set, there is only one search direction!
        ! This is the direction which minimises the mean stress.
        if (leqi(cell_constraint_flag, 'volume')) then
-         search_dir_mean = gamma*search_dir_mean + mean_stress
+          search_dir_mean = gamma*search_dir_mean + mean_stress - press*volume
        else
-         search_dir_x = gamma*search_dir_x + stressx - press*volume
-         search_dir_y = gamma*search_dir_y + stressy - press*volume
-         search_dir_z = gamma*search_dir_z + stressz - press*volume
+          search_dir_x = gamma*search_dir_x + stressx - press*volume
+          search_dir_y = gamma*search_dir_y + stressy - press*volume
+          search_dir_z = gamma*search_dir_z + stressz - press*volume
        end if
 
        if (inode == ionode .and. iprint_gen > 0) &
-           write(io_lun,*)  "Initial cell dims ", rcellx, rcelly, rcellz
+            write(io_lun,*)  "Initial cell dims ", rcellx, rcelly, rcellz
 
        new_rcellx = rcellx
        new_rcelly = rcelly
@@ -2686,14 +3638,21 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
 
        ! Minimise in this direction. Constraint information is also used within
        ! safemin_cell. Look in move_atoms.module.f90 for further information.
-       call safemin_cell(new_rcellx, new_rcelly, new_rcellz, search_dir_x, &
-                         search_dir_y, search_dir_z, search_dir_mean, press, &
-                         enthalpy0, enthalpy1, fixed_potential, vary_mu)
+       if(cg_line_min==safe) then
+          call safemin_cell(new_rcellx, new_rcelly, new_rcellz, search_dir_x, &
+               search_dir_y, search_dir_z, search_dir_mean, press, &
+               enthalpy0, enthalpy1, fixed_potential, vary_mu)
+       else if(cg_line_min==backtrack.OR.cg_line_min==adapt_backtrack) then
+          cg(1) = search_dir_x
+          cg(2) = search_dir_y
+          cg(3) = search_dir_z
+          call backtrack_linemin_cell(cg, enthalpy0, enthalpy1, fixed_potential, vary_mu)
+       end if
        ! Output positions to UpdatedAtoms.dat
        if (myid == 0 .and. iprint_gen > 1) then
           do i = 1, ni_in_cell
              write (io_lun, 1) i, atom_coord(1,i), atom_coord(2,i), &
-                               atom_coord(3,i)
+                  atom_coord(3,i)
           end do
        end if
        call write_atomic_positions("UpdatedAtoms.dat", trim(pdb_template))
@@ -2701,8 +3660,8 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
        ! Analyse Stresses and energies
        dH = enthalpy0 - enthalpy1
        newRMSstress = sqrt(((stress(1,1)*stress(1,1)) + &
-                            (stress(2,2)*stress(2,2)) + &
-                            (stress(3,3)*stress(3,3)))/3)
+            (stress(2,2)*stress(2,2)) + &
+            (stress(3,3)*stress(3,3)))/3)
        dRMSstress = RMSstress - newRMSstress
 
        enthalpy0 = enthalpy1
@@ -2710,8 +3669,8 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
        volume = rcellx*rcelly*rcellz
        max_stress = zero
        do i=1,3
-         stress_diff = abs(press*volume + stress(i,i))/volume
-         if (stress_diff > max_stress) max_stress = stress_diff
+          stress_diff = abs(press*volume + stress(i,i))/volume
+          if (stress_diff > max_stress) max_stress = stress_diff
        end do
 
        reset_iter = reset_iter +1
@@ -2745,7 +3704,7 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
           done = .true.
           if (myid == 0) &
                write (io_lun, fmt='(4x,"Exceeded number of MD steps: ",i4)') &
-                     iter
+               iter
        end if
 
        ! Second exit is if the desired enthalpy and stress tolerancex have ben reached
@@ -2756,9 +3715,9 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
           done = .true.
           if (myid == 0 .and. iprint_gen > 0) &
                write (io_lun, fmt='(4x,"Enthalpy change below threshold: ",f20.10," ",a2)') &
-                     dH*en_conv, en_units(energy_units)
-               write (io_lun, fmt='(4x,"Maximum stress below threshold:   ",f20.10," GPa")') &
-                     max_stress*HaBohr3ToGPa
+               dH*en_conv, en_units(energy_units)
+          write (io_lun, fmt='(4x,"Maximum stress below threshold:   ",f20.10," GPa")') &
+               max_stress*HaBohr3ToGPa
        end if
 
        call stop_print_timer(tmr_l_iter, "a CG iteration", IPRINT_TIME_THRES1)
@@ -2767,17 +3726,17 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
     end do
 
     if (myid == 0 .and. iprint_gen > 0) then
-        write(io_lun, fmt='("Final simulation box dimensions are: ")')
-        write(io_lun, fmt='(2x,"a = ",f12.5,1x,a2)') rcellx, d_units(dist_units)
-        write(io_lun, fmt='(2x,"b = ",f12.5,1x,a2)') rcelly, d_units(dist_units)
-        write(io_lun, fmt='(2x,"c = ",f12.5,1x,a2)') rcellz, d_units(dist_units)
+       write(io_lun, fmt='("Final simulation box dimensions are: ")')
+       write(io_lun, fmt='(2x,"a = ",f12.5,1x,a2)') rcellx, d_units(dist_units)
+       write(io_lun, fmt='(2x,"b = ",f12.5,1x,a2)') rcelly, d_units(dist_units)
+       write(io_lun, fmt='(2x,"c = ",f12.5,1x,a2)') rcellz, d_units(dist_units)
     end if
 
     call reg_dealloc_mem(area_general, 6*ni_in_cell, type_dbl)
 
 1   format(4x,'Atom ',i8,' Position ',3f15.8)
 2   format(4x,'Welcome to cell_cg_run. Doing ',i4,&
-           ' steps with tolerance of ',f12.5,a2)
+         ' steps with tolerance of ',f12.5,a2)
 3   format(4x,'*** CG step ',i4,' Gamma: ',f14.8)
 4   format(4x,'Enthalpy change: ',f15.8,' ',a2)
 5   format(4x,'RMS Stress change: ',f15.8,' ',a2)
@@ -2865,22 +3824,20 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
   end subroutine get_gamma_cell_cg
 !!***
 
-  !!****f* control/full_cg_run_double_loop *
+  !!****f* control/full_double_loop *
   !!
   !!  NAME
-  !!   full_cg_run_double_loop
+  !!   full_double_loop
   !!  USAGE
   !!
   !!  PURPOSE
-  !!   Simple implementation of cell + ionic geometry optimisation using a
-  !!   nested loop: the outer loop does one cell steepest descent step, the
-  !!   inner does a full ionic conjugate gradients optimisation
-  !!
-  !!   Note that in this routine we perform a full ionic relaxation followed
+  !!   Simple implementation of cell + ionic geometry optimisation using a full ionic relaxation followed
   !!   by a full cell optimisation, and repeat until converged.  It's not
   !!   clear if this is more efficient than performing full ionic relaxation
   !!   after each line minimisation of the cell relaxation but does seem so
   !!   in tests.
+  !!
+  !!   Now allows choice of CG vs SQNM
   !!  INPUTS
   !!
   !!  USES
@@ -2892,9 +3849,11 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
   !!  MODIFICATION HISTORY
   !!   2021/10/15 10:45 dave
   !!    Rewrite to call cg_run for ions and cell_cg_run for cell sequentially
+  !!   2022/08/15 10:31 dave
+  !!    Add possibility of SQNM instead of CG
   !!  SOURCE
   !!
-  subroutine full_cg_run_double_loop(fixed_potential, vary_mu, total_energy)
+  subroutine full_double_loop(fixed_potential, vary_mu, total_energy)
 
     ! Module usage
     use numbers
@@ -2904,11 +3863,11 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
          atom_coord, area_general, iprint_MD,  &
          IPRINT_TIME_THRES1,                   &
          cell_en_tol, cell_stress_tol,         &
-         rcellx, rcelly, rcellz
+         rcellx, rcelly, rcellz, runtype
+    use input_module,         only: leqi
     use group_module,  only: parts
     use minimise,      only: get_E_and_F
-    use move_atoms,    only: safemin2, safemin_cell, enthalpy, &
-         enthalpy_tolerance
+    use move_atoms,    only: enthalpy, enthalpy_tolerance
     use GenComms,      only: inode, ionode
     use GenBlas,       only: dot
     use force_module,  only: tot_force, stress
@@ -2945,7 +3904,7 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
 
 
     if (inode==ionode .and. iprint_MD > 2) &
-         write(io_lun,'(2x,a)') "control/full_cg_run_double_loop"
+         write(io_lun,'(2x,a)') "control/full_double_loop"
 
     allocate(cg(3,ni_in_cell), STAT=stat)
     if (stat /= 0) &
@@ -2966,7 +3925,7 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
     done_cell = .false.
     length = 3 * ni_in_cell
     if (inode==ionode .and. iprint_gen > 0) then
-       write(io_lun,'(4x,"Welcome to full_cg_run. Doing ",i4," steps")') MDn_steps
+       write(io_lun,'(4x,"Welcome to full_double_loop. Doing ",i4," steps")') MDn_steps
        write(io_lun,'(4x,"Force tolerance:    ",f20.10)') MDcgtol
        write(io_lun,'(4x,"Stress tolerance: ",f20.10," GPa")') cell_stress_tol
     end if
@@ -3005,7 +3964,11 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
     ! Cell loop
     do while (.not. done_cell)
        ! Relax ions
-       call cg_run(fixed_potential, vary_mu, energy1)
+       if ( leqi(runtype, 'cg')    ) then
+          call cg_run(fixed_potential, vary_mu, energy1)
+       else if ( leqi(runtype, 'sqnm')    ) then
+          call sqnm(fixed_potential, vary_mu, energy1)
+       end if
        ! Analyse forces, stresses and energies
        call get_maxf(max)
        enthalpy1 = enthalpy(energy1, press)
@@ -3038,7 +4001,11 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
           exit
        end if
        ! Relax cell
-       call cell_cg_run(fixed_potential, vary_mu, energy1)
+       !if ( leqi(runtype, 'cg')    ) then
+          call cell_cg_run(fixed_potential, vary_mu, energy1)
+       !else if ( leqi(runtype, 'sqnm')    ) then
+       !   call cell_sqnm(fixed_potential, vary_mu, energy1)
+       !end if
        ! Analyse forces, stresses and energies
        call get_maxf(max)
        enthalpy1 = enthalpy(energy1, press)
@@ -3130,7 +4097,7 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
 6   format(4x,'Maximum force component: ',f15.8,' ',a2,'/',a2)
 7   format(4x,3f15.8)
 
-  end subroutine full_cg_run_double_loop
+  end subroutine full_double_loop
 !!***
 
   ! Keeping this temporarily so that we can test the relative efficiency of
@@ -3150,8 +4117,7 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
                              rcellx, rcelly, rcellz
     use group_module,  only: parts
     use minimise,      only: get_E_and_F
-    use move_atoms,    only: safemin2, safemin_cell, enthalpy, &
-                             enthalpy_tolerance
+    use move_atoms,    only: safemin_cell, enthalpy, enthalpy_tolerance
     use GenComms,      only: inode, ionode
     use GenBlas,       only: dot
     use force_module,  only: tot_force, stress
@@ -3549,7 +4515,7 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
       force_old = force
       ! Minimise in this direction
       call safemin_full(config, cg, cell_ref, enthalpy0, enthalpy1, &
-                        press, fixed_potential, vary_mu, enthalpy1)
+                        press, fixed_potential, vary_mu)
 
       ! Output positions
       if (inode==ionode .and. iprint_gen > 1) then
