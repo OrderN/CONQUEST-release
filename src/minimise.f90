@@ -254,7 +254,7 @@ contains
                             total_energy, expected_reduction)
           dE_elec_opt = dE_blip
        else if (flag_basis_set == PAOs) then
-          if (flag_multisite .and. flag_LFD_NonSCF) then
+          if (flag_multisite .and. flag_LFD_nonSCF) then
              if (inode==ionode) write(io_lun,'(/4x,A/)') &
                 'WARNING: Numerical PAO minimisation will be performed without doing LFD_SCF!'   
              !2017.Dec.28 TM: We need Selfconsistent Hamiltonian if this routine is called from control

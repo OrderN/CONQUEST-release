@@ -2751,7 +2751,6 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
        end if
 
        iter = iter + 1
-       end if
 
        ! First exit is if too many steps have been taken. Default is 50.
        if (iter > MDn_steps) then

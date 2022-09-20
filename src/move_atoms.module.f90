@@ -780,6 +780,7 @@ contains
     use mult_module, ONLY: allocate_temp_matrix, free_temp_matrix, matrix_sum
     use global_module, ONLY: atomf, sf
     use io_module, ONLY: dump_matrix
+    use multisiteSF_module, only: flag_LFD_nonSCF
 
     implicit none
 
@@ -972,12 +973,8 @@ contains
          IPRINT_TIME_THRES1)
     ! We've just moved the atoms - we need a self-consistent ground state before
     ! we can minimise blips !
-<<<<<<< HEAD
-    if (flag_vary_basis) then
-=======
     min_layer = min_layer - 1
-    if (flag_vary_basis .or. .NOT.flag_LFD_NonSCF) then
->>>>>>> First pass for output levels 0-2
+    if (flag_vary_basis .or. .NOT.flag_LFD_nonSCF) then
        call new_SC_potl(.false., sc_tolerance, reset_L,           &
             fixed_potential, vary_mu, n_L_iterations, &
             L_tolerance, e3)
@@ -1072,7 +1069,7 @@ contains
        ! We've just moved the atoms - we need a self-consistent ground
        ! state before we can minimise blips !
        min_layer = min_layer - 1
-       if(flag_vary_basis .or. .NOT.flag_LFD_NonSCF) then
+       if(flag_vary_basis .or. .NOT.flag_LFD_nonSCF) then
           call new_SC_potl(.false., sc_tolerance, reset_L,           &
                fixed_potential, vary_mu, n_L_iterations, &
                L_tolerance, e3)
@@ -1158,6 +1155,7 @@ contains
     use global_module, ONLY: atomf, sf
     use io_module, ONLY: dump_matrix, return_prefix
     use force_module,      only: force
+    use multisiteSF_module, only: flag_LFD_nonSCF
 
     implicit none
 
@@ -1242,7 +1240,7 @@ contains
        ! We've just moved the atoms - we need a self-consistent ground
        ! state before we can minimise blips !
        min_layer = min_layer - 1
-       if (flag_vary_basis .or. .NOT.flag_LFD_NonSCF) then
+       if (flag_vary_basis .or. .NOT.flag_LFD_nonSCF) then
           call new_SC_potl(.false., sc_tolerance, reset_L,           &
                fixed_potential, vary_mu, n_L_iterations, &
                L_tolerance, e3)
@@ -1507,6 +1505,7 @@ contains
     use global_module, ONLY: atomf, sf
     use io_module, ONLY: dump_matrix
     use force_module,      only: force
+    use multisiteSF_module, only: flag_LFD_nonSCF
 
     implicit none
 
@@ -1587,7 +1586,7 @@ contains
        ! We've just moved the atoms - we need a self-consistent ground
        ! state before we can minimise blips !
        min_layer = min_layer - 1
-       if (flag_vary_basis .or. .NOT.flag_LFD_NonSCF) then
+       if (flag_vary_basis .or. .NOT.flag_LFD_nonSCF) then
           call new_SC_potl(.false., sc_tolerance, reset_L,           &
                fixed_potential, vary_mu, n_L_iterations, &
                L_tolerance, e3)
@@ -1722,6 +1721,7 @@ contains
     use fft_module,         only: recip_vector, hartree_factor, i0
     use DiagModule,         only: kk, nkp
     use store_matrix,       only: dump_pos_and_matrices
+    use multisiteSF_module, only: flag_LFD_nonSCF
 
     implicit none
 
@@ -1803,7 +1803,7 @@ contains
        ! We've just moved the atoms - we need a self-consistent ground
        ! state before we can minimise blips !
        min_layer = min_layer - 1
-       if (flag_vary_basis .or. .NOT.flag_LFD_NonSCF) then
+       if (flag_vary_basis .or. .NOT.flag_LFD_nonSCF) then
           call new_SC_potl(.false., sc_tolerance, reset_L,           &
                fixed_potential, vary_mu, n_L_iterations, &
                L_tolerance, e3)
@@ -1886,7 +1886,7 @@ contains
          IPRINT_TIME_THRES1)
     ! We've just moved the atoms - we need a self-consistent ground state before we can minimise blips !
     min_layer = min_layer - 1
-    if (flag_vary_basis .or. .NOT.flag_LFD_NonSCF) then
+    if (flag_vary_basis .or. .NOT.flag_LFD_nonSCF) then
        call new_SC_potl(.false., sc_tolerance, reset_L,           &
             fixed_potential, vary_mu, n_L_iterations, &
             L_tolerance, e3)
@@ -1962,7 +1962,7 @@ contains
        ! We've just moved the atoms - we need a self-consistent ground
        ! state before we can minimise blips !
        min_layer = min_layer - 1
-       if(flag_vary_basis .or. .NOT.flag_LFD_NonSCF) then
+       if(flag_vary_basis .or. .NOT.flag_LFD_nonSCF) then
           call new_SC_potl(.false., sc_tolerance, reset_L,           &
                fixed_potential, vary_mu, n_L_iterations, &
                L_tolerance, e3)
@@ -2039,6 +2039,7 @@ contains
     use io_module,      only: write_atomic_positions, pdb_template
     use timer_module
     use store_matrix, ONLY: dump_pos_and_matrices
+    use multisiteSF_module, only: flag_LFD_nonSCF
 
     implicit none
 
@@ -2150,7 +2151,7 @@ contains
        ! We've just moved the atoms - we need a self-consistent ground
        ! state before we can minimise blips !
        min_layer = min_layer - 1
-       if (flag_vary_basis .or. .NOT.flag_LFD_NonSCF) then
+       if (flag_vary_basis .or. .NOT.flag_LFD_nonSCF) then
           call new_SC_potl(.false., sc_tolerance, reset_L,           &
                fixed_potential, vary_mu, n_L_iterations, &
                L_tolerance, e3)
@@ -2251,7 +2252,7 @@ contains
     ! We've just moved the atoms - we need a self-consistent ground state before
     ! we can minimise blips !
     min_layer = min_layer - 1
-    if (flag_vary_basis .or. .NOT.flag_LFD_NonSCF) then
+    if (flag_vary_basis .or. .NOT.flag_LFD_nonSCF) then
        call new_SC_potl(.false., sc_tolerance, reset_L,           &
             fixed_potential, vary_mu, n_L_iterations, &
             L_tolerance, e3)
@@ -2346,7 +2347,7 @@ contains
        ! We've just moved the atoms - we need a self-consistent ground
        ! state before we can minimise blips !
        min_layer = min_layer - 1
-       if(flag_vary_basis .or. .NOT.flag_LFD_NonSCF) then
+       if(flag_vary_basis .or. .NOT.flag_LFD_nonSCF) then
           call new_SC_potl(.false., sc_tolerance, reset_L,           &
                fixed_potential, vary_mu, n_L_iterations, &
                L_tolerance, e3)

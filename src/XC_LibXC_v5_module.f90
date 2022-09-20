@@ -220,7 +220,7 @@ contains
              else if(iprint_ops>0) then
                 write(io_lun,'(4x,"Using the ",a," functional ",a)') trim(family),trim(name)
              else
-                select case(xc_f90_info_kind(xc_info(i)))
+                select case(xc_f90_func_info_get_kind(xc_info(i)))
                 case (XC_EXCHANGE)
                    write(io_lun,fmt='(/4x,"Using X functional ",a)') trim(name)
                 case (XC_CORRELATION)
@@ -318,10 +318,10 @@ contains
     write(io_lun,fmt='(4x,"XC references from LibXC:")')
     do j=1,n_xc_terms
        i = 0
-       call xc_f90_info_refs(xc_info(j), i, ref)
+       ref = xc_f90_func_reference_get_ref(xc_f90_func_info_get_references(xc_info(j),i))
        do while(i >= 0)
           write(io_lun, '(6x,a)') trim(ref)
-          call xc_f90_info_refs(xc_info(j), i, ref)
+          ref = xc_f90_func_reference_get_ref(xc_f90_func_info_get_references(xc_info(j),i))
        end do
     end do
     return
