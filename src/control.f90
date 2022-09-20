@@ -2209,23 +2209,17 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
                               y_atom_cell, z_atom_cell, id_glob,    &
                               atom_coord, area_general, flag_pulay_simpleStep, &
                               flag_diagonalisation, nspin, flag_LmatrixReuse, &
-                              flag_SFcoeffReuse, flag_move_atom
+                              flag_SFcoeffReuse, flag_move_atom, min_layer
     use group_module,   only: parts
     use minimise,       only: get_E_and_F
-    use move_atoms,     only: pulayStep, velocityVerlet,            &
-                              updateIndices, updateIndices3, update_atom_coord,     &
-                              safemin2, update_H, update_pos_and_matrices, single_step
-    use move_atoms,     only: updateL, updateLorK, updateSFcoeff
-    use GenComms,       only: gsum, myid, inode, ionode, gcopy, my_barrier
+    use move_atoms,     only: single_step
+    use GenComms,       only: myid, inode, ionode
     use GenBlas,        only: dot, syev
     use force_module,   only: tot_force
     use io_module,      only: write_atomic_positions, pdb_template, &
-                              check_stop, write_xsf
+                              check_stop, write_xsf, print_atomic_positions
     use memory_module,  only: reg_alloc_mem, reg_dealloc_mem, type_dbl
-    use primary_module, only: bundle
     use store_matrix,   only: dump_pos_and_matrices
-    use mult_module, ONLY: matK, S_trans, matrix_scale, matL, L_trans
-    use matrix_data, ONLY: Hrange, Lrange
     use dimens,        only: r_super_x, r_super_y, r_super_z
     use md_control,    only: flag_write_xsf
 
@@ -2265,12 +2259,6 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
     call reg_alloc_mem(area_general, 6 * ni_in_cell, type_dbl)
     if (myid == 0) &
          write (io_lun, fmt='(/4x,"Starting SQNM atomic relaxation"/)')
-    if (myid == 0 .and. iprint_MD > 1) then
-       do i = 1, ni_in_cell
-          write (io_lun, fmt='(4x,"Atom ",i8," Position ",3f15.8)') i, x_atom_cell(i), y_atom_cell(i), &
-               z_atom_cell(i)
-       end do
-    end if
     posnStore = zero
     forceStore = zero
     ! Do we need to add MD.MaxCGDispl ?
@@ -2284,6 +2272,7 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
     energy1 = zero
     dE = zero
     ! Find energy and forces
+    min_layer = min_layer - 1
     call get_E_and_F(fixed_potential, vary_mu, energy0, .true., &
                      .false.)
     call dump_pos_and_matrices
@@ -2293,6 +2282,7 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
        write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," E: ",e18.10)') & 
             iter, for_conv*max, en_conv*energy0
     end if
+    min_layer = min_layer + 1
     iter_loc = 0
     ggold = zero
     energy1 = energy0
@@ -2368,6 +2358,10 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
        posnStore(:,:,npmod) = posnStore(:,:,npmod)/mod_dr(npmod)
        forceStore(:,:,npmod) = forceStore(:,:,npmod)/mod_dr(npmod)
        cg_new = -tot_force ! The L-BFGS is in terms of grad E
+       ! Output positions
+       if (myid == 0 .and. iprint_md > 1) then
+          call print_atomic_positions
+       end if
        ! Add call to write_atomic_positions and write_xsf (2020/01/17: smujahed)
        call write_atomic_positions("UpdatedAtoms.dat", trim(pdb_template))
        if (flag_write_xsf) call write_xsf('trajectory.xsf', iter)
