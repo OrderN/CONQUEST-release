@@ -539,18 +539,19 @@ contains
                               vary_mu, n_cg_L_iterations, tolerance, &
                               con_tolerance, total_energy_0,         &
                               expected_reduction, last_step, tmp)
+       flag_vary_basis = .true.
+
        ! Normalise and writeout
        !call normalise_SFcoeff
        !do spin_SF = 1,nspin_SF
        !   call matrix_scale(zero,matSFcoeff_tran(spin_SF))
        !   call matrix_transpose(matSFcoeff(spin_SF), matSFcoeff_tran(spin_SF))
        !enddo
+
        ! Write out current SF coefficients every n_dumpSFcoeff, if n_dumpSFcoeff > 0)
        if (n_dumpSFcoeff > 0 .and. mod(n_iterations,n_dumpSFcoeff) == 1) then
           call dump_pos_and_matrices(index = unit_MSSF_save)
        endif
-
-       flag_vary_basis = .true.
 
        ! Find change in energy for convergence
        diff = total_energy_last - total_energy_0
@@ -966,7 +967,7 @@ contains
     use logicals
     use numbers,            only: BIG, ten, zero
     use global_module,      only: nspin, ni_in_cell, ne_in_cell, spin_factor, nspin_SF, &
-                                  area_minE, area_ops, flag_diagonalisation, iprint_basis
+                                  area_minE, area_ops, flag_diagonalisation, iprint_basis, min_layer
     use PosTan,             only: PulayC, PulayBeta, SCC, SCBeta
     use GenComms,           only: gsum, inode, ionode, cq_abort, my_barrier
     use dimens,             only: n_my_grid_points, grid_point_volume
@@ -982,7 +983,9 @@ contains
     use store_matrix,       only: dump_pos_and_matrices, unit_MSSF_save
     use multisiteSF_module, only: initial_SFcoeff, LFD_max_iteration, LFD_Thresh_EnergyRise, &
                                   LFD_threshD, LFD_threshE, n_dumpSFcoeff
-    
+    use units,              only: en_conv, en_units, energy_units
+    use io_module,                 only: return_prefix
+
     implicit none
 
     ! Passed variables
@@ -1000,8 +1003,12 @@ contains
     real(double) :: total_energy_last, total_energy_0, diff_E, R0, tolerance, con_tolerance
     real(double), dimension(nspin) :: electrons, energy_tmp
     integer :: spin, spin_SF, iter, length, stat
+    character(len=10) :: subname = "LFD_SCF:  "
+    character(len=120) :: prefix
 
-    if (inode==ionode) write(io_lun,*) 'We are in sub:LFD_SCF'
+    prefix = return_prefix(subname, min_layer)
+    if (inode==ionode .and. iprint_basis + min_layer >= 0) &
+         write(io_lun,fmt='(/4x,a)') trim(prefix)//" Starting LFD"
 
     length = mat_p(matSFcoeff(1))%length
 
@@ -1038,7 +1045,8 @@ contains
     end do
 
     do iter = 1, LFD_max_iteration
-       if (inode == ionode) write (io_lun, 7) iter
+       if (inode == ionode .and. iprint_basis + min_layer>=1) &
+            write (io_lun, fmt='(4x,a,i3)') trim(prefix)//" LFD variation ", iter
 
        ! Make new multisite SF coefficients with updated density
        ! matSpao is not rebuild, matHpao is rebuild 
@@ -1047,7 +1055,8 @@ contains
        call my_barrier
 
        ! Find new self-consistent energy
-       if (inode==ionode .and. iprint_basis.ge.5) write(io_lun,*) 'In sub:LFD_SCF, perform SC calculation.'
+       if (inode==ionode .and. iprint_basis + min_layer >= 4) &
+            write(io_lun,fmt='(4x,a)') trim(prefix)//' perform SC calculation.'
        ! 1. Get new S_sf matrix 
        call get_S_matrix(inode, ionode, build_AtomF_matrix=.false.)
        ! 2. If we're building K as 3LSL-2LSLSL, we need to make K now
@@ -1057,9 +1066,12 @@ contains
        end if
        reset_L = .true.
        ! 3. Get a new self-consistent potential and Hamiltonian
+       min_layer = min_layer - 2 ! I'm imposing two here temporarily
+       ! because otherwise we get too much output from energy
        call new_SC_potl(.false., con_tolerance, reset_L,             &
                         fixed_potential, vary_mu, n_cg_L_iterations, &
                         tolerance, total_energy_last)
+       min_layer = min_layer + 2
 
        ! Check convergency by energy (diff_E) and density (R0)
        ! energy
@@ -1082,20 +1094,31 @@ contains
        call gsum(R0)
        R0 = sqrt(grid_point_volume * R0) / ne_in_cell
 
-       if (inode == ionode) write(io_lun,'(/A,I3,3(3X,A,F20.10))') &
-                            'LFD_SCF: iter =',iter,'Total energy =',total_energy_last, &
-                            'diff_E=',diff_E,'R0 =',R0
+       if (diff_E.gt.zero .and. inode==ionode .and. iprint_basis + min_layer>=1) &
+            write(io_lun,'(4x,A,f15.7,A,i3)') &
+            trim(prefix)//' Energy rose by ', diff_E, ' at iteration # ',iter 
+       if (inode == ionode .and. iprint_basis + min_layer>=0) &
+            write(io_lun,'(4x,A,I3,2(3X,A,F17.10,1x,A2),(3X,A,F17.10)/)') &
+            trim(prefix)//' iter =',iter, &
+            'Total energy =',total_energy_last*en_conv,en_units(energy_units), &
+            'diff_E=',diff_E*en_conv,en_units(energy_units),'R0 =',R0
 
        if (ABS(diff_E).le.LFD_threshE) then
           ! Energy converged
           convergence_flag = .true.
           total_energy = total_energy_last
-          if (inode==ionode) write(io_lun,18) 'total energy', iter, total_energy
+          if (inode==ionode .and. iprint_basis + min_layer >= -1) &
+               write(io_lun,fmt='(/4x,a,f15.7,a2,a,i3,a)') &
+               trim(prefix)//" LFD converged to ", total_energy*en_conv, &
+               en_units(energy_units)," after ",iter," iterations"
        else if (R0.le.LFD_threshD) then
           ! Density converged
           convergence_flag = .true.
           total_energy = total_energy_last
-          if (inode==ionode) write(io_lun,18) 'density', iter, total_energy
+          if (inode==ionode .and. iprint_basis + min_layer >=-1) &
+               write(io_lun,fmt='(/4x,a,f15.7,a2,a,i3,a)') &
+               trim(prefix)//" LFD converged to ", total_energy*en_conv, &
+               en_units(energy_units)," after ",iter," iterations"
        else if (diff_E.gt.zero .and. ABS(diff_E).le.LFD_Thresh_EnergyRise) then
           ! Energy rises so finish iteration with the previous SF coefficients and density
           convergence_flag = .true.
@@ -1108,11 +1131,17 @@ contains
           do spin = 1, nspin
              rho(1:n_my_grid_points,spin) = rho_0(1:n_my_grid_points,spin)
           enddo
-          if (inode==ionode) &
-               write(io_lun,'(///20x,A,f15.7,A,i3/20x,A,i3//20x,A,f15.7)') &
-               'LFD_SCF: Energy rises by ', diff_E, ' at iteration # ', iter, &
-               'SF coefficients and density are returned to those at previous iteration # ', iter-1, &
-               'Total energy = ',total_energy
+          if (inode==ionode .and. iprint_basis + min_layer >=0) then
+             write(io_lun,'(4x,A,f15.7,1x,A2,A,i3,a)') &
+                  trim(prefix)//' Energy rose by ', diff_E*en_conv,en_units(energy_units), &
+                  ' at iteration # ', iter, ' Returning to previous iteration'
+             write(io_lun,'(4x,A,i3)') &
+                  trim(prefix)//&
+                  &' SF coefficients and density are returned to those at previous iteration # ', &
+                  iter-1
+             write(io_lun,'(4x,A,f15.7,1x,A2)') &
+                  trim(prefix)//' Total energy = ',total_energy*en_conv,en_units(energy_units)
+          end if
           ! Reconstruct S, H and K with previous density 
           call get_S_matrix(inode, ionode, build_AtomF_matrix=.false.)
           call get_H_matrix(.false., fixed_potential, electrons, &
@@ -1121,8 +1150,6 @@ contains
                          reset_L, .false.)
        else 
           ! Save present energy and density
-          if (diff_E.gt.zero .and. inode==ionode) write(io_lun,'(/20x,A,f15.7,A,i3)') &
-               'LFD_SCF: Energy rises by ', diff_E, ' at iteration # ',iter 
           total_energy   = total_energy_last
           total_energy_0 = total_energy_last
           do spin = 1, nspin
@@ -1131,8 +1158,9 @@ contains
           do spin_SF = 1, nspin_SF
              data_PAO0(:,spin_SF) = mat_p(matSFcoeff(spin_SF))%matrix
           end do
-          if (inode==ionode) write(io_lun,'(/20x,A,i5)') &
-               'LFD_SCF: Save SF coefficients at iteration # ',iter
+          if (inode==ionode .and. iprint_basis + min_layer >2) &
+               write(io_lun,'(/4x,A,i5)') &
+               trim(prefix)//' Save SF coefficients at iteration # ',iter
        endif
 
        ! Write out current SF coefficients and density matrices with some iprint (in future)
@@ -1147,17 +1175,14 @@ contains
        endif
     enddo ! iter
 
-    if (inode==ionode) write(io_lun,'(A,I3,A)') &
-         'LFD SCF iteration is not converged after ',LFD_max_iteration,' iterations.'
+    if (inode==ionode) write(io_lun,'(4x,A,I3,A)') &
+         trim(prefix)//' Not converged after ',LFD_max_iteration,' iterations.'
     deallocate(data_PAO0)
 
     call reg_dealloc_mem(area_minE, length*nspin_SF, type_dbl)
     !
     return
     !
-7   format(/20x,'------------ LFD Variation #: ',i5,' ------------',/)
-18  format(///20x,'The LFD SCF iteration has converged to a ',A,' at iteration #',I3, &
-         //20x,'Total energy = ',f15.7)
   end subroutine LFD_SCF
   !!***
 

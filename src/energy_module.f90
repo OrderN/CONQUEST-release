@@ -464,7 +464,6 @@ contains
                                       flag_vdWDFT,                    &
                                       flag_exx, exx_alpha,            &
                                       flag_neutral_atom, min_layer
-    use DFT_D2,                 only: disp_energy
     use density_module,         only: electron_number
     use pseudopotential_common, only: core_correction, &
                                       flag_neutral_atom_projector

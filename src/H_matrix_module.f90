@@ -239,6 +239,8 @@ contains
     use exx_io,                      only: exx_global_write
 !****lat>$
     use energy, only: local_ps_energy
+    use density_module, only: flag_DumpChargeDensity
+    use io_module,      only: dump_charge
     
     implicit none
 
