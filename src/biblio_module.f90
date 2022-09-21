@@ -265,6 +265,8 @@ contains
   !!  MODIFICATION HISTORY
   !!   2020/03/24 14:22 dave
   !!    Changed to write reference key only if iprint<2
+  !!   2022/09/21 10:58 dave
+  !!    Changed to write reference key only if iprint<4
   !!  SOURCE
   !!
   subroutine cite(bib, key, punc, pre)
@@ -281,7 +283,7 @@ contains
     character(18) :: start
 
     reference = bib%get_ref(key)
-    if(iprint_init>1) then
+    if(iprint_init>3) then
        call reference%cite_reference
        if (flag_dump_bib) call reference%write_bib(bib%first)
     else

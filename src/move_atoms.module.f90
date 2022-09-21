@@ -807,7 +807,6 @@ contains
 
     integer :: ig, both, mat, update_var
 
-    write(io_lun,*) 'min_layer is ',min_layer
     call start_timer(tmr_std_moveatoms)
 
     if(flag_SFcoeffReuse) then
