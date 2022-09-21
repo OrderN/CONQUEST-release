@@ -166,7 +166,7 @@ contains
                                          matSFcoeff, matSFcoeff_tran,  &
                                          matdSFcoeff, matdSFcoeff_e,   &
                                          matrix_scale, matrix_transpose
-    use multisiteSF_module,        only: normalise_SFcoeff, n_dumpSFcoeff
+    use multisiteSF_module,        only: normalise_SFcoeff, n_dumpSFcoeff, flag_mix_LFD_SCF
     use units,                     only: en_conv, en_units, energy_units
     use SelfCon,           only: new_SC_potl
     
@@ -185,7 +185,7 @@ contains
     integer      :: i, part, nsf1, npao2, neigh, proc, ind_part, atom, local_atom, &
                     nsf_local, n_nab_local, npao_local, gcspart, ist, wheremat
     integer      :: length, n_iterations, spin_SF, stat
-    logical      :: orig_SC, reset_L, my_atom
+    logical      :: orig_SC, reset_L, my_atom, orig_LFD_SCF
     real(double) :: diff, total_energy_0, total_energy_test, last_step, &
                     dN_dot_de, dN_dot_dN, summ, E2, E1, g1, g2, &
                     tmp0, val0, val1
@@ -251,9 +251,14 @@ contains
        call matrix_scale(zero, matdSFcoeff(spin_SF))
        call matrix_scale(zero, matdSFcoeff_e(spin_SF))
     enddo
+    orig_LFD_SCF = flag_mix_LFD_SCF
+    flag_mix_LFD_SCF = .false.
     ! call get_H_matrix before calling build_PAO_coeff ! TM
-    call get_H_matrix(.true., fixed_potential, electrons, density, &
-                      maxngrid)
+    !call get_H_matrix(.true., fixed_potential, electrons, density, &
+    !                  maxngrid)
+    call new_SC_potl(.false., con_tolerance, reset_L,             &
+         fixed_potential, vary_mu, n_cg_L_iterations, &
+         tolerance, total_energy_last)
     call build_PAO_coeff_grad(full)
 
     if (TestBasisGrads) then
@@ -600,6 +605,7 @@ contains
        total_energy_last = total_energy_0
     end do ! n_iterations
 
+    flag_mix_LFD_SCF = orig_LFD_SCF
     deallocate(search_direction, last_sd, Psd, STAT=stat)
     if (stat /= 0) call cq_abort("vary_pao: Error dealloc mem")
     call reg_dealloc_mem(area_minE, 3*length*nspin_SF, type_dbl)

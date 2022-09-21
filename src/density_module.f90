@@ -813,8 +813,8 @@ contains
 
     call start_timer(tmr_std_chargescf)
 
-    if (inode == ionode .and. iprint_SC + min_layer >= 2) &
-         write (io_lun,fmt='(4x,a)') trim(prefix)//'Entering'
+    if (inode == ionode .and. iprint_SC + min_layer >= 3) &
+         write (io_lun,fmt='(4x,a)') trim(prefix)//' Entering'
 
     do spin = 1, nspin
        ! matK->matKatomf backtransformation for contracted SFs
@@ -863,7 +863,7 @@ contains
                          rsum(n_my_grid_points, denout(:,spin), 1)
        call gsum(electrons(spin))
 
-       if (inode == ionode .and. iprint_SC + min_layer > 1) &
+       if (inode == ionode .and. iprint_SC + min_layer > 2) &
             write (io_lun, '(4x,a,i1,a,f25.15)') &
                   trim(prefix)//"Electrons (spin=",spin, "): ", electrons(spin)
     end do ! spin

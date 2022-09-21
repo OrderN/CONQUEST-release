@@ -1349,7 +1349,7 @@ contains
 !!$
 !!$
     if (inode == ionode .and. iprint_init > 2) &
-         write (io_lun, fmt='(4x,a)') 'Find_chdens is ', find_chdens
+         write (io_lun, fmt='(4x,a,L2)') 'Find_chdens is ', find_chdens
 !!$
 !!$
 !!$
