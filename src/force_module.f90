@@ -510,7 +510,7 @@ contains
     max_atom  = 0
     max_compt = 0
     if (inode == ionode .and. write_forces .and. (iprint_MD + min_layer>0 .or. ni_in_cell<atom_output_threshold)) then
-       write (io_lun, fmt='(/4x,a,a2,"/",a2,")"/)') &
+       write (io_lun, fmt='(/4x,a,a2,"/",a2,")")') &
              trim(prefix)//" Forces on atoms (",en_units(energy_units), d_units(dist_units)
        write (io_lun, fmt='(4x,a)') &
             trim(prefix)//"  Atom   X              Y              Z"
@@ -692,7 +692,7 @@ contains
       scale = -HaBohr3ToGPa/volume
       !call print_stress("Total pressure:   ", stress*scale, 0)
       if(inode==ionode.AND.iprint_MD + min_layer>=0) &
-           write(io_lun,'(/4x,a,f15.8,a4)') trim(prefix)//" Average pressure:   ", &
+           write(io_lun,'(4x,a,f15.8,a4)') trim(prefix)//" Average pressure:   ", &
            third*scale*(stress(1,1) + stress(2,2) + stress(3,3))," GPa"
       if (flag_atomic_stress .and. iprint_MD + min_layer > 2) call check_atomic_stress
     end if
