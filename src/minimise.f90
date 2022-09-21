@@ -283,6 +283,7 @@ contains
        call new_SC_potl(.false., sc_tolerance, reset_L,           &
                         fixed_potential, vary_mu, n_L_iterations, &
                         L_tolerance, total_energy, backtrace_level)
+       dE_elec_opt = dE_SCF
     end if
     ! Once ground state is reached, if we are doing deltaSCF, perform excitation
     ! and solve for the new ground state (on excited Born-Oppenheimer surface)

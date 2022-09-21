@@ -4326,7 +4326,7 @@ subroutine print_stress(label, str_mat, print_level)
   character(20) :: blank = ''
 
   if (inode==ionode) then
-    if (iprint_MD >= print_level) then
+    if (iprint_MD > print_level) then
       if (flag_full_stress) then
         write(io_lun,fmt=fmt) label, str_mat(1,:), en_units(energy_units)
         write(io_lun,fmt=fmt) blank, str_mat(2,:), blank
