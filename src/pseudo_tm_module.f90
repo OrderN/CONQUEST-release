@@ -973,7 +973,7 @@ contains
     use dimens, only: grid_point_volume, n_my_grid_points
     use global_module, only: rcellx,rcelly,rcellz,id_glob, iprint_pseudo, &
          species_glob, nlpf,ni_in_cell, flag_neutral_atom, dens, &
-         flag_full_stress, flag_stress, flag_atomic_stress, atomic_stress
+         flag_full_stress, flag_stress, flag_atomic_stress, atomic_stress, min_layer
     use block_module, only : n_pts_in_block
     use group_module, only : blocks, parts
     use primary_module, only: domain
@@ -987,6 +987,7 @@ contains
     use density_module, only: density_atom
     use atomic_density, only: atomic_density_table ! for Neutral atom potential
     use pseudopotential_common, only: flag_neutral_atom_projector
+    use io_module, only: return_prefix
 
     implicit none   
 
@@ -1020,10 +1021,16 @@ contains
     real(double),allocatable, dimension(:) :: h_potential, drho_tot
     ! Store potential scaled by 2GaGb/G^4 for stress
     real(double),allocatable :: loc_charge(:)
+    character(len=10) :: subname = "pseudo_tm_force:  "
+    character(len=120) :: prefix
+
+    prefix = return_prefix(subname, min_layer)
 
     call start_backtrace(t=backtrace_timer,who='loc_pp_derivative_tm',where=7,level=3,echo=.true.)
     call start_timer(tmr_std_pseudopot)
-    if(iprint_pseudo>2.AND.inode==ionode) write(io_lun,fmt='(4x,"Doing TM force with pseudotype: ",i3)') pseudo(1)%tm_loc_pot
+    if(iprint_pseudo + min_layer>3.AND.inode==ionode) &
+         write(io_lun,fmt='(4x,a,i3)') trim(prefix)//" starting with pseudotype: ", &
+         pseudo(1)%tm_loc_pot
     ! the structure of this subroutine is similar to set_tm_pseudo et.
     HF_force = zero
     loc_HF_stress = zero

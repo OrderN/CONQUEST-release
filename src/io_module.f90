@@ -577,7 +577,7 @@ second:   do
                               flag_fractional_atomic_coords, rcellx,   &
                               rcelly, rcellz, iprint_init, atom_coord, &
                               species_glob, flag_move_atom, area_init, &
-                              IPRINT_TIME_THRES3
+                              IPRINT_TIME_THRES3, min_layer
     use species_module, only: species, species_label
     use GenComms,       only: inode, ionode, cq_abort
     use units,          only: BohrToAng
@@ -598,7 +598,7 @@ second:   do
     if(inode==ionode) then
        call start_timer(tmr_l_tmp1,WITH_LEVEL)
        if (pdb_output) then
-          if (iprint_init > 2) write(io_lun,*) 'Writing write_atomic_positions'
+          if (iprint_init + min_layer > 2) write(io_lun,fmt='(6x,a)') 'Writing atomic positions'
           call io_assign(lun)
           ! No appending of coords for a pdb file
           open (unit = lun, file = 'output.pdb', status = 'replace', iostat = ios)
@@ -653,7 +653,7 @@ second:   do
           call io_close(lun)
           call io_close(template)
        else
-          if(iprint_init>2) write(io_lun,*) 'Writing atomic positions'
+          if (iprint_init + min_layer > 2) write(io_lun,fmt='(6x,a)') 'Writing atomic positions'
           call io_assign(lun)
           if(append_coords) then
              open(unit=lun,file=filename,position='append')
@@ -812,7 +812,7 @@ second:   do
        !call create_sfc_partitions(myid, parts)
        call sfc_partitions_to_processors(parts)
        np_in_cell = parts%ngcellx*parts%ngcelly*parts%ngcellz
-       if (iprint_init > 2.AND.myid==0) write(io_lun,fmt='(4x,a)') 'Finished partitioning'
+       if (iprint_init > 2.AND.myid==0) write(io_lun,fmt='(10x,a)') 'Finished partitioning'
     end if
     ! inverse table to npnode
     do np=1,np_in_cell
@@ -2666,7 +2666,7 @@ second:   do
     character(len=2)           :: atom_name
 
     if(inode==ionode) then
-      if (iprint_init>2) write(io_lun,*) 'Writing atomic positions to .xsf'
+      if (iprint_init>3) write(io_lun,fmt='(6x,a)') 'Writing atomic positions to .xsf'
       call io_assign(lun)
       if(append_coords) then
          open(unit=lun,file=filename,position='append')
@@ -3108,28 +3108,28 @@ second:   do
     integer :: i
 
     if(inode==ionode) then
-       write(io_lun,fmt='(/4x,"Simulation cell dimensions: ",f10.4,a3," x ",f10.4,a3," x ",f10.4,a3)') &
+       write(io_lun,fmt='(/6x,"Simulation cell dimensions: ",f10.4,a3," x ",f10.4,a3," x ",f10.4,a3)') &
             r_super_x*dist_conv, d_units(dist_units), r_super_y*dist_conv, d_units(dist_units), &
             r_super_z*dist_conv, d_units(dist_units)
        if(flag_coords_xyz) then
-          write(io_lun,fmt='(4x,"           X         Y         Z")')
+          write(io_lun,fmt='(6x,"           X         Y         Z")')
           if(dist_units==bohr) then
-             write(io_lun,fmt='(/4x,"Atomic coordinates in XYZ format (",a2,")")') "A "
+             write(io_lun,fmt='(/6x,"Atomic coordinates in XYZ format (",a2,")")') "A "
              do i = 1, ni_in_cell
                 write (io_lun,fmt='(4x, a2, 3f10.4)') pte(atomicnum(species_glob(i))), atom_coord(1:3,i)*BohrToAng
              end do
-             write(io_lun,fmt='(6x,"N.B. units above converted to Angstroms for xyz output")')
+             write(io_lun,fmt='(8x,"N.B. units above converted to Angstroms for xyz output")')
           else
-             write(io_lun,fmt='(/4x,"Atomic coordinates (",a2,")")') d_units(dist_units)
+             write(io_lun,fmt='(/6x,"Atomic coordinates (",a2,")")') d_units(dist_units)
              do i = 1, ni_in_cell
                 write (io_lun,fmt='(4x, a2, 3f10.4)') pte(atomicnum(species_glob(i))), atom_coord(1:3,i)
              end do
           end if
        else
-          write(io_lun,fmt='(/4x,"Atomic coordinates (",a2,")")') d_units(dist_units)
-          write(io_lun,fmt='(4x,"   Atom         X         Y         Z  Species")')
+          write(io_lun,fmt='(/6x,"Atomic coordinates (",a2,")")') d_units(dist_units)
+          write(io_lun,fmt='(6x,"   Atom         X         Y         Z  Species")')
           do i = 1, ni_in_cell
-             write (io_lun,fmt='(4x, i7, 3f10.4, 6x, i3)') i,atom_coord(1:3,i), species_glob(i)
+             write (io_lun,fmt='(6x, i7, 3f10.4, 6x, i3)') i,atom_coord(1:3,i), species_glob(i)
           end do
        end if
     end if

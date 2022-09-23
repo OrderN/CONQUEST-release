@@ -649,7 +649,7 @@ contains
     ! Local variables
     
     if(inode==ionode) then
-       if(iprint>0) write(io_lun,fmt='(2x,"WARNING: ",a)')  message
+       if(iprint>0) write(io_lun,fmt='(/"WARNING: ",a/)')  message
        write(warning_lun,fmt='(a,": ",a)')  trim(sub_name), message
        flag_warnings = .true.
     end if
@@ -696,10 +696,10 @@ contains
     
     if(inode==ionode) then
        if(present(int2)) then
-          if(iprint>0) write(io_lun,fmt='(2x,"WARNING: ",a,2i8)')  message, int1, int2
+          if(iprint>0) write(io_lun,fmt='(/"WARNING: ",a,2i8/)')  message, int1, int2
           write(warning_lun,fmt='(a,": ",a,2i8)')  trim(sub_name), message, int1, int2
        else
-          if(iprint>0) write(io_lun,fmt='(2x,"WARNING: ",a,i8)')  message, int1
+          if(iprint>0) write(io_lun,fmt='(/"WARNING: ",a,i8/)')  message, int1
           write(warning_lun,fmt='(a,": ",a,i8)')  trim(sub_name), message, int1
        end if
        flag_warnings = .true.
@@ -747,10 +747,10 @@ contains
     
     if(inode==ionode) then
        if(present(real2)) then
-          if(iprint>0) write(io_lun,fmt='(2x,"WARNING: ",a,2f20.12)')  message, real1, real2
+          if(iprint>0) write(io_lun,fmt='(/"WARNING: ",a,2f20.12/)')  message, real1, real2
           write(warning_lun,fmt='(a,": ",a,2f20.12)')  trim(sub_name), message, real1, real2
        else
-          if(iprint>0) write(io_lun,fmt='(2x,"WARNING: ",a,f20.12)')  message, real1
+          if(iprint>0) write(io_lun,fmt='(/"WARNING: ",a,f20.12/)')  message, real1
           write(warning_lun,fmt='(a,": ",a,f20.12)')  trim(sub_name), message, real1
        end if
        flag_warnings = .true.

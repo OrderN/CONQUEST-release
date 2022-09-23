@@ -1543,7 +1543,7 @@ contains
     use global_module, ONLY : id_glob, iprint_gen, species_glob, ni_in_cell, &
                               area_general, IPRINT_TIME_THRES3, &
                               flag_full_stress, flag_stress, &
-                              flag_atomic_stress, atomic_stress
+                              flag_atomic_stress, atomic_stress, min_layer
     use group_module, ONLY : parts
     use maxima_module, ONLY : maxatomsproc
     use numbers
@@ -1553,6 +1553,8 @@ contains
     use timer_module, ONLY: cq_timer,start_timer,stop_print_timer,WITH_LEVEL
     use energy, ONLY: local_ps_energy, screened_ion_interaction_energy
     use atomic_density, only: atomic_density_table ! for Neutral atom potential
+    use io_module, only: return_prefix
+    use units, only: energy_units, en_units
     
     implicit none
 
@@ -1563,12 +1565,15 @@ contains
     real(double) :: screenedE_sum_self
     real(double) :: overlap, dummy
     real(double) :: goverlap_x, goverlap_y, goverlap_z
+    character(len=12) :: subname = "Screened ion int: "
+    character(len=120) :: prefix
 
-    if(iprint_gen>4) write(io_lun,fmt='(2x,"Screened ion: init")')
+    prefix = return_prefix(subname, min_layer)
+    if(iprint_gen>4) write(io_lun,fmt='(4x,a)') trim(prefix)//" Starting"
     screened_ion_force   = zero
     screened_ion_stress  = zero
     screened_ion_interaction_energy = zero
-    if(iprint_gen>4) write(io_lun,fmt='(2x,"Screened ion: interactions")')
+    if(iprint_gen>4) write(io_lun,fmt='(4x,a)') trim(prefix)//" Interactions"
     ! --- loop over primary-set partitions
     do ip = 1, bundle%groups_on_node
        if(bundle%nm_nodgroup(ip) > 0) then
@@ -1654,8 +1659,8 @@ contains
     call gsum(screened_ion_force,3,ni_in_cell)
     if (flag_stress) call gsum(screened_ion_stress,3,3)
     if(inode == ionode.AND.iprint_gen>1) &
-         write(unit=io_lun,fmt='(/8x," ++++++ Screened ion interaction energy:",e20.12)') &
-         &screened_ion_interaction_energy
+         write(unit=io_lun,fmt='(/4x,a,e20.12,a2/)') &
+         trim(prefix)//" Energy: ", screened_ion_interaction_energy,en_units(energy_units)
 
   end subroutine screened_ion_interaction
 !!***

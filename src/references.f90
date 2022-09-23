@@ -234,6 +234,19 @@ module references
            "Details of new CONQUEST PAOs from basis generation tool, &
            &using Hamann-type pseudopotentials")
 
+      call bib%add_ref( &
+           "Nakata2020", &
+           "{A. Nakata and J. S. Baker and S. Y. Mujahed and J. T. L. Poulton &
+           &and S. Arapan and J. Lin and Z. Raza and S. Yadav and L. Truflandier and &
+           &T. Miyazaki and D. R. Bowler}", &
+           "{Large scale and linear scaling DFT with the CONQUEST code}", &
+           "{J. Chem. Phys.}", &
+           152, &
+           164112, &
+           2020, &
+           "10.1063/5.0005074", &
+           "Overview of recent developments in CONQUEST")
+
       ! Other papers: not Conquest specific
       call bib%add_ref( &
            "Martyna1994", &
@@ -431,22 +444,22 @@ module references
       call get_bib_db(bib)
 
       if (inode==ionode) then
-         if(iprint_init>1) then
-            write(io_lun,*)
-            write(io_lun,'(4x,a)') "BIBLIOGRAPHY: If you publish results obtained &
-                 &with CONQUEST, please consider citing the &
-                 &following:"
-            write(io_lun,*)
-         else
+         !if(iprint_init>1) then
+         !   write(io_lun,*)
+         !   write(io_lun,'(4x,a)') "BIBLIOGRAPHY: If you publish results obtained &
+         !        &with CONQUEST, please consider citing the &
+         !        &following:"
+         !   write(io_lun,*)
+         !else
             write(io_lun,fmt='(/4x,a/)') "BIBLIOGRAPHY: Please consider citing the following &
                  &references in the conquest.bib file"
-         end if
+         !end if
       end if
 
       ! Cite publications for *any* CONQUEST calculation
       call bib%cite("Bowler2002pt",punc=", ",pre="CONQUEST: ")
       call bib%cite("Miyazaki2004",punc=", ")
-      call bib%cite("Bowler:2006xr") ! Replace with 2020 JCP when submitted
+      call bib%cite("Nakata2020") 
       write(io_lun,*)
 
       !if (inode==ionode) then

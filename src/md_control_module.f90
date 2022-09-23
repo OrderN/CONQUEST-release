@@ -274,6 +274,11 @@ contains
   !!  
   subroutine init_thermo(th, thermo_type, baro_type, dt, ndof, tau_T, ke_ions)
 
+    use global_module, ONLY: min_layer
+    use io_module, ONLY: return_prefix
+
+    implicit none
+    
     ! passed variables
     class(type_thermostat), intent(inout) :: th
     character(*), intent(in)              :: thermo_type, baro_type
@@ -285,8 +290,12 @@ contains
     real(double)                          :: dummy_rn
     integer                               :: i
 
-    if (inode==ionode .and. iprint_MD > 1) &
-      write(io_lun,'(2x,a)') 'Welcome to init_thermo'
+    character(len=13) :: subname = "init_thermo: "
+    character(len=120) :: prefix
+
+    prefix = return_prefix(subname, min_layer)
+    if (inode==ionode .and. iprint_MD + min_layer > 1) &
+      write(io_lun,'(4x,a)') trim(prefix)//" starting"
     th%T_int = two*ke_ions/fac_Kelvin2Hartree/md_ndof_ions
     th%T_ext = temp_ion
     th%dt = dt
@@ -337,13 +346,13 @@ contains
       call cq_abort("MD.ThermoType must be 'none', 'svr' or 'nhc'")
     end select
 
-    if (inode==ionode .and. iprint_MD > 1) then
-      write(io_lun,'(4x,"Thermostat type: ",a)') th%thermo_type
-      write(io_lun,'(4x,"Extended system: ",l1)') flag_extended_system
+    if (inode==ionode .and. iprint_MD + min_layer > 1) then
+      write(io_lun,'(4x,a)') trim(prefix)//" Thermostat type: "//th%thermo_type
+      write(io_lun,'(4x,a,l1)') trim(prefix)//" Extended system: ",flag_extended_system
       if (.not. leqi(thermo_type, 'none')) then
-        write(io_lun,'(4x,a,f10.2)') 'Target temperature        T_ext = ', &
+        write(io_lun,'(4x,a,f10.2)') trim(prefix)//"Target temperature        T_ext = ", &
                                      th%T_ext
-        write(io_lun,'(4x,a,f10.2)') 'Coupling time period      tau_T = ', &
+        write(io_lun,'(4x,a,f10.2)') trim(prefix)//"Coupling time period      tau_T = ", &
                                      th%tau_T
       end if
     end if
@@ -1220,7 +1229,8 @@ contains
   !!  
   subroutine init_baro(baro, baro_type, dt, ndof, v, tau_P, ke_ions)
 
-    use global_module,    only: rcellx, rcelly, rcellz
+    use global_module,    only: rcellx, rcelly, rcellz, min_layer
+    use io_module, ONLY: return_prefix
 
     ! passed variables
     class(type_barostat), intent(inout)       :: baro
@@ -1232,6 +1242,10 @@ contains
     ! local variables
     real(double)                              :: tauP, omega_P
 
+    character(len=13) :: subname = "init_baro: "
+    character(len=120) :: prefix
+
+    prefix = return_prefix(subname, min_layer)
     ! Globals
     baro%baro_type = baro_type
     baro%dt = dt
@@ -1315,19 +1329,18 @@ contains
       call cq_abort("MD.BaroType must be 'none', 'mttk' or 'pr'")
     end select
 
-    if (inode==ionode .and. iprint_MD > 1) then
-      write(io_lun,'(2x,a)') 'Welcome to init_baro'
-      write(io_lun,'(4x,"Barostat type:   ",a)') baro%baro_type
-      write(io_lun,'(4x,"Extended system: ",l1)') flag_extended_system
+    if (inode==ionode .and. iprint_MD + min_layer > 1) then
+      write(io_lun,'(4x,a)') trim(prefix)//"Barostat type:   "//baro%baro_type
+      write(io_lun,'(4x,a,l1)') trim(prefix)//"Extended system: ",flag_extended_system
       if (.not. leqi(baro_type, 'none')) then
-        write(io_lun,'(4x,a,f14.2)') 'Target pressure        P_ext = ', &
+        write(io_lun,'(4x,a,f14.2)') trim(prefix)//'Target pressure        P_ext = ', &
                                       baro%P_ext
-        write(io_lun,'(4x,a,f14.2)') 'Coupling time period   tau_P = ', &
+        write(io_lun,'(4x,a,f14.2)') trim(prefix)//'Coupling time period   tau_P = ', &
                                       baro%tau_P
         if (flag_extended_system) then
-          write(io_lun,'(4x,a,f15.8)') 'Box mass                     = ', &
+          write(io_lun,'(4x,a,f15.8)') trim(prefix)//'Box mass                     = ', &
                                         baro%box_mass
-          write(io_lun,'(4x,a,f15.8)') 'Pressure drag factor  p_drag = ', &
+          write(io_lun,'(4x,a,f15.8)') trim(prefix)//'Pressure drag factor  p_drag = ', &
                                         baro%p_drag
         end if
       end if

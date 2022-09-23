@@ -461,12 +461,13 @@ contains
     endif ! flag_basis_set
     if (atomf==sf)   natomf_species(:) =  nsf_species(:)
     if (atomf==paof) natomf_species(:) = npao_species(:)
-    if (iprint_init.ge.3 .and. inode==ionode) write(io_lun,*) 'flag_one_to_one (T/F): ',flag_one_to_one
-    if (iprint_init.ge.3 .and. inode==ionode) then
+    if (iprint_init > 3 .and. inode==ionode) &
+         write(io_lun,fmt='(6x,a,L2)') 'PAO:SF mapping flag is ',flag_one_to_one
+    if (iprint_init> 3 .and. inode==ionode) then
        if(atomf==sf) then
-          write(io_lun,fmt='(2x,"Primitive atom functions are the support functions"/)')
+          write(io_lun,fmt='(6x,"Primitive atom functions are the support functions"/)')
        else if(atomf==paof) then
-          write(io_lun,fmt='(2x,"Primitive atom functions are the pseudo-atomic orbitals"/)')
+          write(io_lun,fmt='(6x,"Primitive atom functions are the pseudo-atomic orbitals"/)')
        endif
     end if
     !

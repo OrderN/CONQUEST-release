@@ -971,7 +971,7 @@ contains
                                            iprint_ops,                 &
                                            nspin, id_glob,             &
                                            species_glob,               &
-                                           flag_analytic_blip_int
+                                           flag_analytic_blip_int, min_layer
     use GenComms,                    only: cq_abort, myid, inode, ionode
     use GenBlas,                     only: axpy
     use build_PAO_matrices,          only: assemble_2
@@ -1057,16 +1057,16 @@ contains
        !call dump_matrix("NSC",matAP,inode)
     else if (flag_basis_set == PAOs) then
        ! Use assemble to generate matrix elements
-       if (inode == ionode .and. iprint_ops > 2) &
+       if (inode == ionode .and. iprint_ops + min_layer > 3) &
             write (io_lun, *) 'Calling assemble'
        call assemble_2(APrange, matAP, 3)
-       if (inode == ionode .AND. iprint_ops > 2) &
+       if (inode == ionode .AND. iprint_ops + min_layer > 3) &
             write(io_lun,*) 'Called assemble'
     else
        call cq_abort('get_HNL_matrix: basis set incorrectly specified ', &
                      flag_basis_set)
     end if
-    if (inode == ionode .and. iprint_ops > 2) write(io_lun,*) 'Made SP'
+    if (inode == ionode .and. iprint_ops + min_layer > 3) write(io_lun,*) 'Made SP'
 
     call matrix_sum(zero, matAPtmp, one ,matAP)
     if (mult(AP_PA_aHa)%mult_type == 2) then ! type 2 means no transpose necessary
@@ -1081,21 +1081,21 @@ contains
        end select
        call matrix_product(matAPtmp, matAP, matNLatomf, mult(AP_PA_aHa))
     else ! Transpose SP->PS, then mult
-       if (inode == ionode .and. iprint_ops > 2) &
+       if (inode == ionode .and. iprint_ops + min_layer > 3) &
             write (io_lun, *) 'Type 1 ', matAP, matPA
        call matrix_transpose(matAP, matPA)
-       if (inode == ionode .and. iprint_ops > 2) &
+       if (inode == ionode .and. iprint_ops + min_layer > 3) &
             write (io_lun, *) 'Done transpose'
        select case (pseudo_type)
        case (OLDPS)
           call matrix_scale_diag(matAP, species, n_projectors, l_core,&
                                  recip_scale, APrange)
        case (SIESTA)
-          if (inode == ionode .and. iprint_ops > 2) &
+          if (inode == ionode .and. iprint_ops + min_layer > 3) &
                write (io_lun, *) 'Doing scale'
           call matrix_scale_diag_tm(matAP, APrange)
        case(ABINIT)
-          if (inode == ionode .and. iprint_ops > 2) &
+          if (inode == ionode .and. iprint_ops + min_layer > 3) &
                write (io_lun, *) 'Doing scale'
           call matrix_scale_diag_tm(matAP, APrange)
        end select

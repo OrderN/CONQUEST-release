@@ -127,16 +127,11 @@ program Conquest
   ! identify what node we are on
   call init_comms(myid, numprocs)
 
-  ! Initialise reads in data and finds an initial, self-consistent
-  ! Hamiltonian
+  ! initialise reads in data and builds an initial Hamiltonian
   call initialise(vary_mu, fixed_potential, mu, total_energy)
-  if (inode == ionode .and. iprint_gen > 0) &
-       write (io_lun, '(4x,"Finished initialise")')
 
-  ! control does (at the moment) blip minimisation and simple MD
+  ! control manages which run is called (static, relaxation, MD)
   call control_run(fixed_potential, vary_mu, total_energy)
-  if (inode == ionode .and. iprint_gen > 0) &
-       write (io_lun, '(4x,"Finished control")')
 
   call compile_biblio
   if(flag_warnings .AND. inode==ionode) &

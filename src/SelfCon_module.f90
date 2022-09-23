@@ -187,6 +187,7 @@ contains
     use density_module,  only: density
     use maxima_module,   only: maxngrid
     use timer_module
+    use io_module,       only: return_prefix
 
     implicit none
 
@@ -208,7 +209,10 @@ contains
     type(cq_timer) :: tmr_l_tmp1
     type(cq_timer) :: backtrace_timer
     integer        :: backtrace_level
+    character(len=12) :: subname = "new_SC_potl: "
+    character(len=120) :: prefix
 
+    prefix = return_prefix(subname, min_layer)
 !****lat<$
     if (       present(level) ) backtrace_level = level+1
     if ( .not. present(level) ) backtrace_level = -10
@@ -237,10 +241,9 @@ contains
        min_layer = min_layer + 1
        return
     end if
-    if (inode == ionode .and. iprint_SC + min_layer > 0) &
-         write (io_lun, &
-                fmt='(4x,"Starting self-consistency.  Tolerance: ",e12.5,/)') &
-               self_tol
+    if (inode == ionode .and. iprint_SC + min_layer > 1) &
+         write (io_lun, fmt='(4x,a,e12.5,/)') &
+         trim(prefix)//" Starting.  Tolerance: ",self_tol
     if (record) then
        if (inode == ionode .and. iprint_SC + min_layer > 1) &
             write (io_lun, *) 'Original tol: ', L_tol
@@ -284,7 +287,7 @@ contains
        if (.not. done) then ! Late stage strategy
           call start_timer(tmr_l_tmp1, WITH_LEVEL)
           reset_L = .true. !.false.
-          if (inode == ionode .and. iprint_SC + min_layer > 0) &
+          if (inode == ionode .and. iprint_SC + min_layer > 1) &
                write (io_lun, *) '********** LateSC **********'
 
           call lateSC(record, done, ndone, SC_tol, reset_L,     &

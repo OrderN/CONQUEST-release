@@ -265,6 +265,8 @@ contains
   !!    Added choice of line minimiser: standard safemin2 or backtracking
   !!   2021/10/15 17:36 dave
   !!    total_energy now returns final energy
+  !!   2022/09/22 16:49 dave
+  !!    Output tidying and implementation of FR for backtrack (PR gives gamma < 0)
   !!  SOURCE
   !!
   subroutine cg_run(fixed_potential, vary_mu, total_energy)
@@ -279,12 +281,12 @@ contains
                              IPRINT_TIME_THRES1, min_layer
     use group_module,  only: parts
     use minimise,      only: get_E_and_F
-    use move_atoms,    only: adapt_backtrack_linemin, safemin2, cg_line_min, safe, backtrack
+    use move_atoms,    only: backtrack_linemin, safemin2, cg_line_min, safe, backtrack
     use GenComms,      only: gsum, myid, inode, ionode
     use GenBlas,       only: dot
     use force_module,  only: tot_force
     use io_module,     only: write_atomic_positions, pdb_template, &
-                             check_stop, write_xsf, print_atomic_positions
+                             check_stop, write_xsf, print_atomic_positions, return_prefix
     use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use timer_module
     use store_matrix,  ONLY: dump_InfoMatGlobal, dump_pos_and_matrices
@@ -306,6 +308,10 @@ contains
     real(double), allocatable, dimension(:)   :: x_new_pos, y_new_pos,&
          z_new_pos
 
+    character(len=12) :: subname = "cg_run: "
+    character(len=120) :: prefix
+
+    prefix = return_prefix(subname, min_layer)
     allocate(cg(3,ni_in_cell), STAT=stat)
     if (stat /= 0) &
          call cq_abort("Error allocating cg in control: ",&
@@ -317,22 +323,27 @@ contains
          call cq_abort("Error allocating _new_pos in control: ", &
                        ni_in_cell,stat)
     call reg_alloc_mem(area_general, 6 * ni_in_cell, type_dbl)
-    if (inode == ionode .and. cg_line_min==safe) then
-         write (io_lun, fmt='(/4x,"Starting CG atomic relaxation with safemin line minimisation"/)')
-    else if (inode == ionode .and. cg_line_min==backtrack) then
-         write (io_lun, fmt='(/4x,"Starting CG atomic relaxation with backtracking line minimisation"/)')
+    if (inode == ionode) then
+       if(cg_line_min==safe) then
+          write (io_lun, fmt='(/4x,a)') &
+               trim(prefix)//" starting relaxation with safemin line minimisation"
+       else if (cg_line_min==backtrack) then
+          write (io_lun, fmt='(/4x,a)') &
+               trim(prefix)//" starting relaxation with backtracking line minimisation"
+       end if
+       if(iprint_gen + min_layer>0) write(io_lun, fmt='(4x,a,f8.4,a2,"/",a2,a,i4)') &
+            trim(prefix)//" Tolerance: ",MDcgtol,en_units(energy_units), d_units(dist_units),&
+            " Maximum steps: ",MDn_steps
     end if
     cg = zero
     ! Do we need to add MD.MaxCGDispl ?
     done = .false.
     length = 3 * ni_in_cell
-    if (myid == 0 .and. iprint_gen > 0) &
-         write (io_lun, 2) MDn_steps, MDcgtol, en_units(energy_units), d_units(dist_units)
     energy0 = total_energy
     energy1 = zero
     dE = zero
     ! Find energy and forces
-    min_layer = min_layer - 1
+    !min_layer = min_layer - 1
     call get_E_and_F(fixed_potential, vary_mu, energy0, .true., .true.)
     call dump_pos_and_matrices
     call get_maxf(max)
@@ -340,7 +351,7 @@ contains
       write(io_lun,'(/4x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," E: ",e16.8," dE: ",f12.8/)') & 
            0, max, energy0, dE
     end if
-    min_layer = min_layer + 1
+    !min_layer = min_layer + 1
 
     iter = 1
     ggold = zero
@@ -366,16 +377,24 @@ contains
        else
           gamma = (gg-gg1)/ggold ! PR - change to gg/ggold for FR
        end if
-       if(gamma<zero) gamma = zero
-       if (inode == ionode .and. iprint_MD > 2) &
-            write (io_lun,*) ' CHECK :: Force Residual = ', &
-                             for_conv * sqrt(gg)/ni_in_cell
-       if (inode == ionode .and. iprint_MD > 2) &
-            write (io_lun,*) ' CHECK :: gamma = ', gamma
+       if(gamma<zero) then
+          if(inode==ionode .and. iprint_MD + min_layer > 2) &
+               write(io_lun,fmt='(4x,a)') trim(prefix)//" gamma < 0.  Setting to gg/ggold."
+          gamma = gg/ggold ! Default to FR if PR gives negative
+       end if
+       if (inode == ionode .and. iprint_MD + min_layer > 2) then
+          ! Redundant: reproduces output below
+          !write (io_lun,fmt='(4x,a,f12.8,a2,"/",a2)') &
+          !     trim(prefix)//' Force Residual = ', &
+          !     for_conv * sqrt(gg/ni_in_cell),en_units(energy_units), d_units(dist_units)
+          write (io_lun,fmt='(4x,a,f12.8)') &
+               trim(prefix)//' gamma = ', gamma
+       end if
        if (CGreset) then
           if (gamma > one) then
-             if (inode == ionode .and. iprint_MD>0) &
-                  write(io_lun,fmt='(4x,"In cg_run, gamma>1, so resetting direction")')
+             if (inode == ionode .and. iprint_MD + min_layer > 1) &
+                  write(io_lun,fmt='(4x,a)') &
+                  trim(prefix)//" gamma>1, so resetting direction"
              gamma = zero
           end if
        end if
@@ -399,8 +418,9 @@ contains
        !test_dot = dot(3*ni_in_cell, cg, 1, tot_force, 1)
        !call gsum(test_dot)
        if(test_dot<zero) then
-          if(inode==ionode.AND.iprint_MD>0) &
-               write(io_lun,fmt='(4x,"In cg_run, search dot gradient < zero. Reset direction ",e14.6)') test_dot
+          if(inode==ionode.AND.iprint_MD + min_layer > 0) &
+               write(io_lun,fmt='(4x,a,e14.6)') &
+               trim(prefix)//" search dot gradient < zero. Reset direction ",test_dot
           gamma = zero
           do j = 1, ni_in_cell
              jj = id_glob(j)
@@ -411,12 +431,12 @@ contains
        end if
        old_force = tot_force
        ! Minimise in this direction
-       !min_layer = min_layer - 1
+       min_layer = min_layer - 1
        if(cg_line_min==safe) then
           call safemin2(x_new_pos, y_new_pos, z_new_pos, cg, energy0,&
                energy1, fixed_potential, vary_mu, energy1)
        else if(cg_line_min==backtrack) then
-          call adapt_backtrack_linemin(cg, energy0, energy1, fixed_potential, vary_mu, energy1)
+          call backtrack_linemin(cg, energy0, energy1, fixed_potential, vary_mu, energy1)
        end if
        ! Output positions
        if (myid == 0 .and. iprint_gen > 1) then
@@ -427,46 +447,44 @@ contains
        ! Analyse forces
        g0 = dot(length, tot_force, 1, tot_force, 1)
        call get_maxf(max)
-       !min_layer = min_layer + 1
+       min_layer = min_layer + 1
        ! Output and energy changes
        dE = energy1 - energy0
 
        if (inode==ionode) then
-         write(io_lun,'(/4x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," E: ",e16.8," dE: ",f12.8/)') & 
-              iter, max, energy1, en_conv*dE
-         if (iprint_MD > 1) then
-           write(io_lun,'(4x,"Force Residual:     ",f20.10," ",a2,"/",a2)') &
-             for_conv*sqrt(g0/ni_in_cell), en_units(energy_units), & 
-             d_units(dist_units)
-           write(io_lun,'(4x,"Maximum force:      ",f20.10)') max
-           write(io_lun,'(4x,"Force tolerance:    ",f20.10)') MDcgtol
-           write(io_lun,'(4x,"Energy change:      ",f20.10," ",a2)') &
-             en_conv*dE, en_units(energy_units)
-           ! write(io_lun,'(4x,"Energy tolerance:   ",f20.10)') &
-           !   enthalpy_tolerance
-           ! Why is there no energy threshold? - zamaan
-         end if
+          write(io_lun,'(/4x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," E: ",e16.8," dE: ",f12.8/)') & 
+               iter, max, energy1, en_conv*dE
+          if (iprint_MD + min_layer > 1) then
+             write(io_lun,'(4x,a,f20.10," ",a2,"/",a2)') &
+                  trim(prefix)//" Force Residual:     ", &
+                  for_conv*sqrt(g0/ni_in_cell), en_units(energy_units), & 
+                  d_units(dist_units)
+             write(io_lun,'(6x,"Maximum force:      ",f20.10)') max
+             write(io_lun,'(6x,"Force tolerance:    ",f20.10)') MDcgtol
+             write(io_lun,'(6x,"Energy change:      ",f20.10," ",a2)') &
+                  en_conv*dE, en_units(energy_units)
+          end if
        end if
 
-       iter = iter + 1
        energy0 = energy1
        total_energy = energy0
        !energy1 = abs(dE)
        if (iter > MDn_steps) then
           done = .true.
           if (myid == 0) &
-               write (io_lun, fmt='(4x,"Exceeded number of MD steps: ",i6)') &
-                     iter
+               write (io_lun, fmt='(4x,a,i6)') &
+                     trim(prefix)//"Exceeded number of MD steps: ",iter
        end if
        if (abs(max) < MDcgtol) then
           done = .true.
           if (myid == 0) then
              write(io_lun,'(/4x,a,i4,a)') "GeomOpt converged in ", iter, " iterations"
-             write (io_lun, fmt='(4x,"Maximum force below threshold: ",f12.5)') max
+             write(io_lun, fmt='(4x,a,f12.5)') trim(prefix)//" Maximum force below threshold: ",max
           end if
        end if
+       iter = iter + 1
 
-       call dump_pos_and_matrices
+       !call dump_pos_and_matrices
        
        call stop_print_timer(tmr_l_iter, "a CG iteration", IPRINT_TIME_THRES1)
        if (.not. done) call check_stop(done, iter)
@@ -605,7 +623,7 @@ contains
     use GenComms,       only: gsum, my_barrier, inode, ionode, gcopy
     use GenBlas,        only: dot
     use force_module,   only: tot_force, stress
-    use io_module,      only: read_fire, check_stop, print_atomic_positions
+    use io_module,      only: read_fire, check_stop, print_atomic_positions, return_prefix
     use memory_module,  only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use move_atoms,     only: fac_Kelvin2Hartree, update_pos_and_matrices, &
                               updateL, updateLorK, updateSFcoeff
@@ -664,6 +682,10 @@ contains
     type(type_thermostat), target :: thermo
     type(type_barostat), target   :: baro
 
+    character(len=12) :: subname = "md_run: "
+    character(len=120) :: prefix
+
+    prefix = return_prefix(subname, min_layer)
     n_stop_qMD = 0
     final_call = 1
     energy0 = zero
@@ -693,9 +715,8 @@ contains
     !2020/Jul/30 TM
      if(flag_FixCOM) md_ndof = md_ndof-3
 
-    if (inode==ionode .and. iprint_gen > 0) &
-      write(io_lun,'(4x,"Welcome to md_run. Doing ",i6," steps")') &
-            MDn_steps
+    if (inode==ionode) &
+      write(io_lun,'(4x,a,i6," steps")') trim(prefix)//" starting MD run with ",MDn_steps
 
     ! Thermostat/barostat initialisation
     call init_md(baro, thermo, mdl, md_ndof, nequil)
@@ -984,7 +1005,7 @@ contains
                               flag_MDdebug, iprint_MD, flag_atomic_stress, &
                               atomic_stress, area_moveatoms, &
                               id_glob, atom_vels, &
-                              flag_full_stress, flag_heat_flux
+                              flag_full_stress, flag_heat_flux, min_layer
     use move_atoms,     only: init_velocity
     use md_control,     only: type_thermostat, type_barostat, md_tau_T, &
                               md_tau_P, md_n_nhc, md_n_ys, md_n_mts, &
@@ -993,6 +1014,7 @@ contains
                               md_ndof_ions, md_tau_P_equil, md_tau_T_equil, &
                               write_md_checkpoint, read_md_checkpoint, &
                               flag_extended_system, heat_flux
+    use io_module,      only: return_prefix
 
     ! passed variables
     type(type_barostat), intent(inout)    :: baro
@@ -1006,10 +1028,12 @@ contains
     character(50)  :: file_velocity='velocity.dat'
     integer       :: stat, i
 
-    if (inode==ionode .and. iprint_MD > 1) then
-       write(io_lun,'(2x,a)') "Welcome to init_md"
-       write(io_lun,'(4x,"MD ensemble is ",a)') md_ensemble
-    end if
+    character(len=12) :: subname = "init_md: "
+    character(len=120) :: prefix
+
+    prefix = return_prefix(subname, min_layer)
+    if (inode==ionode .and. iprint_MD + min_layer > 1) &
+       write(io_lun,'(4x,a)') trim(prefix)//" MD ensemble is"//md_ensemble
 
     if (.not. allocated(ion_velocity)) then
        allocate(ion_velocity(3,ni_in_cell), STAT=stat)
@@ -1078,9 +1102,9 @@ contains
             md_tau_P, mdl%ion_kinetic_energy) !to get the pressure
     case('nvt')
        if (nequil > 0) then ! Equilibrate ?
-          if (inode==ionode) then
-             write (io_lun, '(4x,"Equilibrating using SVR &
-                  &thermostat for ",i8," steps")') nequil
+          if (inode==ionode .and. iprint_MD + min_layer > 1) then
+             write (io_lun, '(4x,a,i8," steps")') &
+                  trim(prefix)//"Equilibrating using SVR thermostat for ",nequil
           end if
           call thermo%init_thermo('svr', 'none', MDtimestep, md_ndof, &
                md_tau_T, mdl%ion_kinetic_energy)
@@ -1092,9 +1116,9 @@ contains
             md_tau_P, mdl%ion_kinetic_energy) !to get the pressure
     case('nph')
        if (nequil > 0) then ! Equilibrate ?
-          if (inode == ionode) then
-             write (io_lun, '(4x,"Equilibrating using PR &
-                  &barostat for ",i8," steps")') nequil
+          if (inode==ionode .and. iprint_MD + min_layer > 1) then
+             write (io_lun, '(4x,a,i8," steps")') &
+                  trim(prefix)//"Equilibrating using PR barostat for ",nequil
           end if
           call thermo%init_thermo('none', 'pr', MDtimestep, &
                md_ndof, md_tau_T_equil, &
@@ -1110,9 +1134,9 @@ contains
        end if
     case('npt')
        if (nequil > 0) then ! Equilibrate ?
-          if (inode == ionode) then
-             write (io_lun, '(4x,"Equilibrating using SVR &
-                  &baro/thermostat for ",i8," steps")') nequil
+          if (inode==ionode .and. iprint_MD + min_layer > 1) then
+             write (io_lun, '(4x,a,i8," steps")') &
+                  trim(prefix)//"Equilibrating using SVR baro/thermostat for ",nequil
           end if
           call thermo%init_thermo('svr', 'pr', MDtimestep, &
                md_ndof, md_tau_T_equil, &
@@ -2217,7 +2241,7 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
     use GenBlas,        only: dot, syev
     use force_module,   only: tot_force
     use io_module,      only: write_atomic_positions, pdb_template, &
-                              check_stop, write_xsf, print_atomic_positions
+                              check_stop, write_xsf, print_atomic_positions, return_prefix
     use memory_module,  only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use store_matrix,   only: dump_pos_and_matrices
     use dimens,        only: r_super_x, r_super_y, r_super_z
@@ -2243,6 +2267,10 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
                     nfile, symm, iter_loc, iter_high, this_iter
     logical      :: done
 
+    character(len=12) :: subname = "sqnm: "
+    character(len=120) :: prefix
+
+    prefix = return_prefix(subname, min_layer)
     step = MDtimestep
     allocate(posnStore(3,ni_in_cell,LBFGS_history), &
              forceStore(3,ni_in_cell,LBFGS_history), STAT=stat)
@@ -2257,39 +2285,41 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
          call cq_abort("Error allocating _new_pos in control: ", &
                        ni_in_cell, stat)
     call reg_alloc_mem(area_general, 6 * ni_in_cell, type_dbl)
-    if (myid == 0) &
-         write (io_lun, fmt='(/4x,"Starting SQNM atomic relaxation"/)')
+    if (myid == 0) then
+       write (io_lun, fmt='(/4x,a)') trim(prefix)//" starting SQNM atomic relaxation"
+       if(iprint_MD + min_layer>0) write(io_lun, fmt='(4x,a,f8.4,a2,"/",a2,a,i4)') &
+            trim(prefix)//" Tolerance: ",MDcgtol,en_units(energy_units), d_units(dist_units),&
+            " Maximum steps: ",MDn_steps
+    end if
     posnStore = zero
     forceStore = zero
     ! Do we need to add MD.MaxCGDispl ?
     done = .false.
     length = 3 * ni_in_cell
     alpha = one
-    if (myid == 0 .and. iprint_MD > 0) &
-         write (io_lun, fmt='(4x,"SQNM structural relaxation. Maximum of ",i4, " steps with tolerance of ",&
-              &f8.4,a2,"/",a2)') MDn_steps, MDcgtol, en_units(energy_units), d_units(dist_units)
     energy0 = total_energy
     energy1 = zero
     dE = zero
     ! Find energy and forces
-    min_layer = min_layer - 1
+    !min_layer = min_layer - 1
     call get_E_and_F(fixed_potential, vary_mu, energy0, .true., &
                      .false.)
     call dump_pos_and_matrices
     call get_maxf(max)
     iter = 0
     if (inode==ionode) then
-       write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," E: ",e18.10)') & 
-            iter, for_conv*max, en_conv*energy0
+       write(io_lun,'(/4x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," E: ",e16.8," dE: ",f12.8/)') & 
+            iter, for_conv*max, en_conv*energy0, en_conv*dE
     end if
-    min_layer = min_layer + 1
+    !min_layer = min_layer + 1
     iter_loc = 0
     ggold = zero
     energy1 = energy0
     cg_new = -tot_force ! The L-BFGS is in terms of grad E
-    if (inode==ionode .and. iprint_MD > 1) then
-       g0 = dot(length,cg_new,1,cg_new,1)
-       write(io_lun,'(4x,"Search direction has magnitude ",f20.10)') sqrt(g0/ni_in_cell)
+    g0 = dot(length,cg_new,1,cg_new,1)
+    if (inode==ionode .and. iprint_MD + min_layer > 2) then
+       write(io_lun,'(4x,a,f20.10)') &
+            trim(prefix)//" search direction has magnitude ", sqrt(g0/ni_in_cell)
     end if
     do while (.not. done)
        ! Book-keeping
@@ -2309,12 +2339,12 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
           cg(:,i) = -cg_new(:,jj) ! Search downhill
        end do
        ! Set up limits for sums
-       if (myid == 0 .and. iprint_MD > 2) &
-            write(io_lun,fmt='(2x,"SQNM iteration ",i4)') iter
+       min_layer = min_layer - 1
        ! Line search
        call single_step(cg, energy0, energy1, fixed_potential, vary_mu)
        if(energy1>energy0) then
-          if(inode==ionode.AND.iprint_MD>1) write(io_lun,fmt='(4x,"Energy rise: resetting history")')
+          if(inode==ionode.AND.iprint_MD>2) &
+               write(io_lun,fmt='(4x,a)') trim(prefix)//" energy rise: resetting history"
           cg_new = -tot_force
           do i=1,ni_in_cell
              jj = id_glob(i)
@@ -2347,7 +2377,8 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
           ! New search direction
        end do
        n_store = min(iter_loc,LBFGS_history) ! Number of stored states
-       if(inode==ionode.AND.iprint_MD>2) write(io_lun,fmt='(4x,"Number of stored histories ",i3)') n_store
+       if(inode==ionode.AND.iprint_MD + min_layer > 2) &
+            write(io_lun,fmt='(4x,a,i3)') trim(prefix)//" number of stored histories: ",n_store
        allocate(mod_dr(n_store),Sij(n_store,n_store),lambda(n_store),&
             omega(n_store,n_store))
        mod_dr = zero
@@ -2365,6 +2396,7 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
        ! Add call to write_atomic_positions and write_xsf (2020/01/17: smujahed)
        call write_atomic_positions("UpdatedAtoms.dat", trim(pdb_template))
        if (flag_write_xsf) call write_xsf('trajectory.xsf', iter)
+       min_layer = min_layer + 1
        ! Build significant subspace
        Sij = zero
        omega = zero
@@ -2379,13 +2411,17 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
        if(n_store>1) then
           call syev('U',n_store,omega,n_store,lambda,info)
           if(info<0) call cq_abort("Error in SQNM calling dsyev: ",info)
-          if(info>0.and.inode==ionode) write(io_lun,fmt='(4x,"Possible error in SQNM; dsyev returned ",i4)') info
+          if(info>0.and.inode==ionode) &
+               write(io_lun,fmt='(4x,a,i4)') trim(prefix)//" issue in SQNM; dsyev returned ",info
        else
           lambda = one
           omega = one
        end if
-       if(inode==ionode.AND.iprint_MD>2) then
-          write(io_lun,fmt='(4x,"Eigenvalues of Sij: ",(f7.4))') lambda
+       if(inode==ionode.AND.iprint_MD + min_layer > 3) then
+          write(io_lun,fmt='(4x,a)') trim(prefix)//" Eigenvalues of Sij: "
+          do i = 1,n_store
+             write(io_lun,fmt='(6x,f7.4)') lambda(i)
+          end do
        end if
        lambda_max = maxval(lambda)
        n_dim = n_store
@@ -2394,7 +2430,8 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
              n_dim = n_dim - 1
           end if
        end do
-       if(inode==ionode.AND.iprint_MD>2) write(io_lun,fmt='(4x,"Number of eigenstates kept: ",i3)') n_dim
+       if(inode==ionode.AND.iprint_MD + min_layer > 3) &
+            write(io_lun,fmt='(4x,a,i3)') trim(prefix)//"Number of eigenstates kept: ",n_dim
        ! Build dr_tilde and dg_tilde
        allocate(dr_tilde(3,ni_in_cell,n_dim), dg_tilde(3,ni_in_cell,n_dim))
        dr_tilde = zero
@@ -2425,12 +2462,18 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
        if(n_dim>1) then
           call syev('U',n_dim,vi,n_dim,kappa,info)
           if(info<0) call cq_abort("Error in SQNM calling dsyev: ",info)
-          if(info>0.and.inode==ionode) write(io_lun,fmt='(4x,"Possible error in SQNM; dsyev returned ",i4)') info
+          if(info>0.and.inode==ionode) &
+               write(io_lun,fmt='(4x,a,i4)') trim(prefix)//" issue in SQNM; dsyev returned ",info
        else
           kappa = one !Hij(1,1)
           vi = one
        end if
-       if(inode==ionode.AND.iprint_MD>3) write(io_lun,fmt='(4x,"Kappa: ",(f7.4))') kappa
+       if(inode==ionode.AND.iprint_MD + min_layer > 3) then
+          write(io_lun,fmt='(4x,a)') trim(prefix)//"Kappa: "
+          do i=1,n_dim
+             write(io_lun,fmt='(6x,f7.4)') kappa(i)
+          end do
+       end if
        ! Build v tilde
        allocate(vi_tilde(3,ni_in_cell,n_dim),ri_vec(3,ni_in_cell))
        vi_tilde = zero
@@ -2444,7 +2487,12 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
           !kappa_prime(i) = sqrt(0.0025_double + kappa(i)*kappa(i))
           kappa_prime(i) = sqrt(dot(length,ri_vec,1,ri_vec,1) + kappa(i)*kappa(i))
        end do
-       if(inode==ionode.AND.iprint_MD>3) write(io_lun,fmt='(4x,"Kappa prime: ",(f7.4))') kappa_prime
+       if(inode==ionode.AND.iprint_MD>3) then
+          write(io_lun,fmt='(4x,a)') trim(prefix)//"Kappa prime: "
+          do i=1,n_dim
+             write(io_lun,fmt='(6x,f7.4)') kappa_prime(i)
+          end do
+       end if
        ! Build preconditioned search
        cg_new = -alpha*tot_force
        do i=1,n_dim
@@ -2464,15 +2512,16 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
        ! Analyse forces
        g0 = dot(length, tot_force, 1, tot_force, 1)
        f_dot_sd = dot(length,cg_new,1,-tot_force,1)/sqrt(g0*gg)
-       if(inode==ionode.AND.iprint_MD>2) &
-            write(io_lun,fmt='(4x,"Dot product of search direction and force: ",f12.7)') f_dot_sd
+       if(inode==ionode.AND.iprint_MD + min_layer > 2) &
+            write(io_lun,fmt='(4x,a,f12.7)') trim(prefix)//" force dot search direction: ",f_dot_sd
        ! Now adjust alpha
        if(f_dot_sd>0.2_double) then
           alpha = alpha*1.1_double
        else
           alpha = alpha*0.85_double
        end if
-       if(inode==ionode.AND.iprint_MD>2) write(io_lun,fmt='(4x,"Alpha set to: ",f9.5)') alpha
+       if(inode==ionode.AND.iprint_MD + min_layer > 2) &
+            write(io_lun,fmt='(4x,a,f9.5)') trim(prefix)//" alpha set to: ",alpha
        max = zero
        do i = 1, ni_in_cell
           do k = 1, 3
@@ -2482,31 +2531,34 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
        dE = energy0 - energy1
        energy0 = energy1
        if (inode==ionode) then
-          write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," E: ",e18.10," dE: ",f12.8)') & 
+          write(io_lun,'(/4x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," E: ",e16.8," dE: ",f12.8/)') & 
                iter, for_conv*max, en_conv*energy1, en_conv*dE
-          if (iprint_MD > 1) then
+          if (iprint_MD + min_layer > 1) then
              g0 = dot(length, tot_force, 1, tot_force, 1)
-             write(io_lun,'(4x,"Force Residual:     ",f20.10," ",a2,"/",a2)') &
+             write(io_lun,'(4x,a,f20.10," ",a2,"/",a2)') &
+                  trim(prefix)//" Force Residual:     ", &
                   for_conv*sqrt(g0/ni_in_cell), en_units(energy_units), & 
                   d_units(dist_units)
-             write(io_lun,'(4x,"Maximum force:      ",f20.10)') for_conv*max
-             write(io_lun,'(4x,"Force tolerance:    ",f20.10)') for_conv*MDcgtol
-             write(io_lun,'(4x,"Energy change:      ",f20.10," ",a2)') &
+             write(io_lun,'(6x,"Maximum force:      ",f20.10)') max
+             write(io_lun,'(6x,"Force tolerance:    ",f20.10)') MDcgtol
+             write(io_lun,'(6x,"Energy change:      ",f20.10," ",a2)') &
                   en_conv*dE, en_units(energy_units)
              g0 = dot(length,cg_new,1,cg_new,1)
-             write(io_lun,'(4x,"Search direction has magnitude ",f20.10)') sqrt(g0/ni_in_cell)
+             write(io_lun,'(4x,a,f20.10)') &
+                  trim(prefix)//" search direction has magnitude ", sqrt(g0/ni_in_cell)
           end if
        end if
        if (iter > MDn_steps) then
           done = .true.
           if (myid == 0) &
-               write (io_lun, fmt='(4x,"Exceeded number of MD steps: ",i4)') iter
+               write (io_lun, fmt='(4x,a,i6)') &
+                     trim(prefix)//"Exceeded number of MD steps: ",iter
        end if
        if (abs(max) < MDcgtol) then
           done = .true.
           if (inode==ionode) then
-             write(io_lun, fmt='(4x,"Maximum force below threshold: ",f12.5)') max
-             write(io_lun,'(2x,a,i4,a)') "GeomOpt converged in ", iter, " iterations"
+             write(io_lun,'(/4x,a,i4,a)') "GeomOpt converged in ", iter, " iterations"
+             write(io_lun, fmt='(4x,a,f12.5)') trim(prefix)//" Maximum force below threshold: ",max
           end if
        end if
        deallocate(dr_tilde,dg_tilde,Hij,kappa,vi,kappa_prime,vi_tilde,ri_vec)

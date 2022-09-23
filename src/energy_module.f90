@@ -566,13 +566,13 @@ contains
     if (inode == ionode) then
        electrons_tot = electrons(1) + electrons(nspin)
        !
-       if(iprint_gen + min_layer>=-1) then
+       if(iprint_gen + min_layer>=1) then
           if (nspin == 1) then
              write (io_lun,fmt='(4x,"| Number of electrons      = ",f16.6)') electrons_tot
           else if(nspin == 2) then
              write (io_lun,fmt='(4x,"| Number of electrons (u/d)= ",2f16.6)') electrons(1),electrons(nspin)
           end if
-       else if (iprint_gen + min_layer ==1) then
+       else if (iprint_gen + min_layer ==2) then
           write (io_lun, 6) en_conv *    band_energy,  en_units(energy_units)
           if(flag_neutral_atom) then
              write (io_lun,68) en_conv * screened_ion_interaction_energy,  en_units(energy_units)
@@ -586,7 +586,7 @@ contains
              write (io_lun,11) en_conv* delta_E_hartree, en_units(energy_units)
           end if
           write (io_lun,12) en_conv* delta_E_xc,      en_units(energy_units)
-       else if (iprint_gen + min_layer >= 2) then
+       else if (iprint_gen + min_layer > 2) then
           write (io_lun, *) 
           !write (io_lun, *) 
           !write (io_lun, 1) 
@@ -650,13 +650,13 @@ contains
                 if (entropy < zero) &
                      call cq_warn(sub_name, 'Calculated entropy is less than zero; something is wrong ', entropy)
                 !
-                if (iprint_gen + min_layer >= 0) &
+                if (iprint_gen + min_layer >= 1) &
                      write (io_lun,14) en_conv*(total_energy1-half*entropy), &
                      en_units(energy_units)
                 !
                 !
              case (1) ! Methfessel-Paxton smearing
-                if (iprint_gen + min_layer >= 0)                             &
+                if (iprint_gen + min_layer >= 1)                             &
                      write (io_lun,16) en_conv * (total_energy1 - &
                      (real(MPOrder+1,double) /                   &
                      real(MPOrder+2,double))*entropy),          &
@@ -666,7 +666,7 @@ contains
              end select
              !
           else
-             if (iprint_gen + min_layer >= 0) &
+             if (iprint_gen + min_layer >= 1) &
                   write (io_lun,14) en_conv*(total_energy1-half*entropy), &
                   en_units(energy_units)
           end if
@@ -717,7 +717,7 @@ contains
                        hartree_energy_total_rho
 
     if (inode == ionode) then
-       if (iprint_gen + min_layer >= -1) then
+       if (iprint_gen + min_layer >= 0) then
           write(io_lun,10) en_conv*total_energy1, en_units(energy_units)
           if(iprint_gen + min_layer>0) then
              write(io_lun,13) en_conv*total_energy2, en_units(energy_units)
@@ -739,9 +739,9 @@ contains
 
     if (inode == ionode) then
        electrons_tot = electrons(1) + electrons(nspin)
-       if(iprint_gen + min_layer==1) then
+       if(iprint_gen + min_layer>1) then
           write (io_lun,24) electrons_tot
-       elseif (iprint_gen + min_layer >= 2) then
+       elseif (iprint_gen + min_layer > 2) then
           write (io_lun,23) 
           write (io_lun,24) electrons_tot
           write (io_lun,25) electrons_tot2

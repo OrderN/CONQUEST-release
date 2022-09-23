@@ -248,7 +248,7 @@ contains
 !!
   subroutine get_S_matrix_PAO(inode, ionode)
 
-    use global_module,               only: iprint_ops
+    use global_module,               only: iprint_ops, min_layer
     use matrix_data,                 only: aSa_range
     use mult_module,                 only: matSatomf
     use build_PAO_matrices,          only: assemble_2
@@ -263,13 +263,13 @@ contains
 
 
     ! Get S matrix with assemble
-    if (inode == ionode .and. iprint_ops > 2) &
+    if (inode == ionode .and. iprint_ops + min_layer > 3) &
          write (io_lun, *) 'Calling assemble_2 for Satomf: ', matSatomf
     call assemble_2(aSa_range, matSatomf, 1)
     !call dump_matrix("NS_atomf",matSatomf,inode)
 
     ! calculate PAO values on grids
-    if (inode == ionode .and. iprint_ops > 2) &
+    if (inode == ionode .and. iprint_ops + min_layer > 3) &
          write (io_lun, *) 'single PAO to grid ', atomfns
     call single_PAO_to_grid(atomfns)
 
@@ -317,7 +317,7 @@ contains
     use global_module,               only: iprint_ops,            &
                                            flag_onsite_blip_ana,  &
                                            id_glob, species_glob, &
-                                           flag_analytic_blip_int, nspin
+                                           flag_analytic_blip_int, nspin, min_layer
     use matrix_data,                 only: Srange, halo, blip_trans
     use mult_module,                 only: matS, ltrans, matrix_scale, &
                                            matK, matM12, return_matrix_block_pos,&
@@ -359,11 +359,11 @@ contains
 
     spin_SF = 1 ! spin-dependent SF is not available with blips at present
     ! Project support functions onto grid
-    if (inode == ionode .and. iprint_ops > 2) &
+    if (inode == ionode .and. iprint_ops + min_layer > 3) &
          write (io_lun, *) 'Doing blip-to-support ', atomfns
     call blip_to_support_new(inode-1, atomfns)
 
-    if (inode == ionode .and. iprint_ops > 2) &
+    if (inode == ionode .and. iprint_ops + min_layer > 3) &
          write (io_lun, *) 'Doing integration ', atomfns
     ! Integrate
     if(flag_analytic_blip_int) then

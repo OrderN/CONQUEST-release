@@ -260,7 +260,7 @@ contains
          where=area,level=backtrace_level)
 !****lat>$
     prefix = return_prefix(subname, min_layer)
-    if (inode == ionode .and. iprint_SC >= 2) then
+    if (inode == ionode .and. iprint_SC >= 3) then
        write (io_lun, fmt='(4x,a)') trim(prefix)//" Entering"
        if (flag_InitialAtomicSpin) write (io_lun, fmt='(4x,a)') &
             trim(prefix)//" Initial atomic spins are read from input file"
@@ -554,7 +554,7 @@ contains
     character(len=120) :: prefix
 
     prefix = return_prefix(subname, min_layer)
-    if (inode == ionode .and. iprint_SC >= 2) &
+    if (inode == ionode .and. iprint_SC >= 3) &
          write (io_lun, fmt='(4x,a)') trim(prefix)//" Entering"
 
     call start_timer(tmr_std_chargescf)

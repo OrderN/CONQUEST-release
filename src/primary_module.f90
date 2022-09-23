@@ -144,8 +144,8 @@ contains
     prim%nz_origin = ind_group0- &
          (prim%nx_origin-1)*groups%ngcelly*groups%ngcellz- &
          (prim%ny_origin-1)*groups%ngcellz
-    if(iprint_gen>2.AND.myid==0) write(io_lun,1) myid,prim%nx_origin,prim%ny_origin,prim%nz_origin
-1   format(2x,'On processor ',i4,' the primary set origin is ',3i5)
+    if(iprint_gen>3.AND.myid==0) write(io_lun,1) myid,prim%nx_origin,prim%ny_origin,prim%nz_origin
+1   format(6x,'On processor ',i4,' the primary set origin is ',3i5)
     ! --- determine widths and left spans of primary shell ----------------
     iprojx=0
     iprojy=0
