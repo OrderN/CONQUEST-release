@@ -151,8 +151,8 @@ contains
     type(type_thermostat), intent(in), target :: thermo
     type(type_barostat), intent(in), target   :: baro
 
-    if (inode==ionode .and. iprint_MD > 2) &
-      write(io_lun,'(2x,a)') "Initialising model"
+    !if (inode==ionode .and. iprint_MD > 2) &
+    !  write(io_lun,'(2x,a)') "Initialising model"
 
     mdl%append = .false.
     if (flag_MDcontinue) mdl%append = .true.

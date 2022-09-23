@@ -602,13 +602,13 @@ contains
     integer :: i,j,m,n,row,col,proc,ng
     integer :: row_max_n, col_max_n, loc_max_row, loc_max_col
 
-    if(iprint_DM>2.AND.myid==0) write(io_lun,3)
+    if(iprint_DM>3.AND.myid==0) write(io_lun,3)
     if(iprint_DM>3.AND.myid==0) write(io_lun,4)
     ! The first row_max_n procs have 1 more block than the rest
     row_max_n = mod(blocks_r,proc_rows)
     col_max_n = mod(blocks_c,proc_cols)
-    if(iprint_DM>2.AND.myid==0) write(io_lun,fmt='(4x,a,2i4)') 'N for row, col: ',row_max_n, col_max_n
-    if(iprint_DM>2.AND.myid==0) write(io_lun,fmt='(4x,a,2f4.0)') 'Loc_max_row, col: ',&
+    if(iprint_DM>3.AND.myid==0) write(io_lun,fmt='(4x,a,2i4)') 'N for row, col: ',row_max_n, col_max_n
+    if(iprint_DM>3.AND.myid==0) write(io_lun,fmt='(4x,a,2f4.0)') 'Loc_max_row, col: ',&
          aint(real(blocks_r/proc_rows)),aint(real(blocks_c/proc_cols))
     my_row = 0
     ! first record proc_start(:)%rows and %cols map, this is proc proc dependent
@@ -672,7 +672,7 @@ contains
     return
 1   format(2x,'MakeMaps: proc,row,col,map,n,m: ',7i5)
 2   format(2x,'MakeMaps: proc,n,max,my_row: ',4i5)
-3   format(1x,'Welcome to make_maps')
+3   format(6x,'Welcome to make_maps')
 4   format(2x,'Here we will create maps from ref to SC and back again')
   end subroutine make_maps
 !!***

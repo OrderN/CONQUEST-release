@@ -779,13 +779,13 @@ contains
                 endif
              end do ! j=matrix_size
              write (io_lun, &
-                  fmt='("Sum of eigenvalues for spin = ", &
+                  fmt='(10x,"Sum of eigenvalues for spin = ", &
                   &i1, ": ", f18.11," ", a2)') &
                   spin, en_conv * bandE(spin), en_units(energy_units)
           end do ! spin
           if (nspin == 2) then
              write (io_lun, &
-                  fmt='("Total sum of eigenvalues: ", f18.11, " ",a2)') &
+                  fmt='(10x,"Total sum of eigenvalues: ", f18.11, " ",a2)') &
                   en_conv * (bandE(1) + bandE(2)), en_units(energy_units)
           else
              write(io_lun, 4) en_conv * two * bandE(1), en_units(energy_units)
@@ -803,13 +803,13 @@ contains
                 bandE(spin) = bandE(spin) + w(j,i,spin) * occ(j,i,spin)
              end do ! j=matrix_size
              write (io_lun, &
-                  fmt='("Sum of eigenvalues for spin = ", &
+                  fmt='(10x,"Sum of eigenvalues for spin = ", &
                   &i1, ": ", f18.11," ", a2)') &
                   spin, en_conv * bandE(spin), en_units(energy_units)
           end do ! spin
           if (nspin == 2) then
              write (io_lun, &
-                  fmt='("Total sum of eigenvalues: ", f18.11, " ",a2)') &
+                  fmt='(10x,"Total sum of eigenvalues: ", f18.11, " ",a2)') &
                   en_conv * (bandE(1) + bandE(2)), en_units(energy_units)
           else
              write(io_lun, 4) en_conv * two * bandE(1), en_units(energy_units)

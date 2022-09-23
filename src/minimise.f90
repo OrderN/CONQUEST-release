@@ -147,7 +147,7 @@ contains
                                  runtype, flag_vdWDFT, io_lun,         &
                                  flag_DeltaSCF, flag_excite, runtype,  &
                                  flag_LmatrixReuse,McWFreq,            &
-                                 flag_multisite,                       &
+                                 flag_multisite, iprint_minE,          &
                                  io_lun, flag_out_wf, wf_self_con, flag_write_DOS, &
                                  flag_diagonalisation, nspin, flag_LFD, min_layer
     use energy,            only: get_energy, xc_energy, final_energy
@@ -160,6 +160,7 @@ contains
     use density_module,    only: density
     use multisiteSF_module,only: flag_LFD_nonSCF, flag_mix_LFD_SCF
     use units
+    use io_module,         only: return_prefix
 
     implicit none
 
@@ -178,7 +179,10 @@ contains
     type(cq_timer)    :: tmr_l_energy, tmr_l_force, tmr_vdW
     type(cq_timer)    :: backtrace_timer
     integer           :: backtrace_level
-    
+    character(len=12) :: subname = "get_E_and_F: "
+    character(len=120) :: prefix
+
+    prefix = return_prefix(subname, min_layer)
 !****lat<$
     if (       present(level) ) backtrace_level = level+1
     if ( .not. present(level) ) backtrace_level = -10
@@ -289,7 +293,7 @@ contains
     ! and solve for the new ground state (on excited Born-Oppenheimer surface)
     if(flag_DeltaSCF.and.(.not.flag_excite)) then
        flag_excite = .true.
-       if(inode==ionode.AND.iprint>2) write(io_lun,fmt='(2x,"Starting excitation loop")')
+       if(inode==ionode.AND.iprint_minE>2) write(io_lun,fmt='(2x,"Starting excitation loop")')
        if (flag_vary_basis) then ! Vary everything: DM, charge density, basis set
           if (flag_basis_set == blips) then
              call vary_support(n_support_iterations, fixed_potential, &
@@ -384,9 +388,9 @@ contains
 !****lat<$
     call stop_backtrace(t=backtrace_timer,who='get_E_and_F',echo=.true.)
 !****lat>$
-    if(inode==ionode) &
-         write(io_lun,fmt='(4x,"Change in energy during last step of electronic optimisation: ",e12.5)') &
-         dE_elec_opt
+    if(inode==ionode .and. iprint_minE + min_layer >0) &
+         write(io_lun,fmt='(4x,a,e12.5)') &
+         trim(prefix)//" Change in energy during last step of electronic optimisation: ", dE_elec_opt
     return
   end subroutine get_E_and_F
   !!***

@@ -178,6 +178,7 @@ contains
     if(allocated(pseudo)) then
        if(iprint_pseudo>2.AND.inode==ionode) write(io_lun,fmt='(10x," setup_pseudo_info is skipped because it is already called")')
     else
+       if(iprint_pseudo>1.AND.inode==ionode) write(io_lun,fmt='(/10x,a/)') "Reading ion files"
        call start_timer(tmr_std_allocation)
        allocate(pseudo(n_species),STAT=stat)
        if(stat /= 0) call cq_abort ('allocating pseudo in setup_pseudo_info',stat)

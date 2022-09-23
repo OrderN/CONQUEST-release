@@ -92,7 +92,7 @@ contains
 !!
   subroutine distribute_atoms(inode, ionode) 
     
-    use global_module, ONLY: id_glob, numprocs, iprint_init
+    use global_module, ONLY: id_glob, numprocs, iprint_init, min_layer
     use group_module, ONLY: parts
     
     implicit none 
@@ -107,7 +107,7 @@ contains
 
     call start_timer(tmr_std_indexing)
 
-    if(iprint_init>1.AND.inode==ionode) write(io_lun,fmt='(10x,"Allocating memory for distribute_atom")')
+    if(iprint_init + min_layer>3.AND.inode==ionode) write(io_lun,fmt='(10x,"Allocating memory for distribute_atom")')
     call allocate_distribute_atom
     ia = 0
     do node_doing = 1,numprocs
