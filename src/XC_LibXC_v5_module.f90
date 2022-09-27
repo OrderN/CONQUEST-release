@@ -202,9 +202,21 @@ contains
              end select
 
              if(iprint_ops>2) then
-                write(io_lun,'(4x,"The functional ", a, " is ", a, ", and it belongs to the ", a, &
-                     " family")') &
-                     trim(name), trim(kind), trim(family)
+                if(vmajor>2) then
+                   write(io_lun,'(4x,"The functional ", a, " is ", a, ", it belongs to the ", a, &
+                   &     " family and is defined in the reference(s):")') &
+                        trim(name), trim(kind), trim(family)
+                   j = 0
+                   ref = xc_f90_func_reference_get_ref(xc_f90_func_info_get_references(xc_info(i),j))
+                   do while(j >= 0)
+                      write(io_lun, '(4x,a,i1,2a)') '[', j, '] ', trim(ref)
+                      ref = xc_f90_func_reference_get_ref(xc_f90_func_info_get_references(xc_info(i),j))
+                   end do
+                else
+                   write(io_lun,'(4x,"The functional ", a, " is ", a, ", and it belongs to the ", a, &
+                   &     " family")') &
+                        trim(name), trim(kind), trim(family)
+                end if
              else if(iprint_ops>0) then
                 write(io_lun,'(4x,"Using the ",a," functional ",a)') trim(family),trim(name)
              else

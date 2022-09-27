@@ -18,11 +18,6 @@ are specified as: *integer*;
 General
 -------
 
-General.Title (*string*)
-    Title for the calculation
-
-    *default*: none
-
 General.NumberOfSpecies (*integer*)
     Number of species in cell
 
@@ -224,7 +219,7 @@ Input-Output General Tags
 -------------------------
 
 IO.Title (*string*)
-    Title for run
+    Title for calculation
 
     *default*: none
 

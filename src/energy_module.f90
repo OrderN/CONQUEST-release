@@ -257,7 +257,7 @@ contains
     if (inode == ionode) then
        if(print_Harris) then
           !if(iprint_gen>=1) write(io_lun,2) electrons
-          if (iprint_gen + min_layer >= 1) then
+          if (iprint_gen + min_layer >= 3) then
              if(flag_neutral_atom) then
                 write (io_lun, 1) en_conv*band_energy,     en_units(energy_units)
                 write (io_lun,33) en_conv*hartree_energy_drho,  en_units(energy_units)
@@ -302,11 +302,11 @@ contains
                 case (0) ! Fermi smearing
                    if (entropy < zero) &
                         call cq_warn(sub_name,'Calculated entropy is less than zero; something is wrong ', entropy)
-                   if (iprint_gen + min_layer >= 1) &
+                   if (iprint_gen + min_layer >= 2) &
                         write (io_lun,14) en_conv*(total_energy-half*entropy), &
                                           en_units(energy_units)
                 case (1) ! Methfessel-Paxton smearing
-                   if (iprint_gen + min_layer >= 1)                                     &
+                   if (iprint_gen + min_layer >= 2)                                     &
                         write (io_lun,16)                                   &
                               en_conv * (total_energy -                     &
                                          (real(MPOrder+1,double) /          &
@@ -314,7 +314,7 @@ contains
                               en_units(energy_units)
                 end select
              else
-                if (iprint_gen + min_layer >= 1) &
+                if (iprint_gen + min_layer >= 2) &
                      write (io_lun,14) en_conv*(total_energy-half*entropy), &
                                        en_units(energy_units)
              end if
@@ -324,7 +324,7 @@ contains
           else
              if (iprint_gen + min_layer >= 1) &
                   write (io_lun,10) en_conv*total_energy, en_units(energy_units)
-             if (iprint_gen + min_layer >= 1) &
+             if (iprint_gen + min_layer >= 2) &
                   write (io_lun, '(10x,"(TS=0 as O(N) or entropic &
                                   &contribution is negligible)")')
           end if
@@ -353,7 +353,7 @@ contains
        if (flag_perform_cdft) total_energy2 = total_energy2 + cdft_energy
        if (flag_dft_d2)       total_energy2 = total_energy2 + disp_energy
 
-       if (inode == ionode .and. iprint_gen + min_layer>=1) then
+       if (inode == ionode .and. iprint_gen + min_layer>=2) then
           write(io_lun,13) en_conv*total_energy2, en_units(energy_units)
        end if
     end if
@@ -362,16 +362,16 @@ contains
     if (iprint_gen + min_layer >= 0) then
        call electron_number(electrons)
        if (inode == ionode) then
-          if (iprint_gen + min_layer >= 1) then
+          if (iprint_gen + min_layer >= 2) then
              electrons_tot = electrons(1) + electrons(nspin)
              write (io_lun,18) electrons_tot
              if (nspin == 2) then
                 write (io_lun,19) electrons(1)
                 write (io_lun,20) electrons(2)
              end if
+             if (nspin == 2) &
+                  write (io_lun,21) electrons(1) - electrons(2)
           end if
-          if (nspin == 2) &
-               write (io_lun,21) electrons(1) - electrons(2)
        end if
     end if
 

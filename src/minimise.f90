@@ -283,7 +283,10 @@ contains
           call cq_abort("get_E_and_F: basis set undefined: ", &
                         flag_basis_set)
        end if
-    else ! NB new_SC_potl deals with non-SCF as well as SCF
+       ! Removing these lines as they've already been done in initial_H
+       ! DRB 2020/04/21
+       ! Restoring lines (but new_SC_potl deals with Non-SCF)DRB 2020/05/22
+    else 
        call new_SC_potl(.false., sc_tolerance, reset_L,           &
                         fixed_potential, vary_mu, n_L_iterations, &
                         L_tolerance, total_energy, backtrace_level)

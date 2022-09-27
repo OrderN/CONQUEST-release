@@ -1100,7 +1100,7 @@ contains
                 if (.not.flag_SpinDependentSF .and. spin.eq.2) then
                    if(inode==ionode  .and. iprint_basis + min_layer>2) &
                         write(io_lun,fmt='(4x,a)') &
-                        trim(prefix)//'Take average of matSFcoeff(1) and matSFcoeff(2) into matSFcoeff(1)'
+                        trim(prefix)//' Take average of matSFcoeff(1) and matSFcoeff(2) into matSFcoeff(1)'
                    matSFcoeff_2 = allocate_temp_matrix(SFcoeff_range,0,sf,atomf)
                    call matrix_scale(zero,matSFcoeff_2)
                    call LFD_put_TVEC_to_SFcoeff(np,i,mat(:,SFcoeff_range),mat_p(matSFcoeff_2)%matrix, &

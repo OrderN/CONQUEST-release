@@ -3514,7 +3514,7 @@ contains
        end if
     end do
     len_occ = len
-    if(iprint_DM + min_layer>3.AND.myid==0) write(io_lun,*) 'buildK: Stage three len:',len, matA
+    if(iprint_DM+min_layer>3.AND.myid==0) write(io_lun,*) 'buildK: Stage three len:',len, matA
     ! Step three - loop over processors, send and recv data and build K
     allocate(send_fsc(bundle%mx_iprim),recv_to_FSC(bundle%mx_iprim),mapchunk(bundle%mx_iprim),STAT=stat)
     if(stat/=0) call cq_abort('buildK: Error allocating send_fsc, recv_to_FSC and mapchunk',stat)

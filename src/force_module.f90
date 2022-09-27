@@ -263,6 +263,7 @@ contains
     use XC, ONLY: XC_GGA_stress
     use io_module, only: atom_output_threshold, return_prefix
     use input_module,         only: leqi
+    use io_module, only: atom_output_threshold, return_prefix
 
     implicit none
 
@@ -577,7 +578,7 @@ contains
              if (flag_pcc_global) write(io_lun, 108) trim(prefix),(for_conv *   pcc_force(j,i), j = 1, 3)
              if (flag_dft_d2) write (io_lun, 109) trim(prefix),(for_conv * disp_force(j,i), j = 1, 3)
              if (flag_perform_cdft) write (io_lun, fmt='(4x,a,3f15.10)') &
-                  trim(prefix)//"Force cDFT : ",(for_conv*cdft_force(j,i),j=1,3)
+                  trim(prefix)//" Force cDFT : ",(for_conv*cdft_force(j,i),j=1,3)
              if (flag_self_consistent) then
                 write (io_lun, 105) trim(prefix),(for_conv * tot_force(j,i),   j = 1, 3)
              else
@@ -665,7 +666,7 @@ contains
       ! Output
       if (inode == ionode.AND.iprint_MD + min_layer>2) then
          write (io_lun,fmt='(/4x,a,3a15)') trim(prefix)//"                  ","X","Y","Z"
-         if(iprint_MD + min_layer > 1) write(io_lun,fmt='(4x,a)') trim(prefix)//"Stress contributions:"
+         if(iprint_MD + min_layer > 1) write(io_lun,fmt='(4x,a)') trim(prefix)//" Stress contributions:"
       end if
       call print_stress(trim(prefix)//" K.E. stress:      ", KE_stress, 2)
       call print_stress(trim(prefix)//" S-Pulay stress:   ", SP_stress, 2)
@@ -700,7 +701,7 @@ contains
     call my_barrier()
     if(iprint_MD + min_layer>3) deallocate(s_pulay_for,phi_pulay_for)
     if (inode == ionode .and. iprint_MD + min_layer > 1 .and. write_forces) &
-         write (io_lun, fmt='(4x,a)') trim(prefix)//"Finished force"
+         write (io_lun, fmt='(4x,a)') trim(prefix)//" Finished force"
 
     call start_timer(tmr_std_allocation)
     if (flag_pcc_global) then

@@ -263,7 +263,7 @@ contains
     if (inode == ionode .and. iprint_SC >= 3) then
        write (io_lun, fmt='(4x,a)') trim(prefix)//" Entering"
        if (flag_InitialAtomicSpin) write (io_lun, fmt='(4x,a)') &
-            trim(prefix)//"Initial atomic spins are read from input file"
+            trim(prefix)//" Initial atomic spins are read from input file"
     endif
 
     call start_timer(tmr_std_chargescf)
@@ -438,7 +438,7 @@ contains
              if (inode == ionode .and. iprint_SC > 0) &
                   write (io_lun, &
                   fmt='(4x,a,i1,a,f20.12)') &
-                  trim(prefix)//"In set_atomic_density, electrons (spin=", spin, "): ", &
+                  trim(prefix)//" In set_atomic_density, electrons (spin=", spin, "): ", &
                   density_scale(spin) * grid_electrons
           enddo
        else
@@ -451,11 +451,11 @@ contains
              if (inode == ionode .and. iprint_SC > 0) then
                 if(nspin==1) then
                    write (io_lun, fmt='(4x,a,f20.12)') &
-                        trim(prefix)//"In set_atomic_density, electrons : ", &
+                        trim(prefix)//" In set_atomic_density, electrons : ", &
                         spin_factor * density_scale(spin) * half * grid_electrons
                 else
                    write (io_lun, fmt='(4x,a,i1,a,f20.12)') &
-                        trim(prefix)//"In set_atomic_density, electrons (spin=", &
+                        trim(prefix)//" In set_atomic_density, electrons (spin=", &
                         spin, "): ", density_scale(spin) * half * grid_electrons
                 end if
              end if
@@ -865,7 +865,7 @@ contains
 
        if (inode == ionode .and. iprint_SC + min_layer > 2) &
             write (io_lun, '(4x,a,i1,a,f25.15)') &
-                  trim(prefix)//"Electrons (spin=",spin, "): ", electrons(spin)
+                  trim(prefix)//" Electrons (spin=",spin, "): ", electrons(spin)
     end do ! spin
 
     if (flag_Becke_weights) &
