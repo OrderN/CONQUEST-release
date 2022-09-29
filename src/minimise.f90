@@ -227,9 +227,6 @@ contains
     call start_timer(tmr_l_energy, WITH_LEVEL)
     ! Now choose what we vary
     if (flag_Multisite .and. (.NOT.flag_LFD_nonSCF)) then ! Vary everything, PAO-based multi-site SFs
-       ! minimise by repeating LFD with updated SCF density if flag set
-       if(flag_LFD .and. (.NOT.flag_mix_LFD_SCF)) call LFD_SCF(fixed_potential, vary_mu, &
-            n_L_iterations, L_tolerance, sc_tolerance, expected_reduction, total_energy, density)
        ! Numerical optimisation subsequently 
        if (flag_vary_basis) then
           if (UsePulay) then
@@ -243,6 +240,11 @@ contains
                            sc_tolerance, energy_tolerance,        &
                            total_energy, expected_reduction)
           end if
+          dE_elec_opt = dE_PAO
+       ! minimise by repeating LFD with updated SCF density if flag set
+       else if(flag_LFD .and. (.NOT.flag_mix_LFD_SCF)) then
+          call LFD_SCF(fixed_potential, vary_mu, &
+               n_L_iterations, L_tolerance, sc_tolerance, expected_reduction, total_energy, density)
           dE_elec_opt = dE_PAO
        else ! Or SCF if necessary
           call new_SC_potl(.false., sc_tolerance, reset_L,           &

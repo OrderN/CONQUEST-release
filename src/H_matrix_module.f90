@@ -570,6 +570,8 @@ contains
   !!    Removed unused fn_on_grid
   !!   2018/02/13 12:17 dave
   !!    New XC interface implemented
+  !!   2022/08/02 08:57 dave
+  !!    Tidied XC potential and energy calculation (PCC related)
   !!  SOURCE
   !!
   subroutine get_h_on_atomfns(output_level, fixed_potential, &
@@ -722,53 +724,41 @@ contains
     end if
     !
     !
-    ! for P.C.C.
+    ! Calculate XC potential and energies with/without P.C.C.
+    delta_E_xc = zero
     if (flag_pcc_global) then
        allocate(density_wk(size,nspin), density_wk_tot(size), STAT=stat)
        if (stat /= 0) &
             call cq_abort("Error allocating density_wk, density_wk_tot: ", &
                           stat)
        call reg_alloc_mem(area_ops, size * (nspin + 1), type_dbl)
-       !density_wk = zero
        do spin = 1, nspin
           density_wk(:,spin) = rho(:,spin) + half * density_pcc(:)
        end do
        density_wk_tot = rho_tot + density_pcc
-    end if
-    !  
-    !
-    if (flag_pcc_global) then
        call get_xc_potential(density=density_wk, size=size, &
             xc_potential=xc_potential,    &
             xc_epsilon  =xc_epsilon, &
             xc_energy   =xc_energy,  &
             x_energy    =x_energy    )
-    else
+       delta_E_xc = dot(n_my_grid_points, xc_epsilon,1,density_wk_tot,1)
+       delta_E_xc = delta_E_xc - dot(n_my_grid_points,xc_potential(:,1),1,rho(:,1),1)
+       delta_E_xc = delta_E_xc - dot(n_my_grid_points,xc_potential(:,nspin),1,rho(:,nspin),1)
+       deallocate(density_wk, STAT=stat)
+       deallocate(density_wk_tot, STAT=stat)
+       if (stat /= 0) &
+            call cq_abort("Error deallocating density_wk: ", stat)
+       call reg_dealloc_mem(area_ops, size* (nspin + 1), type_dbl)
+    else ! No PCC
        call get_xc_potential(density=rho, size=size,     &
             xc_potential=xc_potential, &
             xc_epsilon  =xc_epsilon,        & 
             xc_energy   =xc_energy,         &
             x_energy    =x_energy)
+       delta_E_xc = dot(n_my_grid_points, xc_epsilon,1,rho_tot,1)
+       delta_E_xc = delta_E_xc - dot(n_my_grid_points,xc_potential(:,1),1,rho(:,1),1)
+       delta_E_xc = delta_E_xc - dot(n_my_grid_points,xc_potential(:,nspin),1,rho(:,nspin),1)
     end if
-    !
-    !
-    ! Calculation of delta_E_xc
-    delta_E_xc = zero
-    if (flag_pcc_global) then
-       do igrid = 1, n_my_grid_points
-          delta_E_xc = delta_E_xc + &
-                       xc_epsilon(igrid) * density_wk_tot(igrid) - &
-                       xc_potential(igrid,1) * rho(igrid,1) - &
-                       xc_potential(igrid,nspin) * rho(igrid,nspin)
-       end do
-    else
-       do igrid = 1, n_my_grid_points
-          delta_E_xc = delta_E_xc + &
-                       xc_epsilon(igrid) * rho_tot(igrid) - &
-                       xc_potential(igrid,1) * rho(igrid,1) - &
-                       xc_potential(igrid,nspin) * rho(igrid,nspin)
-       end do
-    end if ! (flag_pcc_global)
     call gsum(delta_E_xc)
     delta_E_xc = delta_E_xc * grid_point_volume
     !
@@ -855,14 +845,6 @@ contains
        end if ! (naba_atoms_of_blocks(atomf)%no_of_atom(nb) > 0)
        m = m + n_pts_in_block
     end do ! nb
-    !
-    !
-    if (flag_pcc_global) then
-       deallocate(density_wk, STAT=stat)
-       if (stat /= 0) &
-            call cq_abort("Error deallocating density_wk: ", stat)
-       call reg_dealloc_mem(area_ops, size, type_dbl)
-    endif
     !
     !
     deallocate(xc_epsilon, h_potential, rho_tot, xc_potential, STAT=stat)

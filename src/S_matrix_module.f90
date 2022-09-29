@@ -714,7 +714,7 @@ contains
     use datatypes
     use numbers
     use global_module, ONLY: IPRINT_TIME_THRES1,flag_TmatrixReuse,restart_T, &
-                             runtype, atomf, sf, flag_diagonalisation, nspin_SF
+                             runtype, atomf, sf, flag_diagonalisation, nspin_SF, min_layer
     use matrix_data, ONLY: Trange, TSrange, mat, Srange
     use mult_module, ONLY: allocate_temp_matrix, free_temp_matrix, store_matrix_value, matrix_scale, matrix_sum, &
          matT, matS, return_matrix_value, T_trans
@@ -728,6 +728,7 @@ contains
                             matrix_store_global, grab_InfoMatGlobal, set_atom_coord_diff
 
     use UpdateInfo, ONLY: Matrix_CommRebuild
+    use io_module, ONLY: return_prefix
 
     implicit none
 
@@ -746,9 +747,13 @@ contains
     type(InfoMatrixFile),pointer :: Info(:)    ! why pointer ? <-> related to gcc problem
     type(matrix_store_global)    :: InfoGlob
 
+    character(len=12) :: subname = "InvS: "
+    character(len=120) :: prefix
+
+    prefix = return_prefix(subname, min_layer)
     if (atomf.ne.sf .and. .not.flag_do_SFtransform) then
-       if (inode.eq.ionode.and.output_level>=3) write(io_lun,*) &
-          'Now we have only Spao but not Ssf yet, so InvS is not calculated at present.'
+       if (inode.eq.ionode.and.output_level>=4) write(io_lun,fmt='(4x,a)') &
+          trim(prefix)//' only formed Spao but not Ssf, so InvS is not yet calculated'
     else
        matI = allocate_temp_matrix(TSrange,0)
        matT1 = allocate_temp_matrix(Trange,0)

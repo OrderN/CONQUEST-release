@@ -251,14 +251,16 @@ contains
        call matrix_scale(zero, matdSFcoeff(spin_SF))
        call matrix_scale(zero, matdSFcoeff_e(spin_SF))
     enddo
-    orig_LFD_SCF = flag_mix_LFD_SCF
-    flag_mix_LFD_SCF = .false.
     ! call get_H_matrix before calling build_PAO_coeff ! TM
     !call get_H_matrix(.true., fixed_potential, electrons, density, &
     !                  maxngrid)
     call new_SC_potl(.false., con_tolerance, reset_L,             &
          fixed_potential, vary_mu, n_cg_L_iterations, &
          tolerance, total_energy_last)
+    total_energy_0 = total_energy_last
+    ! Set LFD_SCF to false to avoid undoing PAO optimisation
+    orig_LFD_SCF = flag_mix_LFD_SCF ! Use to restore original setting
+    flag_mix_LFD_SCF = .false.
     call build_PAO_coeff_grad(full)
 
     if (TestBasisGrads) then
@@ -572,6 +574,9 @@ contains
                en_units(energy_units), " after ",n_iterations," iterations"
           convergence_flag = .true.
           total_energy_last = total_energy_0
+          ! Commented out because we don't want to reset to LFD after
+          ! a successful PAO optimisation 
+          !flag_mix_LFD_SCF = orig_LFD_SCF
           deallocate(search_direction, last_sd, Psd, STAT=stat)
           if (stat /= 0) call cq_abort("vary_pao: Error dealloc mem")
           call reg_dealloc_mem(area_minE, 3*length*nspin_SF, type_dbl)

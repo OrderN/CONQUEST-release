@@ -274,7 +274,7 @@ In general, we write:
 
 .. math::
 
-   rho_{n+1}^{in} = \sum_{i} \alpha_i \left[ \rho_{i}^{in} + A R_{i}
+   \rho_{n+1}^{in} = \sum_{i} \alpha_i \left[ \rho_{i}^{in} + A R_{i}
    \right]
 
 where :math:`R_{i}` is the residual at iteration :math:`i`, defined above.  The
@@ -300,7 +300,7 @@ Fourier transform of the residual, :math:`\tilde{R}` as:
 
 .. math::
 
-    \tilde{R} \frac{q^2}{q^2 - q^2_0}
+    \tilde{R} \frac{q^2}{q^2 + q^2_0}
 
 where :math:`q^2_0` is the square of the Kerker factor and :math:`q` is a
 wavevector.  You should test values of :math:`q_0` around
