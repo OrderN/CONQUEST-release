@@ -4392,9 +4392,13 @@ contains
   !!    Zeroed COM velocity after initialisation
   !!   2020/07/28 tsuyoshi
   !!    Zeroed velocity for the fixed degree of freedom
+  !!   2022/10/03 08:45 dave
+  !!    Added rescaling after assignment of velocities so that temperature is correct
+  !!   2022/10/03 17:14 dave
+  !!    Return ionic KE
   !!  SOURCE
   !!
-  subroutine init_velocity(ni_in_cell, temp, velocity)
+  subroutine init_velocity(ni_in_cell, temp, velocity, KE_ions)
 
     use datatypes,      only: double
     use numbers,        only: three,two,twopi, zero, one, RD_ERR, half, three_halves
@@ -4410,9 +4414,12 @@ contains
     integer,intent(in) :: ni_in_cell
     real(double),intent(in) :: temp
     real(double),intent(out):: velocity(3,ni_in_cell)
+    real(double) :: KE_ions
+
+    ! Local variables
     integer :: dir, ia, iglob
     real(double) :: xx, yy, zz, u0, ux, uy, uz, v0
-    real(double) :: massa, KE
+    real(double) :: massa, scale_temp, temp_ions
     integer :: speca
 
     type(type_rng) :: myrng
@@ -4422,7 +4429,7 @@ contains
 
     prefix = return_prefix(subname, min_layer)
     if (inode == ionode) then
-       KE = zero
+       KE_ions = zero
        velocity(:,:) = zero
        call myrng%init_rng
        call myrng%init_normal(one, zero)
@@ -4450,19 +4457,32 @@ contains
           v0 = sqrt(temp*fac_Kelvin2Hartree/(massa*fac)) 
           do dir=1,3
              if(flag_move_atom(dir,iglob)) then
-              u0 = myrng%rng_normal()
+                u0 = myrng%rng_normal()
              else
-              u0 = zero
+                u0 = zero
              endif
+             ! Rescale standard normal distribution
              velocity(dir,ia) = v0 * u0
-             KE = KE + half * massa * fac * velocity(dir,ia)**2
           end do
        enddo
        if (flag_FixCOM) call zero_COM_velocity(velocity)
-       KE = KE*three_halves
-       KE = KE/(real(ni_in_cell,double)*fac_Kelvin2Hartree)
+       ! Find KE for rescaling: order doesn't matter; do this after fixing COM
+       KE_ions = zero
+       do ia=1,ni_in_cell
+          speca= species(ia)
+          massa= mass(speca)
+          do dir=1,3
+             KE_ions = KE_ions + half * massa * fac * velocity(dir,ia)**2
+          end do
+       end do
+       temp_ions = KE_ions/(three_halves*real(ni_in_cell,double)*fac_Kelvin2Hartree)
+       ! Find scaling factor for KE and hence velocity
+       scale_temp = temp/temp_ions
+       velocity = velocity*sqrt(scale_temp)
+       KE_ions = KE_ions*scale_temp
+       temp_ions = temp_ions*scale_temp
        if(iprint_MD + min_layer > 1) write(io_lun,fmt='(4x,a,f11.3,a)') &
-            " initial kinetic energy is ",KE," K"
+            " initial kinetic energy is ",temp_ions," K"
     end if
     call gcopy(velocity, 3, ni_in_cell)
     return

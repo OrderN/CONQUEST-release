@@ -838,7 +838,7 @@ contains
          InvSDeltaOmegaTolerance
     use blip,          only: blip_info, init_blip_flag, alpha, beta
     use maxima_module, only: lmax_ps
-    use control,       only: MDn_steps, MDfreq, MDtimestep, MDcgtol, CGreset, LBFGS_history
+    use control,       only: MDn_steps, MDfreq, MDcgtol, CGreset, LBFGS_history
     use ion_electrostatic,  only: ewald_accuracy
     use minimise,      only: UsePulay, n_L_iterations,          &
          n_support_iterations, L_tolerance, &
@@ -891,14 +891,13 @@ contains
          flag_LFD_MD_UseAtomicDensity,  flag_MSSF_nonminimal,   &
          n_dumpSFcoeff, flag_mix_LFD_SCF,                       &
          MSSF_nonminimal_offset ! nonmin_mssf
-    use control,    only: md_ensemble
     use md_control, only: md_tau_T, md_n_nhc, md_n_ys, md_n_mts, md_nhc_mass, &
          target_pressure, md_baro_type, md_tau_P, &
          md_thermo_type, md_bulkmod_est, md_box_mass, &
          flag_write_xsf, md_cell_nhc, md_nhc_cell_mass, &
          md_calc_xlmass, md_equil_steps, md_equil_press, &
          md_tau_T_equil, md_tau_P_equil, md_p_drag, &
-         md_t_drag, md_cell_constraint, flag_write_extxyz
+         md_t_drag, md_cell_constraint, flag_write_extxyz, MDtimestep, md_ensemble
     use md_model,   only: md_tdep
     use move_atoms,         only: threshold_resetCD, &
          flag_stop_on_empty_bundle, &
@@ -2516,7 +2515,7 @@ contains
     use blip,                 only: blip_info
     use global_module,        only: flag_basis_set, blips,        &
          flag_precondition_blips, io_lun, flag_LFD, runtype, flag_opt_cell, &
-         flag_Multisite, flag_diagonalisation, flag_neutral_atom, &
+         flag_Multisite, flag_diagonalisation, flag_neutral_atom, temp_ion, &
          flag_self_consistent, flag_vary_basis, iprint_init, flag_pcc_global
     use SelfCon,              only: maxitersSC
     use minimise,             only: energy_tolerance, L_tolerance,     &
@@ -2527,7 +2526,8 @@ contains
     use pseudopotential_common, only: flag_neutral_atom_projector, maxL_neutral_atom_projector, &
          numN_neutral_atom_projector, pseudo_type, OLDPS, SIESTA, ABINIT
     use input_module,         only: leqi, chrcap
-    use control,    only: md_ensemble, MDn_steps
+    use control,    only: MDn_steps
+    use md_control, only: md_ensemble
 
     implicit none
 
@@ -2568,6 +2568,7 @@ contains
        ensemblestr = md_ensemble
        call chrcap(ensemblestr,3)
        write(io_lun, fmt='(4x,a15,a3," MD run for ",i5," steps ")') job_str, ensemblestr, MDn_steps
+       write(io_lun, fmt='(4x,"Initial ion temperature: ",f9.3,"K")') temp_ion
     else if(leqi(runtype,'lbfgs')) then
        write(io_lun, fmt='(4x,a15,"L-BFGS atomic relaxation")') job_str
     end if

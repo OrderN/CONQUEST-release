@@ -994,7 +994,7 @@ contains
        enddo !ig=1, InfoGlob%ni_in_cell
 
        if(flag_velocity_local) then
-          if(iprint_MD>2) write(io_lun,*) 'Reading velocity from ',filename
+          if(iprint_MD>2) write(io_lun,fmt='(6x,a)') 'Reading velocity from '//filename
           read(lun,*)
           do ig=1, InfoGlob%ni_in_cell
              read(lun,101) iglob, InfoGlob%atom_veloc(1:3, ig)

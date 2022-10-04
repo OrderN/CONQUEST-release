@@ -14,7 +14,8 @@
 !!  2019/05/09 zmaaan
 !!    New dump_heat_flux subroutine to save heat flux to file for thermal
 !!    conductivity calculations
-!!
+!!  2022/09/30 08:31 dave
+!!    Rearranging definitions and locations of types
 !!  SOURCE
 !!
 module md_model
@@ -28,9 +29,7 @@ module md_model
                               atom_vels, species_glob, iprint_MD, &
                               flag_MDcontinue, flag_MDdebug, x_atom_cell, &
                               y_atom_cell, z_atom_cell, rcellx, rcelly, rcellz
-  use md_control,       only: md_n_nhc, ion_velocity, type_thermostat, &
-                              type_barostat, lattice_vec, &
-                              flag_extended_system, md_cell_constraint, heat_flux
+  use rng,              only: type_rng
 
   implicit none
 
@@ -40,6 +39,8 @@ module md_model
   character(20) :: file_forces    = 'infile.forces'
   character(20) :: file_stat      = 'infile.stat'
   character(20) :: file_loto      = 'infile.lotosplitting'
+
+  real(double), dimension(3), target        :: heat_flux
 
   !!****s* md_model/type_md_model *
   !!  NAME
@@ -144,6 +145,8 @@ contains
   !!  
   subroutine init_model(mdl, ensemble, timestep, thermo, baro)
 
+    use md_control, only: lattice_vec, type_thermostat, type_barostat
+
     ! passed variables
     class(type_md_model), intent(inout)       :: mdl
     character(3), intent(in)                  :: ensemble
@@ -224,12 +227,13 @@ contains
   subroutine get_cons_qty(mdl)
 
     use input_module,     only: leqi
+    use md_control,       only: flag_extended_system
 
     ! passed variables
     class(type_md_model), intent(inout)   :: mdl
 
     if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 1) &
-      write(io_lun,'(2x,a)') "get_cons_qty"
+      write(io_lun,'(6x,a)') "md_run: get_cons_qty"
 
     select case(mdl%ensemble)
     case("nve")
@@ -281,13 +285,15 @@ contains
   !!  
   subroutine print_md_energy(mdl)
 
+    use md_control,       only: flag_extended_system
+
     ! passed variables
     class(type_md_model), intent(inout)   :: mdl
 
     ! local variables
 
-    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 2) &
-      write(io_lun,'(2x,a)') "print_md_energy"
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) &
+      write(io_lun,'(4x,a)') "print_md_energy"
 
     if (inode==ionode .and. iprint_MD>0) then
       write (io_lun, '(4x,"Conserved quantity H''  : ",f15.8)') &
@@ -349,8 +355,8 @@ contains
     integer                               :: lun
     real(double)                          :: P_GPa
 
-    if (inode==ionode .and. iprint_MD > 1) &
-      write(io_lun,'(2x,"Writing statistics to ",a)') filename
+    if (inode==ionode .and. iprint_MD > 2) &
+      write(io_lun,'(6x,"Writing statistics to ",a)') filename
 
     ! Convert units if necessary
     P_GPa = mdl%P_int*HaBohr3ToGPa
@@ -422,7 +428,7 @@ contains
     integer                               :: lun, i
 
     if (inode==ionode) then
-      if (iprint_MD > 1) write(io_lun,'(2x,"Writing frame to ",a)') filename
+      if (iprint_MD > 2) write(io_lun,'(6x,"Writing frame to ",a)') filename
       call io_assign(lun)
       if (mdl%append) then
         open(unit=lun,file=filename,position='append')
@@ -533,8 +539,7 @@ contains
   subroutine dump_tdep(mdl)
  
     use input_module,     only: io_assign, io_close
-    use units,            only: HaToEv, BohrToAng
-    use md_control,       only: HaBohr3ToGPa
+    use units,            only: HaToEv, BohrToAng, HaBohr3ToGPa
  
     ! passed variables
     class(type_md_model), intent(inout)   :: mdl

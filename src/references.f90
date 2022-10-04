@@ -429,8 +429,7 @@ module references
                                flag_perform_cDFT, flag_DeltaSCF, runtype, iprint_init
       use pseudopotential_common, only: pseudo_type, ABINIT
       use input_module,  only: leqi
-      use control,       only: md_ensemble
-      use md_control,    only: md_thermo_type
+      use md_control,    only: md_thermo_type, md_ensemble
       use XC,            only: flag_functional_type, functional_lda_pz81, &
            functional_lda_gth96, functional_lda_pw92, functional_gga_pbe96, &
            functional_gga_pbe96_rev98, functional_gga_pbe96_r99, functional_gga_pbe96_wc, &
@@ -471,10 +470,12 @@ module references
       ! Cite method-specific publications
       ! Basis sets
       if (flag_basis_set == PAOs) then
-         call bib%cite("Bowler2019",punc=", ",pre="Basis: ")
          if (flag_Multisite) then
+            call bib%cite("Bowler2019",punc=", ",pre="Basis: ")
             call bib%cite("Nakata2014",punc=", ")
             call bib%cite("Nakata2015")
+         else
+            call bib%cite("Bowler2019",pre="Basis: ")
          end if
       else
          call bib%cite("Hernandez1997",punc=", ",pre="Basis: ")
@@ -501,8 +502,10 @@ module references
       ! MD
       if (leqi(runtype,'md')) then
          call bib%cite("Arita2014",punc=", ",pre="MD: ")
-         if (flag_XLBOMD)                  call bib%cite("Niklasson2006",punc=", ")
-         if (flag_XLBOMD)                  call bib%cite("Niklasson2009",punc=", ")
+         if (flag_XLBOMD) then
+            call bib%cite("Niklasson2006",punc=", ")
+            call bib%cite("Niklasson2009",punc=", ")
+         end if
          if (leqi(md_ensemble, 'npt')) then
             if (leqi(md_thermo_type, 'nhc')) then
                call bib%cite("Martyna1996",punc=", ")
