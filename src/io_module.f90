@@ -222,13 +222,13 @@ pdb:   if (pdb_format) then
                call cq_abort('Pdb file format does not support &
                               &fractional coordinates.')
           if (iprint_init>2) &
-               write(io_lun,*) 'Entering read_atomic_positions, pdb file'
+               write(io_lun,fmt='(4x,a)') 'Entering read_atomic_positions, pdb file'
           call io_assign(lun)
           ! Go through the file and count the atoms
           open( unit=lun, file=filename, status='old', iostat=ios)
           if ( ios > 0 ) call cq_abort('Reading pdb file: file error')
           if (iprint_init > 2) &
-               write (io_lun,'(1x,a)') &
+               write (io_lun,'(5x,a)') &
                      'Counting atoms, checking for alternate locations'
           ni_in_cell = 0
 first:    do
@@ -261,7 +261,7 @@ first:    do
           end do first
           call io_close(lun)
           if (iprint_init>0) &
-               write(io_lun,'(1x,a,i5)') 'Number of atoms: ', ni_in_cell
+               write(io_lun,'(5x,a,i5)') 'Number of atoms: ', ni_in_cell
 
           ! Now read the file again and extracts the coordinates
           open(unit=lun, file=filename, status='old', iostat=ios)
@@ -301,7 +301,7 @@ second:   do
                             species_glob(i) = j
                             if(species_glob(i)>n_species) then
                                write(io_lun,&
-                                     fmt='(2x,"** WARNING ! ** &
+                                     fmt='(4x,"** WARNING ! ** &
                                            &Species incompatibility between &
                                            &coordinates and input")')
                                call cq_abort("Species specified &
@@ -454,7 +454,7 @@ second:   do
           do i=1,ni_in_cell
              read(lun,*) x,y,z,species_glob(i),movex,movey,movez
              if(species_glob(i)>n_species) then
-                write(io_lun,fmt='(2x,"** WARNING ! ** Species &
+                write(io_lun,fmt='(6x,"** WARNING ! ** Species &
                                    &incompatibility between coordinates and &
                                    &input")')
                 call cq_abort("Species specified greater than number &
@@ -898,7 +898,7 @@ second:   do
     call start_backtrace(t=backtrace_timer,who='read_partitions',where=1,level=4)
 !****lat>$  
 
-    if(iprint_init>2.AND.myid==0) write(io_lun,*) 'Entering read_partitions'
+    if(iprint_init>2.AND.myid==0) write(io_lun,fmt='(4x,a)') 'Entering read_partitions'
     call io_assign(lun)
 
     open(unit=lun, file=part_file, status='old', iostat=ios)
@@ -951,7 +951,7 @@ second:   do
        if(ntmp3>maxatomsproc) maxatomsproc = ntmp3
     enddo ! nnd = 1,nnode
     if(iprint_init>3.AND.myid==0) &
-         write(io_lun,*) 'Atoms proc max: ',maxatomsproc, maxpartsproc
+         write(io_lun,fmt='(6x,a,2i5)') 'Atoms proc max: ',maxatomsproc, maxpartsproc
     call init_group(parts, maxpartsproc, mx_tmp_edge, np_in_cell, &
                     maxatomspart, numprocs)
     maxpartscell = np_in_cell
@@ -1129,7 +1129,7 @@ second:   do
     integer:: n_block_x, n_block_y, n_block_z, maxtmp
     character(len=80) :: blk_coord_file, def
 
-    if(inode==ionode.AND.iprint_init>2) write(io_lun,*) 'Entering read_blocks ', in_block_x,in_block_y,in_block_z
+    if(inode==ionode.AND.iprint_init>2) write(io_lun,fmt='(4x,a,3i6)') 'Entering read_blocks ', in_block_x,in_block_y,in_block_z
     !--- find numbers of blocks in each direction
     n_block_x = n_grid_x/in_block_x
     n_block_y = n_grid_y/in_block_y
@@ -1151,10 +1151,10 @@ second:   do
        ! Read and check blocks along cell sides
        read(lun,*) ntmpx, ntmpy, ntmpz
        if(ntmpx/=n_block_x.OR.ntmpy/=n_block_y.OR.ntmpz/=n_block_z) then
-          write(io_lun,fmt='(2x,"In input, ReadBlocks T has been set, so the distribution of blocks is ")')
-          write(io_lun,fmt='(2x,"read from a file.  There is an error specifying numbers of blocks.  ")')
-          write(io_lun,fmt='(2x,"Found from the file: ",3i6)') ntmpx, ntmpy, ntmpz
-          write(io_lun,fmt='(2x,"Calculated from input using grid points: ",3i6)') n_block_x, n_block_y, n_block_z
+          write(io_lun,fmt='(4x,"In input, ReadBlocks T has been set, so the distribution of blocks is ")')
+          write(io_lun,fmt='(4x,"read from a file.  There is an error specifying numbers of blocks.  ")')
+          write(io_lun,fmt='(4x,"Found from the file: ",3i6)') ntmpx, ntmpy, ntmpz
+          write(io_lun,fmt='(4x,"Calculated from input using grid points: ",3i6)') n_block_x, n_block_y, n_block_z
           call cq_abort("Aborting ! Please bring block input file and overall input file together.")
        end if
        ! Find and check total number of blocks
@@ -2741,7 +2741,7 @@ second:   do
 
     if(inode==ionode) then
       if (iprint_init>2) write(io_lun, &
-          '(2x,"Writing atomic positions to ",a,".xyz")') filename
+          '(6x,"Writing atomic positions to ",a,".xyz")') filename
       call io_assign(lun)
       if(append_coords) then
          open(unit=lun,file=filename,position='append')
@@ -2823,7 +2823,7 @@ second:   do
 
     if(inode==ionode) then
       if (iprint_init>2) write(io_lun, &
-          '(2x,"Writing atomic positions to ",a,".xyz")') filename
+          '(6x,"Writing atomic positions to ",a,".xyz")') filename
       call io_assign(lun)
       open(unit=lun,file=filename)
       write(lun,fmt='(i8)') ni_in_cell
@@ -3056,7 +3056,7 @@ second:   do
 
        write(io_lun,*)
        do i=1,numprocs
-          write(io_lun,'(a,i9,a,i9,2a)') 'ID-Info: MPI = ',i,'    Process = ',pids(i),'    Host = ',hostnames(i)
+          write(io_lun,'(4x,a,i9,a,i9,2a)') 'ID-Info: MPI = ',i,'    Process = ',pids(i),'    Host = ',hostnames(i)
        end do
        write(io_lun,*)
 
@@ -3246,7 +3246,7 @@ second:   do
           if(id_glob(ni) /= id_global) &
                call cq_abort(' ERROR in global labelling ',id_global,id_glob(ni))
           read(lun,101) id_tmp, ni2, velocity(1:3, ni)
-          if(ni2 /= ni) write(io_lun,*) &
+          if(ni2 /= ni) write(io_lun,fmt='(4x,a,i6,a,i6,a,i6)') &
                ' Order of atom has changed for global id (file_labelling) = ',id_global, &
                ' : corresponding labelling (NOprt labelling) used to be ',ni2,&
                ' : but now it is ',ni

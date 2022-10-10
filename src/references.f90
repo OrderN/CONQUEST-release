@@ -418,7 +418,8 @@ module references
     !!  MODIFICATION HISTORY
     !!   2020/03/24 14:22 dave
     !!    Changed to write reference key only if iprint<2
-    !!
+    !!   2022/10/06 11:41 dave
+    !!    Moved cite commands inside ionode only if statement
     !!  SOURCE
     !!
     subroutine compile_biblio
@@ -439,120 +440,104 @@ module references
       type(type_bibliography) :: bib
       type(type_reference)    :: reference
 
-      call bib%init_bib
-      call get_bib_db(bib)
-
       if (inode==ionode) then
-         !if(iprint_init>1) then
-         !   write(io_lun,*)
-         !   write(io_lun,'(4x,a)') "BIBLIOGRAPHY: If you publish results obtained &
-         !        &with CONQUEST, please consider citing the &
-         !        &following:"
-         !   write(io_lun,*)
-         !else
-            write(io_lun,fmt='(/4x,a/)') "BIBLIOGRAPHY: Please consider citing the following &
-                 &references in the conquest.bib file"
-         !end if
-      end if
+         call bib%init_bib
+         call get_bib_db(bib)
+         write(io_lun,fmt='(/4x,a/)') "BIBLIOGRAPHY: Please consider citing the following &
+              &references in the conquest.bib file"
 
-      ! Cite publications for *any* CONQUEST calculation
-      call bib%cite("Bowler2002pt",punc=", ",pre="CONQUEST: ")
-      call bib%cite("Miyazaki2004",punc=", ")
-      call bib%cite("Nakata2020") 
-      write(io_lun,*)
+         ! Cite publications for *any* CONQUEST calculation
+         call bib%cite("Bowler2002pt",punc=", ",pre="CONQUEST: ")
+         call bib%cite("Miyazaki2004",punc=", ")
+         call bib%cite("Nakata2020") 
+         write(io_lun,*)
 
-      !if (inode==ionode) then
-      !  write(io_lun,'(/4x,a)') "The following papers detail methodology used &
-      !                         &in this CONQUEST calculation:"
-      !  write(io_lun,*)
-      !end if
-
-      ! Cite method-specific publications
-      ! Basis sets
-      if (flag_basis_set == PAOs) then
-         if (flag_Multisite) then
-            call bib%cite("Bowler2019",punc=", ",pre="Basis: ")
-            call bib%cite("Nakata2014",punc=", ")
-            call bib%cite("Nakata2015")
-         else
-            call bib%cite("Bowler2019",pre="Basis: ")
-         end if
-      else
-         call bib%cite("Hernandez1997",punc=", ",pre="Basis: ")
-         call bib%cite("Bowler:1998lo")
-      end if
-      write(io_lun,*)
-      ! Finding DM
-      if (.NOT.flag_diagonalisation) then ! O(N)
-         call bib%cite("Bowler:1999if",punc=", ",pre="DM: ")
-         call bib%cite("Bowler2001",punc=", ")
-         call bib%cite("Bowler2010")
-      else
-         call bib%cite("Bowler:2006xr",pre="DM: ")
-      end if
-      write(io_lun,*)
-      if(flag_perform_cDFT)             call bib%cite("Sena:2011fc")
-      if(flag_DeltaSCF)                 call bib%cite("Terranova:2013fk")
-      ! Pseudopotentials
-      if (pseudo_type == ABINIT) then
-         call bib%cite("Hamann2013",punc=", ",pre="Pseudopotentials: ")
-         call bib%cite("Bowler2019")
-      end if
-      write(io_lun,*)
-      ! MD
-      if (leqi(runtype,'md')) then
-         call bib%cite("Arita2014",punc=", ",pre="MD: ")
-         if (flag_XLBOMD) then
-            call bib%cite("Niklasson2006",punc=", ")
-            call bib%cite("Niklasson2009",punc=", ")
-         end if
-         if (leqi(md_ensemble, 'npt')) then
-            if (leqi(md_thermo_type, 'nhc')) then
-               call bib%cite("Martyna1996",punc=", ")
-               call bib%cite("Hirakawa2017",punc=", ")
+         ! Cite method-specific publications
+         ! Basis sets
+         if (flag_basis_set == PAOs) then
+            if (flag_Multisite) then
+               call bib%cite("Bowler2019",punc=", ",pre="Basis: ")
+               call bib%cite("Nakata2014",punc=", ")
+               call bib%cite("Nakata2015")
+            else
+               call bib%cite("Bowler2019",pre="Basis: ")
             end if
-            call bib%cite("Martyna1994",punc=", ")
-            call bib%cite("Shinoda2004")
          else
-            if (leqi(md_thermo_type, 'nhc')) then
-               call bib%cite("Martyna1996",punc=", ")
-               call bib%cite("Hirakawa2017")
-            end if
+            call bib%cite("Hernandez1997",punc=", ",pre="Basis: ")
+            call bib%cite("Bowler:1998lo")
          end if
-         !if (flag_heat_flux)               call bib%cite("Carbogno2017")
          write(io_lun,*)
-      end if
-      ! Cell optimisation
-      if (optcell_method == 3) then
-         call bib%cite("Pfrommer1997",pre="Cell optimisation: ")
+         ! Finding DM
+         if (.NOT.flag_diagonalisation) then ! O(N)
+            call bib%cite("Bowler:1999if",punc=", ",pre="DM: ")
+            call bib%cite("Bowler2001",punc=", ")
+            call bib%cite("Bowler2010")
+         else
+            call bib%cite("Bowler:2006xr",pre="DM: ")
+         end if
          write(io_lun,*)
-      end if
-      ! Functionals
-      if(flag_functional_type>0) then
-         !if (inode==ionode) then
-         !   write(io_lun,'(/4x,a)') "The following paper details the functional used &
-         !        &in this CONQUEST calculation:"
-         !   write(io_lun,*)
-         !end if
-         if(flag_functional_type == functional_lda_pz81) &
-              call bib%cite("Perdew1981",pre="XC functional: ")
-         if(flag_functional_type == functional_lda_pw92) &
-              call bib%cite("Perdew1992",pre="XC functional: ")
-         if(flag_functional_type == functional_gga_pbe96) &
-              call bib%cite("Perdew1996",pre="XC functional: ")
-         if(flag_functional_type == functional_gga_pbe96_rev98) &
-              call bib%cite("Zhang1998",pre="XC functional: ")
-         if(flag_functional_type == functional_gga_pbe96_r99) &
-              call bib%cite("Hammer1999",pre="XC functional: ")
-         if(flag_functional_type == functional_gga_pbe96_wc) &
-              call bib%cite("Wu2006",pre="XC functional: ")
+         if(flag_perform_cDFT)             call bib%cite("Sena:2011fc")
+         if(flag_DeltaSCF)                 call bib%cite("Terranova:2013fk")
+         ! Pseudopotentials
+         if (pseudo_type == ABINIT) then
+            call bib%cite("Hamann2013",punc=", ",pre="Pseudopotentials: ")
+            call bib%cite("Bowler2019")
+         end if
          write(io_lun,*)
-      else ! LibXC
-         call write_xc_refs
+         ! MD
+         if (leqi(runtype,'md')) then
+            call bib%cite("Arita2014",punc=", ",pre="MD: ")
+            if (flag_XLBOMD) then
+               call bib%cite("Niklasson2006",punc=", ")
+               call bib%cite("Niklasson2009",punc=", ")
+            end if
+            if (leqi(md_ensemble, 'npt')) then
+               if (leqi(md_thermo_type, 'nhc')) then
+                  call bib%cite("Martyna1996",punc=", ")
+                  call bib%cite("Hirakawa2017",punc=", ")
+               end if
+               call bib%cite("Martyna1994",punc=", ")
+               call bib%cite("Shinoda2004")
+            else
+               if (leqi(md_thermo_type, 'nhc')) then
+                  call bib%cite("Martyna1996",punc=", ")
+                  call bib%cite("Hirakawa2017")
+               end if
+            end if
+            !if (flag_heat_flux)               call bib%cite("Carbogno2017")
+            write(io_lun,*)
+         end if
+         ! Cell optimisation
+         if (optcell_method == 3) then
+            call bib%cite("Pfrommer1997",pre="Cell optimisation: ")
+            write(io_lun,*)
+         end if
+         ! Functionals
+         if(flag_functional_type>0) then
+            !if (inode==ionode) then
+            !   write(io_lun,'(/4x,a)') "The following paper details the functional used &
+            !        &in this CONQUEST calculation:"
+            !   write(io_lun,*)
+            !end if
+            if(flag_functional_type == functional_lda_pz81) &
+                 call bib%cite("Perdew1981",pre="XC functional: ")
+            if(flag_functional_type == functional_lda_pw92) &
+                 call bib%cite("Perdew1992",pre="XC functional: ")
+            if(flag_functional_type == functional_gga_pbe96) &
+                 call bib%cite("Perdew1996",pre="XC functional: ")
+            if(flag_functional_type == functional_gga_pbe96_rev98) &
+                 call bib%cite("Zhang1998",pre="XC functional: ")
+            if(flag_functional_type == functional_gga_pbe96_r99) &
+                 call bib%cite("Hammer1999",pre="XC functional: ")
+            if(flag_functional_type == functional_gga_pbe96_wc) &
+                 call bib%cite("Wu2006",pre="XC functional: ")
+            write(io_lun,*)
+         else ! LibXC
+            call write_xc_refs
+         end if
+         call bib%close_bib
       end if
-      
-      call bib%close_bib
-
+      return
     end subroutine compile_biblio
     !!***
 

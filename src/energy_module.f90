@@ -568,9 +568,9 @@ contains
        !
        if(iprint_gen + min_layer>=1) then
           if (nspin == 1) then
-             write (io_lun,fmt='(4x,"| Number of electrons      = ",f16.6)') electrons_tot
+             write (io_lun,fmt='(6x,"| Number of electrons      = ",f16.6)') electrons_tot
           else if(nspin == 2) then
-             write (io_lun,fmt='(4x,"| Number of electrons (u/d)= ",2f16.6)') electrons(1),electrons(nspin)
+             write (io_lun,fmt='(6x,"| Number of electrons (u/d)= ",2f16.6)') electrons(1),electrons(nspin)
           end if
        else if (iprint_gen + min_layer ==2) then
           write (io_lun, 6) en_conv *    band_energy,  en_units(energy_units)
@@ -767,58 +767,58 @@ contains
     return
 
 
-1   format(4x, '****===============================', &
+1   format(6x, '****===============================', &
                '===================================', &
                '===========****')
 
-2   format(4x, ' ')
+2   format(6x, ' ')
 
 
-6   format(4x,'|* band energy as 2Tr[K.H] = ',f25.15,' ',a2)
-7   format(4x,'|  hartree energy (rho)    = ',f25.15,' ',a2)
-8   format(4x,'|  ion-ion energy          = ',f25.15,' ',a2)
-67  format(4x,'|  hartree energy (drho)   = ',f25.15,' ',a2)
-68  format(4x,'|  screened ion-ion energy = ',f25.15,' ',a2)
-9   format(4x,'|  kinetic energy          = ',f25.15,' ',a2)
+6   format(6x,'|* band energy as 2Tr[K.H] = ',f25.15,' ',a2)
+7   format(6x,'|  hartree energy (rho)    = ',f25.15,' ',a2)
+8   format(6x,'|  ion-ion energy          = ',f25.15,' ',a2)
+67  format(6x,'|  hartree energy (drho)   = ',f25.15,' ',a2)
+68  format(6x,'|  screened ion-ion energy = ',f25.15,' ',a2)
+9   format(6x,'|  kinetic energy          = ',f25.15,' ',a2)
 
-30  format(4x,'|* xc total energy         = ',f25.15,' ',a2)
-31  format(4x,'|    DFT exchange          = ',f25.15,' ',a2)
-32  format(4x,'|    DFT correlation       = ',f25.15,' ',a2)
-33  format(4x,'|    EXX contribution      = ',f25.15,' ',a2)
+30  format(6x,'|* xc total energy         = ',f25.15,' ',a2)
+31  format(6x,'|    DFT exchange          = ',f25.15,' ',a2)
+32  format(6x,'|    DFT correlation       = ',f25.15,' ',a2)
+33  format(6x,'|    EXX contribution      = ',f25.15,' ',a2)
 
 
-40  format(4x,'|* pseudopotential energy  = ',f25.15,' ',a2)
-41  format(4x,'|    core correction       = ',f25.15,' ',a2)
-42  format(4x,'|    local contribution    = ',f25.15,' ',a2)
-43  format(4x,'|    nonlocal contribution = ',f25.15,' ',a2)
-60  format(4x,'|* pseudo/NA energy        = ',f25.15,' ',a2)
-62  format(4x,'|    NA contribution       = ',f25.15,' ',a2)
+40  format(6x,'|* pseudopotential energy  = ',f25.15,' ',a2)
+41  format(6x,'|    core correction       = ',f25.15,' ',a2)
+42  format(6x,'|    local contribution    = ',f25.15,' ',a2)
+43  format(6x,'|    nonlocal contribution = ',f25.15,' ',a2)
+60  format(6x,'|* pseudo/NA energy        = ',f25.15,' ',a2)
+62  format(6x,'|    NA contribution       = ',f25.15,' ',a2)
 
-11  format(4x,'|  Ha correction           = ',f25.15,' ',a2)
-12  format(4x,'|  XC correction           = ',f25.15,' ',a2)
+11  format(6x,'|  Ha correction           = ',f25.15,' ',a2)
+12  format(6x,'|  XC correction           = ',f25.15,' ',a2)
 
-10  format(4x,'|* Harris-Foulkes energy   = ',f25.15,' ',a2)
-13  format(4x,'|* DFT total energy        = ',f25.15,' ',a2)
-22  format(4x,'|  estimated accuracy      = ',f25.15,' ',a2)
+10  format(6x,'|* Harris-Foulkes energy   = ',f25.15,' ',a2)
+13  format(6x,'|* DFT total energy        = ',f25.15,' ',a2)
+22  format(6x,'|  estimated accuracy      = ',f25.15,' ',a2)
 
-14  format(4x,'| GS Energy as E-(1/2)TS   = ',f25.15,' ',a2)
-15  format(4x,'| Free Energy as E-TS      = ',f25.15,' ',a2)
-16  format(4x,'| GS Energy with kT -> 0   = ',f25.15,' ',a2)
-17  format(4x,'| Dispersion (DFT-D2)      = ',f25.15,' ',a2)
-18  format(4x,'| cDFT Energy as 2Tr[K.W]  = ',f25.15,' ',a2)
-19  format(4x,'| Number of e- spin up     = ',f25.15)
-20  format(4x,'| Number of e- spin down   = ',f25.15)
-21  format(4x,'| Spin pol. as (up - down) = ',f25.15)
+14  format(6x,'| GS Energy as E-(1/2)TS   = ',f25.15,' ',a2)
+15  format(6x,'| Free Energy as E-TS      = ',f25.15,' ',a2)
+16  format(6x,'| GS Energy with kT -> 0   = ',f25.15,' ',a2)
+17  format(6x,'| Dispersion (DFT-D2)      = ',f25.15,' ',a2)
+18  format(6x,'| cDFT Energy as 2Tr[K.W]  = ',f25.15,' ',a2)
+19  format(6x,'| Number of e- spin up     = ',f25.15)
+20  format(6x,'| Number of e- spin down   = ',f25.15)
+21  format(6x,'| Spin pol. as (up - down) = ',f25.15)
 
-23  format(4x,'|* check for accuracy      = ',f25.15,' ',a2)
-24  format(4x,'|  number of e- num. int.  = ',f25.15,' ',a2)
-25  format(4x,'|  number of e- as 2Tr[KS] = ',f25.15,' ',a2)
-26  format(4x,'|  one-electron energy     = ',f25.15,' ',a2)
-27  format(4x,'|  potential energy V      = ',f25.15,' ',a2)
-28  format(4x,'|  kinetic energy T        = ',f25.15,' ',a2)
-29  format(4x,'|* virial V/T              = ',f25.15,' ',a2)
-50  format(4x,'|  rescaled DFT exchange   = ',f25.15,' ',a2)
-51  format(4x,'|  rescaled exact exchange = ',f25.15,' ',a2)
+23  format(6x,'|* check for accuracy      = ',f25.15,' ',a2)
+24  format(6x,'|  number of e- num. int.  = ',f25.15,' ',a2)
+25  format(6x,'|  number of e- as 2Tr[KS] = ',f25.15,' ',a2)
+26  format(6x,'|  one-electron energy     = ',f25.15,' ',a2)
+27  format(6x,'|  potential energy V      = ',f25.15,' ',a2)
+28  format(6x,'|  kinetic energy T        = ',f25.15,' ',a2)
+29  format(6x,'|* virial V/T              = ',f25.15,' ',a2)
+50  format(6x,'|  rescaled DFT exchange   = ',f25.15,' ',a2)
+51  format(6x,'|  rescaled exact exchange = ',f25.15,' ',a2)
 
 
   end subroutine final_energy

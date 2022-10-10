@@ -815,7 +815,7 @@ contains
 
        call my_barrier
        if((inode == ionode) .and. (iprint_init > 1)) &
-            write(io_lun,*) 'initial_phis: completed set_blip_index()'
+            write(io_lun,fmt='(10x,a)') 'initial_phis: completed set_blip_index()'
 
        !if((inode == ionode).and.(iprint_init >= 0)) then
        !   write(unit=io_lun,fmt='(/" initial_phis: n_species:",i3)') n_species
@@ -1306,7 +1306,7 @@ contains
             mat_phi=matphi)
        electrons_tot = spin_factor * sum(electrons)
        if (inode == ionode .and. iprint_init > 2)              &
-            write (io_lun,fmt='(4x,a)') 'Got elect: (Nup, Ndn, Ntotal) ', &
+            write (io_lun,fmt='(4x,a,3f12.5)') 'Got elect: (Nup, Ndn, Ntotal) ', &
             electrons(1), electrons(nspin),   &
             electrons_tot
     end if
@@ -1362,7 +1362,7 @@ contains
        electrons_tot = spin_factor * sum(electrons)
        density = density * ne_in_cell/electrons_tot
        if (inode == ionode .and. iprint_init > 2) &
-            write (io_lun, fmt='(4x,a)') 'In initial_H, electrons: ', electrons_tot
+            write (io_lun, fmt='(4x,a,f12.5)') 'In initial_H, electrons: ', electrons_tot
        ! if flag_LFD=T, update SF-PAO coefficients with the obtained density unless they have been read
        ! and update S with the coefficients
        if ((.NOT.read_option).AND.flag_LFD) then

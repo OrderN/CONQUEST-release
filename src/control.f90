@@ -418,14 +418,6 @@ contains
                write(io_lun,fmt='(4x,a)') trim(prefix)//" gamma < 0.  Setting to gg/ggold."
           gamma = gg/ggold ! Default to FR if PR gives negative
        end if
-       if (inode == ionode .and. iprint_MD + min_layer > 2) then
-          ! Redundant: reproduces output below
-          !write (io_lun,fmt='(4x,a,f12.8,a2,"/",a2)') &
-          !     trim(prefix)//' Force Residual = ', &
-          !     for_conv * sqrt(gg/ni_in_cell),en_units(energy_units), d_units(dist_units)
-          write (io_lun,fmt='(4x,a,f12.8)') &
-               trim(prefix)//' gamma = ', gamma
-       end if
        if (CGreset) then
           if (gamma > one) then
              if (inode == ionode .and. iprint_MD + min_layer > 1) &
@@ -433,6 +425,14 @@ contains
                   trim(prefix)//" gamma>1, so resetting direction"
              gamma = zero
           end if
+       end if
+       if (inode == ionode .and. iprint_MD + min_layer > 2) then
+          ! Redundant: reproduces output below
+          !write (io_lun,fmt='(4x,a,f12.8,a2,"/",a2)') &
+          !     trim(prefix)//' Force Residual = ', &
+          !     for_conv * sqrt(gg/ni_in_cell),en_units(energy_units), d_units(dist_units)
+          write (io_lun,fmt='(4x,a,f12.8)') &
+               trim(prefix)//' gamma = ', gamma
        end if
        !if (inode == ionode) &
        !     write (io_lun, fmt='(/4x,"Atomic relaxation CG iteration: ",i5)') iter
@@ -476,8 +476,9 @@ contains
        else if(cg_line_min==adapt_backtrack) then
           call adapt_backtrack_linemin(cg, energy0, energy1, fixed_potential, vary_mu)
        end if
+       min_layer = min_layer + 1
        ! Output positions
-       if (myid == 0 .and. iprint_gen > 1) then
+       if (myid == 0 .and. iprint_gen + min_layer > 1) then
           call print_atomic_positions
        end if
        call write_atomic_positions("UpdatedAtoms.dat", trim(pdb_template))
@@ -485,7 +486,6 @@ contains
        ! Analyse forces
        g0 = dot(length, tot_force, 1, tot_force, 1)
        call get_maxf(max)
-       min_layer = min_layer + 1
        ! Output and energy changes
        dE = energy1 - energy0
 
@@ -2298,9 +2298,9 @@ contains
             write(io_lun,fmt='(2x,"SQNM iteration ",i4)') iter
        ! Take a step downhill
        if(iter==1) then
-          call backtrack_linemin_cell(cg, enthalpy0, enthalpy1, fixed_potential, vary_mu)
+          call backtrack_linemin_cell(cg, press, enthalpy0, enthalpy1, fixed_potential, vary_mu)
        else
-          call single_step_cell(cg, enthalpy0, enthalpy1, fixed_potential, vary_mu)
+          call single_step_cell(cg, press, enthalpy0, enthalpy1, fixed_potential, vary_mu)
        end if
        if(enthalpy1>enthalpy0) then
           if(inode==ionode.AND.iprint_MD>1) write(io_lun,fmt='(4x,"Energy rise: resetting history")')
@@ -2314,7 +2314,7 @@ contains
           !cg_new(i) = (stress(i,i) - press*volume)*orcell(i)/wscal
           !cg(i) = -cg_new(i)*wscal/orcell(i) ! Search downhill
           !end do
-          call backtrack_linemin_cell(cg, enthalpy0, enthalpy1, fixed_potential, vary_mu)
+          call backtrack_linemin_cell(cg, press, enthalpy0, enthalpy1, fixed_potential, vary_mu)
           if(enthalpy1>enthalpy0) call cq_abort("Energy rise twice in succession: check SCF and other tolerances")
           npmod = 1
           iter_loc = 1
@@ -2724,7 +2724,7 @@ contains
             write(io_lun,fmt='(2x,"SQNM iteration ",i4)') iter
        ! Line search
        if(iter==1) then
-          call backtrack_linemin_full(cg, energy0, energy1, fixed_potential, vary_mu)
+          !call backtrack_linemin_full(cg, energy0, energy1, fixed_potential, vary_mu)
        else
           call single_step_full(cg, energy0, energy1, fixed_potential, vary_mu)
        end if
@@ -2741,7 +2741,7 @@ contains
              cg_new(i,ni_in_cell+1) = (stress(i,i) - press*volume)*orcell(i)/wscal
              cg(i,ni_in_cell+1) = -cg_new(i,ni_in_cell+1)*wscal/orcell(i)
           end do
-          call backtrack_linemin_full(cg, energy0, energy1, fixed_potential, vary_mu)
+          !call backtrack_linemin_full(cg, energy0, energy1, fixed_potential, vary_mu)
           !call single_step(cg, energy0, energy1, fixed_potential, vary_mu)
           if(energy1>energy0) call cq_abort("Energy rise twice in succession: check SCF and other tolerances")
           npmod = 1
@@ -3007,6 +3007,8 @@ contains
   !!    Tweak output and iteration update
   !!   2022/09/16 16:57 dave
   !!    Added backtrack line minimiser
+  !!   2022/10/05 08:50 dave
+  !!    Improving output
   !!  SOURCE
   !!
   subroutine cell_cg_run(fixed_potential, vary_mu, total_energy)
@@ -3019,7 +3021,7 @@ contains
          atom_coord, rcellx, rcelly, rcellz,   &
          area_general, iprint_MD,              &
          IPRINT_TIME_THRES1, cell_en_tol,      &
-         cell_constraint_flag, cell_stress_tol
+         cell_constraint_flag, cell_stress_tol, min_layer
     use group_module,  only: parts
     use minimise,      only: get_E_and_F
     use move_atoms,    only: safemin_cell, enthalpy, enthalpy_tolerance, &
@@ -3028,7 +3030,7 @@ contains
     use GenBlas,       only: dot
     use force_module,  only: stress, tot_force
     use io_module,     only: write_atomic_positions, pdb_template, &
-         check_stop
+         check_stop, print_atomic_positions, return_prefix
     use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use timer_module
     use io_module,      only: leqi
@@ -3055,8 +3057,21 @@ contains
          stress_diff, volume, stress_target
     real(double), dimension(3) :: cg
 
-    if (myid == 0 .and. iprint_gen > 0) &
-         write (io_lun, fmt='(/4x,"Starting CG lattice vector relaxation"/)')
+    character(len=20) :: subname = "cell_cg_run: "
+    character(len=120) :: prefix
+
+    prefix = return_prefix(subname, min_layer)
+    if (myid == 0) then
+       if(cg_line_min==safe) then
+          write (io_lun, fmt='(/4x,a)') &
+               trim(prefix)//" starting relaxation with safemin line minimisation"
+       else if (cg_line_min==backtrack) then
+          write (io_lun, fmt='(/4x,a)') &
+               trim(prefix)//" starting relaxation with backtracking line minimisation"
+       end if
+       if(iprint_gen + min_layer>0) write(io_lun, fmt='(4x,a,f8.4,a,i4)') &
+            trim(prefix)//" Tolerance: ",cell_stress_tol," GPa Maximum steps: ",MDn_steps
+    end if
     search_dir_x = zero
     search_dir_y = zero
     search_dir_z = zero
@@ -3064,8 +3079,6 @@ contains
     ! Do we need to add MD.MaxCGDispl ?
     done = .false.
     length = 3
-    if (myid == 0 .and. iprint_gen > 0) &
-         write (io_lun, 2) MDn_steps, cell_en_tol,en_units(energy_units)
     energy0 = total_energy
     energy1 = zero
     dE = zero
@@ -3089,8 +3102,8 @@ contains
        if (stress_diff > max_stress) max_stress = stress_diff
     end do
     if (inode==ionode) then
-       write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxStr: ",f12.8," H: ",e16.8," dH: ",f12.8)') &
-            0, max_stress, enthalpy0, zero
+       write(io_lun,'(/4x,"GeomOpt - Iter: ",i4," MaxStr: ",f12.8," GPa H: ",e16.8," Ha dH: ",f12.8," Ha")') &
+            0, max_stress*HaBohr3ToGPa, enthalpy0, zero
     end if
     ! Check for trivial case where pressure is converged
     if(max_stress < stress_target) then
@@ -3117,25 +3130,19 @@ contains
        ! Construct ratio for conjugacy. Constraints are initially applied within
        ! get_gamma_cell_cg.
        call get_gamma_cell_cg(ggold, gg, gamma, stressx, stressy, stressz)
-       if (myid == 0 .and. iprint_gen > 0) &
-            write(io_lun, 3) iter, gamma
-
-       if (inode == ionode .and. iprint_MD > 2) &
-            write (io_lun,*) ' CHECK :: energy residual = ', &
-            dE
-       if (inode == ionode .and. iprint_MD > 2) &
-            write (io_lun,*) ' CHECK :: gamma = ', gamma
-
        if (CGreset) then
           if (gamma > one .or. reset_iter > length) then
-             if (inode == ionode .and. iprint_gen > 0) &
-                  write(io_lun,*) ' CG direction is reset to steepest descents! '
+             if (inode == ionode .and. iprint_MD + min_layer > 1) &
+                  write(io_lun,fmt='(4x,a)') &
+                  trim(prefix)//" gamma>1, so resetting direction"
              gamma = zero
              reset_iter = 0
           end if
        end if
-       if (inode == ionode .and. iprint_gen > 0) &
-            write (io_lun, fmt='(/4x,"Lattice vector relaxation CG iteration: ",i5)') iter
+       if (inode == ionode .and. iprint_MD + min_layer > 2) then
+          write (io_lun,fmt='(4x,a,f12.8)') &
+               trim(prefix)//' gamma = ', gamma
+       end if
        ggold = gg
 
        !Build search direction.
@@ -3149,15 +3156,13 @@ contains
           search_dir_z = gamma*search_dir_z + stressz - press*volume
        end if
 
-       if (inode == ionode .and. iprint_gen > 0) &
-            write(io_lun,*)  "Initial cell dims ", rcellx, rcelly, rcellz
-
        new_rcellx = rcellx
        new_rcelly = rcelly
        new_rcellz = rcellz
 
        ! Minimise in this direction. Constraint information is also used within
        ! safemin_cell. Look in move_atoms.module.f90 for further information.
+       min_layer = min_layer - 1
        if(cg_line_min==safe) then
           call safemin_cell(new_rcellx, new_rcelly, new_rcellz, search_dir_x, &
                search_dir_y, search_dir_z, search_dir_mean, press, &
@@ -3166,14 +3171,14 @@ contains
           cg(1) = search_dir_x
           cg(2) = search_dir_y
           cg(3) = search_dir_z
-          call backtrack_linemin_cell(cg, enthalpy0, enthalpy1, fixed_potential, vary_mu)
+          call backtrack_linemin_cell(cg, press, enthalpy0, enthalpy1, fixed_potential, vary_mu)
        end if
+       min_layer = min_layer + 1
        ! Output positions to UpdatedAtoms.dat
-       if (myid == 0 .and. iprint_gen > 1) then
-          do i = 1, ni_in_cell
-             write (io_lun, 1) i, atom_coord(1,i), atom_coord(2,i), &
-                  atom_coord(3,i)
-          end do
+       if (myid == 0 .and. iprint_gen + min_layer > 1) then
+          write(io_lun, fmt='(/4x,a)') trim(prefix)//" Simulation cell dimensions: "
+          write(io_lun, fmt='(6x,f12.5,1x,a2," x ",f12.5,1x,a2," x ",f12.5,1x,a2)') &
+            rcellx, d_units(dist_units), rcelly, d_units(dist_units), rcellz, d_units(dist_units)
        end if
        call write_atomic_positions("UpdatedAtoms.dat", trim(pdb_template))
 
@@ -3196,28 +3201,25 @@ contains
        reset_iter = reset_iter +1
 
        if (inode==ionode) then
-          write(io_lun,'(/4x,"GeomOpt - Iter: ",i4," MaxStr: ",f12.8," H: ",e16.8," dH: ",f12.8/)') &
-               iter, max_stress, enthalpy1, en_conv*dH
+          write(io_lun,'(/4x,"GeomOpt - Iter: ",i4," MaxStr: ",f12.8," GPa H: ",e16.8," Ha dH: ",f12.8," Ha")') &
+               iter, max_stress*HaBohr3ToGPa, enthalpy1, en_conv*dH
           if (iprint_MD > 1) then
-             write(io_lun,'(4x,"Maximum stress         ",3f10.6)') &
-                  max_stress
-             write(io_lun,'(4x,"Stress tolerance:   ",f20.10)') &
+             write(io_lun,'(6x,"Maximum stress         ",3f10.6," GPa")') &
+                  max_stress*HaBohr3ToGPa
+             write(io_lun,'(6x,"Stress tolerance:   ",f20.10," GPa")') &
                   cell_stress_tol
-             write(io_lun,'(4x,"Change in stress: ",f15.8," ",a2)') dRMSstress, &
+             write(io_lun,'(6x,"Change in stress: ",f15.8," ",a2)') dRMSstress, &
                   en_units(energy_units)
-             write(io_lun,'(4x,"Enthalpy change:    ",f20.10," ",a2)') &
+             write(io_lun,'(6x,"Enthalpy change:    ",f20.10," ",a2)') &
                   en_conv*dH, en_units(energy_units)
-             write(io_lun,'(4x,"Enthalpy tolerance: ",f20.10)') &
+             write(io_lun,'(6x,"Enthalpy tolerance: ",f20.10)') &
                   enthalpy_tolerance
           else if (iprint_MD > 0) then
-             write(io_lun,'(4x,"Enthalpy change:    ",f20.10," ",a2)') &
+             write(io_lun,'(6x,"Enthalpy change:    ",f20.10," ",a2)') &
                   en_conv*dH, en_units(energy_units)
-             write(io_lun,'(4x,"Change in stress: ",f15.8," ",a2)') dRMSstress, &
-                  en_units(energy_units)
+             write(io_lun,'(6x,"Change in stress: ",f15.8," GPa")') dRMSstress*HaBohr3ToGPa
           end if
        end if
-
-       iter = iter + 1
 
        ! First exit is if too many steps have been taken. Default is 50.
        if (iter > MDn_steps) then
@@ -3229,15 +3231,16 @@ contains
 
        ! Second exit is if the desired enthalpy and stress tolerancex have ben reached
        if (abs(dH)<enthalpy_tolerance .and. max_stress < stress_target) then
-          if (inode==ionode) &
-               write(io_lun,'(/4x,a,i4,a)') "GeomOpt converged in ", &
-               iter, " iterations"
           done = .true.
-          if (myid == 0 .and. iprint_gen > 0) &
-               write (io_lun, fmt='(4x,"Enthalpy change below threshold: ",f20.10," ",a2)') &
-               dH*en_conv, en_units(energy_units)
-          write (io_lun, fmt='(4x,"Maximum stress below threshold:   ",f20.10," GPa")') &
-               max_stress*HaBohr3ToGPa
+          if (inode==ionode) then
+             write(io_lun,'(/4x,a,i4,a)') "GeomOpt converged in ", &
+                  iter, " iterations"
+             if (iprint_MD + min_layer > 0) &
+                  write (io_lun, fmt='(4x,a," Enthalpy change below threshold: ",f20.10," ",a2)') &
+                  trim(prefix),dH*en_conv, en_units(energy_units)
+             write (io_lun, fmt='(4x,a," Maximum stress below threshold:   ",f20.10," GPa")') &
+                  trim(prefix),max_stress*HaBohr3ToGPa
+          end if
        end if
 
        call stop_print_timer(tmr_l_iter, "a CG iteration", IPRINT_TIME_THRES1)
@@ -3245,21 +3248,13 @@ contains
        iter = iter + 1
     end do
 
-    if (myid == 0 .and. iprint_gen > 0) then
-       write(io_lun, fmt='("Final simulation box dimensions are: ")')
-       write(io_lun, fmt='(2x,"a = ",f12.5,1x,a2)') rcellx, d_units(dist_units)
-       write(io_lun, fmt='(2x,"b = ",f12.5,1x,a2)') rcelly, d_units(dist_units)
-       write(io_lun, fmt='(2x,"c = ",f12.5,1x,a2)') rcellz, d_units(dist_units)
+    if (myid == 0 .and. iprint_gen + min_layer > 0) then
+       write(io_lun, fmt='(/4x,"Final simulation box dimensions are: ")')
+       write(io_lun, fmt='(6x,f12.5,1x,a2," x ",f12.5,1x,a2," x ",f12.5,1x,a2)') &
+            rcellx, d_units(dist_units), rcelly, d_units(dist_units), rcellz, d_units(dist_units)
     end if
 
     call reg_dealloc_mem(area_general, 6*ni_in_cell, type_dbl)
-
-1   format(4x,'Atom ',i8,' Position ',3f15.8)
-2   format(4x,'Welcome to cell_cg_run. Doing ',i4,&
-         ' steps with tolerance of ',f12.5,a2)
-3   format(4x,'*** CG step ',i4,' Gamma: ',f14.8)
-4   format(4x,'Enthalpy change: ',f15.8,' ',a2)
-5   format(4x,'RMS Stress change: ',f15.8,' ',a2)
 
   end subroutine cell_cg_run
 
@@ -3339,8 +3334,7 @@ contains
        gamma = gg/ggold
 
     end if
-    if(inode==ionode.AND.iprint_gen>1) write(io_lun,fmt='(2x,"Stress gg is ",f12.5)') gg
-
+    return
   end subroutine get_gamma_cell_cg
 !!***
 
@@ -4030,12 +4024,13 @@ contains
     use group_module,  only: parts
     use minimise,      only: get_E_and_F
     use move_atoms,    only: safemin_full, cq_to_vector, enthalpy, &
-                             enthalpy_tolerance
+                             enthalpy_tolerance, backtrack_linemin_full, &
+                             cg_line_min, safe, backtrack
     use GenComms,      only: inode, ionode
     use GenBlas,       only: dot
     use force_module,  only: tot_force, stress
     use io_module,     only: write_atomic_positions, pdb_template, &
-                             check_stop, write_xsf
+                             check_stop, write_xsf, return_prefix, print_atomic_positions
     use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use timer_module
     use store_matrix,  ONLY: dump_InfoMatGlobal, dump_pos_and_matrices
@@ -4052,7 +4047,7 @@ contains
     real(double)   :: energy0, energy1, max, g0, dE, gg, ggold, gamma, gg1, &
                       press, rcellx_ref, rcelly_ref, rcellz_ref, &
                       enthalpy0, enthalpy1, dH, volume, max_stress, &
-                      stress_diff
+                      stress_diff, dRMSstress, grad_f_dot_p
     integer        :: i,j,k,iter,length, jj, stat
     logical        :: done
     type(cq_timer) :: tmr_l_iter
@@ -4060,27 +4055,34 @@ contains
                                                  config
     real(double), dimension(3) :: one_plus_strain, strain, cell_ref
 
-    if (inode==ionode .and. iprint_MD > 2) &
-      write(io_lun,'(2x,a)') "control/full_cg_run_single_vector"
+    character(len=20) :: subname = "full_cg_run: "
+    character(len=120) :: prefix
 
+    prefix = return_prefix(subname, min_layer)
     allocate(cg(3,ni_in_cell+1), STAT=stat)
     allocate(force(3,ni_in_cell+1), STAT=stat)
     allocate(force_old(3,ni_in_cell+1), STAT=stat)
     allocate(config(3,ni_in_cell+1), STAT=stat)
     length = 3*(ni_in_cell+1)
     call reg_alloc_mem(area_general, 5*length, type_dbl)
-
-    if (inode==ionode) &
-      write (io_lun, fmt='(/4x,"Starting CG cell and atomic relaxation"/)')
+    if (inode == ionode) then
+       if(cg_line_min==safe) then
+          write (io_lun, fmt='(/4x,a)') &
+               trim(prefix)//" starting relaxation with safemin line minimisation"
+       else if (cg_line_min==backtrack) then
+          write (io_lun, fmt='(/4x,a)') &
+               trim(prefix)//" starting relaxation with safemin line minimisation"
+          write (io_lun, fmt='(4x,a)') &
+               trim(prefix)//" as backtrack line minimisation not yet implemented"
+       end if
+       if(iprint_gen + min_layer>0) write(io_lun, fmt='(4x,a,f8.4,a2,"/",a2,a,i4)') &
+            trim(prefix)//" Tolerance: ",MDcgtol,en_units(energy_units), d_units(dist_units),&
+            " Maximum steps: ",MDn_steps
+    end if
     cg = zero
     ! Do we need to add MD.MaxCGDispl ?
     done = .false.
     length = 3*(ni_in_cell+1)
-    if (inode==ionode .and. iprint_gen > 0) then
-      write(io_lun,'(4x,"Welcome to cg_run. Doing ",i4," steps")') MDn_steps
-      write(io_lun,'(4x,"Force tolerance:    ",f20.10)') MDcgtol
-      write(io_lun,'(4x,"Enthalpy tolerance: ",f20.10)') enthalpy_tolerance
-    end if
     press = target_pressure/HaBohr3ToGPa
     energy0 = total_energy
     enthalpy0 = enthalpy(energy0, press)
@@ -4092,15 +4094,31 @@ contains
     cell_ref(3) = rcellz
 
     ! Find energy and forces
-    min_layer = min_layer - 1
+    !min_layer = min_layer - 1
     call get_E_and_F(fixed_potential, vary_mu, energy0, .true., .true.)
     call dump_pos_and_matrices
     call get_maxf(max)
-    min_layer = min_layer + 1
+    volume = rcellx*rcelly*rcellz
+    max_stress = zero
+    do i=1,3
+       stress_diff = abs(press + stress(i,i))/volume
+       if (stress_diff > max_stress) max_stress = stress_diff
+    end do
+    !min_layer = min_layer + 1
     enthalpy0 = enthalpy(energy0, press)
     if (inode==ionode) then
       write(io_lun,'(/4x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," H: ",e16.8," dH: ",f12.8/)') &
            0, max, enthalpy0, zero
+    end if
+    ! Check for trivial case where forces are converged
+    if (abs(max) < MDcgtol .and. max_stress < cell_stress_tol) then
+       done = .true.
+       if (inode == ionode) then
+          write(io_lun,'(4x,a,i4,a)') "GeomOpt converged in ", iter, " iterations"
+          write (io_lun, fmt='(4x,"Maximum force below threshold:  ",f12.5)') max
+          write (io_lun, fmt='(4x,"Maximum stress below threshold: ",f12.5)') max_stress
+       end if
+       return
     end if
 
     iter = 1
@@ -4127,21 +4145,23 @@ contains
       else
         gamma = (gg-gg1)/ggold ! PR - change to gg/ggold for FR
       end if
-      if(gamma<zero) gamma = zero
-      if (inode == ionode .and. iprint_MD > 2) &
-        write(io_lun,*) ' CHECK :: Force Residual = ', &
-                        for_conv * sqrt(gg)/ni_in_cell
-      if (inode == ionode .and. iprint_MD > 2) &
-        write(io_lun,*) ' CHECK :: gamma = ', gamma
+       if(gamma<zero) then
+          if(inode==ionode .and. iprint_MD + min_layer > 2) &
+               write(io_lun,fmt='(4x,a)') trim(prefix)//" gamma < 0.  Setting to gg/ggold."
+          gamma = gg/ggold ! Default to FR if PR gives negative
+       end if
       if (CGreset) then
         if (gamma > one) then
-          if (inode==ionode) &
-            write(io_lun,*) ' CG direction is reset! '
-          gamma = zero
+           if (inode == ionode .and. iprint_MD + min_layer > 1) &
+                write(io_lun,fmt='(4x,a)') &
+                trim(prefix)//" gamma>1, so resetting direction"
+           gamma = zero
+        end if
       end if
+      if (inode == ionode .and. iprint_MD + min_layer > 2) then
+         write (io_lun,fmt='(4x,a,f12.8)') &
+              trim(prefix)//' gamma = ', gamma
       end if
-      if (inode == ionode) &
-        write (io_lun,'(4x,"CG iteration: ",i5," Gamma: ",f12.6)') iter, gamma
       ggold = gg
       ! Build search direction - note that indexing is correct (cf safemin)
       ! as we update atom_coord in safemin_full
@@ -4152,17 +4172,23 @@ contains
       end do
       force_old = force
       ! Minimise in this direction
-      !min_layer = min_layer - 1
-      call safemin_full(config, cg, cell_ref, enthalpy0, enthalpy1, &
-                        press, fixed_potential, vary_mu)
-      !min_layer = min_layer + 1
-      ! Output positions
-      if (inode==ionode .and. iprint_gen > 1) then
-        write(io_lun,'(4x,a4,a15)') "Atom", "Position"
-        do i = 1, ni_in_cell
-          write(io_lun,'(4x,i8,3f15.8)') i,atom_coord(:,i)
-        end do
+      min_layer = min_layer - 1
+      if(cg_line_min==safe) then
+         call safemin_full(config, cg, cell_ref, enthalpy0, enthalpy1, &
+              press, fixed_potential, vary_mu)
+      else if(cg_line_min==backtrack) then
+         call safemin_full(config, cg, cell_ref, enthalpy0, enthalpy1, &
+              press, fixed_potential, vary_mu)
+         ! Backtrack does not (yet) work - don't use ! 
+         !grad_f_dot_p = -dot(3*ni_in_cell+3,force,1,cg,1)
+         !call backtrack_linemin_full(config, cg, cell_ref, enthalpy0, enthalpy1, &
+         !     press, grad_f_dot_p, fixed_potential, vary_mu)         
       end if
+      min_layer = min_layer + 1
+      ! Output positions
+       if (inode == ionode .and. iprint_gen + min_layer > 1) then
+          call print_atomic_positions
+       end if
       call write_atomic_positions("UpdatedAtoms.dat", trim(pdb_template))
       if (flag_write_xsf) call write_xsf('trajectory.xsf', iter)
 
@@ -4181,19 +4207,24 @@ contains
       if (inode==ionode) then
         write(io_lun,'(/4x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," H: ",e16.8," dH: ",f12.8/)') &
              iter, max, enthalpy1, en_conv*dH
-        if (iprint_MD > 1) then
-          write(io_lun,'(4x,"Force Residual:     ",f20.10," ",a2,"/",a2)') &
-            for_conv*sqrt(g0/ni_in_cell), en_units(energy_units), & 
-            d_units(dist_units)
-          write(io_lun,'(4x,"Maximum force:      ",f20.10)') max
-          write(io_lun,'(4x,"Force tolerance:    ",f20.10)') MDcgtol
-          write(io_lun,'(4x,"Maximum stress         ",3f10.6)') &
-            max_stress
-          write(io_lun, fmt='(4x,"Stress tolerance:   ",f20.10)') &
-            cell_stress_tol
-          write(io_lun,'(4x,"Enthalpy change:    ",f20.10," ",a2)') &
+          if (iprint_MD + min_layer > 1) then
+             write(io_lun,'(4x,a,f20.10," ",a2,"/",a2)') &
+                  trim(prefix)//" Force Residual:     ", &
+                  for_conv*sqrt(g0/ni_in_cell), en_units(energy_units), & 
+                  d_units(dist_units)
+             write(io_lun,'(6x,"Maximum force:      ",f20.10)') max
+             write(io_lun,'(6x,"Force tolerance:    ",f20.10)') MDcgtol
+             write(io_lun,'(6x,"Energy change:      ",f20.10," ",a2)') &
+                  en_conv*dE, en_units(energy_units)
+             write(io_lun,'(6x,"Maximum stress:     ",f20.10," GPa")') &
+                  max_stress*HaBohr3ToGPa
+             write(io_lun,'(6x,"Stress tolerance:   ",f20.10," GPa")') &
+                  cell_stress_tol
+             write(io_lun,'(6x,"Change in stress:   ",f20.10," ",a2)') dRMSstress, &
+                  en_units(energy_units)
+          write(io_lun,'(6x,"Enthalpy change:    ",f20.10," ",a2)') &
             en_conv*dH, en_units(energy_units)
-          write(io_lun,'(4x,"Enthalpy tolerance: ",f20.10)') &
+          write(io_lun,'(6x,"Enthalpy tolerance: ",f20.10)') &
             enthalpy_tolerance
         end if
       end if
@@ -4201,23 +4232,21 @@ contains
       enthalpy0 = enthalpy1
       if (iter > MDn_steps) then
         done = .true.
-        if (inode==ionode) &
-          write(io_lun, fmt='(4x,"Exceeded number of MD steps: ",i6)') iter
+          if (inode == ionode) &
+               write (io_lun, fmt='(4x,a,i6)') &
+                     trim(prefix)//"Exceeded number of MD steps: ",iter
       end if
       if (abs(dH) < enthalpy_tolerance) then
         if (abs(max) < MDcgtol .and. max_stress < cell_stress_tol) then
           done = .true.
           if (inode==ionode) then
-            write(io_lun,'(/4x,a,i4,a)') "GeomOpt converged in ", iter, " iterations"
-            write(io_lun, fmt='(4x,"Maximum force:      ",f20.10)') max
-            write(io_lun, fmt='(4x,"Force tolerance:    ",f20.10)') MDcgtol
-            write(io_lun, fmt='(4x,"Enthalpy change:    ",f20.10)') dH
-            write(io_lun, fmt='(4x,"Enthalpy tolerance: ",f20.10)') &
-              enthalpy_tolerance
-            write(io_lun, fmt='(4x,"Maximum stress:     ",f20.10)') &
-              max_stress
-            write(io_lun, fmt='(4x,"Stress tolerance:   ",f20.10)') &
-              cell_stress_tol
+             write(io_lun,'(/4x,a,i4,a)') "GeomOpt converged in ", iter, " iterations"
+             if (inode == ionode .and. iprint_MD + min_layer > 0) &
+                  write (io_lun, fmt='(4x,a," Enthalpy change below threshold: ",f20.10," ",a2)') &
+                  trim(prefix),dH*en_conv, en_units(energy_units)
+             write (io_lun, fmt='(4x,a," Maximum stress below threshold:   ",f20.10," GPa")') &
+                  trim(prefix),max_stress*HaBohr3ToGPa
+             write(io_lun, fmt='(4x,a," Maximum force below threshold:    ",f20.10)') trim(prefix),max
           end if
         end if
       end if

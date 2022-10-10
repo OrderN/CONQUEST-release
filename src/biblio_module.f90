@@ -280,7 +280,7 @@ contains
 
     ! local variables
     type(type_reference)                    :: reference
-    character(18) :: start
+    character(20) :: start
 
     reference = bib%get_ref(key)
     if(iprint_init>3) then

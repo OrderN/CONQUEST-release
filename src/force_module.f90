@@ -594,10 +594,10 @@ contains
     if (inode == ionode) then
        write (io_lun, fmt='(4x,a,f15.8,"(",a2,"/",&
             &a2,") on atom ",i9," in ",a1," direction")')     &
-            trim(prefix)//" Maximum force : ",for_conv * max_force, en_units(energy_units), &
+            trim(prefix)//" Maximum force :   ",for_conv * max_force, en_units(energy_units), &
             d_units(dist_units), max_atom, comptstr(max_compt)
-       write(io_lun, fmt='(4x,a,f20.10," ",a2,"/",a2)') &
-            trim(prefix)//" Force Residual:     ", &
+       write(io_lun, fmt='(4x,a,f15.8," ",a2,"/",a2)') &
+            trim(prefix)//" Force Residual:   ", &
             for_conv*sqrt(g0/ni_in_cell), en_units(energy_units), d_units(dist_units)
     end if
     ! We will add PCC and nonSCF stresses even if the flags are not set, as they are
@@ -668,32 +668,32 @@ contains
          write (io_lun,fmt='(/4x,a,3a15)') trim(prefix)//"                  ","X","Y","Z"
          if(iprint_MD + min_layer > 1) write(io_lun,fmt='(4x,a)') trim(prefix)//" Stress contributions:"
       end if
-      call print_stress(trim(prefix)//" K.E. stress:      ", KE_stress, 2)
-      call print_stress(trim(prefix)//" S-Pulay stress:   ", SP_stress, 2)
-      call print_stress(trim(prefix)//" Phi-Pulay stress: ", PP_stress, 2)
-      call print_stress(trim(prefix)//" Local stress:     ", loc_HF_stress, 2)
-      call print_stress(trim(prefix)//" Local G stress:   ", loc_G_stress, 2)
-      call print_stress(trim(prefix)//" Non-local stress: ", NL_stress, 2)
-      call print_stress(trim(prefix)//" Jacobian stress:  ", GPV_stress, 2)
-      call print_stress(trim(prefix)//" XC stress:        ", XC_stress, 2)
+      call print_stress(trim(prefix)//" K.E. stress:      ", KE_stress, 3)
+      call print_stress(trim(prefix)//" S-Pulay stress:   ", SP_stress, 3)
+      call print_stress(trim(prefix)//" Phi-Pulay stress: ", PP_stress, 3)
+      call print_stress(trim(prefix)//" Local stress:     ", loc_HF_stress, 3)
+      call print_stress(trim(prefix)//" Local G stress:   ", loc_G_stress, 3)
+      call print_stress(trim(prefix)//" Non-local stress: ", NL_stress, 3)
+      call print_stress(trim(prefix)//" Jacobian stress:  ", GPV_stress, 3)
+      call print_stress(trim(prefix)//" XC stress:        ", XC_stress, 3)
       if (flag_neutral_atom) then
-        call print_stress(trim(prefix)//" Ion-ion stress:   ", screened_ion_stress, 2)
+        call print_stress(trim(prefix)//" Ion-ion stress:   ", screened_ion_stress, 3)
         if(flag_neutral_atom_projector) &
-             call print_stress(trim(prefix)//" N.A. stress:      ", NA_stress, 2)
+             call print_stress(trim(prefix)//" N.A. stress:      ", NA_stress, 3)
       else
-        call print_stress(trim(prefix)//" Ion-ion stress:   ", ion_interaction_stress, 2)
+        call print_stress(trim(prefix)//" Ion-ion stress:   ", ion_interaction_stress, 3)
       end if
-      call print_stress(trim(prefix)//" Hartree stress:   ", Hartree_stress, 2)
-      call print_stress(trim(prefix)//" PCC stress:       ", pcc_stress, 2)
-      call print_stress(trim(prefix)//" non-SCF stress:   ", nonSCF_stress, 2)
-      if(flag_dft_D2) call print_stress(trim(prefix)//" DFT-D2 stress:    ", disp_stress, 2)
-      call print_stress(trim(prefix)//" Total stress:     ", stress, 0)
+      call print_stress(trim(prefix)//" Hartree stress:   ", Hartree_stress, 3)
+      call print_stress(trim(prefix)//" PCC stress:       ", pcc_stress, 3)
+      call print_stress(trim(prefix)//" non-SCF stress:   ", nonSCF_stress, 3)
+      if(flag_dft_D2) call print_stress(trim(prefix)//" DFT-D2 stress:    ", disp_stress, 3)
+      call print_stress(trim(prefix)//" Total stress:     ", stress, -2) ! Force output
       volume = rcellx*rcelly*rcellz
       ! We need pressure in GPa, and only diagonal terms output
       scale = -HaBohr3ToGPa/volume
       !call print_stress("Total pressure:   ", stress*scale, 0)
       if(inode==ionode.AND.iprint_MD + min_layer>=1) &
-           write(io_lun,'(4x,a,f15.8,a4/)') trim(prefix)//" Average pressure:   ", &
+           write(io_lun,'(4x,a,f15.8,a4/)') trim(prefix)//" Average pressure: ", &
            third*scale*(stress(1,1) + stress(2,2) + stress(3,3))," GPa"
       if (flag_atomic_stress .and. iprint_MD + min_layer > 2) call check_atomic_stress
     end if
@@ -4336,7 +4336,7 @@ subroutine print_stress(label, str_mat, print_level)
   real(double) :: volume, scale
   
   if (inode==ionode) then
-    if (iprint_MD + min_layer > print_level) then
+    if (iprint_MD + min_layer >= print_level) then
       volume = rcellx*rcelly*rcellz
       scale = HaBohr3ToGPa/volume
       if (flag_full_stress) then

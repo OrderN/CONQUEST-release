@@ -267,7 +267,7 @@ contains
     ! Local variables
     integer :: stat
 
-    if(iprint_DM>2.AND.myid==0) write(io_lun,*) myid,' Starting Allocate Arrays'
+    if(iprint_DM>3.AND.myid==0) write(io_lun,*) myid,' Starting Allocate Arrays'
 
     ! Calculate maximum numbers of blocks in different directions
     blocks_r = (matrix_size/block_size_r)
@@ -340,7 +340,7 @@ contains
     ! Local variables
     integer :: stat
 
-    if(iprint_DM>2.AND.myid==0) write(io_lun,*) myid,' Starting Deallocate Arrays'
+    if(iprint_DM>3.AND.myid==0) write(io_lun,*) myid,' Starting Deallocate Arrays'
     call start_timer(tmr_std_allocation)
     deallocate(CC_to_SC,CQ2SC_row_info, my_row,proc_start, STAT=stat)
     if(stat/=0) call cq_abort("ScalapackFormat: Could not dealloc CC2SC, CQ2SC",stat)
@@ -492,7 +492,7 @@ contains
     integer :: i, j, n, nrow, ncol, prow, pcol, proc
     integer :: ng
 
-    if(iprint_DM>2.AND.myid==0) write(io_lun,fmt='(4x,a)') ' Starting Ref To SC Blocks'
+    if(iprint_DM>3.AND.myid==0) write(io_lun,fmt='(4x,a)') 'Starting Ref To SC Blocks'
     ! Construct processor ids
     if(iprint_DM>2.AND.myid==0) write(io_lun,fmt="(4x,'Scalapack Processor Grid')") 
     do ng = 1, proc_groups
@@ -503,7 +503,7 @@ contains
              if(n>N_procs_in_pg(ng)) call cq_abort('Ref2SC: Too many processors in group',ng,n)
              n = n + 1
           end do
-          if(iprint_DM>2.AND.myid==0) write(io_lun,*) (procid(ng,i,j),j=1,proc_cols)
+          if(iprint_DM>3.AND.myid==0) write(io_lun,*) (procid(ng,i,j),j=1,proc_cols)
        end do
     end do
     ! now build list of blocks and where they go
