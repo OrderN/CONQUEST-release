@@ -493,10 +493,8 @@ contains
           write(io_lun,'(/4x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," E: ",e16.8," dE: ",f12.8/)') & 
                iter, max, energy1, en_conv*dE
           if (iprint_MD + min_layer > 1) then
-             write(io_lun,'(4x,a,f20.10," ",a2,"/",a2)') &
-                  trim(prefix)//" Force Residual:     ", &
-                  for_conv*sqrt(g0/ni_in_cell), en_units(energy_units), & 
-                  d_units(dist_units)
+             write(io_lun,'(6x,"Force Residual:     ",f20.10," ",a2,"/",a2)') &
+                  for_conv*sqrt(g0/ni_in_cell), en_units(energy_units), d_units(dist_units)
              write(io_lun,'(6x,"Maximum force:      ",f20.10)') max
              write(io_lun,'(6x,"Force tolerance:    ",f20.10)') MDcgtol
              write(io_lun,'(6x,"Energy change:      ",f20.10," ",a2)') &
@@ -540,14 +538,6 @@ contains
          call cq_abort("Error deallocating cg in control: ", ni_in_cell,stat)
     call reg_dealloc_mem(area_general, 6*ni_in_cell, type_dbl)
 
-1   format(4x,'Atom ',i8,' Position ',3f15.8)
-2   format(4x,'Welcome to cg_run. Doing ',i4,&
-           ' steps with tolerance of ',f8.4,a2,"/",a2)
-3   format(4x,'*** CG step ',i4,' Gamma: ',f14.8)
-4   format(4x,'Energy change: ',f15.8,' ',a2)
-5   format(4x,'Force Residual: ',f15.10,' ',a2,'/',a2)
-6   format(4x,'Maximum force component: ',f15.8,' ',a2,'/',a2)
-7   format(4x,3f15.8)
   end subroutine cg_run
   !!***
 
@@ -2079,10 +2069,8 @@ contains
                iter, for_conv*max, en_conv*energy1, en_conv*dE
           if (iprint_MD + min_layer > 1) then
              g0 = dot(length, tot_force, 1, tot_force, 1)
-             write(io_lun,'(4x,a,f20.10," ",a2,"/",a2)') &
-                  trim(prefix)//" Force Residual:     ", &
-                  for_conv*sqrt(g0/ni_in_cell), en_units(energy_units), & 
-                  d_units(dist_units)
+             write(io_lun,'(6x,"Force Residual:     ",f20.10," ",a2,"/",a2)') &
+                  for_conv*sqrt(g0/ni_in_cell), en_units(energy_units), d_units(dist_units)
              write(io_lun,'(6x,"Maximum force:      ",f20.10)') max
              write(io_lun,'(6x,"Force tolerance:    ",f20.10)') MDcgtol
              write(io_lun,'(6x,"Energy change:      ",f20.10," ",a2)') &
@@ -2471,7 +2459,7 @@ contains
        newRMSstress = sqrt(((stress(1,1)*stress(1,1)) + &
             (stress(2,2)*stress(2,2)) + &
             (stress(3,3)*stress(3,3)))/3)
-       dRMSstress = RMSstress - newRMSstress
+       dRMSstress = (RMSstress - newRMSstress)/volume
        enthalpy0 = enthalpy1
        ! Check exit criteria
        volume = rcellx*rcelly*rcellz
@@ -3184,14 +3172,15 @@ contains
 
        ! Analyse Stresses and energies
        dH = enthalpy0 - enthalpy1
+       volume = rcellx*rcelly*rcellz
        newRMSstress = sqrt(((stress(1,1)*stress(1,1)) + &
             (stress(2,2)*stress(2,2)) + &
             (stress(3,3)*stress(3,3)))/3)
-       dRMSstress = RMSstress - newRMSstress
+       dRMSstress = (RMSstress - newRMSstress)/volume
 
        enthalpy0 = enthalpy1
+       total_energy = enthalpy1
        ! Check exit criteria
-       volume = rcellx*rcelly*rcellz
        max_stress = zero
        do i=1,3
           stress_diff = abs(press*volume + stress(i,i))/volume
@@ -3204,20 +3193,20 @@ contains
           write(io_lun,'(/4x,"GeomOpt - Iter: ",i4," MaxStr: ",f12.8," GPa H: ",e16.8," Ha dH: ",f12.8," Ha")') &
                iter, max_stress*HaBohr3ToGPa, enthalpy1, en_conv*dH
           if (iprint_MD > 1) then
-             write(io_lun,'(6x,"Maximum stress         ",3f10.6," GPa")') &
+             write(io_lun,'(6x,"Maximum stress:     ",f20.10," GPa")') &
                   max_stress*HaBohr3ToGPa
              write(io_lun,'(6x,"Stress tolerance:   ",f20.10," GPa")') &
                   cell_stress_tol
-             write(io_lun,'(6x,"Change in stress: ",f15.8," ",a2)') dRMSstress, &
-                  en_units(energy_units)
+             write(io_lun,'(6x,"Change in stress:   ",f20.10," GPa")') &
+                  dRMSstress*HaBohr3ToGPa
              write(io_lun,'(6x,"Enthalpy change:    ",f20.10," ",a2)') &
                   en_conv*dH, en_units(energy_units)
-             write(io_lun,'(6x,"Enthalpy tolerance: ",f20.10)') &
-                  enthalpy_tolerance
+             write(io_lun,'(6x,"Enthalpy tolerance: ",f20.10," ",a2)') &
+                  en_conv*enthalpy_tolerance, en_units(energy_units)
           else if (iprint_MD > 0) then
              write(io_lun,'(6x,"Enthalpy change:    ",f20.10," ",a2)') &
                   en_conv*dH, en_units(energy_units)
-             write(io_lun,'(6x,"Change in stress: ",f15.8," GPa")') dRMSstress*HaBohr3ToGPa
+             write(io_lun,'(6x,"Change in stress:   ",f20.10," GPa")') dRMSstress*HaBohr3ToGPa
           end if
        end if
 
@@ -3377,7 +3366,7 @@ contains
          atom_coord, area_general, iprint_MD,  &
          IPRINT_TIME_THRES1,                   &
          cell_en_tol, cell_stress_tol,         &
-         rcellx, rcelly, rcellz, runtype
+         rcellx, rcelly, rcellz, runtype, min_layer
     use input_module,         only: leqi
     use group_module,  only: parts
     use minimise,      only: get_E_and_F
@@ -3386,7 +3375,7 @@ contains
     use GenBlas,       only: dot
     use force_module,  only: tot_force, stress
     use io_module,     only: write_atomic_positions, pdb_template, &
-         check_stop, write_xsf
+         check_stop, write_xsf, return_prefix
     use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use timer_module
     use store_matrix,  only: dump_InfoMatGlobal, dump_pos_and_matrices
@@ -3415,11 +3404,10 @@ contains
          RMSstress, newRMSstress, dRMSstress, search_dir_mean, &
          mean_stress, energy2, volume, stress_diff, max_stress, stress_target
     integer      :: iter_cell
+    character(len=20) :: subname = "full_double_loop: "
+    character(len=120) :: prefix
 
-
-    if (inode==ionode .and. iprint_MD > 2) &
-         write(io_lun,'(2x,a)') "control/full_double_loop"
-
+    prefix = return_prefix(subname, min_layer)
     allocate(cg(3,ni_in_cell), STAT=stat)
     if (stat /= 0) &
          call cq_abort("Error allocating cg in control: ",&
@@ -3438,10 +3426,20 @@ contains
     cg = zero
     done_cell = .false.
     length = 3 * ni_in_cell
-    if (inode==ionode .and. iprint_gen > 0) then
-       write(io_lun,'(4x,"Welcome to full_double_loop. Doing ",i4," steps")') MDn_steps
-       write(io_lun,'(4x,"Force tolerance:    ",f20.10)') MDcgtol
-       write(io_lun,'(4x,"Stress tolerance: ",f20.10," GPa")') cell_stress_tol
+    if (inode == ionode) then
+       if ( leqi(runtype, 'cg')    ) then
+          write (io_lun, fmt='(/4x,a)') &
+               trim(prefix)//" starting relaxation with CG for ions and cell"
+       else if ( leqi(runtype, 'sqnm')    ) then
+          write (io_lun, fmt='(/4x,a)') &
+               trim(prefix)//" starting relaxation with SQNM for ions and CG for cell"
+       end if
+       if(iprint_gen + min_layer>0) then
+          write(io_lun, fmt='(4x,a,f8.4," ",a2,"/",a2,a,i4)') &
+               trim(prefix)//" force tolerance:  ",MDcgtol,en_units(energy_units), d_units(dist_units),&
+               " Maximum steps: ",MDn_steps
+          write(io_lun,'(4x,a,f8.4," GPa")') trim(prefix)//" stress tolerance: ",cell_stress_tol
+       end if
     end if
     energy0 = total_energy
     energy1 = zero
@@ -3464,13 +3462,8 @@ contains
        if (stress_diff > max_stress) max_stress = stress_diff
     end do
     if (inode==ionode) then
-       write(io_lun,'(2x,"GeomOpt + Iter: ",i4," MaxF: ",f12.8," H: " ,e16.8," MaxS: ",f12.8)') &
+       write(io_lun,'(/4x,"GeomOpt + Iter: ",i4," MaxF: ",f12.8," H: " ,e16.8," MaxS: ",f12.8)') &
             0, max, enthalpy0, max_stress*HaBohr3ToGPa
-    end if
-
-    if (inode == ionode .and. iprint_gen > 0) then
-       write (io_lun, fmt='(/4x,"Starting full cell optimisation"/)')
-       write(io_lun,*)  "Initial cell dims", rcellx, rcelly, rcellz
     end if
 
     iter = 1
@@ -3487,12 +3480,12 @@ contains
        call get_maxf(max)
        enthalpy1 = enthalpy(energy1, press)
        dH = enthalpy0 - enthalpy1
+       volume = rcellx*rcelly*rcellz
        newRMSstress = sqrt(((stress(1,1)*stress(1,1)) + &
             (stress(2,2)*stress(2,2)) + &
             (stress(3,3)*stress(3,3)))/three)
-       dRMSstress = RMSstress - newRMSstress
+       dRMSstress = (RMSstress - newRMSstress)/volume
 
-       volume = rcellx*rcelly*rcellz
        max_stress = zero
        do i=1,3
           stress_diff = abs(press*volume + stress(i,i))/volume
@@ -3502,15 +3495,23 @@ contains
        if (abs(max) < MDcgtol .and. max_stress < stress_target) then
           done_cell = .true.
           if (inode==ionode) then
-             write(io_lun,'(2x,a,i4,a)') "GeomOpt converged in ", &
+             write(io_lun,'(/4x,a,i4,a)') "GeomOpt converged in ", &
                   iter," combined ionic and cell steps"
-             write(io_lun, fmt='(4x,"Maximum force:      ",f20.10)') max
-             write(io_lun, fmt='(4x,"Force tolerance:    ",f20.10)') MDcgtol
-             write(io_lun, fmt='(4x,"Enthalpy change:    ",f20.10)') dH
-             write(io_lun, fmt='(4x,"Maximum stress:     ",f20.10," GPa")') &
+             g0 = dot(length, tot_force, 1, tot_force, 1)
+             write(io_lun,'(6x,"Force Residual:     ",f20.10," ",a2,"/",a2)') &
+                  for_conv*sqrt(g0/ni_in_cell), en_units(energy_units), d_units(dist_units)
+             write(io_lun,'(6x,"Maximum force:      ",f20.10," ",a2,"/",a2)') &
+                  for_conv*max, en_units(energy_units), d_units(dist_units)
+             write(io_lun,'(6x,"Force tolerance:    ",f20.10," ",a2,"/",a2)') &
+                  for_conv*MDcgtol, en_units(energy_units), d_units(dist_units)
+             write(io_lun,'(6x,"Maximum stress:     ",f20.10," GPa")') &
                   max_stress*HaBohr3ToGPa
-             write(io_lun, fmt='(4x,"Stress tolerance:   ",f20.10," GPa")') &
+             write(io_lun,'(6x,"Stress tolerance:   ",f20.10," GPa")') &
                   cell_stress_tol
+             write(io_lun,'(6x,"Change in stress:   ",f20.10," GPa")') &
+                  dRMSstress*HaBohr3ToGPa
+             write(io_lun,'(6x,"Enthalpy change:    ",f20.10," ",a2)') &
+                  en_conv*dH, en_units(energy_units)
           end if
           exit
        end if
@@ -3527,7 +3528,7 @@ contains
        newRMSstress = sqrt(((stress(1,1)*stress(1,1)) + &
             (stress(2,2)*stress(2,2)) + &
             (stress(3,3)*stress(3,3)))/three)
-       dRMSstress = RMSstress - newRMSstress
+       dRMSstress = (RMSstress - newRMSstress)/volume
 
        volume = rcellx*rcelly*rcellz
        max_stress = zero
@@ -3536,42 +3537,31 @@ contains
           if (stress_diff > max_stress) max_stress = stress_diff
        end do
        ! Test for finish
-       if (abs(max) < MDcgtol .and. max_stress < stress_target) then
-          done_cell = .true.
-          if (inode==ionode) then
-             write(io_lun,'(2x,a,i4,a)') "GeomOpt converged in ", &
-                  iter," combined ionic and cell steps"
-             write(io_lun, fmt='(4x,"Maximum force:      ",f20.10)') max
-             write(io_lun, fmt='(4x,"Force tolerance:    ",f20.10)') MDcgtol
-             write(io_lun, fmt='(4x,"Enthalpy change:    ",f20.10)') dH
-             write(io_lun, fmt='(4x,"Maximum stress:     ",f20.10," GPa")') &
-                  max_stress*HaBohr3ToGPa
-             write(io_lun, fmt='(4x,"Stress tolerance:   ",f20.10," GPa")') &
-                  cell_stress_tol
-          end if
-       end if
-
        if (inode==ionode) then
           write(io_lun,'(2x,"GeomOpt + Iter: ",i4," MaxF: ",f12.8," H: " ,e16.8," MaxS: ",f12.8)') &
                iter, max, enthalpy1, max_stress*HaBohr3ToGPa
           if (iprint_MD > 1) then
-             write(io_lun,'(4x,"Force Residual:     ",f20.10," ",a2,"/",a2)') &
-                  for_conv*sqrt(g0/ni_in_cell), en_units(energy_units), & 
-                  d_units(dist_units)
-             write(io_lun,'(4x,"Maximum force:         ",f20.10)') max
-             write(io_lun,'(4x,"Force tolerance:       ",f20.10)') MDcgtol
-             write(io_lun,'(4x,"Maximum stress         ",e14.6," Ha/Bohr**3")') &
-                  max_stress
-             write(io_lun,'(4x,"Simulation cell volume ",e14.6," Bohr**3")') volume
-             write(io_lun,'(4x,"Maximum stress         ",f14.6," GPa")') &
+             g0 = dot(length, tot_force, 1, tot_force, 1)
+             write(io_lun,'(6x,"Force Residual:     ",f20.10," ",a2,"/",a2)') &
+                  for_conv*sqrt(g0/ni_in_cell), en_units(energy_units), d_units(dist_units)
+             write(io_lun,'(6x,"Maximum force:      ",f20.10," ",a2,"/",a2)') &
+                  for_conv*max, en_units(energy_units), d_units(dist_units)
+             write(io_lun,'(6x,"Force tolerance:    ",f20.10," ",a2,"/",a2)') &
+                  for_conv*MDcgtol, en_units(energy_units), d_units(dist_units)
+             write(io_lun,'(6x,"Maximum stress:     ",f20.10," GPa")') &
                   max_stress*HaBohr3ToGPa
-             write(io_lun,'(4x,"Stress tolerance: ",f14.6," GPa")') &
+             write(io_lun,'(6x,"Stress tolerance:   ",f20.10," GPa")') &
                   cell_stress_tol
-             write(io_lun,'(4x,"Enthalpy change:       ",f20.10," ",a2)') &
+             write(io_lun,'(6x,"Change in stress:   ",f20.10," GPa")') &
+                  dRMSstress*HaBohr3ToGPa
+             write(io_lun,'(6x,"Enthalpy change:    ",f20.10," ",a2)') &
                   en_conv*dH, en_units(energy_units)
-             write(io_lun,'(4x,"Enthalpy tolerance:    ",f20.10)') &
-                  enthalpy_tolerance
+             write(io_lun,'(6x,"Enthalpy tolerance: ",f20.10," ",a2)') &
+                  en_conv*enthalpy_tolerance, en_units(energy_units)
           end if
+       end if
+       if (abs(max) < MDcgtol .and. max_stress < stress_target) then
+          done_cell = .true.
        end if
 
        iter = iter + 1
@@ -3590,9 +3580,10 @@ contains
        if (.not. done_cell) call check_stop(done_cell, iter_cell)
     end do
 
-    if (inode == ionode .and. iprint_gen > 0) then
-       write(io_lun, fmt='(/4x,"Finished full cell optimisation"/)')
-       write(io_lun,*)  "Final cell dims", rcellx, rcelly, rcellz
+    if (inode == ionode .and. iprint_gen + min_layer > 0) then
+       write(io_lun, fmt='(/4x,"Final simulation box dimensions are: ")')
+       write(io_lun, fmt='(6x,f12.5,1x,a2," x ",f12.5,1x,a2," x ",f12.5,1x,a2)') &
+            rcellx, d_units(dist_units), rcelly, d_units(dist_units), rcellz, d_units(dist_units)
     end if
 
     deallocate(z_new_pos, y_new_pos, x_new_pos, STAT=stat)
@@ -3604,12 +3595,6 @@ contains
     if (stat /= 0) &
          call cq_abort("Error deallocating cg in control: ", ni_in_cell,stat)
     call reg_dealloc_mem(area_general, 6*ni_in_cell, type_dbl)
-
-3   format(4x,'*** CG step ',i4,' Gamma: ',f14.8)
-4   format(4x,'Enthalpy change: ',f15.8,' ',a2)
-5   format(4x,'Force Residual: ',f15.10,' ',a2,'/',a2)
-6   format(4x,'Maximum force component: ',f15.8,' ',a2,'/',a2)
-7   format(4x,3f15.8)
 
   end subroutine full_double_loop
 !!***
@@ -3798,7 +3783,11 @@ contains
         enthalpy1 = enthalpy(energy1, press)
         dE = energy1 - energy0
         dH = enthalpy1 - enthalpy0
-        energy0 = energy1
+        newRMSstress = sqrt(((stress(1,1)*stress(1,1)) + &
+             (stress(2,2)*stress(2,2)) + &
+             (stress(3,3)*stress(3,3)))/3)
+        dRMSstress = (RMSstress - newRMSstress)
+        enthalpy0 = enthalpy1
 
         if (inode==ionode) then
           write(io_lun,'(/4x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," H: ",e16.8," dH: ",f12.8/)') &
@@ -4047,7 +4036,7 @@ contains
     real(double)   :: energy0, energy1, max, g0, dE, gg, ggold, gamma, gg1, &
                       press, rcellx_ref, rcelly_ref, rcellz_ref, &
                       enthalpy0, enthalpy1, dH, volume, max_stress, &
-                      stress_diff, dRMSstress, grad_f_dot_p
+                      stress_diff, dRMSstress, grad_f_dot_p, RMSstress, newRMSstress
     integer        :: i,j,k,iter,length, jj, stat
     logical        :: done
     type(cq_timer) :: tmr_l_iter
@@ -4107,8 +4096,8 @@ contains
     !min_layer = min_layer + 1
     enthalpy0 = enthalpy(energy0, press)
     if (inode==ionode) then
-      write(io_lun,'(/4x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," H: ",e16.8," dH: ",f12.8/)') &
-           0, max, enthalpy0, zero
+       write(io_lun,'(/4x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," H: ",e16.8," dH: ",f12.8/)') &
+            0, max, enthalpy0, zero
     end if
     ! Check for trivial case where forces are converged
     if (abs(max) < MDcgtol .and. max_stress < cell_stress_tol) then
@@ -4128,6 +4117,9 @@ contains
     enthalpy1 = enthalpy0
     do while (.not. done)
       call start_timer(tmr_l_iter, WITH_LEVEL) ! Construct ratio for conjugacy
+      RMSstress = sqrt(((stress(1,1)*stress(1,1)) + &
+           (stress(2,2)*stress(2,2)) + &
+           (stress(3,3)*stress(3,3)))/3)
       ! Construct the vector to optimise (config) and its force vector (force)
       call cq_to_vector(force, config, cell_ref, press)
       gg = zero
@@ -4204,37 +4196,39 @@ contains
 
       ! Output and energy changes
       dH = enthalpy0 - enthalpy1
+      newRMSstress = sqrt(((stress(1,1)*stress(1,1)) + &
+           (stress(2,2)*stress(2,2)) + &
+           (stress(3,3)*stress(3,3)))/3)
+      dRMSstress = (RMSstress - newRMSstress)/volume
       if (inode==ionode) then
-        write(io_lun,'(/4x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," H: ",e16.8," dH: ",f12.8/)') &
-             iter, max, enthalpy1, en_conv*dH
-          if (iprint_MD + min_layer > 1) then
-             write(io_lun,'(4x,a,f20.10," ",a2,"/",a2)') &
-                  trim(prefix)//" Force Residual:     ", &
-                  for_conv*sqrt(g0/ni_in_cell), en_units(energy_units), & 
-                  d_units(dist_units)
-             write(io_lun,'(6x,"Maximum force:      ",f20.10)') max
-             write(io_lun,'(6x,"Force tolerance:    ",f20.10)') MDcgtol
-             write(io_lun,'(6x,"Energy change:      ",f20.10," ",a2)') &
-                  en_conv*dE, en_units(energy_units)
-             write(io_lun,'(6x,"Maximum stress:     ",f20.10," GPa")') &
-                  max_stress*HaBohr3ToGPa
-             write(io_lun,'(6x,"Stress tolerance:   ",f20.10," GPa")') &
-                  cell_stress_tol
-             write(io_lun,'(6x,"Change in stress:   ",f20.10," ",a2)') dRMSstress, &
-                  en_units(energy_units)
-          write(io_lun,'(6x,"Enthalpy change:    ",f20.10," ",a2)') &
-            en_conv*dH, en_units(energy_units)
-          write(io_lun,'(6x,"Enthalpy tolerance: ",f20.10)') &
-            enthalpy_tolerance
-        end if
+         write(io_lun,'(/4x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," H: ",e16.8," dH: ",f12.8/)') &
+              iter, max, enthalpy1, en_conv*dH
+         if (iprint_MD + min_layer > 1) then
+            write(io_lun,'(6x,"Force Residual:     ",f20.10," ",a2,"/",a2)') &
+                 for_conv*sqrt(g0/ni_in_cell), en_units(energy_units), d_units(dist_units)
+            write(io_lun,'(6x,"Maximum force:      ",f20.10," ",a2,"/",a2)') &
+                 for_conv*max, en_units(energy_units), d_units(dist_units)
+            write(io_lun,'(6x,"Force tolerance:    ",f20.10," ",a2,"/",a2)') &
+                 for_conv*MDcgtol, en_units(energy_units), d_units(dist_units)
+            write(io_lun,'(6x,"Maximum stress:     ",f20.10," GPa")') &
+                 max_stress*HaBohr3ToGPa
+            write(io_lun,'(6x,"Stress tolerance:   ",f20.10," GPa")') &
+                 cell_stress_tol
+            write(io_lun,'(6x,"Change in stress:   ",f20.10," GPa")') &
+                 dRMSstress*HaBohr3ToGPa
+            write(io_lun,'(6x,"Enthalpy change:    ",f20.10," ",a2)') &
+                 en_conv*dH, en_units(energy_units)
+            write(io_lun,'(6x,"Enthalpy tolerance: ",f20.10," ",a2)') &
+                 en_conv*enthalpy_tolerance, en_units(energy_units)
+         end if
       end if
 
       enthalpy0 = enthalpy1
       if (iter > MDn_steps) then
-        done = .true.
-          if (inode == ionode) &
-               write (io_lun, fmt='(4x,a,i6)') &
-                     trim(prefix)//"Exceeded number of MD steps: ",iter
+         done = .true.
+         if (inode == ionode) &
+              write (io_lun, fmt='(4x,a,i6)') &
+              trim(prefix)//"Exceeded number of MD steps: ",iter
       end if
       if (abs(dH) < enthalpy_tolerance) then
         if (abs(max) < MDcgtol .and. max_stress < cell_stress_tol) then
@@ -4242,11 +4236,12 @@ contains
           if (inode==ionode) then
              write(io_lun,'(/4x,a,i4,a)') "GeomOpt converged in ", iter, " iterations"
              if (inode == ionode .and. iprint_MD + min_layer > 0) &
-                  write (io_lun, fmt='(4x,a," Enthalpy change below threshold: ",f20.10," ",a2)') &
+                  write (io_lun, fmt='(4x,a," Enthalpy change below threshold:  ",f20.10," ",a2)') &
                   trim(prefix),dH*en_conv, en_units(energy_units)
              write (io_lun, fmt='(4x,a," Maximum stress below threshold:   ",f20.10," GPa")') &
                   trim(prefix),max_stress*HaBohr3ToGPa
-             write(io_lun, fmt='(4x,a," Maximum force below threshold:    ",f20.10)') trim(prefix),max
+             write(io_lun, fmt='(4x,a," Maximum force below threshold:    ",f20.10," ",a2,"/",a2)') &
+                  trim(prefix),for_conv*max, en_units(energy_units), d_units(dist_units)
           end if
         end if
       end if

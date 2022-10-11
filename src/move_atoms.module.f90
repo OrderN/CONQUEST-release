@@ -2904,14 +2904,14 @@ contains
 
     end if
     dH = h0 - enthalpy_out
-    if (inode == ionode .and. iprint_MD + min_layer >= 0) then
-       write (io_lun, fmt='(4x,a,i4,a,f20.10," ",a2)') &
+    !if (inode == ionode .and. iprint_MD + min_layer >= 0) then
+       write (io_lun, fmt='(/4x,a,i4,a,f20.10," ",a2)') &
             trim(prefix)//" exit after ", iter, " iterations with enthalpy",&
             en_conv * enthalpy_out, en_units(energy_units)
-    else if (inode == ionode) then
-       write (io_lun, fmt='(/4x,a,f20.10," ",a2)') &
-            trim(prefix)//" Final enthalpy: ",en_conv * enthalpy_out, en_units(energy_units)
-    end if
+    !else if (inode == ionode) then
+    !   write (io_lun, fmt='(/4x,a,f20.10," ",a2)') &
+    !        trim(prefix)//" Final enthalpy: ",en_conv * enthalpy_out, en_units(energy_units)
+    !end if
     deallocate(config_start)
     call stop_timer(tmr_std_moveatoms)
     return

@@ -266,6 +266,7 @@ module DiagModule
   ! 2007/08/13 dave changed this to be set by user
   real(double) :: kT
   logical :: first = .true.
+  logical :: flag_info_greater_zero = .false.
 
   !logical :: diagon ! Do we diagonalise or use O(N) ?
 
@@ -4119,16 +4120,19 @@ contains
   !!    Updating the behaviour when info/=0
   !!   2018/11/13 17:30 nakata
   !!    Changed matS to be spin_SF dependent
+  !!   2022/10/10 16:53 dave
+  !!    Introduced flag to output info>0 warning only once
   !!  SOURCE
   !!
   subroutine distrib_and_diag(spin,index_kpoint,mode,flag_store_w,kpassed)
 
     use datatypes
     use numbers
-    use global_module,   only: iprint_DM, flag_SpinDependentSF, min_layer
+    use global_module,   only: iprint_DM, flag_SpinDependentSF, min_layer, iprint
     use mult_module,     only: matH, matS
     use ScalapackFormat, only: matrix_size, proc_rows, proc_cols,     &
          nkpoints_max, pgid, N_kpoints_in_pg, pg_kpoints, N_procs_in_pg, proc_groups
+    use GenComms,        only: cq_warn
 
     implicit none
 
@@ -4141,7 +4145,7 @@ contains
 
     ! Local
     real(double) :: vl, vu, orfac, scale
-    integer :: il, iu, m, mz, info, spin_SF
+    integer :: il, iu, m, mz, info, spin_SF, iprint_store
 
     spin_SF = 1
     if (flag_SpinDependentSF) spin_SF = spin
@@ -4178,11 +4182,15 @@ contains
             gap, info)
        if (info /= 0) then
           if(info==2.OR.info==4) then ! These are safe to continue
-             if(inode==ionode) then
-                write(io_lun,fmt='(2x,"************************************")')
-                write(io_lun,fmt='(2x,"** ScaLAPACK pzhegvx evec warning **")')
-                write(io_lun,fmt='(2x,"** INFO=",i2," but continuing  **")') info
-                write(io_lun,fmt='(2x,"************************************")')
+             if(.NOT.flag_info_greater_zero) then
+                call cq_warn("distrib_and_diag","ScaLAPACK pzhegvx warning, info=",info)
+                flag_info_greater_zero = .true.
+             else
+                ! Force iprint to zero temporarily to output warning to file not main output
+                iprint_store = iprint
+                iprint = 0
+                call cq_warn("distrib_and_diag","ScaLAPACK pzhegvx warning, info=",info)
+                iprint = iprint_store
              end if
           else
              call cq_abort ("FindEvals: pzhegvx failed for mode "//mode//" with INFO=", info)
