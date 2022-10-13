@@ -1565,7 +1565,7 @@ contains
     real(double) :: screenedE_sum_self
     real(double) :: overlap, dummy
     real(double) :: goverlap_x, goverlap_y, goverlap_z
-    character(len=12) :: subname = "Screened ion int: "
+    character(len=20) :: subname = "Screened ion int: "
     character(len=120) :: prefix
 
     prefix = return_prefix(subname, min_layer)
@@ -1658,9 +1658,9 @@ contains
     call gsum(screened_ion_interaction_energy)
     call gsum(screened_ion_force,3,ni_in_cell)
     if (flag_stress) call gsum(screened_ion_stress,3,3)
-    if(inode == ionode.AND.iprint_gen>1) &
-         write(unit=io_lun,fmt='(/4x,a,e20.12,a2/)') &
-         trim(prefix)//" Energy: ", screened_ion_interaction_energy,en_units(energy_units)
+    if(inode == ionode.AND.iprint_gen + min_layer > 1) &
+         write(unit=io_lun,fmt='(/4x,a,f20.12,x,a2/)') &
+         trim(prefix)//" energy: ", screened_ion_interaction_energy,en_units(energy_units)
 
   end subroutine screened_ion_interaction
 !!***

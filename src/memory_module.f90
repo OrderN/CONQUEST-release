@@ -233,7 +233,7 @@ contains
                      i,real(max_alloc_area(i))*mem_conv,mem_units(m_units)
              end do
           end if
-          write(io_lun,'(/4x,"Max total mem use is ",f10.3," ",a2)') &
+          write(io_lun,'(/4x,"Max total mem use is         ",f10.3," ",a2)') &
                real(max_alloc)*mem_conv,mem_units(m_units)
        end if
     end if

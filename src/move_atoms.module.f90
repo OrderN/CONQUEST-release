@@ -921,6 +921,7 @@ contains
        end if
        kmin = k2
     end if
+    iter = iter + 1
     !%%!if(flag_self_consistent.AND.(.NOT.flag_no_atomic_densities)) then
     !%%!   ! Subtract off atomic densities
     !%%!   store_density = density
@@ -1027,6 +1028,7 @@ contains
        end do
        ! Get atomic displacements: atom_coord_diff(1:3, ni_in_cell)
        k3_local = kmin-kmin_old!03/07/2013
+       iter = iter + 1
 
        call update_pos_and_matrices(update_var,direction)
        call update_H(fixed_potential)

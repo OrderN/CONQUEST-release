@@ -338,7 +338,7 @@ contains
     integer :: ierr
 
     if(inode==ionode) close(warning_lun)
-    if(myid==0) write(io_lun,fmt='(/4x,"Total run time was: ",f20.3," seconds")') mtime()*0.001_double
+    if(myid==0) write(io_lun,fmt='(/4x,"Total run time was: ",f19.3," seconds")') mtime()*0.001_double
     call MPI_Barrier(MPI_COMM_WORLD, ierr)
     call MPI_Finalize(ierr)
     return

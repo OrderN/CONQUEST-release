@@ -285,53 +285,58 @@ contains
   !!  
   subroutine print_md_energy(mdl)
 
+    use global_module,    only: min_layer
+    use units
     use md_control,       only: flag_extended_system
 
     ! passed variables
     class(type_md_model), intent(inout)   :: mdl
 
     ! local variables
+    character(len=10) :: prefixF = '          '
 
     if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) &
-      write(io_lun,'(4x,a)') "print_md_energy"
+         write(io_lun,'(4x,a)') prefixF(1:-2*min_layer)//"print_md_energy"
 
-    if (inode==ionode .and. iprint_MD>0) then
-      write (io_lun, '(4x,"Conserved quantity H''  : ",f15.8)') &
-        mdl%h_prime
-      write (io_lun, '(4x,a)') "Components of conserved quantity"
-      write (io_lun, '(4x,"Kinetic energy          : ",f15.8)') &
-        mdl%ion_kinetic_energy
-      write (io_lun, '(4x,"Potential energy        : ",f15.8)') &
-        mdl%dft_total_energy
-      select case(mdl%ensemble)
-      case('nvt')
-        select case(mdl%thermo_type)
-        case('nhc')
-          write (io_lun, '(4x,"Nose-Hoover energy      : ",f15.8)') &
-            mdl%e_thermostat
-        case('svr')
-          write (io_lun, '(4x,"SVR energy              : ",f15.8)') &
-            mdl%e_thermostat
-        end select
-      case('npt')
-        if (flag_extended_system .and. mdl%nequil < 1) then
+    if (inode==ionode .and. iprint_MD>0) &
+         write (io_lun, '(4x,a,f15.8,x,a2)') &
+         prefixF(1:-2*min_layer)//"Conserved quantity H'   : ",en_conv*mdl%h_prime,en_units(energy_units)
+    if (inode==ionode .and. iprint_MD + min_layer > 1) then
+       write (io_lun, '(4x,a)') prefixF(1:-2*min_layer)//"Components of conserved quantity"
+       write (io_lun, '(4x,a,f15.8,x,a2)') prefixF(1:-2*min_layer)//"Kinetic energy          : ", &
+            en_conv*mdl%ion_kinetic_energy, en_units(energy_units)
+       write (io_lun, '(4x,a,f15.8,x,a2)') prefixF(1:-2*min_layer)//"Potential energy        : ", &
+            en_conv*mdl%dft_total_energy, en_units(energy_units)
+       select case(mdl%ensemble)
+       case('nvt')
           select case(mdl%thermo_type)
           case('nhc')
-            write (io_lun, '(4x,"Nose-Hoover energy      : ",f15.8)') &
-              mdl%e_thermostat
+             write (io_lun, '(4x,a,f15.8,x,a2)') prefixF(1:-2*min_layer)//"Nose-Hoover energy      : ", &
+                  en_conv*mdl%e_thermostat, en_units(energy_units)
           case('svr')
-            write (io_lun, '(4x,"SVR energy              : ",f15.8)') &
-              mdl%e_thermostat
+             write (io_lun, '(4x,a,f15.8,x,a2)') prefixF(1:-2*min_layer)//"SVR energy              : ", &
+                  en_conv*mdl%e_thermostat, en_units(energy_units)
           end select
-          write (io_lun, '(4x,"Box kinetic energy      : ",f15.8)') &
-            mdl%e_barostat
-        end if
-        write (io_lun, '(4x,"PV                      : ",f15.8)') &
-          mdl%PV
-      end select
+       case('npt')
+          if (flag_extended_system .and. mdl%nequil < 1) then
+             select case(mdl%thermo_type)
+             case('nhc')
+                write (io_lun, '(4x,a,f15.8,x,a2)') prefixF(1:-2*min_layer)//"Nose-Hoover energy      : ", &
+                     en_conv*mdl%e_thermostat, en_units(energy_units)
+             case('svr')
+                write (io_lun, '(4x,a,f15.8,x,a2)') prefixF(1:-2*min_layer)//"SVR energy              : ", &
+                     en_conv*mdl%e_thermostat, en_units(energy_units)
+             end select
+             write (io_lun, '(4x,a,f15.8,x,a2)') prefixF(1:-2*min_layer)//"Box kinetic energy      : ", &
+                  en_conv*mdl%e_barostat, en_units(energy_units)
+          end if
+          write (io_lun, '(4x,a,f15.8,x,a2)') prefixF(1:-2*min_layer)//"PV                      : ", &
+               en_conv*mdl%PV, en_units(energy_units)
+       end select
     end if
   end subroutine print_md_energy
-
+!!****
+  
   !!****m* md_model/dump_stats *
   !!  NAME
   !!   dump_stats 

@@ -155,6 +155,7 @@ contains
     character(len=12) :: subname = "initialise: "
     character(len=120) :: prefix
 
+    min_layer = 0
     prefix = return_prefix(subname, min_layer)
     call init_timing_system(inode)
 
