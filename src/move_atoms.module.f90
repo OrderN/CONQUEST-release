@@ -1233,8 +1233,13 @@ contains
     end if
     call dump_pos_and_matrices
     ! Now find forces
-    call force(fixed_potential, vary_mu, n_L_iterations, &
-         L_tolerance, sc_tolerance, energy_out, .true.)
+    if (iprint_MD + min_layer > 0) then
+       call force(fixed_potential, vary_mu, n_L_iterations, &
+            L_tolerance, sc_tolerance, energy_out, .true.)
+    else
+       call force(fixed_potential, vary_mu, n_L_iterations, &
+            L_tolerance, sc_tolerance, energy_out, .false.)
+    end if
     ! Evaluate new grad f dot p
     grad_fp_dot_p = zero
     do i=1, ni_in_cell
@@ -1542,14 +1547,15 @@ contains
     end do ! while (.not. done)
     if(.not. done) call cq_abort("Failed to reduce energy in backtrack_linemin.  Final step size: ",alpha)
     enthalpy_out = h3
-    if(inode==ionode .and. abs(enthalpy_out - enthalpy_in) < abs(two*dE_elec_opt)) then
-       call cq_warn(subname, "Electronic structure dE is similar to atom movement dE; increase tolerance", &
-            dE_elec_opt, enthalpy_out - enthalpy_in)
-    end if
     call dump_pos_and_matrices
     ! Now find forces
-    call force(fixed_potential, vary_mu, n_L_iterations, &
-         L_tolerance, sc_tolerance, e3, .true.)
+    if (iprint_MD + min_layer > 0) then
+       call force(fixed_potential, vary_mu, n_L_iterations, &
+            L_tolerance, sc_tolerance, e3, .true.)
+    else
+       call force(fixed_potential, vary_mu, n_L_iterations, &
+            L_tolerance, sc_tolerance, e3, .false.)
+    end if
     ! Evaluate new grad f dot p
     grad_fp_dot_p = zero
     grad_fp_dot_p = grad_f_dot_p + direction(1)*stress(1,1)
@@ -1884,8 +1890,13 @@ contains
     call dump_pos_and_matrices
     ! Now find forces
     !min_layer = min_layer - 1
-    call force(fixed_potential, vary_mu, n_L_iterations, &
-         L_tolerance, sc_tolerance, enthalpy_out, .true.)
+    if (iprint_MD + min_layer > 0) then
+       call force(fixed_potential, vary_mu, n_L_iterations, &
+            L_tolerance, sc_tolerance, enthalpy_out, .true.)
+    else
+       call force(fixed_potential, vary_mu, n_L_iterations, &
+            L_tolerance, sc_tolerance, enthalpy_out, .false.)
+    end if
     !min_layer = min_layer + 1
     if (inode == ionode .and. iprint_MD + min_layer > 2) call print_atomic_positions
     dE = enthalpy_in - enthalpy_out
@@ -2202,8 +2213,13 @@ contains
     end if
     ! Now find forces
     min_layer = min_layer - 1
-    call force(fixed_potential, vary_mu, n_L_iterations, &
-         L_tolerance, sc_tolerance, energy_out, .true.)
+    if (iprint_MD + min_layer > 0) then
+       call force(fixed_potential, vary_mu, n_L_iterations, &
+            L_tolerance, sc_tolerance, energy_out, .true.)
+    else
+       call force(fixed_potential, vary_mu, n_L_iterations, &
+            L_tolerance, sc_tolerance, energy_out, .false.)
+    end if
     min_layer = min_layer + 1
     grad_fp_dot_p = zero
     do i=1, ni_in_cell
@@ -2663,7 +2679,7 @@ contains
     endif
     if (inode == ionode .and. iprint_MD + min_layer > 1) &
          write (io_lun, fmt='(4x,a,f20.10," ",a2)') &
-         trim(prefix)//" initial enthaly is ", &
+         trim(prefix)//" initial enthalpy is ", &
          en_conv * enthalpy_in, en_units(energy_units)
     if (inode == ionode .and. iprint_MD + min_layer > 0) then
        write (io_lun, fmt='(/4x,a/)') &
@@ -2776,6 +2792,7 @@ contains
        end if
        kmin = k2
     end if
+    iter = iter + 1
 
     call propagate_vector(force, config_start, config, cell_ref, kmin)
     call vector_to_cq(config, cell_ref, orcellx, orcelly, orcellz)
@@ -2871,6 +2888,7 @@ contains
        call propagate_vector(force, config_start, config, cell_ref, kmin)
        call vector_to_cq(config, cell_ref, orcellx, orcelly, orcellz)
        k3_local = kmin-kmin_old!03/07/2013
+       iter = iter + 1
        ! Re-order force into dummy for update_pos_and_matrices
        do i=1,ni_in_cell
           dummy(:,i) = force(:,id_glob(i))
@@ -4708,8 +4726,6 @@ contains
          flag_reset_dens_on_atom_move,           &
          IPRINT_TIME_THRES1, flag_pcc_global, &
          flag_diagonalisation, cell_constraint_flag, min_layer
-    use minimise,           only: get_E_and_F, sc_tolerance, L_tolerance, &
-         n_L_iterations
     use GenComms,           only: my_barrier, myid, inode, ionode,        &
          cq_abort
     use io_module,          only: write_atomic_positions, pdb_template
@@ -4728,10 +4744,6 @@ contains
     ! Passed variables
     real(double) :: start_rcellx, start_rcelly, start_rcellz,&
          search_dir_x, search_dir_y, search_dir_z, k, search_dir_mean
-
-    ! Shared variables needed by get_E_and_F for now (!)
-    logical           :: vary_mu, fixed_potential
-    character(len=40) :: output_file
 
     ! local variables
     real(double) :: orcellx, orcelly, orcellz, xvec, yvec, zvec, r2, scale

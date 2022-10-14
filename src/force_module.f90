@@ -586,7 +586,7 @@ contains
                 write (io_lun, 105) trim(prefix),(for_conv * tot_force(j,i),   j = 1, 3)
              end if
           else if (write_forces .and. iprint_MD + min_layer>=0 .and. ni_in_cell<atom_output_threshold) then
-             write (io_lun,fmt='(4x,a,i6,3f15.10)') &
+             write (io_lun,fmt='(4x,a,i6,3f15.10/)') &
                   trim(prefix),i, (for_conv * tot_force(j,i), j = 1, 3)
           end if ! (iprint_MD + min_layer > 2)
        end if ! (inode == ionode)
@@ -736,7 +736,7 @@ contains
 106 format(4x,a,' Force Ion-Ion: ',3f15.10)
 107 format(4x,a,' Force nonSC  : ',3f15.10)
 108 format(4x,a,' Force PCC    : ',3f15.10)
-105 format(4x,a,' Force Total  : ',3f15.10)
+105 format(4x,a,' Force Total  : ',3f15.10/)
 109 format(4x,a,' Force disp   : ',3f15.10)
 
   end subroutine force

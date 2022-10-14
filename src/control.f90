@@ -3546,13 +3546,13 @@ contains
     do while (.not. done_cell)
        ! Relax ions
        if(inode==ionode) write(io_lun,fmt='(4x,a)') trim(prefix)//" ionic relaxation"
-       min_layer = min_layer - 1
+       !min_layer = min_layer - 1
        if ( leqi(runtype, 'cg')    ) then
           call cg_run(fixed_potential, vary_mu, energy1)
        else if ( leqi(runtype, 'sqnm')    ) then
           call sqnm(fixed_potential, vary_mu, energy1)
        end if
-       min_layer = min_layer + 1
+       !min_layer = min_layer + 1
        ! Analyse forces, stresses and energies
        call get_maxf(max)
        enthalpy1 = enthalpy(energy1, press)
@@ -3583,13 +3583,13 @@ contains
        end if
        ! Relax cell
        if(inode==ionode) write(io_lun,fmt='(4x,a)') trim(prefix)//" cell relaxation"
-       min_layer = min_layer - 1
+       !min_layer = min_layer - 1
        !if ( leqi(runtype, 'cg')    ) then
           call cell_cg_run(fixed_potential, vary_mu, energy1)
        !else if ( leqi(runtype, 'sqnm')    ) then
        !   call cell_sqnm(fixed_potential, vary_mu, energy1)
        !end if
-       min_layer = min_layer + 1
+       !min_layer = min_layer + 1
        ! Analyse forces, stresses and energies
        call get_maxf(max)
        enthalpy1 = enthalpy(energy1, press)
@@ -4292,7 +4292,7 @@ contains
       dRMSstress = (RMSstress - newRMSstress)/volume
       if (inode==ionode) then
          write(io_lun,'(/4x,a,i4," MaxF: ",f12.8,x,a2,"/",a2," H: " ,e16.8,x,a2," MaxS: ",f12.8," GPa")') &
-              trim(prefixGO)//" - Iter: ",0, for_conv*max, en_units(energy_units), d_units(dist_units), &
+              trim(prefixGO)//" - Iter: ",iter, for_conv*max, en_units(energy_units), d_units(dist_units), &
               enthalpy1, en_units(energy_units), max_stress*HaBohr3ToGPa
          if (iprint_MD + min_layer > 1) then
              write(io_lun,'(4x,a,f20.10," ",a2,"/",a2)') prefixF(1:-2*min_layer)//"Force Residual:     ", &
