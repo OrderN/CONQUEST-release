@@ -138,7 +138,7 @@ contains
     use PosTan,                    only: PulayC, PulayBeta, SCC,       &
                                          SCBeta
     use GenComms,                  only: my_barrier, gsum, inode,      &
-                                         ionode, cq_abort
+                                         ionode, cq_abort, cq_warn
     !use DiagModule,                only: diagon
     use primary_module,            only: bundle
     use cover_module,              only: BCS_parts
@@ -254,6 +254,7 @@ contains
     ! call get_H_matrix before calling build_PAO_coeff ! TM
     !call get_H_matrix(.true., fixed_potential, electrons, density, &
     !                  maxngrid)
+    min_layer = min_layer - 1
     call new_SC_potl(.false., con_tolerance, reset_L,             &
          fixed_potential, vary_mu, n_cg_L_iterations, &
          tolerance, total_energy_last)
@@ -262,6 +263,7 @@ contains
     orig_LFD_SCF = flag_mix_LFD_SCF ! Use to restore original setting
     flag_mix_LFD_SCF = .false.
     call build_PAO_coeff_grad(full)
+    min_layer = min_layer + 1
 
     if (TestBasisGrads) then
        do spin_SF = 1, nspin_SF
@@ -611,7 +613,9 @@ contains
     end do ! n_iterations
     if(inode==ionode) &
          write(io_lun,fmt='(/4x,a,i4,a,f15.7,x,a2)') &
-         trim(prefix)//" Ending after ",n_iterations," with dE ",en_conv*diff,en_units(energy_units)
+         trim(prefix)//" Ending unconverged after ",n_support_iterations," iterations with dE ", &
+         en_conv*diff,en_units(energy_units)
+    call cq_warn(subname,"PAO optimisation finished after maximum iterations: ",n_support_iterations)
     flag_mix_LFD_SCF = orig_LFD_SCF
     deallocate(search_direction, last_sd, Psd, STAT=stat)
     if (stat /= 0) call cq_abort("vary_pao: Error dealloc mem")
@@ -1323,7 +1327,7 @@ contains
     character(len=14) :: subname = "line_min_pao: "
     character(len=120) :: prefix
 
-    min_layer = min_layer - 1
+    !min_layer = min_layer - 1
     prefix = return_prefix(subname, min_layer)
     if (inode == ionode .and. iprint_minE + min_layer >= 1) &
          write (io_lun, fmt='(4x,a,f15.7,a2)') trim(prefix)//' On entry to pao line_min, dE is ', &
@@ -1518,7 +1522,7 @@ contains
     deallocate(data_PAO0, STAT=stat)
     if (stat /= 0) call cq_abort("line_minimise_pao: Error dealloc mem")
     call reg_dealloc_mem(area_minE, length*nspin_SF, type_dbl)
-    min_layer = min_layer + 1
+    !min_layer = min_layer + 1
 
     return
   end subroutine line_minimise_pao

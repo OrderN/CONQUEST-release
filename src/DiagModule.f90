@@ -2390,7 +2390,7 @@ contains
     use datatypes
     use numbers
     use global_module, only: iprint_DM, nspin, min_layer
-    use GenComms,      only: myid
+    use GenComms,      only: myid, cq_warn
 
     implicit none
 
@@ -2546,7 +2546,8 @@ contains
           ! now that we have a lower-bound, find upper bound
           ! get gaussian width
           if (gaussian_height >= one) then
-             if (myid == 0) write (io_lun, 9) myid
+             call cq_warn("findFermi","Diag.GaussianHeight must be less than one; resetting to 0.1", &
+                  gaussian_height)
              gaussian_height = 0.1_double
           end if
           gaussian_width = two * sqrt(-log(gaussian_height)) * kT
@@ -2623,8 +2624,6 @@ contains
          ') > electron_number (for spin ', i2, ' ) - 1.0. May be you &
          &should increase the value of Diag.NElecLess (at the moment =&
          & ',f12.5,')')
-9   format(10x, 'Proc: ', i5, ' findFermi_fixspin: Warning! Diag.gaussianHeight &
-         &must be less than one, reset to 0.1 as default')
 10  format(10x, 'Fermi level is ', f12.5)
 11  format(10x, 'Fermi level for spin ', i2, ' is ', f12.5)
 12  format(10x, 'Proc: ', i5, ' bracketed Ef: ', 2f12.5)
@@ -2662,7 +2661,7 @@ contains
     use datatypes
     use numbers
     use global_module, only: iprint_DM, nspin, spin_factor, min_layer
-    use GenComms,      only: myid
+    use GenComms,      only: myid, cq_warn
 
     implicit none
 
@@ -2803,7 +2802,8 @@ contains
        ! now that we have a lower-bound, find upper bound
        ! get gaussian width
        if (gaussian_height >= one) then
-          if (inode == ionode) write (io_lun, 7)
+          call cq_warn("findFermi","Diag.GaussianHeight must be less than one; resetting to 0.1", &
+               gaussian_height)
           gaussian_height = 0.1_double
        end if
        gaussian_width = two * sqrt(-log(gaussian_height)) * kT
@@ -2860,8 +2860,6 @@ contains
          &of electrons, setting it equal to number of electrons, but &
          &this is slow and you may want to change it to something &
          &smaller.')
-7   format(10x, 'In findFermi, Warning! Diag.gaussianHeight must be &
-         &less than one, reset to 0.1 as default')
 8   format(10x, 'Fermi level is ', f12.5)
 
   end subroutine findFermi_varspin

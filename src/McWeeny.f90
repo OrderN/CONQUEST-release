@@ -352,7 +352,7 @@ contains
                               free_temp_matrix
     use matrix_data,    only: Lrange, Srange, TSrange
     use GenBlas
-    use GenComms,       only: gsum, my_barrier, gmin, gmax, cq_abort
+    use GenComms,       only: gsum, my_barrier, gmin, gmax, cq_abort, cq_warn
     use timer_module,   only: cq_timer,start_timer, stop_print_timer, &
                               WITH_LEVEL
 
@@ -389,13 +389,7 @@ contains
     ! populations for the initialisation procedure to work properly.
     do spin = 1, nspin
        if (ne(spin) / n_o > one) then
-          write (io_lun, '(/,2x,a,i1,a,i1,a,f12.6,a,f12.6,a,/)')      &
-               '*** WARNING!!! You have too few number of support &
-                &functions for the calculation. The number of &
-                &electrons in spin = ', spin, ' is greater than the &
-                &number of orbitals!. ne(', spin, ') = ', ne(spin),   &
-                ', n_o for spin channel = ', n_o, &
-                ' ***'
+          call cq_warn("InitMcW","Too few support functions for electrons: ",ne(spin),n_o)
        end if
     end do
 

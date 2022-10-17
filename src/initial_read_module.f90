@@ -1819,15 +1819,17 @@ contains
     flag_test_all_forces    = fdf_boolean('AtomMove.TestAllForces',.true. )
     if(.NOT.flag_test_all_forces) then ! Test one force component
        flag_which_force = fdf_integer('AtomMove.TestSpecificForce',1)
-       if(flag_which_force>8.OR.flag_which_force<0.AND.inode==ionode) &
-            write (io_lun,fmt='(10x,"Warning ! TestSpecificForce &
-            &must lie between 1 and 8: ",i3)') &
-            flag_which_force
+       if(flag_which_force>10.OR.flag_which_force<0.AND.inode==ionode) then
+          call cq_warn(sub_name,&
+               "AtomMove.TestSpecificForce must lie between 1 and 10 (setting to 1): ",&
+               flag_which_force)
+          flag_which_force = 1
+       end if
     end if
     TF_direction = fdf_integer('AtomMove.TestForceDirection',1)
     if(TF_direction>3.OR.TF_direction<0.AND.inode==ionode) then
-       write (io_lun,fmt='(10x,"Warning ! TestForceDirection must &
-            &lie between 1 and 3: ",i3)') TF_direction
+       call cq_warn(sub_name,&
+            "TestForceDirection must lie between 1 and 3: ",TF_direction)
        TF_direction = 1
     end if
     TF_atom_moved = fdf_integer('AtomMove.TestForceAtom',1)
@@ -1942,8 +1944,7 @@ contains
        part_method = HILBERT
     else
        part_method = HILBERT
-       if(inode==ionode) &
-            write(io_lun,*) 'WARNING: Unrecognised partitioning method'
+       call cq_warn(sub_name,"Unrecognised partitioning method: "//part_mode//" Using Hilbert")
     end if
     ! For Hilbert curve sfc partitioning
     tmp2 = fdf_string(20,'General.LoadBalance','atoms')
@@ -2816,13 +2817,8 @@ contains
     ! Read k-point parallelisation process-group incormation, default is 1
     proc_groups = fdf_integer ('Diag.KProcGroups', 1)
     if(proc_groups>numprocs) then
-       if(inode==ionode) then
-          write(io_lun,fmt='(/2x,"*************")')
-          write(io_lun,fmt='(2x,"* WARNING ! *")')
-          write(io_lun,fmt='(2x,"*************")')
-          write(io_lun,fmt='(/2x,"Error setting Diag.KProcGroups.  We have ",i6, &
-               &" processes and ",i6," KProcGroups.   Setting to 1 and continuing."/)') numprocs,proc_groups
-       end if
+       call cq_warn(sub_name,"Too few processes for k-point groups (setting to 1): ", &
+            numprocs, proc_groups)
        proc_groups = 1
     end if
 

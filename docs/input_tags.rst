@@ -311,24 +311,21 @@ Levels of Output
 
 The overall level of output is controlled by **IO.Iprint** and can be
 fine-tuned with the other IO.Iprint keywords. These are by default set
-to the value of iprint, but that will be over-ridden if setting them
-explicitly. For instance, IO.Iprint could be set to 0, but IO.Iprint\_MD
+to the value of **IO.Iprint**, but that will be over-ridden if setting them
+explicitly. For instance, **IO.Iprint** could be set to 0, but **IO.Iprint\_MD**
 could be set to 2 giving more extensive information about atomic
 movements but little other information.
-
-N.B. At beta release, these levels of output are still being tuned;
-level 0 is reliable, and generally fairly minimal.
 
 IO.Iprint (*integer*)
     The amount of information printed out to the output file
     The larger the value the more detailed the output is.
 
     | 0 Basic information about the system and the run
-    | 1 Breakdown of energies, and details of the SCF cycle
-    | 2 Matrix range info, matrix multiplication details (covering set), partition details and general parallelisation info.
-    | 3 Subroutines called, messages upon entering/quitting subroutines
-    | 4 Details including internal variables of subroutines
-    | 5 Don’t do this.
+    | 1 Overview of the SCF cycle and atom movement
+    | 2 More detail on SCF cycle, atom movement
+    | 3 Extensive detail on SCF cycle, atom movement
+    | 4 Details of energy breakdown
+    | 5 Excessive output, only for developers debugging
 
 
     *default*: 0
