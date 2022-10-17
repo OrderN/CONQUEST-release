@@ -382,7 +382,7 @@ contains
     call dump_pos_and_matrices
     call get_maxf(max)
     if (inode==ionode) then
-      write(io_lun,'(/4x,a,i4," MaxF: ",f12.8,x,a2,"/",a2," E: ",e16.8,x,a2," dE: ",f14.8,x,a2/)') & 
+      write(io_lun,'(/4x,a,i4," MaxF: ",f12.8,x,a2,"/",a2," E: ",f16.8,x,a2," dE: ",f14.8,x,a2/)') & 
            trim(prefixGO)//" - Iter: ",0, for_conv*max, en_units(energy_units), d_units(dist_units), &
            en_conv*energy0, en_units(energy_units), en_conv*dE, en_units(energy_units)
     end if
@@ -435,7 +435,7 @@ contains
              gamma = zero
           end if
        end if
-       if (inode == ionode .and. iprint_MD + min_layer > 2) then
+       if (inode == ionode .and. iprint_MD + min_layer > 1) then
           write(io_lun,fmt='(4x,a,f12.8)') trim(prefix)//' gamma = ', gamma
        end if
        ggold = gg
@@ -490,7 +490,7 @@ contains
        dE = energy1 - energy0
 
        if (inode==ionode) then
-          write(io_lun,'(/4x,a,i4," MaxF: ",f12.8,x,a2,"/",a2," E: ",e16.8,x,a2," dE: ",f14.8,x,a2/)') & 
+          write(io_lun,'(/4x,a,i4," MaxF: ",f12.8,x,a2,"/",a2," E: ",f16.8,x,a2," dE: ",f14.8,x,a2/)') & 
                trim(prefixGO)//" - Iter: ", iter, for_conv*max, &
                en_units(energy_units), d_units(dist_units), &
                en_conv*energy1, en_units(energy_units), en_conv*dE, en_units(energy_units)
@@ -1711,7 +1711,7 @@ contains
        if (abs(max) < MDcgtol) then
           done = .true.
           if (inode==ionode) then
-             write(io_lun,'(/4x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," E: ",e16.8," dE: ",f12.8/)') & 
+             write(io_lun,'(/4x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," E: ",f16.8," dE: ",f12.8/)') & 
                   iter, max, energy1, en_conv*dE
              if (iprint_MD > 1) then
                 write(io_lun,'(4x,"Force Residual:     ",f20.10," ",a2,"/",a2)') &
@@ -1858,7 +1858,7 @@ contains
     min_layer = min_layer + 1
     iter = 0
     if (inode==ionode) then
-       write(io_lun,'(/4x,a,i4," MaxF: ",f12.8,x,a2,"/",a2," E: ",e16.8,x,a2," dE: ",f14.8,x,a2/)') & 
+       write(io_lun,'(/4x,a,i4," MaxF: ",f12.8,x,a2,"/",a2," E: ",f16.8,x,a2," dE: ",f14.8,x,a2/)') & 
             trim(prefixGO)//" - Iter: ", iter, for_conv*max, &
             en_units(energy_units), d_units(dist_units), &
             en_conv*energy0, en_units(energy_units), en_conv*dE, en_units(energy_units)
@@ -1925,41 +1925,6 @@ contains
           alpha = one
        endif
        min_layer = min_layer + 1
-       ! Output and energy changes
-       dE = energy1 - energy0
-       energy0 = energy1
-       if (inode==ionode) then
-          write(io_lun,'(/4x,a,i4," MaxF: ",f12.8,x,a2,"/",a2," E: ",e16.8,x,a2," dE: ",f14.8,x,a2/)') & 
-               trim(prefixGO)//" - Iter: ", iter, for_conv*max, &
-               en_units(energy_units), d_units(dist_units), &
-               en_conv*energy1, en_units(energy_units), en_conv*dE, en_units(energy_units)
-          if (iprint_MD + min_layer > 1) then
-             g0 = dot(length, tot_force, 1, tot_force, 1)
-             write(io_lun,'(4x,a,f20.10," ",a2,"/",a2)') prefixF(1:-2*min_layer)//"Force Residual:     ", &
-                  for_conv*sqrt(g0/ni_in_cell), en_units(energy_units), d_units(dist_units)
-             write(io_lun,'(4x,a,f20.10," ",a2,"/",a2)') prefixF(1:-2*min_layer)//"Maximum force:      ", &
-                  for_conv*max, en_units(energy_units), d_units(dist_units)
-             write(io_lun,'(4x,a,f20.10," ",a2,"/",a2)') prefixF(1:-2*min_layer)//"Force tolerance:    ", &
-                  for_conv*MDcgtol, en_units(energy_units), d_units(dist_units)
-             write(io_lun,'(4x,a,f20.10," ",a2)') prefixF(1:-2*min_layer)//"Energy change:      ", &
-                  en_conv*dE, en_units(energy_units)
-          end if
-       end if
-       if (iter > MDn_steps) then
-          done = .true.
-          if (myid == 0) &
-               write(io_lun, fmt='(4x,a,i6)') &
-                     trim(prefix)//"Exceeded number of MD steps: ",iter
-       end if
-       if (abs(max) < MDcgtol) then
-          done = .true.
-          if (inode==ionode) then
-             write(io_lun,'(/4x,a,i4,a)') trim(prefixGO)//" converged in ", iter, " iterations"
-             write(io_lun, fmt='(4x,a,f12.5,x,a2,"/",a2)') &
-                  trim(prefix)//" maximum force below threshold: ",&
-                  for_conv*max, en_units(energy_units), d_units(dist_units)
-          end if
-       end if
        ! Update stored position difference and force difference
        do i=1,ni_in_cell
           jj = id_glob(i)
@@ -2131,6 +2096,41 @@ contains
              if (abs(tot_force(k,i)) > max) max = abs(tot_force(k,i))
           end do
        end do
+       ! Output and energy changes
+       dE = energy1 - energy0
+       energy0 = energy1
+       if (inode==ionode) then
+          write(io_lun,'(/4x,a,i4," MaxF: ",f12.8,x,a2,"/",a2," E: ",f16.8,x,a2," dE: ",f14.8,x,a2/)') & 
+               trim(prefixGO)//" - Iter: ", iter, for_conv*max, &
+               en_units(energy_units), d_units(dist_units), &
+               en_conv*energy1, en_units(energy_units), en_conv*dE, en_units(energy_units)
+          if (iprint_MD + min_layer > 1) then
+             g0 = dot(length, tot_force, 1, tot_force, 1)
+             write(io_lun,'(4x,a,f20.10," ",a2,"/",a2)') prefixF(1:-2*min_layer)//"Force Residual:     ", &
+                  for_conv*sqrt(g0/ni_in_cell), en_units(energy_units), d_units(dist_units)
+             write(io_lun,'(4x,a,f20.10," ",a2,"/",a2)') prefixF(1:-2*min_layer)//"Maximum force:      ", &
+                  for_conv*max, en_units(energy_units), d_units(dist_units)
+             write(io_lun,'(4x,a,f20.10," ",a2,"/",a2)') prefixF(1:-2*min_layer)//"Force tolerance:    ", &
+                  for_conv*MDcgtol, en_units(energy_units), d_units(dist_units)
+             write(io_lun,'(4x,a,f20.10," ",a2)') prefixF(1:-2*min_layer)//"Energy change:      ", &
+                  en_conv*dE, en_units(energy_units)
+          end if
+       end if
+       if (iter > MDn_steps) then
+          done = .true.
+          if (myid == 0) &
+               write(io_lun, fmt='(4x,a,i6)') &
+                     trim(prefix)//"Exceeded number of MD steps: ",iter
+       end if
+       if (abs(max) < MDcgtol) then
+          done = .true.
+          if (inode==ionode) then
+             write(io_lun,'(/4x,a,i4,a)') trim(prefixGO)//" converged in ", iter, " iterations"
+             write(io_lun, fmt='(4x,a,f12.5,x,a2,"/",a2)') &
+                  trim(prefix)//" maximum force below threshold: ",&
+                  for_conv*max, en_units(energy_units), d_units(dist_units)
+          end if
+       end if
        deallocate(dr_tilde,dg_tilde,Hij,kappa,vi,kappa_prime,vi_tilde,ri_vec)
        deallocate(mod_dr,Sij,lambda,omega)
        if (.not. done) call check_stop(done, iter)
@@ -2278,7 +2278,7 @@ contains
        if (stress_diff > max_stress) max_stress = stress_diff
     end do
     if (inode==ionode) then
-      write(io_lun,'(/4x,"GeomOpt - Iter: ",i4," MaxStr: ",f12.8," H: ",e16.8," dH: ",f12.8/)') &
+      write(io_lun,'(/4x,"GeomOpt - Iter: ",i4," MaxStr: ",f12.8," H: ",f16.8," dH: ",f12.8/)') &
            0, max_stress, enthalpy0, zero
     end if
     iter_loc = 0
@@ -2507,7 +2507,7 @@ contains
           if (stress_diff > max_stress) max_stress = stress_diff
        end do
        if (inode==ionode) then
-          write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxStr: ",f12.8," H: ",e16.8," dH: ",f12.8)') &
+          write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxStr: ",f12.8," H: ",f16.8," dH: ",f12.8)') &
                iter, max_stress*volume, enthalpy1, en_conv*dH
           if (iprint_MD > 1) then
              write(io_lun,'(4x,"Maximum stress         ",e14.6," Ha/Bohr**3")') max_stress
@@ -2698,7 +2698,7 @@ contains
     if (inode==ionode) then
        write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," E: ",e18.10)') & 
             iter, for_conv*max, en_conv*energy0
-       write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxStr: ",f12.8," MaxF: ",f12.8," H: ",e16.8," dH: ",f12.8)') &
+       write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxStr: ",f12.8," MaxF: ",f12.8," H: ",f16.8," dH: ",f12.8)') &
             iter, max_stress*volume, for_conv*max, en_conv*enthalpy1, en_conv*dH
     end if
     iter_loc = 0
@@ -3138,7 +3138,7 @@ contains
        if (stress_diff > max_stress) max_stress = stress_diff
     end do
     if (inode==ionode) then
-       write(io_lun,'(/4x,a,i4," MaxStr: ",f12.8," GPa H: ",e16.8,x,a2," dH: ",f12.8,a2)') &
+       write(io_lun,'(/4x,a,i4," MaxStr: ",f12.8," GPa H: ",f16.8,x,a2," dH: ",f12.8,a2)') &
             trim(prefixGO)//" - Iter: ",0, max_stress*HaBohr3ToGPa, en_conv*enthalpy0, &
             en_units(energy_units), zero, en_units(energy_units)
     end if
@@ -3239,7 +3239,7 @@ contains
        reset_iter = reset_iter +1
 
        if (inode==ionode) then
-          write(io_lun,'(/4x,a,i4," MaxStr: ",f12.8," GPa H: ",e16.8,x,a2," dH: ",f12.8,a2)') &
+          write(io_lun,'(/4x,a,i4," MaxStr: ",f12.8," GPa H: ",f16.8,x,a2," dH: ",f12.8,a2)') &
                trim(prefixGO)//" - Iter: ",iter, max_stress*HaBohr3ToGPa, en_conv*enthalpy1, &
                en_units(energy_units), en_conv*dH, en_units(energy_units)
           if (iprint_MD + min_layer > 1) then
@@ -3521,7 +3521,7 @@ contains
        if (stress_diff > max_stress) max_stress = stress_diff
     end do
     if (inode==ionode) then
-       write(io_lun,'(/4x,a,i4," MaxF: ",f12.8,x,a2,"/",a2," H: " ,e16.8,x,a2," MaxS: ",f12.8," GPa")') &
+       write(io_lun,'(/4x,a,i4," MaxF: ",f12.8,x,a2,"/",a2," H: " ,f16.8,x,a2," MaxS: ",f12.8," GPa")') &
             trim(prefixGO)//" + Iter: ",0, for_conv*max, en_units(energy_units), d_units(dist_units), &
             enthalpy0, en_units(energy_units), max_stress*HaBohr3ToGPa
     end if
@@ -3607,7 +3607,7 @@ contains
        end do
        ! Test for finish
        if (inode==ionode) then
-          write(io_lun,'(/4x,a,i4," MaxF: ",f12.8,x,a2,"/",a2," H: " ,e16.8,x,a2," MaxS: ",f12.8," GPa")') &
+          write(io_lun,'(/4x,a,i4," MaxF: ",f12.8,x,a2,"/",a2," H: " ,f16.8,x,a2," MaxS: ",f12.8," GPa")') &
                trim(prefixGO)//" + Iter: ",0, for_conv*max, en_units(energy_units), d_units(dist_units), &
                enthalpy1, en_units(energy_units), max_stress*HaBohr3ToGPa
           if (iprint_MD + min_layer > 1) then
@@ -3776,7 +3776,7 @@ contains
     enthalpy0 = enthalpy(energy0, press)
     dH = zero
     if (inode==ionode) then
-      write(io_lun,'(/4x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," H: ", e16.8," dH: ",f12.8/)') & 
+      write(io_lun,'(/4x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," H: ", f16.8," dH: ",f12.8/)') & 
            0, max, enthalpy0, dH
     end if
 
@@ -3871,7 +3871,7 @@ contains
         enthalpy0 = enthalpy1
 
         if (inode==ionode) then
-          write(io_lun,'(/4x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," H: ",e16.8," dH: ",f12.8/)') &
+          write(io_lun,'(/4x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," H: ",f16.8," dH: ",f12.8/)') &
                iter, max, enthalpy1, en_conv*dH
           if (iprint_MD > 1) then
             write(io_lun,'(4x,"Force Residual:     ",f20.10," ",a2,"/",a2)') &
@@ -3969,7 +3969,7 @@ contains
       end do
 
       if (inode==ionode) then
-        write(io_lun,'(/4x,"GeomOpt + Iter: ",i4," MaxF: ",f12.8," H: " ,e16.8," dH: ",f12.8/)') &
+        write(io_lun,'(/4x,"GeomOpt + Iter: ",i4," MaxF: ",f12.8," H: " ,f16.8," dH: ",f12.8/)') &
              iter, max, enthalpy1, en_conv*dH
         if (iprint_MD > 1) then
           write(io_lun,'(4x,"Force Residual:     ",f20.10," ",a2,"/",a2)') &
@@ -4183,7 +4183,7 @@ contains
     end do
     enthalpy0 = enthalpy(energy0, press)
     if (inode==ionode) then
-       write(io_lun,'(/4x,a,i4," MaxF: ",f12.8,x,a2,"/",a2," H: " ,e16.8,x,a2," MaxS: ",f12.8," GPa")') &
+       write(io_lun,'(/4x,a,i4," MaxF: ",f12.8,x,a2,"/",a2," H: " ,f16.8,x,a2," MaxS: ",f12.8," GPa")') &
             trim(prefixGO)//" - Iter: ",0, for_conv*max, en_units(energy_units), d_units(dist_units), &
             enthalpy0, en_units(energy_units), max_stress*HaBohr3ToGPa
     end if
@@ -4291,7 +4291,7 @@ contains
            (stress(3,3)*stress(3,3)))/3)
       dRMSstress = (RMSstress - newRMSstress)/volume
       if (inode==ionode) then
-         write(io_lun,'(/4x,a,i4," MaxF: ",f12.8,x,a2,"/",a2," H: " ,e16.8,x,a2," MaxS: ",f12.8," GPa")') &
+         write(io_lun,'(/4x,a,i4," MaxF: ",f12.8,x,a2,"/",a2," H: " ,f16.8,x,a2," MaxS: ",f12.8," GPa")') &
               trim(prefixGO)//" - Iter: ",iter, for_conv*max, en_units(energy_units), d_units(dist_units), &
               enthalpy1, en_units(energy_units), max_stress*HaBohr3ToGPa
          if (iprint_MD + min_layer > 1) then
@@ -4307,10 +4307,10 @@ contains
                   prefixF(1:-2*min_layer)//"Stress tolerance:   ", cell_stress_tol
              write(io_lun,'(4x,a,f20.10," GPa")') &
                   prefixF(1:-2*min_layer)//"Change in stress:   ", dRMSstress*HaBohr3ToGPa
-            !write(io_lun,'(8x,"Enthalpy change:    ",f20.10," ",a2)') &
-            !     en_conv*dH, en_units(energy_units)
-            !write(io_lun,'(8x,"Enthalpy tolerance: ",f20.10," ",a2)') &
-            !     en_conv*enthalpy_tolerance, en_units(energy_units)
+             write(io_lun,'(8x,"Enthalpy change:    ",f20.10," ",a2)') &
+                  en_conv*dH, en_units(energy_units)
+             write(io_lun,'(8x,"Enthalpy tolerance: ",f20.10," ",a2)') &
+                  en_conv*enthalpy_tolerance, en_units(energy_units)
          end if
       end if
 

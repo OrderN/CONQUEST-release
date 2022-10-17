@@ -861,7 +861,7 @@ contains
        call get_E_and_F(fixed_potential, vary_mu, e3, .false., &
             .false.)
        !min_layer = min_layer + 1
-       if(inode==ionode .and. abs(e3 - energy_in) < abs(two*dE_elec_opt)) then
+       if(abs(e3 - energy_in) < abs(two*dE_elec_opt)) then
           call cq_warn(subname, "Electronic structure dE is similar to atom movement dE; increase tolerance", &
                dE_elec_opt, e3 - energy_in)
        end if
@@ -959,7 +959,7 @@ contains
        call get_E_and_F(fixed_potential, vary_mu, energy_out, .true., .false.)
     end if
     !min_layer = min_layer + 1
-    if(inode==ionode .and. abs(energy_out - energy_in) < abs(two*dE_elec_opt)) then
+    if(abs(energy_out - energy_in) < abs(two*dE_elec_opt)) then
        call cq_warn(subname, "Electronic structure dE is similar to atom movement dE; increase tolerance", &
             dE_elec_opt, energy_out - energy_in)
     end if
@@ -1201,7 +1201,7 @@ contains
        end if
        call get_E_and_F(fixed_potential, vary_mu, e3, .false., &
             .false.)
-       if(inode==ionode .and. abs(e3 - energy_in) < abs(two*dE_elec_opt)) then
+       if(abs(e3 - energy_in) < abs(two*dE_elec_opt)) then
           call cq_warn(subname, "Electronic structure dE is similar to atom movement dE; increase tolerance", &
                dE_elec_opt, e3 - energy_in)
        end if
@@ -1227,7 +1227,7 @@ contains
     end do ! while (.not. done)
     if(.not. done) call cq_abort("Failed to reduce energy in backtrack_linemin.  Final step size: ",alpha)
     energy_out = e3
-    if(inode==ionode .and. abs(energy_out - energy_in) < abs(two*dE_elec_opt)) then
+    if(abs(energy_out - energy_in) < abs(two*dE_elec_opt)) then
        call cq_warn(subname, "Electronic structure dE is similar to atom movement dE; increase tolerance", &
             dE_elec_opt, energy_out - energy_in)
     end if
@@ -1356,7 +1356,7 @@ contains
     call get_E_and_F(fixed_potential, vary_mu, energy_out, .false., &
          .false.)
     dE = energy_out - energy_in
-    if(inode==ionode .and. abs(dE) < abs(two*dE_elec_opt)) then
+    if(abs(dE) < abs(two*dE_elec_opt)) then
        call cq_warn(subname, "Electronic structure dE is similar to atom movement dE; increase tolerance", &
             dE_elec_opt, dE)
     end if
@@ -1521,7 +1521,7 @@ contains
        call get_E_and_F(fixed_potential, vary_mu, e3, .false., &
             .false.)
        h3 = enthalpy(e3, target_press)
-       if(inode==ionode .and. abs(h3 - enthalpy_in) < abs(two*dE_elec_opt)) then
+       if(abs(h3 - enthalpy_in) < abs(two*dE_elec_opt)) then
           call cq_warn(subname, "Electronic structure dE is similar to atom movement dE; increase tolerance", &
                dE_elec_opt, h3 - enthalpy_in)
        end if
@@ -1685,7 +1685,7 @@ contains
     call get_E_and_F(fixed_potential, vary_mu, e3, .false., &
          .false.)
     energy_out = e3
-    if(inode==ionode .and. abs(energy_out - energy_in) < abs(two*dE_elec_opt)) then
+    if(abs(energy_out - energy_in) < abs(two*dE_elec_opt)) then
        call cq_warn(subname, "Electronic structure dE is similar to atom movement dE; increase tolerance", &
             dE_elec_opt, energy_out - energy_in)
     end if
@@ -1856,7 +1856,7 @@ contains
             .false.)
        !min_layer = min_layer + 1
        h3 = enthalpy(e3, target_press)
-       if(inode==ionode .and. abs(h3 - enthalpy_in) < abs(two*dE_elec_opt)) then
+       if(abs(h3 - enthalpy_in) < abs(two*dE_elec_opt)) then
           call cq_warn(subname, "Electronic structure dE is similar to atom movement dE; increase tolerance", &
                dE_elec_opt, h3 - enthalpy_in)
        end if
@@ -1883,7 +1883,7 @@ contains
     end do ! while (.not. done)
     if(.not. done) call cq_abort("Failed to reduce enthalpy in backtrack_linemin.  Final step size: ",alpha)
     enthalpy_out = h3
-    if(inode==ionode .and. abs(enthalpy_out - enthalpy_in) < abs(two*dE_elec_opt)) then
+    if(abs(enthalpy_out - enthalpy_in) < abs(two*dE_elec_opt)) then
        call cq_warn(subname, "Electronic structure dE is similar to atom movement dE; increase tolerance", &
             dE_elec_opt, enthalpy_out - enthalpy_in)
     end if
@@ -2010,7 +2010,7 @@ contains
          .false.)
     !min_layer = min_layer + 1
     dE = energy_in - energy_out
-    if(inode==ionode .and. abs(dE) < abs(two*dE_elec_opt)) then
+    if(abs(dE) < abs(two*dE_elec_opt)) then
        call cq_warn(subname, "Electronic structure dE is similar to atom movement dE; increase tolerance", &
             dE_elec_opt, energy_out - energy_in)
     end if
@@ -2413,7 +2413,7 @@ contains
             .false.)
        !min_layer = min_layer + 1
        h3 = enthalpy(e3, target_press)
-       if(inode==ionode .and. abs(h3 - enthalpy_in) < abs(two*dE_elec_opt)) then
+       if(abs(h3 - enthalpy_in) < abs(two*dE_elec_opt)) then
           call cq_warn(subname, "Electronic structure dE is similar to atom movement dE; increase tolerance", &
                dE_elec_opt, h3 - enthalpy_in)
        end if
@@ -2491,7 +2491,7 @@ contains
     end if
     !min_layer = min_layer + 1
     enthalpy_out = enthalpy(energy_out, target_press)
-    if(inode==ionode .and. abs(enthalpy_out - enthalpy_in) < abs(two*dE_elec_opt)) then
+    if(abs(enthalpy_out - enthalpy_in) < abs(two*dE_elec_opt)) then
        call cq_warn(subname, "Electronic structure dE is similar to atom movement dE; increase tolerance", &
             dE_elec_opt, enthalpy_out - enthalpy_in)
     end if
@@ -2740,7 +2740,7 @@ contains
             .false.)
        !min_layer = min_layer + 1
        h3 = enthalpy(e3, target_press)
-       if(inode==ionode .and. abs(h3 - enthalpy_in) < abs(two*dE_elec_opt)) then
+       if(abs(h3 - enthalpy_in) < abs(two*dE_elec_opt)) then
           call cq_warn(subname, "Electronic structure dE is similar to atom movement dE; increase tolerance", &
                dE_elec_opt, h3 - enthalpy_in)
        end if
@@ -2823,7 +2823,7 @@ contains
     end if
     !min_layer = min_layer + 1
     enthalpy_out = enthalpy(energy_out, target_press)
-    if(inode==ionode .and. abs(enthalpy_out - enthalpy_in) < abs(two*dE_elec_opt)) then
+    if(abs(enthalpy_out - enthalpy_in) < abs(two*dE_elec_opt)) then
        call cq_warn(subname, "Electronic structure dE is similar to atom movement dE; increase tolerance", &
             dE_elec_opt, enthalpy_out - enthalpy_in)
     end if
@@ -3650,7 +3650,7 @@ contains
     use density_module,         only: set_atomic_density,              &
                                       density, set_density_pcc,        &
                                       get_electronic_density
-    use GenComms,               only: cq_abort, inode, ionode
+    use GenComms,               only: cq_abort, inode, ionode, cq_warn
     use maxima_module,          only: maxngrid
     use DFT_D2,                 only: dispersion_D2
     use functions_on_grid,      ONLY: atomfns, H_on_atomfns
@@ -3742,9 +3742,7 @@ contains
                if(abs(scale-one)<threshold_resetCD .AND. abs(scale-one)>RD_ERR) then
                   density(:,spin) = density(:,spin)*scale
                else if (abs(scale-one)>=threshold_resetCD) then
-                  if(inode == ionode) write(io_lun,fmt='(6x,a,2f10.5)') &
-                       ' WARNING! in update_H: constructed charge density is strange... ; scale = ', &
-                       scale, threshold_resetCD
+                  call cq_warn("update_H","Charge density from K is strange, requires large scale factor: ",scale)
                   call set_atomic_density(.true.)
                   exit
                end if
@@ -3770,9 +3768,7 @@ contains
           if(abs(scale-one)<threshold_resetCD .AND.abs(scale-one)>RD_ERR) then
              density(:,spin) = density(:,spin)*scale
           else if (abs(scale-one)>=threshold_resetCD) then
-             if(inode == ionode) write(io_lun,fmt='(6x,a,2f10.5)')  ' WARNING2! in update_H: &
-                  & constructed charge density is strange... ; scale,threshold = ', &
-                  scale, threshold_resetCD
+             call cq_warn("update_H","Charge density from K is strange, requires large scale factor: ",scale)
              call set_atomic_density(.true.)
              exit
           end if

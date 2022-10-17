@@ -586,13 +586,13 @@ contains
                 write (io_lun, 105) trim(prefix),(for_conv * tot_force(j,i),   j = 1, 3)
              end if
           else if (write_forces .and. iprint_MD + min_layer>=0 .and. ni_in_cell<atom_output_threshold) then
-             write (io_lun,fmt='(4x,a,i6,3f15.10/)') &
+             write (io_lun,fmt='(4x,a,i6,3f15.10)') &
                   trim(prefix),i, (for_conv * tot_force(j,i), j = 1, 3)
           end if ! (iprint_MD + min_layer > 2)
        end if ! (inode == ionode)
     end do ! i
     if (inode == ionode) then
-       write (io_lun, fmt='(4x,a,f15.8,"(",a2,"/",&
+       write (io_lun, fmt='(/4x,a,f15.8,"(",a2,"/",&
             &a2,") on atom ",i9," in ",a1," direction")')     &
             trim(prefix)//" Maximum force :   ",for_conv * max_force, en_units(energy_units), &
             d_units(dist_units), max_atom, comptstr(max_compt)
@@ -4323,7 +4323,6 @@ subroutine print_stress(label, str_mat, print_level)
   use units
   use GenComms,       only: inode, ionode
   use global_module,  only: iprint_MD, flag_full_stress, rcellx, rcelly, rcellz, min_layer
-  use units, only: HaBohr3ToGPa
 
   ! Passed variables
   character(*), intent(in)                  :: label

@@ -609,7 +609,9 @@ contains
        enddo
        total_energy_last = total_energy_0
     end do ! n_iterations
-
+    if(inode==ionode) &
+         write(io_lun,fmt='(/4x,a,i4,a,f15.7,x,a2)') &
+         trim(prefix)//" Ending after ",n_iterations," with dE ",en_conv*diff,en_units(energy_units)
     flag_mix_LFD_SCF = orig_LFD_SCF
     deallocate(search_direction, last_sd, Psd, STAT=stat)
     if (stat /= 0) call cq_abort("vary_pao: Error dealloc mem")
@@ -1504,11 +1506,11 @@ contains
     if (inode == ionode .and. iprint_minE + min_layer >= 0) &
          write(io_lun, fmt='(4x,a,i3,a)') trim(prefix)//" Found minimum after ",iter," iterations"
     if (inode == ionode .and. iprint_minE + min_layer >= 2) &
-         write (io_lun, fmt='(4x,a,f25.10)') &
+         write (io_lun, fmt='(4x,a,f25.10,x,a2)') &
          trim(prefix)//" At exit energy is ",energy_out*en_conv,en_units(energy_units)
     dE = total_energy_0 - energy_out
     if (inode == ionode .and. iprint_minE + min_layer >= 2) &
-         write (io_lun, fmt='(4x,a,f25.10,2f25.10,a2)') &
+         write (io_lun, fmt='(4x,a,f25.10,2f25.10,x,a2)') &
          trim(prefix)//" On exit, dE is ",dE*en_conv, &
          total_energy_0*en_conv, energy_out*en_conv,en_units(energy_units)
     total_energy_0 = energy_out
