@@ -570,7 +570,7 @@ contains
                write(io_lun, fmt='(4x,a,i3,2(a,f15.7,a2))') trim(prefix)//" Iter: ", &
                n_iterations," E: ",total_energy_0*en_conv,en_units(energy_units),&
                " dE: ",diff*en_conv,en_units(energy_units)
-          if (inode == ionode .and. iprint_minE + min_layer >-1) &
+          if (inode == ionode) & !  .and. iprint_minE + min_layer >-1) &
                write (io_lun, fmt='(/4x,a,f15.7,a2,a,i3,a)') &
                trim(prefix)//" Minimisation converged to ",total_energy_0*en_conv, &
                en_units(energy_units), " after ",n_iterations," iterations"

@@ -2542,7 +2542,7 @@ contains
           if (myid == 0 .and. iprint_md > 0) &
                write(io_lun, fmt='(4x,"Enthalpy change below threshold: ",f20.10," ",a2)') &
                dH*en_conv, en_units(energy_units)
-          write(io_lun, fmt='(4x,"Maximum stress below threshold:   ",f20.10," GPa")') &
+          if(myid==0) write(io_lun, fmt='(4x,"Maximum stress below threshold:   ",f20.10," GPa")') &
                max_stress*HaBohr3ToGPa
        end if
        deallocate(dr_tilde,dg_tilde,Hij,kappa,vi,kappa_prime,vi_tilde,ri_vec)
@@ -3608,7 +3608,7 @@ contains
        ! Test for finish
        if (inode==ionode) then
           write(io_lun,'(/4x,a,i4," MaxF: ",f12.8,x,a2,"/",a2," H: " ,f16.8,x,a2," MaxS: ",f12.8," GPa")') &
-               trim(prefixGO)//" + Iter: ",0, for_conv*max, en_units(energy_units), d_units(dist_units), &
+               trim(prefixGO)//" + Iter: ",iter, for_conv*max, en_units(energy_units), d_units(dist_units), &
                enthalpy1, en_units(energy_units), max_stress*HaBohr3ToGPa
           if (iprint_MD + min_layer > 1) then
              g0 = dot(length, tot_force, 1, tot_force, 1)
@@ -4307,10 +4307,10 @@ contains
                   prefixF(1:-2*min_layer)//"Stress tolerance:   ", cell_stress_tol
              write(io_lun,'(4x,a,f20.10," GPa")') &
                   prefixF(1:-2*min_layer)//"Change in stress:   ", dRMSstress*HaBohr3ToGPa
-             write(io_lun,'(8x,"Enthalpy change:    ",f20.10," ",a2)') &
-                  en_conv*dH, en_units(energy_units)
-             write(io_lun,'(8x,"Enthalpy tolerance: ",f20.10," ",a2)') &
-                  en_conv*enthalpy_tolerance, en_units(energy_units)
+             write(io_lun,'(4x,a,f20.10," ",a2)') &
+                  prefixF(1:-2*min_layer)//"Enthalpy change:    ", en_conv*dH, en_units(energy_units)
+             write(io_lun,'(4x,a,f20.10," ",a2)') &
+                  prefixF(1:-2*min_layer)//"Enthalpy tolerance: ", en_conv*enthalpy_tolerance, en_units(energy_units)
          end if
       end if
 

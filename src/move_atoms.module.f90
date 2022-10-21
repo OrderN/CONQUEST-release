@@ -1227,10 +1227,6 @@ contains
     end do ! while (.not. done)
     if(.not. done) call cq_abort("Failed to reduce energy in backtrack_linemin.  Final step size: ",alpha)
     energy_out = e3
-    if(abs(energy_out - energy_in) < abs(two*dE_elec_opt)) then
-       call cq_warn(subname, "Electronic structure dE is similar to atom movement dE; increase tolerance", &
-            dE_elec_opt, energy_out - energy_in)
-    end if
     call dump_pos_and_matrices
     ! Now find forces
     if (iprint_MD + min_layer > 0) then
@@ -2925,9 +2921,9 @@ contains
     end if
     dH = h0 - enthalpy_out
     !if (inode == ionode .and. iprint_MD + min_layer >= 0) then
-       write (io_lun, fmt='(/4x,a,i4,a,f20.10," ",a2)') &
-            trim(prefix)//" exit after ", iter, " iterations with enthalpy",&
-            en_conv * enthalpy_out, en_units(energy_units)
+    if(inode==ionode) write (io_lun, fmt='(/4x,a,i4,a,f20.10," ",a2)') &
+         trim(prefix)//" exit after ", iter, " iterations with enthalpy",&
+         en_conv * enthalpy_out, en_units(energy_units)
     !else if (inode == ionode) then
     !   write (io_lun, fmt='(/4x,a,f20.10," ",a2)') &
     !        trim(prefix)//" Final enthalpy: ",en_conv * enthalpy_out, en_units(energy_units)
