@@ -3138,7 +3138,7 @@ contains
        if (stress_diff > max_stress) max_stress = stress_diff
     end do
     if (inode==ionode) then
-       write(io_lun,'(/4x,a,i4," MaxStr: ",f12.8," GPa H: ",f16.8,x,a2," dH: ",f12.8,a2)') &
+       write(io_lun,'(/4x,a,i4," MaxStr: ",f12.8," GPa H: ",f16.8,x,a2," dH: ",f12.8,a2/)') &
             trim(prefixGO)//" - Iter: ",0, max_stress*HaBohr3ToGPa, en_conv*enthalpy0, &
             en_units(energy_units), zero, en_units(energy_units)
     end if
@@ -3239,7 +3239,7 @@ contains
        reset_iter = reset_iter +1
 
        if (inode==ionode) then
-          write(io_lun,'(/4x,a,i4," MaxStr: ",f12.8," GPa H: ",f16.8,x,a2," dH: ",f12.8,a2)') &
+          write(io_lun,'(/4x,a,i4," MaxStr: ",f12.8," GPa H: ",f16.8,x,a2," dH: ",f12.8,a2/)') &
                trim(prefixGO)//" - Iter: ",iter, max_stress*HaBohr3ToGPa, en_conv*enthalpy1, &
                en_units(energy_units), en_conv*dH, en_units(energy_units)
           if (iprint_MD + min_layer > 1) then
@@ -3607,7 +3607,7 @@ contains
        end do
        ! Test for finish
        if (inode==ionode) then
-          write(io_lun,'(/4x,a,i4," MaxF: ",f12.8,x,a2,"/",a2," H: " ,f16.8,x,a2," MaxS: ",f12.8," GPa")') &
+          write(io_lun,'(/4x,a,i4," MaxF: ",f12.8,x,a2,"/",a2," H: " ,f16.8,x,a2," MaxS: ",f12.8," GPa/")') &
                trim(prefixGO)//" + Iter: ",iter, for_conv*max, en_units(energy_units), d_units(dist_units), &
                enthalpy1, en_units(energy_units), max_stress*HaBohr3ToGPa
           if (iprint_MD + min_layer > 1) then
@@ -4291,7 +4291,7 @@ contains
            (stress(3,3)*stress(3,3)))/3)
       dRMSstress = (RMSstress - newRMSstress)/volume
       if (inode==ionode) then
-         write(io_lun,'(/4x,a,i4," MaxF: ",f12.8,x,a2,"/",a2," H: " ,f16.8,x,a2," MaxS: ",f12.8," GPa")') &
+         write(io_lun,'(/4x,a,i4," MaxF: ",f12.8,x,a2,"/",a2," H: " ,f16.8,x,a2," MaxS: ",f12.8," GPa/")') &
               trim(prefixGO)//" - Iter: ",iter, for_conv*max, en_units(energy_units), d_units(dist_units), &
               enthalpy1, en_units(energy_units), max_stress*HaBohr3ToGPa
          if (iprint_MD + min_layer > 1) then
