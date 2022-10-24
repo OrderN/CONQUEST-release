@@ -3243,21 +3243,21 @@ contains
                trim(prefixGO)//" - Iter: ",iter, max_stress*HaBohr3ToGPa, en_conv*enthalpy1, &
                en_units(energy_units), en_conv*dH, en_units(energy_units)
           if (iprint_MD + min_layer > 1) then
-             write(io_lun,'(4x,a,f19.8," GPa")') &
+             write(io_lun,'(4x,a,f21.8," GPa")') &
                   prefixF(1:-2*min_layer)//"Maximum stress:     ", max_stress*HaBohr3ToGPa
-             write(io_lun,'(4x,a,f19.8," GPa")') &
+             write(io_lun,'(4x,a,f21.8," GPa")') &
                   prefixF(1:-2*min_layer)//"Stress tolerance:   ", cell_stress_tol
-             write(io_lun,'(4x,a,f19.8," GPa")') &
+             write(io_lun,'(4x,a,f21.8," GPa")') &
                   prefixF(1:-2*min_layer)//"Change in stress:   ", dRMSstress*HaBohr3ToGPa
-             write(io_lun,'(4x,a,f19.8," ",a2)') &
+             write(io_lun,'(4x,a,f21.8," ",a2)') &
                   prefixF(1:-2*min_layer)//"Enthalpy change:    ", en_conv*dH, en_units(energy_units)
-             write(io_lun,'(4x,a,f19.8," ",a2)') &
+             write(io_lun,'(4x,a,f21.8," ",a2)') &
                   prefixF(1:-2*min_layer)//"Enthalpy tolerance: ", en_conv*enthalpy_tolerance, &
                   en_units(energy_units)
           else if (iprint_MD + min_layer > -1) then
-             write(io_lun,'(4x,a,f19.8," ",a2)') &
+             write(io_lun,'(4x,a,f21.8," ",a2)') &
                   prefixF(1:-2*min_layer)//"Enthalpy change:    ", en_conv*dH, en_units(energy_units)
-             write(io_lun,'(4x,a,f19.8," GPa")') &
+             write(io_lun,'(4x,a,f21.8," GPa")') &
                   prefixF(1:-2*min_layer)//"Maximum stress:     ", max_stress*HaBohr3ToGPa
           end if
        end if
@@ -3279,7 +3279,7 @@ contains
                   write(io_lun, fmt='(4x,a,f19.8," ",a2)') &
                   trim(prefix)//"Enthalpy change below threshold: ", dH*en_conv, en_units(energy_units)
              write(io_lun, fmt='(4x,a,f19.8," GPa")') &
-                  trim(prefix)//"Maximum stress below threshold:   ", max_stress*HaBohr3ToGPa
+                  trim(prefix)//"Maximum stress below threshold:  ", max_stress*HaBohr3ToGPa
           end if
        end if
 
