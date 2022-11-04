@@ -178,16 +178,17 @@ contains
     use numbers
     use global_module,   only: iprint_SC, flag_self_consistent,         &
                                flag_SCconverged, IPRINT_TIME_THRES2,    &
-                               nspin, spin_factor, min_layer
-    use H_matrix_module, only: get_H_matrix
-    use DMMin,           only: FindMinDM
+                               nspin, spin_factor, min_layer, flag_mix_L_SC_min
+    use H_matrix_module, only: get_H_matrix, get_output_energies
+    use DMMin,           only: FindMinDM, dE_DMM
     use energy,          only: get_energy
     use GenComms,        only: inode, ionode, cq_abort
     use dimens,          only: n_my_grid_points
-    use density_module,  only: density
+    use density_module,  only: density, get_electronic_density
     use maxima_module,   only: maxngrid
     use timer_module
     use io_module,       only: return_prefix
+    use functions_on_grid, only: atomfns, H_on_atomfns
 
     implicit none
 
@@ -230,15 +231,21 @@ contains
     call start_timer(tmr_l_tmp1,WITH_LEVEL)
     if (.not. flag_self_consistent) then
        call stop_timer(tmr_std_chargescf)
-       min_layer = min_layer - 1
+       !min_layer = min_layer - 1
        call FindMinDM(n_L_iterations, vary_mu, L_tol, &
-                      reset_L, .false.)
+            reset_L, .false.)
+       !if (.not.flag_mix_L_SC_min) then
+       !call get_electronic_density(density, electrons, atomfns, &
+       !     H_on_atomfns(1), inode, ionode, maxngrid, backtrace_level)
+       !end if
+       dE_SCF = dE_DMM
        call start_timer(tmr_std_chargescf)
+       call get_output_energies(density, maxngrid)
        call get_energy(total_energy)
        call stop_print_timer(tmr_l_tmp1, "new_SC_potl (except H build)", &
                              IPRINT_TIME_THRES2)
        call stop_timer(tmr_std_chargescf)
-       min_layer = min_layer + 1
+       !min_layer = min_layer + 1
        return
     end if
     if (inode == ionode .and. iprint_SC + min_layer > 1) &
@@ -288,7 +295,7 @@ contains
           call start_timer(tmr_l_tmp1, WITH_LEVEL)
           reset_L = .true. !.false.
           if (inode == ionode .and. iprint_SC + min_layer > 1) &
-               write (io_lun, *) '********** LateSC **********'
+               write (io_lun, fmt='(10x,a)') '********** LateSC **********'
 
           call lateSC(record, done, ndone, SC_tol, reset_L,     &
                       fixed_potential, vary_mu, n_L_iterations, &
@@ -486,7 +493,7 @@ contains
          dot(n_my_grid_points, resid_pul(:,1,1), 1, resid_pul(:,1,nspin), 1)
     call gsum(R0)
     R0 = sqrt(grid_point_volume * R0) / ne_in_cell
-    if (inode == ionode) write (io_lun, *) 'Residual is ', R0
+    if (inode == ionode) write (io_lun, fmt='(10x,a,f16.6)') 'Residual is ', R0
 
     ! Old output becomes new input
     do spin = 1, nspin
@@ -522,7 +529,7 @@ contains
        n_iters = n_iters + 1
 
        if (inode == ionode) &
-            write (io_lun, *) '********** Late iter ', n_iters
+            write (io_lun, fmt='(10x,a,i5)') '********** Late iter ', n_iters
 
        n_pulay = n_pulay + 1
 
@@ -541,7 +548,7 @@ contains
        npmod = mod(n_pulay, maxpulaySC) + 1
        pul_mx = min(n_pulay + 1, maxpulaySC)
        if (inode == ionode) &
-            write (io_lun, *) 'npmod, pul_mx: ', npmod, pul_mx
+            write (io_lun, fmt='(10x,a,2i5)') 'npmod, pul_mx: ', npmod, pul_mx
 
        ! For the present output, find the residual (i.e. R_n^\prime)
        call get_new_rho(.false., reset_L, fixed_potential, vary_mu, &
@@ -579,11 +586,11 @@ contains
 
        call DoPulay(npmod, Aij, alph, pul_mx, maxpulaySC)
 
-       do spin = 1, nspin
-          if (inode == ionode) &
-               write (io_lun, *) 'alph (spin=', spin, '): ', &
-                                 alph(1:pul_mx,spin)
-       end do
+       !do spin = 1, nspin
+       !   if (inode == ionode) &
+       !        write (io_lun, *) 'alph (spin=', spin, '): ', &
+       !                          alph(1:pul_mx,spin)
+       !end do
 
        ! Build new input density - we could do this wrap around, but
        ! will need rho_up/dn anyway, so might as well use it.
@@ -622,7 +629,7 @@ contains
        ! Generate the residual either exactly or by extrapolation
        if (mod(n_iters, n_exact) == 0) then
 
-          if (inode == ionode) write (io_lun, *) 'Generating rho exactly'
+          if (inode == ionode) write (io_lun, fmt='(10x,a)') 'Generating rho exactly'
           do spin = 1, nspin
              resid_pul(1:n_my_grid_points,npmod,spin) = &
                   alph(npmod,spin) * resid_pul(1:n_my_grid_points,npmod,spin)
@@ -712,7 +719,7 @@ contains
        else ! if (mod(n_iters, n_exact) == 0) then
 
           if (inode == ionode) &
-               write (io_lun, *) 'Generating rho by interpolation'
+               write (io_lun, fmt='(10x,a)') 'Generating rho by interpolation'
           ! Clever, wrap-around way to do it
           do spin = 1, nspin
              resid_pul(1:n_my_grid_points,npmod,spin) = &
@@ -796,16 +803,16 @@ contains
                      rho_pul(1:n_my_grid_points,pul_mx,spin)
              end do
           end if
-          if (inode == ionode) write (io_lun, *) 'PANIC ! Residual increase !'
+          if (inode == ionode) write (io_lun, fmt='(10x,a)') 'PANIC ! Residual increase !'
        end if
        !
        R0 = R1
        !
        if (R0 < self_tol) then
           done = .true.
-          if (inode == ionode) write (io_lun, *) 'Done ! Self-consistent'
+          if (inode == ionode) write (io_lun, fmt='(10x,a)') 'Done ! Self-consistent'
        end if
-       if (inode == ionode) write (io_lun, *) 'Residual is ', R0
+       if (inode == ionode) write (io_lun, fmt='(10x,a,f16.6)') 'Residual is ', R0
        if (record) then
           SCE(n_iters) = total_energy
           SCR(n_iters) = R0
@@ -827,7 +834,7 @@ contains
     ndone = n_iters
 
     if (inode == ionode) &
-         write(io_lun, *) 'Finishing lateSC after ', ndone, &
+         write(io_lun, fmt='(10x,a,i5,a,f16.6)') 'Finishing lateSC after ', ndone, &
                           'iterations with residual of ', R0
 
     deallocate(rho_pul, resid_pul, rho1, STAT=stat)
@@ -1065,7 +1072,7 @@ contains
     if (R0 < self_tol .AND. iter >= minitersSC) then ! If we've done minimum number
        if (inode == ionode .and. iprint_SC + min_layer>=0) &
             write (io_lun,fmt='(4x,a,e12.5, &
-            &" after ",i6," iterations")') trim(prefix)//" Reached SCF tolerance of ", &
+            &" after ",i6," iterations")') trim(prefix)//" reached SCF residual of ", &
             R0, iter
        done = .true.
        call deallocate_PulayMiXSC_spin

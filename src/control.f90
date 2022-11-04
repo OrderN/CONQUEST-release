@@ -143,7 +143,7 @@ contains
     use minimise,             only: get_E_and_F
     use global_module,        only: runtype, flag_self_consistent, &
                                     flag_out_wf, flag_write_DOS, wf_self_con, &
-                                    flag_opt_cell, optcell_method, min_layer
+                                    flag_opt_cell, optcell_method, min_layer, flag_DM_converged
     use input_module,         only: leqi
     use store_matrix,         only: dump_pos_and_matrices
 
@@ -165,7 +165,7 @@ contains
     call start_backtrace(t=backtrace_timer,who='control_run',&
          where=area,level=backtrace_level,echo=.true.)
 !****lat>$
-
+    flag_DM_converged = .false.
     if ( leqi(runtype,'static') ) then
        !if(.NOT.flag_self_consistent.AND.(flag_out_wf.OR.flag_write_DOS)) return
        flag_ff = .true.
@@ -374,9 +374,9 @@ contains
     ! Find energy and forces
     min_layer = min_layer - 1
     if (iprint_MD + min_layer > 0) then
-       call get_E_and_F(fixed_potential, vary_mu, energy0, .true., .true.)
+       call get_E_and_F(fixed_potential, vary_mu, energy0, .true., .true.,0)
     else
-       call get_E_and_F(fixed_potential, vary_mu, energy0, .true., .false.)
+       call get_E_and_F(fixed_potential, vary_mu, energy0, .true., .false.,0)
     end if
     min_layer = min_layer + 1
     call dump_pos_and_matrices
@@ -764,9 +764,9 @@ contains
     ! Find energy and forces
     min_layer = min_layer - 1
     if (flag_fire_qMD) then
-       call get_E_and_F(fixed_potential, vary_mu, energy0, .true., .true.)
+       call get_E_and_F(fixed_potential, vary_mu, energy0, .true., .true.,0)
     else
-       call get_E_and_F(fixed_potential, vary_mu, energy0, .true., .false.)
+       call get_E_and_F(fixed_potential, vary_mu, energy0, .true., .false.,0)
     end if
     min_layer = min_layer + 1
     mdl%dft_total_energy = energy0
@@ -1246,8 +1246,7 @@ contains
     energy1 = zero
     dE = zero
     ! Find energy and forces
-    call get_E_and_F(fixed_potential, vary_mu, energy0, .true., &
-                     .false.)
+    call get_E_and_F(fixed_potential, vary_mu, energy0, .true., .false.,0)
     call dump_pos_and_matrices
     iter = 1
     ggold = zero
@@ -1324,8 +1323,7 @@ contains
              call update_pos_and_matrices(updateLorK,cg)
           endif
           call update_H(fixed_potential)
-          call get_E_and_F(fixed_potential, vary_mu, energy1, .true., &
-               .false.)
+          call get_E_and_F(fixed_potential, vary_mu, energy1, .true., .false.)
           call dump_pos_and_matrices
        else
           call safemin2(x_new_pos, y_new_pos, z_new_pos, cg, energy0, &
@@ -1380,8 +1378,7 @@ contains
           call update_pos_and_matrices(updateLorK,cg)
        endif
        call update_H(fixed_potential)
-       call get_E_and_F(fixed_potential, vary_mu, energy1, .true., &
-                        .false.)
+       call get_E_and_F(fixed_potential, vary_mu, energy1, .true., .false.)
        call write_atomic_positions("UpdatedAtoms.dat", trim(pdb_template))
        call dump_pos_and_matrices
 
@@ -1562,8 +1559,7 @@ contains
     dE = zero
     ! Find energy and forces
     !min_layer = min_layer - 1
-    call get_E_and_F(fixed_potential, vary_mu, energy0, .true., &
-         .false.)
+    call get_E_and_F(fixed_potential, vary_mu, energy0, .true., .false.,0)
     call dump_pos_and_matrices
     call get_maxf(max)
     !min_layer = min_layer + 1
@@ -1833,7 +1829,7 @@ contains
     call reg_alloc_mem(area_general, 6 * ni_in_cell, type_dbl)
     if (myid == 0) then
        write(io_lun, fmt='(/4x,a)') trim(prefix)//" starting SQNM atomic relaxation"
-       if(iprint_MD + min_layer>0) write(io_lun, fmt='(4x,a,f8.4,a2,"/",a2,a,i4)') &
+       if(iprint_MD + min_layer>0) write(io_lun, fmt='(4x,a,f8.4,1x,a2,"/",a2,a,i4)') &
             trim(prefix)//" Tolerance: ",MDcgtol,en_units(energy_units), d_units(dist_units),&
             " Maximum steps: ",MDn_steps
     end if
@@ -1849,9 +1845,9 @@ contains
     ! Find energy and forces
     min_layer = min_layer - 1
     if (iprint_MD + min_layer > 0) then
-       call get_E_and_F(fixed_potential, vary_mu, energy0, .true., .true.)
+       call get_E_and_F(fixed_potential, vary_mu, energy0, .true., .true.,0)
     else
-       call get_E_and_F(fixed_potential, vary_mu, energy0, .true., .false.)
+       call get_E_and_F(fixed_potential, vary_mu, energy0, .true., .false.,0)
     end if
     call dump_pos_and_matrices
     call get_maxf(max)
@@ -2260,7 +2256,7 @@ contains
     dE = zero
     ! Find energy and forces
     min_layer = min_layer - 1
-    call get_E_and_F(fixed_potential, vary_mu, energy0, .true., .true.)
+    call get_E_and_F(fixed_potential, vary_mu, energy0, .true., .true.,0)
     min_layer = min_layer + 1
     call dump_pos_and_matrices
     call get_maxf(max)
@@ -2677,8 +2673,7 @@ contains
     dE = zero
     ! Find energy and forces
     min_layer = min_layer - 1
-    call get_E_and_F(fixed_potential, vary_mu, energy0, .true., &
-         .false.)
+    call get_E_and_F(fixed_potential, vary_mu, energy0, .true., .false.,0)
     call dump_pos_and_matrices
     call get_maxf(max)
     min_layer = min_layer + 1
@@ -3115,9 +3110,9 @@ contains
     ! Find energy and forces
     min_layer = min_layer - 1
     if (iprint_MD + min_layer > 0) then
-       call get_E_and_F(fixed_potential, vary_mu, energy0, .true., .true.)
+       call get_E_and_F(fixed_potential, vary_mu, energy0, .true., .true.,0)
     else
-       call get_E_and_F(fixed_potential, vary_mu, energy0, .true., .false.)
+       call get_E_and_F(fixed_potential, vary_mu, energy0, .true., .false.,0)
     end if
     min_layer = min_layer + 1
     iter = 1
@@ -3502,9 +3497,9 @@ contains
     ! Find energy and forces
     min_layer = min_layer - 1
     if (iprint_MD + min_layer > 0) then
-       call get_E_and_F(fixed_potential, vary_mu, energy0, .true., .true.)
+       call get_E_and_F(fixed_potential, vary_mu, energy0, .true., .true.,0)
     else
-       call get_E_and_F(fixed_potential, vary_mu, energy0, .true., .false.)
+       call get_E_and_F(fixed_potential, vary_mu, energy0, .true., .false.,0)
     end if
     call dump_pos_and_matrices
     call get_maxf(max)
@@ -3766,7 +3761,7 @@ contains
 
     ! Find energy and forces
     min_layer = min_layer - 1
-    call get_E_and_F(fixed_potential, vary_mu, energy0, .true., .true.)
+    call get_E_and_F(fixed_potential, vary_mu, energy0, .true., .true.,0)
     call dump_pos_and_matrices
     call get_maxf(max)
     min_layer = min_layer + 1
@@ -4168,9 +4163,9 @@ contains
     ! Find energy and forces
     min_layer = min_layer - 1
     if (iprint_MD + min_layer > 0) then
-       call get_E_and_F(fixed_potential, vary_mu, energy0, .true., .true.)
+       call get_E_and_F(fixed_potential, vary_mu, energy0, .true., .true.,0)
     else
-       call get_E_and_F(fixed_potential, vary_mu, energy0, .true., .false.)
+       call get_E_and_F(fixed_potential, vary_mu, energy0, .true., .false.,0)
     end if
     call dump_pos_and_matrices
     call get_maxf(max)

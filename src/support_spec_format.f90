@@ -112,21 +112,26 @@ contains
     call start_timer(tmr_std_allocation)
     if(allocated(coefficient_array)) then
        deallocate(coefficient_array)
-       if(inode==ionode) write(io_lun,*) 'WARNING ! Allocate call for coefficient_array when allocated !'
+       if(inode==ionode) &
+            write(io_lun,fmt='(8x,a)') 'WARNING ! Allocate call for coefficient_array when allocated !'
     end if
     if(allocated(grad_coeff_array)) then
        deallocate(grad_coeff_array)
-       if(inode==ionode) write(io_lun,*) 'WARNING ! Allocate call for coefficient_array when allocated !'
+       if(inode==ionode) &
+            write(io_lun,fmt='(8x,a)') 'WARNING ! Allocate call for coefficient_array when allocated !'
     end if
     if(allocated(elec_grad_coeff_array)) then
        deallocate(elec_grad_coeff_array)
-       if(inode==ionode) write(io_lun,*) 'WARNING ! Allocate call for coefficient_array when allocated !'
+       if(inode==ionode) &
+            write(io_lun,fmt='(8x,a)') 'WARNING ! Allocate call for coefficient_array when allocated !'
     end if
     if(allocated(coefficient_array_remote)) then
        deallocate(coefficient_array_remote)
-       if(inode==ionode) write(io_lun,*) 'WARNING ! Allocate call for coefficient_array when allocated !'
+       if(inode==ionode) &
+            write(io_lun,fmt='(8x,a)') 'WARNING ! Allocate call for coefficient_array when allocated !'
     end if
-    if(inode==ionode.AND.iprint_basis>2) write(io_lun,*) 'Allocating basis set coefficients array, size: ',size
+    if(inode==ionode.AND.iprint_basis>2) &
+         write(io_lun,fmt='(8x,a,i6)') 'Allocating basis set coefficients array, size: ',size
     allocate(coefficient_array(size),STAT=stat)
     if(stat/=0) call cq_abort("Error allocating coefficient_array: ",stat,size)
     call reg_alloc_mem(area_basis, size, type_dbl)

@@ -186,6 +186,7 @@ module global_module
   logical,      dimension(:,:), allocatable :: flag_move_atom  ! Move atoms ?
   integer,      dimension(:),   allocatable :: flag_cdft_atom
   logical :: restart_DM, restart_rho, restart_T, restart_X
+  logical :: flag_DM_converged
 
   integer :: global_maxatomspart ! Maximum atoms per partition, if exceeded, triggers partitioning refinement
 

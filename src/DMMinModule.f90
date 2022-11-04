@@ -180,14 +180,14 @@ contains
                              flag_SkipEarlyDM, flag_XLBOMD,             &
                              flag_propagateX, flag_dissipation,         &
                              integratorXL, runtype, flag_exx,           &
-                             flag_diagonalisation, min_layer
+                             flag_diagonalisation, min_layer, flag_DM_converged
     use mult_module,   only: matrix_transpose, matT, matTtran, matL,    &
                              matS, matrix_sum, matK
     use McWeeny,       only: InitMcW, McWMin
     use PosTan,        only: max_iters, cscale, PulayE, PulayR, PulayC, &
                              PulayBeta, pos_tan, fit_coeff
     use DiagModule,    only: FindEvals
-    use io_module,     only: dump_matrix
+    use io_module,     only: dump_matrix, return_prefix
     use energy,        only: entropy
     use timer_module,  only: cq_timer, start_timer, stop_print_timer,   &
                              WITH_LEVEL
@@ -218,6 +218,8 @@ contains
     !TM 2010.Nov.06
     integer                 :: niter = 0
     integer, parameter      :: niter_max = 10
+    character(len=12) :: subname = "FindDM: "
+    character(len=120) :: prefix
 
 !****lat<$
     if (       present(level) ) backtrace_level = level+1
@@ -227,15 +229,16 @@ contains
 !****lat>$
 
     call start_timer(tmr_std_densitymat)
+    prefix = return_prefix(subname, min_layer)
 
     entropy = zero
 
     if (flag_diagonalisation) then ! Use exact diagonalisation to get K
        call FindEvals(ne_spin_in_cell)
     else
-       if (inode == ionode) then
-          write (io_lun,'(1x,a,f15.10,2x,a,i5)') &
-               'Welcome to FindDMMin, tol: ', tolerance, &
+       if (inode == ionode .and. iprint_DM + min_layer >0) then
+          write(io_lun,'(/4x,a,f15.10,2x,a,i5)') &
+               trim(prefix)//' tol: ', tolerance, &
                'number of L iterations: ', n_L_iterations
        end if
 
@@ -280,12 +283,12 @@ contains
                IPRINT_TIME_THRES1)
        end do ! end of do while (.not. done)
     end if
-
+    flag_DM_converged = .true.
     if (record) then
-       if (inode == ionode .and. iprint_DM > 1) then
-          write (io_lun,*) '  List of residuals and energies'
+       if (inode == ionode .and. iprint_DM + min_layer > 2) then
+          write(io_lun,*) '  List of residuals and energies'
           do i = 1, ndone
-             write (io_lun, 7) i, PulayR(i), PulayE(i)
+             write(io_lun, 7) i, PulayR(i), PulayE(i)
           end do
        end if
        call fit_coeff(PulayC, PulayBeta, PulayE, PulayR, ndone)
@@ -372,13 +375,14 @@ contains
                               matrix_sum, matrix_product
     use primary_module, only: bundle
     use PosTan,         only: PulayR, PulayE
-    use GenComms,       only: cq_abort, gsum
-    use global_module,  only: IPRINT_TIME_THRES1,           &
+    use GenComms,       only: cq_abort, gsum, cq_warn
+    use global_module,  only: IPRINT_TIME_THRES1, min_layer,           &
                               ni_in_cell, flag_global_tolerance,       &
                               nspin, spin_factor,                      &
                               flag_fix_spin_population, flag_SpinDependentSF
     use timer_module,   only: cq_timer, start_timer, stop_print_timer, &
                               WITH_LEVEL
+    use io_module,      only: return_prefix
 
     implicit none
 
@@ -397,6 +401,8 @@ contains
     real(double)                   :: g0, g1
     real(double)                   :: interpG, zeta, direct_sum_factor
     type(cq_timer)                 :: tmr_l_tmp1, tmr_l_iter
+    character(len=12) :: subname = "earlyDM: "
+    character(len=120) :: prefix
 
     ! integer :: matM3, matSM3, matSphi, mat_temp, mat_search
     ! integer :: matM3_dn, matSM3_dn, mat_search_dn, matSphi_dn
@@ -410,9 +416,9 @@ contains
     ! type(cq_timer) :: tmr_l_tmp1, tmr_l_iter
 
     call start_timer(tmr_l_tmp1, WITH_LEVEL)
-
+    prefix = return_prefix(subname, min_layer)
     spin_SF = 1
-
+    if(inode==ionode .and. iprint_DM + min_layer >= 2) write(io_lun,fmt='(/4x,a)') trim(prefix)//" starting"
     ! allocate temp matrices
     do spin = 1, nspin
        matM3(spin) = allocate_temp_matrix(Lrange,0)
@@ -426,9 +432,9 @@ contains
          call cq_abort('earlyDM: too many L iterations', &
                        ndone, n_L_iterations)
 
-    if (vary_mu) then
-       call correct_electron_number
-    end if
+    min_layer = min_layer - 1
+    if (vary_mu) call correct_electron_number
+    min_layer = min_layer + 1
 
     call LNV_matrix_multiply(electrons, energy0, dontK, dontM1, &
                              dontM2, doM3, dontM4, dophi, doE,  &
@@ -458,11 +464,11 @@ contains
           e_dot_n_tot = e_dot_n_tot + spin_factor * e_dot_n(spin)
           n_dot_n(spin) = matrix_product_trace(matSphi(spin), matphi(spin))
           n_dot_n_tot = n_dot_n_tot + spin_factor * n_dot_n(spin)
-          if (inode == ionode .and. iprint_DM >= 2) then
-             write (io_lun, '(2x,"e.n (spin=",i1,") ",f25.15)') &
-                  spin, e_dot_n(spin)
-             write (io_lun, '(2x,"n.n (spin=",i1,") ",f25.15)') &
-                  spin, n_dot_n(spin)
+          if (inode == ionode .and. iprint_DM + min_layer >= 3) then
+             write(io_lun, '(4x,a,i1,") ",f16.6)') &
+                  trim(prefix)//" e.n (spin=", spin, e_dot_n(spin)
+             write(io_lun, '(4x,a,i1,") ",f16.6)') &
+                  trim(prefix)//" n.n (spin=", spin, n_dot_n(spin)
           end if
        end do
        ! Correct search direction so that it is tangent to
@@ -527,19 +533,21 @@ contains
                   real(ni_in_cell, double)
           end do
        end if
-       if (inode == ionode .and. iprint_DM >= 1) &
-            write (io_lun, 1) n_iter, energy0_tot, g0
+       if (inode == ionode .and. iprint_DM + min_layer >= 1) &
+            write(io_lun, fmt='(4x,a,i3," Energy: ",f16.6," Ha Residual: ",e16.6)') &
+            trim(prefix)//" iteration: ",n_iter, energy0_tot, g0
 
        ! minimise total E along search direction, updates energy1 =
        ! E(L_n_iter+1), delta_e = energy1_tot - energy0_tot,
        ! matM3(L_n_iter+1), matM3_dn(L_n_iter+1), inflex and interpG
+       min_layer = min_layer - 1
        call lineMinL(matM3, mat_search, mat_temp, matSM3,   &
                      energy0_tot, energy1_tot, delta_e, &
                      inflex, interpG)
+       min_layer = min_layer + 1
        ! panic if found inflexion point
        if (inflex) then
-          if (inode == ionode) &
-               write (io_lun, *) 'Panic ! Inflexion point found !'
+          call cq_warn(subname,"Inflexion point found in DM search; resetting")
           ndone = n_iter
           ! deallocate matrices
           do spin = nspin, 1, -1
@@ -583,15 +591,15 @@ contains
        ! Test for linearity or convergence
        ! zeta is returned by lineMinL
        zeta = interpG
-       if (inode == ionode .and. iprint_DM >= 2) &
-            write (io_lun, 2) delta_e, zeta
-       if (inode == ionode .and. iprint_DM >= 2) &
-            write (io_lun, '(2x,"zeta...: ",3e25.15)') g0, g1, interpG
+       if (inode == ionode .and. iprint_DM + min_layer >= 2) &
+            write(io_lun,fmt='(4x,a,f16.6,af16.6)') trim(prefix)//" dE ", delta_e, " Ha linearity: ",zeta
+       if (inode == ionode .and. iprint_DM + min_layer >= 3) &
+            write (io_lun, '(4x,a,3f16.6)') trim(prefix)//" zeta...: ", g0, g1, interpG
 
        ! Correct L_n_iter+1 again to get electron numbers correct
-       if (vary_mu) then
-          call correct_electron_number
-       endif
+       min_layer = min_layer - 1
+       if (vary_mu) call correct_electron_number
+       min_layer = min_layer + 1
 
        ! recalculate the quantities after L_n_iter+1 is updated
        ! 2011/08/24 L.Tong:
@@ -680,10 +688,12 @@ contains
           ! We're linear Added +1 to n_iter for cosmetic reasons (this
           ! is true since at this stage g0 and energy0_tot etc are already
           ! prepared for n_iter+1 step)
-          if (inode == ionode .and. iprint_DM >= 1) &
-               write (io_lun, 1) n_iter + 1, energy0_tot, g0
-          if ((inode == ionode).and. (iprint_DM >= 2)) &
-               write (io_lun, '("Linearity satisfied - calling PulayL")')
+          if (inode == ionode .and. iprint_DM + min_layer >= 2) &
+               write(io_lun, fmt='(4x,a,i3," Energy: ",f16.6," Ha Residual: ",e16.6)') &
+               trim(prefix)//" iteration: ",n_iter+1, energy0_tot, g0
+          if ((inode == ionode).and. (iprint_DM + min_layer >= 1)) &
+               write (io_lun, '(4x,a,i3,a)') &
+               trim(prefix)//" transition to lateDM after ",n_iter+1," iterations"
           ndone = n_iter
           do spin = nspin, 1, -1
              call free_temp_matrix(mat_search(spin))
@@ -707,12 +717,7 @@ contains
        call free_temp_matrix(matSM3(spin))
        call free_temp_matrix(matM3(spin))
     end do
-
     return
-
-1   format('Iteration: ',i3,' Energy: ',e20.12,' Residual: ',e20.12)
-2   format(2x,'Change in energy: ',e20.12,' Linearity: ',e20.12)
-
   end subroutine earlyDM
   !!***
 
@@ -820,10 +825,10 @@ contains
                                  flag_mix_L_SC_min,                    &
                                  flag_fix_spin_population, nspin,      &
                                  spin_factor, flag_dump_L,             &
-                                 flag_SpinDependentSF
+                                 flag_SpinDependentSF, min_layer
     use timer_module,      only: cq_timer,start_timer,                 &
                                  stop_print_timer, WITH_LEVEL
-    use io_module,         only: dump_matrix
+    use io_module,         only: dump_matrix, return_prefix
     use functions_on_grid, only: atomfns, H_on_atomfns
     use H_matrix_module,   only: get_H_matrix
     use density_module,    only: density, get_electronic_density, flag_DumpChargeDensity
@@ -858,9 +863,11 @@ contains
     !TM
     integer        :: iter_stuck = 0
     integer, parameter :: mx_stuck = 5
+    character(len=12) :: subname = "lateDM: "
+    character(len=120) :: prefix
 
     call start_timer(tmr_l_tmp1, WITH_LEVEL)
-
+    prefix = return_prefix(subname, min_layer)
     iter_stuck = 0
 
     spin_SF = 1
@@ -881,6 +888,7 @@ contains
     end do
 
     ! Update the charge density if flag is set
+    min_layer = min_layer - 1
     if (flag_mix_L_SC_min) then
        ! 2011/08/29 L.Tong:
        ! original also calculates matphi, (dophi), but I think
@@ -895,6 +903,7 @@ contains
                                    maxngrid)
        call get_H_matrix(.true., .false., electrons, density, maxngrid)
     end if
+    min_layer = min_layer + 1
 
     ! Get the gradient at the starting point (?) this updates matM3
     ! and matphi
@@ -920,11 +929,11 @@ contains
           call matrix_product(mat_temp(spin), matT(spin_SF), matSphi(spin), mult(TL_T_L))
           e_dot_n(spin) = matrix_product_trace(matSM3(spin), matphi(spin))
           n_dot_n(spin) = matrix_product_trace(matSphi(spin), matphi(spin))
-          if (inode == ionode .and. iprint_DM >= 2) then
-             write (io_lun, '(2x,"e_dot_n (spin=",i1,"): ",f25.15)') &
-                   spin, e_dot_n(spin)
-             write (io_lun, '(2x,"n_dot_n (spin=",i1,"): ",f25.15)') &
-                   spin, n_dot_n(spin)
+          if (inode == ionode .and. iprint_DM + min_layer >= 3) then
+             write(io_lun, '(4x,a,i1,") ",f16.6)') &
+                  trim(prefix)//" e.n (spin=", spin, e_dot_n(spin)
+             write(io_lun, '(4x,a,i1,") ",f16.6)') &
+                  trim(prefix)//" n.n (spin=", spin, n_dot_n(spin)
           end if
        end do
 
@@ -985,8 +994,9 @@ contains
     end if
     do n_iter = 1, n_L_iterations
        call start_timer(tmr_l_iter, WITH_LEVEL)
-       if (inode == ionode .and. iprint_DM >= 1) &
-            write (io_lun, 1) n_iter, energy0_tot, g0
+       if (inode == ionode .and. iprint_DM + min_layer >= 1) &
+            write(io_lun, fmt='(4x,a,i3," Energy: ",f16.6," Ha Residual: ",e16.6)') &
+            trim(prefix)//"  iteration: ",n_iter, energy0_tot, g0
        ! Storage for pulay DMs/residuals
        npmod = mod(n_iter, maxpulayDMM) + 1
        pul_mx = min(n_iter + 1, maxpulayDMM)
@@ -1002,9 +1012,9 @@ contains
        ! We don't want the step to be too small or too big
        if (abs(step) < minpulaystepDMM) step = minpulaystepDMM
        if (abs(step) > maxpulaystepDMM) step = maxpulaystepDMM
-       if (inode == ionode .and. iprint_DM >= 2) &
-            write (io_lun, '(2x,"npmod, pul_mx and step: ",i3,i3,f25.15)') &
-                  npmod, pul_mx, step
+       if (inode == ionode .and. iprint_DM + min_layer >= 3) &
+            write(io_lun, '(4x,a,i3,i3,f16.6)') &
+            trim(prefix)//" npmod, pul_mx and step: ", npmod, pul_mx, step
        ! take L_n+1 = L_n + step * G_n
        if (npmod > 1) then
           do spin = 1, nspin
@@ -1018,7 +1028,9 @@ contains
           end do
        endif
        ! after the step, correct the electron number
+       min_layer = min_layer - 1
        if (vary_mu) call correct_electron_number
+       min_layer = min_layer + 1
        ! Re-evaluate gradient and energy
        call LNV_matrix_multiply(electrons, energy1, dontK, dontM1, &
                                 dontM2, doM3, dontM4, dophi, doE,  &
@@ -1069,6 +1081,8 @@ contains
              end if
           end if
        end if
+       ! 2022/10/28 16:01 dave
+       ! I'm not sure that we need this calculation of residual
        ! Find the residual (i.e. the gradient)
        if (flag_global_tolerance) then
           gg = zero
@@ -1084,8 +1098,8 @@ contains
                   real(ni_in_cell, double)
           end do
        end if
-       if (inode == ionode .and. iprint_DM >= 2) &
-            write (io_lun, '(2x,"R2 is ",e25.15)') sqrt(gg)
+       if (inode == ionode .and. iprint_DM + min_layer >= 2) &
+            write(io_lun, '(4x,a,e16.6)') trim(prefix)//" R2 is ", sqrt(gg)
        ! record Pulay histories
        do spin = 1, nspin
           call matrix_sum(zero, mat_SGstore(npmod,spin), -one, matSM3(spin))
@@ -1116,6 +1130,7 @@ contains
           end do
        end do
        ! after the step, correct the electron number
+       min_layer = min_layer - 1
        if (vary_mu) call correct_electron_number
        if (flag_mix_L_SC_min) then
           ! 2011/08/29 L.Tong
@@ -1129,6 +1144,7 @@ contains
                                       ionode, maxngrid)
           call get_H_matrix(.true., .false., electrons, density, maxngrid)
        end if
+       min_layer = min_layer + 1
        ! re-evaluate the gradient and energy at new position
        call LNV_matrix_multiply(electrons, energy1, dontK, dontM1, &
                                 dontM2, doM3, dontM4, dophi, doE,  &
@@ -1154,9 +1170,9 @@ contains
                   real(ni_in_cell, double)
           end do
        end if
-       if (inode == ionode .and. iprint_DM >= 3) &
-            write (io_lun, '(2x,"Residual before electron gradient &
-                            &correction: ",e25.15)') g1
+       if (inode == ionode .and. iprint_DM + min_layer >= 2) &
+            write(io_lun, '(4x,a,e16.6)') &
+            trim(prefix)//" Residual before electron gradient correction: ", g1
        if (vary_mu) then
           do spin = 1, nspin
              if (flag_SpinDependentSF) spin_SF = spin
@@ -1211,8 +1227,8 @@ contains
                   real(ni_in_cell, double)
           end do
        end if
-       if (inode == ionode .and. iprint_DM >= 2) &
-            write (io_lun, '(2x,"New residual: ",e25.15)') g1
+       if (inode == ionode .and. iprint_DM + min_layer >= 2) &
+            write(io_lun, '(4x,a,e16.6)') trim(prefix)//" New residual: ", g1
        if ((ndone + n_iter) < max_iters) then
           PulayR(ndone + n_iter) = g1
           PulayE(ndone + n_iter) = energy1_tot
@@ -1232,20 +1248,18 @@ contains
        if (g1 < tolerance) then
           done = .true.
           ndone = n_iter
-          if (inode == ionode) write (io_lun, *) 'Achieved tolerance in lateDM'
-          if (inode == ionode) &
-               write (io_lun, '("Final energy and residual: ",f24.9,f15.9)') &
-                     energy1_tot, g1
+          if (inode == ionode .and. iprint_DM + min_layer >= 0) &
+               write(io_lun, '(/4x,a,e16.6,a,i3,a/)') &
+               trim(prefix)//" reached residual of ", g1, " after ",n_iter, " iterations"
           call dealloc_lateDM
           call stop_print_timer(tmr_l_iter, "a lateDM iteration", &
                                 IPRINT_TIME_THRES1)
           return
        else if ((.not. flag_mix_L_SC_min) .and. (g1 > two * g0)) then
-          if (inode == ionode) &
-               write (io_lun, *) 'Panic ! Residual increase in lateDM'
-          if (inode == ionode) &
-               write (io_lun, '("Final energy and residual: ",f24.9,f15.9)') &
-                     energy1_tot, g1
+          if (inode == ionode .and. iprint_DM + min_layer >= 0) &
+               write(io_lun, '(/4x,a,i3,a,f16.6,a,f16.6)') &
+               trim(prefix)//" residual rise after  ", n_iter, &
+               " iterations with energy and residual: ", energy1_tot, " Ha ", g1
           ndone = n_iter
           call dealloc_lateDM
           call stop_print_timer(tmr_l_iter, "a lateDM iteration", &
@@ -1256,11 +1270,10 @@ contains
           if (iter_stuck > mx_stuck) then
              done = .false.
              ndone = n_iter
-             if (inode == ionode) &
-                  write (io_lun, '("Fail in reducing Residual in lateDM")')
-             if (inode == ionode) &
-                  write (io_lun, '("energy and residual: ",f24.9,f15.9)')&
-                        energy1_tot, g1
+             if (inode == ionode .and. iprint_DM + min_layer >= 0) &
+                  write(io_lun, '(/4x,a,i3,a,f16.6,a,e16.6)') &
+                  trim(prefix)//" reset since failed to reduce residual after ",n_iter, &
+                  " iterations with energy and residual: ", energy1_tot, " Ha ", g1
              call dealloc_lateDM
              call stop_print_timer(tmr_l_iter, "a lateDM iteration", &
                                    IPRINT_TIME_THRES1)
@@ -1300,8 +1313,6 @@ contains
     endif  ! (flag_mix_L_SC_min) then
 
     call dealloc_lateDM
-
-1   format('Iteration: ',i3,' Energy: ',e20.12,'   Residual: ',e20.12)
 
     return
 
@@ -1392,7 +1403,8 @@ contains
                              LNV_matrix_multiply, mult, T_L_TL,      &
                              TL_T_L, symmetrise_L
     use global_module, only: flag_fix_spin_population, nspin,        &
-                             spin_factor, flag_SpinDependentSF
+                             spin_factor, flag_SpinDependentSF, min_layer
+    use io_module,      only: return_prefix
 
     implicit none
 
@@ -1410,7 +1422,10 @@ contains
     real(double) :: g0, g1, ig0, ig1, ig1_step, igcross, igcross2
     real(double) :: lamG, zeta
     integer      :: i, j, k, length, spin, spin_SF
+    character(len=12) :: subname = "lineMinL: "
+    character(len=120) :: prefix
 
+    prefix = return_prefix(subname, min_layer)
     spin_SF = 1
     g0 = zero
     ig0 = zero
@@ -1442,8 +1457,8 @@ contains
     step = delta_e / g0
     if (abs(step) < 1.0e-2_double) step = 0.01_double
     if (abs(step) > 0.1_double)    step = 0.1_double
-    if (inode == ionode .and. iprint_DM >= 2) &
-         write (io_lun, '(2x,"Step is ",f25.15)') step
+    if (inode == ionode .and. iprint_DM + min_layer >= 2) &
+         write(io_lun, '(4x,a,f16.6)') trim(prefix)//" trial step is ",step
 
     ! now we take the step in the direction D
     do spin = 1, nspin
@@ -1499,8 +1514,10 @@ contains
 
     if (SQ < 0) then
        ! point of inflexion - problem !
-       if (inode == ionode) write (io_lun, *) 'Inflexion approximation:'
-       if (inode == ionode) write (io_lun, *) 'A, B, C, D: ', A, B, C, D
+       if (inode == ionode .and. iprint_DM + min_layer > 0) then
+          write(io_lun, fmt='(4x,a)') trim(prefix)//' inflexion approximation:'
+          write(io_lun, fmt='(4x,a,4f16.6)') trim(prefix)//' A, B, C, D: ', A, B, C, D
+       end if
        inflex = .true.
        do spin = nspin, 1, -1
           call free_temp_matrix(matM3old(spin))
@@ -1510,15 +1527,16 @@ contains
        if (abs(A) > RD_ERR) then
           truestep = (-two * B + SQRT(SQ)) / (six * A)
        else
-          if (inode == ionode) write (*, *) 'Local quadratic approximation:'
+          if (inode == ionode .and. iprint_DM + min_layer >2) &
+               write(io_lun, fmt='(4x,a)') trim(prefix)//' local quadratic approximation'
           ! L.Tong shouldn this be -C/(two*B) instead of the orginal
           ! C/(two * B) ?
           ! truestep = C / (two * B)
           truestep = - C / (two * B)
        end if
     end if ! if (SQ < 0) then
-    if (inode == ionode .and. iprint_DM >= 2) &
-         write (io_lun, '(2x,"True Step is ",f25.15)') truestep
+    if (inode == ionode .and. iprint_DM + min_layer>= 2) &
+         write(io_lun, '(4x,a,f16.6)') trim(prefix)//" actual step is ", truestep
 
     !TM 09/09/2003
     if (truestep < 1.e-04_double) truestep = 1.e-04_double
@@ -1576,12 +1594,12 @@ contains
     ! returns interpG as zeta
     interpG = zeta
 
-    if (inode == ionode .and. iprint_DM >= 2) then
+    if (inode == ionode .and. iprint_DM + min_layer >= 2) then
        do spin = 1, nspin
-          write (io_lun, '(2x,"energy_1 for spin = ",i1," is: ",f25.15)') &
-                spin, energy_1_spin(spin)
+          write(io_lun, '(4x,a,i1," is: ",f16.6)') &
+               trim(prefix)//" energy_1 for spin = ", spin, energy_1_spin(spin)
        end do
-       write (io_lun, '(2x,"energy_1 overall           is ",f25.15)') energy_1
+       write(io_lun, '(4x,a,f16.6)') trim(prefix)//" energy_1 overall is:      ", energy_1
     end if
 
     ! deallocate matrix
@@ -1666,7 +1684,8 @@ contains
     use primary_module, only: bundle
     use GenComms,       only: gsum, cq_abort
     use global_module,  only: ne_spin_in_cell, nspin, spin_factor, &
-                              nspin_SF, flag_SpinDependentSF
+                              nspin_SF, flag_SpinDependentSF, min_layer
+    use io_module,      only: return_prefix
 
     implicit none
 
@@ -1677,7 +1696,10 @@ contains
     real(double), dimension(nspin) :: electrons_0, electrons_2, &
                                       electrons, energy
     integer,      dimension(nspin) :: matTL, matphi2, matSphi, matSphi2
+    character(len=20) :: subname = "correct_Ne: "
+    character(len=120) :: prefix
 
+    prefix = return_prefix(subname, min_layer)
     spin_SF = 1
 
     ! set electrons_0 to the correct electron number
@@ -1699,30 +1721,29 @@ contains
           call LNV_matrix_multiply(electrons, energy, dontK, dontM1,     &
                                    dontM2, dontM3, dontM4, dophi, dontE, &
                                    mat_phi=matphi, spin=spin)
-          if (inode == ionode .and. iprint_DM >= 2) &
-               write (io_lun, '(2x,"electron number (spin=",i1,") before &
-                               &correction: ",f25.15)') spin, electrons(spin)
+          if (inode == ionode .and. iprint_DM + min_layer >= 2) &
+               write(io_lun, '(4x,a,i1,") before correction: ",f16.6)') &
+               trim(prefix)//" electron number (spin=", spin, electrons(spin)
           call matrix_product(matT(spin_SF), matphi(spin), matTL(spin), mult(T_L_TL))
           call matrix_product(matTL(spin), matTtran(spin_SF), matSphi(spin), mult(TL_T_L))
           g0 = matrix_product_trace(matSphi(spin), matphi(spin))
           ! initial guess is linear correction...
           step1 = (electrons_0(spin) - electrons(spin)) / g0
           step = 0.1_double
-          if (inode == ionode .and. iprint_DM >= 2) &
-               write (io_lun, '(2x,"g0, step1 (spin=",i1,") are ",2f25.15)') &
-                     spin, g0, step1
+          if (inode == ionode .and. iprint_DM + min_layer >= 2) &
+               write(io_lun, '(4x,a,i1,") are ",f16.6,e16.6)') &
+                     trim(prefix)//" g0, step1 (spin=", spin, g0, step1
           if (abs(electrons_0(spin) - electrons(spin)) < 1.0e-9_double) then
              call matrix_sum(one, matL(spin), step1, matSphi(spin))
              ! check that electron number is correct
-             if (iprint_DM >= 2) then
+             if (iprint_DM + min_layer >= 2) then
                 call LNV_matrix_multiply(electrons_2, energy, dontK,     &
                                          dontM1, dontM2, dontM3, dontM4, &
                                          dophi, dontE, mat_phi=matphi,   &
                                          spin=spin)
                 if (inode == ionode) &
-                     write (io_lun, '(2x,"electron number (spin=",i1,") &
-                                     &after correction: ",f25.15)') &
-                           spin, electrons_2(spin)
+                     write(io_lun, '(4x,a,i1,") after correction: ",f15.6)') &
+                                     trim(prefix)//" electron number (spin=", spin, electrons_2(spin)
              end if
              done = .true.
           else
@@ -1738,9 +1759,9 @@ contains
              call matrix_product(matTL(spin), matTtran(spin_SF), &
                                  matSphi2(spin), mult(TL_T_L))
              g1 = matrix_product_trace(matphi(spin), matSphi2(spin))
-             if (inode == ionode .and. iprint_DM >= 2) &
-                  write (io_lun, '(2x,"g1, elec2 (spin=",i1,") are ",2f25.15)') &
-                        spin, g1, electrons_2(spin)
+             if (inode == ionode .and. iprint_DM + min_layer >= 2) &
+                  write(io_lun, '(4x,a,i1,") are ",2f16.6)') &
+                        trim(prefix)//" g1, elec2 (spin=", spin, g1, electrons_2(spin)
              ! get coefficients of polynomial
              D = electrons(spin) - electrons_0(spin)
              C = g0
@@ -1753,21 +1774,21 @@ contains
              C = C * recA
              D = D * recA
              truestep = SolveCubic(B, C, D, step, inode, ionode)
-             if (inode .eq. ionode .and. iprint_DM >= 2) &
-                  write (io_lun, '(2x,"Step, truestep (spin=",i1,") are ",2f25.15)') &
-                        spin, step, truestep
+             if (inode .eq. ionode .and. iprint_DM + min_layer >= 2) &
+                  write(io_lun, '(4x,a,i1,") are ",2e16.6)') &
+                  trim(prefix)//" step, truestep (spin=", spin, step, truestep
              call matrix_sum(one, matL(spin), truestep - step, matSphi(spin))
              if (truestep == step) then
-                if (inode == ionode) write (io_lun, '(2x,"Still in linear loop")')
+                if (inode == ionode .and. iprint_DM + min_layer >= 2) &
+                     write(io_lun, '(4x,a)') trim(prefix)//" still in linear loop"
                 ! check that electron number is correct
                 call LNV_matrix_multiply(electrons_2, energy, dontK, &
                                          dontM1, dontM2, dontM3,     &
                                          dontM4, dophi, dontE,       &
                                          mat_phi=matphi, spin=spin)
-                if (inode == ionode .and. iprint_DM >= 2) &
-                     write (io_lun, '(2x,"electron number (spin=",i1,") &
-                                     &after correction",f25.15)') &
-                           spin, electrons_2(spin)
+                if (inode == ionode .and. iprint_DM + min_layer >= 2) &
+                     write(io_lun,fmt='(4x,a,i1,") after correction",f16.6)') &
+                     trim(prefix)//" electron number (spin=", spin, electrons_2(spin)
                 dne = abs(electrons_2(spin) - electrons_0(spin))
                 if (dne < 1e-4_double) done = .true.
                 iter = iter + 1
@@ -1777,10 +1798,9 @@ contains
                                          dontM1, dontM2, dontM3,     &
                                          dontM4, dophi, dontE,       &
                                          mat_phi=matphi, spin=spin)
-                if (inode == ionode .and. iprint_DM >= 2) &
-                     write (io_lun, '(2x,"electron number (spin=",i1,") &
-                                     &after correction: ",f25.15)') &
-                           spin, electrons_2(spin)
+                if (inode == ionode .and. iprint_DM + min_layer >= 2) &
+                     write(io_lun, '(4x,a,i1,") after correction:  ",f16.6)') &
+                     trim(prefix)//" electron number (spin=", spin, electrons_2(spin)
              end if ! (truestep == step)
           end if ! (abs(electrons_0(spin) - electrons(spin)) < 1.0e-9_double)
        end do ! while ( .not. done .and. (iter < 20))
@@ -1843,7 +1863,8 @@ contains
     use primary_module, only: bundle
     use GenComms,       only: gsum
     use global_module,  only: ne_in_cell, nspin, spin_factor, &
-                              nspin_SF, flag_SpinDependentSF
+                              nspin_SF, flag_SpinDependentSF, min_layer
+    use io_module,      only: return_prefix
 
     implicit none
 
@@ -1854,7 +1875,10 @@ contains
                     electrons2, g0, g1, recA, B, C, D, truestep, dne
     integer :: iter, spin, spin_SF
     logical :: done
+    character(len=20) :: subname = "correct_Ne: "
+    character(len=120) :: prefix
 
+    prefix = return_prefix(subname, min_layer)
     done = .false.
     iter = 0
     spin_SF = 1
@@ -1880,10 +1904,10 @@ contains
                                 dontE, mat_phi=matphi)
        electrons = spin_factor * sum(electrons_spin)
 
-       if (inode == ionode .and. iprint_DM >= 2) &
-            write (io_lun, 1) electrons_spin(1), &
-                              electrons_spin(nspin), electrons
-
+       if (inode == ionode .and. iprint_DM + min_layer >= 2) &
+            write(io_lun, '(4x,a,3f16.6)') &
+            trim(prefix)//" electron numbers before correction (up, down, total): ", &
+            electrons_spin(1), electrons_spin(nspin), electrons
        g0 = zero
        do spin = 1, nspin
           if (flag_SpinDependentSF) spin_SF = spin
@@ -1896,8 +1920,8 @@ contains
        ! initial guess is linear correction...
        step1 = (electrons_0 - electrons) / (g0 + RD_ERR)
        step = 0.1_double
-       if (inode == ionode .and. iprint_DM >= 2) &
-            write (io_lun, '(2x,"g0, step1 are ",2f25.15)') g0, step1
+       if (inode == ionode .and. iprint_DM + min_layer >= 2) &
+            write(io_lun, '(4x,a,f16.6,e16.6)') trim(prefix)//" g0, step1 are", g0, step1
 
        ! if we are within 0.1% of the correct number, linear will do.
        if (abs(electrons_0 - electrons) < 1.0e-9_double) then
@@ -1927,12 +1951,11 @@ contains
              g1 = g1 + spin_factor * &
                   matrix_product_trace(matphi(spin), matSphi2(spin))
           end do
-          if (inode == ionode .and. iprint_DM >= 2)               &
-               write (io_lun, '(2x,"g1, elec_up, elec_dn, elec2 are ",&
-                               &f25.15/,34x,f25.15/,34x,f25.15/,&
-                               &34x,f25.15)')                         &
-                     g1, electrons_spin(1), electrons_spin(nspin),   &
-                     electrons2
+          if (inode == ionode .and. iprint_DM + min_layer >= 2)               &
+               write(io_lun, '(4x,a,4f16.6)') &
+               trim(prefix)//" g1, elec (up, down, total): ", &
+               g1, electrons_spin(1), electrons_spin(nspin),   &
+               electrons2
 
           ! get coefficients of polynomial
           D = electrons - electrons_0
@@ -1952,9 +1975,8 @@ contains
           D = D * recA
 
           truestep = SolveCubic(B, C, D, step, inode, ionode)
-          if (inode == ionode .and. iprint_DM >= 2) &
-               write (io_lun, '(2x,"Step, truestep are ",2f25.15)') &
-                     step, truestep
+          if (inode == ionode .and. iprint_DM + min_layer >= 2) &
+               write(io_lun, '(4x,a,2e16.6)') trim(prefix)//" step, truestep ", step, truestep
 
           do spin = 1, nspin
              call matrix_sum(one, matL(spin), truestep - step, matSphi(spin))
@@ -1962,7 +1984,8 @@ contains
 
           if (truestep == step) then
 
-             if (inode == ionode) write (io_lun, '(2x,"Still in linear loop")')
+             if (inode == ionode .and. iprint_DM + min_layer >= 2) &
+                  write(io_lun, '(4x,a)') trim(prefix)//" still in linear loop"
 
              ! check that electron number is correct
              call LNV_matrix_multiply(electrons_spin, energy_spin,   &
@@ -1970,9 +1993,10 @@ contains
                                       dontM4, dophi, dontE, mat_phi=matphi)
              electrons2 = spin_factor * sum(electrons_spin)
 
-             if (inode == ionode .and. iprint_DM >= 2) &
-                  write (io_lun, 2) electrons_spin(1), &
-                                    electrons_spin(nspin), electrons2
+             if (inode == ionode .and. iprint_DM + min_layer >= 2) &
+                  write(io_lun,fmt='(4x,a,3f16.6)') &
+                  trim(prefix)//" electron numbers after correction (up, down, total):  ", &
+                  electrons_spin(1), electrons_spin(nspin), electrons2
              dne = abs(electrons2 - electrons_0)
              if ((dne / electrons_0) < 1.0e-6_double) done = .true.
              iter = iter + 1
@@ -1982,9 +2006,10 @@ contains
                                       dontK, dontM1, dontM2, dontM3, &
                                       dontM4, dophi, dontE, mat_phi=matphi)
              electrons2 = spin_factor * sum(electrons_spin)
-             if (inode == ionode .and. iprint_DM >= 2) &
-                  write (io_lun, 2) electrons_spin(1), &
-                                    electrons_spin(nspin), electrons2
+             if (inode == ionode .and. iprint_DM + min_layer >= 2) &
+                  write(io_lun,fmt='(4x,a,3f16.6)') &
+                  trim(prefix)//" electron numbers after correction (up, down, total):  ", &
+                  electrons_spin(1), electrons_spin(nspin), electrons2
           end if
        end if ! (abs(electrons_0 - electrons) < 1.0e-9_double)
     end do ! while (.not. done .and. iter < 20)
@@ -2045,6 +2070,7 @@ contains
 
     use datatypes
     use numbers
+    use global_module, only: min_layer
 
     implicit none
 
@@ -2102,8 +2128,8 @@ contains
        ! 
        ! The prefactor of 10 is arbitrary but seems reasonable
        if(abs(SolveCubic)>10.0_double*abs(guess)) then
-          if(inode==ionode) &
-               write (io_lun, '(2x,"Step too large: linear guess was: ",2e25.15)') &
+          if(inode==ionode .and. iprint_DM + min_layer > 2) &
+               write (io_lun, '(8x,"Step too large for Ne correction: linear guess was: ",2e16.6)') &
                      SolveCubic, guess
           SolveCubic = guess
        end if

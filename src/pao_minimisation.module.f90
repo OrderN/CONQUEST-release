@@ -300,7 +300,7 @@ contains
                    n_nab_local = 0
                    npao_local = 0
                    if (my_atom) then
-                      write (io_lun,*) 'primary, prim(glob) ', &
+                      write (io_lun,fmt='(8x,a,2i6)') 'primary, prim(glob) ', &
                                        local_atom, bundle%ig_prim(local_atom)
                       nsf_local   = mat(part,SFcoeff_range)%ndimi(atom)
                       n_nab_local = mat(part,SFcoeff_range)%n_nab(atom)
@@ -351,9 +351,9 @@ contains
                                   g1 = mat_p(matdSFcoeff(spin_SF))%matrix(wheremat)
                                   mat_p(matdSFcoeff(spin_SF))%matrix = grad_copy
                                   g2 = mat_p(matdSFcoeff(spin_SF))%matrix(wheremat)
-                                  write (io_lun, *) 'Tot: Numerical, analytic grad: ', &
+                                  write (io_lun, fmt='(8x,a,2f16.6)') 'Tot: Numerical, analytic grad: ', &
                                                     (E2 - E1) / tmp0, - half * (g1 + g2)
-                                  write (io_lun, *) 'Tot:Components: ', &
+                                  write (io_lun, fmt='(8x,a,5f16.6)') 'Tot:Components: ', &
                                                     tmp0, E1, E2, g1, g2
                                end if
                                ! Shift coefficient back
@@ -391,9 +391,9 @@ contains
                                   g1 = mat_p(matdSFcoeff(spin_SF))%matrix(wheremat)
                                   mat_p(matdSFcoeff(spin_SF))%matrix = grad_copy_dS
                                   g2 = mat_p(matdSFcoeff(spin_SF))%matrix(wheremat)
-                                  write (io_lun,*) 'GdS: Numerical, analytic grad: ',&
+                                  write (io_lun,fmt='(8x,a,2f16.6)') 'GdS: Numerical, analytic grad: ',&
                                                    (E2 - E1) / tmp0, - half * (g1 + g2)
-                                  write (io_lun,*) 'GdS:Components: ', &
+                                  write (io_lun,fmt='(8x,a,5f16.6)') 'GdS:Components: ', &
                                                    tmp0, E1, E2, g1, g2
                                end if
                                ! Shift coefficient back
@@ -431,9 +431,9 @@ contains
                                   g1 = mat_p(matdSFcoeff(spin_SF))%matrix(wheremat)
                                   mat_p(matdSFcoeff(spin_SF))%matrix = grad_copy_dH
                                   g2 = mat_p(matdSFcoeff(spin_SF))%matrix(wheremat)
-                                  write (io_lun, *) 'KdH: Numerical, analytic grad: ',&
+                                  write (io_lun, fmt='(8x,a,2f16.6)') 'KdH: Numerical, analytic grad: ',&
                                                     (E2 - E1) / tmp0, - half * (g1 + g2)
-                                  write (io_lun, *) 'KdH:Components: ', &
+                                  write (io_lun, fmt='(8x,a,5f16.6)') 'KdH:Components: ', &
                                                     tmp0, E1, E2, g1, g2
                                end if
                                ! Shift coefficient back

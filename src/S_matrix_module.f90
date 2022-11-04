@@ -264,13 +264,13 @@ contains
 
     ! Get S matrix with assemble
     if (inode == ionode .and. iprint_ops + min_layer > 3) &
-         write (io_lun, *) 'Calling assemble_2 for Satomf: ', matSatomf
+         write (io_lun, fmt='(10x,a,i5)') 'Calling assemble_2 for Satomf: ', matSatomf
     call assemble_2(aSa_range, matSatomf, 1)
     !call dump_matrix("NS_atomf",matSatomf,inode)
 
     ! calculate PAO values on grids
     if (inode == ionode .and. iprint_ops + min_layer > 3) &
-         write (io_lun, *) 'single PAO to grid ', atomfns
+         write (io_lun, fmt='(10x,a,i5)') 'single PAO to grid ', atomfns
     call single_PAO_to_grid(atomfns)
 
     return
@@ -360,11 +360,11 @@ contains
     spin_SF = 1 ! spin-dependent SF is not available with blips at present
     ! Project support functions onto grid
     if (inode == ionode .and. iprint_ops + min_layer > 3) &
-         write (io_lun, *) 'Doing blip-to-support ', atomfns
+         write (io_lun, fmt='(10x,a,i5)') 'Doing blip-to-support ', atomfns
     call blip_to_support_new(inode-1, atomfns)
 
     if (inode == ionode .and. iprint_ops + min_layer > 3) &
-         write (io_lun, *) 'Doing integration ', atomfns
+         write (io_lun, fmt='(10x,a,i5)') 'Doing integration ', atomfns
     ! Integrate
     if(flag_analytic_blip_int) then
        call matrix_scale(zero,matS(spin_SF))
@@ -706,6 +706,8 @@ contains
 !!    Changed matS and matT to be spin_SF dependent
 !!   2019/11/18 tsuyoshi
 !!    Removed flag_MDold
+!!   2022/10/25 16:58 dave
+!!    Updating output: Note that output_level is iprint+min_layer
 !!  SOURCE
 !!
   subroutine Iter_Hott_InvS(output_level, n_L_iterations, tolerance,n_atoms,&
@@ -782,10 +784,12 @@ contains
              n_orbs = n_orbs + real(nsf_species(species(i)),double)
           end do
           ! First construct the identity
-          if (inode.eq.ionode.and.output_level>=3) write(io_lun,*) 'Zeroing data'
+          if (inode.eq.ionode.and.output_level>=3) write(io_lun,fmt='(/4x,a)') &
+               trim(prefix)//' starting S inversion'
           call matrix_scale(zero,matI)
           call matrix_scale(zero,matT(1))
-          if (inode.eq.ionode.and.output_level>=3) write(io_lun,*) 'Creating I'
+          if (inode.eq.ionode.and.output_level>=3) write(io_lun,fmt='(4x,a)') &
+               trim(prefix)//' creating I'
           ip = 1
           nb = 1
           do np = 1,bundle%groups_on_node
@@ -827,7 +831,8 @@ contains
                enddo
                call gsum(tot)
                eps = 1.0_double/(tot)
-               if(output_level>2.and.inode==ionode) write(io_lun,*) 'Eps, tot: ',eps,tot
+               if(output_level>3.and.inode==ionode) write(io_lun,fmt='(4x,a,2e10.5)') &
+                    trim(prefix)//' eps, tot: ',eps,tot
                call matrix_scale(zero,matT(spin_SF))
                call matrix_sum(zero,matT(spin_SF),eps,matS(spin_SF))
             enddo ! spin_SF
@@ -849,23 +854,32 @@ contains
              call matrix_scale(zero,matT1)
              call matrix_scale(zero,matTold)
              call matrix_scale(zero,matTM)
-             if (inode==ionode.and.output_level>=2) write(io_lun,*) 'Starting loop'
+             if (inode==ionode.and.output_level >=2) write(io_lun,fmt='(4x,a)') &
+                  trim(prefix)//' starting loop'
              do n_iterations=1,n_L_iterations
                 call start_timer(tmr_l_tmp1,WITH_LEVEL)
-                if (inode==ionode.and.output_level>=2) &
-                     write(io_lun,2) n_iterations
+                !if (inode==ionode.and.output_level >=2) &
+                !     write(io_lun,fmt='(4x,a,i3)') trim(prefix)//" iteration ",n_iterations
                 deltaomega = deltaomega * half
                 ! check for convergence
                 if(n_iterations<3.or.abs(deltaomega)>tolerance) then
                    call HotInvS_mm( matI, matS(spin_SF), matT(spin_SF), matT1, matTM, omega,n_iterations)
                    deltaomega = omega - oldomega
-                   if(inode==ionode.and.output_level>=1) then
-                      write(io_lun,*) 'Omega is ',omega/n_orbs
-                      if(omega>zero) write(io_lun,*) 'R is ',sqrt(omega)/n_orbs
-                      write(io_lun,*) 'deltaomega is ',n_iterations,deltaomega
+                   if(inode==ionode.and.output_level >=2) then
+                      if(omega>zero) then
+                         write(io_lun,fmt='(4x,a,i3,a,f12.5,a,f12.5,a,f12.5)') &
+                              trim(prefix)//" Iter: ",n_iterations,'   omega: ',omega/n_orbs, &
+                              " deltaomega: ", deltaomega/n_orbs, " R: ",sqrt(omega)/n_orbs
+                      else
+                         write(io_lun,fmt='(4x,a,i3,a,f12.5,a,f12.5)') &
+                              trim(prefix)//" Iter: ",n_iterations,'   omega: ',omega/n_orbs, &
+                              " deltaomega: ", deltaomega/n_orbs
+                      end if
                    endif
                    if ( omega>oldomega.and.oldomega/=0.0_double) then
-                      if(inode==ionode) write(io_lun,*) 'Truncation error reached !'
+                      if(inode==ionode.and.output_level >=2) &
+                           write(io_lun,fmt='(4x,a,i3,a)') &
+                           trim(prefix)//' truncation error reached after ', n_iterations, " iterations"
                       call matrix_sum(zero,matT(spin_SF),one,matTold)
                       omega = oldomega ! This is consistent with Told
                       call stop_print_timer(tmr_l_tmp1,"an inverse S iteration",IPRINT_TIME_THRES1)
@@ -882,7 +896,8 @@ contains
              end do ! n_iterations
              ! If this isn't a good guess, then reset to I
              if((omega/n_orbs)>InvSTolerance) then
-                if(inode==ionode) write(io_lun,*) 'Setting InvS to I'
+                if(inode==ionode .and. output_level >= 1) &
+                     write(io_lun,fmt='(4x,a)') trim(prefix)//' setting InvS to I'
                 call matrix_scale(zero,matT(spin_SF))
                 ip = 1
                 nb = 1
@@ -910,13 +925,6 @@ contains
        !  flag_readT = .true.
        !endif
     end if ! End if (atomf.ne.sf .and. .not.flag_do_SFtransform)
-
-1   format(20x,'Starting functional value: ',f15.7,' a.u.')
-2   format(/,20x,'Conjugate Gradients InvS iteration:',i5)
-3   format(/,20x,'Functional value reached after ',i5,' InvS iterations: ',&
-         /,20x,' Omega: ', f15.7, ' DeltaOmega: ', f15.7)
-4   format('InvS is ',4i5,f15.7)
-5   format('T0S,A is ',4i5,2f15.7)
     return
 
   end subroutine Iter_Hott_InvS

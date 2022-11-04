@@ -115,9 +115,10 @@ contains
     use global_module, only: iprint_DM, IPRINT_TIME_THRES1,            &
                              IPRINT_TIME_THRES2,                       &
                              nspin, spin_factor,                       &
-                             flag_fix_spin_population
+                             flag_fix_spin_population, min_layer
     use timer_module,  only: cq_timer, start_timer, stop_print_timer,  &
                              WITH_LEVEL
+    use io_module,      only: return_prefix
 
     implicit none
 
@@ -131,13 +132,15 @@ contains
     real(double)                   :: cn_tot, oldE_tot, omega1_tot, c_old_tot
     type(cq_timer)                 :: tmr_l_tmp1,tmr_l_tmp2
     logical,      dimension(nspin) :: done
+    character(len=12) :: subname = "McWMin: "
+    character(len=120) :: prefix
 
     ! real(double) :: cn, oldE, omega1, c_old
     ! real(double) :: cn_up, cn_dn, oldE_up, oldE_dn, omega1_up, &
     !      omega1_dn, c_old_up, c_old_dn
 
     call start_timer(tmr_l_tmp1,WITH_LEVEL)
-
+    prefix = return_prefix(subname, min_layer)
     done(:) = .false.
     oldE(:) = 1.0e30_double
     oldE_tot = spin_factor * sum(oldE(:))
@@ -155,10 +158,12 @@ contains
        iter: do n_iterations = 1, n_L_iterations
 
           call start_timer(tmr_l_tmp2, WITH_LEVEL)
-          if (inode == ionode .and. iprint_DM >= 1) &
-               write (io_lun, 1) n_iterations
+          !if (inode == ionode .and. iprint_DM + min_layer >= 2) &
+          !     write(io_lun, fmt='(4x,a,i3)') trim(prefix)//" iteration: ", n_iterations
+          min_layer = min_layer - 1
           call McW_matrix_multiply_nonds(matH, matS, matL, matT, &
                                          matRhoNew, omega1, cn)
+          min_layer = min_layer + 1
 
           do spin = 1, nspin
              if (omega1(spin) > oldE(spin) .or.                       &
@@ -171,10 +176,11 @@ contains
              end if
           end do
           if (done(1) .and. done(nspin)) then
-             if (inode == ionode .and. iprint_DM > 0) then
+             if (inode == ionode .and. iprint_DM + min_layer > 1) then
                 do spin = 1, nspin
-                   write (io_lun, 2) spin, c_old(spin), oldE(spin),&
-                                     cn(spin), omega1(spin)
+                   write(io_lun,fmt='(4x,a,i1,4f16.6)') &
+                        trim(prefix)//" rounding error found, spin:   ", spin, &
+                        c_old(spin), oldE(spin), cn(spin), omega1(spin)
                 end do
              end if
              call stop_print_timer(tmr_l_tmp2, "a McWeeny iteration", &
@@ -189,8 +195,9 @@ contains
               call matrix_sum(zero, matL(spin), one, matRhoNew(spin))
               oldE(spin) = omega1(spin)
               c_old(spin) = cn(spin)
-              if (inode == ionode .and. iprint_DM >= 0) &
-                   write (io_lun, 3) spin, oldE(spin), c_old(spin)
+              if (inode == ionode .and. iprint_DM + min_layer >= 2) &
+                   write(io_lun,fmt='(4x,a,i3,a,i1,f16.6," Ha mid-point: ",f16.6)') &
+                   trim(prefix)//" iteration ",n_iterations," energy for spin ", spin, oldE(spin), c_old(spin)
            end do ! spin
            call symmetrise_L()
            call stop_print_timer(tmr_l_tmp2, "a McWeeny iteration",&
@@ -205,17 +212,21 @@ contains
 
         do n_iterations = 1, n_L_iterations
            call start_timer(tmr_l_tmp2, WITH_LEVEL)
-           if (inode == ionode .and. iprint_DM >= 1) &
-                write(io_lun, 1) n_iterations
+           !if (inode == ionode .and. iprint_DM + min_layer >= 2) &
+           !     write(io_lun, fmt='(4x,a,i3)') trim(prefix)//" iteration: ", n_iterations
            ! find new rho and energy
+           min_layer = min_layer - 1
            call McW_matrix_multiply_ds(matH, matS, matL, matT, &
                                        matRhoNew, omega1_tot, cn_tot)
+           min_layer = min_layer + 1
            if (omega1_tot > oldE_tot .or.                      &
                abs(omega1_tot - oldE_tot) < 1.0e-8_double .or. &
                cn_tot > one .or. cn_tot < zero) then
               
               if (inode == ionode .and. iprint_DM > 0) &
-                   write (io_lun, 4) c_old_tot, oldE_tot, cn_tot, omega1_tot
+                   write(io_lun,fmt='(4x,a,4f16.6)') &
+                   trim(prefix)//" rounding error found: ", &
+                   c_old_tot, oldE_tot, cn_tot, omega1_tot
               call stop_print_timer(tmr_l_tmp2, "a McWeeny iteration", &
                                     IPRINT_TIME_THRES2)
               exit
@@ -228,8 +239,9 @@ contains
            end do
            oldE_tot = omega1_tot
            c_old_tot = cn_tot
-           if (inode == ionode .and. iprint_DM >= 0) &
-                write (io_lun, 5) oldE_tot, c_old_tot
+           if (inode == ionode .and. iprint_DM + min_layer >= 2) &
+                write(io_lun,fmt='(4x,a,i3,a,f16.6," Ha mid-point: ",f16.6)') &
+                trim(prefix)//" iteration ",n_iterations," energy: ", oldE_tot, c_old_tot
            call symmetrise_L()
            call stop_print_timer(tmr_l_tmp2, "a McWeeny iteration", &
                                  IPRINT_TIME_THRES2)
@@ -244,30 +256,19 @@ contains
         call free_temp_matrix(mat_oldL(spin))
      end do
 
-     if (inode == ionode .and. iprint_DM >= 1) then
-        write (io_lun, 6) n_iterations
+     if (inode == ionode .and. iprint_DM + min_layer >= 1) then
         if (nspin == 1 .or. flag_fix_spin_population) then
-           do spin = 1, nspin
-              write (io_lun, 7) spin, omega1(spin)
-           end do
+           write(io_lun,fmt='(4x,a,i3,a,f16.6,a3)') trim(prefix)//" after ", n_iterations, &
+                " iterations, energy is ", spin_factor*sum(omega1)," Ha"
         else
-           write (io_lun, 8) omega1_tot
+           write(io_lun,fmt='(4x,a,i3,a,f16.6,a3)') trim(prefix)//" after ", n_iterations, &
+                " iterations, energy is ", spin_factor*omega1_tot," Ha"
         end if
      end if
 
      call stop_print_timer(tmr_l_tmp1,"MCWEENY",IPRINT_TIME_THRES1)
      
      return
-
-1   format(/,20x,'McWeeny L iteration:',i5)
-2   format(2x,'Rounding error found (spin=',i1,'): ',4f25.15)
-3   format(2x,'Energy (spin=',i1,'): ',f25.15,' Mid-point: ',f25.15)
-4   format(2x,'Rounding error found (direct sum): ',4f25.15)
-5   format(2x,'Energy (direct sum): ',f25.15,' Mid-point: ',f25.15)
-6   format(/,20x,'Functional value reached after ',i5,' L iterations')
-7   format(20x,'Omega (spin=',i1,'): ',f25.15)
-8   format(20x,'Omega (direct sum): ', f25.15)
-
   end subroutine McWMin
   !!***
 
@@ -344,7 +345,7 @@ contains
                               IPRINT_TIME_THRES1, nspin, nspin_SF,    &
                               flag_fix_spin_population, ne_in_cell,   &
                               ne_spin_in_cell, spin_factor,           &
-                              flag_SpinDependentSF
+                              flag_SpinDependentSF, min_layer
     use species_module, only: species, nsf_species
     use mult_module,    only: allocate_temp_matrix, matH, matS, matT, &
                               matL, mult, matrix_trace, T_S_TS,       &
@@ -354,7 +355,8 @@ contains
     use GenBlas
     use GenComms,       only: gsum, my_barrier, gmin, gmax, cq_abort, cq_warn
     use timer_module,   only: cq_timer,start_timer, stop_print_timer, &
-                              WITH_LEVEL
+         WITH_LEVEL
+    use io_module,      only: return_prefix
 
     implicit none
 
@@ -367,9 +369,13 @@ contains
     integer,      dimension(nspin) :: matXHX, matSXHX, mat_temp
     integer                        :: matTS, length, i, spin, spin_SF
     type(cq_timer)                 :: tmr_l_tmp1
+    character(len=12) :: subname = "InitMcW: "
+    character(len=120) :: prefix
 
     call start_timer(tmr_l_tmp1, WITH_LEVEL)
-    if (inode == ionode .and. iprint_DM > 1) write (io_lun, 1)
+    prefix = return_prefix(subname, min_layer)
+    if (inode == ionode .and. iprint_DM + min_layer > 2) write(io_lun, fmt='(/4x,a)') &
+         trim(prefix)//" starting"
     ! We must first initialise rho
     ! ne is the number of electrons per spin channel
     ne(1:nspin) = ne_spin_in_cell(1:nspin)
@@ -394,11 +400,13 @@ contains
     end do
 
     if (nspin == 2) then
-       if (inode == ionode .and. iprint_DM > 1) &
-            write (io_lun, 3) ne(1), ne(2), n_o
+       if (inode == ionode .and. iprint_DM + min_layer > 1) &
+            write(io_lun, fmt='(4x,a,f11.2,a,f11.2,a,f11.2)') &
+            trim(prefix)//" electrons(1): ",ne(1), " electrons(2): ",ne(2), " orbitals: ",n_o
     else
-       if (inode == ionode .and. iprint_DM > 1) &
-            write (io_lun, 2) n_e_ds, n_o_ds    ! check Miyazaki-san
+       if (inode == ionode .and. iprint_DM + min_layer > 1) &
+            write(io_lun, fmt='(4x,a,f11.2,a,f11.2)') &
+            trim(prefix)//" electrons: ",n_e_ds, " orbitals: ",n_o_ds
     end if
 
     matTS = allocate_temp_matrix(TSrange,0)
@@ -407,15 +415,15 @@ contains
        call matrix_product(matT(spin_SF), matS(spin_SF), matTS, mult(T_S_TS))
        SX(spin_SF) = matrix_trace(matTS)
     enddo
-    if (inode == ionode .and. iprint_DM > 1) then 
+    if (inode == ionode .and. iprint_DM + min_layer > 1) then 
        if (nspin_SF == 1) then
-          write (io_lun, fmt='(2x,"SX is    ",f25.15)') SX(1)
-          write (io_lun, fmt='(2x,"SX/no is ",f25.15)') SX(1) / n_o
+          write(io_lun, fmt='(4x,a,f16.6)') trim(prefix)//" SX is    ",SX(1)
+          write(io_lun, fmt='(4x,a,f16.6)') trim(prefix)//" SX/no is ", SX(1) / n_o
        else
-          write (io_lun, fmt='(2x,"SX_up is    ",f25.15)') SX(1)
-          write (io_lun, fmt='(2x,"SX_up/no is ",f25.15)') SX(1) / n_o
-          write (io_lun, fmt='(2x,"SX_dn is    ",f25.15)') SX(2)
-          write (io_lun, fmt='(2x,"SX_dn/no is ",f25.15)') SX(2) / n_o
+          write(io_lun, fmt='(4x,a,f16.6)') trim(prefix)//" SX_up is    ",SX(1)
+          write(io_lun, fmt='(4x,a,f16.6)') trim(prefix)//" SX_up/no is ",SX(1) / n_o
+          write(io_lun, fmt='(4x,a,f16.6)') trim(prefix)//" SX_dn is    ",SX(2)
+          write(io_lun, fmt='(4x,a,f16.6)') trim(prefix)//" SX_dn/no is ",SX(2) / n_o
        endif
     end if
 
@@ -425,16 +433,18 @@ contains
        if (flag_SpinDependentSF) spin_SF = spin
        matXHX(spin) = allocate_temp_matrix(Lrange, 0)
        mat_temp(spin) = allocate_temp_matrix(Srange, 0)
+       min_layer = min_layer - 1
        call McWXHX(matH(spin), matT(spin_SF), matXHX(spin), mat_temp(spin))
+       min_layer = min_layer + 1
        SXHX(spin) = matrix_product_trace(matS(spin_SF), mat_temp(spin))
        SXHX_ds = SXHX_ds + spin_factor * SXHX(spin)
-       if (inode == ionode .and. iprint_DM > 1) &
-            write (io_lun, '(2x,"SXHX(spin=",i1,") = ",f25.15)') &
-                  spin, SXHX(spin)
+       if (inode == ionode .and. iprint_DM + min_layer > 2) &
+            write(io_lun, '(4x,a,i1,") = ",f16.6)') &
+                  trim(prefix)//" SXHX(spin=",spin, SXHX(spin)
     end do
-    if (inode == ionode .and. iprint_DM > 1) &
-            write (io_lun, '(2x,"SXHX_ds = ",f25.15)') &
-                  SXHX_ds    
+    if (inode == ionode .and. iprint_DM + min_layer > 2) &
+            write(io_lun, '(4x,a,f16.6)') &
+            trim(prefix)//" SXHX_ds =      ",SXHX_ds
 
     call my_barrier()
 
@@ -443,14 +453,16 @@ contains
     do spin = 1, nspin
        call gmin(hmin(spin))
        call gmax(hmax(spin))
-       if (inode == ionode .and. iprint_DM > 1) &
-          write (io_lun, 4) spin, hmin(spin), hmax(spin)  
+       if (inode == ionode .and. iprint_DM + min_layer > 2) &
+            write(io_lun, fmt='(4x,a,i1,a,2f15.6)') &
+            trim(prefix)//" for spin ",spin, " limits on H are: ",hmin(spin), hmax(spin)
     end do
     ! for variable spin case find min and max of the direct sum
     if (nspin == 2 .and. (.not. flag_fix_spin_population)) then
        hmin_ds = minval(hmin(:))
        hmax_ds = maxval(hmax(:))
-       if (inode == ionode .and. iprint_DM > 1) write (io_lun, 5) hmin, hmax
+       if (inode == ionode .and. iprint_DM + min_layer > 2) &
+            write(io_lun, fmt='(4x,a,2f15.6)') trim(prefix)//" overall limits on H are: ",hmin_ds, hmax_ds
     end if
 
     do spin_SF = 1, nspin_SF    
@@ -476,10 +488,10 @@ contains
              mu2(spin) = (hmin(spin) * A(spin_SF) * ne(spin) / (n_o - ne(spin)) - &
                           SXHX(spin) / n_o) / &
                          (n_o * A(spin_SF) / (n_o - ne(spin)) - one)
-             if (inode == ionode) &
-                  write (io_lun, &
-                         '(2x,"Mu1, Mu2, for spin = ",i1," are: ",2f25.15)') &
-                         spin, mu1(spin), mu2(spin)
+             if (inode == ionode .and. iprint_DM + min_layer > 2) &
+                  write(io_lun, &
+                  '(4x,a,i1," are: ",2f16.6)') &
+                  trim(prefix)//" mu1, mu2, for spin = ", spin, mu1(spin), mu2(spin)
              if ((ne(spin) / (hmax(spin) - mu1(spin))) < &
                  ((n_o - ne(spin)) / (mu1(spin) - hmin(spin)))) then
                 mubar(spin) = mu1(spin)
@@ -492,18 +504,19 @@ contains
                 call cq_abort('InitMcW: Cannot find mubar.')
              end if
           end if
-          if (inode == ionode .and. iprint_DM > 1) &
-               write (io_lun, &
-                      '(2x,"mubar, lambda for spin = ",i1," are: ",2f25.15)') &
-                     spin, mubar(spin), lambda(spin)
+          if (inode == ionode .and. iprint_DM + min_layer > 1) &
+               write(io_lun,fmt='(4x,a,i1," are: ",2f16.6)') &
+               trim(prefix)//" mubar, lambda for spin = ", spin, mubar(spin), lambda(spin)
        end do
        ! Calculate L0. 
+       min_layer = min_layer - 1
        spin_SF = 1
        do spin = 1, nspin
           if (flag_SpinDependentSF) spin_SF = spin
           call McWRho0(matL(spin), matT(spin_SF), matXHX(spin), mubar(spin), &
                lambda(spin), ne(spin), n_o)
        end do
+       min_layer = min_layer + 1
     else ! variable spin
        ! for the rare case where n_o_ds == n_e_ds, we have lambda =
        ! 0, and mu_bar = infty. But initial rho will be identity
@@ -516,8 +529,8 @@ contains
           mu1(:) = SXHX_ds / n_o_ds + hmax_ds * A_ds
           mu2(:) = (hmin_ds * A_ds * n_e_ds / (n_o_ds - n_e_ds) - SXHX_ds / n_o_ds) / &
                    (n_o_ds * A_ds / (n_o_ds - n_e_ds) - one)
-          if (inode == ionode) &
-               write (io_lun, '(2x,"Mu1, Mu2: ",2f25.15)') mu1(1), mu2(1)
+          if (inode == ionode .and. iprint_DM + min_layer > 1) &
+               write(io_lun,fmt='(4x,a,2f15.6)') trim(prefix)//" mu1, mu2: ",mu1(1), mu2(1)
           if ((n_e_ds / (hmax_ds - mu1(1))) < &
               ((n_o_ds - n_e_ds) / (mu1(1) - hmin_ds))) then
              mubar(:) = mu1(:)
@@ -530,17 +543,18 @@ contains
              call cq_abort('InitMcW: Cannot find mubar.')
           end if
        end if
-       if (inode == ionode .and. iprint_DM > 1) then
-          write (io_lun, 6) mubar(1)
-          write (io_lun, '(2x,"lambda is ",f25.15)') lambda(1)
+       if (inode == ionode .and. iprint_DM + min_layer> 1) then
+          write(io_lun, fmt='(4x,a,2f15.6)') trim(prefix)//" mubar, lambda = ", mubar(1), lambda(1)
        end if
        ! Calculate L0. 
+       min_layer = min_layer - 1
        spin_SF = 1
        do spin = 1, nspin
           if (flag_SpinDependentSF) spin_SF = spin
           call McWRho0(matL(spin), matT(spin_SF), matXHX(spin), mubar(spin), &
                        lambda(spin), n_e_ds, n_o_ds)
        end do
+       min_layer = min_layer + 1
     end if
     
     ! Free the temporary matrices, order of deallocation is important
@@ -552,14 +566,6 @@ contains
 
     call stop_print_timer(tmr_l_tmp1, "McWeeny initialisation", &
                           IPRINT_TIME_THRES1)
-
-1   format(1x,'Welcome to InitMcW')
-2   format(2x,'Electrons: ',f15.6,' Orbitals: ',f15.6)
-3   format(2x,'Electrons_up: ',f15.6,' Electrons_dn: ',f15.6,' Orbitals for each spin: ',f15.6)
-4   format(2x,'Minimum and maximum limites on H(spin=',i1,') are ',2f15.6)
-5   format(2x,'Minimum and maximum limites on overall H are ',2f15.6)
-6   format(2x,'Mubar is ',f15.6)
-
     return
   end subroutine InitMcW
   !!***
@@ -622,8 +628,9 @@ contains
                               matrix_transpose, allocate_temp_matrix, &
                               free_temp_matrix, L_S_LS, LS_L_LSL,     &
                               LSL_SL_L, mult, matLS, matSL
-    use global_module,  only: iprint_DM, nspin, spin_factor, flag_SpinDependentSF
+    use global_module,  only: iprint_DM, nspin, spin_factor, flag_SpinDependentSF, min_layer
     use GenComms,       only: gsum, cq_abort, my_barrier
+    use io_module,      only: return_prefix
 
     implicit none
 
@@ -632,9 +639,12 @@ contains
     real(double), dimension(:) :: energy, c
     ! Local Variables
     integer :: spin, spin_SF
-    real(double), dimension(nspin) :: c1, c2, cn
+    real(double), dimension(nspin) :: c1, c2, cn, tmp
     integer,      dimension(nspin) :: matLSL, matLSLSL, mat_top, mat_bottom
+    character(len=12) :: subname = "McW_MM: "
+    character(len=120) :: prefix
 
+    prefix = return_prefix(subname, min_layer)
     spin_SF = 1
 
     do spin = 1, nspin
@@ -657,26 +667,25 @@ contains
        call matrix_sum(zero, mat_top(spin),  one, matLSL(spin))
        call matrix_sum(one,  mat_top(spin), -one, matLSLSL(spin))
        c1(spin) = matrix_product_trace(matS(spin_SF), mat_top(spin))
-       if (inode == ionode .and. iprint_DM >= 2) &
-            write (io_lun, '(2x,"S.top (spin=",i1,") is  ",f25.15)') &
-                  spin, c1(spin)
+       if (inode == ionode .and. iprint_DM + min_layer>= 3) &
+            write(io_lun, '(4x,a,i1,") is  ",f16.6)') &
+            trim(prefix)//" S.top (spin=", spin, c1(spin)
        call matrix_sum(zero, mat_bottom(spin), one, matL(spin))
-       c1(spin) = matrix_product_trace(matS(spin_SF), mat_bottom(spin))
-       if (inode == ionode .and. iprint_DM >= 2) &
-            write (io_lun, '(2x,"N_e (spin=",i1,") is  ",f25.15)') &
-                  spin, c1(spin)
-       call matrix_sum(one, mat_bottom(spin), -one, matLSL(spin))
-       c1(spin) = matrix_product_trace(matS(spin_SF), mat_top(spin))
        c2(spin) = matrix_product_trace(matS(spin_SF), mat_bottom(spin))
-       if (c2(spin) /= zero) then
+       if (inode == ionode .and. iprint_DM + min_layer >= 2) &
+            write(io_lun, '(4x,a,i1,") is    ",f16.6)') &
+            trim(prefix)//" N_e (spin=", spin, c2(spin)
+       call matrix_sum(one, mat_bottom(spin), -one, matLSL(spin))
+       c2(spin) = matrix_product_trace(matS(spin_SF), mat_bottom(spin))
+       if (abs(c2(spin))>1e-15_double) then
           cn(spin) = c1(spin) / c2(spin)
        else
-          call cq_abort('McW_matrix_multiply: c2 is zero for spin', spin)
+          call cq_abort('McW_matrix_multiply: c2 is near zero: ', c2(spin))
        endif
        c(spin) = cn(spin)
-       if (inode == ionode .and. iprint_DM >= 2) &
-            write (io_lun, '(2x,"c, c1, c2 (spin=",i1,") are ",3f25.15)') &
-                  spin, cn(spin), c1(spin), c2(spin)                              
+       if (inode == ionode .and. iprint_DM + min_layer >= 2) &
+            write(io_lun, '(4x,a,i1,") are ",3f16.6)') &
+            trim(prefix)//" c, c1, c2 (spin=", spin, cn(spin), c1(spin), c2(spin)
        ! Shorten LSL and LSLSL to range L
        call matrix_scale(zero, matRhoNew(spin))
        call matrix_sum(zero, matRhoNew(spin), -one, matLSLSL(spin))
@@ -709,14 +718,14 @@ contains
        mat_bottom(spin) = allocate_temp_matrix(Hrange, 0)
        call matrix_sum(zero, mat_bottom(spin), one, matRhoNew(spin))
        energy(spin) = matrix_product_trace(mat_bottom(spin), matH(spin))
-       if (inode == ionode .and. iprint_DM >= 3) &
-            write (io_lun, '(2x,"energy (spin=",i1,") is ",f25.15)') &
-                  spin, energy(spin)
+       if (inode == ionode .and. iprint_DM + min_layer >= 3) &
+            write(io_lun, '(4x,a,i1,") is ",f16.6)') &
+            trim(prefix)//" energy (spin=", spin, energy(spin)
        call matrix_sum(zero, mat_top(spin), one, matRhoNew(spin))
        c1(spin) = matrix_product_trace(mat_top(spin), matS(spin_SF))
-       if (inode == ionode .and. iprint_DM >= 3) &
-            write (io_lun, '(2x,"N_e(2) (spin=",i1,") is ",f25.15)') &
-                  spin, c1(spin)
+       if (inode == ionode .and. iprint_DM + min_layer >= 3) &
+            write(io_lun, '(4x,a,i1,") is ",f16.6)') &
+            trim(prefix)//" N_e(2) (spin=", spin, c1(spin)
        ! note that N_e is printed without factor of two here even for
        ! spin un-polarised results.
        call free_temp_matrix(mat_bottom(spin))
@@ -772,8 +781,9 @@ contains
                               matrix_transpose, allocate_temp_matrix, &
                               free_temp_matrix, matLS, matSL, L_S_LS, &
                               LS_L_LSL, LSL_SL_L, mult
-    use global_module,  only: iprint_DM, nspin, spin_factor, flag_SpinDependentSF
+    use global_module,  only: iprint_DM, nspin, spin_factor, flag_SpinDependentSF, min_layer
     use GenComms,       only: gsum, cq_abort, my_barrier
+    use io_module,      only: return_prefix
 
     implicit none
 
@@ -785,7 +795,10 @@ contains
     real(double)              :: c1, c2, tmp
     integer, dimension(nspin) :: matLSL, matLSLSL, mat_top, mat_bottom
     integer                   :: spin, spin_SF
+    character(len=12) :: subname = "McW_MM: "
+    character(len=120) :: prefix
     
+    prefix = return_prefix(subname, min_layer)
     c1 = zero
     c2 = zero
     energy_total = zero
@@ -811,29 +824,32 @@ contains
        call matrix_sum(zero, mat_top(spin),  one, matLSL(spin))
        call matrix_sum(one,  mat_top(spin), -one, matLSLSL(spin))
        tmp = matrix_product_trace(matS(spin_SF), mat_top(spin))
-       if (inode == ionode .and. iprint_DM >= 2) &
-            write (io_lun, '(2x,"S.top (spin=",i1,") is ",f25.15)') spin, tmp
+       c1 = c1 + spin_factor * tmp
+       if (inode == ionode .and. iprint_DM + min_layer>= 3) &
+            write(io_lun, '(4x,a,i1,") is  ",f16.6)') &
+            trim(prefix)//" S.top (spin=", spin, tmp
        call matrix_sum(zero, mat_bottom(spin), one, matL(spin))
        tmp = matrix_product_trace(matS(spin_SF), mat_bottom(spin))
-       if (inode == ionode .and. iprint_DM >= 2) &
-            write (io_lun, '(2x,"N_e (spin=",i1,") is ",f25.15)') spin, tmp
+       if (inode == ionode .and. iprint_DM + min_layer >= 2) &
+            write(io_lun, '(4x,a,i1,") is  ",f16.6)') &
+            trim(prefix)//" N_e (spin=", spin, tmp
        ! get the real mat_bottom for spin up
        call matrix_sum(one, mat_bottom(spin), -one, matLSL(spin))
        ! c1 and c2 calculated
-       c1 = c1 + spin_factor * matrix_product_trace(matS(spin_SF), mat_top(spin))
-       c2 = c2 + spin_factor * matrix_product_trace(matS(spin_SF), mat_bottom(spin))
+       tmp = matrix_product_trace(matS(spin_SF), mat_bottom(spin))
+       c2 = c2 + spin_factor * tmp
        ! finished  mat_bottom here, change to Hrange for something else
        call free_temp_matrix(mat_bottom(spin))
        mat_bottom(spin) = allocate_temp_matrix(Hrange,0)
     end do ! spin
-    if (c2 /= zero) then
+    if(abs(c2)>1e-15_double) then
        c_total = c1 / c2
     else
        call cq_abort('McW_matrix_multiply_ds: c2 is zero')
     end if
-    if (inode == ionode .and. iprint_DM >= 2) &
-         write (io_lun, '(2x,"c_total, c1, c2 are ",3f25.15)') &
-               c_total, c1, c2
+    if (inode == ionode .and. iprint_DM + min_layer >= 2) &
+         write(io_lun, '(4x,a,3f16.6)') &
+         trim(prefix)//" c_total, c1, c2 are ", c_total, c1, c2
     ! Shorten LSL and LSLSL to range L
     do spin = 1, nspin
        call matrix_scale(zero, matRhoNew(spin))
@@ -850,14 +866,15 @@ contains
        energy_total = energy_total + spin_factor * &
                       matrix_product_trace(mat_bottom(spin), matH(spin))
     end do ! spin
-    if (inode == ionode .and. iprint_DM >= 3) &
-         write (io_lun, '(2x,"energy_total: ",f25.15)') energy_total
+    if (inode == ionode .and. iprint_DM + min_layer >= 3) &
+         write(io_lun, '(4x,a,f16.6)') &
+         trim(prefix)//" energy = ", energy_total
     do spin = 1, nspin
        call matrix_sum(zero, mat_top(spin), one, matRhoNew(spin))
        tmp = matrix_product_trace(mat_top(spin), matS(spin_SF))
-       if (inode == ionode .and. iprint_DM >= 3) &
-            write (io_lun, '(2x,"N_e (spin=",i1,") is ",f25.15)') &
-                  spin, tmp
+       if (inode == ionode .and. iprint_DM + min_layer >= 3) &
+            write(io_lun, '(4x,a,i1,") is ",f16.6)') &
+            trim(prefix)//" N_e(2) (spin=", spin, tmp
     end do ! spin
 
     ! free temp matrices
@@ -896,7 +913,8 @@ contains
     use mult_module,   only: matrix_product, matrix_sum, T_H_TH, &
                              TH_T_L, allocate_temp_matrix, mult, &
                              free_temp_matrix, matrix_trace
-    use global_module, only: iprint_DM
+    use global_module, only: iprint_DM, min_layer
+    use io_module,      only: return_prefix
 
     implicit none
 
@@ -906,20 +924,23 @@ contains
     ! Local variable
     integer :: matBA
     real(double) :: xx
+    character(len=12) :: subname = "McW_XHX: "
+    character(len=120) :: prefix
 
+    prefix = return_prefix(subname, min_layer)
     matBA = allocate_temp_matrix(THrange,0)
     call matrix_product(matB, matA, matBA, mult(T_H_TH))
-    if (iprint_DM >= 2) xx = matrix_trace(matBA)
-    if (inode == ionode .and. iprint_DM >= 2) &
-         write (io_lun, '(2x,"Trace of BA:            ",f25.15)') xx
+    if (iprint_DM + min_layer >= 2) xx = matrix_trace(matBA)
+    if (inode == ionode .and. iprint_DM + min_layer >= 2) &
+         write (io_lun, '(4x,a,f16.6)') trim(prefix)//" Trace of BA:            ", xx
     call matrix_product(matBA, matB, matBAB, mult(TH_T_L))
-    if (iprint_DM >= 2) xx = matrix_trace(matBAB)
-    if (inode == ionode .and. iprint_DM >= 2) &
-         write (io_lun, '(2x,"Trace of BAB (L range): ",f25.15)') xx
+    if (iprint_DM + min_layer >= 2) xx = matrix_trace(matBAB)
+    if (inode == ionode .and. iprint_DM + min_layer >= 2) &
+         write (io_lun, '(4x,a,f16.6)') trim(prefix)//" Trace of BAB (L range): ", xx
     call matrix_sum(zero, mat_temp, one, matBAB)
-    if (iprint_DM >= 2) xx = matrix_trace(mat_temp)
-    if (inode == ionode .and. iprint_DM >= 2) &
-         write (io_lun, '(2x,"Trace of BAB (S range): ",f25.15)') xx
+    if (iprint_DM + min_layer >= 2) xx = matrix_trace(mat_temp)
+    if (inode == ionode .and. iprint_DM + min_layer >= 2) &
+         write (io_lun, '(4x,a,f16.6)') trim(prefix)//" Trace of BAB (S range): ", xx
     call free_temp_matrix(matBA)
     return
   end Subroutine McWXHX
@@ -942,21 +963,25 @@ contains
     use datatypes
     use numbers
     use mult_module,   only: matrix_sum
-    use global_module, only: iprint_DM
+    use global_module, only: iprint_DM, min_layer
+    use io_module,      only: return_prefix
 
     implicit none
 
     integer :: matA, matB, matC
-    Real( double ) :: m, l, n_e, n_o, tmp
+    real(double) :: m, l, n_e, n_o, tmp
+    character(len=12) :: subname = "McW_Rho0: "
+    character(len=120) :: prefix
 
+    prefix = return_prefix(subname, min_layer)
     tmp = (l*m+n_e)/n_o
-    if (inode == ionode .and. iprint_DM >= 2) &
-         write (io_lun, '(2x,"l, m, n_e, n_o and tmp are ",5f25.15)') &
-               l, m, n_e, n_o, tmp
+    if (inode == ionode .and. iprint_DM + min_layer >= 3) &
+         write (io_lun, '(4x,a,5f15.5)') &
+               trim(prefix)//" l, m, n_e, n_o and (lm+n_e)/n_o are ",l, m, n_e, n_o, tmp
     call matrix_sum(zero, matA, tmp, matB)
     tmp = -l/n_o
-    if (inode == ionode .and. iprint_DM >= 2) &
-         write (io_lun, '(2x,"tmp is ",f25.15)') tmp
+    if (inode == ionode .and. iprint_DM + min_layer  >= 3) &
+         write (io_lun, '(4x,a,f15.5)') trim(prefix)//" l/n_o is ", tmp
     call matrix_sum(one, matA, tmp, matC)
     return
   end Subroutine McWRho0

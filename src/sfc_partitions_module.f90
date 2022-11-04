@@ -570,7 +570,7 @@ contains
        if (parts(ihilbert)%n_atoms > max_natoms_part) max_natoms_part = parts(ihilbert)%n_atoms
     end do loop_atoms_check
     if(max_natoms_part>global_maxatomspart.AND.inode==ionode) &
-         write(io_lun,fmt='(2x,"Warning: Adjusted max. atoms per partitions to ",i3)') max_natoms_part
+         write(io_lun,fmt='(8x,"Warning: Adjusted max. atoms per partitions to ",i3)') max_natoms_part
     allocate(iglob_atom_part(max_natoms_part,n_parts_total), STAT=stat)
     if (stat /= 0) call cq_abort("setup_partitions: Error allocating parts", max_natoms_part, n_parts_total)
     call reg_alloc_mem(area_init, max_natoms_part * n_parts_total, type_int)
@@ -1203,7 +1203,7 @@ contains
                       tot_n_parts, numprocs)
     else
        if ((inode == ionode) .and. (iprint_init >= 2)) then
-          write (io_lun, "(a)") "PASS"
+          write (io_lun, "(10x,a)") "PASS"
        end if
     end if
     ! check total occupied partitions
@@ -1228,7 +1228,7 @@ contains
                       n_occupied_parts, numprocs)
     else
        if ((inode == ionode) .and. (iprint_init >= 2)) then
-          write (io_lun, "(a)") "PASS"
+          write (io_lun, "(10x,a)") "PASS"
        end if
     end if
     ! check total number of atoms
@@ -1243,7 +1243,7 @@ contains
                       tot_n_atoms, ni_in_cell)
     else
        if ((inode == ionode) .and. (iprint_init >= 2)) then
-          write (io_lun, "(a)") "PASS"
+          write (io_lun, "(10x,a)") "PASS"
        end if
     end if
     ! check total number of support functions
@@ -1262,7 +1262,7 @@ contains
                       tot_n_sf, nsf_in_cell)
     else
        if ((inode == ionode) .and. (iprint_init >= 2)) then
-          write (io_lun, "(a)") "PASS"
+          write (io_lun, "(10x,a)") "PASS"
        end if
     end if
     ! check if the atoms are assigned to partitions in a correct way
@@ -1305,7 +1305,7 @@ contains
                          &Found duplicated atomic indices. ",ii,jj)
        else
           if ((inode == ionode) .and. (iprint_init >= 2)) then
-             write (io_lun, "(a)") "PASS"
+             write (io_lun, "(10x,a)") "PASS"
           end if
        end if
     end if

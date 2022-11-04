@@ -911,9 +911,9 @@ contains
 
     ! +++ temporary printing
     if(inode == ionode.AND.iprint_gen>=6) then
-       write(unit=io_lun,fmt='(/"+++ structure factors:"/)')
+       write(unit=io_lun,fmt='(/6x,"+++ structure factors:"/)')
        do n = 1, number_of_g_vectors
-          write(unit=io_lun,fmt='(i10,2x,3f12.6,2x,2e15.6)') n, &
+          write(unit=io_lun,fmt='(6x,i10,2x,3f12.6,2x,2e15.6)') n, &
                &ewald_g_vector_x(n), ewald_g_vector_y(n), ewald_g_vector_z(n), &
                &struc_fac_r(n), struc_fac_i(n)
        enddo
@@ -1206,7 +1206,7 @@ contains
           enddo
        endif
        if(inode == ionode.AND.iprint_gen>=4) &
-            write(unit=io_lun,fmt='(/" >>> ewald: node:",i3:" real_sum_intra for partition no:",i3,&
+            write(unit=io_lun,fmt='(/6x," >>> ewald: node:",i3:" real_sum_intra for partition no:",i3,&
             &" is:",e20.12)') inode, ip, ewald_real_sum_ip
        ewald_real_sum_intra = ewald_real_sum_intra + ewald_real_sum_ip
     enddo
@@ -1214,14 +1214,14 @@ contains
     call gsum(ewald_real_sum_intra)
     if (flag_stress) call gsum(ewald_intra_stress,3,3)
     if(inode == ionode.AND.iprint_gen>=6) then
-       write(unit=io_lun,fmt='(/" Ewald real-space self info for node:",i3/)') inode 
-       write(unit=io_lun,fmt='(/" self-partition part of real_space Ewald:",e20.12)') ewald_real_sum_intra
-       write(unit=io_lun,fmt='(/" self-partition part of real-space Ewald forces:"/)')
+       write(unit=io_lun,fmt='(/6x," Ewald real-space self info for node:",i3/)') inode 
+       write(unit=io_lun,fmt='(/6x," self-partition part of real_space Ewald:",e20.12)') ewald_real_sum_intra
+       write(unit=io_lun,fmt='(/6x," self-partition part of real-space Ewald forces:"/)')
        do ip = 1, bundle%groups_on_node
           if(bundle%nm_nodgroup(ip) > 0) then
              do ni = 1, bundle%nm_nodgroup(ip)
                 i = bundle%ig_prim(bundle%nm_nodbeg(ip)+ni-1)
-                write(unit=io_lun,fmt='(2x,3i5,2x,3e20.12)') ip, ni, i, &
+                write(unit=io_lun,fmt='(8x,3i5,2x,3e20.12)') ip, ni, i, &
                      &ewald_intra_force_x(bundle%nm_nodbeg(ip)+ni-1), ewald_intra_force_y(bundle%nm_nodbeg(ip)+ni-1), &
                      &ewald_intra_force_z(bundle%nm_nodbeg(ip)+ni-1)
              enddo
@@ -1313,7 +1313,7 @@ contains
           enddo
        endif
        if(inode == ionode.AND.iprint_gen>=4) &
-            write(unit=io_lun,fmt='(/" >>> ewald: node:",i3:" real_sum_inter for partition no:",i3,&
+            write(unit=io_lun,fmt='(/6x," >>> ewald: node:",i3:" real_sum_inter for partition no:",i3,&
             &" is:",e20.12)') inode, ip, ewald_real_sum_ip
        ewald_real_sum_inter = ewald_real_sum_inter + ewald_real_sum_ip
     enddo
@@ -1328,14 +1328,14 @@ contains
     call gsum(ewald_real_sum_inter)
     if (flag_stress) call gsum(ewald_inter_stress,3,3)
     if(inode == ionode.AND.iprint_gen>=6) then
-       write(unit=io_lun,fmt='(/" Ewald real-space other info for node:",i3/)') inode 
-       write(unit=io_lun,fmt='(/" other-partition part of real_space Ewald:",e20.12)') ewald_real_sum_inter
-       write(unit=io_lun,fmt='(/" other-partition part of real-space Ewald forces:"/)')
+       write(unit=io_lun,fmt='(/6x," Ewald real-space other info for node:",i3/)') inode 
+       write(unit=io_lun,fmt='(/6x," other-partition part of real_space Ewald:",e20.12)') ewald_real_sum_inter
+       write(unit=io_lun,fmt='(/6x," other-partition part of real-space Ewald forces:"/)')
        do ip = 1, bundle%groups_on_node
           if(bundle%nm_nodgroup(ip) > 0) then
              do ni = 1, bundle%nm_nodgroup(ip)
                 i = bundle%ig_prim(bundle%nm_nodbeg(ip)+ni-1)
-                write(unit=io_lun,fmt='(2x,3i5,2x,3e20.12)') ip, ni, i, &
+                write(unit=io_lun,fmt='(8x,3i5,2x,3e20.12)') ip, ni, i, &
                      &ewald_inter_force_x(bundle%nm_nodbeg(ip)+ni-1), ewald_inter_force_y(bundle%nm_nodbeg(ip)+ni-1), &
                      &ewald_inter_force_z(bundle%nm_nodbeg(ip)+ni-1)
              enddo

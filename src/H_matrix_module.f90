@@ -583,13 +583,11 @@ contains
                                            nspin, spin_factor,         &
                                            flag_pcc_global, area_ops,  &
                                            exx_alpha, exx_niter, exx_siter, &
-                                           flag_neutral_atom
-     
+                                           flag_neutral_atom, min_layer
     use XC,                          only: get_xc_potential
     use GenBlas,                     only: copy, axpy, dot, rsum
     use dimens,                      only: grid_point_volume,          &
                                            n_my_grid_points, n_grid_z
-
     use block_module,                only: n_blocks, n_pts_in_block
     use primary_module,              only: domain
     use set_blipgrid_module,         only: naba_atoms_of_blocks
@@ -606,7 +604,6 @@ contains
     use hartree_module,              only: hartree, hartree_stress
     use functions_on_grid,           only: gridfunctions, &
                                            atomfns, H_on_atomfns
-
     use calc_matrix_elements_module, only: norb
     use pseudopotential_common,      only: pseudopotential, flag_neutral_atom_projector
     use potential_module,            only: potential
@@ -615,7 +612,7 @@ contains
                                            reg_dealloc_mem, type_dbl
     use fft_module,                  only: fft3, hartree_factor,       &
                                            z_columns_node, i0
-    use io_module,                   only: dump_locps
+    use io_module,                   only: dump_locps, return_prefix
 
     implicit none
 
@@ -637,7 +634,10 @@ contains
     real(double), dimension(:),   allocatable :: density_wk_tot
     !complex(double_cplx), dimension(:), allocatable :: chdenr, locpotr
     real(double), dimension(:),   allocatable :: drho_tot
+    character(len=20) :: subname = "get_h_on_atomfns: "
+    character(len=120) :: prefix
 
+    prefix = return_prefix(subname, min_layer)
     ! for Neutral atom potential
     if( flag_neutral_atom ) then
        allocate( drho_tot(size), STAT=stat)
@@ -697,9 +697,8 @@ contains
     
     electrons_tot = spin_factor * sum(electrons(:))
     if (inode == ionode .and. output_level >= 3) then
-       write (io_lun, '(10x,a)') &
-            'get_h_on_atomfns: Electron Count, up, down and total:'
-       write (io_lun, '(10x, 3f25.15)') &
+       write (io_lun, '(4x,a,3f16.6)') &
+            trim(prefix)//' electron count (up, down, total): ', &
             electrons(1), electrons(nspin), electrons_tot
     end if
     !
