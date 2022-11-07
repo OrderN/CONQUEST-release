@@ -2012,8 +2012,8 @@ contains
     ! Basic settings for MD
     flag_MDdebug      = fdf_boolean('AtomMove.Debug',.false.)
     flag_MDcontinue   = fdf_boolean('AtomMove.RestartRun',.false.)
-    flag_SFcoeffReuse = fdf_boolean('AtomMove.ReuseSFcoeff',.true.)
     flag_LmatrixReuse = fdf_boolean('AtomMove.ReuseDM',.true.)
+    flag_SFcoeffReuse = fdf_boolean('AtomMove.ReuseSFcoeff',flag_LmatrixReuse)
     flag_write_xsf    = fdf_boolean('AtomMove.WriteXSF', .true.)
     flag_write_extxyz = fdf_boolean('AtomMove.WriteExtXYZ', .false.)
     ! tsuyoshi 2019/12/30

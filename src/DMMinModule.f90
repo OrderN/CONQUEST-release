@@ -592,7 +592,7 @@ contains
        ! zeta is returned by lineMinL
        zeta = interpG
        if (inode == ionode .and. iprint_DM + min_layer >= 2) &
-            write(io_lun,fmt='(4x,a,f16.6,af16.6)') trim(prefix)//" dE ", delta_e, " Ha linearity: ",zeta
+            write(io_lun,fmt='(4x,a,f16.6,a,f16.6)') trim(prefix)//" dE ", delta_e, " Ha linearity: ",zeta
        if (inode == ionode .and. iprint_DM + min_layer >= 3) &
             write (io_lun, '(4x,a,3f16.6)') trim(prefix)//" zeta...: ", g0, g1, interpG
 
@@ -688,7 +688,7 @@ contains
           ! We're linear Added +1 to n_iter for cosmetic reasons (this
           ! is true since at this stage g0 and energy0_tot etc are already
           ! prepared for n_iter+1 step)
-          if (inode == ionode .and. iprint_DM + min_layer >= 2) &
+          if (inode == ionode .and. iprint_DM + min_layer >= 1) &
                write(io_lun, fmt='(4x,a,i3," Energy: ",f16.6," Ha Residual: ",e16.6)') &
                trim(prefix)//" iteration: ",n_iter+1, energy0_tot, g0
           if ((inode == ionode).and. (iprint_DM + min_layer >= 1)) &
