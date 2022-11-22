@@ -137,7 +137,8 @@ contains
          flag_DumpMatrices
     use matrix_data, ONLY: Lrange, Hrange, SFcoeff_range, SFcoeffTr_range, HTr_range, Srange, LSrange
     use mult_module, ONLY: matL,L_trans, matK, matSFcoeff, matS
-    use io_module, ONLY: append_coords, write_atomic_positions, pdb_template
+    use io_module, ONLY: append_coords, pdb_template, write_atomic_positions
+    !use io_module, ONLY: write_atomic_positions_ase
     use mult_module, only: matXL, matXLvel
     use GenComms, only: cq_warn
 
@@ -210,6 +211,7 @@ contains
     end if
 
     append_coords_bkup = append_coords; append_coords = .false.
+    !call write_atomic_positions_ase()
     call write_atomic_positions('coord_next.dat',trim(pdb_template))
     append_coords = append_coords_bkup
 

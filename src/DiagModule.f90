@@ -469,6 +469,8 @@ contains
   !!   2019/11/21 10:40 nakata
   !!    Bug fix for pDOS normalisation for spin-polarised calculations 
   !!    (added the dimension of spin to w_pDOS)
+  !!   2020/10/31 16:00 lionel
+  !!    Added formatted print of eigenvalues for ASE 
   !!  SOURCE
   !!
   subroutine FindEvals(electrons)
@@ -487,7 +489,8 @@ contains
          out_wf, n_DOS, E_DOS_max, E_DOS_min, flag_write_DOS, sigma_DOS, &
          flag_write_projected_DOS, flag_normalise_pDOS, flag_pDOS_angmom, flag_pDOS_lm, &
          E_wf_min, E_wf_max, flag_wf_range_Ef, &
-         flag_SpinDependentSF
+         flag_SpinDependentSF, &
+         io_ase, write_ase, ase_file
     use GenComms,        only: my_barrier, cq_abort, mtime, gsum, myid
     use ScalapackFormat, only: matrix_size, proc_rows, proc_cols,     &
          block_size_r,       &
@@ -508,7 +511,8 @@ contains
          allocate_temp_fn_on_grid,    &
          free_temp_fn_on_grid
     use density_module, ONLY: get_band_density
-    use io_module, ONLY: dump_DOS, dump_projected_DOS, write_eigenvalues
+    use io_module, ONLY: dump_DOS, dump_projected_DOS, write_eigenvalues, &
+         write_eigenvalues_format_ase
     use pao_format, ONLY: pao
 
     implicit none
@@ -818,6 +822,9 @@ contains
        end do ! do i = 1, nkp
     end if ! if(iprint_DM + min_layer>=1.AND.myid==0)
 
+    if(inode==ionode .and. write_ase) call write_eigenvalues_format_ase(w,occ,matrix_size,nkp,nspin,&
+         kk,Efermi,io_ase,ase_file,7+n_species+2+nkp)
+    
     time0 = mtime()
     do spin = 1, nspin
        call matrix_scale(zero, matK(spin))
@@ -928,7 +935,9 @@ contains
 
     !------ output WFs  --------
     !if (wf_self_con .and. (flag_out_wf.OR.flag_write_DOS)) then
+
     if(inode==ionode) call write_eigenvalues(w,matrix_size,nkp,nspin,kk,wtk,Efermi)
+
     !end if
     if(wf_self_con.AND.flag_write_DOS) then
        ! output DOS

@@ -56,6 +56,10 @@ module energy
   use timer_module,  only: start_timer, stop_timer, cq_timer
   use timer_module,  only: start_backtrace, stop_backtrace
 
+  !use DiagModule,             only: nkp
+  use ScalapackFormat,        only: matrix_size
+
+  
   implicit none
 
   ! Area identification
@@ -442,14 +446,17 @@ contains
   !!    Activated "electrons_tot2" calculation
   !!   2019/12/03 08:09 dave
   !!    Removed broken code for electrons via Tr[KS]
+  !!   2021/10/28 17:13 lionel
+  !!    Added 'DFT total energy' printing in ASE output
+  !!    nkp must to be passed to avoid circular dependency
   !!  SOURCE
   !!
-  subroutine final_energy(level)
+  subroutine final_energy(nkp,level)
 
     use datatypes
     use numbers
     use units
-    use GenComms,               only: inode, ionode, cq_warn
+    use GenComms,               only: inode, ionode, cq_warn, cq_abort
     use mult_module,            only: matrix_product_trace, matH,     &
                                       matrix_product_trace_length,    &
                                       matrix_trace,                   &
@@ -463,18 +470,21 @@ contains
                                       flag_perform_cdft,              &
                                       flag_vdWDFT,                    &
                                       flag_exx, exx_alpha,            &
-                                      flag_neutral_atom, min_layer
+                                      flag_neutral_atom, min_layer,   &
+                                      io_ase, write_ase, ase_file
+    
     use density_module,         only: electron_number
     use pseudopotential_common, only: core_correction, &
                                       flag_neutral_atom_projector
-
-
+    use species_module,         only: n_species
+    use input_module,           only: io_close
     
     implicit none
 
     ! Passed variables
-    integer, optional :: level
-
+    integer, optional   :: level
+    integer, intent(in) :: nkp
+    
     ! Local variables
     character(len=80) :: sub_name = "final_energy"
     integer        :: spin, spin_SF
@@ -489,6 +499,8 @@ contains
     ! electron number information
     real(double), dimension(nspin) :: electrons
     real(double)                   :: electrons_tot, electrons_tot2
+    integer :: i, stat, counter
+    character(len=80) :: tmp
 
 !****lat<$
     if (       present(level) ) backtrace_level = level+1
@@ -720,14 +732,47 @@ contains
        if (iprint_gen + min_layer >= 0) then
           write(io_lun,10) en_conv*total_energy1, en_units(energy_units)
           if(iprint_gen + min_layer>0) then
-             write(io_lun,13) en_conv*total_energy2, en_units(energy_units)
+             
+             write(io_lun,13)  en_conv*total_energy2, en_units(energy_units)             
              if(iprint_gen + min_layer>1) &
                   write(io_lun,22) en_conv*(total_energy1 - total_energy2), &
                   en_units(energy_units) 
           end if
        end if
+       !
+       ! BEGIN %%%% ASE printing %%%%
+       !
+       if ( write_ase ) then
+          open(io_ase,file=ase_file, status='old', action='readwrite', iostat=stat, position='rewind')
+          
+          if (stat .ne. 0) call cq_abort('Error opening file !')
+          !
+          if ( nspin == 2 ) then
+             counter = nkp*3 + nspin*nkp + nspin*nkp*(matrix_size/3) + 1 + 2 
+             if ( mod(matrix_size,3) > 0 ) counter = counter + nspin*nkp
+             
+          else
+             counter = nkp*3 + nkp*(matrix_size/3) + 1 + 1
+             if ( mod(matrix_size,3) > 0 ) counter = counter + nkp
+             
+          end if
+          counter = counter + 7 + n_species + nkp + 1 + 1
+          !%%%%%%%%%%
+          !counter = 0
+          !%%%%%%%%%%
+          do i = 1, counter
+             read (io_ase,*)
+          end do
+          !
+          write(io_ase,133) en_conv*total_energy2, en_units(energy_units)       
+          !
+          call io_close(io_ase)
+          !
+          ! END %%%% ASE printing %%%%
+          !
+       end if
     end if
-
+    
     call electron_number(electrons)
 
     electrons_tot2 = zero
@@ -799,6 +844,8 @@ contains
 
 10  format(6x,'|* Harris-Foulkes energy   = ',f25.15,' ',a2)
 13  format(6x,'|* DFT total energy        = ',f25.15,' ',a2)
+133 format(/4x,'DFT total energy        = ',f25.15,' ',a2)
+    
 22  format(6x,'|  estimated accuracy      = ',f25.15,' ',a2)
 
 14  format(6x,'| GS Energy as E-(1/2)TS   = ',f25.15,' ',a2)

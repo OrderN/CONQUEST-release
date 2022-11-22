@@ -82,11 +82,16 @@
 module force_module
 
   use datatypes
-  use global_module,          only: io_lun, atomic_stress
+  use global_module,          only: io_lun, atomic_stress, ase_file, nspin
+  use global_module,          only: io_ase, write_ase, ase_file  
   use timer_module,           only: start_timer, stop_timer, cq_timer
   use timer_module,           only: start_backtrace, stop_backtrace
   use timer_stdclocks_module, only: tmr_std_allocation,      &
                                     tmr_std_matrices
+
+  use DiagModule,             only: nkp
+  use ScalapackFormat,        only: matrix_size
+  use species_module,         only: n_species
 
   implicit none
 
@@ -213,6 +218,8 @@ contains
   !!    Zero components of stress where unit cell is constrained; simplify pressure conversion
   !!   2022/06/08 16:12 dave
   !!    Add dispersion (D2) stress
+  !!   2022/10/28 16:12 lionel
+  !!    Add printint forces/stress in ASE output
   !!  SOURCE
   !!
   subroutine force(fixed_potential, vary_mu, n_cg_L_iterations, &
@@ -262,9 +269,9 @@ contains
     use hartree_module, only: Hartree_stress
     use XC, ONLY: XC_GGA_stress
     use io_module, only: atom_output_threshold, return_prefix
-    use input_module,         only: leqi
+    use input_module,         only: leqi, io_close
     use io_module, only: atom_output_threshold, return_prefix
-
+    
     implicit none
 
     ! Passed variables
@@ -275,7 +282,7 @@ contains
 
     ! Local variables
     integer        :: i, j, ii, stat, max_atom, max_compt, ispin, &
-                      direction, dir1, dir2
+                      direction, dir1, dir2, counter
     real(double)   :: max_force, volume, scale, g0
     type(cq_timer) :: tmr_l_tmp1
     type(cq_timer) :: backtrace_timer
@@ -293,8 +300,9 @@ contains
     real(double), dimension(:),   allocatable :: density_out_tot
     real(double), dimension(:,:), allocatable :: density_out
     character(len=1), dimension(3) :: comptstr = (/"x", "y", "z"/)
-    character(len=10) :: subname = "force:  "
+    character(len=10)  :: subname = "force:  "
     character(len=120) :: prefix
+    character(len=120) :: tmp
 
     prefix = return_prefix(subname, min_layer)
 !****lat<$
@@ -510,12 +518,52 @@ contains
     max_force = zero
     max_atom  = 0
     max_compt = 0
+
+    ! print in Conquest output
     if (inode == ionode .and. write_forces .and. (iprint_MD + min_layer>=0 .and. ni_in_cell<atom_output_threshold)) then
        write (io_lun, fmt='(/4x,a,a2,"/",a2,")")') &
              trim(prefix)//" Forces on atoms (",en_units(energy_units), d_units(dist_units)
        write (io_lun, fmt='(4x,a)') &
             trim(prefix)//"  Atom   X              Y              Z"
     end if
+    !
+    ! BEGIN %%%% ASE printing %%%%
+    !    
+    ! print in ASE output ; kept the conditions
+    if ( inode == ionode .and. write_forces .and. (iprint_MD + min_layer>=0 .and. ni_in_cell<atom_output_threshold) &
+       .and. write_ase ) then
+
+       open(io_ase,file=ase_file, status='old', action='readwrite', iostat=stat, position='rewind')
+       !open(io_ase,file=ase_file, status='old', action='readwrite', iostat=stat, position='append')
+       
+       if (stat .ne. 0) call cq_abort('Error opening file !')
+       !
+       if ( nspin == 2 ) then
+          counter = nkp*3 + nspin*nkp + nspin*nkp*(matrix_size/3) + 1 + 2
+          if ( mod(matrix_size,3) > 0 ) counter = counter + nspin*nkp
+       
+       else
+          counter = nkp*3 + nkp*(matrix_size/3) + 1 + 1
+          if ( mod(matrix_size,3) > 0 ) counter = counter + nkp
+       
+       end if
+       counter = counter + 7 + n_species + 2 + nkp + 2
+
+       !%%%%%%%%%%
+       !counter = 0
+       !%%%%%%%%%%
+       do i = 1, counter
+          read (io_ase,*)
+       end do
+       
+       write (io_ase, fmt='(/4x,a,a2,"/",a2,")")') &
+             trim(prefix)//" Forces on atoms (",en_units(energy_units), d_units(dist_units)
+       write (io_ase, fmt='(4x,a)') &
+            trim(prefix)//"  Atom   X              Y              Z"             
+    end if
+    !
+    ! END %%%% ASE printing %%%%
+    !    
     ! Calculate forces and write out
     g0 = zero
     do i = 1, ni_in_cell
@@ -589,8 +637,24 @@ contains
              write (io_lun,fmt='(4x,a,i6,3f15.10)') &
                   trim(prefix),i, (for_conv * tot_force(j,i), j = 1, 3)
           end if ! (iprint_MD + min_layer > 2)
+          !
+          ! BEGIN %%%% ASE printing %%%%
+          !
+          ! write total forces on ASE output anyway
+          !
+          if( write_ase ) write (io_ase,fmt='(4x,a,i6,3f15.10)') &
+               trim(prefix),i, (for_conv * tot_force(j,i), j = 1, 3)          
+
+          ! END %%%% ASE printing %%%%          
+          !          
        end if ! (inode == ionode)
     end do ! i
+
+    if (inode == ionode .and. write_ase ) then
+       write (io_ase,fmt='(4x,a/)') 'end of force report'
+       call io_close(io_ase)
+    end if
+        
     if (inode == ionode) then
        write (io_lun, fmt='(/4x,a,f15.8,"(",a2,"/",&
             &a2,") on atom ",i9," in ",a1," direction")')     &
@@ -603,101 +667,101 @@ contains
     ! We will add PCC and nonSCF stresses even if the flags are not set, as they are
     ! zeroed at the start
     if (flag_stress) then
-      if(flag_neutral_atom) then
-         do dir1 = 1, 3
-            do dir2 = 1,3
-               stress(dir1,dir2) = KE_stress(dir1,dir2) + &
-                 SP_stress(dir1,dir2) + PP_stress(dir1,dir2) + &
-                 NL_stress(dir1,dir2) + GPV_stress(dir1,dir2) + &
-                 XC_stress(dir1,dir2) + screened_ion_stress(dir1,dir2) + &
-                 Hartree_stress(dir1,dir2) + loc_HF_stress(dir1,dir2) +  &
-                 pcc_stress(dir1,dir2) + nonSCF_stress(dir1,dir2)
-               if (flag_atomic_stress) then
-                 non_atomic_stress(dir1,dir2) = &
-                   non_atomic_stress(dir1,dir2) + GPV_stress(dir1,dir2) + &
-                   XC_stress(dir1,dir2) + Hartree_stress(dir1,dir2)
-               end if
-               if (flag_neutral_atom_projector) then
-                 stress(dir1,dir2) = stress(dir1,dir2) + NA_stress(dir1,dir2)
-               end if
-
-            end do
-         end do
-      else
-         do dir1 = 1, 3
-            do dir2 = 1, 3
-               stress(dir1,dir2) = KE_stress(dir1,dir2) + &
-                 SP_stress(dir1,dir2) + PP_stress(dir1,dir2) + &
-                 NL_stress(dir1,dir2) + GPV_stress(dir1,dir2) + &
-                 XC_stress(dir1,dir2) + ion_interaction_stress(dir1,dir2) + &
-                 Hartree_stress(dir1,dir2) + loc_HF_stress(dir1,dir2) + &
-                 loc_G_stress(dir1,dir2) + pcc_stress(dir1,dir2) + &
-                 nonSCF_stress(dir1,dir2)
-               if (flag_atomic_stress) then
-                 ! non-atomic ion_interaction_stress added in
-                 ! ion_electrostatic_module - zamaan
-                 non_atomic_stress(dir1,dir2) = &
-                   non_atomic_stress(dir1,dir2) + GPV_stress(dir1,dir2) + &
-                   XC_stress(dir1,dir2) + Hartree_stress(dir1,dir2) + &
-                   loc_G_stress(dir1,dir2)
-               end if
-            end do
-         end do
-      end if
-      if (flag_atomic_stress) call gsum(atomic_stress,3,3,ni_in_cell)
-      if (flag_dft_d2) stress = stress + disp_stress
-      ! If we constrain the cell, zero the appropriate stresses
-      if (leqi(cell_constraint_flag, 'a')) then
-         stress(1,1) = zero
-      else if (leqi(cell_constraint_flag, 'b')) then
-         stress(2,2) = zero
-      else if (leqi(cell_constraint_flag, 'c')) then
-         stress(3,3) = zero
-      else if (leqi(cell_constraint_flag, 'c a') .or. leqi(cell_constraint_flag, 'a c')) then
-         stress(1,1) = zero
-         stress(3,3) = zero
-      else if (leqi(cell_constraint_flag, 'a b') .or. leqi(cell_constraint_flag, 'b a')) then
-         stress(1,1) = zero
-         stress(2,2) = zero
-      else if (leqi(cell_constraint_flag, 'b c') .or. leqi(cell_constraint_flag, 'c b')) then
-         stress(2,2) = zero
-         stress(3,3) = zero
-      end if
-      ! Output
-      if (inode == ionode.AND.iprint_MD + min_layer>2) then
-         write (io_lun,fmt='(/4x,a,3a15)') trim(prefix)//"                  ","X","Y","Z"
-         if(iprint_MD + min_layer > 1) write(io_lun,fmt='(4x,a)') trim(prefix)//" Stress contributions:"
-      end if
-      call print_stress(trim(prefix)//" K.E. stress:      ", KE_stress, 3)
-      call print_stress(trim(prefix)//" S-Pulay stress:   ", SP_stress, 3)
-      call print_stress(trim(prefix)//" Phi-Pulay stress: ", PP_stress, 3)
-      call print_stress(trim(prefix)//" Local stress:     ", loc_HF_stress, 3)
-      call print_stress(trim(prefix)//" Local G stress:   ", loc_G_stress, 3)
-      call print_stress(trim(prefix)//" Non-local stress: ", NL_stress, 3)
-      call print_stress(trim(prefix)//" Jacobian stress:  ", GPV_stress, 3)
-      call print_stress(trim(prefix)//" XC stress:        ", XC_stress, 3)
-      if (flag_neutral_atom) then
-        call print_stress(trim(prefix)//" Ion-ion stress:   ", screened_ion_stress, 3)
-        if(flag_neutral_atom_projector) &
-             call print_stress(trim(prefix)//" N.A. stress:      ", NA_stress, 3)
-      else
-        call print_stress(trim(prefix)//" Ion-ion stress:   ", ion_interaction_stress, 3)
-      end if
-      call print_stress(trim(prefix)//" Hartree stress:   ", Hartree_stress, 3)
-      call print_stress(trim(prefix)//" PCC stress:       ", pcc_stress, 3)
-      call print_stress(trim(prefix)//" non-SCF stress:   ", nonSCF_stress, 3)
-      if(flag_dft_D2) call print_stress(trim(prefix)//" DFT-D2 stress:    ", disp_stress, 3)
-      call print_stress(trim(prefix)//" Total stress:     ", stress, -2) ! Force output
-      volume = rcellx*rcelly*rcellz
-      ! We need pressure in GPa, and only diagonal terms output
-      scale = -HaBohr3ToGPa/volume
-      !call print_stress("Total pressure:   ", stress*scale, 0)
-      if(inode==ionode.AND.iprint_MD + min_layer>=1) &
-           write(io_lun,'(4x,a,f15.8,a4/)') trim(prefix)//" Average pressure: ", &
-           third*scale*(stress(1,1) + stress(2,2) + stress(3,3))," GPa"
-      if (flag_atomic_stress .and. iprint_MD + min_layer > 2) call check_atomic_stress
+       if(flag_neutral_atom) then
+          do dir1 = 1, 3
+             do dir2 = 1,3
+                stress(dir1,dir2) = KE_stress(dir1,dir2) + &
+                     SP_stress(dir1,dir2) + PP_stress(dir1,dir2) + &
+                     NL_stress(dir1,dir2) + GPV_stress(dir1,dir2) + &
+                     XC_stress(dir1,dir2) + screened_ion_stress(dir1,dir2) + &
+                     Hartree_stress(dir1,dir2) + loc_HF_stress(dir1,dir2) +  &
+                     pcc_stress(dir1,dir2) + nonSCF_stress(dir1,dir2)
+                if (flag_atomic_stress) then
+                   non_atomic_stress(dir1,dir2) = &
+                        non_atomic_stress(dir1,dir2) + GPV_stress(dir1,dir2) + &
+                        XC_stress(dir1,dir2) + Hartree_stress(dir1,dir2)
+                end if
+                if (flag_neutral_atom_projector) then
+                   stress(dir1,dir2) = stress(dir1,dir2) + NA_stress(dir1,dir2)
+                end if
+                
+             end do
+          end do
+       else
+          do dir1 = 1, 3
+             do dir2 = 1, 3
+                stress(dir1,dir2) = KE_stress(dir1,dir2) + &
+                     SP_stress(dir1,dir2) + PP_stress(dir1,dir2) + &
+                     NL_stress(dir1,dir2) + GPV_stress(dir1,dir2) + &
+                     XC_stress(dir1,dir2) + ion_interaction_stress(dir1,dir2) + &
+                     Hartree_stress(dir1,dir2) + loc_HF_stress(dir1,dir2) + &
+                     loc_G_stress(dir1,dir2) + pcc_stress(dir1,dir2) + &
+                     nonSCF_stress(dir1,dir2)
+                if (flag_atomic_stress) then
+                   ! non-atomic ion_interaction_stress added in
+                   ! ion_electrostatic_module - zamaan
+                   non_atomic_stress(dir1,dir2) = &
+                        non_atomic_stress(dir1,dir2) + GPV_stress(dir1,dir2) + &
+                        XC_stress(dir1,dir2) + Hartree_stress(dir1,dir2) + &
+                        loc_G_stress(dir1,dir2)
+                end if
+             end do
+          end do
+       end if
+       if (flag_atomic_stress) call gsum(atomic_stress,3,3,ni_in_cell)
+       if (flag_dft_d2) stress = stress + disp_stress
+       ! If we constrain the cell, zero the appropriate stresses
+       if (leqi(cell_constraint_flag, 'a')) then
+          stress(1,1) = zero
+       else if (leqi(cell_constraint_flag, 'b')) then
+          stress(2,2) = zero
+       else if (leqi(cell_constraint_flag, 'c')) then
+          stress(3,3) = zero
+       else if (leqi(cell_constraint_flag, 'c a') .or. leqi(cell_constraint_flag, 'a c')) then
+          stress(1,1) = zero
+          stress(3,3) = zero
+       else if (leqi(cell_constraint_flag, 'a b') .or. leqi(cell_constraint_flag, 'b a')) then
+          stress(1,1) = zero
+          stress(2,2) = zero
+       else if (leqi(cell_constraint_flag, 'b c') .or. leqi(cell_constraint_flag, 'c b')) then
+          stress(2,2) = zero
+          stress(3,3) = zero
+       end if
+       ! Output
+       if (inode == ionode.AND.iprint_MD + min_layer>2) then
+          write (io_lun,fmt='(/4x,a,3a15)') trim(prefix)//"                  ","X","Y","Z"
+          if(iprint_MD + min_layer > 1) write(io_lun,fmt='(4x,a)') trim(prefix)//" Stress contributions:"
+       end if
+       call print_stress(trim(prefix)//" K.E. stress:      ", KE_stress, 3)
+       call print_stress(trim(prefix)//" S-Pulay stress:   ", SP_stress, 3)
+       call print_stress(trim(prefix)//" Phi-Pulay stress: ", PP_stress, 3)
+       call print_stress(trim(prefix)//" Local stress:     ", loc_HF_stress, 3)
+       call print_stress(trim(prefix)//" Local G stress:   ", loc_G_stress, 3)
+       call print_stress(trim(prefix)//" Non-local stress: ", NL_stress, 3)
+       call print_stress(trim(prefix)//" Jacobian stress:  ", GPV_stress, 3)
+       call print_stress(trim(prefix)//" XC stress:        ", XC_stress, 3)
+       if (flag_neutral_atom) then
+          call print_stress(trim(prefix)//" Ion-ion stress:   ", screened_ion_stress, 3)
+          if(flag_neutral_atom_projector) &
+               call print_stress(trim(prefix)//" N.A. stress:      ", NA_stress, 3)
+       else
+          call print_stress(trim(prefix)//" Ion-ion stress:   ", ion_interaction_stress, 3)
+       end if
+       call print_stress(trim(prefix)//" Hartree stress:   ", Hartree_stress, 3)
+       call print_stress(trim(prefix)//" PCC stress:       ", pcc_stress, 3)
+       call print_stress(trim(prefix)//" non-SCF stress:   ", nonSCF_stress, 3)
+       if(flag_dft_D2) call print_stress(trim(prefix)//" DFT-D2 stress:    ", disp_stress, 3)
+       call print_stress(trim(prefix)//" Total stress:     ", stress, -2, write_ase) ! Force output
+       volume = rcellx*rcelly*rcellz
+       ! We need pressure in GPa, and only diagonal terms output
+       scale = -HaBohr3ToGPa/volume
+       !call print_stress("Total pressure:   ", stress*scale, 0)
+       if(inode==ionode.AND.iprint_MD + min_layer>=1) &
+            write(io_lun,'(4x,a,f15.8,a4/)') trim(prefix)//" Average pressure: ", &
+            third*scale*(stress(1,1) + stress(2,2) + stress(3,3))," GPa"
+       if (flag_atomic_stress .and. iprint_MD + min_layer > 2) call check_atomic_stress
     end if
-
+    
     call my_barrier()
     if(iprint_MD + min_layer>3) deallocate(s_pulay_for,phi_pulay_for)
     if (inode == ionode .and. iprint_MD + min_layer > 1 .and. write_forces) &
@@ -4316,23 +4380,27 @@ contains
 !!  
 !!  SOURCE
 !!  
-subroutine print_stress(label, str_mat, print_level)
+subroutine print_stress(label, str_mat, print_level,print_ase)
 
   use datatypes
   use numbers
   use units
-  use GenComms,       only: inode, ionode
+  use GenComms,       only: inode, ionode, cq_abort
   use global_module,  only: iprint_MD, flag_full_stress, rcellx, rcelly, rcellz, min_layer
-
+  use global_module,  only: ni_in_cell
+  use input_module,   only: io_close
+  
   ! Passed variables
   character(*), intent(in)                  :: label
+  logical,      intent(in), optional        :: print_ase
   real(double), dimension(3,3), intent(in)  :: str_mat
   integer, intent(in)                       :: print_level
 
   ! local variables
   character(20) :: fmt = '(4x,a,3f15.8,a4)'
   character(20) :: blank = ''
-  real(double) :: volume, scale
+  real(double)  :: volume, scale
+  integer       :: i, counter, stat
   
   if (inode==ionode) then
     if (iprint_MD + min_layer >= print_level) then
@@ -4342,9 +4410,48 @@ subroutine print_stress(label, str_mat, print_level)
         write(io_lun,fmt=fmt) label, str_mat(1,:)*scale, ' GPa'!en_units(energy_units)
         write(io_lun,fmt=fmt) blank, str_mat(2,:)*scale, blank
         write(io_lun,fmt=fmt) blank, str_mat(3,:)*scale, blank
-      else
-        write(io_lun,fmt=fmt) label, str_mat(1,1)*scale, str_mat(2,2)*scale, &
-                              str_mat(3,3)*scale, ' GPa'!en_units(energy_units)
+      else            
+         write(io_lun,fmt=fmt) label, str_mat(1,1)*scale, str_mat(2,2)*scale, &
+              str_mat(3,3)*scale, ' GPa'!en_units(energy_units)
+         !
+         ! BEGIN %%%% ASE printing %%%%
+         ! 
+         if (present(print_ase)) then
+
+            open(io_ase,file=ase_file, status='old', action='readwrite', iostat=stat, position='rewind')
+
+            !open(io_ase,file=ase_file, status='old', action='readwrite', iostat=stat, position='append')
+                  
+            
+            if (stat .ne. 0) call cq_abort('Error opening file !')
+
+            if ( nspin == 2 ) then
+               counter = nkp*3 + nspin*nkp + nspin*nkp*(matrix_size/3) + 1 + 2 
+               if ( mod(matrix_size,3) > 0 ) counter = counter + nspin*nkp
+               
+            else
+               counter = nkp*3 + nkp*(matrix_size/3) + 1 + 1
+               if ( mod(matrix_size,3) > 0 ) counter = counter + nkp
+               
+            end if
+            counter = counter + 7 + n_species + 2 + nkp + 2 + 2 + ni_in_cell + 2
+
+            !%%%%%%%%%%
+            !counter = 0
+            !%%%%%%%%%%
+            do i = 1, counter
+               read (io_ase,*)
+            end do
+            !
+            write(io_ase,fmt=fmt) label, str_mat(1,1)*scale, str_mat(2,2)*scale, &
+                 str_mat(3,3)*scale, ' GPa'!en_units(energy_units)
+            !
+            call io_close(io_ase)
+            
+         end if
+         !
+         ! END %%%% ASE printing %%%%
+         !    
       end if
     end if
   end if
