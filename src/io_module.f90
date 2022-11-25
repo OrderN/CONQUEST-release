@@ -1632,7 +1632,7 @@ second:   do
     !print*, nlines
     
     open(io,file=file, status='old', action='readwrite', iostat=stat, position='rewind')
-    if (stat .ne. 0) call cq_abort('Error opening file !')
+    if (stat .ne. 0) call cq_abort('ASE/eigenvalues error opening file !')
     !
     do i = 1, skip_lines
        read (io,*)

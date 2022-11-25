@@ -745,7 +745,7 @@ contains
        if ( write_ase ) then
           open(io_ase,file=ase_file, status='old', action='readwrite', iostat=stat, position='rewind')
           
-          if (stat .ne. 0) call cq_abort('Error opening file !')
+          if (stat .ne. 0) call cq_abort('ASE/energy error opening file !')
           !
           if ( nspin == 2 ) then
              counter = nkp*3 + nspin*nkp + nspin*nkp*(matrix_size/3) + 1 + 2 

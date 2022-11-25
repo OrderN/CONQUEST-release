@@ -2656,7 +2656,7 @@ contains
     !
     if ( write_ase ) then
        open(io_ase,file=ase_file, status='old', action='readwrite', iostat=stat, position='append')
-       if (stat .ne. 0) call cq_abort('Error opening file !')
+       if (stat .ne. 0) call cq_abort('ASE/io_module error opening file !')
        !
        write(io_ase,fmt='(/4x,"Number of species: ",i2)') n_species
        write(io_ase,fmt='(4x,a56)') '--------------------------------------------------------'

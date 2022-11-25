@@ -536,7 +536,7 @@ contains
        open(io_ase,file=ase_file, status='old', action='readwrite', iostat=stat, position='rewind')
        !open(io_ase,file=ase_file, status='old', action='readwrite', iostat=stat, position='append')
        
-       if (stat .ne. 0) call cq_abort('Error opening file !')
+       if (stat .ne. 0) call cq_abort('ASE/force error opening file !')
        !
        if ( nspin == 2 ) then
           counter = nkp*3 + nspin*nkp + nspin*nkp*(matrix_size/3) + 1 + 2
@@ -4403,57 +4403,57 @@ subroutine print_stress(label, str_mat, print_level,print_ase)
   integer       :: i, counter, stat
   
   if (inode==ionode) then
-    if (iprint_MD + min_layer >= print_level) then
-      volume = rcellx*rcelly*rcellz
-      scale = HaBohr3ToGPa/volume
-      if (flag_full_stress) then
-        write(io_lun,fmt=fmt) label, str_mat(1,:)*scale, ' GPa'!en_units(energy_units)
-        write(io_lun,fmt=fmt) blank, str_mat(2,:)*scale, blank
-        write(io_lun,fmt=fmt) blank, str_mat(3,:)*scale, blank
-      else            
-         write(io_lun,fmt=fmt) label, str_mat(1,1)*scale, str_mat(2,2)*scale, &
-              str_mat(3,3)*scale, ' GPa'!en_units(energy_units)
-         !
-         ! BEGIN %%%% ASE printing %%%%
-         ! 
-         if (present(print_ase)) then
-
-            open(io_ase,file=ase_file, status='old', action='readwrite', iostat=stat, position='rewind')
-
-            !open(io_ase,file=ase_file, status='old', action='readwrite', iostat=stat, position='append')
-                  
-            
-            if (stat .ne. 0) call cq_abort('Error opening file !')
-
-            if ( nspin == 2 ) then
-               counter = nkp*3 + nspin*nkp + nspin*nkp*(matrix_size/3) + 1 + 2 
-               if ( mod(matrix_size,3) > 0 ) counter = counter + nspin*nkp
-               
-            else
-               counter = nkp*3 + nkp*(matrix_size/3) + 1 + 1
-               if ( mod(matrix_size,3) > 0 ) counter = counter + nkp
-               
-            end if
-            counter = counter + 7 + n_species + 2 + nkp + 2 + 2 + ni_in_cell + 2
-
-            !%%%%%%%%%%
-            !counter = 0
-            !%%%%%%%%%%
-            do i = 1, counter
-               read (io_ase,*)
-            end do
-            !
-            write(io_ase,fmt=fmt) label, str_mat(1,1)*scale, str_mat(2,2)*scale, &
-                 str_mat(3,3)*scale, ' GPa'!en_units(energy_units)
-            !
-            call io_close(io_ase)
-            
-         end if
-         !
-         ! END %%%% ASE printing %%%%
-         !    
-      end if
-    end if
+     if (iprint_MD + min_layer >= print_level) then
+        volume = rcellx*rcelly*rcellz
+        scale = HaBohr3ToGPa/volume
+        if (flag_full_stress) then
+           write(io_lun,fmt=fmt) label, str_mat(1,:)*scale, ' GPa'!en_units(energy_units)
+           write(io_lun,fmt=fmt) blank, str_mat(2,:)*scale, blank
+           write(io_lun,fmt=fmt) blank, str_mat(3,:)*scale, blank
+        else            
+           write(io_lun,fmt=fmt) label, str_mat(1,1)*scale, str_mat(2,2)*scale, &
+                str_mat(3,3)*scale, ' GPa'!en_units(energy_units)
+           !
+           ! BEGIN %%%% ASE printing %%%%
+           ! 
+           if (present(print_ase)) then
+              !
+              if ( print_ase ) then
+                 
+                 open(io_ase,file=ase_file, status='old', action='readwrite', iostat=stat, position='rewind')                 
+                 
+                 if (stat .ne. 0) call cq_abort('ASE/stress error opening file !')
+                 
+                 if ( nspin == 2 ) then
+                    counter = nkp*3 + nspin*nkp + nspin*nkp*(matrix_size/3) + 1 + 2 
+                    if ( mod(matrix_size,3) > 0 ) counter = counter + nspin*nkp                  
+                 else
+                    counter = nkp*3 + nkp*(matrix_size/3) + 1 + 1
+                    if ( mod(matrix_size,3) > 0 ) counter = counter + nkp
+                    
+                 end if
+                 counter = counter + 7 + n_species + 2 + nkp + 2 + 2 + ni_in_cell + 2
+                 
+                 !%%%%%%%%%%
+                 !counter = 0
+                 !%%%%%%%%%%
+                 do i = 1, counter
+                    read (io_ase,*)
+                 end do
+                 !
+                 write(io_ase,fmt=fmt) label, str_mat(1,1)*scale, str_mat(2,2)*scale, &
+                      str_mat(3,3)*scale, ' GPa'!en_units(energy_units)
+                 !
+                 call io_close(io_ase)
+                 !
+                 ! END %%%% ASE printing %%%%
+                 !                     
+              end if
+              !
+           end if
+           
+        end if
+     end if
   end if
 end subroutine print_stress
 !!*****
