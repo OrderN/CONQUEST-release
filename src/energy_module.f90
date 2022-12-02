@@ -471,6 +471,7 @@ contains
                                       flag_vdWDFT,                    &
                                       flag_exx, exx_alpha,            &
                                       flag_neutral_atom, min_layer,   &
+                                      flag_fix_spin_population,       &
                                       io_ase, write_ase, ase_file
     
     use density_module,         only: electron_number

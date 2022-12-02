@@ -2535,8 +2535,10 @@ contains
     use blip,                 only: blip_info
     use global_module,        only: flag_basis_set, blips,        &
          flag_precondition_blips, io_lun, io_ase, write_ase, flag_LFD, runtype, flag_opt_cell, &
-         flag_Multisite, flag_diagonalisation, flag_neutral_atom, temp_ion, &
-         flag_self_consistent, flag_vary_basis, iprint_init, flag_pcc_global, ase_file
+         flag_Multisite, flag_diagonalisation, flag_neutral_atom, temp_ion,  &
+         flag_self_consistent, flag_vary_basis, iprint_init, flag_pcc_global,&
+         nspin, flag_SpinDependentSF, flag_fix_spin_population, ne_spin_in_cell, flag_XLBOMD,&
+         ase_file
     use SelfCon,              only: maxitersSC
     use GenComms,             only: cq_abort
     use minimise,             only: energy_tolerance, L_tolerance,     &
