@@ -743,12 +743,13 @@ contains
        ! BEGIN %%%% ASE printing %%%%
        !
        if ( write_ase ) then
+          !
           open(io_ase,file=ase_file, status='old', action='readwrite', iostat=stat, position='rewind')
-          
+          !
           if (stat .ne. 0) call cq_abort('ASE/energy error opening file !')
           !
           if ( nspin == 2 ) then
-             counter = nkp*3 + nspin*nkp + nspin*nkp*(matrix_size/3) + 1 + 2 
+             counter = nkp*3 + (nspin+1)*nkp + nspin*nkp*(matrix_size/3) + 1 + 2 
              if ( mod(matrix_size,3) > 0 ) counter = counter + nspin*nkp
              
           else
@@ -757,9 +758,6 @@ contains
              
           end if
           counter = counter + 7 + n_species + nkp + 1 + 1
-          !%%%%%%%%%%
-          !counter = 0
-          !%%%%%%%%%%
           do i = 1, counter
              read (io_ase,*)
           end do

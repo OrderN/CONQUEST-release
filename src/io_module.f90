@@ -537,95 +537,6 @@ second:   do
   end subroutine read_atomic_positions
   !!***
 
-!!$  ! --------------------------------------------------------------------
-!!$  ! Subroutine write_atomic_positions_ase
-!!$  ! --------------------------------------------------------------------
-!!$  
-!!$  !!****f* io_module/write_atomic_positions *
-!!$  !!
-!!$  !!  NAME 
-!!$  !!   write_atomic_positions
-!!$  !!  USAGE
-!!$  !! 
-!!$  !!  PURPOSE
-!!$  !!   writes positions, species and constraint type for atoms
-!!$  !!  INPUTS
-!!$  !! 
-!!$  !! 
-!!$  !!  USES
-!!$  !!   datatypes, dimens, GenComms, global_module, species_module
-!!$  !!  AUTHOR
-!!$  !!   D.R.Bowler
-!!$  !!  CREATION DATE
-!!$  !!   2022/11/08 L. Truflandier
-!!$  !!     Copied from write_atomic_positions to print in ASE output
-!!$  !      Forced to be fractional coordinates
-!!$  !!  MODIFICATION HISTORY
-!!$  !!  SOURCE
-!!$  !!
-!!$  subroutine write_atomic_positions_ase()
-!!$    use datatypes
-!!$    use numbers,        only: zero
-!!$    use dimens,         only: r_super_x, r_super_y, r_super_z
-!!$    use global_module,  only: ni_in_cell, species_glob, flag_move_atom, &
-!!$                              min_layer, io_ase, ase_file, iprint_init, &
-!!$                              IPRINT_TIME_THRES3, atom_coord, nspin
-!!$    use species_module, only: species, species_label, n_species
-!!$    use ScalapackFormat,only: matrix_size
-!!$    use DiagModule,             only: nkp
-!!$    use GenComms,       only: inode, ionode, cq_abort
-!!$    use timer_module
-!!$
-!!$    ! Passed variables
-!!$
-!!$    ! Local variables
-!!$    integer :: i, counter, stat
-!!$    type(cq_timer)             :: tmr_l_tmp1
-!!$
-!!$    if(inode==ionode) then
-!!$       
-!!$       call start_timer(tmr_l_tmp1,WITH_LEVEL)       
-!!$       if (iprint_init + min_layer > 2) write(io_lun,fmt='(6x,a)') 'Writing atomic positions in ASE output'
-!!$
-!!$       open(io_ase,file=ase_file, status='old', action='readwrite', iostat=stat, position='rewind')
-!!$
-!!$       !open(io_ase,file=ase_file, status='old', action='readwrite', iostat=stat, position='append')
-!!$             
-!!$       if (stat .ne. 0) call cq_abort('Error opening file !')
-!!$       !
-!!$       if ( nspin == 2 ) then
-!!$          counter = nkp*3 + nspin*nkp + nspin*nkp*(matrix_size/3) + 1 + 2
-!!$          if ( mod(matrix_size,3) > 0 ) counter = counter + nspin*nkp
-!!$       
-!!$       else
-!!$          counter = nkp*3 + nkp*(matrix_size/3) + 1 + 1
-!!$          if ( mod(matrix_size,3) > 0 ) counter = counter + nkp
-!!$       
-!!$       end if
-!!$       counter = counter + 7 + n_species + 2 + nkp + 2 + 2 + ni_in_cell + 2 + 1
-!!$
-!!$       !%%%%%%%%%%
-!!$       !counter = 0
-!!$       !%%%%%%%%%%
-!!$       do i = 1, counter
-!!$          read (io_ase,*)
-!!$       end do
-!!$       
-!!$       ! Read supercell vector - for now it must be orthorhombic so we use x and y as dummy variables
-!!$       write(io_ase,fmt='(3f25.17)') r_super_x, zero, zero
-!!$       write(io_ase,fmt='(3f25.17)') zero, r_super_y, zero
-!!$       write(io_ase,fmt='(3f25.17)') zero, zero, r_super_z
-!!$       write(io_ase,fmt='(i8)') ni_in_cell
-!!$       do i=1,ni_in_cell
-!!$          write(io_ase,fmt='(3f25.17,i6,3L3)') atom_coord(1,i)/r_super_x,atom_coord(2,i)/r_super_y,&
-!!$               atom_coord(3,i)/r_super_z, species_glob(i),flag_move_atom(1,i),flag_move_atom(2,i), &
-!!$               flag_move_atom(3,i)
-!!$       end do
-!!$       call stop_print_timer(tmr_l_tmp1,"writing atomic positions ASE",IPRINT_TIME_THRES3)
-!!$    end if
-!!$    
-!!$    return
-!!$  end subroutine write_atomic_positions_ase
   
   ! --------------------------------------------------------------------
   ! Subroutine write_atomic_positions
@@ -1712,11 +1623,18 @@ second:   do
     !
     call io_close(io)
     !    
+!4   format(10x,'Sum of eigenvalues: ',f18.11,' ',a2)
+!7   format(10x,'Eigenvalues and occupancies for k-point ',i3,' : ',3f12.5)
+!8   format(10x,f12.5,f6.3,2x)
+!9   format(10x,f12.5,f6.3,2x,f12.5,f6.3,2x)
+!10  format(10x,f12.5,f6.3,2x,f12.5,f6.3,2x,f12.5,f6.3,2x)
+!13  format(10x,'Fermi energy for spin = ',i1,' is ',f18.11,' ',a2)
+
 4   format(10x,'Sum of eigenvalues: ',f18.11,' ',a2)
 7   format(10x,'Eigenvalues and occupancies for k-point ',i3,' : ',3f12.5)
-8   format(10x,f12.5,f6.3,2x)
-9   format(10x,f12.5,f6.3,2x,f12.5,f6.3,2x)
-10  format(10x,f12.5,f6.3,2x,f12.5,f6.3,2x,f12.5,f6.3,2x)
+8   format(10x,f15.7,x,f8.5,2x)
+9   format(10x,f15.7,x,f8.5,2x,f15.7,x,f8.5,2x)
+10  format(10x,f15.7,x,f8.5,2x,f15.7,x,f8.5,2x,f15.7,x,f8.5)
 13  format(10x,'Fermi energy for spin = ',i1,' is ',f18.11,' ',a2)
     
     return
