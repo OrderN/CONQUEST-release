@@ -744,6 +744,8 @@ contains
   !!    Keywords for equilibration
   !!   2020/01/07 tsuyoshi 
   !!     Default setting of MakeInitialChargeFromK has been changed
+  !!   2022/10/28 15:56 lionel
+  !!     Added ASE output file setup ; default is T
   !!  TODO
   !!  SOURCE
   !!
@@ -753,7 +755,7 @@ contains
     use datatypes
     use numbers
     use units
-    use global_module, only: iprint, flag_vary_basis,                  &
+    use global_module, only: iprint, flag_vary_basis, &
          flag_self_consistent,                     &
          flag_precondition_blips,                  &
          flag_fix_spin_population,                 &
@@ -775,7 +777,8 @@ contains
          iprint_pseudo, iprint_basis, iprint_exx,  &
          iprint_intgn,iprint_MDdebug, &
          global_maxatomspart, load_balance,        &
-         flag_assign_blocks,      &
+         flag_assign_blocks, &
+         io_ase, write_ase, ase_file,   &
          io_lun, flag_pulay_simpleStep,            &
          flag_Becke_weights,                       &
          flag_Becke_atomic_radii,                  &
@@ -867,8 +870,9 @@ contains
     use pao_minimisation, only: InitStep_paomin
     use timer_module,     only: time_threshold,lun_tmr, TimingOn, &
          TimersWriteOut, BackTraceOn
-    use input_module!, only: load_input, input_array, block_start,
-    ! block_end, fd
+    use input_module, only: load_input, input_array, block_start, &
+         block_end, fdf_boolean, fdf_integer, fdf_double, fdf_string, &
+         fdf_block, fdf_defined, leqi, io_assign, fdf_endblock
     use cdft_data, only: cDFT_Type, cDFT_MaxIterations, cDFT_NAtoms, &
          cDFT_Target, cDFT_Tolerance,                &
          cDFT_NumberAtomGroups, cDFT_AtomList,       &
@@ -971,6 +975,19 @@ contains
        call gcopy(io_lun)
     else
        io_lun = 6
+    end if
+    ! 
+    if (fdf_boolean('IO.WriteOutToASEFile',.false.)) then
+       if (inode == ionode) then
+          write_ase = .true.
+          call io_assign(io_ase)
+          open(unit=io_ase,file=ase_file,iostat=stat)
+          if (stat /= 0) &
+               call cq_abort("Failed to open ASE Conquest output file", stat)
+       end if
+       call gcopy(io_ase)
+    else
+       if (inode == ionode) write_ase = .false.       
     end if
 !!$
 !!$
@@ -2508,6 +2525,8 @@ contains
   !!    Removed obsolete parameter number_of_bands
   !!   2017/02/23 dave
   !!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
+  !!   2022/10/28 lionel
+  !!    Add printing of species table in ASE output
   !!  SOURCE
   !!
   subroutine write_info(titles, mu, vary_mu, HNL_fac, NODES)
@@ -2525,11 +2544,13 @@ contains
          iMethfessel_Paxton
     use blip,                 only: blip_info
     use global_module,        only: flag_basis_set, blips,        &
-         flag_precondition_blips, io_lun, flag_LFD, runtype, flag_opt_cell, &
+         flag_precondition_blips, io_lun, io_ase, write_ase, flag_LFD, runtype, flag_opt_cell, &
          flag_Multisite, flag_diagonalisation, flag_neutral_atom, temp_ion, &
          flag_self_consistent, flag_vary_basis, iprint_init, flag_pcc_global, &
-         nspin, flag_SpinDependentSF, flag_fix_spin_population, ne_spin_in_cell, flag_XLBOMD
+         nspin, flag_SpinDependentSF, flag_fix_spin_population, ne_spin_in_cell, flag_XLBOMD,&
+         ase_file
     use SelfCon,              only: maxitersSC
+    use GenComms,             only: cq_abort
     use minimise,             only: energy_tolerance, L_tolerance,     &
          sc_tolerance,                      &
          n_support_iterations,              &
@@ -2551,7 +2572,7 @@ contains
     real(double) :: mu, HNL_fac
 
     ! Local variables
-    integer :: n
+    integer :: n, stat
     character(len=10) :: today, the_time
     character(len=15) :: job_str
     character(len=5)  :: timezone
@@ -2631,29 +2652,55 @@ contains
     else
        write(io_lun,fmt='(6x,"Solving for the K matrix using ",a16)') 'order N with LNV'   
     end if
-    if(iprint_init>0) write(io_lun,fmt='(/4x,"Integration grid size: ",i4," x ",i4," x ",i4)') &
+    if(iprint_init>0) write(io_lun,fmt='(/4x,"Integration grid size:   ",i4," x ",i4," x ",i4)') &
          n_grid_x, n_grid_y, n_grid_z
 
-    if(iprint_init>1) write(io_lun,fmt='(4x,"Integration grid blocks: ",i3," x ",i3," x ",i3)') &
+    if(iprint_init>1) write(io_lun,fmt='(4x, "Integration grid blocks: ",i4," x ",i4," x ",i4)') &
          in_block_x, in_block_y, in_block_z
 
     write(io_lun,fmt='(/4x,"Integration grid spacing: ",f6.3,a3," x",f6.3,a3," x",f6.3,a3)') &
          dist_conv*(r_super_x/n_grid_x), d_units(dist_units), & 
          dist_conv*(r_super_y/n_grid_y), d_units(dist_units), &
          dist_conv*(r_super_z/n_grid_z), d_units(dist_units)
-
+    
+    ! print in Conquest output
     write(io_lun,fmt='(/4x,"Number of species: ",i2)') n_species
-    write(io_lun,fmt='(4x,a66)') '------------------------------------------------------------------'
-    write(io_lun,fmt='(4x,"   #  Mass (au)  Charge (e)  SF Rad (",a2,")  NSF  Label            ")') &
+    write(io_lun,fmt='(4x,a56)') '--------------------------------------------------------'
+    write(io_lun,fmt='(4x,"|   #  mass (au)  Charge (e)  SF Rad (",a2,")  NSF  Label  |")') &
          d_units(dist_units)
-    write(io_lun,fmt='(4x,a66)') '------------------------------------------------------------------'
+    write(io_lun,fmt='(4x,a56)') '--------------------------------------------------------'
 
     do n=1, n_species
-       write(io_lun,fmt='(4x,i4,2x,f9.3,3x,f9.3,4x,f9.3,2x,i3,2x,a30)') &
+       write(io_lun,fmt='(4x,"|",i4,2x,f9.3,3x,f9.3,4x,f9.3,2x,i3,2x,a7,"|")') &
             n, mass(n), charge(n), dist_conv*RadiusSupport(n), nsf_species(n), species_label(n)
     end do
-    write(io_lun,fmt='(4x,a66)') '------------------------------------------------------------------'
-
+    write(io_lun,fmt='(4x,a56)') '--------------------------------------------------------'
+    
+    !
+    ! BEGIN %%%% ASE printing %%%%
+    !
+    if ( write_ase ) then
+       open(io_ase,file=ase_file, status='old', action='readwrite', iostat=stat, position='append')
+       if (stat .ne. 0) call cq_abort('ASE/io_module error opening file !')
+       !
+       write(io_ase,fmt='(/4x,"Number of species: ",i2)') n_species
+       write(io_ase,fmt='(4x,a56)') '--------------------------------------------------------'
+       write(io_ase,fmt='(4x,"|   #  mass (au)  Charge (e)  SF Rad (",a2,")  NSF  Label  |")') &
+            d_units(dist_units)
+       write(io_ase,fmt='(4x,a56)') '--------------------------------------------------------'
+       
+       do n=1, n_species
+          write(io_ase,fmt='(4x,"|",i4,2x,f9.3,3x,f9.3,4x,f9.3,2x,i3,2x,a7,"|")') &
+               n, mass(n), charge(n), dist_conv*RadiusSupport(n), nsf_species(n), species_label(n)
+       end do
+       write(io_ase,fmt='(4x,a56)') '--------------------------------------------------------'
+       write(io_ase,fmt='(4x,a)') 'end of species report'
+       !
+       close(io_ase)
+    end if
+    !
+    ! END %%%% ASE printing %%%%
+    !
     if (flag_Multisite) write(io_lun,'(/10x,"PAOs are contracted to multi-site support functions")')
 
     if(iprint_init>0) then
@@ -2783,10 +2830,10 @@ contains
   subroutine readDiagInfo
 
     use datatypes
-    use functions, only: is_prime
+    use functions,       only: is_prime
     use global_module,   only: iprint_init, rcellx, rcelly, rcellz,  &
          area_general, ni_in_cell, numprocs,   &
-         species_glob, io_lun
+         species_glob, io_lun, io_ase, ase_file, write_ase
     use numbers,         only: zero, one, two, pi, RD_ERR, half
     use GenComms,        only: cq_abort, cq_warn, gcopy
     use input_module
@@ -2813,7 +2860,7 @@ contains
     logical        :: ms_is_prime
     
     ! k-point mesh type
-    logical        :: mp_mesh, done, flag_lines_kpoints, flag_gamma
+    logical        :: mp_mesh, done, flag_lines_kpoints, flag_gamma, test_ase
     integer,      dimension(1:3)              :: mp
     real(double), dimension(1:3)              :: mp_shift
     real(double), allocatable, dimension(:,:) :: kk_tmp
@@ -2980,6 +3027,25 @@ contains
                 write(io_lun,fmt='(8x,i5,3f15.6,f12.3)')&
                      i,kk(1,i),kk(2,i),kk(3,i),wtk(i)
              end do
+             !
+             ! BEGIN %%%% ASE printing %%%%
+             !
+             if ( write_ase ) then
+                inquire(io_ase, opened=test_ase) 
+                if ( .not. test_ase ) open(io_ase,file=ase_file, status='old', action='write',&
+                     iostat=stat, position='append')
+                
+                write(io_ase,*)
+                write(io_ase,7) nkp
+                do i=1,nkp
+                   write (io_ase,fmt='(8x,i5,3f15.6,f12.3)') &
+                        i,kk(1,i),kk(2,i),kk(3,i),wtk(i)
+                end do
+                call io_close(io_ase)
+             end if
+             !
+             ! END %%%% ASE printing %%%%
+             !
           end if
           ! Scale from fractional to reciprocal
           do i = 1, nkp
@@ -3035,6 +3101,24 @@ contains
                 write(io_lun,fmt='(8x,i5,3f15.6,f12.3)')&
                      i,kk(1,i)/(two*pi)*rcellx,kk(2,i)/(two*pi)*rcellx,kk(3,i)/(two*pi)*rcellx,wtk(i)
              end do
+             !
+             ! BEGIN %%%% ASE printing %%%%
+             !
+             if ( write_ase ) then
+                inquire(io_ase, opened=test_ase) 
+                if ( .not. test_ase ) open(io_ase,file=ase_file, status='old', action='write',&
+                     iostat=stat, position='append')             
+                write(io_ase,*)
+                write(io_ase,7) nkp
+                do i=1,nkp
+                   write(io_ase,fmt='(8x,i5,3f15.6,f12.3)')&
+                        i,kk(1,i)/(two*pi)*rcellx,kk(2,i)/(two*pi)*rcellx,kk(3,i)/(two*pi)*rcellx,wtk(i)
+                end do
+                call io_close(io_ase)
+             end if
+             !
+             ! END %%%% ASE printing %%%%
+             !
           end if
        end if
     else
@@ -3175,14 +3259,34 @@ contains
        if(stat/=0) &
             call cq_abort('FindEvals: couldnt deallocate kpoints', nkp_tmp)
        if(iprint_init>1.AND.inode==ionode) then
+          !
           write(io_lun,*)
           write(io_lun,10) nkp
           do i=1,nkp
              write (io_lun,fmt='(8x,i5,3f15.6,f12.3)') &
                   i,kk(1,i),kk(2,i),kk(3,i),wtk(i)
           end do
+          !
+          !
+          ! BEGIN %%%% ASE printing %%%%
+          !
+          if ( write_ase ) then
+             inquire(io_ase, opened=test_ase) 
+             if ( .not. test_ase ) open(io_ase,file=ase_file, status='old', action='write',&
+                  iostat=stat, position='append')                       
+             write(io_ase,*)
+             write(io_ase,10) nkp
+             do i=1,nkp
+                write (io_ase,fmt='(8x,i5,3f15.6,f12.3)') &
+                     i,kk(1,i),kk(2,i),kk(3,i),wtk(i)
+             end do
+             call io_close(io_ase)
+             !
+             ! END %%%% ASE printing %%%%
+             !    
+          end if
        end if
-
+       
        do i = 1, nkp
           kk(1,i) = two * pi * kk(1,i) / rcellx
           kk(2,i) = two * pi * kk(2,i) / rcelly
@@ -3241,15 +3345,17 @@ contains
   !!  CREATION DATE
   !!   2014/02/04
   !!  MODIFICATION HISTORY
+  !!   2020/10/30 lionel
+  !!    correct for io_assign, wrong module!
   !!  SOURCE
   !!
   subroutine read_input_aux(aux)
     ! Module usage
-    use global_module, ONLY: io_lun
-    use auxiliary_types, ONLY: group_aux
-    use GenComms, ONLY: myid,cq_abort,gcopy
-    use io_module, ONLY: io_assign,io_close
-    use input_module, ONLY: fdf_block,fdf_endblock
+    use global_module,   only: io_lun
+    use auxiliary_types, only: group_aux
+    use GenComms,        only: myid,cq_abort,gcopy
+    use input_module,    only: io_assign,io_close
+    use input_module,    only: fdf_block,fdf_endblock
 
     implicit none
     ! passed variables

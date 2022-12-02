@@ -162,6 +162,7 @@ contains
     use multisiteSF_module,only: flag_LFD_nonSCF, flag_mix_LFD_SCF
     use units
     use io_module,         only: return_prefix
+    use DiagModule,        only: nkp
 
     implicit none
 
@@ -359,7 +360,7 @@ contains
     end if
 
 !****lat<$
-    call final_energy(backtrace_level)
+    call final_energy(nkp,backtrace_level)
 !****lat>$
 
     ! output WFs or DOS

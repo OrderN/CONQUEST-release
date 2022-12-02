@@ -155,6 +155,8 @@
 !!    Added atom_vels 
 !!   2021/07/19 15:00 dave
 !!    Removed flag for wavefunction output by k-point
+!!   2022/10/28 15:56 lionel
+!!    Added ASE output unit
 !!  SOURCE
 !!
 module global_module
@@ -166,7 +168,12 @@ module global_module
   implicit none
 
   integer :: iprint                 ! Level of output
-  integer :: io_lun                 ! Output unit
+  integer :: io_lun                 ! Conquest output unit
+  !
+  integer :: io_ase                 ! ASE output unit  
+  logical :: write_ase              ! Whether we write ASE ouptput or not
+  character(len=80) :: ase_file = 'Conquest_out_ase' ! ASE file output
+  !
   integer, allocatable, dimension(:) :: id_glob      ! global label of atom in sim cell (CC)
   integer, allocatable, dimension(:) :: id_glob_inv  ! gives global number for a CC atom
   integer, dimension(:), allocatable, target :: species_glob ! gives species 

@@ -537,6 +537,7 @@ second:   do
   end subroutine read_atomic_positions
   !!***
 
+  
   ! --------------------------------------------------------------------
   ! Subroutine write_atomic_positions
   ! --------------------------------------------------------------------
@@ -1475,9 +1476,9 @@ second:   do
     open (unit = lun, file = 'eigenvalues.dat')
     write(lun,fmt='("#  ",i7," eigenvalues ",i4," kpoints")') n_evals, nkp
     if(nspin==1) then
-       write(lun,fmt='("# Ef: ",f12.5)') Ef(1)
+       write(lun,fmt='("# Ef: ",f18.10)') Ef(1)
     else
-       write(lun,fmt='("# Ef: ",2f12.5)') Ef(1),Ef(2)
+       write(lun,fmt='("# Ef: ",2f18.10)') Ef(1),Ef(2)
     end if
     write(lun,fmt='("# Format: nk kx ky kz weight, followed by eigenvalues")')
     do sp = 1,nspin
@@ -1491,6 +1492,154 @@ second:   do
     call io_close(lun)
     return
   end subroutine write_eigenvalues
+  !!***
+
+  !!****f* io_module/write_eigenvalues_format_ase
+  !! PURPOSE
+  !!  Writes out eigenvalues with ASE format
+  !! INPUTS
+  !!  eval
+  !!  n_evals
+  !!  nkp
+  !!  nspin
+  !! OUTPUT
+  !! RETURN VALUE
+  !! AUTHOR
+  !!   David Bowler/Lionel Truflandier
+  !! CREATION DATE 
+  !!   2022/10/29 16:00
+  !! MODIFICATION HISTORY
+  !! SOURCE
+  !!
+  subroutine write_eigenvalues_format_ase(eval,occ,n_evals,nkp,nspin,kk,Ef,io,file,skip_lines)
+
+    use datatypes
+    use units
+
+    implicit none
+
+    ! Passed variables
+    integer,   intent(in) :: n_evals, nkp, nspin
+    integer,   intent(in) :: io, skip_lines
+    character(len=80), intent(in) :: file
+
+    real(double), dimension(n_evals,nkp,nspin) :: eval
+    real(double), dimension(n_evals,nkp,nspin) :: occ
+    real(double), dimension(3,nkp)             :: kk
+    real(double), dimension(2)                 :: Ef
+
+    ! Local variables
+    real(double),dimension(2) :: BandE
+    integer :: i, j, spin, stat, counter, nlines
+
+
+    !open(io,file=file, status='old', action='read', iostat=stat, position='rewind')
+    !if (stat .ne. 0) call cq_abort('Error opening file !')
+    !do
+    !   read (io,*, END=11)
+    !   nlines = nlines + 1
+    !end do
+    !11  call io_close(io)
+    !print*, nlines
+    
+    open(io,file=file, status='old', action='readwrite', iostat=stat, position='rewind')
+    if (stat .ne. 0) call cq_abort('ASE/eigenvalues error opening file !')
+    !
+    do i = 1, skip_lines
+       read (io,*)
+    end do
+    !
+    !if ( nspin == 2 ) then
+    !   counter = nkp*3 + nspin*nkp + nspin*nkp*(n_evals/3) + 1
+    !   if ( mod(n_evals,3) > 0 ) counter = counter + nspin*nkp
+    
+    !else
+    !   counter = nkp*3 + nkp*(n_evals/3) + 1
+    !   if ( mod(n_evals,3) > 0 ) counter = counter + nkp
+       
+    !end if
+
+    !if ( nlines > skip_lines ) then
+    !   do i = 1, counter - skip_lines
+    !      backspace(io)
+    !   end do
+    !end if
+    !
+    ! Write bands!
+    !
+    write(io,*)
+    !
+    bandE = zero
+    !
+    do i = 1, nkp
+       write (io, 7) i, kk(1,i), kk(2,i), kk(3,i)
+       do spin = 1, nspin
+          if (nspin == 2) &
+               write (io, '(10x,"For spin = ",i1)') spin
+          do j = 1, n_evals, 3
+             
+             if (j == n_evals) then
+                write (io, 8) eval(j,i,spin), occ(j,i,spin)
+
+                bandE(spin) = bandE(spin) + eval(j,i,spin) * occ(j,i,spin)
+                
+             else if (j == n_evals - 1) then
+                write (io, 9) eval(j,i,spin), occ(j,i,spin), &
+                     eval(j+1,i,spin), occ(j+1,i,spin)
+                
+                bandE(spin) = bandE(spin) + eval(j,i,spin) * occ(j,i,spin) + &
+                     eval(j+1,i,spin) * occ(j+1,i,spin)
+
+             else
+                write (io, 10) eval(j,i,spin), occ(j,i,spin), &
+                     eval(j+1,i,spin), occ(j+1,i,spin), &
+                     eval(j+2,i,spin), occ(j+2,i,spin)
+                
+                bandE(spin) = bandE(spin) + eval(j,i,spin) * occ(j,i,spin) + &
+                     eval(j+1,i,spin) * occ(j+1,i,spin) + &
+                     eval(j+2,i,spin) * occ(j+2,i,spin)
+             endif
+          end do ! j=matrix_size
+          write (io, &
+               fmt='(10x,"Sum of eigenvalues for spin = ", &
+               &i1, ": ", f18.11," ", a2)') &
+               spin, en_conv * bandE(spin), en_units(energy_units)
+       end do ! spin
+       if (nspin == 2) then
+          write (io, &
+               fmt='(10x,"Total sum of eigenvalues: ", f18.11, " ",a2)') &
+               en_conv * (bandE(1) + bandE(2)), en_units(energy_units)
+       else
+          write(io, 4) en_conv * two * bandE(1), en_units(energy_units)
+       end if
+    end do ! do i = 1, nkp
+    !
+    ! Write Fermi energy
+    !
+    do spin = 1, nspin
+       write (io, 13) spin, en_conv * Ef(spin), &
+            en_units(energy_units)
+    end do
+    !
+    call io_close(io)
+    !    
+!4   format(10x,'Sum of eigenvalues: ',f18.11,' ',a2)
+!7   format(10x,'Eigenvalues and occupancies for k-point ',i3,' : ',3f12.5)
+!8   format(10x,f12.5,f6.3,2x)
+!9   format(10x,f12.5,f6.3,2x,f12.5,f6.3,2x)
+!10  format(10x,f12.5,f6.3,2x,f12.5,f6.3,2x,f12.5,f6.3,2x)
+!13  format(10x,'Fermi energy for spin = ',i1,' is ',f18.11,' ',a2)
+
+4   format(10x,'Sum of eigenvalues: ',f18.11,' ',a2)
+7   format(10x,'Eigenvalues and occupancies for k-point ',i3,' : ',3f12.5)
+8   format(10x,f15.7,x,f8.5,2x)
+9   format(10x,f15.7,x,f8.5,2x,f15.7,x,f8.5,2x)
+10  format(10x,f15.7,x,f8.5,2x,f15.7,x,f8.5,2x,f15.7,x,f8.5)
+13  format(10x,'Fermi energy for spin = ',i1,' is ',f18.11,' ',a2)
+    
+    return
+
+  end subroutine write_eigenvalues_format_ase
   !!***
   
   !!****f* io_module/dump_DOS
@@ -3463,5 +3612,61 @@ second:   do
     return_prefix = prefix(1:-2*level)//name
   end function return_prefix
 
+
+  ! --------------------------------------------------------------------
+  ! Subroutine write_output_ase
+  ! --------------------------------------------------------------------
+  
+  !!****f* io_module/write_output_ase *
+  !!
+  !!  NAME 
+  !!   read_atomic_positions
+  !!  USAGE
+  !! 
+  !!  PURPOSE
+  !!   Reads positions, species and constraint type for atoms
+  !!  INPUTS
+  !! 
+  !! 
+  !!  USES
+  !!   datatypes, dimens, GenComms, global_module, species_module
+  !!  AUTHOR
+  !!   D.R.Bowler
+  !!  CREATION DATE
+  !!   16:26, 2003/04/15
+  !!  MODIFICATION HISTORY
+  !!   16:46, 2003/06/09 tm
+  !!    id_glob_inv, atom_coord, species_glob is added.
+  !!    and labelling in make_prt.dat is changed 
+  !!   13:31, 22/09/2003 drb 
+  !!    Added reading of flags to constrain atom movement in three directions
+  !!   2006/10/09 08:21 dave
+  !!    Tidying up output
+  !!   20/11/2006 Veronika
+  !!    Corrected reading of constraints from pdb file
+  !!   15:05, 27/04/2007 drb 
+  !!    Check to ensure right number of species added
+  !!   2007/06/28, 21:37 mt + drb
+  !!    Added coordinate wrapping to non-pdb coordinates.
+  !!   2007/10/11 Veronika
+  !!    Added coordinate wrapping to pdb coordinates
+  !!    Added coordinate wrapping for coordinates outside 
+  !!    the [-1*cell parameter; 2*cell parameter] range
+  !!   2013/07/01 M.Arita & T.Miyazaki
+  !!    Added shift_in_bohr when wrapping atoms and allocation of atom_coord_diff
+  !!   2013/08/20 M.Arita
+  !!    Bug fix & correct the if-statement
+  !!   2015/06/08 lat
+  !!    Added experimental backtrace
+  !!   2018/01/22 tsuyoshi (with dave)
+  !!    Allocate atom_coord_diff for all calculations
+  !!   2019/04/04 14:17 dave
+  !!    Correct bug in wrapping with non-fractional coordinates and Angstroms
+  !!   2020/07/27 tsuyoshi
+  !!    Added atom_vels  
+  !!   2020/10/07 tsuyoshi
+  !!    Removed allocation of atom_vels (moved to "control")
+  !!  SOURCE
+  !!
 end module io_module
 
