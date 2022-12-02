@@ -1225,7 +1225,8 @@ contains
           alpha = max(alpha_new, 0.1_double*alpha)
        end if
     end do ! while (.not. done)
-    if(.not. done) call cq_abort("Failed to reduce energy in backtrack_linemin.  Final step size: ",alpha)
+    if((inode==ionode) .and. (.not. done)) &
+         call cq_abort("Failed to reduce energy in backtrack_linemin.  Final step size: ",alpha)
     energy_out = e3
     call dump_pos_and_matrices
     ! Now find forces
@@ -1541,7 +1542,8 @@ contains
           alpha = max(alpha_new, 0.1_double*alpha)
        end if
     end do ! while (.not. done)
-    if(.not. done) call cq_abort("Failed to reduce energy in backtrack_linemin.  Final step size: ",alpha)
+    if((inode==ionode) .and. (.not. done)) &
+         call cq_abort("Failed to reduce energy in backtrack_linemin.  Final step size: ",alpha)
     enthalpy_out = h3
     call dump_pos_and_matrices
     ! Now find forces
@@ -1877,7 +1879,8 @@ contains
           alpha = half*alpha
        end if
     end do ! while (.not. done)
-    if(.not. done) call cq_abort("Failed to reduce enthalpy in backtrack_linemin.  Final step size: ",alpha)
+    if((inode==ionode) .and. (.not. done)) &
+         call cq_abort("Failed to reduce enthalpy in backtrack_linemin.  Final step size: ",alpha)
     enthalpy_out = h3
     if(abs(enthalpy_out - enthalpy_in) < abs(two*dE_elec_opt)) then
        call cq_warn(subname, "Electronic structure dE is similar to atom movement dE; increase tolerance", &
@@ -2199,7 +2202,8 @@ contains
           alpha = max(alpha_new, 0.1_double*alpha)
        end if
     end do ! while (.not. done)
-    if(.not. done) call cq_abort("Failed to reduce energy in adapt_backtrack_linemin.  Final step size: ",alpha)
+    if((inode==ionode) .and. (.not. done)) &
+         call cq_abort("Failed to reduce energy in adapt_backtrack_linemin.  Final step size: ",alpha)
     energy_out = e3
     call dump_pos_and_matrices
     ! Test increase of alpha
@@ -3730,7 +3734,7 @@ contains
        if (flag_self_consistent .OR. flag_mix_L_SC_min) then
           if(flag_neutral_atom .and. .not.flag_LFD_MD_UseAtomicDensity) call set_atomic_density(.false.)
           if(flag_LmatrixReuse) then
-             if (inode.EQ.ionode.AND.iprint_MD>2) write (io_lun,*) "update_H: Get charge density from L-matrix"
+             if (inode.EQ.ionode.AND.iprint_MD>3) write (io_lun,*) "update_H: Get charge density from L-matrix"
              call get_electronic_density(density,electrons,atomfns,H_on_atomfns(1), &
                   inode,ionode,maxngrid)
             do spin=1,nspin
@@ -4824,9 +4828,9 @@ contains
        x_atom_cell(j) = (rcellx/orcellx)*x_atom_cell(j)
        y_atom_cell(j) = (rcelly/orcelly)*y_atom_cell(j)
        z_atom_cell(j) = (rcellz/orcellz)*z_atom_cell(j)
-       if (inode == ionode .and. iprint_MD > 3) &
-            write (io_lun,*) 'Position: ', j, x_atom_cell(j), &
-            y_atom_cell(j), z_atom_cell(j)
+       !if (inode == ionode .and. iprint_MD > 3) &
+       !     write (io_lun,*) 'Position: ', j, x_atom_cell(j), &
+       !     y_atom_cell(j), z_atom_cell(j)
     end do
     if(inode==ionode.and.iprint_MD>2) then
        write(io_lun,fmt='(6x,"Scaling cell dimenstions by: ",3f9.6)') rcellx/start_rcellx, rcelly/start_rcelly, rcellz/start_rcellz

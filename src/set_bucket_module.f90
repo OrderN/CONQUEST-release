@@ -361,7 +361,7 @@ contains
       mx_recv_BRnode=nnode
 
       if(iprint_index >= 4.AND.myid==0) write(io_lun,111) myid+1, mx_recv_BRnode, mx_send_DRnode
-      111 format(' Calc_mx_send for local and remote buckets : Node = ',i4,&
+      111 format(8x,' Calc_mx_send for local and remote buckets : Node = ',i4,&
                  ' mx_recv_BRnode & mx_send_DRnode = ',2i4)
      return
     end subroutine calc_mx_nodes_bucket
@@ -643,7 +643,7 @@ contains
       !TM VARNSF: START
       loc_bucket%no_pair_orb = norb
       !TM VARNSF: END
-      if(iprint_index>3.AND.myid==0) write(io_lun,*) 'n_pair in make_pair_DCSpart = ',npair
+      if(iprint_index>3.AND.myid==0) write(io_lun,fmt='(8x,a,i6)') 'n_pair in make_pair_DCSpart = ',npair
       !if(npair > loc_bucket%mx_pair) call cq_abort('ERROR in make_pair_DCSpart for loc_bucket%mx_pair',&
       !     npair,loc_bucket%mx_pair)
       !making tables
@@ -672,7 +672,8 @@ contains
 !         end do
 !      end do
       ! End counting pairs
-      if(allocated(isend_array).AND.myid==0) write(io_lun,*) "isend_array allocated: ",size(isend_array)
+      if(allocated(isend_array).AND.myid==0) &
+           write(io_lun,fmt='(8x,a,i6)') "isend_array allocated: ",size(isend_array)
       allocate(isend_array(4*npair),STAT=stat)
       if(stat/=0) call cq_abort("Error allocating isend_array in make_pair_DCSprt: ",npair)
       ind_pair=0
@@ -893,7 +894,7 @@ contains
                !TM VARNSF : START
                myid_npair_orb=buff_npair_orb(nnd)
                 if(iprint_index>4.AND.myid==0) write(io_lun,112) mynode ,myid_ibegin,myid_npair, myid_npair_orb
-                112 format(' Node ',i3,' myid_ibegin, myid_npair, myid_npair_orb = ',3i6)
+                112 format(8x,' Node ',i3,' myid_ibegin, myid_npair, myid_npair_orb = ',3i6)
                !if(iprint_index>4) write(io_lun,*) ' Node ',mynode, &
                !     ' myid_ibegin, myid_npair and myid_npair_orb= ',myid_ibegin,myid_npair,myid_npair_orb
                !TM VARNSF : END
@@ -923,7 +924,8 @@ contains
                ibegin=4*(loc_bucket%ibegin_pair(nnd)-1)+1
                send_size=4*buff_npair(nnd)
                if(send_size>0) then
-                  if(ibegin>4*loc_bucket%no_pair.AND.myid==0) write(io_lun,*) 'ERROR: ',ibegin,send_size,4*loc_bucket%no_pair
+                  if(ibegin>4*loc_bucket%no_pair.AND.myid==0) &
+                       write(io_lun,fmt='(8x,a,2i6)') 'ERROR: ',ibegin,send_size,4*loc_bucket%no_pair
                   if(ibegin + send_size-1>4*loc_bucket%no_pair.AND.myid==0) &
                        write(io_lun,*) 'ERROR: ',ibegin,send_size,4*loc_bucket%no_pair
                   call MPI_issend(isend_array(ibegin),send_size,MPI_INTEGER,&
@@ -1123,7 +1125,8 @@ contains
                recv_ptr => irecv_array(1:nsize)
             endif
 
-            if(iprint_index>3.AND.myid==0) write(io_lun,*) '$ME$ Node ',myid+1,' SendNode ',nnd_send,' npair= ',npair
+            if(iprint_index>3.AND.myid==0) &
+                 write(io_lun,fmt='(8x,a,i6,a,i6,a,i6)') '$ME$ Node ',myid+1,' SendNode ',nnd_send,' npair= ',npair
             !TM VARNSF : START
             ibeg_orb1 = 0
             ibeg_orb2 = 0
@@ -1172,7 +1175,7 @@ contains
                        ,BCS_parts%xcover(ni2_new),BCS_parts%ycover(ni2_new)&
                        ,BCS_parts%zcover(ni2_new)&
                        ,offset,nx,ny,nz
-101               format('Node,ipair= ',2i3,' diff =',3f8.3,2x,' prim =',3f8.3,2x,&
+101               format(8x,'Node,ipair= ',2i3,' diff =',3f8.3,2x,' prim =',3f8.3,2x,&
                        'cover=',3f8.3,2x,'offset=',i4,' nx,y,z=',3i3)
                endif
 

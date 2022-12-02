@@ -251,7 +251,7 @@ contains
                                       nspin, spin_factor, &
                                       flag_analytic_blip_int, &
                                       flag_neutral_atom, flag_stress, &
-                                      rcellx, rcelly, rcellz, &
+                                      rcellx, rcelly, rcellz, flag_mix_L_SC_min, &
                                       flag_atomic_stress, non_atomic_stress, &
                                       flag_heat_flux, cell_constraint_flag, min_layer
     use density_module,         only: get_electronic_density, density, &
@@ -389,7 +389,7 @@ contains
             GPV_stress(dir1,dir1) = (hartree_energy_total_rho + &
               local_ps_energy - core_correction) ! core contains 1/V term
          end if
-         if(flag_self_consistent) then
+         if(flag_self_consistent .or. flag_mix_L_SC_min) then
             XC_stress(dir1,dir1) = xc_energy + &
               spin_factor*XC_GGA_stress(dir1,dir1)
          else ! nonSCF XC found later, along with corrections to Hartree
@@ -421,7 +421,7 @@ contains
 
     ! Different forces depending on whether we're doing Harris-Foulkes
     ! or self-consistent
-    if (.not. flag_self_consistent) then
+    if ((.not. flag_self_consistent) .and. (.not. flag_mix_L_SC_min)) then
 
        call start_timer(tmr_std_allocation)
        allocate(density_out(maxngrid,nspin), &
@@ -571,7 +571,7 @@ contains
           tot_force(j,i) = HF_force(j,i) + HF_NL_force(j,i) + &
                p_force(j,i) +    KE_force(j,i)
           ! Non-self-consistent
-          if (.not.flag_self_consistent) &
+          if ((.not.flag_self_consistent) .and. (.not.flag_mix_L_SC_min)) &
                tot_force(j,i) = tot_force(j,i) + nonSC_force(j,i)
           ! Neutral atom or conventional pseudopotential
           if(flag_neutral_atom) then
@@ -626,7 +626,7 @@ contains
              if (flag_dft_d2) write (io_lun, 109) trim(prefix),(for_conv * disp_force(j,i), j = 1, 3)
              if (flag_perform_cdft) write (io_lun, fmt='(4x,a,3f15.10)') &
                   trim(prefix)//" Force cDFT : ",(for_conv*cdft_force(j,i),j=1,3)
-             if (flag_self_consistent) then
+             if (flag_self_consistent.or.flag_mix_L_SC_min) then
                 write (io_lun, 105) trim(prefix),(for_conv * tot_force(j,i),   j = 1, 3)
              else
                 write (io_lun, 107) trim(prefix),(for_conv * nonSC_force(j,i), j = 1, 3)
@@ -4115,7 +4115,7 @@ contains
                                    area_moveatoms, IPRINT_TIME_THRES3, &
                                    nspin, spin_factor, flag_self_consistent, &
                                    flag_full_stress, flag_stress,      &
-                                   flag_atomic_stress
+                                   flag_atomic_stress, flag_mix_L_SC_min
     use block_module,        only: nx_in_block,ny_in_block,            &
                                    nz_in_block, n_pts_in_block
     use group_module,        only: blocks, parts
@@ -4199,7 +4199,7 @@ contains
          xc_epsilon, xc_energy, size)
     if(PRESENT(xc_energy_ret)) xc_energy_ret = xc_energy
     ! We do this here to re-use xc_potential - for non-PCC we do it in get_nonSC_correction_force
-    if(.NOT.flag_self_consistent) then
+    if((.not.flag_self_consistent).and.(.not.flag_mix_L_SC_min)) then
        if(.NOT.present(density_out)) call cq_abort("Output density not passed to PCC force for nonSCF calculation")
        if (flag_stress) then
          jacobian = zero

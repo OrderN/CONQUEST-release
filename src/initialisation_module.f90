@@ -1110,7 +1110,7 @@ contains
          flag_out_wf, wf_self_con, &
          flag_write_DOS, flag_neutral_atom, &
          atomf, sf, flag_LFD, nspin_SF, flag_diagonalisation, &
-         ne_in_cell
+         ne_in_cell, min_layer
     use ion_electrostatic,   only: ewald, screened_ion_interaction
     use S_matrix_module,     only: get_S_matrix
     use GenComms,            only: my_barrier,end_comms,inode,ionode, &
@@ -1119,7 +1119,7 @@ contains
     use H_matrix_module,     only: get_H_matrix
     use energy,              only: get_energy
     use test_force_module,   only: test_forces
-    use io_module,           only: grab_matrix, grab_charge
+    use io_module,           only: grab_matrix, grab_charge, return_prefix
     !use DiagModule,          only: diagon
     use density_module,      only: get_electronic_density, density
     use functions_on_grid,   only: atomfns, H_on_atomfns
@@ -1158,6 +1158,8 @@ contains
 
     type(matrix_store_global) :: InfoGlob
     type(InfoMatrixFile),pointer :: Info(:)
+    character(len=12) :: subname = "initial_H: "
+    character(len=120) :: prefix
 
     ! Dummy vars for MMM
 
@@ -1166,6 +1168,7 @@ contains
     if ( .not. present(level) ) backtrace_level = -10
     call start_backtrace(t=backtrace_timer,who='initial_H',&
          where=area,level=backtrace_level,echo=.true.)
+    prefix = return_prefix(subname, min_layer)
     !****lat>$
 
     ! (0) Get the global information
@@ -1179,7 +1182,8 @@ contains
          restart_DM.or. &
          restart_T   .or. &
          read_option  ) then
-       if (inode.eq.ionode) write (io_lun,*) "Get global info to load matrices"
+       if (inode.eq.ionode .and. iprint_init + min_layer > 2) &
+            write(io_lun,fmt='(4x,a)') trim(prefix)//" get global info to load matrices"
        if (inode.eq.ionode) call make_glob2node
        call gcopy(glob2node, ni_in_cell)
        call grab_InfoMatGlobal(InfoGlob,index=index_MatrixFile)  
@@ -1214,7 +1218,8 @@ contains
           call matrix_scale(zero,matSFcoeff(spin_SF))
        enddo
        if (read_option) then
-          if (inode == ionode) write (io_lun,*) 'Read supp_pao coefficients from SFcoeff files'
+          if (inode == ionode .and. iprint_init + min_layer > 2) &
+               write(io_lun,fmt='(4x,a)') trim(prefix)//' read supp_pao coefficients from SFcoeff files'
           call grab_matrix2('SFcoeff',inode,nfile,Info,InfoGlob,index=index_MatrixFile,n_matrix=nspin_SF)
           call my_barrier()
           call Matrix_CommRebuild(InfoGlob,Info,SFcoeff_range,SFcoeff_trans,matSFcoeff,nfile,n_matrix=nspin_SF)
@@ -1229,7 +1234,8 @@ contains
           ! make SF-PAO coefficients
           call initial_SFcoeff(.true., .true., fixed_potential, .true.)
        endif
-       if (inode == ionode .and. iprint_init > 2) write (io_lun, fmt='(4x,a)') 'Got SFcoeff'
+       if (inode == ionode .and. iprint_init + min_layer > 2) &
+            write(io_lun, fmt='(4x,a)') trim(prefix)//' got SFcoeff'
        call my_barrier
     endif
 !!$
@@ -1251,7 +1257,8 @@ contains
     else
        call get_S_matrix(inode, ionode)
     endif
-    if (inode == ionode .and. iprint_init > 2) write (io_lun, fmt='(4x,a)') 'Got S'
+    if (inode == ionode .and. iprint_init + min_layer > 2) &
+         write(io_lun, fmt='(4x,a)') trim(prefix)//' got S'
     call my_barrier
 !!$
 !!$
@@ -1263,8 +1270,8 @@ contains
     if (.not. flag_diagonalisation .and. find_chdens .and. (start .or. start_L)) then
        call initial_L()
        call my_barrier()
-       if (inode == ionode .and. iprint_init > 2) &
-            write (io_lun, fmt='(4x,a)') 'Got L  matrix'
+       if (inode == ionode .and. iprint_init + min_layer > 2) &
+            write(io_lun, fmt='(4x,a)') trim(prefix)//' got L  matrix'
        if (vary_mu) then
           ! This cannot be timed within the routine
           call start_timer(tmr_std_densitymat)
@@ -1277,12 +1284,14 @@ contains
           call grab_matrix2('L',inode,nfile,Info,InfoGlob,index=index_MatrixFile,n_matrix=nspin)
           call my_barrier()
           call Matrix_CommRebuild(InfoGlob,Info,Lrange,L_trans,matL,nfile,symm,n_matrix=nspin)
-          if (inode == ionode .and. iprint_init > 2) write (io_lun, fmt='(4x,a)') 'Grabbed L  matrix'
+          if (inode == ionode .and. iprint_init + min_layer > 2) &
+               write(io_lun, fmt='(4x,a)') trim(prefix)//' grabbed L  matrix'
        else
           call grab_matrix2('K',inode,nfile,Info,InfoGlob,index=index_MatrixFile,n_matrix=nspin)
           call my_barrier()
           call Matrix_CommRebuild(InfoGlob,Info,Hrange,H_trans,matK,nfile,n_matrix=nspin)
-          if (inode == ionode .and. iprint_init > 2) write (io_lun, fmt='(4x,a)') 'Grabbed K  matrix'
+          if (inode == ionode .and. iprint_init + min_layer > 2) &
+               write(io_lun, fmt='(4x,a)') trim(prefix)//' grabbed K  matrix'
           !DEBUG call Report_UpdateMatrix("Kmat")  
        end if
     end if
@@ -1306,8 +1315,8 @@ contains
             dontM2, dontM3, dontM4, dophi, dontE, &
             mat_phi=matphi)
        electrons_tot = spin_factor * sum(electrons)
-       if (inode == ionode .and. iprint_init > 2)              &
-            write (io_lun,fmt='(4x,a,3f12.5)') 'Got elect: (Nup, Ndn, Ntotal) ', &
+       if (inode == ionode .and. iprint_init + min_layer > 2)              &
+            write(io_lun,fmt='(4x,a,3f12.5)') trim(prefix)//' got elect: (Nup, Ndn, Ntotal) ', &
             electrons(1), electrons(nspin),   &
             electrons_tot
     end if
@@ -1322,15 +1331,15 @@ contains
 !!$
 !!$
     ! (5) Find the Ewald energy for the initial set of atoms
-    if (inode == ionode .and. iprint_init > 2) &
-         write (io_lun, fmt='(4x,a)') 'Ionic electrostatics'
+    if (inode == ionode .and. iprint_init + min_layer > 2) &
+         write(io_lun, fmt='(4x,a)') trim(prefix)//' ionic electrostatics'
     if(flag_neutral_atom) then
-       if (inode == ionode .and. iprint_init > 2) &
-            write (io_lun, fmt='(4x,a)') 'Calling screened_ion_interaction'
+       if (inode == ionode .and. iprint_init + min_layer > 2) &
+            write(io_lun, fmt='(4x,a)') trim(prefix)//' calling screened_ion_interaction'
        call screened_ion_interaction
     else
-       if (inode == ionode .and. iprint_init > 2) &
-            write (io_lun, fmt='(4x,a)') 'Calling ewald'
+       if (inode == ionode .and. iprint_init + min_layer > 2) &
+            write(io_lun, fmt='(4x,a)') trim(prefix)//' calling ewald'
        call ewald
     end if
 !!$
@@ -1340,8 +1349,8 @@ contains
     ! +++
     ! (6) Find the dispersion energy for the initial set of atoms
     if (flag_dft_d2) then
-       if ((inode == ionode) .and. (iprint_init > 2) ) &
-            write (io_lun, fmt='(4x,a)') 'Calling DFT-D2'
+       if ((inode == ionode) .and. (iprint_init + min_layer > 2) ) &
+            write(io_lun, fmt='(4x,a)') trim(prefix)//' calling DFT-D2'
        call dispersion_D2
     end if
     call my_barrier
@@ -1349,8 +1358,8 @@ contains
 !!$
 !!$
 !!$
-    if (inode == ionode .and. iprint_init > 2) &
-         write (io_lun, fmt='(4x,a,L2)') 'Find_chdens is ', find_chdens
+    if (inode == ionode .and. iprint_init + min_layer > 2) &
+         write(io_lun, fmt='(4x,a,L2)') trim(prefix)//' find_chdens is ', find_chdens
 !!$
 !!$
 !!$
@@ -1362,8 +1371,8 @@ contains
             maxngrid)
        electrons_tot = spin_factor * sum(electrons)
        density = density * ne_in_cell/electrons_tot
-       if (inode == ionode .and. iprint_init > 2) &
-            write (io_lun, fmt='(4x,a,f12.5)') 'In initial_H, electrons: ', electrons_tot
+       if (inode == ionode .and. iprint_init + min_layer > 2) &
+            write(io_lun, fmt='(4x,a,f12.5)') trim(prefix)//' electrons: ', electrons_tot
        ! if flag_LFD=T, update SF-PAO coefficients with the obtained density unless they have been read
        ! and update S with the coefficients
        if ((.NOT.read_option).AND.flag_LFD) then

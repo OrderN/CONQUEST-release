@@ -471,8 +471,9 @@ contains
                                       flag_vdWDFT,                    &
                                       flag_exx, exx_alpha,            &
                                       flag_neutral_atom, min_layer,   &
+                                      flag_fix_spin_population,       &
                                       io_ase, write_ase, ase_file
-    
+
     use density_module,         only: electron_number
     use pseudopotential_common, only: core_correction, &
                                       flag_neutral_atom_projector
@@ -782,8 +783,10 @@ contains
 
     if (inode == ionode) then
        electrons_tot = electrons(1) + electrons(nspin)
-       if(iprint_gen + min_layer>1) then
-          write (io_lun,24) electrons_tot
+       if(iprint_gen + min_layer>-1) then
+          write (io_lun,241) electrons_tot
+          if (nspin == 2 .and. (.not. flag_fix_spin_population)) &
+               write (io_lun,21) electrons(1) - electrons(2)
        elseif (iprint_gen + min_layer > 2) then
           write (io_lun,23) 
           write (io_lun,24) electrons_tot
@@ -855,9 +858,10 @@ contains
 20  format(6x,'| Number of e- spin down   = ',f25.15)
 21  format(6x,'| Spin pol. as (up - down) = ',f25.15)
 
-23  format(6x,'|* check for accuracy      = ',f25.15,' ',a2)
-24  format(6x,'|  number of e- num. int.  = ',f25.15,' ',a2)
-25  format(6x,'|  number of e- as 2Tr[KS] = ',f25.15,' ',a2)
+23  format(6x,'|* check for accuracy      = ')
+24  format(6x,'|  number of e- num. int.  = ',f25.15)
+241 format(6x,'|  number of electrons     = ',f25.15)
+25  format(6x,'|  number of e- as 2Tr[KS] = ',f25.15)
 26  format(6x,'|  one-electron energy     = ',f25.15,' ',a2)
 27  format(6x,'|  potential energy V      = ',f25.15,' ',a2)
 28  format(6x,'|  kinetic energy T        = ',f25.15,' ',a2)

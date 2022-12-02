@@ -222,7 +222,7 @@ contains
                 prim%species(prim%n_prim)= &
                      spec(groups%icell_beg(ind_group)+ni-1)
                 if(iprint_gen>4.AND.myid==0) then
-                   write(io_lun,fmt='(2x,"Prim atom: ",i4," position: ",3f8.3)') prim%n_prim, &
+                   write(io_lun,fmt='(8x,"Prim atom: ",i4," position: ",3f8.3)') prim%n_prim, &
                         prim%xprim(prim%n_prim),prim%yprim(prim%n_prim),prim%zprim(prim%n_prim)
                 end if
              endif

@@ -222,7 +222,7 @@ contains
        flag_remote_iprim = .false.
     endif
     call my_barrier()
-    if (iprint_MD > 3 .and. inode.EQ.ionode) write (io_lun,*) "Got through the 1st MPI communication !" !db
+    if (iprint_MD > 4 .and. inode.EQ.ionode) write (io_lun,*) "Got through the 1st MPI communication !" !db
 
     ! Get ready for the 2nd & 3rd communication.
     if (LmatrixRecv%nsend_node.GT.0 .AND. numprocs.NE.1) then
@@ -248,7 +248,7 @@ contains
           if (ierr3.NE.MPI_SUCCESS) call cq_abort('Error in MPI_Wait, nreq3.')
        enddo
     endif
-    if (iprint_MD > 3 .and. inode.EQ.ionode) &
+    if (iprint_MD > 4 .and. inode.EQ.ionode) &
          write (io_lun,*) "Got through communication! Matrix reconstruction follows next."
 
     !! ----- DEBUG: 12/NOV/2012 ----- !!
@@ -288,18 +288,18 @@ contains
     call UpdateMatrix_local(InfoMat,range,nspin_local,matA,flag_remote_iprim,nfile)
     if (numprocs.NE.1) then
        if (LmatrixSend%nrecv_node.GT.0 .OR. LmatrixRecv%nsend_node.GT.0) then
-          if (iprint_MD > 3 .and. inode.EQ.ionode) write (io_lun,*) "Reorganise remote matrix data"
+          if (iprint_MD > 4 .and. inode.EQ.ionode) write (io_lun,*) "Reorganise remote matrix data"
           call UpdateMatrix_remote(range,nspin_local,matA,LmatrixRecv,flag_remote_iprim,irecv2_array,recv_array)
        endif
     endif
     if (flag_MDdebug .AND. iprint_MDdebug.GT.3) write (lun_db5,*) mat_p(matA(1))%matrix(1:)
     if (present(symm)) then
-       if (inode.EQ.ionode.AND.iprint_MD>2) write (io_lun,*) "Symmetrisation !"
+       if (inode.EQ.ionode.AND.iprint_MD>4) write (io_lun,*) "Symmetrisation !"
        call symmetrise_mat(range,nspin_local,trans,matA)
     endif
     call my_barrier()
     if (flag_MDdebug .AND. iprint_MDdebug.GT.3) write (lun_db6,*) mat_p(matA(1))%matrix(1:)
-    if (iprint_MD > 3 .and. inode.EQ.ionode) write (io_lun,*) &
+    if (iprint_MD > 4 .and. inode.EQ.ionode) write (io_lun,*) &
          "Got through 2nd & 3rd MPIs and symmetrising matrix !" !db
 
     ! Deallocation.
@@ -307,16 +307,16 @@ contains
        call deallocate_CommMatArrays(isend_array,isend2_array,send_array, &
             irecv_array,irecv2_array,recv_array, &
             LmatrixSend,LmatrixRecv)
-       if (iprint_MD > 3 .and. inode.EQ.ionode) write (io_lun,*) "Deallocate CommMatArrays" !db
+       if (iprint_MD > 4 .and. inode.EQ.ionode) write (io_lun,*) "Deallocate CommMatArrays" !db
     else
        deallocate (flag_remote_iprim, STAT=stat_alloc)
        if (stat_alloc.NE.0) call cq_abort('Error deallocating flag_remote_iprim:', bundle%n_prim)
-       if (iprint_MD > 3 .and. inode.EQ.ionode) write (io_lun,*) "Deallocate flag_remote_iprim" !db
+       if (iprint_MD > 4 .and. inode.EQ.ionode) write (io_lun,*) "Deallocate flag_remote_iprim" !db
     endif
 
     if (nfile.GT.0) then
        call deallocate_InfoMatrixFile(nfile,InfoMat)
-       if (iprint_MD > 3 .and. inode.EQ.ionode) write (io_lun,*) "Deallocate arrays related to InfoMat" !db
+       if (iprint_MD > 4 .and. inode.EQ.ionode) write (io_lun,*) "Deallocate arrays related to InfoMat" !db
     endif
 
     if (LmatrixRecv%nsend_node.GE.1 .AND. numprocs.NE.1) then
@@ -325,7 +325,7 @@ contains
             LmatrixRecv%nsend_node)
     endif
 
-    if (iprint_MD > 3 .and. inode.EQ.ionode) &
+    if (iprint_MD > 4 .and. inode.EQ.ionode) &
          write (io_lun,*) "Finished communication and matrix reconstruction" !db
 
     !! --- DEBUG: --- !!

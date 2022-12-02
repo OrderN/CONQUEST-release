@@ -481,7 +481,8 @@ contains
     end do
     !
     !
-    if (nspin == 2 .and. ne_magn_in_cell > zero) then
+    ! Removed second condition otherwise variables not set 2022/10/31 08:36 dave
+    if (nspin == 2) then ! .and. ne_magn_in_cell > zero) then 
        ne_spin_in_cell(1) = half * (ne_magn_in_cell + ne_in_cell)
        ne_spin_in_cell(2) = ne_spin_in_cell(1) - ne_magn_in_cell  
        !
@@ -1483,6 +1484,17 @@ contains
 !!$
 !!$
 !!$
+!!$
+    ! Find out what type of run we're doing
+    runtype             = fdf_string(20,'AtomMove.TypeOfRun',       'static')
+    if(leqi(runtype,'pulay')) then
+       runtype = 'sqnm'
+       if(inode==ionode) write(io_lun,fmt='(/4x,"Pulay relaxation superceded by SQNM; changing method.")')
+    end if
+!!$
+!!$
+!!$
+!!$
 !!$ 
     !blip_width = support_grid_spacing *
     !             fdf_double('blip_width_over_support_grid_spacing',four)
@@ -1498,12 +1510,6 @@ contains
     maxpulaystepDMM       = fdf_double ('DM.MaxPulayStepSize',1.0e-1_double)
     LinTol_DMM = fdf_double('DM.LinTol',0.1_double)
 !!$
-!!$
-!!$
-!!$
-!!$
-    ! Find out what type of run we're doing
-    runtype             = fdf_string(20,'AtomMove.TypeOfRun',       'static')
     flag_buffer_old       = fdf_boolean('AtomMove.OldBuffer',        .false.)
     AtomMove_buffer       = fdf_double ('AtomMove.BufferSize',    4.0_double)
     flag_pulay_simpleStep = fdf_boolean('AtomMove.PulaySimpleStep',  .false.)
@@ -1536,7 +1542,11 @@ contains
     flag_self_consistent = fdf_boolean('minE.SelfConsistent',      .true. )
     flag_mix_L_SC_min    = fdf_boolean('minE.MixedLSelfConsistent',.false.)
     ! DRB 2018/02/26 turn off mixed L-SCF with diagonalisation
-    if(flag_mix_L_SC_min.AND.flag_diagonalisation) flag_mix_L_SC_min = .false.
+    if(flag_mix_L_SC_min .and. flag_diagonalisation) then
+       flag_mix_L_SC_min = .false.
+    else if(flag_mix_L_SC_min .and. flag_self_consistent) then 
+       flag_self_consistent = .false.
+    end if
     ! Tweak 2007/03/23 DRB Make Pulay mixing default
     flag_linear_mixing   = fdf_boolean('SC.LinearMixingSC',        .true. )
     A(1)                 = fdf_double ('SC.LinearMixingFactor', 0.5_double)
@@ -2019,8 +2029,8 @@ contains
     ! Basic settings for MD
     flag_MDdebug      = fdf_boolean('AtomMove.Debug',.false.)
     flag_MDcontinue   = fdf_boolean('AtomMove.RestartRun',.false.)
-    flag_SFcoeffReuse = fdf_boolean('AtomMove.ReuseSFcoeff',.true.)
     flag_LmatrixReuse = fdf_boolean('AtomMove.ReuseDM',.true.)
+    flag_SFcoeffReuse = fdf_boolean('AtomMove.ReuseSFcoeff',flag_LmatrixReuse)
     flag_write_xsf    = fdf_boolean('AtomMove.WriteXSF', .true.)
     flag_write_extxyz = fdf_boolean('AtomMove.WriteExtXYZ', .false.)
     ! tsuyoshi 2019/12/30
@@ -2536,7 +2546,9 @@ contains
     use global_module,        only: flag_basis_set, blips,        &
          flag_precondition_blips, io_lun, io_ase, write_ase, flag_LFD, runtype, flag_opt_cell, &
          flag_Multisite, flag_diagonalisation, flag_neutral_atom, temp_ion, &
-         flag_self_consistent, flag_vary_basis, iprint_init, flag_pcc_global, ase_file
+         flag_self_consistent, flag_vary_basis, iprint_init, flag_pcc_global, &
+         nspin, flag_SpinDependentSF, flag_fix_spin_population, ne_spin_in_cell, flag_XLBOMD,&
+         ase_file
     use SelfCon,              only: maxitersSC
     use GenComms,             only: cq_abort
     use minimise,             only: energy_tolerance, L_tolerance,     &
@@ -2585,11 +2597,14 @@ contains
        else
           write(io_lun, fmt='(4x,a15,"CG atomic relaxation")') job_str
        end if
+    else if(leqi(runtype,'sqnm')) then
+       write(io_lun, fmt='(4x,a15,"SQNM atomic relaxation")') job_str
     else if(leqi(runtype,'md')) then
        ensemblestr = md_ensemble
        call chrcap(ensemblestr,3)
        write(io_lun, fmt='(4x,a15,a3," MD run for ",i5," steps ")') job_str, ensemblestr, MDn_steps
-       write(io_lun, fmt='(4x,"Initial ion temperature: ",f9.3,"K")') temp_ion
+       write(io_lun, fmt='(6x,"Initial ion temperature: ",f9.3,"K")') temp_ion
+       if(flag_XLBOMD) write(io_lun, fmt='(6x,"Using extended Lagrangian formalism")')
     else if(leqi(runtype,'lbfgs')) then
        write(io_lun, fmt='(4x,a15,"L-BFGS atomic relaxation")') job_str
     end if
@@ -2607,11 +2622,21 @@ contains
           else
              write(io_lun,'(6x,"Multi-site SFs used")')
           end if
+          if(flag_SpinDependentSF) write(io_lun,'(6x,"SFs are spin dependent")')
        else
           write(io_lun,'(6x,"1:1 PAO to SF mapping")')
        end if
     end if
-    
+    if(nspin==2) then
+       if(flag_fix_spin_population) then
+          write(io_lun,'(6x,"Spin-polarised electrons; population difference fixed at ",f10.6)') &
+               ne_spin_in_cell(1) - ne_spin_in_cell(2)
+       else
+          write(io_lun,'(6x,"Spin-polarised electrons; population difference free")')
+       end if
+    else
+       write(io_lun,'(6x,"Non-spin-polarised electrons")')
+    end if
     if(flag_diagonalisation) then
        write(io_lun,fmt='(6x,"Solving for the K matrix using ",a16)') 'diagonalisation '
        if(iprint_init>0) then

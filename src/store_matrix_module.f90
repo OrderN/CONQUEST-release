@@ -594,7 +594,8 @@ contains
           do ni = 1, bundle%nm_nodgroup(np)
              atom_num=bundle%nm_nodbeg(np)+ni-1
              iprim = iprim + 1
-             if(atom_num /= iprim) write(io_lun,*) 'Warning!! in set_matrix_store : iprim & atom_num = ', &
+             if(atom_num /= iprim) &
+                  write(io_lun,fmt='(8x,a,2i6)') 'Warning!! in set_matrix_store : iprim & atom_num = ', &
                   iprim,atom_num
 
              do neigh = 1, mat(np,range)%n_nab(ni)
@@ -746,7 +747,7 @@ contains
     if(inode == ionode) then
        call io_assign(lun)
        call get_file_name_2rank('InfoGlobal',filename,index_local)
-       if(iprint_MD + min_layer > 3) write(io_lun,*) ' filename = ',filename
+       if(iprint_MD + min_layer > 4) write(io_lun,fmt='(8x,a)') ' filename = '//filename
        open (lun,file=filename,iostat=istat)
        rewind lun
        if (istat.GT.0) call cq_abort('Fail in opening InfoGlobal.dat .')
@@ -996,7 +997,7 @@ contains
        enddo !ig=1, InfoGlob%ni_in_cell
 
        if(flag_velocity_local) then
-          if(iprint_MD>2) write(io_lun,fmt='(6x,a)') 'Reading velocity from '//filename
+          if(iprint_MD>2) write(io_lun,fmt='(8x,a)') 'Reading velocity from '//filename
           read(lun,*)
           do ig=1, InfoGlob%ni_in_cell
              read(lun,101) iglob, InfoGlob%atom_veloc(1:3, ig)
@@ -1331,7 +1332,7 @@ contains
           else
              ! Case 2 : Text Format   old version  -----------------------
              open (lun,file=file_name,status='old',iostat=stat)
-             if (myid==0.AND.iprint_MD > 2) write(*,*) " Trying to open the ASCII file : ",file_name
+             if (myid==0.AND.iprint_MD > 4) write(*,*) " Trying to open the ASCII file : ",file_name
              if (stat/=0) call cq_abort('Fail in opening ASCII Lmatrix file.')
              ! Get dimension, allocate arrays and store necessary data.
              read (lun,*,iostat=stat) proc_id, InfoMat(ifile)%natom_i
@@ -1534,7 +1535,7 @@ contains
     maxiters = maxiter_Dissipation
     if(maxiters < 4) maxiters = 3
     if(maxiters > 9) then
-       if(inode == ionode) write(io_lun,*)  &
+       if(inode == ionode) write(io_lun,fmt='(8x,a,i6)')  &
             &'WARNING: maxiters_Dissipation should be smaller than 10 : ', maxiter_Dissipation
        maxiters = 9
     endif

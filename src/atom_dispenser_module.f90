@@ -207,7 +207,7 @@ contains
     character(20) :: file_name
 
     if (inode.EQ.ionode .AND. Iprint_MD + min_layer > 3) &
-      write (io_lun,*) "Entering allatom2part."
+      write (io_lun,fmt='(10x,a)') "Entering allatom2part."
 
     !! ---------------- DEBUG ------------------ !!
     if (flag_MDdebug .AND. inode.EQ.ionode) then

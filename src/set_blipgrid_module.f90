@@ -138,7 +138,7 @@ contains
     use primary_module,ONLY: bundle, domain
     use cover_module,  ONLY: DCS_parts
     use atomic_density, ONLY: rcut_dens
-    use GenComms, ONLY: cq_abort
+    use GenComms, ONLY: cq_abort, cq_warn
     use functions_on_grid, ONLY: gridsize
     use block_module, ONLY: n_pts_in_block, nx_in_block,ny_in_block,nz_in_block
     use blip, ONLY: blip_info
@@ -180,8 +180,7 @@ contains
        call alloc_halo_atm(halo_atoms_of_blocks(nlpf), max_recv_node_BtoG,max_halo_part,DCS_parts%mx_mcover)
     else
        ! Note: this is a problem because max_recv_node_BtoG isn't defined
-       if(myid==0) write(io_lun,*) ' WARNING !! '
-       if(myid==0) write(io_lun,*) ' before alloc_halo_atm : rcut_atomf < rcut_proj '
+       call cq_warn("set_bg","rcut_atomf<rcut_proj for at least one species")
        call alloc_halo_atm(halo_atoms_of_blocks(nlpf), numprocs,max_halo_part,DCS_parts%mx_mcover)
     endif
     ! Densities
@@ -494,7 +493,7 @@ contains
              if(iprint_index>3.AND.myid==0) write(io_lun,101) inp,naba_blk%nxmin(inp),naba_blk%nxmax(inp),&
                   naba_blk%nymin(inp),naba_blk%nymax(inp),&
                   naba_blk%nzmin(inp),naba_blk%nzmax(inp)
-101          format('inp =',i4,' nxmin,max= ',2i6,' ny ',2i6,' nz ',2i6)
+101          format(8x,'inp =',i4,' nxmin,max= ',2i6,' ny ',2i6,' nz ',2i6)
 
           enddo ! ni (atoms in the primary sets of partitions)
 
@@ -1844,7 +1843,7 @@ contains
           ia2=atoms_on_node(iprim,nnd_rem)           
 
           if(iprim /= atom_number_on_node(ia2)) &
-               write(io_lun,*) ' ERROR: IPRIM in make_table! '
+               write(io_lun,*) ' ERROR: IPRIM in make_table! ',iprim, atom_number_on_node(ia2)
           !write(io_lun,102) ii,j,ia1,ia2
           !102 format(6x,'ii,j,ia1,ia2 = ',2i4,2i6)
           ! glob no. of iprim-th atm on nnd_rem
