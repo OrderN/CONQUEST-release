@@ -1627,7 +1627,7 @@ contains
        end do
     end do
     if(iprint_DM>=5) then
-       if(myid==0) write(io_lun,fmt='(10x,a,i6)') myid," calling part iii"
+       if(myid==0) write(io_lun,fmt='(10x,i6,a)') myid," calling part iii"
        call my_barrier()
     end if
     ! Part (iii)
@@ -3428,7 +3428,7 @@ contains
     maxsend = 0
     do i=1,numprocs
        if(iprint_DM + min_layer>=4.AND.myid==0) &
-            write(io_lun,fmt='(10x,a,2i6)') myid,' Curr loc atoms: ',i,current_loc_atoms(i)
+            write(io_lun,fmt='(10x,i6,a,2i6)') myid,' Curr loc atoms: ',i,current_loc_atoms(i)
        if(current_loc_atoms(i)>maxloc) maxloc = current_loc_atoms(i)
        do j=1,bundle%mx_iprim ! Needs to be mx_iprim because goes over primary atoms on REMOTE processors
           if(ints(i,j)>maxint) maxint = ints(i,j)
@@ -3532,7 +3532,7 @@ contains
     do i=1,matrix_size ! Effectively all bands
        if(abs(occs(i))>RD_ERR) then
           len = i !len+1
-          if(myid==0.AND.iprint_DM + min_layer>=4) write(io_lun,fmt='(10x,a,i6)') 'Occ is ',occs(i)
+          if(myid==0.AND.iprint_DM + min_layer>=4) write(io_lun,fmt='(10x,a,f8.4)') 'Occ is ',occs(i)
        end if
     end do
     len_occ = len
@@ -4203,7 +4203,7 @@ contains
     end if
     ! Now, if this processor is involved, do the diagonalisation
     if (iprint_DM + min_layer > 3 .and. inode == ionode) &
-         write (io_lun, fmt='(10x,a,5i6)') myid, 'Proc row, cols, me: ', &
+         write (io_lun, fmt='(10x,i6,a,5i6)') myid, 'Proc row, cols, me: ', &
          proc_rows, proc_cols, me, index_kpoint, nkpoints_max
     if (index_kpoint <= N_kpoints_in_pg(pgid)) then
        ! Call the diagonalisation routine for generalised problem
