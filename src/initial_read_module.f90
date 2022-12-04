@@ -3033,19 +3033,19 @@ contains
              !
              ! BEGIN %%%% ASE printing %%%%
              !
-             if ( write_ase ) then
-                inquire(io_ase, opened=test_ase) 
-                if ( .not. test_ase ) open(io_ase,file=ase_file, status='old', action='write',&
-                     iostat=stat, position='append')
-                
-                write(io_ase,*)
-                write(io_ase,7) nkp
-                do i=1,nkp
-                   write (io_ase,fmt='(8x,i5,3f15.6,f12.3)') &
-                        i,kk(1,i),kk(2,i),kk(3,i),wtk(i)
-                end do
-                call io_close(io_ase)
-             end if
+!!$             if ( write_ase ) then
+!!$                inquire(io_ase, opened=test_ase) 
+!!$                if ( .not. test_ase ) open(io_ase,file=ase_file, status='old', action='write',&
+!!$                     iostat=stat, position='append')
+!!$                
+!!$                write(io_ase,*)
+!!$                write(io_ase,7) nkp
+!!$                do i=1,nkp
+!!$                   write (io_ase,fmt='(8x,i5,3f15.6,f12.3)') &
+!!$                        i,kk(1,i),kk(2,i),kk(3,i),wtk(i)
+!!$                end do
+!!$                call io_close(io_ase)
+!!$             end if
              !
              ! END %%%% ASE printing %%%%
              !
@@ -3107,18 +3107,18 @@ contains
              !
              ! BEGIN %%%% ASE printing %%%%
              !
-             if ( write_ase ) then
-                inquire(io_ase, opened=test_ase) 
-                if ( .not. test_ase ) open(io_ase,file=ase_file, status='old', action='write',&
-                     iostat=stat, position='append')             
-                write(io_ase,*)
-                write(io_ase,7) nkp
-                do i=1,nkp
-                   write(io_ase,fmt='(8x,i5,3f15.6,f12.3)')&
-                        i,kk(1,i)/(two*pi)*rcellx,kk(2,i)/(two*pi)*rcellx,kk(3,i)/(two*pi)*rcellx,wtk(i)
-                end do
-                call io_close(io_ase)
-             end if
+!!$             if ( write_ase ) then
+!!$                inquire(io_ase, opened=test_ase) 
+!!$                if ( .not. test_ase ) open(io_ase,file=ase_file, status='old', action='write',&
+!!$                     iostat=stat, position='append')             
+!!$                write(io_ase,*)
+!!$                write(io_ase,7) nkp
+!!$                do i=1,nkp
+!!$                   write(io_ase,fmt='(8x,i5,3f15.6,f12.3)')&
+!!$                        i,kk(1,i)/(two*pi)*rcellx,kk(2,i)/(two*pi)*rcellx,kk(3,i)/(two*pi)*rcellx,wtk(i)
+!!$                end do
+!!$                call io_close(io_ase)
+!!$             end if
              !
              ! END %%%% ASE printing %%%%
              !
@@ -3273,21 +3273,21 @@ contains
           !
           ! BEGIN %%%% ASE printing %%%%
           !
-          if ( write_ase ) then
-             inquire(io_ase, opened=test_ase) 
-             if ( .not. test_ase ) open(io_ase,file=ase_file, status='old', action='write',&
-                  iostat=stat, position='append')                       
-             write(io_ase,*)
-             write(io_ase,10) nkp
-             do i=1,nkp
-                write (io_ase,fmt='(8x,i5,3f15.6,f12.3)') &
-                     i,kk(1,i),kk(2,i),kk(3,i),wtk(i)
-             end do
-             call io_close(io_ase)
-             !
-             ! END %%%% ASE printing %%%%
-             !    
-          end if
+!!$          if ( write_ase ) then
+!!$             inquire(io_ase, opened=test_ase) 
+!!$             if ( .not. test_ase ) open(io_ase,file=ase_file, status='old', action='write',&
+!!$                  iostat=stat, position='append')                       
+!!$             write(io_ase,*)
+!!$             write(io_ase,10) nkp
+!!$             do i=1,nkp
+!!$                write (io_ase,fmt='(8x,i5,3f15.6,f12.3)') &
+!!$                     i,kk(1,i),kk(2,i),kk(3,i),wtk(i)
+!!$             end do
+!!$             call io_close(io_ase) 
+!!$          end if
+!!$       !
+!!$       ! END %%%% ASE printing %%%%
+!!$       !             
        end if
        
        do i = 1, nkp
@@ -3296,7 +3296,25 @@ contains
           kk(3,i) = two * pi * kk(3,i) / rcellz
        end do
     end if ! MP mesh branch
-
+    !
+    ! BEGIN %%%% ASE printing %%%%
+    !
+    if (inode==ionode .and. write_ase ) then
+       inquire(io_ase, opened=test_ase) 
+       if ( .not. test_ase ) open(io_ase,file=ase_file, status='old', action='write',&
+            iostat=stat, position='append')                       
+       write(io_ase,*)
+       write(io_ase,10) nkp
+       do i=1,nkp
+          write (io_ase,fmt='(8x,i5,3f15.6,f12.3)') &
+               i, kk(1,i)*rcellx/(two*pi), kk(2,i)*rcelly/(two*pi), kk(3,i)*rcellz/(two*pi), wtk(i)
+       end do
+       call io_close(io_ase)
+       !
+    end if
+    !
+    ! END %%%% ASE printing %%%%
+    !    
     ! Write out k-points
     if(inode==ionode.AND.iprint_init>2) then
        write(io_lun,51) nkp
