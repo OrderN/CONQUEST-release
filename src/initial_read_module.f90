@@ -484,7 +484,7 @@ contains
     ! Removed second condition otherwise variables not set 2022/10/31 08:36 dave
     if (nspin == 2) then ! .and. ne_magn_in_cell > zero) then
        ! Yes but should consider preceding set up via Spin.NeUP/Spin.NeDN
-       if ( ne_spin_in_cell(1) == zero .and. ne_spin_in_cell(1) == zero) then
+       if ( abs(ne_spin_in_cell(1))<RD_ERR .and. abs(ne_spin_in_cell(1))<RD_ERR) then
           ne_spin_in_cell(1) = half * (ne_magn_in_cell + ne_in_cell)
           ne_spin_in_cell(2) = ne_spin_in_cell(1) - ne_magn_in_cell
        end if
