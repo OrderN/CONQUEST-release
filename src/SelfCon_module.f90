@@ -1619,7 +1619,8 @@ contains
     use mult_module,       only: LNV_matrix_multiply
     use DMMin,             only: FindMinDM
     use global_module,     only: iprint_SC, atomf, flag_perform_cDFT, &
-                                 nspin, spin_factor, flag_diagonalisation, flag_LFD, flag_Multisite
+                                 nspin, spin_factor, flag_diagonalisation, flag_LFD, flag_Multisite, &
+                                 ne_spin_in_cell, nspin, flag_fix_spin_population
     use H_matrix_module,   only: get_H_matrix, get_output_energies
     use S_matrix_module,   only: get_S_matrix
     !use DiagModule,        only: diagon
@@ -1688,6 +1689,8 @@ contains
     call stop_timer(tmr_std_chargescf) ! This routine is always call within area 5
     call get_electronic_density(rhoout, electrons, atomfns, &
                                 temp_supp_fn, inode, ionode, size, backtrace_level)
+    ! we should update ne_spin_in_cell(:) here, I think.   2022/Dec/07 TM
+       if(nspin>1 .and. .not.flag_fix_spin_population) ne_spin_in_cell(:) = electrons(:)
     call start_timer(tmr_std_chargescf)
     call free_temp_fn_on_grid(temp_supp_fn)
 

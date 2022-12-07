@@ -192,7 +192,8 @@ contains
     use species_module,         only: n_species, species, charge,      &
          non_local_species,               &
          nsf_species, npao_species,       &
-         natomf_species
+         natomf_species, charge_up, charge_dn
+    use density_module, only: flag_InitialAtomicSpin
     use GenComms,               only: my_barrier, cq_abort, cq_warn
     use pseudopotential_data,   only: non_local, read_pseudopotential
     use pseudopotential_common, only: core_radius, pseudo_type, OLDPS, &
@@ -234,6 +235,7 @@ contains
 
     ! for checking the sum of electrons of spin channels
     real(double) :: sum_elecN_spin
+    real(double) :: charge_tmp
 
     !****lat<$
     call start_backtrace(t=backtrace_timer,who='read_and_write',where=1,level=1)
@@ -505,6 +507,26 @@ contains
        end if
     end if
     !
+    ! IF (flag_InitialAtomicSpin) : atomic spin density will be set
+    !
+    if(flag_InitialAtomicSpin) then
+      do i = 1, n_species
+       charge_tmp = charge_up(i) + charge_dn(i)
+       if(charge_tmp < RD_ERR) then   ! 
+         charge_up(i) = half*charge(i)
+         charge_dn(i) = half*charge(i)
+         !if(inode .eq. ionode) write(io_lun,fmt='(6x,a,i3,a,2f15.8)') &
+         ! 'ispecies = ', i,' charge_up, dn = ',charge_up(i), charge_dn(i)
+       endif
+      enddo !i = 1, n_species
+     ne_spin_in_cell(:) = zero
+     do i = 1, ni_in_cell
+       ! number_of_bands = number_of_bands + half * charge(species(i))
+       ne_spin_in_cell(1) = ne_spin_in_cell(1) + charge_up(species(i))
+       ne_spin_in_cell(2) = ne_spin_in_cell(2) + charge_dn(species(i))
+     end do
+     !if(inode .eq. ionode) write(io_lun,fmt='(6x,a,2f15.8)') 'ne_spin_in_cell(1:2) = ',ne_spin_in_cell(1),ne_spin_in_cell(2)
+    endif
     ! 
     !
     ! Set up various lengths, volumes, reciprocals etc. for convenient use
@@ -947,6 +969,7 @@ contains
     ! spin polarisation
     logical :: flag_spin_polarisation
     real(double) :: sum_elecN_spin
+    real(double) :: charge_tmp
 
     ! Set defaults
     vary_mu  = .true.
@@ -1323,6 +1346,7 @@ contains
     !maxnsf      = 0
     !max_rc = zero
     min_blip_sp = 1.0e8_double
+          flag_InitialAtomicSpin = .false.
     do i=1,n_species
        charge(i)         = zero
        charge_up(i)      = zero
@@ -1346,7 +1370,6 @@ contains
           charge_up(i)     = fdf_double ('Atom.SpinNeUp',zero)
           charge_dn(i)     = fdf_double ('Atom.SpinNeDn',zero)
           sum_elecN_spin   = charge_up(i)+charge_dn(i)
-          flag_InitialAtomicSpin = .false.
           if (abs(sum_elecN_spin)>RD_ERR) then
              flag_InitialAtomicSpin = .true.
              ! We will check that the sum of charge_up and charge_dn matches charge later
@@ -1423,6 +1446,22 @@ contains
           call cq_abort("Error: Neutral Atom Projector cannot be used for ghost atom, at present.")
        endif
     endif
+          if(flag_InitialAtomicSpin) then
+            ! we may not need the following do-loop since charge(:) has not been defined yet, here.
+            do i = 1, n_species
+             charge_tmp = charge_up(i) + charge_dn(i)
+             if(charge_tmp < RD_ERR) then   ! includes ghost atom?
+               charge_up(i) = half*charge(i)
+               charge_dn(i) = half*charge(i)
+             endif
+            enddo !i = 1, n_species
+           !if(inode .eq. ionode) then
+           ! write(io_lun,*) 'TMTMTM: flag_InitialAtomicSpin = ',flag_InitialAtomicSpin
+           ! do i = 1, n_species
+           !    write(io_lun,*) ' ispecies, charge_up and charge_dn = ',i, charge_up(i), charge_dn(i)
+           ! enddo
+           !endif
+          endif
 !!$        
 !!$        
 !!$        
