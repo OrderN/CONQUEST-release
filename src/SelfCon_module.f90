@@ -1608,6 +1608,8 @@ contains
   !!    Fix module use for get_H_matrix
   !!   2021/07/28 10:13 dave
   !!    Correctly calculate DFT energy (Ha, XC and local contributions use output density)
+  !!   2022/12/07 17:56 dave and tsuyoshi
+  !!    Introduce update for ne_spin_in_cell to reflect present occupation
   !!  SOURCE
   !!
   subroutine get_new_rho(record, reset_L, fixed_potential, vary_mu,  &
@@ -1618,7 +1620,7 @@ contains
     use logicals
     use mult_module,       only: LNV_matrix_multiply
     use DMMin,             only: FindMinDM
-    use global_module,     only: iprint_SC, atomf, flag_perform_cDFT, &
+    use global_module,     only: iprint_SC, atomf, flag_perform_cDFT, ne_in_cell, &
                                  nspin, spin_factor, flag_diagonalisation, flag_LFD, flag_Multisite, &
                                  ne_spin_in_cell, nspin, flag_fix_spin_population
     use H_matrix_module,   only: get_H_matrix, get_output_energies
@@ -1645,7 +1647,7 @@ contains
     integer        :: backtrace_level
 
     ! Local variables
-    real(double) :: start_BE, new_BE, Ltol
+    real(double) :: start_BE, new_BE, Ltol, elec_tot
     real(double), dimension(nspin) :: electrons, energy_spin
     
 !****lat<$
@@ -1690,7 +1692,12 @@ contains
     call get_electronic_density(rhoout, electrons, atomfns, &
                                 temp_supp_fn, inode, ionode, size, backtrace_level)
     ! we should update ne_spin_in_cell(:) here, I think.   2022/Dec/07 TM
-       if(nspin>1 .and. .not.flag_fix_spin_population) ne_spin_in_cell(:) = electrons(:)
+    if(nspin>1 .and. (.not.flag_fix_spin_population)) then
+       ne_spin_in_cell(:) = electrons(:)
+       ! Rescale to ensure correct total number of electrons in ne_spin_in_cell 2022/12/07 17:54 dave
+       elec_tot = sum(electrons)
+       ne_spin_in_cell = ne_spin_in_cell * ne_in_cell/elec_tot
+    end if
     call start_timer(tmr_std_chargescf)
     call free_temp_fn_on_grid(temp_supp_fn)
 
