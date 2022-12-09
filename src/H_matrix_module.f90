@@ -804,12 +804,40 @@ contains
        end if
        if (dump_pot(3)) call dump_locps("PS", pseudopotential, size, inode)
        if (dump_pot(4)) then
+        ! OLD: dumping Total potential  
+         ! if (nspin == 1) then
+         !    call dump_locps("Total", potential(:,1), size, inode)
+         ! else
+         !    call dump_locps("Total_up", potential(:,1), size, inode)
+         !    call dump_locps("Total_dn", potential(:,2), size, inode)
+         ! end if
+        ! Change (2022/Dec/09) : Electrostaic potential is now dumped.
+        !  using density_wk for dump electrostatic potential
+          allocate(density_wk(size,nspin), STAT=stat)
+          if (stat /= 0) &
+            call cq_abort("Error allocating density_wk : ", &
+                          stat)
+          call reg_alloc_mem(area_ops, size * nspin, type_dbl)
+         density_wk =zero
+
+         ! total_loc_potential = loc_Har + loc_ps + loc_XC
+         !    loc_ES (ElectroStatic) = loc_Har + loc_ps
+         do spin = 1, nspin
+          call copy(n_my_grid_points, potential(:,spin), 1, density_wk(:,spin), 1)
+          call axpy(n_my_grid_points, -one, xc_potential(:,spin), 1, &
+                    density_wk(:,spin), 1)
+         end do
           if (nspin == 1) then
-             call dump_locps("Total", potential(:,1), size, inode)
+             call dump_locps("ES", density_wk(:,1), size, inode)
           else
-             call dump_locps("Total_up", potential(:,1), size, inode)
-             call dump_locps("Total_dn", potential(:,2), size, inode)
+             call dump_locps("ES_up", density_wk(:,1), size, inode)
+             call dump_locps("ES_dn", density_wk(:,2), size, inode)
           end if
+         deallocate(density_wk, STAT=stat)
+         if (stat /= 0) &
+            call cq_abort("Error deallocating density_wk: ", stat)
+         call reg_dealloc_mem(area_ops, size* nspin, type_dbl)
+
        end if
     end if
     !
