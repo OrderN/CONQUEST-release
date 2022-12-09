@@ -160,6 +160,9 @@ contains
     nsampx = fdf_integer('Process.SampleX',1)
     nsampy = fdf_integer('Process.SampleY',1)
     nsampz = fdf_integer('Process.SampleZ',1)
+    ! Energy limits (relative to Ef or absolute)
+    E_wf_min = fdf_double('IO.min_wf_E',zero)
+    E_wf_max = fdf_double('IO.max_wf_E',zero)
     ! Read in details of bands output from Conquest
     n_bands_active=fdf_integer('IO.maxnoWF',0)
     if(n_bands_active>0) then
@@ -178,20 +181,17 @@ contains
        end if
        flag_wf_range = .false.
     else
-       ! Energy limits (relative to Ef or absolute)
-       E_wf_min = fdf_double('IO.min_wf_E',zero)
-       E_wf_max = fdf_double('IO.max_wf_E',zero)
        if(abs(E_wf_max-E_wf_min)>1e-8_double) then
           flag_wf_range = .true.
           flag_wf_range_Ef = fdf_boolean('IO.WFRangeRelative',.true.)
        else
-          flag_wf_range_Ef = fdf_boolean('IO.WFRangeRelative',.false.)
+          call cq_abort("No bands specified!")
        end if
     end if
     ! Now read details of bands to output from processing
     ! Energy limits
-    E_procwf_min = fdf_double('Process.min_wf_E',zero)
-    E_procwf_max = fdf_double('Process.max_wf_E',zero)
+    E_procwf_min = fdf_double('Process.min_wf_E',E_wf_min)
+    E_procwf_max = fdf_double('Process.max_wf_E',E_wf_max)
     ! Is the range relative to Ef (T) or absolute (F)
     flag_procwf_range_Ef = fdf_boolean('Process.WFRangeRelative',.true.)
     if(abs(E_procwf_max-E_procwf_min)>1e-8_double) then
@@ -371,10 +371,10 @@ contains
     ! Fermi level
     efermi = zero
     if(nspin==1) then
-       read(17,fmt='(a6,f12.5)') str,efermi(1)
+       read(17,fmt='(a6,f18.10)') str,efermi(1)
        write(*,fmt='(4x,"Fermi level: ",f12.5," Ha")') efermi(1)
     else
-       read(17,fmt='(a6,2f12.5)') str,efermi(1), efermi(2)
+       read(17,fmt='(a6,2f18.10)') str,efermi(1), efermi(2)
        write(*,fmt='(4x,"Fermi levels: ",2f12.5," Ha")') efermi
     end if
     read(17,*) str
@@ -495,7 +495,7 @@ contains
              do i_kp = 1, nkp
                 read(17,*) n_prim ! Number of atoms on process
                 do i_band = 1, n_bands_active
-                   if(band_active_kp(i_kp, i_band, i_spin) == 1) then
+                   if(band_active_kp(band_no(i_band), i_kp, i_spin) == 1) then
                       read(17,*) i, eval
                       ! Loop over primary atoms
                       do i_prim = 1, n_prim

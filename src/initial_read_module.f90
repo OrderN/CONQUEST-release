@@ -1651,10 +1651,10 @@ contains
 
     ! read wavefunction output flags
     mx_temp_matrices = fdf_integer('General.MaxTempMatrices',100)
+    wf_self_con=.false.
     flag_out_wf=fdf_boolean('IO.outputWF',.false.)
     if (flag_out_wf) then
        if (flag_diagonalisation .and. leqi(runtype,'static')) then
-          wf_self_con=.false.
           ! The user can either specify which bands explicitly
           max_wf=fdf_integer('IO.maxnoWF',0)
           if(max_wf>0) then
