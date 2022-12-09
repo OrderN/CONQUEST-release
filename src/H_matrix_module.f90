@@ -632,6 +632,7 @@ contains
     real(double), dimension(:,:), allocatable :: xc_potential
     real(double), dimension(:,:), allocatable :: density_wk ! rho + density_pcc
     real(double), dimension(:),   allocatable :: density_wk_tot
+    integer :: locps_choice_tmp
     !complex(double_cplx), dimension(:), allocatable :: chdenr, locpotr
     real(double), dimension(:),   allocatable :: drho_tot
     character(len=20) :: subname = "get_h_on_atomfns: "
@@ -777,8 +778,9 @@ contains
     !
     ! Print potential, if necessary
     if (locps_output) then
-       dump_pot = (/.false., .true., .false., .false./)
-       if (locps_choice < 0 .or. locps_choice > 15) then
+       dump_pot = (/.false., .false., .false., .false./)
+       locps_choice_tmp = locps_choice
+       if (locps_choice_tmp < 0 .or. locps_choice_tmp > 15) then
           if (inode == ionode) &
                write (io_lun, *) 'Bad choice for local potential &
                                   &printout: no output.'
@@ -786,9 +788,9 @@ contains
           if (inode == ionode) &
                write (io_lun, *) 'Writing local potential to file(s).'
           do i = 4, 1, -1
-             pot_flag = mod(locps_choice/(2**(i-1)), 2)
+             pot_flag = mod(locps_choice_tmp/(2**(i-1)), 2)
              if (pot_flag > 0) dump_pot(i) = .true.
-             locps_choice = locps_choice - pot_flag*(2**(i-1))
+             locps_choice_tmp = locps_choice_tmp - pot_flag*(2**(i-1))
           end do
        end if
        if (dump_pot(1)) call dump_locps("Hartree", h_potential, size, inode)
