@@ -3606,7 +3606,9 @@ contains
              RecvBuffer(1:len,1:recv_info(recv_proc+1)%orbs) = SendBuffer(1:len,1:recv_info(recv_proc+1)%orbs)
           end if
           if(iprint_DM + min_layer>=4.AND.myid==0) &
-               write(io_lun,fmt='(10x,a,i6)') 'Doing the mapchunk', recv_to_FSC
+               !write(io_lun,fmt='(10x,a,i6)') 'Doing the mapchunk', recv_to_FSC
+               write(io_lun,fmt='(10x,a,100000i6)') 'Doing the mapchunk', recv_to_FSC
+               !write(io_lun,fmt='(10x,a,*(i6))') 'Doing the mapchunk', recv_to_FSC
           do j=1,current_loc_atoms(recv_proc+1)
              mapchunk(j) = LocalAtom(recv_to_FSC(j))
           end do
@@ -3634,12 +3636,12 @@ contains
              do inter = 1,recv_info(recv_proc+1)%ints(locatom)
                 prim = recv_info(recv_proc+1)%prim_atom(inter,locatom)
                 if(iprint_DM + min_layer>=4.AND.myid==0) &
-                     write(io_lun,fmt='(10x,a,i6)') 'Inter: ',inter,prim
+                     write(io_lun,fmt='(10x,a,2i6)') 'Inter: ',inter,prim
                 phase = kps(1)*recv_info(recv_proc+1)%dx(inter,locatom) + &
                      kps(2)*recv_info(recv_proc+1)%dy(inter,locatom) + &
                      kps(3)*recv_info(recv_proc+1)%dz(inter,locatom)
                 if(iprint_DM + min_layer>=5.AND.myid==0) &
-                     write(io_lun,fmt='(10x,a,3i6)') 'Prim, where, phase: ', &
+                     write(io_lun,fmt='(10x,a,2i6,f12.4)') 'Prim, where, phase: ', &
                      prim, whereMat, phase
                 rfac = cos(phase)
                 ifac = sin(phase)
@@ -4191,7 +4193,7 @@ contains
     il = 0
     iu = 0
     if (iprint_DM + min_layer > 3 .and. (inode == ionode)) &
-         write (io_lun, fmt='(10x,a)') myid, ' Calling DistributeCQ_to_SC for H'
+         write (io_lun, fmt='(10x,i6,a)') myid, 'Calling DistributeCQ_to_SC for H'
     ! Form the Hamiltonian and overlap for this k-point and send them to appropriate processors
     if(PRESENT(kpassed)) then
        if(proc_groups>1) call cq_abort("Coding error: can't have more than one PG and pass k-point to distrib_and_diag")
