@@ -171,7 +171,8 @@ contains
        flag_ff = .true.
        flag_wf = .true.
        if (flag_out_wf.OR.flag_write_DOS) then
-          wf_self_con=.true.
+          ! This is done within get_E_and_F
+          !wf_self_con=.true.
           flag_ff = .false.
           flag_wf = .false.
        endif
