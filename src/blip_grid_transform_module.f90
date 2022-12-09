@@ -125,7 +125,7 @@ contains
        call cq_abort(' No primary atoms for processor=',myid)
     endif
     do iprim = 1,bundle%mx_iprim
-       if(iprint_basis>2.AND.myid==0) write(io_lun,fmt='(2x,"Proc: ",i5," blip-transform for atom ",i5)') myid,iprim
+       if(iprint_basis>3.AND.myid==0) write(io_lun,fmt='(8x,"Proc: ",i5," blip-transform for atom ",i5)') myid,iprim
        call my_barrier()
        if( iprim <= bundle%n_prim ) then
           spec = bundle%species(iprim)
@@ -134,7 +134,7 @@ contains
        else
           nsf_send = 0
        endif
-       if(iprint_basis>2.AND.myid==0) write(io_lun,fmt='(2x,"Proc: ",i5," distribute result for atom ",i5)') myid,iprim
+       if(iprint_basis>3.AND.myid==0) write(io_lun,fmt='(8x,"Proc: ",i5," distribute result for atom ",i5)') myid,iprim
        call my_barrier()
        call distribute_result(myid,iprim,nsf_send,support)
     end do
@@ -2260,7 +2260,7 @@ contains
           call reg_dealloc_mem(area_basis,msize,type_dbl)
           call stop_timer(tmr_std_allocation)
        else
-          if(myid==0) write(io_lun,fmt='(2x,"Possible problem in collect_result: recv_array not allocated")')
+          if(myid==0) write(io_lun,fmt='(8x,"Possible problem in collect_result: recv_array not allocated")')
        end if
     end if
     call my_barrier() ! this is not needed, I think.

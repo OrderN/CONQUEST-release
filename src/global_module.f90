@@ -155,6 +155,8 @@
 !!    Added atom_vels 
 !!   2021/07/19 15:00 dave
 !!    Removed flag for wavefunction output by k-point
+!!   2022/10/28 15:56 lionel
+!!    Added ASE output unit
 !!  SOURCE
 !!
 module global_module
@@ -166,7 +168,12 @@ module global_module
   implicit none
 
   integer :: iprint                 ! Level of output
-  integer :: io_lun                 ! Output unit
+  integer :: io_lun                 ! Conquest output unit
+  !
+  integer :: io_ase                 ! ASE output unit  
+  logical :: write_ase              ! Whether we write ASE ouptput or not
+  character(len=80) :: ase_file = 'Conquest_out_ase' ! ASE file output
+  !
   integer, allocatable, dimension(:) :: id_glob      ! global label of atom in sim cell (CC)
   integer, allocatable, dimension(:) :: id_glob_inv  ! gives global number for a CC atom
   integer, dimension(:), allocatable, target :: species_glob ! gives species 
@@ -186,6 +193,7 @@ module global_module
   logical,      dimension(:,:), allocatable :: flag_move_atom  ! Move atoms ?
   integer,      dimension(:),   allocatable :: flag_cdft_atom
   logical :: restart_DM, restart_rho, restart_T, restart_X
+  logical :: flag_DM_converged
 
   integer :: global_maxatomspart ! Maximum atoms per partition, if exceeded, triggers partitioning refinement
 
@@ -293,6 +301,7 @@ module global_module
   integer, parameter :: IPRINT_TIME_THRES2 = 4  ! Not that important
   integer, parameter :: IPRINT_TIME_THRES3 = 6  ! For special purposes
 
+  integer :: min_layer ! Layer of minimisation algorithm (from 0 to -n)
   ! For P.C.C.
   logical :: flag_pcc_global = .false.
 

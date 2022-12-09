@@ -117,6 +117,7 @@ contains
   subroutine init_pseudo_tm(ecore, ncf_out) 
     
     use datatypes,      only: double
+    use numbers,        only: zero
     use global_module,  only: iprint_pseudo, flag_neutral_atom
     use block_module,   only: n_pts_in_block
     use GenComms,       only: cq_abort, myid, inode, ionode
@@ -175,7 +176,11 @@ contains
     call stop_timer(tmr_std_pseudopot)    ! This is timed inside set_tm_pseudo
     call set_tm_pseudo         !contained in this module
     call start_timer(tmr_std_pseudopot)
-    call get_energy_shift(ecore)   !contained in this module
+    if(flag_neutral_atom) then
+       ecore = zero
+    else
+       call get_energy_shift(ecore)   !contained in this module
+    end if
     call stop_timer(tmr_std_pseudopot)
 
 !****lat<$
@@ -968,7 +973,7 @@ contains
     use dimens, only: grid_point_volume, n_my_grid_points
     use global_module, only: rcellx,rcelly,rcellz,id_glob, iprint_pseudo, &
          species_glob, nlpf,ni_in_cell, flag_neutral_atom, dens, &
-         flag_full_stress, flag_stress, flag_atomic_stress, atomic_stress
+         flag_full_stress, flag_stress, flag_atomic_stress, atomic_stress, min_layer
     use block_module, only : n_pts_in_block
     use group_module, only : blocks, parts
     use primary_module, only: domain
@@ -982,6 +987,7 @@ contains
     use density_module, only: density_atom
     use atomic_density, only: atomic_density_table ! for Neutral atom potential
     use pseudopotential_common, only: flag_neutral_atom_projector
+    use io_module, only: return_prefix
 
     implicit none   
 
@@ -1015,10 +1021,16 @@ contains
     real(double),allocatable, dimension(:) :: h_potential, drho_tot
     ! Store potential scaled by 2GaGb/G^4 for stress
     real(double),allocatable :: loc_charge(:)
+    character(len=10) :: subname = "pseudo_tm_force:  "
+    character(len=120) :: prefix
+
+    prefix = return_prefix(subname, min_layer)
 
     call start_backtrace(t=backtrace_timer,who='loc_pp_derivative_tm',where=7,level=3,echo=.true.)
     call start_timer(tmr_std_pseudopot)
-    if(iprint_pseudo>2.AND.inode==ionode) write(io_lun,fmt='(4x,"Doing TM force with pseudotype: ",i3)') pseudo(1)%tm_loc_pot
+    if(iprint_pseudo + min_layer>3.AND.inode==ionode) &
+         write(io_lun,fmt='(4x,a,i3)') trim(prefix)//" starting with pseudotype: ", &
+         pseudo(1)%tm_loc_pot
     ! the structure of this subroutine is similar to set_tm_pseudo et.
     HF_force = zero
     loc_HF_stress = zero
@@ -1912,17 +1924,17 @@ contains
           call calc_energy_shift(pseudo(ispecies),nfac2, eshift2, vlocG0_2)
           call calc_energy_shift(pseudo(ispecies),nfac3, eshift3, vlocG0_3)
           !if(abs(eshift2-eshift3) > eps) write(io_lun,fmt='(10x,"WARNING!!!   eshift")')
-          if(inode == ionode.AND.iprint_pseudo>0) then
+          if(inode == ionode.AND.iprint_pseudo>2) then
              write (io_lun, &
-                    '(10x,a11,i2,a12,3i3,a19,d15.7,/,63x,d15.7,/,63x,d15.7)') &
+                    '(4x,a11,i2,a12,3i3,a19,d15.7,/,63x,d15.7,/,63x,d15.7)') &
                    'ispecies = ', ispecies, '  eshift for', &
                    nfac1, nfac2, nfac3, ' times fine mesh = ', &
                    eshift1, eshift2, eshift3
              write (io_lun,'(55x,a8,d15.7)') ' diff = ', eshift2 - eshift3
           end if
-          if(inode == ionode.AND.iprint_pseudo>0) then
+          if(inode == ionode.AND.iprint_pseudo>2) then
              write (io_lun, &
-                    '(10x,a11,i2,a12,3i3,a19,d15.7,/,63x,d15.7,/,63x,d15.7)') &
+                    '(4x,a11,i2,a12,3i3,a19,d15.7,/,63x,d15.7,/,63x,d15.7)') &
                    'ispecies = ', ispecies, '  eshift for', &
                    nfac1, nfac2, nfac3, ' times fine mesh = ', &
                    vlocG0_1, vlocG0_2, vlocG0_3
@@ -2098,8 +2110,8 @@ contains
             intvloc = intvloc +  four *pi * rr * wos(imesh) * &
                  (vlocal + z * erfarg )
             !(vlocal + z * erf(sqrt(beta) *rr) )
-            if(imesh==nmesh_vloc.AND.inode==ionode.AND.iprint_pseudo>1) &
-                 write(io_lun,fmt='(2x,"Sum of local potential and core charge: ",3f12.8)') &
+            if(imesh==nmesh_vloc.AND.inode==ionode.AND.iprint_pseudo>2) &
+                 write(io_lun,fmt='(4x,"Sum of local potential and core charge: ",3f12.8)') &
                  vlocal + z, vlocal, z
          enddo
          call start_timer(tmr_std_allocation)
@@ -2109,7 +2121,7 @@ contains
          !write(io_lun,*) 'Int. vloc: ',intvloc
          !intvloc = intvloc + pi*z/beta
          if(PRESENT(vlocG0)) vlocG0 = intvloc
-         !write(io_lun,*) 'Int. vloc, eshift: ',intvloc,eshift, beta, pi*z/beta, z/beta
+         !write(io_lun,*) 'Int. vloc, eshift: ',intvloc,eshift!, beta, pi*z/beta, z/beta
       else
          nmesh = pseudo%chlocal%n
          nmesh_vloc = (nmesh-1) * nfac + 1
@@ -2170,7 +2182,7 @@ contains
             func2%f(imesh) = rho* four * pi * rr
             zcore=zcore + func1%f(imesh)*wos(imesh)
          enddo
-         if(inode == ionode.AND.iprint_pseudo>1) write(io_lun,fmt='(2x,"Integral of interpolated chlocal ",f8.3)') zcore
+         if(inode == ionode.AND.iprint_pseudo>2) write(io_lun,fmt='(4x,"Integral of interpolated chlocal ",f8.3)') zcore
          zcore = - zcore   ! makes zcore positive
 
          !Makes vlocal & integrates vlocal

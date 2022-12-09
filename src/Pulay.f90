@@ -93,6 +93,7 @@ contains
     ! Module usage
     use datatypes
     use GenBlas, ONLY: sytrf, sytri
+    use GenComms, only: cq_warn
 
     implicit none
 
@@ -105,6 +106,7 @@ contains
     integer i,j, info, ipiv(max_n)
     real(double) :: Rtot,work(max_n), sum
     logical :: WRITE_OUT = .false.
+    character(len=20) :: subname = "DoPulay"
 
     ! Start the Pulay procedure
     ! Invert A
@@ -112,10 +114,10 @@ contains
     ipiv = 0
     work = 0.0_double
     call sytrf('U',n,Aij,n,ipiv,work,n,info)
-    if(inode.eq.ionode.AND.info.ne.0) write(io_lun,*) 'info is ',info
+    if(inode.eq.ionode.AND.info.ne.0) call cq_warn(subname,"info from sytrf is ",info)
     info = 0
     call sytri('U',n,Aij,n,ipiv,work,info)
-    if(inode.eq.ionode.AND.info.ne.0) write(io_lun,*) 'info is ',info
+    if(inode.eq.ionode.AND.info.ne.0) call cq_warn(subname,"info from sytri is ",info)
     ! Only a triangle is returned, so complete Aij
     do i=1,n
        do j=i,n
@@ -189,6 +191,7 @@ contains
     use datatypes
     use numbers
     use GenBlas, ONLY: sytrf, sytri
+    use GenComms, only: cq_warn
 
     implicit none
 
@@ -202,7 +205,7 @@ contains
     real(double) :: Rtot,work(max_n), sum, OA(max_n,max_n)
     logical :: WRITE_OUT = .false.
     logical :: Aij_invertable
-
+    character(len=20) :: subname = "DoPulay"
 
     ! Start the Pulay procedure
     ! Invert A
@@ -214,15 +217,11 @@ contains
        work = 0.0_double
        OA = Aij
        call sytrf('U',n,Aij,max_n,ipiv,work,max_n,info)
-       if(inode==ionode.AND.info/=0) then
-          write(io_lun,*) inode,' sytrf: info is ',info
-          write(io_lun,*) inode,' A was: ',OA
-          write(io_lun,*) inode,' A is: ',Aij
-       end if
+       if(inode==ionode.AND.info/=0) call cq_warn(subname,"info from sytrf is ",info)
        info = 0
        call sytri('U',n,Aij,max_n,ipiv,work,info)
        if(inode==ionode.AND.info/=0) then
-          write(io_lun,*) ' sytri: info is ',info
+          call cq_warn(subname,"info from sytrf is ",info)
           Aij_invertable = .false.
        else
           Aij_invertable = .true.
@@ -299,7 +298,7 @@ contains
     use numbers
     use GenBlas,       only: sytrf, sytri
     use global_module, only: flag_fix_spin_population, ne_in_cell, nspin
-    use GenComms,      only: cq_abort
+    use GenComms,      only: cq_abort, cq_warn
 
     implicit none
 
@@ -315,6 +314,7 @@ contains
     integer,      dimension(max_n)       :: ipiv
     real(double), dimension(max_n)       :: work
     real(double), dimension(max_n,max_n) :: old_A
+    character(len=20) :: subname = "DoPulay"
 
     ! store sum of spin parts in Aij if doing spin relaxation
     if (nspin == 2 .and. (.not. flag_fix_spin_population)) then
@@ -340,20 +340,22 @@ contains
           old_A(:,:) = Aij(:,:,spin)
           call sytrf('U', n, Aij(:,:,spin), max_n, ipiv, work, max_n, info)
           if (inode == ionode .and. info /= 0) then
-             write (io_lun, '(a,i5,a,i2,a,i5)') &
-                   'Node:', inode, ' A(spin=', spin, '): sytrf: info is ', info
-             write (io_lun, '(a,i5,a,i2,a)') &
-                   'Node:', inode, ' A(spin=', spin, ') was: '
-             write (io_lun, *) old_A
-             write (io_lun, '(a,i5,a,i2,a)') &
-                   'Node:', inode, ' A(spin=', spin, ') is: '
-             write (io_lun, *) Aij(:,:,spin)
+             call cq_warn(subname,"info from sytrf is ",info)
+             !write (io_lun, '(a,i5,a,i2,a,i5)') &
+             !      'Node:', inode, ' A(spin=', spin, '): sytrf: info is ', info
+             !write (io_lun, '(a,i5,a,i2,a)') &
+             !      'Node:', inode, ' A(spin=', spin, ') was: '
+             !write (io_lun, *) old_A
+             !write (io_lun, '(a,i5,a,i2,a)') &
+             !      'Node:', inode, ' A(spin=', spin, ') is: '
+             !write (io_lun, *) Aij(:,:,spin)
           end if
           info = 0
           call sytri('U', n, Aij(:,:,spin), max_n, ipiv, work, info)
           if (inode == ionode .and. info /= 0) then
-             write (io_lun, '(a,i5,a,i2,a,i5)') &
-                   'Node:', inode, 'A(spin=', spin, '): sytri: info is ', info
+             call cq_warn(subname,"info from sytrf is ",info)
+             !write (io_lun, '(a,i5,a,i2,a,i5)') &
+             !      'Node:', inode, 'A(spin=', spin, '): sytri: info is ', info
              Aij_invertable = .false.
           else
              Aij_invertable = .true.

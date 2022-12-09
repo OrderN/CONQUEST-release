@@ -178,6 +178,7 @@ contains
     if(allocated(pseudo)) then
        if(iprint_pseudo>2.AND.inode==ionode) write(io_lun,fmt='(10x," setup_pseudo_info is skipped because it is already called")')
     else
+       if(iprint_pseudo>1.AND.inode==ionode) write(io_lun,fmt='(/10x,a/)') "Reading ion files"
        call start_timer(tmr_std_allocation)
        allocate(pseudo(n_species),STAT=stat)
        if(stat /= 0) call cq_abort ('allocating pseudo in setup_pseudo_info',stat)
@@ -279,8 +280,8 @@ contains
     !call gcopy(flag_pcc_global)
     !call gcopy(gap_threshold)
     !call gcopy(maxnsf)
-    if (iprint_pseudo>0.AND.inode==ionode .AND.flag_pcc_global) &
-         write (io_lun,fmt='(10x,a)') "P.C.C. is taken into account."
+    !if (iprint_pseudo>0.AND.inode==ionode .AND.flag_pcc_global) &
+    !     write (io_lun,fmt='(10x,a)') "P.C.C. is taken into account."
     return
   end subroutine setup_pseudo_info
   !!***

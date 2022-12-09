@@ -215,7 +215,7 @@ contains
                                            area_ops, nspin, nspin_SF,   &
                                            spin_factor, blips,          &
                                            flag_analytic_blip_int,      &
-                                           flag_neutral_atom
+                                           flag_neutral_atom, min_layer
     use functions_on_grid,           only: atomfns, H_on_atomfns,       &
                                            gridfunctions
     use io_module,                   only: dump_matrix, dump_blips,     &
@@ -239,6 +239,8 @@ contains
     use exx_io,                      only: exx_global_write
 !****lat>$
     use energy, only: local_ps_energy
+    use density_module, only: flag_DumpChargeDensity
+    use io_module,      only: dump_charge
     
     implicit none
 
@@ -319,10 +321,10 @@ contains
        !
        ! from here on, workspace support becomes h_on_atomfns...
        ! in fact, what we are getting here is (H_local - T) acting on support
-       call get_h_on_atomfns(iprint_ops, fixed_potential, electrons, rho, size)
+       call get_h_on_atomfns(iprint_ops + min_layer, fixed_potential, electrons, rho, size)
        !
        !
-       if (inode == ionode .and. iprint_ops > 2) &
+       if (inode == ionode .and. iprint_ops > 3) &
             write (io_lun, *) 'Doing integration'
        ! Do the integration - support holds <phi| and workspace_support
        ! holds H|phi>. Inode starts from 1, and myid starts from 0. 
@@ -332,7 +334,7 @@ contains
                                        matHatomf(spin), atomfns, &
                                        H_on_atomfns(spin))
        end do
-       if (inode == ionode .and. iprint_ops > 2) write (io_lun, *) 'Done integration'
+       if (inode == ionode .and. iprint_ops > 3) write (io_lun, *) 'Done integration'
        !
        !
        if (iprint_ops > 4) then
@@ -361,29 +363,29 @@ contains
           !if (inode==ionode) print*, 'exx_pulay_r0 = ', exx_pulay_r0
           if  ( exx_niter < exx_siter ) then
              ! For first H building use pure DFT. To be improved for Hartree-Fock
-             if (inode == ionode .and. iprint_exx > 2) &
+             if (inode == ionode .and. iprint_exx > 3) &
                   write (io_lun, *) 'EXX: first guess from DFT'
              !
           else
              !
-             if (inode == ionode .and. iprint_exx > 2) &
+             if (inode == ionode .and. iprint_exx > 3) &
                   write (io_lun, *) 'EXX: setting get_X_matrix'
              call get_X_params(backtrace_level)
 
              call exx_global_write() 
              !
-             !if (inode == ionode .and. iprint_exx > 2) &
+             !if (inode == ionode .and. iprint_exx > 3) &
                   !write (io_lun, *) 'EXX: doing get_X_matrix'
              do spin = 1, nspin
-                if (inode == ionode .and. iprint_exx > 2) &
+                if (inode == ionode .and. iprint_exx > 3) &
                 write (io_lun, *) 'EXX: doing get_X_matrix: ', print_exxspin(spin)
                 call get_X_matrix(spin,backtrace_level)
              end do
              !
-             !if (inode == ionode .and. iprint_exx > 2) &
+             !if (inode == ionode .and. iprint_exx > 3) &
                   !write (io_lun, *) 'EXX: done get_X_matrix'
              do spin = 1, nspin
-                if (inode == ionode .and. iprint_exx > 2) &
+                if (inode == ionode .and. iprint_exx > 3) &
                 write (io_lun, *) 'EXX: done get_X_matrix: ', print_exxspin(spin)
                 call matrix_sum(one, matHatomf(spin),-exx_alpha*half, matXatomf(spin)) 
              end do
@@ -441,6 +443,24 @@ contains
           call dump_matrix("NKE_dn", matKE(2), inode)
        end if
     endif
+    !
+    !
+    ! dump charges if required
+    if (flag_DumpChargeDensity .or. iprint_SC > 3) then
+       if(nspin==1) then
+          allocate(rho_total(size), STAT=stat)
+          if (stat /= 0) call cq_abort("Error allocating rho_total: ", size)
+          call reg_alloc_mem(area_ops, size, type_dbl)
+          rho_total(:) = spin_factor * rho(:,1)
+          call dump_charge(rho_total, size, inode, spin=0)
+          deallocate(rho_total, STAT=stat)
+          if (stat /= 0) call cq_abort("Error deallocating rho_total")
+          call reg_dealloc_mem(area_ops, size, type_dbl)
+       else if (nspin == 2) then
+          call dump_charge(rho(:,1), size, inode, spin=1)
+          call dump_charge(rho(:,2), size, inode, spin=2)
+       end if
+    end if
     !
     !
     ! Store the new H matrix for cDFT
@@ -563,13 +583,11 @@ contains
                                            nspin, spin_factor,         &
                                            flag_pcc_global, area_ops,  &
                                            exx_alpha, exx_niter, exx_siter, &
-                                           flag_neutral_atom
-     
+                                           flag_neutral_atom, min_layer
     use XC,                          only: get_xc_potential
     use GenBlas,                     only: copy, axpy, dot, rsum
     use dimens,                      only: grid_point_volume,          &
                                            n_my_grid_points, n_grid_z
-
     use block_module,                only: n_blocks, n_pts_in_block
     use primary_module,              only: domain
     use set_blipgrid_module,         only: naba_atoms_of_blocks
@@ -586,7 +604,6 @@ contains
     use hartree_module,              only: hartree, hartree_stress
     use functions_on_grid,           only: gridfunctions, &
                                            atomfns, H_on_atomfns
-
     use calc_matrix_elements_module, only: norb
     use pseudopotential_common,      only: pseudopotential, flag_neutral_atom_projector
     use potential_module,            only: potential
@@ -595,7 +612,7 @@ contains
                                            reg_dealloc_mem, type_dbl
     use fft_module,                  only: fft3, hartree_factor,       &
                                            z_columns_node, i0
-    use io_module,                   only: dump_locps
+    use io_module,                   only: dump_locps, return_prefix
 
     implicit none
 
@@ -617,7 +634,10 @@ contains
     real(double), dimension(:),   allocatable :: density_wk_tot
     !complex(double_cplx), dimension(:), allocatable :: chdenr, locpotr
     real(double), dimension(:),   allocatable :: drho_tot
+    character(len=20) :: subname = "get_h_on_atomfns: "
+    character(len=120) :: prefix
 
+    prefix = return_prefix(subname, min_layer)
     ! for Neutral atom potential
     if( flag_neutral_atom ) then
        allocate( drho_tot(size), STAT=stat)
@@ -676,10 +696,9 @@ contains
     end if
     
     electrons_tot = spin_factor * sum(electrons(:))
-    if (inode == ionode .and. output_level >= 2) then
-       write (io_lun, '(10x,a)') &
-            'get_h_on_atomfns: Electron Count, up, down and total:'
-       write (io_lun, '(10x, 3f25.15)') &
+    if (inode == ionode .and. output_level >= 3) then
+       write (io_lun, '(4x,a,3f16.6)') &
+            trim(prefix)//' electron count (up, down, total): ', &
             electrons(1), electrons(nspin), electrons_tot
     end if
     !
@@ -933,7 +952,7 @@ contains
                                            iprint_ops,                 &
                                            nspin, id_glob,             &
                                            species_glob,               &
-                                           flag_analytic_blip_int
+                                           flag_analytic_blip_int, min_layer
     use GenComms,                    only: cq_abort, myid, inode, ionode
     use GenBlas,                     only: axpy
     use build_PAO_matrices,          only: assemble_2
@@ -1019,16 +1038,16 @@ contains
        !call dump_matrix("NSC",matAP,inode)
     else if (flag_basis_set == PAOs) then
        ! Use assemble to generate matrix elements
-       if (inode == ionode .and. iprint_ops > 2) &
+       if (inode == ionode .and. iprint_ops + min_layer > 3) &
             write (io_lun, *) 'Calling assemble'
        call assemble_2(APrange, matAP, 3)
-       if (inode == ionode .AND. iprint_ops > 2) &
+       if (inode == ionode .AND. iprint_ops + min_layer > 3) &
             write(io_lun,*) 'Called assemble'
     else
        call cq_abort('get_HNL_matrix: basis set incorrectly specified ', &
                      flag_basis_set)
     end if
-    if (inode == ionode .and. iprint_ops > 2) write(io_lun,*) 'Made SP'
+    if (inode == ionode .and. iprint_ops + min_layer > 3) write(io_lun,*) 'Made SP'
 
     call matrix_sum(zero, matAPtmp, one ,matAP)
     if (mult(AP_PA_aHa)%mult_type == 2) then ! type 2 means no transpose necessary
@@ -1043,21 +1062,21 @@ contains
        end select
        call matrix_product(matAPtmp, matAP, matNLatomf, mult(AP_PA_aHa))
     else ! Transpose SP->PS, then mult
-       if (inode == ionode .and. iprint_ops > 2) &
+       if (inode == ionode .and. iprint_ops + min_layer > 3) &
             write (io_lun, *) 'Type 1 ', matAP, matPA
        call matrix_transpose(matAP, matPA)
-       if (inode == ionode .and. iprint_ops > 2) &
+       if (inode == ionode .and. iprint_ops + min_layer > 3) &
             write (io_lun, *) 'Done transpose'
        select case (pseudo_type)
        case (OLDPS)
           call matrix_scale_diag(matAP, species, n_projectors, l_core,&
                                  recip_scale, APrange)
        case (SIESTA)
-          if (inode == ionode .and. iprint_ops > 2) &
+          if (inode == ionode .and. iprint_ops + min_layer > 3) &
                write (io_lun, *) 'Doing scale'
           call matrix_scale_diag_tm(matAP, APrange)
        case(ABINIT)
-          if (inode == ionode .and. iprint_ops > 2) &
+          if (inode == ionode .and. iprint_ops + min_layer > 3) &
                write (io_lun, *) 'Doing scale'
           call matrix_scale_diag_tm(matAP, APrange)
        end select

@@ -56,6 +56,10 @@ module energy
   use timer_module,  only: start_timer, stop_timer, cq_timer
   use timer_module,  only: start_backtrace, stop_backtrace
 
+  !use DiagModule,             only: nkp
+  use ScalapackFormat,        only: matrix_size
+
+  
   implicit none
 
   ! Area identification
@@ -161,7 +165,7 @@ contains
                                       flag_perform_cdft,              &
                                       flag_vdWDFT,                    &
                                       flag_exx, exx_alpha,            &
-                                      flag_neutral_atom
+                                      flag_neutral_atom, min_layer
     use pseudopotential_common, only: core_correction, &
                                       flag_neutral_atom_projector
     use density_module,         only: electron_number
@@ -257,7 +261,7 @@ contains
     if (inode == ionode) then
        if(print_Harris) then
           !if(iprint_gen>=1) write(io_lun,2) electrons
-          if (iprint_gen >= 1) then
+          if (iprint_gen + min_layer >= 3) then
              if(flag_neutral_atom) then
                 write (io_lun, 1) en_conv*band_energy,     en_units(energy_units)
                 write (io_lun,33) en_conv*hartree_energy_drho,  en_units(energy_units)
@@ -295,18 +299,18 @@ contains
           end if
 
           if (abs(entropy) >= RD_ERR) then
-             if (iprint_gen >= 0) &
+             if (iprint_gen + min_layer >= 1) &
                   write(io_lun,10) en_conv*total_energy, en_units(energy_units)
              if (flag_check_Diag) then
                 select case (SmearingType)
                 case (0) ! Fermi smearing
                    if (entropy < zero) &
                         call cq_warn(sub_name,'Calculated entropy is less than zero; something is wrong ', entropy)
-                   if (iprint_gen >= 0) &
+                   if (iprint_gen + min_layer >= 2) &
                         write (io_lun,14) en_conv*(total_energy-half*entropy), &
                                           en_units(energy_units)
                 case (1) ! Methfessel-Paxton smearing
-                   if (iprint_gen >= 0)                                     &
+                   if (iprint_gen + min_layer >= 2)                                     &
                         write (io_lun,16)                                   &
                               en_conv * (total_energy -                     &
                                          (real(MPOrder+1,double) /          &
@@ -314,17 +318,17 @@ contains
                               en_units(energy_units)
                 end select
              else
-                if (iprint_gen >= 0) &
+                if (iprint_gen + min_layer >= 2) &
                      write (io_lun,14) en_conv*(total_energy-half*entropy), &
                                        en_units(energy_units)
              end if
-             if (iprint_gen >= 1) &
+             if (iprint_gen + min_layer >= 1) &
                   write (io_lun,15) en_conv*(total_energy-entropy), &
                                     en_units(energy_units)
           else
-             if (iprint_gen >= 0) &
+             if (iprint_gen + min_layer >= 1) &
                   write (io_lun,10) en_conv*total_energy, en_units(energy_units)
-             if (iprint_gen >= 1) &
+             if (iprint_gen + min_layer >= 2) &
                   write (io_lun, '(10x,"(TS=0 as O(N) or entropic &
                                   &contribution is negligible)")')
           end if
@@ -353,25 +357,25 @@ contains
        if (flag_perform_cdft) total_energy2 = total_energy2 + cdft_energy
        if (flag_dft_d2)       total_energy2 = total_energy2 + disp_energy
 
-       if (inode == ionode) then
+       if (inode == ionode .and. iprint_gen + min_layer>=2) then
           write(io_lun,13) en_conv*total_energy2, en_units(energy_units)
        end if
     end if
 
     ! print electron number and spin polarisation information
-    if (iprint_gen >= 0) then
+    if (iprint_gen + min_layer >= 0) then
        call electron_number(electrons)
        if (inode == ionode) then
-          if (iprint_gen >= 1) then
+          if (iprint_gen + min_layer >= 2) then
              electrons_tot = electrons(1) + electrons(nspin)
              write (io_lun,18) electrons_tot
              if (nspin == 2) then
                 write (io_lun,19) electrons(1)
                 write (io_lun,20) electrons(2)
              end if
+             if (nspin == 2) &
+                  write (io_lun,21) electrons(1) - electrons(2)
           end if
-          if (nspin == 2) &
-               write (io_lun,21) electrons(1) - electrons(2)
        end if
     end if
 
@@ -442,14 +446,17 @@ contains
   !!    Activated "electrons_tot2" calculation
   !!   2019/12/03 08:09 dave
   !!    Removed broken code for electrons via Tr[KS]
+  !!   2021/10/28 17:13 lionel
+  !!    Added 'DFT total energy' printing in ASE output
+  !!    nkp must to be passed to avoid circular dependency
   !!  SOURCE
   !!
-  subroutine final_energy(level)
+  subroutine final_energy(nkp,level)
 
     use datatypes
     use numbers
     use units
-    use GenComms,               only: inode, ionode, cq_warn
+    use GenComms,               only: inode, ionode, cq_warn, cq_abort
     use mult_module,            only: matrix_product_trace, matH,     &
                                       matrix_product_trace_length,    &
                                       matrix_trace,                   &
@@ -462,18 +469,23 @@ contains
                                       flag_self_consistent,           &
                                       flag_perform_cdft,              &
                                       flag_vdWDFT,                    &
-                                      flag_exx, exx_alpha, flag_neutral_atom
+                                      flag_exx, exx_alpha,            &
+                                      flag_neutral_atom, min_layer,   &
+                                      flag_fix_spin_population,       &
+                                      io_ase, write_ase, ase_file
+
     use density_module,         only: electron_number
     use pseudopotential_common, only: core_correction, &
                                       flag_neutral_atom_projector
-
-
+    use species_module,         only: n_species
+    use input_module,           only: io_close
     
     implicit none
 
     ! Passed variables
-    integer, optional :: level
-
+    integer, optional   :: level
+    integer, intent(in) :: nkp
+    
     ! Local variables
     character(len=80) :: sub_name = "final_energy"
     integer        :: spin, spin_SF
@@ -488,6 +500,8 @@ contains
     ! electron number information
     real(double), dimension(nspin) :: electrons
     real(double)                   :: electrons_tot, electrons_tot2
+    integer :: i, stat, counter
+    character(len=80) :: tmp
 
 !****lat<$
     if (       present(level) ) backtrace_level = level+1
@@ -565,7 +579,27 @@ contains
     if (inode == ionode) then
        electrons_tot = electrons(1) + electrons(nspin)
        !
-       if (iprint_gen >= 1) then          
+       if(iprint_gen + min_layer>=1) then
+          if (nspin == 1) then
+             write (io_lun,fmt='(6x,"| Number of electrons      = ",f16.6)') electrons_tot
+          else if(nspin == 2) then
+             write (io_lun,fmt='(6x,"| Number of electrons (u/d)= ",2f16.6)') electrons(1),electrons(nspin)
+          end if
+       else if (iprint_gen + min_layer ==2) then
+          write (io_lun, 6) en_conv *    band_energy,  en_units(energy_units)
+          if(flag_neutral_atom) then
+             write (io_lun,68) en_conv * screened_ion_interaction_energy,  en_units(energy_units)
+          else
+             write (io_lun, 8) en_conv *   ion_interaction_energy,  en_units(energy_units)
+          end if
+          if(flag_neutral_atom) then
+             write (io_lun,11) en_conv*(- hartree_energy_drho - hartree_energy_drho_atom_rho), &
+                  en_units(energy_units)
+          else
+             write (io_lun,11) en_conv* delta_E_hartree, en_units(energy_units)
+          end if
+          write (io_lun,12) en_conv* delta_E_xc,      en_units(energy_units)
+       else if (iprint_gen + min_layer > 2) then
           write (io_lun, *) 
           !write (io_lun, *) 
           !write (io_lun, 1) 
@@ -629,13 +663,13 @@ contains
                 if (entropy < zero) &
                      call cq_warn(sub_name, 'Calculated entropy is less than zero; something is wrong ', entropy)
                 !
-                if (iprint_gen >= 0) &
+                if (iprint_gen + min_layer >= 1) &
                      write (io_lun,14) en_conv*(total_energy1-half*entropy), &
                      en_units(energy_units)
                 !
                 !
              case (1) ! Methfessel-Paxton smearing
-                if (iprint_gen >= 0)                             &
+                if (iprint_gen + min_layer >= 1)                             &
                      write (io_lun,16) en_conv * (total_energy1 - &
                      (real(MPOrder+1,double) /                   &
                      real(MPOrder+2,double))*entropy),          &
@@ -645,13 +679,13 @@ contains
              end select
              !
           else
-             if (iprint_gen >= 0) &
+             if (iprint_gen + min_layer >= 1) &
                   write (io_lun,14) en_conv*(total_energy1-half*entropy), &
                   en_units(energy_units)
           end if
           !
           !
-          if (iprint_gen >= 1) &
+          if (iprint_gen + min_layer >= 1) &
                write (io_lun,15) en_conv*(total_energy1-entropy), &
                en_units(energy_units)
        else
@@ -696,14 +730,48 @@ contains
                        hartree_energy_total_rho
 
     if (inode == ionode) then
-       if (iprint_gen >= 0) then
-          write(io_lun,10) en_conv*total_energy1, en_units(energy_units)          
-          write(io_lun,13) en_conv*total_energy2, en_units(energy_units) 
-          write(io_lun,22) en_conv*(total_energy1 - total_energy2), en_units(energy_units) 
-          write(io_lun, *) 
+       if (iprint_gen + min_layer >= 0) then
+          write(io_lun,10) en_conv*total_energy1, en_units(energy_units)
+          if(iprint_gen + min_layer>0) then
+             
+             write(io_lun,13)  en_conv*total_energy2, en_units(energy_units)             
+             if(iprint_gen + min_layer>1) &
+                  write(io_lun,22) en_conv*(total_energy1 - total_energy2), &
+                  en_units(energy_units) 
+          end if
+       end if
+       !
+       ! BEGIN %%%% ASE printing %%%%
+       !
+       if ( write_ase ) then
+          !
+          open(io_ase,file=ase_file, status='old', action='readwrite', iostat=stat, position='rewind')
+          !
+          if (stat .ne. 0) call cq_abort('ASE/energy error opening file !')
+          !
+          if ( nspin == 2 ) then
+             counter = nkp*3 + (nspin+1)*nkp + nspin*nkp*(matrix_size/3) + 1 + 2 
+             if ( mod(matrix_size,3) > 0 ) counter = counter + nspin*nkp
+             
+          else
+             counter = nkp*3 + nkp*(matrix_size/3) + 1 + 1
+             if ( mod(matrix_size,3) > 0 ) counter = counter + nkp
+             
+          end if
+          counter = counter + 7 + n_species + nkp + 1 + 1
+          do i = 1, counter
+             read (io_ase,*)
+          end do
+          !
+          write(io_ase,133) en_conv*total_energy2, en_units(energy_units)       
+          !
+          call io_close(io_ase)
+          !
+          ! END %%%% ASE printing %%%%
+          !
        end if
     end if
-
+    
     call electron_number(electrons)
 
     electrons_tot2 = zero
@@ -715,7 +783,11 @@ contains
 
     if (inode == ionode) then
        electrons_tot = electrons(1) + electrons(nspin)
-       if (iprint_gen >= 1) then
+       if(iprint_gen + min_layer>-1) then
+          write (io_lun,241) electrons_tot
+          if (nspin == 2 .and. (.not. flag_fix_spin_population)) &
+               write (io_lun,21) electrons(1) - electrons(2)
+       elseif (iprint_gen + min_layer > 2) then
           write (io_lun,23) 
           write (io_lun,24) electrons_tot
           write (io_lun,25) electrons_tot2
@@ -741,58 +813,61 @@ contains
     return
 
 
-1   format(4x, '****===============================', &
+1   format(6x, '****===============================', &
                '===================================', &
                '===========****')
 
-2   format(10x, ' ')
+2   format(6x, ' ')
 
 
-6   format(10x,' |* band energy as 2Tr[K.H] = ',f25.15,' ',a2)
-7   format(10x,' |  hartree energy (rho)    = ',f25.15,' ',a2)
-8   format(10x,' |  ion-ion energy          = ',f25.15,' ',a2)
-67  format(10x,' |  hartree energy (drho)   = ',f25.15,' ',a2)
-68  format(10x,' |  screened ion-ion energy = ',f25.15,' ',a2)
-9   format(10x,' |  kinetic energy          = ',f25.15,' ',a2)
+6   format(6x,'|* band energy as 2Tr[K.H] = ',f25.15,' ',a2)
+7   format(6x,'|  hartree energy (rho)    = ',f25.15,' ',a2)
+8   format(6x,'|  ion-ion energy          = ',f25.15,' ',a2)
+67  format(6x,'|  hartree energy (drho)   = ',f25.15,' ',a2)
+68  format(6x,'|  screened ion-ion energy = ',f25.15,' ',a2)
+9   format(6x,'|  kinetic energy          = ',f25.15,' ',a2)
 
-30  format(10x,' |* xc total energy         = ',f25.15,' ',a2)
-31  format(10x,' |    DFT exchange          = ',f25.15,' ',a2)
-32  format(10x,' |    DFT correlation       = ',f25.15,' ',a2)
-33  format(10x,' |    EXX contribution      = ',f25.15,' ',a2)
+30  format(6x,'|* xc total energy         = ',f25.15,' ',a2)
+31  format(6x,'|    DFT exchange          = ',f25.15,' ',a2)
+32  format(6x,'|    DFT correlation       = ',f25.15,' ',a2)
+33  format(6x,'|    EXX contribution      = ',f25.15,' ',a2)
 
 
-40  format(10x,' |* pseudopotential energy  = ',f25.15,' ',a2)
-41  format(10x,' |    core correction       = ',f25.15,' ',a2)
-42  format(10x,' |    local contribution    = ',f25.15,' ',a2)
-43  format(10x,' |    nonlocal contribution = ',f25.15,' ',a2)
-60  format(10x,' |* pseudo/NA energy        = ',f25.15,' ',a2)
-62  format(10x,' |    NA contribution       = ',f25.15,' ',a2)
+40  format(6x,'|* pseudopotential energy  = ',f25.15,' ',a2)
+41  format(6x,'|    core correction       = ',f25.15,' ',a2)
+42  format(6x,'|    local contribution    = ',f25.15,' ',a2)
+43  format(6x,'|    nonlocal contribution = ',f25.15,' ',a2)
+60  format(6x,'|* pseudo/NA energy        = ',f25.15,' ',a2)
+62  format(6x,'|    NA contribution       = ',f25.15,' ',a2)
 
-11  format(10x,' |  Ha correction           = ',f25.15,' ',a2)
-12  format(10x,' |  XC correction           = ',f25.15,' ',a2)
+11  format(6x,'|  Ha correction           = ',f25.15,' ',a2)
+12  format(6x,'|  XC correction           = ',f25.15,' ',a2)
 
-10  format(10x,' |* Harris-Foulkes energy   = ',f25.15,' ',a2)
-13  format(10x,' |* DFT total energy        = ',f25.15,' ',a2)
-22  format(10x,' |  estimated accuracy      = ',f25.15,' ',a2)
+10  format(6x,'|* Harris-Foulkes energy   = ',f25.15,' ',a2)
+13  format(6x,'|* DFT total energy        = ',f25.15,' ',a2)
+133 format(/4x,'DFT total energy        = ',f25.15,' ',a2)
+    
+22  format(6x,'|  estimated accuracy      = ',f25.15,' ',a2)
 
-14  format(10x,' | GS Energy as E-(1/2)TS   = ',f25.15,' ',a2)
-15  format(10x,' | Free Energy as E-TS      = ',f25.15,' ',a2)
-16  format(10x,' | GS Energy with kT -> 0   = ',f25.15,' ',a2)
-17  format(10x,' | Dispersion (DFT-D2)      = ',f25.15,' ',a2)
-18  format(10x,' | cDFT Energy as 2Tr[K.W]  = ',f25.15,' ',a2)
-19  format(10x,' | Number of e- spin up     = ',f25.15)
-20  format(10x,' | Number of e- spin down   = ',f25.15)
-21  format(10x,' | Spin pol. as (up - down) = ',f25.15)
+14  format(6x,'| GS Energy as E-(1/2)TS   = ',f25.15,' ',a2)
+15  format(6x,'| Free Energy as E-TS      = ',f25.15,' ',a2)
+16  format(6x,'| GS Energy with kT -> 0   = ',f25.15,' ',a2)
+17  format(6x,'| Dispersion (DFT-D2)      = ',f25.15,' ',a2)
+18  format(6x,'| cDFT Energy as 2Tr[K.W]  = ',f25.15,' ',a2)
+19  format(6x,'| Number of e- spin up     = ',f25.15)
+20  format(6x,'| Number of e- spin down   = ',f25.15)
+21  format(6x,'| Spin pol. as (up - down) = ',f25.15)
 
-23  format(10x,' |* check for accuracy      = ',f25.15,' ',a2)
-24  format(10x,' |  number of e- num. int.  = ',f25.15,' ',a2)
-25  format(10x,' |  number of e- as 2Tr[KS] = ',f25.15,' ',a2)
-26  format(10x,' |  one-electron energy     = ',f25.15,' ',a2)
-27  format(10x,' |  potential energy V      = ',f25.15,' ',a2)
-28  format(10x,' |  kinetic energy T        = ',f25.15,' ',a2)
-29  format(10x,' |* virial V/T              = ',f25.15,' ',a2)
-50  format(10x,' |  rescaled DFT exchange   = ',f25.15,' ',a2)
-51  format(10x,' |  rescaled exact exchange = ',f25.15,' ',a2)
+23  format(6x,'|* check for accuracy      = ')
+24  format(6x,'|  number of e- num. int.  = ',f25.15)
+241 format(6x,'|  number of electrons     = ',f25.15)
+25  format(6x,'|  number of e- as 2Tr[KS] = ',f25.15)
+26  format(6x,'|  one-electron energy     = ',f25.15,' ',a2)
+27  format(6x,'|  potential energy V      = ',f25.15,' ',a2)
+28  format(6x,'|  kinetic energy T        = ',f25.15,' ',a2)
+29  format(6x,'|* virial V/T              = ',f25.15,' ',a2)
+50  format(6x,'|  rescaled DFT exchange   = ',f25.15,' ',a2)
+51  format(6x,'|  rescaled exact exchange = ',f25.15,' ',a2)
 
 
   end subroutine final_energy
