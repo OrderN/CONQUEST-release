@@ -173,6 +173,8 @@ contains
   !!    Added atom_vels  
   !!   2020/10/07 tsuyoshi
   !!    Removed allocation of atom_vels (moved to "control")
+  !!   2022/12/09 16:52 dave
+  !!    Added simple check for Cartesian coordinates when fractional flag set and vice versa
   !!  SOURCE
   !!
   subroutine read_atomic_positions(filename)
@@ -191,14 +193,14 @@ contains
     use memory_module,  only: reg_alloc_mem, type_dbl, type_int
     use units,          only: AngToBohr
     use units,          only: dist_units, ang
-    use numbers,        only: RD_ERR, zero
+    use numbers,        only: RD_ERR, zero, one, two
 
     ! Passed variables
     character(len=*) :: filename
 
     ! Local variables
     type(cq_timer) :: backtrace_timer
-    integer        :: lun, i, spec, stat
+    integer        :: lun, i, spec, stat, n_wrong_coords
     logical        :: movex, movey, movez
     real(double)   :: x, y, z
     real(double), dimension(3) :: cell
@@ -451,6 +453,7 @@ second:   do
                call cq_abort("Failure to allocate coordinates: ",ni_in_cell)
           call reg_alloc_mem(area_init, 6*ni_in_cell,type_dbl)
           call reg_alloc_mem(area_init, 4*ni_in_cell,type_int)
+          n_wrong_coords = 0
           do i=1,ni_in_cell
              read(lun,*) x,y,z,species_glob(i),movex,movey,movez
              if(species_glob(i)>n_species) then
@@ -464,6 +467,8 @@ second:   do
                 atom_coord(1,i) = x*r_super_x
                 atom_coord(2,i) = y*r_super_y
                 atom_coord(3,i) = z*r_super_z
+                ! Simple check for Cartesian coordinates
+                if(abs(x)>two .OR. abs(y)>two .OR. abs(z)>two) n_wrong_coords = n_wrong_coords + 1
              else
                 atom_coord(1,i) = x
                 atom_coord(2,i) = y
@@ -472,6 +477,8 @@ second:   do
                 ! 2019/04/04 14:16 dave
                 ! Moved here so that distances are corrected *before* wrapping below
                 if(dist_units == ang) atom_coord(:,i)=atom_coord(:,i)*AngToBohr
+                ! Simple check for fractional coordinates
+                if(abs(x)<one .OR. abs(y)<one .OR. abs(z)<one) n_wrong_coords = n_wrong_coords + 1
              end if
              ! Wrap coordinates
              cell(1) = r_super_x
@@ -496,6 +503,14 @@ second:   do
              flag_move_atom(2,i) = movey
              flag_move_atom(3,i) = movez
           end do
+          ! Warn user if it looks like Cartesian coordinates with fractional flag set or vice versa
+          if(flag_fractional_atomic_coords .and. n_wrong_coords>2) then
+             call cq_warn("read_atomic_positions", &
+                  "Expected fractional coordinates but many are greater than one: ",n_wrong_coords)
+          else if(n_wrong_coords>2) then
+             call cq_warn("read_atomic_positions", &
+                  "Expected Cartesian coordinates but many are less than one: ",n_wrong_coords)
+          end if
           call io_close(lun)
        end if pdb
     end if
