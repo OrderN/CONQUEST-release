@@ -2218,7 +2218,7 @@ contains
              ! ---------------
              ! Debugging output
              if(iprint_DM>=5.AND.myid==0) then
-                write(io_lun,fmt='(10x,a,2i6)') 'Proc: ',myid,' Sizes: ',send_size,recv_size
+                write(io_lun,fmt='(10x,a,i6,a,2i6)') 'Proc: ',myid,' Sizes: ',send_size,recv_size
                 write(io_lun,10) i,myid,send_proc,recv_proc,srow_size, scol_size, rrow_size, rcol_size
                 write(io_lun,fmt='(10x,a)') 'About to send...'
              end if
