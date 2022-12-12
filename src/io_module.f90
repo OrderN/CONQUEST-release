@@ -468,7 +468,7 @@ second:   do
                 atom_coord(2,i) = y*r_super_y
                 atom_coord(3,i) = z*r_super_z
                 ! Simple check for Cartesian coordinates
-                if(abs(x)>two .OR. abs(y)>two .OR. abs(z)>two) n_wrong_coords = n_wrong_coords + 1
+                if(abs(x)>two .and. abs(y)>two .and. abs(z)>two) n_wrong_coords = n_wrong_coords + 1
              else
                 atom_coord(1,i) = x
                 atom_coord(2,i) = y
@@ -478,7 +478,7 @@ second:   do
                 ! Moved here so that distances are corrected *before* wrapping below
                 if(dist_units == ang) atom_coord(:,i)=atom_coord(:,i)*AngToBohr
                 ! Simple check for fractional coordinates
-                if(abs(x)<one .OR. abs(y)<one .OR. abs(z)<one) n_wrong_coords = n_wrong_coords + 1
+                if(abs(x)<one .and. abs(y)<one .and. abs(z)<one) n_wrong_coords = n_wrong_coords + 1
              end if
              ! Wrap coordinates
              cell(1) = r_super_x
