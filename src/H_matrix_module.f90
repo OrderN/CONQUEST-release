@@ -812,11 +812,27 @@ contains
          !    call dump_locps("Total_dn", potential(:,2), size, inode)
          ! end if
         ! Change (2022/Dec/09) : Electrostaic potential is now dumped.
+        !  using density_wk_tot for dump electrostatic potential
+          allocate(density_wk_tot(size), STAT=stat)
+          if (stat /= 0) &
+           call cq_abort("Error allocating density_wk_tot : ", stat)
+          call reg_alloc_mem(area_ops, size, type_dbl)
+
+          density_wk_tot =zero
+          call copy(n_my_grid_points, h_potential, 1, density_wk_tot, 1)
+          call axpy(n_my_grid_points, one, pseudopotential, 1, density_wk_tot, 1)
+          call dump_locps("EStot", density_wk_tot, size, inode)
+
+          deallocate(density_wk, STAT=stat)
+          if (stat /= 0) &
+           call cq_abort("Error deallocating density_wk_tot: ", stat)
+          call reg_dealloc_mem(area_ops, size, type_dbl)
+
+        !old  : 
         !  using density_wk for dump electrostatic potential
           allocate(density_wk(size,nspin), STAT=stat)
           if (stat /= 0) &
-            call cq_abort("Error allocating density_wk : ", &
-                          stat)
+           call cq_abort("Error allocating density_wk : ", stat)
           call reg_alloc_mem(area_ops, size * nspin, type_dbl)
          density_wk =zero
 
