@@ -163,56 +163,58 @@ contains
     ! Energy limits (relative to Ef or absolute)
     E_wf_min = fdf_double('IO.min_wf_E',zero)
     E_wf_max = fdf_double('IO.max_wf_E',zero)
-    ! Read in details of bands output from Conquest
-    n_bands_active=fdf_integer('IO.maxnoWF',0)
-    if(n_bands_active>0) then
-       allocate(band_no(n_bands_active))
-       if (fdf_block('WaveFunctionsOut')) then
-          if(1+block_end-block_start<n_bands_active) then
-             write(*,*) "Too few wf no in WaveFunctionsOut: ",1+block_end-block_start,n_bands_active
-             stop
-          end if
-          do i=1,n_bands_active
-             read(unit=input_array(block_start+i-1),fmt=*) band_no(i)
-          end do
-          call fdf_endblock
-       else
-          call cq_abort("You specified bands with IO.maxnoWF but didn't give the WaveFunctionsOut block")
-       end if
-       flag_wf_range = .false.
-    else
-       if(abs(E_wf_max-E_wf_min)>1e-8_double) then
-          flag_wf_range = .true.
-          flag_wf_range_Ef = fdf_boolean('IO.WFRangeRelative',.true.)
-       else
-          call cq_abort("No bands specified!")
-       end if
-    end if
-    ! Now read details of bands to output from processing
-    ! Energy limits
-    E_procwf_min = fdf_double('Process.min_wf_E',E_wf_min)
-    E_procwf_max = fdf_double('Process.max_wf_E',E_wf_max)
-    ! Is the range relative to Ef (T) or absolute (F)
-    flag_procwf_range_Ef = fdf_boolean('Process.WFRangeRelative',.true.)
-    if(abs(E_procwf_max-E_procwf_min)>1e-8_double) then
-       flag_proc_range = .true.
-    else
-       n_bands_process = fdf_integer('Process.noWF',0)
-       if(n_bands_process>0) then
-          allocate(band_proc_no(n_bands_process))
-          if (fdf_block('WaveFunctionsProcess')) then
-             if(1+block_end-block_start<n_bands_process) then
-                write(*,*) "Too few wf no in WaveFunctionsOut: ",1+block_end-block_start,n_bands_process
+    if(i_job==3 .or. i_job==4 .or. i_job==5) then ! Band-resolved charge or STM
+       ! Read in details of bands output from Conquest
+       n_bands_active=fdf_integer('IO.maxnoWF',0)
+       if(n_bands_active>0) then
+          allocate(band_no(n_bands_active))
+          if (fdf_block('WaveFunctionsOut')) then
+             if(1+block_end-block_start<n_bands_active) then
+                write(*,*) "Too few wf no in WaveFunctionsOut: ",1+block_end-block_start,n_bands_active
                 stop
              end if
-             do i=1,n_bands_process
-                read(unit=input_array(block_start+i-1),fmt=*) band_proc_no(i)
+             do i=1,n_bands_active
+                read(unit=input_array(block_start+i-1),fmt=*) band_no(i)
              end do
              call fdf_endblock
+          else
+             call cq_abort("You specified bands with IO.maxnoWF but didn't give the WaveFunctionsOut block")
           end if
-          flag_proc_range = .false.
+          flag_wf_range = .false.
+       else
+          if(abs(E_wf_max-E_wf_min)>1e-8_double) then
+             flag_wf_range = .true.
+             flag_wf_range_Ef = fdf_boolean('IO.WFRangeRelative',.true.)
+          else
+             call cq_abort("No bands specified!")
+          end if
        end if
-    end if
+       ! Now read details of bands to output from processing
+       ! Energy limits
+       E_procwf_min = fdf_double('Process.min_wf_E',E_wf_min)
+       E_procwf_max = fdf_double('Process.max_wf_E',E_wf_max)
+       ! Is the range relative to Ef (T) or absolute (F)
+       flag_procwf_range_Ef = fdf_boolean('Process.WFRangeRelative',.true.)
+       if(abs(E_procwf_max-E_procwf_min)>1e-8_double) then
+          flag_proc_range = .true.
+       else
+          n_bands_process = fdf_integer('Process.noWF',0)
+          if(n_bands_process>0) then
+             allocate(band_proc_no(n_bands_process))
+             if (fdf_block('WaveFunctionsProcess')) then
+                if(1+block_end-block_start<n_bands_process) then
+                   write(*,*) "Too few wf no in WaveFunctionsOut: ",1+block_end-block_start,n_bands_process
+                   stop
+                end if
+                do i=1,n_bands_process
+                   read(unit=input_array(block_start+i-1),fmt=*) band_proc_no(i)
+                end do
+                call fdf_endblock
+             end if
+             flag_proc_range = .false.
+          end if
+       end if
+    end if ! i_job == 3 or 4 or 5
     ! Output format
     ps_type = fdf_string(4,'Process.OutputFormat','cube')
     if(leqi(ps_type,'cube')) then
