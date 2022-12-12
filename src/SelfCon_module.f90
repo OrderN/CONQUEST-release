@@ -1428,6 +1428,8 @@ contains
   !!    - Added experimental backtrace
   !!   2019/08/16 14:10 dave
   !!    get_new_rho is now in this module
+  !!   2022/12/12 16:21 dave and tsuyoshi
+  !!    fix issue with free spin and Kerker preconditioning
   !! SOURCE
   !!
   subroutine update_pulay_history(iPulay, rho_in, reset_L,             &
@@ -1437,7 +1439,7 @@ contains
                                   cov_resid_pul, level)
     use datatypes
     use GenBlas
-    use dimens,         only: n_my_grid_points, grid_point_volume
+    use dimens,         only: n_my_grid_points, grid_point_volume, volume
     use GenComms,       only: gsum, cq_abort
     use hartree_module, only: kerker, kerker_and_wdmetric, wdmetric
     use global_module,  only: nspin, flag_fix_spin_population
@@ -1460,6 +1462,8 @@ contains
     ! local variables
     integer :: spin, stat
     real(double), dimension(:,:), allocatable :: rho_out, resid
+    logical :: flag_Kerker_VarSpin
+    real(double), dimension(2) :: ne_spin_sum
     type(cq_timer) :: backtrace_timer
     integer        :: backtrace_level
 
@@ -1474,6 +1478,7 @@ contains
     if (stat /= 0) &
          call cq_abort("update_pulay_history: Error alloc mem: ", maxngrid, nspin)
     call reg_alloc_mem(area_SC, 2*maxngrid*nspin, type_dbl)
+    flag_Kerker_VarSpin = (flag_kerker .and. (.not.flag_fix_spin_population) .and. (nspin == 2))
 
     ! store rho_in to history
     do spin = 1, nspin
@@ -1495,7 +1500,15 @@ contains
        resid_pul(1:n_my_grid_points,iPulay,spin) = &
             resid(1:n_my_grid_points,spin)
     end do
-
+    ! Allow G=0 term to vary between spin channels but to integrate to zero
+    if(flag_Kerker_VarSpin) then 
+       ne_spin_sum(:) = zero
+       do spin = 1, nspin
+          ne_spin_sum(spin) = grid_point_volume * rsum(n_my_grid_points, resid(:,spin), 1)
+          call gsum(ne_spin_sum(spin))
+       end do
+       ne_spin_sum(2)= -ne_spin_sum(1)
+    endif
     ! calculate the Kerker preconditioned or wave-dependent metric
     ! covarient residuals if requires to
     do spin = 1, nspin
@@ -1507,6 +1520,11 @@ contains
           else
              call kerker(resid(:,spin), maxngrid, q0)
           end if
+          ! Now we correct the G=0 term for the residual (ne_spin_sum is G=0 term)
+          if(flag_Kerker_VarSpin) then
+             ne_spin_sum(spin) = ne_spin_sum(spin)/volume
+             resid(:,spin)=resid(:,spin) + ne_spin_sum(spin)
+          endif
           ! replace the k_resid_pul history at iPulay to new value
           k_resid_pul(1:n_my_grid_points,iPulay,spin) = &
                resid(1:n_my_grid_points,spin)
