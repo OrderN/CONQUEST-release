@@ -743,13 +743,15 @@ Go to :ref:`top <input_tags>`.
 Moving Atoms
 ------------
 AtomMove.TypeOfRun (*string*)
-    values: static/cg/lbfgs/md
+    values: static/cg/sqnm/lbfgs/md
 
     Options:
 
     static — Single point calculation
 
     cg — Structure optimisation by conjugate gradients
+
+    sqnm - Stabilised Quasi-Newton Minimisation (recommended approach)
 
     lbfgs — Structure optimisation by LBFGS (Limited Memory Broyden–Fletcher–Goldfarb–Shanno algorithm)
 
@@ -778,6 +780,13 @@ AtomMove.MaxForceTol (*real*)
 
     *default*: 0.0005 Ha/bohr
 
+AtomMove.MaxSQNMStep (*real*)
+    The maximum distance any atom can move during SQNM (in Bohr).  Applies to the
+    part of the search direction not in the SQNM subspace (scaled directly by a step
+    size, which is limited to ensure this value is not exceeded).
+
+    *default*: 0.2 bohr
+    
 AtomMove.Timestep (*real*)
     Time step for molecular dynamics
 

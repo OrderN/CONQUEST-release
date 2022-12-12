@@ -50,6 +50,8 @@
 !!    Removing Berendsen thermostat
 !!   2022/09/29 16:47 dave
 !!    Moved various subroutines to md_misc_module
+!!   2022/12/12 11:41 dave
+!!    Added SQNM maximum step size (sqnm_trust_step) as user-adjustable parameter
 !!  SOURCE
 !!
 module control
@@ -65,7 +67,7 @@ module control
 
   integer      :: MDn_steps 
   integer      :: MDfreq 
-  real(double) :: MDcgtol 
+  real(double) :: MDcgtol, sqnm_trust_step
   logical      :: CGreset
   integer      :: LBFGS_history
 
@@ -1763,6 +1765,8 @@ contains
   !!    Bug fix for force restoration when energy rises
   !!   2022/09/16 17:10 dave
   !!    Added test for forces below threshold at the start of the run
+  !!   2022/12/12 11:42 dave
+  !!    Added check for maximum distance moved by atoms in increase of alpha
   !!  SOURCE
   !!
   subroutine sqnm(fixed_potential, vary_mu, total_energy)
@@ -2082,6 +2086,9 @@ contains
        ! Now adjust alpha
        if(f_dot_sd>0.2_double) then
           alpha = alpha*1.1_double
+          max = maxval(abs(cg_new))
+          ! Hard limit on alpha so that atoms are not moved by more than sqnm_trust_step Bohr
+          if(max*alpha>sqnm_trust_step) alpha = sqnm_trust_step/max
        else
           alpha = alpha*0.85_double
        end if
