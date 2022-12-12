@@ -163,6 +163,7 @@ contains
     use units
     use io_module,         only: return_prefix
     use DiagModule,        only: nkp
+    use H_matrix_module,   only: flag_write_locps, locps_output
 
     implicit none
 
@@ -364,11 +365,13 @@ contains
 !****lat>$
 
     ! output WFs or DOS
-    if (flag_self_consistent.AND.(flag_out_wf.OR.flag_write_DOS)) then
-       wf_self_con=.true.
+    if (flag_self_consistent.AND.(flag_out_wf.OR.flag_write_DOS.OR.flag_write_locps)) then
+       if(flag_out_wf.OR.flag_write_DOS) wf_self_con=.true.
+       if(flag_write_locps) locps_output=.true.
        call FindMinDM(n_L_iterations, vary_mu, L_tolerance,&
             reset_L, .false.)
        wf_self_con=.false.
+       locps_output=.false.
     end if
 
     call stop_print_timer(tmr_l_energy, "calculating ENERGY", &
