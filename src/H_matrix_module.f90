@@ -823,37 +823,10 @@ contains
           call axpy(n_my_grid_points, one, pseudopotential, 1, density_wk_tot, 1)
           call dump_locps("EStot", density_wk_tot, size, inode)
 
-          deallocate(density_wk, STAT=stat)
+          deallocate(density_wk_tot, STAT=stat)
           if (stat /= 0) &
            call cq_abort("Error deallocating density_wk_tot: ", stat)
           call reg_dealloc_mem(area_ops, size, type_dbl)
-
-        !old  : 
-        !  using density_wk for dump electrostatic potential
-          allocate(density_wk(size,nspin), STAT=stat)
-          if (stat /= 0) &
-           call cq_abort("Error allocating density_wk : ", stat)
-          call reg_alloc_mem(area_ops, size * nspin, type_dbl)
-         density_wk =zero
-
-         ! total_loc_potential = loc_Har + loc_ps + loc_XC
-         !    loc_ES (ElectroStatic) = loc_Har + loc_ps
-         do spin = 1, nspin
-          call copy(n_my_grid_points, potential(:,spin), 1, density_wk(:,spin), 1)
-          call axpy(n_my_grid_points, -one, xc_potential(:,spin), 1, &
-                    density_wk(:,spin), 1)
-         end do
-          if (nspin == 1) then
-             call dump_locps("ES", density_wk(:,1), size, inode)
-          else
-             call dump_locps("ES_up", density_wk(:,1), size, inode)
-             call dump_locps("ES_dn", density_wk(:,2), size, inode)
-          end if
-         deallocate(density_wk, STAT=stat)
-         if (stat /= 0) &
-            call cq_abort("Error deallocating density_wk: ", stat)
-         call reg_dealloc_mem(area_ops, size* nspin, type_dbl)
-
        end if
     end if
     !
