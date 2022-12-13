@@ -81,8 +81,10 @@ module H_matrix_module
   ! Area identification
   integer, parameter, private :: area = 3
 
-  logical :: locps_output
-  integer :: locps_choice
+  logical :: locps_output=.false.
+  logical :: flag_write_locps
+  integer, parameter :: max_locps_type = 5
+  logical :: flag_dump_locps(max_locps_type)
 
 !!***
 
@@ -777,22 +779,8 @@ contains
     !
     ! Print potential, if necessary
     if (locps_output) then
-       dump_pot = (/.false., .true., .false., .false./)
-       if (locps_choice < 0 .or. locps_choice > 15) then
-          if (inode == ionode) &
-               write (io_lun, *) 'Bad choice for local potential &
-                                  &printout: no output.'
-       else
-          if (inode == ionode) &
-               write (io_lun, *) 'Writing local potential to file(s).'
-          do i = 4, 1, -1
-             pot_flag = mod(locps_choice/(2**(i-1)), 2)
-             if (pot_flag > 0) dump_pot(i) = .true.
-             locps_choice = locps_choice - pot_flag*(2**(i-1))
-          end do
-       end if
-       if (dump_pot(1)) call dump_locps("Hartree", h_potential, size, inode)
-       if (dump_pot(2)) then
+       if (flag_dump_locps(1)) call dump_locps("Har", h_potential, size, inode)
+       if (flag_dump_locps(2)) then
           if (nspin == 1) then
              call dump_locps("XC", xc_potential(:,1), size, inode)
           else
@@ -800,15 +788,34 @@ contains
              call dump_locps("XC_dn", xc_potential(:,2), size, inode)
           end if
        end if
-       if (dump_pot(3)) call dump_locps("PS", pseudopotential, size, inode)
-       if (dump_pot(4)) then
-          if (nspin == 1) then
-             call dump_locps("Total", potential(:,1), size, inode)
-          else
-             call dump_locps("Total_up", potential(:,1), size, inode)
-             call dump_locps("Total_dn", potential(:,2), size, inode)
-          end if
+       if (flag_dump_locps(3)) call dump_locps("PS", pseudopotential, size, inode)
+       if (flag_dump_locps(4)) then
+        ! Change (2022/Dec/09) : Electrostaic potential is now dumped.
+        !  using density_wk_tot for dump electrostatic potential
+          allocate(density_wk_tot(size), STAT=stat)
+          if (stat /= 0) &
+           call cq_abort("Error allocating density_wk_tot : ", stat)
+          call reg_alloc_mem(area_ops, size, type_dbl)
+
+          density_wk_tot =zero
+          call copy(n_my_grid_points, h_potential, 1, density_wk_tot, 1)
+          call axpy(n_my_grid_points, one, pseudopotential, 1, density_wk_tot, 1)
+          call dump_locps("ES", density_wk_tot, size, inode)
+
+          deallocate(density_wk_tot, STAT=stat)
+          if (stat /= 0) &
+           call cq_abort("Error deallocating density_wk_tot: ", stat)
+          call reg_dealloc_mem(area_ops, size, type_dbl)
        end if
+       if (flag_dump_locps(5)) then
+        ! dumping Total potential  
+          if (nspin == 1) then
+             call dump_locps("Tot", potential(:,1), size, inode)
+          else
+             call dump_locps("Tot_up", potential(:,1), size, inode)
+             call dump_locps("Tot_dn", potential(:,2), size, inode)
+          end if
+       endif
     end if
     !
     !

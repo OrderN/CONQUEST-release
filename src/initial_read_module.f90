@@ -891,7 +891,7 @@ contains
          flag_MatrixFile_BinaryFormat_Dump_END, atom_output_threshold, flag_coords_xyz
 
     use group_module,     only: part_method, HILBERT, PYTHON
-    use H_matrix_module,  only: locps_output, locps_choice
+    use H_matrix_module,  only: flag_write_locps, flag_dump_locps
     use pao_minimisation, only: InitStep_paomin
     use timer_module,     only: time_threshold,lun_tmr, TimingOn, &
          TimersWriteOut, BackTraceOn
@@ -1081,8 +1081,13 @@ contains
     !
     flag_dump_bib = fdf_boolean('IO.DumpBibTeX',      .true.)
     flag_dump_L   = fdf_boolean('IO.DumpL',           .true. )
-    locps_output  = fdf_boolean('IO.LocalPotOutput',  .false.)
-    locps_choice  = fdf_integer('IO.LocalPotChoice',   8     )
+    !flag for dumping locps
+    flag_dump_locps(1) = fdf_boolean('IO.DumpHarPot',  .false.)
+    flag_dump_locps(2) = fdf_boolean('IO.DumpXCPot',  .false.)
+    flag_dump_locps(3) = fdf_boolean('IO.DumpPSPot',  .false.)
+    flag_dump_locps(4) = fdf_boolean('IO.DumpESPot',  .false.)
+    flag_dump_locps(5) = fdf_boolean('IO.DumpTotPot',  .false.)
+    flag_write_locps = any(flag_dump_locps(:))
     atomch_output = fdf_boolean('IO.AtomChargeOutput',.false.)
     !
     ! Seed for RNG
