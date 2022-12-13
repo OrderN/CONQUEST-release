@@ -867,7 +867,7 @@ contains
          InvSDeltaOmegaTolerance
     use blip,          only: blip_info, init_blip_flag, alpha, beta
     use maxima_module, only: lmax_ps
-    use control,       only: MDn_steps, MDfreq, MDcgtol, CGreset, LBFGS_history
+    use control,       only: MDn_steps, MDfreq, MDcgtol, CGreset, LBFGS_history, sqnm_trust_step
     use ion_electrostatic,  only: ewald_accuracy
     use minimise,      only: UsePulay, n_L_iterations,          &
          n_support_iterations, L_tolerance, &
@@ -1560,6 +1560,7 @@ contains
     MDfreq                = fdf_integer('AtomMove.OutputFreq',    50        )
     MDtimestep            = fdf_double ('AtomMove.Timestep',      0.5_double)
     MDcgtol               = fdf_double ('AtomMove.MaxForceTol',0.0005_double)
+    sqnm_trust_step       = fdf_double ('AtomMove.MaxSQNMStep',0.2_double   )
     LBFGS_history         = fdf_integer('AtomMove.LBFGSHistory', 5          )
     flag_opt_cell         = fdf_boolean('AtomMove.OptCell',          .false.)
     flag_variable_cell    = flag_opt_cell
