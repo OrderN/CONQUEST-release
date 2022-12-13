@@ -245,7 +245,8 @@ IO.DumpL (*boolean*)
 
     *default*: T
 
-IO.DumpChargeDensity (*boolean*) Whether to write out the charge
+IO.DumpChargeDensity (*boolean*)
+    Whether to write out the charge
     density.  If T, then the charge density will be written out at
     self-consistency; additionally, if ``IO.Iprint_SC`` is larger than
     2, the charge density will be written out at every step of the SCF
@@ -253,8 +254,17 @@ IO.DumpChargeDensity (*boolean*) Whether to write out the charge
     format files using the :ref:`post-processing utility
     <et_post_process>`.
 
-    *default*: T
+    *default*: F
 
+IO.Dump[Har|XC|PS|ES|Tot]Pot (*boolean*)
+    Flags to allow dumping of different local potentials (Hartree, XC, pseudopotential, electrostatic, total).
+    Only active when a static self-consistent run is chosen. (NB each flag must be set to true for output,
+    such as ``IO.DumpHarPot T`` etc.)  Files can be converted to cube format as for charge density by setting
+    ``Process.ChargeStub`` appropriately (e.g. ``locpsHar`` with other files replacing Har
+    with XC, PS, ES and Tot)
+
+    *default*: F
+    
 IO.TimingOn (*boolean*)
     Whether time information will be measured and written to output
 

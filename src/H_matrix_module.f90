@@ -779,7 +779,7 @@ contains
     !
     ! Print potential, if necessary
     if (locps_output) then
-       if (flag_dump_locps(1)) call dump_locps("Hartree", h_potential, size, inode)
+       if (flag_dump_locps(1)) call dump_locps("Har", h_potential, size, inode)
        if (flag_dump_locps(2)) then
           if (nspin == 1) then
              call dump_locps("XC", xc_potential(:,1), size, inode)
@@ -810,10 +810,10 @@ contains
        if (flag_dump_locps(5)) then
         ! dumping Total potential  
           if (nspin == 1) then
-             call dump_locps("Total", potential(:,1), size, inode)
+             call dump_locps("Tot", potential(:,1), size, inode)
           else
-             call dump_locps("Total_up", potential(:,1), size, inode)
-             call dump_locps("Total_dn", potential(:,2), size, inode)
+             call dump_locps("Tot_up", potential(:,1), size, inode)
+             call dump_locps("Tot_dn", potential(:,2), size, inode)
           end if
        endif
     end if
