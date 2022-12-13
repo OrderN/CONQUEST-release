@@ -409,17 +409,13 @@ contains
 
     ! Calculate integral of density_atom but DO NOT renormalize yet - do it AFTER setting density
     ! We use grid_electrons below when we do NOT have species-dependent spin
-    grid_electrons = zero
-    do iz = 1, n_my_grid_points
-       grid_electrons = grid_electrons + density_atom(iz)
-    end do
-    grid_electrons = grid_electrons * grid_point_volume
+    grid_electrons = grid_point_volume * rsum(n_my_grid_points, density_atom, 1)
     call gsum(grid_electrons)
     ! Scaling factor for renormalizing atomic density
     scale = ne_in_cell/grid_electrons
-    ! Renormalize the atomic density
+    ! Renormalize the atomic density and update grid_electrons (added 2022/12/13 12:11 dave)
     density_atom(:) = density_atom(:) * scale
-
+    grid_electrons = grid_electrons * scale 
     !write(*,*) "SCALE in atomic_density = ", scale, ne_in_cell, grid_electrons
 
     ! Set density if required
@@ -427,11 +423,7 @@ contains
        if (flag_InitialAtomicSpin) then
           ! -- Already scaled for spin
           do spin = 1, nspin
-             grid_electrons = zero
-             do iz = 1, n_my_grid_points
-                grid_electrons = grid_electrons + density(iz,spin)
-             end do
-             grid_electrons = grid_electrons * grid_point_volume
+             grid_electrons = grid_point_volume * rsum(n_my_grid_points, density(:,spin), 1)
              call gsum(grid_electrons)
              density_scale(spin) = ne_spin_in_cell(spin) / grid_electrons        ! renormalise
              density(:,spin) = density(:,spin) * density_scale(spin)
@@ -484,7 +476,7 @@ contains
   ! Subroutine set_density_pcc
   ! -----------------------------------------------------------
 
-  !!****f* density_module/set_densityi_pcc *
+  !!****f* density_module/set_density_pcc *
   !!
   !!  NAME
   !!   set_density_pcc
