@@ -1004,14 +1004,14 @@ contains
     end if
     ! 
     if (fdf_boolean('IO.WriteOutToASEFile',.false.)) then
+       call io_assign(io_ase) ! Reserve this unit on all processes
+       write_ase = .false.
        if (inode == ionode) then
           write_ase = .true.
-          call io_assign(io_ase)
           open(unit=io_ase,file=ase_file,iostat=stat)
           if (stat /= 0) &
                call cq_abort("Failed to open ASE Conquest output file", stat)
        end if
-       call gcopy(io_ase)
     else
        if (inode == ionode) write_ase = .false.       
     end if
@@ -3075,25 +3075,6 @@ contains
                 write(io_lun,fmt='(8x,i5,3f15.6,f12.3)')&
                      i,kk(1,i),kk(2,i),kk(3,i),wtk(i)
              end do
-             !
-             ! BEGIN %%%% ASE printing %%%%
-             !
-!!$             if ( write_ase ) then
-!!$                inquire(io_ase, opened=test_ase) 
-!!$                if ( .not. test_ase ) open(io_ase,file=ase_file, status='old', action='write',&
-!!$                     iostat=stat, position='append')
-!!$                
-!!$                write(io_ase,*)
-!!$                write(io_ase,7) nkp
-!!$                do i=1,nkp
-!!$                   write (io_ase,fmt='(8x,i5,3f15.6,f12.3)') &
-!!$                        i,kk(1,i),kk(2,i),kk(3,i),wtk(i)
-!!$                end do
-!!$                call io_close(io_ase)
-!!$             end if
-             !
-             ! END %%%% ASE printing %%%%
-             !
           end if
           ! Scale from fractional to reciprocal
           do i = 1, nkp
@@ -3149,24 +3130,6 @@ contains
                 write(io_lun,fmt='(8x,i5,3f15.6,f12.3)')&
                      i,kk(1,i)/(two*pi)*rcellx,kk(2,i)/(two*pi)*rcellx,kk(3,i)/(two*pi)*rcellx,wtk(i)
              end do
-             !
-             ! BEGIN %%%% ASE printing %%%%
-             !
-!!$             if ( write_ase ) then
-!!$                inquire(io_ase, opened=test_ase) 
-!!$                if ( .not. test_ase ) open(io_ase,file=ase_file, status='old', action='write',&
-!!$                     iostat=stat, position='append')             
-!!$                write(io_ase,*)
-!!$                write(io_ase,7) nkp
-!!$                do i=1,nkp
-!!$                   write(io_ase,fmt='(8x,i5,3f15.6,f12.3)')&
-!!$                        i,kk(1,i)/(two*pi)*rcellx,kk(2,i)/(two*pi)*rcellx,kk(3,i)/(two*pi)*rcellx,wtk(i)
-!!$                end do
-!!$                call io_close(io_ase)
-!!$             end if
-             !
-             ! END %%%% ASE printing %%%%
-             !
           end if
        end if
     else
@@ -3314,25 +3277,6 @@ contains
              write (io_lun,fmt='(8x,i5,3f15.6,f12.3)') &
                   i,kk(1,i),kk(2,i),kk(3,i),wtk(i)
           end do
-          !
-          !
-          ! BEGIN %%%% ASE printing %%%%
-          !
-!!$          if ( write_ase ) then
-!!$             inquire(io_ase, opened=test_ase) 
-!!$             if ( .not. test_ase ) open(io_ase,file=ase_file, status='old', action='write',&
-!!$                  iostat=stat, position='append')                       
-!!$             write(io_ase,*)
-!!$             write(io_ase,10) nkp
-!!$             do i=1,nkp
-!!$                write (io_ase,fmt='(8x,i5,3f15.6,f12.3)') &
-!!$                     i,kk(1,i),kk(2,i),kk(3,i),wtk(i)
-!!$             end do
-!!$             call io_close(io_ase) 
-!!$          end if
-!!$       !
-!!$       ! END %%%% ASE printing %%%%
-!!$       !             
        end if
        
        do i = 1, nkp
@@ -3354,7 +3298,7 @@ contains
           write (io_ase,fmt='(8x,i5,3f15.6,f12.3)') &
                i, kk(1,i)*rcellx/(two*pi), kk(2,i)*rcelly/(two*pi), kk(3,i)*rcellz/(two*pi), wtk(i)
        end do
-       call io_close(io_ase)
+       close(io_ase)
        !
     end if
     !

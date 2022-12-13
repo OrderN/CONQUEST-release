@@ -651,7 +651,7 @@ contains
 
     if (inode == ionode .and. write_ase ) then
        write (io_ase,fmt='(4x,a/)') 'end of force report'
-       call io_close(io_ase)
+       close(io_ase)
     end if
         
     if (inode == ionode) then
@@ -4439,7 +4439,7 @@ subroutine print_stress(label, str_mat, print_level,print_ase)
                  write(io_ase,fmt=fmt) label, str_mat(1,1)*scale, str_mat(2,2)*scale, &
                       str_mat(3,3)*scale, ' GPa'!en_units(energy_units)
                  !
-                 call io_close(io_ase)
+                 close(io_ase)
                  !
                  ! END %%%% ASE printing %%%%
                  !                     

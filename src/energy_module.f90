@@ -579,13 +579,18 @@ contains
     if (inode == ionode) then
        electrons_tot = electrons(1) + electrons(nspin)
        !
-       if(iprint_gen + min_layer>=1) then
+       if(iprint_gen + min_layer<2) then
           if (nspin == 1) then
              write (io_lun,fmt='(6x,"| Number of electrons      = ",f16.6)') electrons_tot
           else if(nspin == 2) then
              write (io_lun,fmt='(6x,"| Number of electrons (u/d)= ",2f16.6)') electrons(1),electrons(nspin)
           end if
        else if (iprint_gen + min_layer ==2) then
+          if (nspin == 1) then
+             write (io_lun,fmt='(6x,"| Number of electrons      = ",f16.6)') electrons_tot
+          else if(nspin == 2) then
+             write (io_lun,fmt='(6x,"| Number of electrons (u/d)= ",2f16.6)') electrons(1),electrons(nspin)
+          end if
           write (io_lun, 6) en_conv *    band_energy,  en_units(energy_units)
           if(flag_neutral_atom) then
              write (io_lun,68) en_conv * screened_ion_interaction_energy,  en_units(energy_units)
@@ -604,7 +609,9 @@ contains
           !write (io_lun, *) 
           !write (io_lun, 1) 
           !
-          if (nspin == 2) then
+          if (nspin == 1) then
+             write (io_lun,fmt='(6x,"| Number of electrons      = ",f25.15)') electrons_tot
+          else if (nspin == 2) then
              write (io_lun,19) electrons(1)
              write (io_lun,20) electrons(2)
              write (io_lun,21) electrons(1) - electrons(2)
@@ -765,45 +772,45 @@ contains
           !
           write(io_ase,133) en_conv*total_energy2, en_units(energy_units)       
           !
-          call io_close(io_ase)
+          close(io_ase)
           !
           ! END %%%% ASE printing %%%%
           !
        end if
     end if
     
-    call electron_number(electrons)
-
-    electrons_tot2 = zero
-    do spin = 1, nspin
-       if (flag_SpinDependentSF) spin_SF = spin
-       electrons_tot2 = electrons_tot2 + &
-            spin_factor * matrix_product_trace_length(matK(spin),matS(spin_SF))
-    end do
-
-    if (inode == ionode) then
-       electrons_tot = electrons(1) + electrons(nspin)
-       if(iprint_gen + min_layer>-1) then
-          write (io_lun,241) electrons_tot
-          if (nspin == 2 .and. (.not. flag_fix_spin_population)) &
-               write (io_lun,21) electrons(1) - electrons(2)
-       elseif (iprint_gen + min_layer > 2) then
-          write (io_lun,23) 
-          write (io_lun,24) electrons_tot
-          write (io_lun,25) electrons_tot2
-          !write (io_lun,26) one_electron_energy
-          !write (io_lun,27) potential_energy
-          !write (io_lun,28) kinetic_energy
-          write (io_lun,29) (total_energy2 - kinetic_energy)/kinetic_energy 
-          if (exx_alpha > zero .and. exx_alpha < one) then             
-             write (io_lun,50) x_energy/(one - exx_alpha)
-             write (io_lun,51) exx_energy/exx_alpha
-          end if
-          !write (io_lun, 1)
-          !write (io_lun, *) 
-          write (io_lun, *) 
-       end if
-    end if
+    !call electron_number(electrons)
+    !
+    !electrons_tot2 = zero
+    !do spin = 1, nspin
+    !   if (flag_SpinDependentSF) spin_SF = spin
+    !   electrons_tot2 = electrons_tot2 + &
+    !        spin_factor * matrix_product_trace_length(matK(spin),matS(spin_SF))
+    !end do
+    !
+    !if (inode == ionode) then
+    !   electrons_tot = electrons(1) + electrons(nspin)
+    !   if(iprint_gen + min_layer>-1) then
+    !      write (io_lun,241) electrons_tot
+    !      if (nspin == 2 .and. (.not. flag_fix_spin_population)) &
+    !           write (io_lun,21) electrons(1) - electrons(2)
+    !   elseif (iprint_gen + min_layer > 2) then
+    !      write (io_lun,23) 
+    !      write (io_lun,24) electrons_tot
+    !      write (io_lun,25) electrons_tot2
+    !      !write (io_lun,26) one_electron_energy
+    !      !write (io_lun,27) potential_energy
+    !      !write (io_lun,28) kinetic_energy
+    !      write (io_lun,29) (total_energy2 - kinetic_energy)/kinetic_energy 
+    !      if (exx_alpha > zero .and. exx_alpha < one) then             
+    !         write (io_lun,50) x_energy/(one - exx_alpha)
+    !         write (io_lun,51) exx_energy/exx_alpha
+    !      end if
+    !      !write (io_lun, 1)
+    !      !write (io_lun, *) 
+    !      write (io_lun, *) 
+    !   end if
+    !end if
 
 
 !****lat<$
