@@ -771,6 +771,8 @@ contains
   !!     Default setting of MakeInitialChargeFromK has been changed
   !!   2022/10/28 15:56 lionel
   !!     Added ASE output file setup ; default is T
+  !!   2022/12/14 10:01 dave and tsuyoshi
+  !!     Update test for solution method (diagon vs ordern) following issue #47
   !!  TODO
   !!  SOURCE
   !!
@@ -1189,14 +1191,14 @@ contains
     in_block_x = fdf_integer('Grid.InBlockX',4)
     in_block_y = fdf_integer('Grid.InBlockY',4)
     in_block_z = fdf_integer('Grid.InBlockZ',4)
-    ! Solution method - O(N) or diagonalisation ?
+    ! Solution method - O(N) or diagonalisation - diagonalisation default
     method = fdf_string(6,'DM.SolutionMethod','diagon') 
-    if(leqi(method,'diagon')) then
-       flag_diagonalisation = .true.
-       flag_check_Diag = .true. 
-    else
+    if(leqi(method,'ordern')) then
        flag_diagonalisation = .false.
        flag_check_Diag = .false.
+    else
+       flag_diagonalisation = .true.
+       flag_check_Diag = .true. 
     end if
     ! Read basis set
     basis_string = fdf_string(10,'Basis.BasisSet','PAOs')
