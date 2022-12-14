@@ -131,6 +131,8 @@ contains
   !!    for comparison with dE from structural optimisation
   !!   2021/10/13 08:58 dave
   !!    Add call to new_SC_potl when doing MSSF/LFD without optimisation
+  !!   2022/12/13 16:46 dave and tsuyoshi
+  !!    Move output of wavefunctions and potential to be after final energy and force call
   !!  SOURCE
   !!
   subroutine get_E_and_F(fixed_potential, vary_mu, total_energy, &
@@ -150,7 +152,7 @@ contains
                                  flag_multisite, iprint_minE,          &
                                  io_lun, flag_out_wf, wf_self_con, flag_write_DOS, &
                                  flag_diagonalisation, nspin, flag_LFD, min_layer, &
-                                 flag_DM_converged
+                                 flag_DM_converged, write_ase
     use energy,            only: get_energy, xc_energy, final_energy
     use GenComms,          only: cq_abort, inode, ionode, cq_warn
     use blip_minimisation, only: vary_support, dE_blip
@@ -163,7 +165,8 @@ contains
     use units
     use io_module,         only: return_prefix
     use DiagModule,        only: nkp
-    use H_matrix_module,   only: flag_write_locps, locps_output
+    use H_matrix_module,   only: flag_write_locps, locps_output, get_H_matrix
+    use maxima_module,     only: maxngrid
 
     implicit none
 
@@ -179,6 +182,7 @@ contains
     ! Local variables
     logical           :: reset_L
     real(double)      :: vdW_energy_correction, vdW_xc_energy
+    real(double), dimension(nspin) :: electrons
     type(cq_timer)    :: tmr_l_energy, tmr_l_force, tmr_vdW
     type(cq_timer)    :: backtrace_timer
     integer           :: backtrace_level
@@ -364,16 +368,6 @@ contains
     call final_energy(nkp,backtrace_level)
 !****lat>$
 
-    ! output WFs or DOS
-    if (flag_self_consistent.AND.(flag_out_wf.OR.flag_write_DOS.OR.flag_write_locps)) then
-       if(flag_out_wf.OR.flag_write_DOS) wf_self_con=.true.
-       if(flag_write_locps) locps_output=.true.
-       call FindMinDM(n_L_iterations, vary_mu, L_tolerance,&
-            reset_L, .false.)
-       wf_self_con=.false.
-       locps_output=.false.
-    end if
-
     call stop_print_timer(tmr_l_energy, "calculating ENERGY", &
                           IPRINT_TIME_THRES1)
     if (atomch_output) call get_atomic_charge()
@@ -389,6 +383,24 @@ contains
       ! Stop timing the force calculation
       call stop_print_timer(tmr_l_force, "calculating FORCE", &
                             IPRINT_TIME_THRES1)
+    end if
+
+    ! output WFs or DOS
+    if (flag_self_consistent.AND.(flag_out_wf.OR.flag_write_DOS.OR.flag_write_locps)) then
+       write_ase = .false. ! Safe as we're about to finish
+       ! Dump wavefunction coefficients or DOS data (requires diagonalisation)
+       if(flag_out_wf.OR.flag_write_DOS) then
+          wf_self_con=.true.
+          call FindMinDM(n_L_iterations, vary_mu, L_tolerance,&
+               reset_L, .false.)
+       end if
+       wf_self_con=.false.
+       ! Dump potentials (requires H matrix build)
+       if(flag_write_locps) then
+          locps_output=.true.
+          call get_H_matrix(.false.,.true., electrons, density, maxngrid)
+       end if
+       locps_output=.false.
     end if
 
     !% NOTE: This call should be outside this subroutine [2013/08/20 michi]
