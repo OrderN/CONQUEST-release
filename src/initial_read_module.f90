@@ -2136,7 +2136,7 @@ contains
        restart_DM         = fdf_boolean('General.LoadDM', .true.)
        find_chdens    = fdf_boolean('SC.MakeInitialChargeFromK',.true.)
        if (flag_XLBOMD) restart_X=fdf_boolean('XL.LoadX', .true.)
-       if (flag_multisite) read_option = fdf_boolean('Basis.LoadCoeffs', .true.)
+       if (flag_multisite .or. flag_basis_set==blips) read_option = fdf_boolean('Basis.LoadCoeffs', .true.)
     else
        flag_read_velocity = fdf_boolean('AtomMove.ReadVelocity',.false.)
        restart_DM         = fdf_boolean('General.LoadDM', .false.)
@@ -2146,7 +2146,7 @@ contains
           find_chdens    = fdf_boolean('SC.MakeInitialChargeFromK',.false.)
        endif
        if (flag_XLBOMD) restart_X=fdf_boolean('XL.LoadX', .false.)
-       if (flag_multisite) read_option = fdf_boolean('Basis.LoadCoeffs', .false.)
+       if (flag_multisite .or. flag_basis_set==blips) read_option = fdf_boolean('Basis.LoadCoeffs', .false.)
     end if
 
     if (restart_DM .and. flag_Multisite .and. .not.read_option) then
@@ -2575,6 +2575,8 @@ contains
   !!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
   !!   2022/10/28 lionel
   !!    Add printing of species table in ASE output
+  !!   2022/12/14 11:31 dave
+  !!    Removed output of support grid spacing with blips (shouldn't be here: species dependent)
   !!  SOURCE
   !!
   subroutine write_info(titles, mu, vary_mu, HNL_fac, NODES)
@@ -2659,9 +2661,7 @@ contains
     ! Ground state search details
     write(io_lun,fmt='(/4x,"Ground state search:")')
     if(flag_basis_set==blips) then 
-       write(io_lun,'(6x,"Support functions represented with blip basis")') 
-       write(io_lun,'(6x,"Support-grid spacing: ",f7.4,1x,a2)') &
-            dist_conv*blip_info(n)%SupportGridSpacing, d_units(dist_units)
+       write(io_lun,'(6x,"Support functions represented with blip basis")')
     else
        write(io_lun,'(6x,"Support functions represented with PAO basis")') 
        if(flag_Multisite) then

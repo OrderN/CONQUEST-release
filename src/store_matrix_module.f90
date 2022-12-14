@@ -134,7 +134,7 @@ contains
     ! Module usage
     use global_module, ONLY: ni_in_cell, nspin, nspin_SF, flag_diagonalisation, flag_Multisite, &
          flag_XLBOMD, flag_propagateX, flag_dissipation, integratorXL, flag_SFcoeffReuse, &
-         flag_DumpMatrices
+         flag_DumpMatrices, flag_basis_set, PAOs
     use matrix_data, ONLY: Lrange, Hrange, SFcoeff_range, SFcoeffTr_range, HTr_range, Srange, LSrange
     use mult_module, ONLY: matL,L_trans, matK, matSFcoeff, matS
     use io_module, ONLY: append_coords, pdb_template, write_atomic_positions
@@ -164,7 +164,8 @@ contains
     index_local = 0; if(present(index)) index_local=index
     MDstep_local = 0; if(present(MDstep)) MDstep_local=MDstep
 
-    if(flag_SFcoeffReuse .or. flag_Multisite) then
+    ! Blip coefficients are saved separately
+    if(flag_basis_set==PAOs .and. (flag_SFcoeffReuse .or. flag_Multisite)) then
        call dump_matrix_update('SFcoeff',matSFcoeff,SFcoeff_range,&
             index=index_local,nspin=nspin_SF,iprint_mode=mat,MDstep=MDstep_local)
     endif
