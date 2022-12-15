@@ -4961,7 +4961,7 @@ contains
     use numbers,         only: half, zero, one, very_small
     use global_module,   only: flag_diagonalisation, atom_coord, atom_vels, atom_coord_diff, &
          rcellx, rcelly, rcellz, ni_in_cell, nspin, nspin_SF, id_glob, &
-         area_moveatoms
+         area_moveatoms, flag_basis_set, blips
     ! n_proc_old and glob2node_old have been removed
     use GenComms,        only: my_barrier, inode, ionode, cq_abort, gcopy
     use mult_module,     only: matL, L_trans, matK, matS, S_trans, matSFcoeff, SFcoeff_trans, &
@@ -5030,6 +5030,7 @@ contains
        if(inode .eq. ionode) write(io_lun,*) 'Update_Pos_and_Matrices:: updateX is not implemented yet.'
     case(updateSFcoeff)
        flag_SFcoeff=.true.
+       if(flag_basis_set==blips) flag_SFcoeff = .false. ! Blips saved elsewhere
        if(flag_diagonalisation) then
           flag_K=.true.
        else

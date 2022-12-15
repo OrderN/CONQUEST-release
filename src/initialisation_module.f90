@@ -1110,7 +1110,7 @@ contains
          flag_out_wf, wf_self_con, &
          flag_write_DOS, flag_neutral_atom, &
          atomf, sf, flag_LFD, nspin_SF, flag_diagonalisation, &
-         ne_in_cell, min_layer
+         ne_in_cell, min_layer, flag_basis_set, PAOs
     use ion_electrostatic,   only: ewald, screened_ion_interaction
     use S_matrix_module,     only: get_S_matrix
     use GenComms,            only: my_barrier,end_comms,inode,ionode, &
@@ -1203,7 +1203,7 @@ contains
     endif
 
     ! (0) If we use PAOs and contract them, prepare SF-PAO coefficients here
-    if (atomf.ne.sf) then
+    if ((atomf .ne. sf) .and. flag_basis_set==PAOs) then
        if (restart_rho) then
           ! Read density from input files here to make SF-PAO coefficients
           if (nspin == 2) then
