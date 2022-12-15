@@ -4191,7 +4191,7 @@ contains
             enthalpy0, en_units(energy_units), max_stress*HaBohr3ToGPa
     end if
     ! Check for trivial case where forces are converged
-    if (abs(max) < MDcgtol .and. max_stress < cell_stress_tol) then
+    if (abs(max) < MDcgtol .and. max_stress*HaBohr3ToGPa < cell_stress_tol) then
        done = .true.
        if (inode == ionode) then
           write(io_lun,'(4x,a,i4,a)') trim(prefixGO)//" converged in ", iter, " iterations"
@@ -4325,7 +4325,7 @@ contains
               trim(prefix)//" exceeded number of MD steps: ",iter
       end if
       if (abs(dH) < enthalpy_tolerance) then
-        if (abs(max) < MDcgtol .and. max_stress < cell_stress_tol) then
+        if (abs(max) < MDcgtol .and. max_stress*HaBohr3ToGPa < cell_stress_tol) then
           done = .true.
           if (inode==ionode) then
              write(io_lun,'(/4x,a,i4,a)') trim(prefixGO)//" converged in ", iter, " iterations"
