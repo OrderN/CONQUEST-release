@@ -4,16 +4,16 @@
 # check convergence very carefully before using this.
 
 General.NumberOfSpecies 1
-# The 4p shell is really semi-core, so adjust the cutoff
-General.SemicoreEnergy -0.58
+# The 5p shell should really be semi-core, so change the cutoff energy
+General.SemicoreEnergy -0.68
 
 %block SpeciesLabels
-1  Rb
+1  Ba
 %endblock
 
-%block Rb
-Atom.PseudopotentialFile Rb.in
-Atom.VKBFile Rb.pot
+%block Ba
+Atom.PseudopotentialFile Ba.in
+Atom.VKBFile Ba.pot
 Atom.BasisSize medium
 # Polarisation orbitals are potentially problematic for Groups I and II.
 # The highest energy valence orbital is l=0 so the polarisation orbital
@@ -21,10 +21,10 @@ Atom.BasisSize medium
 # mean a basis set with only l=0 and l=1.  It is also possible to polarise 
 # perturbatively from the highest energy l=1 orbital to give a polarisation 
 # orbital with l=2 using the lines below, but this will be perturbing a
-# semi-core state and will give a basis where the only l=1 orbitals are
-# semi-core states.  This may not be reliable: we recommend careful testing
-# should you choose this route.
+# low-lying state (close to semi-core) and will give a basis where the only 
+# l=1 orbitals are close to semi-core states.  This may not be reliable: we 
+# recommend careful testing should you choose this route.
 #
-#Atom.PolarisedN 4
+#Atom.PolarisedN 5
 #Atom.PolarisedL 1
 %endblock

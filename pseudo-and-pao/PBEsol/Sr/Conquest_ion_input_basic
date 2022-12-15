@@ -5,15 +5,15 @@
 
 General.NumberOfSpecies 1
 # The 4p shell is really semi-core, so adjust the cutoff
-General.SemicoreEnergy -0.58
+General.SemicoreEnergy -0.80
 
 %block SpeciesLabels
-1  Rb
+1  Sr
 %endblock
 
-%block Rb
-Atom.PseudopotentialFile Rb.in
-Atom.VKBFile Rb.pot
+%block Sr
+Atom.PseudopotentialFile Sr.in
+Atom.VKBFile Sr.pot
 Atom.BasisSize medium
 # Polarisation orbitals are potentially problematic for Groups I and II.
 # The highest energy valence orbital is l=0 so the polarisation orbital
