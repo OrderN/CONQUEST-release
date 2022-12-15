@@ -64,6 +64,7 @@ User Guide
    ext-tools
    errors
    input_tags
+   generating_paos
 
 Tutorials
 ---------

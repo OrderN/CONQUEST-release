@@ -1,0 +1,30 @@
+# This file will create a smaller and more basic basis set than in the
+# default input file (with only one set of polarisation functions, which
+# are l=1 by default), but this will likely be less accurate.  You should
+# check convergence very carefully before using this.
+
+General.NumberOfSpecies 1
+# If you want to force the 5p shell to be semi-core, uncomment the line below
+#General.SemicoreEnergy -0.49
+
+%block SpeciesLabels
+1  Cs
+%endblock
+
+%block Cs
+Atom.PseudopotentialFile Cs.in
+Atom.VKBFile Cs.pot
+Atom.BasisSize medium
+# Polarisation orbitals are potentially problematic for Groups I and II.
+# The highest energy valence orbital is l=0 so the polarisation orbital
+# using the standard perturbative approach would be l=1, but that would 
+# mean a basis set with only l=0 and l=1.  It is also possible to polarise 
+# perturbatively from the highest energy l=1 orbital to give a polarisation 
+# orbital with l=2 using the lines below, but this will be perturbing a
+# low-lying state (close to semi-core) and will give a basis where the only 
+# l=1 orbitals are close to semi-core states.  This may not be reliable: we 
+# recommend careful testing should you choose this route.
+#
+#Atom.PolarisedN 5
+#Atom.PolarisedL 1
+%endblock
