@@ -182,7 +182,7 @@ contains
     use datatypes
     use dimens,         only: r_super_x, r_super_y, r_super_z
     use global_module,  only: x_atom_cell, y_atom_cell, z_atom_cell, &
-                              ni_in_cell,                            &
+                              ni_in_cell, numprocs,                  &
                               flag_fractional_atomic_coords, rcellx, &
                               rcelly, rcellz, id_glob, iprint_init,  &
                               id_glob_inv, atom_coord, species_glob, &
@@ -513,6 +513,8 @@ second:   do
           end if
           call io_close(lun)
        end if pdb
+       ! Check for sensible number of processes
+       if(ni_in_cell<numprocs) call cq_abort("We must have at least one atom per process: ",ni_in_cell,numprocs)
     end if
     if((iprint_init>0) .or. (iprint_init==0.AND.ni_in_cell<atom_output_threshold)) &
          call print_atomic_positions
