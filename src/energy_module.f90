@@ -579,7 +579,7 @@ contains
     if (inode == ionode) then
        electrons_tot = electrons(1) + electrons(nspin)
        !
-       if(iprint_gen + min_layer<2) then
+       if(iprint_gen + min_layer<2 .and. iprint_gen + min_layer>-1) then
           if (nspin == 1) then
              write (io_lun,fmt='(6x,"| Number of electrons      = ",f16.6)') electrons_tot
           else if(nspin == 2) then

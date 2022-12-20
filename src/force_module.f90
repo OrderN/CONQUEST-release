@@ -530,8 +530,7 @@ contains
     ! BEGIN %%%% ASE printing %%%%
     !    
     ! print in ASE output ; kept the conditions
-    if ( inode == ionode .and. write_forces .and. (iprint_MD + min_layer>=0 .and. ni_in_cell<atom_output_threshold) &
-       .and. write_ase ) then
+    if ( inode == ionode .and. write_ase ) then
 
        open(io_ase,file=ase_file, status='old', action='readwrite', iostat=stat, position='rewind')
        
