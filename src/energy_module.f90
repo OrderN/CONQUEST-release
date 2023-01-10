@@ -449,6 +449,8 @@ contains
   !!   2021/10/28 17:13 lionel
   !!    Added 'DFT total energy' printing in ASE output
   !!    nkp must to be passed to avoid circular dependency
+  !!   2023/01/10 18:44 lionel
+  !!    Secure ASE printing when using ordern
   !!  SOURCE
   !!
   subroutine final_energy(nkp,level)
@@ -472,7 +474,8 @@ contains
                                       flag_exx, exx_alpha,            &
                                       flag_neutral_atom, min_layer,   &
                                       flag_fix_spin_population,       &
-                                      io_ase, write_ase, ase_file
+                                      io_ase, write_ase, ase_file,    &
+                                      flag_diagonalisation
 
     use density_module,         only: electron_number
     use pseudopotential_common, only: core_correction, &
@@ -756,16 +759,22 @@ contains
           !
           if (stat .ne. 0) call cq_abort('ASE/energy error opening file !')
           !
-          if ( nspin == 2 ) then
-             counter = nkp*3 + (nspin+1)*nkp + nspin*nkp*(matrix_size/3) + 1 + 2 
-             if ( mod(matrix_size,3) > 0 ) counter = counter + nspin*nkp
+          if ( flag_diagonalisation ) then
+             if ( nspin == 2 ) then
+                counter = nkp*3 + (nspin+1)*nkp + nspin*nkp*(matrix_size/3) + 1 + 2 
+                if ( mod(matrix_size,3) > 0 ) counter = counter + nspin*nkp
+                
+             else
+                counter = nkp*3 + nkp*(matrix_size/3) + 1 + 1
+                if ( mod(matrix_size,3) > 0 ) counter = counter + nkp
+             
+             end if
+             counter = counter + 7 + n_species + nkp + 1 + 1
              
           else
-             counter = nkp*3 + nkp*(matrix_size/3) + 1 + 1
-             if ( mod(matrix_size,3) > 0 ) counter = counter + nkp
-             
+             counter =  7 + n_species
           end if
-          counter = counter + 7 + n_species + nkp + 1 + 1
+          
           do i = 1, counter
              read (io_ase,*)
           end do
