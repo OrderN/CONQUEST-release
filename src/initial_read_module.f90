@@ -2596,7 +2596,7 @@ contains
          iMethfessel_Paxton
     use blip,                 only: blip_info
     use global_module,        only: flag_basis_set, blips,        &
-         flag_precondition_blips, io_lun, io_ase, write_ase, flag_LFD, runtype, flag_opt_cell, &
+         flag_precondition_blips, io_lun, io_ase, write_ase, flag_LFD, runtype, flag_opt_cell, optcell_method, &
          flag_Multisite, flag_diagonalisation, flag_neutral_atom, temp_ion, &
          flag_self_consistent, flag_vary_basis, iprint_init, flag_pcc_global, &
          nspin, flag_SpinDependentSF, flag_fix_spin_population, ne_spin_in_cell, flag_XLBOMD,&
@@ -2645,12 +2645,26 @@ contains
        write(io_lun, fmt='(4x,a15,"static calculation")') job_str
     else if(leqi(runtype,'cg')) then
        if(flag_opt_cell) then
-          write(io_lun, fmt='(4x,a15,"CG cell relaxation")') job_str
+          if(optcell_method==1) then
+             write(io_lun, fmt='(4x,a15,"CG cell relaxation")') job_str
+          else
+             write(io_lun, fmt='(4x,a15,"Combined CG atomic and cell relaxation")') job_str
+          end if
        else
           write(io_lun, fmt='(4x,a15,"CG atomic relaxation")') job_str
        end if
     else if(leqi(runtype,'sqnm')) then
-       write(io_lun, fmt='(4x,a15,"SQNM atomic relaxation")') job_str
+       if(flag_opt_cell) then
+          if(optcell_method==1) then
+             write(io_lun, fmt='(4x,a15,"CG cell relaxation")') job_str
+          else if(optcell_method==2) then
+             write(io_lun, fmt='(4x,a15,"Combined SQNM atomic and CG cell relaxation")') job_str
+          else
+             write(io_lun, fmt='(4x,a15,"Combined CG atomic and cell relaxation")') job_str
+          end if
+       else
+          write(io_lun, fmt='(4x,a15,"SQNM atomic relaxation")') job_str
+       end if
     else if(leqi(runtype,'md')) then
        ensemblestr = md_ensemble
        call chrcap(ensemblestr,3)

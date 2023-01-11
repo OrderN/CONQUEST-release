@@ -897,7 +897,12 @@ contains
           done = .true.
        endif
        k3_local = k3 - k3_old
-       if (k3 <= very_small) call cq_abort("Step too small: safemin2 failed!")
+       if (k3 <= very_small) then
+          if(inode==ionode) write(io_lun,fmt='(4x,a,i2,a)') &
+               trim(prefix)//" unable to find step size after ", iter, &
+               " iterations.  Check Conquest_warnings."
+          call cq_abort("Step too small: safemin2 failed!")
+       end if
        call stop_print_timer(tmr_l_iter, "a safemin2 iteration", &
             IPRINT_TIME_THRES1)
     end do ! while (.not. done)
@@ -2436,7 +2441,12 @@ contains
        else
           done = .true.
        endif
-       if (k3 <= very_small) call cq_abort("Step too small: safemin_cell failed!")
+       if (k3 <= very_small) then
+          if(inode==ionode) write(io_lun,fmt='(4x,a,i2,a)') &
+               trim(prefix)//" unable to find step size after ", iter, &
+               " iterations.  Check Conquest_warnings."
+          call cq_abort("Step too small: safemin_cell failed!")
+       end if
        call stop_print_timer(tmr_l_iter, "a safemin_cell iteration", &
             IPRINT_TIME_THRES1)
     end do !while (.not. done)
@@ -2767,7 +2777,12 @@ contains
           done = .true.
        end if
        k3_local = k3 - k3_old
-       if (k3 <= very_small) call cq_abort("Step too small: safemin_full failed!")
+       if (k3 <= very_small) then
+          if(inode==ionode) write(io_lun,fmt='(4x,a,i2,a)') &
+               trim(prefix)//" unable to find step size after ", iter, &
+               " iterations.  Check Conquest_warnings."
+          call cq_abort("Step too small: safemin_full failed!")
+       end if
        call stop_print_timer(tmr_l_iter, "a safemin_full iteration", &
             IPRINT_TIME_THRES1)
     end do ! while (.not. done)

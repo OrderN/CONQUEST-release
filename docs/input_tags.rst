@@ -864,19 +864,21 @@ AtomMove.AtomicStress (*boolean*)
 
 AtomMove.OptCell (*boolean*)
     Turns on conjugate gradient relaxation of the simulation box dimensions a, b
-    and c. Note that AtomMove.TypeOfRun must also be set to cg.
+    and c. Note that AtomMove.TypeOfRun must also be set to cg (except for method 2 below
+    where sqnm will result in SQNM for atomic positions and CG for cell vectors).
 
     *default*: F
 
 AtomMove.OptCellMethod (*integer*)
     Cell optimisation method.
-    1. fixed fractional coordinates
-    2. double loop - inner: full atomic cg optimisation, outer: single cell
-    steepest descent step. Generally only useful for systems that are extremely
-    problematic to relax
-    3. simultaneous cell and atomic conjugate gradients relaxation
-
+    
     *default*: 1
+
+    Options:
+
+    1. Fixed fractional coordinates (only cell vectors)
+    2. Alternating atomic position and cell vector optimisation (recommended for simultaneous optimisation)
+    3. Simultaneous cell and atomic conjugate gradients relaxation; caution recommended (can be unstable)
 
 AtomMove.EnthalpyTolerance (*real*)
     Enthalpy tolerance for cell optimisation

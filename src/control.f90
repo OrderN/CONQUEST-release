@@ -3548,16 +3548,21 @@ contains
     ! Cell loop
     do while (.not. done_cell)
        ! Relax ions
-       if(inode==ionode) write(io_lun,fmt='(4x,a)') trim(prefix)//" ionic relaxation"
-       !min_layer = min_layer - 1
-       if ( leqi(runtype, 'cg')    ) then
-          call cg_run(fixed_potential, vary_mu, energy1)
-       else if ( leqi(runtype, 'sqnm')    ) then
-          call sqnm(fixed_potential, vary_mu, energy1)
+       if(abs(max)>MDcgtol) then
+          if(inode==ionode) write(io_lun,fmt='(4x,a)') trim(prefix)//" ionic relaxation"
+          !min_layer = min_layer - 1
+          if ( leqi(runtype, 'cg')    ) then
+             call cg_run(fixed_potential, vary_mu, energy1)
+          else if ( leqi(runtype, 'sqnm')    ) then
+             call sqnm(fixed_potential, vary_mu, energy1)
+          end if
+          !min_layer = min_layer + 1
+          ! Analyse forces, stresses and energies
+          call get_maxf(max)
+       else
+          energy1 = energy0
+          if(inode==ionode) write(io_lun,fmt='(4x,a)') trim(prefix)//" no ionic relaxation (force converged)"
        end if
-       !min_layer = min_layer + 1
-       ! Analyse forces, stresses and energies
-       call get_maxf(max)
        enthalpy1 = enthalpy(energy1, press)
        dH = enthalpy1 - enthalpy0
        volume = rcellx*rcelly*rcellz
@@ -3585,16 +3590,20 @@ contains
           exit
        end if
        ! Relax cell
-       if(inode==ionode) write(io_lun,fmt='(4x,a)') trim(prefix)//" cell relaxation"
-       !min_layer = min_layer - 1
-       !if ( leqi(runtype, 'cg')    ) then
+       if(max_stress > stress_target) then
+          if(inode==ionode) write(io_lun,fmt='(4x,a)') trim(prefix)//" cell relaxation"
+          !min_layer = min_layer - 1
+          !if ( leqi(runtype, 'cg')    ) then
           call cell_cg_run(fixed_potential, vary_mu, energy1)
-       !else if ( leqi(runtype, 'sqnm')    ) then
-       !   call cell_sqnm(fixed_potential, vary_mu, energy1)
-       !end if
-       !min_layer = min_layer + 1
-       ! Analyse forces, stresses and energies
-       call get_maxf(max)
+          !else if ( leqi(runtype, 'sqnm')    ) then
+          !   call cell_sqnm(fixed_potential, vary_mu, energy1)
+          !end if
+          !min_layer = min_layer + 1
+          ! Analyse forces, stresses and energies
+          call get_maxf(max)
+       else
+          if(inode==ionode) write(io_lun,fmt='(4x,a)') trim(prefix)//" no cell relaxation (stress converged)"
+       end if
        enthalpy1 = enthalpy(energy1, press)
        dH = enthalpy1 - enthalpy0
        newRMSstress = sqrt(((stress(1,1)*stress(1,1)) + &
@@ -4099,7 +4108,7 @@ contains
     use move_atoms,    only: safemin_full, cq_to_vector, enthalpy, &
                              enthalpy_tolerance, backtrack_linemin_full, &
                              cg_line_min, safe, backtrack
-    use GenComms,      only: inode, ionode
+    use GenComms,      only: inode, ionode, cq_warn
     use GenBlas,       only: dot
     use force_module,  only: tot_force, stress
     use io_module,     only: write_atomic_positions, pdb_template, &
@@ -4181,7 +4190,7 @@ contains
     volume = rcellx*rcelly*rcellz
     max_stress = zero
     do i=1,3
-       stress_diff = abs(press + stress(i,i))/volume
+       stress_diff = abs(press*volume + stress(i,i))/volume
        if (stress_diff > max_stress) max_stress = stress_diff
     end do
     enthalpy0 = enthalpy(energy0, press)
@@ -4201,8 +4210,10 @@ contains
                trim(prefix),for_conv*max, en_units(energy_units), d_units(dist_units)
        end if
        return
+    else if(abs(max) < MDcgtol) then
+       if(inode==ionode) &
+            call cq_warn(trim(prefix)," Maximum force below threshold; consider only optimising cell")
     end if
-
     iter = 1
     ggold = zero
     force_old = zero
@@ -4228,7 +4239,8 @@ contains
       if (abs(ggold) < 1.0e-6_double) then
         gamma = zero
       else
-        gamma = (gg-gg1)/ggold ! PR - change to gg/ggold for FR
+         !gamma = (gg-gg1)/ggold ! PR - change to gg/ggold for FR
+         gamma = gg/ggold ! PR - change to gg/ggold for FR
       end if
        if(gamma<zero) then
           if(inode==ionode .and. iprint_MD + min_layer > 2) &
@@ -4278,12 +4290,12 @@ contains
       if (flag_write_xsf) call write_xsf('trajectory.xsf', iter)
 
       ! Analyse forces and stress
-      g0 = dot(length, force, 1, force, 1)
+      g0 = dot(length-3, tot_force, 1, tot_force, 1)
       call get_maxf(max)
       volume = rcellx*rcelly*rcellz
       max_stress = zero
       do i=1,3
-        stress_diff = abs(press + stress(i,i))/volume
+        stress_diff = abs(press*volume + stress(i,i))/volume
         if (stress_diff > max_stress) max_stress = stress_diff
       end do
 
