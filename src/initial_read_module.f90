@@ -770,7 +770,7 @@ contains
   !!   2020/01/07 tsuyoshi 
   !!     Default setting of MakeInitialChargeFromK has been changed
   !!   2022/10/28 15:56 lionel
-  !!     Added ASE output file setup ; default is T
+  !!     Added ASE output file setup ; default is F
   !!   2022/12/14 10:01 dave and tsuyoshi
   !!     Update test for solution method (diagon vs ordern) following issue #47
   !!  TODO
@@ -966,7 +966,7 @@ contains
     character(len=6)  :: method ! To find whether we diagonalise or use O(N)
     character(len=5)  :: ps_type !To find which pseudo we use
     character(len=8)  :: tmp
-    logical :: flag_ghost, find_species
+    logical :: flag_ghost, find_species, test_ase
 
     ! spin polarisation
     logical :: flag_spin_polarisation
@@ -1006,10 +1006,11 @@ contains
     end if
     ! 
     if (fdf_boolean('IO.WriteOutToASEFile',.false.)) then
-       call io_assign(io_ase) ! Reserve this unit on all processes
-       write_ase = .false.
+       !call io_assign(io_ase) ! Reserve this unit on all processes
+       !write_ase = .false.
        if (inode == ionode) then
           write_ase = .true.
+          call io_assign(io_ase) 
           open(unit=io_ase,file=ase_file,iostat=stat)
           if (stat /= 0) &
                call cq_abort("Failed to open ASE Conquest output file", stat)
