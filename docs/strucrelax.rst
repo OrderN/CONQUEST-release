@@ -117,10 +117,11 @@ coordinates* (``AtomMove.OptCellMethod 1``) using the following input:
    AtomMove.TypeOfRun cg
    AtomMove.OptCell T
    AtomMove.OptCellMethod 1
-   AtomMove.TargetPressure 1.0
    AtomMove.ReuseDM T
    AtomMove.EnthalpyTolerance 1E-5
    AtomMove.StressTolerance 0.1
+
+Note that stress is in GPa and enthalpy is in Ha by default.
 
 Go to :ref:`top <strucrelax>`.
 
@@ -134,31 +135,31 @@ changes in the simulation cell lengths; however for more complicated systems suc
 molecular crystals and amorphous materials, it is necessary simultaneously relax
 the ionic positions and simulation cell lengths (recalling that CONQUEST only
 allows *orthorhombic* unit cells). This can be done by setting
-``AtomMove.OptCellMethod 3``
+``AtomMove.OptCellMethod 2`` or ``AtomMove.OptCellMethod 3``
 
 ::
 
    AtomMove.TypeOfRun cg
    AtomMove.OptCell T
-   AtomMove.OptCellMethod 3
-   AtomMove.TargetPressure 1.0
+   AtomMove.OptCellMethod 2
    AtomMove.ReuseDM T
    AtomMove.MaxForceTol 5e-4
    AtomMove.EnthalpyTolerance 1E-5
    AtomMove.StressTolerance 0.1
 
-Note that the enthalpy will generally converge much more rapidly than the force
+Note that stress is in GPa and enthalpy is in Ha by default.
+
+The enthalpy will generally converge much more rapidly than the force
 and stress, and that it may be necessary to tighten ``minE.SCTolerance``
 (diagonalisation) or ``minE.LTolerance`` (order(N)) to reach the force
-tolerance, if it is even possible.
-
-Due to the nature of the complex partitioning system, large and sudden changes in volume
-may cause the calculation to crash, particlularly in the case of combined
-optimisation. In such cases, it may help to try ``AtomMove.OptCellMethod 2``,
+and stress tolerance, if it is even possible.  For combined optimisation,
+we recommend using ``AtomMove.OptCellMethod 2``,
 which uses a simple but robust double-loop minimisation: a full ionic 
 relaxation (using either cg or sqnm) followed by a full simulation cell 
-relaxation (using cg). This is considerably less efficient, but
-may help in particularly problematic cases.
+relaxation (using cg).  While this may be less efficient than optimising all
+degrees of freedom simultaneously, it is much more robust.  It is also possible
+to optimise cell vectors and atomic positions simultaneously, using ``AtomMove.OptCellMethod 3``,
+but this should be monitored carefully, as it can be unstable.
 
 Go to :ref:`top <strucrelax>`.
 
