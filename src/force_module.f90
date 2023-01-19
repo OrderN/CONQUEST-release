@@ -220,6 +220,8 @@ contains
   !!    Add dispersion (D2) stress
   !!   2022/10/28 16:12 lionel
   !!    Add printint forces/stress in ASE output
+  !!   2023/01/10 18:41 lionel
+  !!    Secure ASE printing when using ordern
   !!  SOURCE
   !!
   subroutine force(fixed_potential, vary_mu, n_cg_L_iterations, &
@@ -239,7 +241,7 @@ contains
     use pseudopotential_common, only: pseudo_type, OLDPS, SIESTA,      &
                                       STATE, ABINIT, core_correction, flag_neutral_atom_projector
     use pseudo_tm_module,       only: loc_pp_derivative_tm, loc_HF_stress, loc_G_stress
-    use global_module,          only: flag_self_consistent,            &
+    use global_module,          only: flag_self_consistent, flag_diagonalisation,  &
                                       flag_move_atom, id_glob,         &
                                       WhichPulay, BothPulay, PhiPulay, &
                                       SPulay, flag_basis_set, PAOs,    &
@@ -530,24 +532,29 @@ contains
     ! BEGIN %%%% ASE printing %%%%
     !    
     ! print in ASE output ; kept the conditions
-    if ( inode == ionode .and. write_forces .and. (iprint_MD + min_layer>=0 .and. ni_in_cell<atom_output_threshold) &
-       .and. write_ase ) then
+    if ( inode == ionode .and. write_ase ) then
 
        open(io_ase,file=ase_file, status='old', action='readwrite', iostat=stat, position='rewind')
        
        if (stat .ne. 0) call cq_abort('ASE/force error opening file !')
        !
-       if ( nspin == 2 ) then
-          counter = nkp*3 + (nspin+1)*nkp + nspin*nkp*(matrix_size/3) + 1 + 2
-          if ( mod(matrix_size,3) > 0 ) counter = counter + nspin*nkp
-       
+       if ( flag_diagonalisation ) then
+          if ( nspin == 2 ) then
+             counter = nkp*3 + (nspin+1)*nkp + nspin*nkp*(matrix_size/3) + 1 + 2
+             if ( mod(matrix_size,3) > 0 ) counter = counter + nspin*nkp
+             
+          else
+             counter = nkp*3 + nkp*(matrix_size/3) + 1 + 1
+             if ( mod(matrix_size,3) > 0 ) counter = counter + nkp
+             
+          end if          
+          counter = counter + 7 + n_species + 2 + nkp + 2
+          
        else
-          counter = nkp*3 + nkp*(matrix_size/3) + 1 + 1
-          if ( mod(matrix_size,3) > 0 ) counter = counter + nkp
-       
+          counter =  7 + n_species + 2
+          
        end if
-       counter = counter + 7 + n_species + 2 + nkp + 2
-
+          
        !%%%%%%%%%%
        !counter = 0
        !%%%%%%%%%%
@@ -4386,7 +4393,7 @@ subroutine print_stress(label, str_mat, print_level,print_ase)
   use units
   use GenComms,       only: inode, ionode, cq_abort
   use global_module,  only: iprint_MD, flag_full_stress, rcellx, rcelly, rcellz, min_layer
-  use global_module,  only: ni_in_cell
+  use global_module,  only: ni_in_cell, flag_diagonalisation
   use input_module,   only: io_close
   
   ! Passed variables
@@ -4422,16 +4429,25 @@ subroutine print_stress(label, str_mat, print_level,print_ase)
                  open(io_ase,file=ase_file, status='old', action='readwrite', iostat=stat, position='rewind')                 
                  
                  if (stat .ne. 0) call cq_abort('ASE/stress error opening file !')
-                 
-                 if ( nspin == 2 ) then
-                    counter = nkp*3 + (nspin+1)*nkp + nspin*nkp*(matrix_size/3) + 1 + 2 
-                    if ( mod(matrix_size,3) > 0 ) counter = counter + nspin*nkp                  
-                 else
-                    counter = nkp*3 + nkp*(matrix_size/3) + 1 + 1
-                    if ( mod(matrix_size,3) > 0 ) counter = counter + nkp
+
+                 if ( flag_diagonalisation ) then
                     
+                    if ( nspin == 2 ) then
+                       counter = nkp*3 + (nspin+1)*nkp + nspin*nkp*(matrix_size/3) + 1 + 2
+                       
+                       if ( mod(matrix_size,3) > 0 ) counter = counter + nspin*nkp                  
+                    else
+                       counter = nkp*3 + nkp*(matrix_size/3) + 1 + 1
+
+                       if ( mod(matrix_size,3) > 0 ) counter = counter + nkp
+                       
+                    end if
+                    counter = counter + 7 + n_species + 2 + nkp + 2 + 2 + ni_in_cell + 2
+                    
+                 else
+                    counter = 7 + n_species + 2 + 2 + ni_in_cell + 2
                  end if
-                 counter = counter + 7 + n_species + 2 + nkp + 2 + 2 + ni_in_cell + 2
+                 
                  do i = 1, counter
                     read (io_ase,*)
                  end do
