@@ -29,6 +29,8 @@
 !!    Added timers
 !!   2014/09/15 18:30 lat
 !!    fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
+!!   2021/08/02 14:41 dave
+!!    Added dE_PAO to allow comparison with dE from structural optimisation
 !!  SOURCE
 !!
 module pao_minimisation
@@ -45,6 +47,7 @@ module pao_minimisation
   integer, parameter :: KdH = 2
   integer, parameter :: full = 3
   real(double), save :: InitStep_paomin = 5.0_double
+  real(double), save :: dE_PAO
 
 !!***
 
@@ -118,6 +121,9 @@ contains
   !!    Removed dump_matrix(SFcoeff), which will be changed to dump_pos_and_matrices in near future
   !!   2019/12/30 tsuyoshi
   !!    introduced dump_pos_and_matrices (every n_dumpSFcoeff iterations)
+  !!   2021/07/28 10:39 dave
+  !     Tidied up to remove unnecessary calls to get_S, get_H, FindMinDM and get_energy (all done
+  !!    in line_minimise_pao)
   !!  SOURCE
   !!
   subroutine vary_pao(n_support_iterations, fixed_potential, vary_mu, &
@@ -132,7 +138,7 @@ contains
     use PosTan,                    only: PulayC, PulayBeta, SCC,       &
                                          SCBeta
     use GenComms,                  only: my_barrier, gsum, inode,      &
-                                         ionode, cq_abort
+                                         ionode, cq_abort, cq_warn
     !use DiagModule,                only: diagon
     use primary_module,            only: bundle
     use cover_module,              only: BCS_parts
@@ -140,17 +146,17 @@ contains
                                          ni_in_cell,                   &
                                          flag_self_consistent,         &
                                          id_glob, numprocs, area_minE, &
-                                         nspin, spin_factor, nspin_SF, flag_diagonalisation
+                                         nspin, spin_factor, nspin_SF, &
+                                         flag_diagonalisation, min_layer
     use group_module,              only: parts
     use H_matrix_module,           only: get_H_matrix
     use S_matrix_module,           only: get_S_matrix
     use store_matrix,              only: dump_pos_and_matrices, unit_MSSF_save
-!    use io_module,                 only: dump_matrix
+    use io_module,                 only: return_prefix
     use support_spec_format,       only: TestBasisGrads, TestTot,      &
                                          TestBoth, TestS, TestH
     use DMMin,                     only: FindMinDM
-    use energy,                    only: get_energy, kinetic_energy,   &
-                                         nl_energy, band_energy
+    use energy,                    only: get_energy, band_energy
     use density_module,            only: density
     use matrix_data,               only: mat, halo, SFcoeff_range
     use maxima_module,             only: maxngrid
@@ -160,8 +166,10 @@ contains
                                          matSFcoeff, matSFcoeff_tran,  &
                                          matdSFcoeff, matdSFcoeff_e,   &
                                          matrix_scale, matrix_transpose
-    use multisiteSF_module,        only: normalise_SFcoeff, n_dumpSFcoeff
-
+    use multisiteSF_module,        only: normalise_SFcoeff, n_dumpSFcoeff, flag_mix_LFD_SCF
+    use units,                     only: en_conv, en_units, energy_units
+    use SelfCon,           only: new_SC_potl
+    
     implicit none
 
     ! Shared variables
@@ -177,7 +185,7 @@ contains
     integer      :: i, part, nsf1, npao2, neigh, proc, ind_part, atom, local_atom, &
                     nsf_local, n_nab_local, npao_local, gcspart, ist, wheremat
     integer      :: length, n_iterations, spin_SF, stat
-    logical      :: orig_SC, reset_L, my_atom
+    logical      :: orig_SC, reset_L, my_atom, orig_LFD_SCF
     real(double) :: diff, total_energy_0, total_energy_test, last_step, &
                     dN_dot_de, dN_dot_dN, summ, E2, E1, g1, g2, &
                     tmp0, val0, val1
@@ -188,8 +196,12 @@ contains
     real(double), dimension(:), allocatable :: grad_copy,        &
                                                grad_copy_dH,     &
                                                grad_copy_dS
+    character(len=10) :: subname = "vary_pao: "
+    character(len=120) :: prefix
 
-
+    prefix = return_prefix(subname, min_layer)
+    if(inode==ionode .and. iprint_minE + min_layer >= 0) &
+         write(io_lun,fmt='(/4x,a)') trim(prefix)//" Starting PAO optimisation"
     reset_L = .true.
 
     length = mat_p(matSFcoeff(1))%length
@@ -214,12 +226,11 @@ contains
     if (con_tolerance < ten * tolerance) &
          tolerance = 0.1_double * con_tolerance
     con_tolerance = sc_tolerance
-
-    if (inode == ionode) &
-         write (io_lun, *) 'Tolerances: ', &
+    tolerance = L_tolerance
+    
+    if (inode == ionode .and. iprint_minE + min_layer >= 2) &
+         write (io_lun, fmt='(4x,a,2e12.5)') trim(prefix)//' Tolerances: ', &
          con_tolerance, tolerance
-    if (inode == ionode) &
-         write (io_lun, *) inode, ' entering vary_pao'
 
     allocate(search_direction(length,nspin_SF), &
              last_sd(length,nspin_SF), Psd(length,nspin_SF), STAT=stat)
@@ -241,9 +252,18 @@ contains
        call matrix_scale(zero, matdSFcoeff_e(spin_SF))
     enddo
     ! call get_H_matrix before calling build_PAO_coeff ! TM
-    call get_H_matrix(.true., fixed_potential, electrons, density, &
-                      maxngrid)
+    !call get_H_matrix(.true., fixed_potential, electrons, density, &
+    !                  maxngrid)
+    min_layer = min_layer - 1
+    call new_SC_potl(.false., con_tolerance, reset_L,             &
+         fixed_potential, vary_mu, n_cg_L_iterations, &
+         tolerance, total_energy_last)
+    total_energy_0 = total_energy_last
+    ! Set LFD_SCF to false to avoid undoing PAO optimisation
+    orig_LFD_SCF = flag_mix_LFD_SCF ! Use to restore original setting
+    flag_mix_LFD_SCF = .false.
     call build_PAO_coeff_grad(full)
+    min_layer = min_layer + 1
 
     if (TestBasisGrads) then
        do spin_SF = 1, nspin_SF
@@ -280,7 +300,7 @@ contains
                    n_nab_local = 0
                    npao_local = 0
                    if (my_atom) then
-                      write (io_lun,*) 'primary, prim(glob) ', &
+                      write (io_lun,fmt='(8x,a,2i6)') 'primary, prim(glob) ', &
                                        local_atom, bundle%ig_prim(local_atom)
                       nsf_local   = mat(part,SFcoeff_range)%ndimi(atom)
                       n_nab_local = mat(part,SFcoeff_range)%n_nab(atom)
@@ -331,9 +351,9 @@ contains
                                   g1 = mat_p(matdSFcoeff(spin_SF))%matrix(wheremat)
                                   mat_p(matdSFcoeff(spin_SF))%matrix = grad_copy
                                   g2 = mat_p(matdSFcoeff(spin_SF))%matrix(wheremat)
-                                  write (io_lun, *) 'Tot: Numerical, analytic grad: ', &
+                                  write (io_lun, fmt='(8x,a,2f16.6)') 'Tot: Numerical, analytic grad: ', &
                                                     (E2 - E1) / tmp0, - half * (g1 + g2)
-                                  write (io_lun, *) 'Tot:Components: ', &
+                                  write (io_lun, fmt='(8x,a,5f16.6)') 'Tot:Components: ', &
                                                     tmp0, E1, E2, g1, g2
                                end if
                                ! Shift coefficient back
@@ -371,9 +391,9 @@ contains
                                   g1 = mat_p(matdSFcoeff(spin_SF))%matrix(wheremat)
                                   mat_p(matdSFcoeff(spin_SF))%matrix = grad_copy_dS
                                   g2 = mat_p(matdSFcoeff(spin_SF))%matrix(wheremat)
-                                  write (io_lun,*) 'GdS: Numerical, analytic grad: ',&
+                                  write (io_lun,fmt='(8x,a,2f16.6)') 'GdS: Numerical, analytic grad: ',&
                                                    (E2 - E1) / tmp0, - half * (g1 + g2)
-                                  write (io_lun,*) 'GdS:Components: ', &
+                                  write (io_lun,fmt='(8x,a,5f16.6)') 'GdS:Components: ', &
                                                    tmp0, E1, E2, g1, g2
                                end if
                                ! Shift coefficient back
@@ -411,9 +431,9 @@ contains
                                   g1 = mat_p(matdSFcoeff(spin_SF))%matrix(wheremat)
                                   mat_p(matdSFcoeff(spin_SF))%matrix = grad_copy_dH
                                   g2 = mat_p(matdSFcoeff(spin_SF))%matrix(wheremat)
-                                  write (io_lun, *) 'KdH: Numerical, analytic grad: ',&
+                                  write (io_lun, fmt='(8x,a,2f16.6)') 'KdH: Numerical, analytic grad: ',&
                                                     (E2 - E1) / tmp0, - half * (g1 + g2)
-                                  write (io_lun, *) 'KdH:Components: ', &
+                                  write (io_lun, fmt='(8x,a,5f16.6)') 'KdH:Components: ', &
                                                     tmp0, E1, E2, g1, g2
                                end if
                                ! Shift coefficient back
@@ -451,7 +471,8 @@ contains
     last_step = 1.0D10
     ! now loop over search directions
     do n_iterations = 1, n_support_iterations
-       if (inode == ionode) write (io_lun, 7) n_iterations
+       if (inode == ionode .and. iprint_minE + min_layer >= 1) &
+            write (io_lun, fmt='(/4x,a,i3)') trim(prefix)//" PAO iteration ", n_iterations
        do spin_SF = 1, nspin_SF
           ! We need the last search direction for CG manipulations
           call copy(length, search_direction(:,spin_SF), 1, last_sd(:,spin_SF), 1)
@@ -465,8 +486,8 @@ contains
                                      mat_p(matdSFcoeff_e(spin_SF))%matrix, 1)
              call gsum(dN_dot_de)
              call gsum(dN_dot_dN)
-             if (inode == ionode) &
-                write (io_lun, *) 'dN.de, dN.dN ', &
+             if (inode == ionode .and. iprint_minE + min_layer >= 3) &
+                write (io_lun, fmt='(4x,a,2e12.5)') trim(prefix)//' dN.de, dN.dN ', &
                                    dN_dot_de, dN_dot_dN
              call axpy(length, - (dN_dot_de / dN_dot_dN), &
                        mat_p(matdSFcoeff_e(spin_SF))%matrix, 1, search_direction(:,spin_SF), 1)
@@ -477,7 +498,6 @@ contains
           gg(spin_SF) = dgg(spin_SF)
           dgg(spin_SF) = dot(length, search_direction(:,spin_SF), 1, Psd(:,spin_SF), 1)
           call gsum(dgg(spin_SF))
-          if (inode == ionode) write (io_lun, '(A,I2,A,F15.7)') 'dgg(',spin_SF,') is ', dgg(spin_SF)
           if (gg(spin_SF) /= zero) then
              gamma(spin_SF) = dgg(spin_SF) / gg(spin_SF)
           else
@@ -485,7 +505,9 @@ contains
           end if
           !gamma = zero
           ! if (mod(n_iterations, 5) == 0) gamma = zero
-          if (inode == ionode) write (io_lun, '(A,I2,A,F15.7)') 'Gamma(',spin_SF,') is ', gamma(spin_SF)
+          if (inode == ionode .and. iprint_minE + min_layer >= 2) &
+               write (io_lun, '(4x,A,I2,A,2F10.6)') trim(prefix)//' For spin(',spin_SF, &
+               ') dgg and gamma are ', dgg(spin_SF), gamma(spin_SF)
 
           ! Construct the actual search direction
           call copy(length, Psd(:,spin_SF), 1, search_direction(:,spin_SF), 1)
@@ -498,8 +520,8 @@ contains
                                      mat_p(matdSFcoeff_e(spin_SF))%matrix, 1)
              call gsum(dN_dot_de)
              call gsum(dN_dot_dN)
-             if (inode == ionode) &
-                  write (io_lun, *) 'dN.de, dN.dN ', &
+             if (inode == ionode .and. iprint_minE + min_layer >=3) &
+                  write (io_lun, fmt='(4x,a,2e12.5)') trim(prefix)//' dN.de, dN.dN ', &
                                     dN_dot_de, dN_dot_dN
              call axpy(length, - (dN_dot_de / dN_dot_dN), &
                        mat_p(matdSFcoeff_e(spin_SF))%matrix, 1, search_direction(:,spin_SF), 1)
@@ -507,11 +529,11 @@ contains
           ! Check this !
           sum_0(spin_SF) = dot(length, mat_p(matdSFcoeff(spin_SF))%matrix, 1, search_direction(:,spin_SF), 1)
           call gsum(sum_0(spin_SF))
-          if (inode == ionode) write (io_lun, '(A,I2,A,F15.7)') 'sum_0(',spin_SF,') is ', sum_0(spin_SF)
+          if (inode == ionode .and. iprint_minE + min_layer >=3) &
+               write (io_lun, '(4x,A,I2,A,F15.7)') trim(prefix)//' sum_0(',spin_SF,') is ', &
+               sum_0(spin_SF)
           call my_barrier()
 
-          ! minimise the energy (approximately) in this direction.
-          if (inode == ionode) write (io_lun, *) 'Minimise'
           call my_barrier()
           tmp(spin_SF) = dot(length, search_direction(:,spin_SF), 1, mat_p(matdSFcoeff(spin_SF))%matrix, 1)
           call gsum(tmp(spin_SF))
@@ -526,44 +548,53 @@ contains
                               vary_mu, n_cg_L_iterations, tolerance, &
                               con_tolerance, total_energy_0,         &
                               expected_reduction, last_step, tmp)
-       if (inode == ionode) write (io_lun, *) 'Returned !'
+       flag_vary_basis = .true.
 
        ! Normalise and writeout
-       call normalise_SFcoeff
-       do spin_SF = 1,nspin_SF
-          call matrix_scale(zero,matSFcoeff_tran(spin_SF))
-          call matrix_transpose(matSFcoeff(spin_SF), matSFcoeff_tran(spin_SF))
-       enddo
+       !call normalise_SFcoeff
+       !do spin_SF = 1,nspin_SF
+       !   call matrix_scale(zero,matSFcoeff_tran(spin_SF))
+       !   call matrix_transpose(matSFcoeff(spin_SF), matSFcoeff_tran(spin_SF))
+       !enddo
 
-    ! Write out current SF coefficients every n_dumpSFcoeff, if n_dumpSFcoeff > 0)
-     if (n_dumpSFcoeff > 0 .and. mod(n_iterations,n_dumpSFcoeff) == 1) then
-       call dump_pos_and_matrices(index = unit_MSSF_save)
-     endif
-
-       flag_vary_basis = .true.
+       ! Write out current SF coefficients every n_dumpSFcoeff, if n_dumpSFcoeff > 0)
+       if (n_dumpSFcoeff > 0 .and. mod(n_iterations,n_dumpSFcoeff) == 0) then
+          call dump_pos_and_matrices(index = unit_MSSF_save)
+       endif
 
        ! Find change in energy for convergence
        diff = total_energy_last - total_energy_0
+       dE_PAO = diff
        if (abs(diff / total_energy_0) <= energy_tolerance) then
-          if (inode == ionode) write (io_lun, 18) total_energy_0
+          if(inode==ionode .and. iprint_minE + min_layer>0) &
+               write(io_lun, fmt='(4x,a,i3,2(a,f15.7,a2))') trim(prefix)//" Iter: ", &
+               n_iterations," E: ",total_energy_0*en_conv,en_units(energy_units),&
+               " dE: ",diff*en_conv,en_units(energy_units)
+          if (inode == ionode) & !  .and. iprint_minE + min_layer >-1) &
+               write (io_lun, fmt='(/4x,a,f15.7,a2,a,i3,a)') &
+               trim(prefix)//" Minimisation converged to ",total_energy_0*en_conv, &
+               en_units(energy_units), " after ",n_iterations," iterations"
           convergence_flag = .true.
           total_energy_last = total_energy_0
+          ! Commented out because we don't want to reset to LFD after
+          ! a successful PAO optimisation 
+          !flag_mix_LFD_SCF = orig_LFD_SCF
           deallocate(search_direction, last_sd, Psd, STAT=stat)
           if (stat /= 0) call cq_abort("vary_pao: Error dealloc mem")
           call reg_dealloc_mem(area_minE, 3*length*nspin_SF, type_dbl)
           return
+       else
+          if(inode==ionode .and. iprint_minE + min_layer>=0) &
+               write(io_lun, fmt='(4x,a,i3,2(a,f15.7,a2))') trim(prefix)//" Iter: ", &
+               n_iterations," E: ",total_energy_0*en_conv,en_units(energy_units),&
+               " dE: ",diff*en_conv,en_units(energy_units)
        end if
 
        ! prepare for next iteration
        ! Find new self-consistent energy 
-       ! 1. Generate S
-       call get_S_matrix(inode, ionode, build_AtomF_matrix=.false.)
-       ! 3. Generate H
-       call get_H_matrix(.false., fixed_potential, electrons, density, &
-                         maxngrid)
-       call FindMinDM(n_cg_L_iterations, vary_mu, L_tolerance, &
-                      .false., .false.)
-       call get_energy(total_energy_test)
+       !call new_SC_potl(.false., sc_tolerance, reset_L,             &
+       !     fixed_potential, vary_mu, n_L_iterations, &
+       !     L_tolerance, total_energy_0)
        ! We need to assemble the gradient
        do spin_SF = 1, nspin_SF
           call matrix_scale(zero, matdSFcoeff(spin_SF))
@@ -571,72 +602,29 @@ contains
        enddo
        ! Generate dS and dH
        call build_PAO_coeff_grad(full)
-       !if(inode==1) then
-       !   gradient(:,:,2:mx_at_prim) = zero
-       !else
-       !   gradient = zero
-       !end if
        do spin_SF = 1, nspin_SF
           summ = dot(length, mat_p(matdSFcoeff(spin_SF))%matrix, 1, mat_p(matdSFcoeff(spin_SF))%matrix, 1)
           call gsum(summ)
-          if (inode == ionode) &
-               write (io_lun, *) 'Dot prod of gradient (',spin_SF,'): ', summ
+          if (inode == ionode .and. iprint_minE + min_layer >= 3) &
+               write (io_lun, fmt='(4x,a,i1,a,e12.5)') trim(prefix)//' Dot prod of gradient (',&
+               spin_SF,'): ', summ
        enddo
        total_energy_last = total_energy_0
     end do ! n_iterations
-
+    if(inode==ionode) &
+         write(io_lun,fmt='(/4x,a,i4,a,f15.7,x,a2)') &
+         trim(prefix)//" Ending unconverged after ",n_support_iterations," iterations with dE ", &
+         en_conv*diff,en_units(energy_units)
+    call cq_warn(subname,"PAO optimisation finished after maximum iterations: ",n_support_iterations)
+    flag_mix_LFD_SCF = orig_LFD_SCF
     deallocate(search_direction, last_sd, Psd, STAT=stat)
     if (stat /= 0) call cq_abort("vary_pao: Error dealloc mem")
     call reg_dealloc_mem(area_minE, 3*length*nspin_SF, type_dbl)
 
     return
     
-! 1   format(20x,'mu = ',f10.7,'start energy = ',f15.7)
-! 2   format(/20x,'Current Total Energy : ',f15.7,' a.u. ')
-! 3   format(20x,'Previous Total Energy: ',f15.7,' a.u. ')
-! 4   format(20x,'Difference           : ',f15.7,' a.u. ')
-! 5   format(20x,'Required difference  : ',f15.7,' a.u. '/)
-7   format(/20x,'------------ PAO Variation #: ',i5,' ------------',/)
-18  format(///20x,'The minimisation has converged to a total energy:', &
-         //20x,' Total energy = ',f15.7)
-
   end subroutine vary_pao
   !!***
-  
-  !!****f* pao_minimisation/filtration
-  !!
-  !! NAME
-  !! filtration
-  !! 
-  !! PUPOSE
-  !! To generate a minimal basis for solving the self-consistent Kohn Sham equations
-  !! using the method introduced by Rayson see Phys. Rev. B 89, 205104
-  !!
-  !!
-
- subroutine filtration()
- !! i) Need to define or input a cutoff radius r which will be centred on  each individual atom
- !! ii) Start a loop through each individual atom i (i=1..N) N-total number of atoms
- !!      a) The distance of the nearest neighbours and next nearest neighbours to atom i need to 
- !!         be evaluated  to see if they lie within the radius r
- !!      b) If the neighbours are within the radius then store the correspoding atom number to a
- !!         new  set F 
- !! iii) For the atom numbers in F take the corresponding rows and colums in the hamiltonian H and
- !!      overlap matrix S to define new sub-matrices H' and S'
- !!  iv) For these sub-matrices solve the general eigenvalue problem using diagonalisation to find
- !!        eigenvectors(c) and eigenvalues(l) H'c=S'cl
- !!   v) Define a filtration function f, for now a Fermi-Dirac function in the high temperature limit
- !!  vi) Use this filtration function to construct a minimal basis by calculation f(c)
- !!      f(c)=cf(l)c'S'
- !!      where c' is the transpose of c
- !!  vii) Define an NxN matrix of zeroes k
- !!  viii) Using the set F take the corresponding rows and columns of the matrix k and assign to it
- !!        a value of f(c)
- !!  ix)   We know have the filtered matrix k
-
- end subroutine filtration
-
-
 
   !!****f* pao_minimisation/pulay_min_pao *
   !! PURPOSE
@@ -934,6 +922,7 @@ contains
 !       end if
 
        diff = total_energy_last - total_energy_0
+       dE_PAO = diff
        total_energy_last = total_energy_0
        if (abs(diff / total_energy_0) <= energy_tolerance) then
           if (inode == ionode) write (io_lun, 18) total_energy_0
@@ -964,6 +953,255 @@ contains
   end subroutine pulay_min_pao
   !!***
 
+!!****f* multisiteSF_module/LFD_SCF *
+!!
+!!  NAME
+!!   LFD_SCF
+!!
+!!  PURPOSE
+!!   This subroutine is to update SF coefficients by LFD method using SCF density.
+!!
+!!   This subroutine is based on sub:line_minimise_pao in pao_minimisation.f90.
+!!
+!!   This subroutine is called in sub:
+!!
+!!  AUTHOR
+!!   A.Nakata
+!!  CREATION DATE
+!!   2017/01/17
+!!  MODIFICATION DATE
+!!   2017/01/31 15:56 dave
+!!    Small bug fix: changed dimension of rhototal to maxngrid
+!!   2019/10/24 11:52 dave
+!!    Changed function calls to FindMinDM
+!!   201912/02 nakata
+!!    Removed dump_matrix(SFcoeff), which will be changed to dump_pos_and_matrices in near future
+!!  SOURCE
+!!
+  subroutine LFD_SCF(fixed_potential, vary_mu, n_cg_L_iterations, L_tolerance, &
+                          sc_tolerance, expected_reduction, total_energy, rho)
+
+    use logicals
+    use numbers,            only: BIG, ten, zero
+    use global_module,      only: nspin, ni_in_cell, ne_in_cell, spin_factor, nspin_SF, &
+                                  area_minE, area_ops, flag_diagonalisation, iprint_basis, min_layer
+    use PosTan,             only: PulayC, PulayBeta, SCC, SCBeta
+    use GenComms,           only: gsum, inode, ionode, cq_abort, my_barrier
+    use dimens,             only: n_my_grid_points, grid_point_volume
+    use maxima_module,      only: maxngrid
+    use DMMin,              only: FindMinDM
+    use SelfCon,            only: new_SC_potl
+    use S_matrix_module,    only: get_S_matrix
+    use H_matrix_module,    only: get_H_matrix
+    use mult_module,        only: LNV_matrix_multiply, mat_p, matSFcoeff, matSFcoeff_tran, &
+                                  matrix_scale, matrix_transpose 
+    use GenBlas,            only: dot
+    use memory_module,      only: reg_alloc_mem, type_dbl, reg_dealloc_mem
+    use store_matrix,       only: dump_pos_and_matrices, unit_MSSF_save
+    use multisiteSF_module, only: initial_SFcoeff, LFD_max_iteration, LFD_Thresh_EnergyRise, &
+                                  LFD_threshD, LFD_threshE, n_dumpSFcoeff
+    use units,              only: en_conv, en_units, energy_units
+    use io_module,                 only: return_prefix
+
+    implicit none
+
+    ! Passed variables
+    logical :: fixed_potential, vary_mu
+    integer :: n_cg_L_iterations
+    real(double) :: L_tolerance, sc_tolerance, expected_reduction
+    real(double) :: total_energy
+    real(double), dimension(maxngrid,nspin) :: rho   ! = density
+
+    ! Local variables
+    logical :: reset_L, convergence_flag
+    real(double), allocatable, dimension(:,:) :: data_PAO0
+    real(double), allocatable, dimension(:) :: rho_total
+    real(double), dimension(maxngrid,nspin) :: rho_0, resid
+    real(double) :: total_energy_last, total_energy_0, diff_E, R0, tolerance, con_tolerance
+    real(double), dimension(nspin) :: electrons, energy_tmp
+    integer :: spin, spin_SF, iter, length, stat
+    character(len=10) :: subname = "LFD_SCF:  "
+    character(len=120) :: prefix
+
+    prefix = return_prefix(subname, min_layer)
+    if (inode==ionode .and. iprint_basis + min_layer >= 0) &
+         write(io_lun,fmt='(/4x,a)') trim(prefix)//" Starting LFD"
+
+    length = mat_p(matSFcoeff(1))%length
+
+    convergence_flag = .false.
+
+    ! Set tolerances for self-consistency and L minimisation
+    con_tolerance = SCC * expected_reduction**SCBeta
+    tolerance = PulayC * (0.1_double * expected_reduction)**PulayBeta
+    if (con_tolerance < sc_tolerance) &
+         con_tolerance = sc_tolerance
+    if (con_tolerance < ten * tolerance) &
+         tolerance = 0.1_double * con_tolerance
+    con_tolerance = sc_tolerance
+
+    ! initialise
+    rho_0  = zero
+    diff_E = BIG
+    R0     = zero
+
+    ! First, make a copy of the coefficients FOR THIS PRIMARY SET
+    allocate(data_PAO0(length,nspin_SF), STAT=stat)
+    if (stat /= 0) &
+         call cq_abort("LFD_SCF: Error alloc mem: ", length*nspin_SF)
+    call reg_alloc_mem(area_minE, length*nspin_SF, type_dbl)
+    data_PAO0 = zero
+    do spin_SF = 1, nspin_SF
+       data_PAO0(:,spin_SF) = mat_p(matSFcoeff(spin_SF))%matrix
+    enddo
+
+    ! Copy present energy and rho
+    total_energy_0 = total_energy
+    do spin = 1, nspin
+       rho_0(1:n_my_grid_points,spin) = rho(1:n_my_grid_points,spin)
+    end do
+
+    do iter = 1, LFD_max_iteration
+       if (inode == ionode .and. iprint_basis + min_layer>=1) &
+            write (io_lun, fmt='(4x,a,i3)') trim(prefix)//" LFD variation ", iter
+
+       ! Make new multisite SF coefficients with updated density
+       ! matSpao is not rebuild, matHpao is rebuild 
+       call initial_SFcoeff(.false., .true., fixed_potential, .false.)
+
+       call my_barrier
+
+       ! Find new self-consistent energy
+       if (inode==ionode .and. iprint_basis + min_layer >= 4) &
+            write(io_lun,fmt='(4x,a)') trim(prefix)//' perform SC calculation.'
+       ! 1. Get new S_sf matrix 
+       call get_S_matrix(inode, ionode, build_AtomF_matrix=.false.)
+       ! 2. If we're building K as 3LSL-2LSLSL, we need to make K now
+       if (.not. flag_diagonalisation) then
+          call LNV_matrix_multiply(electrons, energy_tmp, doK, dontM1,&
+                                   dontM2, dontM3, dontM4, dontphi, dontE)
+       end if
+       reset_L = .true.
+       ! 3. Get a new self-consistent potential and Hamiltonian
+       min_layer = min_layer - 2 ! I'm imposing two here temporarily
+       ! because otherwise we get too much output from energy
+       call new_SC_potl(.false., con_tolerance, reset_L,             &
+                        fixed_potential, vary_mu, n_cg_L_iterations, &
+                        tolerance, total_energy_last)
+       min_layer = min_layer + 2
+
+       ! Check convergency by energy (diff_E) and density (R0)
+       ! energy
+       dE_PAO = total_energy_last - total_energy_0
+       diff_E = (total_energy_last - total_energy_0) / ni_in_cell
+       ! density
+       resid = zero
+       do spin = 1, nspin
+          resid(1:n_my_grid_points,spin) = rho(1:n_my_grid_points,spin) &
+                                         - rho_0(1:n_my_grid_points,spin)
+       end do
+       R0 = zero
+       do spin = 1, nspin
+          R0 = R0 + spin_factor * &
+               dot(n_my_grid_points, resid(:,spin), 1, resid(:,spin), 1)
+       end do
+       ! cross term
+       ! R0 = R0 + two * &
+       !      dot(n_my_grid_points, resid(:,1), 1, resid(:,nspin), 1)
+       call gsum(R0)
+       R0 = sqrt(grid_point_volume * R0) / ne_in_cell
+
+       if (diff_E.gt.zero .and. inode==ionode .and. iprint_basis + min_layer>=1) &
+            write(io_lun,'(4x,A,f15.7,A,i3)') &
+            trim(prefix)//' Energy rose by ', diff_E, ' at iteration # ',iter 
+       if (inode == ionode .and. iprint_basis + min_layer>=0) &
+            write(io_lun,'(4x,A,I3,2(3X,A,F17.10,1x,A2),(3X,A,F17.10)/)') &
+            trim(prefix)//' iter =',iter, &
+            'Total energy =',total_energy_last*en_conv,en_units(energy_units), &
+            'diff_E=',diff_E*en_conv,en_units(energy_units),'R0 =',R0
+
+       if (ABS(diff_E).le.LFD_threshE) then
+          ! Energy converged
+          convergence_flag = .true.
+          total_energy = total_energy_last
+          if (inode==ionode .and. iprint_basis + min_layer >= -1) &
+               write(io_lun,fmt='(/4x,a,f15.7,a2,a,i3,a)') &
+               trim(prefix)//" LFD converged to ", total_energy*en_conv, &
+               en_units(energy_units)," after ",iter," iterations"
+       else if (R0.le.LFD_threshD) then
+          ! Density converged
+          convergence_flag = .true.
+          total_energy = total_energy_last
+          if (inode==ionode .and. iprint_basis + min_layer >=-1) &
+               write(io_lun,fmt='(/4x,a,f15.7,a2,a,i3,a)') &
+               trim(prefix)//" LFD converged to ", total_energy*en_conv, &
+               en_units(energy_units)," after ",iter," iterations"
+       else if (diff_E.gt.zero .and. ABS(diff_E).le.LFD_Thresh_EnergyRise) then
+          ! Energy rises so finish iteration with the previous SF coefficients and density
+          convergence_flag = .true.
+          total_energy = total_energy_0
+          do spin_SF = 1, nspin_SF
+             mat_p(matSFcoeff(spin_SF))%matrix = data_PAO0(:,spin_SF)
+             call matrix_scale(zero,matSFcoeff_tran(spin_SF))
+             call matrix_transpose(matSFcoeff(spin_SF), matSFcoeff_tran(spin_SF))
+          enddo
+          do spin = 1, nspin
+             rho(1:n_my_grid_points,spin) = rho_0(1:n_my_grid_points,spin)
+          enddo
+          if (inode==ionode .and. iprint_basis + min_layer >=0) then
+             write(io_lun,'(4x,A,f15.7,1x,A2,A,i3,a)') &
+                  trim(prefix)//' Energy rose by ', diff_E*en_conv,en_units(energy_units), &
+                  ' at iteration # ', iter, ' Returning to previous iteration'
+             write(io_lun,'(4x,A,i3)') &
+                  trim(prefix)//&
+                  &' SF coefficients and density are returned to those at previous iteration # ', &
+                  iter-1
+             write(io_lun,'(4x,A,f15.7,1x,A2)') &
+                  trim(prefix)//' Total energy = ',total_energy*en_conv,en_units(energy_units)
+          end if
+          ! Reconstruct S, H and K with previous density 
+          call get_S_matrix(inode, ionode, build_AtomF_matrix=.false.)
+          call get_H_matrix(.false., fixed_potential, electrons, &
+                            rho, maxngrid)
+          call FindMinDM(n_cg_L_iterations, vary_mu, L_tolerance, &
+                         reset_L, .false.)
+       else 
+          ! Save present energy and density
+          total_energy   = total_energy_last
+          total_energy_0 = total_energy_last
+          do spin = 1, nspin
+             rho_0(1:n_my_grid_points,spin) = rho(1:n_my_grid_points,spin)
+          end do
+          do spin_SF = 1, nspin_SF
+             data_PAO0(:,spin_SF) = mat_p(matSFcoeff(spin_SF))%matrix
+          end do
+          if (inode==ionode .and. iprint_basis + min_layer >2) &
+               write(io_lun,'(/4x,A,i5)') &
+               trim(prefix)//' Save SF coefficients at iteration # ',iter
+       endif
+
+       ! Write out current SF coefficients and density matrices with some iprint (in future)
+       if(n_dumpSFcoeff > 0 .and. mod(iter,n_dumpSFcoeff) ==0) then
+          call dump_pos_and_matrices(index=unit_MSSF_save)
+       endif
+       ! Go out if converged
+       if (convergence_flag) then
+          deallocate(data_PAO0)
+          call reg_dealloc_mem(area_minE, length*nspin_SF, type_dbl)
+          return
+       endif
+    enddo ! iter
+
+    if (inode==ionode) write(io_lun,'(4x,A,I3,A)') &
+         trim(prefix)//' Not converged after ',LFD_max_iteration,' iterations.'
+    deallocate(data_PAO0)
+
+    call reg_dealloc_mem(area_minE, length*nspin_SF, type_dbl)
+    !
+    return
+    !
+  end subroutine LFD_SCF
+  !!***
 
   !!****f* pao_minimisation/line_minimise_pao *
   !!
@@ -1052,13 +1290,15 @@ contains
     use S_matrix_module,     only: get_S_matrix
     use GenComms,            only: gsum, my_barrier, cq_abort, inode, &
                                    ionode
-    ! Check on whether we need K found from L or whether we have it exactly
     use global_module,       only: ni_in_cell,                        &
-                                   area_minE, nspin, nspin_SF, flag_diagonalisation
+         area_minE, nspin, nspin_SF, flag_diagonalisation, &
+         iprint_minE, min_layer
     use primary_module,      only: bundle
     use memory_module,       only: reg_alloc_mem, reg_dealloc_mem,    &
                                    type_dbl
     use multisiteSF_module,  only: normalise_SFcoeff
+    use units,                     only: en_conv, en_units, energy_units
+    use io_module,                 only: return_prefix
 
     implicit none
 
@@ -1084,10 +1324,14 @@ contains
     logical :: done = .false. ! flag of line minimisation
     real(double), save :: kmin_last = zero
     real(double), save :: dE = zero ! Use this to guess initial step ?
-        
-    if (inode == ionode) &
-         write (io_lun, *) 'On entry to pao line_min, dE is ', &
-                           dE, total_energy_0
+    character(len=14) :: subname = "line_min_pao: "
+    character(len=120) :: prefix
+
+    !min_layer = min_layer - 1
+    prefix = return_prefix(subname, min_layer)
+    if (inode == ionode .and. iprint_minE + min_layer >= 1) &
+         write (io_lun, fmt='(4x,a,f15.7,a2)') trim(prefix)//' On entry to pao line_min, dE is ', &
+                           dE*en_conv, en_units(energy_units)
 
     n_atoms = bundle%n_prim
     length = mat_p(matSFcoeff(1))%length
@@ -1095,7 +1339,8 @@ contains
        tmp(spin_SF) = dot(length, search_direction(:,spin_SF), 1, search_direction(:,spin_SF), 1)
        call gsum(tmp(spin_SF))
        ! search_direction(:,spin_SF) = search_direction(:,spin_SF) / sqrt(tmp(spin_SF))
-       if (inode == ionode) write (io_lun, *) 'Searchdir: ', tmp(spin_SF)
+       if (inode == ionode .and. iprint_minE + min_layer >= 2) &
+            write (io_lun, fmt='(4x,a,f15.7)') trim(prefix)//' Searchdir: ', tmp(spin_SF)
     enddo
 
     ! if (nspin_SF == 1) then
@@ -1153,23 +1398,25 @@ contains
           call LNV_matrix_multiply(electrons, energy_tmp, doK, dontM1,&
                                    dontM2, dontM3, dontM4, dontphi, dontE)
        end if
-       reset_L = .true.
+       reset_L = .false. !true.
        ! 3. Get a new self-consistent potential and Hamiltonian
        ! I've not put a call to get_H_matrix here because it's
        ! currently in new_SC_potl
+       min_layer = min_layer - 1
        call new_SC_potl(.false., con_tolerance, reset_L,             &
                         fixed_potential, vary_mu, n_cg_L_iterations, &
                         tolerance, e3)
-       if (inode == ionode) &
+       min_layer = min_layer + 1
+       if (inode == ionode .and. iprint_minE + min_layer >= 2) &
             write (io_lun, &
-                   fmt='(2x,"In pao_min, iter ",i3," &
+                   fmt='(4x,a,i3," &
                         &step and energy are ",f15.10,f25.10)') &
-                  iter, k3, e3
-       if (inode == ionode) &
+                  trim(prefix)//" In pao_min, iter ",iter, k3, e3
+       if (inode == ionode .and. iprint_minE + min_layer >= 2) &
             write (io_lun, &
-                   fmt='(" iter=", i3," k1, k2, k3, &
-                        &= ", 5f15.8)') &
-                  iter, k1, k2, k3
+                   fmt='(4x,a, i3," k1, k2, k3, &
+                        &= ", 3f15.8)') &
+                        trim(prefix)//" iter=",iter, k1, k2, k3
        if (e3 < e2) then ! We're still going down hill
           k1 = k2
           e1 = e2
@@ -1192,11 +1439,12 @@ contains
                     (k1 * k1 - k2 * k2) * (e1 - e3)) / &
                    ((k1 - k3) * (e1 - e2) - (k1 - k2) * (e1 - e3)))
     kmin_last = kmin
-    if (inode == ionode) &
-         write (io_lun, *) 'In pao_min, bracketed - min from extrap: ', &
+    if (inode == ionode .and. iprint_minE + min_layer >= 2) &
+         write (io_lun, fmt='(4x,a,4f15.7)') &
+         trim(prefix)//' In pao_min, bracketed - min from extrap: ', &
                            k1, k2, k3, kmin
-    if (inode == ionode) &
-         write (io_lun, *) 'In pao_min, bracketed - energies: ', &
+    if (inode == ionode .and. iprint_minE + min_layer >= 2) &
+         write (io_lun, fmt='(4x,a,3f15.7)') trim(prefix)//' In pao_min, bracketed - energies: ', &
                            e1, e2, e3
 
     ! Change blips: start from blip0
@@ -1209,6 +1457,7 @@ contains
        call matrix_scale(zero,matSFcoeff_tran(spin_SF))
        call matrix_transpose(matSFcoeff(spin_SF), matSFcoeff_tran(spin_SF))
     enddo
+    iter = iter + 1
 
     ! Find new self-consistent energy 
     ! 1. Get new S matrix
@@ -1218,12 +1467,14 @@ contains
        call LNV_matrix_multiply(electrons, energy_tmp, doK, dontM1, &
                                 dontM2, dontM3, dontM4, dontphi, dontE)
     end if
-    reset_L = .true.
+    reset_L = .false. !true.
     ! 3. Get a new self-consistent potential and Hamiltonian
     ! I've not put a call to get_H_matrix here because it's currently
     ! in new_SC_potl
+    min_layer = min_layer - 1
     call new_SC_potl(.false., con_tolerance, reset_L, fixed_potential,&
                      vary_mu, n_cg_L_iterations, tolerance, energy_out)
+    min_layer = min_layer + 1
 
     ! If the interpolation failed, go back to the previous "minimum"
     if (energy_out > e2) then 
@@ -1238,6 +1489,7 @@ contains
           call matrix_scale(zero,matSFcoeff_tran(spin_SF))
           call matrix_transpose(matSFcoeff(spin_SF), matSFcoeff_tran(spin_SF))
        enddo
+       iter = iter + 1
 
        ! Find new self-consistent energy 
        ! 1. Get new S matrix
@@ -1247,25 +1499,30 @@ contains
           call LNV_matrix_multiply(electrons, energy_tmp, doK, dontM1,&
                                    dontM2, dontM3, dontM4, dontphi, dontE)
        end if
-       reset_L = .true.
+       reset_L = .false. !true.
        ! 3. Get a new self-consistent potential and Hamiltonian
+       min_layer = min_layer - 1
        call new_SC_potl(.false., con_tolerance, reset_L,             &
                         fixed_potential, vary_mu, n_cg_L_iterations, &
                         tolerance, energy_out)
+       min_layer = min_layer + 1
     end if
-
-    if (inode == ionode) &
-         write (io_lun, fmt='(2x,"In pao_min, at exit energy is ",f25.10)') &
-               energy_out
+    if (inode == ionode .and. iprint_minE + min_layer >= 0) &
+         write(io_lun, fmt='(4x,a,i3,a)') trim(prefix)//" Found minimum after ",iter," iterations"
+    if (inode == ionode .and. iprint_minE + min_layer >= 2) &
+         write (io_lun, fmt='(4x,a,f25.10,x,a2)') &
+         trim(prefix)//" At exit energy is ",energy_out*en_conv,en_units(energy_units)
     dE = total_energy_0 - energy_out
-    if (inode == ionode) &
-         write (io_lun, fmt='(2x,"On exit from pao line_min, dE is ",f25.10,2f25.10)') &
-                           dE, total_energy_0, energy_out
+    if (inode == ionode .and. iprint_minE + min_layer >= 2) &
+         write (io_lun, fmt='(4x,a,f25.10,2f25.10,x,a2)') &
+         trim(prefix)//" On exit, dE is ",dE*en_conv, &
+         total_energy_0*en_conv, energy_out*en_conv,en_units(energy_units)
     total_energy_0 = energy_out
 
     deallocate(data_PAO0, STAT=stat)
     if (stat /= 0) call cq_abort("line_minimise_pao: Error dealloc mem")
     call reg_dealloc_mem(area_minE, length*nspin_SF, type_dbl)
+    !min_layer = min_layer + 1
 
     return
   end subroutine line_minimise_pao
@@ -1500,6 +1757,5 @@ contains
                    !gradient(npao1,nsf1,iprim) = gradient(npao1,nsf1,iprim) + sum
                    !sum = dot(nsf*mat(part,Srange)%n_nab(memb),data_K(nsf1,1:,point:),1,data_dHloc(npao1,1,point),1)
                    !gradient(npao1,nsf1,iprim) = gradient(npao1,nsf1,iprim) + sum
-
 
 end module pao_minimisation

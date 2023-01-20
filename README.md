@@ -45,3 +45,7 @@ under this umbrella DOI (which will resolve to the latest version).  Please use 
 DOI for the specific version you have used in any given study.
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.3943720.svg)](https://doi.org/10.5281/zenodo.3943720)
+
+## Version number
+
+CONQUEST is now at version 1.1 (tag:v1.1)

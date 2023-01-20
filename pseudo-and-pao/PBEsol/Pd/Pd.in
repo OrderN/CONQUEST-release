@@ -1,6 +1,6 @@
 # ATOM AND REFERENCE CONFIGURATION
 # atsym  z   nc   nv     iexc    psfile
-Pd 46.00    6    3 -116133      upf
+Pd 46.00    6    4 -116133      upf
 #
 #   n    l    f        energy (Ha)
 1    0    2.00
@@ -11,7 +11,8 @@ Pd 46.00    6    3 -116133      upf
 3    2   10.00
 4    0    2.00
 4    1    6.00
-4    2   10.00
+4    2    9.00
+5    0    1.00
 #
 # PSEUDOPOTENTIAL AND OPTIMIZATION
 # lmax

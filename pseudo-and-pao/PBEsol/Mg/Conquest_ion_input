@@ -1,3 +1,9 @@
+# The standard PseudoDojo pseudopotentials for Mg only include l=0 and l=1
+# in the non-local part, in contrast to most other Group I and II elements.  
+# For those elements (K, Ca and beyond) we provide an accurate PAO basis
+# which includes both l=1 and l=2 polarisation orbitals, but we cannot do
+# that here, so we default to l=1 (though see below for more details).
+
 General.NumberOfSpecies 1
 
 %block SpeciesLabels
@@ -8,4 +14,16 @@ General.NumberOfSpecies 1
 Atom.PseudopotentialFile Mg.in
 Atom.VKBFile Mg.pot
 Atom.BasisSize medium
+# Polarisation orbitals are potentially problematic for Groups I and II.
+# The highest energy valence orbital is l=0 so the polarisation orbital
+# using the standard perturbative approach would be l=1, but that would 
+# mean a basis set with only l=0 and l=1.  It is also possible to polarise 
+# perturbatively from the highest energy l=1 orbital to give a polarisation 
+# orbital with l=2 using the lines below, but this will be perturbing a
+# semi-core state and will give a basis where the only l=1 orbitals are
+# semi-core states.  This may not be reliable: we recommend careful testing
+# should you choose this route.
+#
+#Atom.PolarisedN 2
+#Atom.PolarisedL 1
 %endblock

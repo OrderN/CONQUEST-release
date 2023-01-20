@@ -6,4 +6,5 @@ FORCES_OBJS = force_module.o \
               Integrators_module.o \
               constraint_module.o \
               md_control_module.o \
-              md_model_module.o
+              md_model_module.o \
+              md_misc_module.o

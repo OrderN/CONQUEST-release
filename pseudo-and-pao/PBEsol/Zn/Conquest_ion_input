@@ -1,4 +1,6 @@
 General.NumberOfSpecies 1
+# If you want the 3d shell to be semi-core, uncomment the line below
+# General.SemicoreEnergy -0.35
 
 %block SpeciesLabels
 1  Zn

@@ -45,7 +45,7 @@ module multisiteSF_module
 
   use datatypes
   use numbers
-  use global_module,          only: io_lun, iprint_basis, area_basis
+  use global_module,          only: io_lun, iprint_basis, area_basis, min_layer
   use GenComms,               only: myid, my_barrier, cq_abort, inode, ionode
   use timer_module,           only: start_timer,stop_timer
   use timer_stdclocks_module, only: tmr_std_basis,tmr_std_matrices
@@ -77,6 +77,7 @@ module multisiteSF_module
 
   ! LFD SFcoeff iteration
   logical :: flag_LFD_nonSCF                                     ! Update Hpao with SCF density
+  logical :: flag_mix_LFD_SCF                                    ! Perform LFD at each SCF cycle
   real(double) :: LFD_threshE                                    ! energy  threshold for SFcoeff iteration by LFD with SCF charge
   real(double) :: LFD_threshD                                    ! density threshold for SFcoeff iteration by LFD with SCF charge
   real(double) :: LFD_Thresh_EnergyRise                          ! energy  threshold when energy rises
@@ -133,8 +134,8 @@ contains
     use S_matrix_module,           only: get_S_matrix
     use H_matrix_module,           only: get_H_matrix
     use store_matrix,              only: dump_pos_and_matrices
-!    use io_module,                 only: dump_matrix
     use GenComms,                  only: mtime
+    use io_module,                 only: return_prefix
 
     implicit none
 
@@ -144,9 +145,12 @@ contains
     real(double), dimension(nspin) :: electrons
     real(double) :: electrons_tot, t0, t1, t2
     integer :: spin_SF
+    character(len=14) :: subname = "Init_SFcoeff: "
+    character(len=120) :: prefix
 
-
-    if (inode==ionode) write(io_lun,*) 'We are in sub:initial_SFcoeff'
+    prefix = return_prefix(subname, min_layer)
+    if (inode==ionode .and. iprint_basis + min_layer>2) write(io_lun,fmt='(4x,a)') &
+         trim(prefix)//' Entering'
 
     if (output_naba_in_MSSF) call print_naba_in_MSSF
 
@@ -168,8 +172,8 @@ contains
                                              density, maxngrid, transform_AtomF_to_SF=.false.)
        call my_barrier()
        t1 = mtime()
-       if (inode == ionode) write (io_lun,'(A,f20.8,A)') &
-          'LFD: Time for S and H in primitive PAO: ', t1-t0, ' ms'
+       if (inode == ionode .and. iprint_basis + min_layer>2) write (io_lun,'(4x,A,f20.8,A)') &
+          trim(prefix)//' Time for S and H in primitive PAO: ', t1-t0, ' ms'
        t0 = t1
        ! Rayson's Localised Filter Diagonalisation method
        call LocFilterDiag(mult(aLa_aHa_aLHa)%ahalo)    
@@ -199,12 +203,12 @@ contains
     enddo
 
     ! Write out current SF coefficients with some iprint (in future)
-     if (iprint_basis>=3) call dump_pos_and_matrices(index=98)
+     if (iprint_basis + min_layer>=3) call dump_pos_and_matrices(index=98)
 
     call my_barrier()
     t2 = mtime()
-    if (inode == ionode) write (io_lun,'(A,f20.8,A)') &
-       'Time for making initial multi-site SF coeffficients: ', t2-t0, ' ms'
+    if (inode == ionode .and. iprint_basis + min_layer>1) write (io_lun,'(4x,A,f20.8,A)') &
+       trim(prefix)//' Time for making initial multi-site SF coeffficients: ', t2-t0, ' ms'
 
     return
   end subroutine initial_SFcoeff
@@ -257,7 +261,7 @@ contains
 
     call start_timer(tmr_std_basis)
     call start_timer(tmr_l_tmp1,WITH_LEVEL)
-    if(iprint_basis>=5.AND.myid==0) write(io_lun,'(6x,A)') ' We are in normalise_SFcoeff'
+    if(iprint_basis + min_layer>=5.AND.myid==0) write(io_lun,'(6x,A)') ' We are in normalise_SFcoeff'
 
     call start_timer(tmr_std_matrices)
 
@@ -395,27 +399,27 @@ contains
 
     call start_timer(tmr_std_basis)
     call start_timer(tmr_l_tmp1,WITH_LEVEL)
-    if(iprint_basis>=5.AND.myid==0) write(io_lun,'(6x,A)') ' We are in initial_SFcoeff_onsite'
+    if(iprint_basis + min_layer>=5.AND.myid==0) write(io_lun,'(6x,A)') ' We are in initial_SFcoeff_onsite'
 
 
-    if(iprint_basis>=5.AND.myid==0) write(io_lun,'(6x,i5,A)') myid, ' Zeroing matSFcoeff'
+    if(iprint_basis + min_layer>=5.AND.myid==0) write(io_lun,'(6x,i5,A)') myid, ' Zeroing matSFcoeff'
     do spin_SF=1,nspin_SF
        call matrix_scale(zero,matSFcoeff(spin_SF))
        call matrix_scale(zero,matSFcoeff_tran(spin_SF))
     enddo
-    if(iprint_basis>=5.AND.myid==0) write(io_lun,'(6x,A)') ' Done Zeroing'
+    if(iprint_basis + min_layer>=5.AND.myid==0) write(io_lun,'(6x,A)') ' Done Zeroing'
 
     iprim = 0
     call start_timer(tmr_std_matrices)
     do part = 1,bundle%groups_on_node ! Loop over primary set partitions
-       if(iprint_basis>=6.AND.myid==0) write(io_lun,fmt='(6x,"Processor, partition: ",2i7)') myid,part
+       if(iprint_basis + min_layer>=6.AND.myid==0) write(io_lun,fmt='(6x,"Processor, partition: ",2i7)') myid,part
        if(bundle%nm_nodgroup(part)>0) then ! If there are atoms in partition
           do memb = 1,bundle%nm_nodgroup(part) ! Loop over atoms
              atom_num = bundle%nm_nodbeg(part)+memb-1
              iprim=iprim+1
              ! Atomic species
              atom_spec = bundle%species(atom_num)
-             if(iprint_basis>=6.AND.myid==0) write(io_lun,'(6x,"Processor, atom, spec: ",3i7)') myid,memb,atom_spec
+             if(iprint_basis + min_layer>=6.AND.myid==0) write(io_lun,'(6x,"Processor, atom, spec: ",3i7)') myid,memb,atom_spec
              do neigh = 1, mat(part,SFcoeff_range)%n_nab(memb) ! Loop over neighbours of atom
                 ist = mat(part,SFcoeff_range)%i_acc(memb)+neigh-1
                 ! Build the distances between atoms - needed for phases 
@@ -426,7 +430,7 @@ contains
                 dz = BCS_parts%zcover(gcspart)-bundle%zprim(atom_num)
                 r2 = dx*dx + dy*dy + dz*dz
                 r2 = sqrt(r2)
-                if(iprint_basis>=6.AND.myid==0) write(80+myid,*) 'dx,y,z,r: ',gcspart,dx,dy,dz,r2
+                if(iprint_basis + min_layer>=6.AND.myid==0) write(80+myid,*) 'dx,y,z,r: ',gcspart,dx,dy,dz,r2
                 if (r2.le.RD_ERR) then    ! only on-site
                    ! We need to know the species of neighbour
                    neigh_global_part = BCS_parts%lab_cell(mat(part,SFcoeff_range)%i_part(ist)) 
@@ -450,7 +454,7 @@ contains
     enddo
 
     ! Write out current SF coefficients with some iprint (in future)
-    ! if (iprint_basis>=3) call dump_pos_and_matrices
+    ! if (iprint_basis + min_layer>=3) call dump_pos_and_matrices
 !    if (nspin_SF == 1) then
 !       call dump_matrix("SFcoeff",    matSFcoeff(1), inode)
 !    else
@@ -512,7 +516,7 @@ contains
     ! Loop over SFs on i
     if (nsf_species(atom_spec).eq.npao_species(atom_spec)) then
     ! not-contracted SFs
-       if (iprint_basis>=6) write(io_lun,*) 'SFs of species', atom_spec, ' are not contracted'
+       if (iprint_basis + min_layer>=6) write(io_lun,*) 'SFs of species', atom_spec, ' are not contracted'
        do sf1 = 1, nsf_i
           count_pao_j = 1
           ! Loop over PAOs on j = i
@@ -533,7 +537,7 @@ contains
        enddo ! sf1
     else
     ! contracted SFs
-       if (iprint_basis>=6) write(io_lun,*) 'SFs of species', atom_spec, ' are contracted'
+       if (iprint_basis + min_layer>=6) write(io_lun,*) 'SFs of species', atom_spec, ' are contracted'
        do sf1 = 1, nsf_i
           count_pao_j = 1 ! which PAO
           ! Loop over PAOs on j = i
@@ -634,7 +638,7 @@ contains
     real(double) :: r_center, r_shift, WIDTH
 
 
-    if (iprint_basis>=5.and.inode==ionode) write(io_lun,*) 'We are in sub:smear_MSSF'
+    if (iprint_basis + min_layer>=5.and.inode==ionode) write(io_lun,*) 'We are in sub:smear_MSSF'
 
     sf1 = mat_p(matA)%sf1_type
     sf2 = mat_p(matA)%sf2_type
@@ -704,7 +708,7 @@ contains
                    else if (itype.eq.2) then
                       FLTR = half * erfc_cq(r2 - (r_center + r_shift))      ! f(r) = 0.5 * erfc(r - (r_center+r_shift))
                    endif
-                   if (iprint_basis>=6) write(io_lun,'(2(A,F10.5))') 'r=',r2,'  FLTR =',FLTR
+                   if (iprint_basis + min_layer>=6) write(io_lun,'(2(A,F10.5))') 'r=',r2,'  FLTR =',FLTR
 
                    do k = 1, nsf1
                       do l = 1, nsf2
@@ -748,44 +752,48 @@ contains
     use matrix_data,            only: mat, SFcoeff_range
     use global_module,          only: ni_in_cell
     use GenComms,               only: gsum
+    use io_module,                 only: return_prefix
 
     implicit none
 
     ! Local
     integer :: stat, iprim, atom_i, np, i
     integer, allocatable, dimension(:) :: num_naba_MS   ! storage for number of naba atoms
+    character(len=14) :: subname = "Init_SFcoeff: "
+    character(len=120) :: prefix
 
+    if (iprint_basis + min_layer>2) then
+       prefix = return_prefix(subname, min_layer)
+       allocate(num_naba_MS(ni_in_cell),STAT=stat)
+       if(stat/=0) call cq_abort('print_naba_in_MSSF: error allocating num_naba_MS')
 
-    allocate(num_naba_MS(ni_in_cell),STAT=stat)
-    if(stat/=0) call cq_abort('print_naba_in_MSSF: error allocating num_naba_MS')
+       num_naba_MS(:) = 0
 
-    num_naba_MS(:) = 0
+       iprim = 0; atom_i = 0  
+       do np = 1,bundle%groups_on_node           ! Loop over primary set partitions
+          if(bundle%nm_nodgroup(np)>0) then      ! If there are atoms in partition
+             do i = 1,bundle%nm_nodgroup(np)     ! Loop over atom_i
+                iprim = iprim + 1
+                atom_i = bundle%ig_prim(iprim)   ! global number of i
+                num_naba_MS(atom_i) = mat(np,SFcoeff_range)%n_nab(i)
+             enddo ! i
+          endif ! endif of (bundle%nm_nodgroup(np)>0)
+       enddo ! np
 
-    iprim = 0; atom_i = 0  
-    do np = 1,bundle%groups_on_node           ! Loop over primary set partitions
-       if(bundle%nm_nodgroup(np)>0) then      ! If there are atoms in partition
-          do i = 1,bundle%nm_nodgroup(np)     ! Loop over atom_i
-             iprim = iprim + 1
-             atom_i = bundle%ig_prim(iprim)   ! global number of i
-             num_naba_MS(atom_i) = mat(np,SFcoeff_range)%n_nab(i)
-          enddo ! i
-       endif ! endif of (bundle%nm_nodgroup(np)>0)
-    enddo ! np
+       ! print out the number of neighbour atoms for each target atom
+       call gsum(num_naba_MS,ni_in_cell)
+       if (inode==ionode .and. iprint_basis + min_layer>2) then
+          write(io_lun,fmt='(4x,a)') trim(prefix)//' --- Number of neighbour atoms in the multi-site range ---'
+          write(io_lun,fmt='(4x,a)') trim(prefix)//'     atom ID      number of neighbour atoms'
+          do i = 1, ni_in_cell
+             write(io_lun,'(4x,a,5X,I8,5X,I8)') trim(prefix),i, num_naba_MS(i)
+          enddo
+       endif
 
-    ! print out the number of neighbour atoms for each target atom
-    call my_barrier()
-    call gsum(num_naba_MS,ni_in_cell)
-    if (inode==ionode) then
-       write(io_lun,*) ' --- Number of neighbour atoms in the multi-site range ---'
-       write(io_lun,*) '     atom ID      number of neighbour atoms'
-       do i = 1, ni_in_cell
-          write(io_lun,'(5X,I8,5X,I8)') i, num_naba_MS(i)
-       enddo
-    endif
-
-    ! deallocate subspace matrices their labels
-    deallocate(num_naba_MS,STAT=stat)
-    if(stat/=0) call cq_abort('print_naba_in_MSSF: error deallocating num_naba_MS')
+       ! deallocate subspace matrices their labels
+       deallocate(num_naba_MS,STAT=stat)
+       if(stat/=0) call cq_abort('print_naba_in_MSSF: error deallocating num_naba_MS')
+    end if
 !
     return
   end subroutine print_naba_in_MSSF
@@ -839,7 +847,7 @@ contains
                                       matSatomf, matHatomf, matSFcoeff, aLa_aHa_aLHa, aLa_aSa_aLSa
     use global_module,          only: ni_in_cell, numprocs, nspin, nspin_SF, sf, atomf, flag_SpinDependentSF
     use species_module,         only: npao_species
-    use io_module,              only: get_file_name
+    use io_module,              only: get_file_name, return_prefix
     use input_module,           only: io_assign, io_close
     use GenComms,               only: mtime, gsum
     use timer_stdclocks_module, only: start_timer,stop_timer,tmr_std_allocation
@@ -872,10 +880,13 @@ contains
     real(double), allocatable, dimension(:)   :: l_k_r2
     integer, allocatable, dimension(:)        :: IWORK, IFAIL                 ! scratch space
     real(double), allocatable, dimension(:)   :: WORK, WORK2
+    character(len=7) :: subname = "DoLFD: "
+    character(len=120) :: prefix
 
-
+    prefix = return_prefix(subname, min_layer)
     call my_barrier
-    if (inode==ionode) write(io_lun,*) 'Do Localized Filter Diagonalization'
+    if (inode==ionode .and. iprint_basis + min_layer>2) write(io_lun,fmt='(4x,a)') &
+         trim(prefix)//' Entering'
 
     do spin_SF = 1, nspin_SF
        call matrix_scale(zero,matSFcoeff(spin_SF))
@@ -888,7 +899,7 @@ contains
     abstol = 1.0e-300_double
 
     ! open debug file for TVEC and subspace MOs
-    if (iprint_basis>=6) then
+    if (iprint_basis + min_layer>=6) then
        call get_file_name('TVECr',numprocs,inode,filename11)  ! Build a filename based on node number for TVEC
        call io_assign(lun11)                                  ! Open file 
        open(unit=lun11,file=filename11)
@@ -904,7 +915,7 @@ contains
     len_kj_sub   = (nhalo_LFD*nhalo_LFD+nhalo_LFD)/2            ! max. number of lower-triangle of halo-pair (k,j)
     len_Sub      = (max_npao_LFD*max_npao_LFD+max_npao_LFD)/2   ! max. number of lower-triangle of subspace matrix elements
 
-    if (iprint_basis>=5 .and. inode==ionode) then
+    if (iprint_basis + min_layer>=5 .and. inode==ionode) then
        if (flag_LFD_useChemPsub) then 
           write(io_lun,*) ' LFD: Chemical potential = ', 'will be determined later'
        else
@@ -945,7 +956,7 @@ contains
 !      --- Start Localized Filter Diagonalisation Method for each primary ATOM ---
 !
        if(myid==0) t0 = mtime()
-       if (iprint_basis>=5.and.inode==ionode) &
+       if (iprint_basis + min_layer>=5.and.inode==ionode) &
           write(io_lun,'(/A,I2)') 'Start atom loop in the LFD method for spin',spin
 
        iprim = 0; atom_i = 0  
@@ -969,7 +980,7 @@ contains
                    nd3 = LFDhalo%ndimj(k_in_halo)                                    ! number of PAOs on atom_k
                    len_Sub_i = len_Sub_i + nd3                                       ! dimension of subspace for atom_i
                 enddo ! k
-                if (iprint_basis>=6) write(io_lun,'(A,I8,A,I2,A,I3,A,I4)') &
+                if (iprint_basis + min_layer>=6) write(io_lun,'(A,I8,A,I2,A,I3,A,I4)') &
                                           '  atom_i=',atom_i, ' : NTVEC=',NTVEC, &
                                           '  nab=',mat(np,LD_range)%n_nab(i), '  len_Sub_i = ',len_Sub_i
 !
@@ -1049,7 +1060,7 @@ contains
                 Ssub_i(:,:) = zero
                 call DCOPY(len_Sub_i*len_Sub_i,WORK2,1,Ssub_i,1)     ! Ssub_i was overwritten, so reset to the original.
                 ! debug: print out local MOs
-                if (iprint_basis>=6) call LFD_debug_matrix(lun12,1,np,atom_i,EVAL,EVEC,len_Sub_i,NUMEIG, &
+                if (iprint_basis + min_layer>=6) call LFD_debug_matrix(lun12,1,np,atom_i,EVAL,EVEC,len_Sub_i,NUMEIG, &
                                                            n_naba_i_d,l_k_g,l_k_r2,l_kpao)
 !
 !               --- (4) filteration: k = Csub_i * f(e) * Csub_i**T * Ssub_i * TVEC
@@ -1072,7 +1083,7 @@ contains
                    if (NEsub0.gt.NEsub) NEsub = NEsub + one
                    INEsub = idint(NEsub)                         ! number of occupied orbitals
                    ChemP = (EVAL(INEsub)+EVAL(INEsub+1)) / two   ! ChemP is set to the average of subspace HOMO and LUMO
-                   if (iprint_basis>=6) write(io_lun,'(A,i8,A,F10.5)') ' Atom',atom_i,': ChemP of this subspace =',ChemP
+                   if (iprint_basis + min_layer>=6) write(io_lun,'(A,i8,A,F10.5)') ' Atom',atom_i,': ChemP of this subspace =',ChemP
                 endif
                 call LFD_filter(TVEC,EVAL,ChemP,kT1,NUMEIG,NTVEC)
 !
@@ -1087,8 +1098,9 @@ contains
                 WORK(:) = zero
                 call transpose_2Dmat(TVEC,WORK,len_Sub_i,NTVEC)
                 if (.not.flag_SpinDependentSF .and. spin.eq.2) then
-!                   if (iprint_basis>=5.and.inode==ionode) &
-                      write(io_lun,*) 'Take average of matSFcoeff(1) and matSFcoeff(2) into matSFcoeff(1)'
+                   if(inode==ionode  .and. iprint_basis + min_layer>2) &
+                        write(io_lun,fmt='(4x,a)') &
+                        trim(prefix)//' Take average of matSFcoeff(1) and matSFcoeff(2) into matSFcoeff(1)'
                    matSFcoeff_2 = allocate_temp_matrix(SFcoeff_range,0,sf,atomf)
                    call matrix_scale(zero,matSFcoeff_2)
                    call LFD_put_TVEC_to_SFcoeff(np,i,mat(:,SFcoeff_range),mat_p(matSFcoeff_2)%matrix, &
@@ -1145,16 +1157,16 @@ contains
     call stop_timer(tmr_std_allocation)
 
     ! Close debug file
-    if (iprint_basis>=6) then
+    if (iprint_basis + min_layer>=6) then
        call io_close(lun11)
        call io_close(lun12)
     endif
 
-    if(myid==0) then
+    if(myid==0 .and. inode==ionode  .and. iprint_basis + min_layer>2) then
        t1 = mtime()
-       write(io_lun,'(A,f20.8,A)') 'Time for Localised Filter Diagonalisation: ',t1-t0,' ms'
+       write(io_lun,'(4x,A,f20.8,A)') trim(prefix)//' time for Localised Filter Diagonalisation: ',t1-t0,' ms'
     end if
-    if (inode==ionode) write(io_lun,*) 'Done Localized Filter Diagonalization'
+    if (inode==ionode .and. iprint_basis + min_layer>2) write(io_lun,fmt='(4x,a)') trim(prefix)//'Exiting'
 !
     return
   end subroutine LocFilterDiag
@@ -1252,7 +1264,7 @@ contains
     integer :: count_kj
 
 
-    if (iprint_basis>=5 .and. inode==ionode) write(io_lun,*) 'We are in sub:LFD_make_Subspace_halo'
+    if (iprint_basis + min_layer>=5 .and. inode==ionode) write(io_lun,*) 'We are in sub:LFD_make_Subspace_halo'
 
     call start_timer(tmr_std_allocation)
     if(iprint_mat>3.AND.myid==0) t0 = mtime()    
@@ -1638,7 +1650,7 @@ contains
                ist, gcspart, k_in_halo, j, ist2, gcspart2, j_in_halo, nd2, nd3, n2, n3
 
 
-    if (inode==ionode) write(io_lun,*) 'We are in sub:LFD_make_Subspace_i'
+    if (inode==ionode .and. iprint_basis + min_layer>4) write(io_lun,*) 'We are in sub:LFD_make_Subspace_i'
 
     kpao0 = 0
     ! Loop over atom_k, neighbour of atom_i
@@ -1841,7 +1853,7 @@ contains
 !    real(double) :: MSSF_nonminimal_offset
 
 
-    if (iprint_basis>=5.and.inode==ionode) write(io_lun,*) 'We are in sub:LFD_make_TVEC'
+    if (iprint_basis + min_layer>=5.and.inode==ionode) write(io_lun,*) 'We are in sub:LFD_make_TVEC'
 
     npao_i = npao_species(atom_spec)
 
@@ -2005,7 +2017,7 @@ contains
     integer :: IVEC,JVEC
 
 
-    if (iprint_basis>=5.and.inode==ionode) write(io_lun,*) 'We are in sub:LFD_filter'
+    if (iprint_basis + min_layer>=5.and.inode==ionode) write(io_lun,*) 'We are in sub:LFD_filter'
 
     do IVEC = 1,NUMEIG
        EXFRM = ( EIG(IVEC) - CHEMP ) * kT1        ! (e_i - mu) / kT
@@ -2049,7 +2061,7 @@ contains
     integer :: i,j
 
 
-    if (iprint_basis>=5.and.inode==ionode) write(io_lun,*) 'We are in sub:transpose_2Dmat'
+    if (iprint_basis + min_layer>=5.and.inode==ionode) write(io_lun,*) 'We are in sub:transpose_2Dmat'
     
     do i = 1,LDA
        do j = 1,LDB
@@ -2109,7 +2121,7 @@ contains
     integer :: nb,ist_k,ist_l,nd1,nd2,bsize,SFCOEFFposn,LFDposn
     
 
-    if (iprint_basis>=5.and.inode==ionode) write(io_lun,*) 'We are in sub:LFD_put_TVEC_to_SFcoeff'
+    if (iprint_basis + min_layer>=5.and.inode==ionode) write(io_lun,*) 'We are in sub:LFD_put_TVEC_to_SFcoeff'
 
     ist_l = LFDmat(np)%i_acc(i)                              ! index of atom_l in neighbor labelling for LD_range
     SFCOEFFposn = MSmat(np)%nd_offset+MSmat(np)%i_nd_acc(i)  ! starting position of matrix element for (atom_i,atom_k) in SFCOEFF matrix
@@ -2226,227 +2238,5 @@ contains
     return
   end subroutine LFD_debug_matrix
 !!***   
-
-!!****f* multisiteSF_module/LFD_SCF *
-!!
-!!  NAME
-!!   LFD_SCF
-!!
-!!  PURPOSE
-!!   This subroutine is to update SF coefficients by LFD method using SCF density.
-!!
-!!   This subroutine is based on sub:line_minimise_pao in pao_minimisation.f90.
-!!
-!!   This subroutine is called in sub:
-!!
-!!  AUTHOR
-!!   A.Nakata
-!!  CREATION DATE
-!!   2017/01/17
-!!  MODIFICATION DATE
-!!   2017/01/31 15:56 dave
-!!    Small bug fix: changed dimension of rhototal to maxngrid
-!!   2019/10/24 11:52 dave
-!!    Changed function calls to FindMinDM
-!!   201912/02 nakata
-!!    Removed dump_matrix(SFcoeff), which will be changed to dump_pos_and_matrices in near future
-!!  SOURCE
-!!
-  subroutine LFD_SCF(fixed_potential, vary_mu, n_cg_L_iterations, L_tolerance, &
-                          sc_tolerance, expected_reduction, total_energy, rho)
-
-    use logicals
-    use global_module,      only: nspin, ni_in_cell, ne_in_cell, spin_factor, nspin_SF, &
-                                  area_minE, area_ops, flag_diagonalisation
-    use PosTan,             only: PulayC, PulayBeta, SCC, SCBeta
-    use GenComms,           only: gsum
-    use dimens,             only: n_my_grid_points, grid_point_volume
-    use maxima_module,      only: maxngrid
-    use DMMin,              only: FindMinDM
-    use SelfCon,            only: new_SC_potl
-    use S_matrix_module,    only: get_S_matrix
-    use H_matrix_module,    only: get_H_matrix
-    use mult_module,        only: LNV_matrix_multiply, mat_p, matSFcoeff, matSFcoeff_tran, &
-                                  matrix_scale, matrix_transpose 
-    use GenBlas,            only: dot
-    use memory_module,      only: reg_alloc_mem, type_dbl, reg_dealloc_mem
-    use store_matrix,       only: dump_pos_and_matrices, unit_MSSF_save
-
-    implicit none
-
-    ! Passed variables
-    logical :: fixed_potential, vary_mu
-    integer :: n_cg_L_iterations
-    real(double) :: L_tolerance, sc_tolerance, expected_reduction
-    real(double) :: total_energy
-    real(double), dimension(maxngrid,nspin) :: rho   ! = density
-
-    ! Local variables
-    logical :: reset_L, convergence_flag
-    real(double), allocatable, dimension(:,:) :: data_PAO0
-    real(double), allocatable, dimension(:) :: rho_total
-    real(double), dimension(maxngrid,nspin) :: rho_0, resid
-    real(double) :: total_energy_last, total_energy_0, diff_E, R0, tolerance, con_tolerance
-    real(double), dimension(nspin) :: electrons, energy_tmp
-    integer :: spin, spin_SF, iter, length, stat
-
-    if (inode==ionode) write(io_lun,*) 'We are in sub:LFD_SCF'
-
-    length = mat_p(matSFcoeff(1))%length
-
-    convergence_flag = .false.
-
-    ! Set tolerances for self-consistency and L minimisation
-    con_tolerance = SCC * expected_reduction**SCBeta
-    tolerance = PulayC * (0.1_double * expected_reduction)**PulayBeta
-    if (con_tolerance < sc_tolerance) &
-         con_tolerance = sc_tolerance
-    if (con_tolerance < ten * tolerance) &
-         tolerance = 0.1_double * con_tolerance
-    con_tolerance = sc_tolerance
-
-    ! initialise
-    rho_0  = zero
-    diff_E = BIG
-    R0     = zero
-
-    ! First, make a copy of the coefficients FOR THIS PRIMARY SET
-    allocate(data_PAO0(length,nspin_SF), STAT=stat)
-    if (stat /= 0) &
-         call cq_abort("LFD_SCF: Error alloc mem: ", length*nspin_SF)
-    call reg_alloc_mem(area_minE, length*nspin_SF, type_dbl)
-    data_PAO0 = zero
-    do spin_SF = 1, nspin_SF
-       data_PAO0(:,spin_SF) = mat_p(matSFcoeff(spin_SF))%matrix
-    enddo
-
-    ! Copy present energy and rho
-    total_energy_0 = total_energy
-    do spin = 1, nspin
-       rho_0(1:n_my_grid_points,spin) = rho(1:n_my_grid_points,spin)
-    end do
-
-    do iter = 1, LFD_max_iteration
-       if (inode == ionode) write (io_lun, 7) iter
-
-       ! Make new multisite SF coefficients with updated density
-       ! matSpao is not rebuild, matHpao is rebuild 
-       call initial_SFcoeff(.false., .true., fixed_potential, .false.)
-
-       call my_barrier
-
-       ! Find new self-consistent energy
-       if (inode==ionode .and. iprint_basis.ge.5) write(io_lun,*) 'In sub:LFD_SCF, perform SC calculation.'
-       ! 1. Get new S_sf matrix 
-       call get_S_matrix(inode, ionode, build_AtomF_matrix=.false.)
-       ! 2. If we're building K as 3LSL-2LSLSL, we need to make K now
-       if (.not. flag_diagonalisation) then
-          call LNV_matrix_multiply(electrons, energy_tmp, doK, dontM1,&
-                                   dontM2, dontM3, dontM4, dontphi, dontE)
-       end if
-       reset_L = .true.
-       ! 3. Get a new self-consistent potential and Hamiltonian
-       call new_SC_potl(.false., con_tolerance, reset_L,             &
-                        fixed_potential, vary_mu, n_cg_L_iterations, &
-                        tolerance, total_energy_last)
-
-       ! Check convergency by energy (diff_E) and density (R0)
-       ! energy
-       diff_E = (total_energy_last - total_energy_0) / ni_in_cell
-       ! density
-       resid = zero
-       do spin = 1, nspin
-          resid(1:n_my_grid_points,spin) = rho(1:n_my_grid_points,spin) &
-                                         - rho_0(1:n_my_grid_points,spin)
-       end do
-       R0 = zero
-       do spin = 1, nspin
-          R0 = R0 + spin_factor * &
-               dot(n_my_grid_points, resid(:,spin), 1, resid(:,spin), 1)
-       end do
-       ! cross term
-       ! R0 = R0 + two * &
-       !      dot(n_my_grid_points, resid(:,1), 1, resid(:,nspin), 1)
-       call gsum(R0)
-       R0 = sqrt(grid_point_volume * R0) / ne_in_cell
-
-       if (inode == ionode) write(io_lun,'(/A,I3,3(3X,A,F20.10))') &
-                            'LFD_SCF: iter =',iter,'Total energy =',total_energy_last, &
-                            'diff_E=',diff_E,'R0 =',R0
-
-       if (ABS(diff_E).le.LFD_threshE) then
-          ! Energy converged
-          convergence_flag = .true.
-          total_energy = total_energy_last
-          if (inode==ionode) write(io_lun,18) 'total energy', iter, total_energy
-       else if (R0.le.LFD_threshD) then
-          ! Density converged
-          convergence_flag = .true.
-          total_energy = total_energy_last
-          if (inode==ionode) write(io_lun,18) 'density', iter, total_energy
-       else if (diff_E.gt.zero .and. ABS(diff_E).le.LFD_Thresh_EnergyRise) then
-          ! Energy rises so finish iteration with the previous SF coefficients and density
-          convergence_flag = .true.
-          total_energy = total_energy_0
-          do spin_SF = 1, nspin_SF
-             mat_p(matSFcoeff(spin_SF))%matrix = data_PAO0(:,spin_SF)
-             call matrix_scale(zero,matSFcoeff_tran(spin_SF))
-             call matrix_transpose(matSFcoeff(spin_SF), matSFcoeff_tran(spin_SF))
-          enddo
-          do spin = 1, nspin
-             rho(1:n_my_grid_points,spin) = rho_0(1:n_my_grid_points,spin)
-          enddo
-          if (inode==ionode) &
-               write(io_lun,'(///20x,A,f15.7,A,i3/20x,A,i3//20x,A,f15.7)') &
-               'LFD_SCF: Energy rises by ', diff_E, ' at iteration # ', iter, &
-               'SF coefficients and density are returned to those at previous iteration # ', iter-1, &
-               'Total energy = ',total_energy
-          ! Reconstruct S, H and K with previous density 
-          call get_S_matrix(inode, ionode, build_AtomF_matrix=.false.)
-          call get_H_matrix(.false., fixed_potential, electrons, &
-                            rho, maxngrid)
-          call FindMinDM(n_cg_L_iterations, vary_mu, L_tolerance, &
-                         reset_L, .false.)
-       else 
-          ! Save present energy and density
-          if (diff_E.gt.zero .and. inode==ionode) write(io_lun,'(/20x,A,f15.7,A,i3)') &
-               'LFD_SCF: Energy rises by ', diff_E, ' at iteration # ',iter 
-          total_energy   = total_energy_last
-          total_energy_0 = total_energy_last
-          do spin = 1, nspin
-             rho_0(1:n_my_grid_points,spin) = rho(1:n_my_grid_points,spin)
-          end do
-          do spin_SF = 1, nspin_SF
-             data_PAO0(:,spin_SF) = mat_p(matSFcoeff(spin_SF))%matrix
-          end do
-          if (inode==ionode) write(io_lun,'(/20x,A,i5)') &
-               'LFD_SCF: Save SF coefficients at iteration # ',iter
-       endif
-
-       ! Write out current SF coefficients and density matrices with some iprint (in future)
-       if(n_dumpSFcoeff > 0 .and. mod(iter,n_dumpSFcoeff) ==0) then
-          call dump_pos_and_matrices(index=unit_MSSF_save)
-       endif
-       ! Go out if converged
-       if (convergence_flag) then
-          deallocate(data_PAO0)
-          call reg_dealloc_mem(area_minE, length*nspin_SF, type_dbl)
-          return
-       endif
-    enddo ! iter
-
-    if (inode==ionode) write(io_lun,'(A,I3,A)') &
-         'LFD SCF iteration is not converged after ',LFD_max_iteration,' iterations.'
-    deallocate(data_PAO0)
-
-    call reg_dealloc_mem(area_minE, length*nspin_SF, type_dbl)
-    !
-    return
-    !
-7   format(/20x,'------------ LFD Variation #: ',i5,' ------------',/)
-18  format(///20x,'The LFD SCF iteration has converged to a ',A,' at iteration #',I3, &
-         //20x,'Total energy = ',f15.7)
-  end subroutine LFD_SCF
-  !!***
 
 end module multisiteSF_module

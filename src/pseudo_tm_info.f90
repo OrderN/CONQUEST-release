@@ -37,6 +37,8 @@
 !!    NA projectors added to pseudo_info type
 !!   2019/12/03 08:21 dave
 !!    Added functional to ps_info structure
+!!   2020/05/15 tsuyoshi
+!!    changed the type of z from integer to real
 !!  SOURCE
 !!
 module pseudo_tm_info
@@ -77,9 +79,9 @@ module pseudo_tm_info
      integer :: lmax                 ! maximum of the angular momentum
      integer :: n_pjnl               ! number of projector functions
      logical :: flag_pcc             ! flag for partial core correction
-     integer :: z                    ! atomic weight
      integer :: functional           ! Code for functional if set in ion file
      integer :: ps_type              ! Type of pseudopotential (hamann/siesta)
+     real(double) :: z               ! atomic weight
      real(double) :: zval            ! number of valence electrons
      real(double) :: alpha           ! exponent of gaussian for long range term
      ! of local pseudopotential (might not be used)
@@ -176,6 +178,7 @@ contains
     if(allocated(pseudo)) then
        if(iprint_pseudo>2.AND.inode==ionode) write(io_lun,fmt='(10x," setup_pseudo_info is skipped because it is already called")')
     else
+       if(iprint_pseudo>1.AND.inode==ionode) write(io_lun,fmt='(/10x,a/)') "Reading ion files"
        call start_timer(tmr_std_allocation)
        allocate(pseudo(n_species),STAT=stat)
        if(stat /= 0) call cq_abort ('allocating pseudo in setup_pseudo_info',stat)
@@ -220,7 +223,7 @@ contains
           if(abs(InvSRange(ispecies))<RD_ERR) InvSRange(ispecies) = RadiusSupport(ispecies)
           if (flag_Multisite) RadiusSupport(ispecies) = RadiusSupport(ispecies) + RadiusMS(ispecies)
           max_rc = max(RadiusSupport(ispecies),max_rc)
-          atomicnum(ispecies)    = pseudo(ispecies)%z
+          atomicnum(ispecies)    = nint(pseudo(ispecies)%z)
           ! Valence charge
           charge(ispecies)       = pseudo(ispecies)%zval
           if(mass(ispecies) < zero) charge(ispecies) = zero
@@ -277,8 +280,8 @@ contains
     !call gcopy(flag_pcc_global)
     !call gcopy(gap_threshold)
     !call gcopy(maxnsf)
-    if (iprint_pseudo>0.AND.inode==ionode .AND.flag_pcc_global) &
-         write (io_lun,fmt='(10x,a)') "P.C.C. is taken into account."
+    !if (iprint_pseudo>0.AND.inode==ionode .AND.flag_pcc_global) &
+    !     write (io_lun,fmt='(10x,a)') "P.C.C. is taken into account."
     return
   end subroutine setup_pseudo_info
   !!***
@@ -505,9 +508,12 @@ contains
   !!    Changed yp1 and ypn to use first derivative (simple FD) instead of zero
   !!   2018/03/08 09:54 dave
   !!    Added consistency check between cutoff and step size/number of points
+  !!   2022/08/04 11:48 dave
+  !!    Added optional arguments to allow setting of derivatives at j=1 and j=n
+  !!    (initially for PCC to allow dy/dr=0 at r=0)
   !!  SOURCE
   !!
-  subroutine radial_read_ascii(op,lun)
+  subroutine radial_read_ascii(op,lun,dy1,dyn)
 
     use numbers, ONLY: BIG, zero, RD_ERR
     use splines, ONLY: spline
@@ -519,6 +525,7 @@ contains
     ! Passed variables
     type(rad_func),intent(out) :: op
     integer,intent(in)         :: lun
+    real(double), optional :: dy1, dyn ! Allow user to specify gradients at start/end of table
 
     ! Local variables
     character(len=80) :: sub_name = "radial_read_ascii"
@@ -551,12 +558,16 @@ contains
     do j=3,npts
        read(lun,*) dummy, op%f(j)
     enddo
-    !ori call rad_setup_d2(op)
-    ! conquest version 
-    !  yp1= BIG * 1.1
-    !  ypn= BIG * 1.1
-    yp1= (op%f(2)-op%f(1))/delta!zero
-    ypn= (op%f(npts)-op%f(npts-1))/delta!zero
+    if(present(dy1)) then
+       yp1 = dy1
+    else
+       yp1= (op%f(2)-op%f(1))/delta
+    endif
+    if(present(dyn)) then
+       ypn = dyn
+    else
+       ypn= (op%f(npts)-op%f(npts-1))/delta
+    endif
     call spline(op%n, op%delta, op%f, yp1, ypn, op%d2)
     return
   end subroutine radial_read_ascii
@@ -628,6 +639,8 @@ contains
   !!    Bug fix: set semicore when numprocs>1
   !!   2020/01/22 16:59 dave
   !!    Bug fix: change header to read Hamann code version line if present
+  !!   2022/08/04 11:50 dave
+  !!    Add zero derivatives to PCC read routine to set physically
   !!  SOURCE
   !!
   subroutine read_ion_ascii_tmp(ps_info,pao_info)
@@ -655,10 +668,10 @@ contains
     type(rad_func) :: dummy_rad
 
     character(len=80) :: filename
-    integer :: i, lun , i1, i2, i3, i4, z
+    integer :: i, lun , i1, i2, i3, i4
     real(double) :: dummy, a, r
     integer :: n_orbnl, n_pjnl
-    real(double) :: zval, yp1, ypn, erfarg, tmpv
+    real(double) :: z, zval, yp1, ypn, erfarg, tmpv
     real(double), parameter :: ln10 = 2.302585092994_double
 
     integer :: iproc, lmax, maxz, alls, nzeta, l, count,tzl, xc_func, ps_type
@@ -843,7 +856,7 @@ contains
        if(ps_info%flag_pcc) then
           read(lun,*)
           if(iprint_pseudo>3.AND.inode==ionode) write(io_lun,fmt='(10x,"Reading pcc ")')
-          call radial_read_ascii(ps_info%chpcc,lun)
+          call radial_read_ascii(ps_info%chpcc,lun,zero,zero)
        end if
        !ps_info%flag_pcc = .true.
 
@@ -986,8 +999,8 @@ contains
       implicit none
 
       integer, intent(in)         :: unit
-      integer, intent(out) :: n_orbnl, n_pjnl, z, xc_func, pseudo_type
-      real(double), intent(out) :: zval
+      integer, intent(out) :: n_orbnl, n_pjnl, xc_func, pseudo_type
+      real(double), intent(out) :: z, zval
 
       character(len=78) :: line, trim_line
 
@@ -1055,7 +1068,7 @@ contains
          read(unit,'(a20)') label
          write(io_lun,fmt='(10x,"label = ",a20)') label
          read(unit,*) z
-         write(io_lun,fmt='(10x,"z = ",i5)') z
+         write(io_lun,fmt='(10x,"z = ",f12.5)') z
          read(unit,*) zval
          write(io_lun,fmt='(10x,"zval_int, zval = ",f12.5)') zval
          read(unit,*) mass

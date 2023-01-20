@@ -14,7 +14,8 @@
 !!  2019/05/09 zmaaan
 !!    New dump_heat_flux subroutine to save heat flux to file for thermal
 !!    conductivity calculations
-!!
+!!  2022/09/30 08:31 dave
+!!    Rearranging definitions and locations of types
 !!  SOURCE
 !!
 module md_model
@@ -24,13 +25,11 @@ module md_model
   use GenComms,         only: inode, ionode
   use input_module,     only: leqi
   use force_module,     only: tot_force, stress
-  use global_module,    only: ni_in_cell, io_lun, atom_coord, iprint_MD, &
+  use global_module,    only: ni_in_cell, io_lun, atom_coord, &
+                              atom_vels, species_glob, iprint_MD, &
                               flag_MDcontinue, flag_MDdebug, x_atom_cell, &
                               y_atom_cell, z_atom_cell, rcellx, rcelly, rcellz
-  use species_module,   only: species
-  use md_control,       only: md_n_nhc, ion_velocity, type_thermostat, &
-                              type_barostat, lattice_vec, &
-                              flag_extended_system, md_cell_constraint, heat_flux
+  use rng,              only: type_rng
 
   implicit none
 
@@ -40,6 +39,8 @@ module md_model
   character(20) :: file_forces    = 'infile.forces'
   character(20) :: file_stat      = 'infile.stat'
   character(20) :: file_loto      = 'infile.lotosplitting'
+
+  real(double), dimension(3), target        :: heat_flux
 
   !!****s* md_model/type_md_model *
   !!  NAME
@@ -144,6 +145,8 @@ contains
   !!  
   subroutine init_model(mdl, ensemble, timestep, thermo, baro)
 
+    use md_control, only: lattice_vec, type_thermostat, type_barostat
+
     ! passed variables
     class(type_md_model), intent(inout)       :: mdl
     character(3), intent(in)                  :: ensemble
@@ -151,8 +154,8 @@ contains
     type(type_thermostat), intent(in), target :: thermo
     type(type_barostat), intent(in), target   :: baro
 
-    if (inode==ionode .and. iprint_MD > 2) &
-      write(io_lun,'(2x,a)') "Initialising model"
+    !if (inode==ionode .and. iprint_MD > 2) &
+    !  write(io_lun,'(2x,a)') "Initialising model"
 
     mdl%append = .false.
     if (flag_MDcontinue) mdl%append = .true.
@@ -162,7 +165,7 @@ contains
     mdl%natoms = ni_in_cell
     mdl%ensemble = ensemble
     mdl%timestep = timestep
-    mdl%species       => species
+    mdl%species       => species_glob
     mdl%lat_a         => rcellx
     mdl%lat_b         => rcelly
     mdl%lat_c         => rcellz
@@ -171,7 +174,7 @@ contains
     mdl%pos_z         => z_atom_cell
     mdl%atom_coords   => atom_coord
     mdl%atom_force    => tot_force
-    mdl%atom_velocity => ion_velocity
+    mdl%atom_velocity => atom_vels
     mdl%lattice_vec   => lattice_vec
     mdl%stress        => stress
     mdl%J_v           => heat_flux
@@ -224,12 +227,13 @@ contains
   subroutine get_cons_qty(mdl)
 
     use input_module,     only: leqi
+    use md_control,       only: flag_extended_system
 
     ! passed variables
     class(type_md_model), intent(inout)   :: mdl
 
     if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 1) &
-      write(io_lun,'(2x,a)') "get_cons_qty"
+      write(io_lun,'(6x,a)') "md_run: get_cons_qty"
 
     select case(mdl%ensemble)
     case("nve")
@@ -281,51 +285,58 @@ contains
   !!  
   subroutine print_md_energy(mdl)
 
+    use global_module,    only: min_layer
+    use units
+    use md_control,       only: flag_extended_system
+
     ! passed variables
     class(type_md_model), intent(inout)   :: mdl
 
     ! local variables
+    character(len=10) :: prefixF = '          '
 
-    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 1) &
-      write(io_lun,'(2x,a)') "print_md_energy"
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) &
+         write(io_lun,'(4x,a)') prefixF(1:-2*min_layer)//"print_md_energy"
 
-    if (inode==ionode) then
-      write (io_lun, '(4x,"Conserved quantity H''  : ",f15.8)') &
-        mdl%h_prime
-      write (io_lun, '(4x,a)') "Components of conserved quantity"
-      write (io_lun, '(4x,"Kinetic energy          : ",f15.8)') &
-        mdl%ion_kinetic_energy
-      write (io_lun, '(4x,"Potential energy        : ",f15.8)') &
-        mdl%dft_total_energy
-      select case(mdl%ensemble)
-      case('nvt')
-        select case(mdl%thermo_type)
-        case('nhc')
-          write (io_lun, '(4x,"Nose-Hoover energy      : ",f15.8)') &
-            mdl%e_thermostat
-        case('svr')
-          write (io_lun, '(4x,"SVR energy              : ",f15.8)') &
-            mdl%e_thermostat
-        end select
-      case('npt')
-        if (flag_extended_system .and. mdl%nequil < 1) then
+    if (inode==ionode .and. iprint_MD>0) &
+         write (io_lun, '(4x,a,f15.8,x,a2)') &
+         prefixF(1:-2*min_layer)//"Conserved quantity H'   : ",en_conv*mdl%h_prime,en_units(energy_units)
+    if (inode==ionode .and. iprint_MD + min_layer > 1) then
+       write (io_lun, '(4x,a)') prefixF(1:-2*min_layer)//"Components of conserved quantity"
+       write (io_lun, '(4x,a,f15.8,x,a2)') prefixF(1:-2*min_layer)//"Kinetic energy          : ", &
+            en_conv*mdl%ion_kinetic_energy, en_units(energy_units)
+       write (io_lun, '(4x,a,f15.8,x,a2)') prefixF(1:-2*min_layer)//"Potential energy        : ", &
+            en_conv*mdl%dft_total_energy, en_units(energy_units)
+       select case(mdl%ensemble)
+       case('nvt')
           select case(mdl%thermo_type)
           case('nhc')
-            write (io_lun, '(4x,"Nose-Hoover energy      : ",f15.8)') &
-              mdl%e_thermostat
+             write (io_lun, '(4x,a,f15.8,x,a2)') prefixF(1:-2*min_layer)//"Nose-Hoover energy      : ", &
+                  en_conv*mdl%e_thermostat, en_units(energy_units)
           case('svr')
-            write (io_lun, '(4x,"SVR energy              : ",f15.8)') &
-              mdl%e_thermostat
+             write (io_lun, '(4x,a,f15.8,x,a2)') prefixF(1:-2*min_layer)//"SVR energy              : ", &
+                  en_conv*mdl%e_thermostat, en_units(energy_units)
           end select
-          write (io_lun, '(4x,"Box kinetic energy      : ",f15.8)') &
-            mdl%e_barostat
-        end if
-        write (io_lun, '(4x,"PV                      : ",f15.8)') &
-          mdl%PV
-      end select
+       case('npt')
+          if (flag_extended_system .and. mdl%nequil < 1) then
+             select case(mdl%thermo_type)
+             case('nhc')
+                write (io_lun, '(4x,a,f15.8,x,a2)') prefixF(1:-2*min_layer)//"Nose-Hoover energy      : ", &
+                     en_conv*mdl%e_thermostat, en_units(energy_units)
+             case('svr')
+                write (io_lun, '(4x,a,f15.8,x,a2)') prefixF(1:-2*min_layer)//"SVR energy              : ", &
+                     en_conv*mdl%e_thermostat, en_units(energy_units)
+             end select
+             write (io_lun, '(4x,a,f15.8,x,a2)') prefixF(1:-2*min_layer)//"Box kinetic energy      : ", &
+                  en_conv*mdl%e_barostat, en_units(energy_units)
+          end if
+          write (io_lun, '(4x,a,f15.8,x,a2)') prefixF(1:-2*min_layer)//"PV                      : ", &
+               en_conv*mdl%PV, en_units(energy_units)
+       end select
     end if
   end subroutine print_md_energy
-
+!!****
+  
   !!****m* md_model/dump_stats *
   !!  NAME
   !!   dump_stats 
@@ -349,8 +360,8 @@ contains
     integer                               :: lun
     real(double)                          :: P_GPa
 
-    if (inode==ionode .and. iprint_MD > 1) &
-      write(io_lun,'(2x,"Writing statistics to ",a)') filename
+    if (inode==ionode .and. iprint_MD > 2) &
+      write(io_lun,'(6x,"Writing statistics to ",a)') filename
 
     ! Convert units if necessary
     P_GPa = mdl%P_int*HaBohr3ToGPa
@@ -422,7 +433,7 @@ contains
     integer                               :: lun, i
 
     if (inode==ionode) then
-      if (iprint_MD > 1) write(io_lun,'(2x,"Writing frame to ",a)') filename
+      if (iprint_MD > 2) write(io_lun,'(6x,"Writing frame to ",a)') filename
       call io_assign(lun)
       if (mdl%append) then
         open(unit=lun,file=filename,position='append')
@@ -533,8 +544,7 @@ contains
   subroutine dump_tdep(mdl)
  
     use input_module,     only: io_assign, io_close
-    use units,            only: HaToEv, BohrToAng
-    use md_control,       only: HaBohr3ToGPa
+    use units,            only: HaToEv, BohrToAng, HaBohr3ToGPa
  
     ! passed variables
     class(type_md_model), intent(inout)   :: mdl

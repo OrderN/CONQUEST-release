@@ -57,7 +57,7 @@ deps.obj.inc: $(SRCS_NODS) system.make
 	touch $(COMMENT)
 	$(ECHOSTR) "module datestamp" > datestamp.f90
 	$(ECHOSTR) "  implicit none" >> datestamp.f90
-	$(ECHOSTR) '  character(len=*), parameter :: datestr="'`date`'"' >> datestamp.f90
+	$(ECHOSTR) '  character(len=*), parameter :: datestr="'`date "+%Y/%m/%d at %H:%M %z"`'"' >> datestamp.f90
 	sed "s/BBB/"`git symbolic-ref HEAD | cut -b 12-`"/" $(COMMENT) | sed "s/RRR/"`git describe --tags`"/" >> datestamp.f90
 	$(ECHOSTR) "end module datestamp" >> datestamp.f90
 	./makedeps makedeps.txt $^
@@ -98,16 +98,16 @@ tar:
 clean:
 	rm -f *.o *.mod *~  *.d work.pc* deps.obj.inc
 #	(cd FFT; make -k clean)
-	(cd utilities; make -k clean)
+#	(cd utilities; make -k clean)
 
-clean_lib:
-	rm -f *.a
-	(cd FFT.FFTE; make -k clean)
-	(cd FFT.GPFA; make -k clean)
-	(cd FFT.ISF;  make -k clean)
+#clean_lib:
+#	rm -f *.a
+#	(cd FFT.FFTE; make -k clean)
+#	(cd FFT.GPFA; make -k clean)
+#	(cd FFT.ISF;  make -k clean)
 
 very_clean: 
-	make clean; make clean_lib; make doc_clean; make pure_clean;
+	make clean; make doc_clean; make pure_clean
 doc:
 	make xhtml; make html
 help:

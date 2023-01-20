@@ -29,7 +29,7 @@ contains
     ! Local variables
     real(double), allocatable, dimension(:) :: vha, vxc, atomic_rho, vha_conf
     
-    write(*,fmt='(/"Generating PAOs for ",a2/)') pte(pseudo(i_species)%z)
+    write(*,fmt='(/"Generating PAOs for ",a2/)') pte(nint(pseudo(i_species)%z))
     !
     ! Create mesh
     !
@@ -82,7 +82,7 @@ contains
     vha_conf = vha_conf + local_and_vkb%local
     call interpolate_potentials(i_species,vha_conf)
     deallocate(vha,vxc,vha_conf,atomic_rho)
-    write(*,fmt='(/2x,"Finished ",a2)') pte(pseudo(i_species)%z)
+    write(*,fmt='(/2x,"Finished ",a2)') pte(nint(pseudo(i_species)%z))
   end subroutine make_paos
 
   ! Solve for the unconfined (atomic) pseudo-functions
@@ -209,11 +209,12 @@ contains
   ! Changes
   !
   ! 2019/07/15 11:33 dave
-  !  Temporarily remove orthogonalisation to semi-core states
-  !  as this breaks the normalisation.  Longer term: decide it
-  !  the orthogonalisation is really needed (in which case we
-  !  need to normalise again) or not (in which case we leave it
-  !  out).
+  ! 2021/09/27 16:31 dave
+  !  Restore orthogonalisation to semi-core states and correctly
+  !  normalise resulting functions.
+  ! 2021/09/28 14:38 dave
+  !  Remove orthogonalisation (!) because it breaks Ba perturbative
+  !  polarisation (see below)
   subroutine solve_for_occupied_paos(i_species,vha,vxc,atomic_density)
 
     use datatypes
@@ -266,7 +267,14 @@ contains
                 ! Accumulate atomic charge density
                 atomic_density = atomic_density + val%occ(i_shell)*psi*psi
              end if
-             ! Orthogonalise to semi-core state
+             ! These lines orthogonalise to semi-core states where necessary
+             ! They are left for completeness, but I found that they can cause
+             ! problems with the perturbative polarisation for Ba (basically the
+             ! orthogonalisation means that the 6s shell which we perturb is not
+             ! negative near r=0 which breaks the sign-change detection in the
+             ! perturbative polarisation routines and means they fail).  If we can
+             ! sort this out, we could restore this, but I think that it's not
+             ! very important.  Dave Bowler, 2021/09/28 14:38
              !if(paos%inner(i_shell)>0) then
              !   ! Dot product of two
              !   dot_p = zero
@@ -274,17 +282,18 @@ contains
              !      dot_p = dot_p + rr(i)**(2*ell+2)*paos%psi(zeta,i_shell)%f(i)* &
              !           paos%psi(1,val%inner(i_shell))%f(i)*drdi(i)
              !   end do
-             !   write(*,fmt='(2x,"Orthogonalising to semi-core; overlap is ",f10.5)') dot_p
-             !   ! Orthgonalise
+             !   if(iprint>2) write(*,fmt='(2x,"Orthogonalising to semi-core; overlap is ",f10.5)') dot_p
+             !   ! Orthogonalise
              !   paos%psi(zeta,i_shell)%f = paos%psi(zeta,i_shell)%f - &
              !        dot_p * paos%psi(1,val%inner(i_shell))%f
-             !   ! Check
+             !   ! Normalise
              !   dot_p = zero
              !   do i=1,nmesh
              !      dot_p = dot_p + rr(i)**(2*ell+2)*paos%psi(zeta,i_shell)%f(i)* &
-             !           paos%psi(1,val%inner(i_shell))%f(i)*drdi(i)
+             !           paos%psi(zeta,i_shell)%f(i)*drdi(i)
              !   end do
-             !   if(abs(dot_p)>RD_ERR) write(*,fmt='(2x,"Warning: following orthogonalisation, overlap is ",f10.5)') dot_p
+             !   if(iprint>2) write(*,fmt='(2x,"Normalising: ",f10.5)') dot_p
+             !   paos%psi(zeta,i_shell)%f = paos%psi(zeta,i_shell)%f/sqrt(dot_p)
              !end if ! Inner shell orthogonalisation
           end if ! Split-norm or confined state
        end do ! zeta = 1, paos%nzeta
@@ -298,11 +307,11 @@ contains
   ! Changes
   !
   ! 2019/07/15 11:33 dave
-  !  Temporarily remove orthogonalisation to semi-core states
-  !  as this breaks the normalisation.  Longer term: decide it
-  !  the orthogonalisation is really needed (in which case we
-  !  need to normalise again) or not (in which case we leave it
-  !  out).
+  ! 2021/09/27 16:31 dave
+  !  Restore orthogonalisation to semi-core states and correctly
+  !  normalise resulting functions.  Particularly important for
+  !  elements such as Ga or Ge with semi-core d shell and l=2
+  !  polarisation shell
   subroutine solve_for_polarisation(i_species,vha,vxc)
 
     use datatypes
@@ -349,18 +358,26 @@ contains
                   paos%psi(zeta,i_shell)%f,paos%energy(zeta,i_shell), &
                   vha,vxc,paos%width(i_shell),paos%prefac(i_shell))
              ! Orthogonalise to semi-core state
-             !if(paos%inner(i_shell)>0) then
-             !   ! Dot product of two
-             !   dot_p = zero
-             !   do i=1,nmesh
-             !      dot_p = dot_p + rr(i)**(2*ell+2)*paos%psi(zeta,i_shell)%f(i)* &
-             !           paos%psi(1,paos%inner(i_shell))%f(i)*drdi(i)
-             !   end do
-             !   write(*,fmt='(2x,"Orthogonalising to semi-core; overlap is ",f10.5)') dot_p
-             !   ! Orthgonalise
-             !   paos%psi(zeta,i_shell)%f = paos%psi(zeta,i_shell)%f - &
-             !        dot_p * paos%psi(1,paos%inner(i_shell))%f
-             !end if
+             if(paos%inner(i_shell)>0) then
+                ! Dot product of two
+                dot_p = zero
+                do i=1,nmesh
+                   dot_p = dot_p + rr(i)**(2*ell+2)*paos%psi(zeta,i_shell)%f(i)* &
+                        paos%psi(1,paos%inner(i_shell))%f(i)*drdi(i)
+                end do
+                if(iprint>2) write(*,fmt='(2x,"Orthogonalising to semi-core; overlap is ",f10.5)') dot_p
+                ! Orthogonalise
+                paos%psi(zeta,i_shell)%f = paos%psi(zeta,i_shell)%f - &
+                     dot_p * paos%psi(1,paos%inner(i_shell))%f
+                ! Normalise
+                dot_p = zero
+                do i=1,nmesh
+                   dot_p = dot_p + rr(i)**(2*ell+2)*paos%psi(zeta,i_shell)%f(i)* &
+                        paos%psi(zeta,i_shell)%f(i)*drdi(i)
+                end do
+                if(iprint>2) write(*,fmt='(2x,"Normalising: ",f10.5)') dot_p
+                paos%psi(zeta,i_shell)%f = paos%psi(zeta,i_shell)%f/sqrt(dot_p)
+             end if
           end if
        end do
     end do
@@ -369,29 +386,54 @@ contains
     !
     if(paos%flag_perturb_polarise) then       
        i_shell = paos%n_shells
-       ell = paos%l(i_shell)
+       ! NB we pass l-1 here as the angular momentum of the shell being perturbed
+       ell = paos%l(i_shell)-1
+       ! Note that npao is set to the value of n for the shell being perturbed
        en = paos%npao(i_shell)
        do zeta = 1,paos%nzeta(i_shell)
           allocate(paos%psi(zeta,i_shell)%f(nmesh))
           paos%psi(zeta,i_shell)%f = zero
-          ! NB we pass l-1 here as we need to perturb the shell below
-          ell = paos%l(i_shell)-1
-          en = paos%npao(i_shell)
           if(iprint>2) then
              write(*,fmt='(2x,"Perturbative polarisation")')
              write(*,fmt='(2x,"Species ",i2," n=",i2," l=",i2," zeta=",i2, " Rc=",f4.1," bohr")') &
                   i_species, en, ell, zeta, paos%cutoff(zeta,i_shell)
              write(*,fmt='(4x,"Prefactor scaled by ",f5.1)') paos%pol_pf
+             write(*,fmt='(4x,"Energy: ",f12.5)') paos%energy(zeta,paos%polarised_shell)
+             write(*,fmt='(4x,"Polarising shell: ",i2)') paos%polarised_shell
           end if
           if(zeta>1.AND.paos%flag_zetas==1) then
              call find_split_norm(en,ell+1,paos%cutoff(zeta,i_shell),&
                   paos%psi(zeta,i_shell)%f,paos%psi(1,i_shell)%f)
           else
              ! Set radius of polarisation PAO
-             paos%cutoff(zeta,i_shell) = paos%cutoff(zeta,i_shell-1)
+             paos%cutoff(zeta,i_shell) = paos%cutoff(zeta,paos%polarised_shell)
              call find_polarisation(i_species,en,ell,paos%cutoff(zeta,i_shell),&
-                  paos%psi(zeta,i_shell-1)%f,paos%psi(zeta,i_shell)%f,&
-                  paos%energy(zeta,i_shell-1),vha,vxc,paos%pol_pf)
+                 paos%psi(zeta,paos%polarised_shell)%f,paos%psi(zeta,i_shell)%f,&
+                 paos%energy(zeta,paos%polarised_shell),vha,vxc,paos%pol_pf)
+             ! Orthogonalise to semi-core state
+             if(paos%inner(i_shell)>0) then
+                ! Dot product of two
+                ! NB r^(2l+4) is because each psi needs to be scaled by r^(l+1)
+                ! to remove the Siesta normalisation, and then the integral needs
+                ! another r^2.  Also below when normalising.
+                dot_p = zero
+                do i=1,nmesh
+                   dot_p = dot_p + rr(i)**(2*ell+4)*paos%psi(zeta,i_shell)%f(i)* &
+                        paos%psi(1,paos%inner(i_shell))%f(i)*drdi(i)
+                end do
+                if(iprint>2) write(*,fmt='(2x,"Orthogonalising to semi-core; overlap is ",f10.5)') dot_p
+                ! Orthgonalise
+                paos%psi(zeta,i_shell)%f = paos%psi(zeta,i_shell)%f - &
+                     dot_p * paos%psi(1,paos%inner(i_shell))%f
+                ! Normalise
+                dot_p = zero
+                do i=1,nmesh
+                   dot_p = dot_p + rr(i)**(2*ell+4)*paos%psi(zeta,i_shell)%f(i)* &
+                        paos%psi(zeta,i_shell)%f(i)*drdi(i)
+                end do
+                if(iprint>2) write(*,fmt='(2x,"Normalising: ",f10.5)') dot_p
+                paos%psi(zeta,i_shell)%f = paos%psi(zeta,i_shell)%f/sqrt(dot_p)
+             end if
           end if
        end do
     end if ! paos%flag_perturb_polarise
@@ -429,7 +471,7 @@ contains
           ! Interpolate
           call interpolate(paos%psi_reg(zeta,i_shell)%x,paos%psi_reg(zeta,i_shell)%f,nmesh_pao,&
                rr(1:nrc-1),paos%psi(zeta,i_shell)%f(1:nrc-1),nrc-1,zero)
-          if(flag_plot_output) call write_pao_plot(pseudo(i_species)%z,paos%psi_reg(zeta,i_shell)%x, &
+          if(flag_plot_output) call write_pao_plot(nint(pseudo(i_species)%z),paos%psi_reg(zeta,i_shell)%x, &
                paos%psi_reg(zeta,i_shell)%f, nmesh_pao,"PAO", en,ell,zeta)
        end do
     end do
@@ -453,6 +495,7 @@ contains
     ! Local variables
     integer :: i_shell, en, ell, zeta, nmesh_pot, i, j, k, nrc, istart
     real(double) :: max_cutoff
+    real(double) :: zz
     real(double), allocatable, dimension(:) :: x_reg
 
     !
@@ -487,7 +530,7 @@ contains
           pseudo(i_species)%pjnl(j)%delta = rr(nrc)/real(nmesh_pot-1,double)
           call interpolate(x_reg,pseudo(i_species)%pjnl(j)%f,nmesh_pot, &
                rr(1:nrc),local_and_vkb%projector(1:nrc,i,ell),nrc,zero)
-          if(flag_plot_output) call write_pao_plot(pseudo(i_species)%z,x_reg, &
+          if(flag_plot_output) call write_pao_plot(nint(pseudo(i_species)%z),x_reg, &
                pseudo(i_species)%pjnl(j)%f,nmesh_pot,"KB",ell=ell,zeta=i)
           deallocate(x_reg)
        end do
@@ -514,7 +557,7 @@ contains
        call make_mesh_reg(x_reg,nmesh_pot,pseudo(i_species)%chpcc%cutoff)
        call interpolate(x_reg,pseudo(i_species)%chpcc%f,nmesh_pot, &
             rr,local_and_vkb%pcc,local_and_vkb%ngrid,zero)
-       if(flag_plot_output) call write_pao_plot(pseudo(i_species)%z,x_reg, &
+       if(flag_plot_output) call write_pao_plot(nint(pseudo(i_species)%z),x_reg, &
             pseudo(i_species)%chpcc%f,nmesh_pot,"PCC")
        deallocate(x_reg)
     end if
@@ -532,9 +575,11 @@ contains
     !
     ! Interpolate using exact value of local potential at cutoff: -Z/r
     !
+    zz = pseudo(i_species)%z - pseudo(i_species)%zcore
     call interpolate(x_reg,pseudo(i_species)%vlocal%f,nmesh_pot, &
-         rr,local_and_vkb%local,local_and_vkb%ngrid,-pseudo(i_species)%zval/pseudo(i_species)%vlocal%cutoff)
-    if(flag_plot_output) call write_pao_plot(pseudo(i_species)%z,x_reg, &
+         !rr,local_and_vkb%local,local_and_vkb%ngrid,-pseudo(i_species)%zval/pseudo(i_species)%vlocal%cutoff)
+         rr,local_and_vkb%local,local_and_vkb%ngrid,-zz/pseudo(i_species)%vlocal%cutoff)
+    if(flag_plot_output) call write_pao_plot(nint(pseudo(i_species)%z),x_reg, &
          pseudo(i_species)%vlocal%f,nmesh_pot,"Vlocal")
     !
     ! Neutral atom potential - same mesh as local
@@ -545,7 +590,7 @@ contains
     pseudo(i_species)%vna%cutoff = pseudo(i_species)%vlocal%cutoff
     call interpolate(x_reg,pseudo(i_species)%vna%f,pseudo(i_species)%vna%n,&
          rr,vha_conf,nmesh,zero)
-    if(flag_plot_output) call write_pao_plot(pseudo(i_species)%z,x_reg, &
+    if(flag_plot_output) call write_pao_plot(nint(pseudo(i_species)%z),x_reg, &
          pseudo(i_species)%vna%f,nmesh_pot,"VNA")
     deallocate(x_reg)
     return
@@ -806,6 +851,7 @@ contains
     l_half_sq = l_half_sq*l_half_sq
     l_l_plus_one = real(ell*(ell+1),double)
     zval = pseudo(i_species)%zval ! Added
+    !zval = pseudo(i_species)%z  (z or zval?)
     !write(*,*) '# zval is ',zval
     dx_sq_over_twelve = alpha*alpha/twelve
     alpha_sq_over_four = alpha*alpha/four
@@ -1213,8 +1259,14 @@ contains
     l_half_sq = real(ell+1,double) + half
     l_half_sq = l_half_sq*l_half_sq
     l_l_plus_one = real((ell+2)*(ell+1),double)
+    ! NB The values of n and l we have here are for the perturbed function, so this is correct
     n_nodes = en - ell - 1
     if(iprint>2) write(*,fmt='(2x,"For this polarisation function, we require ",i2," nodes")') n_nodes
+    ! This is needed when we are perturbing a valence state with a semi-core state
+    if(n_nodes>0 .and. pf_sign>zero .and. psi_l(1)<zero) then
+       pf_sign = -one
+       if(iprint>5) write(*,fmt='(4x,"Changing sign of function as required")')
+    end if
     zval = pseudo(i_species)%z
     dx_sq_over_twelve = alpha*alpha/twelve
     alpha_sq_over_four = alpha*alpha/four
@@ -1226,10 +1278,12 @@ contains
     ! compatibility with old Siesta pseudopotentials and for cases where we do not have semi-local
     ! potentials for l+1
     if((ell+1>pseudo(i_species)%lmax).OR.flag_use_Vl) then
-       if(ell+1>pseudo(i_species)%lmax) then
-          write(*,*) 'lmax is ',pseudo(i_species)%lmax,' so perturbing using l not l+1'
-       else
-          write(*,*) 'Using V_{l} not V_{l+1} for perturbation'
+       if(iprint>2) then
+          if(ell+1>pseudo(i_species)%lmax) then
+             write(*,*) 'lmax is ',pseudo(i_species)%lmax,' so perturbing using l not l+1'
+          else
+             write(*,*) 'Using V_{l} not V_{l+1} for perturbation'
+          end if
        end if
        !l_l_plus_one = real((ell)*(ell+1),double)
        do i=1,nmesh
@@ -1245,14 +1299,8 @@ contains
     ! Energy bounds - allow for unbound states
     nmax = nmesh ! Adjust later to confine
     ! Test
-    !Rc = 8.0_double
     call convert_r_to_i(Rc,nmax)
     nmax = nmax - 1
-    ! NEW !
-    write(*,*) 'Rc and rr(nmax) are: ',Rc,rr(nmax)
-    !Rc = rr(nmax)
-    ! NEW !
-    !write(*,*) "# Nmax is ",nmax
     ! Numerov
     do i=1,nmax
        g(i) = (drdi_squared(i)*(two*(energy - potential(i))-l_l_plus_one/rr_squared(i)) - alpha_sq_over_four)/twelve
@@ -1305,10 +1353,12 @@ contains
        end if
     end do
     if(loop>=n_loop) then
-       do i=1,nmax
-          write(50,*) rr(i),psi_pol(i),-rr(i)*rr(i)*psi_l(i)
-       end do
-       call flush(50)
+       if(iprint>5) then
+          do i=1,nmax
+             write(50,*) rr(i),psi_pol(i),-rr(i)*rr(i)*psi_l(i)
+          end do
+          call flush(50)
+       end if
        call cq_abort("ERROR in perturbative polarisation routines - prefactor not found")
     else
        if(iprint>2) write(*,fmt='("Finished perturbative polarisation search with prefactor ",f13.5)') prefac

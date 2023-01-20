@@ -26,7 +26,7 @@ contains
     character(len=1), dimension(4) :: ang_mom = (/ "s", "p", "d", "f"/)
     
     call io_assign(lun)
-    filename = trim(pte(pseudo(i_species)%z))//"CQ.ion"
+    filename = trim(pte(nint(pseudo(i_species)%z)))//"CQ.ion"
     open(unit=lun, file=filename)
     ! Tag preamble
     write(lun,fmt='("<preamble>")')
@@ -73,7 +73,7 @@ contains
     case default
        string_xc = 'xx'
     end select
-    write(lun,fmt='((a)," basis set with ",(a)," functional")') trim(pte(pseudo(i_species)%z)), trim(functional_description)
+    write(lun,fmt='((a)," basis set with ",(a)," functional")') trim(pte(nint(pseudo(i_species)%z))), trim(functional_description)
     ! Loop over l
     !write(lun,fmt='("  n  l zetas  other")')
     paos%total_paos = 0
@@ -102,23 +102,24 @@ contains
     write(lun,fmt='("<pseudopotential_header>")')
     ! Write symbol, functional, relativistic, PCC (pcec or nc)
     if(pseudo(i_species)%flag_pcc) then
-       write(lun,fmt='(1x,a2," ",a2," nrl pcec")') pte(pseudo(i_species)%z), string_xc
+       write(lun,fmt='(1x,a2," ",a2," nrl pcec")') pte(nint(pseudo(i_species)%z)), string_xc
     else
-       write(lun,fmt='(1x,a2," ",a2," nrl nc  ")') pte(pseudo(i_species)%z), string_xc
+       write(lun,fmt='(1x,a2," ",a2," nrl nc  ")') pte(nint(pseudo(i_species)%z)), string_xc
     end if
     ! Only the last is used ! Get the format right
     write(lun,fmt='("</pseudopotential_header>")')
     write(lun,fmt='("</preamble>")')
     ! Symbol
-    write(lun,fmt='(a2,20x,"# Element symbol")') pte(pseudo(i_species)%z)
+    write(lun,fmt='(a2,20x,"# Element symbol")') pte(nint(pseudo(i_species)%z))
     ! Label - how do we set this ? 
-    write(lun,fmt='(a2,20x,"# Label")') pte(pseudo(i_species)%z)
+    write(lun,fmt='(a2,20x,"# Label")') pte(nint(pseudo(i_species)%z))
     ! Atomic number
-    write(lun,fmt='(i5,20x,"# Atomic number")') pseudo(i_species)%z
+    !write(lun,fmt='(i5,20x,"# Atomic number")') pseudo(i_species)%z
+    write(lun,fmt='(f6.2,20x,"# Atomic number")') pseudo(i_species)%z
     ! Valence charge
     write(lun,fmt='(f18.10,20x,"# Valence charge")') pseudo(i_species)%zval
     ! Mass
-    write(lun,fmt='(f18.10,20x,"# Mass")') atomic_mass(pseudo(i_species)%z)
+    write(lun,fmt='(f18.10,20x,"# Mass")') atomic_mass(nint(pseudo(i_species)%z))
     ! Self energy ?
     write(lun,fmt='(f18.10,20x,"# Self energy")') 0.0_double
     ! Lmax, no of nl orbitals BASIS
@@ -150,7 +151,7 @@ contains
     
     ! Open file
     call io_assign(lun)
-    filename = trim(pte(pseudo(i_species)%z))//"CQ.ion"
+    filename = trim(pte(nint(pseudo(i_species)%z)))//"CQ.ion"
     open(unit=lun, file=filename,position="append")
     ! PAOs
     write(lun,fmt='("# PAOs:_______________")')
@@ -200,7 +201,7 @@ contains
     
     ! Open file
     call io_assign(lun)
-    filename = trim(pte(pseudo(i_species)%z))//"CQ.ion"
+    filename = trim(pte(nint(pseudo(i_species)%z)))//"CQ.ion"
     open(unit=lun, file=filename,position="append")
     ! KB projectors 
     write(lun,fmt='("# KBs:_______________")')
@@ -256,7 +257,7 @@ contains
     
     ! Open file
     call io_assign(lun)
-    filename = trim(pte(pseudo(i_species)%z))//"CQ.ion"
+    filename = trim(pte(nint(pseudo(i_species)%z)))//"CQ.ion"
     open(unit=lun, file=filename,position="append")
     write(lun,fmt='("<pseudopotential_input_file>")')
     do i=1,input_file_length

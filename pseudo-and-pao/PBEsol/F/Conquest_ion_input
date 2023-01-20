@@ -1,4 +1,6 @@
 General.NumberOfSpecies 1
+# We want the 2s to be valence, so adjust the cutoff
+General.SemicoreEnergy -1.1
 
 %block SpeciesLabels
 1  F

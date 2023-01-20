@@ -9,11 +9,16 @@ LINKFLAGS= -L/usr/local/lib
 ARFLAGS=
 
 # Compilation flags
+# NB for gcc10 you need to add -fallow-argument-mismatch
 COMPFLAGS= -O3 $(XC_COMPFLAGS)
 COMPFLAGS_F77= $(COMPFLAGS)
 
 # Set BLAS and LAPACK libraries
-BLAS= -lvecLibFort
+# MacOS X
+# BLAS= -lvecLibFort
+# Intel MKL use the Intel tool
+# Generic
+# BLAS= -llapack -lblas
 
 # Full library call; remove scalapack if using dummy diag module
 LIBS= $(FFT_LIB) $(XC_LIB) -lscalapack $(BLAS)
@@ -26,9 +31,9 @@ LIBS= $(FFT_LIB) $(XC_LIB) -lscalapack $(BLAS)
 #XC_COMPFLAGS =
 
 # LibXC compatibility
-# Choose old LibXC (v2.x) or modern versions
-#XC_LIBRARY = LibXC_v2
-XC_LIBRARY = LibXC
+# Choose LibXC version: v4 or v5
+XC_LIBRARY = LibXC_v4
+# XC_LIBRARY = LibXC_v5
 XC_LIB = -lxcf90 -lxc
 XC_COMPFLAGS = -I/usr/local/include
 

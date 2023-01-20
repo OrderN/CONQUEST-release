@@ -1,4 +1,6 @@
 General.NumberOfSpecies 1
+# If you want the 4d shell to be semi-core, uncomment the line below
+# General.SemicoreEnergy -0.40
 
 %block SpeciesLabels
 1  Cd

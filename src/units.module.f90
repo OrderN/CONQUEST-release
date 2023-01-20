@@ -19,6 +19,8 @@
 !!  MODIFICATION HISTORY
 !!   2018/03/07 10:29 dave
 !!    Adding further useful constants and updating values to CODATA
+!!   2022/06/09 15:35 dave
+!!    Added Avogadro's constant (for unit conversion in DFT-D2)
 !!  SOURCE
 !!
 module units
@@ -42,6 +44,8 @@ module units
   ! Time
   real(double), parameter :: fac_fs2atu = 41.3413745758
 
+  ! Number
+  real(double), parameter :: AvogadroC = 6.02214076e23_double
   ! Pressure
   real(double), parameter :: HaBohr3ToGPa = &
     (HaToeV*eVToJ*1e21_double)/(BohrToAng**3)
