@@ -166,6 +166,7 @@ parser.add_argument('--dump', action='store_true', dest='dump',
 parser.add_argument('--mser', action='store', dest='mser_var', default=None,
                     type=str, help='Compute MSER for the given property')
 
+
 opts = parser.parse_args()
 if (opts.vacf or opts.msd or opts.stress or opts.rdf):
   read_frames = True
