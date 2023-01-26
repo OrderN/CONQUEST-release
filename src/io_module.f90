@@ -1631,7 +1631,7 @@ second:   do
 !13  format(10x,'Fermi energy for spin = ',i1,' is ',f18.11,' ',a2)
 
 4   format(10x,'Sum of eigenvalues: ',f18.11,' ',a2)
-7   format(10x,'Eigenvalues and occupancies for k-point ',i3,' : ',3f12.5)
+7   format(10x,'Eigenvalues and occupancies for k-point ',i4,' : ',3f12.5)
 8   format(10x,f15.7,x,f8.5,2x)
 9   format(10x,f15.7,x,f8.5,2x,f15.7,x,f8.5,2x)
 10  format(10x,f15.7,x,f8.5,2x,f15.7,x,f8.5,2x,f15.7,x,f8.5)
