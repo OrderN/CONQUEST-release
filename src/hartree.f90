@@ -444,11 +444,12 @@ contains
     ! for FFT, then i0=0
     ! q=0 is only on one of processor node need to make sure we are
     ! doing the correct point
-    if ((i0 > 0)) then
-       if((hartree_factor(i0) <= RD_ERR)) then
-          FR_kerker(i0) = zero
-       end if
-    end if
+    ! 2023/02/14 DRB Removed as this introduces an error
+    !if ((i0 > 0)) then
+    !   if((hartree_factor(i0) <= RD_ERR)) then
+    !      FR_kerker(i0) = zero
+    !   end if
+    !end if
     ! FFT back
     call fft3(resid, FR_kerker, size, +1)
     ! deallocate array
@@ -528,7 +529,7 @@ contains
     else
        q12 = q1*q1
     end if
-    facmax = zero
+    !facmax = zero
     ! FFT residue
     allocate(FR_wdmetric(size), STAT=stat)
     if (stat /= 0) &
@@ -542,22 +543,24 @@ contains
        ! treating it separately
        if (hartree_factor(i) > RD_ERR) then 
           fac = one + hartree_factor(i)*q12
-          facmax = max(fac, facmax)
+          !facmax = max(fac, facmax)
           FR_wdmetric(i) = FR_wdmetric(i)*fac
        end if
     end do
     ! find the global maximum for fac
-    call gmax(facmax)
+    !call gmax(facmax)
     ! do q=0 point separately (if q=0 is on one of the grid point)
     ! note that if q=0 point is not on the discrete reciporical grid
     ! for FFT, then i0=0
     ! q=0 is only on one of processor node need to make sure we are
     ! doing the correct point
-    if ((i0 > 0)) then
-       if((hartree_factor(i0) <= RD_ERR)) then
-          FR_wdmetric(i0) = FR_wdmetric(i0) * facmax
-       end if
-    end if
+    ! We don't want to amplify this: it should be zero and if it isn't should be unscaled
+    ! 2023/02/14 DRB
+    !if ((i0 > 0)) then
+    !   if((hartree_factor(i0) <= RD_ERR)) then
+    !      FR_wdmetric(i0) = FR_wdmetric(i0) * facmax
+    !   end if
+    !end if
     ! FFT back
     call fft3(resid_cov, FR_wdmetric, size, +1)
     ! deallocate arrays
@@ -634,19 +637,19 @@ contains
     real(double) :: fac, fac2, facmax, q02, q12
     complex(double_cplx), allocatable, dimension(:) :: FR_kerker, FR_wdmetric
     
-    if (abs(q0) < RD_ERR) then
-       return
-    else
+    !if (abs(q0) < RD_ERR) then
+    !   return
+    !else
        q02 = q0*q0
-    endif
-    if (abs(q1) < RD_ERR) then
+    !endif
+    !if (abs(q1) < RD_ERR) then
        ! copy resid to resid_cov 
-       resid_cov = resid
-       return
-    else
+    !   resid_cov = resid
+    !   return
+    !else
        q12 = q1*q1
-    end if
-    facmax = zero
+    !end if
+    !facmax = zero
     ! FFT residue
     allocate(FR_kerker(size), FR_wdmetric(size), STAT=stat)
     if (stat /= 0) &
@@ -666,23 +669,23 @@ contains
           FR_kerker(i) = FR_kerker(i)*fac
           ! wave-dependent-metric factor
           fac2 = one + hartree_factor(i)*q12
-          facmax = max(fac2, facmax)
+          !facmax = max(fac2, facmax)
           FR_wdmetric(i) = FR_wdmetric(i)*fac2
        end if
     end do
     ! find the global maximum for fac
-    call gmax(facmax)
+    !call gmax(facmax)
     ! do q=0 point separately (if q=0 is on one of the grid point)
     ! note that if q=0 point is not on the discrete reciporical grid
     ! for FFT, then i0=0
     ! q=0 is only on one of processor node need to make sure we are
     ! doing the correct point
-    if ((i0 > 0)) then
-       if((hartree_factor(i0) <= RD_ERR)) then
-          FR_kerker(i0) = zero
-          FR_wdmetric(i0) = FR_wdmetric(i0)*facmax
-       end if
-    end if
+    !if ((i0 > 0)) then
+    !   if((hartree_factor(i0) <= RD_ERR)) then
+    !      FR_kerker(i0) = zero
+    !      FR_wdmetric(i0) = FR_wdmetric(i0)*facmax
+    !   end if
+    !end if
     ! FFT back
     call fft3(resid, FR_kerker, size, +1)
     call fft3(resid_cov, FR_wdmetric, size, +1)
