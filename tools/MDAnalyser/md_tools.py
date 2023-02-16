@@ -5,6 +5,8 @@ import matplotlib.pyplot as plt
 from scipy.linalg import norm
 from scipy.integrate import cumtrapz
 from scipy.signal import correlate
+from scipy.fft import fft, ifft, fftshift
+from numpy import linspace, sin
 from scipy import histogram
 from math import ceil, pi
 from md_frame import Frame
@@ -138,10 +140,57 @@ class Pairdist:
       ax2.grid(b=True, which='minor', axis='x', color='gray', linestyle='--')
       ax2.grid(b=True, which='major', axis='y', color='gray', linestyle='-')
       # ax2.grid(b=True, which='minor', axis='y', color='gray', linestyle='--')
+
+      # To be edited to allow the possibility to chose the pair of species whished.
+      
+      # How to choose a pair
+     
+      # Display all the atoms
       for ispec in range(self.nspec):
-        for jspec in range(ispec,self.nspec):
-          pair = "{}-{}".format(self.species[ispec+1], self.species[jspec+1])
-          ax2.plot(self.bins, self.gr[:,ispec,jspec], label=pair, linewidth=1.0)
+          print(self.species[ispec+1])
+      self.selection = 0
+
+      # For the first atom
+      while self.selection == 0:
+        self.choosen_atom1 = input("Which species do you wan to take? Type 'all' to show every datas.")
+        if(self.choosen_atom1 == "All" or self.choosen_atom1 == "all"):
+          self.selection = 1
+          break
+        for ispec in range(self.nspec):
+          #print(self.species[ispec])
+          #print(self.species[ispec+1], " vs ", self.choosen_atom1)
+          if(str(self.species[ispec+1]) == self.choosen_atom1):
+            self.choosen_atom1_coord = ispec+1
+            self.selection = 2
+            break
+        if(self.selection == 0):
+          print("Error, please enter again.")
+      # For the second atom
+      if (self.selection == 2):
+        while self.selection == 2:
+          self.choosen_atom2 = input("Which species do you wan to take? Type 'quitt' to go back to the previous selection.")
+          if(self.choosen_atom2 == "Quitt" or self.choosen_atom2 == "quitt" or self.choosen_atom2 == "exit" or self.choosen_atom2 == "Exit"):
+            self.selection == 0
+            break # I want not to break but to go to the previous while loop.
+          for ispec in range(self.nspec):
+            if(str(self.species[ispec+1]) == self.choosen_atom2):
+              self.choosen_atom2_coord = ispec+1
+              self.selection = 3
+              break
+        if(self.selection == 2):
+          print("Error, please enter again.")
+        # We plot the pair choosen
+      if (self.selection == 3):
+        pair = "{}-{}".format(self.species[self.choosen_atom1_coord], self.species[self.choosen_atom2_coord])
+        ax2.plot(self.bins, self.gr[:,self.choosen_atom1_coord,self.choosen_atom2_coord], label=pair, linewidth=1.0)
+      else:
+        # We plot all the pairs.
+        for ispec in range(self.nspec):
+          for jspec in range(ispec,self.nspec):
+            pair = "{}-{}".format(self.species[ispec+1], self.species[jspec+1])
+            ax2.plot(self.bins, self.gr[:,ispec,jspec], label=pair, linewidth=1.0)
+      
+      
       ax2.set_ylim(bottom=0)
       ax2.set_xlabel("r (A)")
       ax2.set_ylabel("partial g(r)")
@@ -274,6 +323,8 @@ class VACF:
     self.init_v = init_frame.v
     self.vacf = []
     self.steps = []
+    self.omega = 0
+    self.freq = 0
 
   def update_vacf(self, step, frame):
     self.nframes += 1
@@ -286,6 +337,17 @@ class VACF:
     self.vacf = sp.array(self.vacf)/self.nat
     self.time = sp.array(self.steps, dtype='float')*self.dt
 
+  def fft_vacf(self):
+    self.time = self.time
+    self.vacf = self.vacf
+
+    self.omega = fft(self.vacf,len(self.steps))
+    self.omega = fftshift(self.vacf)
+    #self.omega = fftshift(fft(sin(self.time),len(self.steps)))
+    #self.omega = ifft(self.omega,len(self.steps))
+    self.freq = linspace(0.0,1.0/(self.vacf[-1]*self.dt),len(self.steps))
+    #self.freq = linspace(0.0,1.0/(sin(self.time[-1])*self.dt),len(self.steps))
+
   def plot_vacf(self):
     filename = "vacf.pdf"
     plt.figure("VACF")
@@ -294,6 +356,17 @@ class VACF:
     plt.xlim((self.time[0],self.time[-1]))
     plt.plot(self.time, self.vacf)
     plt.plot((0,self.time[-1]), (0, 0), 'k-')
+    plt.savefig(filename, bbox_inches='tight')
+
+  def plot_fft_vacf(self):
+    filename = "vacf_fft.pdf"
+    plt.figure("VACF FFT")
+    plt.xlabel("w (cm-1)")
+    plt.ylabel("I(w)")
+    plt.xlim((self.freq[0],self.freq[-1]))
+    #plt.plot(self.freq, self.omega)
+    plt.plot(self.freq, (1.0/(2*pi)) * abs(self.omega)) # Is the norm okay?
+    plt.plot((0,self.freq[-1]), (0, 0), 'k-')
     plt.savefig(filename, bbox_inches='tight')
 
   def dump_vacf(self):

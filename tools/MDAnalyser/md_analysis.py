@@ -20,11 +20,12 @@ endframe_re = re.compile('end frame')
 specblock_re = re.compile(r'%block ChemicalSpeciesLabel\n(.*?)\n%endblock',
                           re.M | re.S | re.I)
 
+# The input.log and the Conquest input file is needed for the analysis.
 cq_input_file = 'input.log'
 cq_input_species = 'Conquest_input'
 
 # Parsing functions
-def strip_comments(line, separator):
+def strip_comments(line, separator): # Function to remove all the comments.
   for s in separator:
     i = line.find(s)
     if i >= 0:
@@ -128,7 +129,7 @@ parser.add_argument('-f', action='store', dest='framesfile',
 parser.add_argument('-s', action='store', dest='statfile',
                     default='Stats', help='MD statistics file')
 parser.add_argument('--skip', action='store', dest='nskip', default=0,
-                    type=int, help='Number of equilibration steps to skip')
+                    type=int, help='Number of equilibration steps to skip') # Allow to skip some steps (remove the equilibration)
 parser.add_argument('--stride', action='store', dest='stride', default=1,
                     type=int, help='Only analyse every nth step of frames file')
 parser.add_argument('--snap', action='store', dest='snap', default=-1, 
@@ -140,15 +141,15 @@ parser.add_argument('--equil', action='store', dest='nequil', default=0,
 parser.add_argument('--stats', action='store_true', dest='stats',
                     help='Plot statistics')
 parser.add_argument('--vacf', action='store_true', dest='vacf', 
-                    help='Plot velocity autocorrelation function')
+                    help='Plot velocity autocorrelation function') # Prio
 parser.add_argument('--hfacf', action='store_true', dest='hfacf', 
                     help='Plot heat flux autocorrelation function')
 parser.add_argument('--acfwindow', action='store', dest='acfwindow', default=0.0, 
                     type=float, help='window for autocorrelation')
 parser.add_argument('--msd', action='store_true', dest='msd', 
-                    help='Plot mean squared deviation')
+                    help='Plot mean squared deviation')           # Prio
 parser.add_argument('--rdf', action='store_true', dest='rdf', 
-                    help='Plot radial distribution function')
+                    help='Plot radial distribution function')     # Prio
 parser.add_argument('--stress', action='store_true', dest='stress', 
                     help='Plot stress')
 parser.add_argument('--landscape', action='store_true', dest='landscape', 
@@ -318,7 +319,7 @@ if opts.hfacf:
   time = np.array([float(i)*dt for i in range(window)])
   nruns = 0
   for ind, d in enumerate(opts.dirs):
-    path = os.path.join(d, heatfluxfile)
+    path = os.path.join(d, heatfluxfile) # Undefined name.
 
     J = []
     t = []
@@ -359,7 +360,7 @@ if opts.hfacf:
   plt.savefig("hfacf.pdf", bbox_inches='tight')
 
 # Parse the frames file
-if read_frames:
+if read_frames: # Speed to be improved
   nframes = 0
   newframe = True
   buf = ""
@@ -490,7 +491,9 @@ if read_frames:
   # Plot the VACF
   if opts.vacf:
     c.norm_vacf()
+    c.fft_vacf()
     c.plot_vacf()
+    c.plot_fft_vacf()
     if opts.dump:
       c.dump_vacf()
 
