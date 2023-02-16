@@ -1,0 +1,274 @@
+fdf-debug              0     # Default value
+IO.WriteOutToFile              T     # Default value
+IO.OutputFile     Conquest_out     # Default value
+IO.WriteOutToASEFile              F     # Default value
+IO.BackTraceOn              F     # Default value
+IO.TimingOn              F     # Default value
+IO.Iprint                        1
+IO.Iprint_init              1     # Default value
+IO.Iprint_mat              1     # Default value
+IO.Iprint_ops              1     # Default value
+IO.Iprint_DM              1     # Default value
+IO.Iprint_SC              1     # Default value
+IO.Iprint_minE              1     # Default value
+IO.Iprint_MD              1     # Default value
+IO.Iprint_MDdebug              1     # Default value
+IO.Iprint_index              1     # Default value
+IO.Iprint_gen              1     # Default value
+IO.Iprint_pseudo              1     # Default value
+IO.Iprint_basis              1     # Default value
+IO.Iprint_intgn              1     # Default value
+IO.Iprint_time              1     # Default value
+IO.Iprint_exx              1     # Default value
+IO.DumpBibTeX              T     # Default value
+IO.DumpL              T     # Default value
+IO.DumpHarPot              F     # Default value
+IO.DumpXCPot              F     # Default value
+IO.DumpPSPot              F     # Default value
+IO.DumpESPot              F     # Default value
+IO.DumpTotPot              F     # Default value
+IO.AtomChargeOutput              F     # Default value
+General.RNGSeed             -1     # Default value
+General.MemoryUnits     MB     # Default value
+General.TimeThreshold         0.1000000000E-02     # Default value
+General.MaxTime          1997.000000    
+IO.Title     CH6N                                                                            
+General.NewRun              T     # Default value
+Basis.InitBlipFlag     pao     # Default value
+General.LoadRho              F     # Default value
+General.LoadInvS              F     # Default value
+General.NetCharge         -1.000000000    
+IO.FractionalAtomicCoords              T
+IO.CheckInitialAtomicDistances              T     # Default value
+IO.InitAtomicDistance_max          50.00000000         # Default value
+IO.InitAtomicDistance_min         0.5000000000         # Default value
+IO.AtomOutputThreshold            200     # Default value
+IO.AtomCoordsXYZ              F     # Default value
+Spin.SpinPolarised              F
+Spin.FixSpin              F     # Default value
+Grid.GridCutoff          100.0000000    
+Grid.PointsAlongX              0     # Default value
+Grid.PointsAlongY              0     # Default value
+Grid.PointsAlongZ              0     # Default value
+DM.LVariations             50     # Default value
+minE.SupportVariations             10     # Default value
+minE.ExpectedEnergyReduction          0.000000000         # Default value
+DM.mu          0.000000000         # Default value
+DM.L_range          1.000000000         # Default value
+Basis.SGaussExponent          0.000000000         # Default value
+Basis.PGaussExponent          0.000000000         # Default value
+minE.EnergyTolerance         0.1000000000E-04     # Default value
+Basis.UsePulayForPAOs              F     # Default value
+Grid.InBlockX              4     # Default value
+Grid.InBlockY              4     # Default value
+Grid.InBlockZ              4     # Default value
+DM.SolutionMethod     diagon
+Basis.BasisSet     PAOs      
+Basis.OnsiteBlipsAnalytic              T     # Default value
+Basis.AnalyticBlipIntegrals              F     # Default value
+SC.BeckeWeights              F     # Default value
+SC.BeckeAtomicRadii              F     # Default value
+General.NumberOfSpecies                        3
+Basis.FlagNewAngular              T     # Default value
+Basis.MultisiteSF              F     # Default value
+General.PseudopotentialType     Haman
+General.NeutralAtom              T
+General.NeutralAtomProjector              F     # Default value
+General.PAOFromFiles              F     # Default value
+Atom.SpinNeUp          0.000000000         # Default value
+Atom.SpinNeDn          0.000000000         # Default value
+Atom.NumberOfSupports                        5
+Atom.SupportFunctionRange          6.830000000    
+Atom.InvSRange          0.000000000         # Default value
+Atom.NonLocalFactor          0.000000000         # Default value
+Atom.SupportGridSpacing          0.000000000         # Default value
+Atom.SpinNeUp          0.000000000         # Default value
+Atom.SpinNeDn          0.000000000         # Default value
+Atom.NumberOfSupports                       13
+Atom.SupportFunctionRange          6.350000000    
+Atom.InvSRange          0.000000000         # Default value
+Atom.NonLocalFactor          0.000000000         # Default value
+Atom.SupportGridSpacing          0.000000000         # Default value
+Atom.SpinNeUp          0.000000000         # Default value
+Atom.SpinNeDn          0.000000000         # Default value
+Atom.NumberOfSupports                       13
+Atom.SupportFunctionRange          5.580000000    
+Atom.InvSRange          0.000000000         # Default value
+Atom.NonLocalFactor          0.000000000         # Default value
+Atom.SupportGridSpacing          0.000000000         # Default value
+AtomMove.TypeOfRun     md                  
+minE.GlobalTolerance              T     # Default value
+minE.LTolerance         0.1000000000E-06     # Default value
+minE.SCTolerance         0.1000000000E-06
+DM.MaxPulay              5     # Default value
+DM.MinPulayStepSize         0.1000000000E-02     # Default value
+DM.MaxPulayStepSize         0.1000000000         # Default value
+DM.LinTol         0.1000000000         # Default value
+AtomMove.OldBuffer              F     # Default value
+AtomMove.BufferSize          4.000000000         # Default value
+AtomMove.PulaySimpleStep              F     # Default value
+AtomMove.ResetCG              F     # Default value
+AtomMove.NumSteps                      100
+AtomMove.OutputFreq                       10
+AtomMove.Timestep          1.000000000    
+AtomMove.MaxForceTol         0.5000000000E-03     # Default value
+AtomMove.MaxSQNMStep         0.2000000000         # Default value
+AtomMove.LBFGSHistory              5     # Default value
+AtomMove.OptCell              F     # Default value
+AtomMove.OptCellMethod              1     # Default value
+AtomMove.OptCell.Constraint     none     # Default value
+AtomMove.OptCell.EnTol         0.1000000000E-04     # Default value
+AtomMove.StressTolerance         0.1000000000         # Default value
+AtomMove.StopOnEmptyBundle              F     # Default value
+AtomMove.EnthalpyTolerance         0.1000000000E-04     # Default value
+AtomMove.CalcStress              T     # Default value
+AtomMove.FullStress              F     # Default value
+AtomMove.AtomicStress              F     # Default value
+minE.VaryBasis              F     # Default value
+minE.InitStep_paomin          5.000000000         # Default value
+minE.SelfConsistent              T
+minE.MixedLSelfConsistent              F     # Default value
+SC.LinearMixingSC              T     # Default value
+SC.LinearMixingFactor         0.5000000000         # Default value
+SC.LinearMixingFactor_SpinDown         0.5000000000         # Default value
+SC.LinearMixingEnd         0.1000000000E-10     # Default value
+SC.KerkerPreCondition              F     # Default value
+SC.KerkerFactor         0.1000000000         # Default value
+SC.WaveDependentMetric              F     # Default value
+SC.MetricFactor         0.1000000000         # Default value
+SC.LateStageReset              5     # Default value
+SC.ContinueOnSCFail              F     # Default value
+SC.MaxIters                       50
+SC.MinIters              0     # Default value
+SC.MaxEarly              3     # Default value
+SC.MaxPulay              5     # Default value
+SC.AbsResidual              F     # Default value
+SC.AbsResidual.Fractional              T     # Default value
+SC.Threshold.Reset         0.1000000000         # Default value
+AtomMove.CGLineMin     safe     # Default value
+IO.DumpFreq.DMM              0     # Default value
+IO.DumpFreq.SCF              0     # Default value
+IO.DumpFreq.SFcoeff              0     # Default value
+IO.DumpMatrices              T     # Default value
+IO.DumpChargeDensity              F     # Default value
+IO.MatrixFile.RankFromZero              T     # Default value
+IO.MatrixFile.BinaryFormat              T     # Default value
+IO.MatrixFile.BinaryFormat.Grab              T     # Default value
+IO.MatrixFile.BinaryFormat.Dump              T     # Default value
+IO.MatrixFile.FileIndex              0     # Default value
+General.MaxTempMatrices            100     # Default value
+IO.outputWF              F     # Default value
+IO.writeDOS              F     # Default value
+cDFT.Perform_cDFT              F     # Default value
+minE.DeltaSCF              F     # Default value
+DM.InvSTolerance         0.1000000000E-01     # Default value
+DM.InvSDeltaOmegaTolerance         0.1000000000E-03     # Default value
+DM.InvSMaxSteps            100     # Default value
+General.BlockAssign     Hilbert     # Default value
+Grid.ReadBlocks              F     # Default value
+General.EwaldAccuracy         0.1000000000E-09     # Default value
+MM.UseGemm              F     # Default value
+AtomMove.QuenchMD              F     # Default value
+AtomMove.FIRE              F     # Default value
+AtomMove.FixCentreOfMass              T     # Default value
+AtomMove.IonTemperature          300.0000000    
+Basis.PaoKspaceOlGridspace         0.1000000000         # Default value
+Basis.PaoKspaceOlCutoff          1000.000000         # Default value
+Basis.PAOs_StoreAllAtomsInCell              T     # Default value
+Basis.SymmetryBreaking              F     # Default value
+Basis.SupportPaoFile     supp_pao.dat     # Default value
+Basis.PaoInfoFile     pao.dat     # Default value
+Basis.PaoNormFlag              0     # Default value
+Basis.TestBasisGradients              F     # Default value
+Basis.TestBasisGradTot              F     # Default value
+Basis.TestBasisGradBoth              F     # Default value
+Basis.TestBasisGrad_S              F     # Default value
+Basis.TestBasisGrad_H              F     # Default value
+Basis.SupportSpecFile     support.dat     # Default value
+Basis.ReadSupportSpec              F     # Default value
+Basis.SpinDependentSF              F     # Default value
+AtomMove.TestForces              F     # Default value
+AtomMove.TestAllForces              T     # Default value
+AtomMove.TestForceDirection              1     # Default value
+AtomMove.TestForceAtom              1     # Default value
+AtomMove.TestForceDelta         0.1000000000E-04     # Default value
+General.FunctionalType                      101
+General.DifferentFunctional              T
+EXX.MethodSCF             -1     # Default value
+General.EnergyUnits     Ha     # Default value
+General.DistanceUnits     bohr     # Default value
+IO.PdbIn              F     # Default value
+IO.PdbAltLoc           # Default value
+IO.PdbOut              F     # Default value
+General.PartitionMethod     Hilbert     # Default value
+General.LoadBalance     atoms     # Default value
+General.MaxAtomsPartition             34     # Default value
+General.NPartitionsX              0     # Default value
+General.NPartitionsY              0     # Default value
+General.NPartitionsZ              0     # Default value
+General.AverageAtomicDiameter          5.000000000         # Default value
+General.GapThreshold          0.000000000         # Default value
+AtomMove.AppendCoords              T     # Default value
+General.DFT_D2              F     # Default value
+General.only_Dispersion              F     # Default value
+General.vdWDFT              F     # Default value
+AtomMove.Debug              F     # Default value
+AtomMove.RestartRun              T
+AtomMove.ReuseDM              T     # Default value
+AtomMove.ReuseSFcoeff              T     # Default value
+AtomMove.WriteXSF              T     # Default value
+AtomMove.WriteExtXYZ              F     # Default value
+AtomMove.InitialChargeDensity              0     # Default value
+SC.ResetDensOnAtomMove              F     # Default value
+AtomMove.ReuseInvS              F     # Default value
+AtomMove.SkipEarlyDM              F     # Default value
+AtomMove.McWeenyFreq              0     # Default value
+AtomMove.ExtendedLagrangian              F     # Default value
+AtomMove.ReadVelocity              T     # Default value
+General.LoadDM              T     # Default value
+SC.MakeInitialChargeFromK              T     # Default value
+AtomMove.RigidBonds              F     # Default value
+MD.Ensemble     nvt
+MD.CalculateXLMass              T     # Default value
+MD.Thermostat     svr                 
+MD.Barostat     none     # Default value
+MD.tauT          20.00000000    
+MD.tauTEquil          1.000000000         # Default value
+MD.nNHC              5     # Default value
+MD.nYoshida              1     # Default value
+MD.nMTS              1     # Default value
+MD.ThermoDebug              F     # Default value
+MD.TDrag          0.000000000         # Default value
+MD.HeatFlux              F     # Default value
+AtomMove.TargetPressure          0.000000000         # Default value
+MD.BoxMass          1.000000000         # Default value
+MD.tauP         -1.000000000         # Default value
+MD.tauPEquil          100.0000000         # Default value
+MD.BulkModulusEst          100.0000000         # Default value
+MD.CellNHC              T     # Default value
+MD.BaroDebug              F     # Default value
+MD.EquilSteps              0     # Default value
+MD.EquilPress          1.000000000         # Default value
+MD.TDEP              F     # Default value
+MD.PDrag          0.000000000         # Default value
+MD.CellConstraint     volume     # Default value
+IO.Coordinates     CH6N.in                                                                         
+IO.PdbTemplate           # Default value
+IO.Partitions     make_prt.dat                                                                         # Default value
+Diag.MaxEfIter             50     # Default value
+Diag.kT         0.1000000000E-02     # Default value
+Diag.SmearingType              0     # Default value
+Diag.MPOrder              0     # Default value
+Diag.MaxBrktSteps             50     # Default value
+Diag.GaussianHeight         0.1000000000         # Default value
+Diag.EfStepFiness          1.000000000         # Default value
+Diag.NElecLess          10.00000000         # Default value
+Diag.KProcGroups              1     # Default value
+Diag.MPMesh              T
+Diag.GammaCentred              F     # Default value
+Diag.MPMeshX                        2
+Diag.MPMeshY                        2
+Diag.MPMeshZ                        2
+Diag.MPShiftX          0.000000000         # Default value
+Diag.MPShiftY          0.000000000         # Default value
+Diag.MPShiftZ          0.000000000         # Default value

@@ -1,0 +1,65 @@
+################################################################################
+# CONQUEST Input file
+# Created using the Atomic Simulation Environment (ASE)
+################################################################################
+
+atommove.iontemperature          300.0
+atommove.numsteps                100
+atommove.outputfreq              10
+atommove.restartrun              True
+atommove.timestep                1.0
+atommove.typeofrun               md
+basis.basisset                   PAOs
+dm.solutionmethod                diagon
+general.differentfunctional      True
+general.functionaltype           101
+general.maxtime                  1997
+general.neutralatom              True
+general.numberofspecies          3
+general.netcharge                -1.000000e+00
+general.pseudopotentialtype      Hamann
+grid.gridcutoff                  100.0
+io.coordinates                   CH6N.in
+io.fractionalatomiccoords        True
+io.iprint                        1
+io.title                         CH6N
+md.ensemble                      nvt
+md.taut                          20
+md.thermostat                    svr
+mine.sctolerance                 1.000000e-07
+mine.selfconsistent              True
+sc.maxiters                      50
+spin.spinpolarised               False
+
+diag.mpmesh                      True
+diag.mpmeshx                     2
+diag.mpmeshy                     2
+diag.mpmeshz                     2
+
+%block ChemicalSpeciesLabel
+ 1    1.008 H
+ 2   12.011 C
+ 3   14.007 N
+%endblock ChemicalSpeciesLabel
+
+%block H
+xc                               PBE
+atom.valencecharge               1.000000
+atom.numberofsupports            5
+atom.supportfunctionrange        6.830000
+%endblock
+
+%block C
+xc                               PBE
+atom.valencecharge               4.000000
+atom.numberofsupports            13
+atom.supportfunctionrange        6.350000
+%endblock
+
+%block N
+xc                               PBE
+atom.valencecharge               5.000000
+atom.numberofsupports            13
+atom.supportfunctionrange        5.580000
+%endblock
+

@@ -1,0 +1,1 @@
+CHARACTER(LEN=70), PARAMETER :: version_date = 'Thu Apr 21 16:10:58 CEST 2016'

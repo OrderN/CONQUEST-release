@@ -6,8 +6,6 @@ from pdb import set_trace
 cell_re = re.compile('cell_vectors(.*?)end cell_vectors', re.M | re.S)
 stress_re = re.compile('stress_tensor(.*?)end stress_tensor', re.M | re.S)
 position_re = re.compile('positions(.*?)end positions', re.M | re.S)
-position_re = re.compile('positions(.*?)end positions', re.M | re.S)
-# position_re is declared twice.
 velocity_re = re.compile('velocities(.*?)end velocities', re.M | re.S)
 force_re = re.compile('forces(.*?)end forces', re.M | re.S)
 
