@@ -835,7 +835,7 @@ contains
          flag_opt_cell, cell_constraint_flag, flag_variable_cell, &
          cell_en_tol, optcell_method, cell_stress_tol, &
          flag_stress, flag_full_stress, rng_seed, &
-         flag_atomic_stress, flag_heat_flux, flag_DumpMatrices
+         flag_atomic_stress, flag_heat_flux, flag_DumpMatrices, flag_calc_pol, flag_do_pol_calc
     use dimens, only: GridCutoff,    &
          n_grid_x, n_grid_y, n_grid_z, r_c,         &
          RadiusSupport, RadiusAtomf, RadiusMS, RadiusLD, &
@@ -1820,6 +1820,13 @@ contains
           end do
        end if
     end if
+!!$
+!!$
+!!$
+!!$
+    !Calculate bulk polarisation
+    flag_calc_pol   = fdf_boolean('General.CalcPol', .false.)
+    flag_do_pol_calc = .false.
 !!$
 !!$
 !!$

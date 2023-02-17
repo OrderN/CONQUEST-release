@@ -3290,6 +3290,8 @@ contains
   !!    Changing MPI tags to conform to MPI standard
   !!   2020/08/24 16:09 dave
   !!    Bugfix: deallocate ndimj in recv_info
+  !!   2023/02/07 08:33 dave
+  !!    Adding Resta polarisation
   !!  SOURCE
   !!
   subroutine buildK(range, matA, occs, kps, weight, localEig, locw)
@@ -3306,11 +3308,11 @@ contains
          matrix_size
     use global_module,   only: numprocs, iprint_DM, id_glob,         &
          ni_in_cell, x_atom_cell, y_atom_cell, &
-         z_atom_cell, max_wf, min_layer
+         z_atom_cell, max_wf, min_layer, flag_do_pol_calc, polS, mat_polX_re, mat_polX_im
     use mpi
     use GenBlas,         only: dot
     use GenComms,        only: myid
-    use mult_module,     only: store_matrix_value_pos, matrix_pos
+    use mult_module,     only: store_matrix_value_pos, matrix_pos, matK, return_matrix_value_pos
     use matrix_data,     only: mat, halo
     use species_module,  only: nsf_species
 
@@ -3341,8 +3343,8 @@ contains
          LocalAtom, num_send, norb_send, send_FSC, recv_to_FSC, &
          mapchunk, prim_orbs
     integer, dimension(MPI_STATUS_SIZE) :: mpi_stat
-    real(double) :: phase, rfac, ifac, rcc, icc, rsum
-    complex(double_cplx) :: zsum
+    real(double) :: phase, rfac, ifac, rcc, icc, rsum, exp_X_value_real, exp_X_value_imag
+    complex(double_cplx) :: zsum, exp_X_value
     complex(double_cplx), dimension(:,:), allocatable :: RecvBuffer, &
          SendBuffer
     logical :: flag, flag_write_out
@@ -3549,6 +3551,11 @@ contains
     ! Two messages per process; use tag and tag + 1 below
     sendtag = 1
     recvtag = 1
+    if(flag_do_pol_calc.AND.matA==matK(1)) then
+       allocate(polS(len_occ,len_occ))
+       if(stat/=0) call cq_abort("Error allocating polS matrix ",len_occ)
+       polS = zero
+    end if
     do i=1,numprocs
        send_size = len*norb_send(send_proc+1)!num_send(send_proc+1)*nsf
        recv_size = len*recv_info(recv_proc+1)%orbs!current_loc_atoms(recv_proc+1)*nsf
@@ -3647,6 +3654,18 @@ contains
                 ifac = sin(phase)
                 do row_sup = 1,recv_info(recv_proc+1)%ndimj(locatom)
                    do col_sup = 1,nsf_species(bundle%species(prim))
+                      ! Resta polarisation
+                      if(flag_do_pol_calc.AND.matA==matK(1)) then ! HORRIBLE temporary hack !
+                         whereMat = matrix_pos(mat_polX_re,&
+                              recv_info(recv_proc+1)%prim_atom(inter,locatom), &
+                              recv_info(recv_proc+1)%locj(inter,locatom),col_sup,row_sup)
+                         exp_X_value_real =  return_matrix_value_pos(mat_polX_re,whereMat)
+                         exp_X_value_imag =  return_matrix_value_pos(mat_polX_im,whereMat)
+                         exp_X_value = cmplx(exp_X_value_real,exp_X_value_imag)
+                         call zgeru(len_occ, len_occ, exp_X_value, &
+                              localEig(:,prim_orbs(prim)+col_sup), 1, &
+                              RecvBuffer(:,orb_count+row_sup),1,polS,len_occ)
+                      end if
                       whereMat = matrix_pos(matA,recv_info(recv_proc+1)%prim_atom(inter,locatom), &
                            recv_info(recv_proc+1)%locj(inter,locatom),col_sup,row_sup)
                       zsum = dot(len_occ,localEig(1:len_occ,prim_orbs(prim)+col_sup),1,RecvBuffer(1:len_occ,orb_count+row_sup),1)

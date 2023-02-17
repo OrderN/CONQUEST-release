@@ -416,9 +416,9 @@ module global_module
   logical :: flag_diagonalisation
 
   ! Polarisation
-  logical :: flag_cal_pol
+  logical :: flag_calc_pol, flag_do_pol_calc
   integer :: mat_polX_re, mat_polX_im, mat_polX_re_atomf, mat_polX_im_atomf
-  real(double), dimension(:,:), allocatable :: polS
+  complex(double_cplx), dimension(:,:), allocatable :: polS
 
 end module global_module
 !!***
