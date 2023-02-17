@@ -751,8 +751,6 @@ if opts.rdf or opts.vacf: # Dynpro_gestion is only taken if we want an RDF or a 
       dynpro.dynpro_launch()
       if opts.dynpro_substi:
         dynpro.substitution(Input_Atom,ID_atom_replace)
-        print(ispec+1)
-        print(init_config['nspecies'])
         if ispec+1 == init_config['nspecies']:
           dynpro.File_generation(True)
           dynpro.dynpro_launch()
