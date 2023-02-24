@@ -91,8 +91,9 @@ contains
     do ispin=1,nspin
        size = number_of_bands(ispin)
        ! Get electronic contribution
-       ! Allocate ipiv; polS allocated in FindEvals and deallocated below
-       allocate(ipiv(size),stat=stat)
+       ! Allocate ipiv and polS
+       allocate(polS(size,size), STAT=stat)
+       allocate(ipiv(size),STAT=stat)
        ! Calculate polX matrix
        ! get_r_on_atomfns: real
        flag_func = 1
@@ -116,10 +117,12 @@ contains
            detS = detS * polS(i,i)
            ! Permutation: if ipiv(i)/=i, scale by -1
            if(ipiv(i)/=i) detS = -detS
-       end do
+        end do
+        write(io_lun,fmt='(4x,"detS real ",e20.12," detS imag ",e20.12)') real(detS), aimag(detS)
        ! Calculate electronic P: Im ln polS is just finding phase
        Pel_gamma = -atan2(aimag(detS),real(detS))/pi
-       write(io_lun,fmt='(4x,"Pel is ",f12.5)') Pel_gamma
+       write(io_lun,fmt='(4x,"Pel is ",e20.12)') Pel_gamma
+       deallocate(ipiv)
        deallocate(polS)
     end do
     ! Get ionic contribution

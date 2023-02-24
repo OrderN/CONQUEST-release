@@ -3551,11 +3551,13 @@ contains
     ! Two messages per process; use tag and tag + 1 below
     sendtag = 1
     recvtag = 1
-    if(flag_do_pol_calc.AND.matA==matK(1)) then
-       allocate(polS(len_occ,len_occ))
-       if(stat/=0) call cq_abort("Error allocating polS matrix ",len_occ)
-       polS = zero
-    end if
+    !if(flag_do_pol_calc.AND.matA==matK(1)) then
+    !   if(.NOT.allocated(polS)) then
+    !      allocate(polS(len_occ,len_occ))
+    !      if(stat/=0) call cq_abort("Error allocating polS matrix ",len_occ)
+    !      polS = zero
+    !   end if
+    !end if
     do i=1,numprocs
        send_size = len*norb_send(send_proc+1)!num_send(send_proc+1)*nsf
        recv_size = len*recv_info(recv_proc+1)%orbs!current_loc_atoms(recv_proc+1)*nsf
