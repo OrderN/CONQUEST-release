@@ -262,7 +262,7 @@ parser.add_argument('-dynpro_md', action='store', dest='dynpro_md', default="Dyn
                     help='Name of the MD treated files by dynpro.')
                     # Command to allow the output of the maximums of g(r) of the RDF and the coordinance of each atoms.
 parser.add_argument('--advanced_rdf', action='store_true', dest='advanced_rdf',
-                    help='Print the coordination and the localisation of the g(r) maximums (RDF).') # The coordination printed is the one below the maximum only.
+                    help='Print the coordination and the localisation of the g(r) maximums (RDF).') # The coordination number printed need to be redone for the result of each pics.
                     #                  
 parser.add_argument('--dump', action='store_true', dest='dump', 
                     help='Dump secondary data used to generate plots')
@@ -342,20 +342,24 @@ if not opts.compare:
       color_cyan = "0da8c2"
 
     if opts.landscape:
-      # Parameters to obtain a good landscape graphic.
+      #------------------------------------------------#
+      # Parameters to obtain a good landscape graphic. #
+      #------------------------------------------------#
       figsizex = 13
       figsizey = 7
       numb_row = 2
       numb_col = 2
-      fontsizelegend = 10
+      fontsizelegend = 14
       axis_size = fontsizelegend*(7)/10
-      left_location = [-0.18,0.5]
-      right_location = [1.21,0.5]
+      left_location = [-0.24,0.5]
+      right_location = [1.25,0.5]
       linewidth_stat = 0.5
       legend_correction = 0.06
-      fig1, ((ax1, ax2), (ax3, ax4)) = plt.subplots(nrows=numb_row, ncols=numb_col, sharex=True, figsize=(figsizex,figsizey))
+      fig1, ((ax1, ax3), (ax2, ax4)) = plt.subplots(nrows=numb_row, ncols=numb_col, sharex=True, figsize=(figsizex,figsizey))
     else:
-      # Parameters to obtain a good graphic with only one colomn.
+      #-----------------------------------------------------------#
+      # Parameters to obtain a good graphic with only one colomn. #
+      #-----------------------------------------------------------#
       figsizex = 8
       figsizey = 15
       numb_row = 4
@@ -366,7 +370,7 @@ if not opts.compare:
       right_location = [1.12,0.5]
       linewidth_stat = 0.5
       legend_correction = 0.03
-      fig1, (ax1, ax2, ax3, ax4) = plt.subplots(nrows=numb_row, ncols=numb_col, sharex=True, figsize=(figsizex,figsizey), gridspec_kw={"height_ratios": [2,1,1,1]})
+      fig1, (ax1, ax2, ax3, ax4) = plt.subplots(nrows=numb_row, ncols=numb_col, sharex=True, figsize=(figsizex,figsizey), gridspec_kw={"height_ratios": [2,0.85,1,1]})
 
     # Legend system.
     ybox_neut = osb.TextArea("E (Ha)", textprops=dict(color="k",size=fontsizelegend*1.05,rotation=90, ha='left', va='bottom'))
@@ -402,16 +406,16 @@ if not opts.compare:
       ybox_EnsemblePV = osb.TextArea(", pV", textprops=dict(color="#"+color_pink,size=fontsizelegend,rotation=270, ha='right', va='bottom'))
       Ensemble_box = np.append(Ensemble_box,ybox_EnsemblePV)
 
-    ax2.plot(data['time'][opts.nskip:], data['H\''][opts.nskip:])
-    ax2.plot((opts.nskip,data['time'][-1]), (avg['H\''],avg['H\'']), '-',
+    ax2.plot(data['time'][opts.nskip:], data['H\''][opts.nskip:], linestyle="-", linewidth=linewidth_stat+1.5)
+    ax2.plot((opts.nskip,data['time'][-1]), (avg['H\''],avg['H\'']), linestyle="-", linewidth=linewidth_stat+0.5,
           label=r'$\langle H\' \rangle$ = {0:>12.4f} $\pm$ {1:<12.4f}'.format(avg['H\''], std['H\'']))
 
-    ax3.plot(data['time'][opts.nskip:], data['T'][opts.nskip:])
-    ax3.plot((opts.nskip,data['time'][-1]), (avg['T'],avg['T']), '-',
+    ax3.plot(data['time'][opts.nskip:], data['T'][opts.nskip:], linestyle="-", linewidth=linewidth_stat)
+    ax3.plot((opts.nskip,data['time'][-1]), (avg['T'],avg['T']), linestyle="-", linewidth=linewidth_stat+0.5,
           label=r'$\langle T \rangle$ = {0:>12.4f} $\pm$ {1:<12.4f}'.format(avg['T'], std['T']))
 
     ax4.plot(data['time'][opts.nskip:], data['P'][opts.nskip:], color="#"+color_blue, linestyle="-", linewidth=linewidth_stat)
-    ax4.plot((opts.nskip,data['time'][-1]), (avg['P'],avg['P']),color="#"+color_cyan, linestyle="--",
+    ax4.plot((opts.nskip,data['time'][-1]), (avg['P'],avg['P']),color="#"+color_cyan, linestyle="--", linewidth=linewidth_stat+0.5,
           label=r'$\langle P \rangle$ = {0:>12.4f} $\pm$ {1:<12.4f}'.format(avg['P'], std['P']))
 
     if cq_params['MD.Ensemble'][1] == 'p':
@@ -464,13 +468,14 @@ if not opts.compare:
       plt.tight_layout(pad=7)
       fig1.subplots_adjust(hspace=0,top=0.97,bottom=0.08,left=0.105,right=0.9)
       ax3.set_xlabel("time (fs)")
-    ax2.set_ylabel("H$'$ (Ha)")
-    ax3.set_ylabel("T (K)")
-    ax4.set_ylabel("P (GPa)", color="#"+color_blue)
+    ax2.set_ylabel("H$'$ (Ha)",size=fontsizelegend)
+    ax3.set_ylabel("T (K)",size=fontsizelegend)
+    ax4.set_ylabel("P (GPa)", color="#"+color_blue,size=fontsizelegend)
     if cq_params['MD.Ensemble'][1] == 'p':
       ax4a.set_ylabel("V ($a_0^3$)", color="#"+color_red)
     ax4.set_xlabel("time (fs)")
     ax2.legend()
+    ax2.set_ylim(min(data['H\''])-1,max(data['H\''])+1)
     ax3.legend()
     ax4.legend(loc="upper left")
     if cq_params['MD.Ensemble'][1] == 'p':
@@ -872,17 +877,12 @@ if opts.rdf or opts.vacf: # Dynpro_gestion is only taken if we want an RDF or a 
       show_RDF  = False
     dynpro.plot_dynpro(show_VACF,show_RDF,Central_atom_to_print,cq_params['species'],opts.advanced_rdf)
 
-if opts.advanced_rdf:
-  print("****")
-  print("The advanced options for the RDF is used.")
-  print("If you want to redo the calculation, then, delete the files generated previously.")
-  print("****")
 
 ###########################
 # MSD and stress analysis #
 ###########################
 
-if read_frames and (opts.msd or not opts.stress):
+if read_frames and (opts.msd or opts.stress):
   if opts.msd and not opts.stress :
     print("---MSD calculations---")
   if opts.msd and opts.stress :
@@ -926,7 +926,6 @@ if read_frames and (opts.msd or not opts.stress):
           first_frame = False
           f1 = Frame(natoms,n)
           f1.parse_frame(buf)
-          
           if opts.msd:
             if opts.msd_multi_ID == 0 :
               if opts.msd_skip >= 1: # If the skip as been set up, then we can put it inside the variable.

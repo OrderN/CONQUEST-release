@@ -61,7 +61,12 @@ contains
 
     print*, '   ps_to_cm :', ps_to_cm
     print*, '   time_conv:', time_conv
-    print*, '   time_conv:', freq_conv
+    print*, '   freq_conv:', freq_conv
+    print*, '   time_step:', time_step
+    print*, '      iprint:', iprint
+    print*, 'interval_i_m:', interval_i_m
+    print*, '          ps:', ps
+
 
     !print*, type,  nsp, lspe, iteration, syst_ID_lab, syst_ID_spe, &
     !   filevac, loverlap, n_seg, win, unit_vac, m_cof, time_step,  & 

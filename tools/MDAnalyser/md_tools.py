@@ -10,6 +10,7 @@ from scipy.linalg import norm
 from scipy.integrate import cumtrapz
 from scipy.signal import correlate
 from scipy.fft import fft, fftshift
+from numpy import linspace
 from scipy.constants import physical_constants
 from scipy import histogram
 from math import ceil, pi
@@ -234,7 +235,7 @@ class Dynpro_gestion:
     self.md_frame_name    = str(md_frame_name)         # Name of the md.frames file.
     self.md_stats_name    = str(md_stats_name)         # Name of the md.stats file.
     # Centering
-    self.center           = lcenter               # Do we center the cell around an atom?
+    self.center           = lcenter                    # Do we center the cell around an atom?
     self.ct_atom          = int(ct_atom)               # ID of the centering atom. If its 0, it will be taken automatically.
     # Selections
     self.RDF              = RDF_data              # Do we want to do the RDF?
@@ -249,11 +250,25 @@ class Dynpro_gestion:
     self.subtitution      = Logical_to_string(self.subti)
     self.Real_atom_name   = np.array([])
     # For debugging
-    self.debug = False
+    self.debug = Logical_to_string(False)
     # Database
     power2table = [
-      1,2,4,8,16,32,64,128,256,512,1024
-    ]
+      1,2,4,8,16,32,64,128,256,512,1024,2048,4096,8192,16384,32768,65536,131072,262144,524288,1048576,
+      2097152,4194304,8388608,16777216,33554432,67108864,134217728,268435456,536870912,1073741824,
+      2147483648,4294967296,8589934592,17179869184,34359738368,68719476736,137438953472,274877906944,
+      549755813888,1099511627776,2199023255552,4398046511104,8796093022208,17592186044416,35184372088832,
+      70368744177664,140737488355328,281474976710656,562949953421312,1125899906842624,2251799813685248,
+      4503599627370496,9007199254740992,18014398509481984,36028797018963970,72057594037927940,144115188075855870,
+      288230376151711740,576460752303423500,1152921504606847000,2305843009213694000,4611686018427388000,
+      9223372036854776000,18446744073709552000,36893488147419103000,73786976294838210000,147573952589676410000,
+      295147905179352830000,590295810358705700000,1.1805916207174113e+21,2.3611832414348226e+21,4.722366482869645e+21,
+      9.44473296573929e+21,1.888946593147858e+22,3.777893186295716e+22,7.555786372591432e+22,1.5111572745182865e+23,
+      3.022314549036573e+23,6.044629098073146e+23,1.2089258196146292e+24,2.4178516392292583e+24,4.835703278458517e+24,
+      9.671406556917033e+24,1.9342813113834067e+25,3.8685626227668134e+25,7.737125245533627e+25,1.5474250491067253e+26,
+      3.094850098213451e+26,6.189700196426902e+26,1.2379400392853803e+27,2.4758800785707605e+27, 4.951760157141521e+27,
+      9.903520314283042e+27,1.9807040628566084e+28,3.961408125713217e+28,7.922816251426434e+28,1.5845632502852868e+29,
+      3.1691265005705735e+29,6.338253001141147e+29,1.2676506002282294e+30
+    ] # The power2 data table goes until 2^100
     
     # Evaluation of sp_n, the number of sample to be taken
     if self.Ending_point > self.Starting_point and self.Sample:
@@ -262,7 +277,7 @@ class Dynpro_gestion:
         if (i >= self.Ending_point):
           self.sp_n = i_last
           break
-        if (i == 1024):
+        if (i == 1.2676506002282294e+30):
           self.sp_n = i
           break
         i_last = i
@@ -549,9 +564,9 @@ class Dynpro_gestion:
     dynpro_in.write("       lsample   =  "+str(self.Sample_data)+"			! Do we sample our data?\n")
     dynpro_in.write("       lsphere   =  F\n")
     dynpro_in.write("       lrdf      =  "+str(self.RDF_data)+"			! Do we do the RDF analysis?\n")
-    dynpro_in.write("       lvacf     =  "+str(self.VACF_data)+"			! Do we do the VACF analysis (FFT)?\n")
-    dynpro_in.write("       lpsd      =  "+str(self.VACF_data)+"			! Another method for the fourier transform.\n")
-    dynpro_in.write("       ldebug    =  F      ! Debugging option.\n")
+    dynpro_in.write("       lvacf     =  "+str(self.VACF_data)+"			! Do we do the VACF analysis?\n")
+    dynpro_in.write("       lpsd      =  "+str(self.VACF_data)+"			! Power spectral density.\n")
+    dynpro_in.write("       ldebug    =  "+str(self.debug)+"      ! Debugging option.\n")
     dynpro_in.write("/\n")
     dynpro_in.write("&inputsample\n")
     if (self.Starting_point < 0 or not self.Sample):
@@ -581,13 +596,14 @@ class Dynpro_gestion:
     
     dynpro_in.write("&inputpsd\n")
     dynpro_in.write("       lspe       = "+str(self.VACF_data)+" 			! Species \n")
-    dynpro_in.write("       m_cof      =  			! Low sp_n ex. sp_n/2\n")
+    #dynpro_in.write("       m_cof      =  "+str(int(self.sp_n)/2)+"			! Low sp_n ex. sp_n/2\n")
+    dynpro_in.write("       m_cof      =   			! Low sp_n ex. sp_n/2\n")
     dynpro_in.write("       n_seg      =  1\n")
     dynpro_in.write("       loverlap   =  F\n")
     dynpro_in.write("       win        =  0\n")
     if self.temperature < 0:
       dynpro_in.write("       temp       = 298.15d0\n")
-      print("An unpexpected error as been identified in the temperature.")
+      print("An unexpected error as been identified with the temperature.")
     else:
       dynpro_in.write("       temp       = "+str(self.temperature)+"d0\n")
     dynpro_in.write("       qcfactor   =  0\n")
@@ -772,10 +788,10 @@ class Dynpro_gestion:
               axl_.set_ylabel("Intensity [arb. unit]", color="#"+VACF_color)
               axl_.set_xlabel("WaveNumber [cm-1]")
 
-              axl_.plot(Wave_all, Intens_all, color="#"+VACF_color,linestyle="solid", label="VACF", linewidth=line_width_choice)
+              axl_.plot(Wave_all, Intens_all, color="#"+VACF_color,linestyle="solid", label="PSD of all atoms", linewidth=line_width_choice)
               axl_.set_ylim(bottom=0)
               axl_.set_xlim(left=Wave_all[0],right=Wave_all[-1])
-
+              axl_.legend()
               plt.title('VACF with PSD method of all the atoms')
               figVACF_.savefig(filename_vacf_all, bbox_inches='tight')
               if graph_show_VACF:
@@ -837,9 +853,16 @@ class Dynpro_gestion:
               # Calculation of the maximums of the g(r) pics #
               ################################################
               if Calculate_max:
+                if ( os.path.isfile("./data_table_dynpro/log_max_length"+central+"-"+targuet+".txt") ):
+                  os.system("rm ./data_table_dynpro/log_max_length"+central+"-"+targuet+".txt")
+                if ( os.path.isfile("./data_table_dynpro/log_coord"+targuet+".txt") ):
+                  os.system("rm ./data_table_dynpro/log_coord"+targuet+".txt")
                 g_last = 0.0
                 g_last_min = 0.0
                 g = 0.0
+                Coord = []
+                Coord_rank = 0
+                thr_coord = 0.5
                 found = False
                 rank_maxim = 0
                 Verify = False
@@ -853,18 +876,21 @@ class Dynpro_gestion:
                     rank_maxim += 1
                     if self.r_min <= float(i) and Verify:
                         # What is the maximum?
-                        g = g_ab[rank_maxim-1]
-                        Coord = g_int[rank_maxim-1]
+                        g = g_ab[rank_maxim-1] # We convert from bohr to Angstrom
+                        if rank_maxim < len(g_int): # The coordinance printed need to be modified, the function doesn't work well.
+                          if ( abs(g_int[rank_maxim-1] - g_int[rank_maxim]) <= thr_coord):
+                            Coord.append(g_int[rank_maxim])
+                            Coord_rank += 1
                         if g != 0 and g <= g_last and not found:
                             Maximum_g = g
                             #print(i,"A ->",Maximum_g," =>", Coord)
                             if print_results:
                                 if ( not os.path.isfile("./data_table_dynpro/log_max_length"+central+"-"+targuet+".txt")):
                                     deposit_file = open("./data_table_dynpro/log_max_length"+central+"-"+targuet+".txt","w")
-                                    deposit_file.write("        r       max_g       Coord\n")
+                                    deposit_file.write("        r             max_g               Coord\n")
                                 else:
                                     deposit_file = open("./data_table_dynpro/log_max_length"+central+"-"+targuet+".txt","a")
-                                deposit_file.write("    "+str(i)+"   "+str(Maximum_g)+"       "+str(Coord)+"\n")
+                                deposit_file.write("    "+str(i*bohr2ang)+"   "+str(Maximum_g)+"       "+str(Coord[Coord_rank-1])+"\n")
                                 deposit_file.close()
                                 found = True
                         else:
@@ -909,9 +935,9 @@ class Dynpro_gestion:
               axl.set_xlabel("r (A)")
 
 
-              axl.plot(r, g_ab, color="#314ad2",linestyle="solid", label="g(r)", linewidth=line_width_choice)
-              axr.plot(r, g_int, color='#d23131',linestyle="solid", label="Coord", linewidth=line_width_choice)
-              plt.xlim((0,r[-1]))
+              axl.plot(r*bohr2ang, g_ab, color="#314ad2",linestyle="solid", label="g(r)", linewidth=line_width_choice)
+              axr.plot(r*bohr2ang, g_int, color='#d23131',linestyle="solid", label="Coord", linewidth=line_width_choice)
+              plt.xlim((0,r[-1]*bohr2ang))
               axl.set_ylim(bottom=0)
               axr.set_ylim(bottom=axl.get_ylim()[0], top=axr.get_ylim()[1])
 
