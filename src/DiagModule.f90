@@ -3348,7 +3348,7 @@ contains
     complex(double_cplx), dimension(:,:), allocatable :: RecvBuffer, &
          SendBuffer
     logical :: flag, flag_write_out
-    integer :: FSCpart, ipart, iband, iwf, len_occ
+    integer :: FSCpart, ipart, iband, iwf, len_occ, jband
     ! for spin polarisation
     real(double) :: occ_correction
 
@@ -3664,7 +3664,19 @@ contains
                          exp_X_value_real =  return_matrix_value_pos(mat_polX_re,whereMat)
                          exp_X_value_imag =  return_matrix_value_pos(mat_polX_im,whereMat)
                          exp_X_value = cmplx(exp_X_value_real,exp_X_value_imag)
-                         call zgeru(len_occ, len_occ, exp_X_value, &
+                         ! This is the original, explicit code for reference
+                         !do iband=1,len_occ
+                         !   do jband=1,len_occ
+                         !      polS(jband,iband) = polS(jband,iband) + &
+                         !           (exp_X_value_real*conjg(localEig(iband,prim_orbs(prim)+col_sup)) &
+                         !           *RecvBuffer(jband,orb_count+row_sup) - &
+                         !           minus_i * exp_X_value_imag * &
+                         !           conjg(localEig(iband,prim_orbs(prim)+col_sup))&
+                         !           *RecvBuffer(jband,orb_count+row_sup))
+                         !   end do
+                         !end do
+                         ! LAPACK outer product; I can't see a way to distribute it
+                         call zgerc(len_occ, len_occ, exp_X_value, &
                               localEig(:,prim_orbs(prim)+col_sup), 1, &
                               RecvBuffer(:,orb_count+row_sup),1,polS,len_occ)
                       end if

@@ -93,6 +93,7 @@ contains
        ! Get electronic contribution
        ! Allocate ipiv and polS
        allocate(polS(size,size), STAT=stat)
+       polS = zero
        allocate(ipiv(size),STAT=stat)
        ! Calculate polX matrix
        ! get_r_on_atomfns: real
