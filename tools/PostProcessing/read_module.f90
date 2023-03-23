@@ -163,7 +163,7 @@ contains
     ! Energy limits (relative to Ef or absolute)
     E_wf_min = fdf_double('IO.min_wf_E',zero)
     E_wf_max = fdf_double('IO.max_wf_E',zero)
-    if(i_job==3 .or. i_job==4 .or. i_job==5) then ! Band-resolved charge or STM
+    if(i_job==3 .or. i_job==4 .or. i_job==5 .or. i_job==7) then ! Band-resolved charge or STM
        ! Read in details of bands output from Conquest
        n_bands_active=fdf_integer('IO.maxnoWF',0)
        if(n_bands_active>0) then
@@ -342,6 +342,26 @@ contains
     return
   end subroutine read_block_input
 
+  ! We read in the block positions
+  subroutine read_nprocs_from_blocks
+
+    use datatypes
+    use local, ONLY: nprocs
+    
+    implicit none
+
+    integer :: proc, idum, idum2, iblock, blocks_on_proc, ind_group, nblockx,nblocky,nblockz
+
+    write(*,fmt='(2x,"Opening block file: ",a)') block_file
+    open(unit=17,file=block_file)
+    ! Numbers of blocks in x/y/z
+    read(17,*) nblockx,nblocky,nblockz
+    read(17,*) nprocs
+    write(*,fmt='(2x,"Original run on ",i8," processors")') nprocs
+    close(unit=17)
+    return
+  end subroutine read_nprocs_from_blocks
+  
   subroutine read_eigenvalues
 
     use datatypes
@@ -446,7 +466,7 @@ contains
   end subroutine read_eigenvalues
 
   ! Here we will read ALL the bands written out by Conquest (n_bands_active)
-  subroutine read_psi_coeffs
+  subroutine read_psi_coeffs(stub)
 
     use datatypes
     use numbers
@@ -455,6 +475,9 @@ contains
     use local, ONLY: nkp, nprocs, n_bands_active, band_active_kp, eigenvalues, evec_coeff, n_bands_active, band_no
 
     implicit none
+
+    ! Passed variables
+    character(len=*) :: stub
 
     ! Local variables
     integer :: i_sf, i_proc, i_kp, i, i_band, i_prim, n_prim, i_glob, i_atom, i_spin
@@ -468,7 +491,7 @@ contains
     if(nspin==1) then
        ! Read coefficients
        do i_proc = 1, nprocs
-          write(filename,'("Process",I0.7,"WF.dat")') i_proc
+          write(filename,'(a,I0.7,"WF.dat")') trim(stub),i_proc
           open(unit=17,file=filename)
           do i_kp = 1, nkp
              read(17,*) n_prim ! Number of atoms on process

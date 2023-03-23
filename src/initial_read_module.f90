@@ -852,7 +852,7 @@ contains
          species_file, species_from_files
     use GenComms,   only: gcopy, my_barrier, cq_abort, inode, ionode, cq_warn
     !use DiagModule, only: diagon
-    use DiagModule,             only: flag_pDOS_include_semicore
+    !use DiagModule,             only: flag_pDOS_include_semicore
     use energy,     only: flag_check_Diag
     use DMMin,      only: maxpulayDMM, maxpulaystepDMM, minpulaystepDMM, &
          LinTol_DMM, n_dumpL
@@ -1703,12 +1703,16 @@ contains
           flag_write_projected_DOS = fdf_boolean('IO.write_proj_DOS',.false.)
           E_DOS_min = fdf_double('IO.min_DOS_E',zero)
           E_DOS_max = fdf_double('IO.max_DOS_E',zero)
+          if(flag_write_projected_DOS.and.abs(E_DOS_max - E_DOS_min)<RD_ERR) then
+             E_wf_min = fdf_double('IO.min_wf_E',-BIG)
+             E_wf_max = fdf_double('IO.max_wf_E',BIG)
+          end if
           sigma_DOS = fdf_double('IO.sigma_DOS',0.001_double)
           n_DOS = fdf_integer('IO.n_DOS',201)
           flag_normalise_pDOS = fdf_boolean('IO.normalise_PDOS',.true.)
           flag_pDOS_angmom = fdf_boolean('IO.PDOS_Angmom',.false.)
           flag_pDOS_lm = fdf_boolean('IO.PDOS_lm_resolved',.false.)
-          flag_pDOS_include_semicore = fdf_boolean('IO.PDOS_include_semicore',.true.)
+          !flag_pDOS_include_semicore = fdf_boolean('IO.PDOS_include_semicore',.true.)
           if(flag_pDOS_lm.AND.(.NOT.flag_pDOS_angmom)) then
              if(inode==ionode) write(io_lun,'(2x,"Setting IO.PDOS_Angmom T as (l,m)-resolved PDOS requested")')
              flag_pDOS_angmom = .true.

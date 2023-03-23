@@ -20,6 +20,7 @@ module local
 
   ! Store eigenvector coefficients
   complex(double_cplx), allocatable, dimension(:,:,:,:,:), save :: evec_coeff ! PAOs, atoms, bands, kpoints, spin
+  complex(double_cplx), dimension(:,:,:,:,:), allocatable :: scaled_evec_coeff
 
   
   character(len=50) :: root_file
