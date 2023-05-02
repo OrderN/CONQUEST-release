@@ -341,13 +341,16 @@ contains
     implicit none
     
     ! Local variables
-    integer :: i_band, i_kp, i_spin, n_DOS_wid, n_band, n_min, n_max, i, i_atom
-    real(double) :: Ebin, dE_DOS, a, pf_DOS, spin_fac, coeff
-    real(double), dimension(nspin) :: total_electrons, iDOS_low
+    integer :: i_band, i_kp, i_spin, n_DOS_wid, n_band, n_min, n_max, i, i_atom,max_nsf
+    real(double) :: Ebin, dE_DOS, a, pf_DOS, spin_fac, coeff, check_electrons
     real(double), dimension(:,:), allocatable :: total_DOS, iDOS
     real(double), dimension(:,:,:), allocatable :: pDOS
+    real(double), dimension(:,:,:,:), allocatable :: pDOS_l
+    real(double), dimension(:,:,:,:,:), allocatable :: pDOS_lm
     real(double), dimension(:,:), allocatable :: occ
+    real(double), dimension(:,:), allocatable :: total_electrons
     character(len=20) :: filename
+    complex(double_cplx),external :: zdotc
 
     call read_nprocs_from_blocks
     if(nspin==1) then
@@ -360,15 +363,25 @@ contains
     ! Read eigenvector coefficients
     call read_psi_coeffs("ProcessSij")
     ! Care: do we need total or active bands here?
-    allocate(scaled_evec_coeff(maxval(nsf_species), ni_in_cell, n_bands_total, nkp, nspin))
+    max_nsf = maxval(nsf_species)
+    allocate(scaled_evec_coeff(max_nsf, ni_in_cell, n_bands_total, nkp, nspin))
     scaled_evec_coeff = evec_coeff
     deallocate(evec_coeff)
     call read_psi_coeffs("Process")
     allocate(total_DOS(n_DOS,nspin),iDOS(n_DOS,nspin),occ(n_bands_total,nkp))
+    ! Set up storage based on pDOS per atom, or l/lm resolved per atom
+    !if(flag_pDOS_lm_resolved) then
+    !   allocate(pDOS_lm(max_lm,ni_in_cell,n_DOS,nspin))
+    !else if(flag_pDOS_l_resolved) then
+    !   allocate(pDOS_l(max_l,ni_in_cell,n_DOS,nspin))
+    !else
     allocate(pDOS(ni_in_cell,n_DOS,nspin))
+    !end if
+    allocate(total_electrons(ni_in_cell,nspin))
     total_DOS = zero
     pDOS = zero
     iDOS = zero
+    total_electrons = zero
     ! Set limits on DOS output
     if(abs(E_DOS_min)<RD_ERR) then
        E_DOS_min = minval(eigenvalues(1,:,:))
@@ -401,13 +414,20 @@ contains
     n_DOS_wid = floor(six*sigma_DOS/dE_DOS) ! How many bins either side of state we consider
     pf_DOS = one/(sigma_DOS*sqrt(twopi))
     total_electrons = zero
-    iDOS_low = zero ! Integral of DOS to lowest energy bound
     ! Accumulate DOS over bands and k-points for each spin
     do i_spin = 1, nspin
+       ! This is used to perform a simple integral over c.S.c which should give Ne in spin channel
+       ! check_electrons = zero
        occ = zero
        call occupy(occ,eigenvalues,efermi,i_spin)
        do i_kp = 1, nkp
           do i_band=1,n_bands_total ! All bands
+             ! Check electrons
+             ! This performs a simple integral over c.S.c which should give Ne in spin channel
+             ! do i_atom = 1, ni_in_cell
+             !    coeff = zdotc(max_nsf,evec_coeff(:,i_atom,i_band,i_kp,i_spin),1,scaled_evec_coeff(:,i_atom,i_band,i_kp,i_spin),1)
+             !    check_electrons = check_electrons + coeff*wtk(i_kp)*occ(i_band,i_kp)
+             ! end do
              if(eigenvalues(i_band, i_kp, i_spin)>E_DOS_min .and. &
                   eigenvalues(i_band, i_kp, i_spin)<E_DOS_max) then
                 n_band = floor((eigenvalues(i_band, i_kp, i_spin) - E_DOS_min)/dE_DOS) + 1
@@ -420,40 +440,40 @@ contains
                    a = (Ebin-eigenvalues(i_band, i_kp, i_spin))/sigma_DOS
                    do i_atom = 1, ni_in_cell
                       ! not l-m resolved
-                      !write(28,fmt='(4i4,2f20.12)') i_kp, i_band,i,i_atom,evec_coeff(1,i_atom,i_band,i_kp,i_spin), &
-                      write(28,*) i_kp, i_band,i,i_atom,evec_coeff(1,i_atom,i_band,i_kp,i_spin), &
-                           scaled_evec_coeff(1,i_atom,i_band,i_kp,i_spin)
-                      coeff = dot_product(evec_coeff(:,i_atom,i_band,i_kp,i_spin),scaled_evec_coeff(:,i_atom,i_band,i_kp,i_spin))
+                      coeff = zdotc(max_nsf,evec_coeff(:,i_atom,i_band,i_kp,i_spin),1, &
+                           scaled_evec_coeff(:,i_atom,i_band,i_kp,i_spin),1)
                       pDOS(i_atom,i,i_spin) = pDOS(i_atom,i,i_spin) + wtk(i_kp)*pf_DOS*exp(-half*a*a)*coeff
+                      total_electrons(i_atom, i_spin) = total_electrons(i_atom, i_spin) + &
+                           occ(i_band,i_kp)*wtk(i_kp)*pf_DOS*exp(-half*a*a)*coeff
                    end do
                 end do
-             else if(eigenvalues(i_band, i_kp, i_spin)<E_DOS_min) then
-                !iDOS_low(i_spin) = iDOS_low(i_spin) + wtk(i_kp)
              end if
           end do
        end do
-       !! Now integrate DOS
-       !write(*,*) 'iDOS_low is ',iDOS_low
-       !do i = 2, n_DOS
-       !   iDOS(i,i_spin) = iDOS(i,i_spin) + iDOS(i-1,i_spin)
-       !end do
+       ! This is used to perform a simple integral over c.S.c which should give Ne in spin channel
+       ! write(*,fmt='(4x,"Spin channel ",i2," Check integral of KS: ",f20.12)') i_spin, two*check_electrons
     end do
     ! Include spin factor
-    !iDOS = iDOS*dE_DOS*spin_fac
-    !if(flag_total_iDOS) then
-    !   do i_spin = 1, nspin
-    !      iDOS(:,i_spin) = iDOS(:,i_spin) + spin_fac*iDOS_low(i_spin)
-    !   end do
-    !end if
-    !total_electrons = total_electrons*dE_DOS*spin_fac
-    !total_DOS = total_DOS*spin_fac
-    !if(nspin==1) then
-    !   write(*,fmt='(2x,"DOS between ",f11.3," and ",f11.3," Ha integrates to ",f12.3," electrons")') &
-    !        E_DOS_min, E_DOS_max, total_electrons(1)
-    !else
-    !   write(*,fmt='(2x,"Spin Up DOS integrates to ",f12.3," electrons")') total_electrons(1)
-    !   write(*,fmt='(2x,"Spin Dn DOS integrates to ",f12.3," electrons")') total_electrons(2)
-    !end if
+    total_electrons = total_electrons*dE_DOS*spin_fac
+    pDOS = pDOS*spin_fac
+    if(nspin==1) then
+       write(*,fmt='(2x,"Results of integrating pDOS between ",f11.3," and ",f11.3," Ha (electrons per atom).")') &
+            E_DOS_min, E_DOS_max
+       write(*,fmt='(4x,"Atom    Electrons")')
+       do i_atom = 1, ni_in_cell
+          write(*,fmt='(4x,i7,x,f11.3)') i_atom, total_electrons(i_atom,1)
+       end do
+       write(*,fmt='(2x,"Integrated pDOS: ",f11.3," electrons")') sum(total_electrons)
+    else
+       write(*,fmt='(2x,"Results of integrating pDOS between ",f11.3," and ",f11.3," Ha (electrons per atom).")') &
+            E_DOS_min, E_DOS_max
+       write(*,fmt='(4x,"Atom    Electrons  Electrons")')
+       do i_atom = 1, ni_in_cell
+          write(*,fmt='(4x,i7,x,2f11.3)') i_atom, total_electrons(i_atom,1), total_electrons(i_atom,2)
+       end do
+       write(*,fmt='(2x,"Integrated spin up pDOS: ",f11.3," electrons")') sum(total_electrons(:,1))
+       write(*,fmt='(2x,"Integrated spin dn pDOS: ",f11.3," electrons")') sum(total_electrons(:,2))
+    end if
     ! Since we write out DOS against eV we need this conversion to get the integral right
     pDOS = pDOS/HaToeV
     ! Write out DOS, shifted to Ef = 0
@@ -464,11 +484,7 @@ contains
           write(17,fmt='("# Spin ",I1)') i_spin
           write(17,fmt='("# Original Fermi-level: ",f12.5," eV")') HaToeV*efermi(i_spin)
           write(17,fmt='("# DOS shifted relative to Fermi-level")')
-          if(flag_total_iDOS) then
-             write(17,fmt='("#  Energy (eV)     DOS (/eV)    Total iDOS")')
-          else
-             write(17,fmt='("#  Energy (eV)     DOS (/eV)    Local iDOS")')
-          end if
+          write(17,fmt='("#  Energy (eV)     pDOS (/eV)")')
           do i=1, n_DOS
              write(17,fmt='(2f14.5)') HaToeV*(E_DOS_min + dE_DOS*real(i-1,double)-efermi(i_spin)), &
                   pDOS(i_atom,i,i_spin)

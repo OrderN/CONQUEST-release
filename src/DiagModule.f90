@@ -811,17 +811,19 @@ contains
                      write (io_lun, *) myid, ' Calling buildK ', &
                      Hrange, matK(spin)
                 ! Output wavefunction coefficients
-                if(wf_self_con .and. flag_out_wf) then 
+                if(wf_self_con .and. (flag_out_wf .or. flag_write_projected_DOS)) then 
                    call write_wavefn_coeffs(w(:,kp,spin),expH(:,:,spin),spin)
-                end if
-                if(wf_self_con .and. flag_write_projected_DOS) then
-                   scaledEig = zero
-                   flag_pDOS_buildK = .true.
-                   call buildK(Hrange, matK(spin), occ(:,kp,spin), &
-                        kk(:,kp), wtk(kp), expH(:,:,spin),scaledEig,matS(spin))
-                   flag_pDOS_buildK = .false.
-                   call write_wavefn_coeffs(w(:,kp,spin),expH(:,:,spin),spin)
-                   call write_wavefn_coeffs(w(:,kp,spin),scaledEig,spin,"Sij")
+                   if(flag_write_projected_DOS) then
+                      scaledEig = zero
+                      flag_pDOS_buildK = .true.
+                      call buildK(Hrange, matK(spin), occ(:,kp,spin), &
+                           kk(:,kp), wtk(kp), expH(:,:,spin),scaledEig,matS(spin))
+                      flag_pDOS_buildK = .false.
+                      call write_wavefn_coeffs(w(:,kp,spin),scaledEig,spin,"Sij")
+                   else
+                      call buildK(Hrange, matK(spin), occ(:,kp,spin), &
+                           kk(:,kp), wtk(kp), expH(:,:,spin))
+                   end if
                 else
                    call buildK(Hrange, matK(spin), occ(:,kp,spin), &
                         kk(:,kp), wtk(kp), expH(:,:,spin))
@@ -3577,7 +3579,7 @@ contains
                          ! 1:len_occ gives bands; we want c_jb^n * S_iajb
                          overlapEig(1:len_occ,prim_orbs(prim)+col_sup) = &
                               overlapEig(1:len_occ,prim_orbs(prim)+col_sup) + &
-                              Siajb*RecvBuffer(1:len_occ,orb_count+row_sup)
+                              Siajb*RecvBuffer(1:len_occ,orb_count+row_sup)*cmplx(rfac,ifac,double_cplx)
                       end if
                    end do ! col_sup=nsf
                 end do ! row_sup=nsf
