@@ -324,6 +324,7 @@ contains
        write(17,fmt='("&")')
     end do
     close(unit=17)
+    deallocate(total_DOS,iDOS,occ)
     return
   end subroutine process_dos
 
@@ -358,8 +359,8 @@ contains
     else if(nspin==2) then
        spin_fac = one
     end if
-    ! Read eigenvalues
-    call read_eigenvalues
+    ! Assume DOS processing called first, so eigenvalues already read
+    ! call read_eigenvalues
     ! Read eigenvector coefficients
     call read_psi_coeffs("ProcessSij")
     ! Care: do we need total or active bands here?

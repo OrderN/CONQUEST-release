@@ -811,15 +811,23 @@ contains
                      write (io_lun, *) myid, ' Calling buildK ', &
                      Hrange, matK(spin)
                 ! Output wavefunction coefficients
-                if(wf_self_con .and. (flag_out_wf .or. flag_write_projected_DOS)) then 
-                   call write_wavefn_coeffs(w(:,kp,spin),expH(:,:,spin),spin)
+                if(wf_self_con .and. (flag_out_wf .or. flag_write_projected_DOS)) then
+                   if(spin==1 .and. i==1) then
+                      call write_wavefn_coeffs(w(:,kp,spin),expH(:,:,spin),spin,first=1)
+                   else
+                      call write_wavefn_coeffs(w(:,kp,spin),expH(:,:,spin),spin)
+                   end if
                    if(flag_write_projected_DOS) then
                       scaledEig = zero
                       flag_pDOS_buildK = .true.
                       call buildK(Hrange, matK(spin), occ(:,kp,spin), &
                            kk(:,kp), wtk(kp), expH(:,:,spin),scaledEig,matS(spin))
                       flag_pDOS_buildK = .false.
-                      call write_wavefn_coeffs(w(:,kp,spin),scaledEig,spin,"Sij")
+                      if(spin==1 .and. i==1) then
+                         call write_wavefn_coeffs(w(:,kp,spin),scaledEig,spin,tag="Sij",first=1)
+                      else
+                         call write_wavefn_coeffs(w(:,kp,spin),scaledEig,spin,tag="Sij")
+                      end if
                    else
                       call buildK(Hrange, matK(spin), occ(:,kp,spin), &
                            kk(:,kp), wtk(kp), expH(:,:,spin))
@@ -3932,7 +3940,7 @@ contains
   !!    Added support for writing out specific bands
   !!  SOURCE
   !!
-  subroutine write_wavefn_coeffs(eval, evec, spin, tag)
+  subroutine write_wavefn_coeffs(eval, evec, spin, tag, first)
 
     use datatypes
     use numbers,         only: zero
@@ -3949,12 +3957,18 @@ contains
     complex(double_cplx), dimension(:,:), intent(in) :: evec
     real(double), dimension(:) :: eval
     character(len=3), optional :: tag
+    integer, optional :: first
 
     ! Local variables
     integer :: lun, iwf, acc, atom, isf1, wf_no
     character(len=50) :: filename
     real(double) :: offset
+    logical :: append_file
 
+    append_file = .true.
+    if(present(first)) then
+       if(first==1) append_file = .false.
+    end if
     offset = zero
     if(flag_wf_range_Ef) offset = Efermi(spin)
     call io_assign (lun)
@@ -3971,7 +3985,11 @@ contains
           write(filename,'("Process",I0.7,"WF.dat")') myid+1
        end if
     end if
-    open (unit = lun, file = filename,position='append')
+    if(append_file) then
+       open (unit = lun, file = filename,position='append')
+    else
+       open (unit = lun, file = filename)
+    end if
     write(lun,*) bundle%n_prim
     if(max_wf>0) then
        do iwf=1,max_wf
