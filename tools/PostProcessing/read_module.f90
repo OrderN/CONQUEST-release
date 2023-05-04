@@ -163,7 +163,7 @@ contains
     ! Energy limits (relative to Ef or absolute)
     E_wf_min = fdf_double('IO.min_wf_E',zero)
     E_wf_max = fdf_double('IO.max_wf_E',zero)
-    if(i_job==3 .or. i_job==4 .or. i_job==5 .or. i_job==7) then ! Band-resolved charge or STM
+    if(i_job==3 .or. i_job==4 .or. i_job==5) then ! Band-resolved charge or STM
        ! Read in details of bands output from Conquest
        n_bands_active=fdf_integer('IO.maxnoWF',0)
        if(n_bands_active>0) then
@@ -215,6 +215,18 @@ contains
           end if
        end if
     end if ! i_job == 3 or 4 or 5
+    if(i_job==7) then
+       ! If no limits specified, cover whole range
+       if(abs(E_wf_max-E_wf_min)<1e-8_double) then
+          E_wf_min = -BIG
+          E_wf_max =  BIG
+       end if
+       flag_wf_range = .true.
+       flag_procwf_range_Ef = fdf_boolean('Process.WFRangeRelative',.true.)
+       flag_l_resolved = fdf_boolean('Process.pDOS_l_resolved',.false.)
+       flag_lm_resolved = fdf_boolean('Process.pDOS_lm_resolved',.false.)
+       if(flag_lm_resolved .and. (.not.flag_l_resolved)) flag_l_resolved = .true.
+    end if
     ! Output format
     ps_type = fdf_string(4,'Process.OutputFormat','cube')
     if(leqi(ps_type,'cube')) then
@@ -369,7 +381,7 @@ contains
     use local, ONLY: nkp, n_eval_window, efermi, kx, ky, kz, wtk, efermi, stm_bias, stm_broad, &
          n_bands_active, eigenvalues, band_no, flag_only_charge, flag_by_kpoint, E_wf_min, E_wf_max, &
          flag_wf_range, n_bands_total, band_active_kp, band_active_all, n_bands_process, band_proc_no, &
-         band_full_to_active
+         band_full_to_active, i_job
     use units, ONLY: HaToeV
     use global_module, only: flag_wf_range_Ef, nspin
     
@@ -386,6 +398,9 @@ contains
     open(unit=17,file='eigenvalues.dat')
     read(17,*) str,n_evals,str2,idum
     n_bands_total = n_evals
+    if(i_job==7 .and. n_bands_active==0) then
+       n_bands_active = n_bands_total
+    end if
     if(idum/=nkp) then
        write(*,fmt='(4x,"Reading k-points from eigenvalues file, not setting from input file")')
        nkp = idum
@@ -417,10 +432,10 @@ contains
     end if
     if(flag_wf_range) then
        if(nspin==1) then
-          write(*,fmt='(2x,"Reading bands between ",f9.3,"Ha and ",f9.3,"Ha")') Emin(1), Emax(1)
+          write(*,fmt='(2x,"Reading bands between ",e12.3,"Ha and ",e12.3,"Ha")') Emin(1), Emax(1)
        else
-          write(*,fmt='(2x,"SpinU reading bands between ",f9.3,"Ha and ",f9.3,"Ha")') Emin(1), Emax(1)
-          write(*,fmt='(2x,"SpinD reading bands between ",f9.3,"Ha and ",f9.3,"Ha")') Emin(2), Emax(2)
+          write(*,fmt='(2x,"SpinU reading bands between ",e12.3,"Ha and ",e12.3,"Ha")') Emin(1), Emax(1)
+          write(*,fmt='(2x,"SpinD reading bands between ",e12.3,"Ha and ",e12.3,"Ha")') Emin(2), Emax(2)
        end if
     end if
     ! Now loop over k-points and read eigenvalues
