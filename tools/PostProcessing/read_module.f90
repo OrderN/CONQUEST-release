@@ -530,7 +530,7 @@ contains
        ! Read coefficients
        do i_spin = 1, nspin
           do i_proc = 1, nprocs
-             write(filename,'("Process",I0.7,"WF",I0.1,".dat")') i_proc, i_spin
+             write(filename,'(a,I0.7,"WF",I0.1,".dat")') trim(stub),i_proc, i_spin
              open(unit=17,file=filename)
              do i_kp = 1, nkp
                 read(17,*) n_prim ! Number of atoms on process

@@ -789,7 +789,9 @@ contains
     ! Second diagonalisation - get eigenvectors and build K
     entropy = zero
     flag_pDOS_buildK = .false.
+    spin_SF = 1
     do spin = 1, nspin
+       if (flag_SpinDependentSF) spin_SF = spin
        do i = 1, nkpoints_max
           call distrib_and_diag(spin,i,'V',.false.)
           if (iprint_DM >= 5 .and. inode == ionode) &
@@ -812,7 +814,7 @@ contains
                      Hrange, matK(spin)
                 ! Output wavefunction coefficients
                 if(wf_self_con .and. (flag_out_wf .or. flag_write_projected_DOS)) then
-                   if(spin==1 .and. i==1) then
+                   if(i==1) then
                       call write_wavefn_coeffs(w(:,kp,spin),expH(:,:,spin),spin,firstcall=1)
                    else
                       call write_wavefn_coeffs(w(:,kp,spin),expH(:,:,spin),spin)
@@ -821,9 +823,9 @@ contains
                       scaledEig = zero
                       flag_pDOS_buildK = .true.
                       call buildK(Hrange, matK(spin), occ(:,kp,spin), &
-                           kk(:,kp), wtk(kp), expH(:,:,spin),scaledEig,matS(spin))
+                           kk(:,kp), wtk(kp), expH(:,:,spin),scaledEig,matS(spin_SF))
                       flag_pDOS_buildK = .false.
-                      if(spin==1 .and. i==1) then
+                      if(i==1) then
                          call write_wavefn_coeffs(w(:,kp,spin),scaledEig,spin,tag="Sij",firstcall=1)
                       else
                          call write_wavefn_coeffs(w(:,kp,spin),scaledEig,spin,tag="Sij")
