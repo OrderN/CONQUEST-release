@@ -36,8 +36,8 @@ parallelisation performed with OpenMP.
 
 .. _over_on:
 
-Linear scaling
---------------
+Linear scaling DFT
+------------------
 The ideas of linear scaling have been current for more than twenty
 years, but it has proven challenging to make efficient, accurate codes
 to implement these ideas.  CONQUEST has demonstrated effective linear
