@@ -15,7 +15,7 @@ contains
     use local
     use input_module
     use numbers
-    use io_module, ONLY: pdb_format, pdb_template, read_atomic_positions
+    use io_module, ONLY: pdb_format, pdb_template, read_atomic_positions, flag_MatrixFile_BinaryFormat
     use dimens, ONLY: r_super_x, r_super_y, r_super_z, GridCutoff
     use species_module, ONLY: n_species, species_label, species_file, mass, type_species, charge, nsf_species
     use units, ONLY: HaToeV
@@ -77,6 +77,9 @@ contains
     else
        pdb_template = fdf_string(80,'IO.PdbTemplate',' ')
     end if
+    ! Format of wavefunction coefficient files
+    flag_MatrixFile_BinaryFormat = fdf_boolean('IO.MatrixFile.BinaryFormat', .true.)
+    ! Number of species
     n_species = fdf_integer('General.NumberOfSpecies',1)
     ! And read the positions
     call read_atomic_positions(trim(proc_coords))
@@ -488,6 +491,7 @@ contains
     use species_module, ONLY: nsf_species
     use global_module, ONLY: ni_in_cell, species_glob, nspin
     use local, ONLY: nkp, nprocs, n_bands_active, band_active_kp, eigenvalues, evec_coeff, n_bands_active, band_no
+    use io_module, ONLY: flag_MatrixFile_BinaryFormat
 
     implicit none
 
@@ -503,34 +507,44 @@ contains
     ! Allocate space
     allocate(evec_coeff(maxval(nsf_species), ni_in_cell, n_bands_active, nkp, nspin))
     evec_coeff = zero
-    if(nspin==1) then
+    if(flag_MatrixFile_BinaryFormat) then
        ! Read coefficients
-       do i_proc = 1, nprocs
-          write(filename,'(a,I0.7,"WF.dat")') trim(stub),i_proc
-          open(unit=17,file=filename)
-          do i_kp = 1, nkp
-             read(17,*) n_prim ! Number of atoms on process
-             do i_band = 1, n_bands_active
-                if(band_active_kp(band_no(i_band), i_kp, 1) == 1) then
-                   read(17,*) i, eval
-                   ! Loop over primary atoms
-                   do i_prim = 1, n_prim
-                      read(17,*) i_atom ! Global number of atom
-                      ! Loop over SFs
-                      do i_sf = 1, nsf_species(species_glob(i_atom))
-                         read(17,*) evec_coeff(i_sf, i_atom, i_band, i_kp, 1)
-                      end do ! nsf
-                   end do ! n_prim primary atoms
-                end if
-             end do ! bands
-          end do ! nkp kpoints
-          close(unit=17)
-       end do! nprocs processes
+       do i_spin = 1, nspin
+          do i_proc = 1, nprocs
+             if(nspin==1) then
+                write(filename,'(a,I0.7,"WF.dat")') trim(stub),i_proc
+             else
+                write(filename,'(a,I0.7,"WF",I0.1,".dat")') trim(stub),i_proc, i_spin
+             end if
+             open(unit=17,file=filename,form='unformatted')
+             do i_kp = 1, nkp
+                read(17) n_prim ! Number of atoms on process
+                do i_band = 1, n_bands_active
+                   if(band_active_kp(band_no(i_band), i_kp, i_spin) == 1) then
+                      read(17) i, eval
+                      ! Loop over primary atoms
+                      do i_prim = 1, n_prim
+                         read(17) i_atom ! Global number of atom
+                         ! Loop over SFs
+                         do i_sf = 1, nsf_species(species_glob(i_atom))
+                            read(17) evec_coeff(i_sf, i_atom, i_band, i_kp, i_spin)
+                         end do ! nsf
+                      end do ! n_prim primary atoms
+                   end if
+                end do ! bands
+             end do ! nkp kpoints
+             close(unit=17)
+          end do! nprocs processes
+       end do ! i_spin = nspin
     else
        ! Read coefficients
        do i_spin = 1, nspin
           do i_proc = 1, nprocs
-             write(filename,'(a,I0.7,"WF",I0.1,".dat")') trim(stub),i_proc, i_spin
+             if(nspin==1) then
+                write(filename,'(a,I0.7,"WF.dat")') trim(stub),i_proc
+             else
+                write(filename,'(a,I0.7,"WF",I0.1,".dat")') trim(stub),i_proc, i_spin
+             end if
              open(unit=17,file=filename)
              do i_kp = 1, nkp
                 read(17,*) n_prim ! Number of atoms on process
@@ -550,8 +564,8 @@ contains
              end do ! nkp kpoints
              close(unit=17)
           end do! nprocs processes
-       end do ! Spin
-    end if
+       end do ! i_spin = nspin
+    end if ! Binary format
   end subroutine read_psi_coeffs
  
   subroutine allocate_species_vars

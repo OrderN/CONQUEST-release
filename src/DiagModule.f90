@@ -3940,6 +3940,8 @@ contains
   !!  MODIFICATION HISTORY
   !!   2021/07/19 14:59 dave
   !!    Added support for writing out specific bands
+  !!   2023/05/10 08:24 dave
+  !!    Reworked for post-processing requirements and added binary output option
   !!  SOURCE
   !!
   subroutine write_wavefn_coeffs(eval, evec, spin, tag, firstcall)
@@ -3951,6 +3953,7 @@ contains
     use species_module,  only: nsf_species, natomf_species
     use input_module,    only: io_assign, io_close
     use primary_module,  only: bundle
+    use io_module,       only: flag_MatrixFile_BinaryFormat
 
     implicit none
 
@@ -3987,39 +3990,76 @@ contains
           write(filename,'("Process",I0.7,"WF.dat")') myid+1
        end if
     end if
-    if(append_file) then
-       open (unit = lun, file = filename,position='append')
-    else
-       open (unit = lun, file = filename,position='rewind')
-    end if
-    write(lun,*) bundle%n_prim
-    if(max_wf>0) then
-       do iwf=1,max_wf
-          wf_no = out_wf(iwf)
-          write(lun,*) wf_no,eval(wf_no)
-          acc = 0
-          do atom=1,bundle%n_prim
-             write(lun,*) bundle%ig_prim(atom)
-             do isf1 = 1,nsf_species(bundle%species(atom))
-                write(lun,*) evec(wf_no,acc+isf1)
+    if(flag_MatrixFile_BinaryFormat) then
+       if(append_file) then
+          open (unit = lun, file = filename,position='append',form='unformatted')
+       else
+          open (unit = lun, file = filename,position='rewind',form='unformatted')
+       end if
+       write(lun) bundle%n_prim
+       if(max_wf>0) then
+          do iwf=1,max_wf
+             wf_no = out_wf(iwf)
+             write(lun) wf_no,eval(wf_no)
+             acc = 0
+             do atom=1,bundle%n_prim
+                write(lun) bundle%ig_prim(atom)
+                do isf1 = 1,nsf_species(bundle%species(atom))
+                   write(lun) evec(wf_no,acc+isf1)
+                end do
+                acc = acc + nsf_species(bundle%species(atom))
              end do
-             acc = acc + nsf_species(bundle%species(atom))
-          end do
-       end do ! iwf
+          end do ! iwf
+       else
+          do iwf=1,matrix_size ! Effectively all bands
+             if(eval(iwf)-offset>=E_wf_min.AND.eval(iwf)-offset<=E_wf_max) then
+                write(lun) iwf,eval(iwf)
+                acc = 0
+                do atom=1,bundle%n_prim
+                   write(lun) bundle%ig_prim(atom)
+                   do isf1 = 1,nsf_species(bundle%species(atom))
+                      write(lun) evec(iwf,acc+isf1)
+                   end do
+                   acc = acc + nsf_species(bundle%species(atom))
+                end do
+             end if
+          end do ! iwf
+       end if
     else
-       do iwf=1,matrix_size ! Effectively all bands
-          if(eval(iwf)-offset>=E_wf_min.AND.eval(iwf)-offset<=E_wf_max) then
-             write(lun,*) iwf,eval(iwf)
+       if(append_file) then
+          open (unit = lun, file = filename,position='append')
+       else
+          open (unit = lun, file = filename,position='rewind')
+       end if
+       write(lun,*) bundle%n_prim
+       if(max_wf>0) then
+          do iwf=1,max_wf
+             wf_no = out_wf(iwf)
+             write(lun,*) wf_no,eval(wf_no)
              acc = 0
              do atom=1,bundle%n_prim
                 write(lun,*) bundle%ig_prim(atom)
                 do isf1 = 1,nsf_species(bundle%species(atom))
-                   write(lun,*) evec(iwf,acc+isf1)
+                   write(lun,*) evec(wf_no,acc+isf1)
                 end do
                 acc = acc + nsf_species(bundle%species(atom))
              end do
-          end if
-       end do ! iwf
+          end do ! iwf
+       else
+          do iwf=1,matrix_size ! Effectively all bands
+             if(eval(iwf)-offset>=E_wf_min.AND.eval(iwf)-offset<=E_wf_max) then
+                write(lun,*) iwf,eval(iwf)
+                acc = 0
+                do atom=1,bundle%n_prim
+                   write(lun,*) bundle%ig_prim(atom)
+                   do isf1 = 1,nsf_species(bundle%species(atom))
+                      write(lun,*) evec(iwf,acc+isf1)
+                   end do
+                   acc = acc + nsf_species(bundle%species(atom))
+                end do
+             end if
+          end do ! iwf
+       end if
     end if
     call io_close(lun)
     return
