@@ -144,11 +144,12 @@ contains
     write(17,'("PRIMCOORD ",i8)') step
     write(17,fmt='(2i8)') ni_in_cell, 1
     if(flag_write_forces) then
+       write(*,fmt='(4x,"Force output not yet implemented; just writing positions")')
        do i=1,ni_in_cell
           atom_name = adjustr(species_label(species_glob(i))(1:2))
-          write(17,'(a4,6f16.8)') atom_name, atom_coord(:,i)*BohrToAng,&
-               tot_force(:,i)*HaToeV/BohrToAng
-          ! species_glob(i),flag_move_atom(1,i),flag_move_atom(2,i), &
+          write(17,'(a4,3f16.8)') atom_name, atom_coord(:,i)*BohrToAng
+          !write(17,'(a4,6f16.8)') atom_name, atom_coord(:,i)*BohrToAng,&
+          !     tot_force(:,i)*HaToeV/BohrToAng
        end do
     else if(flag_write_spin_moments) then
        ! Read spins
