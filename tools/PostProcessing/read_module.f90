@@ -92,6 +92,11 @@ contains
           coord_format=1
        else if(leqi(input_string,'cel')) then
           coord_format=2
+       else if(leqi(input_string,'xsf')) then
+          coord_format=3
+          flag_write_forces = fdf_boolean('Process.WriteForces',.false.)
+          flag_write_spin_moments = fdf_boolean('Process.WriteSpinMoments',.false.)
+          if(flag_write_forces .and. flag_write_spin_moments) call cq_abort("Cannot have both forces and spin moments output")
        else
           call cq_abort("Unrecognised output format: "//trim(input_string))
        end if

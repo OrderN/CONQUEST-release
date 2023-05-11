@@ -101,6 +101,84 @@ contains
     return
   end subroutine write_cell
   
+  subroutine write_xsf(ci)
+
+    use datatypes
+    use numbers,        only: zero
+    use dimens,         only: r_super_x, r_super_y, r_super_z
+    use global_module,  only: ni_in_cell, iprint_init, atom_coord, &
+                              species_glob
+    use species_module, only: species_label
+    use GenComms,       only: inode, ionode, cq_abort
+    use units,          only: BohrToAng, HaToeV
+    use timer_module
+    use local,          only: flag_write_spin_moments, flag_write_forces, root_file
+
+    ! Passed variables
+    character(len=50), OPTIONAL :: ci
+
+    ! Local variables
+    integer                    :: lun, i, step
+    character(len=2)           :: atom_name
+    character(len=50) :: filename
+    real(double), dimension(ni_in_cell) :: spin_moment
+    real(double), dimension(3,ni_in_cell) :: tot_force
+    real(double) :: tote, eup, edn
+
+    step = 1
+    write(*,fmt='(4x,"Writing out coordinates in XSF format")')
+    if(flag_write_forces) write(*,fmt='(4x,"Including forces")')
+    if(flag_write_spin_moments) write(*,fmt='(4x,"Including spin moments")')
+    ! Open file
+    if(PRESENT(ci)) then
+       filename = trim(ci)//".xsf"
+    else
+       filename = trim(root_file)//".xsf"
+    end if
+    open(unit=17,file=filename)
+    write(17,'(a)') "CRYSTAL"
+    write(17,'("PRIMVEC   ",i8)') step
+    write(17,fmt='(3f14.8)') r_super_x*BohrToAng, zero, zero
+    write(17,fmt='(3f14.8)') zero, r_super_y*BohrToAng, zero
+    write(17,fmt='(3f14.8)') zero, zero, r_super_z*BohrToAng
+    write(17,'("PRIMCOORD ",i8)') step
+    write(17,fmt='(2i8)') ni_in_cell, 1
+    if(flag_write_forces) then
+       do i=1,ni_in_cell
+          atom_name = adjustr(species_label(species_glob(i))(1:2))
+          write(17,'(a4,6f16.8)') atom_name, atom_coord(:,i)*BohrToAng,&
+               tot_force(:,i)*HaToeV/BohrToAng
+          ! species_glob(i),flag_move_atom(1,i),flag_move_atom(2,i), &
+       end do
+    else if(flag_write_spin_moments) then
+       ! Read spins
+       open(unit=18,file="AtomCharge.dat", status='old',iostat=i)
+       if(i>0) then
+          write(*,fmt='(4x,"Failed to open file AtomCharge.dat for spins; just writing positions")')
+          do i=1,ni_in_cell
+             atom_name = adjustr(species_label(species_glob(i))(1:2))
+             write(17,'(a4,3f16.8)') atom_name, atom_coord(:,i)*BohrToAng
+          end do
+       else
+          do i=1,ni_in_cell
+             read(18,*) tote, eup, edn
+             spin_moment(i) = eup - edn
+          end do
+          do i=1,ni_in_cell
+             atom_name = adjustr(species_label(species_glob(i))(1:2))
+             write(17,'(a4,6f16.8)') atom_name, atom_coord(:,i)*BohrToAng, &
+                  zero,zero,spin_moment(i)
+          end do
+       end if
+    else
+       do i=1,ni_in_cell
+          atom_name = adjustr(species_label(species_glob(i))(1:2))
+          write(17,'(a4,3f16.8)') atom_name, atom_coord(:,i)*BohrToAng
+          ! species_glob(i),flag_move_atom(1,i),flag_move_atom(2,i), &
+       end do
+    end if
+  end subroutine write_xsf
+
   ! Write OpenDX file for charge or current density
   subroutine write_dx_density(ci)
 
