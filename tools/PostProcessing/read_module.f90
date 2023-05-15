@@ -218,18 +218,6 @@ contains
           end if
        end if
     end if ! i_job == 3 or 4 or 5
-    if(i_job==7) then
-       ! If no limits specified, cover whole range
-       if(abs(E_wf_max-E_wf_min)<1e-8_double) then
-          E_wf_min = -BIG
-          E_wf_max =  BIG
-       end if
-       flag_wf_range = .true.
-       flag_procwf_range_Ef = fdf_boolean('Process.WFRangeRelative',.true.)
-       flag_l_resolved = fdf_boolean('Process.pDOS_l_resolved',.false.)
-       flag_lm_resolved = fdf_boolean('Process.pDOS_lm_resolved',.false.)
-       if(flag_lm_resolved .and. (.not.flag_l_resolved)) flag_l_resolved = .true.
-    end if
     ! Output format
     ps_type = fdf_string(4,'Process.OutputFormat','cube')
     if(leqi(ps_type,'cube')) then
@@ -243,11 +231,23 @@ contains
     flag_by_kpoint = fdf_boolean('Process.outputWF_by_kpoint',.false.)
     ! DOS
     ! Add flag for window relative to Fermi level
-    E_DOS_min = fdf_double('Process.min_DOS_E',zero)
-    E_DOS_max = fdf_double('Process.max_DOS_E',zero)
+    E_DOS_min = fdf_double('Process.min_DOS_E',E_wf_min)
+    E_DOS_max = fdf_double('Process.max_DOS_E',E_wf_max)
     sigma_DOS = fdf_double('Process.sigma_DOS',zero) ! Adjust to minimum of 4*energy spacing
     n_DOS = fdf_integer('Process.n_DOS',1001)
     flag_total_iDOS = fdf_boolean('Process.TotalIntegratedDOS',.false.)
+    if(i_job==7) then
+       ! If no limits specified, cover whole range
+       if(abs(E_wf_max-E_wf_min)<1e-8_double) then
+          E_wf_min = -BIG
+          E_wf_max =  BIG
+       end if
+       flag_wf_range = .true.
+       flag_procwf_range_Ef = fdf_boolean('Process.WFRangeRelative',.false.)
+       flag_l_resolved = fdf_boolean('Process.pDOS_l_resolved',.false.)
+       flag_lm_resolved = fdf_boolean('Process.pDOS_lm_resolved',.false.)
+       if(flag_lm_resolved .and. (.not.flag_l_resolved)) flag_l_resolved = .true.
+    end if
     ! Now read PS files for atomic information
     call allocate_species_vars
     ps_type = fdf_string(5,'General.PseudopotentialType','haman') 
