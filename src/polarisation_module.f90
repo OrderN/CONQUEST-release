@@ -67,6 +67,7 @@ contains
     use DiagModule, only: FindEvals
     use matrix_data, only: Srange, aSa_range
     use mult_module, only: S_trans, allocate_temp_matrix
+    use dimens,                      only: r_super_x, r_super_y, r_super_z
 
     implicit none
 
@@ -129,6 +130,9 @@ contains
     ! Get ionic contribution
     call get_P_ionic(Pion_x, Pion_y, Pion_z)
     ! Output
+    write(io_lun,fmt='(4x,"Fractional: Pel is ",e20.12," Pion is ",e20.12," Ptot is ",e20.12)') &
+         Pel_gamma,Pion_x,Pel_gamma + Pion_x
+    write(io_lun,fmt='(4x,"Total polarisation is ",e20.12," e Bohr")') (Pel_gamma + Pion_x)*r_super_x
     ! Do we also test Tr[K.polX] for different forms of polX? (x, Resta and other)
     ! Free space
     call free_temp_fn_on_grid(tmp_fn)
@@ -198,9 +202,9 @@ contains
             i = bundle%ig_prim(bundle%nm_nodbeg(ipoint)+ni-1)
 !           --- We want the positions of atom i in fractional coordinates ---
 !           --- (hence we divide by r_super_x)                            ---
-            x = atom_coord(1,i) !/ r_super_x
-            y = atom_coord(2,i) !/ r_super_y
-            z = atom_coord(3,i) !/ r_super_z
+            x = atom_coord(1,i) / r_super_x
+            y = atom_coord(2,i) / r_super_y
+            z = atom_coord(3,i) / r_super_z
             q_i = charge(bundle%species(bundle%nm_nodbeg(ipoint)+ni-1))
 
             ! write (io_lun, *) "q_i: ",q_i
@@ -219,6 +223,10 @@ contains
     !call wrapphase(Pion_x, one, Pion_x)
     !call wrapphase(Pion_y, one, Pion_y)
     !call wrapphase(Pion_z, one, Pion_z)
+    ! We have found P in fractional coordinates, so quantum is 1
+    Pion_x = Pion_x - floor(Pion_x)
+    Pion_y = Pion_y - floor(Pion_y)
+    Pion_z = Pion_z - floor(Pion_z)
     if(inode==ionode) then
        write (io_lun, *) "Pion_x: ",Pion_x
        write (io_lun, *) "Pion_y: ",Pion_y
