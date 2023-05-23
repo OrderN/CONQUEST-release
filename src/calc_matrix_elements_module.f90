@@ -202,7 +202,6 @@ contains
           allocate(acc_block(n_dim_two*n_dim_one),STAT=stat)
           if(stat/=0) call cq_abort('Error allocating memory in get_matrix_elements: ',n_dim_one,n_dim_two)
           acc_block = zero
-          call reg_alloc_mem(area_integn,n_dim_two*n_dim_one,type_dbl)
           ! for both left and right functions...
           ! To get the contiguous access for acc_block, it should be
           !arranged like acc_block(right,left).
@@ -228,15 +227,9 @@ contains
           !
           do naba1=1, naba_atm1%no_of_atom(iprim_blk)    ! left 
              ind_halo1 = naba_atm1%list_atom_by_halo(naba1,iprim_blk)
-             if(ind_halo1 > loc_bucket%no_halo_atom1) &
-                  call cq_abort('ERROR in no_of_halo_atoms for left',ind_halo1,loc_bucket%no_halo_atom1)
              do naba2=1, naba_atm2%no_of_atom(iprim_blk) ! right
                 ind_halo2 = naba_atm2%list_atom_by_halo(naba2,iprim_blk)
-                if(ind_halo2 > loc_bucket%no_halo_atom2) &
-                     call cq_abort('ERROR in no_of_halo_atoms for right',ind_halo2,loc_bucket%no_halo_atom2)
                 bucket = loc_bucket%i_h2d(ind_halo2,ind_halo1) !index of the pair
-                if(bucket > loc_bucket%no_pair_orb) &
-                     call cq_abort('ERROR : bucket in get_matrix_elements',bucket,loc_bucket%no_pair_orb)
                 If(bucket /= 0) then   ! naba1 and naba2 makes pair
                    ii=(bucket-1)
                    ! Note that matrix elements A_{i alpha}{j beta} are arranged 
@@ -246,12 +239,8 @@ contains
                    do nsf2=1, ntwof
                       do nsf1=1, nonef
                          ii = ii+1
-                         if(ii>size_send_array) &
-                              call cq_abort("Error: send_array overflow in get_matrix_elements: ",size_send_array,ii)
                          where = n_dim_two*(naba_atm1%ibeg_orb_atom(naba1, iprim_blk)-1 + nsf1-1) + &
                               naba_atm2%ibeg_orb_atom(naba2, iprim_blk)-1 + nsf2  
-                         if(where>n_dim_two*n_dim_one) &
-                              call cq_abort('Overflow error in get_matrix_elements: ',where,n_dim_two*n_dim_one)
                          send_array(ii)=send_array(ii)+acc_block(where)
                       end do
                    end do
@@ -260,7 +249,6 @@ contains
              enddo ! Loop over right naba atoms
           enddo ! Loop over left naba atoms
           deallocate(acc_block)
-          call reg_dealloc_mem(area_integn,n_dim_two*n_dim_one,type_dbl)
        endif    ! If the primary block has naba atoms for left & right functions
     end do   ! end loop over primary blocks
 
@@ -384,7 +372,6 @@ contains
                      ii=0
                      do isf2 = 1,halo(matrix_index(matM))%ndimj(rem_bucket%bucket(ipair,jnode)%jhalo)
                         do isf1 = 1,halo(matrix_index(matM))%ndimi(rem_bucket%bucket(ipair,jnode)%iprim)
-                           if (loc2+ii>nsize) call cq_abort("Overflow error ! ",nsize,loc2+ii)
                            tmp = recv_ptr(loc2+ii)*grid_point_volume
                            call store_matrix_value_pos(matM,loc1+ii,tmp)
                            ii=ii+1
