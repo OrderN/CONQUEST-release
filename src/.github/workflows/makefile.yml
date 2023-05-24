@@ -1,0 +1,37 @@
+name: Makefile CI
+
+on:
+  push:
+    branches: [ "develop" ]
+  pull_request:
+    branches: [ "develop" ]
+
+jobs:
+  build:
+    name: ${{matrix.fc}} -- ${{matrix.os}}
+    runs-on: ${{matrix.os}}
+    env:
+      FC: ${{matrix.fc}}
+      F77: mpif77
+    strategy:
+      matrix:
+        os:
+          - ubuntu-22.04
+          - ubuntu-latest
+        fc:
+          - mpif90
+          - mpifort
+      
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Install Dependencies
+      run: |
+        sudo apt update
+        sudo apt install openmpi-bin libopenmpi-dev libfftw3-dev libblas3 liblapack3 libscalapack-openmpi-dev
+       
+    - name: Build
+      working-directory: ${{github.workspace}}/CONQUEST-release/src
+      run: |
+        cp gha.make system.make
+        make -j 2
