@@ -30,7 +30,9 @@ jobs:
       run: |
         sudo apt update
         sudo apt install openmpi-bin libopenmpi-dev libfftw3-dev libblas3 liblapack3 libscalapack-openmpi-dev
-       
+    - name: Check compiler version
+      run: ${{matrix.fc}} --version
+      
     - name: Build
       working-directory: ${{github.workspace}}/src
       run: |
