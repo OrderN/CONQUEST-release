@@ -14,6 +14,7 @@ jobs:
       FC: ${{matrix.fc}}
       F77: mpif77
     strategy:
+      fail-fast: false
       matrix:
         os:
           - ubuntu-22.04
@@ -31,7 +32,7 @@ jobs:
         sudo apt install openmpi-bin libopenmpi-dev libfftw3-dev libblas3 liblapack3 libscalapack-openmpi-dev
        
     - name: Build
-      working-directory: ${{github.workspace}}/CONQUEST-release/src
+      working-directory: ${{github.workspace}}/src
       run: |
         cp gha.make system.make
         make -j 2
