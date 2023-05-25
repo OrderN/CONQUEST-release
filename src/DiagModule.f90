@@ -3308,7 +3308,8 @@ contains
          matrix_size
     use global_module,   only: numprocs, iprint_DM, id_glob,         &
          ni_in_cell, x_atom_cell, y_atom_cell, &
-         z_atom_cell, max_wf, min_layer, flag_do_pol_calc, polS, mat_polX_re, mat_polX_im
+         z_atom_cell, max_wf, min_layer, flag_do_pol_calc, polS, mat_polX_re, mat_polX_im, &
+         i_pol_dir_st, i_pol_dir_end
     use mpi
     use GenBlas,         only: dot
     use GenComms,        only: myid
@@ -3348,7 +3349,7 @@ contains
     complex(double_cplx), dimension(:,:), allocatable :: RecvBuffer, &
          SendBuffer
     logical :: flag, flag_write_out
-    integer :: FSCpart, ipart, iband, iwf, len_occ, jband
+    integer :: FSCpart, ipart, iband, iwf, len_occ, jband, dir
     ! for spin polarisation
     real(double) :: occ_correction
 
@@ -3658,27 +3659,19 @@ contains
                    do col_sup = 1,nsf_species(bundle%species(prim))
                       ! Resta polarisation
                       if(flag_do_pol_calc.AND.matA==matK(1)) then ! HORRIBLE temporary hack !
-                         whereMat = matrix_pos(mat_polX_re,&
+                         ! Find matrix location (same for all matrices)
+                         whereMat = matrix_pos(mat_polX_re(1),&
                               recv_info(recv_proc+1)%prim_atom(inter,locatom), &
                               recv_info(recv_proc+1)%locj(inter,locatom),col_sup,row_sup)
-                         exp_X_value_real =  return_matrix_value_pos(mat_polX_re,whereMat)
-                         exp_X_value_imag =  return_matrix_value_pos(mat_polX_im,whereMat)
-                         exp_X_value = cmplx(exp_X_value_real,exp_X_value_imag)
-                         ! This is the original, explicit code for reference
-                         !do iband=1,len_occ
-                         !   do jband=1,len_occ
-                         !      polS(jband,iband) = polS(jband,iband) + &
-                         !           (exp_X_value_real*conjg(localEig(iband,prim_orbs(prim)+col_sup)) &
-                         !           *RecvBuffer(jband,orb_count+row_sup) - &
-                         !           minus_i * exp_X_value_imag * &
-                         !           conjg(localEig(iband,prim_orbs(prim)+col_sup))&
-                         !           *RecvBuffer(jband,orb_count+row_sup))
-                         !   end do
-                         !end do
-                         ! LAPACK outer product; I can't see a way to distribute it
-                         call zgerc(len_occ, len_occ, exp_X_value, &
-                              localEig(:,prim_orbs(prim)+col_sup), 1, &
-                              RecvBuffer(:,orb_count+row_sup),1,polS,len_occ)
+                         do dir = i_pol_dir_st, i_pol_dir_end
+                            exp_X_value_real =  return_matrix_value_pos(mat_polX_re(dir),whereMat)
+                            exp_X_value_imag =  return_matrix_value_pos(mat_polX_im(dir),whereMat)
+                            exp_X_value = cmplx(exp_X_value_real,exp_X_value_imag)
+                            ! LAPACK outer product; I can't see a way to distribute it
+                            call zgerc(len_occ, len_occ, exp_X_value, &
+                                 localEig(:,prim_orbs(prim)+col_sup), 1, &
+                                 RecvBuffer(:,orb_count+row_sup),1,polS(:,:,dir),len_occ)
+                         end do
                       end if
                       whereMat = matrix_pos(matA,recv_info(recv_proc+1)%prim_atom(inter,locatom), &
                            recv_info(recv_proc+1)%locj(inter,locatom),col_sup,row_sup)

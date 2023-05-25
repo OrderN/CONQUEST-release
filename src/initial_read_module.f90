@@ -835,7 +835,8 @@ contains
          flag_opt_cell, cell_constraint_flag, flag_variable_cell, &
          cell_en_tol, optcell_method, cell_stress_tol, &
          flag_stress, flag_full_stress, rng_seed, &
-         flag_atomic_stress, flag_heat_flux, flag_DumpMatrices, flag_calc_pol, flag_do_pol_calc
+         flag_atomic_stress, flag_heat_flux, flag_DumpMatrices, flag_calc_pol, flag_do_pol_calc, &
+         i_pol_dir, i_pol_dir_st, i_pol_dir_end
     use dimens, only: GridCutoff,    &
          n_grid_x, n_grid_y, n_grid_z, r_c,         &
          RadiusSupport, RadiusAtomf, RadiusMS, RadiusLD, &
@@ -1824,9 +1825,22 @@ contains
 !!$
 !!$
 !!$
-    !Calculate bulk polarisation
+    ! Calculate bulk polarisation
     flag_calc_pol   = fdf_boolean('General.CalcPol', .false.)
     flag_do_pol_calc = .false.
+    ! Find direction for polarisation calculation: 0 means all three
+    i_pol_dir = 0
+    i_pol_dir(1) = fdf_integer('General.PolDir',0)
+    if(i_pol_dir(1)==0) then
+       i_pol_dir_st = 1
+       i_pol_dir_end = 3
+       i_pol_dir(1) = 1
+       i_pol_dir(2) = 2
+       i_pol_dir(3) = 3
+    else
+       i_pol_dir_st = 1
+       i_pol_dir_end = 1
+    end if
 !!$
 !!$
 !!$
