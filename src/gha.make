@@ -4,10 +4,9 @@ ARFLAGS=
 # Set BLAS and LAPACK libraries
 BLAS= -llapack -lblas
 # LibXC compatibility (LibXC below) or Conquest XC library
-# Conquest XC library
-XC_LIBRARY = CQ
-XC_LIB =
-XC_COMPFLAGS =
+XC_LIBRARY = LibXC_v5
+XC_LIB = -lxcf90 -lxc
+XC_COMPFLAGS = -I/usr/include
 # Set FFT library
 FFT_LIB=-lfftw3
 FFT_OBJ=fft_fftw3.o
