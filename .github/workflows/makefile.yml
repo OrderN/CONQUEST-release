@@ -60,7 +60,7 @@ jobs:
       working-directory: ${{github.workspace}}/src
       run: |
         cp gha.make system.make
-        make -j 2
+        make -j ${{matrix.np}}
 
     - name: Run test 001
       working-directory: ${{github.workspace}}/testsuite/test_001_bulk_Si_1proc_Diag
