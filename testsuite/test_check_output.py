@@ -3,7 +3,12 @@ import os
 import pytest
 
 def read_conquest_out(path=".", filename="Conquest_out"):
-
+    '''
+    Reads a predefined set of values from a Conquest output file (typically
+    named Conquest_out) by matching a string on the line. Currently we read
+    Harris-Foulkes energy, Maximum force, Force Residual and Total stress.
+    Returns a dictionary with float values.
+    '''
     path_to_file = os.path.join(path,filename)
     assert os.path.exists(path_to_file)
     file = open(path_to_file, 'r')
@@ -27,7 +32,11 @@ def read_conquest_out(path=".", filename="Conquest_out"):
                                        'Force residual',
                                        'Total stress'])
 def test_check_outputs(test_path, field_name):
-
+    '''
+    Reads a predefined set of results written in Conquest_out files of
+    tests 001 and 002 and compares them against results in Conquest_out.ref
+    with a tolerance of 6 decimals.
+    '''
     ref_result = read_conquest_out(test_path, "Conquest_out.ref")
     test_result = read_conquest_out(test_path, "Conquest_out")
 
