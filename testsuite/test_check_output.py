@@ -7,34 +7,32 @@ def read_conquest_out(path=".", filename="Conquest_out"):
     path_to_file = os.path.join(path,filename)
     assert os.path.exists(path_to_file)
     file = open(path_to_file, 'r')
+    Results = dict()
     for line in file.readlines():
         if line.find("Harris-Foulkes energy") >= 0:
-            harris_foulkes_energy = float(line.split("=")[1].split()[0])
+            Results['Harris-Foulkes energy'] = float(line.split("=")[1].split()[0])
         if line.find("Maximum force") >= 0:
-            max_force = float(line.split(":")[2].split("(")[0])
+            Results['Max force'] = float(line.split(":")[2].split("(")[0])
         if line.find("Force Residual") >= 0:
-            force_residual = float(line.split(":")[2].split()[0])
+            Results['Force residual'] = float(line.split(":")[2].split()[0])
         if line.find("Total stress") >= 0:
-            total_stress = np.array(line.split(":")[2].split()[:-1], dtype=float)
+            Results['Total stress'] = np.array(line.split(":")[2].split()[:-1], dtype=float)
 
-    return (harris_foulkes_energy, max_force, force_residual, total_stress)
+    return Results
 
 @pytest.mark.parametrize("test_path", ["test_001_bulk_Si_1proc_Diag",
                                        "test_002_bulk_Si_1proc_OrderN"])
-def test_check_outputs(test_path):
+@pytest.mark.parametrize("field_name",['Harris-Foulkes energy',
+                                       'Max force',
+                                       'Force residual',
+                                       'Total stress'])
+def test_check_outputs(test_path, field_name):
 
     ref_result = read_conquest_out(test_path, "Conquest_out.ref")
     test_result = read_conquest_out(test_path, "Conquest_out")
 
-    np.testing.assert_almost_equal(ref_result[0], test_result[0],
+    np.testing.assert_almost_equal(ref_result[field_name],
+                                   test_result[field_name],
                                    decimal = 6,
-                                   err_msg='Harris-Foulkes energy', verbose=True)
-    np.testing.assert_almost_equal(ref_result[1], test_result[1],
-                                   decimal = 6,
-                                   err_msg='max force', verbose=True)
-    np.testing.assert_almost_equal(ref_result[2], test_result[2],
-                                   decimal = 6,
-                                   err_msg='force residual', verbose=True)
-    np.testing.assert_almost_equal(ref_result[3], test_result[3],
-                                   decimal = 4,
-                                   err_msg='total stress', verbose=True)
+                                   err_msg = test_path+": "+field_name,
+                                   verbose = True)
