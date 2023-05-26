@@ -8,6 +8,8 @@ def read_conquest_out(path=".", filename="Conquest_out"):
     assert os.path.exists(path_to_file)
     file = open(path_to_file, 'r')
     for line in file.readlines():
+        if line.find("Harris-Foulkes energy") >= 0:
+            harris_foulkes_energy = float(line.split("=")[1].split()[0])
         if line.find("Maximum force") >= 0:
             max_force = float(line.split(":")[2].split("(")[0])
         if line.find("Force Residual") >= 0:
@@ -15,7 +17,7 @@ def read_conquest_out(path=".", filename="Conquest_out"):
         if line.find("Total stress") >= 0:
             total_stress = np.array(line.split(":")[2].split()[:-1], dtype=float)
 
-    return (max_force, force_residual, total_stress)        
+    return (harris_foulkes_energy, max_force, force_residual, total_stress)
 
 @pytest.mark.parametrize("test_path", ["test_001_bulk_Si_1proc_Diag",
                                        "test_002_bulk_Si_1proc_OrderN"])
@@ -26,10 +28,13 @@ def test_check_outputs(test_path):
 
     np.testing.assert_almost_equal(ref_result[0], test_result[0],
                                    decimal = 6,
-                                   err_msg='max force', verbose=True)
+                                   err_msg='Harris-Foulkes energy', verbose=True)
     np.testing.assert_almost_equal(ref_result[1], test_result[1],
                                    decimal = 6,
-                                   err_msg='force residual', verbose=True)
+                                   err_msg='max force', verbose=True)
     np.testing.assert_almost_equal(ref_result[2], test_result[2],
                                    decimal = 6,
+                                   err_msg='force residual', verbose=True)
+    np.testing.assert_almost_equal(ref_result[3], test_result[3],
+                                   decimal = 4,
                                    err_msg='total stress', verbose=True)
