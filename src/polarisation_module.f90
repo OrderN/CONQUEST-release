@@ -169,21 +169,29 @@ contains
     ! Get ionic contribution
     call get_P_ionic(Pion)
     ! Output
-    if(inode==ionode .and. iprint>1) then
-       do direction=i_pol_dir_st, i_pol_dir_end
-          write(io_lun,fmt='(4x,"Direction ",i2," Fractional: Pel is ",e20.12," Pion is ",e20.12," Ptot is ",e20.12)') &
-               i_pol_dir(direction),Pel_gamma(direction),Pion(i_pol_dir(direction)), &
-               Pel_gamma(direction) + Pion(i_pol_dir(direction))
-          write(io_lun,fmt='(4x,"Direction ",i2," Total dipole moment is ",e20.12," e Bohr")') &
-               i_pol_dir(direction),(Pel_gamma(direction) + Pion(i_pol_dir(direction))) &
-               * cell_vec(i_pol_dir(direction))
-          write(io_lun,fmt='(4x,"Direction ",i2," Total polarisation is ",e20.12," e / Bohr^2")') &
-               i_pol_dir(direction),(Pel_gamma(direction) + Pion(i_pol_dir(direction))) &
-               * cell_vec(i_pol_dir(direction))/cell_vol
-          write(io_lun,fmt='(4x,"Direction ",i2," Total polarisation is ",e20.12," C / m^2")') &
-               i_pol_dir(direction),(Pel_gamma(direction) + Pion(i_pol_dir(direction))) &
-               * cell_vec(i_pol_dir(direction))*eVToJ/(cell_vol*BohrToAng*BohrToAng*1e-20_double)
-       end do
+    if(inode==ionode) then
+       if(iprint>1) then
+          do direction=i_pol_dir_st, i_pol_dir_end
+             write(io_lun,fmt='(4x,"Direction ",i2," Fractional: Pel is ",e20.12," Pion is ",e20.12," Ptot is ",e20.12)') &
+                  i_pol_dir(direction),Pel_gamma(direction),Pion(i_pol_dir(direction)), &
+                  Pel_gamma(direction) + Pion(i_pol_dir(direction))
+             write(io_lun,fmt='(4x,"Direction ",i2," Total dipole moment is ",e20.12," e Bohr")') &
+                  i_pol_dir(direction),(Pel_gamma(direction) + Pion(i_pol_dir(direction))) &
+                  * cell_vec(i_pol_dir(direction))
+             write(io_lun,fmt='(4x,"Direction ",i2," Total polarisation is ",e20.12," e / Bohr^2")') &
+                  i_pol_dir(direction),(Pel_gamma(direction) + Pion(i_pol_dir(direction))) &
+                  * cell_vec(i_pol_dir(direction))/cell_vol
+             write(io_lun,fmt='(4x,"Direction ",i2," Total polarisation is ",e20.12," C / m^2")') &
+                  i_pol_dir(direction),(Pel_gamma(direction) + Pion(i_pol_dir(direction))) &
+                  * cell_vec(i_pol_dir(direction))*eVToJ/(cell_vol*BohrToAng*BohrToAng*1e-20_double)
+          end do
+       else
+          do direction=i_pol_dir_st, i_pol_dir_end
+             write(io_lun,fmt='(4x,"Direction ",i2," Total polarisation is ",e20.12," e / Bohr^2")') &
+                  i_pol_dir(direction),(Pel_gamma(direction) + Pion(i_pol_dir(direction))) &
+                  * cell_vec(i_pol_dir(direction))/cell_vol
+          end do
+       end if
     end if
     !write (io_lun, fmt="(22x, ' X           Y           Z ')")
     !write (io_lun, "(15x,43('-'))")
