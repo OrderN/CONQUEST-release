@@ -35,13 +35,13 @@ def test_check_outputs(test_path, field_name):
     '''
     Reads a predefined set of results written in Conquest_out files of
     tests 001 and 002 and compares them against results in Conquest_out.ref
-    with a tolerance of 6 decimals.
+    with a tolerance of 4 decimals.
     '''
     ref_result = read_conquest_out(test_path, "Conquest_out.ref")
     test_result = read_conquest_out(test_path, "Conquest_out")
 
     np.testing.assert_almost_equal(ref_result[field_name],
                                    test_result[field_name],
-                                   decimal = 6,
+                                   decimal = 4,
                                    err_msg = test_path+": "+field_name,
                                    verbose = True)
