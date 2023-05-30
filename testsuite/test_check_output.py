@@ -30,23 +30,37 @@ def read_conquest_out(path=".", filename="Conquest_out"):
 @pytest.mark.parametrize("key",['Harris-Foulkes energy',
                                 'Max force',
                                 'Force residual',
-                                'Total stress'])
+                                'Total stress',
+                                'Not-a-real-key'
+                                ])
 def test_check_outputs(test_path, key):
     '''
     Reads a predefined set of results written in Conquest_out files of
     tests 001 and 002 and compares them against results in Conquest_out.ref
     with a tolerance of 4 decimals.
     '''
+
+    # Template for skipping tests. If a parameter combination is added to
+    # xfail_test, pytest will expect the test to fail.
+    xfail_test = (key == "Not-a-real-key")
+    if (xfail_test):
+        pytest.xfail("invalid parameter combination: "+test_path+", "+key)
+
+    # Read data from the directory parameterized by test_path
     ref_result = read_conquest_out(test_path, "Conquest_out.ref")
     test_result = read_conquest_out(test_path, "Conquest_out")
 
-    precision = {'Harris-Foulkes energy': 6,
-                 'Max force': 6,
-                 'Force residual': 6,
-                 'Total stress': 4}
+    # Set precision, by default check to 6 decimal numbers
+    default_precision = 6
+    custom_precision = {'Total stress': 4}
+
+    if key in custom_precision:
+        precision = custom_precision[key]
+    else:
+        precision = default_precision
     
     np.testing.assert_almost_equal(ref_result[key],
                                    test_result[key],
-                                   decimal = precision[key],
+                                   decimal = precision,
                                    err_msg = test_path+": "+key,
                                    verbose = True)
