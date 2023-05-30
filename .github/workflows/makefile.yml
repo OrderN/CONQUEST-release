@@ -8,7 +8,7 @@ on:
 
 jobs:
   build:
-    name: ${{matrix.fc}} -- ${{matrix.os}}
+    name: ${{matrix.fc}} -- ${{matrix.os}} -- np = ${{matrix.np}}
     runs-on: ${{matrix.os}}
     env:
       FC: ${{matrix.fc}}
