@@ -22,7 +22,7 @@ These steps can be run automatically using the script `run_conquest_test.sh` in 
 To add new tests
 
   1. Add input files in a new subdirectory under [testsuite](./). The naming convention is test directory names start with `test_` followed by a running index with three digits, e.g. `003`.
-  2. Add an entry to the `"test_path"` parameter in [test_check_output.py](./test_check_output.py). The test driver will check for all fields in the output listed in the `"key"` parameter. They are read from the `Conquest_out` file by the `read_conquest_out()` function.
+  2. Add an entry to the `"test_path"` parameter in [test_check_output.py](./test_check_output.py). The test driver will check for all fields in the output listed in the `"key"` parameter. They are read from the [Conquest_out](test_001_bulk_Si_1proc_Diag/Conquest_out.ref) file by the `read_conquest_out()` function.
   3. *optional* If a new field in the output needs to be checked, these things are required:
     - Add the logic how to read the line of output to the loop `for line in file.readlines()` in `read_conquest_out()`. The result should be stored in the dictionary `Results`.
 	- Add the new key from the dictionary `Results` to the `"key"` parameter for `test_check_outputs()`.
