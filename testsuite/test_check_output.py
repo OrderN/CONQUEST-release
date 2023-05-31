@@ -37,7 +37,7 @@ def test_check_outputs(test_path, key):
     '''
     Reads a predefined set of results written in Conquest_out files of
     tests 001 and 002 and compares them against results in Conquest_out.ref
-    with a tolerance of 4 decimals.
+    within a tolerance.
     '''
 
     # Template for skipping tests. If a parameter combination is added to
