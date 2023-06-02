@@ -15,9 +15,6 @@ contains
     integer :: proc, iblock, ig1, ind_group, block_x, block_y, block_z, nblock
     real(double) :: rbx, rby, rbz
 
-    write(*,*) 'Range for x: ',stm_x_min, stm_x_max
-    write(*,*) 'Range for y: ',stm_y_min, stm_y_max
-    write(*,*) 'Range for z: ',stm_z_min, stm_z_max
     nblock = 0
     do proc=1,nprocs
        block_store(proc)%active = 0
@@ -47,7 +44,6 @@ contains
           end if
        end do
     end do
-    write(*,*) "Blocks assigned"
     return
   end subroutine assign_blocks
 
@@ -70,7 +66,6 @@ contains
     real(double) :: n_elect
     character(len=50) :: filename, ci
 
-    write(*,*) 'Processing charge'
     allocate(current(nptsx,nptsy,nptsz))
     do ispin=1,nspin
        current = zero
@@ -99,21 +94,32 @@ contains
     use datatypes
     use numbers
     use local, ONLY: nkp, efermi, current, nptsx, nptsy, nptsz, eigenvalues, flag_by_kpoint, &
-         n_bands_total, band_active_kp, flag_proc_range, band_full_to_active, &
-         E_procwf_min, E_procwf_max, flag_procwf_range_Ef, band_proc_no, n_bands_process
+         n_bands_total, band_active_kp, flag_proc_range, band_full_to_active, evec_coeff,&
+         E_procwf_min, E_procwf_max, flag_procwf_range_Ef, band_proc_no, n_bands_process, &
+         grid_x, grid_y, grid_z, wtk
     use output, ONLY: write_cube
     use global_module, only : nspin
     use read, ONLY: read_eigenvalues, read_psi_coeffs
+    use pao_format, ONLY: pao
+    use global_module, ONLY: ni_in_cell, atom_coord, species_glob
+    use species_module, ONLY: nsf_species, n_species
+    use angular_coeff_routines, ONLY: set_prefac_real, set_fact, set_prefac
 
     implicit none
 
-    integer :: proc, band, nk, idum1, idum2, kp, ispin
-    real(double) :: weight, rbx, rby, rbz, sq, test
+    integer :: proc, band, nk, idum1, idum2, kp, ispin, i, j, k, ipao, jpao
+    real(double) :: weight, rbx, rby, rbz, sq, test, gpv, integral
     real(double), dimension(2) :: Emin, Emax
     character(len=50) :: filename, ci
     complex(double_cplx), dimension(:,:,:), allocatable :: psi
+    integer :: i_atom, i_spec, i_l, i_zeta,i_m,j_atom,j_spec,j_l,j_zeta,j_m
+    integer :: i_band, i_pao, j_pao
 
-    write(*,*) 'Processing bands'
+    ! Create arrays needed by Conquest PAO routines
+    call set_fact(8)
+    call set_prefac(9)
+    call set_prefac_real(9)
+    gpv = grid_x*grid_y*grid_z
     ! Read eigenvalues
     call read_eigenvalues
     ! Read eigenvector coefficients
@@ -135,10 +141,17 @@ contains
                    if(eigenvalues(band,kp,ispin) >= Emin(ispin) .and. &
                         eigenvalues(band,kp,ispin) <= Emax(ispin) .and. &
                         band_active_kp(band,kp,ispin)==1) then
+                      psi = zero
+                      current = zero
                       call pao_to_grid(band_full_to_active(band), kp, ispin, psi)
                       current = psi*conjg(psi)
                       write(ci,'("Band",I0.6,"den_kp",I0.3,"S",I0.1)') band, kp, ispin
                       call write_cube(current,ci)
+                      integral = gpv*sum(current)
+                      ! Check for problems with band integral
+                      if(abs(integral - one)>1e-4_double) &
+                           write(*,fmt='(4x,"Integral of band ",i5," with energy ",f17.10," is ",f17.10)') &
+                           band,eigenvalues(band,kp,ispin),integral
                    end if
                 end do ! kp
              end do ! bands = 1, n_bands_total
@@ -151,7 +164,12 @@ contains
                         eigenvalues(band,kp,ispin) <= Emax(ispin) .and. &
                         band_active_kp(band,kp,ispin)==1) then
                       call pao_to_grid(band_full_to_active(band), kp, ispin, psi)
-                      current = current + psi*conjg(psi)
+                      integral = gpv*sum(psi*conjg(psi))
+                      ! Check for problems with band integral
+                      if(abs(integral - one)>1e-4_double) &
+                           write(*,fmt='(4x,"Integral of band ",i5," at kp ",i5," is ",f17.10)') &
+                           band,kp,integral
+                      current = current + psi*conjg(psi)*wtk(kp)
                       idum1 = 1
                    end if
                 end do ! kp
@@ -159,6 +177,11 @@ contains
                    write(ci,'("Band",I0.6,"den_totS",I0.1)') band, ispin
                    call write_cube(current,ci)
                 end if
+                integral = gpv*sum(current)
+                ! Check for problems with band integral
+                if(abs(integral - one)>1e-4_double) &
+                     write(*,fmt='(4x,"Integral of band ",i5," is ",f17.10)') &
+                     band,integral
              end do ! bands
           end if
        end do
@@ -170,10 +193,17 @@ contains
                 do kp = 1,nkp
                    ! This clause is needed in case the user chose an energy range that only selects some k-points
                    if(band_active_kp(band_proc_no(band),kp,ispin)==1) then
+                      psi = zero
+                      current = zero
                       call pao_to_grid(band_full_to_active(band_proc_no(band)), kp, ispin, psi)
                       current = psi*conjg(psi)
                       write(ci,'("Band",I0.6,"den_kp",I0.3,"S",I0.1)') band_proc_no(band), kp, ispin
                       call write_cube(current,ci)
+                      integral = gpv*sum(current)
+                      ! Check for problems with band integral
+                      if(abs(integral - one)>1e-4_double) &
+                           write(*,fmt='(4x,"Integral of psi squared ",i5," with energy ",f17.10," is ",f17.10)') &
+                           band,eigenvalues(band,kp,ispin),integral
                    end if
                 end do ! kp
              end do ! bands = 1, n_bands_total
@@ -184,11 +214,21 @@ contains
                    ! This clause is needed in case the user chose an energy range that only selects some k-points
                    if(band_active_kp(band_proc_no(band),kp,ispin)==1) then
                       call pao_to_grid(band_full_to_active(band_proc_no(band)), kp, ispin, psi)
-                      current = current + psi*conjg(psi)
+                      integral = gpv*sum(psi*conjg(psi))
+                      ! Check for problems with band integral
+                      if(abs(integral - one)>1e-4_double) &
+                           write(*,fmt='(4x,"Integral of band ",i5," at kp ",i5," is ",f17.10)') &
+                           band,kp,integral
+                      current = current + psi*conjg(psi)*wtk(kp)
                    end if
                 end do ! kp
                 write(ci,'("Band",I0.6,"den_totS",I0.1)') band_proc_no(band), ispin
                 call write_cube(current,ci)
+                integral = gpv*sum(current)
+                ! Check for problems with band integral
+                if(abs(integral - one)>1e-4_double) &
+                     write(*,fmt='(4x,"Integral of band ",i5," is ",f17.10)') &
+                     band,integral
              end do ! bands
           end if
        end do
@@ -348,6 +388,7 @@ contains
     use local, ONLY: nptsx, nptsy, nptsz, grid_x, grid_y, grid_z, stm_x_min, stm_x_max, &
          stm_y_min, stm_y_max, stm_z_min, stm_z_max, evec_coeff, kx, ky, kz, i_job
     use dimens, ONLY: RadiusAtomf, r_super_x, r_super_y, r_super_z
+    use angular_coeff_routines, ONLY: evaluate_pao, pao_elem_derivative_2
 
     implicit none
 
@@ -358,7 +399,7 @@ contains
 
     ! Local variables
     integer :: i_atom, i_grid_x, i_grid_y, i_grid_z, i_l, i_zeta, i_m, ix, iy, iz
-    integer :: i_spec, j, npao
+    integer :: i_spec, j, npao, i_mult
     integer :: minx, maxx, miny, maxy, minz, maxz
     real(double) :: dr, dx, dy, dz, sph_rl, f_r, df_r, dx_dr, dy_dr, dz_dr, del_r
     real(double) :: a, b, c, d, r1, r2, r3, r4, rr, kr, krx, kry, krz
@@ -374,10 +415,8 @@ contains
     ! Loop over atoms
     do i_atom = 1, ni_in_cell
        i_spec = species_glob(i_atom)
-       !write(*,*) 'Atom, spec, pos: ',i_atom, i_spec, atom_coord(3, i_atom) + RadiusAtomf(i_spec), stm_z_min
        if(atom_coord(3, i_atom) + RadiusAtomf(i_spec) >= stm_z_min) then ! Is the atom in STM region?
           kr = kx(i_kp)*atom_coord(1, i_atom) + ky(i_kp)*atom_coord(2, i_atom) + kz(i_kp)*atom_coord(3, i_atom)
-          !phase = cmplx(cos(kr),sin(kr))
           ! Find grid limits
           minx = floor( (atom_coord(1, i_atom) - RadiusAtomf(i_spec))/dg(1) )    
           maxx = floor( (atom_coord(1, i_atom) + RadiusAtomf(i_spec))/dg(1) ) + 1
@@ -385,11 +424,6 @@ contains
           maxy = floor( (atom_coord(2, i_atom) + RadiusAtomf(i_spec))/dg(2) ) + 1
           minz = floor( (atom_coord(3, i_atom) - RadiusAtomf(i_spec))/dg(3) )    
           maxz = floor( (atom_coord(3, i_atom) + RadiusAtomf(i_spec))/dg(3) ) + 1
-          ! Account for STM limits
-          !if(stm_x_min>zero) minx = max(minx, floor(stm_x_min/dg(1)) )
-          !if(stm_x_max<r_super_x) maxx = min(maxx, floor(stm_x_max/dg(1)+1) )
-          !if(stm_y_min>zero) miny = max(miny, floor(stm_y_min/dg(2)) )
-          !if(stm_y_max<r_super_y) maxy = min(maxy, floor(stm_y_max/dg(2)+1) )
           if(i_job==4.or.i_job==5) then ! STM not band density, so no z periodicity
              if(stm_z_min>zero) then
                 minz = minz - floor(stm_z_min/dg(3))
@@ -397,49 +431,41 @@ contains
              if(minz<1) minz = 1
              maxz = min(maxz, nptsz)
           end if
-          !end if
           ! Loop over grid points
           do i_grid_z = minz, maxz
              ! Find z grid position and dz
-             dz = dg(3)*real(i_grid_z-1,double)+stm_z_min - atom_coord(3,i_atom)
-             iz = i_grid_z
+             dz = dg(3)*real(i_grid_z,double)+stm_z_min - atom_coord(3,i_atom)
              ! Wrap if we're making band densities, but not for STM simulation
              krz = zero
              if(i_job==3) then
-                if(i_grid_z<1) then
-                   iz = i_grid_z + nptsz
-                   krz = kz(i_kp)*r_super_z
+                iz = modulo(i_grid_z,nptsz) + 1
+                ! Extra phase if we extend outside simulation cell
+                if(i_grid_z<1 .or. i_grid_z>nptsz) then
+                   i_mult = -(i_grid_z - modulo(i_grid_z,nptsz))/nptsz
+                   krz = kz(i_kp)*r_super_z*i_mult
                 end if
-                if(i_grid_z>nptsz) then
-                   iz = i_grid_z - nptsz
-                   krz = -kz(i_kp)*r_super_z
-                end if
+             else
+                iz = i_grid_z + 1
              end if
              do i_grid_y = miny, maxy
                 ! Find y grid position and dy and wrap grid point
-                dy = dg(2)*real(i_grid_y-1,double)+stm_y_min - atom_coord(2,i_atom)
-                iy = i_grid_y
+                dy = dg(2)*real(i_grid_y,double)+stm_y_min - atom_coord(2,i_atom)
                 kry = zero
-                if(i_grid_y<1) then
-                   iy = i_grid_y + nptsy
-                   kry = ky(i_kp)*r_super_y
-                end if
-                if(i_grid_y>nptsy) then
-                   iy = i_grid_y - nptsy
-                   kry = -ky(i_kp)*r_super_y
+                iy = modulo(i_grid_y,nptsy)+1
+                ! Extra phase if we extend outside simulation cell
+                if(i_grid_y<1.or.i_grid_y>nptsy) then
+                   i_mult = -(i_grid_y - modulo(i_grid_y,nptsy))/nptsy
+                   kry = ky(i_kp)*r_super_y*i_mult
                 end if
                 do i_grid_x = minx, maxx
                    ! Find x grid position and dx and wrap grid point
-                   dx = dg(1)*real(i_grid_x-1,double)+stm_x_min - atom_coord(1,i_atom)
-                   ix = i_grid_x
+                   dx = dg(1)*real(i_grid_x,double)+stm_x_min - atom_coord(1,i_atom)
                    krx = zero
-                   if(i_grid_x<1) then
-                      ix = i_grid_x + nptsx
-                      krx = kx(i_kp)*r_super_x
-                   end if
-                   if(i_grid_x>nptsx) then
-                      ix = i_grid_x - nptsx
-                      krx = -kx(i_kp)*r_super_x
+                   ix = modulo(i_grid_x,nptsx)+1
+                   ! Extra phase if we extend outside simulation cell
+                   if(i_grid_x<1 .or. i_grid_x>nptsx) then
+                      i_mult = -(i_grid_x - modulo(i_grid_x,nptsx))/nptsx
+                      krx = kx(i_kp)*r_super_x*i_mult
                    end if
                    ! Calculate dr
                    dr = sqrt(dx*dx + dy*dy + dz*dz)
@@ -455,46 +481,21 @@ contains
                          ! Loop over zeta
                          do i_zeta = 1, pao(i_spec)%angmom(i_l)%n_zeta_in_angmom
                             ! Find f(r), df/dr
-                            del_r = pao(i_spec)%angmom(i_l)%zeta(i_zeta)%delta
-                            j = floor(dr/del_r) + 1
-                            if(j+1<=pao(i_spec)%angmom(i_l)%zeta(i_zeta)%length) then
-                               rr = real(j,double)*del_r
-                               a = (rr - dr)/del_r
-                               b = one - a
-                               c = a * ( a * a - one ) * del_r * del_r / six
-                               d = b * ( b * b - one ) * del_r * del_r / six
-                               r1 = pao(i_spec)%angmom(i_l)%zeta(i_zeta)%table(j)
-                               r2 = pao(i_spec)%angmom(i_l)%zeta(i_zeta)%table(j+1)
-                               r3 = pao(i_spec)%angmom(i_l)%zeta(i_zeta)%table2(j)
-                               r4 = pao(i_spec)%angmom(i_l)%zeta(i_zeta)%table2(j+1)
-                               f_r = a*r1 + b*r2 + c*r3 + d*r4
-                               ! Re-use a and b before redefining
-                               c = -del_r*(three*a*a-one)/six
-                               d =  del_r*(three*b*b-one)/six
-                               a = -one/del_r
-                               b = -a
-                               df_r = a*r1 + b*r2 + c*r3 + d*r4
-                            else
-                               f_r = zero
-                               df_r = zero
-                            end if
                             ! Loop over m
                             do i_m = -i_l, i_l
-                               ! Get spherical harmonic and gradient
-                               ! NB returns r^l times spherical harmonic
-                               call spherical_harmonic_rl(dx, dy, dz, i_l, i_m, sph_rl, dsph_rl)
-                               ! Accumulate into psi, grad psi
+                               call evaluate_pao(i_spec,i_l,i_zeta,i_m,dx,dy,dz,f_r)
+                               ! Accumulate into psi
                                psi(ix, iy, iz) = psi(ix, iy, iz) + &
-                                    phase*evec_coeff(npao,i_atom,i_band, i_kp, i_spin) * sph_rl * f_r
+                                    phase*evec_coeff(npao,i_atom,i_band, i_kp, i_spin) * f_r
+                               call pao_elem_derivative_2(1,i_spec,i_l,i_zeta,i_m,dx,dy,dz,df_r)
                                dpsi(ix, iy, iz, 1) = dpsi(ix, iy, iz, 1) + &
-                                    phase*evec_coeff(npao,i_atom,i_band, i_kp, i_spin) * &
-                                    (sph_rl * df_r * dx_dr + dsph_rl(1) * f_r)
+                                    phase*evec_coeff(npao,i_atom,i_band, i_kp, i_spin) * df_r
+                               call pao_elem_derivative_2(2,i_spec,i_l,i_zeta,i_m,dx,dy,dz,df_r)
                                dpsi(ix, iy, iz, 2) = dpsi(ix, iy, iz, 2) + &
-                                    phase*evec_coeff(npao,i_atom,i_band, i_kp, i_spin) * &
-                                    (sph_rl * df_r * dy_dr + dsph_rl(2) * f_r)
+                                    phase*evec_coeff(npao,i_atom,i_band, i_kp, i_spin) * df_r
+                               call pao_elem_derivative_2(3,i_spec,i_l,i_zeta,i_m,dx,dy,dz,df_r)
                                dpsi(ix, iy, iz, 3) = dpsi(ix, iy, iz, 3) + &
-                                    phase*evec_coeff(npao,i_atom,i_band, i_kp, i_spin) * &
-                                    (sph_rl * df_r * dz_dr + dsph_rl(3) * f_r)
+                                    phase*evec_coeff(npao,i_atom,i_band, i_kp, i_spin) * df_r
                                npao = npao + 1
                             end do ! i_m
                          end do ! i_zeta
@@ -518,6 +519,7 @@ contains
     use local, ONLY: nptsx, nptsy, nptsz, grid_x, grid_y, grid_z, stm_x_min, stm_x_max, &
          stm_y_min, stm_y_max, stm_z_min, stm_z_max, evec_coeff, kx, ky, kz, i_job
     use dimens, ONLY: RadiusAtomf, r_super_x, r_super_y, r_super_z
+    use angular_coeff_routines, ONLY: evaluate_pao
 
     implicit none
 
@@ -527,7 +529,7 @@ contains
 
     ! Local variables
     integer :: i_atom, i_grid_x, i_grid_y, i_grid_z, i_l, i_zeta, i_m, ix, iy, iz
-    integer :: i_spec, j, npao
+    integer :: i_spec, j, npao, i_mult
     integer :: minx, maxx, miny, maxy, minz, maxz
     real(double) :: dr, dx, dy, dz, sph_rl, f_r, df_r, dx_dr, dy_dr, dz_dr, del_r
     real(double) :: a, b, c, d, r1, r2, r3, r4, rr, kr, krx, kry, krz
@@ -542,7 +544,6 @@ contains
     ! Loop over atoms
     do i_atom = 1, ni_in_cell
        i_spec = species_glob(i_atom)
-       !write(*,*) 'Atom, spec, pos: ',i_atom, i_spec, atom_coord(3, i_atom) + RadiusAtomf(i_spec), stm_z_min
        if(atom_coord(3, i_atom) + RadiusAtomf(i_spec) >= stm_z_min) then ! Is the atom in STM region?
           kr = kx(i_kp)*atom_coord(1, i_atom) + ky(i_kp)*atom_coord(2, i_atom) + kz(i_kp)*atom_coord(3, i_atom)
           !phase = cmplx(cos(kr),sin(kr))
@@ -554,12 +555,6 @@ contains
           minz = floor( (atom_coord(3, i_atom) - RadiusAtomf(i_spec))/dg(3) )    
           maxz = floor( (atom_coord(3, i_atom) + RadiusAtomf(i_spec))/dg(3) ) + 1
           ! Account for STM limits
-          !if(stm_x_min>zero.and.minx<0) then
-          !   if(minx+nptsx>floor(stm_x_min
-          !if(stm_x_min>zero) minx = max(minx, floor(stm_x_min/dg(1)) )
-          !if(stm_x_max<r_super_x) maxx = min(maxx, floor(stm_x_max/dg(1)+1) )
-          !if(stm_y_min>zero) miny = max(miny, floor(stm_y_min/dg(2)) )
-          !if(stm_y_max<r_super_y) maxy = min(maxy, floor(stm_y_max/dg(2)+1) )
           if(i_job==4.or.i_job==5) then ! STM not band density
              if(stm_z_min>zero) then
                 minz = minz - floor(stm_z_min/dg(3))
@@ -570,45 +565,38 @@ contains
           ! Loop over grid points
           do i_grid_z = minz, maxz
              ! Find z grid position and dz
-             dz = dg(3)*real(i_grid_z-1,double)+stm_z_min - atom_coord(3,i_atom)
-             iz = i_grid_z
+             dz = dg(3)*real(i_grid_z,double)+stm_z_min - atom_coord(3,i_atom)
              ! Wrap if we're making band densities, but not for STM simulation
              krz = zero
              if(i_job==3) then
-                if(i_grid_z<1) then
-                   iz = i_grid_z + nptsz
-                   krz = kz(i_kp)*r_super_z
+                iz = modulo(i_grid_z,nptsz) + 1
+                ! Extra phase if we extend outside simulation cell
+                if(i_grid_z<1 .or. i_grid_z>nptsz) then
+                   i_mult = -(i_grid_z - modulo(i_grid_z,nptsz))/nptsz
+                   krz = kz(i_kp)*r_super_z*i_mult
                 end if
-                if(i_grid_z>nptsz) then
-                   iz = i_grid_z - nptsz
-                   krz = -kz(i_kp)*r_super_z
-                end if
+             else
+                iz = i_grid_z + 1
              end if
              do i_grid_y = miny, maxy
                 ! Find y grid position and dy and wrap grid point
-                dy = dg(2)*real(i_grid_y-1,double)+stm_y_min - atom_coord(2,i_atom)
-                iy = i_grid_y
+                dy = dg(2)*real(i_grid_y,double)+stm_y_min - atom_coord(2,i_atom)
                 kry = zero
-                if(i_grid_y<1) then
-                   iy = i_grid_y + nptsy
-                   kry = ky(i_kp)*r_super_y
-                end if
-                if(i_grid_y>nptsy) then
-                   iy = i_grid_y - nptsy
-                   kry = -ky(i_kp)*r_super_y
+                iy = modulo(i_grid_y,nptsy)+1
+                ! Extra phase if we extend outside simulation cell
+                if(i_grid_y<1.or.i_grid_y>nptsy) then
+                   i_mult = -(i_grid_y - modulo(i_grid_y,nptsy))/nptsy
+                   kry = ky(i_kp)*r_super_y*i_mult
                 end if
                 do i_grid_x = minx, maxx
                    ! Find x grid position and dx and wrap grid point
-                   dx = dg(1)*real(i_grid_x-1,double)+stm_x_min - atom_coord(1,i_atom)
-                   ix = i_grid_x
+                   dx = dg(1)*real(i_grid_x,double)+stm_x_min - atom_coord(1,i_atom)
                    krx = zero
-                   if(i_grid_x<1) then
-                      ix = i_grid_x + nptsx
-                      krx = kx(i_kp)*r_super_x
-                   end if
-                   if(i_grid_x>nptsx) then
-                      ix = i_grid_x - nptsx
-                      krx = -kx(i_kp)*r_super_x
+                   ix = modulo(i_grid_x,nptsx)+1
+                   ! Extra phase if we extend outside simulation cell
+                   if(i_grid_x<1 .or. i_grid_x>nptsx) then
+                      i_mult = -(i_grid_x - modulo(i_grid_x,nptsx))/nptsx
+                      krx = kx(i_kp)*r_super_x*i_mult
                    end if
                    ! Calculate dr
                    dr = sqrt(dx*dx + dy*dy + dz*dz)
@@ -619,31 +607,12 @@ contains
                       do i_l = 0, pao(i_spec)%greatest_angmom
                          ! Loop over zeta
                          do i_zeta = 1, pao(i_spec)%angmom(i_l)%n_zeta_in_angmom
-                            ! Find f(r), df/dr
-                            del_r = pao(i_spec)%angmom(i_l)%zeta(i_zeta)%delta
-                            j = floor(dr/del_r) + 1
-                            if(j+1<=pao(i_spec)%angmom(i_l)%zeta(i_zeta)%length) then
-                               rr = real(j,double)*del_r
-                               a = (rr - dr)/del_r
-                               b = one - a
-                               c = a * ( a * a - one ) * del_r * del_r / six
-                               d = b * ( b * b - one ) * del_r * del_r / six
-                               r1 = pao(i_spec)%angmom(i_l)%zeta(i_zeta)%table(j)
-                               r2 = pao(i_spec)%angmom(i_l)%zeta(i_zeta)%table(j+1)
-                               r3 = pao(i_spec)%angmom(i_l)%zeta(i_zeta)%table2(j)
-                               r4 = pao(i_spec)%angmom(i_l)%zeta(i_zeta)%table2(j+1)
-                               f_r = a*r1 + b*r2 + c*r3 + d*r4
-                            else
-                               f_r = zero
-                            end if
                             ! Loop over m
                             do i_m = -i_l, i_l
-                               ! Get spherical harmonic and gradient
-                               ! NB returns r^l times spherical harmonic
-                               call spherical_harmonic_rl(dx, dy, dz, i_l, i_m, sph_rl, dsph_rl)
-                               ! Accumulate into psi, grad psi
+                               call evaluate_pao(i_spec,i_l,i_zeta,i_m,dx,dy,dz,f_r)
+                               ! Accumulate into psi
                                psi(ix, iy, iz) = psi(ix, iy, iz) + &
-                                    phase*evec_coeff(npao,i_atom,i_band, i_kp, i_spin) * sph_rl * f_r
+                                    phase*evec_coeff(npao,i_atom,i_band, i_kp, i_spin) * f_r
                                npao = npao + 1
                             end do ! i_m
                          end do ! i_zeta
@@ -656,73 +625,6 @@ contains
     end do ! i_atom
     return
   end subroutine pao_to_grid
-
-  ! Return spherical harmonic times r^l (and derivative of this)
-  subroutine spherical_harmonic_rl(x, y, z, l, m, sph, dsph)
-    
-    use datatypes
-    use numbers
-
-    implicit none
-
-    ! Passed variables
-    integer :: l, m
-    real(double) :: x, y, z, sph
-    real(double), dimension(3) :: dsph
-
-    ! Local variables
-    real(double) :: r
-    real(double) :: prefac
-
-    dsph = zero
-    if(l==0) then
-       prefac = one/sqrt(fourpi)
-       sph = prefac
-       dsph = zero
-    else if(l==1) then
-       prefac = sqrt(3/fourpi)
-       select case(m)
-       case(-1) ! py
-          sph = prefac*y
-          dsph(2) = prefac
-       case(0)  ! pz
-          sph = prefac*z
-          dsph(3) = prefac
-       case(1)  ! px
-          sph = prefac*x
-          dsph(1) = prefac
-       end select
-    else if(l==2) then
-       select case(m)
-       case(-2) ! xy
-          prefac = sqrt(fifteen/fourpi)
-          sph = prefac*x*y
-          dsph(1) = prefac*y
-          dsph(2) = prefac*x
-       case(-1) ! yz
-          prefac = sqrt(fifteen/fourpi)
-          sph = prefac*y*z
-          dsph(2) = prefac*z
-          dsph(3) = prefac*y
-       case(0) ! 3z^2 - r^2
-          prefac = sqrt(five/(sixteen*pi))
-          sph = prefac*(two*z*z - x*x - y*y)
-          dsph(1) = -prefac*two*x
-          dsph(2) = -prefac*two*y
-          dsph(3) =  prefac*four*z
-       case(1) ! xz
-          prefac = sqrt(fifteen/fourpi)
-          sph = prefac*z*x
-          dsph(1) = prefac*z
-          dsph(3) = prefac*x
-       case(2) ! x^2 - y^2
-          prefac = sqrt(fifteen/(sixteen*pi))
-          sph = prefac*(x*x - y*y)
-          dsph(1) =  prefac*two*x
-          dsph(2) = -prefac*two*y
-       end select
-    end if
-  end subroutine spherical_harmonic_rl
 
   subroutine read_domain(lun,proc,data)
 

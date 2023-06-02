@@ -36,6 +36,8 @@
 !!    Added timers
 !   2014/09/15 18:30 lat
 !!    fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
+!!  2023/05/23 11:44 dave
+!!    Update get_matrix_elements to improve stride
 !!  SOURCE
 !!
 module calc_matrix_elements_module
@@ -120,6 +122,8 @@ contains
 !!    Added timers
 !!   2016/07/20 16:30 nakata
 !!    Renamed naba_atm -> naba_atoms_of_blocks
+!!   2023/05/23 11:44 dave
+!!    Change GEMM call to transpose acc_block so that access is contiguous
 !!  SOURCE
 !!
   subroutine get_matrix_elements_new(myid,rem_bucket,matM,gridone,gridtwo)
@@ -153,8 +157,9 @@ contains
 
     integer :: iprim_blk, n_dim_one, n_dim_two, i_beg_one, i_beg_two
     integer :: naba1, naba2, ind_halo1, ind_halo2, nsf1, nsf2
-    integer :: nonef, ntwof, bucket, where, ii, stat
+    integer :: nonef, ntwof, bucket, i_acc_b, ii, stat
     integer :: size_send_array
+    integer :: na1, na2
 
     ! acc_block = zero
 
@@ -211,24 +216,24 @@ contains
           !     =\sum_{r_l in block} [ phi_{i alpha} (r_l) * psi_{j beta} (r_l) ]
           !     =\sum_{r_l in block} [ psi_{j beta} (r_l)  * phi_{i alpha} (r_l)]  
           !
-          call gemm ( 'T', 'N', n_dim_two, n_dim_one, n_pts_in_block, &
-               ONE, gridfunctions(gridtwo)%griddata(i_beg_two:), n_pts_in_block, &
-               gridfunctions(gridone)%griddata(i_beg_one:), n_pts_in_block, &
-               ZERO, acc_block, n_dim_two )
+          call gemm ( 'T', 'N', n_dim_one, n_dim_two, n_pts_in_block, &
+               ONE, gridfunctions(gridone)%griddata(i_beg_one:), n_pts_in_block, &
+               gridfunctions(gridtwo)%griddata(i_beg_two:), n_pts_in_block, &
+               ZERO, acc_block, n_dim_one )
 
           ! and accumulate it into the node accumulator
 
-          !---  I HAVE TO BE CAREFUL about WHICH ONE IS LEFT --- 
-          !  I have changed the order of naba1 and naba2 to
-          ! get contiguous access to send_array.
+          ! NB order changed to one/two to give contiguous access to send_array and acc_block
           ! Note that we can expect loc_bucket%i_h2d(ind_halo2,ind_halo1) changes
           ! gradually in most cases, if ind_halo1 is fixed and both naba2 
           ! and ind_halo2 are orderd in NOPG order
           !
           do naba1=1, naba_atm1%no_of_atom(iprim_blk)    ! left 
              ind_halo1 = naba_atm1%list_atom_by_halo(naba1,iprim_blk)
+             na1 = naba_atm1%ibeg_orb_atom(naba1, iprim_blk)-1
              do naba2=1, naba_atm2%no_of_atom(iprim_blk) ! right
                 ind_halo2 = naba_atm2%list_atom_by_halo(naba2,iprim_blk)
+                na2 = naba_atm2%ibeg_orb_atom(naba2, iprim_blk)-1
                 bucket = loc_bucket%i_h2d(ind_halo2,ind_halo1) !index of the pair
                 If(bucket /= 0) then   ! naba1 and naba2 makes pair
                    ii=(bucket-1)
@@ -237,15 +242,11 @@ contains
                    nonef = norb(naba_atm1,naba1,iprim_blk)
                    ntwof = norb(naba_atm2,naba2,iprim_blk)
                    do nsf2=1, ntwof
-                      do nsf1=1, nonef
-                         ii = ii+1
-                         where = n_dim_two*(naba_atm1%ibeg_orb_atom(naba1, iprim_blk)-1 + nsf1-1) + &
-                              naba_atm2%ibeg_orb_atom(naba2, iprim_blk)-1 + nsf2  
-                         send_array(ii)=send_array(ii)+acc_block(where)
-                      end do
+                      i_acc_b = n_dim_one*(na2 + nsf2-1) + na1
+                      send_array(ii+1:ii+nonef)=send_array(ii+1:ii+nonef)+acc_block(i_acc_b+1:i_acc_b+nonef)
+                      ii = ii + nonef
                    end do
                 Endif  ! if the two atoms are within a range 
-
              enddo ! Loop over right naba atoms
           enddo ! Loop over left naba atoms
           deallocate(acc_block)
