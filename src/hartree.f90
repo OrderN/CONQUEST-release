@@ -512,7 +512,7 @@ contains
 
     ! Local variables
     integer      :: i, stat
-    real(double) :: fac, facmax, q12
+    real(double) :: fac, q12
     complex(double_cplx), allocatable, dimension(:) :: FR_wdmetric
     
     if (abs (q1) < RD_ERR) then
@@ -613,22 +613,11 @@ contains
 
     ! Local variables
     integer      :: i, stat
-    real(double) :: fac, fac2, facmax, q02, q12
+    real(double) :: fac, fac2, q02, q12
     complex(double_cplx), allocatable, dimension(:) :: FR_kerker, FR_wdmetric
     
-    !if (abs(q0) < RD_ERR) then
-    !   return
-    !else
-       q02 = q0*q0
-    !endif
-    !if (abs(q1) < RD_ERR) then
-       ! copy resid to resid_cov 
-    !   resid_cov = resid
-    !   return
-    !else
-       q12 = q1*q1
-    !end if
-    !facmax = zero
+    q02 = q0*q0
+    q12 = q1*q1
     ! FFT residue
     allocate(FR_kerker(size), FR_wdmetric(size), STAT=stat)
     if (stat /= 0) &
