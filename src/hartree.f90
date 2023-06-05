@@ -433,12 +433,8 @@ contains
     call reg_alloc_mem(area_SC, size, type_dbl)
     call fft3(resid, FR_kerker, size, -1)
     do i = 1, z_columns_node(inode)*n_grid_z
-       ! hartree_factor(q) = 1/q**2 for q /= 0, and hartree_factor(q)
-       ! = 0 for q = 0, calculated in fft module
-       if (hartree_factor(i) > RD_ERR) then 
-          fac = one / (one + hartree_factor(i)*q02)
-          FR_kerker(i) = FR_kerker(i)*fac
-       end if
+       ! hartree_factor(q) = 1/q**2 for q /= 0; set to zero at q=0
+       FR_kerker(i) = FR_kerker(i) / (one + hartree_factor(i)*q02)
     end do
     ! do nothing for q=0 point (introduces an error!)
     ! FFT back
@@ -530,12 +526,8 @@ contains
     call reg_alloc_mem(area_SC, size, type_dbl)
     call fft3(resid, FR_wdmetric, size, -1)
     do i = 1, z_columns_node(inode)*n_grid_z
-       ! hartree_factor(q) = 1/q**2 for q /= 0, and hartree_factor(q)
-       ! = 0 for q = 0, calculated in fft module excluding q=0 point,
-       if (hartree_factor(i) > RD_ERR) then 
-          fac = one + hartree_factor(i)*q12
-          FR_wdmetric(i) = FR_wdmetric(i)*fac
-       end if
+       ! hartree_factor(q) = 1/q**2 for q /= 0; set to zero at q=0
+       FR_wdmetric(i) = FR_wdmetric(i) * (one + hartree_factor(i)*q12)
     end do
     ! do nothing for q=0 point (nothing needed)
     ! FFT back
@@ -628,16 +620,11 @@ contains
     call fft3(resid, FR_kerker, size, -1)
     FR_wdmetric = FR_kerker
     do i = 1, z_columns_node(inode)*n_grid_z
-       ! hartree_factor(q) = 1/q**2 for q /= 0, and hartree_factor(q)
-       ! = 0 for q = 0, calculated in fft module excluding q=0 point,
-       if (hartree_factor(i) > RD_ERR) then 
-          ! Kerker factor
-          fac = one / (one + hartree_factor(i)*q02)
-          FR_kerker(i) = FR_kerker(i)*fac
-          ! wave-dependent-metric factor
-          fac2 = one + hartree_factor(i)*q12
-          FR_wdmetric(i) = FR_wdmetric(i)*fac2
-       end if
+       ! hartree_factor(q) = 1/q**2 for q /= 0; set to zero at q=0
+       ! Kerker factor
+       FR_kerker(i) = FR_kerker(i) / (one + hartree_factor(i)*q02)
+       ! wave-dependent-metric factor
+       FR_wdmetric(i) = FR_wdmetric(i) * (one + hartree_factor(i)*q12)
     end do
     ! do nothing for q=0 point (nothing needed)
     ! FFT back
