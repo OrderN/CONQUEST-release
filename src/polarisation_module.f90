@@ -159,7 +159,7 @@ contains
                real(detS), aimag(detS)
           ! Calculate electronic P: Im ln polS is just finding phase
           Pel_gamma(direction) = Pel_gamma(direction) - atan2(aimag(detS),real(detS))/pi
-          if(inode==ionode .and. iprint>1) &
+          if(inode==ionode .and. iprint>2) &
                write(io_lun,fmt='(4x,"Direction ",i2," Spin ",i2," Pel is ",e20.12)') &
                i_pol_dir(direction),ispin,Pel_gamma(direction)
        end do
@@ -168,51 +168,34 @@ contains
     end do
     ! Get ionic contribution
     call get_P_ionic(Pion)
-    ! Output
+    ! Output - include quantum of polarisation
+    ! The quantum is \frac{e}{V_{cell}} \mathbf{R} for lattice vector R
     if(inode==ionode) then
        if(iprint>1) then
+          ! NB we always calculate all three directions for ionic, but potentially limit electronic
+          ! so the indexing is different - this is correct
           do direction=i_pol_dir_st, i_pol_dir_end
-             write(io_lun,fmt='(4x,"Direction ",i2," Fractional: Pel is ",e20.12," Pion is ",e20.12," Ptot is ",e20.12)') &
-                  i_pol_dir(direction),Pel_gamma(direction),Pion(i_pol_dir(direction)), &
-                  Pel_gamma(direction) + Pion(i_pol_dir(direction))
-             write(io_lun,fmt='(4x,"Direction ",i2," Total dipole moment is ",e20.12," e Bohr")') &
-                  i_pol_dir(direction),(Pel_gamma(direction) + Pion(i_pol_dir(direction))) &
-                  * cell_vec(i_pol_dir(direction))
-             write(io_lun,fmt='(4x,"Direction ",i2," Total polarisation is ",e20.12," e / Bohr^2")') &
-                  i_pol_dir(direction),(Pel_gamma(direction) + Pion(i_pol_dir(direction))) &
+             write(io_lun,fmt='(4x,"Direction: ",i2)') i_pol_dir(direction)
+             write(io_lun,fmt='(4x,"Total polarisation:      ",e20.12," e / Bohr^2")') &
+                  (Pel_gamma(direction) + Pion(i_pol_dir(direction))) &
                   * cell_vec(i_pol_dir(direction))/cell_vol
-             write(io_lun,fmt='(4x,"Direction ",i2," Total polarisation is ",e20.12," C / m^2")') &
-                  i_pol_dir(direction),(Pel_gamma(direction) + Pion(i_pol_dir(direction))) &
+             write(io_lun,fmt='(4x,"Quantum of polarisation: ",e20.12," e / Bohr^2")') &
+                  cell_vec(i_pol_dir(direction))/cell_vol
+             write(io_lun,fmt='(4x,"Total polarisation:      ",e20.12," C / m^2")') &
+                  (Pel_gamma(direction) + Pion(i_pol_dir(direction))) &
                   * cell_vec(i_pol_dir(direction))*eVToJ/(cell_vol*BohrToAng*BohrToAng*1e-20_double)
           end do
        else
           do direction=i_pol_dir_st, i_pol_dir_end
-             write(io_lun,fmt='(4x,"Direction ",i2," Total polarisation is ",e20.12," e / Bohr^2")') &
-                  i_pol_dir(direction),(Pel_gamma(direction) + Pion(i_pol_dir(direction))) &
+             write(io_lun,fmt='(4x,"Direction: ",i2)') i_pol_dir(direction)
+             write(io_lun,fmt='(4x,"Total polarisation:      ",e20.12," e / Bohr^2")') &
+                  (Pel_gamma(direction) + Pion(i_pol_dir(direction))) &
                   * cell_vec(i_pol_dir(direction))/cell_vol
+             write(io_lun,fmt='(4x,"Quantum of polarisation: ",e20.12," e / Bohr^2")') &
+                  cell_vec(i_pol_dir(direction))/cell_vol
           end do
        end if
     end if
-    !write (io_lun, fmt="(22x, ' X           Y           Z ')")
-    !write (io_lun, "(15x,43('-'))")
-    !write (io_lun, fmt='(6x,"P_el     : ",3f12.5)') Pel_x,Pel_y,Pel_z
-    !! -----  Print out the ionic contribution to Polarisation in x,y and z: -----!
-    !write (io_lun, fmt='(6x,"P_ion    : ",3f12.5)') Pion_x,Pion_y,Pion_z
-    !!       write (io_lun, fmt='(6x,"i, x,y,z, q_i: ",i3,4f12.5)') i, x, y, z, q_i
-    !write (io_lun, fmt='(6x,"Quant(P) : ",3f12.5)') quantPx,quantPy,quantPz
-    !write (io_lun, "(15x,43('-'))")
-    !write (io_lun, fmt='(6x,"Total P  : ",3f12.5)') Px,Py,Pz
-    !write (io_lun, "(15x,43('-'))")
-    !write (io_lun, fmt='(6x,"Total P  : ",3f12.5, " e a0")') Px_scaled,Py_scaled,Pz_scaled
-    !write (io_lun, "(15x,43('-'))")
-    !write (io_lun, fmt='(6x,"Norm of P: ",1f12.5, " e a0")') Pnorm
-    !write (io_lun, fmt='(6x,"Norm of P: ",1f12.5, " D")') Pnorm*ea0todebye
-    !! Here we divide by the cell volume and convert to C/m^2
-    !! This is the ACTUAL polarisation, the above are in fact just dipole moments
-    !write (io_lun, fmt='(6x,"Norm of P: ",1f12.5, " C/m^2")') 16.0217657_double * Pnorm/(volume*BohrToAng*BohrToAng)
-    !
-    !write (io_lun, "(2/,6x,56('='),2/)")
-    ! Do we also test Tr[K.polX] for different forms of polX? (x, Resta and other)
     ! Free space
     call free_temp_fn_on_grid(tmp_fn)
     flag_do_pol_calc = .false.
