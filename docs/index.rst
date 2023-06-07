@@ -44,6 +44,7 @@ User Guide
 * :doc:`groundstate`
 * :doc:`convergence`
 * :doc:`basissets`
+* :doc:`elec_struc`
 * :doc:`strucrelax`
 * :doc:`moldyn`
 * :doc:`ext-tools`
@@ -59,6 +60,7 @@ User Guide
    groundstate
    convergence
    basissets
+   elec_struc
    strucrelax
    moldyn
    ext-tools
