@@ -26,6 +26,9 @@ program ConvertCharge
      else if(coord_format==2) then
         write(*,fmt='(2x,"Converting coordinates to CASTEP cell format"/)')
         call write_cell
+     else if(coord_format==3) then
+        write(*,fmt='(2x,"Converting coordinates to XSF format"/)')
+        call write_xsf
      end if
   else if(i_job==2) then ! Convert chden to cube
      write(*,fmt='(2x,"Converting charge density to cube format"/)')

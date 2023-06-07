@@ -21,6 +21,7 @@ contains
     use io_module, ONLY: get_file_name
     use output, ONLY: write_cube
     use read, ONLY: read_psi_coeffs, read_eigenvalues
+    use angular_coeff_routines, ONLY: set_prefac_real, set_fact, set_prefac
 
     implicit none
 
@@ -36,6 +37,9 @@ contains
     character(len=50) :: ci, filename
     logical :: use_band
 
+    call set_fact(8)
+    call set_prefac(9)
+    call set_prefac_real(9)
     !dg = pi/sqrt(two*GridCutoff) ! Equivalent grid spacing
     dg(1) = grid_x!/BohrToAng
     dg(2) = grid_y!/BohrToAng
@@ -324,6 +328,7 @@ contains
     use read, ONLY: read_eigenvalues, read_psi_coeffs
     use process, ONLY: pao_to_grid
     use units, ONLY: HaToeV
+    use angular_coeff_routines, ONLY: set_prefac_real, set_fact, set_prefac
 
     implicit none
 
@@ -338,6 +343,9 @@ contains
     call read_eigenvalues
     ! Read eigenvector coefficients
     call read_psi_coeffs("Process")
+    call set_fact(8)
+    call set_prefac(9)
+    call set_prefac_real(9)
     allocate(current(nptsx,nptsy,nptsz))
     allocate(psi(nptsx,nptsy,nptsz))
     if(stm_bias<0) then

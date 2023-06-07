@@ -36,6 +36,8 @@ module local
   
   logical :: flag_only_charge, flag_by_kpoint, flag_wf_range, flag_proc_range, flag_procwf_range_Ef, &
        flag_total_iDOS, flag_l_resolved, flag_lm_resolved
+  logical :: flag_only_charge, flag_by_kpoint, flag_wf_range, flag_proc_range, flag_procwf_range_Ef
+  logical :: flag_total_iDOS, flag_write_forces, flag_write_spin_moments, flag_l_resolved, flag_lm_resolved
   character(len=80) :: charge_stub
 
   integer :: i_job ! Job type
