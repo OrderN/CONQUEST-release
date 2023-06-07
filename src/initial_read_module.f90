@@ -828,8 +828,7 @@ contains
          flag_exx, exx_alpha, exx_scf, exx_scf_tol, exx_siter,         &
          flag_out_wf,max_wf,out_wf,wf_self_con, flag_fire_qMD, &
          flag_write_DOS, flag_write_projected_DOS, &
-         flag_normalise_pDOS, flag_pDOS_angmom, flag_pDOS_lm, &
-         E_DOS_min, E_DOS_max, sigma_DOS, n_DOS, E_wf_min, E_wf_max, flag_wf_range_Ef, &
+         E_wf_min, E_wf_max, flag_wf_range_Ef, &
          mx_temp_matrices, flag_neutral_atom, flag_diagonalisation, &
          flag_SpinDependentSF, flag_Multisite, flag_LFD, flag_SFcoeffReuse, &
          flag_opt_cell, cell_constraint_flag, flag_variable_cell, &
@@ -852,7 +851,7 @@ contains
          species_file, species_from_files
     use GenComms,   only: gcopy, my_barrier, cq_abort, inode, ionode, cq_warn
     !use DiagModule, only: diagon
-    use DiagModule,             only: flag_pDOS_include_semicore
+    !use DiagModule,             only: flag_pDOS_include_semicore
     use energy,     only: flag_check_Diag
     use DMMin,      only: maxpulayDMM, maxpulaystepDMM, minpulaystepDMM, &
          LinTol_DMM, n_dumpL
@@ -1701,26 +1700,16 @@ contains
     if(flag_write_DOS) then
        if(flag_diagonalisation) then
           flag_write_projected_DOS = fdf_boolean('IO.write_proj_DOS',.false.)
-          E_DOS_min = fdf_double('IO.min_DOS_E',zero)
-          E_DOS_max = fdf_double('IO.max_DOS_E',zero)
-          sigma_DOS = fdf_double('IO.sigma_DOS',0.001_double)
-          n_DOS = fdf_integer('IO.n_DOS',201)
-          flag_normalise_pDOS = fdf_boolean('IO.normalise_PDOS',.true.)
-          flag_pDOS_angmom = fdf_boolean('IO.PDOS_Angmom',.false.)
-          flag_pDOS_lm = fdf_boolean('IO.PDOS_lm_resolved',.false.)
-          flag_pDOS_include_semicore = fdf_boolean('IO.PDOS_include_semicore',.true.)
-          if(flag_pDOS_lm.AND.(.NOT.flag_pDOS_angmom)) then
-             if(inode==ionode) write(io_lun,'(2x,"Setting IO.PDOS_Angmom T as (l,m)-resolved PDOS requested")')
-             flag_pDOS_angmom = .true.
+          if(flag_write_projected_DOS) then
+             E_wf_min = fdf_double('IO.min_wf_E',-BIG)
+             E_wf_max = fdf_double('IO.max_wf_E',BIG)
           end if
-          if (.not.flag_write_projected_DOS) then
-             flag_normalise_pDOS = .false.
-             flag_pDOS_angmom = .false.
-          endif
-          if (flag_pDOS_angmom .and. flag_basis_set==blips) then
-             flag_pDOS_angmom = .false.
-             if(inode==ionode) write(io_lun,'(2x,"Setting IO.PDOS_Angmom F as using blips")')
-          endif
+          ! Possibly needed to decide if MSSF needs dealing with
+          !flag_pDOS_angmom = fdf_boolean('IO.PDOS_Angmom',.false.)
+          !if (flag_pDOS_angmom .and. flag_basis_set==blips) then
+          !   flag_pDOS_angmom = .false.
+          !   if(inode==ionode) write(io_lun,'(2x,"Setting IO.PDOS_Angmom F as using blips")')
+          !endif
        else
           flag_write_DOS = .false.
           if(inode==ionode) write(io_lun,'(2x,"Setting IO.writeDOS F as solving O(N)")')
