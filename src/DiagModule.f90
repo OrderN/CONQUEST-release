@@ -2670,6 +2670,8 @@ contains
   !! CREATION DATE
   !!   2012/03/06
   !! MODIFICATION HISTORY
+  !!   2023/01/16 10:44 dave
+  !!    Fixed problem with divide by zero if using default iMethfessel_Paxton
   !! SOURCE
   !!
   subroutine findFermi_varspin(electrons_total, eig, nbands, nkp, Ef, occ)
@@ -2789,7 +2791,7 @@ contains
              end if
           end do kpoint1
        end do band1
-       lowEf(:) = min(eig(lband,lkp,1), eig(lband,lkp,2))
+       lowEf(:) = minval(eig(lband,:,:))
        call occupy(occ, eig, lowEf, electrons, nbands, nkp)
        lowElec = spin_factor * sum(electrons(:))
        ! check if we indeed have a good lower bound
@@ -2823,8 +2825,12 @@ contains
           gaussian_height = 0.1_double
        end if
        gaussian_width = two * sqrt(-log(gaussian_height)) * kT
-       incEf(:) = gaussian_width / &
-            (two * real(iMethfessel_Paxton, double) * finess)
+       if (iMethfessel_Paxton < 2) then   !! prevents division by zero using default iMethfessel value
+          incEf(:) = gaussian_width / (two * finess)
+       else 
+          incEf(:) = gaussian_width / &
+               (two * real(iMethfessel_Paxton, double) * finess)
+       end if
        highEf(:) = lowEf(:) + incEf(:)
        call occupy(occ, eig, highEf, electrons, nbands, nkp)
        highElec = spin_factor * sum(electrons(:))

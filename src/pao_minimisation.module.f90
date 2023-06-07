@@ -558,7 +558,7 @@ contains
        !enddo
 
        ! Write out current SF coefficients every n_dumpSFcoeff, if n_dumpSFcoeff > 0)
-       if (n_dumpSFcoeff > 0 .and. mod(n_iterations,n_dumpSFcoeff) == 1) then
+       if (n_dumpSFcoeff > 0 .and. mod(n_iterations,n_dumpSFcoeff) == 0) then
           call dump_pos_and_matrices(index = unit_MSSF_save)
        endif
 

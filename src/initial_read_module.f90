@@ -770,7 +770,7 @@ contains
   !!   2020/01/07 tsuyoshi 
   !!     Default setting of MakeInitialChargeFromK has been changed
   !!   2022/10/28 15:56 lionel
-  !!     Added ASE output file setup ; default is T
+  !!     Added ASE output file setup ; default is F
   !!   2022/12/14 10:01 dave and tsuyoshi
   !!     Update test for solution method (diagon vs ordern) following issue #47
   !!  TODO
@@ -967,7 +967,7 @@ contains
     character(len=6)  :: method ! To find whether we diagonalise or use O(N)
     character(len=5)  :: ps_type !To find which pseudo we use
     character(len=8)  :: tmp
-    logical :: flag_ghost, find_species
+    logical :: flag_ghost, find_species, test_ase
 
     ! spin polarisation
     logical :: flag_spin_polarisation
@@ -1007,10 +1007,11 @@ contains
     end if
     ! 
     if (fdf_boolean('IO.WriteOutToASEFile',.false.)) then
-       call io_assign(io_ase) ! Reserve this unit on all processes
-       write_ase = .false.
+       !call io_assign(io_ase) ! Reserve this unit on all processes
+       !write_ase = .false.
        if (inode == ionode) then
           write_ase = .true.
+          call io_assign(io_ase) 
           open(unit=io_ase,file=ase_file,iostat=stat)
           if (stat /= 0) &
                call cq_abort("Failed to open ASE Conquest output file", stat)
@@ -2617,7 +2618,7 @@ contains
          iMethfessel_Paxton
     use blip,                 only: blip_info
     use global_module,        only: flag_basis_set, blips,        &
-         flag_precondition_blips, io_lun, io_ase, write_ase, flag_LFD, runtype, flag_opt_cell, &
+         flag_precondition_blips, io_lun, io_ase, write_ase, flag_LFD, runtype, flag_opt_cell, optcell_method, &
          flag_Multisite, flag_diagonalisation, flag_neutral_atom, temp_ion, &
          flag_self_consistent, flag_vary_basis, iprint_init, flag_pcc_global, &
          nspin, flag_SpinDependentSF, flag_fix_spin_population, ne_spin_in_cell, flag_XLBOMD,&
@@ -2666,12 +2667,26 @@ contains
        write(io_lun, fmt='(4x,a15,"static calculation")') job_str
     else if(leqi(runtype,'cg')) then
        if(flag_opt_cell) then
-          write(io_lun, fmt='(4x,a15,"CG cell relaxation")') job_str
+          if(optcell_method==1) then
+             write(io_lun, fmt='(4x,a15,"CG cell relaxation")') job_str
+          else
+             write(io_lun, fmt='(4x,a15,"Combined CG atomic and cell relaxation")') job_str
+          end if
        else
           write(io_lun, fmt='(4x,a15,"CG atomic relaxation")') job_str
        end if
     else if(leqi(runtype,'sqnm')) then
-       write(io_lun, fmt='(4x,a15,"SQNM atomic relaxation")') job_str
+       if(flag_opt_cell) then
+          if(optcell_method==1) then
+             write(io_lun, fmt='(4x,a15,"CG cell relaxation")') job_str
+          else if(optcell_method==2) then
+             write(io_lun, fmt='(4x,a15,"Combined SQNM atomic and CG cell relaxation")') job_str
+          else
+             write(io_lun, fmt='(4x,a15,"Combined CG atomic and cell relaxation")') job_str
+          end if
+       else
+          write(io_lun, fmt='(4x,a15,"SQNM atomic relaxation")') job_str
+       end if
     else if(leqi(runtype,'md')) then
        ensemblestr = md_ensemble
        call chrcap(ensemblestr,3)

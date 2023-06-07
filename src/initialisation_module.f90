@@ -475,7 +475,7 @@ contains
     !enddo !  i=1, mx_matrices
     rcut_BCS = rcut(max_range)
     if (inode == ionode .and. iprint_init > 3) &
-         write (io_lun,fmt='(4x,a)') trim(prefix)//'rcut for BCS_parts =', rcut_BCS
+         write (io_lun,fmt='(4x,a,x,f12.4)') trim(prefix)//'rcut for BCS_parts =', rcut_BCS
 
     call make_cs(inode-1, rcut_BCS, BCS_parts, parts, bundle, &
                  ni_in_cell, x_atom_cell, y_atom_cell, z_atom_cell)

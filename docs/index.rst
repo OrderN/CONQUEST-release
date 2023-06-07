@@ -129,11 +129,11 @@ papers, which will be given in the output file (a BiBTeX file
 containing these references is also output).  The key CONQUEST
 references are:
 
-* D. R. Bowler, T. Miyazaki and M. J. Gillan, J. Phys. Condens. Matter
-  **14**, 2781--2798 (2002)
-* T. Miyazaki, D. R. Bowler, R. Choudhury
-  and M. J. Gillan, J. Chem. Phys. **121**, 6186--6194 (2004)
-* D. R. Bowler, R. Choudhury, M. J. Gillan and T. Miyazaki,
-  phys. stat. sol. b **243**, 989--1000 (2006)
+* A. Nakata, J. S. Baker, S. Y. Mujahed, J. T. L. Poulton, S. Arapan, J. Lin, Z. Raza, S. Yadav, L. Truflandier, T. Miyazaki, and D. R. Bowler, J. Chem. Phys. **152**, 164112 (2020)
+  `DOI:10.1063/5.0005074 <https://doi.org/10.1063/5.0005074>`_
+* T. Miyazaki, D. R. Bowler, R. Choudhury and M. J. Gillan, J. Chem. Phys. **121**, 6186--6194 (2004)
+  `DOI:10.1063/1.1787832 <http://dx.doi.org/10.1063/1.1787832>`_
+* D. R. Bowler, T. Miyazaki and M. J. Gillan, J. Phys. Condens. Matter **14**, 2781--2798 (2002)
+  `DOI:10.1088/0953-8984/14/11/303 <http://dx.doi.org/10.1088/0953-8984/14/11/303>`_
 
 __ https://choosealicense.com/licenses/mit/

@@ -2,3 +2,4 @@ Conquest
 makedeps.txt
 *.mod
 *.o
+datestamp.f90
