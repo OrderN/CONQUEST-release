@@ -47,6 +47,7 @@ User Guide
 * :doc:`elec_struc`
 * :doc:`strucrelax`
 * :doc:`moldyn`
+* :doc:`post-proc`
 * :doc:`ext-tools`
 * :doc:`errors`
 * :doc:`input_tags`
@@ -63,6 +64,7 @@ User Guide
    elec_struc
    strucrelax
    moldyn
+   post-proc
    ext-tools
    errors
    input_tags

@@ -51,7 +51,7 @@ contains
     !   call read_eigenvalues(zero, stm_bias)
     !end if
     ! Read coefficients
-    call read_psi_coeffs
+    call read_psi_coeffs("Process")
     ! Allocate space for variables
     allocate(delta_of_S(nptsx,nptsy,nptsz), g_k(nptsx,nptsy,nptsz))
     delta_of_S = zero
@@ -342,7 +342,7 @@ contains
     ! Read eigenvalues
     call read_eigenvalues
     ! Read eigenvector coefficients
-    call read_psi_coeffs
+    call read_psi_coeffs("Process")
     call set_fact(8)
     call set_prefac(9)
     call set_prefac_real(9)

@@ -150,7 +150,7 @@ contains
                                  flag_DeltaSCF, flag_excite, runtype,  &
                                  flag_LmatrixReuse,McWFreq,            &
                                  flag_multisite, iprint_minE,          &
-                                 io_lun, flag_out_wf, wf_self_con, flag_write_DOS, &
+                                 io_lun, flag_out_wf, wf_self_con, flag_write_projected_DOS, &
                                  flag_diagonalisation, nspin, flag_LFD, min_layer, &
                                  flag_DM_converged, write_ase, flag_calc_pol
     use energy,            only: get_energy, xc_energy, final_energy
@@ -391,20 +391,17 @@ contains
     end if
 
     ! output WFs or DOS
-    if (flag_self_consistent.AND.(flag_out_wf.OR.flag_write_DOS.OR.flag_write_locps)) then
+    if (flag_out_wf.OR.flag_write_projected_DOS) then
        write_ase = .false. ! Safe as we're about to finish
        ! Dump wavefunction coefficients or DOS data (requires diagonalisation)
-       if(flag_out_wf.OR.flag_write_DOS) then
-          wf_self_con=.true.
-          call FindMinDM(n_L_iterations, vary_mu, L_tolerance,&
-               reset_L, .false.)
-       end if
+       wf_self_con=.true.
+       call FindMinDM(n_L_iterations, vary_mu, L_tolerance,&
+            reset_L, .false.)
        wf_self_con=.false.
+    else if (flag_self_consistent.AND.flag_write_locps) then
        ! Dump potentials (requires H matrix build)
-       if(flag_write_locps) then
-          locps_output=.true.
-          call get_H_matrix(.false.,.true., electrons, density, maxngrid)
-       end if
+       locps_output=.true.
+       call get_H_matrix(.false.,.true., electrons, density, maxngrid)
        locps_output=.false.
     end if
 
