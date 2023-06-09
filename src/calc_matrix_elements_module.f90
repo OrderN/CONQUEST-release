@@ -192,20 +192,11 @@ contains
        n_dim_two     = naba_atm2%no_of_orb(iprim_blk) !right
        i_beg_one     = (naba_atm1%ibegin_blk_orb(iprim_blk)-1) * n_pts_in_block +1
        i_beg_two     = (naba_atm2%ibegin_blk_orb(iprim_blk)-1) * n_pts_in_block +1
-       if(i_beg_one+n_dim_one*n_pts_in_block-1 > gridfunctions(gridone)%size) then
-          call cq_abort("get_matrix_elements gridone overflow: ",gridfunctions(gridone)%size, &
-               i_beg_one+n_dim_one*n_pts_in_block-1)
-       endif
-       if(i_beg_two+n_dim_two*n_pts_in_block-1 > gridfunctions(gridtwo)%size) then
-          call cq_abort("get_matrix_elements gridtwo overflow: ",gridfunctions(gridtwo)%size, &
-               i_beg_two+n_dim_two*n_pts_in_block-1)
-       endif
 
        ! get the overlap contribution from this block
 
        if(n_dim_two*n_dim_one /= 0) then  ! If the primary block has naba atoms
           allocate(acc_block(n_dim_two*n_dim_one),STAT=stat)
-          if(stat/=0) call cq_abort('Error allocating memory in get_matrix_elements: ',n_dim_one,n_dim_two)
           acc_block = zero
           call reg_alloc_mem(area_integn,n_dim_two*n_dim_one,type_dbl)
           ! for both left and right functions...
@@ -232,16 +223,10 @@ contains
           do naba1=1, naba_atm1%no_of_atom(iprim_blk)    ! left 
              ind_halo1 = naba_atm1%list_atom_by_halo(naba1,iprim_blk)
              na1 = naba_atm1%ibeg_orb_atom(naba1, iprim_blk)-1
-             if(ind_halo1 > loc_bucket%no_halo_atom1) &
-                  call cq_abort('ERROR in no_of_halo_atoms for left',ind_halo1,loc_bucket%no_halo_atom1)
              do naba2=1, naba_atm2%no_of_atom(iprim_blk) ! right
                 ind_halo2 = naba_atm2%list_atom_by_halo(naba2,iprim_blk)
                 na2 = naba_atm2%ibeg_orb_atom(naba2, iprim_blk)-1
-                if(ind_halo2 > loc_bucket%no_halo_atom2) &
-                     call cq_abort('ERROR in no_of_halo_atoms for right',ind_halo2,loc_bucket%no_halo_atom2)
                 bucket = loc_bucket%i_h2d(ind_halo2,ind_halo1) !index of the pair
-                if(bucket > loc_bucket%no_pair_orb) &
-                     call cq_abort('ERROR : bucket in get_matrix_elements',bucket,loc_bucket%no_pair_orb)
                 If(bucket /= 0) then   ! naba1 and naba2 makes pair
                    ii=(bucket-1)
                    ! Note that matrix elements A_{i alpha}{j beta} are arranged 
