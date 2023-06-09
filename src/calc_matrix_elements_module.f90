@@ -186,6 +186,14 @@ contains
     ! we need the following barrier ??
     ! call my_barrier()
 
+    !$omp parallel do default(none) &
+    !$omp             schedule(dynamic) &
+    !$omp             reduction(+: send_array) &
+    !$omp             shared(naba_atm1, naba_atm2, gridfunctions, n_pts_in_block, loc_bucket, &
+    !$omp                    gridone, gridtwo) &
+    !$omp             private(iprim_blk, n_dim_one, n_dim_two, i_beg_one, i_beg_two, &
+    !$omp                     stat, ind_halo1, ind_halo2, na1, na2, bucket, nonef, ntwof, &
+    !$omp                     naba1, naba2, ii, nsf2, i_acc_b, acc_block)
     do iprim_blk=1, domain%groups_on_node
 
        n_dim_one     = naba_atm1%no_of_orb(iprim_blk) !left
@@ -196,6 +204,10 @@ contains
        ! get the overlap contribution from this block
 
        if(n_dim_two*n_dim_one /= 0) then  ! If the primary block has naba atoms
+          ! TK: Do we have to allocate memory on each iteration?
+          !     Could we do this before the loop?
+          !     Get a max of n_dim_two*n_dim_one over possible values of iprim_blk
+          !     for example and pass a slice of it to gemm
           allocate(acc_block(n_dim_two*n_dim_one),STAT=stat)
           acc_block = zero
           call reg_alloc_mem(area_integn,n_dim_two*n_dim_one,type_dbl)
@@ -246,6 +258,7 @@ contains
           call reg_dealloc_mem(area_integn,n_dim_two*n_dim_one,type_dbl)
        endif    ! If the primary block has naba atoms for left & right functions
     end do   ! end loop over primary blocks
+    !$omp end parallel do
 
     call put_matrix_elements &
          (myid, loc_bucket, rem_bucket, matM )
