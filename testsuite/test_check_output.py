@@ -59,8 +59,8 @@ def test_check_outputs(test_path, key):
     else:
         precision = default_precision
     
-    np.testing.assert_almost_equal(ref_result[key],
-                                   test_result[key],
+    np.testing.assert_almost_equal(test_result[key],
+                                   ref_result[key],
                                    decimal = precision,
                                    err_msg = test_path+": "+key,
                                    verbose = True)
