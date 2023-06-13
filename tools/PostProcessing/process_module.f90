@@ -699,7 +699,7 @@ contains
     
     ! Local variables
     integer :: i_band, i_kp, i_spin, n_DOS_wid, n_band, n_min, n_max, i
-    real(double) :: Ebin, dE_DOS, a, pf_DOS, spin_fac
+    real(double) :: Ebin, dE_DOS, a, pf_DOS, spin_fac, dE
     real(double), dimension(nspin) :: total_electrons, iDOS_low
     real(double), dimension(:,:), allocatable :: total_DOS, iDOS
     real(double), dimension(:,:), allocatable :: occ
@@ -738,25 +738,50 @@ contains
     end if
     open(unit=17, file="BandStructure.dat")
     do i_spin = 1, nspin
+       dE = zero
+       if(flag_procwf_range_Ef) dE = -efermi(i_spin)
+       write(17,fmt='("# Spin ",I1)') i_spin
+       write(17,fmt='("# Original Fermi-level: ",f12.5," eV")') HaToeV*efermi(i_spin)
+       write(17,fmt='("# Bands shifted relative to Fermi-level")')
        do i_band=1,n_bands_total ! All bands
-          write(17,fmt='("# ",i6)') i_band
-          do i_kp = 1, nkp
-             if(eigenvalues(i_band, i_kp, i_spin)>=E_DOS_min .and. &
-                  eigenvalues(i_band, i_kp, i_spin)<=E_DOS_max) then
-                if(flag_proc_band_str==4) then
-                   write(17,fmt='(i4,f20.12)') i_kp, eigenvalues(i_band, i_kp, i_spin)
-                else if(flag_proc_band_str==0) then
-                   write(17,fmt='(4f20.12)') kx(i_kp), ky(i_kp), kz(i_kp), eigenvalues(i_band, i_kp, i_spin)
-                else if(flag_proc_band_str==1) then
-                   write(17,fmt='(2f20.12)') kx(i_kp), eigenvalues(i_band, i_kp, i_spin)
-                else if(flag_proc_band_str==2) then
-                   write(17,fmt='(2f20.12)') ky(i_kp), eigenvalues(i_band, i_kp, i_spin)
-                else if(flag_proc_band_str==3) then
-                   write(17,fmt='(2f20.12)') kz(i_kp), eigenvalues(i_band, i_kp, i_spin)
+          if(minval(eigenvalues(i_band, :, i_spin))+dE>=E_DOS_min .and. &
+               maxval(eigenvalues(i_band, :, i_spin))+dE<=E_DOS_max) then
+             write(17,fmt='("# Band ",i6)') i_band
+             do i_kp = 1, nkp
+                if(flag_procwf_range_Ef) then
+                   if(flag_proc_band_str==4) then
+                      write(17,fmt='(i4,f20.12)') i_kp, &
+                           HaToeV*(eigenvalues(i_band, i_kp, i_spin) - efermi(i_spin))
+                   else if(flag_proc_band_str==0) then
+                      write(17,fmt='(4f20.12)') kx(i_kp), ky(i_kp), kz(i_kp), &
+                           HaToeV*(eigenvalues(i_band, i_kp, i_spin) - efermi(i_spin))
+                   else if(flag_proc_band_str==1) then
+                      write(17,fmt='(2f20.12)') kx(i_kp), &
+                           HaToeV*(eigenvalues(i_band, i_kp, i_spin) - efermi(i_spin))
+                   else if(flag_proc_band_str==2) then
+                      write(17,fmt='(2f20.12)') ky(i_kp), &
+                           HaToeV*(eigenvalues(i_band, i_kp, i_spin) - efermi(i_spin))
+                   else if(flag_proc_band_str==3) then
+                      write(17,fmt='(2f20.12)') kz(i_kp), &
+                           HaToeV*(eigenvalues(i_band, i_kp, i_spin) - efermi(i_spin))
+                   end if
+                else
+                   if(flag_proc_band_str==4) then
+                      write(17,fmt='(i4,f20.12)') i_kp, HaToeV*eigenvalues(i_band, i_kp, i_spin)
+                   else if(flag_proc_band_str==0) then
+                      write(17,fmt='(4f20.12)') kx(i_kp), ky(i_kp), kz(i_kp), &
+                           HaToeV*eigenvalues(i_band, i_kp, i_spin)
+                   else if(flag_proc_band_str==1) then
+                      write(17,fmt='(2f20.12)') kx(i_kp), HaToeV*eigenvalues(i_band, i_kp, i_spin)
+                   else if(flag_proc_band_str==2) then
+                      write(17,fmt='(2f20.12)') ky(i_kp), HaToeV*eigenvalues(i_band, i_kp, i_spin)
+                   else if(flag_proc_band_str==3) then
+                      write(17,fmt='(2f20.12)') kz(i_kp), HaToeV*eigenvalues(i_band, i_kp, i_spin)
+                   end if
                 end if
-             end if
-          end do ! i_kp = nkp
-          write(17,fmt='("&")')
+             end do ! i_kp = nkp
+             write(17,fmt='("&")')
+          end if
        end do
     end do
     close(unit=17)

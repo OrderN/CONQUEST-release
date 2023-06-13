@@ -188,7 +188,7 @@ contains
     ! Energy limits (relative to Ef or absolute)
     E_wf_min = fdf_double('IO.min_wf_E',zero)
     E_wf_max = fdf_double('IO.max_wf_E',zero)
-    if(i_job==3 .or. i_job==4 .or. i_job==5) then ! Band-resolved charge or STM
+    if(i_job==3 .or. i_job==4 .or. i_job==5 .or. i_job==8) then ! Band-resolved charge or STM
        ! Read in details of bands output from Conquest
        n_bands_active=fdf_integer('IO.maxnoWF',0)
        if(n_bands_active>0) then
@@ -211,7 +211,9 @@ contains
              flag_wf_range = .true.
              flag_wf_range_Ef = fdf_boolean('IO.WFRangeRelative',.true.)
           else
-             call cq_abort("No bands specified!")
+             E_wf_min = -BIG
+             E_wf_max =  BIG
+             write(*,fmt='(2x,"No range specified for bands output; assuming all bands")')
           end if
        end if
        ! Now read details of bands to output from processing
