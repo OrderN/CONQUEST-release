@@ -939,7 +939,6 @@ contains
     use XC, only : flag_functional_type, functional_hartree_fock, functional_hyb_pbe0, &
          flag_different_functional
     use biblio, only: flag_dump_bib
-
     !2019/12/27 tsuyoshi
     use density_module,  only: method_UpdateChargeDensity,DensityMatrix,AtomicCharge
 
@@ -1821,15 +1820,15 @@ contains
     ! Find direction for polarisation calculation: 0 means all three
     i_pol_dir = 0
     i_pol_dir(1) = fdf_integer('General.PolDir',0)
+    i_pol_dir_st = 1
+    i_pol_dir_end = 1
     if(i_pol_dir(1)==0) then
-       i_pol_dir_st = 1
        i_pol_dir_end = 3
        i_pol_dir(1) = 1
        i_pol_dir(2) = 2
        i_pol_dir(3) = 3
-    else
-       i_pol_dir_st = 1
-       i_pol_dir_end = 1
+    else if(i_pol_dir(1)>3) then
+       call cq_abort("Illegal value for General.PolDir: must lie between 0 and 3 ",i_pol_dir(1))
     end if
 !!$
 !!$
@@ -2908,7 +2907,7 @@ contains
     use functions,       only: is_prime
     use global_module,   only: iprint_init, rcellx, rcelly, rcellz,  &
          area_general, ni_in_cell, numprocs,   &
-         species_glob, io_lun, io_ase, ase_file, write_ase
+         species_glob, io_lun, io_ase, ase_file, write_ase, flag_calc_pol
     use numbers,         only: zero, one, two, pi, RD_ERR, half
     use GenComms,        only: cq_abort, cq_warn, gcopy
     use input_module
@@ -3312,6 +3311,11 @@ contains
           kk(3,i) = two * pi * kk(3,i) / rcellz
        end do
     end if ! MP mesh branch
+    ! Check polarisation
+    if(flag_calc_pol) then
+       if(nkp>1 .or. (nkp==1 .and. maxval(abs(kk))>RD_ERR)) &
+            call cq_warn(sub_name, "Resta polarisation is only valid at gamma point")
+    end if
     !
     ! BEGIN %%%% ASE printing %%%%
     !
