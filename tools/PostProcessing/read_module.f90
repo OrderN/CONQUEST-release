@@ -122,6 +122,23 @@ contains
        i_job = 6
     else if(leqi(job,'pdo').or.leqi(job,'pro')) then
        i_job = 7
+    else if(leqi(job,'str').or.leqi(job,'bst')) then
+       i_job = 8
+       ! x-axis for band structure plots
+       input_string = fdf_string(1,'Process.BandStrucAxis','n')
+       if(leqi(input_string,'n')) then      ! K-point number
+          flag_proc_band_str = 4
+       else if(leqi(input_string,'a')) then ! All k-points
+          flag_proc_band_str = 0
+       else if(leqi(input_string,'x')) then ! kx
+          flag_proc_band_str = 1
+       else if(leqi(input_string,'y')) then ! ky
+          flag_proc_band_str = 2
+       else if(leqi(input_string,'z')) then ! kz
+          flag_proc_band_str = 3
+       else                                 ! All k-points
+          flag_proc_band_str = 4
+       end if
     end if
     ! 
     charge_stub = fdf_string(80,'Process.ChargeStub','chden')

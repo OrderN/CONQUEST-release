@@ -685,6 +685,84 @@ contains
     return
   end subroutine process_pdos
 
+  subroutine process_band_structure
+
+    use datatypes
+    use numbers, ONLY: zero, RD_ERR, twopi, half, one, two, four, six
+    use local, ONLY: eigenvalues, n_bands_total, nkp, wtk, efermi, flag_total_iDOS, &
+         flag_procwf_range_Ef, kx,  ky, kz, flag_proc_band_str
+    use read, ONLY: read_eigenvalues, read_psi_coeffs
+    use global_module, ONLY: nspin, n_DOS, E_DOS_min, E_DOS_max, sigma_DOS
+    use units, ONLY: HaToeV
+
+    implicit none
+    
+    ! Local variables
+    integer :: i_band, i_kp, i_spin, n_DOS_wid, n_band, n_min, n_max, i
+    real(double) :: Ebin, dE_DOS, a, pf_DOS, spin_fac
+    real(double), dimension(nspin) :: total_electrons, iDOS_low
+    real(double), dimension(:,:), allocatable :: total_DOS, iDOS
+    real(double), dimension(:,:), allocatable :: occ
+
+    write(*,fmt='(/2x,"Processing eigenvalues to write band structure")')
+    if(nspin==1) then
+       spin_fac = two
+    else if(nspin==2) then
+       spin_fac = one
+    end if
+    ! Read eigenvalues
+    call read_eigenvalues
+    if(abs(E_DOS_min)<RD_ERR) then
+       E_DOS_min = minval(eigenvalues(1,:,:))
+       write(*,fmt='(2x,"Band structure lower limit set automatically: ",f12.5," Ha")') E_DOS_min
+    else
+       write(*,fmt='(2x,"Band structure lower limit set by user: ",f12.5," Ha")') E_DOS_min
+    end if
+    if(abs(E_DOS_max)<RD_ERR) then
+       E_DOS_max = maxval(eigenvalues(n_bands_total,:,:))
+       write(*,fmt='(2x,"Band structure upper limit set automatically: ",f12.5," Ha")') E_DOS_max
+    else
+       write(*,fmt='(2x,"Band structure upper limit set by user: ",f12.5," Ha")') E_DOS_max
+    end if
+    write(*,fmt='(2x,"Writing band structure files")')
+    if(flag_proc_band_str==4) then
+       write(*,fmt='(4x,"X-axis will be k-point index")')
+    else if(flag_proc_band_str==0) then
+       write(*,fmt='(4x,"All k-point coordinates provided")')
+    else if(flag_proc_band_str==1) then
+       write(*,fmt='(4x,"X-axis will be kx")')
+    else if(flag_proc_band_str==2) then
+       write(*,fmt='(4x,"X-axis will be ky")')
+    else if(flag_proc_band_str==3) then
+       write(*,fmt='(4x,"X-axis will be kz")')
+    end if
+    open(unit=17, file="BandStructure.dat")
+    do i_spin = 1, nspin
+       do i_band=1,n_bands_total ! All bands
+          write(17,fmt='("# ",i6)') i_band
+          do i_kp = 1, nkp
+             if(eigenvalues(i_band, i_kp, i_spin)>=E_DOS_min .and. &
+                  eigenvalues(i_band, i_kp, i_spin)<=E_DOS_max) then
+                if(flag_proc_band_str==4) then
+                   write(17,fmt='(i4,f20.12)') i_kp, eigenvalues(i_band, i_kp, i_spin)
+                else if(flag_proc_band_str==0) then
+                   write(17,fmt='(4f20.12)') kx(i_kp), ky(i_kp), kz(i_kp), eigenvalues(i_band, i_kp, i_spin)
+                else if(flag_proc_band_str==1) then
+                   write(17,fmt='(2f20.12)') kx(i_kp), eigenvalues(i_band, i_kp, i_spin)
+                else if(flag_proc_band_str==2) then
+                   write(17,fmt='(2f20.12)') ky(i_kp), eigenvalues(i_band, i_kp, i_spin)
+                else if(flag_proc_band_str==3) then
+                   write(17,fmt='(2f20.12)') kz(i_kp), eigenvalues(i_band, i_kp, i_spin)
+                end if
+             end if
+          end do ! i_kp = nkp
+          write(17,fmt='("&")')
+       end do
+    end do
+    close(unit=17)
+    return
+  end subroutine process_band_structure
+
   ! Important note
   !
   ! Formally we have: PAO(\mathbf{r}) = f(r) r^l Y_{lm}(\hat{\mathbf{r}})
