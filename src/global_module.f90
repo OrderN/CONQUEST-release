@@ -178,6 +178,7 @@ module global_module
   integer, allocatable, dimension(:) :: id_glob_inv  ! gives global number for a CC atom
   integer, dimension(:), allocatable, target :: species_glob ! gives species 
   integer :: numprocs               ! number of processors
+  integer :: numthreads             ! number of threads
   real(double), target :: rcellx,rcelly,rcellz  ! cell side lengths
   real(double), allocatable, dimension(:), target :: x_atom_cell ! position of atom in sim cell (CC)
   real(double), allocatable, dimension(:), target :: y_atom_cell
