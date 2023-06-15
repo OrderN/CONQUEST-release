@@ -369,12 +369,12 @@ contains
     call final_energy(nkp,backtrace_level)
 !****lat>$
 
+    call stop_print_timer(tmr_l_energy, "calculating ENERGY", &
+                          IPRINT_TIME_THRES1)
     ! For Bulk Polarisation
     !
     if (flag_calc_pol) call get_polarisation()
     !
-    call stop_print_timer(tmr_l_energy, "calculating ENERGY", &
-                          IPRINT_TIME_THRES1)
     if (atomch_output) call get_atomic_charge()
 
     if (find_forces) then

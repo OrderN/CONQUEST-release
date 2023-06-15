@@ -1,0 +1,38 @@
+IO.Title  BTO perfect
+IO.Coordinates    BTO_Ba_dz.in
+IO.FractionalCoordinates T 
+IO.Iprint 0
+IO.WriteOutToFile F
+
+## General Parameters
+General.NumberOfSpecies 3
+General.CalcPol True
+General.PolDir 3
+
+## Moving Atoms
+AtomMove.TypeOfRun static
+
+## Basis Sets
+Basis.BasisSet PAOs
+
+## Energy Minimisation
+minE.SelfConsistent T
+minE.SCTolerance 1.0e-7
+SC.KerkerPreCondition T
+
+##Integration Grid
+Grid.GridCutoff 100
+
+## Finding Density Matrix 
+DM.SolutionMethod diagon
+Diag.MPMesh   T
+Diag.MPMeshX  1
+Diag.MPMeshY  1
+Diag.MPMeshZ  1
+
+## Atomic Information
+%block ChemicalSpeciesLabel
+ 1  137.327 Ba
+ 2  47.867  Ti
+ 3  15.999  O
+%endblock ChemicalSpeciesLabel

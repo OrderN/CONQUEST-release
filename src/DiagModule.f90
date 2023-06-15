@@ -147,7 +147,7 @@ module DiagModule
 
   use datatypes
   use global_module,          only: io_lun, area_DM, iprint_DM, min_layer, flag_diagonalisation
-  use GenComms,               only: cq_abort, inode, ionode, myid
+  use GenComms,               only: cq_abort, inode, ionode, myid, cq_warn
   use timer_module,           only: start_timer, stop_timer
   use timer_stdclocks_module, only: tmr_std_matrices
 
@@ -3241,7 +3241,7 @@ contains
     use global_module,   only: numprocs, iprint_DM, id_glob,         &
          ni_in_cell, x_atom_cell, y_atom_cell, &
          z_atom_cell, max_wf, min_layer, flag_do_pol_calc, polS, mat_polX_re, mat_polX_im, &
-         i_pol_dir_st, i_pol_dir_end, wf_self_con, flag_write_projected_DOS
+         i_pol_dir_st, i_pol_dir_end, wf_self_con, flag_write_projected_DOS, ne_spin_in_cell
     use mpi
     use GenBlas,         only: dot
     use GenComms,        only: myid
@@ -3272,7 +3272,7 @@ contains
     integer :: len, send_size, recv_size, send_proc, recv_proc, nsf1, &
          sendtag, recvtag
     integer :: req1, req2, ierr, atom, inter, prim, wheremat, row_sup,&
-         col_sup
+         col_sup, pol_S_size
     integer, dimension(:,:), allocatable :: ints, atom_list, &
          send_prim, send_info, send_orbs, send_off
     integer, dimension(:), allocatable :: current_loc_atoms, &
@@ -3477,6 +3477,11 @@ contains
     len_occ = len
     if(iprint_DM+min_layer>3.AND.myid==0) &
          write(io_lun,fmt='(10x,a,2i6)') 'buildK: Stage three len:',len, matA
+    if(flag_do_pol_calc.AND.flag_pol_buildS) then
+       pol_S_size = maxval(ne_spin_in_cell)
+       if(len_occ>pol_S_size .and. myid==0) call cq_warn("buildK", &
+            "This system may be metallic: please take care with polarisation")
+    end if
     ! Step three - loop over processors, send and recv data and build K
     allocate(send_fsc(bundle%mx_iprim),recv_to_FSC(bundle%mx_iprim),mapchunk(bundle%mx_iprim),STAT=stat)
     if(stat/=0) call cq_abort('buildK: Error allocating send_fsc, recv_to_FSC and mapchunk',stat)
@@ -3605,9 +3610,10 @@ contains
                             exp_X_value_imag =  return_matrix_value_pos(mat_polX_im(dir),whereMat)
                             exp_X_value = cmplx(exp_X_value_real,exp_X_value_imag)
                             ! LAPACK outer product; I can't see a way to distribute it
-                            call zgerc(len_occ, len_occ, exp_X_value, &
-                                 localEig(:,prim_orbs(prim)+col_sup), 1, &
-                                 RecvBuffer(:,orb_count+row_sup),1,polS(:,:,dir),len_occ)
+                            call zgerc(pol_S_size, pol_S_size, exp_X_value, &
+                                 localEig(1:pol_S_size,prim_orbs(prim)+col_sup), 1, &
+                                 RecvBuffer(1:pol_S_size,orb_count+row_sup),1, &
+                                 polS(1:pol_S_size,1:pol_S_size,dir),pol_S_size)
                          end do
                       end if
                       ! projected DOS
