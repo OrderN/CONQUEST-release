@@ -493,6 +493,13 @@ contains
     ! FOR get_non_local_gradient !
     !  19/Sep/00 Tsuyoshi Miyazaki
     ! loop over blocks in this node
+    !$omp parallel do default(none) &
+    !$omp             schedule(static) &
+    !$omp             shared(naba_atm1, naba_atm2, domain, gridfunctions, loc_bucket, &
+    !$omp                    n_pts_in_block, send_array, gridone, gridtwo) &
+    !$omp             private(iprim_blk, n_dim_one, n_dim_two, naba1, naba2, bucket, &
+    !$omp                     ind_halo1, ind_halo2, nonef, ntwof, nsf1, nsf2, &
+    !$omp                     ii, factor_M, griddata1, griddata2, ind1, ind2)
     do iprim_blk=1, domain%groups_on_node
 
        !  In the future we have to prepare n_dim_one & n_dim_two
@@ -511,16 +518,10 @@ contains
           ! I HAVE TO BE CAREFUL about WHICH ONE IS LEFT
           do naba1=1, naba_atm1%no_of_atom(iprim_blk)    ! left atom
              ind_halo1 = naba_atm1%list_atom_by_halo(naba1,iprim_blk)
-             if(ind_halo1 > loc_bucket%no_halo_atom1) &
-                  call cq_abort('ERROR in no_of_halo_atoms for left',ind_halo1,loc_bucket%no_halo_atom1)
              do naba2=1, naba_atm2%no_of_atom(iprim_blk) ! right atom
                 ind_halo2 = naba_atm2%list_atom_by_halo(naba2,iprim_blk)
-                if(ind_halo2 > loc_bucket%no_halo_atom2) &
-                     call cq_abort('ERROR in no_of_halo_atoms for right',ind_halo2,loc_bucket%no_halo_atom2)
 
                 bucket = loc_bucket%i_h2d(ind_halo2,ind_halo1) !index of the pair
-                if(bucket > loc_bucket%no_pair_orb) &
-                     call cq_abort('ERROR : bucket in act_on_vectors_new',bucket,loc_bucket%no_pair_orb)
                 If(bucket /= 0) then   ! naba1 and naba2 makes pair
                    ii=bucket-1
                    nonef = norb(naba_atm1, naba1, iprim_blk)
@@ -549,6 +550,7 @@ contains
           enddo ! Loop over left naba atoms
        endif  ! If the primary block has naba atoms
     end do   ! end loop over primary blocks
+    !$omp end parallel do
     deallocate(send_array,STAT=stat)
     if(stat/=0) call cq_abort("Error deallocating send_array in act_on_vectors: ",loc_bucket%no_pair_orb)
     call reg_dealloc_mem(area_integn,loc_bucket%no_pair_orb,type_dbl)
