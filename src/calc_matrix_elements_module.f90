@@ -470,8 +470,6 @@ contains
     integer      :: nsf1, nsf2, ii, stat
     real(double) :: factor_M
 
-    real(double), dimension(n_pts_in_block) :: griddata1, griddata2
-
     call start_timer(tmr_std_integration)
     !(pointer)
     !  This structure is introduced to keep the strict connection
@@ -534,14 +532,9 @@ contains
                               naba_atm1%ibeg_orb_atom(naba1,iprim_blk)-1+(nsf1-1))+1
                          ii = ii+1
                          factor_M=send_array(ii)
-                         griddata1 = gridfunctions(gridone)%griddata(ind1:ind1+n_pts_in_block-1)
-                         griddata2 = gridfunctions(gridtwo)%griddata(ind2:ind2+n_pts_in_block-1)
-                         call axpy(n_pts_in_block, factor_M, griddata2, 1, griddata1, 1)
-                         !gridfunctions(gridtwo)%griddata(ind2:ind2+n_pts_in_block-1), 1, &
-                         !gridfunctions(gridone)%griddata(ind1:ind1+n_pts_in_block-1), 1)
-                         gridfunctions(gridone)%griddata(ind1:ind1+n_pts_in_block-1) = griddata1
-                         gridfunctions(gridtwo)%griddata(ind2:ind2+n_pts_in_block-1) = griddata2
-
+                         call axpy(n_pts_in_block, factor_M, &
+                              gridfunctions(gridtwo)%griddata(ind2:ind2+n_pts_in_block-1), 1, &
+                              gridfunctions(gridone)%griddata(ind1:ind1+n_pts_in_block-1), 1)
                       end do
                    end do
                 Endif  ! if the two atoms are within a range
