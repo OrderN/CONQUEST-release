@@ -497,7 +497,7 @@ contains
     !$omp                    n_pts_in_block, send_array, gridone, gridtwo) &
     !$omp             private(iprim_blk, n_dim_one, n_dim_two, naba1, naba2, bucket, &
     !$omp                     ind_halo1, ind_halo2, nonef, ntwof, nsf1, nsf2, &
-    !$omp                     ii, factor_M, griddata1, griddata2, ind1, ind2)
+    !$omp                     ii, factor_M, ind1, ind2)
     do iprim_blk=1, domain%groups_on_node
 
        !  In the future we have to prepare n_dim_one & n_dim_two
