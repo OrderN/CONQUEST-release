@@ -333,6 +333,18 @@ contains
     ! loop arround grid points in the domain, and for each
     ! point, get the d_PAO/d_R values
 
+    !$omp parallel do default(none) &
+    !$omp             schedule(dynamic) &
+    !$omp             shared(domain, dcellx_block, dcelly_block, dcellz_block, atomf, &
+    !$omp                    naba_atoms_of_blocks, parts, r_h, n_pts_in_block, direction, &
+    !$omp                    pao, pao_fns, npao_species, dcs_parts, id_glob, species_glob, &
+    !$omp                    gridfunctions) &
+    !$omp             private(iblock, iatom, ipart, jpart, ind_part, xblock, yblock, zblock, &
+    !$omp                     ii, ia, icover, ig_atom, xatom, yatom, zatom, the_species, &
+    !$omp                     rcut, r_from_i, ip, position, offset_position, ipoint, &
+    !$omp                     npoint, ip_store, r_store, x_store, y_store, z_store, x, y, z, &
+    !$omp                     l1, acz, m1, count1, val) &
+    !$omp             firstprivate(no_of_ib_ia)
     do iblock = 1, domain%groups_on_node ! primary set of blocks
        xblock=(domain%idisp_primx(iblock)+domain%nx_origin-1)*dcellx_block
        yblock=(domain%idisp_primy(iblock)+domain%ny_origin-1)*dcelly_block
@@ -341,24 +353,12 @@ contains
           iatom=0
           do ipart=1,naba_atoms_of_blocks(atomf)%no_of_part(iblock)
              jpart=naba_atoms_of_blocks(atomf)%list_part(ipart,iblock)
-             if(jpart > DCS_parts%mx_gcover) then 
-                call cq_abort('single_PAO_to_grad: JPART ERROR ',ipart,jpart)
-             endif
              ind_part=DCS_parts%lab_cell(jpart)
              do ia=1,naba_atoms_of_blocks(atomf)%no_atom_on_part(ipart,iblock)
                 iatom=iatom+1
                 ii = naba_atoms_of_blocks(atomf)%list_atom(iatom,iblock)
                 icover= DCS_parts%icover_ibeg(jpart)+ii-1
                 ig_atom= id_glob(parts%icell_beg(ind_part)+ii-1)
-
-                if(parts%icell_beg(ind_part) + ii-1 > ni_in_cell) then
-                   call cq_abort('single_PAO_to_grad: globID ERROR ', &
-                        ii,parts%icell_beg(ind_part))
-                endif
-                if(icover > DCS_parts%mx_mcover) then
-                   call cq_abort('single_PAO_to_grad: icover ERROR ', &
-                        icover,DCS_parts%mx_mcover)
-                endif
 
                 xatom=DCS_parts%xcover(icover)
                 yatom=DCS_parts%ycover(icover)
@@ -370,8 +370,7 @@ contains
                 rcut = r_h + RD_ERR
                 call check_block (xblock,yblock,zblock,xatom,yatom,zatom, rcut, &  ! in
                      npoint,ip_store,r_store,x_store,y_store,z_store,n_pts_in_block) !out
-                r_from_i = sqrt((xatom-xblock)**2+(yatom-yblock)**2+ &
-                     (zatom-zblock)**2 )
+                r_from_i = sqrt( (xatom-xblock)**2 + (yatom-yblock)**2 + (zatom-zblock)**2 )
 
                 if(npoint > 0) then
                    !offset_position = (no_of_ib_ia-1) * npao * n_pts_in_block
@@ -379,8 +378,6 @@ contains
                    do ip=1,npoint
                       ipoint=ip_store(ip)
                       position= offset_position + ipoint
-                      if(position > gridfunctions(pao_fns)%size) call cq_abort &
-                           ('single_pao_to_grad: position error ', position, gridfunctions(pao_fns)%size)
 
                       r_from_i = r_store(ip)
                       x = x_store(ip)
@@ -393,9 +390,11 @@ contains
                          do acz = 1,pao(the_species)%angmom(l1)%n_zeta_in_angmom
                             do m1=-l1,l1
                                call pao_elem_derivative_2(direction,the_species,l1,acz,m1,x,y,z,val)
-                               if(position+(count1-1)*n_pts_in_block > gridfunctions(pao_fns)%size) &
-                                    call cq_abort('single_pao_to_grad: position error ', &
-                                    position, gridfunctions(pao_fns)%size)
+                               ! Each loop iteration accesses consequtive elements of gridfunctions%griddata
+                               ! so this should be safe as a shared variable. Incrementing the index
+                               ! inside the loop might not be great for vectorization, but with the function
+                               ! call here, it probably won't vectorize anyways.
+                               ! This loop nest really should be inside pao_elem_derivative_2, see issue #198
                                gridfunctions(pao_fns)%griddata(position+(count1-1)*n_pts_in_block) = val
                                count1 = count1+1
                             end do ! m1
@@ -408,6 +407,7 @@ contains
           enddo ! naba_part
        endif !(naba_atoms_of_blocks(atomf)%no_of_part(iblock) > 0) !naba atoms?
     enddo ! iblock : primary set of blocks
+    !$omp end parallel do
     call my_barrier()
     call start_timer(tmr_std_allocation)
     deallocate(ip_store,x_store,y_store,z_store,r_store)
