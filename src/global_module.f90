@@ -419,7 +419,7 @@ module global_module
   logical :: flag_calc_pol, flag_do_pol_calc
   integer, dimension(3) :: mat_polX_re, mat_polX_im
   integer, dimension(3) :: mat_polX_re_atomf, mat_polX_im_atomf
-  complex(double_cplx), dimension(:,:,:), allocatable :: polS
+  complex(double_cplx), dimension(:,:,:,:), allocatable, target :: polS
   integer :: i_pol_dir_st, i_pol_dir_end ! Either 1,1 or 1,3
   integer, dimension(3) :: i_pol_dir ! Either n,0,0 or 1,2,3
 

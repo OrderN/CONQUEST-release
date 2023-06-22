@@ -209,6 +209,7 @@ module GenComms
      module procedure dcplx_one_gsumv
      module procedure dcplx_two_gsumv
      module procedure dcplx_three_gsumv
+     module procedure dcplx_four_gsumv
      module procedure logical_gsum
   end interface
 !!***
@@ -1504,6 +1505,67 @@ contains
     timings(6) = timings(6) + t2 - t1
     return
   end subroutine dcplx_three_gsumv
+!!***
+
+!!****f* GenComms/dcplx_four_gsumv *
+!!
+!!  NAME 
+!!   dcplx_four_gsumv - global sum on a complex(double_cplx) 3D vector
+!!  USAGE
+!!   dcplx_four_gsumv(variable, len1, len2, len3)
+!!  PURPOSE
+!!   Performs a global sum on a specified 3D complex(double_cplx) vector -
+!!   in other words, sum vector over all processors and ensure
+!!   that all processors get the results
+!!
+!!   Since we don't know in advance how big this will be, we'll
+!!   have a parameter in the module header double_gsum_buf which 
+!!   will allow the sum to be done piecewise (for memory conservation)
+!!
+!!   The shenanigans with temp are necessary as there's no in-place
+!!   global sum in MPI
+!!  INPUTS
+!!   integer :: len1, len2, len3
+!!   complex(double_cplx), dimension(len1,len2,len3) :: variable
+!!  USES
+!! 
+!!  AUTHOR
+!!   D.R.Bowler
+!!  CREATION DATE
+!!   2023/05/24 11:36 dave
+!!  MODIFICATION HISTORY
+!!  SOURCE
+!!
+  subroutine dcplx_four_gsumv(variable, len1, len2, len3, len4)
+
+    use datatypes
+
+    implicit none
+
+    ! Passed variables
+    integer :: len1, len2, len3, len4
+    complex(double_cplx), dimension(len1, len2, len3, len4) :: variable
+
+    ! Local variables
+    complex(double_cplx), allocatable, dimension(:,:,:,:) :: temp
+    integer :: ierr, stat, tmpsize, j
+
+    t1 = MPI_wtime()
+    if(len1<=0 .or. len2<=0) call cq_abort('dcplx_four_gsumv: length of vector passed as zero')
+    ! Establish size of temporary variable and allocate
+    allocate(temp(len1,len2,len3,len4),STAT=stat)
+    if(stat/=0) call cq_abort('dcplx_four_gsumv: error allocating temp')
+    temp = variable
+    call MPI_allreduce(temp,variable,len1*len2*len3*len4,MPI_Double_complex,&
+         MPI_Sum,MPI_COMM_WORLD,ierr)
+    if(ierr/=MPI_Success) &
+         call cq_abort('dcplx_gsumv: Problem with allreduce')
+    deallocate(temp,STAT=stat)
+    if(stat/=0) call cq_abort('dcplx_gsumv: error deallocating temp')
+    t2 = MPI_wtime()
+    timings(6) = timings(6) + t2 - t1
+    return
+  end subroutine dcplx_four_gsumv
 !!***
 
 !!****f* GenComms/double_gmax *

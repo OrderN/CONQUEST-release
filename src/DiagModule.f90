@@ -280,6 +280,8 @@ module DiagModule
   ! Local scratch data
   real(double), dimension(:,:,:), allocatable :: w ! matrix_size, nkp, nspin
   real(double), dimension(:,:),   allocatable :: local_w ! matrix_size, nspin
+  complex(double_cplx), dimension(:,:,:), pointer :: polSloc
+  integer :: pol_S_size
   !complex(double_cplx), dimension(:),allocatable :: work, rwork, gap
   complex(double_cplx), dimension(:), allocatable :: work
   real(double),         dimension(:), allocatable :: rwork, gap
@@ -488,8 +490,8 @@ contains
          dscf_HOMO_limit, dscf_LUMO_limit, &
          flag_out_wf,wf_self_con, max_wf, paof, sf, atomf, &
          out_wf, flag_write_projected_DOS, &
-         flag_SpinDependentSF, flag_do_pol_calc, &
-         io_ase, write_ase, ase_file
+         flag_SpinDependentSF, flag_do_pol_calc, polS, &
+         io_ase, write_ase, ase_file, i_pol_dir_end, ne_spin_in_cell
     use GenComms,        only: my_barrier, cq_abort, mtime, gsum, myid
     use ScalapackFormat, only: matrix_size, proc_rows, proc_cols,     &
          block_size_r,       &
@@ -793,6 +795,7 @@ contains
     entropy = zero
     flag_pDOS_buildK = .false.
     spin_SF = 1
+    pol_S_size = maxval(ne_spin_in_cell) ! Size for polarisation matrix
     do spin = 1, nspin
        if (flag_SpinDependentSF) spin_SF = spin
        do i = 1, nkpoints_max
@@ -838,10 +841,17 @@ contains
                            kk(:,kp), wtk(kp), expH(:,:,spin))
                    end if
                 else
-                   if(flag_do_pol_calc) flag_pol_buildS = .true.
+                   if(flag_do_pol_calc) then
+                      ! Set up polarisation calculation for this spin channel
+                      flag_pol_buildS = .true.
+                      polSloc => polS(:,:,:,spin)
+                   end if
                    call buildK(Hrange, matK(spin), occ(:,kp,spin), &
                         kk(:,kp), wtk(kp), expH(:,:,spin))
-                   if(flag_do_pol_calc) flag_pol_buildS = .false.
+                   if(flag_do_pol_calc) then
+                      flag_pol_buildS = .false.
+                      nullify(polSloc)
+                   end if
                 end if
                 ! Build matrix needed for Pulay force
                 ! We scale the occupation number for this k-point by the
@@ -3240,7 +3250,7 @@ contains
          matrix_size
     use global_module,   only: numprocs, iprint_DM, id_glob,         &
          ni_in_cell, x_atom_cell, y_atom_cell, &
-         z_atom_cell, max_wf, min_layer, flag_do_pol_calc, polS, mat_polX_re, mat_polX_im, &
+         z_atom_cell, max_wf, min_layer, flag_do_pol_calc, mat_polX_re, mat_polX_im, &
          i_pol_dir_st, i_pol_dir_end, wf_self_con, flag_write_projected_DOS, ne_spin_in_cell
     use mpi
     use GenBlas,         only: dot
@@ -3272,7 +3282,7 @@ contains
     integer :: len, send_size, recv_size, send_proc, recv_proc, nsf1, &
          sendtag, recvtag
     integer :: req1, req2, ierr, atom, inter, prim, wheremat, row_sup,&
-         col_sup, pol_S_size
+         col_sup
     integer, dimension(:,:), allocatable :: ints, atom_list, &
          send_prim, send_info, send_orbs, send_off
     integer, dimension(:), allocatable :: current_loc_atoms, &
@@ -3478,7 +3488,6 @@ contains
     if(iprint_DM+min_layer>3.AND.myid==0) &
          write(io_lun,fmt='(10x,a,2i6)') 'buildK: Stage three len:',len, matA
     if(flag_do_pol_calc.AND.flag_pol_buildS) then
-       pol_S_size = maxval(ne_spin_in_cell)
        if(len_occ>pol_S_size .and. myid==0) call cq_warn("buildK", &
             "This system may be metallic: please take care with polarisation")
     end if
@@ -3493,13 +3502,6 @@ contains
     ! Two messages per process; use tag and tag + 1 below
     sendtag = 1
     recvtag = 1
-    !if(flag_do_pol_calc.AND.matA==matK(1)) then
-    !   if(.NOT.allocated(polS)) then
-    !      allocate(polS(len_occ,len_occ))
-    !      if(stat/=0) call cq_abort("Error allocating polS matrix ",len_occ)
-    !      polS = zero
-    !   end if
-    !end if
     do i=1,numprocs
        send_size = len*norb_send(send_proc+1)!num_send(send_proc+1)*nsf
        recv_size = len*recv_info(recv_proc+1)%orbs!current_loc_atoms(recv_proc+1)*nsf
@@ -3613,7 +3615,7 @@ contains
                             call zgerc(pol_S_size, pol_S_size, exp_X_value, &
                                  localEig(1:pol_S_size,prim_orbs(prim)+col_sup), 1, &
                                  RecvBuffer(1:pol_S_size,orb_count+row_sup),1, &
-                                 polS(1:pol_S_size,1:pol_S_size,dir),pol_S_size)
+                                 polSloc(1:pol_S_size,1:pol_S_size,dir),pol_S_size)
                          end do
                       end if
                       ! projected DOS

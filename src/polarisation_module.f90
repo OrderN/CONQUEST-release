@@ -68,7 +68,7 @@ contains
     use numbers
     use global_module, only: polS, ne_spin_in_cell, atomf, iprint, &
          mat_polX_re, mat_polX_im, mat_polX_re_atomf, mat_polX_im_atomf, io_lun, &
-         flag_do_pol_calc, i_pol_dir, i_pol_dir_st, i_pol_dir_end
+         flag_do_pol_calc, i_pol_dir, i_pol_dir_st, i_pol_dir_end, nspin, spin_factor
     use GenComms, only: cq_abort, cq_warn, inode, ionode, gsum
     use S_matrix_module, only: get_r_on_atomfns
     use functions_on_grid, only: atomfns, allocate_temp_fn_on_grid, &
@@ -87,9 +87,8 @@ contains
 
     ! Local variables
     integer, dimension(:), allocatable :: ipiv
-    integer, dimension(2) :: number_of_bands
     integer :: direction, flag_func, info
-    integer :: stat, tmp_fn, size, i
+    integer :: stat, tmp_fn, size, i, spin
     character(len=20) :: subname = "get_polarisation: "
     complex(double_cplx) :: detS
     real(double), dimension(3) :: Pion, cell_vec
@@ -108,7 +107,6 @@ contains
     cell_vec(3) = r_super_z
     cell_vol = r_super_x * r_super_y * r_super_z
     ! Electronic contribution
-    number_of_bands = int(ne_spin_in_cell)
     tmp_fn = allocate_temp_fn_on_grid(atomfns)
     gridfunctions(tmp_fn)%griddata = zero
     do direction = i_pol_dir_st, i_pol_dir_end
@@ -117,12 +115,12 @@ contains
     end do
     flag_do_pol_calc = .true.
     Pel_gamma = zero
-    size = maxval(number_of_bands)
+    size = maxval(ne_spin_in_cell)
     ! Allocate ipiv and polS
-    allocate(polS(size,size,i_pol_dir_end), STAT=stat)
+    allocate(polS(size,size,i_pol_dir_end,nspin), STAT=stat)
     allocate(ipiv(size),STAT=stat)
     polS = zero
-    ! Build matrix
+    ! Build matrices
     do direction = i_pol_dir_st, i_pol_dir_end
        ! Calculate polX matrix: <phi_{i\alpha}|exp(i.2pi.r/L|phi_{j\beta}>
        ! This is in *fractional* coordinates so quantum of polarisation is 1
@@ -141,27 +139,31 @@ contains
        mat_polX_re(direction) = mat_polX_re_atomf(direction)
        mat_polX_im(direction) = mat_polX_im_atomf(direction)
     end do
-    ! Resta: call to diagonalisation to get polS matrix
+    ! Resta: call to diagonalisation to get polS matrix (BOTH spin channels at once)
     call FindEvals(ne_spin_in_cell)
-    call gsum(polS,size,size,i_pol_dir_end)
+    call gsum(polS,size,size,i_pol_dir_end,nspin)
+    ! Construct polarisation from determinant of polS matrix
     do direction = i_pol_dir_st, i_pol_dir_end
-       ! Find determinant: call dgetrf to decompose polS into P.U.L
-       call zgetrf(size,size,polS(:,:,direction),size,ipiv,info)
-       ! Take product of diagonals of polS (on output) to get determinant
-       detS = cmplx(one,zero,double_cplx)
-       do i=1,size
-          detS = detS * polS(i,i,direction)
-          ! Permutation: if ipiv(i)/=i, scale by -1
-          if(ipiv(i)/=i) detS = -detS
+       do spin=1,nspin
+          ! Find determinant: call zgetrf to decompose polS into P.U.L
+          call zgetrf(size,size,polS(:,:,direction,spin),size,ipiv,info)
+          if(info>0) write(io_lun,fmt='(4x,"Problem with zgetrf; info=",i4)') spin,info
+          ! Take product of diagonals of polS (on output) to get determinant
+          detS = cmplx(one,zero,double_cplx)
+          do i=1,size
+             detS = detS * polS(i,i,direction,spin)
+             ! Permutation: if ipiv(i)/=i, scale by -1
+             if(ipiv(i)/=i) detS = -detS
+          end do
+          if(inode==ionode .and. iprint>2) &
+               write(io_lun,fmt='(/4x,"detS real ",e20.12," detS imag ",e20.12/)') &
+               real(detS), aimag(detS)
+          ! Calculate electronic P: Im ln polS is just finding phase NB 1/pi includes factor of 2 for spin
+          Pel_gamma(direction) = Pel_gamma(direction) - spin_factor*atan2(aimag(detS),real(detS))/twopi
+          if(inode==ionode .and. iprint>2) &
+               write(io_lun,fmt='(4x,"Direction ",i2," Pel is ",e20.12)') &
+               i_pol_dir(direction),Pel_gamma(direction)
        end do
-       if(inode==ionode .and. iprint>2) &
-            write(io_lun,fmt='(/4x,"detS real ",e20.12," detS imag ",e20.12/)') &
-            real(detS), aimag(detS)
-       ! Calculate electronic P: Im ln polS is just finding phase
-       Pel_gamma(direction) = Pel_gamma(direction) - atan2(aimag(detS),real(detS))/pi
-       if(inode==ionode .and. iprint>2) &
-            write(io_lun,fmt='(4x,"Direction ",i2," Pel is ",e20.12)') &
-            i_pol_dir(direction),Pel_gamma(direction)
     end do
     deallocate(ipiv)
     deallocate(polS)
@@ -174,6 +176,9 @@ contains
           ! NB we always calculate all three directions for ionic, but potentially limit electronic
           ! so the indexing is different - this is correct
           do direction=i_pol_dir_st, i_pol_dir_end
+             if(inode==ionode .and. iprint>2) &
+                  write(io_lun,fmt='(4x,"Direction ",i2," Pion is ",e20.12/)') &
+                  i_pol_dir(direction),Pion(i_pol_dir(direction))
              write(io_lun,fmt='(4x,"Direction: ",i2)') i_pol_dir(direction)
              write(io_lun,fmt='(4x,"Total polarisation:      ",e20.12," e / Bohr^2")') &
                   (Pel_gamma(direction) + Pion(i_pol_dir(direction))) &

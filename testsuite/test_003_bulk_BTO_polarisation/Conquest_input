@@ -2,7 +2,6 @@ IO.Title  BTO perfect
 IO.Coordinates    BTO_Ba_dz.in
 IO.FractionalCoordinates T 
 IO.Iprint 0
-IO.WriteOutToFile F
 
 ## General Parameters
 General.NumberOfSpecies 3
