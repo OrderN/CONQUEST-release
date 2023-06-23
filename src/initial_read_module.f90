@@ -2939,7 +2939,7 @@ contains
     real(double), dimension(1:3)              :: mp_shift
     real(double), allocatable, dimension(:,:) :: kk_tmp
     real(double), allocatable, dimension(:)   :: wtk_tmp
-    integer :: nkp_tmp
+    integer :: nkp_tmp, nkp_in_line, inc
     integer :: counter
     character(len=2) :: suffix
 
@@ -3061,41 +3061,69 @@ contains
              write(io_lun,fmt='(4x,"Using ",i3," lines of k-points specified by user")')
           end if
           if(nkp_lines<1) call cq_abort("Need to specify how many kpoint lines !",nkp_lines)
-          nkp = fdf_integer('Diag.NumKpts',2)
-          if(iprint_init>1.AND.inode==ionode) write(io_lun,fmt='(8x,"Number of Kpoints in a line: ",i4)') nkp
-          allocate(kk(3,nkp*nkp_lines),wtk(nkp*nkp_lines),STAT=stat)
-          if(stat/=0) call cq_abort('FindEvals: couldnt allocate kpoints',nkp*nkp_lines)
-          call reg_alloc_mem(area_general,4*nkp*nkp_lines,type_dbl)
-          kk = zero
-          wtk = one/real(nkp*nkp_lines,double)
-          sum = zero
-          nk_st = 1
+          nkp_in_line = fdf_integer('Diag.NumKpts',2)
+          if(iprint_init>1.AND.inode==ionode) write(io_lun,fmt='(8x,"Number of Kpoints in a line: ",i4)') nkp_in_line
+          ! Total number of k-points (potentially corrected later)
+          nkp = nkp_in_line*nkp_lines
+          ! Read start/end points for lines and correct for duplication
+          allocate(kk_tmp(3,2*nkp_lines))
+          kk_tmp = zero
           if(fdf_block('Diag.KpointLines'))then
              if(1+block_end-block_start<2*nkp_lines) &
                   call cq_abort("Kpoint line error: ",1+block_end-block_start,nkp_lines)
              do i=1,2*nkp_lines,2
+                ! Start/end points for line
                 read (unit=input_array(block_start+i-1),fmt=*) &
-                     kk(1,nk_st),kk(2,nk_st),kk(3,nk_st)
+                     kk_tmp(1,i),kk_tmp(2,i),kk_tmp(3,i)
                 read (unit=input_array(block_start+i),fmt=*) &
-                     kk(1,nk_st+nkp-1),kk(2,nk_st+nkp-1),kk(3,nk_st+nkp-1)
-                dkx = (kk(1,nk_st+nkp-1) - kk(1,nk_st))/real(nkp-1,double)
-                dky = (kk(2,nk_st+nkp-1) - kk(2,nk_st))/real(nkp-1,double)
-                dkz = (kk(3,nk_st+nkp-1) - kk(3,nk_st))/real(nkp-1,double)
-                if(iprint_init>1.AND.inode==ionode) &
-                     write(io_lun,fmt='(2x,"K-point spacing along line : ",i3,3f7.3)') i,dkx,dky,dkz
-                do j=1,nkp-2
-                   kk(1,nk_st+j) = kk(1,nk_st+j-1)+dkx
-                   kk(2,nk_st+j) = kk(2,nk_st+j-1)+dky
-                   kk(3,nk_st+j) = kk(3,nk_st+j-1)+dkz
-                end do
-                nk_st = nk_st + nkp
+                     kk_tmp(1,i+1),kk_tmp(2,i+1),kk_tmp(3,i+1)
+                ! If the start of this line duplicates the end of the last, reduce nkp by 1
+                if(i>1) then
+                   if(abs(kk_tmp(1,i)-kk_tmp(1,i-1))<RD_ERR .and. &
+                        abs(kk_tmp(2,i)-kk_tmp(2,i-1))<RD_ERR .and. &
+                        abs(kk_tmp(3,i)-kk_tmp(3,i-1))<RD_ERR) nkp = nkp - 1
+                end if
              end do
           else
              call cq_abort("Must specify a block Diag.KpointLines to have lines of kpoints !")
           end if
-          nkp = nkp*nkp_lines
+          allocate(kk(3,nkp),wtk(nkp),STAT=stat)
+          if(stat/=0) call cq_abort('FindEvals: couldnt allocate kpoints',nkp)
+          call reg_alloc_mem(area_general,4*nkp,type_dbl)
+          kk = zero
+          nk_st = 1
+          do i=1,2*nkp_lines,2
+             ! Spacing for this line in three directions
+             dkx = (kk_tmp(1,i+1) - kk_tmp(1,i))/real(nkp_in_line-1,double)
+             dky = (kk_tmp(2,i+1) - kk_tmp(2,i))/real(nkp_in_line-1,double)
+             dkz = (kk_tmp(3,i+1) - kk_tmp(3,i))/real(nkp_in_line-1,double)
+             if(iprint_init>1.AND.inode==ionode) &
+                  write(io_lun,fmt='(2x,"K-point spacing along line : ",i3,3f7.3)') i,dkx,dky,dkz
+             ! Number of points in line
+             inc = nkp_in_line
+             if(i<2*nkp_lines-1) then ! If last point is the same as first point of next line, ignore
+                if(abs(kk_tmp(1,i+2)-kk_tmp(1,i+1))<RD_ERR .and. &
+                     abs(kk_tmp(2,i+2)-kk_tmp(2,i+1))<RD_ERR .and. &
+                     abs(kk_tmp(3,i+2)-kk_tmp(3,i+1))<RD_ERR) then
+                   inc = nkp_in_line - 1
+                end if
+             end if
+             ! Initial point
+             kk(1,nk_st) = kk_tmp(1,i)
+             kk(2,nk_st) = kk_tmp(2,i)
+             kk(3,nk_st) = kk_tmp(3,i)
+             ! Intermediate points
+             do j=1,inc-1
+                kk(1,nk_st+j) = kk(1,nk_st+j-1)+dkx
+                kk(2,nk_st+j) = kk(2,nk_st+j-1)+dky
+                kk(3,nk_st+j) = kk(3,nk_st+j-1)+dkz
+             end do
+             nk_st = nk_st + inc
+          end do
+          deallocate(kk_tmp)
+          wtk = one/real(nkp,double)
           ! Write out fractional k-points
-          if(iprint_init>0.AND.inode==ionode) then
+          if(iprint_init>1.AND.inode==ionode) then
              write(io_lun,7) nkp
              do i=1,nkp
                 write(io_lun,fmt='(8x,i5,3f15.6,f12.3)')&

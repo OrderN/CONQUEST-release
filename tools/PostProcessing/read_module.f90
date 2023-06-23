@@ -122,6 +122,23 @@ contains
        i_job = 6
     else if(leqi(job,'pdo').or.leqi(job,'pro')) then
        i_job = 7
+    else if(leqi(job,'str').or.leqi(job,'bst')) then
+       i_job = 8
+       ! x-axis for band structure plots
+       input_string = fdf_string(1,'Process.BandStrucAxis','n')
+       if(leqi(input_string,'n')) then      ! K-point number
+          flag_proc_band_str = 4
+       else if(leqi(input_string,'a')) then ! All k-points
+          flag_proc_band_str = 0
+       else if(leqi(input_string,'x')) then ! kx
+          flag_proc_band_str = 1
+       else if(leqi(input_string,'y')) then ! ky
+          flag_proc_band_str = 2
+       else if(leqi(input_string,'z')) then ! kz
+          flag_proc_band_str = 3
+       else                                 ! All k-points
+          flag_proc_band_str = 4
+       end if
     end if
     ! 
     charge_stub = fdf_string(80,'Process.ChargeStub','chden')
@@ -171,7 +188,7 @@ contains
     ! Energy limits (relative to Ef or absolute)
     E_wf_min = fdf_double('IO.min_wf_E',zero)
     E_wf_max = fdf_double('IO.max_wf_E',zero)
-    if(i_job==3 .or. i_job==4 .or. i_job==5) then ! Band-resolved charge or STM
+    if(i_job==3 .or. i_job==4 .or. i_job==5 .or. i_job==8) then ! Band-resolved charge or STM
        ! Read in details of bands output from Conquest
        n_bands_active=fdf_integer('IO.maxnoWF',0)
        if(n_bands_active>0) then
@@ -194,7 +211,9 @@ contains
              flag_wf_range = .true.
              flag_wf_range_Ef = fdf_boolean('IO.WFRangeRelative',.true.)
           else
-             call cq_abort("No bands specified!")
+             E_wf_min = -BIG
+             E_wf_max =  BIG
+             write(*,fmt='(2x,"No range specified for bands output; assuming all bands")')
           end if
        end if
        ! Now read details of bands to output from processing

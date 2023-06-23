@@ -63,6 +63,9 @@ program ConvertCharge
      write(*,fmt='(2x,"Creating projected density of states (pDOS); also generating DOS"/)')
      call process_dos
      call process_pdos
+  else if(i_job==8) then ! DOS output
+     write(*,fmt='(2x,"Creating band structure"/)')
+     call process_band_structure
   end if
   ! Read eigenvalues and calculate weight for bands by kpt
   !if(flag_only_charge) then
