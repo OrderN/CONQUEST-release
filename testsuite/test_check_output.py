@@ -54,16 +54,10 @@ def test_check_outputs(test_path, key):
 
     # Set precision, by default check to 6 decimal numbers
     default_precision = 1e-4
-    custom_precision = {'Total stress': 1e-4, 'Total polarisation': 1e-4}
-
-    if key in custom_precision:
-        precision = custom_precision[key]
-    else:
-        precision = default_precision
     
     np.testing.assert_allclose(ref_result[key],
                                test_result[key],
-                               rtol = precision,
+                               rtol = default_precision,
                                atol = 0,
                                err_msg = test_path+": "+key,
                                verbose = True)
