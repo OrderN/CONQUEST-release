@@ -470,7 +470,8 @@ contains
     integer      :: nsf1, nsf2, ii, stat
     real(double) :: factor_M
 
-    real(double), dimension(n_pts_in_block) :: griddata1, griddata2
+    !double, dimension(:) :: griddataone = gridfunctions(gridone)%griddata ! Write only, try different Openmp options
+    !double, dimension(:) :: griddatatwo = gridfunctions(gridtwo)%griddata ! Read only, Should be shared in Openmp
 
     call start_timer(tmr_std_integration)
     !(pointer)
@@ -499,7 +500,7 @@ contains
     !$omp                    n_pts_in_block, send_array, gridone, gridtwo) &
     !$omp             private(iprim_blk, n_dim_one, n_dim_two, naba1, naba2, bucket, &
     !$omp                     ind_halo1, ind_halo2, nonef, ntwof, nsf1, nsf2, &
-    !$omp                     ii, factor_M, griddata1, griddata2, ind1, ind2)
+    !$omp                     ii, factor_M, ind1, ind2)
     do iprim_blk=1, domain%groups_on_node
 
        !  In the future we have to prepare n_dim_one & n_dim_two
@@ -532,16 +533,11 @@ contains
                       do nsf1=1, nonef
                          ind1=n_pts_in_block*(naba_atm1%ibegin_blk_orb(iprim_blk)-1+ &
                               naba_atm1%ibeg_orb_atom(naba1,iprim_blk)-1+(nsf1-1))+1
-                         ii = ii+1
+                         ii = ii+1 ! Could be replaced by f(nsf1, nsf2, nonef)
                          factor_M=send_array(ii)
-                         griddata1 = gridfunctions(gridone)%griddata(ind1:ind1+n_pts_in_block-1)
-                         griddata2 = gridfunctions(gridtwo)%griddata(ind2:ind2+n_pts_in_block-1)
-                         call axpy(n_pts_in_block, factor_M, griddata2, 1, griddata1, 1)
-                         !gridfunctions(gridtwo)%griddata(ind2:ind2+n_pts_in_block-1), 1, &
-                         !gridfunctions(gridone)%griddata(ind1:ind1+n_pts_in_block-1), 1)
-                         gridfunctions(gridone)%griddata(ind1:ind1+n_pts_in_block-1) = griddata1
-                         gridfunctions(gridtwo)%griddata(ind2:ind2+n_pts_in_block-1) = griddata2
-
+                         call axpy(n_pts_in_block, factor_M, &
+                              gridfunctions(gridtwo)%griddata(ind2:ind2+n_pts_in_block-1), 1, & ! Read-only
+                              gridfunctions(gridone)%griddata(ind1:ind1+n_pts_in_block-1), 1)   ! Write-only
                       end do
                    end do
                 Endif  ! if the two atoms are within a range
