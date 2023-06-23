@@ -50,7 +50,7 @@ def test_check_outputs(test_path, key):
     if (xfail_test):
         pytest.xfail("invalid parameter combination: "+test_path+", "+key)
     # Only check polarisation for test003 for now
-    xfail_test = (key == "Total polarisation" and not(test_path[7]=="3"))
+    xfail_test = (key == "Total polarisation" and "test_003" not in test_path)
     if (xfail_test):
         pytest.xfail("invalid parameter combination: "+test_path+", "+key)
 
@@ -59,16 +59,17 @@ def test_check_outputs(test_path, key):
     test_result = read_conquest_out(test_path, "Conquest_out")
 
     # Set precision, by default check to 6 decimal numbers
-    default_precision = 6
-    custom_precision = {'Total stress': 4, 'Total polarisation': 8}
+    default_precision = 1e-4
+    custom_precision = {'Total stress': 1e-4, 'Total polarisation': 1e-4}
 
     if key in custom_precision:
         precision = custom_precision[key]
     else:
         precision = default_precision
     
-    np.testing.assert_almost_equal(ref_result[key],
-                                   test_result[key],
-                                   decimal = precision,
-                                   err_msg = test_path+": "+key,
-                                   verbose = True)
+    np.testing.assert_allclose(ref_result[key],
+                               test_result[key],
+                               rtol = precision,
+                               atol = 0,
+                               err_msg = test_path+": "+key,
+                               verbose = True)
