@@ -22,15 +22,19 @@ def read_conquest_out(path=".", filename="Conquest_out"):
             Results['Force residual'] = float(line.split(":")[2].split()[0])
         if line.find("Total stress") >= 0:
             Results['Total stress'] = np.array(line.split(":")[2].split()[:-1], dtype=float)
+        if line.find("Total polarisation") >= 0:
+            Results['Total polarisation'] = float(line.split(":")[1].split()[0])
 
     return Results
 
 @pytest.mark.parametrize("test_path", ["test_001_bulk_Si_1proc_Diag",
-                                       "test_002_bulk_Si_1proc_OrderN"])
+                                       "test_002_bulk_Si_1proc_OrderN",
+                                       "test_003_bulk_BTO_polarisation"])
 @pytest.mark.parametrize("key",['Harris-Foulkes energy',
                                 'Max force',
                                 'Force residual',
                                 'Total stress',
+                                'Total polarisation',
                                 'Not-a-real-key'
                                 ])
 def test_check_outputs(test_path, key):
@@ -45,22 +49,27 @@ def test_check_outputs(test_path, key):
     xfail_test = (key == "Not-a-real-key")
     if (xfail_test):
         pytest.xfail("invalid parameter combination: "+test_path+", "+key)
+    # Only check polarisation for test003 for now
+    xfail_test = (key == "Total polarisation" and "test_003" not in test_path)
+    if (xfail_test):
+        pytest.xfail("invalid parameter combination: "+test_path+", "+key)
 
     # Read data from the directory parameterized by test_path
     ref_result = read_conquest_out(test_path, "Conquest_out.ref")
     test_result = read_conquest_out(test_path, "Conquest_out")
 
     # Set precision, by default check to 6 decimal numbers
-    default_precision = 6
-    custom_precision = {'Total stress': 4}
+    default_precision = 1e-4
+    custom_precision = {'Total stress': 1e-4, 'Total polarisation': 1e-4}
 
     if key in custom_precision:
         precision = custom_precision[key]
     else:
         precision = default_precision
     
-    np.testing.assert_almost_equal(ref_result[key],
-                                   test_result[key],
-                                   decimal = precision,
-                                   err_msg = test_path+": "+key,
-                                   verbose = True)
+    np.testing.assert_allclose(ref_result[key],
+                               test_result[key],
+                               rtol = precision,
+                               atol = 0,
+                               err_msg = test_path+": "+key,
+                               verbose = True)

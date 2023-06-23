@@ -1,9 +1,10 @@
 # CONQUEST test suite.
 
-This directry currently contains two end-to-end tests
+This directory currently contains three end-to-end tests
 
   - `test_001_bulk_Si_1proc_Diag`
   - `test_002_bulk_Si_1proc_OrderN`
+  - `test_003_bulk_BTO_polarisation`
 
 for Conquest, and a simple python pytest script for checking the correctness of the outputs.
 

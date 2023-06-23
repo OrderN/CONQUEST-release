@@ -1334,9 +1334,9 @@ contains
           do dir2=1,n_stress
             if (flag_stress) then
               if (flag_full_stress) then
-                call get_r_on_atomfns(dir2,tmp_fn,tmp_fn2)
+                call get_r_on_atomfns(dir2,0,tmp_fn,tmp_fn2)
               else 
-                call get_r_on_atomfns(dir1,tmp_fn,tmp_fn2)
+                call get_r_on_atomfns(dir1,0,tmp_fn,tmp_fn2)
               end if
             end if
             ! Need to zero mat_tmp2 here because it is accumulating
