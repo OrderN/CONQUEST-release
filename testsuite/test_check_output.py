@@ -27,37 +27,41 @@ def read_conquest_out(path=".", filename="Conquest_out"):
 
     return Results
 
-@pytest.mark.parametrize("test_path", ["test_001_bulk_Si_1proc_Diag",
-                                       "test_002_bulk_Si_1proc_OrderN",
-                                       "test_003_bulk_BTO_polarisation"])
+def results(path, key):
+
+    ref_result = read_conquest_out(path, "Conquest_out.ref")
+    test_result = read_conquest_out(path, "Conquest_out")
+
+    return (ref_result[key], test_result[key])
+
+@pytest.fixture
+def precision():
+
+    return 1e-4
+
 @pytest.mark.parametrize("key",['Harris-Foulkes energy',
                                 'Max force',
                                 'Force residual',
-                                'Total stress',
-                                'Total polarisation',
-                                ])
-def test_check_outputs(test_path, key):
-    '''
-    Reads a predefined set of results written in Conquest_out files of
-    tests 001 - 003 and compares them against results in Conquest_out.ref
-    within a relative tolerance.
-    '''
+                                'Total stress'])
+def test_001(key, precision):
 
-    # Only check polarisation for test003 for now
-    xfail_test = (key == "Total polarisation" and "test_003" not in test_path)
-    if (xfail_test):
-        pytest.xfail("invalid parameter combination: "+test_path+", "+key)
+    res = results("test_001_bulk_Si_1proc_Diag", key)
+    np.testing.assert_allclose(res[0], res[1], rtol = precision, verbose = True)
 
-    # Read data from the directory parameterized by test_path
-    ref_result = read_conquest_out(test_path, "Conquest_out.ref")
-    test_result = read_conquest_out(test_path, "Conquest_out")
+@pytest.mark.parametrize("key", ['Harris-Foulkes energy',
+                                 'Max force',
+                                 'Force residual',
+                                 'Total stress'])
+def test_002(key, precision):
 
-    # Set precision, by default check to 6 decimal numbers
-    default_precision = 1e-4
-    
-    np.testing.assert_allclose(ref_result[key],
-                               test_result[key],
-                               rtol = default_precision,
-                               atol = 0,
-                               err_msg = test_path+": "+key,
-                               verbose = True)
+    res = results("test_002_bulk_Si_1proc_OrderN", key)
+    np.testing.assert_allclose(res[0], res[1], rtol = precision, verbose = True)
+
+@pytest.mark.parametrize("key", ['Harris-Foulkes energy',
+                                 'Max force',
+                                 'Force residual',
+                                 'Total polarisation'])
+def test_003(key, precision):
+
+    res = results("test_003_bulk_BTO_polarisation", key)
+    np.testing.assert_allclose(res[0], res[1], rtol = precision, verbose = True)
