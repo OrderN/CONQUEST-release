@@ -12,10 +12,8 @@ NP=${1:-1}
 NT=${2:-1}
 export OMP_NUM_THREADS=$NT
 echo "Running tests on $NP processes and $NT threads"
-FILE=../bin/Conquest
-if [ ! -f "$FILE" ]; then
-    (cd ../src; make -j $NP)
-fi
+
+(cd ../src; make -j $NP)
 
 for dn in $(ls -d test_[0-9][0-9][0-9]_*)
 do
