@@ -147,7 +147,7 @@ module DiagModule
 
   use datatypes
   use global_module,          only: io_lun, area_DM, iprint_DM, min_layer, flag_diagonalisation
-  use GenComms,               only: cq_abort, inode, ionode, myid
+  use GenComms,               only: cq_abort, inode, ionode, myid, cq_warn
   use timer_module,           only: start_timer, stop_timer
   use timer_stdclocks_module, only: tmr_std_matrices
 
@@ -270,13 +270,18 @@ module DiagModule
   real(double) :: kT
   logical :: first = .true.
   logical :: flag_info_greater_zero = .false.
+  ! These two flags are used to perform specific calculations in buildK
+  ! (projected DOS and Resta polarisation respectively)
   logical :: flag_pDOS_buildK = .false.
+  logical :: flag_pol_buildS = .false.
 
   !logical :: diagon ! Do we diagonalise or use O(N) ?
 
   ! Local scratch data
   real(double), dimension(:,:,:), allocatable :: w ! matrix_size, nkp, nspin
   real(double), dimension(:,:),   allocatable :: local_w ! matrix_size, nspin
+  complex(double_cplx), dimension(:,:,:), pointer :: polSloc
+  integer :: pol_S_size
   !complex(double_cplx), dimension(:),allocatable :: work, rwork, gap
   complex(double_cplx), dimension(:), allocatable :: work
   real(double),         dimension(:), allocatable :: rwork, gap
@@ -485,8 +490,8 @@ contains
          dscf_HOMO_limit, dscf_LUMO_limit, &
          flag_out_wf,wf_self_con, max_wf, paof, sf, atomf, &
          out_wf, flag_write_projected_DOS, &
-         flag_SpinDependentSF, &
-         io_ase, write_ase, ase_file
+         flag_SpinDependentSF, flag_do_pol_calc, polS, &
+         io_ase, write_ase, ase_file, i_pol_dir_end, ne_spin_in_cell
     use GenComms,        only: my_barrier, cq_abort, mtime, gsum, myid
     use ScalapackFormat, only: matrix_size, proc_rows, proc_cols,     &
          block_size_r,       &
@@ -790,6 +795,7 @@ contains
     entropy = zero
     flag_pDOS_buildK = .false.
     spin_SF = 1
+    pol_S_size = maxval(ne_spin_in_cell) ! Size for polarisation matrix
     do spin = 1, nspin
        if (flag_SpinDependentSF) spin_SF = spin
        do i = 1, nkpoints_max
@@ -835,8 +841,17 @@ contains
                            kk(:,kp), wtk(kp), expH(:,:,spin))
                    end if
                 else
+                   if(flag_do_pol_calc) then
+                      ! Set up polarisation calculation for this spin channel
+                      flag_pol_buildS = .true.
+                      polSloc => polS(:,:,:,spin)
+                   end if
                    call buildK(Hrange, matK(spin), occ(:,kp,spin), &
                         kk(:,kp), wtk(kp), expH(:,:,spin))
+                   if(flag_do_pol_calc) then
+                      flag_pol_buildS = .false.
+                      nullify(polSloc)
+                   end if
                 end if
                 ! Build matrix needed for Pulay force
                 ! We scale the occupation number for this k-point by the
@@ -3213,8 +3228,12 @@ contains
   !!    Changing MPI tags to conform to MPI standard
   !!   2020/08/24 16:09 dave
   !!    Bugfix: deallocate ndimj in recv_info
+  !!   2023/02/07 08:33 dave
+  !!    Adding Resta polarisation
   !!   2023/03/15 08:42 dave
   !!    Add possibility to calculate S_{ij}.c^n_j for pDOS calculation post-processing
+  !!   2023/06/08 15:38 dave
+  !!    Introduce flag_pol_build_S to select polarisation calculation
   !!  SOURCE
   !!
   subroutine buildK(range, matA, occs, kps, weight, localEig, overlapEig, matSij)
@@ -3231,11 +3250,12 @@ contains
          matrix_size
     use global_module,   only: numprocs, iprint_DM, id_glob,         &
          ni_in_cell, x_atom_cell, y_atom_cell, &
-         z_atom_cell, max_wf, min_layer, wf_self_con, flag_write_projected_DOS
+         z_atom_cell, max_wf, min_layer, flag_do_pol_calc, mat_polX_re, mat_polX_im, &
+         i_pol_dir_st, i_pol_dir_end, wf_self_con, flag_write_projected_DOS, ne_spin_in_cell
     use mpi
     use GenBlas,         only: dot
     use GenComms,        only: myid
-    use mult_module,     only: store_matrix_value_pos, matrix_pos, return_matrix_value_pos
+    use mult_module,     only: store_matrix_value_pos, matrix_pos, matK, return_matrix_value_pos
     use matrix_data,     only: mat, halo
     use species_module,  only: nsf_species
 
@@ -3269,12 +3289,12 @@ contains
          LocalAtom, num_send, norb_send, send_FSC, recv_to_FSC, &
          mapchunk, prim_orbs
     integer, dimension(MPI_STATUS_SIZE) :: mpi_stat
-    real(double) :: phase, rfac, ifac, rcc, icc, rsum, Siajb
-    complex(double_cplx) :: zsum
+    real(double) :: phase, rfac, ifac, rcc, icc, rsum, exp_X_value_real, exp_X_value_imag, Siajb
+    complex(double_cplx) :: zsum, exp_X_value
     complex(double_cplx), dimension(:,:), allocatable :: RecvBuffer, &
          SendBuffer
     logical :: flag, flag_write_out
-    integer :: FSCpart, ipart, iband, iwf, len_occ
+    integer :: FSCpart, ipart, iband, iwf, len_occ, jband, dir
     ! for spin polarisation
     real(double) :: occ_correction
 
@@ -3467,6 +3487,10 @@ contains
     len_occ = len
     if(iprint_DM+min_layer>3.AND.myid==0) &
          write(io_lun,fmt='(10x,a,2i6)') 'buildK: Stage three len:',len, matA
+    if(flag_do_pol_calc.AND.flag_pol_buildS) then
+       if(len_occ>pol_S_size .and. myid==0) call cq_warn("buildK", &
+            "This system may be metallic: please take care with polarisation")
+    end if
     ! Step three - loop over processors, send and recv data and build K
     allocate(send_fsc(bundle%mx_iprim),recv_to_FSC(bundle%mx_iprim),mapchunk(bundle%mx_iprim),STAT=stat)
     if(stat/=0) call cq_abort('buildK: Error allocating send_fsc, recv_to_FSC and mapchunk',stat)
@@ -3579,10 +3603,22 @@ contains
                 ifac = sin(phase)
                 do row_sup = 1,recv_info(recv_proc+1)%ndimj(locatom)
                    do col_sup = 1,nsf_species(bundle%species(prim))
-                      whereMat = matrix_pos(matA, prim, jatom, col_sup, row_sup)
-                      ! Also find S matrix element
-                      zsum = dot(len_occ,localEig(1:len_occ,prim_orbs(prim)+col_sup),1,RecvBuffer(1:len_occ,orb_count+row_sup),1)
-                      call store_matrix_value_pos(matA,whereMat,real(zsum*cmplx(rfac,ifac,double_cplx),double))
+                      ! Resta polarisation
+                      if(flag_do_pol_calc.AND.flag_pol_buildS) then
+                         ! Find matrix location (same for all matrices)
+                         whereMat = matrix_pos(mat_polX_re(1), prim, jatom,col_sup,row_sup)
+                         do dir = i_pol_dir_st, i_pol_dir_end
+                            exp_X_value_real =  return_matrix_value_pos(mat_polX_re(dir),whereMat)
+                            exp_X_value_imag =  return_matrix_value_pos(mat_polX_im(dir),whereMat)
+                            exp_X_value = cmplx(exp_X_value_real,exp_X_value_imag)
+                            ! LAPACK outer product; I can't see a way to distribute it
+                            call zgerc(pol_S_size, pol_S_size, exp_X_value, &
+                                 localEig(1:pol_S_size,prim_orbs(prim)+col_sup), 1, &
+                                 RecvBuffer(1:pol_S_size,orb_count+row_sup),1, &
+                                 polSloc(1:pol_S_size,1:pol_S_size,dir),pol_S_size)
+                         end do
+                      end if
+                      ! projected DOS
                       if(flag_pDOS_buildK .and. wf_self_con .and. flag_write_projected_DOS) then
                          whereMat = matrix_pos(matSij, prim, jatom, col_sup, row_sup)
                          Siajb = return_matrix_value_pos(matSij,whereMat)
@@ -3591,6 +3627,10 @@ contains
                               overlapEig(1:len_occ,prim_orbs(prim)+col_sup) + &
                               Siajb*RecvBuffer(1:len_occ,orb_count+row_sup)*cmplx(rfac,ifac,double_cplx)
                       end if
+                      ! Build K or M3
+                      whereMat = matrix_pos(matA, prim, jatom, col_sup, row_sup)
+                      zsum = dot(len_occ,localEig(1:len_occ,prim_orbs(prim)+col_sup),1,RecvBuffer(1:len_occ,orb_count+row_sup),1)
+                      call store_matrix_value_pos(matA,whereMat,real(zsum*cmplx(rfac,ifac,double_cplx),double))
                    end do ! col_sup=nsf
                 end do ! row_sup=nsf
              end do ! inter=recv_info%ints

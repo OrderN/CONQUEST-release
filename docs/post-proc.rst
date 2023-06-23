@@ -37,6 +37,8 @@ though we hope to implement this soon.
 
 Go to :ref:`top <post-proc>`.
 
+.. _pp_coord:
+
 Coordinate conversion
 +++++++++++++++++++++
 
@@ -61,6 +63,8 @@ structure, not the output structure.  Parameters that can be set are:
 
 Go to :ref:`top <post-proc>`.
 
+.. _pp_charge:
+
 Charge density
 ++++++++++++++
 
@@ -81,6 +85,8 @@ used for output.
 set the flag ``IO.DumpChargeDensity T`` in the CONQUEST run.
 
 Go to :ref:`top <post-proc>`.
+
+.. _pp_band_dens:
 
 Band density
 ++++++++++++
@@ -148,6 +154,8 @@ at individual k-points, by setting ``Process.outputWF_by_kpoint`` to
 
 Go to :ref:`top <post-proc>`.
 
+.. _pp_STM:
+
 Tersoff-Hamann STM simulation
 +++++++++++++++++++++++++++++
 
@@ -170,6 +178,8 @@ in which the STM image is calculated is set by the ``MinZ`` and
 ``MaxZ`` tags, and the filename by the ``RootFile`` tag.
 
 Go to :ref:`top <post-proc>`.
+
+.. _pp_DOS:
 
 Density of states (DOS)
 +++++++++++++++++++++++
@@ -202,6 +212,8 @@ F`` and ``General.LoadRho T`` (which will require that the converged
 charge density is written out by CONQUEST by setting ``IO.DumpChargeDensity T``).
 
 Go to :ref:`top <post-proc>`.
+
+.. _pp_pDOS:
 
 Atom-projected DOS
 ++++++++++++++++++
@@ -284,6 +296,8 @@ where the final tag sets the minimum and maximum values relative to
 the Fermi level.
 
 Go to :ref:`top <post-proc>`.
+
+.. _pp_band_str
 
 Band structure
 ++++++++++++++
