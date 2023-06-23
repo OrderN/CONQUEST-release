@@ -35,20 +35,14 @@ def read_conquest_out(path=".", filename="Conquest_out"):
                                 'Force residual',
                                 'Total stress',
                                 'Total polarisation',
-                                'Not-a-real-key'
                                 ])
 def test_check_outputs(test_path, key):
     '''
     Reads a predefined set of results written in Conquest_out files of
-    tests 001 and 002 and compares them against results in Conquest_out.ref
-    within a tolerance.
+    tests 001 - 003 and compares them against results in Conquest_out.ref
+    within a relative tolerance.
     '''
 
-    # Template for skipping tests. If a parameter combination is added to
-    # xfail_test, pytest will expect the test to fail.
-    xfail_test = (key == "Not-a-real-key")
-    if (xfail_test):
-        pytest.xfail("invalid parameter combination: "+test_path+", "+key)
     # Only check polarisation for test003 for now
     xfail_test = (key == "Total polarisation" and "test_003" not in test_path)
     if (xfail_test):
