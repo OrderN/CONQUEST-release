@@ -28,7 +28,9 @@ def read_conquest_out(path=".", filename="Conquest_out"):
     return Results
 
 def results(path, key):
-
+    '''
+    Reads a result and its reference, selects one value with key and returns it.
+    '''
     ref_result = read_conquest_out(path, "Conquest_out.ref")
     test_result = read_conquest_out(path, "Conquest_out")
 
@@ -36,6 +38,9 @@ def results(path, key):
 
 @pytest.fixture
 def precision():
+    '''
+    Return the relative tolerance used by tests
+    '''
 
     return 1e-4
 
