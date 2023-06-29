@@ -1,6 +1,7 @@
 import numpy as np
 import os
 import pytest
+import pathlib
 
 def read_conquest_out(path=".", filename="Conquest_out"):
     '''
@@ -10,7 +11,7 @@ def read_conquest_out(path=".", filename="Conquest_out"):
     Returns a dictionary with float values.
     '''
     path_to_file = os.path.join(path,filename)
-    assert os.path.exists(path_to_file)
+    assert os.path.exists(path_to_file), path_to_file
     file = open(path_to_file, 'r')
     Results = dict()
     for line in file.readlines():
@@ -37,6 +38,13 @@ def results(path, key):
     return (ref_result[key], test_result[key])
 
 @pytest.fixture
+def directory():
+    '''
+    Return path to testsuite
+    '''
+    return pathlib.Path(__file__).parent.resolve()
+
+@pytest.fixture
 def precision():
     '''
     Return the relative tolerance used by tests
@@ -48,25 +56,28 @@ def precision():
                                 'Max force',
                                 'Force residual',
                                 'Total stress'])
-def test_001(key, precision):
+def test_001(key, precision, directory):
 
-    res = results("test_001_bulk_Si_1proc_Diag", key)
+    path = os.path.join(directory, "test_001_bulk_Si_1proc_Diag")
+    res = results(path, key)
     np.testing.assert_allclose(res[0], res[1], rtol = precision, verbose = True)
 
 @pytest.mark.parametrize("key", ['Harris-Foulkes energy',
                                  'Max force',
                                  'Force residual',
                                  'Total stress'])
-def test_002(key, precision):
+def test_002(key, precision, directory):
 
-    res = results("test_002_bulk_Si_1proc_OrderN", key)
+    path = os.path.join(directory, "test_002_bulk_Si_1proc_OrderN")
+    res = results(path, key)
     np.testing.assert_allclose(res[0], res[1], rtol = precision, verbose = True)
 
 @pytest.mark.parametrize("key", ['Harris-Foulkes energy',
                                  'Max force',
                                  'Force residual',
                                  'Total polarisation'])
-def test_003(key, precision):
+def test_003(key, precision, directory):
 
-    res = results("test_003_bulk_BTO_polarisation", key)
+    path = os.path.join(directory, "test_003_bulk_BTO_polarisation")
+    res = results(path, key)
     np.testing.assert_allclose(res[0], res[1], rtol = precision, verbose = True)
