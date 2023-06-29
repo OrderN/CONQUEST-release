@@ -71,6 +71,10 @@ jobs:
       working-directory: ${{github.workspace}}/testsuite/test_002_bulk_Si_1proc_OrderN
       run: mpirun -np ${{matrix.np}} ../../bin/Conquest
 
+    - name: Run test 003
+      working-directory: ${{github.workspace}}/testsuite/test_003_bulk_BTO_polarisation
+      run: mpirun -np ${{matrix.np}} ../../bin/Conquest
+
     - name: Check test results
       working-directory: ${{github.workspace}}/testsuite
       run: pytest test_check_output.py

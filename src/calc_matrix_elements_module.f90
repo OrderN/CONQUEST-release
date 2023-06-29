@@ -210,7 +210,6 @@ contains
           !     for example and pass a slice of it to gemm
           allocate(acc_block(n_dim_two*n_dim_one),STAT=stat)
           acc_block = zero
-          call reg_alloc_mem(area_integn,n_dim_two*n_dim_one,type_dbl)
           ! for both left and right functions...
           ! To get the contiguous access for acc_block, it should be
           !arranged like acc_block(right,left).
@@ -250,12 +249,11 @@ contains
                       send_array(ii+1:ii+nonef)=send_array(ii+1:ii+nonef)+acc_block(i_acc_b+1:i_acc_b+nonef)
                       ii = ii + nonef
                    end do
-                Endif  ! if the two atoms are within a range
 
+                Endif  ! if the two atoms are within a range
              enddo ! Loop over right naba atoms
           enddo ! Loop over left naba atoms
           deallocate(acc_block)
-          call reg_dealloc_mem(area_integn,n_dim_two*n_dim_one,type_dbl)
        endif    ! If the primary block has naba atoms for left & right functions
     end do   ! end loop over primary blocks
     !$omp end parallel do
@@ -380,7 +378,6 @@ contains
                      ii=0
                      do isf2 = 1,halo(matrix_index(matM))%ndimj(rem_bucket%bucket(ipair,jnode)%jhalo)
                         do isf1 = 1,halo(matrix_index(matM))%ndimi(rem_bucket%bucket(ipair,jnode)%iprim)
-                           if (loc2+ii>nsize) call cq_abort("Overflow error ! ",nsize,loc2+ii)
                            tmp = recv_ptr(loc2+ii)*grid_point_volume
                            call store_matrix_value_pos(matM,loc1+ii,tmp)
                            ii=ii+1

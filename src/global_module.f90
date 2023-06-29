@@ -157,6 +157,8 @@
 !!    Removed flag for wavefunction output by k-point
 !!   2022/10/28 15:56 lionel
 !!    Added ASE output unit
+!!   2023/01/12 17:11 dave
+!!    Variables for polarisation calculation
 !!  SOURCE
 !!
 module global_module
@@ -413,6 +415,14 @@ module global_module
 
   ! diagonalise or linear scaling
   logical :: flag_diagonalisation
+
+  ! Polarisation
+  logical :: flag_calc_pol, flag_do_pol_calc
+  integer, dimension(3) :: mat_polX_re, mat_polX_im
+  integer, dimension(3) :: mat_polX_re_atomf, mat_polX_im_atomf
+  complex(double_cplx), dimension(:,:,:,:), allocatable, target :: polS
+  integer :: i_pol_dir_st, i_pol_dir_end ! Either 1,1 or 1,3
+  integer, dimension(3) :: i_pol_dir ! Either n,0,0 or 1,2,3
 
 end module global_module
 !!***
