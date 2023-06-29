@@ -77,7 +77,8 @@ contains
     use set_bucket_module,           only: rem_bucket, atomf_atomf_rem
     use DiagModule, only: FindEvals
     use matrix_data, only: Srange, aSa_range
-    use mult_module, only: S_trans, allocate_temp_matrix, free_temp_matrix
+    use mult_module, only: S_trans, allocate_temp_matrix, free_temp_matrix, &
+         matrix_product_trace, matK, matrix_sum
     use dimens,                      only: r_super_x, r_super_y, r_super_z
     use units, only: eVToJ, BohrToAng
 
@@ -87,12 +88,12 @@ contains
 
     ! Local variables
     integer, dimension(:), allocatable :: ipiv
-    integer :: direction, flag_func, info
+    integer :: direction, flag_func, info, matK_rangeS
     integer :: stat, tmp_fn, size, i, spin
     character(len=20) :: subname = "get_polarisation: "
     complex(double_cplx) :: detS
     real(double), dimension(3) :: Pion, cell_vec
-    real(double) :: cell_vol
+    real(double) :: cell_vol, matRe, matIm
 
     if(inode==ionode) then
        if(iprint>1) then
@@ -115,23 +116,58 @@ contains
     end do
     flag_do_pol_calc = .true.
     Pel_gamma = zero
+    ! Get ionic contribution
+    call get_P_ionic(Pion)
     size = maxval(ne_spin_in_cell)
     ! Allocate ipiv and polS
     allocate(polS(size,size,i_pol_dir_end,nspin), STAT=stat)
     allocate(ipiv(size),STAT=stat)
     polS = zero
-    ! Build matrices
+    ! ---------------------------------------
+    ! Experimental approaches to polarisation
+    ! ---------------------------------------
+    ! Simple: x = <phi|x|phi>, P = Tr[Kx]/Vol
+    if(inode==ionode) write(io_lun,fmt='(/4x,"Experimental approaches to polarisation")')
+    if(inode==ionode) write(io_lun,fmt='(/4x,"Use P=Tr[Kx]/Vol with x=<phi|x|phi>")')
+    do direction = i_pol_dir_st, i_pol_dir_end
+       ! This is not something that should work, particularly as x here is relative to ionic
+       ! positions; it's here as a place holder for now
+       flag_func = 0 ! Just x/y/z
+       call get_r_on_atomfns(i_pol_dir(direction),flag_func,atomfns,tmp_fn)
+       call get_matrix_elements_new(inode-1, rem_bucket(atomf_atomf_rem),&
+            mat_polX_re_atomf(direction), atomfns, tmp_fn)
+       mat_polX_re(direction) = mat_polX_re_atomf(direction)
+    end do
+    matK_rangeS = allocate_temp_matrix(aSa_range, 0, atomf, atomf)
+    do direction = i_pol_dir_st, i_pol_dir_end
+       do spin=1,nspin
+          ! K to S range
+          call matrix_sum(zero, matK_rangeS, one, matK(spin))
+          ! Evaluate Tr[KX]
+          matRe = matrix_product_trace(matK_rangeS,mat_polX_re(direction))
+          if(inode==ionode) then
+             write(io_lun,fmt='(4x,"Direction ",i2," Tr[Kx] is ",2e20.12)') &
+                  i_pol_dir(direction),matRe
+             Pel_gamma(direction) = matRe/cell_vec(i_pol_dir(direction))
+             write(io_lun,fmt='(4x,"Total polarisation from Tr[Kx] is   ",e20.12," e / Bohr^2")') &
+                  (Pel_gamma(direction) + Pion(i_pol_dir(direction))) &
+                  * cell_vec(i_pol_dir(direction))/cell_vol
+          end if
+       end do
+    end do
+    call free_temp_matrix(matK_rangeS)
+    Pel_gamma = zero
+    ! Define X = <phi|exp(i.2pi.x/L)|phi>
+    if(inode==ionode) write(io_lun,fmt='(/4x,"Use P=(-1/pi) Im ln S, S=Tr[KX] with X=<phi|exp(i.2pi.x/L|phi>")')
     do direction = i_pol_dir_st, i_pol_dir_end
        ! Calculate polX matrix: <phi_{i\alpha}|exp(i.2pi.r/L|phi_{j\beta}>
        ! This is in *fractional* coordinates so quantum of polarisation is 1
-       ! get_r_on_atomfns: real
-       flag_func = 1
-       ! We only need i_pol_dir in the first argument here to select x/y/z
+       flag_func = 1 ! real part
        call get_r_on_atomfns(i_pol_dir(direction),flag_func,atomfns,tmp_fn)
        call get_matrix_elements_new(inode-1, rem_bucket(atomf_atomf_rem),&
             mat_polX_re_atomf(direction), atomfns, tmp_fn)
        ! get_r_on_atomfns: imag
-       flag_func = 2
+       flag_func = 2 ! imag part
        call get_r_on_atomfns(i_pol_dir(direction),flag_func,atomfns,tmp_fn)
        call get_matrix_elements_new(inode-1, rem_bucket(atomf_atomf_rem),&
             mat_polX_im_atomf(direction), atomfns, tmp_fn)
@@ -139,7 +175,29 @@ contains
        mat_polX_re(direction) = mat_polX_re_atomf(direction)
        mat_polX_im(direction) = mat_polX_im_atomf(direction)
     end do
-    ! Resta: call to diagonalisation to get polS matrix (BOTH spin channels at once)
+    matK_rangeS = allocate_temp_matrix(aSa_range, 0, atomf, atomf)
+    do direction = i_pol_dir_st, i_pol_dir_end
+       do spin=1,nspin
+          call matrix_sum(zero, matK_rangeS, one, matK(spin))
+          ! Real and imaginary parts
+          matRe = matrix_product_trace(matK_rangeS,mat_polX_re(direction))
+          matIm = matrix_product_trace(matK_rangeS,mat_polX_im(direction))
+          Pel_gamma(direction) = Pel_gamma(direction) - spin_factor*atan2(matIm,matRe)/twopi
+          if(inode==ionode) then
+             write(io_lun,fmt='(4x,"Direction ",i2," Tr[KX] is ",2e20.12)') &
+                  i_pol_dir(direction),matRe, matIm
+             write(io_lun,fmt='(4x,"Direction ",i2," Pel from Tr[KX] is ",e20.12)') &
+                  i_pol_dir(direction),Pel_gamma(direction)
+             write(io_lun,fmt='(4x,"Total polarisation from Tr[KX] is   ",e20.12," e / Bohr^2")') &
+                  (Pel_gamma(direction) + Pion(i_pol_dir(direction))) &
+                  * cell_vec(i_pol_dir(direction))/cell_vol
+          end if
+       end do
+    end do
+    call free_temp_matrix(matK_rangeS)
+    ! Now the Resta approach
+    if(inode==ionode) write(io_lun,fmt='(/4x,"Use Resta approach")')
+    Pel_gamma = zero
     call FindEvals(ne_spin_in_cell)
     call gsum(polS,size,size,i_pol_dir_end,nspin)
     ! Construct polarisation from determinant of polS matrix
@@ -167,8 +225,6 @@ contains
     end do
     deallocate(ipiv)
     deallocate(polS)
-    ! Get ionic contribution
-    call get_P_ionic(Pion)
     ! Output - include quantum of polarisation
     ! The quantum is \frac{e}{V_{cell}} \mathbf{R} for lattice vector R
     if(inode==ionode) then
