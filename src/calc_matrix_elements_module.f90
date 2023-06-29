@@ -524,7 +524,6 @@ contains
 
                 bucket = loc_bucket%i_h2d(ind_halo2,ind_halo1) !index of the pair
                 If(bucket /= 0) then   ! naba1 and naba2 makes pair
-                   ii=bucket-1
                    nonef = norb(naba_atm1, naba1, iprim_blk)
                    ntwof = norb(naba_atm2, naba2, iprim_blk)
                    do nsf2=1, ntwof
@@ -533,7 +532,7 @@ contains
                       do nsf1=1, nonef
                          ind1=n_pts_in_block*(naba_atm1%ibegin_blk_orb(iprim_blk)-1+ &
                               naba_atm1%ibeg_orb_atom(naba1,iprim_blk)-1+(nsf1-1))+1
-                         ii = ii+1 ! Could be replaced by f(nsf1, nsf2, nonef)
+                         ii = (bucket - 1) + (nsf2 - 1) * nonef + nsf1
                          factor_M=send_array(ii)
                          call axpy(n_pts_in_block, factor_M, &
                               gridfunctions(gridtwo)%griddata(ind2:ind2+n_pts_in_block-1), 1, & ! Read-only
