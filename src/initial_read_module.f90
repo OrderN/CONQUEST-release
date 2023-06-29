@@ -1387,7 +1387,9 @@ contains
           ! Added DRB 2018/07/16 for safety
           if(flag_Multisite) then
              RadiusMS(i)      = fdf_double ('Atom.MultisiteRange',zero)
-             RadiusLD(i)      = fdf_double ('Atom.LFDRange',zero)
+             RadiusLD(i)      = fdf_double ('Atom.LFDRange',RadiusMS(i))
+             if(RadiusLD(i)<RadiusMS(i)) call cq_warn(sub_name,"LFD range should be larger than MSSF range: ", &
+                  RadiusLD(i),RadiusMS(i))
           end if
           ! Moved to ... so that RadiusAtomf is read from ion files
           !if (flag_Multisite) RadiusSupport(i) = RadiusAtomf(i) + RadiusMS(i)
