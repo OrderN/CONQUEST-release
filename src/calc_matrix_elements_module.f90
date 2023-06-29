@@ -467,8 +467,7 @@ contains
     integer      :: nsf1, nsf2, ii, stat
     real(double) :: factor_M
 
-    !double, dimension(:) :: griddataone = gridfunctions(gridone)%griddata ! Write only, try different Openmp options
-    !double, dimension(:) :: griddatatwo = gridfunctions(gridtwo)%griddata ! Read only, Should be shared in Openmp
+    real(double), dimension(n_pts_in_block) :: griddata_temp_buffer
 
     call start_timer(tmr_std_integration)
     !(pointer)
@@ -486,18 +485,16 @@ contains
     ! collects matrix elements and store them in send_array
     call collect_matrix_elements(myid, loc_bucket, rem_bucket, matM)
 
-    ! Initialization of output (gridone)
-    !      gridone(:) = zero     ! NOT INITIALISE
     ! FOR get_non_local_gradient !
     !  19/Sep/00 Tsuyoshi Miyazaki
     ! loop over blocks in this node
     !$omp parallel do default(none) &
-    !$omp             schedule(static) &
+    !$omp             schedule(dynamic) &
     !$omp             shared(naba_atm1, naba_atm2, domain, gridfunctions, loc_bucket, &
     !$omp                    n_pts_in_block, send_array, gridone, gridtwo) &
     !$omp             private(iprim_blk, n_dim_one, n_dim_two, naba1, naba2, bucket, &
     !$omp                     ind_halo1, ind_halo2, nonef, ntwof, nsf1, nsf2, &
-    !$omp                     ii, factor_M, ind1, ind2)
+    !$omp                     ii, factor_M, ind1, ind2, griddata_temp_buffer)
     do iprim_blk=1, domain%groups_on_node
 
        !  In the future we have to prepare n_dim_one & n_dim_two
@@ -531,9 +528,18 @@ contains
                               naba_atm1%ibeg_orb_atom(naba1,iprim_blk)-1+(nsf1-1))+1
                          ii = (bucket - 1) + (nsf2 - 1) * nonef + nsf1
                          factor_M=send_array(ii)
+#ifdef DEBUG
                          call axpy(n_pts_in_block, factor_M, &
-                              gridfunctions(gridtwo)%griddata(ind2:ind2+n_pts_in_block-1), 1, & ! Read-only
-                              gridfunctions(gridone)%griddata(ind1:ind1+n_pts_in_block-1), 1)   ! Write-only
+                              gridfunctions(gridtwo)%griddata(ind2:ind2+n_pts_in_block-1), 1, &
+                              griddata_temp_buffer, 1)
+                         !$omp critical
+                         gridfunctions(gridone)%griddata(ind1:ind1+n_pts_in_block-1) = griddata_temp_buffer
+                         !$omp end critical
+#else
+                         call axpy(n_pts_in_block, factor_M, &
+                              gridfunctions(gridtwo)%griddata(ind2:ind2+n_pts_in_block-1), 1, &
+                              gridfunctions(gridone)%griddata(ind1:ind1+n_pts_in_block-1), 1)
+#endif
                       end do
                    end do
                 Endif  ! if the two atoms are within a range
