@@ -396,7 +396,8 @@ contains
     use datatypes
     use numbers, ONLY: zero, RD_ERR, twopi, half, one, two, four, six
     use local, ONLY: eigenvalues, n_bands_total, nkp, wtk, efermi, flag_total_iDOS, &
-         evec_coeff, scaled_evec_coeff, flag_procwf_range_Ef, flag_l_resolved, flag_lm_resolved, band_full_to_active
+         evec_coeff, scaled_evec_coeff, flag_procwf_range_Ef, flag_l_resolved, flag_lm_resolved, &
+         band_full_to_active, n_atoms_pDOS, pDOS_atom_index
     use read, ONLY: read_eigenvalues, read_psi_coeffs, read_nprocs_from_blocks
     use global_module, ONLY: nspin, n_DOS, E_DOS_min, E_DOS_max, sigma_DOS, ni_in_cell, species_glob
     use units, ONLY: HaToeV
@@ -424,6 +425,15 @@ contains
     else if(flag_l_resolved) then
        write(*,fmt='(4x,"Resolving in l")')
     end if
+    if(n_atoms_pDOS==ni_in_cell) then
+       write(*,fmt='(4x,"Producing pDOS for all atoms in cell")')
+    else
+       if(n_atoms_pDOS==1) then
+          write(*,fmt='(4x,"Producing pDOS for ",i7," atom in cell")') n_atoms_pDOS
+       else
+          write(*,fmt='(4x,"Producing pDOS for ",i7," atoms in cell")') n_atoms_pDOS
+       end if
+    end if
     call read_nprocs_from_blocks
     if(nspin==1) then
        spin_fac = two
@@ -444,25 +454,25 @@ contains
     allocate(occ(n_bands_total,nkp))
     ! Set up storage based on pDOS per atom, or l/lm resolved per atom
     if(flag_lm_resolved) then
-       allocate(pDOS_lm(-max_l:max_l,0:max_l,ni_in_cell,n_DOS,nspin))
+       allocate(pDOS_lm(-max_l:max_l,0:max_l,n_atoms_pDOS,n_DOS,nspin))
        pDOS_lm = zero
-       allocate(total_electrons_l(0:max_l,ni_in_cell,nspin))
+       allocate(total_electrons_l(0:max_l,n_atoms_pDOS,nspin))
        total_electrons_l = zero
        ! For total pDOS
-       allocate(pDOS(ni_in_cell,n_DOS,nspin))
+       allocate(pDOS(n_atoms_pDOS,n_DOS,nspin))
        pDOS = zero
     else if(flag_l_resolved) then
-       allocate(pDOS_l(0:max_l,ni_in_cell,n_DOS,nspin))
+       allocate(pDOS_l(0:max_l,n_atoms_pDOS,n_DOS,nspin))
        pDOS_l = zero
-       allocate(total_electrons_l(0:max_l,ni_in_cell,nspin))
+       allocate(total_electrons_l(0:max_l,n_atoms_pDOS,nspin))
        total_electrons_l = zero
        ! For total pDOS
-       allocate(pDOS(ni_in_cell,n_DOS,nspin))
+       allocate(pDOS(n_atoms_pDOS,n_DOS,nspin))
        pDOS = zero
     else
-       allocate(pDOS(ni_in_cell,n_DOS,nspin))
+       allocate(pDOS(n_atoms_pDOS,n_DOS,nspin))
        pDOS = zero
-       allocate(total_electrons(ni_in_cell,nspin))
+       allocate(total_electrons(n_atoms_pDOS,nspin))
        total_electrons = zero
     end if
     ! E_DOS_min and max and sigma_DOS already set in process_dos
@@ -491,20 +501,25 @@ contains
                 do i = n_min, n_max
                    Ebin = real(i-1,double)*dE_DOS + E_DOS_min
                    a = (Ebin-eigenvalues(i_band, i_kp, i_spin))/sigma_DOS
-                   do i_atom = 1, ni_in_cell
-                      i_spec = species_glob(i_atom)
+                   do i_atom = 1, n_atoms_pDOS
+                      i_spec = species_glob(pDOS_atom_index(i_atom))
                       if(flag_l_resolved .and. flag_lm_resolved) then
                          sf_offset = 0
                          do i_l = 0, pao(i_spec)%greatest_angmom
                             nzeta = pao(i_spec)%angmom(i_l)%n_zeta_in_angmom
                             norbs = nzeta
                             do i_m = -i_l,i_l
-                               coeff = zdotc(norbs, evec_coeff(sf_offset+1:sf_offset+norbs,i_atom,i_band_c,i_kp,i_spin),1, &
-                                 scaled_evec_coeff(sf_offset+1:sf_offset+norbs,i_atom,i_band_c,i_kp,i_spin),1)
-                               pDOS_lm(i_m,i_l,i_atom,i,i_spin) = pDOS_lm(i_m,i_l,i_atom,i,i_spin) + &
+                               coeff = zdotc(norbs, evec_coeff(sf_offset+1:sf_offset+norbs,pDOS_atom_index(i_atom), &
+                                    i_band_c,i_kp,i_spin),1, &
+                                    scaled_evec_coeff(sf_offset+1:sf_offset+norbs,pDOS_atom_index(i_atom), &
+                                    i_band_c,i_kp,i_spin),1)
+                               pDOS_lm(i_m,i_l,i_atom,i,i_spin) = &
+                                    pDOS_lm(i_m,i_l,i_atom,i,i_spin) + &
                                     wtk(i_kp)*pf_DOS*exp(-half*a*a)*coeff
-                               pDOS(i_atom,i,i_spin) = pDOS(i_atom,i,i_spin) + wtk(i_kp)*pf_DOS*exp(-half*a*a)*coeff
-                               total_electrons_l(i_l,i_atom, i_spin) = total_electrons_l(i_l,i_atom, i_spin) + &
+                               pDOS(i_atom,i,i_spin) = pDOS(i_atom,i,i_spin) + &
+                                    wtk(i_kp)*pf_DOS*exp(-half*a*a)*coeff
+                               total_electrons_l(i_l,i_atom, i_spin) = &
+                                    total_electrons_l(i_l,i_atom, i_spin) + &
                                     occ(i_band,i_kp)*wtk(i_kp)*pf_DOS*exp(-half*a*a)*coeff
                                sf_offset = sf_offset + norbs
                             end do
@@ -514,17 +529,22 @@ contains
                          do i_l = 0, pao(i_spec)%greatest_angmom
                             nzeta = pao(i_spec)%angmom(i_l)%n_zeta_in_angmom
                             norbs = nzeta*(2*i_l+1)
-                            coeff = zdotc(norbs, evec_coeff(sf_offset+1:sf_offset+norbs,i_atom,i_band_c,i_kp,i_spin),1, &
-                                 scaled_evec_coeff(sf_offset+1:sf_offset+norbs,i_atom,i_band_c,i_kp,i_spin),1)
-                            pDOS_l(i_l,i_atom,i,i_spin) = pDOS_l(i_l,i_atom,i,i_spin) + wtk(i_kp)*pf_DOS*exp(-half*a*a)*coeff
+                            coeff = zdotc(norbs, evec_coeff(sf_offset+1:sf_offset+norbs,pDOS_atom_index(i_atom), &
+                                 i_band_c,i_kp,i_spin),1, &
+                                 scaled_evec_coeff(sf_offset+1:sf_offset+norbs,pDOS_atom_index(i_atom), &
+                                 i_band_c,i_kp,i_spin),1)
+                            pDOS_l(i_l,i_atom,i,i_spin) = pDOS_l(i_l,i_atom,i,i_spin) + &
+                                 wtk(i_kp)*pf_DOS*exp(-half*a*a)*coeff
                             pDOS(i_atom,i,i_spin) = pDOS(i_atom,i,i_spin) + wtk(i_kp)*pf_DOS*exp(-half*a*a)*coeff
                             total_electrons_l(i_l,i_atom, i_spin) = total_electrons_l(i_l,i_atom, i_spin) + &
                                  occ(i_band,i_kp)*wtk(i_kp)*pf_DOS*exp(-half*a*a)*coeff
                             sf_offset = sf_offset + norbs
                          end do
                       else
-                         coeff = zdotc(npao_species(i_spec),evec_coeff(1:npao_species(i_spec),i_atom,i_band_c,i_kp,i_spin),1, &
-                              scaled_evec_coeff(1:npao_species(i_spec),i_atom,i_band_c,i_kp,i_spin),1)
+                         coeff = zdotc(npao_species(i_spec),evec_coeff(1:npao_species(i_spec), &
+                              pDOS_atom_index(i_atom),i_band_c,i_kp,i_spin),1, &
+                              scaled_evec_coeff(1:npao_species(i_spec), &
+                              pDOS_atom_index(i_atom),i_band_c,i_kp,i_spin),1)
                          pDOS(i_atom,i,i_spin) = pDOS(i_atom,i,i_spin) + wtk(i_kp)*pf_DOS*exp(-half*a*a)*coeff
                          total_electrons(i_atom, i_spin) = total_electrons(i_atom, i_spin) + &
                               occ(i_band,i_kp)*wtk(i_kp)*pf_DOS*exp(-half*a*a)*coeff
@@ -559,8 +579,8 @@ contains
           write(*,fmt='(4x,"   Atom       Total        l=0        l=1        l=2")')
           write(fmt_DOS,*) max_l + 2 ! Number of columns
           fmt_DOS = '(4x,i7,x,'//trim(adjustl(fmt_DOS))//'f11.3)'
-          do i_atom = 1, ni_in_cell
-             write(*,fmt=fmt_DOS) i_atom, sum(total_electrons_l(:,i_atom,1)),total_electrons_l(:,i_atom,1)
+          do i_atom = 1, n_atoms_pDOS
+             write(*,fmt=fmt_DOS) pDOS_atom_index(i_atom), sum(total_electrons_l(:,i_atom,1)),total_electrons_l(:,i_atom,1)
           end do
           write(*,fmt='(2x,"Integrated pDOS: ",f11.3," electrons")') sum(total_electrons_l)
           if(flag_lm_resolved) then
@@ -577,8 +597,8 @@ contains
           end if
        else
           write(*,fmt='(4x,"   Atom   Electrons")')
-          do i_atom = 1, ni_in_cell
-             write(*,fmt='(4x,i7,x,f11.3)') i_atom, total_electrons(i_atom,1)
+          do i_atom = 1, n_atoms_pDOS
+             write(*,fmt='(4x,i7,x,f11.3)') pDOS_atom_index(i_atom), total_electrons(i_atom,1)
           end do
           write(*,fmt='(2x,"Integrated pDOS: ",f11.3," electrons")') sum(total_electrons)
        end if
@@ -589,8 +609,8 @@ contains
           write(*,fmt='(4x,"   Atom     Spin Up        l=0        l=1        l=2  Spin Down        l=0        l=1        l=2")')
           write(fmt_DOS,*) 2*(max_l + 2) ! Number of columns
           fmt_DOS = '(4x,i7,x,'//trim(adjustl(fmt_DOS))//'f11.3)'
-          do i_atom = 1, ni_in_cell
-             write(*,fmt=fmt_DOS) i_atom, sum(total_electrons_l(:,i_atom,1)),total_electrons_l(:,i_atom,1), &
+          do i_atom = 1, n_atoms_pDOS
+             write(*,fmt=fmt_DOS) pDOS_atom_index(i_atom), sum(total_electrons_l(:,i_atom,1)),total_electrons_l(:,i_atom,1), &
                   sum(total_electrons_l(:,i_atom,2)),total_electrons_l(:,i_atom,2)
           end do
           write(*,fmt='(2x,"Integrated spin up pDOS: ",f11.3," electrons")') sum(total_electrons_l(:,:,1))
@@ -611,22 +631,22 @@ contains
           write(*,fmt='(2x,"Results of integrating pDOS between ",f11.3," and ",f11.3," Ha (electrons per atom).")') &
                E_DOS_min, E_DOS_max
           write(*,fmt='(4x,"   Atom     Spin Up  Spin Down")')
-          do i_atom = 1, ni_in_cell
-             write(*,fmt='(4x,i7,x,2f11.3)') i_atom, total_electrons(i_atom,1), total_electrons(i_atom,2)
+          do i_atom = 1, n_atoms_pDOS
+             write(*,fmt='(4x,i7,x,2f11.3)') pDOS_atom_index(i_atom), total_electrons(i_atom,1), total_electrons(i_atom,2)
           end do
           write(*,fmt='(2x,"Integrated spin up pDOS: ",f11.3," electrons")') sum(total_electrons(:,1))
           write(*,fmt='(2x,"Integrated spin dn pDOS: ",f11.3," electrons")') sum(total_electrons(:,2))
        end if
     end if
     ! Write out DOS, shifted to Ef = 0
-    do i_atom = 1, ni_in_cell
-       i_spec = species_glob(i_atom)
+    do i_atom = 1, n_atoms_pDOS
+       i_spec = species_glob(pDOS_atom_index(i_atom))
        if(flag_l_resolved .and. flag_lm_resolved) then
-          write(filename,'("Atom",I0.7,"DOS_lm.dat")') i_atom
+          write(filename,'("Atom",I0.7,"DOS_lm.dat")') pDOS_atom_index(i_atom)
        else if(flag_l_resolved) then
-          write(filename,'("Atom",I0.7,"DOS_l.dat")') i_atom
+          write(filename,'("Atom",I0.7,"DOS_l.dat")') pDOS_atom_index(i_atom)
        else
-          write(filename,'("Atom",I0.7,"DOS.dat")') i_atom
+          write(filename,'("Atom",I0.7,"DOS.dat")') pDOS_atom_index(i_atom)
        end if
        open(unit=17, file=filename)
        do i_spin = 1, nspin

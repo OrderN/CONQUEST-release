@@ -53,5 +53,6 @@ module local
   real(double) :: kT
   ! Flags controlling Methfessel-Paxton approximation to step-function
   integer :: flag_smear_type, iMethfessel_Paxton
-  
+  integer :: n_atoms_pDOS
+  integer, dimension(:), allocatable :: pDOS_atom_index
 end module local

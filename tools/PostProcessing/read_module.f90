@@ -11,7 +11,7 @@ contains
   subroutine read_input
 
     use global_module, ONLY: flag_assign_blocks, flag_fractional_atomic_coords, nspin, &
-         flag_wf_range_Ef, E_DOS_min, E_DOS_max, sigma_DOS, n_DOS
+         flag_wf_range_Ef, E_DOS_min, E_DOS_max, sigma_DOS, n_DOS, ni_in_cell
     use local
     use input_module
     use numbers
@@ -271,6 +271,28 @@ contains
        flag_l_resolved = fdf_boolean('Process.pDOS_l_resolved',.false.)
        flag_lm_resolved = fdf_boolean('Process.pDOS_lm_resolved',.false.)
        if(flag_lm_resolved .and. (.not.flag_l_resolved)) flag_l_resolved = .true.
+       ! How many atoms?
+       n_atoms_pDOS = fdf_integer('Process.n_atoms_pDOS',0)
+       if(n_atoms_pDOS==0) then ! All atoms
+          n_atoms_pDOS = ni_in_cell
+          allocate(pDOS_atom_index(n_atoms_pDOS))
+          do i=1,ni_in_cell
+             pDOS_atom_index(i)=i
+          end do
+       else
+          allocate(pDOS_atom_index(n_atoms_pDOS))
+          if(fdf_block('pDOS_atoms')) then
+             if(1+block_end-block_start<n_atoms_pDOS) & 
+                  call cq_abort("Too few atoms in pDOS_atoms: ",&
+                  1+block_end-block_start,n_atoms_pDOS)
+             do i=1,n_atoms_pDOS
+                read(unit=input_array(block_start+i-1),fmt=*) pDOS_atom_index(i)
+             end do
+             call fdf_endblock
+          else
+             call cq_abort("Specified n_atoms_pDOS but no pDOS_atoms block")
+          end if
+       end if
     end if
     ! Now read PS files for atomic information
     call allocate_species_vars
