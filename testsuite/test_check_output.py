@@ -52,32 +52,33 @@ def precision():
 
     return 1e-4
 
-@pytest.mark.parametrize("key",['Harris-Foulkes energy',
-                                'Max force',
-                                'Force residual',
-                                'Total stress'])
-def test_001(key, precision, directory):
+class TestClass:
+    @pytest.mark.parametrize("key",['Harris-Foulkes energy',
+                                    'Max force',
+                                    'Force residual',
+                                    'Total stress'])
+    def test_001(self, key, precision, directory):
 
-    path = os.path.join(directory, "test_001_bulk_Si_1proc_Diag")
-    res = results(path, key)
-    np.testing.assert_allclose(res[0], res[1], rtol = precision, verbose = True)
+        path = os.path.join(directory, "test_001_bulk_Si_1proc_Diag")
+        res = results(path, key)
+        np.testing.assert_allclose(res[0], res[1], rtol = precision, verbose = True)
 
-@pytest.mark.parametrize("key", ['Harris-Foulkes energy',
-                                 'Max force',
-                                 'Force residual',
-                                 'Total stress'])
-def test_002(key, precision, directory):
+    @pytest.mark.parametrize("key", ['Harris-Foulkes energy',
+                                     'Max force',
+                                     'Force residual',
+                                     'Total stress'])
+    def test_002(self, key, precision, directory):
 
-    path = os.path.join(directory, "test_002_bulk_Si_1proc_OrderN")
-    res = results(path, key)
-    np.testing.assert_allclose(res[0], res[1], rtol = precision, verbose = True)
+        path = os.path.join(directory, "test_002_bulk_Si_1proc_OrderN")
+        res = results(path, key)
+        np.testing.assert_allclose(res[0], res[1], rtol = precision, verbose = True)
 
-@pytest.mark.parametrize("key", ['Harris-Foulkes energy',
-                                 'Max force',
-                                 'Force residual',
-                                 'Total polarisation'])
-def test_003(key, precision, directory):
+    @pytest.mark.parametrize("key", ['Harris-Foulkes energy',
+                                     'Max force',
+                                     'Force residual',
+                                     'Total polarisation'])
+    def test_003(self, key, precision, directory):
 
-    path = os.path.join(directory, "test_003_bulk_BTO_polarisation")
-    res = results(path, key)
-    np.testing.assert_allclose(res[0], res[1], rtol = precision, verbose = True)
+        path = os.path.join(directory, "test_003_bulk_BTO_polarisation")
+        res = results(path, key)
+        np.testing.assert_allclose(res[0], res[1], rtol = precision, verbose = True)
