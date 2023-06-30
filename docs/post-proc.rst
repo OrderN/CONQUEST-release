@@ -295,6 +295,18 @@ also be specified:
 where the final tag sets the minimum and maximum values relative to
 the Fermi level.
 
+If you only want to produce pDOS for a few atoms, then you can set
+the  variable ``Process.n_atoms_pDOS`` and list the atoms you want
+in the block ``pDOS_atoms``:
+
+::
+
+   Process.n_atoms_pDOS 2
+   %block pDOS_atoms
+   1
+   12
+   %endblock
+
 Go to :ref:`top <post-proc>`.
 
 .. _pp_band_str
