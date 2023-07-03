@@ -37,6 +37,17 @@ def results(path, key):
 
     return (ref_result[key], test_result[key])
 
+def precision(key='_'):
+    '''
+    Return the relative tolerance used by tests. By default returns 1e-4, but
+    you can pass a key as an argument and match it to return a different precision
+    '''
+
+    if(key == 'Special case'):
+        return 999.9
+    else:
+        return 1e-4
+
 @pytest.fixture
 def testsuite_directory():
     '''
@@ -44,41 +55,33 @@ def testsuite_directory():
     '''
     return pathlib.Path(__file__).parent.resolve()
 
-@pytest.fixture
-def default_precision():
-    '''
-    Return the relative tolerance used by tests
-    '''
-
-    return 1e-4
-
 class TestClass:
     @pytest.mark.parametrize("key",['Harris-Foulkes energy',
                                     'Max force',
                                     'Force residual',
                                     'Total stress'])
-    def test_001(self, key, default_precision, testsuite_directory):
+    def test_001(self, key, testsuite_directory):
 
         path = os.path.join(testsuite_directory, "test_001_bulk_Si_1proc_Diag")
         res = results(path, key)
-        np.testing.assert_allclose(res[0], res[1], rtol = default_precision, verbose = True)
+        np.testing.assert_allclose(res[0], res[1], rtol = precision(key), verbose = True)
 
     @pytest.mark.parametrize("key", ['Harris-Foulkes energy',
                                      'Max force',
                                      'Force residual',
                                      'Total stress'])
-    def test_002(self, key, default_precision, testsuite_directory):
+    def test_002(self, key, testsuite_directory):
 
         path = os.path.join(testsuite_directory, "test_002_bulk_Si_1proc_OrderN")
         res = results(path, key)
-        np.testing.assert_allclose(res[0], res[1], rtol = default_precision, verbose = True)
+        np.testing.assert_allclose(res[0], res[1], rtol = precision(key), verbose = True)
 
     @pytest.mark.parametrize("key", ['Harris-Foulkes energy',
                                      'Max force',
                                      'Force residual',
                                      'Total polarisation'])
-    def test_003(self, key, default_precision, testsuite_directory):
+    def test_003(self, key, testsuite_directory):
 
         path = os.path.join(testsuite_directory, "test_003_bulk_BTO_polarisation")
         res = results(path, key)
-        np.testing.assert_allclose(res[0], res[1], rtol = default_precision, verbose = True)
+        np.testing.assert_allclose(res[0], res[1], rtol = precision(key), verbose = True)
