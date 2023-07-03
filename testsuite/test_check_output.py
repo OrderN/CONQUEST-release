@@ -38,14 +38,14 @@ def results(path, key):
     return (ref_result[key], test_result[key])
 
 @pytest.fixture
-def directory():
+def testsuite_directory():
     '''
     Return path to testsuite
     '''
     return pathlib.Path(__file__).parent.resolve()
 
 @pytest.fixture
-def precision():
+def default_precision():
     '''
     Return the relative tolerance used by tests
     '''
@@ -57,28 +57,28 @@ class TestClass:
                                     'Max force',
                                     'Force residual',
                                     'Total stress'])
-    def test_001(self, key, precision, directory):
+    def test_001(self, key, default_precision, testsuite_directory):
 
-        path = os.path.join(directory, "test_001_bulk_Si_1proc_Diag")
+        path = os.path.join(testsuite_directory, "test_001_bulk_Si_1proc_Diag")
         res = results(path, key)
-        np.testing.assert_allclose(res[0], res[1], rtol = precision, verbose = True)
+        np.testing.assert_allclose(res[0], res[1], rtol = default_precision, verbose = True)
 
     @pytest.mark.parametrize("key", ['Harris-Foulkes energy',
                                      'Max force',
                                      'Force residual',
                                      'Total stress'])
-    def test_002(self, key, precision, directory):
+    def test_002(self, key, default_precision, testsuite_directory):
 
-        path = os.path.join(directory, "test_002_bulk_Si_1proc_OrderN")
+        path = os.path.join(testsuite_directory, "test_002_bulk_Si_1proc_OrderN")
         res = results(path, key)
-        np.testing.assert_allclose(res[0], res[1], rtol = precision, verbose = True)
+        np.testing.assert_allclose(res[0], res[1], rtol = default_precision, verbose = True)
 
     @pytest.mark.parametrize("key", ['Harris-Foulkes energy',
                                      'Max force',
                                      'Force residual',
                                      'Total polarisation'])
-    def test_003(self, key, precision, directory):
+    def test_003(self, key, default_precision, testsuite_directory):
 
-        path = os.path.join(directory, "test_003_bulk_BTO_polarisation")
+        path = os.path.join(testsuite_directory, "test_003_bulk_BTO_polarisation")
         res = results(path, key)
-        np.testing.assert_allclose(res[0], res[1], rtol = precision, verbose = True)
+        np.testing.assert_allclose(res[0], res[1], rtol = default_precision, verbose = True)
