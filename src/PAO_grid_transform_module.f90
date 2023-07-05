@@ -303,7 +303,7 @@ contains
     integer :: no_of_ib_ia, offset_position
     integer :: position,iatom
     integer :: stat, nl, npoint, ip
-    integer :: i,m, m1min, m1max,acz,m1,l1,count1
+    integer :: i,m, m1min, m1max,acz,m1,l1,count1, temp_size
     integer     , allocatable :: ip_store(:)
     real(double), allocatable :: x_store(:)
     real(double), allocatable :: y_store(:)
@@ -313,6 +313,7 @@ contains
     real(double) :: rcut
     real(double) :: r1, r2, r3, r4, core_charge, gauss_charge
     real(double) :: val, theta, phi, r_tmp
+    real(double), dimension(:), allocatable :: temp_block_storage
 
     call start_timer(tmr_std_basis)
     call start_timer(tmr_std_allocation)
@@ -330,21 +331,23 @@ contains
     no_of_ib_ia = 0
     gridfunctions(pao_fns)%griddata = zero
 
+    temp_size= maxval(npao_species)*n_pts_in_block
+    allocate(temp_block_storage(temp_size))
     ! loop arround grid points in the domain, and for each
     ! point, get the d_PAO/d_R values
 
-    !$omp parallel do default(none) &
-    !$omp             schedule(dynamic) &
-    !$omp             shared(domain, dcellx_block, dcelly_block, dcellz_block, atomf, &
-    !$omp                    naba_atoms_of_blocks, parts, r_h, n_pts_in_block, direction, &
-    !$omp                    pao, pao_fns, npao_species, dcs_parts, id_glob, species_glob, &
-    !$omp                    gridfunctions) &
-    !$omp             private(iblock, iatom, ipart, jpart, ind_part, xblock, yblock, zblock, &
-    !$omp                     ii, ia, icover, ig_atom, xatom, yatom, zatom, the_species, &
-    !$omp                     rcut, r_from_i, ip, position, offset_position, ipoint, &
-    !$omp                     npoint, ip_store, r_store, x_store, y_store, z_store, x, y, z, &
-    !$omp                     l1, acz, m1, count1, val) &
-    !$omp             firstprivate(no_of_ib_ia)
+    !#!!$omp parallel do default(none) &
+    !#!!$omp             schedule(dynamic) &
+    !#!!$omp             shared(domain, dcellx_block, dcelly_block, dcellz_block, atomf, &
+    !#!!$omp                    naba_atoms_of_blocks, parts, r_h, n_pts_in_block, direction, &
+    !#!!$omp                    pao, pao_fns, npao_species, dcs_parts, id_glob, species_glob, &
+    !#!!$omp                    gridfunctions) &
+    !#!!$omp             private(iblock, iatom, ipart, jpart, ind_part, xblock, yblock, zblock, &
+    !#!!$omp                     ii, ia, icover, ig_atom, xatom, yatom, zatom, the_species, &
+    !#!!$omp                     rcut, r_from_i, ip, position, offset_position, ipoint, &
+    !#!!$omp                     npoint, ip_store, r_store, x_store, y_store, z_store, x, y, z, &
+    !#!!$omp                     l1, acz, m1, count1, val) &
+    !#!!$omp             firstprivate(no_of_ib_ia)
     do iblock = 1, domain%groups_on_node ! primary set of blocks
        xblock=(domain%idisp_primx(iblock)+domain%nx_origin-1)*dcellx_block
        yblock=(domain%idisp_primy(iblock)+domain%ny_origin-1)*dcelly_block
@@ -370,11 +373,23 @@ contains
                 rcut = r_h + RD_ERR
                 call check_block (xblock,yblock,zblock,xatom,yatom,zatom, rcut, &  ! in
                      npoint,ip_store,r_store,x_store,y_store,z_store,n_pts_in_block) !out
-                r_from_i = sqrt( (xatom-xblock)**2 + (yatom-yblock)**2 + (zatom-zblock)**2 )
+                !r_from_i = sqrt( (xatom-xblock)**2 + (yatom-yblock)**2 + (zatom-zblock)**2 )
 
                 if(npoint > 0) then
+                   ! Temporary storage
+                   temp_size= npao_species(the_species)*n_pts_in_block
+                   !allocate(temp_block_storage(temp_size))
+                   temp_block_storage = zero
                    !offset_position = (no_of_ib_ia-1) * npao * n_pts_in_block
                    offset_position = no_of_ib_ia
+                   !$omp parallel do default(none) &
+                   !$omp             schedule(dynamic) &
+                   !$omp             reduction(+: temp_block_storage) &
+                   !$omp             shared(n_pts_in_block, direction, pao, the_species, offset_position, &
+                   !$omp                    no_of_ib_ia, ip_store, r_store, x_store, y_store, z_store) &
+                   !$omp             private(r_from_i, ip, position, ipoint, &
+                   !$omp                     npoint, x, y, z, &
+                   !$omp                     l1, acz, m1, count1, val)
                    do ip=1,npoint
                       ipoint=ip_store(ip)
                       position= offset_position + ipoint
@@ -395,19 +410,24 @@ contains
                                ! inside the loop might not be great for vectorization, but with the function
                                ! call here, it probably won't vectorize anyways.
                                ! This loop nest really should be inside pao_elem_derivative_2, see issue #198
-                               gridfunctions(pao_fns)%griddata(position+(count1-1)*n_pts_in_block) = val
+                               !gridfunctions(pao_fns)%griddata(position+(count1-1)*n_pts_in_block) = val
+                               temp_block_storage(ipoint + (count1-1)*n_pts_in_block) = val
                                count1 = count1+1
                             end do ! m1
                          end do ! acz
                       end do ! l1
                    enddo ! ip=1,npoint
+                   !$omp end parallel do
+                   gridfunctions(pao_fns)%griddata(no_of_ib_ia+1:no_of_ib_ia+temp_size) = &
+                        temp_block_storage(1:temp_size)
                 endif! (npoint > 0) then
                 no_of_ib_ia = no_of_ib_ia + npao_species(the_species)*n_pts_in_block
              enddo ! naba_atoms
           enddo ! naba_part
        endif !(naba_atoms_of_blocks(atomf)%no_of_part(iblock) > 0) !naba atoms?
     enddo ! iblock : primary set of blocks
-    !$omp end parallel do
+    deallocate(temp_block_storage)
+    !#!!$omp end parallel do
     call my_barrier()
     call start_timer(tmr_std_allocation)
     deallocate(ip_store,x_store,y_store,z_store,r_store)
