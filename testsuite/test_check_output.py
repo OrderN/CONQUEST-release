@@ -40,13 +40,17 @@ def results(path, key):
 def precision(key='_'):
     '''
     Return the relative tolerance used by tests. By default returns 1e-4, but
-    you can pass a key as an argument and match it to return a different precision
-    '''
+    takes a key as an argument and you can match it to return a different precision
+
+    For example:
 
     if(key == 'Special case'):
         return 999.9
     else:
         return 1e-4
+    '''
+
+    return 1e-4
 
 @pytest.fixture
 def testsuite_directory():
