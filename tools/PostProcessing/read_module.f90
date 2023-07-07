@@ -213,6 +213,8 @@ contains
           else
              E_wf_min = -BIG
              E_wf_max =  BIG
+             flag_wf_range = .true.
+             flag_wf_range_Ef = fdf_boolean('IO.WFRangeRelative',.true.)
              write(*,fmt='(2x,"No range specified for bands output; assuming all bands")')
           end if
        end if
