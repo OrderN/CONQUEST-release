@@ -114,6 +114,8 @@ contains
     complex(double_cplx), dimension(:,:,:), allocatable :: psi
     integer :: i_atom, i_spec, i_l, i_zeta,i_m,j_atom,j_spec,j_l,j_zeta,j_m
     integer :: i_band, i_pao, j_pao
+    real(double), parameter :: band_integral_tol = 1e-3_double
+    real(double) :: max_band_integral_deviation, integral_deviation
 
     ! Create arrays needed by Conquest PAO routines
     call set_fact(8)
@@ -126,13 +128,21 @@ contains
     call read_psi_coeffs("Process")
     allocate(current(nptsx,nptsy,nptsz))
     allocate(psi(nptsx,nptsy,nptsz))
+    max_band_integral_deviation = zero
     if(flag_proc_range) then
        Emin = E_procwf_min
        Emax = E_procwf_max
+       if(flag_by_kpoint) then
+          write(*,fmt='(4x,"Writing bands at each k-point")')
+       else
+          write(*,fmt='(4x,"Summing over k-points")')
+       end if
        if(flag_procwf_range_Ef) then
           Emin = efermi + Emin
           Emax = efermi + Emax
        end if
+       write(*,fmt='(4x,"Writing bands between ",e12.4," and ",e12.4,"Ha as specified in input file")') &
+            Emin(1),Emax(1)
        do ispin=1,nspin
           if(flag_by_kpoint) then ! Separate bands by k-point
              do band=1,n_bands_total
@@ -148,8 +158,10 @@ contains
                       write(ci,'("Band",I0.6,"den_kp",I0.3,"S",I0.1)') band, kp, ispin
                       call write_cube(current,ci)
                       integral = gpv*sum(current)
+                      integral_deviation = abs(integral - one)
+                      max_band_integral_deviation = max(integral_deviation, max_band_integral_deviation)
                       ! Check for problems with band integral
-                      if(abs(integral - one)>1e-4_double) &
+                      if(integral_deviation>band_integral_tol) &
                            write(*,fmt='(4x,"Integral of band ",i5," with energy ",f17.10," is ",f17.10)') &
                            band,eigenvalues(band,kp,ispin),integral
                    end if
@@ -165,8 +177,10 @@ contains
                         band_active_kp(band,kp,ispin)==1) then
                       call pao_to_grid(band_full_to_active(band), kp, ispin, psi)
                       integral = gpv*sum(psi*conjg(psi))
+                      integral_deviation = abs(integral - one)
+                      max_band_integral_deviation = max(integral_deviation, max_band_integral_deviation)
                       ! Check for problems with band integral
-                      if(abs(integral - one)>1e-4_double) &
+                      if(integral_deviation>band_integral_tol) &
                            write(*,fmt='(4x,"Integral of band ",i5," at kp ",i5," is ",f17.10)') &
                            band,kp,integral
                       current = current + psi*conjg(psi)*wtk(kp)
@@ -176,16 +190,24 @@ contains
                 if(idum1==1) then
                    write(ci,'("Band",I0.6,"den_totS",I0.1)') band, ispin
                    call write_cube(current,ci)
+                   integral = gpv*sum(current)
+                   integral_deviation = abs(integral - one)
+                   max_band_integral_deviation = max(integral_deviation, max_band_integral_deviation)
+                   ! Check for problems with band integral
+                   if(integral_deviation>band_integral_tol) &
+                        write(*,fmt='(4x,"Integral of band ",i5," is ",f17.10)') &
+                        band,integral
                 end if
-                integral = gpv*sum(current)
-                ! Check for problems with band integral
-                if(abs(integral - one)>1e-4_double) &
-                     write(*,fmt='(4x,"Integral of band ",i5," is ",f17.10)') &
-                     band,integral
              end do ! bands
           end if
        end do
     else ! User has provided list of bands
+       write(*,fmt='(4x,"Writing ",i4," bands specified in input file")') n_bands_process
+       if(flag_by_kpoint) then
+          write(*,fmt='(4x,"Writing bands at each k-point")')
+       else
+          write(*,fmt='(4x,"Summing over k-points")')
+       end if
        do ispin=1,nspin
           if(flag_by_kpoint) then ! Separate bands by k-point
              do band=1,n_bands_process
@@ -200,8 +222,10 @@ contains
                       write(ci,'("Band",I0.6,"den_kp",I0.3,"S",I0.1)') band_proc_no(band), kp, ispin
                       call write_cube(current,ci)
                       integral = gpv*sum(current)
+                      integral_deviation = abs(integral - one)
+                      max_band_integral_deviation = max(integral_deviation, max_band_integral_deviation)
                       ! Check for problems with band integral
-                      if(abs(integral - one)>1e-4_double) &
+                      if(integral_deviation>band_integral_tol) &
                            write(*,fmt='(4x,"Integral of psi squared ",i5," with energy ",f17.10," is ",f17.10)') &
                            band,eigenvalues(band,kp,ispin),integral
                    end if
@@ -215,8 +239,10 @@ contains
                    if(band_active_kp(band_proc_no(band),kp,ispin)==1) then
                       call pao_to_grid(band_full_to_active(band_proc_no(band)), kp, ispin, psi)
                       integral = gpv*sum(psi*conjg(psi))
+                      integral_deviation = abs(integral - one)
+                      max_band_integral_deviation = max(integral_deviation, max_band_integral_deviation)
                       ! Check for problems with band integral
-                      if(abs(integral - one)>1e-4_double) &
+                      if(integral_deviation>band_integral_tol) &
                            write(*,fmt='(4x,"Integral of band ",i5," at kp ",i5," is ",f17.10)') &
                            band,kp,integral
                       current = current + psi*conjg(psi)*wtk(kp)
@@ -225,14 +251,17 @@ contains
                 write(ci,'("Band",I0.6,"den_totS",I0.1)') band_proc_no(band), ispin
                 call write_cube(current,ci)
                 integral = gpv*sum(current)
+                integral_deviation = abs(integral - one)
+                max_band_integral_deviation = max(integral_deviation, max_band_integral_deviation)
                 ! Check for problems with band integral
-                if(abs(integral - one)>1e-4_double) &
+                if(integral_deviation>band_integral_tol) &
                      write(*,fmt='(4x,"Integral of band ",i5," is ",f17.10)') &
                      band,integral
              end do ! bands
           end if
        end do
     end if
+    write(*,fmt='(4x,"Largest deviation of band integral from one is ",f8.5)') max_band_integral_deviation
     return
   end subroutine process_bands
 
