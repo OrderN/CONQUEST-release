@@ -444,7 +444,7 @@ contains
     use naba_blk_module,   only:naba_atm_of_blk
     use set_blipgrid_module, only: naba_atoms_of_blocks
     use bucket_module,     only:local_bucket,remote_bucket
-    use GenBlas,           only:axpy
+    use GenBlas,           only:axpy, gemm
     use comm_array_module, only:send_array
     use block_module,      only:n_pts_in_block
     use functions_on_grid, only: gridfunctions, fn_on_grid
@@ -516,27 +516,20 @@ contains
           ! I HAVE TO BE CAREFUL about WHICH ONE IS LEFT
           do naba1=1, naba_atm1%no_of_atom(iprim_blk)    ! left atom
              ind_halo1 = naba_atm1%list_atom_by_halo(naba1,iprim_blk)
+             nonef = norb(naba_atm1, naba1, iprim_blk)
+             ind1=n_pts_in_block*(naba_atm1%ibegin_blk_orb(iprim_blk)-1+ &
+                  naba_atm1%ibeg_orb_atom(naba1,iprim_blk)-1)+1
              do naba2=1, naba_atm2%no_of_atom(iprim_blk) ! right atom
                 ind_halo2 = naba_atm2%list_atom_by_halo(naba2,iprim_blk)
-
                 bucket = loc_bucket%i_h2d(ind_halo2,ind_halo1) !index of the pair
                 If(bucket /= 0) then   ! naba1 and naba2 makes pair
-                   ii=bucket-1
-                   nonef = norb(naba_atm1, naba1, iprim_blk)
                    ntwof = norb(naba_atm2, naba2, iprim_blk)
-                   do nsf2=1, ntwof
-                      ind2=n_pts_in_block*(naba_atm2%ibegin_blk_orb(iprim_blk)-1+ &
-                           naba_atm2%ibeg_orb_atom(naba2,iprim_blk)-1+(nsf2-1))+1
-                      do nsf1=1, nonef
-                         ind1=n_pts_in_block*(naba_atm1%ibegin_blk_orb(iprim_blk)-1+ &
-                              naba_atm1%ibeg_orb_atom(naba1,iprim_blk)-1+(nsf1-1))+1
-                         ii = ii+1
-                         factor_M=send_array(ii)
-                         call axpy(n_pts_in_block, factor_M, &
-                              gridfunctions(gridtwo)%griddata(ind2:ind2+n_pts_in_block-1), 1, &
-                              gridfunctions(gridone)%griddata(ind1:ind1+n_pts_in_block-1), 1)
-                      end do
-                   end do
+                   ind2=n_pts_in_block*(naba_atm2%ibegin_blk_orb(iprim_blk)-1+ &
+                        naba_atm2%ibeg_orb_atom(naba2,iprim_blk)-1)+1
+                   call gemm('N','T',n_pts_in_block,nonef,ntwof, &
+                        one,gridfunctions(gridtwo)%griddata(ind2:ind2+ntwof*n_pts_in_block-1),n_pts_in_block,&
+                        send_array(bucket:bucket+nonef*ntwof-1),nonef,&
+                        one,gridfunctions(gridone)%griddata(ind1:ind1+nonef*n_pts_in_block-1),n_pts_in_block)
                 Endif  ! if the two atoms are within a range
 
              enddo ! Loop over right naba atoms
