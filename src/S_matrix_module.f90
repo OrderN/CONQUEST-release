@@ -626,9 +626,9 @@ contains
                       z = z_store(ip)
                       if(direction==0) then
                          if(flag_func==0) then
-                            rx = x
-                            ry = y
-                            rz = z
+                            rx = x + atom_coord(1,ig_atom)
+                            ry = y + atom_coord(2,ig_atom)
+                            rz = z + atom_coord(3,ig_atom)
                          else if(flag_func==1) then
                             rx = cos(twopi*(x + atom_coord(1,ig_atom))/r_super_x)
                             ry = cos(twopi*(y + atom_coord(2,ig_atom))/r_super_y)
