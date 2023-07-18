@@ -349,6 +349,8 @@ contains
     allocate(current(nptsx,nptsy,nptsz))
     allocate(psi(nptsx,nptsy,nptsz))
 
+    if (nspin==1 .and. fermi_offset.ne.zero) &
+       write(*,fmt='(2X,"Fermi-offset is ",f7.3," eV")') fermi_offset
     fermi_offset = fermi_offset/HaToeV   ! default of fermi_offset is zero
     if(stm_bias<0) then
        Emin = stm_bias/HaToeV + Efermi + fermi_offset
