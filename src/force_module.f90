@@ -3412,6 +3412,8 @@ contains
   !!    Added atomic stress contributions
   !!   2021/03/23 15:52 dave
   !!    Bugfix: correct calculation of rsq implemented, variables tidied
+  !!   2023/07/19 10:40 dave
+  !!    Added minus sign to non-SCF PCC force for consistency with non-SCF part
   !!  SOURCE
   !!
   subroutine get_nonSC_correction_force(HF_force, density_out, inode, &
@@ -3962,7 +3964,8 @@ contains
                                   ! calculated from set_density
                                   do spin = 1, nspin
                                      do dir1 = 1, 3
-                                        fr_pcc(dir1,spin) = r_pcc(dir1) * half * derivative_pcc * density_scale(spin)
+                                        fr_pcc(dir1,spin) = -r_pcc(dir1) * half * &
+                                             derivative_pcc * density_scale(spin)
                                      end do
                                   end do
                                end if
