@@ -755,6 +755,8 @@ contains
 !!    Added salutation at start of subroutine
 !!   2008/05/19 ast
 !!    Added timer
+!!   2023/07/20 tsuyoshi
+!!    Change for padding H and S matrices  (to improve the efficiency of diagonalization)
 !!  SOURCE
 !!
   subroutine find_SC_row_atoms 
@@ -768,11 +770,27 @@ contains
 
     ! Local variables
     integer :: i, patom, part, proc, CC, brow, SCblock, supfn
+    integer :: num_elem_pad, nproc_pad, iblock_pad, end_elem_pad, start_elem_pad
+
+    ! For padding H and S matrices
+    num_elem_pad = matrix_size_padH - matrix_size     ! # of padded elements
+    nproc_pad = mod( blocks_r-1, proc_rows ) + 1      ! ID of the responsible process for the padded part
+    iblock_pad = sum( proc_start( 1 : nproc_pad )%rows ) ! # of blocks before reaching the block including the padded part
+    end_elem_pad = block_size_r * iblock_pad          ! element ID for the end of the padded part
+    start_elem_pad = end_elem_pad - num_elem_pad + 1  ! element ID for the start of the padded part
 
     if(iprint_DM>3.AND.myid==0) write(io_lun,fmt='(10x,i5,a)') myid,' Starting Find SC Row Atoms'
     ! -----------------------------------------------------------------
     ! Loop over matrix using processor/partition/sequence order
     i = 1 ! Indexes matrix row
+    ! For padding H and S matrices:  
+    !  CQ2SC_row_info(:)%CClabel is now initialised and some of the values can be kept 0 for the padded parts.
+    !  Other members are basically not used for padded parts, but also initialised to be 0 for safety.
+     CQ2SC_row_info(:)%CClabel = 0
+     CQ2SC_row_info(:)%support_fn = 0
+     CQ2SC_row_info(:)%atom = 0
+     CQ2SC_row_info(:)%partition = 0
+    
     do proc=1,numprocs
        proc_start(proc)%startrow = i ! This is where data for the processor starts
        if(parts%ng_on_node(proc)>0) then
@@ -786,7 +804,8 @@ contains
                       CQ2SC_row_info(i)%partition = part
                       CQ2SC_row_info(i)%CClabel = CC
                       i = i+1
-                      if(i>matrix_size+1) call cq_abort('Too many support functions !',i)
+                      if( i==start_elem_pad ) i=i+num_elem_pad
+                      if(i>matrix_size_padH+1) call cq_abort('Too many support functions !',i)
                    end do
                 end do
              end if
@@ -813,7 +832,7 @@ contains
           if(iprint_DM>3.AND.myid==0) &
                write(io_lun,2) myid,CQ2SC_row_info(i)%CClabel,CQ2SC_row_info(i)%atom,CQ2SC_row_info(i)%support_fn
           i=i+1
-          if(i>matrix_size+1) call cq_abort('Too many support functions !',i)
+          if(i>matrix_size_padH+1) call cq_abort('Too many support functions !',i)
        end do
     end do
     ! End loop over matrix using blocks
@@ -865,6 +884,8 @@ contains
 !!    Added timer
 !!   2013/07/05 dave
 !!    Moved check on cb overrunning so that erroneous error goes away
+!!   2023/7/20 tsuyoshi
+!!    Changed for the version of padding H matrix
 !!  SOURCE
 !!
   subroutine find_ref_row_atoms 
@@ -881,6 +902,17 @@ contains
     if(iprint_DM>3.AND.myid==0) write(io_lun,fmt='(10x,i5,a)') myid,' Starting Find Ref Row Atoms'
     blockcol = 1
     cb = 1
+    ! For padding of H matrix, we need to initialize ref_row_block_atom and ref_col_block_atom,
+    ! because they need to be kept 0 for the padding part.  
+    !  (it might be safer to initialize other members (atom and support_fn)
+    ref_row_block_atom(:,:)%part = 0
+    ref_col_block_atom(:,:)%part = 0
+    ! for safety, other members are also initialised.
+    ref_row_block_atom(:,:)%atom = 0
+    ref_col_block_atom(:,:)%atom = 0
+    ref_row_block_atom(:,:)%support_fn = 0
+    ref_col_block_atom(:,:)%support_fn = 0
+
     if(iprint_DM>3.AND.myid==0) write(io_lun,fmt='(10x,a,2i5)') '  blocks, size: ',blocks_r, block_size_r
     ! Loop over reference row blocks
     do rb = 1,blocks_r
@@ -888,6 +920,8 @@ contains
        if(iprint_DM>3.AND.myid==0) write(io_lun,2) myid,rb,SCblockx
        do blockrow = 1,block_size_r ! Loop over rows in block
           part = SC_row_block_atom(blockrow,SCblockx)%part
+          !For the padded part, setting of ref_row_block_atom should not be done. (kept to be 0)
+          if(part == 0) cycle   
           seq  = SC_row_block_atom(blockrow,SCblockx)%atom
           supfn  = SC_row_block_atom(blockrow,SCblockx)%support_fn
           if(cb>blocks_c+1.OR.cb==blocks_c+1.AND.blockcol>1) then
@@ -952,6 +986,8 @@ contains
 !!    Added salutation at start of subroutine
 !!   2008/05/19 ast
 !!    Added timer
+!!   2023/07/20 tsuyoshi
+!!    Change for padding Hamiltonian and overlap matrices
 !!  SOURCE
 !!
   subroutine find_SC_col_atoms  
@@ -966,6 +1002,9 @@ contains
     ! Local variables
     integer :: cb, blockcol, refc, part, seq, supfn, np_in_cell
 
+    ! for padding H matrix, we need to initialise SC_col_block_atom
+          SC_col_block_atom(:,:)%part = 0
+         
     if(iprint_DM>3.AND.myid==0) write(io_lun,fmt='(10x,i5, a)') myid,' Starting Find SC Col Atoms'
     ! Loop over SC blocks
     do cb = 1,blocks_c
@@ -973,6 +1012,8 @@ contains
        if(iprint_DM>3.AND.myid==0) write(io_lun,2) myid, cb, refc
        do blockcol = 1,block_size_c
           part = ref_col_block_atom(blockcol,refc)%part  
+          ! for the padded part (padding Hmatrix version)
+          if(part == 0) cycle
           seq  = ref_col_block_atom(blockcol,refc)%atom  
           supfn  = ref_col_block_atom(blockcol,refc)%support_fn
           SC_col_block_atom(blockcol,cb)%part = part
