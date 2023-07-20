@@ -1040,7 +1040,7 @@ contains
   subroutine initDiag
 
     use numbers
-    use ScalapackFormat, only: proc_rows, proc_cols, matrix_size
+    use ScalapackFormat, only: proc_rows, proc_cols, matrix_size, matrix_size_padH
     use global_module,   only: numprocs, nspin
     use GenComms,        only: my_barrier, cq_abort, myid
     use memory_module,   only: type_dbl, type_int, type_cplx,         &
@@ -1069,11 +1069,11 @@ contains
     SCSmat = zero
     z = zero
 
-    allocate(w(matrix_size,nkp,nspin), occ(matrix_size,nkp,nspin), STAT=stat)
+    allocate(w(matrix_size_padH,nkp,nspin), occ(matrix_size,nkp,nspin), STAT=stat)
     if (stat /= 0) call cq_abort('initDiag: failed to allocate w and occ', stat)
     call reg_alloc_mem(area_DM, 2 * matrix_size * nkp * nspin, type_dbl)
 
-    allocate(local_w(matrix_size, nspin), STAT=stat)
+    allocate(local_w(matrix_size_padH, nspin), STAT=stat)
     if (stat /= 0) call cq_abort('initDiag: failed to allocate local_w', stat)
     call reg_alloc_mem(area_DM, matrix_size * nspin, type_dbl)
 
@@ -2044,7 +2044,7 @@ contains
     use mpi
     use numbers,         only: zero, minus_i
     use ScalapackFormat, only: proc_start, block_size_r, block_size_c,&
-         mapy, pgroup, pgid
+         mapy, pgroup, pgid, matrix_size
     use GenComms,        only: my_barrier, myid
 
     implicit none
@@ -2061,7 +2061,7 @@ contains
          coff, req1, req2, ierr
     integer :: srow_size, scol_size, rrow_size, rcol_size
     integer, dimension(MPI_STATUS_SIZE) :: mpi_stat
-    integer :: i, j, k
+    integer :: i, j, k, l
 
     send_proc = myid
     recv_proc = myid
@@ -2127,7 +2127,16 @@ contains
                    if(iprint_DM>=5.AND.myid==0) &
                         write(io_lun,3) myid,j,k,rblock,cblock,refblock,coff,Distrib%firstrow(recv_proc+1),RecvBuffer(j,k)
                    ! localEig(Distrib%firstrow(recv_proc+1)+j-1,coff:coff+block_size_c-1) = RecvBuffer(j,k:k+block_size_c-1)
-                   localEig(coff:coff+block_size_c-1,Distrib%firstrow(recv_proc+1)+j-1) = RecvBuffer(j,k:k+block_size_c-1)
+                   if(coff+block_size_c-1 > matrix_size) then 
+                    !TMP localEig(coff:matrix_size,Distrib%firstrow(recv_proc+1)+j-1) = RecvBuffer(j,k:k+block_size_c-1)
+         
+                    do l=1, block_size_c
+                      if( coff+l-1 > matrix_size ) cycle
+                      localEig(coff+l-1,Distrib%firstrow(recv_proc+1)+j-1) = RecvBuffer(j,k+l-1)
+                    end do
+                   else
+                    localEig(coff:coff+block_size_c-1,Distrib%firstrow(recv_proc+1)+j-1) = RecvBuffer(j,k:k+block_size_c-1)
+                   endif
                 end do
              end do
              if(iprint_DM>=4.AND.myid==0) write(io_lun,fmt='(10x,a)') '  Done on-proc'
@@ -4197,6 +4206,8 @@ contains
   !!    Changed matS to be spin_SF dependent
   !!   2022/10/10 16:53 dave
   !!    Introduced flag to output info>0 warning only once
+  !!   2023/07/20 tsuyoshi
+  !!    Changed for padding H and S matrices
   !!  SOURCE
   !!
   subroutine distrib_and_diag(spin,index_kpoint,mode,flag_store_w,kpassed)
@@ -4205,7 +4216,8 @@ contains
     use numbers
     use global_module,   only: iprint_DM, flag_SpinDependentSF, min_layer, iprint
     use mult_module,     only: matH, matS
-    use ScalapackFormat, only: matrix_size, proc_rows, proc_cols,     &
+    use ScalapackFormat, only: matrix_size, matrix_size_padH, proc_rows, proc_cols,     &
+         block_size_r, block_size_c, blocks_r, blocks_c, procid, &
          nkpoints_max, pgid, N_kpoints_in_pg, pg_kpoints, N_procs_in_pg, proc_groups
     use GenComms,        only: cq_warn
 
@@ -4221,6 +4233,9 @@ contains
     ! Local
     real(double) :: vl, vu, orfac, scale
     integer :: il, iu, m, mz, info, spin_SF, iprint_store
+    ! for padH
+    integer :: num_elem_pad, ind_proc_row_pad, ind_proc_col_pad, i, j
+    real(double), parameter :: H_large_value = 1.0e08  ! this should not change the results if it is larger than E_f
 
     spin_SF = 1
     if (flag_SpinDependentSF) spin_SF = spin
@@ -4247,9 +4262,29 @@ contains
          write (io_lun, fmt='(10x,i6,a,5i6)') myid, 'Proc row, cols, me: ', &
          proc_rows, proc_cols, me, index_kpoint, nkpoints_max
     if (index_kpoint <= N_kpoints_in_pg(pgid)) then
+    ! Padding of H and S matrices to have matrix_size_padH
+       num_elem_pad  = matrix_size_padH - matrix_size
+       ind_proc_row_pad  = mod( blocks_r-1, proc_rows )
+       ind_proc_col_pad  = mod( blocks_c-1, proc_cols )
+
+       if( procid(1, ind_proc_row_pad+1, ind_proc_col_pad+1) == myid+1 ) then
+          do i=row_size-num_elem_pad+1, row_size
+             do j=col_size-num_elem_pad+1, col_size
+                if( mod(i,block_size_r)==mod(j,block_size_c) ) then
+                   SCHmat(i,j,spin) = H_large_value
+                   SCSmat(i,j,spin) = one
+                else
+                   SCHmat(i,j,spin) = zero
+                   SCSmat(i,j,spin) = zero
+                end if
+             end do
+          end do
+       end if
+
+
        ! Call the diagonalisation routine for generalised problem
        ! H.psi = E.S.psi
-       call pzhegvx(1, mode, 'A', 'U', matrix_size, SCHmat(:,:,spin), &
+       call pzhegvx(1, mode, 'A', 'U', matrix_size_padH, SCHmat(:,:,spin), &
             1, 1, desca, SCSmat(:,:,spin), 1, 1, descb,      &
             vl, vu, il, iu, abstol, m, mz, local_w(:,spin),  &
             orfac, z(:,:,spin), 1, 1, descz, work, lwork,    &
