@@ -259,6 +259,7 @@ contains
 !!
   subroutine allocate_arrays (nkp)
 
+    use datatypes, ONLY: double
     use global_module, ONLY: iprint_DM, numprocs
     use GenComms, ONLY: cq_abort, myid
 
@@ -274,8 +275,8 @@ contains
 
     ! Calculate maximum numbers of blocks in different directions
     if(flag_padH) then
-     blocks_r = int(ceiling(dble(matrix_size)/block_size_r))
-     blocks_c = int(ceiling(dble(matrix_size)/block_size_c))
+     blocks_r = int(ceiling(real(matrix_size,double)/block_size_r))
+     blocks_c = int(ceiling(real(matrix_size,double)/block_size_c))
      if(blocks_r .ne. blocks_c) call cq_abort("ScalapackFormat: blocks_r /= blocks_c")
      matrix_size_padH = blocks_r * block_size_r
     else
