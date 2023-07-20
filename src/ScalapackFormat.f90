@@ -155,6 +155,9 @@ module ScalapackFormat
 
   ! Dimension of matrix (always square)
   integer :: matrix_size
+  ! Dimension of padded H (and S) matrix 
+  logical :: flag_padH
+  integer :: matrix_size_padH
   ! Block sizes (not necessarily square)
   integer :: block_size_r, block_size_c
   ! Processor group
@@ -270,8 +273,16 @@ contains
     if(iprint_DM>3.AND.myid==0) write(io_lun,fmt='(10x,i5,a)') myid,' Starting Allocate Arrays'
 
     ! Calculate maximum numbers of blocks in different directions
-    blocks_r = (matrix_size/block_size_r)
-    blocks_c = (matrix_size/block_size_c)
+    if(flag_padH) then
+     blocks_r = int(ceiling(dble(matrix_size)/block_size_r))
+     blocks_c = int(ceiling(dble(matrix_size)/block_size_c))
+     if(blocks_r .ne. blocks_c) call cq_abort("ScalapackFormat: blocks_r /= blocks_c")
+     matrix_size_padH = blocks_r * block_size_r
+    else
+     blocks_r = (matrix_size/block_size_r)
+     blocks_c = (matrix_size/block_size_c)
+     matrix_size_padH = matrix_size
+    endif
     if(myid==0.AND.iprint_DM>3) write(io_lun,1) blocks_r,blocks_c
     maxrow = floor(real(blocks_r/proc_rows))+1
     maxcol = floor(real(blocks_c/proc_cols))+1
@@ -290,7 +301,7 @@ contains
          SC_row_block_atom(block_size_r,blocks_r),&
          SC_col_block_atom(block_size_c,blocks_c),STAT=stat)
     if(stat/=0) call cq_abort("ScalapackFormat: Could not alloc bxa var",stat)
-    allocate(CQ2SC_row_info(matrix_size), my_row(matrix_size),proc_start(numprocs), STAT=stat)
+    allocate(CQ2SC_row_info(matrix_size_padH), my_row(matrix_size),proc_start(numprocs), STAT=stat)
     nprocs_max = floor(real(numprocs/proc_groups))+1
     nkpoints_max = floor(real(nkp/proc_groups))+1
     allocate(pg_procs(proc_groups,nprocs_max),pg_kpoints(proc_groups,nkpoints_max),STAT=stat)
