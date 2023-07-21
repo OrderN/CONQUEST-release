@@ -278,8 +278,8 @@ module DiagModule
   !logical :: diagon ! Do we diagonalise or use O(N) ?
 
   ! Local scratch data
-  real(double), dimension(:,:,:), allocatable :: w ! matrix_size, nkp, nspin
-  real(double), dimension(:,:),   allocatable :: local_w ! matrix_size, nspin
+  real(double), dimension(:,:,:), allocatable :: w ! matrix_size_padH, nkp, nspin
+  real(double), dimension(:,:),   allocatable :: local_w ! matrix_size_padH, nspin
   complex(double_cplx), dimension(:,:,:), pointer :: polSloc
   integer :: pol_S_size
   !complex(double_cplx), dimension(:),allocatable :: work, rwork, gap
@@ -493,7 +493,7 @@ contains
          flag_SpinDependentSF, flag_do_pol_calc, polS, &
          io_ase, write_ase, ase_file, i_pol_dir_end, ne_spin_in_cell
     use GenComms,        only: my_barrier, cq_abort, mtime, gsum, myid
-    use ScalapackFormat, only: matrix_size, proc_rows, proc_cols,     &
+    use ScalapackFormat, only: matrix_size, matrix_size_padH, proc_rows, proc_cols,     &
          block_size_r,       &
          block_size_c, pg_kpoints, proc_groups, &
          nkpoints_max, pgid, N_procs_in_pg,     &
@@ -574,7 +574,7 @@ contains
        ! node, note that the repeating of the same eigenvalues in each
        ! proc_group is taken care of by the additional factor
        ! 1 / N_procs_in_pg
-       call gsum(w(:,:,spin), matrix_size, nkp)
+       call gsum(w(:,:,spin), matrix_size_padH, nkp)
     end do ! spin
     ! Allocate matrices to store band K matrices
     time1 = mtime()
@@ -1077,7 +1077,7 @@ contains
     if (stat /= 0) call cq_abort('initDiag: failed to allocate local_w', stat)
     call reg_alloc_mem(area_DM, matrix_size * nspin, type_dbl)
 
-    allocate(ifail(matrix_size), iclustr(2 * proc_rows * proc_cols), STAT=stat)
+    allocate(ifail(matrix_size_padH), iclustr(2 * proc_rows * proc_cols), STAT=stat)
     if (stat /= 0) call cq_abort("initDiag: failed to allocate ifail and iclustr", stat)
     call reg_alloc_mem(area_DM, matrix_size + 2 * proc_rows * proc_cols, type_int)
 
@@ -1086,7 +1086,7 @@ contains
     call reg_alloc_mem(area_DM, proc_rows * proc_cols, type_dbl)
 
     ! the pzhegvx is only called here to get the optimal work array
-    call pzhegvx(1, 'V', 'A', 'U', matrix_size, SCHmat(:,:,1), 1, 1,  &
+    call pzhegvx(1, 'V', 'A', 'U', matrix_size_padH, SCHmat(:,:,1), 1, 1,  &
          desca, SCSmat(:,:,1), 1, 1, descb, zero, zero, 0, 0, &
          1.0e-307_double, m, mz, w(1,1,1), -one, z(:,:,1), 1, &
          1, descz, wo, -1, rwo, -1, iwo, -1, ifail, iclustr,  &
@@ -2127,16 +2127,17 @@ contains
                    if(iprint_DM>=5.AND.myid==0) &
                         write(io_lun,3) myid,j,k,rblock,cblock,refblock,coff,Distrib%firstrow(recv_proc+1),RecvBuffer(j,k)
                    ! localEig(Distrib%firstrow(recv_proc+1)+j-1,coff:coff+block_size_c-1) = RecvBuffer(j,k:k+block_size_c-1)
-                   if(coff+block_size_c-1 > matrix_size) then 
-                    !TMP localEig(coff:matrix_size,Distrib%firstrow(recv_proc+1)+j-1) = RecvBuffer(j,k:k+block_size_c-1)
+
+                   !if(coff+block_size_c-1 > matrix_size) then 
+                   ! !TMP localEig(coff:matrix_size,Distrib%firstrow(recv_proc+1)+j-1) = RecvBuffer(j,k:k+block_size_c-1)
          
                     do l=1, block_size_c
                       if( coff+l-1 > matrix_size ) cycle
                       localEig(coff+l-1,Distrib%firstrow(recv_proc+1)+j-1) = RecvBuffer(j,k+l-1)
                     end do
-                   else
-                    localEig(coff:coff+block_size_c-1,Distrib%firstrow(recv_proc+1)+j-1) = RecvBuffer(j,k:k+block_size_c-1)
-                   endif
+                   !else
+                   ! localEig(coff:coff+block_size_c-1,Distrib%firstrow(recv_proc+1)+j-1) = RecvBuffer(j,k:k+block_size_c-1)
+                   !endif
                 end do
              end do
              if(iprint_DM>=4.AND.myid==0) write(io_lun,fmt='(10x,a)') '  Done on-proc'
@@ -4214,12 +4215,12 @@ contains
 
     use datatypes
     use numbers
-    use global_module,   only: iprint_DM, flag_SpinDependentSF, min_layer, iprint
+    use global_module,   only: iprint_DM, flag_SpinDependentSF, min_layer, iprint, numprocs
     use mult_module,     only: matH, matS
     use ScalapackFormat, only: matrix_size, matrix_size_padH, proc_rows, proc_cols,     &
          block_size_r, block_size_c, blocks_r, blocks_c, procid, &
          nkpoints_max, pgid, N_kpoints_in_pg, pg_kpoints, N_procs_in_pg, proc_groups
-    use GenComms,        only: cq_warn
+    use GenComms,        only: cq_warn, my_barrier
 
     implicit none
 
@@ -4235,7 +4236,7 @@ contains
     integer :: il, iu, m, mz, info, spin_SF, iprint_store
     ! for padH
     integer :: num_elem_pad, ind_proc_row_pad, ind_proc_col_pad, i, j
-    real(double), parameter :: H_large_value = 1.0e08  ! this should not change the results if it is larger than E_f
+    real(double), parameter :: H_large_value = 1.0e8_double  ! this should not change the results if it is larger than E_f
 
     spin_SF = 1
     if (flag_SpinDependentSF) spin_SF = spin
@@ -4284,6 +4285,17 @@ contains
 
        ! Call the diagonalisation routine for generalised problem
        ! H.psi = E.S.psi
+!       do i=1, numprocs
+!        if(i-1 .eq. myid) then
+!         write(io_lun,*) ' myid, mode, matrix_size_padH = ',myid, mode, matrix_size_padH
+!         write(io_lun,*) '  SCHMat '
+!         write(io_lun,fmt='(3x,20e10.2)')  SCHmat(:,:,spin)
+!         write(io_lun,*) '  SCSMat '
+!         write(io_lun,fmt='(3x,20e10.2)')  SCSmat(:,:,spin)
+!        endif
+!        call my_barrier 
+!       enddo
+
        call pzhegvx(1, mode, 'A', 'U', matrix_size_padH, SCHmat(:,:,spin), &
             1, 1, desca, SCSmat(:,:,spin), 1, 1, descb,      &
             vl, vu, il, iu, abstol, m, mz, local_w(:,spin),  &
@@ -4342,7 +4354,7 @@ contains
          reg_alloc_mem, reg_dealloc_mem
     use ScalapackFormat, only: allocate_arrays, pg_initialise, ref_to_SC_blocks, make_maps, &
          block_size_r, block_size_c, proc_rows, &
-         proc_cols, matrix_size, pgid, procid, proc_start
+         proc_cols, matrix_size_padH, pgid, procid, proc_start
     
     implicit none
 
@@ -4395,13 +4407,13 @@ contains
     if (iprint_DM + min_layer > 3 .AND. myid == 0) write (io_lun, 12) myid, row_size, col_size
 
     ! Register the description of the distribution of H
-    call descinit(desca, matrix_size, matrix_size, block_size_r, block_size_c, 0, 0, context, row_size, info)
+    call descinit(desca, matrix_size_padH, matrix_size_padH, block_size_r, block_size_c, 0, 0, context, row_size, info)
     if (info /= 0) call cq_abort("initDiag: descinit(a) failed !", info)
     ! Register the description of the distribution of S
-    call descinit(descb, matrix_size, matrix_size, block_size_r, block_size_c, 0, 0, context, row_size, info)
+    call descinit(descb, matrix_size_padH, matrix_size_padH, block_size_r, block_size_c, 0, 0, context, row_size, info)
     if (info /= 0) call cq_abort("initDiag: descinit(a) failed !", info)
     ! And register eigenvector distribution
-    call descinit(descz, matrix_size, matrix_size, block_size_r, block_size_c, 0, 0, context, row_size, info)
+    call descinit(descz, matrix_size_padH, matrix_size_padH, block_size_r, block_size_c, 0, 0, context, row_size, info)
     ! Find scratch space requirements for ScaLAPACk
     if (info /= 0) call cq_abort("initDiag: descinit(z) failed !", info)
 1   format(10x, 'Proc: ', i5, ' BLACS proc, row, col: ', 3i5)
