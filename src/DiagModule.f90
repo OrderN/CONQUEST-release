@@ -2128,16 +2128,16 @@ contains
                         write(io_lun,3) myid,j,k,rblock,cblock,refblock,coff,Distrib%firstrow(recv_proc+1),RecvBuffer(j,k)
                    ! localEig(Distrib%firstrow(recv_proc+1)+j-1,coff:coff+block_size_c-1) = RecvBuffer(j,k:k+block_size_c-1)
 
-                   !if(coff+block_size_c-1 > matrix_size) then 
-                   ! !TMP localEig(coff:matrix_size,Distrib%firstrow(recv_proc+1)+j-1) = RecvBuffer(j,k:k+block_size_c-1)
+                   if(coff+block_size_c-1 > matrix_size) then 
+                    !TMP localEig(coff:matrix_size,Distrib%firstrow(recv_proc+1)+j-1) = RecvBuffer(j,k:k+block_size_c-1)
          
                     do l=1, block_size_c
                       if( coff+l-1 > matrix_size ) cycle
                       localEig(coff+l-1,Distrib%firstrow(recv_proc+1)+j-1) = RecvBuffer(j,k+l-1)
                     end do
-                   !else
-                   ! localEig(coff:coff+block_size_c-1,Distrib%firstrow(recv_proc+1)+j-1) = RecvBuffer(j,k:k+block_size_c-1)
-                   !endif
+                   else
+                    localEig(coff:coff+block_size_c-1,Distrib%firstrow(recv_proc+1)+j-1) = RecvBuffer(j,k:k+block_size_c-1)
+                   endif
                 end do
              end do
              if(iprint_DM>=4.AND.myid==0) write(io_lun,fmt='(10x,a)') '  Done on-proc'
@@ -2189,8 +2189,15 @@ contains
                       if(iprint_DM>=5.AND.myid==0) write(io_lun,3) myid,j,k,rblock,cblock,refblock,coff,&
                            Distrib%firstrow(recv_proc+1),RecvBuffer(j,k)
                       !localEig(Distrib%firstrow(recv_proc+1)+j-1,coff:coff+block_size_c-1) = RecvBuffer(j,k:k+block_size_c-1)
-                      localEig(coff:coff+block_size_c-1,Distrib%firstrow(recv_proc+1)+j-1) = &
-                           RecvBuffer(j,k:k+block_size_c-1)
+                      if(coff+block_size_c -1 > matrix_size) then
+                       do l=1, block_size_c
+                         if( coff+l-1 > matrix_size ) cycle
+                         localEig(coff+l-1,Distrib%firstrow(recv_proc+1)+j-1) = RecvBuffer(j,k+l-1)
+                       end do
+                      else
+                       localEig(coff:coff+block_size_c-1,Distrib%firstrow(recv_proc+1)+j-1) = &
+                            RecvBuffer(j,k:k+block_size_c-1)
+                      endif
                    end do
                 end do
              end if ! (rrow_size > 0)
@@ -4215,12 +4222,12 @@ contains
 
     use datatypes
     use numbers
-    use global_module,   only: iprint_DM, flag_SpinDependentSF, min_layer, iprint, numprocs
+    use global_module,   only: iprint_DM, flag_SpinDependentSF, min_layer, iprint
     use mult_module,     only: matH, matS
     use ScalapackFormat, only: matrix_size, matrix_size_padH, proc_rows, proc_cols,     &
          block_size_r, block_size_c, blocks_r, blocks_c, procid, &
          nkpoints_max, pgid, N_kpoints_in_pg, pg_kpoints, N_procs_in_pg, proc_groups
-    use GenComms,        only: cq_warn, my_barrier
+    use GenComms,        only: cq_warn
 
     implicit none
 
@@ -4236,7 +4243,7 @@ contains
     integer :: il, iu, m, mz, info, spin_SF, iprint_store
     ! for padH
     integer :: num_elem_pad, ind_proc_row_pad, ind_proc_col_pad, i, j
-    real(double), parameter :: H_large_value = 1.0e8_double  ! this should not change the results if it is larger than E_f
+    real(double), parameter :: H_large_value = 1.0e3_double  ! this should not change the results if it is larger than E_f
 
     spin_SF = 1
     if (flag_SpinDependentSF) spin_SF = spin
@@ -4285,16 +4292,6 @@ contains
 
        ! Call the diagonalisation routine for generalised problem
        ! H.psi = E.S.psi
-!       do i=1, numprocs
-!        if(i-1 .eq. myid) then
-!         write(io_lun,*) ' myid, mode, matrix_size_padH = ',myid, mode, matrix_size_padH
-!         write(io_lun,*) '  SCHMat '
-!         write(io_lun,fmt='(3x,20e10.2)')  SCHmat(:,:,spin)
-!         write(io_lun,*) '  SCSMat '
-!         write(io_lun,fmt='(3x,20e10.2)')  SCSmat(:,:,spin)
-!        endif
-!        call my_barrier 
-!       enddo
 
        call pzhegvx(1, mode, 'A', 'U', matrix_size_padH, SCHmat(:,:,spin), &
             1, 1, desca, SCSmat(:,:,spin), 1, 1, descb,      &
