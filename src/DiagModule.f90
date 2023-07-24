@@ -1035,6 +1035,8 @@ contains
   !!   2017/06/22 dave
   !!   Made descriptors module variables
   !!   Moved many operations out to new routines so this contains only work needed each time
+  !!   2023/07/24 tsuyoshi
+  !!   - Change for padding H and S matrices
   !!  SOURCE
   !!
   subroutine initDiag
@@ -1071,15 +1073,15 @@ contains
 
     allocate(w(matrix_size_padH,nkp,nspin), occ(matrix_size,nkp,nspin), STAT=stat)
     if (stat /= 0) call cq_abort('initDiag: failed to allocate w and occ', stat)
-    call reg_alloc_mem(area_DM, 2 * matrix_size * nkp * nspin, type_dbl)
+    call reg_alloc_mem(area_DM, (matrix_size+matrix_size_padH) * nkp * nspin, type_dbl)
 
     allocate(local_w(matrix_size_padH, nspin), STAT=stat)
     if (stat /= 0) call cq_abort('initDiag: failed to allocate local_w', stat)
-    call reg_alloc_mem(area_DM, matrix_size * nspin, type_dbl)
+    call reg_alloc_mem(area_DM, matrix_size_padH * nspin, type_dbl)
 
     allocate(ifail(matrix_size_padH), iclustr(2 * proc_rows * proc_cols), STAT=stat)
     if (stat /= 0) call cq_abort("initDiag: failed to allocate ifail and iclustr", stat)
-    call reg_alloc_mem(area_DM, matrix_size + 2 * proc_rows * proc_cols, type_int)
+    call reg_alloc_mem(area_DM, matrix_size_padH + 2 * proc_rows * proc_cols, type_int)
 
     allocate(gap(proc_rows * proc_cols), STAT=stat)
     if (stat /= 0) call cq_abort("initDiag: failed to allocate gap", stat)
@@ -1120,6 +1122,8 @@ contains
   !! CREATION DATE
   !!   2012/03/08
   !! MODIFICATION HISTORY
+  !!   2023/07/24 tsuyoshi
+  !!   - Change for padding H and S matrices
   !! SOURCE
   !!
   subroutine endDiag
@@ -1128,7 +1132,7 @@ contains
          reg_dealloc_mem
     use global_module,   only: numprocs, nspin
     use ScalapackFormat, only: deallocate_arrays, proc_rows,  &
-         proc_cols, matrix_size
+         proc_cols, matrix_size, matrix_size_padH
 
     implicit none
 
@@ -1143,11 +1147,11 @@ contains
 
     deallocate(w, occ, STAT=stat)
     if (stat /= 0) call cq_abort('endDiag: failed to deallocate w and occ', stat)
-    call reg_dealloc_mem(area_DM, 2 * matrix_size * nkp * nspin, type_dbl)
+    call reg_dealloc_mem(area_DM, (matrix_size_padH+matrix_size) * nkp * nspin, type_dbl)
 
     deallocate(local_w, STAT=stat)
     if (stat /= 0) call cq_abort('endDiag: failed to allocate local_w', stat)
-    call reg_dealloc_mem(area_DM, matrix_size * nspin, type_dbl)
+    call reg_dealloc_mem(area_DM, matrix_size_padH * nspin, type_dbl)
 
     ! Shut down BLACS
 
@@ -1157,7 +1161,7 @@ contains
     deallocate(ifail, iclustr, STAT=stat)
     if (stat /= 0) &
          call cq_abort("endDiag: failed to deallocate ifail and iclustr", stat)
-    call reg_dealloc_mem(area_DM, matrix_size + 2 * proc_rows * &
+    call reg_dealloc_mem(area_DM, matrix_size_padH + 2 * proc_rows * &
          proc_cols, type_int)
 
     deallocate(gap, STAT=stat)
@@ -1222,6 +1226,8 @@ contains
   !!    Changed nsf to come from maxima, not common
   !!   2006/08/30 16:49 dave
   !!    Added allocate for arrays in Distrib
+  !!   2023/07/24 tsuyoshi
+  !!   - Change for padding H and S matrices
   !!  SOURCE
   !!
   subroutine PrepareRecv(Distrib)
@@ -1255,6 +1261,7 @@ contains
     do rowblock=1,blocks_r
        if(my_row(rowblock)>0) then ! If this row block is part of my chunk
           do row = 1,block_size_r
+             if(SC_row_block_atom(row,rowblock)%part==0) cycle    ! for padding H and S matrices (padded part)
              if(iprint_DM>=5.AND.myid==0) write(io_lun,4) myid,i,rowblock,row
              ! Find processor and increment processors and rows from proc
              proc = parts%i_cc2node(SC_row_block_atom(row,rowblock)%part) ! find proc on which the partition containing the row is stored

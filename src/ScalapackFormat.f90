@@ -284,6 +284,7 @@ contains
      blocks_c = (matrix_size/block_size_c)
      matrix_size_padH = matrix_size
     endif
+    if(myid==0.AND.iprint_DM>3) write(io_lun,*) "matrix_size & matrix_size_padH = ",matrix_size, matrix_size_padH
     if(myid==0.AND.iprint_DM>3) write(io_lun,1) blocks_r,blocks_c
     maxrow = floor(real(blocks_r/proc_rows))+1
     maxcol = floor(real(blocks_c/proc_cols))+1
@@ -1004,6 +1005,9 @@ contains
 
     ! for padding H matrix, we need to initialise SC_col_block_atom
           SC_col_block_atom(:,:)%part = 0
+     ! for safety other members are also initialised.
+          SC_col_block_atom(:,:)%atom = 0
+          SC_col_block_atom(:,:)%support_fn = 0
          
     if(iprint_DM>3.AND.myid==0) write(io_lun,fmt='(10x,i5, a)') myid,' Starting Find SC Col Atoms'
     ! Loop over SC blocks
@@ -1013,7 +1017,7 @@ contains
        do blockcol = 1,block_size_c
           part = ref_col_block_atom(blockcol,refc)%part  
           ! for the padded part (padding Hmatrix version)
-          if(part == 0) cycle
+          if(part == 0) cycle    ! for padding H and S matrices  (for padded part)
           seq  = ref_col_block_atom(blockcol,refc)%atom  
           supfn  = ref_col_block_atom(blockcol,refc)%support_fn
           SC_col_block_atom(blockcol,cb)%part = part
