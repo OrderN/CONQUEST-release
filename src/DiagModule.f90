@@ -2136,12 +2136,8 @@ contains
                    ! localEig(Distrib%firstrow(recv_proc+1)+j-1,coff:coff+block_size_c-1) = RecvBuffer(j,k:k+block_size_c-1)
 
                    if(coff+block_size_c-1 > matrix_size) then 
-                    !TMP localEig(coff:matrix_size,Distrib%firstrow(recv_proc+1)+j-1) = RecvBuffer(j,k:k+block_size_c-1)
-         
-                    do l=1, block_size_c
-                      if( coff+l-1 > matrix_size ) cycle
-                      localEig(coff+l-1,Distrib%firstrow(recv_proc+1)+j-1) = RecvBuffer(j,k+l-1)
-                    end do
+                     !coff+l-1 = matrix_size  => l = matrix_size+1-coff
+                     localEig(coff:matrix_size,Distrib%firstrow(recv_proc+1)+j-1) = RecvBuffer(j,k:k+matrix_size-coff)
                    else
                     localEig(coff:coff+block_size_c-1,Distrib%firstrow(recv_proc+1)+j-1) = RecvBuffer(j,k:k+block_size_c-1)
                    endif
@@ -2197,10 +2193,8 @@ contains
                            Distrib%firstrow(recv_proc+1),RecvBuffer(j,k)
                       !localEig(Distrib%firstrow(recv_proc+1)+j-1,coff:coff+block_size_c-1) = RecvBuffer(j,k:k+block_size_c-1)
                       if(coff+block_size_c -1 > matrix_size) then
-                       do l=1, block_size_c
-                         if( coff+l-1 > matrix_size ) cycle
-                         localEig(coff+l-1,Distrib%firstrow(recv_proc+1)+j-1) = RecvBuffer(j,k+l-1)
-                       end do
+                       !coff+l-1 = matrix_size  => l = matrix_size+1-coff
+                       localEig(coff:matrix_size,Distrib%firstrow(recv_proc+1)+j-1) = RecvBuffer(j,k:k+matrix_size-coff)
                       else
                        localEig(coff:coff+block_size_c-1,Distrib%firstrow(recv_proc+1)+j-1) = &
                             RecvBuffer(j,k:k+block_size_c-1)
