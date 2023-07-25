@@ -229,6 +229,7 @@ contains
     ! Local variables
     real(double) :: loc_x_energy, exx_tmp
 
+    XC_GGA_stress = zero
     select case(flag_functional_type)
     case (functional_lda_pz81)
        ! NOT SPIN POLARISED

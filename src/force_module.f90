@@ -391,11 +391,11 @@ contains
             GPV_stress(dir1,dir1) = (hartree_energy_total_rho + &
               local_ps_energy - core_correction) ! core contains 1/V term
          end if
+         ! XC_GGA_stress is zero for LDA
          if(flag_self_consistent .or. flag_mix_L_SC_min) then
-            XC_stress(dir1,dir1) = xc_energy + &
-              spin_factor*XC_GGA_stress(dir1,dir1)
+            XC_stress(dir1,dir1) = xc_energy + spin_factor*XC_GGA_stress(dir1,dir1)
          else ! nonSCF XC found later, along with corrections to Hartree
-            XC_stress(dir1,dir1) = delta_E_xc !xc_energy + spin_factor*XC_GGA_stress(direction)
+            XC_stress(dir1,dir1) = delta_E_xc + spin_factor*XC_GGA_stress(dir1,dir1)
          end if
       end do    
     end if
@@ -3418,7 +3418,7 @@ contains
   !!    Bug fix for non-SCF NA stress (remove Hartree stress terms)
   !!  SOURCE
   !!
-  subroutine get_nonSC_correction_force(HF_force, density_out, inode, &
+  subroutine get_nonSC_correction_force(NSCforce, density_out, inode, &
                                         ionode, n_atoms, nsize)
 
     use datatypes
@@ -3462,7 +3462,7 @@ contains
     integer :: n_atoms, nsize
     integer :: inode, ionode
     real(double), dimension(:,:) :: density_out
-    real(double), dimension(:,:) :: HF_force
+    real(double), dimension(:,:) :: NSCforce
 
     ! Local variables
     character(len=80) :: sub_name = "get_nonSC_correction_force"
@@ -3485,16 +3485,11 @@ contains
     type(cq_timer) :: backtrace_timer
 
     real(double), dimension(3,3) :: loc_stress
-    real(double), dimension(:),     allocatable :: h_potential,   &
-                                                   density_total, &
-                                                   density_out_total
+    real(double), dimension(:),     allocatable :: h_potential, density_total, density_out_total
     real(double), dimension(:,:,:), allocatable :: dVxc_drho
     real(double), dimension(nspin) :: pot_here, pot_here_pcc
     ! only for GGA with P.C.C.
-    real(double), allocatable, dimension(:)   :: h_potential_in,       &
-                                                 wk_grid_total
-    real(double), allocatable, dimension(:,:) :: wk_grid,              &
-                                                 density_out_GGA
+    real(double), allocatable, dimension(:,:) :: wk_grid, density_out_GGA
 
 
 !****lat<$
@@ -3503,36 +3498,24 @@ contains
     ! Spin-polarised PBE non-SCF forces not implemented, so exit if necessary
     if ((nspin == 2) .and. flag_is_GGA) then ! Only true for CQ not LibXC
        call cq_warn(sub_name, "NonSCF forces not implemented for spin and GGA; these will be set to zero.")
-       HF_force = zero
+       NSCforce = zero
        return
     end if
 
     stat = 0
     call start_timer(tmr_std_allocation)
     allocate(h_potential(nsize),           STAT=stat)
-    if (stat /= 0) &
-         call cq_abort("get_nonSC_correction_force: Error alloc mem: ", nsize)
+    if (stat /= 0) call cq_abort("get_nonSC_correction_force: Error alloc mem: ", nsize)
     allocate(density_total(nsize),         STAT=stat)
-    if (stat /= 0) &
-         call cq_abort("get_nonSC_correction_force: Error alloc mem: ", nsize)
+    if (stat /= 0) call cq_abort("get_nonSC_correction_force: Error alloc mem: ", nsize)
     allocate(density_out_total(nsize),     STAT=stat)
-    if (stat /= 0) &
-         call cq_abort("get_nonSC_correction_force: Error alloc mem: ", nsize)
+    if (stat /= 0) call cq_abort("get_nonSC_correction_force: Error alloc mem: ", nsize)
     allocate(dVxc_drho(nsize,nspin,nspin), STAT=stat)
-    if (stat /= 0) &
-         call cq_abort("get_nonSC_correction_force: Error alloc mem: ", nsize)
+    if (stat /= 0) call cq_abort("get_nonSC_correction_force: Error alloc mem: ", nsize)
     call reg_alloc_mem(area_moveatoms, (3+nspin*nspin)*nsize, type_dbl)
     call stop_timer(tmr_std_allocation)
 
-!****lat<$
-    !print*, size(density_total,    dim=1)
-    !print*, size(dVxc_drho,        dim=1)
-    !print*, size(density_out_total,dim=1)
-    !print*, size(potential,        dim=1)
-    !print*, size(density_out_total,dim=1)
-!****lat>$
-
-    HF_force = zero
+    NSCforce = zero
 
     dcellx_block = rcellx / blocks%ngcellx
     dcelly_block = rcelly / blocks%ngcelly
@@ -3619,34 +3602,25 @@ contains
     ! for P.C.C.
     call start_timer (tmr_l_tmp1, WITH_LEVEL)
     if (flag_pcc_global) then
-       allocate(wk_grid_total(nsize), wk_grid(nsize,nspin), STAT=stat)
-       wk_grid_total = zero
+       allocate(wk_grid(nsize,nspin), STAT=stat)
        wk_grid       = zero
        if (stat /= 0) &
             call cq_abort('Error allocating wk_grids in &
                            &get_nonSC_correction ', stat)
-       call reg_alloc_mem(area_moveatoms, (nspin + 1) * nsize, type_dbl)
+       call reg_alloc_mem(area_moveatoms, nspin * nsize, type_dbl)
        do spin = 1, nspin
           wk_grid(:,spin)  = density(:,spin)  + half * density_pcc(:)
-          wk_grid_total(:) = wk_grid_total(:) + spin_factor * wk_grid(:,spin)
        end do
-       ! only for GGA
+       ! Find dVxc_drho (different for LDA and GGA)
        if (flag_is_GGA) then
           allocate(density_out_GGA(nsize,nspin), STAT=stat)
           if (stat /= 0) call cq_abort ('Error allocating &
                                &density_out_GGAs in get_nonSC_force ', stat)
           call reg_alloc_mem(area_moveatoms, nspin * nsize, type_dbl)
-          density_out_GGA       = zero
+          density_out_GGA = zero
           do spin = 1, nspin
              density_out_GGA(:,spin)  = density_out(:,spin)      + half * density_pcc(:)
           end do
-          ! copy hartree potential
-          allocate(h_potential_in(nsize), STAT=stat)
-          if (stat /= 0) &
-               call cq_abort('Error allocating h_potential_in in &
-                              &get_nonSC_force ', stat)
-          call reg_alloc_mem(area_moveatoms, nsize, type_dbl)
-          h_potential_in = h_potential
           call get_dxc_potential(wk_grid, dVxc_drho, nsize, density_out_GGA)
           ! GGA with spin not implemented ! 
           potential(:,1) = potential(:,1) + dVxc_drho(:,1,1) 
@@ -3654,11 +3628,6 @@ contains
           if (stat /= 0) call cq_abort('Error deallocating density_out_GGAs in &
                               &get_nonSC_force ', stat)
           call reg_dealloc_mem(area_moveatoms, nspin * nsize, type_dbl)
-          ! make a copy of potential at this point
-          ! use wk_grid as a temporary storage
-          do spin = 1, nspin
-             wk_grid(:,spin) = potential(:,spin)
-          end do
        else
           call get_dxc_potential(wk_grid, dVxc_drho, nsize)
        end if
@@ -3693,10 +3662,8 @@ contains
     call start_timer(tmr_l_tmp2, WITH_LEVEL)
     ! Calculate the Hartree potential from the output density
     h_potential = zero
-    ! Preserve the Hartree stress we've calculated
-    loc_stress = Hartree_stress
+    loc_stress = Hartree_stress ! Preserve Hartree stress
     call hartree(density_out_total, h_potential, nsize, h_energy)
-    ! And restore
     Hartree_stress = loc_stress
     ! And subtract from potential so that we have delta V_Ha
     do spin = 1, nspin
@@ -3804,8 +3771,8 @@ contains
                          ! on what we are doing here.
                          do spin = 1, nspin
                             do dir1 = 1, 3
-                                HF_force(dir1,ig_atom) = &
-                                  HF_force(dir1,ig_atom) + spin_factor * &
+                                NSCforce(dir1,ig_atom) = &
+                                  NSCforce(dir1,ig_atom) + spin_factor * &
                                   fr_1(dir1,spin) * pot_here(spin)
                               if (flag_stress) then
                                 if (flag_full_stress) then
@@ -3848,23 +3815,16 @@ contains
           ! for GGA
           potential = zero
           do spin = 1, nspin
-             do i = 1, n_my_grid_points
-                ! -delta n * dxc_potential
-                potential(i,spin) = wk_grid(i,spin) - h_potential_in(i)
-             end do
+             potential(:,spin) = dVxc_drho(:,spin,spin)
           end do
        else
           ! For LDA
           potential = zero
           do spin = 1, nspin
              do spin_2 = 1, nspin
-                do i = 1, n_my_grid_points
-                   potential(i,spin) =                                &
-                        potential(i,spin) +                           &
-                        spin_factor *                                 &
-                        (density(i,spin_2) - density_out(i,spin_2)) * &
-                        dVxc_drho(i,spin_2,spin)
-                end do
+                potential(:,spin) = potential(:,spin) + &
+                     spin_factor * (density(:,spin_2) - density_out(:,spin_2)) * &
+                     dVxc_drho(:,spin_2,spin)
              end do
           end do
        end if
@@ -3972,8 +3932,8 @@ contains
                             ! components)
                             do spin = 1, nspin
                                do dir1 = 1, 3
-                                 HF_force(dir1,ig_atom) = &
-                                   HF_force(dir1,ig_atom) + spin_factor * &
+                                 NSCforce(dir1,ig_atom) = &
+                                   NSCforce(dir1,ig_atom) + spin_factor * &
                                    fr_pcc(dir1,spin) * pot_here_pcc(spin)
                                  if (flag_stress) then
                                    if (flag_full_stress) then
@@ -4009,7 +3969,7 @@ contains
     end if ! (flag_pcc_global)
 
     call start_timer(tmr_l_tmp1, WITH_LEVEL)
-    call gsum(HF_force, 3, n_atoms)
+    call gsum(NSCforce, 3, n_atoms)
     if (flag_stress) call gsum(nonSCF_stress,3,3)
     call stop_print_timer(tmr_l_tmp1, "NSC force - Compilation", &
                           IPRINT_TIME_THRES3)
@@ -4017,18 +3977,11 @@ contains
     ! deallocating temporary arrays
     call start_timer(tmr_std_allocation)
     if (flag_pcc_global) then
-       deallocate(wk_grid_total, wk_grid, STAT=stat)
+       deallocate(wk_grid, STAT=stat)
        if (stat /= 0) &
             call cq_abort('Error deallocating wk_grid in &
                            &get_nonSC_correction_force ', stat)
        call reg_dealloc_mem(area_moveatoms, (nspin + 1) * nsize, type_dbl)
-       if (flag_is_GGA) then
-          deallocate(h_potential_in, STAT=stat)
-          if (stat /= 0) &
-               call cq_abort('Error deallocating h_potential_in in &
-                             &get_nonSC_correction_force ', stat)
-          call reg_dealloc_mem(area_moveatoms, nsize, type_dbl)
-       end if ! for GGA
     end if ! flag_pcc_global
     deallocate(h_potential, density_total, density_out_total, dVxc_drho, &
                STAT=stat)
@@ -4169,15 +4122,14 @@ contains
     real(double), dimension(nspin) :: pot_here_pcc
     real(double), dimension(3)   :: r_pcc, fr_pcc, r
     ! allocatable arrays
-    real(double), dimension(:),   allocatable :: xc_epsilon, density_wk_tot
+    real(double), dimension(:),   allocatable :: xc_epsilon
     real(double), dimension(:,:), allocatable :: xc_potential, density_wk
     type(cq_timer) :: backtrace_timer
 
     call start_backtrace(t=backtrace_timer,who='get_PCC_force',where=7,level=3,echo=.true.)
-    allocate(xc_epsilon(size), density_wk_tot(size), &
-             xc_potential(size,nspin), density_wk(size,nspin), STAT=stat)
+    allocate(xc_epsilon(size), xc_potential(size,nspin), density_wk(size,nspin), STAT=stat)
     if (stat /= 0) call cq_abort("get_pcc_force: Error alloc mem: ", size)
-    call reg_alloc_mem(area_moveatoms, (2+2*nspin)*size, type_dbl)
+    call reg_alloc_mem(area_moveatoms, (1+2*nspin)*size, type_dbl)
 
     ! initialise arrays
     pcc_force = zero
@@ -4194,10 +4146,8 @@ contains
 
     call start_timer (tmr_l_tmp2)
     density_wk = zero
-    density_wk_tot = zero
     do spin = 1, nspin
        density_wk(:,spin) = density(:,spin) + half * density_pcc(:)
-       density_wk_tot(:) = density_wk_tot(:) + spin_factor * density_wk(:,spin)
     end do
 
     call get_xc_potential(density_wk, xc_potential,     &
@@ -4360,9 +4310,9 @@ contains
     call stop_print_timer(tmr_l_tmp1, "PCC force - Compilation", &
                           IPRINT_TIME_THRES3)
 
-    deallocate(xc_epsilon, density_wk_tot, xc_potential, density_wk, STAT=stat)
+    deallocate(xc_epsilon, xc_potential, density_wk, STAT=stat)
     if (stat /= 0) call cq_abort("get_pcc_force: Error dealloc mem")
-    call reg_dealloc_mem(area_moveatoms, (2+2*nspin)*size, type_dbl)
+    call reg_dealloc_mem(area_moveatoms, (1+2*nspin)*size, type_dbl)
     call stop_backtrace(t=backtrace_timer,who='get_PCC_force',echo=.true.)
 
     return
