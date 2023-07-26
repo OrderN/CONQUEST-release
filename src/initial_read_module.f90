@@ -941,6 +941,7 @@ contains
     use biblio, only: flag_dump_bib
     !2019/12/27 tsuyoshi
     use density_module,  only: method_UpdateChargeDensity,DensityMatrix,AtomicCharge
+    use force_module, only: mix_input_output_XC_GGA_stress
 
     implicit none
 
@@ -1572,6 +1573,10 @@ contains
     sqnm_trust_step       = fdf_double ('AtomMove.MaxSQNMStep',0.2_double   )
     LBFGS_history         = fdf_integer('AtomMove.LBFGSHistory', 5          )
     flag_opt_cell         = fdf_boolean('AtomMove.OptCell',          .false.)
+    ! At present (2023/07/26 just before v1.2 release) neutral atom is required for cell opt
+    if(flag_opt_cell.and.(.not.flag_neutral_atom)) &
+         call cq_abort("You must use neutral atom for cell optimisation")
+    ! This can be removed when ewald update is implemented
     flag_variable_cell    = flag_opt_cell
     optcell_method        = fdf_integer('AtomMove.OptCellMethod', 1)
     cell_constraint_flag  = fdf_string(20,'AtomMove.OptCell.Constraint','none')
@@ -1583,6 +1588,7 @@ contains
     flag_stress           = fdf_boolean('AtomMove.CalcStress', .true.)
     flag_full_stress      = fdf_boolean('AtomMove.FullStress', .false.)
     flag_atomic_stress    = fdf_boolean('AtomMove.AtomicStress', .false.)
+    mix_input_output_XC_GGA_stress = fdf_double('General.MixXCGGAInOut',half)
     !
     flag_vary_basis       = fdf_boolean('minE.VaryBasis', .false.)
     if(.NOT.flag_vary_basis) then

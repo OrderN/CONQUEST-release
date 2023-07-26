@@ -1403,6 +1403,16 @@ General.GapThreshold (*real*)
 General.only_Dispersion (*boolean*)
     Selects only DFT\_D2 calculation (no electronic structure etc)
 
+General.MixXCGGAInOut (*real*)
+    For non-SCF calculations only, chooses how to mix the proportions of
+    GGA XC stress contribution (from the change of the electron density
+    gradient) found using input (0.0 gives pure input) and output (1.0
+    gives pure output) densities.  Note that this is an approximation but
+    varying the value significantly away from 0.5 will give inconsistency
+    between stress and energy.
+
+    *default*: 0.5
+    
 Go to :ref:`top <input_tags>`.
 
 .. _advanced_atomic_spec_tags:

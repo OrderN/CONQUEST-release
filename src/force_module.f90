@@ -106,6 +106,9 @@ module force_module
                                   PP_stress, GPV_stress, XC_stress, &
                                   nonSCF_stress, pcc_stress, NA_stress
 
+  ! How much we mix input and output densities for the calculations of XC_GGA_stress
+  ! during non-SCF simulations (defaults to half for averaging)
+  real(double) :: mix_input_output_XC_GGA_stress
   ! Useful parameters for selecting force calculations in NL part
   integer, parameter :: HF = 1
   integer, parameter :: Pulay = 2
@@ -394,13 +397,12 @@ contains
          ! XC_GGA_stress is zero for LDA
          if(flag_self_consistent .or. flag_mix_L_SC_min) then
             XC_stress(dir1,dir1) = xc_energy + spin_factor*XC_GGA_stress(dir1,dir1)
-         else ! nonSCF XC found later, along with corrections to Hartree
-            XC_stress(dir1,dir1) = delta_E_xc + spin_factor*XC_GGA_stress(dir1,dir1)
+         else ! The rest of nonSCF XC found later (nonSC or PCC routines)
+            XC_stress(dir1,dir1) = delta_E_xc
          end if
-      end do    
+      end do
     end if
     WhichPulay  = BothPulay
-
     ! matK->matKatomf backtransformation for contracted SFs
     if (atomf.ne.sf) then
        do ispin = 1, nspin
@@ -761,7 +763,6 @@ contains
        volume = rcellx*rcelly*rcellz
        ! We need pressure in GPa, and only diagonal terms output
        scale = -HaBohr3ToGPa/volume
-       !call print_stress("Total pressure:   ", stress*scale, 0)
        if(inode==ionode.AND.iprint_MD + min_layer>=1) &
             write(io_lun,'(4x,a,f15.8,a4/)') trim(prefix)//" Average pressure: ", &
             third*scale*(stress(1,1) + stress(2,2) + stress(3,3))," GPa"
@@ -3455,6 +3456,7 @@ contains
                                    WITH_LEVEL, TIME_ACCUMULATE_NO,     &
                                    TIME_ACCUMULATE_YES
     use pseudopotential_common,      only: pseudopotential
+    use XC, ONLY: XC_GGA_stress
 
     implicit none
 
@@ -3576,8 +3578,30 @@ contains
     ! DeltaXC is added in the main force routine
     ! For PCC we will do this in the PCC force routine (easier)
     if (.NOT.flag_pcc_global) then
+       ! Find XC_GGA_stress for density_out - we will average the input and output
+       ! as an approximation to the correct (hideously complex) stress so add factor of half
+       call get_xc_potential(density_out, potential(:,:),    &
+            dVxc_drho(:,1,1), h_energy, nsize) ! NB dVxc_drho is a dummy here
+       if (flag_stress) then
+          XC_stress(1,1) = XC_stress(1,1) + spin_factor*XC_GGA_stress(1,1) * &
+               mix_input_output_XC_GGA_stress
+          XC_stress(2,2) = XC_stress(2,2) + spin_factor*XC_GGA_stress(2,2) * &
+               mix_input_output_XC_GGA_stress
+          XC_stress(3,3) = XC_stress(3,3) + spin_factor*XC_GGA_stress(3,3) * &
+               mix_input_output_XC_GGA_stress
+       end if
+       ! Find XC potential for input density
        call get_xc_potential(density, potential(:,:),    &
-               dVxc_drho(:,1,1), h_energy, nsize) ! NB dVxc_drho is a dummy here
+            dVxc_drho(:,1,1), h_energy, nsize) ! NB dVxc_drho is a dummy here
+       ! And now add XC_GGA_stress for density_in scaled by half
+       if (flag_stress) then
+          XC_stress(1,1) = XC_stress(1,1) + spin_factor*XC_GGA_stress(1,1) * &
+               (one - mix_input_output_XC_GGA_stress)
+          XC_stress(2,2) = XC_stress(2,2) + spin_factor*XC_GGA_stress(2,2) * &
+               (one - mix_input_output_XC_GGA_stress)
+          XC_stress(3,3) = XC_stress(3,3) + spin_factor*XC_GGA_stress(3,3) * &
+               (one - mix_input_output_XC_GGA_stress)
+       end if
        jacobian = zero
        do spin = 1, nspin
           jacobian = jacobian + spin_factor*dot(nsize,density_out(:,spin),1,potential(:,spin),1)
@@ -4093,6 +4117,7 @@ contains
                                    print_timer, stop_print_timer,      &
                                    WITH_LEVEL, TIME_ACCUMULATE_NO,     &
                                    TIME_ACCUMULATE_YES
+    use XC, ONLY: XC_GGA_stress
 
     implicit none
 
@@ -4145,6 +4170,26 @@ contains
     dcellz_grid = dcellz_block / nz_in_block
 
     call start_timer (tmr_l_tmp2)
+    ! Find XC_GGA_stress using output density for non-SCF case
+    ! we will average the input and output as an approximation
+    ! to the correct (hideously complex) stress so add mixing factor
+    if((.not.flag_self_consistent).and.(.not.flag_mix_L_SC_min)) then
+       if(.NOT.present(density_out)) call cq_abort("Output density not passed to PCC force for nonSCF calculation")
+       if (flag_stress) then
+          density_wk = zero
+          do spin = 1, nspin
+             density_wk(:,spin) = density_out(:,spin) + half * density_pcc(:)
+          end do
+          call get_xc_potential(density_wk, xc_potential,     &
+               xc_epsilon, xc_energy, size)
+          XC_stress(1,1) = XC_stress(1,1) + spin_factor*XC_GGA_stress(1,1) * &
+               mix_input_output_XC_GGA_stress
+          XC_stress(2,2) = XC_stress(2,2) + spin_factor*XC_GGA_stress(2,2) * &
+               mix_input_output_XC_GGA_stress
+          XC_stress(3,3) = XC_stress(3,3) + spin_factor*XC_GGA_stress(3,3) * &
+               mix_input_output_XC_GGA_stress
+       end if
+    end if
     density_wk = zero
     do spin = 1, nspin
        density_wk(:,spin) = density(:,spin) + half * density_pcc(:)
@@ -4152,10 +4197,20 @@ contains
 
     call get_xc_potential(density_wk, xc_potential,     &
          xc_epsilon, xc_energy, size)
+    ! And now add XC_GGA_stress for density_in scaled by half
+    if((.not.flag_self_consistent).and.(.not.flag_mix_L_SC_min)) then
+       if (flag_stress) then
+          XC_stress(1,1) = XC_stress(1,1) + spin_factor*XC_GGA_stress(1,1) * &
+               (one - mix_input_output_XC_GGA_stress)
+          XC_stress(2,2) = XC_stress(2,2) + spin_factor*XC_GGA_stress(2,2) * &
+               (one - mix_input_output_XC_GGA_stress)
+          XC_stress(3,3) = XC_stress(3,3) + spin_factor*XC_GGA_stress(3,3) * &
+               (one - mix_input_output_XC_GGA_stress)
+       end if
+    end if
     if(PRESENT(xc_energy_ret)) xc_energy_ret = xc_energy
     ! We do this here to re-use xc_potential - for non-PCC we do it in get_nonSC_correction_force
     if((.not.flag_self_consistent).and.(.not.flag_mix_L_SC_min)) then
-       if(.NOT.present(density_out)) call cq_abort("Output density not passed to PCC force for nonSCF calculation")
        if (flag_stress) then
          jacobian = zero
          do spin=1,nspin
