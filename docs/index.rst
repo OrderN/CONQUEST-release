@@ -48,6 +48,7 @@ User Guide
 * :doc:`strucrelax`
 * :doc:`moldyn`
 * :doc:`post-proc`
+* :doc:`ase-conquest`
 * :doc:`ext-tools`
 * :doc:`errors`
 * :doc:`input_tags`
@@ -65,6 +66,7 @@ User Guide
    strucrelax
    moldyn
    post-proc
+   ase-conquest 
    ext-tools
    errors
    input_tags
