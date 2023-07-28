@@ -574,7 +574,8 @@ contains
        ! node, note that the repeating of the same eigenvalues in each
        ! proc_group is taken care of by the additional factor
        ! 1 / N_procs_in_pg
-       call gsum(w(:,:,spin), matrix_size_padH, nkp)
+       !call gsum(w(:,:,spin), matrix_size_padH, nkp)
+       call gsum(w(:,:,spin), matrix_size, nkp)
     end do ! spin
     ! Allocate matrices to store band K matrices
     time1 = mtime()
@@ -4226,7 +4227,7 @@ contains
     use global_module,   only: iprint_DM, flag_SpinDependentSF, min_layer, iprint
     use mult_module,     only: matH, matS
     use ScalapackFormat, only: matrix_size, matrix_size_padH, proc_rows, proc_cols,     &
-         block_size_r, block_size_c, blocks_r, blocks_c, procid, &
+         block_size_r, block_size_c, blocks_r, blocks_c, procid, pgroup,&
          nkpoints_max, pgid, N_kpoints_in_pg, pg_kpoints, N_procs_in_pg, proc_groups
     use GenComms,        only: cq_warn
 
@@ -4245,6 +4246,7 @@ contains
     ! for padH
     integer :: num_elem_pad, ind_proc_row_pad, ind_proc_col_pad, i, j
     real(double), parameter :: H_large_value = 1.0e3_double  ! this should not change the results if it is larger than E_f
+    integer :: id_kgroup
 
     spin_SF = 1
     if (flag_SpinDependentSF) spin_SF = spin
@@ -4276,7 +4278,8 @@ contains
        ind_proc_row_pad  = mod( blocks_r-1, proc_rows )
        ind_proc_col_pad  = mod( blocks_c-1, proc_cols )
 
-       if( procid(1, ind_proc_row_pad+1, ind_proc_col_pad+1) == myid+1 ) then
+       id_kgroup = pgroup(myid+1)
+       if( procid(id_kgroup, ind_proc_row_pad+1, ind_proc_col_pad+1) == myid+1 ) then
           do i=row_size-num_elem_pad+1, row_size
              do j=col_size-num_elem_pad+1, col_size
                 if( mod(i,block_size_r)==mod(j,block_size_c) ) then
