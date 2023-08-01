@@ -193,7 +193,7 @@ Atomic Simulation Environment (ASE)
 
 .. _et_ase_cq:
 
-`ASE <https://wiki.fysik.dtu.dk/ase/ase/neb.html#module-ase.neb>`_ is a set of 
+`ASE <https://wiki.fysik.dtu.dk/ase>`_ is a set of 
 Python tools for setting up, manipulating, running, visualizing and analyzing 
 atomistic simulations. ASE contains a CONQUEST interface, also
 called *Calculator* so that it can be used to calculate ``energies``, ``forces`` 
