@@ -4,7 +4,7 @@
 Managing Conquest with ASE
 ==========================================
 
-Below we give an introduction how to setup the ASE environment with respect
+Below we give an introduction how to setup the ASE environment with respect 
 to CONQUEST repository along with a few examples of ASE/Conquest capabilities.
 We assume that a python script or jupyter-notebook is used. 
 
