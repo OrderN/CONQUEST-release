@@ -131,8 +131,8 @@ Go to :ref:`top <ase-conquest>`.
 
 .. _ase_calculator:
 
-CONQUEST *Calculator*
-+++++++++++++++++++++
+CONQUEST Calculator
+--------------------
 
 The CONQUEST *Calculator* class can be invoked from the ase Calculator set as described
 in the example below:
@@ -217,7 +217,7 @@ Go to :ref:`top <ase-conquest>`.
 .. _ase_input:
 
 Keywords for generating the Conquest_input file
-+++++++++++++++++++++++++++++++++++++++++++++++
+-----------------------------------------------
 
 In principle all the `Conquest input parameters <https://conquest.readthedocs.io/en/latest/input_tags.html>`_
 can be added to ``Conquest_out_ase`` using key/value pairs in a dictionary. There are 3 class of parameters:
@@ -228,7 +228,8 @@ can be added to ``Conquest_out_ase`` using key/value pairs in a dictionary. Ther
 
 
 Mandatory keywords
-^^^^^^^^^^^^^^^^^^
+++++++++++++++++++
+
 
 =================== =====================  ===============  ================================
 keyword             type                   default value    description
@@ -238,7 +239,8 @@ keyword             type                   default value    description
 =================== =====================  ===============  ================================
 
 Important keywords
-^^^^^^^^^^^^^^^^^^
+++++++++++++++++++
+
 
 =================== ==========================  =====================  ===============  ================================
 keyword             CONQUEST equivalence        type                   default value    description
@@ -256,7 +258,7 @@ keyword             CONQUEST equivalence        type                   default v
 
 
 Defaults keywords
-^^^^^^^^^^^^^^^^^^
++++++++++++++++++
 
 ===============================  =========  ===============  ================================
 keyword                          type       default value    description
@@ -274,6 +276,9 @@ keyword                          type       default value    description
 ..
   ``io.fractionalatomiccoords``    ``bool``   True             atomic coordinates format for the structure file (fractional or cartesian)
   ``basis.basisset``               ``str``    'PAOs'           type of basis set ; always 'PAOs' with ASE 
+
+Some examples
+-------------
 
 An example of more advanced Calculator setup is given below for a SCF calculation on BCC-Na
 where for a PBE calculation using a k-point grid of :math:`6\times 6\times6` using the Fermi-Dirac
