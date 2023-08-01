@@ -574,8 +574,8 @@ contains
        ! node, note that the repeating of the same eigenvalues in each
        ! proc_group is taken care of by the additional factor
        ! 1 / N_procs_in_pg
-       !call gsum(w(:,:,spin), matrix_size_padH, nkp)
-       call gsum(w(:,:,spin), matrix_size, nkp)
+       call gsum(w(:,:,spin), matrix_size_padH, nkp)
+       !call gsum(w(:,:,spin), matrix_size, nkp)
     end do ! spin
     ! Allocate matrices to store band K matrices
     time1 = mtime()
