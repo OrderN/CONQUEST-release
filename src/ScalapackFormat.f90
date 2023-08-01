@@ -262,6 +262,7 @@ contains
     use datatypes, ONLY: double
     use global_module, ONLY: iprint_DM, numprocs
     use GenComms, ONLY: cq_abort, myid
+    use numbers, ONLY: RD_ERR
 
     implicit none
 
@@ -275,8 +276,8 @@ contains
 
     ! Calculate maximum numbers of blocks in different directions
     if(flag_padH) then
-     blocks_r = int(ceiling(real(matrix_size,double)/block_size_r))
-     blocks_c = int(ceiling(real(matrix_size,double)/block_size_c))
+     blocks_r = ceiling((real(matrix_size,double)-RD_ERR)/block_size_r)
+     blocks_c = ceiling((real(matrix_size,double)-RD_ERR)/block_size_c)
      if(blocks_r .ne. blocks_c) call cq_abort("ScalapackFormat: blocks_r /= blocks_c")
      matrix_size_padH = blocks_r * block_size_r
     else
@@ -284,7 +285,7 @@ contains
      blocks_c = (matrix_size/block_size_c)
      matrix_size_padH = matrix_size
     endif
-    if(myid==0.AND.iprint_DM>3) write(io_lun,*) "matrix_size & matrix_size_padH = ",matrix_size, matrix_size_padH
+    if(myid==0.AND.iprint_DM>1) write(io_lun,*) "matrix_size & matrix_size_padH = ",matrix_size, matrix_size_padH
     if(myid==0.AND.iprint_DM>3) write(io_lun,1) blocks_r,blocks_c
     maxrow = floor(real(blocks_r/proc_rows))+1
     maxcol = floor(real(blocks_c/proc_cols))+1
