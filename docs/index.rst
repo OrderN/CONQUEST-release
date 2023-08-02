@@ -95,6 +95,7 @@ Tutorials
 Theory
 ------
 
+* :doc:`theory_energy_force_stress`
 * :doc:`theory-strucrelax`
 * :doc:`theory-md`
 
@@ -103,6 +104,7 @@ Theory
    :hidden:      
    :caption: Theory
 
+   theory_energy_force_stress
    theory-strucrelax
    theory-md
    
