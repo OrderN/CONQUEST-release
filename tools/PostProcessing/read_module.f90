@@ -255,6 +255,9 @@ contains
        stop
     end if
     flag_by_kpoint = fdf_boolean('Process.outputWF_by_kpoint',.false.)
+    ! if output only the real part of WFs (for Gamma-point only)
+    flag_outputWF_real = .false.
+    if (leqi(job,'ban')) flag_outputWF_real = fdf_boolean('Process.outputWF_real',.false.)
     ! DOS
     ! Add flag for window relative to Fermi level
     E_DOS_min = fdf_double('Process.min_DOS_E',E_wf_min)
