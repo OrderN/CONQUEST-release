@@ -349,7 +349,7 @@ contains
     allocate(current(nptsx,nptsy,nptsz))
     allocate(psi(nptsx,nptsy,nptsz))
 
-    if (fermi_offset.ne.zero) write(*,fmt='(2X,"Fermi-offset is ",f7.3," eV")') fermi_offset
+    if (fermi_offset.ne.zero) write(*,fmt='(2X,"Fermi-offset is ",f10.3," eV")') fermi_offset
     fermi_offset = fermi_offset/HaToeV   ! default of fermi_offset is zero
     if(stm_bias<0) then
        Emin = stm_bias/HaToeV + Efermi + fermi_offset
@@ -359,7 +359,7 @@ contains
        Emax = stm_bias/HaToeV + Efermi + fermi_offset
     end if
     if(nspin==1) then
-       write(*,fmt='(2x,"Including bands between ",f7.3," and ",f7.3," eV")') Emin(1)*HaToeV, Emax(1)*HaToeV
+       write(*,fmt='(2x,"Including bands between ",f10.3," and ",f10.3," eV")') Emin(1)*HaToeV, Emax(1)*HaToeV
     end if
 
     current = zero
