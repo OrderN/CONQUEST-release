@@ -558,8 +558,8 @@ contains
        !enddo
 
        ! Write out current SF coefficients every n_dumpSFcoeff, if n_dumpSFcoeff > 0)
-       if (n_dumpSFcoeff > 0 .and. mod(n_iterations,n_dumpSFcoeff) == 0) then
-          call dump_pos_and_matrices(index = unit_MSSF_save)
+       if (n_dumpSFcoeff > 0) then
+          if(mod(n_iterations,n_dumpSFcoeff) == 0) call dump_pos_and_matrices(index = unit_MSSF_save)
        endif
 
        ! Find change in energy for convergence
@@ -1181,8 +1181,8 @@ contains
        endif
 
        ! Write out current SF coefficients and density matrices with some iprint (in future)
-       if(n_dumpSFcoeff > 0 .and. mod(iter,n_dumpSFcoeff) ==0) then
-          call dump_pos_and_matrices(index=unit_MSSF_save)
+       if(n_dumpSFcoeff > 0 ) then
+          if(mod(iter,n_dumpSFcoeff) ==0) call dump_pos_and_matrices(index=unit_MSSF_save)
        endif
        ! Go out if converged
        if (convergence_flag) then
