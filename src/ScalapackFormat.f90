@@ -255,6 +255,8 @@ contains
 !!    Added timer
 !!   2011/02/13 L.Tong
 !!    Added k-point parallelisation
+!!   2023/08/02 tsuyoshi
+!!    Changes for padding of H and S matrices
 !!  SOURCE
 !!
   subroutine allocate_arrays (nkp)
@@ -271,6 +273,7 @@ contains
 
     ! Local variables
     integer :: stat
+    logical :: flag_err
 
     if(iprint_DM>3.AND.myid==0) write(io_lun,fmt='(10x,i5,a)') myid,' Starting Allocate Arrays'
 
@@ -280,6 +283,8 @@ contains
      blocks_c = ceiling((real(matrix_size,double)-RD_ERR)/block_size_c)
      if(blocks_r .ne. blocks_c) call cq_abort("ScalapackFormat: blocks_r /= blocks_c")
      matrix_size_padH = blocks_r * block_size_r
+     call check_block_parameters(flag_err)
+     if(flag_err) call cq_abort("ScalapacFormat: check_block_parameter ",blocks_c, proc_cols)
     else
      blocks_r = (matrix_size/block_size_r)
      blocks_c = (matrix_size/block_size_c)
@@ -316,6 +321,17 @@ contains
     call stop_timer(tmr_std_allocation)
     return
 1   format(10x,'AllocArr: block sizes are: ',2i5)
+   contains 
+     subroutine check_block_parameters(flag_err)
+      implicit none
+      logical, intent(out):: flag_err
+       flag_err=.false.
+       if(blocks_c < blocks_r) flag_err = .true.
+       if(blocks_c < proc_cols) flag_err = .true.
+       !the next one should not be necessary
+       if(blocks_r < proc_rows) flag_err = .true.
+       return
+     end subroutine check_block_parameters
   end subroutine allocate_arrays
 !!***
 
