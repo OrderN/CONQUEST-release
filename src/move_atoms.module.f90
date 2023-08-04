@@ -3775,7 +3775,7 @@ contains
        if (.not.flag_LFD_MD_UseAtomicDensity) call set_atomic_density(.false.)
     end if
     ! If we have read K and are predicting density from it, then rebuild
-    if(flag_diagonalisation.AND.flag_LmatrixReuse) then
+    if(flag_diagonalisation.AND.flag_LmatrixReuse.AND.flag_self_consistent) then
        call get_electronic_density(density,electrons,atomfns,H_on_atomfns(1), &
             inode,ionode,maxngrid)
        do spin=1,nspin

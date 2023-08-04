@@ -26,6 +26,9 @@ program ConvertCharge
      else if(coord_format==2) then
         write(*,fmt='(2x,"Converting coordinates to CASTEP cell format"/)')
         call write_cell
+     else if(coord_format==3) then
+        write(*,fmt='(2x,"Converting coordinates to XSF format"/)')
+        call write_xsf
      end if
   else if(i_job==2) then ! Convert chden to cube
      write(*,fmt='(2x,"Converting charge density to cube format"/)')
@@ -57,7 +60,12 @@ program ConvertCharge
      write(*,fmt='(2x,"Creating density of states (DOS)"/)')
      call process_dos
   else if(i_job==7) then ! pDOS output
-     write(*,*) "Projected DOS will be implemented soon..."
+     write(*,fmt='(2x,"Creating projected density of states (pDOS); also generating DOS"/)')
+     call process_dos
+     call process_pdos
+  else if(i_job==8) then ! DOS output
+     write(*,fmt='(2x,"Creating band structure"/)')
+     call process_band_structure
   end if
   ! Read eigenvalues and calculate weight for bands by kpt
   !if(flag_only_charge) then

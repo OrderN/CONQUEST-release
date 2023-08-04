@@ -1,3 +1,5 @@
+[![build](https://github.com/OrderN/CONQUEST-release/actions/workflows/makefile.yml/badge.svg?branch=develop)](https://github.com/OrderN/CONQUEST-release/actions/workflows/makefile.yml?query=branch%3Adevelop)
+
 # CONQUEST: Large-scale DFT calculations
 
 CONQUEST is a DFT code designed for large-scale calculations, with

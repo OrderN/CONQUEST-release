@@ -1,0 +1,11 @@
+AtomMove.TypeOfRun static
+IO.Coordinates coords.dat
+IO.Iprint 0
+Grid.GridCutoff  50
+DM.SolutionMethod ordern
+DM.L_range 16.0
+minE.MixedLSelfConsistent T
+General.NumberOfSpecies  1
+%block ChemicalSpeciesLabel
+ 1 28.086 Si
+%endblock

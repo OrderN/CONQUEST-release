@@ -523,13 +523,17 @@ contains
 !!    Renamed get_r_on_support -> get_r_on_atomfns
 !!   2016/11/09 21:00 nakata
 !!    Used natomf_species instead of nsf_species
+!!   2022/12/21 16:52 dave
+!!    Extending to allow calculation of exp(i.2pi.x/L) as well as x
+!!    New argument flag_func selects x, cos(2pi.x/L) or sin(2pi.x/L) with 0, 1 or 2
 !!  SOURCE
 !!  
-  subroutine get_r_on_atomfns(direction,inputgf,gridfunc1,gridfunc2,gridfunc3)
+  subroutine get_r_on_atomfns(direction,flag_func,inputgf,gridfunc1,gridfunc2,gridfunc3)
 
     use datatypes
     use numbers
-    use global_module,               only: rcellx,rcelly,rcellz, atomf, species_glob, ni_in_cell, id_glob
+    use global_module,               only: rcellx,rcelly,rcellz, atomf, species_glob, &
+         ni_in_cell, id_glob, atom_coord
     use cover_module,                only: DCS_parts
     use block_module,                only: nx_in_block,ny_in_block,nz_in_block, &
                                            n_blocks, n_pts_in_block
@@ -537,7 +541,7 @@ contains
     use primary_module,              only: domain
     use set_blipgrid_module,         only: naba_atoms_of_blocks
     use functions_on_grid,           only: gridfunctions, fn_on_grid
-    use dimens,                      only: n_my_grid_points, r_h
+    use dimens,                      only: n_my_grid_points, r_h, r_super_x, r_super_y, r_super_z
     use GenComms,                    only: cq_abort
     use species_module,              only: natomf_species
     use PAO_grid_transform_module,   only: check_block
@@ -545,7 +549,7 @@ contains
     implicit none
 
     ! Passed variables
-    integer :: direction
+    integer :: direction, flag_func
     integer :: inputgf,gridfunc1
     integer, OPTIONAL :: gridfunc2, gridfunc3
 
@@ -621,9 +625,19 @@ contains
                       y = y_store(ip)
                       z = z_store(ip)
                       if(direction==0) then
-                         rx = x
-                         ry = y
-                         rz = z
+                         if(flag_func==0) then
+                            rx = x
+                            ry = y
+                            rz = z
+                         else if(flag_func==1) then
+                            rx = cos(twopi*(x + atom_coord(1,ig_atom))/r_super_x)
+                            ry = cos(twopi*(y + atom_coord(2,ig_atom))/r_super_y)
+                            rz = cos(twopi*(z + atom_coord(3,ig_atom))/r_super_z)
+                         else if(flag_func==2) then
+                            rx = sin(twopi*(x + atom_coord(1,ig_atom))/r_super_x)
+                            ry = sin(twopi*(y + atom_coord(2,ig_atom))/r_super_y)
+                            rz = sin(twopi*(z + atom_coord(3,ig_atom))/r_super_z)
+                         end if
                          do nsf1=1,this_nsf
                             sfni = gridfunctions(inputgf)%griddata(position+(nsf1-1)*n_pts_in_block)
                             gridfunctions(gridfunc1)%griddata(position+(nsf1-1)*n_pts_in_block) = sfni * rx
@@ -632,11 +646,29 @@ contains
                          enddo ! nsf1
                       else ! Store position in rx and scale appropriate direction
                          if(direction==1) then
-                            rx = x
+                            if(flag_func==0) then
+                               rx = x
+                            else if(flag_func==1) then
+                               rx = cos(twopi*(x + atom_coord(1,ig_atom))/r_super_x)
+                            else if(flag_func==2) then
+                               rx = sin(twopi*(x + atom_coord(1,ig_atom))/r_super_x)
+                            end if
                          else if(direction==2) then
-                            rx = y
+                            if(flag_func==0) then
+                               rx = y
+                            else if(flag_func==1) then
+                               rx = cos(twopi*(y + atom_coord(2,ig_atom))/r_super_y)
+                            else if(flag_func==2) then
+                               rx = sin(twopi*(y + atom_coord(2,ig_atom))/r_super_y)
+                            end if
                          else if(direction==3) then
-                            rx = z
+                            if(flag_func==0) then
+                               rx = z
+                            else if(flag_func==1) then
+                               rx = cos(twopi*(z + atom_coord(3,ig_atom))/r_super_z)
+                            else if(flag_func==2) then
+                               rx = sin(twopi*(z + atom_coord(3,ig_atom))/r_super_z)
+                            end if
                          end if
                          do nsf1=1,this_nsf
                             sfni = gridfunctions(inputgf)%griddata(position+(nsf1-1)*n_pts_in_block)

@@ -1,0 +1,80 @@
+name: Makefile CI
+
+on:
+  push:
+    branches: [ "develop" ]
+  pull_request:
+    branches: [ "develop" ]
+
+jobs:
+  build:
+    name: ${{matrix.fc}} -- ${{matrix.os}} -- np = ${{matrix.np}}
+    runs-on: ${{matrix.os}}
+    env:
+      FC: ${{matrix.fc}}
+      F77: mpif77
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          # We could add ubuntu-latest but until 2024 it will be the same as 22.04
+          - ubuntu-22.04
+        fc:
+          # the mpifort wrapper is recommended instead of mpif90 by openmpi. Including
+          # both here in case they do something differently.
+          #
+          # TODO: We could also build with `intel-oneapi-compiler-fortran`, it is available
+          #       for installation from Intel through their apt repository.
+          - mpifort
+          - mpif90
+        np:
+          - 1
+          - 2
+        # TODO: Could be worth testing on `mpich` in addition to `openmpi-bin`. Both are
+        #       available in apt
+
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        fetch-depth: '0'
+
+    - name: Install Dependencies
+      run: |
+        sudo apt update
+        sudo apt install openmpi-bin libopenmpi-dev libfftw3-dev libblas3 liblapack3 libscalapack-openmpi-dev libxc-dev
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Install python utilities
+      run: |
+        python -m pip install --upgrade pip
+        pip install pytest
+        pip install numpy
+
+    - name: Check compiler version
+      run: ${{matrix.fc}} --version
+
+    - name: Build
+      working-directory: ${{github.workspace}}/src
+      run: |
+        cp gha.make system.make
+        make -j ${{matrix.np}}
+
+    - name: Run test 001
+      working-directory: ${{github.workspace}}/testsuite/test_001_bulk_Si_1proc_Diag
+      run: mpirun -np ${{matrix.np}} ../../bin/Conquest
+
+    - name: Run test 002
+      working-directory: ${{github.workspace}}/testsuite/test_002_bulk_Si_1proc_OrderN
+      run: mpirun -np ${{matrix.np}} ../../bin/Conquest
+
+    - name: Run test 003
+      working-directory: ${{github.workspace}}/testsuite/test_003_bulk_BTO_polarisation
+      run: mpirun -np ${{matrix.np}} ../../bin/Conquest
+
+    - name: Check test results
+      working-directory: ${{github.workspace}}/testsuite
+      run: pytest test_check_output.py

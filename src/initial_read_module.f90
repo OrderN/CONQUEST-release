@@ -828,14 +828,14 @@ contains
          flag_exx, exx_alpha, exx_scf, exx_scf_tol, exx_siter,         &
          flag_out_wf,max_wf,out_wf,wf_self_con, flag_fire_qMD, &
          flag_write_DOS, flag_write_projected_DOS, &
-         flag_normalise_pDOS, flag_pDOS_angmom, flag_pDOS_lm, &
-         E_DOS_min, E_DOS_max, sigma_DOS, n_DOS, E_wf_min, E_wf_max, flag_wf_range_Ef, &
+         E_wf_min, E_wf_max, flag_wf_range_Ef, &
          mx_temp_matrices, flag_neutral_atom, flag_diagonalisation, &
          flag_SpinDependentSF, flag_Multisite, flag_LFD, flag_SFcoeffReuse, &
          flag_opt_cell, cell_constraint_flag, flag_variable_cell, &
          cell_en_tol, optcell_method, cell_stress_tol, &
          flag_stress, flag_full_stress, rng_seed, &
-         flag_atomic_stress, flag_heat_flux, flag_DumpMatrices
+         flag_atomic_stress, flag_heat_flux, flag_DumpMatrices, flag_calc_pol, flag_do_pol_calc, &
+         i_pol_dir, i_pol_dir_st, i_pol_dir_end
     use dimens, only: GridCutoff,    &
          n_grid_x, n_grid_y, n_grid_z, r_c,         &
          RadiusSupport, RadiusAtomf, RadiusMS, RadiusLD, &
@@ -852,7 +852,7 @@ contains
          species_file, species_from_files
     use GenComms,   only: gcopy, my_barrier, cq_abort, inode, ionode, cq_warn
     !use DiagModule, only: diagon
-    use DiagModule,             only: flag_pDOS_include_semicore
+    !use DiagModule,             only: flag_pDOS_include_semicore
     use energy,     only: flag_check_Diag
     use DMMin,      only: maxpulayDMM, maxpulaystepDMM, minpulaystepDMM, &
          LinTol_DMM, n_dumpL
@@ -939,9 +939,9 @@ contains
     use XC, only : flag_functional_type, functional_hartree_fock, functional_hyb_pbe0, &
          flag_different_functional
     use biblio, only: flag_dump_bib
-
     !2019/12/27 tsuyoshi
     use density_module,  only: method_UpdateChargeDensity,DensityMatrix,AtomicCharge
+    use force_module, only: mix_input_output_XC_GGA_stress
 
     implicit none
 
@@ -1388,7 +1388,9 @@ contains
           ! Added DRB 2018/07/16 for safety
           if(flag_Multisite) then
              RadiusMS(i)      = fdf_double ('Atom.MultisiteRange',zero)
-             RadiusLD(i)      = fdf_double ('Atom.LFDRange',zero)
+             RadiusLD(i)      = fdf_double ('Atom.LFDRange',RadiusMS(i))
+             if(RadiusLD(i)<RadiusMS(i)) call cq_warn(sub_name,"LFD range should be larger than MSSF range: ", &
+                  RadiusLD(i),RadiusMS(i))
           end if
           ! Moved to ... so that RadiusAtomf is read from ion files
           !if (flag_Multisite) RadiusSupport(i) = RadiusAtomf(i) + RadiusMS(i)
@@ -1571,6 +1573,10 @@ contains
     sqnm_trust_step       = fdf_double ('AtomMove.MaxSQNMStep',0.2_double   )
     LBFGS_history         = fdf_integer('AtomMove.LBFGSHistory', 5          )
     flag_opt_cell         = fdf_boolean('AtomMove.OptCell',          .false.)
+    ! At present (2023/07/26 just before v1.2 release) neutral atom is required for cell opt
+    if(flag_opt_cell.and.(.not.flag_neutral_atom)) &
+         call cq_abort("You must use neutral atom for cell optimisation")
+    ! This can be removed when ewald update is implemented
     flag_variable_cell    = flag_opt_cell
     optcell_method        = fdf_integer('AtomMove.OptCellMethod', 1)
     cell_constraint_flag  = fdf_string(20,'AtomMove.OptCell.Constraint','none')
@@ -1582,6 +1588,7 @@ contains
     flag_stress           = fdf_boolean('AtomMove.CalcStress', .true.)
     flag_full_stress      = fdf_boolean('AtomMove.FullStress', .false.)
     flag_atomic_stress    = fdf_boolean('AtomMove.AtomicStress', .false.)
+    mix_input_output_XC_GGA_stress = fdf_double('General.MixXCGGAInOut',half)
     !
     flag_vary_basis       = fdf_boolean('minE.VaryBasis', .false.)
     if(.NOT.flag_vary_basis) then
@@ -1701,26 +1708,16 @@ contains
     if(flag_write_DOS) then
        if(flag_diagonalisation) then
           flag_write_projected_DOS = fdf_boolean('IO.write_proj_DOS',.false.)
-          E_DOS_min = fdf_double('IO.min_DOS_E',zero)
-          E_DOS_max = fdf_double('IO.max_DOS_E',zero)
-          sigma_DOS = fdf_double('IO.sigma_DOS',0.001_double)
-          n_DOS = fdf_integer('IO.n_DOS',201)
-          flag_normalise_pDOS = fdf_boolean('IO.normalise_PDOS',.true.)
-          flag_pDOS_angmom = fdf_boolean('IO.PDOS_Angmom',.false.)
-          flag_pDOS_lm = fdf_boolean('IO.PDOS_lm_resolved',.false.)
-          flag_pDOS_include_semicore = fdf_boolean('IO.PDOS_include_semicore',.true.)
-          if(flag_pDOS_lm.AND.(.NOT.flag_pDOS_angmom)) then
-             if(inode==ionode) write(io_lun,'(2x,"Setting IO.PDOS_Angmom T as (l,m)-resolved PDOS requested")')
-             flag_pDOS_angmom = .true.
+          if(flag_write_projected_DOS) then
+             E_wf_min = fdf_double('IO.min_wf_E',-BIG)
+             E_wf_max = fdf_double('IO.max_wf_E',BIG)
           end if
-          if (.not.flag_write_projected_DOS) then
-             flag_normalise_pDOS = .false.
-             flag_pDOS_angmom = .false.
-          endif
-          if (flag_pDOS_angmom .and. flag_basis_set==blips) then
-             flag_pDOS_angmom = .false.
-             if(inode==ionode) write(io_lun,'(2x,"Setting IO.PDOS_Angmom F as using blips")')
-          endif
+          ! Possibly needed to decide if MSSF needs dealing with
+          !flag_pDOS_angmom = fdf_boolean('IO.PDOS_Angmom',.false.)
+          !if (flag_pDOS_angmom .and. flag_basis_set==blips) then
+          !   flag_pDOS_angmom = .false.
+          !   if(inode==ionode) write(io_lun,'(2x,"Setting IO.PDOS_Angmom F as using blips")')
+          !endif
        else
           flag_write_DOS = .false.
           if(inode==ionode) write(io_lun,'(2x,"Setting IO.writeDOS F as solving O(N)")')
@@ -1820,6 +1817,26 @@ contains
              call fdf_endblock
           end do
        end if
+    end if
+!!$
+!!$
+!!$
+!!$
+    ! Calculate bulk polarisation
+    flag_calc_pol   = fdf_boolean('General.CalcPol', .false.)
+    flag_do_pol_calc = .false.
+    ! Find direction for polarisation calculation: 0 means all three
+    i_pol_dir = 0
+    i_pol_dir(1) = fdf_integer('General.PolDir',0)
+    i_pol_dir_st = 1
+    i_pol_dir_end = 1
+    if(i_pol_dir(1)==0) then
+       i_pol_dir_end = 3
+       i_pol_dir(1) = 1
+       i_pol_dir(2) = 2
+       i_pol_dir(3) = 3
+    else if(i_pol_dir(1)>3) then
+       call cq_abort("Illegal value for General.PolDir: must lie between 0 and 3 ",i_pol_dir(1))
     end if
 !!$
 !!$
@@ -2898,7 +2915,7 @@ contains
     use functions,       only: is_prime
     use global_module,   only: iprint_init, rcellx, rcelly, rcellz,  &
          area_general, ni_in_cell, numprocs,   &
-         species_glob, io_lun, io_ase, ase_file, write_ase
+         species_glob, io_lun, io_ase, ase_file, write_ase, flag_calc_pol
     use numbers,         only: zero, one, two, pi, RD_ERR, half
     use GenComms,        only: cq_abort, cq_warn, gcopy
     use input_module
@@ -2930,7 +2947,7 @@ contains
     real(double), dimension(1:3)              :: mp_shift
     real(double), allocatable, dimension(:,:) :: kk_tmp
     real(double), allocatable, dimension(:)   :: wtk_tmp
-    integer :: nkp_tmp
+    integer :: nkp_tmp, nkp_in_line, inc
     integer :: counter
     character(len=2) :: suffix
 
@@ -3052,41 +3069,69 @@ contains
              write(io_lun,fmt='(4x,"Using ",i3," lines of k-points specified by user")')
           end if
           if(nkp_lines<1) call cq_abort("Need to specify how many kpoint lines !",nkp_lines)
-          nkp = fdf_integer('Diag.NumKpts',2)
-          if(iprint_init>1.AND.inode==ionode) write(io_lun,fmt='(8x,"Number of Kpoints in a line: ",i4)') nkp
-          allocate(kk(3,nkp*nkp_lines),wtk(nkp*nkp_lines),STAT=stat)
-          if(stat/=0) call cq_abort('FindEvals: couldnt allocate kpoints',nkp*nkp_lines)
-          call reg_alloc_mem(area_general,4*nkp*nkp_lines,type_dbl)
-          kk = zero
-          wtk = one/real(nkp*nkp_lines,double)
-          sum = zero
-          nk_st = 1
+          nkp_in_line = fdf_integer('Diag.NumKpts',2)
+          if(iprint_init>1.AND.inode==ionode) write(io_lun,fmt='(8x,"Number of Kpoints in a line: ",i4)') nkp_in_line
+          ! Total number of k-points (potentially corrected later)
+          nkp = nkp_in_line*nkp_lines
+          ! Read start/end points for lines and correct for duplication
+          allocate(kk_tmp(3,2*nkp_lines))
+          kk_tmp = zero
           if(fdf_block('Diag.KpointLines'))then
              if(1+block_end-block_start<2*nkp_lines) &
                   call cq_abort("Kpoint line error: ",1+block_end-block_start,nkp_lines)
              do i=1,2*nkp_lines,2
+                ! Start/end points for line
                 read (unit=input_array(block_start+i-1),fmt=*) &
-                     kk(1,nk_st),kk(2,nk_st),kk(3,nk_st)
+                     kk_tmp(1,i),kk_tmp(2,i),kk_tmp(3,i)
                 read (unit=input_array(block_start+i),fmt=*) &
-                     kk(1,nk_st+nkp-1),kk(2,nk_st+nkp-1),kk(3,nk_st+nkp-1)
-                dkx = (kk(1,nk_st+nkp-1) - kk(1,nk_st))/real(nkp-1,double)
-                dky = (kk(2,nk_st+nkp-1) - kk(2,nk_st))/real(nkp-1,double)
-                dkz = (kk(3,nk_st+nkp-1) - kk(3,nk_st))/real(nkp-1,double)
-                if(iprint_init>1.AND.inode==ionode) &
-                     write(io_lun,fmt='(2x,"K-point spacing along line : ",i3,3f7.3)') i,dkx,dky,dkz
-                do j=1,nkp-2
-                   kk(1,nk_st+j) = kk(1,nk_st+j-1)+dkx
-                   kk(2,nk_st+j) = kk(2,nk_st+j-1)+dky
-                   kk(3,nk_st+j) = kk(3,nk_st+j-1)+dkz
-                end do
-                nk_st = nk_st + nkp
+                     kk_tmp(1,i+1),kk_tmp(2,i+1),kk_tmp(3,i+1)
+                ! If the start of this line duplicates the end of the last, reduce nkp by 1
+                if(i>1) then
+                   if(abs(kk_tmp(1,i)-kk_tmp(1,i-1))<RD_ERR .and. &
+                        abs(kk_tmp(2,i)-kk_tmp(2,i-1))<RD_ERR .and. &
+                        abs(kk_tmp(3,i)-kk_tmp(3,i-1))<RD_ERR) nkp = nkp - 1
+                end if
              end do
           else
              call cq_abort("Must specify a block Diag.KpointLines to have lines of kpoints !")
           end if
-          nkp = nkp*nkp_lines
+          allocate(kk(3,nkp),wtk(nkp),STAT=stat)
+          if(stat/=0) call cq_abort('FindEvals: couldnt allocate kpoints',nkp)
+          call reg_alloc_mem(area_general,4*nkp,type_dbl)
+          kk = zero
+          nk_st = 1
+          do i=1,2*nkp_lines,2
+             ! Spacing for this line in three directions
+             dkx = (kk_tmp(1,i+1) - kk_tmp(1,i))/real(nkp_in_line-1,double)
+             dky = (kk_tmp(2,i+1) - kk_tmp(2,i))/real(nkp_in_line-1,double)
+             dkz = (kk_tmp(3,i+1) - kk_tmp(3,i))/real(nkp_in_line-1,double)
+             if(iprint_init>1.AND.inode==ionode) &
+                  write(io_lun,fmt='(2x,"K-point spacing along line : ",i3,3f7.3)') i,dkx,dky,dkz
+             ! Number of points in line
+             inc = nkp_in_line
+             if(i<2*nkp_lines-1) then ! If last point is the same as first point of next line, ignore
+                if(abs(kk_tmp(1,i+2)-kk_tmp(1,i+1))<RD_ERR .and. &
+                     abs(kk_tmp(2,i+2)-kk_tmp(2,i+1))<RD_ERR .and. &
+                     abs(kk_tmp(3,i+2)-kk_tmp(3,i+1))<RD_ERR) then
+                   inc = nkp_in_line - 1
+                end if
+             end if
+             ! Initial point
+             kk(1,nk_st) = kk_tmp(1,i)
+             kk(2,nk_st) = kk_tmp(2,i)
+             kk(3,nk_st) = kk_tmp(3,i)
+             ! Intermediate points
+             do j=1,inc-1
+                kk(1,nk_st+j) = kk(1,nk_st+j-1)+dkx
+                kk(2,nk_st+j) = kk(2,nk_st+j-1)+dky
+                kk(3,nk_st+j) = kk(3,nk_st+j-1)+dkz
+             end do
+             nk_st = nk_st + inc
+          end do
+          deallocate(kk_tmp)
+          wtk = one/real(nkp,double)
           ! Write out fractional k-points
-          if(iprint_init>0.AND.inode==ionode) then
+          if(iprint_init>1.AND.inode==ionode) then
              write(io_lun,7) nkp
              do i=1,nkp
                 write(io_lun,fmt='(8x,i5,3f15.6,f12.3)')&
@@ -3302,6 +3347,11 @@ contains
           kk(3,i) = two * pi * kk(3,i) / rcellz
        end do
     end if ! MP mesh branch
+    ! Check polarisation
+    if(flag_calc_pol) then
+       if(nkp>1 .or. (nkp==1 .and. maxval(abs(kk))>RD_ERR)) &
+            call cq_warn(sub_name, "Resta polarisation is only valid at gamma point")
+    end if
     !
     ! BEGIN %%%% ASE printing %%%%
     !
