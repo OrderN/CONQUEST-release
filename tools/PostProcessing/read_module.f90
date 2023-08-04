@@ -255,6 +255,9 @@ contains
        stop
     end if
     flag_by_kpoint = fdf_boolean('Process.outputWF_by_kpoint',.false.)
+    ! if output only the real part of WFs (for Gamma-point only)
+    flag_outputWF_real = .false.
+    if (leqi(job,'ban')) flag_outputWF_real = fdf_boolean('Process.outputWF_real',.false.)
     ! DOS
     ! Add flag for window relative to Fermi level
     E_DOS_min = fdf_double('Process.min_DOS_E',E_wf_min)
@@ -460,10 +463,10 @@ contains
     efermi = zero
     if(nspin==1) then
        read(17,fmt='(a6,f18.10)') str,efermi(1)
-       write(*,fmt='(4x,"Fermi level: ",f12.5," Ha")') efermi(1)
+       write(*,fmt='(4x,"Fermi level: ",f12.5," Ha   (=",f10.3," eV)")') efermi(1), efermi(1)*HaToeV
     else
        read(17,fmt='(a6,2f18.10)') str,efermi(1), efermi(2)
-       write(*,fmt='(4x,"Fermi levels: ",2f12.5," Ha")') efermi
+       write(*,fmt='(4x,"Fermi levels: ",2f12.5," Ha   (=",2f10.3" eV)")') efermi, efermi*HaToeV
     end if
     read(17,*) str
     ! Allocate memory
