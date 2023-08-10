@@ -1152,10 +1152,10 @@ contains
   subroutine updateMembers_cs
 
     ! Module usage
-    use global_module, ONLY: flag_dft_d2,ni_in_cell
+    use global_module, ONLY: flag_dft_d2,ni_in_cell,flag_MLFF
     use group_module, ONLY: parts
     use primary_module, ONLY: bundle,domain
-    use cover_module, ONLY: BCS_parts,DCS_parts,ion_ion_CS,D2_CS
+    use cover_module, ONLY: BCS_parts,DCS_parts,ion_ion_CS,D2_CS,ML_CS
 
     implicit none
 
@@ -1196,5 +1196,53 @@ contains
     return
   end subroutine updateMembers_cs
   !! ***
+
+    !!****f* UpdateMember_module/updateMembers_cs_ML *
+  !!
+  !!  NAME
+  !!   updateMembers_cs_ML
+  !!  USAGE
+  !!
+  !!  PURPOSE
+  !!   Updates members of covering sets (atoms only) machine learning
+  !!  INPUTS
+  !!   velocity
+  !!  USES
+  !!
+  !!  AUTHOR
+  !!   Jianbo Lin
+  !!  CREATION DATE
+  !!   2023/06/15
+  !!  MODIFICATION HISTORY
+  !!   2023/06/15 Jianbo Lin
+  !!     Modify from updateMembers_cs to have an independent updating CS
+  !!  SOURCE
+  !!
+  subroutine updateMembers_cs_ML
+
+    ! Module usage
+    use global_module, ONLY: ni_in_cell,flag_MLFF
+    use group_module, ONLY: parts
+    use primary_module, ONLY: bundle,domain
+    use cover_module, ONLY: ML_CS
+
+    implicit none
+
+    ! Local variables
+    real(double)   :: dcellx, dcelly, dcellz
+    integer        :: nmodx,nmody,nmodz
+    ! x,y,z numbering of CS groups (for CC labels)
+    integer, pointer, dimension(:)  :: nx_in_cover
+    integer, pointer, dimension(:)  :: ny_in_cover
+    integer, pointer, dimension(:)  :: nz_in_cover
+
+    ! Update members in ML_CS
+    call deallocate_CSmember(ML_CS)
+    call allocate_CSmember(ML_CS,parts,nx_in_cover,ny_in_cover,nz_in_cover, &
+         nmodx,nmody,nmodz,dcellx,dcelly,dcellz)
+    call cover_update_mparts(ML_CS,parts,nx_in_cover,ny_in_cover,nz_in_cover, &
+         nmodx,nmody,nmodz,dcellx,dcelly,dcellz)
+    return
+  end subroutine updateMembers_cs_ML
   
 end module UpdateMember_module

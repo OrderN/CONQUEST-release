@@ -585,7 +585,7 @@ contains
                               flag_move_atom,rcellx, rcelly, rcellz,  &
                               flag_Multisite,flag_SFcoeffReuse, &
                               atom_coord, flag_quench_MD, atomic_stress, &
-                              non_atomic_stress, flag_heat_flux
+                              non_atomic_stress, flag_heat_flux, flag_MLFF
     use group_module,   only: parts
     use minimise,       only: get_E_and_F
     use move_atoms,     only: velocityVerlet, updateIndices,           &
@@ -621,6 +621,8 @@ contains
 
     use atoms,          only: distribute_atoms,deallocate_distribute_atom
     use global_module,  only: atom_coord_diff, iprint_MD, area_moveatoms
+    use mlff,           only: get_MLFF
+    use mpi
 
     implicit none
 
@@ -633,6 +635,7 @@ contains
     integer       ::  iter, i, j, k, length, stat, i_first, i_last, md_ndof
     integer       :: nequil ! number of equilibration steps - zamaan
     real(double)  :: energy1, energy0, dE, max, g0
+    real(double)  :: t0,t1,t2
     logical       :: done,second_call
     logical,allocatable,dimension(:) :: flag_movable
 
@@ -690,17 +693,32 @@ contains
 
     ! Thermostat/barostat initialisation
     call init_md(baro, thermo, mdl, md_ndof, nequil)
+    if (inode==ionode) &
+       write(io_lun,*) 'check stress after init_md ini:', stress,baro%P_int*HaBohr3ToGPa,&
+               baro%P_ext*HaBohr3ToGPa
     call thermo%get_temperature_and_ke(baro, ion_velocity, &
                                       mdl%ion_kinetic_energy)
+    if (inode==ionode) &
+       write(io_lun,*) 'check stress after thermo%get_temperature_and_ke ini:', stress,baro%P_int*HaBohr3ToGPa,&
+               baro%P_ext*HaBohr3ToGPa
     call baro%get_pressure_and_stress
+    !! have pressure from here
+    if (inode==ionode) &
+       write(io_lun,*) 'check stress after baro%get_pressure_and_stress ini:', stress,baro%P_int*HaBohr3ToGPa,&
+               baro%P_ext*HaBohr3ToGPa
     call mdl%get_cons_qty
 
     ! Find energy and forces
-    if (flag_fire_qMD) then
-       call get_E_and_F(fixed_potential, vary_mu, energy0, .true., .true.)
+    if (flag_MLFF) then
+      call get_MLFF
     else
-       call get_E_and_F(fixed_potential, vary_mu, energy0, .true., .false.)
+      if (flag_fire_qMD) then
+        call get_E_and_F(fixed_potential, vary_mu, energy0, .true., .true.)
+      else
+        call get_E_and_F(fixed_potential, vary_mu, energy0, .true., .false.)
+      end if
     end if
+
     mdl%dft_total_energy = energy0
 
     ! XL-BOMD
@@ -735,29 +753,47 @@ contains
     if (flag_heat_flux) &
       call get_heat_flux(atomic_stress, ion_velocity, heat_flux)
 
+    if (inode==ionode) &
+       write(io_lun,*) 'check stress before mdl%get_cons_qty:', stress,baro%P_int*HaBohr3ToGPa,&
+               baro%P_ext*HaBohr3ToGPa
     if (.not. flag_MDcontinue) then
        ! Check this: it fixes H' for NVE but needs NVT confirmation
        ! DRB & TM 2020/01/24 12:03
        call mdl%get_cons_qty
+       if (inode==ionode) &
+          write(io_lun,*) 'check stress after mdl%get_cons_qty:', stress,baro%P_int*HaBohr3ToGPa,&
+               baro%P_ext*HaBohr3ToGPa
        call write_md_data(i_first-1, thermo, baro, mdl, nequil)
     end if
 
     do iter = i_first, i_last ! Main MD loop
+       t0=MPI_wtime()
        mdl%step = iter
        if (inode==ionode) &
-            write(io_lun,fmt='(4x,"MD run, iteration ",i5)') iter
+          write(io_lun,fmt='(4x,"MD run, iteration ",i5)') iter
+       if (inode==ionode) &
+          write(io_lun,*) 'check stress start md:', stress,baro%P_int*HaBohr3ToGPa,&
+               baro%P_ext*HaBohr3ToGPa
 
        if (flag_heat_flux) then
          atomic_stress = zero
          non_atomic_stress = zero
        end if
-
        call thermo%get_temperature_and_ke(baro, ion_velocity, &
                                           mdl%ion_kinetic_energy)
+       if (inode==ionode) &
+          write(io_lun,*) 'check stress after thermo%get_temperature_and_ke 1:', stress,baro%P_int*HaBohr3ToGPa,&
+               baro%P_ext*HaBohr3ToGPa
        call baro%get_pressure_and_stress
+       if (inode==ionode) &
+          write(io_lun,*) 'check stress after baro%get_pressure_and_stress 1:', stress,baro%P_int*HaBohr3ToGPa,&
+               baro%P_ext*HaBohr3ToGPa
 
        ! thermostat/barostat (MTTK splitting of Liouvillian)
        call integrate_pt(baro, thermo, mdl, ion_velocity)
+       if (inode==ionode) &
+          write(io_lun,*) 'check stress after integrate_pt 1:', stress,baro%P_int*HaBohr3ToGPa,&
+               baro%P_ext*HaBohr3ToGPa
 
        !! For Debuggging !!
        !     call dump_pos_and_matrices(index=1,MDstep=i_first)
@@ -769,11 +805,9 @@ contains
                         fire_N,fire_N2,fire_P0,fire_alpha) ! SA 20150204
        else
           call vVerlet_v_dthalf(MDtimestep,ion_velocity,tot_force,flag_movable)
-
           ! The velocity Verlet dt position update plus box update(s)
           call update_pos_and_box(baro, nequil, flag_movable)
        end if
-
        ! Constrain position
        if (flag_RigidBonds) &
          call correct_atomic_position(ion_velocity,MDtimestep)
@@ -783,41 +817,69 @@ contains
              call baro%update_cell
           end if
        end if
+       t1=MPI_wtime()
        if(flag_SFcoeffReuse) then
-          call update_pos_and_matrices(updateSFcoeff,ion_velocity)
+         call update_pos_and_matrices(updateSFcoeff,ion_velocity)
        else
-          call update_pos_and_matrices(updateLorK,ion_velocity)
+         call update_pos_and_matrices(updateLorK,ion_velocity)
        endif
 
+       t2=MPI_wtime()
+       if (inode==ionode) &
+            write(io_lun,*) 'Time update_pos_and_matrices in MD:', t2-t1
        if (flag_XLBOMD) call Do_XLBOMD(iter,MDtimestep)
-       call update_H(fixed_potential)
+       if (.not. flag_MLFF) call update_H(fixed_potential)
 
        !2018.Jan.4 TM 
        !   We need to update flag_movable, since the order of x_atom_cell (or id_glob) 
        !   may change after the atomic positions are updated.
        call check_move_atoms(flag_movable)
-       
+
        !! For Debuggging !!
        !     call dump_pos_and_matrices(index=2,MDstep=i_first)
        !! For Debuggging !!
        
        if (flag_fire_qMD) then
-          call get_E_and_F(fixed_potential, vary_mu, energy1, .true., .true.,iter)
-          call check_stop(done, iter)   !2019/Nov/14
-          call dump_pos_and_matrices(index=0,MDstep=iter,velocity=ion_velocity)
-       else
-          call get_E_and_F(fixed_potential, vary_mu, energy1, .true., .false.,iter)
-          call check_stop(done, iter)   !2019/Nov/14
-          ! Here so that the kinetic stress is reported just after the 
-          ! static stress - zamaan
-          if (inode == ionode .and. iprint_MD > 2) then
-            write(io_lun,fmt='(/4x,"Kinetic stress    ", 3f15.8,a3)') &
-              baro%ke_stress(1,1), baro%ke_stress(2,2), baro%ke_stress(3,3), &
-              en_units(energy_units)
+          if (flag_MLFF) then
+            call get_MLFF
+            if (inode==ionode) &
+               write(io_lun,*) 'check stress after gret_MLFF:', stress,baro%P_int*HaBohr3ToGPa,&
+               baro%P_ext*HaBohr3ToGPa
+            call check_stop(done, iter)
+          else
+            call get_E_and_F(fixed_potential, vary_mu, energy1, .true., .true.,iter)
+            call check_stop(done, iter)   !2019/Nov/14
+            call dump_pos_and_matrices(index=0,MDstep=iter,velocity=ion_velocity)
           end if
-          call dump_pos_and_matrices(index=0,MDstep=iter,velocity=ion_velocity)
+       else
+          if (flag_MLFF) then
+            t1=MPI_wtime()
+            call get_MLFF
+            t2=MPI_wtime()
+            if (inode==ionode) &
+               write(io_lun,*) 'Time get_E_and_F_ML in MD:', t2-t1
+            if (inode==ionode) &
+               write(io_lun,*) 'check stress after get_MLFF:', stress,baro%P_int*HaBohr3ToGPa,&
+               baro%P_ext*HaBohr3ToGPa
+            call check_stop(done, iter)
+          else
+            call get_E_and_F(fixed_potential, vary_mu, energy1, .true., .false.,iter)
+            call check_stop(done, iter)   !2019/Nov/14
+            ! Here so that the kinetic stress is reported just after the
+            ! static stress - zamaan
+            if (inode == ionode .and. iprint_MD > 2) then
+              write(io_lun,fmt='(/4x,"Kinetic stress    ", 3f15.8,a3)') &
+                baro%ke_stress(1,1), baro%ke_stress(2,2), baro%ke_stress(3,3), &
+                en_units(energy_units)
+            end if
+            call dump_pos_and_matrices(index=0,MDstep=iter,velocity=ion_velocity)
+          end if
           call vVerlet_v_dthalf(MDtimestep,ion_velocity,tot_force,flag_movable,second_call)
        end if
+       if (inode==ionode) &
+          write(io_lun,*) 'check stress after if flag_fire_qMD:', stress,baro%P_int*HaBohr3ToGPa,&
+               baro%P_ext*HaBohr3ToGPa
+       t1=MPI_wtime()
        ! Update DFT energy
        mdl%dft_total_energy = energy1
        !******
@@ -836,11 +898,20 @@ contains
        thermo%ke_ions = mdl%ion_kinetic_energy
        call thermo%get_temperature_and_ke(baro, ion_velocity, &
                                           mdl%ion_kinetic_energy)
+       if (inode==ionode) &
+          write(io_lun,*) 'check stress after thermo%get_temperature_and_ke 2:', stress,baro%P_int*HaBohr3ToGPa,&
+               baro%P_ext/HaBohr3ToGPa
        call baro%get_pressure_and_stress
+       if (inode==ionode) &
+          write(io_lun,*) 'check stress after baro%get_pressure_and_stress 2:', stress,baro%P_int*HaBohr3ToGPa,&
+               baro%P_ext/HaBohr3ToGPa
 
        ! thermostat/barostat (MTTK splitting of Liouvillian)
        call mdl%get_cons_qty
        call integrate_pt(baro, thermo, mdl, ion_velocity, second_call)
+       if (inode==ionode) &
+          write(io_lun,*) 'check stress after integrate_pt 2:', stress,baro%P_int*HaBohr3ToGPa,&
+               baro%P_ext/HaBohr3ToGPa
 
        ! Constrain velocity
        if (flag_RigidBonds) call correct_atomic_velocity(ion_velocity)
@@ -897,7 +968,13 @@ contains
        call thermo%get_temperature_and_ke(baro, ion_velocity, &
                                           mdl%ion_kinetic_energy, &
                                           final_call)
+       if (inode==ionode) &
+          write(io_lun,*) 'check stress thermo%get_temperature_and_ke second velocity:', stress,baro%P_int*HaBohr3ToGPa,&
+               baro%P_ext/HaBohr3ToGPa
        call baro%get_pressure_and_stress(final_call)
+       if (inode==ionode) &
+          write(io_lun,*) 'check stress baro%get_pressure_and_stress second velocity:', stress,baro%P_int*HaBohr3ToGPa,&
+               baro%P_ext/HaBohr3ToGPa
  
        if (nequil > 0) then
           nequil = nequil - 1
@@ -914,9 +991,18 @@ contains
        if (flag_heat_flux) &
          call get_heat_flux(atomic_stress, ion_velocity, heat_flux)
 
+       t2=MPI_wtime()
+       if (inode==ionode) &
+            write(io_lun,*) 'Time after get_E_and_F_ML in MD:', t2-t1
+       t1=MPI_wtime()
        ! Write all MD data and checkpoints to disk
        call write_md_data(iter, thermo, baro, mdl, nequil)
-
+       if (inode==ionode) &
+          write(io_lun,*) 'check stress write_md_data second velocity:', stress,baro%P_int*HaBohr3ToGPa,&
+               baro%P_ext/HaBohr3ToGPa
+       t2=MPI_wtime()
+       if (inode==ionode) &
+            write(io_lun,*) 'Time save MD data in MD:', t2-t1
        !call check_stop(done, iter) ! moved above. 2019/Nov/14 tsuyoshi
        if (flag_fire_qMD.OR.flag_quench_MD) then
           if (abs(max) < MDcgtol) then
@@ -1919,8 +2005,10 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
   !!  CREATION DATE
   !!   2019/12/10
   !!  MODIFICATION HISTORY
-  !!  2020/01/17 smujahed
-  !!  - Added call to subroutine write_xsf to write trajectory file
+  !!   2020/01/17 smujahed
+  !!    - Added call to subroutine write_xsf to write trajectory file
+  !!   2022/05/27 10:05 dave
+  !!    Bug fix: define g0 on all processes, not just ionode
   !!  SOURCE
   !!
   subroutine lbfgs(fixed_potential, vary_mu, total_energy)
@@ -2016,19 +2104,20 @@ subroutine update_pos_and_box(baro, nequil, flag_movable)
     energy1 = energy0
     cg_new = -tot_force ! The L-BFGS is in terms of grad E
     do while (.not. done)
+       ! Define g0 consistently on all processes
+       g0 = dot(length, cg_new, 1, cg_new, 1)
        if (inode==ionode) then
           write(io_lun,'(2x,"GeomOpt - Iter: ",i4," MaxF: ",f12.8," E: ",e16.8," dE: ",f12.8)') & 
                iter, max, energy1, en_conv*dE
           if (iprint_MD > 1) then
-             g0 = dot(length, tot_force, 1, tot_force, 1)
+             temp = dot(length, tot_force, 1, tot_force, 1)
              write(io_lun,'(4x,"Force Residual:     ",f20.10," ",a2,"/",a2)') &
-                  for_conv*sqrt(g0/ni_in_cell), en_units(energy_units), & 
+                  for_conv*sqrt(temp/ni_in_cell), en_units(energy_units), & 
                   d_units(dist_units)
              write(io_lun,'(4x,"Maximum force:      ",f20.10)') max
              write(io_lun,'(4x,"Force tolerance:    ",f20.10)') MDcgtol
              write(io_lun,'(4x,"Energy change:      ",f20.10," ",a2)') &
                   en_conv*dE, en_units(energy_units)
-             g0 = dot(length,cg_new,1,cg_new,1)
              write(io_lun,'(4x,"Search direction has magnitude ",f20.10)') sqrt(g0/ni_in_cell)
           end if
        end if

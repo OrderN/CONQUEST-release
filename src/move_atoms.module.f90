@@ -2705,12 +2705,13 @@ contains
                                       set_matrix_pointers2, matrix
     use group_module,           only: parts
     use cover_module,           only: BCS_parts, DCS_parts, ion_ion_CS, &
-                                      D2_CS
+                                      D2_CS, ML_CS
     use primary_module,         only: bundle
     use global_module,          only: iprint_MD, x_atom_cell,         &
                                       y_atom_cell, z_atom_cell,       &
                                       IPRINT_TIME_THRES2,             &
-                                      flag_Becke_weights, flag_dft_d2, flag_diagonalisation
+                                      flag_Becke_weights, flag_dft_d2, flag_diagonalisation, &
+                                      flag_MLFF
     use matrix_data,            only: Hrange, mat, rcut
     use maxima_module,          only: maxpartsproc
     use set_blipgrid_module,    only: set_blipgrid
@@ -2746,6 +2747,8 @@ contains
     call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, ion_ion_CS, parts)
     if (flag_dft_d2) &
          call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, D2_CS, parts)
+    if (flag_MLFF) &
+        call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, ML_CS, parts)
     ! If there's a new interaction of Hamiltonian range, then we REALLY need to rebuild the matrices etc
     call checkBonds(check,bundle,BCS_parts,mat(1,Hrange),maxpartsproc,rcut(Hrange))
     ! If one processor gets a new bond, they ALL need to redo the indices
@@ -2807,11 +2810,12 @@ contains
                                       set_matrix_pointers2, matrix
     use group_module,           only: parts
     use cover_module,           only: BCS_parts, DCS_parts, ion_ion_CS, &
-                                      D2_CS
+                                      D2_CS, ML_CS
     use primary_module,         only: bundle
     use global_module,          only: iprint_MD, x_atom_cell,         &
                                       y_atom_cell, z_atom_cell,       &
-                                      flag_Becke_weights, flag_dft_d2, flag_diagonalisation
+                                      flag_Becke_weights, flag_dft_d2, flag_diagonalisation, &
+                                      flag_MLFF
     use matrix_data,            only: Hrange, mat, rcut
     use maxima_module,          only: maxpartsproc
     use set_blipgrid_module,    only: set_blipgrid
@@ -2845,6 +2849,8 @@ contains
          z_atom_cell, ion_ion_CS, parts)
     if (flag_dft_d2) call cover_update(x_atom_cell, y_atom_cell, &
          z_atom_cell, D2_CS, parts)
+    if (flag_MLFF) call cover_update(x_atom_cell, y_atom_cell, &
+         z_atom_cell, ML_CS, parts)
     check = .false.
     ! If there's a new interaction of Hamiltonian range, then we
     ! REALLY need to rebuild the matrices etc
@@ -2916,12 +2922,12 @@ contains
                              ni_in_cell,x_atom_cell,y_atom_cell,z_atom_cell,      &
                              IPRINT_TIME_THRES2,glob2node, io_lun,     &
                              flag_XLBOMD, flag_diagonalisation, flag_neutral_atom, &
-                             numprocs, atom_coord, species_glob, iprint_MD
+                             numprocs, atom_coord, species_glob, iprint_MD, flag_MLFF
     use GenComms, ONLY: inode,ionode,my_barrier,myid,gcopy, cq_abort
     use group_module, ONLY: parts
     use primary_module, ONLY: bundle
     use cover_module, ONLY: BCS_parts, DCS_parts, ion_ion_CS, D2_CS, BCS_blocks, &
-         make_cs,make_iprim,send_ncover, deallocate_cs
+         make_cs,make_iprim,send_ncover, deallocate_cs, ML_CS
     use mult_module,            ONLY: fmmi,immi
     use set_blipgrid_module, ONLY: set_blipgrid
     use set_bucket_module, ONLY: set_bucket
@@ -2929,7 +2935,7 @@ contains
     use pseudopotential_common, ONLY: core_radius
     use functions_on_grid, ONLy: associate_fn_on_grid
     use density_module, ONLY: build_Becke_weights
-    use UpdateMember_module, ONLY: updateMembers_group, updateMembers_cs
+    use UpdateMember_module, ONLY: updateMembers_group,updateMembers_cs,updateMembers_cs_ML
     use atoms, ONLY: distribute_atoms,deallocate_distribute_atom
     use timer_module
     use numbers
@@ -2943,7 +2949,7 @@ contains
     use ion_electrostatic, ONLY: ewald_real_cutoff, ion_ion_cutoff
     use species_module, ONLY: species
     use matrix_data,    ONLY: rcut,max_range
-    use dimens,         ONLY: r_core_squared,r_h, r_dft_d2
+    use dimens,         ONLY: r_core_squared,r_h, r_dft_d2, r_ML_des
     use DiagModule, only: end_scalapack_format, init_scalapack_format
     use maxima_module, ONLY: maxpartsproc, maxatomsproc, maxatomspart
 
@@ -2973,13 +2979,63 @@ contains
     call start_timer(tmr_l_tmp2,WITH_LEVEL)
     if(flag_diagonalisation) call end_scalapack_format
     ! finish blip-grid indexing
-    call finish_blipgrid
+    if (.not. flag_MLFF) call finish_blipgrid  !! Time cost little
     ! finish matrix multiplication indexing
     if (flag_XLBOMD) call fmmi_XL()
-    call fmmi(bundle)
+    if (.not. flag_MLFF) call fmmi(bundle)      !!
+    !! In the machine learing case, we skip to treat other covering sets.
+    if (flag_MLFF) then
+       ! machine learing part
+       if(flag_empty_bundle.OR.flag_variable_cell) then
+          ! Deallocate covering set of machine learing
+          call deallocate_cs(ML_CS,.true.)
+          call deallocate_distribute_atom
+          ! If one process has no atoms then we have to redistribute the
+          ! overall workload; in the longer term, we could trigger this
+          ! if the load balancing becomes poor
+          if(flag_empty_bundle) then
+          if(inode==ionode) &
+               write(io_lun,fmt='(2x,"Empty bundle detected: redistributing atoms between processes")')
+          call deallocate_primary_set(bundle)
+          call deallocate_group_set(parts)
+          ! Call Hilbert curve
+          call sfc_partitions_to_processors(parts)
+          ! inverse table to npnode
+          do np=1,parts%ngcellx*parts%ngcelly*parts%ngcellz
+             parts%inv_ngnode(parts%ngnode(np))=np
+          end do
+          call make_cc2(parts,numprocs)
+          ! NB  velocity update is done in update_pos_and_matrices
+          do ni = 1, ni_in_cell
+             id_global= id_glob(ni)
+             x_atom_cell(ni) = atom_coord(1,id_global)
+             y_atom_cell(ni) = atom_coord(2,id_global)
+             z_atom_cell(ni) = atom_coord(3,id_global)
+             species(ni)     = species_glob(id_global)
+          end do
+          ! Covering sets are made in setgrid
+          ! Create primary set for atoms: bundle of partitions
+          call init_primary(bundle, maxatomsproc, maxpartsproc, .true.)
+          call make_prim(parts, bundle, inode-1, id_glob, x_atom_cell, &
+               y_atom_cell, z_atom_cell, species)
+       end if
+          ! Sorts out which processor owns which atoms
+          call distribute_atoms(inode, ionode)
+          call make_cs(inode-1, r_ML_des, ML_CS, parts, bundle, ni_in_cell, &
+               x_atom_cell, y_atom_cell, z_atom_cell)
+          call make_iprim(ML_CS, bundle)
+          call send_ncover(ML_CS, inode)
+          call my_barrier
+       else if (flag_MLFF) then
+          call updateMembers_cs_ML
+          call deallocate_distribute_atom
+          ! Reallocate and find new indices
+          call distribute_atoms(inode,ionode)
+       end if
+    ! Originial DFT part
     ! Now we need to redistribute; if the cell is changing or one process
     ! has no atoms then we must rebuild the covering sets
-    if(flag_empty_bundle.OR.flag_variable_cell) then
+    else if(flag_empty_bundle.OR.flag_variable_cell) then
        ! Deallocate parts and covering sets
        call deallocate_cs(BCS_parts,.true.)
        call deallocate_cs(DCS_parts,.true.)
@@ -3059,6 +3115,7 @@ contains
     ! Update glob2node
     if (inode.EQ.ionode) call make_glob2node
     call gcopy(glob2node,ni_in_cell)
+    if (flag_MLFF) return
     ! Reallocate for blip grid
     call set_blipgrid(myid, RadiusAtomf, core_radius)
     call set_bucket(inode-1)
@@ -4467,7 +4524,7 @@ contains
   use numbers,         only: half, zero, one, very_small
   use global_module,   only: flag_diagonalisation, atom_coord, atom_vels, atom_coord_diff, &
                              rcellx, rcelly, rcellz, ni_in_cell, nspin, nspin_SF, id_glob, &
-                             area_moveatoms
+                             area_moveatoms, flag_MLFF
     ! n_proc_old and glob2node_old have been removed
   use GenComms,        only: my_barrier, inode, ionode, cq_abort, gcopy
   use mult_module,     only: matL, L_trans, matK, matS, S_trans, matSFcoeff, SFcoeff_trans, &
@@ -4477,6 +4534,7 @@ contains
                              set_atom_coord_diff
   use UpdateInfo, only: Matrix_CommRebuild, Report_UpdateMatrix
   use memory_module,   only: reg_alloc_mem, type_dbl, reg_dealloc_mem
+  use mpi
 
 
   implicit none
@@ -4488,6 +4546,7 @@ contains
    ! should be removed in the future (calling update_H is outside of this routine)
   real(double) :: scale_x, scale_y, scale_z, rms_change
   real(double) :: small_change = 0.3_double
+  real(double) :: t1,t2
   
  !H_trans is not prepared. If we need to symmetrise K, we need H_trans
   integer :: H_trans = 1
@@ -4599,6 +4658,8 @@ contains
  !
  ! Then, matrices will be read from the corresponding files
  !
+  if(flag_MLFF) return
+
   if(flag_L) then
      call grab_matrix2('L',inode,nfile,InfoMat,InfoGlob,index=0,n_matrix=nspin)
      call my_barrier()

@@ -2761,7 +2761,7 @@ second:   do
 
     if(inode==ionode) then
       if (iprint_init>2) write(io_lun, &
-          '(2x,"Writing atomic positions to ",a,".xyz")') filename
+          '(2x,"Writing atomic positions to ",a,".xyz")') ''
       call io_assign(lun)
       if(append_coords) then
          open(unit=lun,file=filename,position='append')

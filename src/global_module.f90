@@ -317,6 +317,9 @@ module global_module
   logical :: flag_vdWDFT          ! selector for turning on vdW energy correction
   integer :: vdW_LDA_functional   ! selector for LDA functional
 
+  ! For Machine learning force field (MLFF)
+  logical :: flag_MLFF
+
   ! DeltaSCF
   logical :: flag_DeltaSCF
   logical :: flag_excite = .false.

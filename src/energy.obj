@@ -29,5 +29,7 @@ ENERGY_OBJS = H_matrix_module.o \
               XC_${XC_LIBRARY}_module.o\
               DFT_D2_module.o\
               vdWMesh_module.o\
-              vdWDFT_module.o
+              vdWDFT_module.o\
+              mlff_type_module.o\
+              mlff_module.o
 

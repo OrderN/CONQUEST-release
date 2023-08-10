@@ -1267,6 +1267,9 @@ contains
     baro%c8 = baro%c6/72.0_double
 
     baro%P_ext = target_pressure/HaBohr3ToGPa
+    if (inode==ionode) &
+       write(io_lun,*) 'check stress in init_baro:', target_pressure, baro%P_int*HaBohr3ToGPa,&
+               baro%P_ext*HaBohr3ToGPa
     baro%lat_ref = zero
     baro%lat_ref(1,1) = rcellx
     baro%lat_ref(2,2) = rcelly

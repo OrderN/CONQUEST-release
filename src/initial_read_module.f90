@@ -179,7 +179,7 @@ contains
          ni_in_cell, area_moveatoms,      &
          io_lun, flag_only_dispersion,    &
          flag_basis_set, blips, PAOs,     &
-         atomf, sf, paof,                 &
+         atomf, sf, paof, flag_MLFF,      &
          flag_SpinDependentSF, nspin_SF,  &
          flag_Multisite,                  &
          flag_cdft_atom, flag_local_excitation, &
@@ -807,13 +807,13 @@ contains
          flag_opt_cell, cell_constraint_flag, flag_variable_cell, &
          cell_en_tol, optcell_method, cell_stress_tol, &
          flag_stress, flag_full_stress, rng_seed, &
-         flag_atomic_stress, flag_heat_flux, flag_DumpMatrices
+         flag_atomic_stress, flag_heat_flux, flag_DumpMatrices, flag_MLFF
     use dimens, only: GridCutoff,    &
          n_grid_x, n_grid_y, n_grid_z, r_c,         &
          RadiusSupport, RadiusAtomf, RadiusMS, RadiusLD, &
          NonLocalFactor, InvSRange,                      &
          min_blip_sp, flag_buffer_old, AtomMove_buffer,  &
-         r_dft_d2, r_exx
+         r_dft_d2, r_exx, r_ML_des
     use block_module, only: in_block_x, in_block_y, in_block_z, &
          blocks_raster, blocks_hilbert
     use species_module, only: species_label, charge, mass, n_species,  &
@@ -1995,6 +1995,14 @@ contains
     !
 !!$
 !!$
+!!$
+!!$
+!!$  M A C H I N E    L E A R N I N G
+    flag_MLFF = fdf_boolean('General.MLFF',.false.)                               ! for MLFF
+    if (flag_MLFF) r_ML_des = fdf_double('MLFF.Descriptor_range',15.0_double)     ! for MLFF
+
+!!$
+!!$
 !!$  M O L E C U L A R    D Y N A M I C S
 !!$
 !!$
@@ -2015,6 +2023,12 @@ contains
           call cq_warn(sub_name,' AtomMove.ReuseSFcoeff should be true if AtomMove.ReuseDM is true.')
           flag_SFcoeffReuse = .true.
        endif
+    endif
+    ! jianbo 2023/06/09
+    if(flag_MLFF) then
+       call cq_warn(sub_name,' AtomMove.ReuseSFcoeff and AtomMove.ReuseDM should be false if General.MLFF is true.')
+       flag_SFcoeffReuse = .false.
+       flag_LmatrixReuse = .false.
     endif
 
     ! tsuyoshi 2019/12/27
@@ -2757,16 +2771,24 @@ contains
   !!    Removed gcopy and myid checks
   !!   2019/12/05 08:12 dave
   !!    Bug fix: only write out on ionode
+  !!   2022/14/06 lat
+  !!    Added cq_warn when matrix size is a prime number
+  !!    and set block_size_r = block_size_c = 1
+  !!   2022/07/16 lionel
+  !!    Added printing fractional k-points when read from block
+  !!   2022/06/29 12:00 dave
+  !!    Moved printing to capture default gamma point behaviour
   !!  SOURCE
   !!
   subroutine readDiagInfo
 
     use datatypes
+    use functions, only: is_prime
     use global_module,   only: iprint_init, rcellx, rcelly, rcellz,  &
          area_general, ni_in_cell, numprocs,   &
          species_glob, io_lun
     use numbers,         only: zero, one, two, pi, RD_ERR, half
-    use GenComms,        only: cq_abort, gcopy
+    use GenComms,        only: cq_abort, cq_warn, gcopy
     use input_module
     use ScalapackFormat, only: proc_rows, proc_cols, block_size_r,   &
          block_size_c, proc_groups, matrix_size
@@ -2782,11 +2804,13 @@ contains
     implicit none
 
     ! Local variables
+    character(len=80) :: sub_name = "readDiagInfo"
     type(cq_timer) :: backtrace_timer
     integer        :: stat, i, j, k, nk_st, nkp_lines
     real(double)   :: a, sum, dkx, dky, dkz
     integer        :: proc_per_group
-
+    logical        :: ms_is_prime
+    
     ! k-point mesh type
     logical        :: mp_mesh, done, flag_lines_kpoints, flag_gamma
     integer,      dimension(1:3)              :: mp
@@ -2861,10 +2885,15 @@ contains
        end if
     end if
     ! Read/choose ScaLAPACK block sizes
-    matrix_size = 0 
+    matrix_size = 0
     do i=1,ni_in_cell
        matrix_size = matrix_size + nsf_species(species_glob(i))
     end do
+    
+    ! Test if matrix_size is a prime number
+    ms_is_prime = is_prime(matrix_size)
+    if ( ms_is_prime ) call cq_warn(sub_name,'matrix size is a prime number', matrix_size)
+    
     if(fdf_defined('Diag.BlockSizeR')) then
        block_size_r = fdf_integer('Diag.BlockSizeR',1)
        block_size_c = fdf_integer('Diag.BlockSizeC',1)
@@ -2876,6 +2905,10 @@ contains
        if(a - real(floor(a))>1e-8_double) &
             call cq_abort('block_size_c not a factor of matrix size ! ',&
             matrix_size, block_size_c)
+    else if (  ms_is_prime ) then
+       block_size_r = 1
+       block_size_c = block_size_r
+       call cq_warn(sub_name,'prime: set block_size_c = block_size_r = 1 ')
     else
        done = .false.
        block_size_r = matrix_size/max(proc_rows,proc_cols)+1
@@ -2984,6 +3017,14 @@ contains
              kk(2,1) = zero
              kk(3,1) = zero
              wtk(1) = one
+          end if
+          ! Write out fractional k-points and weight (the easiest way not the cleverest)
+          if(iprint_init>0.AND.inode==ionode) then
+             write(io_lun,7) nkp
+             do i=1,nkp
+                write(io_lun,fmt='(8x,i5,3f15.6,f12.3)')&
+                     i,kk(1,i)/(two*pi)*rcellx,kk(2,i)/(two*pi)*rcellx,kk(3,i)/(two*pi)*rcellx,wtk(i)
+             end do
           end if
        end if
     else

@@ -109,6 +109,8 @@ contains
   !!    Changes to new XC interface
   !!   2019/12/26 tsuyoshi
   !!    Removed flag_no_atomic_densities
+  !!   2022/06/09 08:35 dave
+  !!    Changed name of D2 set-up routine, added only to module use
   !!  SOURCE
   !!
   subroutine initialise(vary_mu, fixed_potential, mu, total_energy)
@@ -120,7 +122,7 @@ contains
                                  flag_only_dispersion, flag_neutral_atom, &
                                  flag_atomic_stress, flag_heat_flux, &
                                  flag_full_stress, area_moveatoms, &
-                                 atomic_stress, non_atomic_stress
+                                 atomic_stress, non_atomic_stress, flag_MLFF
     use GenComms,          only: inode, ionode, my_barrier, end_comms, &
                                  cq_abort
     use initial_read,      only: read_and_write
@@ -130,11 +132,13 @@ contains
     use primary_module,    only: bundle
     use cover_module,      only: make_cs, D2_CS
     use dimens,            only: r_dft_d2
-    use DFT_D2
+    use DFT_D2,            only: set_para_D2, dispersion_D2
     use pseudo_tm_module,   only: make_neutral_atom
     use angular_coeff_routines, only: set_fact
     use maxima_module,          only: lmax_ps, lmax_pao
     use XC, only: init_xc
+    use mlff,               only: get_MLFF
+    use mlff_type,               only: set_ML
     
     implicit none
 
@@ -173,10 +177,17 @@ contains
     if (flag_only_dispersion) then
       call make_cs(inode-1, r_dft_d2, D2_CS, parts, bundle, ni_in_cell, &
                    x_atom_cell, y_atom_cell, z_atom_cell)
-      call read_para_D2
+      call set_para_D2
       call dispersion_D2
       call end_comms()
       stop
+    end if
+
+    ! Test calculate of machine learning force field part 20220727 JianBo.Lin
+    if (flag_MLFF) then
+      call set_ML
+      !call get_MLFF
+      !call end_comms()
     end if
 
     ! Call routines to read or make data for isolated ions
@@ -187,6 +198,7 @@ contains
     if(lmax_tot<8) lmax_tot = 8
     call set_fact(lmax_tot)
     if(flag_neutral_atom) call make_neutral_atom
+    !if (.not. flag_MLFF) &
     call set_up(find_chdens,std_level_loc+1)
     
     call my_barrier()
@@ -219,6 +231,14 @@ contains
       non_atomic_stress = zero
     end if
 
+    call my_barrier()
+    if (flag_MLFF) then
+       call stop_timer(tmr_std_initialisation)
+!****lat<$
+       call stop_backtrace(t=backtrace_timer,who='initialise',echo=.true.)
+!****lat>$
+       return
+    end if
     call initial_H(start, start_L, find_chdens, fixed_potential, &
                    vary_mu, total_energy,std_level_loc+1)
 
@@ -308,6 +328,8 @@ contains
   !!    Removed r_super_x references (redundant)
   !!   2018/01/22 12:41 JST dave
   !!    Adding check for maximum angular momentum for Bessel functions
+  !!   2022/06/09 08:36 dave
+  !!    Change name of D2 set-up routine
   !!  SOURCE
   !!
   subroutine set_up(find_chdens,level)
@@ -368,7 +390,7 @@ contains
     use angular_coeff_routines, only: set_fact, set_prefac, set_prefac_real
     use numbers,                only: zero
     use cDFT_module,            only: init_cdft
-    use DFT_D2,                 only: read_para_D2
+    use DFT_D2,                 only: set_para_D2
     use input_module,           ONLY: leqi
     use UpdateInfo,             ONLY: make_glob2node
     use XLBOMD_module,          ONLY: immi_XL
@@ -558,7 +580,7 @@ contains
         write (io_lun, '(8x,"+++ D2_CS%nx_origin, y, z:",3i8)') &
               D2_CS%nx_origin, D2_CS%ny_origin, D2_CS%nz_origin
       end if
-      call read_para_D2
+      call set_para_D2
       if (inode == ionode) then                               !! DEBUG !!
          write (io_lun, '(a, f10.5)') &                       !! DEBUG !!
                "Sbrt: make_cs for DFT-D2, the cutoff is ", &  !! DEBUG !!

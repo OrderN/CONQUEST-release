@@ -44,6 +44,8 @@
 !!    stores the value of hartree_energy_drho made from the input charge density when we have check_DFT T
 !!   2021/07/30 12:15 dave
 !!    Remove check_DFT
+!!   2022/06/09 12:29 dave
+!!    Moved disp_energy here from DFT-D2 module
 !!  SOURCE
 !!
 module energy
@@ -69,10 +71,12 @@ module energy
   real(double) ::     cdft_energy
   real(double) ::      exx_energy
   real(double) ::        x_energy
+  real(double) ::     disp_energy
   real(double) :: delta_E_hartree
   real(double) :: delta_E_xc
   real(double) :: entropy = zero
   real(double) :: ion_interaction_energy
+  real(double) :: ml_energy                  ! estimated from machine learning force field
   
   ! Neutral atom potential
   real(double) :: hartree_energy_drho          ! Self-energy for drho = rho - rho_atom
@@ -161,7 +165,6 @@ contains
                                       flag_neutral_atom
     use pseudopotential_common, only: core_correction, &
                                       flag_neutral_atom_projector
-    use DFT_D2,                 only: disp_energy
     use density_module,         only: electron_number
     
 
@@ -461,7 +464,6 @@ contains
                                       flag_perform_cdft,              &
                                       flag_vdWDFT,                    &
                                       flag_exx, exx_alpha, flag_neutral_atom
-    use DFT_D2,                 only: disp_energy
     use density_module,         only: electron_number
     use pseudopotential_common, only: core_correction, &
                                       flag_neutral_atom_projector

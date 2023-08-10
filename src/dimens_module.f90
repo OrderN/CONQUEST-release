@@ -55,7 +55,7 @@ module dimens
 
   real(double) :: r_super_x, r_super_y, r_super_z, volume
   real(double) :: r_super_x_squared, r_super_y_squared, r_super_z_squared
-  real(double) :: r_s, r_h, r_c, r_nl, r_core_squared, r_dft_d2, r_exx
+  real(double) :: r_s, r_h, r_c, r_nl, r_core_squared, r_dft_d2, r_exx, r_ML_des
   real(double) :: r_s_atomf, r_h_atomf, r_MS, r_LD
   real(double) :: grid_point_volume, one_over_grid_point_volume
   real(double) :: support_grid_volume

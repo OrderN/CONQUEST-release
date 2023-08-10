@@ -84,6 +84,7 @@ module cover_module
   type(cover_set) :: BCS_parts
   type(cover_set) :: ion_ion_CS
   type(cover_set) :: D2_CS ! for DFT-D2
+  type(cover_set) :: ML_CS ! for machine learning
 
 !!***
 contains
