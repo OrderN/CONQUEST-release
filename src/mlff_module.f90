@@ -562,9 +562,6 @@ contains
     real(double) :: rx,ry,rz
 
     ! loop over all atom pairs (atoms in primary set, max. cover set) -
-    if (inode== ionode) then
-        write(*,*) 'We are in calculate_EandF_split2b3b', ' id=',inode
-    end if
     inp=1  ! Indexes primary atoms
     do nn=1,prim%groups_on_node ! Partitions in primary set
        !pair check!write(*,*) 'nn loop, inode=',inode
@@ -679,31 +676,25 @@ contains
 
     ! Todo: check flag_descriptortype
     if (inode == ionode) then
-        write(*,'(a,a18)') 'flag_descriptortype:', flag_descriptortype
+        write(*,*) 'flag_descriptortype:', flag_descriptortype
     end if
 
 
     if (params_ML%descriptor_type == 'split2b3b' .or. params_ML%descriptor_type == 'Split2b3b') then
-       !call read_split(filename, descriptor_params_split)
-       feature_dim = params_ML%split(1)%dim_coef
-       if (inode == ionode) then
-          write(*,'(a18,i10)') flag_descriptortype, feature_dim
-       end if
-       call allocate_features_ML(amat_ML, amat_features_ML, prim%groups_on_node, feature_dim)
-       call get_feature_split(prim,gcs,amat_ML,amat_features_ML,rcut,params_ML%split)
-       call calculate_EandF_split2b3b(prim,amat_ML,amat_features_ML,params_ML%split)
+        !call read_split(filename, descriptor_params_split)
+        feature_dim = params_ML%split(1)%dim_coef
+        call allocate_features_ML(amat_ML, amat_features_ML, prim%groups_on_node, feature_dim)
+        call get_feature_split(prim,gcs,amat_ML,amat_features_ML,rcut,params_ML%split)
+        call calculate_EandF_split2b3b(prim,amat_ML,amat_features_ML,params_ML%split)
 
-       !call deallocate_split_param(descriptor_params_split)
-       !call clean_up_ml_split(amat_ML,amat_features_ML,descriptor_params_split)
+        !call deallocate_split_param(descriptor_params_split)
+        !call clean_up_ml_split(amat_ML,amat_features_ML,descriptor_params_split)
     elseif (params_ML%descriptor_type == 'acsf2b' .or. params_ML%descriptor_type == 'ACSF2b') then
-      !call read_acsf2b(filename, descriptor_params_acsf2b)
-      feature_dim = params_ML%acsf(1)%dim_coef
-      if (inode == ionode) then
-         write(*,'(a18,i10)') flag_descriptortype, feature_dim
-      end if
-      call allocate_features_ML(amat_ML, amat_features_ML, prim%groups_on_node, feature_dim)
-      call get_feature_acsf2b(prim,gcs,amat_ML,amat_features_ML,rcut,params_ML%acsf)
-      call calculate_EandF_acsf2b(prim,amat_ML,amat_features_ML,params_ML%acsf)
+        !call read_acsf2b(filename, descriptor_params_acsf2b)
+        feature_dim = params_ML%acsf(1)%dim_coef
+        call allocate_features_ML(amat_ML, amat_features_ML, prim%groups_on_node, feature_dim)
+        call get_feature_acsf2b(prim,gcs,amat_ML,amat_features_ML,rcut,params_ML%acsf)
+        call calculate_EandF_acsf2b(prim,amat_ML,amat_features_ML,params_ML%acsf)
 
         !call deallocate_acsf2b_param(descriptor_params_acsf2b)
         !call clean_up_ml_acsf(amat_ML,amat_features_ML,descriptor_params_acsf2b)
@@ -873,6 +864,10 @@ contains
                         nj=amat_ML(nn)%i_seq(ist)
                         j_glob =  id_glob( parts%icell_beg(ML_CS%lab_cell(np)) +nj-1 )
 
+                        !write(*, 100) inode, nn,i, ia_glob,np,nj, j_glob,&
+                        !        amat_ML(nn)%j_species(ist),amat_ML(nn)%radius(ist) * BohrToAng
+                        !check!write(*, 102) inode, nn,i, ia_glob,np,nj, j_glob,&
+                                !check!amat_ML(nn)%j_species(ist),amat_ML(nn)%radius(ist) * BohrToAng
                     end do
                 end do !part_nabs
             else
@@ -912,29 +907,26 @@ contains
       write(io_lun,*) 'Time after get_E_and_F_ML in get_MLFF:', t2-t1
 
     !! check force and feature info after operate mlff
-    !! check 1st atom Si and 71st atom O
-    do nn=1, bundle%groups_on_node
-       !write(20230808,'(3i8)') bundle%nm_nodgroup(nn), bundle%nm_nodbeg(nn),amat_ML(nn)%n_atoms
-      if(bundle%nm_nodgroup(nn).gt.0) then
-          do i=1, amat_ML(nn)%n_atoms
-             ia_glob=bundle%ig_prim(bundle%nm_nodbeg(nn)+i-1)
-
-             !write(1984,*) 'this is checking first atom in x direction: after, ia_glob:',ia_glob
-             if (ia_glob==1 .or. ia_glob==71) then
-             !if (ia_glob==1 ) then
-                write(1984,*) 'this is checking first atom in x direction: after, ia_glob:',ia_glob
-                do j=1, params_ML%split(1)%dim_coef
-                   write(1984,*) amat_features_ML(nn)%fpx(j, i)
-                end do
-                write(1984,*) 'fx= ',ml_force(1, ia_glob)
-             end if
-          end do !i
-      else
-          write(*, *) 'Warning: No atoms in this partition', inode, nn
-      end if ! no atoms in partition?
-    end do !nn
-    ! check force and energy
     if (inode == ionode) then
+        do nn=1, bundle%groups_on_node
+            if(bundle%nm_nodgroup(nn).gt.0) then
+                do i=1, amat_ML(nn)%n_atoms
+                    ia_glob=bundle%ig_prim(bundle%nm_nodbeg(nn)+i-1)
+
+                    !!if (ia_glob==1 .or. ia_glob==71) then
+                    if (ia_glob==1) then
+                        write(1984,*) 'this is checking first atom in x direction: after, ia_glob:',ia_glob
+                        do j=1, 40
+                            write(1984,*) 'No' !,amat_features_ML(nn)%fpx(i, j)
+                        end do
+                        write(1984,*) 'fx= ',ml_force(1, ia_glob)
+                    end if
+                end do !i
+            else
+                write(*, *) 'Warning: No atoms in this partition', inode, nn
+            end if ! no atoms in partition?
+        end do !nn
+
         write(1988,*) ml_energy
         do i=1, ni_in_cell
             write(1987,103) i, ml_force(:, i)

@@ -105,8 +105,8 @@ module mlff_type
   type features_ML
      integer(integ) :: n_atoms ! Lengths of n_nab, i_acc, i_nd_acc
      real(double), dimension(:,:), allocatable  :: fpx ! feature for atomic force in x direction of natoms
-     real(double), dimension(:,:), allocatable  :: fpy ! feature for atomic force in y direction of natoms
-     real(double), dimension(:,:), allocatable  :: fpz ! feature for atomic force in z direction of natoms
+     real(double), dimension(:,:), allocatable  :: fpy ! feature for atomic force in x direction of natoms
+     real(double), dimension(:,:), allocatable  :: fpz ! feature for atomic force in x direction of natoms
      real(double), dimension(:,:), allocatable  :: fp ! feature for atomic energy of natoms
   end type features_ML
 
@@ -617,69 +617,6 @@ contains
   end subroutine ini_species_order
 !!***
 
-
-!!****f* matrix_module/ini_species_order *
-  subroutine ini_species_order_center(species_orders, n_species,i_species)
-    implicit none
-
-    ! Passed variables
-    type(species_order) :: species_orders
-    integer                 :: n_species,i_species
-
-    ! Local variables
-    integer :: i, j, k, shift,stat
-    integer :: i_d2, i_d3
-
-    allocate(species_orders%d2(n_species),STAT=stat)
-    if(stat/=0) then
-        call cq_abort('species_orders d2: error allocating memory to n_species')
-    endif
-    allocate(species_orders%d3(n_species, n_species),STAT=stat)
-    if(stat/=0) then
-        call cq_abort('species_orders d3: error allocating memory to (n_species, n_species)')
-    endif
-
-    !! center atom to be the first order
-    !! X-X, and X-XX
-    species_orders%d2(i_species) = 1
-    species_orders%d3(i_species,i_species) = 1
-    i_d2=2
-    i_d3=2
-    !! X-XA,X-XB,...X-AX
-    do i=1, n_species
-      do j=1, n_species
-        if (i == i_species .or. j==i_species) then
-            if (j > i ) then
-               species_orders%d3(i,j) = i_d3
-               i_d3 = i_d3 + 1
-            else
-               species_orders%d3(i,j) = species_orders%d3(j,i)
-            end if
-        end if
-      end do
-    end do
-
-    ! X-A, and X-AB, X-BA
-    do i=1, n_species
-       if (i /= i_species) then
-          species_orders%d2(i) = i_d2
-          i_d2 = i_d2 + 1
-       end if
-       do j=1, n_species
-        if (i /= i_species .and. j/=i_species) then
-            if (j >= i ) then
-               species_orders%d3(i,j) = i_d3
-               i_d3 = i_d3 + 1
-            else
-               species_orders%d3(i,j) = species_orders%d3(j,i)
-            end if
-        end if
-       end do
-    end do
-    return
-  end subroutine ini_species_order_center
-!!***
-
 !!****f* matrix_module/allocate_feature_ML *
   subroutine allocate_features_ML(amat_ML, amat_features_ML,part_on_node,feature_dim)
     use matrix_module, ONLY: matrix
@@ -1023,8 +960,7 @@ contains
         call cq_abort('acsf2b descriptor_params: error allocating memory to n_species')
     endif
     do i=1, n_species
-       !call ini_species_order_center(descriptor_params(i)%species_orders, n_species,i)
-       call ini_species_order(descriptor_params(i)%species_orders, n_species)
+        call ini_species_order(descriptor_params(i)%species_orders, n_species)
     end do
     descriptor_params%n_species = n_species
 
@@ -1562,12 +1498,7 @@ contains
         call cq_abort('split2b3b descriptor_params: error allocating memory to n_species')
     endif
     do i=1, n_species
-        call ini_species_order_center(descriptor_params(i)%species_orders, n_species, i)
-        if (inode== ionode) then
-            write(*,*) 'We are in read split species order, i,n_species', i, n_species
-            write(*,*) descriptor_params(i)%species_orders%d2
-            write(*,*) descriptor_params(i)%species_orders%d3
-        end if
+        call ini_species_order(descriptor_params(i)%species_orders, n_species)
     end do
     descriptor_params%n_species = n_species
 
@@ -1580,13 +1511,10 @@ contains
         ! 30,30,30, ...
         ! read comment lines
         read(file_id,*, end=999) comment
-        if (inode == ionode) then
-            write(*,*) 'read_split2b3b: i, n_species, comment ', i, n_species, comment
-        end if
-
         read(file_id,*, end=999) comment
+
         if (inode == ionode) then
-            write(*,*) 'read_split2b3b: i, n_species, comment ', i, n_species, comment
+            write(*,*) 'read_split2b3b: i, comment ', i, comment
         end if
 
         ! read center atom, and order of species
@@ -1635,7 +1563,7 @@ contains
         end if
 
         if (inode == ionode) then
-            write(*,*) 'read_split2b3b: after acc 2b ', descriptor_params(i)%nums_2b_acc,n_2b
+            write(*,*) 'read_split2b3b: after acc ', descriptor_params(i)%nums_2b_acc,n_2b
         end if
 
         !! Read three body terms
@@ -1646,7 +1574,7 @@ contains
             call get_b3_param(file_id,descriptor_params(i)%params_3b(j), dims_3b(j))
         end do !j1
         if (inode == ionode) then
-            write(*,*) 'read_split2b3b: after read 3b , dims_3b ', dims_3b,n_3b
+            write(*,*) 'read_split2b3b: after read 2b , dims_2b ', dims_2b,n_2b
         end if
 
         !! update index of three body terms
@@ -1654,15 +1582,14 @@ contains
         descriptor_params(i)%num_3b = descriptor_params(i)%nums_3b(1)
         if (n_3b .gt. 1 ) then
             do j = 2, n_3b
-                dim_3b = descriptor_params(i)%nums_3b(j-1)
-                descriptor_params(i)%nums_3b_acc(j) = descriptor_params(i)%nums_3b_acc(j-1) + dim_3b
                 dim_3b = descriptor_params(i)%nums_3b(j)
+                descriptor_params(i)%nums_3b_acc(j) = descriptor_params(i)%nums_3b_acc(j-1) + dim_3b
                 descriptor_params(i)%num_3b = descriptor_params(i)%num_3b + dim_3b
             end do !j2
         end if
 
         if (inode == ionode) then
-            write(*,*) 'read_split2b3b: after acc 3b', descriptor_params(i)%nums_3b_acc,n_3b
+            write(*,*) 'read_split2b3b: after acc ', descriptor_params(i)%nums_3b_acc,n_3b
         end if
         !###############
 
@@ -1770,9 +1697,12 @@ contains
             end if
         end do !j n_3b
 
-        !! check with output coef
         if (inode == ionode) then
             write(*,*) 'read_split2b3b: after collect coefficients '
+        end if
+
+        !! check with output
+        if (inode == ionode) then
             write(*,*) 'read_split2b3b: start check with output '
             do j=1, descriptor_params(i)%dim_coef
                 write(*,*) j, descriptor_params(i)%coef(j)
@@ -1853,7 +1783,6 @@ contains
     integer :: nn,i,j,k,np,ni, ist_j, ist_k, ist_ijk,i_3b,ia_glob
     integer :: species_order2b, species_order3b, i_species, j_species, k_species,tmp_species
     integer :: param_start, param_end, shift_dim, param_index, fp_index, gx_index
-    logical :: flag_X_AX, flag_X_BA
 
     real(double) :: rcutsq, xij, yij, zij, xik, yik, zik, rij, rik, rjk, rjk_2
     real(double) :: eta, rs, eta1, eta2, eta3, rcut_2, rcut_a
@@ -1874,6 +1803,9 @@ contains
     rcut_a=rcut * BohrToAng
     rcut_2=rcut_a * rcut_a
 
+    !if (inode== ionode) then
+    !check get_naba_ML!write(*,*) 'We are in get_naba_ML', ' id=',inode
+    !end if
     call my_barrier()
     ! loop over all atom pairs (atoms in primary set, max. cover set) -
     inp=1  ! Indexes primary atoms
@@ -1895,7 +1827,6 @@ contains
              !Species of i is  amat(nn)%i_species(i)
              i_species = amat(nn)%i_species(i)
              ia_glob=prim%ig_prim(prim%nm_nodbeg(nn)+i-1)
-             write(20230809,*) 'check, ia_glob, nm:',ia_glob,prim%nm_nodgroup(nn)
              do j=1,  amat(nn)%n_nab(i)
                  ist_j = amat(nn)%i_acc(i)+j-1
                  j_species = amat(nn)%j_species(ist_j)
@@ -1946,11 +1877,7 @@ contains
                      rjk = sqrt(rjk_2)
 
                      !! check species order and transfer
-                     !! X_AX -> X_XA, X_BA->X_AB
-                     flag_X_AX = i_species /= j_species .or. i_species == k_species
-                     flag_X_BA = i_species /= j_species .and. i_species /= k_species &
-                         .and. j_species > k_species
-                     if (flag_X_AX .or. flag_X_BA) then
+                     if (j_species > k_species) then
                          tmpr=rik
                          tmpx=xik
                          tmpy=yik
@@ -1981,12 +1908,8 @@ contains
                      param_start = descriptor_params(i_species)%nums_3b_acc(species_order3b)
                      param_end = param_start + descriptor_params(i_species)%nums_3b(species_order3b) - 1
 
-                     !! X-XX => rij(XX), rik(XX), rjk(XX): 123->132->213->231->321->312
+                     !! A-AA, B-BB, C-CC
                      if (i_species == j_species .and. j_species == k_species .and. i_species == k_species)  then
-                         !! X-XX
-                        if (inode== ionode) then
-                           write(*,'(a,4i8)') 'X-XX, order3b',species_order3b,shift_dim,param_start, param_end
-                        end if
                          do param_index= param_start, param_end
                              fp_index = param_index + shift_dim
 
@@ -2002,7 +1925,7 @@ contains
                              eta3 = 1.0/eta3 ** 2
 
                              ! Terms for A-A-A
-                             tmp123 = exp(-eta1 * rij ** 2 - eta2* rik ** 2 - eta3* rjk ** 2)
+                             tmp123 = exp(-eta1 * rij ** 2) * exp(-eta2* rik ** 2)*exp(-eta3* rjk ** 2)
                              tmp132 = exp(-eta1 * rij ** 2 - eta3* rik ** 2 - eta2* rjk ** 2)
                              tmp213 = exp(-eta2 * rij ** 2 - eta1* rik ** 2 - eta3* rjk ** 2)
                              tmp231 = exp(-eta2 * rij ** 2 - eta3* rik ** 2 - eta1* rjk ** 2)
@@ -2041,11 +1964,8 @@ contains
                              amat_features_ML(nn)%fpy(fp_index, i) = amat_features_ML(nn)%fpy(fp_index, i) + tmpy
                              amat_features_ML(nn)%fpz(fp_index, i) = amat_features_ML(nn)%fpz(fp_index, i) + tmpz
                          end do ! three-body terms
-                     !! X-XA, X-XB, X-XC => rij(XX), rik(XA), rjk(XA): 23->32
+                     !! A-AB, A-AC, B-BC
                      elseif (i_species == j_species .and. j_species /= k_species .and. i_species /= k_species) then
-                        if (inode== ionode) then
-                           write(*,'(a,4i8)') 'X-XA, order3b',species_order3b,shift_dim,param_start, param_end
-                        end if
                          do param_index= param_start, param_end
                              fp_index = param_index + shift_dim
 
@@ -2060,113 +1980,48 @@ contains
                              eta2 = 1.0/eta2 ** 2
                              eta3 = 1.0/eta3 ** 2
 
-                             ! Terms for X-XA, X-XB, X-XC => rij(XX), rik(XA), rjk(XA): 23->32
-                             tmp123 = exp(-eta1 * rij ** 2 - eta2* rik ** 2 - eta3* rjk ** 2)
+                             ! Terms for A-AB or B-AB
+                             tmp123 = exp(-eta1 * rij ** 2) * exp(-eta2* rik ** 2)*exp(-eta3* rjk ** 2)
                              tmp132 = exp(-eta1 * rij ** 2 - eta3* rik ** 2 - eta2* rjk ** 2)
-                             !tmp213 = exp(-eta2 * rij ** 2 - eta1* rik ** 2 - eta3* rjk ** 2)
-                             !tmp231 = exp(-eta2 * rij ** 2 - eta3* rik ** 2 - eta1* rjk ** 2)
-                             !tmp312 = exp(-eta3 * rij ** 2 - eta1* rik ** 2 - eta2* rjk ** 2)
-                             !tmp321 = exp(-eta3 * rij ** 2 - eta2* rik ** 2 - eta1* rjk ** 2)
+                             tmp213 = exp(-eta2 * rij ** 2 - eta1* rik ** 2 - eta3* rjk ** 2)
+                             tmp231 = exp(-eta2 * rij ** 2 - eta3* rik ** 2 - eta1* rjk ** 2)
+                             tmp312 = exp(-eta3 * rij ** 2 - eta1* rik ** 2 - eta2* rjk ** 2)
+                             tmp321 = exp(-eta3 * rij ** 2 - eta2* rik ** 2 - eta1* rjk ** 2)
 
                              proj_x = 0.0
                              proj_y = 0.0
                              proj_z = 0.0
                              proj_x = proj_x + tmp123 * (xij*eta1 + xik*eta2)
                              proj_x = proj_x + tmp132 * (xij*eta1 + xik*eta3)
-                             !proj_x = proj_x + tmp213 * (xij*eta2 + xik*eta1)
-                             !proj_x = proj_x + tmp231 * (xij*eta2 + xik*eta3)
-                             !proj_x = proj_x + tmp312 * (xij*eta3 + xik*eta1)
-                             !proj_x = proj_x + tmp321 * (xij*eta3 + xik*eta2)
+                             proj_x = proj_x + tmp213 * (xij*eta2 + xik*eta1)
+                             proj_x = proj_x + tmp231 * (xij*eta2 + xik*eta3)
+                             proj_x = proj_x + tmp312 * (xij*eta3 + xik*eta1)
+                             proj_x = proj_x + tmp321 * (xij*eta3 + xik*eta2)
 
                              proj_y = proj_y + tmp123 * (yij*eta1 + yik*eta2)
                              proj_y = proj_y + tmp132 * (yij*eta1 + yik*eta3)
-                             !proj_y = proj_y + tmp213 * (yij*eta2 + yik*eta1)
-                             !proj_y = proj_y + tmp231 * (yij*eta2 + yik*eta3)
-                             !proj_y = proj_y + tmp312 * (yij*eta3 + yik*eta1)
-                             !proj_y = proj_y + tmp321 * (yij*eta3 + yik*eta2)
+                             proj_y = proj_y + tmp213 * (yij*eta2 + yik*eta1)
+                             proj_y = proj_y + tmp231 * (yij*eta2 + yik*eta3)
+                             proj_y = proj_y + tmp312 * (yij*eta3 + yik*eta1)
+                             proj_y = proj_y + tmp321 * (yij*eta3 + yik*eta2)
 
                              proj_z = proj_z + tmp123 * (zij*eta1 + zik*eta2)
                              proj_z = proj_z + tmp132 * (zij*eta1 + zik*eta3)
-                             !proj_z = proj_z + tmp213 * (zij*eta2 + zik*eta1)
-                             !proj_z = proj_z + tmp231 * (zij*eta2 + zik*eta3)
-                             !proj_z = proj_z + tmp312 * (zij*eta3 + zik*eta1)
-                             !proj_z = proj_z + tmp321 * (zij*eta3 + zik*eta2)
-
-                             tmpx = frc_3b * proj_x
-                             tmpy = frc_3b * proj_y
-                             tmpz = frc_3b * proj_z
-
-                             amat_features_ML(nn)%fpx(fp_index,i) = amat_features_ML(nn)%fpx(fp_index,i) + tmpx
-                             amat_features_ML(nn)%fpy(fp_index,i) = amat_features_ML(nn)%fpy(fp_index,i) + tmpy
-                             amat_features_ML(nn)%fpz(fp_index,i) = amat_features_ML(nn)%fpz(fp_index,i) + tmpz
-
-                         end do ! three-body terms
-                     !! X-AA, X-BB, X-CC => rij(XA), rik(XA), rjk(AA): 12->21
-                     elseif (i_species /= j_species .and. j_species == k_species) then
-                        !! X-AA, X-BB, X-CC
-                        if (inode== ionode) then
-                           write(*,'(a,4i8)') 'X-AA, order3b',species_order3b,shift_dim,param_start, param_end
-                        end if
-                         do param_index= param_start, param_end
-                             fp_index = param_index + shift_dim
-
-                             ! Todo: check dimension of params_2b(j)
-                             gx_index = param_index - param_start + 1
-                             eta1 = descriptor_params((i_species))%params_3b(species_order3b)%eta1(gx_index)
-                             eta2 = descriptor_params((i_species))%params_3b(species_order3b)%eta2(gx_index)
-                             eta3 = descriptor_params((i_species))%params_3b(species_order3b)%eta3(gx_index)
-
-                             ! transfter for efficiency
-                             eta1 = 1.0/eta1 ** 2
-                             eta2 = 1.0/eta2 ** 2
-                             eta3 = 1.0/eta3 ** 2
-
-                             ! Terms for X-AA, X-BB, X-CC => rij(XA), rik(XA), rjk(AA): 12->21
-                             tmp123 = exp(-eta1 * rij ** 2 - eta2* rik ** 2 - eta3* rjk ** 2)
-                             !tmp132 = exp(-eta1 * rij ** 2 - eta3* rik ** 2 - eta2* rjk ** 2)
-                             tmp213 = exp(-eta2 * rij ** 2 - eta1* rik ** 2 - eta3* rjk ** 2)
-                             !tmp231 = exp(-eta2 * rij ** 2 - eta3* rik ** 2 - eta1* rjk ** 2)
-                             !tmp312 = exp(-eta3 * rij ** 2 - eta1* rik ** 2 - eta2* rjk ** 2)
-                             !tmp321 = exp(-eta3 * rij ** 2 - eta2* rik ** 2 - eta1* rjk ** 2)
-
-                             proj_x = 0.0
-                             proj_y = 0.0
-                             proj_z = 0.0
-                             proj_x = proj_x + tmp123 * (xij*eta1 + xik*eta2)
-                             !proj_x = proj_x + tmp132 * (xij*eta1 + xik*eta3)
-                             proj_x = proj_x + tmp213 * (xij*eta2 + xik*eta1)
-                             !proj_x = proj_x + tmp231 * (xij*eta2 + xik*eta3)
-                             !proj_x = proj_x + tmp312 * (xij*eta3 + xik*eta1)
-                             !proj_x = proj_x + tmp321 * (xij*eta3 + xik*eta2)
-
-                             proj_y = proj_y + tmp123 * (yij*eta1 + yik*eta2)
-                             !proj_y = proj_y + tmp132 * (yij*eta1 + yik*eta3)
-                             proj_y = proj_y + tmp213 * (yij*eta2 + yik*eta1)
-                             !proj_y = proj_y + tmp231 * (yij*eta2 + yik*eta3)
-                             !proj_y = proj_y + tmp312 * (yij*eta3 + yik*eta1)
-                             !proj_y = proj_y + tmp321 * (yij*eta3 + yik*eta2)
-
-                             proj_z = proj_z + tmp123 * (zij*eta1 + zik*eta2)
-                             !proj_z = proj_z + tmp132 * (zij*eta1 + zik*eta3)
                              proj_z = proj_z + tmp213 * (zij*eta2 + zik*eta1)
-                             !proj_z = proj_z + tmp231 * (zij*eta2 + zik*eta3)
-                             !proj_z = proj_z + tmp312 * (zij*eta3 + zik*eta1)
-                             !proj_z = proj_z + tmp321 * (zij*eta3 + zik*eta2)
+                             proj_z = proj_z + tmp231 * (zij*eta2 + zik*eta3)
+                             proj_z = proj_z + tmp312 * (zij*eta3 + zik*eta1)
+                             proj_z = proj_z + tmp321 * (zij*eta3 + zik*eta2)
 
                              tmpx = frc_3b * proj_x
                              tmpy = frc_3b * proj_y
                              tmpz = frc_3b * proj_z
 
-                             amat_features_ML(nn)%fpx(fp_index,i) = amat_features_ML(nn)%fpx(fp_index,i) + tmpx
-                             amat_features_ML(nn)%fpy(fp_index,i) = amat_features_ML(nn)%fpy(fp_index,i) + tmpy
-                             amat_features_ML(nn)%fpz(fp_index,i) = amat_features_ML(nn)%fpz(fp_index,i) + tmpz
+                             amat_features_ML(nn)%fpx(i, fp_index) = amat_features_ML(nn)%fpx(i, fp_index) + tmpx
+                             amat_features_ML(nn)%fpy(i, fp_index) = amat_features_ML(nn)%fpy(i, fp_index) + tmpy
+                             amat_features_ML(nn)%fpz(i, fp_index) = amat_features_ML(nn)%fpz(i, fp_index) + tmpz
                          end do ! three-body terms
-                     !! X-AB, X-AC, X-BC => rij(XA), rik(XB), rjk(AB): 1->1
-                     elseif (i_species /= j_species .and. j_species /= k_species .and. i_species /= k_species) then
-                        !! X-AB, X-AC, X-BC
-                        if (inode== ionode) then
-                           write(*,'(a,4i8)') 'X-AB, order3b',species_order3b,shift_dim,param_start, param_end
-                        end if
+                     !! B-AB, C-AC, C-BC
+                     elseif (i_species /= j_species .and. j_species /= k_species .and. i_species == k_species) then
                          do param_index= param_start, param_end
                              fp_index = param_index + shift_dim
 
@@ -2181,47 +2036,54 @@ contains
                              eta2 = 1.0/eta2 ** 2
                              eta3 = 1.0/eta3 ** 2
 
-                             ! Terms for A-BC, B-AC, C-AB
+                             ! Terms for A-AB or B-AB
                              tmp123 = exp(-eta1 * rij ** 2) * exp(-eta2* rik ** 2)*exp(-eta3* rjk ** 2)
-                             !tmp132 = exp(-eta1 * rij ** 2 - eta3* rik ** 2 - eta2* rjk ** 2)
-                             !tmp213 = exp(-eta2 * rij ** 2 - eta1* rik ** 2 - eta3* rjk ** 2)
-                             !tmp231 = exp(-eta2 * rij ** 2 - eta3* rik ** 2 - eta1* rjk ** 2)
-                             !tmp312 = exp(-eta3 * rij ** 2 - eta1* rik ** 2 - eta2* rjk ** 2)
-                             !tmp321 = exp(-eta3 * rij ** 2 - eta2* rik ** 2 - eta1* rjk ** 2)
+                             tmp132 = exp(-eta1 * rij ** 2 - eta3* rik ** 2 - eta2* rjk ** 2)
+                             tmp213 = exp(-eta2 * rij ** 2 - eta1* rik ** 2 - eta3* rjk ** 2)
+                             tmp231 = exp(-eta2 * rij ** 2 - eta3* rik ** 2 - eta1* rjk ** 2)
+                             tmp312 = exp(-eta3 * rij ** 2 - eta1* rik ** 2 - eta2* rjk ** 2)
+                             tmp321 = exp(-eta3 * rij ** 2 - eta2* rik ** 2 - eta1* rjk ** 2)
 
                              proj_x = 0.0
                              proj_y = 0.0
                              proj_z = 0.0
                              proj_x = proj_x + tmp123 * (xij*eta1 + xik*eta2)
-                             !proj_x = proj_x + tmp132 * (xij*eta1 + xik*eta3)
-                             !proj_x = proj_x + tmp213 * (xij*eta2 + xik*eta1)
-                             !proj_x = proj_x + tmp231 * (xij*eta2 + xik*eta3)
-                             !proj_x = proj_x + tmp312 * (xij*eta3 + xik*eta1)
-                             !proj_x = proj_x + tmp321 * (xij*eta3 + xik*eta2)
+                             proj_x = proj_x + tmp132 * (xij*eta1 + xik*eta3)
+                             proj_x = proj_x + tmp213 * (xij*eta2 + xik*eta1)
+                             proj_x = proj_x + tmp231 * (xij*eta2 + xik*eta3)
+                             proj_x = proj_x + tmp312 * (xij*eta3 + xik*eta1)
+                             proj_x = proj_x + tmp321 * (xij*eta3 + xik*eta2)
 
                              proj_y = proj_y + tmp123 * (yij*eta1 + yik*eta2)
-                             !proj_y = proj_y + tmp132 * (yij*eta1 + yik*eta3)
-                             !proj_y = proj_y + tmp213 * (yij*eta2 + yik*eta1)
-                             !proj_y = proj_y + tmp231 * (yij*eta2 + yik*eta3)
-                             !proj_y = proj_y + tmp312 * (yij*eta3 + yik*eta1)
-                             !proj_y = proj_y + tmp321 * (yij*eta3 + yik*eta2)
+                             proj_y = proj_y + tmp132 * (yij*eta1 + yik*eta3)
+                             proj_y = proj_y + tmp213 * (yij*eta2 + yik*eta1)
+                             proj_y = proj_y + tmp231 * (yij*eta2 + yik*eta3)
+                             proj_y = proj_y + tmp312 * (yij*eta3 + yik*eta1)
+                             proj_y = proj_y + tmp321 * (yij*eta3 + yik*eta2)
 
                              proj_z = proj_z + tmp123 * (zij*eta1 + zik*eta2)
-                             !proj_z = proj_z + tmp132 * (zij*eta1 + zik*eta3)
-                             !proj_z = proj_z + tmp213 * (zij*eta2 + zik*eta1)
-                             !proj_z = proj_z + tmp231 * (zij*eta2 + zik*eta3)
-                             !proj_z = proj_z + tmp312 * (zij*eta3 + zik*eta1)
-                             !proj_z = proj_z + tmp321 * (zij*eta3 + zik*eta2)
+                             proj_z = proj_z + tmp132 * (zij*eta1 + zik*eta3)
+                             proj_z = proj_z + tmp213 * (zij*eta2 + zik*eta1)
+                             proj_z = proj_z + tmp231 * (zij*eta2 + zik*eta3)
+                             proj_z = proj_z + tmp312 * (zij*eta3 + zik*eta1)
+                             proj_z = proj_z + tmp321 * (zij*eta3 + zik*eta2)
 
                              tmpx = frc_3b * proj_x
                              tmpy = frc_3b * proj_y
                              tmpz = frc_3b * proj_z
 
-                             amat_features_ML(nn)%fpx(fp_index,i) = amat_features_ML(nn)%fpx(fp_index,i) + tmpx
-                             amat_features_ML(nn)%fpy(fp_index,i) = amat_features_ML(nn)%fpy(fp_index,i) + tmpy
-                             amat_features_ML(nn)%fpz(fp_index,i) = amat_features_ML(nn)%fpz(fp_index,i) + tmpz
+                             amat_features_ML(nn)%fpx(i, fp_index) = amat_features_ML(nn)%fpx(i, fp_index) + tmpx
+                             amat_features_ML(nn)%fpy(i, fp_index) = amat_features_ML(nn)%fpy(i, fp_index) + tmpy
+                             amat_features_ML(nn)%fpz(i, fp_index) = amat_features_ML(nn)%fpz(i, fp_index) + tmpz
                          end do ! three-body terms
+                     !! A-BB, B-AA, C-AA
+                     elseif (i_species /= j_species .and. j_species == k_species) then
+
+                     !! A-BC, B-AC, C-AB
+                     elseif (i_species /= j_species .and. j_species /= k_species .and. i_species /= k_species) then
+
                      end if ! chech term type from species
+
                  end do ! k, three-body
                 !write(*,*) 'after part_nd_nabs in get_feature_split', inode
              end do ! j, two-body
