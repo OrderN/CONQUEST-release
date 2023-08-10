@@ -1023,7 +1023,8 @@ contains
         call cq_abort('acsf2b descriptor_params: error allocating memory to n_species')
     endif
     do i=1, n_species
-        call ini_species_order_center(descriptor_params(i)%species_orders, n_species,i)
+       !call ini_species_order_center(descriptor_params(i)%species_orders, n_species,i)
+       call ini_species_order(descriptor_params(i)%species_orders, n_species)
     end do
     descriptor_params%n_species = n_species
 
