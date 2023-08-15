@@ -386,9 +386,9 @@ contains
                    !$omp             schedule(dynamic) &
                    !$omp             reduction(+: temp_block_storage) &
                    !$omp             shared(n_pts_in_block, direction, pao, the_species, offset_position, &
-                   !$omp                    no_of_ib_ia, ip_store, r_store, x_store, y_store, z_store) &
+                   !$omp                    npoint, no_of_ib_ia, ip_store, r_store, x_store, y_store, z_store) &
                    !$omp             private(r_from_i, ip, position, ipoint, &
-                   !$omp                     npoint, x, y, z, &
+                   !$omp                     x, y, z, &
                    !$omp                     l1, acz, m1, count1, val)
                    do ip=1,npoint
                       ipoint=ip_store(ip)
