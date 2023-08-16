@@ -13,6 +13,8 @@ jobs:
     env:
       FC: ${{matrix.fc}}
       F77: mpif77
+      OMP_NUM_THREADS: ${{matrix.threads}}
+      OPENBLAS_NUM_THREADS: 1
     strategy:
       fail-fast: false
       matrix:
@@ -30,8 +32,14 @@ jobs:
         np:
           - 1
           - 2
+        threads:
+          - 1
+          - 2
         # TODO: Could be worth testing on `mpich` in addition to `openmpi-bin`. Both are
         #       available in apt
+        exclude:
+          - np: 2
+            threads: 2
 
     steps:
     - uses: actions/checkout@v3
