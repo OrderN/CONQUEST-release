@@ -1,6 +1,7 @@
 import numpy as np
 import os
 import pytest
+import pathlib
 
 def read_conquest_out(path=".", filename="Conquest_out"):
     '''
@@ -10,7 +11,7 @@ def read_conquest_out(path=".", filename="Conquest_out"):
     Returns a dictionary with float values.
     '''
     path_to_file = os.path.join(path,filename)
-    assert os.path.exists(path_to_file)
+    assert os.path.exists(path_to_file), path_to_file
     file = open(path_to_file, 'r')
     Results = dict()
     for line in file.readlines():
@@ -22,45 +23,69 @@ def read_conquest_out(path=".", filename="Conquest_out"):
             Results['Force residual'] = float(line.split(":")[2].split()[0])
         if line.find("Total stress") >= 0:
             Results['Total stress'] = np.array(line.split(":")[2].split()[:-1], dtype=float)
+        if line.find("Total polarisation") >= 0:
+            Results['Total polarisation'] = float(line.split(":")[1].split()[0])
 
     return Results
 
-@pytest.mark.parametrize("test_path", ["test_001_bulk_Si_1proc_Diag",
-                                       "test_002_bulk_Si_1proc_OrderN"])
-@pytest.mark.parametrize("key",['Harris-Foulkes energy',
-                                'Max force',
-                                'Force residual',
-                                'Total stress',
-                                'Not-a-real-key'
-                                ])
-def test_check_outputs(test_path, key):
+def results(path, key):
     '''
-    Reads a predefined set of results written in Conquest_out files of
-    tests 001 and 002 and compares them against results in Conquest_out.ref
-    within a tolerance.
+    Reads a result and its reference, selects one value with key and returns it.
     '''
+    ref_result = read_conquest_out(path, "Conquest_out.ref")
+    test_result = read_conquest_out(path, "Conquest_out")
 
-    # Template for skipping tests. If a parameter combination is added to
-    # xfail_test, pytest will expect the test to fail.
-    xfail_test = (key == "Not-a-real-key")
-    if (xfail_test):
-        pytest.xfail("invalid parameter combination: "+test_path+", "+key)
+    return (ref_result[key], test_result[key])
 
-    # Read data from the directory parameterized by test_path
-    ref_result = read_conquest_out(test_path, "Conquest_out.ref")
-    test_result = read_conquest_out(test_path, "Conquest_out")
+def precision(key='_'):
+    '''
+    Return the relative tolerance used by tests. By default returns 1e-4, but
+    takes a key as an argument and you can match it to return a different precision
 
-    # Set precision, by default check to 6 decimal numbers
-    default_precision = 6
-    custom_precision = {'Total stress': 4}
+    For example:
 
-    if key in custom_precision:
-        precision = custom_precision[key]
+    if(key == 'Special case'):
+        return 999.9
     else:
-        precision = default_precision
-    
-    np.testing.assert_almost_equal(test_result[key],
-                                   ref_result[key],
-                                   decimal = precision,
-                                   err_msg = test_path+": "+key,
-                                   verbose = True)
+        return 1e-4
+    '''
+
+    return 1e-4
+
+@pytest.fixture
+def testsuite_directory():
+    '''
+    Return path to testsuite
+    '''
+    return pathlib.Path(__file__).parent.resolve()
+
+class TestClass:
+    @pytest.mark.parametrize("key",['Harris-Foulkes energy',
+                                    'Max force',
+                                    'Force residual',
+                                    'Total stress'])
+    def test_001(self, key, testsuite_directory):
+
+        path = os.path.join(testsuite_directory, "test_001_bulk_Si_1proc_Diag")
+        res = results(path, key)
+        np.testing.assert_allclose(res[0], res[1], rtol = precision(key), verbose = True)
+
+    @pytest.mark.parametrize("key", ['Harris-Foulkes energy',
+                                     'Max force',
+                                     'Force residual',
+                                     'Total stress'])
+    def test_002(self, key, testsuite_directory):
+
+        path = os.path.join(testsuite_directory, "test_002_bulk_Si_1proc_OrderN")
+        res = results(path, key)
+        np.testing.assert_allclose(res[0], res[1], rtol = precision(key), verbose = True)
+
+    @pytest.mark.parametrize("key", ['Harris-Foulkes energy',
+                                     'Max force',
+                                     'Force residual',
+                                     'Total polarisation'])
+    def test_003(self, key, testsuite_directory):
+
+        path = os.path.join(testsuite_directory, "test_003_bulk_BTO_polarisation")
+        res = results(path, key)
+        np.testing.assert_allclose(res[0], res[1], rtol = precision(key), verbose = True)

@@ -44,10 +44,12 @@ User Guide
 * :doc:`groundstate`
 * :doc:`convergence`
 * :doc:`basissets`
+* :doc:`elec_struc`
 * :doc:`strucrelax`
 * :doc:`moldyn`
 * :doc:`post-proc`
 * :doc:`ext-tools`
+* :doc:`ase-conquest`
 * :doc:`errors`
 * :doc:`input_tags`
   
@@ -60,9 +62,11 @@ User Guide
    groundstate
    convergence
    basissets
+   elec_struc
    strucrelax
    moldyn
    post-proc
+   ase-conquest 
    ext-tools
    errors
    input_tags
@@ -91,6 +95,7 @@ Tutorials
 Theory
 ------
 
+* :doc:`theory_energy_force_stress`
 * :doc:`theory-strucrelax`
 * :doc:`theory-md`
 
@@ -99,6 +104,7 @@ Theory
    :hidden:      
    :caption: Theory
 
+   theory_energy_force_stress
    theory-strucrelax
    theory-md
    

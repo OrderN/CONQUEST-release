@@ -152,7 +152,7 @@ contains
                                  flag_multisite, iprint_minE,          &
                                  io_lun, flag_out_wf, wf_self_con, flag_write_projected_DOS, &
                                  flag_diagonalisation, nspin, flag_LFD, min_layer, &
-                                 flag_DM_converged, write_ase
+                                 flag_DM_converged, write_ase, flag_calc_pol
     use energy,            only: get_energy, xc_energy, final_energy
     use GenComms,          only: cq_abort, inode, ionode, cq_warn
     use blip_minimisation, only: vary_support, dE_blip
@@ -167,6 +167,7 @@ contains
     use DiagModule,        only: nkp
     use H_matrix_module,   only: flag_write_locps, locps_output, get_H_matrix
     use maxima_module,     only: maxngrid
+    use polarisation,      only: get_polarisation
 
     implicit none
 
@@ -370,6 +371,10 @@ contains
 
     call stop_print_timer(tmr_l_energy, "calculating ENERGY", &
                           IPRINT_TIME_THRES1)
+    ! For Bulk Polarisation
+    !
+    if (flag_calc_pol) call get_polarisation()
+    !
     if (atomch_output) call get_atomic_charge()
 
     if (find_forces) then

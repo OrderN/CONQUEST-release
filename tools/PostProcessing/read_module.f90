@@ -11,7 +11,7 @@ contains
   subroutine read_input
 
     use global_module, ONLY: flag_assign_blocks, flag_fractional_atomic_coords, nspin, &
-         flag_wf_range_Ef, E_DOS_min, E_DOS_max, sigma_DOS, n_DOS
+         flag_wf_range_Ef, E_DOS_min, E_DOS_max, sigma_DOS, n_DOS, ni_in_cell
     use local
     use input_module
     use numbers
@@ -122,6 +122,23 @@ contains
        i_job = 6
     else if(leqi(job,'pdo').or.leqi(job,'pro')) then
        i_job = 7
+    else if(leqi(job,'str').or.leqi(job,'bst')) then
+       i_job = 8
+       ! x-axis for band structure plots
+       input_string = fdf_string(1,'Process.BandStrucAxis','n')
+       if(leqi(input_string,'n')) then      ! K-point number
+          flag_proc_band_str = 4
+       else if(leqi(input_string,'a')) then ! All k-points
+          flag_proc_band_str = 0
+       else if(leqi(input_string,'x')) then ! kx
+          flag_proc_band_str = 1
+       else if(leqi(input_string,'y')) then ! ky
+          flag_proc_band_str = 2
+       else if(leqi(input_string,'z')) then ! kz
+          flag_proc_band_str = 3
+       else                                 ! All k-points
+          flag_proc_band_str = 4
+       end if
     end if
     ! 
     charge_stub = fdf_string(80,'Process.ChargeStub','chden')
@@ -171,7 +188,7 @@ contains
     ! Energy limits (relative to Ef or absolute)
     E_wf_min = fdf_double('IO.min_wf_E',zero)
     E_wf_max = fdf_double('IO.max_wf_E',zero)
-    if(i_job==3 .or. i_job==4 .or. i_job==5) then ! Band-resolved charge or STM
+    if(i_job==3 .or. i_job==4 .or. i_job==5 .or. i_job==8) then ! Band-resolved charge or STM
        ! Read in details of bands output from Conquest
        n_bands_active=fdf_integer('IO.maxnoWF',0)
        if(n_bands_active>0) then
@@ -194,7 +211,11 @@ contains
              flag_wf_range = .true.
              flag_wf_range_Ef = fdf_boolean('IO.WFRangeRelative',.true.)
           else
-             call cq_abort("No bands specified!")
+             E_wf_min = -BIG
+             E_wf_max =  BIG
+             flag_wf_range = .true.
+             flag_wf_range_Ef = fdf_boolean('IO.WFRangeRelative',.true.)
+             write(*,fmt='(2x,"No range specified for bands output; assuming all bands")')
           end if
        end if
        ! Now read details of bands to output from processing
@@ -234,6 +255,9 @@ contains
        stop
     end if
     flag_by_kpoint = fdf_boolean('Process.outputWF_by_kpoint',.false.)
+    ! if output only the real part of WFs (for Gamma-point only)
+    flag_outputWF_real = .false.
+    if (leqi(job,'ban')) flag_outputWF_real = fdf_boolean('Process.outputWF_real',.false.)
     ! DOS
     ! Add flag for window relative to Fermi level
     E_DOS_min = fdf_double('Process.min_DOS_E',E_wf_min)
@@ -252,6 +276,28 @@ contains
        flag_l_resolved = fdf_boolean('Process.pDOS_l_resolved',.false.)
        flag_lm_resolved = fdf_boolean('Process.pDOS_lm_resolved',.false.)
        if(flag_lm_resolved .and. (.not.flag_l_resolved)) flag_l_resolved = .true.
+       ! How many atoms?
+       n_atoms_pDOS = fdf_integer('Process.n_atoms_pDOS',0)
+       if(n_atoms_pDOS==0) then ! All atoms
+          n_atoms_pDOS = ni_in_cell
+          allocate(pDOS_atom_index(n_atoms_pDOS))
+          do i=1,ni_in_cell
+             pDOS_atom_index(i)=i
+          end do
+       else
+          allocate(pDOS_atom_index(n_atoms_pDOS))
+          if(fdf_block('pDOS_atoms')) then
+             if(1+block_end-block_start<n_atoms_pDOS) & 
+                  call cq_abort("Too few atoms in pDOS_atoms: ",&
+                  1+block_end-block_start,n_atoms_pDOS)
+             do i=1,n_atoms_pDOS
+                read(unit=input_array(block_start+i-1),fmt=*) pDOS_atom_index(i)
+             end do
+             call fdf_endblock
+          else
+             call cq_abort("Specified n_atoms_pDOS but no pDOS_atoms block")
+          end if
+       end if
     end if
     ! Now read PS files for atomic information
     call allocate_species_vars
@@ -417,10 +463,10 @@ contains
     efermi = zero
     if(nspin==1) then
        read(17,fmt='(a6,f18.10)') str,efermi(1)
-       write(*,fmt='(4x,"Fermi level: ",f12.5," Ha")') efermi(1)
+       write(*,fmt='(4x,"Fermi level: ",f12.5," Ha   (=",f10.3," eV)")') efermi(1), efermi(1)*HaToeV
     else
        read(17,fmt='(a6,2f18.10)') str,efermi(1), efermi(2)
-       write(*,fmt='(4x,"Fermi levels: ",2f12.5," Ha")') efermi
+       write(*,fmt='(4x,"Fermi levels: ",2f12.5," Ha   (=",2f10.3" eV)")') efermi, efermi*HaToeV
     end if
     read(17,*) str
     ! Allocate memory

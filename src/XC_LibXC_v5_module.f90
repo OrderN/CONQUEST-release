@@ -370,6 +370,7 @@ contains
     ! Local variables
     real(double) :: loc_x_energy, exx_tmp
 
+    XC_GGA_stress = zero
     if(flag_use_libxc) then
        call get_libxc_potential(density=density, size=size,&
             xc_potential    =xc_potential,    &

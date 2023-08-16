@@ -1235,8 +1235,8 @@ contains
        end if
 
        ! dump the L matrix if required
-       if (n_dumpL>0 .and. mod (n_iter, n_dumpL) == 0) then
-           call dump_pos_and_matrices(index=unit_DM_save)
+       if (n_dumpL>0) then
+          if(mod (n_iter, n_dumpL) == 0) call dump_pos_and_matrices(index=unit_DM_save)
        endif
        !if (flag_dump_L) then
        !   if (mod (n_iter, n_dumpL) == 0) then

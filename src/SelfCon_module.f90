@@ -1207,8 +1207,8 @@ contains
 
        ! 2019Dec30 tsuyoshi
        ! Dump Kmatrix every n_dumpSCF, if n_dumpSCF > 0
-       if(n_dumpSCF > 0 .and. mod(n_iters,n_dumpSCF)==0) then
-        call dump_pos_and_matrices(index=unit_SCF_save)
+       if(n_dumpSCF > 0) then 
+        if(mod(n_iters,n_dumpSCF)==0) call dump_pos_and_matrices(index=unit_SCF_save)
        endif
 
        ! increment iteration counter

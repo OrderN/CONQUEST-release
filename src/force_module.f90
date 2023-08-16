@@ -106,6 +106,9 @@ module force_module
                                   PP_stress, GPV_stress, XC_stress, &
                                   nonSCF_stress, pcc_stress, NA_stress
 
+  ! How much we mix input and output densities for the calculations of XC_GGA_stress
+  ! during non-SCF simulations (defaults to half for averaging)
+  real(double) :: mix_input_output_XC_GGA_stress
   ! Useful parameters for selecting force calculations in NL part
   integer, parameter :: HF = 1
   integer, parameter :: Pulay = 2
@@ -391,16 +394,15 @@ contains
             GPV_stress(dir1,dir1) = (hartree_energy_total_rho + &
               local_ps_energy - core_correction) ! core contains 1/V term
          end if
+         ! XC_GGA_stress is zero for LDA
          if(flag_self_consistent .or. flag_mix_L_SC_min) then
-            XC_stress(dir1,dir1) = xc_energy + &
-              spin_factor*XC_GGA_stress(dir1,dir1)
-         else ! nonSCF XC found later, along with corrections to Hartree
-            XC_stress(dir1,dir1) = delta_E_xc !xc_energy + spin_factor*XC_GGA_stress(direction)
+            XC_stress(dir1,dir1) = xc_energy + spin_factor*XC_GGA_stress(dir1,dir1)
+         else ! The rest of nonSCF XC found later (nonSC or PCC routines)
+            XC_stress(dir1,dir1) = delta_E_xc
          end if
-      end do    
+      end do
     end if
     WhichPulay  = BothPulay
-
     ! matK->matKatomf backtransformation for contracted SFs
     if (atomf.ne.sf) then
        do ispin = 1, nspin
@@ -761,7 +763,6 @@ contains
        volume = rcellx*rcelly*rcellz
        ! We need pressure in GPa, and only diagonal terms output
        scale = -HaBohr3ToGPa/volume
-       !call print_stress("Total pressure:   ", stress*scale, 0)
        if(inode==ionode.AND.iprint_MD + min_layer>=1) &
             write(io_lun,'(4x,a,f15.8,a4/)') trim(prefix)//" Average pressure: ", &
             third*scale*(stress(1,1) + stress(2,2) + stress(3,3))," GPa"
@@ -1334,9 +1335,9 @@ contains
           do dir2=1,n_stress
             if (flag_stress) then
               if (flag_full_stress) then
-                call get_r_on_atomfns(dir2,tmp_fn,tmp_fn2)
+                call get_r_on_atomfns(dir2,0,tmp_fn,tmp_fn2)
               else 
-                call get_r_on_atomfns(dir1,tmp_fn,tmp_fn2)
+                call get_r_on_atomfns(dir1,0,tmp_fn,tmp_fn2)
               end if
             end if
             ! Need to zero mat_tmp2 here because it is accumulating
@@ -3412,9 +3413,13 @@ contains
   !!    Added atomic stress contributions
   !!   2021/03/23 15:52 dave
   !!    Bugfix: correct calculation of rsq implemented, variables tidied
+  !!   2023/07/19 10:40 dave
+  !!    Added minus sign to non-SCF PCC force for consistency with non-SCF part
+  !!   2023/07/24 16:00 dave
+  !!    Bug fix for non-SCF NA stress (remove Hartree stress terms)
   !!  SOURCE
   !!
-  subroutine get_nonSC_correction_force(HF_force, density_out, inode, &
+  subroutine get_nonSC_correction_force(NSCforce, density_out, inode, &
                                         ionode, n_atoms, nsize)
 
     use datatypes
@@ -3426,7 +3431,7 @@ contains
                                    area_moveatoms, IPRINT_TIME_THRES3, &
                                    flag_pcc_global, nspin, spin_factor, &
                                    flag_full_stress, flag_stress,      &
-                                   flag_atomic_stress
+                                   flag_atomic_stress, flag_neutral_atom
     use XC,                  only: get_xc_potential,                   &
                                    get_dxc_potential,                  &
                                    flag_is_GGA
@@ -3440,7 +3445,7 @@ contains
     use atomic_density,      only: atomic_density_table
     use pseudo_tm_info,      only: pseudo
     use dimens,              only: grid_point_volume, n_my_grid_points
-    use GenBlas,             only: axpy
+    use GenBlas,             only: axpy, dot
     use density_module,      only: density, density_scale, density_pcc
     use hartree_module,      only: hartree, Hartree_stress
     use potential_module,    only: potential
@@ -3451,6 +3456,7 @@ contains
                                    WITH_LEVEL, TIME_ACCUMULATE_NO,     &
                                    TIME_ACCUMULATE_YES
     use pseudopotential_common,      only: pseudopotential
+    use XC, ONLY: XC_GGA_stress
 
     implicit none
 
@@ -3458,7 +3464,7 @@ contains
     integer :: n_atoms, nsize
     integer :: inode, ionode
     real(double), dimension(:,:) :: density_out
-    real(double), dimension(:,:) :: HF_force
+    real(double), dimension(:,:) :: NSCforce
 
     ! Local variables
     character(len=80) :: sub_name = "get_nonSC_correction_force"
@@ -3481,17 +3487,11 @@ contains
     type(cq_timer) :: backtrace_timer
 
     real(double), dimension(3,3) :: loc_stress
-    real(double), dimension(:),     allocatable :: h_potential,   &
-                                                   density_total, &
-                                                   density_out_total
+    real(double), dimension(:),     allocatable :: h_potential, density_total, density_out_total
     real(double), dimension(:,:,:), allocatable :: dVxc_drho
     real(double), dimension(nspin) :: pot_here, pot_here_pcc
     ! only for GGA with P.C.C.
-    real(double), allocatable, dimension(:)   :: h_potential_in,       &
-                                                 wk_grid_total,        &
-                                                 density_out_GGA_total
-    real(double), allocatable, dimension(:,:) :: wk_grid,              &
-                                                 density_out_GGA    
+    real(double), allocatable, dimension(:,:) :: wk_grid, density_out_GGA
 
 
 !****lat<$
@@ -3500,36 +3500,24 @@ contains
     ! Spin-polarised PBE non-SCF forces not implemented, so exit if necessary
     if ((nspin == 2) .and. flag_is_GGA) then ! Only true for CQ not LibXC
        call cq_warn(sub_name, "NonSCF forces not implemented for spin and GGA; these will be set to zero.")
-       HF_force = zero
+       NSCforce = zero
        return
     end if
 
     stat = 0
     call start_timer(tmr_std_allocation)
     allocate(h_potential(nsize),           STAT=stat)
-    if (stat /= 0) &
-         call cq_abort("get_nonSC_correction_force: Error alloc mem: ", nsize)
+    if (stat /= 0) call cq_abort("get_nonSC_correction_force: Error alloc mem: ", nsize)
     allocate(density_total(nsize),         STAT=stat)
-    if (stat /= 0) &
-         call cq_abort("get_nonSC_correction_force: Error alloc mem: ", nsize)
+    if (stat /= 0) call cq_abort("get_nonSC_correction_force: Error alloc mem: ", nsize)
     allocate(density_out_total(nsize),     STAT=stat)
-    if (stat /= 0) &
-         call cq_abort("get_nonSC_correction_force: Error alloc mem: ", nsize)
+    if (stat /= 0) call cq_abort("get_nonSC_correction_force: Error alloc mem: ", nsize)
     allocate(dVxc_drho(nsize,nspin,nspin), STAT=stat)
-    if (stat /= 0) &
-         call cq_abort("get_nonSC_correction_force: Error alloc mem: ", nsize)
+    if (stat /= 0) call cq_abort("get_nonSC_correction_force: Error alloc mem: ", nsize)
     call reg_alloc_mem(area_moveatoms, (3+nspin*nspin)*nsize, type_dbl)
     call stop_timer(tmr_std_allocation)
 
-!****lat<$
-    !print*, size(density_total,    dim=1)
-    !print*, size(dVxc_drho,        dim=1)
-    !print*, size(density_out_total,dim=1)
-    !print*, size(potential,        dim=1)
-    !print*, size(density_out_total,dim=1)
-!****lat>$
-
-    HF_force = zero
+    NSCforce = zero
 
     dcellx_block = rcellx / blocks%ngcellx
     dcelly_block = rcelly / blocks%ngcelly
@@ -3561,10 +3549,16 @@ contains
     jacobian = zero
     ! use density_total (input charge) WITHOUT a factor of half so that this term corrects the GPV
     ! found in the main force routine
-    do ipoint = 1,nsize
-       jacobian = jacobian + (density_out_total(ipoint) - density_total(ipoint))* &
-            (h_potential(ipoint) + pseudopotential(ipoint)) ! Also calculate the correction to GPV for local potential
-    end do
+    jacobian = jacobian + dot(nsize,density_out_total,1,pseudopotential,1) - &
+         dot(nsize,density_total,1,pseudopotential,1)
+    if(flag_neutral_atom) then
+       ! These should be zero so ensure that they are; also don't include h_potential in jacobian
+       Hartree_stress = zero
+       loc_stress = zero
+    else
+       jacobian = jacobian + dot(nsize,density_out_total,1,h_potential,1) - &
+            dot(nsize,density_total,1,h_potential,1)
+    end if
     ! Don't apply gsum to jacobian because nonSCF_stress will be summed (end of this routine)
     jacobian = jacobian*grid_point_volume
     ! loc_stress is \int n^{out} V^{PAD}_{Har}
@@ -3584,13 +3578,33 @@ contains
     ! DeltaXC is added in the main force routine
     ! For PCC we will do this in the PCC force routine (easier)
     if (.NOT.flag_pcc_global) then
-       call get_xc_potential(density, dVxc_drho(:,:,1),    &
-               potential(:,1), y_pcc, nsize)
+       ! Find XC_GGA_stress for density_out - we will average the input and output
+       ! as an approximation to the correct (hideously complex) stress so add factor of half
+       call get_xc_potential(density_out, potential(:,:),    &
+            dVxc_drho(:,1,1), h_energy, nsize) ! NB dVxc_drho is a dummy here
+       if (flag_stress) then
+          XC_stress(1,1) = XC_stress(1,1) + spin_factor*XC_GGA_stress(1,1) * &
+               mix_input_output_XC_GGA_stress
+          XC_stress(2,2) = XC_stress(2,2) + spin_factor*XC_GGA_stress(2,2) * &
+               mix_input_output_XC_GGA_stress
+          XC_stress(3,3) = XC_stress(3,3) + spin_factor*XC_GGA_stress(3,3) * &
+               mix_input_output_XC_GGA_stress
+       end if
+       ! Find XC potential for input density
+       call get_xc_potential(density, potential(:,:),    &
+            dVxc_drho(:,1,1), h_energy, nsize) ! NB dVxc_drho is a dummy here
+       ! And now add XC_GGA_stress for density_in scaled by half
+       if (flag_stress) then
+          XC_stress(1,1) = XC_stress(1,1) + spin_factor*XC_GGA_stress(1,1) * &
+               (one - mix_input_output_XC_GGA_stress)
+          XC_stress(2,2) = XC_stress(2,2) + spin_factor*XC_GGA_stress(2,2) * &
+               (one - mix_input_output_XC_GGA_stress)
+          XC_stress(3,3) = XC_stress(3,3) + spin_factor*XC_GGA_stress(3,3) * &
+               (one - mix_input_output_XC_GGA_stress)
+       end if
        jacobian = zero
        do spin = 1, nspin
-          do ipoint = 1,nsize
-             jacobian = jacobian + spin_factor*density_out(ipoint,spin)*dVxc_drho(ipoint,spin,1)
-          end do
+          jacobian = jacobian + spin_factor*dot(nsize,density_out(:,spin),1,potential(:,spin),1)
        end do
        jacobian = jacobian*grid_point_volume
        call gsum(jacobian) ! gsum as XC_stress isn't summed elsewhere
@@ -3610,46 +3624,34 @@ contains
     call stop_timer(tmr_l_tmp2, TIME_ACCUMULATE_NO)
 
     ! for P.C.C.
+    call start_timer (tmr_l_tmp1, WITH_LEVEL)
     if (flag_pcc_global) then
-       allocate(wk_grid_total(nsize), wk_grid(nsize,nspin), STAT=stat)
-       wk_grid_total = zero
+       allocate(wk_grid(nsize,nspin), STAT=stat)
        wk_grid       = zero
        if (stat /= 0) &
             call cq_abort('Error allocating wk_grids in &
                            &get_nonSC_correction ', stat)
-       call reg_alloc_mem(area_moveatoms, (nspin + 1) * nsize, type_dbl)
+       call reg_alloc_mem(area_moveatoms, nspin * nsize, type_dbl)
        do spin = 1, nspin
           wk_grid(:,spin)  = density(:,spin)  + half * density_pcc(:)
-          wk_grid_total(:) = wk_grid_total(:) + spin_factor * wk_grid(:,spin)
        end do
-       ! only for GGA
+       ! Find dVxc_drho (different for LDA and GGA)
        if (flag_is_GGA) then
-          allocate(density_out_GGA_total(nsize), density_out_GGA(nsize,nspin), STAT=stat)
+          allocate(density_out_GGA(nsize,nspin), STAT=stat)
           if (stat /= 0) call cq_abort ('Error allocating &
                                &density_out_GGAs in get_nonSC_force ', stat)
-          call reg_alloc_mem(area_moveatoms, (nspin + 1) * nsize, type_dbl)
-          density_out_GGA_total = zero
-          density_out_GGA       = zero
+          call reg_alloc_mem(area_moveatoms, nspin * nsize, type_dbl)
+          density_out_GGA = zero
           do spin = 1, nspin
              density_out_GGA(:,spin)  = density_out(:,spin)      + half * density_pcc(:)
-             density_out_GGA_total(:) = density_out_GGA_total(:) + spin_factor * density_out_GGA(:,spin)
           end do
-          ! copy hartree potential
-          allocate(h_potential_in(nsize), STAT=stat)
-          if (stat /= 0) &
-               call cq_abort('Error allocating h_potential_in in &
-                              &get_nonSC_force ', stat)
-          call reg_alloc_mem(area_moveatoms, nsize, type_dbl)
-          h_potential_in = h_potential
-       end if
-    end if
-
-    call start_timer (tmr_l_tmp1, WITH_LEVEL)
-    if (flag_pcc_global) then
-       if(flag_is_GGA) then
           call get_dxc_potential(wk_grid, dVxc_drho, nsize, density_out_GGA)
           ! GGA with spin not implemented ! 
           potential(:,1) = potential(:,1) + dVxc_drho(:,1,1) 
+          deallocate(density_out_GGA, STAT=stat)
+          if (stat /= 0) call cq_abort('Error deallocating density_out_GGAs in &
+                              &get_nonSC_force ', stat)
+          call reg_dealloc_mem(area_moveatoms, nspin * nsize, type_dbl)
        else
           call get_dxc_potential(wk_grid, dVxc_drho, nsize)
        end if
@@ -3662,22 +3664,8 @@ contains
           call get_dxc_potential(density, dVxc_drho, nsize)
        end if
     end if
-    ! deallocating density_out_GGA: only for P.C.C.
-    if (flag_pcc_global)  then
-       if (flag_is_GGA) then
-          deallocate(density_out_GGA_total, density_out_GGA, STAT=stat)
-          if (stat /= 0) call cq_abort('Error deallocating density_out_GGAs in &
-                              &get_nonSC_force ', stat)
-          call reg_dealloc_mem(area_moveatoms, (nspin + 1) * nsize, type_dbl)
-          ! make a copy of potential at this point
-          ! use wk_grid as a temporary storage
-          do spin = 1, nspin
-             wk_grid(:,spin) = potential(:,spin)
-          end do
-       end if
-    end if !flag_pcc_global
 
-    ! for LDA
+    ! for LDA: find dn* dxc_potential
     if (.NOT.(flag_is_GGA)) then
        do spin = 1, nspin
           do spin_2 = 1, nspin
@@ -3696,12 +3684,12 @@ contains
 
     ! Restart of the timer; level assigned here
     call start_timer(tmr_l_tmp2, WITH_LEVEL)
+    ! Calculate the Hartree potential from the output density
     h_potential = zero
-    ! Preserve the Hartree stress we've calculated
-    loc_stress = Hartree_stress
+    loc_stress = Hartree_stress ! Preserve Hartree stress
     call hartree(density_out_total, h_potential, nsize, h_energy)
-    ! And restore
     Hartree_stress = loc_stress
+    ! And subtract from potential so that we have delta V_Ha
     do spin = 1, nspin
        call axpy(nsize, -one, h_potential, 1, potential(:,spin), 1)
     end do
@@ -3807,8 +3795,8 @@ contains
                          ! on what we are doing here.
                          do spin = 1, nspin
                             do dir1 = 1, 3
-                                HF_force(dir1,ig_atom) = &
-                                  HF_force(dir1,ig_atom) + spin_factor * &
+                                NSCforce(dir1,ig_atom) = &
+                                  NSCforce(dir1,ig_atom) + spin_factor * &
                                   fr_1(dir1,spin) * pot_here(spin)
                               if (flag_stress) then
                                 if (flag_full_stress) then
@@ -3851,23 +3839,16 @@ contains
           ! for GGA
           potential = zero
           do spin = 1, nspin
-             do i = 1, n_my_grid_points
-                ! -delta n * dxc_potential
-                potential(i,spin) = wk_grid(i,spin) - h_potential_in(i)
-             end do
+             potential(:,spin) = dVxc_drho(:,spin,spin)
           end do
        else
           ! For LDA
           potential = zero
           do spin = 1, nspin
              do spin_2 = 1, nspin
-                do i = 1, n_my_grid_points
-                   potential(i,spin) =                                &
-                        potential(i,spin) +                           &
-                        spin_factor *                                 &
-                        (density(i,spin_2) - density_out(i,spin_2)) * &
-                        dVxc_drho(i,spin_2,spin)
-                end do
+                potential(:,spin) = potential(:,spin) + &
+                     spin_factor * (density(:,spin_2) - density_out(:,spin_2)) * &
+                     dVxc_drho(:,spin_2,spin)
              end do
           end do
        end if
@@ -3962,7 +3943,8 @@ contains
                                   ! calculated from set_density
                                   do spin = 1, nspin
                                      do dir1 = 1, 3
-                                        fr_pcc(dir1,spin) = r_pcc(dir1) * half * derivative_pcc * density_scale(spin)
+                                        fr_pcc(dir1,spin) = -r_pcc(dir1) * half * &
+                                             derivative_pcc * density_scale(spin)
                                      end do
                                   end do
                                end if
@@ -3974,8 +3956,8 @@ contains
                             ! components)
                             do spin = 1, nspin
                                do dir1 = 1, 3
-                                 HF_force(dir1,ig_atom) = &
-                                   HF_force(dir1,ig_atom) + spin_factor * &
+                                 NSCforce(dir1,ig_atom) = &
+                                   NSCforce(dir1,ig_atom) + spin_factor * &
                                    fr_pcc(dir1,spin) * pot_here_pcc(spin)
                                  if (flag_stress) then
                                    if (flag_full_stress) then
@@ -4011,7 +3993,7 @@ contains
     end if ! (flag_pcc_global)
 
     call start_timer(tmr_l_tmp1, WITH_LEVEL)
-    call gsum(HF_force, 3, n_atoms)
+    call gsum(NSCforce, 3, n_atoms)
     if (flag_stress) call gsum(nonSCF_stress,3,3)
     call stop_print_timer(tmr_l_tmp1, "NSC force - Compilation", &
                           IPRINT_TIME_THRES3)
@@ -4019,18 +4001,11 @@ contains
     ! deallocating temporary arrays
     call start_timer(tmr_std_allocation)
     if (flag_pcc_global) then
-       deallocate(wk_grid_total, wk_grid, STAT=stat)
+       deallocate(wk_grid, STAT=stat)
        if (stat /= 0) &
             call cq_abort('Error deallocating wk_grid in &
                            &get_nonSC_correction_force ', stat)
        call reg_dealloc_mem(area_moveatoms, (nspin + 1) * nsize, type_dbl)
-       if (flag_is_GGA) then
-          deallocate(h_potential_in, STAT=stat)
-          if (stat /= 0) &
-               call cq_abort('Error deallocating h_potential_in in &
-                             &get_nonSC_correction_force ', stat)
-          call reg_dealloc_mem(area_moveatoms, nsize, type_dbl)
-       end if ! for GGA
     end if ! flag_pcc_global
     deallocate(h_potential, density_total, density_out_total, dVxc_drho, &
                STAT=stat)
@@ -4142,6 +4117,7 @@ contains
                                    print_timer, stop_print_timer,      &
                                    WITH_LEVEL, TIME_ACCUMULATE_NO,     &
                                    TIME_ACCUMULATE_YES
+    use XC, ONLY: XC_GGA_stress
 
     implicit none
 
@@ -4171,15 +4147,14 @@ contains
     real(double), dimension(nspin) :: pot_here_pcc
     real(double), dimension(3)   :: r_pcc, fr_pcc, r
     ! allocatable arrays
-    real(double), dimension(:),   allocatable :: xc_epsilon, density_wk_tot
+    real(double), dimension(:),   allocatable :: xc_epsilon
     real(double), dimension(:,:), allocatable :: xc_potential, density_wk
     type(cq_timer) :: backtrace_timer
 
     call start_backtrace(t=backtrace_timer,who='get_PCC_force',where=7,level=3,echo=.true.)
-    allocate(xc_epsilon(size), density_wk_tot(size), &
-             xc_potential(size,nspin), density_wk(size,nspin), STAT=stat)
+    allocate(xc_epsilon(size), xc_potential(size,nspin), density_wk(size,nspin), STAT=stat)
     if (stat /= 0) call cq_abort("get_pcc_force: Error alloc mem: ", size)
-    call reg_alloc_mem(area_moveatoms, (2+2*nspin)*size, type_dbl)
+    call reg_alloc_mem(area_moveatoms, (1+2*nspin)*size, type_dbl)
 
     ! initialise arrays
     pcc_force = zero
@@ -4195,19 +4170,47 @@ contains
     dcellz_grid = dcellz_block / nz_in_block
 
     call start_timer (tmr_l_tmp2)
+    ! Find XC_GGA_stress using output density for non-SCF case
+    ! we will average the input and output as an approximation
+    ! to the correct (hideously complex) stress so add mixing factor
+    if((.not.flag_self_consistent).and.(.not.flag_mix_L_SC_min)) then
+       if(.NOT.present(density_out)) call cq_abort("Output density not passed to PCC force for nonSCF calculation")
+       if (flag_stress) then
+          density_wk = zero
+          do spin = 1, nspin
+             density_wk(:,spin) = density_out(:,spin) + half * density_pcc(:)
+          end do
+          call get_xc_potential(density_wk, xc_potential,     &
+               xc_epsilon, xc_energy, size)
+          XC_stress(1,1) = XC_stress(1,1) + spin_factor*XC_GGA_stress(1,1) * &
+               mix_input_output_XC_GGA_stress
+          XC_stress(2,2) = XC_stress(2,2) + spin_factor*XC_GGA_stress(2,2) * &
+               mix_input_output_XC_GGA_stress
+          XC_stress(3,3) = XC_stress(3,3) + spin_factor*XC_GGA_stress(3,3) * &
+               mix_input_output_XC_GGA_stress
+       end if
+    end if
     density_wk = zero
-    density_wk_tot = zero
     do spin = 1, nspin
        density_wk(:,spin) = density(:,spin) + half * density_pcc(:)
-       density_wk_tot(:) = density_wk_tot(:) + spin_factor * density_wk(:,spin)
     end do
 
     call get_xc_potential(density_wk, xc_potential,     &
          xc_epsilon, xc_energy, size)
+    ! And now add XC_GGA_stress for density_in scaled by half
+    if((.not.flag_self_consistent).and.(.not.flag_mix_L_SC_min)) then
+       if (flag_stress) then
+          XC_stress(1,1) = XC_stress(1,1) + spin_factor*XC_GGA_stress(1,1) * &
+               (one - mix_input_output_XC_GGA_stress)
+          XC_stress(2,2) = XC_stress(2,2) + spin_factor*XC_GGA_stress(2,2) * &
+               (one - mix_input_output_XC_GGA_stress)
+          XC_stress(3,3) = XC_stress(3,3) + spin_factor*XC_GGA_stress(3,3) * &
+               (one - mix_input_output_XC_GGA_stress)
+       end if
+    end if
     if(PRESENT(xc_energy_ret)) xc_energy_ret = xc_energy
     ! We do this here to re-use xc_potential - for non-PCC we do it in get_nonSC_correction_force
     if((.not.flag_self_consistent).and.(.not.flag_mix_L_SC_min)) then
-       if(.NOT.present(density_out)) call cq_abort("Output density not passed to PCC force for nonSCF calculation")
        if (flag_stress) then
          jacobian = zero
          do spin=1,nspin
@@ -4362,9 +4365,9 @@ contains
     call stop_print_timer(tmr_l_tmp1, "PCC force - Compilation", &
                           IPRINT_TIME_THRES3)
 
-    deallocate(xc_epsilon, density_wk_tot, xc_potential, density_wk, STAT=stat)
+    deallocate(xc_epsilon, xc_potential, density_wk, STAT=stat)
     if (stat /= 0) call cq_abort("get_pcc_force: Error dealloc mem")
-    call reg_dealloc_mem(area_moveatoms, (2+2*nspin)*size, type_dbl)
+    call reg_dealloc_mem(area_moveatoms, (1+2*nspin)*size, type_dbl)
     call stop_backtrace(t=backtrace_timer,who='get_PCC_force',echo=.true.)
 
     return
