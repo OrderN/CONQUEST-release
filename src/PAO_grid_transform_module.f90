@@ -140,6 +140,8 @@ contains
     real(double) :: rcut
     real(double) :: r1, r2, r3, r4, core_charge, gauss_charge
     real(double) :: val, theta, phi, r_tmp
+    integer :: max_num_blocks, current_num_blocks
+    real(double), dimension(:), allocatable :: temp_block_storage
 
     call start_timer(tmr_std_basis)
     call start_timer(tmr_std_allocation)
@@ -157,6 +159,9 @@ contains
     no_of_ib_ia = 0
     gridfunctions(pao_fns)%griddata = zero
 
+    max_num_blocks = maxval(npao_species)*n_pts_in_block
+    allocate(temp_block_storage(max_num_blocks))
+    
     ! loop arround grid points in the domain, and for each
     ! point, get the PAO values
 
@@ -168,24 +173,12 @@ contains
           iatom=0
           do ipart=1,naba_atoms_of_blocks(atomf)%no_of_part(iblock)
              jpart=naba_atoms_of_blocks(atomf)%list_part(ipart,iblock)
-             if(jpart > DCS_parts%mx_gcover) then 
-                call cq_abort('single_PAO_to_grid: JPART ERROR ',ipart,jpart)
-             endif
              ind_part=DCS_parts%lab_cell(jpart)
              do ia=1,naba_atoms_of_blocks(atomf)%no_atom_on_part(ipart,iblock)
                 iatom=iatom+1
                 ii = naba_atoms_of_blocks(atomf)%list_atom(iatom,iblock)
                 icover= DCS_parts%icover_ibeg(jpart)+ii-1
                 ig_atom= id_glob(parts%icell_beg(ind_part)+ii-1)
-
-                if(parts%icell_beg(ind_part) + ii-1 > ni_in_cell) then
-                   call cq_abort('single_PAO_to_grid: globID ERROR ', &
-                        ii,parts%icell_beg(ind_part))
-                endif
-                if(icover > DCS_parts%mx_mcover) then
-                   call cq_abort('single_PAO_to_grid: icover ERROR ', &
-                        icover,DCS_parts%mx_mcover)
-                endif
 
                 xatom=DCS_parts%xcover(icover)
                 yatom=DCS_parts%ycover(icover)
@@ -197,17 +190,21 @@ contains
                 rcut = r_h + RD_ERR
                 call check_block (xblock,yblock,zblock,xatom,yatom,zatom, rcut, &  ! in
                      npoint,ip_store,r_store,x_store,y_store,z_store,n_pts_in_block) !out
-                r_from_i = sqrt((xatom-xblock)**2+(yatom-yblock)**2+ &
-                     (zatom-zblock)**2 )
 
                 if(npoint > 0) then
-                   !offset_position = (no_of_ib_ia-1) * npao * n_pts_in_block
+                   current_num_blocks = npao_species(the_species)*n_pts_in_block
+                   temp_block_storage = zero
                    offset_position = no_of_ib_ia
+                   !$omp parallel do default(none) &
+                   !$omp             schedule(dynamic) &
+                   !$omp             reduction(+: temp_block_storage) &
+                   !$omp             shared(n_pts_in_block, pao, the_species, offset_position, &
+                   !$omp                    npoint, no_of_ib_ia, ip_store, r_store, x_store, y_store, z_store) &
+                   !$omp             private(r_from_i, ip, position, ipoint, &
+                   !$omp                     x, y, z, l1, acz, m1, count1, val)
                    do ip=1,npoint
                       ipoint=ip_store(ip)
                       position= offset_position + ipoint
-                      if(position > gridfunctions(pao_fns)%size) call cq_abort &
-                           ('single_pao_to_grid: position error ', position, gridfunctions(pao_fns)%size)
 
                       r_from_i = r_store(ip)
                       x = x_store(ip)
@@ -219,21 +216,23 @@ contains
                          do acz = 1,pao(the_species)%angmom(l1)%n_zeta_in_angmom
                             do m1=-l1,l1
                                call evaluate_pao(the_species,l1,acz,m1,x,y,z,val)
-                               if(position+(count1-1)*n_pts_in_block > gridfunctions(pao_fns)%size) &
-                                    call cq_abort('single_pao_to_grid: position error ', &
-                                    position, gridfunctions(pao_fns)%size)
-                               gridfunctions(pao_fns)%griddata(position+(count1-1)*n_pts_in_block) = val
+                               !gridfunctions(pao_fns)%griddata(position+(count1-1)*n_pts_in_block) = val
+                               temp_block_storage(ipoint + (count1-1)*n_pts_in_block) = val
                                count1 = count1+1
                             end do ! m1
                          end do ! acz
                       end do ! l1
                    enddo ! ip=1,npoint
+                   !$omp end parallel do
+                   gridfunctions(pao_fns)%griddata(no_of_ib_ia+1:no_of_ib_ia+current_num_blocks) = &
+                        temp_block_storage(1:current_num_blocks)
                 endif! (npoint > 0) then
                 no_of_ib_ia = no_of_ib_ia + npao_species(the_species)*n_pts_in_block
              enddo ! naba_atoms
           enddo ! naba_part
        endif !(naba_atoms_of_blocks(atomf)%no_of_part(iblock) > 0) !naba atoms?
     enddo ! iblock : primary set of blocks
+    deallocate(temp_block_storage)
     call my_barrier()
     call start_timer(tmr_std_allocation)
     deallocate(ip_store,x_store,y_store,z_store,r_store)
@@ -254,6 +253,7 @@ contains
 !!   Used for gradients of energy wrt atomic coordinates
 !!
 !!   This subroutine is based on sub:single_PAO_to_grid in PAO_grid_transform_module.f90.
+!!   TODO: There is a lot of code duplication between single_PAO_to_grid and single_PAO_to_grad  
 !!
 !!  INPUTS
 !! 
@@ -313,6 +313,8 @@ contains
     real(double) :: rcut
     real(double) :: r1, r2, r3, r4, core_charge, gauss_charge
     real(double) :: val, theta, phi, r_tmp
+    integer :: max_num_blocks, current_num_blocks
+    real(double), dimension(:), allocatable :: temp_block_storage
 
     call start_timer(tmr_std_basis)
     call start_timer(tmr_std_allocation)
@@ -330,21 +332,12 @@ contains
     no_of_ib_ia = 0
     gridfunctions(pao_fns)%griddata = zero
 
+    max_num_blocks = maxval(npao_species)*n_pts_in_block
+    allocate(temp_block_storage(max_num_blocks))
+    
     ! loop arround grid points in the domain, and for each
     ! point, get the d_PAO/d_R values
 
-    !$omp parallel do default(none) &
-    !$omp             schedule(dynamic) &
-    !$omp             shared(domain, dcellx_block, dcelly_block, dcellz_block, atomf, &
-    !$omp                    naba_atoms_of_blocks, parts, r_h, n_pts_in_block, direction, &
-    !$omp                    pao, pao_fns, npao_species, dcs_parts, id_glob, species_glob, &
-    !$omp                    gridfunctions) &
-    !$omp             private(iblock, iatom, ipart, jpart, ind_part, xblock, yblock, zblock, &
-    !$omp                     ii, ia, icover, ig_atom, xatom, yatom, zatom, the_species, &
-    !$omp                     rcut, r_from_i, ip, position, offset_position, ipoint, &
-    !$omp                     npoint, ip_store, r_store, x_store, y_store, z_store, x, y, z, &
-    !$omp                     l1, acz, m1, count1, val) &
-    !$omp             firstprivate(no_of_ib_ia)
     do iblock = 1, domain%groups_on_node ! primary set of blocks
        xblock=(domain%idisp_primx(iblock)+domain%nx_origin-1)*dcellx_block
        yblock=(domain%idisp_primy(iblock)+domain%ny_origin-1)*dcelly_block
@@ -370,11 +363,19 @@ contains
                 rcut = r_h + RD_ERR
                 call check_block (xblock,yblock,zblock,xatom,yatom,zatom, rcut, &  ! in
                      npoint,ip_store,r_store,x_store,y_store,z_store,n_pts_in_block) !out
-                r_from_i = sqrt( (xatom-xblock)**2 + (yatom-yblock)**2 + (zatom-zblock)**2 )
 
                 if(npoint > 0) then
-                   !offset_position = (no_of_ib_ia-1) * npao * n_pts_in_block
+                   ! Temporary storage
+                   current_num_blocks = npao_species(the_species)*n_pts_in_block
+                   temp_block_storage = zero
                    offset_position = no_of_ib_ia
+                   !$omp parallel do default(none) &
+                   !$omp             schedule(dynamic) &
+                   !$omp             reduction(+: temp_block_storage) &
+                   !$omp             shared(n_pts_in_block, direction, pao, the_species, offset_position, &
+                   !$omp                    npoint, no_of_ib_ia, ip_store, r_store, x_store, y_store, z_store) &
+                   !$omp             private(r_from_i, ip, position, ipoint, &
+                   !$omp                     x, y, z, l1, acz, m1, count1, val)
                    do ip=1,npoint
                       ipoint=ip_store(ip)
                       position= offset_position + ipoint
@@ -395,19 +396,23 @@ contains
                                ! inside the loop might not be great for vectorization, but with the function
                                ! call here, it probably won't vectorize anyways.
                                ! This loop nest really should be inside pao_elem_derivative_2, see issue #198
-                               gridfunctions(pao_fns)%griddata(position+(count1-1)*n_pts_in_block) = val
+                               !gridfunctions(pao_fns)%griddata(position+(count1-1)*n_pts_in_block) = val
+                               temp_block_storage(ipoint + (count1-1)*n_pts_in_block) = val
                                count1 = count1+1
                             end do ! m1
                          end do ! acz
                       end do ! l1
                    enddo ! ip=1,npoint
+                   !$omp end parallel do
+                   gridfunctions(pao_fns)%griddata(no_of_ib_ia+1:no_of_ib_ia+current_num_blocks) = &
+                        temp_block_storage(1:current_num_blocks)
                 endif! (npoint > 0) then
                 no_of_ib_ia = no_of_ib_ia + npao_species(the_species)*n_pts_in_block
              enddo ! naba_atoms
           enddo ! naba_part
        endif !(naba_atoms_of_blocks(atomf)%no_of_part(iblock) > 0) !naba atoms?
     enddo ! iblock : primary set of blocks
-    !$omp end parallel do
+    deallocate(temp_block_storage)
     call my_barrier()
     call start_timer(tmr_std_allocation)
     deallocate(ip_store,x_store,y_store,z_store,r_store)
