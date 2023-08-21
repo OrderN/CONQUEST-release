@@ -175,7 +175,6 @@ contains
     call my_barrier()
 
     gridfunctions(pao_fns)%griddata = zero
-
     next_offset_position = 0
     offset_position = huge(0)
     rcut = r_h + RD_ERR
@@ -243,15 +242,15 @@ contains
                       z = z_store(ip, ia, ipart, iblock)
                       ! For this point-atom offset, we accumulate the PAO on the grid
                       count1 = 1
-                      l: do l1 = 0,pao(the_species(ia, ipart, iblock))%greatest_angmom
-                         zeta: do acz = 1,pao(the_species(ia, ipart, iblock))%angmom(l1)%n_zeta_in_angmom
-                            m: do m1=-l1,l1
+                      l_loop: do l1 = 0,pao(the_species(ia, ipart, iblock))%greatest_angmom
+                         z_loop: do acz = 1,pao(the_species(ia, ipart, iblock))%angmom(l1)%n_zeta_in_angmom
+                            m_loop: do m1=-l1,l1
                                call evaluate_pao(the_species(ia, ipart, iblock),l1,acz,m1,x,y,z,val)
                                gridfunctions(pao_fns)%griddata(position+(count1-1)*n_pts_in_block) = val
                                count1 = count1+1
-                            end do m
-                         end do zeta
-                      end do l
+                            end do m_loop
+                         end do z_loop
+                      end do l_loop
                    enddo points_loop_omp
                 endif npoint_if_omp
              enddo atoms_loop_omp
@@ -261,7 +260,7 @@ contains
     !$omp end parallel do
     call my_barrier()
     call start_timer(tmr_std_allocation)
-    deallocate(ip_store,x_store,y_store,z_store,r_store)
+    deallocate(ip_store,x_store,y_store,z_store,r_store,the_species,offset_position,npoint)
     call stop_timer(tmr_std_allocation)
     call stop_timer(tmr_std_basis)
     return
