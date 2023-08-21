@@ -130,12 +130,13 @@ contains
     integer :: stat, nl, ip, this_nsf
     integer :: i,m, m1min, m1max,acz,m1,l1,count1
     integer     , allocatable :: the_species(:,:,:)
+    integer     , allocatable :: offset_position(:,:,:)
     integer     , allocatable :: npoint(:,:,:)
     integer     , allocatable :: ip_store(:,:,:,:)
     real(double), allocatable :: x_store(:,:,:,:)
     real(double), allocatable :: y_store(:,:,:,:)
     real(double), allocatable :: z_store(:,:,:,:)
-    real(double), allocatable :: r_store(:,:,:,:)
+    real(double), allocatable :: r_store(:)
     real(double) :: coulomb_energy
     real(double) :: rcut
     real(double) :: r1, r2, r3, r4, core_charge, gauss_charge
@@ -144,7 +145,6 @@ contains
     real(double), dimension(:), allocatable :: temp_block_storage
 
     integer :: next_offset_position
-    integer, allocatable :: offset_position(:,:,:)
 
     integer :: nblock, npart, natom
 
@@ -155,13 +155,13 @@ contains
     call start_timer(tmr_std_basis)
     call start_timer(tmr_std_allocation)
     allocate(ip_store(n_pts_in_block, natom, npart, nblock))
-    allocate(x_store(n_pts_in_block, natom, npart, nblock))
-    allocate(y_store(n_pts_in_block, natom, npart, nblock))
-    allocate(z_store(n_pts_in_block, natom, npart, nblock))
-    allocate(r_store(n_pts_in_block, natom, npart, nblock))
-    allocate(the_species(natom, npart, nblock))
+    allocate(x_store( n_pts_in_block, natom, npart, nblock))
+    allocate(y_store( n_pts_in_block, natom, npart, nblock))
+    allocate(z_store( n_pts_in_block, natom, npart, nblock))
+    allocate(r_store( n_pts_in_block ))
+    allocate(the_species(    natom, npart, nblock))
     allocate(offset_position(natom, npart, nblock))
-    allocate(npoint(natom, npart, nblock))
+    allocate(npoint(         natom, npart, nblock))
     call stop_timer(tmr_std_allocation)
     ! --  Start of subroutine  ---
 
@@ -205,12 +205,12 @@ contains
                 !calculates distances between the atom and integration grid points
                 !in the block and stores which integration grids are neighbours.
                 call check_block (xblock,yblock,zblock,xatom,yatom,zatom, rcut, &  ! in
-                     npoint(ia, ipart, iblock), & !out
-                     ip_store(:,ia, ipart, iblock), & !out
-                     r_store(:,ia, ipart, iblock), & !out *Note: Does not seem to get used
-                     x_store(:,ia, ipart, iblock), & !out
-                     y_store(:,ia, ipart, iblock), & !out
-                     z_store(:,ia, ipart, iblock), & !out
+                     npoint(     ia, ipart, iblock), & !out
+                     ip_store(:, ia, ipart, iblock), & !out
+                     r_store( : ), & !out *Note: Does not seem to get used
+                     x_store( :, ia, ipart, iblock), & !out
+                     y_store( :, ia, ipart, iblock), & !out
+                     z_store( :, ia, ipart, iblock), & !out
                      n_pts_in_block) ! in
 
                 npoint_if: if (npoint(ia, ipart, iblock) > 0) then
@@ -241,12 +241,12 @@ contains
                       y = y_store(ip, ia, ipart, iblock)
                       z = z_store(ip, ia, ipart, iblock)
                       ! For this point-atom offset, we accumulate the PAO on the grid
-                      count1 = 1
+                      count1 = 0
                       l_loop: do l1 = 0,pao(the_species(ia, ipart, iblock))%greatest_angmom
                          z_loop: do acz = 1,pao(the_species(ia, ipart, iblock))%angmom(l1)%n_zeta_in_angmom
                             m_loop: do m1=-l1,l1
                                call evaluate_pao(the_species(ia, ipart, iblock),l1,acz,m1,x,y,z,val)
-                               gridfunctions(pao_fns)%griddata(position+(count1-1)*n_pts_in_block) = val
+                               gridfunctions(pao_fns)%griddata(position + count1 * n_pts_in_block) = val
                                count1 = count1+1
                             end do m_loop
                          end do z_loop
