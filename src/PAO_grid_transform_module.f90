@@ -141,7 +141,6 @@ contains
     real(double) :: rcut
     real(double) :: r1, r2, r3, r4, core_charge, gauss_charge
     real(double) :: val, theta, phi, r_tmp
-    integer :: max_num_blocks, current_num_blocks
     real(double), dimension(:), allocatable :: temp_block_storage
 
     integer :: next_offset_position
@@ -213,18 +212,18 @@ contains
                      z_store( :, ia, ipart, iblock), & !out
                      n_pts_in_block) ! in
 
-                npoint_if: if (npoint(ia, ipart, iblock) > 0) then
+                if (npoint(ia, ipart, iblock) > 0) then
                    offset_position(ia, ipart, iblock) = next_offset_position
-                   current_num_blocks = npao_species(the_species(ia, ipart, iblock)) * n_pts_in_block
-                   next_offset_position = offset_position(ia, ipart, iblock) + current_num_blocks
-                end if npoint_if
+                end if
+                next_offset_position = next_offset_position + &
+                     npao_species(the_species(ia, ipart, iblock)) * n_pts_in_block
              end do atoms_loop
           end do parts_loop
        end if part_in_block
     end do blocks_loop
 
     !$omp parallel do default(none) &
-    !$omp             schedule(dynamic) &
+    !$omp             schedule(static) &
     !$omp             shared(domain, naba_atoms_of_blocks, npoint, offset_position, pao_fns, atomf, &
     !$omp                    x_store, y_store, z_store, ip_store, pao, gridfunctions, the_species, &
     !$omp                    n_pts_in_block) &
