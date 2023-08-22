@@ -681,7 +681,7 @@ contains
                               md_n_ys, md_n_mts, ion_velocity, lattice_vec, &
                               md_baro_type, target_pressure, md_ndof_ions, &
                               md_equil_steps, md_equil_press, md_tau_T, md_tau_P, &
-                              md_thermo_type
+                              md_thermo_type, temp_ion_end
     use md_misc,        only: write_md_data, get_heat_flux, &
                               update_pos_and_box, integrate_pt, init_md, end_md
     use atoms,          only: distribute_atoms,deallocate_distribute_atom
@@ -824,6 +824,23 @@ contains
 
     do iter = i_first, i_last ! Main MD loop
        mdl%step = iter
+       
+       ! At a given time step, if the difference between T_ext and the final temperature is larger than 
+       ! the temperature step (with 5% margin), then update T_ext 
+       ! Temperature evolves linearly from temp_ion to temp_ion_end over MDn_steps steps
+       ! Stop when target temperature has been reached
+       if  (abs(mdl%T_ext - temp_ion_end) > 0.95*abs((temp_ion_end-temp_ion)/dble(MDn_steps))) then
+         mdl%T_ext = temp_ion+(dble(iter-1)/dble(MDn_steps))*(temp_ion_end-temp_ion)
+         write(io_lun,fmt='(6x, "Thermostat temperature at step ", i5, ": ", f9.1, " K")') iter, mdl%T_ext 
+         ! Update target ke for SVR
+         thermo%ke_target = half*md_ndof_ions*fac_Kelvin2Hartree*mdl%T_ext
+         write(io_lun,fmt='(6x, "kee target is now" , f8.3)') thermo%ke_target
+         
+       else if (abs(temp_ion_end-temp_ion) > 0.0001) then
+         write(io_lun,fmt='(6x, "Target temperature (", f9.1," K) has been reached. Stopping..")') mdl%T_ext 
+		 exit
+       end if
+
        if (inode==ionode .and. iprint_MD + min_layer > 0) &
             write(io_lun,fmt='(/4x,a,i5)') trim(prefix)//" iteration ",iter
 

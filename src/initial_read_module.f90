@@ -929,7 +929,8 @@ contains
          flag_write_xsf, md_cell_nhc, md_nhc_cell_mass, &
          md_calc_xlmass, md_equil_steps, md_equil_press, &
          md_tau_T_equil, md_tau_P_equil, md_p_drag, &
-         md_t_drag, md_cell_constraint, flag_write_extxyz, MDtimestep, md_ensemble
+         md_t_drag, md_cell_constraint, flag_write_extxyz, MDtimestep, md_ensemble, &
+         temp_ion_end 
     use md_model,   only: md_tdep
     use move_atoms,         only: threshold_resetCD, &
          flag_stop_on_empty_bundle, &
@@ -1888,6 +1889,8 @@ contains
     else
        temp_ion           = fdf_double ('AtomMove.IonTemperature',300.0_double)
     end if
+    temp_ion_end       = fdf_double ('AtomMove.IonTemperatureEnd',temp_ion) 
+
 !!$
 !!$
 !!$
@@ -2630,7 +2633,7 @@ contains
          numN_neutral_atom_projector, pseudo_type, OLDPS, SIESTA, ABINIT
     use input_module,         only: leqi, chrcap
     use control,    only: MDn_steps
-    use md_control, only: md_ensemble
+    use md_control, only: md_ensemble, temp_ion_end
 
     implicit none
 
@@ -2688,6 +2691,9 @@ contains
        call chrcap(ensemblestr,3)
        write(io_lun, fmt='(4x,a15,a3," MD run for ",i5," steps ")') job_str, ensemblestr, MDn_steps
        write(io_lun, fmt='(6x,"Initial ion temperature: ",f9.3,"K")') temp_ion
+       if (temp_ion_end .ne. temp_ion) then
+         write(io_lun, fmt='(6x,"Final ion temperature: ",f9.3,"K")') temp_ion_end 
+       end if
        if(flag_XLBOMD) write(io_lun, fmt='(6x,"Using extended Lagrangian formalism")')
     else if(leqi(runtype,'lbfgs')) then
        write(io_lun, fmt='(4x,a15,"L-BFGS atomic relaxation")') job_str

@@ -90,6 +90,7 @@ module md_control
   real(double), dimension(:,:), allocatable, target :: ion_velocity
   real(double), dimension(3,3), target      :: lattice_vec
   logical       :: flag_extended_system = .false.
+  real(double) :: temp_ion_end   
 
   !!****s* md_control/type_thermostat
   !!  NAME

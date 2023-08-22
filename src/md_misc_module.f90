@@ -35,7 +35,8 @@ module md_misc
   use units,            only: HaBohr3ToGPa
   use md_control,       only: ion_velocity, md_nhc_mass, md_nhc_cell_mass, &
        flag_write_extxyz, flag_write_xsf, md_baro_type, md_ensemble, MDtimestep, &
-       flag_nhc, md_tau_P, md_tau_P_equil, md_tau_T, md_tau_T_equil, md_thermo_type
+       flag_nhc, md_tau_P, md_tau_P_equil, md_tau_T, md_tau_T_equil, md_thermo_type, &
+       temp_ion_end
 
   implicit none
 
@@ -77,7 +78,8 @@ contains
     use input_module,   only: leqi
     use io_module,      only: read_velocity
     use md_model,       only: type_md_model
-    use md_control,     only: lattice_vec, type_thermostat, type_barostat, read_md_checkpoint
+    use md_control,     only: lattice_vec, type_thermostat, type_barostat, read_md_checkpoint, &
+                              temp_ion_end
     use GenComms,       only: inode, ionode, gcopy, cq_warn
     use memory_module,  only: reg_alloc_mem, type_dbl
     use global_module,  only: rcellx, rcelly, rcellz, temp_ion, ni_in_cell, &
