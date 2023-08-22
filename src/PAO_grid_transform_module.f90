@@ -181,6 +181,8 @@ contains
     ! loop arround grid points in the domain, and for each
     ! point, get the PAO values
 
+    ! Note: Using OpenMP in this loop requires some redesign because there is a loop
+    !       carrier dependency in next_offset_position.
     blocks_loop: do iblock = 1, domain%groups_on_node ! primary set of blocks
        xblock=(domain%idisp_primx(iblock)+domain%nx_origin-1)*dcellx_block
        yblock=(domain%idisp_primy(iblock)+domain%ny_origin-1)*dcelly_block
@@ -212,10 +214,8 @@ contains
                      z_store( :, ia, ipart, iblock), & !out
                      n_pts_in_block) ! in
 
-                if (npoint(ia, ipart, iblock) > 0) then
-                   offset_position(ia, ipart, iblock) = next_offset_position
-                end if
-                next_offset_position = next_offset_position + &
+                offset_position(ia, ipart, iblock) = next_offset_position
+                next_offset_position = offset_position(ia, ipart, iblock) + &
                      npao_species(the_species(ia, ipart, iblock)) * n_pts_in_block
              end do atoms_loop
           end do parts_loop
@@ -223,7 +223,7 @@ contains
     end do blocks_loop
 
     !$omp parallel do default(none) &
-    !$omp             schedule(static) &
+    !$omp             schedule(dynamic) &
     !$omp             shared(domain, naba_atoms_of_blocks, npoint, offset_position, pao_fns, atomf, &
     !$omp                    x_store, y_store, z_store, ip_store, pao, gridfunctions, the_species, &
     !$omp                    n_pts_in_block) &
