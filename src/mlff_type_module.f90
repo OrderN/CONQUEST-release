@@ -220,7 +220,20 @@ module mlff_type
 contains
 
 
-
+!!****s* ML_type/set_ML *
+!!  NAME
+!!   set_ML
+!!  PURPOSE
+!!   Read the parameters from machine learning infomation file
+!!  AUTHOR
+!!   Jianbo Lin
+!!  CREATION DATE
+!!   2022/03/14
+!!  MODIFICATION HISTORY
+!!   2023/08/22 J.Lin
+!!   Added checking if file exists
+!!  SOURCE
+!!
   subroutine set_ML
 
     use GenComms, ONLY: inode, ionode
@@ -234,6 +247,8 @@ contains
     ! After we have neighbor information and descriptor information
     ! read and set
     open(unit=file_id,file=filename,iostat=stat,status='old')
+    if(stat/=0) &
+      call cq_abort('open ml_pot.txt : error no such file')
     read(file_id,*) comment
     read(file_id,*) descriptor_type
     close(file_id)

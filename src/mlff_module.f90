@@ -933,9 +933,8 @@ contains
         end do
     end if
 
-    !deallocate(amat_features_ML)
+    ! Deallocate feature and matrix
     call deallocate_features_ML(amat_ML,amat_features_ML,bundle%groups_on_node)
-    !deallocate(amat_ML)
     call deallocate_matrix_ML(amat_ML,bundle%groups_on_node,parts%mx_mem_grp)
     !deallocate(amat)
     !call deallocate_matrix(amat,bundle%groups_on_node)
