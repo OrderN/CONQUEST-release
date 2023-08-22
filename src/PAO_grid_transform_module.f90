@@ -119,29 +119,22 @@ contains
     integer,intent(in) :: pao_fns
 
     !local
-    real(double):: dcellx_block,dcelly_block,dcellz_block
-    integer :: ipart,jpart,ind_part,ia,ii,icover,ig_atom
-    real(double), allocatable, dimension(:,:,:) :: xatom,yatom,zatom
-    real(double), allocatable, dimension(:) :: xblock,yblock,zblock
-    integer :: j,iblock,the_l,ipoint, igrid
-    real(double) :: r_from_i
-    real(double) :: rr,a,b,c,d,x,y,z,nl_potential
-    integer :: position,iatom
-    integer :: stat, nl, ip, this_nsf
-    integer :: i,m, m1min, m1max,acz,m1,l1,count1
-    integer :: my_species
-    integer     , allocatable :: species_store(:,:,:)
-    integer     , allocatable :: offset_position(:,:,:)
-    integer :: npoint
-    integer     , allocatable, dimension(:) :: ip_store
-    real(double), allocatable, dimension(:) :: x_store, y_store, z_store, r_store
-    real(double) :: rcut
-    real(double) :: val
-    real(double), dimension(:), allocatable :: temp_block_storage
-
-    integer :: next_offset_position
-
-    integer :: nblock, npart, natom
+    integer :: iblock,ia,ipart,ip,l1,acz,m1 ! Loop index variables
+    integer :: nblock, npart, natom ! Array dimensions
+    integer :: jpart,ind_part,ii,icover,ig_atom,iatom ! Temporary indices for calculating species
+    integer :: position,next_offset_position ! Temporary indices to gridfunctions%griddata
+    integer :: my_species ! Temporary variables to reduce indirect accesses
+    integer :: npoint ! outputs of check_block
+    integer :: count1 ! incremented counter, maps from (l1, acz, m1) to linear index of gridfunctions%griddata
+    real(double):: dcellx_block,dcelly_block,dcellz_block ! grid dimensions, should be moved
+    real(double) :: x,y,z ! Temporary variables to reduce indirect accesses
+    real(double) :: rcut ! Input to check_block
+    real(double) :: val ! output, written into gridfunctions%griddata
+    integer, allocatable, dimension(:) :: ip_store ! outputs of check_block
+    integer, allocatable, dimension(:,:,:) :: offset_position, species_store ! precomputed variables
+    real(double), allocatable, dimension(:) :: x_store, y_store, z_store, r_store ! outputs of check_block
+    real(double), allocatable, dimension(:) :: xblock,yblock,zblock ! inputs to check_block, precomputed
+    real(double), allocatable, dimension(:,:,:) :: xatom,yatom,zatom ! inputs to check_block, precomputed
 
     nblock = domain%groups_on_node
     npart = maxval(naba_atoms_of_blocks(atomf)%no_of_part)
@@ -201,7 +194,7 @@ contains
                 yatom(      ia, ipart, iblock) = DCS_parts%ycover(icover)
                 zatom(      ia, ipart, iblock) = DCS_parts%zcover(icover)
                 species_store(ia, ipart, iblock) = species_glob(ig_atom)
-                
+
                 offset_position(ia, ipart, iblock) = next_offset_position
                 next_offset_position = offset_position(ia, ipart, iblock) + &
                      npao_species(species_store(ia, ipart, iblock)) * n_pts_in_block
@@ -233,7 +226,7 @@ contains
                      n_pts_in_block) ! in
 
                 my_species = species_store(ia, ipart, iblock)
-                
+
                 npoint_if_omp : if(npoint > 0) then
                    points_loop_omp: do ip=1,npoint
                       position = offset_position(ia, ipart, iblock) + ip_store(ip)
