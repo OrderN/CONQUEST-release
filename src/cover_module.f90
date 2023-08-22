@@ -355,7 +355,7 @@ contains
        !endif ! members.AND.nm_group>0
     enddo
     if(members) then ! Now generate member information
-       if(inode==ionode.AND.iprint_index>1) write(io_lun,*) 'Members in covering set: ',nm_in_cover
+       if(inode==ionode.AND.iprint_index>3) write(io_lun,fmt='(6x,a,i7)') 'Members in covering set: ',nm_in_cover
        if(members) set%icover_ibeg(1)=1
        set%mx_mcover = nm_in_cover
        call start_timer(tmr_std_allocation)

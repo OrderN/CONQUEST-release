@@ -267,7 +267,7 @@ contains
     ! Local variables
     integer :: stat
 
-    if(iprint_DM>2.AND.myid==0) write(io_lun,*) myid,' Starting Allocate Arrays'
+    if(iprint_DM>3.AND.myid==0) write(io_lun,fmt='(10x,i5,a)') myid,' Starting Allocate Arrays'
 
     ! Calculate maximum numbers of blocks in different directions
     blocks_r = (matrix_size/block_size_r)
@@ -275,7 +275,7 @@ contains
     if(myid==0.AND.iprint_DM>3) write(io_lun,1) blocks_r,blocks_c
     maxrow = floor(real(blocks_r/proc_rows))+1
     maxcol = floor(real(blocks_c/proc_cols))+1
-    if(iprint_DM>1.AND.myid==0) write(io_lun,*) 'maxrow, maxcol: ',maxrow,maxcol
+    if(iprint_DM>3.AND.myid==0) write(io_lun,fmt='(10x,a,2i5)') 'maxrow, maxcol: ',maxrow,maxcol
     call start_timer(tmr_std_allocation)
     allocate(mapx(numprocs,maxrow,maxcol),mapy(numprocs,maxrow,maxcol),STAT=stat)
     if(stat/=0) call cq_abort("ScalapackFormat: Could not alloc map",stat)
@@ -301,7 +301,7 @@ contains
     if(stat/=0) call cq_abort("ScalapackFormat: Could not alloc pgroup",stat)
     call stop_timer(tmr_std_allocation)
     return
-1   format(2x,'AllocArr: block sizes are: ',2i5)
+1   format(10x,'AllocArr: block sizes are: ',2i5)
   end subroutine allocate_arrays
 !!***
 
@@ -340,7 +340,7 @@ contains
     ! Local variables
     integer :: stat
 
-    if(iprint_DM>2.AND.myid==0) write(io_lun,*) myid,' Starting Deallocate Arrays'
+    if(iprint_DM>3.AND.myid==0) write(io_lun,fmt='(10x,a)') myid,' Starting Deallocate Arrays'
     call start_timer(tmr_std_allocation)
     deallocate(CC_to_SC,CQ2SC_row_info, my_row,proc_start, STAT=stat)
     if(stat/=0) call cq_abort("ScalapackFormat: Could not dealloc CC2SC, CQ2SC",stat)
@@ -492,9 +492,9 @@ contains
     integer :: i, j, n, nrow, ncol, prow, pcol, proc
     integer :: ng
 
-    if(iprint_DM>2.AND.myid==0) write(io_lun,*) myid,' Starting Ref To SC Blocks'
+    if(iprint_DM>3.AND.myid==0) write(io_lun,fmt='(8x,a)') 'Starting Ref To SC Blocks'
     ! Construct processor ids
-    if(iprint_DM>1.AND.myid==0) write(io_lun,fmt="(2x,'Scalapack Processor Grid')") 
+    if(iprint_DM>2.AND.myid==0) write(io_lun,fmt="(8x,'Scalapack Processor Grid')") 
     do ng = 1, proc_groups
        n = 1
        do i=1,proc_rows
@@ -503,12 +503,12 @@ contains
              if(n>N_procs_in_pg(ng)) call cq_abort('Ref2SC: Too many processors in group',ng,n)
              n = n + 1
           end do
-          if(iprint_DM>1.AND.myid==0) write(io_lun,*) (procid(ng,i,j),j=1,proc_cols)
+          if(iprint_DM>4.AND.myid==0) write(io_lun,*) (procid(ng,i,j),j=1,proc_cols)
        end do
     end do
     ! now build list of blocks and where they go
     if(iprint_DM>3.AND.myid==0) &
-         write(io_lun,fmt="(2x,'Map from local block on processor (first three) to reference block (last two)')")
+         write(io_lun,fmt="(8x,'Map from local block on processor (first three) to reference block (last two)')")
     if(iprint_DM>3.AND.myid==0) write(io_lun,fmt="(27x,'Proc Nrow Ncol Mapx Mapy')") 
     do ng = 1, proc_groups
        do i=1,blocks_r                          ! Rows of blocks in ref format
@@ -524,7 +524,7 @@ contains
              mapy(proc,nrow,ncol) = j
              proc_block(ng, i, j) = proc ! Owner of block (linear number)
              if(iprint_DM>3.AND.myid==0) &
-                  write(io_lun,fmt="(2x,'Proc: ',i5,'Mapx and y: ',6i5)") myid,ng,proc,nrow,ncol,i,j
+                  write(io_lun,fmt="(8x,'Proc: ',i5,'Mapx and y: ',6i5)") myid,ng,proc,nrow,ncol,i,j
           end do
        end do
     end do
@@ -602,13 +602,13 @@ contains
     integer :: i,j,m,n,row,col,proc,ng
     integer :: row_max_n, col_max_n, loc_max_row, loc_max_col
 
-    if(iprint_DM>1.AND.myid==0) write(io_lun,3)
+    if(iprint_DM>3.AND.myid==0) write(io_lun,3)
     if(iprint_DM>3.AND.myid==0) write(io_lun,4)
     ! The first row_max_n procs have 1 more block than the rest
     row_max_n = mod(blocks_r,proc_rows)
     col_max_n = mod(blocks_c,proc_cols)
-    if(iprint_DM>1.AND.myid==0) write(io_lun,*) 'N for row, col: ',row_max_n, col_max_n
-    if(iprint_DM>1.AND.myid==0) write(io_lun,*) 'Loc_max_row, col: ',&
+    if(iprint_DM>3.AND.myid==0) write(io_lun,fmt='(8x,a,2i4)') 'N for row, col: ',row_max_n, col_max_n
+    if(iprint_DM>3.AND.myid==0) write(io_lun,fmt='(8x,a,2f4.0)') 'Loc_max_row, col: ',&
          aint(real(blocks_r/proc_rows)),aint(real(blocks_c/proc_cols))
     my_row = 0
     ! first record proc_start(:)%rows and %cols map, this is proc proc dependent
@@ -670,10 +670,10 @@ contains
        end do
     end do
     return
-1   format(2x,'MakeMaps: proc,row,col,map,n,m: ',7i5)
-2   format(2x,'MakeMaps: proc,n,max,my_row: ',4i5)
-3   format(1x,'Welcome to make_maps')
-4   format(2x,'Here we will create maps from ref to SC and back again')
+1   format(8x,'MakeMaps: proc,row,col,map,n,m: ',7i5)
+2   format(8x,'MakeMaps: proc,n,max,my_row: ',4i5)
+3   format(8x,'Welcome to make_maps')
+4   format(8x,'Here we will create maps from ref to SC and back again')
   end subroutine make_maps
 !!***
 
@@ -757,7 +757,7 @@ contains
     ! Local variables
     integer :: i, patom, part, proc, CC, brow, SCblock, supfn
 
-    if(iprint_DM>3.AND.myid==0) write(io_lun,*) myid,' Starting Find SC Row Atoms'
+    if(iprint_DM>3.AND.myid==0) write(io_lun,fmt='(10x,i5,a)') myid,' Starting Find SC Row Atoms'
     ! -----------------------------------------------------------------
     ! Loop over matrix using processor/partition/sequence order
     i = 1 ! Indexes matrix row
@@ -808,7 +808,7 @@ contains
     ! -----------------------------------------------------------------
     return
 
-2   format(2x,'Proc: ',i5,' Part, Seq, SupFn: ',3i5)
+2   format(8x,'Proc: ',i5,' Part, Seq, SupFn: ',3i5)
   end subroutine find_SC_row_atoms
 !!***
 
@@ -866,10 +866,10 @@ contains
     integer :: rb, cb, SCblockx, blockrow, blockcol
     integer :: part, seq, supfn
 
-    if(iprint_DM>3.AND.myid==0) write(io_lun,*) myid,' Starting Find Ref Row Atoms'
+    if(iprint_DM>3.AND.myid==0) write(io_lun,fmt='(10x,i5,a)') myid,' Starting Find Ref Row Atoms'
     blockcol = 1
     cb = 1
-    if(iprint_DM>3.AND.myid==0) write(io_lun,*) '  blocks, size: ',blocks_r, block_size_r
+    if(iprint_DM>3.AND.myid==0) write(io_lun,fmt='(10x,a,2i5)') '  blocks, size: ',blocks_r, block_size_r
     ! Loop over reference row blocks
     do rb = 1,blocks_r
        SCblockx = ref_to_SCx(rb,1)  ! find equivalent block in SC format
@@ -897,8 +897,8 @@ contains
           end if
        end do
     end do
-1   format(2x,'RefRowAt Proc: ',i5,' Part, seq, SupFn: ',3i5,' Block, row: ',2i5)
-2   format(2x,'RefRowAt Proc: ',i5,' Ref block, SC block: ',2i5)
+1   format(8x,'RefRowAt Proc: ',i5,' Part, seq, SupFn: ',3i5,' Block, row: ',2i5)
+2   format(8x,'RefRowAt Proc: ',i5,' Ref block, SC block: ',2i5)
     return
   end subroutine find_ref_row_atoms
 !!***
@@ -954,7 +954,7 @@ contains
     ! Local variables
     integer :: cb, blockcol, refc, part, seq, supfn, np_in_cell
 
-    if(iprint_DM>3.AND.myid==0) write(io_lun,*) myid,' Starting Find SC Col Atoms'
+    if(iprint_DM>3.AND.myid==0) write(io_lun,fmt='(10x,i5, a)') myid,' Starting Find SC Col Atoms'
     ! Loop over SC blocks
     do cb = 1,blocks_c
        refc = SC_to_refy(1,cb) ! find equivalent number in reference format
@@ -983,9 +983,9 @@ contains
     endif
     return
 
-2   format(2x,'Proc: ',i5,' SC col, ref col: ',2i5)
-3   format(2x,3i5,' : ',4i5)
-4   format(2x,'On proc ',i3,' CC_to_SC is',/,2x,' Part Atom  SFn   Label')
+2   format(8x,'Proc: ',i5,' SC col, ref col: ',2i5)
+3   format(8x,3i5,' : ',4i5)
+4   format(8x,'On proc ',i3,' CC_to_SC is',/,2x,' Part Atom  SFn   Label')
   end subroutine find_SC_col_atoms
 !!***
 end module ScalapackFormat

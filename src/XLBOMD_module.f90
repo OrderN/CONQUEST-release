@@ -78,12 +78,13 @@
       ! Module usage
       use basic_types
       use numbers, ONLY: zero
-      use global_module, ONLY: io_lun,integratorXL,flag_propagateL,flag_dissipation
+      use global_module, ONLY: io_lun,integratorXL,flag_propagateL,flag_dissipation, min_layer
       use GenComms, ONLY: cq_abort,inode,ionode
       use matrix_data, ONLY: mat,halo,LSrange,Lrange,Trange,Tmatind
       use mult_module, ONLY: mult,LS_trans,L_trans,LS_T_L,ltrans,allocate_temp_matrix
       use mult_module, ONLY: matXL, matXLvel, matXL_store,maxiter_Dissipation
       use mult_init_module, ONLY: mult_ini
+      use io_module, ONLY: return_prefix
 
       implicit none
       ! passed variables
@@ -99,11 +100,14 @@
       logical,save :: allocated_tags2 = .false.
       ! db
       integer :: lun_db
+      character(len=12) :: subname = "immi_XL: "
+      character(len=120) :: prefix
 
       !if (inode.EQ.ionode) write (io_lun,*) "allocated_tags1 in XL: ", allocated_tags1
       !if (inode.EQ.ionode) write (io_lun,*) "allocated_tags2 in XL: ", allocated_tags2
 
       ! Allocate X, Z & Xvel
+      prefix = return_prefix(subname, min_layer)
       if (.NOT.allocated_tags1) then
         allocate (matXL(nspin),matZ(nspin), STAT=stat_alloc)
         if (stat_alloc.NE.0) call cq_abort('Error allocating matXL and matZ: ', &
@@ -163,10 +167,8 @@
         enddo
       endif
 
-      if (inode.EQ.ionode .AND. iprint_MD.GT.1) &
-        write (io_lun,*) "Completed immi_XL()"
-
-      return
+      if (inode==ionode .AND. iprint_MD + min_layer > 2) &
+        write (io_lun,fmt='(4x,a)') trim(prefix)//" finished"
     end subroutine immi_XL
     !!***
 
@@ -193,18 +195,22 @@
     subroutine fmmi_XL
       ! Module usage
       use GenComms, ONLY: cq_abort,inode,ionode
-      use global_module, ONLY: io_lun,integratorXL,flag_propagateL,flag_dissipation
+      use global_module, ONLY: io_lun,integratorXL,flag_propagateL,flag_dissipation, min_layer
       use matrix_module, ONLY: deallocate_comms_data
       use mult_module, ONLY: mult,LS_T_L,mult,free_temp_matrix
       use mult_module, ONLY: matXL_store, matXL, matXLvel, matXL_store
+      use io_module, ONLY: return_prefix
 
       implicit none
       ! local variables
       integer :: ispin,i,stat_alloc
       integer :: K
+      character(len=12) :: subname = "fmmi_XL: "
+      character(len=120) :: prefix
 
       !write (io_lun,*) "Got in deallocate_matXL", inode
 
+      prefix = return_prefix(subname, min_layer)
       ! When dissipation applies
       if (flag_dissipation) then
         K = maxiter_Dissipation
@@ -238,8 +244,8 @@
       endif
       !endif
 
-      if (inode.EQ.ionode .AND. iprint_MD.GT.1) &
-        write (io_lun,*) "Completed fmmi_XL()"
+      if (inode==ionode .AND. iprint_MD + min_layer > 2) &
+        write (io_lun,fmt='(4x,a)') trim(prefix)//" finished"
 
       return
     end subroutine fmmi_XL
@@ -315,17 +321,21 @@
       ! Module usage
       use numbers
       use global_module, ONLY: nspin,io_lun,flag_propagateX,flag_propagateL, &
-                               nspin_SF, flag_SpinDependentSF
+                               nspin_SF, flag_SpinDependentSF, min_layer
       use GenComms, ONLY: inode,ionode
       use mult_module, ONLY: mult,matrix_product,matL,matT,matTtran,LS_T_L, &
                              symmetrise_L,mat_p,matrix_sum,matrix_transpose, matXL
+      use io_module, ONLY: return_prefix
 
       implicit none
       ! local variables
       integer :: ispin, ispin_SF
+      character(len=12) :: subname = "initL_XL: "
+      character(len=120) :: prefix
 
-      if (inode.EQ.ionode .AND. iprint_MD.GT.1) &
-        write (io_lun,*) "Make an initial guess on L-matrix"
+      prefix = return_prefix(subname, min_layer)
+      if (inode==ionode .and. iprint_MD + min_layer > 2) &
+        write (io_lun,fmt='(4x,a)') trim(prefix)//" create initial L"
 
       if (flag_propagateX) then
         call matrix_transpose(matT(1),matTtran(1))
@@ -415,8 +425,6 @@
           if (flag_SpinDependentSF) ispin_SF = ispin
           call matrix_product(matL(ispin),matS(ispin_SF),matZ(ispin),mult(L_S_LS))
         enddo
-        if (myid.EQ.0 .AND. iprint_MD.GT.1) &
-          write (io_lun,*) "Got Z-matrix" 
       endif
 
       ! Initialises or resets X-matrix
@@ -426,8 +434,6 @@
         call grab_Xhistories(range,trans,InfoGlob)
         call my_barrier()
         call reorder_Xhistories(MDiter)
-        if (myid.EQ.0 .AND. iprint_MD.GT.1) &
-          write (io_lun,*) "Completed reorder_Xhistories"
       endif
 
       return
@@ -456,8 +462,6 @@
         endif
         if (iter.EQ.1 .OR. n.EQ.0) flag = .true.
         if (flag) then
-          if (myid.EQ.0 .AND. iprint_MD.GT.1) &
-            write (io_lun,*) "Initialising X-matrix", iter
           if (flag_propagateX) then
             ispin_SF = 1
             do ispin = 1, nspin
@@ -735,8 +739,6 @@
 
       K = maxiter_Dissipation
       if (MDiter.GT.K+1) then
-        if (myid.EQ.0 .AND. iprint_MD.GT.2) &
-          write (io_lun,*) "Reordering X-matrix files",MDiter
         do ispin = 1,nspin
           do i = 1, K
             call matrix_sum(zero,matXL_store(i,ispin),one,matXL_store(i+1,ispin))
@@ -744,8 +746,6 @@
           call matrix_sum(zero,matXL_store(K+1,ispin),one,matXL(ispin))
         enddo
       elseif (MDiter.LE.K+1) then
-        if (myid.EQ.0 .AND. iprint_MD.GT.2) &
-          write (io_lun,*) "Storing X-matrix",MDiter
         do ispin = 1, nspin
           call matrix_sum(zero,matXL_store(MDiter,ispin),one,matXL(ispin))
         enddo
@@ -797,10 +797,6 @@
       !db
       integer :: lun_db
       character(20) :: file_name
-
-
-      !db if (myid.EQ.0) write (io_lun,'(a,1x,i8,1x,a)') &
-      !db                      "Calculate dissipative force at", MDiter, "MD iter"
 
       dissipation = zero
       K = maxiter_Dissipation
@@ -1087,17 +1083,17 @@
         endif
       endif
       ! Calculate harmonic terms
-      Pot_el = half*matrix_product_trace(matPot(1),matPot(1))
-      if (myid.EQ.0) write (io_lun,'(a,2x,i8,2x,a,f25.15)') &
-                           "     *** MD iter",MDiter,'Tr[(Z-X)^2]:',Pot_el
+      !Pot_el = half*matrix_product_trace(matPot(1),matPot(1))
+      !if (myid.EQ.0) write (io_lun,'(a,2x,i8,2x,a,f25.15)') &
+      !                     "     *** MD iter",MDiter,'Tr[(Z-X)^2]:',Pot_el
 
       ! Free matPot
       do ispin = nspin,1,-1
         call free_temp_matrix(matPot(ispin))
       enddo
 
-      if (myid.EQ.0 .AND. iprint_MD.GT.1) &
-        write (io_lun,*) "X-matrix propagated via Verlet"
+      !if (myid.EQ.0 .AND. iprint_MD.GT.1) &
+      !  write (io_lun,*) "X-matrix propagated via Verlet"
 
       return
     end subroutine Verlet_matXL
@@ -1170,18 +1166,6 @@
 
       ! Evolve matXL
       if (flag_dissipation) then
-
-        !db
-        !if (myid.EQ.0) then
-        !  write (io_lun,'(a,f10.5)') "kappa:  ", kappa_diss
-        !  write (io_lun,'(a,f10.5)') "alpha:  ", alpha
-        !  write (io_lun,'(a)')       "c(1:K): "
-        !  do i = 1, maxiter_Dissipation+1
-        !    write (io_lun,'(f10.5)') c(i)
-        !  enddo
-        !endif
-        !db
-
         allocate (Fdiss(mat_p(matXL(1))%length,nspin), STAT=stat_alloc)
         if (stat_alloc.NE.0) call cq_abort('Error allocating dissipation force: ')
         Fdiss = zero
@@ -1225,19 +1209,19 @@
         enddo
       endif
       ! Calculate kinetic term of electronic degrees of freedom    ! 01/10/2013
-      Pot_el =  half*matrix_product_trace(matPot(1) ,matPot(1) )
-      KE_el  =  half*matrix_product_trace(matXLvel(1),matXLvel(1))
-      if (myid.EQ.0) write (io_lun,'(a,2x,i8,2x,a,f25.15,2x,a,f25.15)') &
-                            "    *** MD iter",MDiter,"Tr[(dX/dt)^2]:",KE_el,"Tr[(Z-X)^2]", &
-                            Pot_el
+      !Pot_el =  half*matrix_product_trace(matPot(1) ,matPot(1) )
+      !KE_el  =  half*matrix_product_trace(matXLvel(1),matXLvel(1))
+      !if (myid.EQ.0) write (io_lun,'(a,2x,i8,2x,a,f25.15,2x,a,f25.15)') &
+      !                      "    *** MD iter",MDiter,"Tr[(dX/dt)^2]:",KE_el,"Tr[(Z-X)^2]", &
+      !                      Pot_el
 
       ! Free matPot
       do ispin = nspin, 1, -1
         call free_temp_matrix(matPot(ispin))
       enddo
 
-      if (myid.EQ.0 .AND. iprint_MD.GT.1) &
-        write (io_lun,*) "X-matrix propagated via velocity Verlet"
+      !if (myid.EQ.0 .AND. iprint_MD.GT.1) &
+      !  write (io_lun,*) "X-matrix propagated via velocity Verlet"
 
       return
     end subroutine vVerlet_matXL

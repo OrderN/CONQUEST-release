@@ -57,11 +57,11 @@ The accuracy of a calculation can be improved by adding polarisation
 functions and multiple radial functions for different angular momentum
 values, though systematic improvement is rather difficult to achieve
 (this is straightforward with a :ref:`blip function basis<basis_blips>`).
-The PAO utility included with CONQUEST generates basis sets with
+The :ref:`PAO utility<generating_paos>` included with CONQUEST generates basis sets with
 differing sizes and accuracies; full details of the performance of
 these basis sets can be found elsewhere :cite:`b-Bowler:2019fv`.
 
-* minimal (single zeta)
+* minimal (single zeta, SZ)
 * small   (single zeta and polarisation, SZP)
 * medium  (double zeta, single polarisation, DZP)
 * large   (triple zeta, double polarisation, TZDP)

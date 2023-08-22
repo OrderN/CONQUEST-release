@@ -183,7 +183,7 @@ contains
     use numbers
     use GenComms, ONLY: gcopy,inode,ionode
     use global_module, ONLY: ni_in_cell,x_atom_cell,y_atom_cell,z_atom_cell, &
-                             atom_coord
+                             atom_coord, min_layer
     use dimens, ONLY: r_super_x,r_super_y,r_super_z
     ! DB
     use input_module, ONLY: io_assign,io_close
@@ -206,8 +206,8 @@ contains
     integer :: lun,stat
     character(20) :: file_name
 
-    if (inode.EQ.ionode .AND. Iprint_MD.GT.2) &
-      write (io_lun,*) "Entering allatom2part."
+    if (inode.EQ.ionode .AND. Iprint_MD + min_layer > 3) &
+      write (io_lun,fmt='(10x,a)') "Entering allatom2part."
 
     !! ---------------- DEBUG ------------------ !!
     if (flag_MDdebug .AND. inode.EQ.ionode) then

@@ -178,6 +178,7 @@ contains
     if(allocated(pseudo)) then
        if(iprint_pseudo>2.AND.inode==ionode) write(io_lun,fmt='(10x," setup_pseudo_info is skipped because it is already called")')
     else
+       if(iprint_pseudo>1.AND.inode==ionode) write(io_lun,fmt='(/10x,a/)') "Reading ion files"
        call start_timer(tmr_std_allocation)
        allocate(pseudo(n_species),STAT=stat)
        if(stat /= 0) call cq_abort ('allocating pseudo in setup_pseudo_info',stat)
@@ -279,8 +280,8 @@ contains
     !call gcopy(flag_pcc_global)
     !call gcopy(gap_threshold)
     !call gcopy(maxnsf)
-    if (iprint_pseudo>0.AND.inode==ionode .AND.flag_pcc_global) &
-         write (io_lun,fmt='(10x,a)') "P.C.C. is taken into account."
+    !if (iprint_pseudo>0.AND.inode==ionode .AND.flag_pcc_global) &
+    !     write (io_lun,fmt='(10x,a)') "P.C.C. is taken into account."
     return
   end subroutine setup_pseudo_info
   !!***
@@ -507,9 +508,12 @@ contains
   !!    Changed yp1 and ypn to use first derivative (simple FD) instead of zero
   !!   2018/03/08 09:54 dave
   !!    Added consistency check between cutoff and step size/number of points
+  !!   2022/08/04 11:48 dave
+  !!    Added optional arguments to allow setting of derivatives at j=1 and j=n
+  !!    (initially for PCC to allow dy/dr=0 at r=0)
   !!  SOURCE
   !!
-  subroutine radial_read_ascii(op,lun)
+  subroutine radial_read_ascii(op,lun,dy1,dyn)
 
     use numbers, ONLY: BIG, zero, RD_ERR
     use splines, ONLY: spline
@@ -521,6 +525,7 @@ contains
     ! Passed variables
     type(rad_func),intent(out) :: op
     integer,intent(in)         :: lun
+    real(double), optional :: dy1, dyn ! Allow user to specify gradients at start/end of table
 
     ! Local variables
     character(len=80) :: sub_name = "radial_read_ascii"
@@ -553,12 +558,16 @@ contains
     do j=3,npts
        read(lun,*) dummy, op%f(j)
     enddo
-    !ori call rad_setup_d2(op)
-    ! conquest version 
-    !  yp1= BIG * 1.1
-    !  ypn= BIG * 1.1
-    yp1= (op%f(2)-op%f(1))/delta!zero
-    ypn= (op%f(npts)-op%f(npts-1))/delta!zero
+    if(present(dy1)) then
+       yp1 = dy1
+    else
+       yp1= (op%f(2)-op%f(1))/delta
+    endif
+    if(present(dyn)) then
+       ypn = dyn
+    else
+       ypn= (op%f(npts)-op%f(npts-1))/delta
+    endif
     call spline(op%n, op%delta, op%f, yp1, ypn, op%d2)
     return
   end subroutine radial_read_ascii
@@ -630,6 +639,8 @@ contains
   !!    Bug fix: set semicore when numprocs>1
   !!   2020/01/22 16:59 dave
   !!    Bug fix: change header to read Hamann code version line if present
+  !!   2022/08/04 11:50 dave
+  !!    Add zero derivatives to PCC read routine to set physically
   !!  SOURCE
   !!
   subroutine read_ion_ascii_tmp(ps_info,pao_info)
@@ -845,7 +856,7 @@ contains
        if(ps_info%flag_pcc) then
           read(lun,*)
           if(iprint_pseudo>3.AND.inode==ionode) write(io_lun,fmt='(10x,"Reading pcc ")')
-          call radial_read_ascii(ps_info%chpcc,lun)
+          call radial_read_ascii(ps_info%chpcc,lun,zero,zero)
        end if
        !ps_info%flag_pcc = .true.
 

@@ -9,6 +9,7 @@ LINKFLAGS= -L/usr/local/lib
 ARFLAGS=
 
 # Compilation flags
+# NB for gcc10 you need to add -fallow-argument-mismatch
 COMPFLAGS= -O3 $(XC_COMPFLAGS)
 COMPFLAGS_F77= $(COMPFLAGS)
 
@@ -30,10 +31,9 @@ LIBS= $(FFT_LIB) $(XC_LIB) -lscalapack $(BLAS)
 #XC_COMPFLAGS =
 
 # LibXC compatibility
-# Choose LibXC version: v2, v3 or v4
-#XC_LIBRARY = LibXC_v2
-#XC_LIBRARY = LibXC_v3
-XC_LIBRARY = LibXC_v4
+# Choose LibXC version: v4 (deprecated) or v5/6 (v5 and v6 have the same interface)
+# XC_LIBRARY = LibXC_v4
+XC_LIBRARY = LibXC_v5
 XC_LIB = -lxcf90 -lxc
 XC_COMPFLAGS = -I/usr/local/include
 

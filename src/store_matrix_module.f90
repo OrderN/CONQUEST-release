@@ -134,10 +134,11 @@ contains
     ! Module usage
     use global_module, ONLY: ni_in_cell, nspin, nspin_SF, flag_diagonalisation, flag_Multisite, &
          flag_XLBOMD, flag_propagateX, flag_dissipation, integratorXL, flag_SFcoeffReuse, &
-         flag_DumpMatrices
+         flag_DumpMatrices, flag_basis_set, PAOs
     use matrix_data, ONLY: Lrange, Hrange, SFcoeff_range, SFcoeffTr_range, HTr_range, Srange, LSrange
     use mult_module, ONLY: matL,L_trans, matK, matSFcoeff, matS
-    use io_module, ONLY: append_coords, write_atomic_positions, pdb_template
+    use io_module, ONLY: append_coords, pdb_template, write_atomic_positions
+    !use io_module, ONLY: write_atomic_positions_ase
     use mult_module, only: matXL, matXLvel
     use GenComms, only: cq_warn
 
@@ -163,7 +164,8 @@ contains
     index_local = 0; if(present(index)) index_local=index
     MDstep_local = 0; if(present(MDstep)) MDstep_local=MDstep
 
-    if(flag_SFcoeffReuse .or. flag_Multisite) then
+    ! Blip coefficients are saved separately
+    if(flag_basis_set==PAOs .and. (flag_SFcoeffReuse .or. flag_Multisite)) then
        call dump_matrix_update('SFcoeff',matSFcoeff,SFcoeff_range,&
             index=index_local,nspin=nspin_SF,iprint_mode=mat,MDstep=MDstep_local)
     endif
@@ -210,6 +212,7 @@ contains
     end if
 
     append_coords_bkup = append_coords; append_coords = .false.
+    !call write_atomic_positions_ase()
     call write_atomic_positions('coord_next.dat',trim(pdb_template))
     append_coords = append_coords_bkup
 
@@ -592,7 +595,8 @@ contains
           do ni = 1, bundle%nm_nodgroup(np)
              atom_num=bundle%nm_nodbeg(np)+ni-1
              iprim = iprim + 1
-             if(atom_num /= iprim) write(io_lun,*) 'Warning!! in set_matrix_store : iprim & atom_num = ', &
+             if(atom_num /= iprim) &
+                  write(io_lun,fmt='(8x,a,2i6)') 'Warning!! in set_matrix_store : iprim & atom_num = ', &
                   iprim,atom_num
 
              do neigh = 1, mat(np,range)%n_nab(ni)
@@ -696,7 +700,8 @@ contains
   subroutine dump_InfoMatGlobal(index,velocity,MDstep)
 
     ! Module usage
-    use global_module, ONLY: ni_in_cell,numprocs,rcellx,rcelly,rcellz,id_glob, io_lun, iprint_MD
+    use global_module, ONLY: ni_in_cell,numprocs,rcellx,rcelly,rcellz,id_glob, &
+         min_layer, io_lun, iprint_MD
     use GenComms, ONLY: cq_abort, inode, ionode, my_barrier, myid
     use group_module, ONLY: parts
     use io_module, ONLY: get_file_name, get_file_name_2rank
@@ -743,7 +748,7 @@ contains
     if(inode == ionode) then
        call io_assign(lun)
        call get_file_name_2rank('InfoGlobal',filename,index_local)
-       if(iprint_MD>2) write(io_lun,*) ' filename = ',filename
+       if(iprint_MD + min_layer > 4) write(io_lun,fmt='(8x,a)') ' filename = '//filename
        open (lun,file=filename,iostat=istat)
        rewind lun
        if (istat.GT.0) call cq_abort('Fail in opening InfoGlobal.dat .')
@@ -993,7 +998,7 @@ contains
        enddo !ig=1, InfoGlob%ni_in_cell
 
        if(flag_velocity_local) then
-          if(iprint_MD>2) write(io_lun,*) 'Reading velocity from ',filename
+          if(iprint_MD>2) write(io_lun,fmt='(8x,a)') 'Reading velocity from '//filename
           read(lun,*)
           do ig=1, InfoGlob%ni_in_cell
              read(lun,101) iglob, InfoGlob%atom_veloc(1:3, ig)
@@ -1328,7 +1333,7 @@ contains
           else
              ! Case 2 : Text Format   old version  -----------------------
              open (lun,file=file_name,status='old',iostat=stat)
-             if (myid==0.AND.iprint_MD > 2) write(*,*) " Trying to open the ASCII file : ",file_name
+             if (myid==0.AND.iprint_MD > 4) write(*,*) " Trying to open the ASCII file : ",file_name
              if (stat/=0) call cq_abort('Fail in opening ASCII Lmatrix file.')
              ! Get dimension, allocate arrays and store necessary data.
              read (lun,*,iostat=stat) proc_id, InfoMat(ifile)%natom_i
@@ -1531,7 +1536,7 @@ contains
     maxiters = maxiter_Dissipation
     if(maxiters < 4) maxiters = 3
     if(maxiters > 9) then
-       if(inode == ionode) write(io_lun,*)  &
+       if(inode == ionode) write(io_lun,fmt='(8x,a,i6)')  &
             &'WARNING: maxiters_Dissipation should be smaller than 10 : ', maxiter_Dissipation
        maxiters = 9
     endif

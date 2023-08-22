@@ -911,9 +911,9 @@ contains
 
     ! +++ temporary printing
     if(inode == ionode.AND.iprint_gen>=6) then
-       write(unit=io_lun,fmt='(/"+++ structure factors:"/)')
+       write(unit=io_lun,fmt='(/6x,"+++ structure factors:"/)')
        do n = 1, number_of_g_vectors
-          write(unit=io_lun,fmt='(i10,2x,3f12.6,2x,2e15.6)') n, &
+          write(unit=io_lun,fmt='(6x,i10,2x,3f12.6,2x,2e15.6)') n, &
                &ewald_g_vector_x(n), ewald_g_vector_y(n), ewald_g_vector_z(n), &
                &struc_fac_r(n), struc_fac_i(n)
        enddo
@@ -1206,7 +1206,7 @@ contains
           enddo
        endif
        if(inode == ionode.AND.iprint_gen>=4) &
-            write(unit=io_lun,fmt='(/" >>> ewald: node:",i3:" real_sum_intra for partition no:",i3,&
+            write(unit=io_lun,fmt='(/6x," >>> ewald: node:",i3:" real_sum_intra for partition no:",i3,&
             &" is:",e20.12)') inode, ip, ewald_real_sum_ip
        ewald_real_sum_intra = ewald_real_sum_intra + ewald_real_sum_ip
     enddo
@@ -1214,14 +1214,14 @@ contains
     call gsum(ewald_real_sum_intra)
     if (flag_stress) call gsum(ewald_intra_stress,3,3)
     if(inode == ionode.AND.iprint_gen>=6) then
-       write(unit=io_lun,fmt='(/" Ewald real-space self info for node:",i3/)') inode 
-       write(unit=io_lun,fmt='(/" self-partition part of real_space Ewald:",e20.12)') ewald_real_sum_intra
-       write(unit=io_lun,fmt='(/" self-partition part of real-space Ewald forces:"/)')
+       write(unit=io_lun,fmt='(/6x," Ewald real-space self info for node:",i3/)') inode 
+       write(unit=io_lun,fmt='(/6x," self-partition part of real_space Ewald:",e20.12)') ewald_real_sum_intra
+       write(unit=io_lun,fmt='(/6x," self-partition part of real-space Ewald forces:"/)')
        do ip = 1, bundle%groups_on_node
           if(bundle%nm_nodgroup(ip) > 0) then
              do ni = 1, bundle%nm_nodgroup(ip)
                 i = bundle%ig_prim(bundle%nm_nodbeg(ip)+ni-1)
-                write(unit=io_lun,fmt='(2x,3i5,2x,3e20.12)') ip, ni, i, &
+                write(unit=io_lun,fmt='(8x,3i5,2x,3e20.12)') ip, ni, i, &
                      &ewald_intra_force_x(bundle%nm_nodbeg(ip)+ni-1), ewald_intra_force_y(bundle%nm_nodbeg(ip)+ni-1), &
                      &ewald_intra_force_z(bundle%nm_nodbeg(ip)+ni-1)
              enddo
@@ -1313,7 +1313,7 @@ contains
           enddo
        endif
        if(inode == ionode.AND.iprint_gen>=4) &
-            write(unit=io_lun,fmt='(/" >>> ewald: node:",i3:" real_sum_inter for partition no:",i3,&
+            write(unit=io_lun,fmt='(/6x," >>> ewald: node:",i3:" real_sum_inter for partition no:",i3,&
             &" is:",e20.12)') inode, ip, ewald_real_sum_ip
        ewald_real_sum_inter = ewald_real_sum_inter + ewald_real_sum_ip
     enddo
@@ -1328,14 +1328,14 @@ contains
     call gsum(ewald_real_sum_inter)
     if (flag_stress) call gsum(ewald_inter_stress,3,3)
     if(inode == ionode.AND.iprint_gen>=6) then
-       write(unit=io_lun,fmt='(/" Ewald real-space other info for node:",i3/)') inode 
-       write(unit=io_lun,fmt='(/" other-partition part of real_space Ewald:",e20.12)') ewald_real_sum_inter
-       write(unit=io_lun,fmt='(/" other-partition part of real-space Ewald forces:"/)')
+       write(unit=io_lun,fmt='(/6x," Ewald real-space other info for node:",i3/)') inode 
+       write(unit=io_lun,fmt='(/6x," other-partition part of real_space Ewald:",e20.12)') ewald_real_sum_inter
+       write(unit=io_lun,fmt='(/6x," other-partition part of real-space Ewald forces:"/)')
        do ip = 1, bundle%groups_on_node
           if(bundle%nm_nodgroup(ip) > 0) then
              do ni = 1, bundle%nm_nodgroup(ip)
                 i = bundle%ig_prim(bundle%nm_nodbeg(ip)+ni-1)
-                write(unit=io_lun,fmt='(2x,3i5,2x,3e20.12)') ip, ni, i, &
+                write(unit=io_lun,fmt='(8x,3i5,2x,3e20.12)') ip, ni, i, &
                      &ewald_inter_force_x(bundle%nm_nodbeg(ip)+ni-1), ewald_inter_force_y(bundle%nm_nodbeg(ip)+ni-1), &
                      &ewald_inter_force_z(bundle%nm_nodbeg(ip)+ni-1)
              enddo
@@ -1543,7 +1543,7 @@ contains
     use global_module, ONLY : id_glob, iprint_gen, species_glob, ni_in_cell, &
                               area_general, IPRINT_TIME_THRES3, &
                               flag_full_stress, flag_stress, &
-                              flag_atomic_stress, atomic_stress
+                              flag_atomic_stress, atomic_stress, min_layer
     use group_module, ONLY : parts
     use maxima_module, ONLY : maxatomsproc
     use numbers
@@ -1553,6 +1553,8 @@ contains
     use timer_module, ONLY: cq_timer,start_timer,stop_print_timer,WITH_LEVEL
     use energy, ONLY: local_ps_energy, screened_ion_interaction_energy
     use atomic_density, only: atomic_density_table ! for Neutral atom potential
+    use io_module, only: return_prefix
+    use units, only: energy_units, en_units
     
     implicit none
 
@@ -1563,12 +1565,15 @@ contains
     real(double) :: screenedE_sum_self
     real(double) :: overlap, dummy
     real(double) :: goverlap_x, goverlap_y, goverlap_z
+    character(len=20) :: subname = "Screened ion int: "
+    character(len=120) :: prefix
 
-    if(iprint_gen>4) write(io_lun,fmt='(2x,"Screened ion: init")')
+    prefix = return_prefix(subname, min_layer)
+    if(iprint_gen>4) write(io_lun,fmt='(4x,a)') trim(prefix)//" Starting"
     screened_ion_force   = zero
     screened_ion_stress  = zero
     screened_ion_interaction_energy = zero
-    if(iprint_gen>4) write(io_lun,fmt='(2x,"Screened ion: interactions")')
+    if(iprint_gen>4) write(io_lun,fmt='(4x,a)') trim(prefix)//" Interactions"
     ! --- loop over primary-set partitions
     do ip = 1, bundle%groups_on_node
        if(bundle%nm_nodgroup(ip) > 0) then
@@ -1653,9 +1658,9 @@ contains
     call gsum(screened_ion_interaction_energy)
     call gsum(screened_ion_force,3,ni_in_cell)
     if (flag_stress) call gsum(screened_ion_stress,3,3)
-    if(inode == ionode.AND.iprint_gen>1) &
-         write(unit=io_lun,fmt='(/8x," ++++++ Screened ion interaction energy:",e20.12)') &
-         &screened_ion_interaction_energy
+    if(inode == ionode.AND.iprint_gen + min_layer > 1) &
+         write(unit=io_lun,fmt='(/4x,a,f20.12,x,a2/)') &
+         trim(prefix)//" energy: ", screened_ion_interaction_energy,en_units(energy_units)
 
   end subroutine screened_ion_interaction
 !!***

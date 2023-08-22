@@ -394,7 +394,7 @@ contains
     !call my_barrier
     if(iprint_mat>3.AND.myid==0) then
        t1 = mtime()
-       write(io_lun,*) 'mult time: ',t1-t0
+       write(io_lun,fmt='(10x,a,f16.6)') 'mult time: ',t1-t0
     end if
 
     call stop_timer(tmr_std_matmult)

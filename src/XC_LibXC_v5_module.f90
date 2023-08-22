@@ -126,9 +126,9 @@ contains
        call xc_f90_version(vmajor, vminor, vmicro)
        if(inode==ionode.AND.iprint_ops>0) then
           if(vmajor>2) then
-             write(io_lun,'("LibXC version: ",I1,".",I1,".",I2)') vmajor, vminor, vmicro
+             write(io_lun,'(4x,"LibXC version: ",I2,".",I2,".",I2)') vmajor, vminor, vmicro
           else
-             write(io_lun,'("LibXC version: ",I1,".",I1)') vmajor, vminor
+             write(io_lun,'(4x,"LibXC version: ",I2,".",I2)') vmajor, vminor
           end if
        end if
        ! Identify the functional
@@ -203,24 +203,33 @@ contains
 
              if(iprint_ops>2) then
                 if(vmajor>2) then
-                   write(io_lun,'("The functional ", a, " is ", a, ", it belongs to the ", a, &
+                   write(io_lun,'(4x,"The functional ", a, " is ", a, ", it belongs to the ", a, &
                    &     " family and is defined in the reference(s):")') &
                         trim(name), trim(kind), trim(family)
                    j = 0
                    ref = xc_f90_func_reference_get_ref(xc_f90_func_info_get_references(xc_info(i),j))
                    do while(j >= 0)
-                      write(io_lun, '(a,i1,2a)') '[', j, '] ', trim(ref)
+                      write(io_lun, '(4x,a,i1,2a)') '[', j, '] ', trim(ref)
                       ref = xc_f90_func_reference_get_ref(xc_f90_func_info_get_references(xc_info(i),j))
                    end do
                 else
-                   write(io_lun,'("The functional ", a, " is ", a, ", and it belongs to the ", a, &
+                   write(io_lun,'(4x,"The functional ", a, " is ", a, ", and it belongs to the ", a, &
                    &     " family")') &
                         trim(name), trim(kind), trim(family)
                 end if
              else if(iprint_ops>0) then
-                write(io_lun,'(2x,"Using the ",a," functional ",a)') trim(family),trim(name)
+                write(io_lun,'(4x,"Using the ",a," functional ",a)') trim(family),trim(name)
              else
-                write(io_lun,fmt='(2x,"Using functional ",a)') trim(name)
+                select case(xc_f90_func_info_get_kind(xc_info(i)))
+                case (XC_EXCHANGE)
+                   write(io_lun,fmt='(/4x,"Using X functional ",a)') trim(name)
+                case (XC_CORRELATION)
+                   write(io_lun,fmt='(4x,"Using C functional ",a/)') trim(name)
+                case (XC_EXCHANGE_CORRELATION)
+                   write(io_lun,fmt='(/4x,"Using XC functional ",a/)') trim(name)
+                case default
+                   write(io_lun,fmt='(/4x,"Using functional ",a/)') trim(name)
+                end select
              end if
           end if
        end do
@@ -265,7 +274,7 @@ contains
           functional_description = 'LSDA PW92'
           if(flag_dft_d2) call cq_abort("DFT-D2 only compatible with PBE and rPBE")
        end select
-       if(inode==ionode) write(io_lun,'(/10x, "The functional used will be ", a15)') functional_description
+       if(inode==ionode) write(io_lun,'(/4x, "The functional used will be ", a15/)') functional_description
        ! This is a temporary, Conquest-specific test - we will
        ! need to keep an eye on this and potentially introduce
        ! tests against functional name
@@ -279,6 +288,46 @@ contains
   end subroutine init_xc
   !!***
   
+  !!****f* XC_module/write_xc_refs *
+  !!
+  !!  NAME
+  !!   write_xc_refs
+  !!  USAGE
+  !!
+  !!  PURPOSE
+  !!   Write XC references
+  !!  INPUTS
+  !!
+  !!  USES
+  !!
+  !!  AUTHOR
+  !!   D. R. Bowler
+  !!  CREATION DATE
+  !!   2020/05/26
+  !!  MODIFICATION HISTORY
+  !!
+  !!  SOURCE
+  !!
+  subroutine write_xc_refs
+
+    implicit none
+
+    integer :: i, j
+    character(len=120) :: ref
+
+    write(io_lun,fmt='(4x,"XC references from LibXC:")')
+    do j=1,n_xc_terms
+       i = 0
+       ref = xc_f90_func_reference_get_ref(xc_f90_func_info_get_references(xc_info(j),i))
+       do while(i >= 0)
+          write(io_lun, '(6x,a)') trim(ref)
+          ref = xc_f90_func_reference_get_ref(xc_f90_func_info_get_references(xc_info(j),i))
+       end do
+    end do
+    return
+  end subroutine write_xc_refs
+  !!***
+
   !!****f* XC/get_xc_potential *
   !!
   !!  NAME
@@ -321,6 +370,7 @@ contains
     ! Local variables
     real(double) :: loc_x_energy, exx_tmp
 
+    XC_GGA_stress = zero
     if(flag_use_libxc) then
        call get_libxc_potential(density=density, size=size,&
             xc_potential    =xc_potential,    &

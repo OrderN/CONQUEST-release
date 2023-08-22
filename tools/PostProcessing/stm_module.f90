@@ -21,6 +21,7 @@ contains
     use io_module, ONLY: get_file_name
     use output, ONLY: write_cube
     use read, ONLY: read_psi_coeffs, read_eigenvalues
+    use angular_coeff_routines, ONLY: set_prefac_real, set_fact, set_prefac
 
     implicit none
 
@@ -36,6 +37,9 @@ contains
     character(len=50) :: ci, filename
     logical :: use_band
 
+    call set_fact(8)
+    call set_prefac(9)
+    call set_prefac_real(9)
     !dg = pi/sqrt(two*GridCutoff) ! Equivalent grid spacing
     dg(1) = grid_x!/BohrToAng
     dg(2) = grid_y!/BohrToAng
@@ -47,7 +51,7 @@ contains
     !   call read_eigenvalues(zero, stm_bias)
     !end if
     ! Read coefficients
-    call read_psi_coeffs
+    call read_psi_coeffs("Process")
     ! Allocate space for variables
     allocate(delta_of_S(nptsx,nptsy,nptsz), g_k(nptsx,nptsy,nptsz))
     delta_of_S = zero
@@ -317,13 +321,14 @@ contains
 
     use datatypes
     use numbers
-    use local, ONLY: nkp, wtk, efermi, current, nptsx, nptsy, nptsz, eigenvalues, stm_bias, &
+    use local, ONLY: nkp, wtk, efermi, current, nptsx, nptsy, nptsz, eigenvalues, stm_bias, fermi_offset, &
          n_bands_total, root_file, grid_z, band_full_to_active
     use output, ONLY: write_dx_density, write_cube, write_dx_coords
     use global_module, only : nspin
     use read, ONLY: read_eigenvalues, read_psi_coeffs
     use process, ONLY: pao_to_grid
     use units, ONLY: HaToeV
+    use angular_coeff_routines, ONLY: set_prefac_real, set_fact, set_prefac
 
     implicit none
 
@@ -337,19 +342,26 @@ contains
     ! Read eigenvalues
     call read_eigenvalues
     ! Read eigenvector coefficients
-    call read_psi_coeffs
+    call read_psi_coeffs("Process")
+    call set_fact(8)
+    call set_prefac(9)
+    call set_prefac_real(9)
     allocate(current(nptsx,nptsy,nptsz))
     allocate(psi(nptsx,nptsy,nptsz))
+
+    if (fermi_offset.ne.zero) write(*,fmt='(2X,"Fermi-offset is ",f10.3," eV")') fermi_offset
+    fermi_offset = fermi_offset/HaToeV   ! default of fermi_offset is zero
     if(stm_bias<0) then
-       Emin = stm_bias/HaToeV + Efermi
-       Emax = Efermi
+       Emin = stm_bias/HaToeV + Efermi + fermi_offset
+       Emax = Efermi + fermi_offset
     else
-       Emin = Efermi
-       Emax = stm_bias/HaToeV + Efermi
+       Emin = Efermi + fermi_offset
+       Emax = stm_bias/HaToeV + Efermi + fermi_offset
     end if
     if(nspin==1) then
-       write(*,fmt='(2x,"Including bands between ",f7.3," and ",f7.3," eV")') Emin(1)*HaToeV, Emax(1)*HaToeV
+       write(*,fmt='(2x,"Including bands between ",f10.3," and ",f10.3," eV")') Emin(1)*HaToeV, Emax(1)*HaToeV
     end if
+
     current = zero
     do ispin=1,nspin
        do band=1,n_bands_total

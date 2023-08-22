@@ -131,6 +131,8 @@ contains
   !!    for comparison with dE from structural optimisation
   !!   2021/10/13 08:58 dave
   !!    Add call to new_SC_potl when doing MSSF/LFD without optimisation
+  !!   2022/12/13 16:46 dave and tsuyoshi
+  !!    Move output of wavefunctions and potential to be after final energy and force call
   !!  SOURCE
   !!
   subroutine get_E_and_F(fixed_potential, vary_mu, total_energy, &
@@ -141,17 +143,18 @@ contains
     use DMMin,             only: FindMinDM, dE_DMM
     use SelfCon,           only: new_SC_potl, atomch_output,           &
                                  get_atomic_charge, dE_SCF
-    use global_module,     only: flag_vary_basis,                      &
+    use global_module,     only: flag_vary_basis, restart_DM,          &
                                  flag_self_consistent, flag_basis_set, &
                                  blips, PAOs, IPRINT_TIME_THRES1,      &
                                  runtype, flag_vdWDFT, io_lun,         &
                                  flag_DeltaSCF, flag_excite, runtype,  &
                                  flag_LmatrixReuse,McWFreq,            &
-                                 flag_multisite,                       &
-                                 io_lun, flag_out_wf, wf_self_con, flag_write_DOS, &
-                                 flag_diagonalisation, nspin, flag_LFD
+                                 flag_multisite, iprint_minE,          &
+                                 io_lun, flag_out_wf, wf_self_con, flag_write_projected_DOS, &
+                                 flag_diagonalisation, nspin, flag_LFD, min_layer, &
+                                 flag_DM_converged, write_ase, flag_calc_pol
     use energy,            only: get_energy, xc_energy, final_energy
-    use GenComms,          only: cq_abort, inode, ionode
+    use GenComms,          only: cq_abort, inode, ionode, cq_warn
     use blip_minimisation, only: vary_support, dE_blip
     use pao_minimisation,  only: vary_pao, pulay_min_pao, LFD_SCF, dE_PAO
     use timer_module
@@ -160,6 +163,11 @@ contains
     use density_module,    only: density
     use multisiteSF_module,only: flag_LFD_nonSCF, flag_mix_LFD_SCF
     use units
+    use io_module,         only: return_prefix
+    use DiagModule,        only: nkp
+    use H_matrix_module,   only: flag_write_locps, locps_output, get_H_matrix
+    use maxima_module,     only: maxngrid
+    use polarisation,      only: get_polarisation
 
     implicit none
 
@@ -175,10 +183,14 @@ contains
     ! Local variables
     logical           :: reset_L
     real(double)      :: vdW_energy_correction, vdW_xc_energy
+    real(double), dimension(nspin) :: electrons
     type(cq_timer)    :: tmr_l_energy, tmr_l_force, tmr_vdW
     type(cq_timer)    :: backtrace_timer
     integer           :: backtrace_level
-    
+    character(len=12) :: subname = "get_E_and_F: "
+    character(len=120) :: prefix
+
+    prefix = return_prefix(subname, min_layer)
 !****lat<$
     if (       present(level) ) backtrace_level = level+1
     if ( .not. present(level) ) backtrace_level = -10
@@ -187,34 +199,38 @@ contains
 !****lat>$
 
     call start_timer(tmr_std_eminimisation)
-    ! reset_L = .true.  ! changed by TM, Aug 2008
-    !   if (leqi(runtype,'static')) then
-    !    reset_L = .false.
-    !   else
-    !    reset_L = .true.   ! temporary for atom movements
-    !   end if
-
-    ! Terrible coding.. Should be modified later. [2013/08/20 michi]
+    ! In general, we want to reuse L/K
     reset_L = .false.
+    ! When moving atoms
     if (.NOT. leqi(runtype,'static')) then
-      !old if (.NOT. flag_MDold .AND. flag_LmatrixReuse) then
-      if (flag_LmatrixReuse) then
-        reset_L = .false.
-        if (McWFreq.NE.0) then
-          if (present(iter)) then
-            if (mod(iter,McWFreq).EQ.0) then
-              if (inode.EQ.ionode) write (io_lun,*) &
-                   "Go back to McWeeny! Iteration:", iter
-              reset_L = .true.
-            endif
+       if (flag_LmatrixReuse) then
+          if(present(iter).and.McWFreq>0) then
+             if (mod(iter,McWFreq).EQ.0) then
+                if (inode.EQ.ionode) write (io_lun,fmt='(4x,a,i4)') &
+                     trim(prefix)//" go back to McWeeny! Iteration:", iter
+                reset_L = .true.
+             endif
           endif
-        endif
-      ! Using an old-fashioned updates
-      else
-        reset_L = .true.
-      endif
+       else
+          reset_L = .true.
+       endif
+       ! If this is iteration zero and we're not restarting
+       if(present(iter)) then
+          if(iter==0 .and. (.not. restart_DM)) then
+             reset_L = .true.
+          end if
+       end if
+    else if(.NOT.restart_DM) then 
+       reset_L = .true.
     endif
-
+    ! If General.LoadDM T is set, do not reset_L but only the first time
+    if(restart_DM) then
+       reset_L = .false.
+       restart_DM = .false.
+    end if
+    ! Now check
+    if(reset_L .and. flag_LmatrixReuse .and. flag_DM_converged) reset_L = .false.
+    if((.not.reset_L) .and. (.not.flag_DM_converged) .and. (.not.restart_DM)) reset_L = .true.
     dE_DMM = zero
     dE_SCF = zero
     dE_PAO = zero
@@ -223,9 +239,6 @@ contains
     call start_timer(tmr_l_energy, WITH_LEVEL)
     ! Now choose what we vary
     if (flag_Multisite .and. (.NOT.flag_LFD_nonSCF)) then ! Vary everything, PAO-based multi-site SFs
-       ! minimise by repeating LFD with updated SCF density if flag set
-       if(flag_LFD .and. (.NOT.flag_mix_LFD_SCF)) call LFD_SCF(fixed_potential, vary_mu, &
-            n_L_iterations, L_tolerance, sc_tolerance, expected_reduction, total_energy, density)
        ! Numerical optimisation subsequently 
        if (flag_vary_basis) then
           if (UsePulay) then
@@ -239,6 +252,11 @@ contains
                            sc_tolerance, energy_tolerance,        &
                            total_energy, expected_reduction)
           end if
+          dE_elec_opt = dE_PAO
+       ! minimise by repeating LFD with updated SCF density if flag set
+       else if(flag_LFD .and. (.NOT.flag_mix_LFD_SCF)) then
+          call LFD_SCF(fixed_potential, vary_mu, &
+               n_L_iterations, L_tolerance, sc_tolerance, expected_reduction, total_energy, density)
           dE_elec_opt = dE_PAO
        else ! Or SCF if necessary
           call new_SC_potl(.false., sc_tolerance, reset_L,           &
@@ -254,9 +272,8 @@ contains
                             total_energy, expected_reduction)
           dE_elec_opt = dE_blip
        else if (flag_basis_set == PAOs) then
-          if (flag_multisite .and. flag_LFD_NonSCF) then
-             if (inode==ionode) write(io_lun,'(/3x,A/)') &
-                'WARNING: Numerical PAO minimisation will be performed without doing LFD_SCF!'   
+          if (flag_multisite .and. flag_LFD_nonSCF) then
+             call cq_warn(subname,"PAO optimisation will be performed without LFD_SCF")
              !2017.Dec.28 TM: We need Selfconsistent Hamiltonian if this routine is called from control
              call new_SC_potl(.false., sc_tolerance, reset_L,             &
                               fixed_potential, vary_mu, n_L_iterations, &
@@ -279,22 +296,20 @@ contains
           call cq_abort("get_E_and_F: basis set undefined: ", &
                         flag_basis_set)
        end if
-    else if (flag_self_consistent) then ! Vary only DM and charge density
+       ! Removing these lines as they've already been done in initial_H
+       ! DRB 2020/04/21
+       ! Restoring lines (but new_SC_potl deals with Non-SCF)DRB 2020/05/22
+    else 
        call new_SC_potl(.false., sc_tolerance, reset_L,           &
                         fixed_potential, vary_mu, n_L_iterations, &
                         L_tolerance, total_energy, backtrace_level)
        dE_elec_opt = dE_SCF
-    else ! Ab initio TB: vary only DM
-       call FindMinDM(n_L_iterations, vary_mu, L_tolerance, &
-                      reset_L, .false., backtrace_level)
-       dE_elec_opt = dE_DMM
-       call get_energy(total_energy, level=backtrace_level)
     end if
     ! Once ground state is reached, if we are doing deltaSCF, perform excitation
     ! and solve for the new ground state (on excited Born-Oppenheimer surface)
     if(flag_DeltaSCF.and.(.not.flag_excite)) then
        flag_excite = .true.
-       if(inode==ionode.AND.iprint>2) write(io_lun,fmt='(2x,"Starting excitation loop")')
+       if(inode==ionode.AND.iprint_minE>2) write(io_lun,fmt='(8x,"Starting excitation loop")')
        if (flag_vary_basis) then ! Vary everything: DM, charge density, basis set
           if (flag_basis_set == blips) then
              call vary_support(n_support_iterations, fixed_potential, &
@@ -351,19 +366,15 @@ contains
     end if
 
 !****lat<$
-    call final_energy(backtrace_level)
+    call final_energy(nkp,backtrace_level)
 !****lat>$
-
-    ! output WFs or DOS
-    if (flag_self_consistent.AND.(flag_out_wf.OR.flag_write_DOS)) then
-       wf_self_con=.true.
-       call FindMinDM(n_L_iterations, vary_mu, L_tolerance,&
-            reset_L, .false.)
-       wf_self_con=.false.
-    end if
 
     call stop_print_timer(tmr_l_energy, "calculating ENERGY", &
                           IPRINT_TIME_THRES1)
+    ! For Bulk Polarisation
+    !
+    if (flag_calc_pol) call get_polarisation()
+    !
     if (atomch_output) call get_atomic_charge()
 
     if (find_forces) then
@@ -379,6 +390,21 @@ contains
                             IPRINT_TIME_THRES1)
     end if
 
+    ! output WFs or DOS
+    if (flag_out_wf.OR.flag_write_projected_DOS) then
+       write_ase = .false. ! Safe as we're about to finish
+       ! Dump wavefunction coefficients or DOS data (requires diagonalisation)
+       wf_self_con=.true.
+       call FindMinDM(n_L_iterations, vary_mu, L_tolerance,&
+            reset_L, .false.)
+       wf_self_con=.false.
+    else if (flag_self_consistent.AND.flag_write_locps) then
+       ! Dump potentials (requires H matrix build)
+       locps_output=.true.
+       call get_H_matrix(.false.,.true., electrons, density, maxngrid)
+       locps_output=.false.
+    end if
+
     !% NOTE: This call should be outside this subroutine [2013/08/20 michi]
     ! Writes out L-matrix at the PREVIOUS step
     !   --> Removed and moved to FindMinDM [2013/12/03 michi]
@@ -389,9 +415,9 @@ contains
 !****lat<$
     call stop_backtrace(t=backtrace_timer,who='get_E_and_F',echo=.true.)
 !****lat>$
-    if(inode==ionode) &
-         write(io_lun,fmt='(4x,"Change in energy during last step of electronic optimisation: ",e12.5)') &
-         dE_elec_opt
+    if(inode==ionode .and. iprint_minE + min_layer >0) &
+         write(io_lun,fmt='(4x,a,e12.5)') &
+         trim(prefix)//" Change in energy during last step of electronic optimisation: ", dE_elec_opt
     return
   end subroutine get_E_and_F
   !!***

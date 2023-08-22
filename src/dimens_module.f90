@@ -451,7 +451,7 @@ contains
 
     if(n_grid_x>0.AND.n_grid_y>0.AND.n_grid_z>0) then ! We dont need to find grids
        if(iprint_init>1.AND.inode==ionode) &
-            write(io_lun,fmt='(2x,"User specified grid dimensions: ",3i5)') n_grid_x,n_grid_y,n_grid_z
+            write(io_lun,fmt='(8x,"User specified grid dimensions: ",3i5)') n_grid_x,n_grid_y,n_grid_z
        call stop_backtrace(t=backtrace_timer,who='find_grid')
        return
     else

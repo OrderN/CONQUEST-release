@@ -59,7 +59,7 @@ contains
 
     call start_timer(tmr_std_basis)
     if((inode == ionode).and.(iprint_basis >= 2)) then
-       write(unit=io_lun,fmt='(//" make_blips_from_nlpfs: sbrt entered")')
+       write(unit=io_lun,fmt='(//6x," make_blips_from_nlpfs: sbrt entered")')
     end if
     a1g_norm = sqrt(one/(four*pi))
     t1u_norm = sqrt(three/(four*pi))
@@ -67,8 +67,8 @@ contains
     eg_a_norm = sqrt(fifteen/(sixteen*pi))
     eg_b_norm = sqrt(five/(sixteen*pi))
     ! number of species
-    if((inode == ionode).and.(iprint_basis >= 1)) then
-       write(unit=io_lun,fmt='(//" make_nlpfs_from_blips:&
+    if((inode == ionode).and.(iprint_basis >= 2)) then
+       write(unit=io_lun,fmt='(//6x," make_nlpfs_from_blips:&
             & no. of species:",i5)') n_species
     end if
     ! -------------------------------------------------------------

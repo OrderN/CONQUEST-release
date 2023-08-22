@@ -26,6 +26,7 @@ ENERGY_OBJS = H_matrix_module.o \
               functions_on_grid_module.o\
               cdft_data_module.o\
               cdft_module.o\
+              polarisation_module.o\
               XC_${XC_LIBRARY}_module.o\
               DFT_D2_module.o\
               vdWMesh_module.o\

@@ -118,6 +118,8 @@ contains
   !!    Renamed supportfns -> atomfns
   !!   2017/02/23 dave
   !!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
+  !!   2022/12/14 13:03 dave
+  !!    Change to save initial energy in total_energy_0 from new_SC_potl
   !!  SOURCE
   !!
   subroutine vary_support(n_support_iterations, fixed_potential, &
@@ -149,6 +151,7 @@ contains
     use primary_module,      only: bundle
     use memory_module,       only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use S_matrix_module,     only: get_S_matrix
+    use SelfCon,           only: new_SC_potl
 
     implicit none
 
@@ -165,7 +168,7 @@ contains
                     energy_in_tot, last_step, dN_dot_de, dN_dot_dN
     integer      :: length, n_iterations, n_tries, offset
     integer      :: k, i, j, n, spec, stat, spin
-    logical      :: notredone, reduced
+    logical      :: notredone, reduced, reset_L
     real(double), parameter :: gamma_max = 6.0_double !! TM 2007.03.29
     real(double), dimension(nspin)          :: electrons, energy_in
     real(double), dimension(:), allocatable :: search_direction, last_sd, Psd
@@ -216,6 +219,11 @@ contains
     call my_barrier()
     total_energy_last = total_energy_0
 
+    reset_L = .true.
+    call new_SC_potl(.false., con_tolerance, reset_L,             &
+         fixed_potential, vary_mu, n_L_iterations, &
+         tolerance, total_energy_last)
+    total_energy_0 = total_energy_last
     ! now obtain the gradient of the energy with respect to support
     ! functions. For diagonalisation, this is already stored
     if (inode == ionode .and. iprint_basis > 2) &
@@ -495,6 +503,8 @@ contains
   !!   - removed k0, it seemed not used and redundant
   !!   2017/02/23 dave
   !!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
+  !!   2022/12/14 13:03 dave
+  !!    Tweak to make initial k3 larger
   !!  SOURCE
   !!
   subroutine line_minimise_support(search_direction, lengthBlip,  &
@@ -573,7 +583,7 @@ contains
           ! DRB 2004/03/03
           tmp = vdot(lengthBlip, search_direction, 1, grad_coeff_array, 1)
           if (abs(dE) < RD_ERR) then
-             k3 = 0.008_double
+             k3 = 0.2_double ! A little conservative
              dE = tmp * k3
           else
              k3 = half * dE / tmp

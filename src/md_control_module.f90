@@ -49,6 +49,8 @@
 !!   2020/01/06 12:18 dave
 !!    Removed Berendsen thermostat due to unreliability (see articles on
 !!    flying ice-cube effect)
+!!   2022/09/29 16:46 dave
+!!    Moved subroutines from control and tidied output
 !!  SOURCE
 !!
 module md_control
@@ -72,27 +74,22 @@ module md_control
   ! Files
   character(20) :: md_position_file = 'md.position'
   character(20) :: md_check_file = "md.checkpoint"
-  character(20) :: md_thermo_file = "md.thermostat"
-  character(20) :: md_baro_file = "md.barostat"
-  character(20) :: md_trajectory_file = "trajectory.xsf"
-  character(20) :: md_frames_file = "md.frames"
-  character(20) :: md_stats_file = "md.stats"
-  character(20) :: md_heat_flux_file = "md.heatflux"
 
   ! Module variables
   character(20) :: md_thermo_type, md_baro_type
+  character(3) :: md_ensemble
   real(double)  :: md_tau_T, md_tau_P, target_pressure, md_bulkmod_est, &
                    md_box_mass, md_ndof_ions, md_omega_t, md_omega_p, &
                    md_tau_T_equil, md_tau_P_equil, md_p_drag, md_t_drag, &
                    md_equil_press
+  real(double) :: MDtimestep 
   integer       :: md_n_nhc, md_n_ys, md_n_mts, md_equil_steps
   logical       :: flag_write_xsf, md_cell_nhc, md_calc_xlmass, flag_nhc, &
                    flag_write_extxyz
-  logical       :: flag_extended_system = .false.
-  real(double), dimension(3,3), target      :: lattice_vec
   real(double), dimension(:), allocatable   :: md_nhc_mass, md_nhc_cell_mass
   real(double), dimension(:,:), allocatable, target :: ion_velocity
-  real(double), dimension(3), target        :: heat_flux
+  real(double), dimension(3,3), target      :: lattice_vec
+  logical       :: flag_extended_system = .false.
 
   !!****s* md_control/type_thermostat
   !!  NAME
@@ -274,6 +271,11 @@ contains
   !!  
   subroutine init_thermo(th, thermo_type, baro_type, dt, ndof, tau_T, ke_ions)
 
+    use global_module, ONLY: min_layer
+    use io_module, ONLY: return_prefix
+
+    implicit none
+    
     ! passed variables
     class(type_thermostat), intent(inout) :: th
     character(*), intent(in)              :: thermo_type, baro_type
@@ -285,8 +287,12 @@ contains
     real(double)                          :: dummy_rn
     integer                               :: i
 
-    if (inode==ionode .and. iprint_MD > 1) &
-      write(io_lun,'(2x,a)') 'Welcome to init_thermo'
+    character(len=13) :: subname = "init_thermo: "
+    character(len=120) :: prefix
+
+    prefix = return_prefix(subname, min_layer)
+    if (inode==ionode .and. iprint_MD + min_layer > 1) &
+      write(io_lun,'(4x,a)') trim(prefix)//" starting"
     th%T_int = two*ke_ions/fac_Kelvin2Hartree/md_ndof_ions
     th%T_ext = temp_ion
     th%dt = dt
@@ -337,13 +343,13 @@ contains
       call cq_abort("MD.ThermoType must be 'none', 'svr' or 'nhc'")
     end select
 
-    if (inode==ionode .and. iprint_MD > 1) then
-      write(io_lun,'(4x,"Thermostat type: ",a)') th%thermo_type
-      write(io_lun,'(4x,"Extended system: ",l1)') flag_extended_system
+    if (inode==ionode .and. iprint_MD + min_layer > 1) then
+      write(io_lun,'(4x,a)') trim(prefix)//" Thermostat type: "//th%thermo_type
+      write(io_lun,'(4x,a,l1)') trim(prefix)//" Extended system: ",flag_extended_system
       if (.not. leqi(thermo_type, 'none')) then
-        write(io_lun,'(4x,a,f10.2)') 'Target temperature        T_ext = ', &
+        write(io_lun,'(4x,a,f10.2)') trim(prefix)//"Target temperature        T_ext = ", &
                                      th%T_ext
-        write(io_lun,'(4x,a,f10.2)') 'Coupling time period      tau_T = ', &
+        write(io_lun,'(4x,a,f10.2)') trim(prefix)//"Coupling time period      tau_T = ", &
                                      th%tau_T
       end if
     end if
@@ -365,7 +371,8 @@ contains
   subroutine init_nhc(th, dt)
 
     use memory_module,    only: reg_alloc_mem, reg_dealloc_mem, type_dbl
-    use global_module,    only: area_moveatoms
+    use global_module,    only: area_moveatoms, min_layer
+    use io_module,      only: return_prefix
 
     ! passed variables
     class(type_thermostat), intent(inout) :: th
@@ -376,7 +383,10 @@ contains
     real(double)                          :: omega_thermo, omega_baro, &
                                              ndof_baro, tauT, tauP
     integer                               :: i
+    character(len=16) :: subname = "init_nhc: "
+    character(len=120) :: prefix
 
+    prefix = return_prefix(subname, min_layer)
     flag_extended_system = .true.
     flag_nhc = .true.
     th%n_nhc = md_n_nhc
@@ -453,17 +463,17 @@ contains
     ! Yoshida-Suzuki time steps
     call th%init_ys(dt, th%n_ys)
 
-    write(fmt1,'("(4x,a16,",i4,"f12.6)")') th%n_nhc
-    write(fmt2,'("(4x,a16,",i4,"f12.2)")') th%n_ys
-    if (inode==ionode .and. iprint_MD > 1) then
-      write(io_lun,'(2x,a)') 'Welcome to init_nhc'
-      write(io_lun,'(4x,a,i10)')   'Number of NHC thermostats n_nhc = ', &
+    write(fmt1,'("(6x,a16,",i4,"f12.6)")') th%n_nhc
+    write(fmt2,'("(6x,a16,",i4,"f12.2)")') th%n_ys
+    if (inode==ionode .and. iprint_MD + min_layer > 1) then
+      write(io_lun,'(4x,a)') trim(prefix)//" Parameters:"
+      write(io_lun,'(6x,a,i10)')   ' Number of NHC thermostats n_nhc = ', &
                                    th%n_nhc
-      write(io_lun,'(4x,a,f15.8)')   'NHC velocity drag factor t_drag = ', &
+      write(io_lun,'(6x,a,f15.8)') ' NHC velocity drag factor t_drag = ', &
                                    th%t_drag
-      write(io_lun,'(4x,a,i10)')   'Multiple time step order  n_mts = ', &
+      write(io_lun,'(6x,a,i10)')   ' Multiple time step order  n_mts = ', &
                                    th%n_mts_nhc
-      write(io_lun,'(4x,a,i10)')   'Yoshida-Suzuki order      n_ys  = ', &
+      write(io_lun,'(6x,a,i10)')   ' Yoshida-Suzuki order      n_ys  = ', &
                                    th%n_ys
       write(io_lun,fmt2) 'YS time steps:  ', th%dt_ys
       write(io_lun,fmt1) 'ion  NHC masses:', th%m_nhc
@@ -608,7 +618,9 @@ contains
   !!  
   subroutine get_temperature_and_ke(th, baro, v, KE, final_call)
 
+    use global_module,    only: iprint_MD, min_layer
     use move_atoms,       only: fac
+    use io_module,      only: return_prefix
 
     ! Passed variables
     class(type_thermostat), intent(inout)     :: th
@@ -620,9 +632,12 @@ contains
     ! local variables
     integer                                   :: j, k, iatom
     real(double)                              :: m, trace
+    character(len=16) :: subname = "get_T_and_KE: "
+    character(len=120) :: prefix
 
-    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 1) &
-      write(io_lun,'(2x,a)') "get_temperature_and_ke"
+    prefix = return_prefix(subname, min_layer)
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD + min_layer > 2) &
+      write(io_lun,'(4x,a)') trim(prefix)//" starting"
 
     ! Update the kinetic energy and stress
     baro%ke_stress = zero
@@ -644,14 +659,14 @@ contains
 !    trace = baro%ke_stress(1,1) + baro%ke_stress(2,2) + baro%ke_stress(3,3)
 
     if (present(final_call)) then
-      if (inode==ionode .and. iprint_MD > 1) then
-        write(io_lun,'(4x,"KE: ",f12.6," Ha")') KE
+      if (inode==ionode .and. iprint_MD + min_layer > 1) then
+        write(io_lun,'(4x,a,f12.6," Ha")') trim(prefix)//" KE: ",KE
   !      write(io_lun,'(4x,"Tr(ke_stress): ",f12.6," Ha")') trace/three
-        write(io_lun,'(4x,"T:  ",f12.6," K")') th%T_int
+        write(io_lun,'(4x,a,f12.6," K")') trim(prefix)//" T:  ",th%T_int
         if (flag_MDdebug .and. iprint_MD > 3) then
-          write(io_lun,'(4x,a,3e16.8)') "ke_stress:     ", baro%ke_stress(:,1)
-          write(io_lun,'(4x,a,3e16.8)') "               ", baro%ke_stress(:,2)
-          write(io_lun,'(4x,a,3e16.8)') "               ", baro%ke_stress(:,3)
+          write(io_lun,'(6x,a,3e16.8)') "ke_stress:     ", baro%ke_stress(:,1)
+          write(io_lun,'(6x,a,3e16.8)') "               ", baro%ke_stress(:,2)
+          write(io_lun,'(6x,a,3e16.8)') "               ", baro%ke_stress(:,3)
           write(io_lun,*)
         end if
       end if
@@ -692,8 +707,8 @@ contains
     ! all processes, so only doing this part on ionode, the gsumming the scaling
     ! factor - zamaan
     if (inode==ionode) then
-      if (flag_MDdebug .and. iprint_MD > 1) &
-        write(io_lun,'(2x,a)') "get_svr_thermo_sf"
+      if (flag_MDdebug .and. iprint_MD > 2) &
+        write(io_lun,'(6x,a)') "get_svr_thermo_sf"
 
       ndof = th%ndof + th%cell_ndof
 
@@ -746,9 +761,9 @@ contains
 
     v = v*th%lambda
 
-    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 1) then
-      write(io_lun,'(2x,a)') "v_rescale"
-      write(io_lun,'(4x,"lambda: ",e16.8)') th%lambda
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 2) then
+      write(io_lun,'(6x,a)') "v_rescale"
+      write(io_lun,'(6x,"lambda: ",e16.8)') th%lambda
     end if
 
   end subroutine v_rescale
@@ -796,7 +811,7 @@ contains
     end if
 
     if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) then
-      write(io_lun,'(2x,a,i2)') "update_G_nhc, k = ", k
+      write(io_lun,'(6x,a,i2)') "update_G_nhc, k = ", k
       write(io_lun,th%nhc_fmt) "G_nhc:      ", th%G_nhc(k)
       if (th%cell_nhc) write(io_lun,th%nhc_fmt) &
         "G_nhc_cell: ", th%G_nhc_cell(k)
@@ -829,7 +844,7 @@ contains
                      dtfac*dt*th%v_eta_cell(k)
 
     if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 4) then
-      write(io_lun,'(2x,a,i2)') "propagate_eta, k = ", k
+      write(io_lun,'(6x,a,i2)') "propagate_eta, k = ", k
       write(io_lun,th%nhc_fmt) "eta:        ", th%eta(k)
       if (th%cell_nhc) write(io_lun,th%nhc_fmt) "eta_cell:   ", th%eta_cell(k)
     end if
@@ -861,7 +876,7 @@ contains
                                         dtfac*dt*th%G_nhc_cell(k)
 
     if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 4) then
-      write(io_lun,'(2x,a,i2)') "propagate_v_eta_lin, k = ", k
+      write(io_lun,'(6x,a,i2)') "propagate_v_eta_lin, k = ", k
       write(io_lun,th%nhc_fmt) "v_eta:      ", th%v_eta(k)
       if (th%cell_nhc) write(io_lun,th%nhc_fmt) &
         "v_eta_cell: ", th%v_eta_cell(k)
@@ -894,7 +909,7 @@ contains
                           th%v_eta_cell(k)*exp(-dtfac*dt*th%v_eta_cell(k+1))
 
     if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 4) then
-      write(io_lun,'(2x,a,i2)') "propagate_v_eta_exp, k = ", k
+      write(io_lun,'(6x,a,i2)') "propagate_v_eta_exp, k = ", k
       write(io_lun,th%nhc_fmt) "v_eta:      ", th%v_eta(k)
       if (th%cell_nhc) &
         write(io_lun,th%nhc_fmt) "v_eta_cell: ", th%v_eta_cell(k)
@@ -925,7 +940,7 @@ contains
     if (th%cell_nhc) th%v_eta_cell(k) = th%v_eta_cell(k)*baro%p_drag
 
     if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 4) then
-      write(io_lun,'(2x,a)') "apply_nhc_drag"
+      write(io_lun,'(6x,a)') "apply_nhc_drag"
     end if
 
   end subroutine apply_nhc_drag
@@ -949,6 +964,11 @@ contains
   !!  
   subroutine integrate_nhc(th, baro, v, ke)
 
+    use global_module,  only: min_layer
+    use io_module,      only: return_prefix
+
+    implicit none
+
     ! passed variables
     class(type_thermostat), intent(inout) :: th
     class(type_barostat), intent(inout)   :: baro
@@ -960,9 +980,12 @@ contains
     real(double)    :: v_sfac   ! ionic velocity scaling factor
     real(double)    :: box_sfac ! box velocity scaling factor
     real(double)    :: fac
+    character(len=16) :: subname = "integrate_nhc: "
+    character(len=120) :: prefix
 
-    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 1) &
-      write(io_lun,'(2x,a)') "integrate_nhc"
+    prefix = return_prefix(subname, min_layer)
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD + min_layer > 1) &
+      write(io_lun,'(4x,a)') trim(prefix)//" starting"
 
     th%ke_ions = ke
     v_sfac = one
@@ -971,9 +994,9 @@ contains
     call th%update_G_nhc(1, baro%e_barostat) ! update force on thermostat 1
     do i_mts=1,th%n_mts_nhc ! MTS loop
       do i_ys=1,th%n_ys     ! Yoshida-Suzuki loop
-        if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) then
-          write(io_lun,'(4x,a,i8)') "i_ys  = ", i_ys
-          write(io_lun,'(4x,a,i8)') "dt_ys = ", th%dt_ys(i_ys)
+        if (inode==ionode .and. flag_MDdebug .and. iprint_MD + min_layer > 3) then
+          write(io_lun,'(4x,a,i8)') trim(prefix)//" i_ys  = ", i_ys
+          write(io_lun,'(4x,a,i8)') trim(prefix)//" dt_ys = ", th%dt_ys(i_ys)
         end if
         ! Reverse part of Trotter expansion: update thermostat force/velocity
         call th%propagate_v_eta_lin(th%n_nhc, th%dt_ys(i_ys), quarter)
@@ -1026,13 +1049,13 @@ contains
 
     ! scale the ionic velocities
     if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) &
-      write(io_lun,'(2x,a,e16.8)') 'v_sfac = ', v_sfac
+      write(io_lun,'(4x,a,e16.8)') trim(prefix)//' v_sfac = ', v_sfac
     v = v_sfac*v
     th%lambda = v_sfac
 
     if (th%cell_nhc) then
       if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) &
-        write(io_lun,'(2x,a,e16.8)') 'box_sfac = ', box_sfac
+        write(io_lun,'(4x,a,e16.8)') trim(prefix)//' box_sfac = ', box_sfac
     end if
 
     if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) then 
@@ -1065,6 +1088,8 @@ contains
   !!  
   subroutine get_thermostat_energy(th)
 
+    use global_module, only: min_layer
+    use io_module,      only: return_prefix
     use input_module,     only: io_assign, io_close
 
     ! passed variables
@@ -1072,9 +1097,12 @@ contains
 
     ! local variables
     integer                               :: k, lun
+    character(len=20) :: subname = "get_thermostat_E: "
+    character(len=120) :: prefix
 
-    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 1) &
-      write(io_lun,'(2x,a)') "get_thermostat_energy"
+    prefix = return_prefix(subname, min_layer)
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD + min_layer > 1) &
+      write(io_lun,'(4x,a)') trim(prefix)//" starting"
 
     select case(th%thermo_type)
     case('nhc')
@@ -1107,7 +1135,7 @@ contains
       th%e_thermostat = th%ke_nhc_ion + th%pe_nhc_ion + &
                         th%ke_nhc_cell + th%pe_nhc_cell
 
-      if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 2) then
+      if (inode==ionode .and. flag_MDdebug .and. iprint_MD + min_layer > 2) then
         write(io_lun,'(4x,"ke_nhc_ion: ",e16.8)') th%ke_nhc_ion
         write(io_lun,'(4x,"pe_nhc_ion: ",e16.8)') th%pe_nhc_ion
         if (th%cell_nhc) then
@@ -1140,7 +1168,7 @@ contains
                           th%e_barostat * (th%lambda**2 - one) * th%dt
       end if
       if (inode==ionode .and. iprint_MD > 2) &
-        write(io_lun,'(4x,"ke_svr:     ",e16.8)') th%e_thermostat
+        write(io_lun,'(4x,a,e16.8)') trim(prefix)//" ke_svr:     ",th%e_thermostat
     case default
       th%e_thermostat = zero
     end select
@@ -1220,7 +1248,8 @@ contains
   !!  
   subroutine init_baro(baro, baro_type, dt, ndof, v, tau_P, ke_ions)
 
-    use global_module,    only: rcellx, rcelly, rcellz
+    use global_module,    only: rcellx, rcelly, rcellz, min_layer
+    use io_module, ONLY: return_prefix
 
     ! passed variables
     class(type_barostat), intent(inout)       :: baro
@@ -1232,6 +1261,10 @@ contains
     ! local variables
     real(double)                              :: tauP, omega_P
 
+    character(len=13) :: subname = "init_baro: "
+    character(len=120) :: prefix
+
+    prefix = return_prefix(subname, min_layer)
     ! Globals
     baro%baro_type = baro_type
     baro%dt = dt
@@ -1318,19 +1351,18 @@ contains
       call cq_abort("MD.BaroType must be 'none', 'mttk' or 'pr'")
     end select
 
-    if (inode==ionode .and. iprint_MD > 1) then
-      write(io_lun,'(2x,a)') 'Welcome to init_baro'
-      write(io_lun,'(4x,"Barostat type:   ",a)') baro%baro_type
-      write(io_lun,'(4x,"Extended system: ",l1)') flag_extended_system
+    if (inode==ionode .and. iprint_MD + min_layer > 1) then
+      write(io_lun,'(4x,a)') trim(prefix)//"Barostat type:   "//baro%baro_type
+      write(io_lun,'(4x,a,l1)') trim(prefix)//"Extended system: ",flag_extended_system
       if (.not. leqi(baro_type, 'none')) then
-        write(io_lun,'(4x,a,f14.2)') 'Target pressure        P_ext = ', &
+        write(io_lun,'(4x,a,f14.2)') trim(prefix)//'Target pressure        P_ext = ', &
                                       baro%P_ext
-        write(io_lun,'(4x,a,f14.2)') 'Coupling time period   tau_P = ', &
+        write(io_lun,'(4x,a,f14.2)') trim(prefix)//'Coupling time period   tau_P = ', &
                                       baro%tau_P
         if (flag_extended_system) then
-          write(io_lun,'(4x,a,f15.8)') 'Box mass                     = ', &
+          write(io_lun,'(4x,a,f15.8)') trim(prefix)//'Box mass                     = ', &
                                         baro%box_mass
-          write(io_lun,'(4x,a,f15.8)') 'Pressure drag factor  p_drag = ', &
+          write(io_lun,'(4x,a,f15.8)') trim(prefix)//'Pressure drag factor  p_drag = ', &
                                         baro%p_drag
         end if
       end if
@@ -1363,8 +1395,10 @@ contains
   !!  
   subroutine get_pressure_and_stress(baro, final_call)
 
+    use global_module,    only: min_layer
     use force_module,     only: stress
     use move_atoms,       only: fac
+    use io_module,      only: return_prefix
 
     ! passed variables
     class(type_barostat), intent(inout)       :: baro
@@ -1372,16 +1406,19 @@ contains
 
     ! local variables
     integer                                   :: i
+    character(len=20) :: subname = "get_P_and_stress: "
+    character(len=120) :: prefix
 
-    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 1) &
-      write(io_lun,'(2x,a)') "get_pressure_and_stress"
+    prefix = return_prefix(subname, min_layer)
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD + min_layer > 1) &
+      write(io_lun,'(4x,a)') trim(prefix)//" starting"
 
     ! Get the static stress from the global variable
     baro%static_stress = zero
     baro%static_stress = -stress ! note the sign convention!!
 
     if (present(final_call)) then
-      if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) then
+      if (inode==ionode .and. flag_MDdebug .and. iprint_MD + min_layer > 3) then
         write(io_lun,'(4x,a,3e16.8)') "static_stress: ", &
                                       baro%static_stress(:,1)
         write(io_lun,'(4x,a,3e16.8)') "               ", &
@@ -1398,7 +1435,7 @@ contains
     baro%P_int = zero
     baro%total_stress = (baro%ke_stress + baro%static_stress)/baro%volume
     if (present(final_call)) then
-      if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) then
+      if (inode==ionode .and. flag_MDdebug .and. iprint_MD + min_layer > 3) then
         write(io_lun,'(4x,a,3e16.8)') "total_stress:  ", baro%total_stress(:,1)
         write(io_lun,'(4x,a,3e16.8)') "               ", baro%total_stress(:,2)
         write(io_lun,'(4x,a,3e16.8)') "               ", baro%total_stress(:,3)
@@ -1412,9 +1449,9 @@ contains
     baro%P_int = baro%P_int*third
     baro%PV = baro%volume*baro%P_ext/HaBohr3ToGPa
     if (present(final_call)) then
-      if (inode==ionode .and. iprint_MD > 1) then
-        write(io_lun,'(4x,"P:  ",f12.6," GPa")') baro%P_int*HaBohr3ToGPa
-        write(io_lun,'(4x,"PV: ",f12.6," Ha")') baro%PV
+      if (inode==ionode .and. iprint_MD + min_layer > 1) then
+        write(io_lun,'(4x,a,f12.6," GPa")') trim(prefix)//"  P: ",baro%P_int*HaBohr3ToGPa
+        write(io_lun,'(4x,a,f12.6," Ha")') trim(prefix)//" PV: ",baro%PV
       end if
     end if
 
@@ -1439,9 +1476,9 @@ contains
 
     baro%volume = baro%lat(1,1)*baro%lat(2,2)*baro%lat(3,3)
 
-    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 1) then
-      write(io_lun,'(2x,a)') "get_volume"
-      write(io_lun,'(4x,a,e16.8)') "volume:     ", baro%volume
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 2) then
+      write(io_lun,'(4x,a)') "get_volume"
+      write(io_lun,'(6x,a,e16.8)') "volume:     ", baro%volume
     end if
 
   end subroutine get_volume
@@ -1460,13 +1497,19 @@ contains
   !!  
   subroutine get_barostat_energy(baro, final_call)
 
+    use global_module,  only: min_layer
+    use io_module,      only: return_prefix
+
     ! passed variables
     class(type_barostat), intent(inout)         :: baro
     integer, optional                           :: final_call
 
     ! local variables
     integer                                     :: i
+    character(len=20) :: subname = "get_barostat_E: "
+    character(len=120) :: prefix
 
+    prefix = return_prefix(subname, min_layer)
     baro%e_barostat = zero
     if (flag_extended_system) then
       select case(baro%baro_type)
@@ -1484,9 +1527,8 @@ contains
     end if
 
     if (present(final_call)) then
-      if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 1) then
-        write(io_lun,'(2x,a)') "get_barostat_energy"
-        write(io_lun,'(4x,a,e16.8)') "e_barostat:     ", baro%e_barostat
+      if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 2) then
+        write(io_lun,'(4x,a,e16.8)') trim(prefix)//" e_barostat:     ", baro%e_barostat
       end if
     end if
 
@@ -1515,7 +1557,7 @@ contains
     real(double)                                :: tr_ke_stress
 
     if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) &
-      write(io_lun,'(2x,a)') "update_G_box"
+      write(io_lun,'(4x,a)') "update_G_box"
 
     select case(baro%baro_type)
     case('mttk')
@@ -1541,12 +1583,12 @@ contains
     if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 4) then 
       select case(baro%baro_type)
       case('mttk')
-        write(io_lun,'(2x,a,e16.8)') "G_eps: ", baro%G_eps
+        write(io_lun,'(6x,a,e16.8)') "G_eps: ", baro%G_eps
       case('pr')
         if (leqi(md_cell_constraint, 'volume')) then
-          write(io_lun,'(2x,a,e16.8)') "G_eps: ", baro%G_eps
+          write(io_lun,'(6x,a,e16.8)') "G_eps: ", baro%G_eps
         else
-          write(io_lun,'(2x,a,3e16.8)') "G_h:   ", baro%G_h(1,1), &
+          write(io_lun,'(6x,a,3e16.8)') "G_h:   ", baro%G_h(1,1), &
                                          baro%G_h(2,2), baro%G_h(3,3)
         end if
       end select
@@ -1576,8 +1618,8 @@ contains
     baro%eps = baro%eps + dtfac*dt*baro%v_eps
 
     if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 4) &
-      write(io_lun,'(2x,a)') "propagate_eps_lin"
-      write(io_lun,'(4x,a,e16.8)') "eps:        ", baro%eps
+      write(io_lun,'(4x,a)') "propagate_eps_lin"
+      write(io_lun,'(6x,a,e16.8)') "eps:        ", baro%eps
 
   end subroutine propagate_eps_lin
   !!***
@@ -1604,8 +1646,8 @@ contains
     baro%eps = baro%eps*exp(-dtfac*dt*v_eta_1)
 
     if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 4) then
-      write(io_lun,'(2x,a)') "propagate_eps_exp"
-      write(io_lun,'(4x,a,e16.8)') "eps:        ", baro%eps
+      write(io_lun,'(4x,a)') "propagate_eps_exp"
+      write(io_lun,'(6x,a,e16.8)') "eps:        ", baro%eps
     end if
 
   end subroutine propagate_eps_exp
@@ -1633,7 +1675,7 @@ contains
     integer                               :: i
 
     if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 4) &
-      write(io_lun,'(2x,a)') "propagate_v_box_lin"
+      write(io_lun,'(4x,a)') "propagate_v_box_lin"
 
     if (leqi(md_cell_constraint, 'volume')) then
       baro%v_eps = baro%v_eps + dtfac*dt*baro%G_eps
@@ -1644,11 +1686,11 @@ contains
     end if
 
     if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 4) then
-      write(io_lun,*) "propagate_v_box_lin"
+      write(io_lun,'(4x,a)') "propagate_v_box_lin"
       if (leqi(md_cell_constraint, 'volume')) then
-        write(io_lun,'(4x,a,e16.8)') "v_eps       ", baro%v_eps
+        write(io_lun,'(6x,a,e16.8)') "v_eps       ", baro%v_eps
       else
-        write(io_lun,'(4x,a,3e16.8)') "v_h         ", &
+        write(io_lun,'(6x,a,3e16.8)') "v_h         ", &
           baro%v_h(1,1), baro%v_h(2,2), baro%v_h(3,3)
       end if
     end if
@@ -1676,7 +1718,7 @@ contains
     real(double), intent(in)              :: v_eta_1  ! v of first NHC thermo
 
     if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 4) &
-      write(io_lun,'(2x,a)') "propagate_v_box_lin"
+      write(io_lun,'(4x,a)') "propagate_v_box_lin"
 
     if (leqi(md_cell_constraint, 'volume')) then
       baro%v_eps = baro%v_eps*exp(-dtfac*dt*v_eta_1)
@@ -1705,7 +1747,7 @@ contains
     integer                               :: i
 
     if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 4) &
-      write(io_lun,'(2x,a)') "apply_box_drag"
+      write(io_lun,'(4x,a)') "apply_box_drag"
 
     if (leqi(md_cell_constraint, 'volume')) then    
       baro%v_eps = baro%v_eps*baro%p_drag
@@ -1777,8 +1819,8 @@ contains
     end select
 
     if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 4) then
-      write(io_lun,'(2x,a)') "update_vscale_fac"
-      write(io_lun,'(4x,a,e16.8)') "v_sfac:     ", v_sfac
+      write(io_lun,'(4x,a)') "update_vscale_fac"
+      write(io_lun,'(6x,a,e16.8)') "v_sfac:     ", v_sfac
     end if
 
   end subroutine update_vscale_fac
@@ -1816,7 +1858,7 @@ contains
     logical                               :: flagx, flagy, flagz
 
     if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 1) &
-      write(io_lun,'(2x,a)') "propagate_r_mttk"
+      write(io_lun,'(4x,a)') "propagate_r_mttk"
 
     if (leqi(md_cell_constraint, 'volume')) then
       exp_v_eps = exp(dt*half*baro%v_eps)
@@ -1851,8 +1893,8 @@ contains
     end if
 
     if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) then
-      write(io_lun,'(4x,a,e16.8)') "fac_v:      ", fac_v
-      write(io_lun,'(4x,a,e16.8)') "fac_r:      ", fac_r
+      write(io_lun,'(6x,a,e16.8)') "fac_v:      ", fac_v
+      write(io_lun,'(6x,a,e16.8)') "fac_r:      ", fac_r
     end if
 
   end subroutine propagate_r_mttk
@@ -1878,7 +1920,7 @@ contains
     ! local variables
     real(double)                          :: v_new, v_old, lat_sfac
 
-      write(io_lun,'(2x,a)') "propagate_box_mttk"
+    if(iprint_MD > 2) write(io_lun,'(4x,a)') "propagate_box_mttk"
 
     baro%v_old = baro%volume
     if (leqi(md_cell_constraint, 'volume')) then
@@ -1891,7 +1933,7 @@ contains
     end if
 
     if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) then
-      write(io_lun,'(4x,a,e16.8)') "lat_sfac:   ", lat_sfac
+      write(io_lun,'(6x,a,e16.8)') "lat_sfac:   ", lat_sfac
     end if
 
   end subroutine propagate_box_mttk
@@ -1947,7 +1989,7 @@ contains
     real(double)                            :: v_sfac, v_eta_couple
 
     if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 1) &
-      write(io_lun,'(2x,a)') "propagate_npt_mttk"
+      write(io_lun,'(4x,a)') "propagate_npt_mttk"
 
     v_sfac = one
     call baro%get_barostat_energy
@@ -1959,8 +2001,8 @@ contains
     do i_mts=1,th%n_mts_nhc ! MTS loop
       do i_ys=1,th%n_ys     ! Yoshida-Suzuki loop
         if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) then
-          write(io_lun,*) "i_ys  = ", i_ys
-          write(io_lun,*) "dt_ys = ", th%dt_ys(i_ys)
+          write(io_lun,'(6x,a,i3)') "i_ys  = ", i_ys
+          write(io_lun,'(6x,a,f6.3)') "dt_ys = ", th%dt_ys(i_ys)
         end if
         call th%propagate_v_eta_lin(th%n_nhc, th%dt_ys(i_ys), quarter)
         th%v_eta(th%n_nhc) = th%v_eta(th%n_nhc)*th%t_drag
@@ -2061,7 +2103,7 @@ contains
     real(double)                            :: tr_ke_stress
 
     if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 1) &
-      write(io_lun,'(2x,a)') "integrate_box"
+      write(io_lun,'(4x,a)') "integrate_box"
 
     if (leqi(md_cell_constraint, 'volume')) then
       baro%G_eps = (two*th%ke_ions/md_ndof_ions + &
@@ -2084,12 +2126,12 @@ contains
 
     if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) then 
       if (leqi(md_cell_constraint, 'volume')) then
-        write(io_lun,'(2x,a,e16.8)') "v_eps: ", baro%v_eps
-        write(io_lun,'(2x,a,e16.8)') "G_eps: ", baro%G_eps
+        write(io_lun,'(6x,a,e16.8)') "v_eps: ", baro%v_eps
+        write(io_lun,'(6x,a,e16.8)') "G_eps: ", baro%G_eps
       else
-        write(io_lun,'(2x,a,3e16.8)') "v_h:   ", baro%v_h(1,1), &
+        write(io_lun,'(6x,a,3e16.8)') "v_h:   ", baro%v_h(1,1), &
                                        baro%v_h(2,2), baro%v_h(3,3)
-        write(io_lun,'(2x,a,3e16.8)') "G_h:   ", baro%G_h(1,1), &
+        write(io_lun,'(6x,a,3e16.8)') "G_h:   ", baro%G_h(1,1), &
                                        baro%G_h(2,2), baro%G_h(3,3)
       end if
     end if
@@ -2119,7 +2161,7 @@ contains
     integer                                 :: i
 
     if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 1) &
-      write(io_lun,'(2x,a)') "couple_box_particle_velocity"
+      write(io_lun,'(4x,a)') "couple_box_particle_velocity"
 
     const = zero
     if (leqi(md_cell_constraint, 'volume')) then
@@ -2128,7 +2170,7 @@ contains
       expfac = exp(-quarter*baro%dt*(baro%v_eps + const))
       v  = v*expfac**2
       if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) &
-        write(io_lun,'(4x,"expfac: ",f16.8)') expfac
+        write(io_lun,'(6x,"expfac: ",f16.8)') expfac
     else
       do i=1,3
         const = const + baro%v_h(i,i)
@@ -2138,7 +2180,7 @@ contains
         expfac = exp(-quarter*baro%dt*baro%odnf*(baro%v_h(i,i)+const))
         v(i,:) = v(i,:)*expfac**2
       if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) &
-        write(io_lun,'(4x,"expfac ",i2,": ",f16.8)') i, expfac
+        write(io_lun,'(6x,"expfac ",i2,": ",f16.8)') i, expfac
       end do
     end if
 
@@ -2166,7 +2208,7 @@ contains
     integer                                 :: i
 
     if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 1) &
-      write(io_lun,'(2x,a)') "propagate_box_ssm"
+      write(io_lun,'(4x,a)') "propagate_box_ssm"
 
     baro%v_old = baro%volume
 
@@ -2175,8 +2217,8 @@ contains
       baro%eps = baro%eps + half*baro%dt*baro%v_eps
       expfac= exp(half*baro%dt*(baro%v_eps + three*baro%v_eps/ni_in_cell))
       if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) then
-        write(io_lun,'(4x,"v_eps:    ",f16.8)') baro%v_eps
-        write(io_lun,'(4x,"expfac:   ",f16.8)') expfac
+        write(io_lun,'(6x,"v_eps:    ",f16.8)') baro%v_eps
+        write(io_lun,'(6x,"expfac:   ",f16.8)') expfac
       end if
       ! Rescale the box
       baro%lat(1,1) = baro%lat(1,1)*expfac
@@ -2193,9 +2235,9 @@ contains
         baro%lat(i,i) = baro%lat(i,i)*expfac_h(i)
       end do
       if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) then
-        write(io_lun,'(4x,"v_h:      ",3f16.8)') baro%v_h(1,1), &
+        write(io_lun,'(6x,"v_h:      ",3f16.8)') baro%v_h(1,1), &
                                                  baro%v_h(2,2), baro%v_h(3,3)
-        write(io_lun,'(4x,"expfac_h: ",3f16.8)') expfac_h
+        write(io_lun,'(6x,"expfac_h: ",3f16.8)') expfac_h
       end if
     end if
 
@@ -2287,7 +2329,7 @@ contains
 
     use units
     use global_module,      only: rcellx, rcelly, rcellz, &
-                                  flag_diagonalisation
+                                  flag_diagonalisation, min_layer
     use GenComms,           only: inode, ionode
     use density_module,     only: density
     use maxima_module,      only: maxngrid
@@ -2299,6 +2341,7 @@ contains
                                   n_grid_y, n_grid_z
     use fft_module,         only: recip_vector, hartree_factor, i0
     use DiagModule,         only: kk, nkp
+    use io_module,          only: return_prefix
 
     implicit none
 
@@ -2308,9 +2351,12 @@ contains
     ! local variables
     real(double) :: orcellx, orcelly, orcellz, xvec, yvec, zvec, r2, scale
     integer :: i, j
+    character(len=20) :: subname = "update_cell: "
+    character(len=120) :: prefix
 
-    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 1) &
-      write(io_lun,'(2x,a)') "update_cell"
+    prefix = return_prefix(subname, min_layer)
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD + min_layer> 1) &
+      write(io_lun,'(4x,a)') trim(prefix)//" starting"
 
     orcellx = rcellx
     orcelly = rcelly
@@ -2358,10 +2404,10 @@ contains
        r2 = xvec*xvec + yvec*yvec + zvec*zvec
        if(j/=i0) hartree_factor(j) = one/r2 ! i0 notates gamma point
     end do
-    if (inode == ionode .and. iprint_MD > 1) then
-      write(io_lun,'(a,3f12.6)') "cell scaling factors: ", rcellx/orcellx, &
+    if (inode == ionode .and. iprint_MD + min_layer > 1) then
+      write(io_lun,'(6x,a,3f12.6)') "cell scaling factors: ", rcellx/orcellx, &
                                  rcelly/orcelly, rcellz/orcellz
-      write(io_lun,'(a,3f12.6)') "new cell dimensions:  ", rcellx, rcelly, &
+      write(io_lun,'(6x,a,3f12.6)') "new cell dimensions:  ", rcellx, rcelly, &
                                  rcellz
     end if
 
@@ -2384,7 +2430,7 @@ contains
 
     use GenComms,         only: cq_abort
     use input_module,     only: io_assign, io_close
-    use global_module,    only: id_glob, id_glob_inv
+    use global_module,    only: id_glob, id_glob_inv, min_layer
     use io_module,        only: append_coords, write_atomic_positions, &
                                 pdb_template
 
@@ -2397,8 +2443,8 @@ contains
     logical                               :: append_coords_bak
 
     if (inode==ionode) then
-      if (iprint_MD > 1) &
-        write(io_lun,'(2x,"Writing MD checkpoint: ",a)') md_check_file
+      if (iprint_MD + min_layer > 2) &
+        write(io_lun,'(6x,"Writing MD checkpoint: ",a)') md_check_file
 
       ! Write the ionic positions
       append_coords_bak = append_coords
@@ -2481,7 +2527,7 @@ contains
     use GenComms,         only: cq_abort, gcopy
     use input_module,     only: io_assign, io_close
     use global_module,    only: id_glob, id_glob_inv, flag_read_velocity, &
-                                species_glob
+                                species_glob, min_layer
 
     ! passed variables
     class(type_thermostat), intent(inout) :: th
@@ -2492,8 +2538,8 @@ contains
     real(double), dimension(3,ni_in_cell) :: v
 
     if (inode==ionode) then
-      if (iprint_MD > 1) &
-        write(io_lun,'(2x,"Reading MD checkpoint: ",a)') md_check_file
+      if (iprint_MD + min_layer > 2) &
+        write(io_lun,'(6x,"Reading MD checkpoint: ",a)') md_check_file
       call io_assign(lun)
       open(unit=lun,file=md_check_file,status='old')
 
@@ -2555,7 +2601,7 @@ contains
         end if
       end if
 
-      if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) then
+      if (inode==ionode .and. flag_MDdebug .and. iprint_MD + min_layer > 3) then
         write(io_lun,'(2x,"flag_extended_system ",l1)') flag_extended_system
         if (flag_read_velocity) then
           write(io_lun,'(a)') "Reading velocities from md.checkpoint"

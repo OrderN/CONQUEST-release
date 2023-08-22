@@ -390,6 +390,8 @@ contains
   !!   2011/07/28 14:20 dave and umberto
   !!     Fix problem with AND statement referencing hartree_factor
   !!     with index 0
+  !!   2023/06/02 16:04 dave
+  !!     Remove scaling for q=0 point (introduces errors)
   !!  TODO
   !!
   !!  SOURCE
@@ -431,24 +433,10 @@ contains
     call reg_alloc_mem(area_SC, size, type_dbl)
     call fft3(resid, FR_kerker, size, -1)
     do i = 1, z_columns_node(inode)*n_grid_z
-       ! hartree_factor(q) = 1/q**2 for q /= 0, and hartree_factor(q)
-       ! = 0 for q = 0, calculated in fft module
-       ! excluding q=0 point, treating it separately
-       if (hartree_factor(i) > RD_ERR) then 
-          fac = one / (one + hartree_factor(i)*q02)
-          FR_kerker(i) = FR_kerker(i)*fac
-       end if
+       ! hartree_factor(q) = 1/q**2 for q /= 0; set to zero at q=0
+       FR_kerker(i) = FR_kerker(i) / (one + hartree_factor(i)*q02)
     end do
-    ! do q=0 point separately (if q=0 is on one of the grid point)
-    ! note that if q=0 point is not on the discrete reciporical grid
-    ! for FFT, then i0=0
-    ! q=0 is only on one of processor node need to make sure we are
-    ! doing the correct point
-    if ((i0 > 0)) then
-       if((hartree_factor(i0) <= RD_ERR)) then
-          FR_kerker(i0) = zero
-       end if
-    end if
+    ! do nothing for q=0 point (introduces an error!)
     ! FFT back
     call fft3(resid, FR_kerker, size, +1)
     ! deallocate array
@@ -492,6 +480,8 @@ contains
   !!   2011/07/28 14:20 dave and umberto
   !!     Fix problem with AND statement referencing hartree_factor
   !!     with index 0
+  !!   2023/06/02 16:04 dave
+  !!     Remove scaling for q=0 point (introduces errors)
   !!  TODO
   !!
   !!  SOURCE
@@ -518,7 +508,7 @@ contains
 
     ! Local variables
     integer      :: i, stat
-    real(double) :: fac, facmax, q12
+    real(double) :: fac, q12
     complex(double_cplx), allocatable, dimension(:) :: FR_wdmetric
     
     if (abs (q1) < RD_ERR) then
@@ -528,7 +518,6 @@ contains
     else
        q12 = q1*q1
     end if
-    facmax = zero
     ! FFT residue
     allocate(FR_wdmetric(size), STAT=stat)
     if (stat /= 0) &
@@ -537,27 +526,10 @@ contains
     call reg_alloc_mem(area_SC, size, type_dbl)
     call fft3(resid, FR_wdmetric, size, -1)
     do i = 1, z_columns_node(inode)*n_grid_z
-       ! hartree_factor(q) = 1/q**2 for q /= 0, and hartree_factor(q)
-       ! = 0 for q = 0, calculated in fft module excluding q=0 point,
-       ! treating it separately
-       if (hartree_factor(i) > RD_ERR) then 
-          fac = one + hartree_factor(i)*q12
-          facmax = max(fac, facmax)
-          FR_wdmetric(i) = FR_wdmetric(i)*fac
-       end if
+       ! hartree_factor(q) = 1/q**2 for q /= 0; set to zero at q=0
+       FR_wdmetric(i) = FR_wdmetric(i) * (one + hartree_factor(i)*q12)
     end do
-    ! find the global maximum for fac
-    call gmax(facmax)
-    ! do q=0 point separately (if q=0 is on one of the grid point)
-    ! note that if q=0 point is not on the discrete reciporical grid
-    ! for FFT, then i0=0
-    ! q=0 is only on one of processor node need to make sure we are
-    ! doing the correct point
-    if ((i0 > 0)) then
-       if((hartree_factor(i0) <= RD_ERR)) then
-          FR_wdmetric(i0) = FR_wdmetric(i0) * facmax
-       end if
-    end if
+    ! do nothing for q=0 point (nothing needed)
     ! FFT back
     call fft3(resid_cov, FR_wdmetric, size, +1)
     ! deallocate arrays
@@ -604,6 +576,8 @@ contains
   !!   2011/07/28 14:20 dave and umberto
   !!     Fix problem with AND statement referencing hartree_factor
   !!     with index 0
+  !!   2023/06/02 16:04 dave
+  !!     Remove scaling for q=0 point (introduces errors)
   !!  TODO
   !!
   !!  SOURCE
@@ -631,22 +605,11 @@ contains
 
     ! Local variables
     integer      :: i, stat
-    real(double) :: fac, fac2, facmax, q02, q12
+    real(double) :: fac, fac2, q02, q12
     complex(double_cplx), allocatable, dimension(:) :: FR_kerker, FR_wdmetric
     
-    if (abs(q0) < RD_ERR) then
-       return
-    else
-       q02 = q0*q0
-    endif
-    if (abs(q1) < RD_ERR) then
-       ! copy resid to resid_cov 
-       resid_cov = resid
-       return
-    else
-       q12 = q1*q1
-    end if
-    facmax = zero
+    q02 = q0*q0
+    q12 = q1*q1
     ! FFT residue
     allocate(FR_kerker(size), FR_wdmetric(size), STAT=stat)
     if (stat /= 0) &
@@ -657,32 +620,13 @@ contains
     call fft3(resid, FR_kerker, size, -1)
     FR_wdmetric = FR_kerker
     do i = 1, z_columns_node(inode)*n_grid_z
-       ! hartree_factor(q) = 1/q**2 for q /= 0, and hartree_factor(q)
-       ! = 0 for q = 0, calculated in fft module excluding q=0 point,
-       ! treating it separately
-       if (hartree_factor(i) > RD_ERR) then 
-          ! Kerker factor
-          fac = one / (one + hartree_factor(i)*q02)
-          FR_kerker(i) = FR_kerker(i)*fac
-          ! wave-dependent-metric factor
-          fac2 = one + hartree_factor(i)*q12
-          facmax = max(fac2, facmax)
-          FR_wdmetric(i) = FR_wdmetric(i)*fac2
-       end if
+       ! hartree_factor(q) = 1/q**2 for q /= 0; set to zero at q=0
+       ! Kerker factor
+       FR_kerker(i) = FR_kerker(i) / (one + hartree_factor(i)*q02)
+       ! wave-dependent-metric factor
+       FR_wdmetric(i) = FR_wdmetric(i) * (one + hartree_factor(i)*q12)
     end do
-    ! find the global maximum for fac
-    call gmax(facmax)
-    ! do q=0 point separately (if q=0 is on one of the grid point)
-    ! note that if q=0 point is not on the discrete reciporical grid
-    ! for FFT, then i0=0
-    ! q=0 is only on one of processor node need to make sure we are
-    ! doing the correct point
-    if ((i0 > 0)) then
-       if((hartree_factor(i0) <= RD_ERR)) then
-          FR_kerker(i0) = zero
-          FR_wdmetric(i0) = FR_wdmetric(i0)*facmax
-       end if
-    end if
+    ! do nothing for q=0 point (nothing needed)
     ! FFT back
     call fft3(resid, FR_kerker, size, +1)
     call fft3(resid_cov, FR_wdmetric, size, +1)
