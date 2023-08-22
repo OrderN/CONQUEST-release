@@ -330,7 +330,7 @@ contains
 !!  CREATION DATE
 !!   2022/07/20
 !!  MODIFICATION HISTORY
-!!   2022/07/27 JL
+!!   2022/07/27 J.Lin
 !!    Modified to get information of triplets for machine learing
 !!  SOURCE
 !!
@@ -366,42 +366,43 @@ contains
     ! loop over all atom pairs (atoms in primary set, max. cover set) -
     inp=1  ! Indexes primary atoms
     do nn=1,part_on_node ! Partitions in primary set
-      if (NOT(amat(nn)%n_atoms .gt. 0)) then ! Are there atoms ?
-        write(*, *) 'Warning: no atom in partition,', nn, amat(nn)%n_atoms
-        cycle
-      end if
-      ! if no atoms, do nothing, and turn to next partition
+      if (amat(nn)%n_atoms .gt. 0) then ! Are there atoms ?
       ! collect accumulation of three body terms, triplets
       amat(nn)%triplet_acc(1)=1
       do i=1,amat(nn)%n_atoms  ! Loop over atoms in partition
 
-         do j=1,  amat(nn)%n_nab(i)
-             ist_j = amat(nn)%i_acc(i)+j-1
-             xij=amat(nn)%dx(ist_j)
-             yij=amat(nn)%dy(ist_j)
-             zij=amat(nn)%dz(ist_j)
+        do j=1,  amat(nn)%n_nab(i)
+            ist_j = amat(nn)%i_acc(i)+j-1
+            xij=amat(nn)%dx(ist_j)
+            yij=amat(nn)%dy(ist_j)
+            zij=amat(nn)%dz(ist_j)
 
-             amat(nn)%n_triplet(ist_j)=0
-             do k=j+1,  amat(nn)%n_nab(i)
-                 ist_k = amat(nn)%i_acc(i)+k-1
-                 xik=amat(nn)%dx(ist_k)
-                 yik=amat(nn)%dy(ist_k)
-                 zik=amat(nn)%dz(ist_k)
-                 rjk_2 = (xij-xik)**2+(yij-yik)**2+(zij-zik)**2
+          amat(nn)%n_triplet(ist_j)=0
+          do k=j+1,  amat(nn)%n_nab(i)
+            ist_k = amat(nn)%i_acc(i)+k-1
+            xik=amat(nn)%dx(ist_k)
+            yik=amat(nn)%dy(ist_k)
+            zik=amat(nn)%dz(ist_k)
+            rjk_2 = (xij-xik)**2+(yij-yik)**2+(zij-zik)**2
 
-                 if (rjk_2 >very_small .and. rjk_2 < rcut_2) then
-                     amat(nn)%n_triplet(ist_j)=amat(nn)%n_triplet(ist_j)+1
-                     ist_ijk=amat(nn)%triplet_acc(ist_j)+amat(nn)%n_triplet(ist_j)-1
-                     amat(nn)%ist_triplet(ist_ijk)=ist_k
-                 end if ! rjk < rcut
-             end do ! k, three-body
-             if(ist_j.lt.amat(nn)%part_nabs) then
-                amat(nn)%triplet_acc(ist_j+1)=amat(nn)%triplet_acc(ist_j)+amat(nn)%n_triplet(ist_j)
-             endif
-             amat(nn)%part_triplets = amat(nn)%part_triplets+amat(nn)%n_triplet(ist_j)
-         end do ! j, two-body
-         inp=inp+1  ! Indexes primary-set atoms
-      enddo ! End i in prim%nm_nodgroup
+            if (rjk_2 >very_small .and. rjk_2 < rcut_2) then
+              amat(nn)%n_triplet(ist_j)=amat(nn)%n_triplet(ist_j)+1
+              ist_ijk=amat(nn)%triplet_acc(ist_j)+amat(nn)%n_triplet(ist_j)-1
+              amat(nn)%ist_triplet(ist_ijk)=ist_k
+            end if ! rjk < rcut
+          end do ! k, three-body
+          if(ist_j.lt.amat(nn)%part_nabs) then
+             amat(nn)%triplet_acc(ist_j+1)=amat(nn)%triplet_acc(ist_j)+amat(nn)%n_triplet(ist_j)
+          endif
+          amat(nn)%part_triplets = amat(nn)%part_triplets+amat(nn)%n_triplet(ist_j)
+          end do ! j, two-body
+        inp=inp+1  ! Indexes primary-set atoms
+        enddo ! End i in prim%nm_nodgroup
+
+      else
+        ! if no atoms, do nothing, and turn to next partition
+        write(*, *) 'Warning: no atom in partition,', nn, amat(nn)%n_atoms
+      end if
     enddo ! End part_on_node
   end subroutine get_triplet_ML
 !!***

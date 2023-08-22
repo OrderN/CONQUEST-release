@@ -46,73 +46,73 @@ module mlff_type
 !!  SOURCE
 !!
   type ML_pair
-     integer :: mx_nab,mx_abs
-     integer :: length
-     real(double)   :: rcut
-     integer(integ) :: n_atoms, part_nabs ! Lengths of n_nab, i_acc
+    integer :: mx_nab,mx_abs
+    integer :: length
+    real(double)   :: rcut
+    integer(integ) :: n_atoms, part_nabs ! Lengths of n_nab, i_acc
 
-     ! index shift of neighbours
-     ! No. of neighbours of each primary atom i
-     integer(integ),pointer :: n_nab(:)
-     ! accumulator for no. of neighbours of primary atom i
-     integer(integ),pointer :: i_acc(:)
-     integer(integ),pointer :: i_species(:)  ! species of target atom i
+    ! index shift of neighbours
+    ! No. of neighbours of each primary atom i
+    integer(integ),pointer :: n_nab(:)
+    ! accumulator for no. of neighbours of primary atom i
+    integer(integ),pointer :: i_acc(:)
+    integer(integ),pointer :: i_species(:)  ! species of target atom i
 
-     ! useful information for machine learning
-     ! the information from each neighbour
-     integer(integ),pointer :: j_species(:)  ! species of neighbour atom j
-     ! save vector of rij and r, or calcuate directly later
-     real(double),pointer :: rijx(:)
-     real(double),pointer :: rijy(:)
-     real(double),pointer :: rijz(:)
-     real(double),pointer :: radius(:)
+    ! useful information for machine learning
+    ! the information from each neighbour
+    integer(integ),pointer :: j_species(:)  ! species of neighbour atom j
+    ! save vector of rij and r, or calcuate directly later
+    real(double),pointer :: rijx(:)
+    real(double),pointer :: rijy(:)
+    real(double),pointer :: rijz(:)
+    real(double),pointer :: radius(:)
   end type ML_pair
 !!***
   type matrix_ML
-     integer :: mx_nab,mx_abs
-     integer :: length
-     ! Useful information for machine learning
-     real(double)   :: rcut
-     integer(integ) :: array_posn ! Starting position in array
-     integer(integ) :: offset     ! This plus i_acc gives us i_dir
-     integer(integ) :: nd_offset  ! This plus i_acc gives us i_dir
-     integer(integ) :: n_atoms, part_nabs, part_nd_nabs ! Lengths of n_nab, i_acc, i_nd_acc
-     integer(integ),pointer :: onsite(:)
-     ! From here on, we point to the comms array
-     integer(integ),pointer :: n_nab(:)     ! Neighbours of primary atom i
-     integer(integ),pointer :: i_acc(:)     ! accumulator for atom in neigh list  : ist_j = amat(nn)%i_acc(i)+j-1
-     integer(integ),pointer :: i_nd_acc(:)  ! accumulator for SFs in neigh list
-     integer(integ),pointer :: npxyz(:)     ! offset of CS part of atom in n. list
+    integer :: mx_nab,mx_abs
+    integer :: length
+    ! Useful information for machine learning
+    real(double)   :: rcut
+    integer(integ) :: array_posn ! Starting position in array
+    integer(integ) :: offset     ! This plus i_acc gives us i_dir
+    integer(integ) :: nd_offset  ! This plus i_acc gives us i_dir
+    integer(integ) :: n_atoms, part_nabs, part_nd_nabs ! Lengths of n_nab, i_acc, i_nd_acc
+    integer(integ),pointer :: onsite(:)
+    ! From here on, we point to the comms array
+    integer(integ),pointer :: n_nab(:)     ! Neighbours of primary atom i
+    integer(integ),pointer :: i_acc(:)     ! accumulator for atom in neigh list  : ist_j = amat(nn)%i_acc(i)+j-1
+    integer(integ),pointer :: i_nd_acc(:)  ! accumulator for SFs in neigh list
+    integer(integ),pointer :: npxyz(:)     ! offset of CS part of atom in n. list
 
-     ! Information from each neighbour
-     integer(integ),pointer :: i_species(:)  ! species of target atom i, dim: natom
-     ! Save vector of rij and r, or calcuate directly later
-     integer(integ),pointer :: j_species(:)  ! species of neighbour atom j  {[ith naba], [i+1th naba],}, dim
-     integer(integ),pointer :: i_part(:)     ! partition no. of atom in neigh list
-     integer(integ),pointer :: i_seq(:)      ! part-seq no. of atom in neigh list
-     real(double),pointer :: dx(:)
-     real(double),pointer :: dy(:)
-     real(double),pointer :: dz(:)
-     real(double),pointer :: radius(:)
+    ! Information from each neighbour
+    integer(integ),pointer :: i_species(:)  ! species of target atom i, dim: natom
+    ! Save vector of rij and r, or calcuate directly later
+    integer(integ),pointer :: j_species(:)  ! species of neighbour atom j  {[ith naba], [i+1th naba],}, dim
+    integer(integ),pointer :: i_part(:)     ! partition no. of atom in neigh list
+    integer(integ),pointer :: i_seq(:)      ! part-seq no. of atom in neigh list
+    real(double),pointer :: dx(:)
+    real(double),pointer :: dy(:)
+    real(double),pointer :: dz(:)
+    real(double),pointer :: radius(:)
 
-     ! Information of three body
-     integer(integ),pointer :: triplet_acc(:) ! accumulator for atom in triplet list
-     integer(integ),pointer :: n_triplet(:)   ! Three body triplets of primary atom i
-     integer(integ),pointer :: ist_triplet(:) ! seq no. of atom in neigh (pair) list
-     integer(integ) :: part_triplets           ! no. of triplets
+    ! Information of three body
+    integer(integ),pointer :: triplet_acc(:) ! accumulator for atom in triplet list
+    integer(integ),pointer :: n_triplet(:)   ! Three body triplets of primary atom i
+    integer(integ),pointer :: ist_triplet(:) ! seq no. of atom in neigh (pair) list
+    integer(integ) :: part_triplets           ! no. of triplets
   end type matrix_ML
 
   type features_ML
-     integer(integ) :: n_atoms ! Lengths of n_nab, i_acc, i_nd_acc
-     real(double), dimension(:,:), allocatable  :: fpx ! feature for atomic force in x direction of natoms
-     real(double), dimension(:,:), allocatable  :: fpy ! feature for atomic force in x direction of natoms
-     real(double), dimension(:,:), allocatable  :: fpz ! feature for atomic force in x direction of natoms
-     real(double), dimension(:,:), allocatable  :: fp ! feature for atomic energy of natoms
+    integer(integ) :: n_atoms ! Lengths of n_nab, i_acc, i_nd_acc
+    real(double), dimension(:,:), allocatable  :: fpx ! feature for atomic force in x direction of natoms
+    real(double), dimension(:,:), allocatable  :: fpy ! feature for atomic force in x direction of natoms
+    real(double), dimension(:,:), allocatable  :: fpz ! feature for atomic force in x direction of natoms
+    real(double), dimension(:,:), allocatable  :: fp ! feature for atomic energy of natoms
   end type features_ML
 
   type species_order
-      integer, dimension(:), allocatable :: d2
-      integer, dimension(:,:), allocatable :: d3
+    integer, dimension(:), allocatable :: d2
+    integer, dimension(:,:), allocatable :: d3
   end type species_order
 
 !!****s* ML_type/ML_acsf *
@@ -242,7 +242,7 @@ contains
     integer                    :: file_id=2023, stat
     character(len=80)          :: filename
     character(len=80)          :: descriptor_type, comment
-      ! Todo: filename
+    ! Todo: filename
     filename='ml_pot.txt'
     ! After we have neighbor information and descriptor information
     ! read and set
@@ -257,7 +257,7 @@ contains
 
     !! TODO: check flag_descriptortype
     if (inode == ionode) then
-        write(*,*) 'flag_descriptortype:', descriptor_type
+      write(*,*) 'flag_descriptortype:', descriptor_type
     end if
 
     if (descriptor_type == 'split2b3b' .or. descriptor_type == 'Split2b3b') then
@@ -267,10 +267,10 @@ contains
     end if
   end subroutine set_ML
 
-!!****f* matrix_module/allocate_matrix *
+!!****f* matrix_module/allocate_matrix_ML *
 !!
 !!  NAME
-!!   allocate_matrix
+!!   allocate_matrix_ML
 !!  USAGE
 !!
 !!  PURPOSE
@@ -283,7 +283,7 @@ contains
 !!  AUTHOR
 !!   Jianbo Lin
 !!  CREATION DATE
-!!   24/11/99
+!!   2023/07/20
 !!  MODIFICATION HISTORY
 !!
 !!  SOURCE
@@ -302,75 +302,63 @@ contains
 
     call start_timer(tmr_std_allocation)
     do i=1,part_on_node
-       ! Dimensions of neighbors
-       mx_naba = mx_part*mat_ML(i)%mx_abs
-       if (mx_naba .gt. 0) then
-           allocate(mat_ML(i)%i_seq(mx_naba),STAT=stat)
-           if(stat/=0) then
-              call cq_abort('alloc_mat_ML: error allocating memory to i_seq')
-           endif
-           allocate(mat_ML(i)%i_part(mx_naba),STAT=stat)
-           if(stat/=0) then
-              call cq_abort('alloc_mat_ML: error allocating memory to i_part')
-           endif
-           allocate(mat_ML(i)%radius(mx_naba),STAT=stat)
-           if(stat/=0) then
-              call cq_abort('alloc_mat_ML: error allocating memory to radius')
-           endif
-           allocate(mat_ML(i)%j_species(mx_naba),STAT=stat)
-           if(stat/=0) then
-              call cq_abort('alloc_mat_ML: error allocating memory to j_species')
-              endif
-           allocate(mat_ML(i)%dx(mx_naba),STAT=stat)
-           if(stat/=0) then
-              call cq_abort('alloc_mat_ML: error allocating memory to dx')
-           endif
-           allocate(mat_ML(i)%dy(mx_naba),STAT=stat)
-           if(stat/=0) then
-              call cq_abort('alloc_mat_ML: error allocating memory to dy')
-           endif
-           allocate(mat_ML(i)%dz(mx_naba),STAT=stat)
-           if(stat/=0) then
-              call cq_abort('alloc_mat_ML: error allocating memory to dz')
-           endif
-       else
-            write(*, *) 'Warning: allocate matrix ML, partition, mx_naba', i, mx_naba
-       end if ! mx_naba
-       ! Dimensions of atoms in processes
-       if (mx_part .gt. 0) then
-           allocate(mat_ML(i)%onsite(mx_part),STAT=stat)
-           if(stat/=0) then
-              call cq_abort('alloc_mat_ML: error allocating memory to onsite')
-           endif
-           allocate(mat_ML(i)%n_nab(mx_part),STAT=stat)
-           if(stat/=0) then
-              call cq_abort('alloc_mat_ML: error allocating memory to n_nab')
-           endif
-           allocate(mat_ML(i)%i_acc(mx_part),STAT=stat)
-           if(stat/=0) then
-              call cq_abort('alloc_mat_ML: error allocating memory to i_acc')
-           endif
-           allocate(mat_ML(i)%i_nd_acc(mx_part),STAT=stat)
-           if(stat/=0) then
-              call cq_abort('alloc_mat_ML: error allocating memory to i_nd_acc')
-           endif
-           allocate(mat_ML(i)%i_species(mx_part),STAT=stat)
-           if(stat/=0) then
-              call cq_abort('alloc_mat_ML: error allocating memory to i_species')
-           endif
-       else
-            write(*, *) 'Warning: allocate matrix ML, partition, mx_part', i, mx_part
-       end if ! mx_part
+      ! Dimensions of neighbors
+      mx_naba = mx_part*mat_ML(i)%mx_abs
+      if (mx_naba .gt. 0) then
+        allocate(mat_ML(i)%i_seq(mx_naba),STAT=stat)
+        if(stat/=0) &
+          call cq_abort('alloc_mat_ML: error allocating memory to i_seq')
+        allocate(mat_ML(i)%i_part(mx_naba),STAT=stat)
+        if(stat/=0) &
+          call cq_abort('alloc_mat_ML: error allocating memory to i_part')
+        allocate(mat_ML(i)%radius(mx_naba),STAT=stat)
+        if(stat/=0) &
+          call cq_abort('alloc_mat_ML: error allocating memory to radius')
+        allocate(mat_ML(i)%j_species(mx_naba),STAT=stat)
+        if(stat/=0) &
+          call cq_abort('alloc_mat_ML: error allocating memory to j_species')
+        allocate(mat_ML(i)%dx(mx_naba),STAT=stat)
+        if(stat/=0) &
+          call cq_abort('alloc_mat_ML: error allocating memory to dx')
+        allocate(mat_ML(i)%dy(mx_naba),STAT=stat)
+        if(stat/=0) &
+          call cq_abort('alloc_mat_ML: error allocating memory to dy')
+        allocate(mat_ML(i)%dz(mx_naba),STAT=stat)
+        if(stat/=0) &
+          call cq_abort('alloc_mat_ML: error allocating memory to dz')
+      else
+        write(*, *) 'Warning: allocate matrix ML, partition, mx_naba', i, mx_naba
+      end if ! mx_naba
+      ! Dimensions of atoms in processes
+      if (mx_part .gt. 0) then
+        allocate(mat_ML(i)%onsite(mx_part),STAT=stat)
+        if(stat/=0) &
+          call cq_abort('alloc_mat_ML: error allocating memory to onsite')
+        allocate(mat_ML(i)%n_nab(mx_part),STAT=stat)
+        if(stat/=0) &
+          call cq_abort('alloc_mat_ML: error allocating memory to n_nab')
+        allocate(mat_ML(i)%i_acc(mx_part),STAT=stat)
+        if(stat/=0) &
+          call cq_abort('alloc_mat_ML: error allocating memory to i_acc')
+        allocate(mat_ML(i)%i_nd_acc(mx_part),STAT=stat)
+        if(stat/=0) &
+          call cq_abort('alloc_mat_ML: error allocating memory to i_nd_acc')
+        allocate(mat_ML(i)%i_species(mx_part),STAT=stat)
+        if(stat/=0) &
+          call cq_abort('alloc_mat_ML: error allocating memory to i_species')
+      else
+        write(*, *) 'Warning: allocate matrix ML, partition, mx_part', i, mx_part
+      end if ! mx_part
     enddo ! i, part_on_node
     call stop_timer(tmr_std_allocation)
     return
   end subroutine allocate_matrix_ML
 !!***
 
-!!****f* matrix_module/deallocate_matrix *
+!!****f* matrix_module/deallocate_matrix_ML *
 !!
 !!  NAME
-!!   deallocate_matrix
+!!   deallocate_matrix_ML
 !!  USAGE
 !!
 !!  PURPOSE
@@ -383,7 +371,7 @@ contains
 !!  AUTHOR
 !!   Jianbo Lin
 !!  CREATION DATE
-!!   24/11/99
+!!   2023/07/20
 !!  MODIFICATION HISTORY
 !!
 !!  SOURCE
@@ -405,65 +393,53 @@ contains
     end if
     call start_timer(tmr_std_allocation)
     do i=part_on_node,1,-1
-       ! Dimensions of neighbors
-       mx_naba = mx_part*mat_ML(i)%mx_abs
-       if (mx_naba .gt. 0) then
-           deallocate(mat_ML(i)%i_seq,STAT=stat)
-           if(stat/=0) then
-              call cq_abort('dealloc_mat_ML: error deallocating memory to i_seq')
-           endif
-           deallocate(mat_ML(i)%i_part,STAT=stat)
-           if(stat/=0) then
-              call cq_abort('dealloc_mat_ML: error deallocating memory to i_part')
-           endif
-           deallocate(mat_ML(i)%radius,STAT=stat)
-           if(stat/=0) then
-              call cq_abort('dealloc_mat_ML: error deallocating memory to radius')
-           endif
-           deallocate(mat_ML(i)%j_species,STAT=stat)
-           if(stat/=0) then
-              call cq_abort('dealloc_mat_ML: error deallocating memory to j_species')
-              endif
-           deallocate(mat_ML(i)%dx,STAT=stat)
-           if(stat/=0) then
-              call cq_abort('dealloc_mat_ML: error deallocating memory to dx')
-           endif
-           deallocate(mat_ML(i)%dy,STAT=stat)
-           if(stat/=0) then
-              call cq_abort('dealloc_mat_ML: error deallocating memory to dy')
-           endif
-           deallocate(mat_ML(i)%dz,STAT=stat)
-           if(stat/=0) then
-              call cq_abort('dealloc_mat_ML: error deallocating memory to dz')
-           endif
-       else
-            write(*, *) 'Warning: deallocate matrix ML, partition, mx_naba', i, mx_naba
-       end if ! mx_naba
-       ! Dimensions of atoms in processes
-       if (mx_part .gt. 0) then
-           deallocate(mat_ML(i)%onsite,STAT=stat)
-           if(stat/=0) then
-              call cq_abort('dealloc_mat_ML: error deallocating memory to onsite')
-           endif
-           deallocate(mat_ML(i)%n_nab,STAT=stat)
-           if(stat/=0) then
-              call cq_abort('dealloc_mat_ML: error deallocating memory to n_nab')
-           endif
-           deallocate(mat_ML(i)%i_acc,STAT=stat)
-           if(stat/=0) then
-              call cq_abort('dealloc_mat_ML: error deallocating memory to i_acc')
-           endif
-           deallocate(mat_ML(i)%i_nd_acc,STAT=stat)
-           if(stat/=0) then
-              call cq_abort('dealloc_mat_ML: error deallocating memory to i_nd_acc')
-           endif
-           deallocate(mat_ML(i)%i_species,STAT=stat)
-           if(stat/=0) then
-              call cq_abort('dealloc_mat_ML: error deallocating memory to i_species')
-           endif
-       else
-            write(*, *) 'Warning: deallocate matrix ML, partition, mx_part', i, mx_part
-       end if ! mx_part
+      ! Dimensions of neighbors
+      mx_naba = mx_part*mat_ML(i)%mx_abs
+      if (mx_naba .gt. 0) then
+        deallocate(mat_ML(i)%i_seq,STAT=stat)
+        if(stat/=0) &
+          call cq_abort('dealloc_mat_ML: error deallocating memory to i_seq')
+        deallocate(mat_ML(i)%i_part,STAT=stat)
+        if(stat/=0) &
+          call cq_abort('dealloc_mat_ML: error deallocating memory to i_part')
+        deallocate(mat_ML(i)%radius,STAT=stat)
+        if(stat/=0) &
+          call cq_abort('dealloc_mat_ML: error deallocating memory to radius')
+        deallocate(mat_ML(i)%j_species,STAT=stat)
+        if(stat/=0) &
+          call cq_abort('dealloc_mat_ML: error deallocating memory to j_species')
+        deallocate(mat_ML(i)%dx,STAT=stat)
+        if(stat/=0) &
+          call cq_abort('dealloc_mat_ML: error deallocating memory to dx')
+        deallocate(mat_ML(i)%dy,STAT=stat)
+        if(stat/=0) &
+          call cq_abort('dealloc_mat_ML: error deallocating memory to dy')
+        deallocate(mat_ML(i)%dz,STAT=stat)
+        if(stat/=0) &
+          call cq_abort('dealloc_mat_ML: error deallocating memory to dz')
+      else
+          write(*, *) 'Warning: deallocate matrix ML, partition, mx_naba', i, mx_naba
+      end if ! mx_naba
+      ! Dimensions of atoms in processes
+      if (mx_part .gt. 0) then
+         deallocate(mat_ML(i)%onsite,STAT=stat)
+         if(stat/=0) &
+            call cq_abort('dealloc_mat_ML: error deallocating memory to onsite')
+         deallocate(mat_ML(i)%n_nab,STAT=stat)
+         if(stat/=0) &
+            call cq_abort('dealloc_mat_ML: error deallocating memory to n_nab')
+         deallocate(mat_ML(i)%i_acc,STAT=stat)
+         if(stat/=0) &
+            call cq_abort('dealloc_mat_ML: error deallocating memory to i_acc')
+         deallocate(mat_ML(i)%i_nd_acc,STAT=stat)
+         if(stat/=0) &
+            call cq_abort('dealloc_mat_ML: error deallocating memory to i_nd_acc')
+         deallocate(mat_ML(i)%i_species,STAT=stat)
+         if(stat/=0) &
+            call cq_abort('dealloc_mat_ML: error deallocating memory to i_species')
+      else
+          write(*, *) 'Warning: deallocate matrix ML, partition, mx_part', i, mx_part
+      end if ! mx_part
     enddo ! i, part_on_node
     call stop_timer(tmr_std_allocation)
     return
@@ -471,10 +447,10 @@ contains
 !!***
 
 
-!!****f* matrix_module/allocate_matrix *
+!!****f* matrix_module/allocate_matrix_ML_triplet *
 !!
 !!  NAME
-!!   allocate_matrix
+!!   allocate_matrix_ML_triplet
 !!  USAGE
 !!
 !!  PURPOSE
@@ -487,7 +463,7 @@ contains
 !!  AUTHOR
 !!   Jianbo Lin
 !!  CREATION DATE
-!!   24/11/99
+!!   2023/07/22
 !!  MODIFICATION HISTORY
 !!
 !!  SOURCE
@@ -506,30 +482,26 @@ contains
 
     call start_timer(tmr_std_allocation)
     do nn=1,part_on_node
-       if (NOT(mat_ML(nn)%n_atoms .gt. 0)) then
-           write(*, *) 'Warning: alloc_mat_ML_triplet, no atom in partition,', nn, mat_ML(nn)%n_atoms
-           cycle
-       end if
-       ! Total dimensions of neighbors
-       part_nabs = mat_ML(nn)%part_nabs
-       allocate(mat_ML(nn)%triplet_acc(part_nabs),STAT=stat)
-       if(stat/=0) then
-              call cq_abort('alloc_mat_ML_triplet: error allocating memory to triplet_acc')
-       endif
-       allocate(mat_ML(nn)%n_triplet(part_nabs),STAT=stat)
-       if(stat/=0) then
-              call cq_abort('alloc_mat_ML_triplet: error allocating memory to n_triplet')
-       endif
+      if (mat_ML(nn)%n_atoms .gt. 0) then
+        ! Total dimensions of neighbors
+        part_nabs = mat_ML(nn)%part_nabs
+        allocate(mat_ML(nn)%triplet_acc(part_nabs),STAT=stat)
+        if(stat/=0) &
+          call cq_abort('alloc_mat_ML_triplet: error allocating memory to triplet_acc')
+        allocate(mat_ML(nn)%n_triplet(part_nabs),STAT=stat)
+        if(stat/=0) &
+          call cq_abort('alloc_mat_ML_triplet: error allocating memory to n_triplet')
 
-       part_nabs_sum = 0
-       do ni=1, mat_ML(nn)%n_atoms
-           part_nabs_sum = part_nabs_sum + mat_ML(nn)%n_nab(ni) **2
-       end do
-       allocate(mat_ML(nn)%ist_triplet(part_nabs_sum),STAT=stat)
-       if(stat/=0) then
-              call cq_abort('alloc_mat_ML_triplet: error allocating memory to ist_triplet')
-       endif
-
+        part_nabs_sum = 0
+        do ni=1, mat_ML(nn)%n_atoms
+          part_nabs_sum = part_nabs_sum + mat_ML(nn)%n_nab(ni) **2
+        end do
+        allocate(mat_ML(nn)%ist_triplet(part_nabs_sum),STAT=stat)
+        if(stat/=0) &
+          call cq_abort('alloc_mat_ML_triplet: error allocating memory to ist_triplet')
+      else
+         write(*, *) 'Warning: alloc_mat_ML_triplet, no atom in partition,', nn, mat_ML(nn)%n_atoms
+      end if
     enddo ! i, part_on_node
     call stop_timer(tmr_std_allocation)
     return
@@ -537,14 +509,14 @@ contains
 !!***
 
 
-!!****f* matrix_module/allocate_matrix *
+!!****f* matrix_module/deallocate_matrix_ML_triplet *
 !!
 !!  NAME
-!!   allocate_matrix
+!!   deallocate_matrix_ML_triplet
 !!  USAGE
 !!
 !!  PURPOSE
-!!   Allocate memory to matrix derived type
+!!   Deallocate memory to matrix derived type
 !!  INPUTS
 !!
 !!
@@ -553,7 +525,7 @@ contains
 !!  AUTHOR
 !!   Jianbo Lin
 !!  CREATION DATE
-!!   24/11/99
+!!   2023/07/22
 !!  MODIFICATION HISTORY
 !!
 !!  SOURCE
@@ -572,25 +544,21 @@ contains
 
     call start_timer(tmr_std_allocation)
     do nn=part_on_node, 1, -1
-       ! Total dimensions of neighbors
-       part_nabs = mat_ML(nn)%part_nabs
-       if (part_nabs .gt. 0) then
-           deallocate(mat_ML(nn)%triplet_acc,STAT=stat)
-           if(stat/=0) then
-              call cq_abort('dealloc_mat_ML_triplet: error deallocating memory to triplet_acc')
-           endif
-           deallocate(mat_ML(nn)%n_triplet,STAT=stat)
-           if(stat/=0) then
-              call cq_abort('dealloc_mat_ML_triplet: error deallocating memory to n_triplet')
-           endif
-           deallocate(mat_ML(nn)%ist_triplet,STAT=stat)
-           if(stat/=0) then
-              call cq_abort('dealloc_mat_ML_triplet: error deallocating memory to ist_triplet')
-           endif
-       else
-         write(*, *) 'Warning: deallocate matrix ML triplet: partition, part_nabs', nn, part_nabs
-       end if
-
+      ! Total dimensions of neighbors
+      part_nabs = mat_ML(nn)%part_nabs
+      if (part_nabs .gt. 0) then
+        deallocate(mat_ML(nn)%triplet_acc,STAT=stat)
+        if(stat/=0) &
+          call cq_abort('dealloc_mat_ML_triplet: error deallocating memory to triplet_acc')
+        deallocate(mat_ML(nn)%n_triplet,STAT=stat)
+        if(stat/=0) &
+          call cq_abort('dealloc_mat_ML_triplet: error deallocating memory to n_triplet')
+        deallocate(mat_ML(nn)%ist_triplet,STAT=stat)
+        if(stat/=0) &
+          call cq_abort('dealloc_mat_ML_triplet: error deallocating memory to ist_triplet')
+      else
+        write(*, *) 'Warning: deallocate matrix ML triplet: partition, part_nabs', nn, part_nabs
+      end if
     enddo ! i, part_on_node
     call stop_timer(tmr_std_allocation)
     return
@@ -618,21 +586,41 @@ contains
     endif
     shift=0
     do i=1, n_species
-        species_orders%d2(i) = i
-        do j=1, n_species
-            if (j >= i) then
-                species_orders%d3(i,j) = shift + j -i +1
-            else
-                species_orders%d3(i,j) = species_orders%d3(j,i)
-            end if
-        end do
-        shift = shift + n_species - i +1
+      species_orders%d2(i) = i
+      do j=1, n_species
+        if (j >= i) then
+          species_orders%d3(i,j) = shift + j -i +1
+        else
+          species_orders%d3(i,j) = species_orders%d3(j,i)
+        end if
+      end do
+      shift = shift + n_species - i +1
     end do
     return
   end subroutine ini_species_order
 !!***
 
 !!****f* matrix_module/allocate_feature_ML *
+!!
+!!  NAME
+!!   allocate_feature_ML
+!!  USAGE
+!!
+!!  PURPOSE
+!!   A matrix to collect information of feature for each partition.
+!!  INPUTS
+!!
+!!
+!!  USES
+!!
+!!  AUTHOR
+!!   Jianbo Lin
+!!  CREATION DATE
+!!   2023/04/22
+!!  MODIFICATION HISTORY
+!!
+!!  SOURCE
+!!
   subroutine allocate_features_ML(amat_ML, amat_features_ML,part_on_node,feature_dim)
     use matrix_module, ONLY: matrix
     use GenComms, ONLY: cq_abort, inode, ionode
@@ -647,40 +635,30 @@ contains
     integer ::  i,n_atoms,stat
 
     call start_timer(tmr_std_allocation)
-    do i=1,part_on_node
-        ! n_atoms in this partition
-        n_atoms = amat_ML(i)%n_atoms
-        !if (inode == ionode) &
-        !    write(*,*) 'in allocate_features_ML', ' n_atoms:', n_atoms
+    do i=1, part_on_node
+      ! number of atoms in this partition
+      n_atoms = amat_ML(i)%n_atoms
+      if (n_atoms .gt. 0) then
+        allocate(amat_features_ML(i)%fpx(feature_dim,n_atoms),STAT=stat)
+        if(stat/=0) &
+          call cq_abort('alloc_mat_features_ML: error allocating memory to fpx')
+        allocate(amat_features_ML(i)%fpy(feature_dim,n_atoms),STAT=stat)
+        if(stat/=0) &
+          call cq_abort('alloc_mat_features_ML: error allocating memory to fpy')
+        allocate(amat_features_ML(i)%fpz(feature_dim,n_atoms),STAT=stat)
+        if(stat/=0) &
+          call cq_abort('alloc_mat_features_ML: error allocating memory to fpz')
+        allocate(amat_features_ML(i)%fp(feature_dim,n_atoms),STAT=stat)
+        if(stat/=0) &
+          call cq_abort('alloc_mat_features_ML: error allocating memory to fp')
 
-        if (n_atoms .gt.0) then
-            allocate(amat_features_ML(i)%fpx(feature_dim,n_atoms),STAT=stat)
-            if(stat/=0) then
-                call cq_abort('alloc_mat_features_ML: error allocating memory to fpx')
-            endif
-            allocate(amat_features_ML(i)%fpy(feature_dim,n_atoms),STAT=stat)
-            if(stat/=0) then
-                call cq_abort('alloc_mat_features_ML: error allocating memory to fpy')
-            endif
-            allocate(amat_features_ML(i)%fpz(feature_dim,n_atoms),STAT=stat)
-            if(stat/=0) then
-                call cq_abort('alloc_mat_features_ML: error allocating memory to fpz')
-            endif
-            allocate(amat_features_ML(i)%fp(feature_dim,n_atoms),STAT=stat)
-            if(stat/=0) then
-                call cq_abort('alloc_mat_features_ML: error allocating memory to fp')
-            endif
-            amat_features_ML(i)%fpx = 0.0
-            amat_features_ML(i)%fpy = 0.0
-            amat_features_ML(i)%fpz = 0.0
-            amat_features_ML(i)%fp = 0.0
-            !if (inode == ionode) then
-            !    write(*,*) 'in allocate_features_ML', ' end allocate', n_atoms
-            !end if
-        else
-            write(*,*) 'Warning no atom in partition, allocate_features_ML ', ' n_atoms:', n_atoms
-        end if
-
+        amat_features_ML(i)%fpx = 0.0
+        amat_features_ML(i)%fpy = 0.0
+        amat_features_ML(i)%fpz = 0.0
+        amat_features_ML(i)%fp = 0.0
+      else
+        write(*,*) 'Warning no atom in partition, allocate_features_ML ', ' n_atoms:', n_atoms
+      end if
     enddo
     call stop_timer(tmr_std_allocation)
     return
@@ -688,6 +666,26 @@ contains
 !!***
 
 !!****f* matrix_module/deallocate_feature_ML *
+!!
+!!  NAME
+!!   deallocate_feature_ML
+!!  USAGE
+!!
+!!  PURPOSE
+!!   Deallocate the matrix for collecting information of feature.
+!!  INPUTS
+!!
+!!
+!!  USES
+!!
+!!  AUTHOR
+!!   Jianbo Lin
+!!  CREATION DATE
+!!   2023/04/22
+!!  MODIFICATION HISTORY
+!!
+!!  SOURCE
+!!
   subroutine deallocate_features_ML(amat_ML,amat_features_ML,part_on_node)
     use matrix_module, ONLY: matrix
     use GenComms, ONLY: cq_abort, inode, ionode
@@ -703,35 +701,24 @@ contains
 
     call start_timer(tmr_std_allocation)
     do i=part_on_node,1,-1
-        ! n_atoms in this partition
-        n_atoms = amat_ML(i)%n_atoms
-        !if (inode == ionode) &
-        !    write(*,*) 'in allocate_features_ML', ' n_atoms:', n_atoms
-
-        if (n_atoms .gt.0) then
-            deallocate(amat_features_ML(i)%fpx,STAT=stat)
-            if(stat/=0) then
-                call cq_abort('dealloc_mat_features_ML: error deallocating memory to fpx')
-            endif
-            deallocate(amat_features_ML(i)%fpy,STAT=stat)
-            if(stat/=0) then
-                call cq_abort('dealloc_mat_features_ML: error deallocating memory to fpy')
-            endif
-            deallocate(amat_features_ML(i)%fpz,STAT=stat)
-            if(stat/=0) then
-                call cq_abort('dealloc_mat_features_ML: error deallocating memory to fpz')
-            endif
-            deallocate(amat_features_ML(i)%fp,STAT=stat)
-            if(stat/=0) then
-                call cq_abort('dealloc_mat_features_ML: error deallocating memory to fp')
-            endif
-            !if (inode == ionode) then
-            !    write(*,*) 'in allocate_features_ML', ' end allocate', n_atoms
-            !end if
-        else
-            write(*,*) 'Warning no atom in partition, deallocate_features_ML ', ' n_atoms:', n_atoms
-        end if
-
+      ! n_atoms in this partition
+      n_atoms = amat_ML(i)%n_atoms
+      if (n_atoms .gt.0) then
+        deallocate(amat_features_ML(i)%fpx,STAT=stat)
+        if(stat/=0) &
+          call cq_abort('dealloc_mat_features_ML: error deallocating memory to fpx')
+        deallocate(amat_features_ML(i)%fpy,STAT=stat)
+        if(stat/=0) &
+          call cq_abort('dealloc_mat_features_ML: error deallocating memory to fpy')
+        deallocate(amat_features_ML(i)%fpz,STAT=stat)
+        if(stat/=0) &
+          call cq_abort('dealloc_mat_features_ML: error deallocating memory to fpz')
+        deallocate(amat_features_ML(i)%fp,STAT=stat)
+        if(stat/=0) &
+          call cq_abort('dealloc_mat_features_ML: error deallocating memory to fp')
+      else
+          write(*,*) 'Warning no atom in partition, deallocate_features_ML ', ' n_atoms:', n_atoms
+      end if
     enddo
     call stop_timer(tmr_std_allocation)
     return
@@ -751,21 +738,17 @@ contains
     integer                 :: stat
 
     allocate(params%eta(num_dim),STAT=stat)
-    if(stat/=0) then
-        call cq_abort('alloc_b2_param: error allocating memory to eta')
-    endif
+    if(stat/=0) &
+      call cq_abort('alloc_b2_param: error allocating memory to eta')
     allocate(params%rs(num_dim),STAT=stat)
-    if(stat/=0) then
-        call cq_abort('alloc_b2_param: error allocating memory to rs')
-    endif
+    if(stat/=0) &
+      call cq_abort('alloc_b2_param: error allocating memory to rs')
     allocate(params%scales(num_dim),STAT=stat)
-    if(stat/=0) then
-        call cq_abort('alloc_b2_param: error allocating memory to scales')
-    endif
+    if(stat/=0) &
+      call cq_abort('alloc_b2_param: error allocating memory to scales')
     allocate(params%coefs(num_dim),STAT=stat)
-    if(stat/=0) then
-        call cq_abort('alloc_b2_param: error allocating memory to coefs')
-    endif
+    if(stat/=0) &
+      call cq_abort('alloc_b2_param: error allocating memory to coefs')
     return
   end subroutine allocate_b2_param
 !!***
@@ -775,30 +758,26 @@ contains
     implicit none
 
     ! Passed variables
-    type(g2_param), dimension(:)          :: params
-    integer                 :: n_2b_pair
+    type(g2_param), dimension(:)  :: params
+    integer                       :: n_2b_pair
 
     ! Local variables
-    integer                 :: i,stat
+    integer                       :: i,stat
 
     call start_timer(tmr_std_allocation)
     do i=n_2b_pair, 1, -1
-        deallocate(params(i)%eta,STAT=stat)
-        if(stat/=0) then
-            call cq_abort('dealloc_b2_param: error deallocating memory to eta')
-        endif
-        deallocate(params(i)%rs,STAT=stat)
-        if(stat/=0) then
-            call cq_abort('dealloc_b2_param: error deallocating memory to rs')
-        endif
-        deallocate(params(i)%scales,STAT=stat)
-        if(stat/=0) then
-            call cq_abort('dealloc_b2_param: error deallocating memory to scales')
-        endif
-        deallocate(params(i)%coefs,STAT=stat)
-        if(stat/=0) then
-            call cq_abort('dealloc_b2_param: error deallocating memory to coefs')
-        endif
+      deallocate(params(i)%eta,STAT=stat)
+      if(stat/=0) &
+        call cq_abort('dealloc_b2_param: error deallocating memory to eta')
+      deallocate(params(i)%rs,STAT=stat)
+      if(stat/=0) &
+        call cq_abort('dealloc_b2_param: error deallocating memory to rs')
+      deallocate(params(i)%scales,STAT=stat)
+      if(stat/=0) &
+        call cq_abort('dealloc_b2_param: error deallocating memory to scales')
+      deallocate(params(i)%coefs,STAT=stat)
+      if(stat/=0) &
+        call cq_abort('dealloc_b2_param: error deallocating memory to coefs')
     end do
     call stop_timer(tmr_std_allocation)
     return
@@ -817,25 +796,20 @@ contains
     integer                 :: stat
 
     allocate(params%eta1(num_dim),STAT=stat)
-    if(stat/=0) then
-        call cq_abort('alloc_b3_param: error allocating memory to eta1')
-    endif
+    if(stat/=0) &
+      call cq_abort('alloc_b3_param: error allocating memory to eta1')
     allocate(params%eta2(num_dim),STAT=stat)
-    if(stat/=0) then
-        call cq_abort('alloc_b3_param: error allocating memory to eta2')
-    endif
+    if(stat/=0) &
+      call cq_abort('alloc_b3_param: error allocating memory to eta2')
     allocate(params%eta3(num_dim),STAT=stat)
-    if(stat/=0) then
-        call cq_abort('alloc_b3_param: error allocating memory to eta3')
-    endif
+    if(stat/=0) &
+      call cq_abort('alloc_b3_param: error allocating memory to eta3')
     allocate(params%scales(num_dim),STAT=stat)
-    if(stat/=0) then
-        call cq_abort('alloc_b3_param: error allocating memory to scales')
-    endif
+    if(stat/=0) &
+      call cq_abort('alloc_b3_param: error allocating memory to scales')
     allocate(params%coefs(num_dim),STAT=stat)
-    if(stat/=0) then
-        call cq_abort('alloc_b3_param: error allocating memory to coefs')
-    endif
+    if(stat/=0) &
+      call cq_abort('alloc_b3_param: error allocating memory to coefs')
     return
   end subroutine allocate_b3_param
 !!***
@@ -845,34 +819,29 @@ contains
     implicit none
 
     ! Passed variables
-    type(b3_param), dimension(:), allocatable          :: params
-    integer                 :: num_b3
+    type(b3_param), dimension(:), allocatable   :: params
+    integer                                     :: num_b3
 
     ! Local variables
-    integer                 :: i,stat
+    integer                                     :: i,stat
 
     call start_timer(tmr_std_allocation)
     do i=num_b3, 1, -1
-        deallocate(params(i)%eta1,STAT=stat)
-        if(stat/=0) then
-            call cq_abort('dealloc_b3_param: error deallocating memory to eta1')
-        endif
-        deallocate(params(i)%eta2,STAT=stat)
-        if(stat/=0) then
-            call cq_abort('dealloc_b3_param: error deallocating memory to eta2')
-        endif
-        deallocate(params(i)%eta3,STAT=stat)
-        if(stat/=0) then
-            call cq_abort('dealloc_b3_param: error deallocating memory to eta3')
-        endif
-        deallocate(params(i)%scales,STAT=stat)
-        if(stat/=0) then
-            call cq_abort('dealloc_b3_param: error deallocating memory to scales')
-        endif
-        deallocate(params(i)%coefs,STAT=stat)
-        if(stat/=0) then
-            call cq_abort('dealloc_b3_param: error deallocating memory to coefs')
-        endif
+      deallocate(params(i)%eta1,STAT=stat)
+      if(stat/=0) &
+        call cq_abort('dealloc_b3_param: error deallocating memory to eta1')
+      deallocate(params(i)%eta2,STAT=stat)
+      if(stat/=0) &
+        call cq_abort('dealloc_b3_param: error deallocating memory to eta2')
+      deallocate(params(i)%eta3,STAT=stat)
+      if(stat/=0) &
+        call cq_abort('dealloc_b3_param: error deallocating memory to eta3')
+      deallocate(params(i)%scales,STAT=stat)
+      if(stat/=0) &
+        call cq_abort('dealloc_b3_param: error deallocating memory to scales')
+      deallocate(params(i)%coefs,STAT=stat)
+      if(stat/=0) &
+        call cq_abort('dealloc_b3_param: error deallocating memory to coefs')
     end do
     call stop_timer(tmr_std_allocation)
     return
@@ -893,7 +862,7 @@ contains
 
 
     do i =1, dims
-        read(file_id,*) params%eta(i),params%rs(i),params%scales(i),params%coefs(i)
+      read(file_id,*) params%eta(i),params%rs(i),params%scales(i),params%coefs(i)
     end do
     !read(file_id,*) params%eta
     !read(file_id,*) params%rs
