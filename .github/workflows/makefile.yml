@@ -8,7 +8,7 @@ on:
 
 jobs:
   build:
-    name: ${{matrix.fc}} -- ${{matrix.os}} -- np = ${{matrix.np}}
+    name: ${{matrix.fc}} -- ${{matrix.os}} -- ${{matrix.np}} processes -- ${{matrix.threads}} threads
     runs-on: ${{matrix.os}}
     env:
       FC: ${{matrix.fc}}
@@ -22,13 +22,9 @@ jobs:
           # We could add ubuntu-latest but until 2024 it will be the same as 22.04
           - ubuntu-22.04
         fc:
-          # the mpifort wrapper is recommended instead of mpif90 by openmpi. Including
-          # both here in case they do something differently.
-          #
           # TODO: We could also build with `intel-oneapi-compiler-fortran`, it is available
           #       for installation from Intel through their apt repository.
           - mpifort
-          - mpif90
         np:
           - 1
           - 2
