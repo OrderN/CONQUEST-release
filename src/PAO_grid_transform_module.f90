@@ -234,13 +234,12 @@ contains
                       y = y_store(ip)
                       z = z_store(ip)
                       ! For this point-atom offset, we accumulate the PAO on the grid
-                      count1 = 0
                       l_loop: do l1 = 0,pao(my_species)%greatest_angmom
                          z_loop: do acz = 1,pao(my_species)%angmom(l1)%n_zeta_in_angmom
                             m_loop: do m1=-l1,l1
                                call evaluate_pao(my_species,l1,acz,m1,x,y,z,val)
-                               gridfunctions(pao_fns)%griddata(position + count1 * n_pts_in_block) = val
-                               count1 = count1+1
+                               gridfunctions(pao_fns)%griddata(position) = val
+                               position = position + n_pts_in_block
                             end do m_loop
                          end do z_loop
                       end do l_loop
