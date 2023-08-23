@@ -130,10 +130,10 @@ contains
     real(double) :: x,y,z ! Temporary variables to reduce indirect accesses
     real(double) :: rcut ! Input to check_block
     real(double) :: val ! output, written into gridfunctions%griddata
+    real(double) xblock,yblock,zblock ! inputs to check_block
     integer, allocatable, dimension(:) :: ip_store ! outputs of check_block
     integer, allocatable, dimension(:,:,:) :: offset_position, species_store ! precomputed variables
     real(double), allocatable, dimension(:) :: x_store, y_store, z_store, r_store ! outputs of check_block
-    real(double), allocatable, dimension(:) :: xblock,yblock,zblock ! inputs to check_block, precomputed
     real(double), allocatable, dimension(:,:,:) :: xatom,yatom,zatom ! inputs to check_block, precomputed
 
     nblock = domain%groups_on_node
@@ -142,7 +142,6 @@ contains
 
     call start_timer(tmr_std_basis)
     call start_timer(tmr_std_allocation)
-    allocate(xblock(nblock), yblock(nblock), zblock(nblock))
     allocate(xatom(natom, npart, nblock))
     allocate(yatom(natom, npart, nblock))
     allocate(zatom(natom, npart, nblock))
@@ -176,9 +175,6 @@ contains
     ! Note: Using OpenMP in this loop requires some redesign because there is a loop
     !       carrier dependency in next_offset_position.
     blocks_loop: do iblock = 1, domain%groups_on_node ! primary set of blocks
-       xblock(iblock)=(domain%idisp_primx(iblock)+domain%nx_origin-1)*dcellx_block
-       yblock(iblock)=(domain%idisp_primy(iblock)+domain%ny_origin-1)*dcelly_block
-       zblock(iblock)=(domain%idisp_primz(iblock)+domain%nz_origin-1)*dcellz_block
        part_in_block: if(naba_atoms_of_blocks(atomf)%no_of_part(iblock) > 0) then ! if there are naba atoms
           iatom=0
           parts_loop: do ipart=1,naba_atoms_of_blocks(atomf)%no_of_part(iblock)
@@ -190,9 +186,9 @@ contains
                 icover= DCS_parts%icover_ibeg(jpart)+ii-1
                 ig_atom= id_glob(parts%icell_beg(ind_part)+ii-1)
 
-                xatom(      ia, ipart, iblock) = DCS_parts%xcover(icover)
-                yatom(      ia, ipart, iblock) = DCS_parts%ycover(icover)
-                zatom(      ia, ipart, iblock) = DCS_parts%zcover(icover)
+                xatom(ia, ipart, iblock) = DCS_parts%xcover(icover)
+                yatom(ia, ipart, iblock) = DCS_parts%ycover(icover)
+                zatom(ia, ipart, iblock) = DCS_parts%zcover(icover)
                 species_store(ia, ipart, iblock) = species_glob(ig_atom)
 
                 offset_position(ia, ipart, iblock) = next_offset_position
@@ -206,18 +202,22 @@ contains
     !$omp parallel do default(none) &
     !$omp             schedule(dynamic) &
     !$omp             shared(domain, naba_atoms_of_blocks, offset_position, pao_fns, atomf, &
-    !$omp                    xblock, yblock, zblock, species_store, &
+    !$omp                    dcellx_block, dcelly_block, dcellz_block, species_store, &
     !$omp                    xatom, yatom, zatom, rcut, n_pts_in_block, pao, gridfunctions) &
     !$omp             private(ia, ipart, iblock, l1, acz, m1, count1, x, y, z, val, position, &
-    !$omp                     npoint, r_store, ip_store, x_store, y_store, z_store, my_species)
+    !$omp                     npoint, r_store, ip_store, x_store, y_store, z_store, my_species, &
+    !$omp                     xblock, yblock, zblock)
     blocks_loop_omp: do iblock = 1, domain%groups_on_node ! primary set of blocks
+       xblock = ( domain%idisp_primx(iblock) + domain%nx_origin - 1 ) * dcellx_block
+       yblock = ( domain%idisp_primy(iblock) + domain%ny_origin - 1 ) * dcelly_block
+       zblock = ( domain%idisp_primz(iblock) + domain%nz_origin - 1 ) * dcellz_block
        part_if_omp: if(naba_atoms_of_blocks(atomf)%no_of_part(iblock) > 0) then ! if there are naba atoms
           parts_loop_omp: do ipart=1,naba_atoms_of_blocks(atomf)%no_of_part(iblock)
              atoms_loop_omp: do ia=1,naba_atoms_of_blocks(atomf)%no_atom_on_part(ipart,iblock)
 
                 !calculates distances between the atom and integration grid points
                 !in the block and stores which integration grids are neighbours.
-                call check_block (xblock(iblock), yblock(iblock), zblock(iblock), &
+                call check_block (xblock, yblock, zblock, &
                      xatom(ia, ipart, iblock), &
                      yatom(ia, ipart, iblock), &
                      zatom(ia, ipart, iblock), &
@@ -255,7 +255,7 @@ contains
     call start_timer(tmr_std_allocation)
     ! Could just let these go out of scope at the end?
     deallocate(ip_store,x_store,y_store,z_store,r_store,species_store,offset_position)
-    deallocate(xblock,yblock,zblock,xatom,yatom,zatom)
+    deallocate(xatom,yatom,zatom)
     call stop_timer(tmr_std_allocation)
     call stop_timer(tmr_std_basis)
     return
