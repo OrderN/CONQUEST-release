@@ -13,7 +13,7 @@
 !!  PURPOSE
 !!   Obtain forces and energies from machine learning force field
 !!  AUTHOR
-!!   Jianbo.Lin
+!!   Jianbo Lin
 !!  CREATION DATE
 !!   2022/03/14
 !!  MODIFICATION HISTORY
@@ -217,6 +217,16 @@ module mlff_type
   !integer, dimension(:,:), allocatable :: species_order
 !!***
 
+  interface swap ! swap two data
+     module procedure int_swap
+     module procedure double_swap
+  end interface
+
+  interface read_ml ! read machine learning model
+     module procedure read_acsf2b
+     module procedure read_split
+  end interface
+
 contains
 
 
@@ -261,9 +271,9 @@ contains
     end if
 
     if (descriptor_type == 'split2b3b' .or. descriptor_type == 'Split2b3b') then
-      call read_split(filename, params_ML%split)
+      call read_ml(filename, params_ML%split)
     elseif (descriptor_type == 'acsf2b' .or. descriptor_type == 'Acsf2b') then
-      call read_acsf2b(filename, params_ML%acsf)
+      call read_ml(filename, params_ML%acsf)
     end if
   end subroutine set_ML
 
@@ -754,18 +764,18 @@ contains
 !!***
 
 !!****f* matrix_module/deallocate_b2_param *
-  subroutine deallocate_b2_param(params, n_2b_pair)
+  subroutine deallocate_b2_param(params, num_b2)
     implicit none
 
     ! Passed variables
     type(g2_param), dimension(:)  :: params
-    integer                       :: n_2b_pair
+    integer                       :: num_b2
 
     ! Local variables
     integer                       :: i,stat
 
     call start_timer(tmr_std_allocation)
-    do i=n_2b_pair, 1, -1
+    do i=num_b2, 1, -1
       deallocate(params(i)%eta,STAT=stat)
       if(stat/=0) &
         call cq_abort('dealloc_b2_param: error deallocating memory to eta')
@@ -885,7 +895,7 @@ contains
     integer                 :: i
 
     do i =1, dims
-        read(file_id,*) params%eta1(i),params%eta2(i),params%eta3(i),params%scales(i),params%coefs(i)
+      read(file_id,*) params%eta1(i),params%eta2(i),params%eta3(i),params%scales(i),params%coefs(i)
     end do
     return
   end subroutine get_b3_param
@@ -919,7 +929,7 @@ contains
     character(len=*)           :: filename
 
     ! Local variables
-    integer                    :: i, j, k, dim_2b, n_species, n_2b_pair
+    integer                    :: ii, jj, kk, dim_2b, n_species, n_2b_pair
     integer                    :: a,b,shift, num_g2
     integer                    :: stat
     integer                    :: file_id=2022
@@ -941,149 +951,144 @@ contains
     !! Allocate n_spieces of descriptor_params
     allocate(descriptor_params(n_species),STAT=stat)
     if(stat/=0) then
-        call cq_abort('acsf2b descriptor_params: error allocating memory to n_species')
+      call cq_abort('acsf2b descriptor_params: error allocating memory to n_species')
     endif
-    do i=1, n_species
-        call ini_species_order(descriptor_params(i)%species_orders, n_species)
+    do ii=1, n_species
+      call ini_species_order(descriptor_params(ii)%species_orders, n_species)
     end do
     descriptor_params%n_species = n_species
 
     !! Allcoate number of pairs or triplets for descriptor_params
     call allocate_acsf2b_param(descriptor_params)
 
-    do i=1, n_species
-        ! read the two body part
-        ! A-A,A-B,A-C, ...
-        ! 30,30,30, ...
-        read(file_id,*, end=999) comment
+    do ii=1, n_species
+      ! read the two body part
+      ! A-A,A-B,A-C, ...
+      ! 30,30,30, ...
+      read(file_id,*, end=999) comment
 
+      if (inode == ionode) then
+        write(*,*) 'read_acsf2b: i, comment ', ii, comment
+      end if
+      ! number of pair types is equal to n_species
+      n_2b_pair = descriptor_params(ii)%n_species
+      allocate(dims_2b(n_2b_pair),STAT=stat)
+      if(stat/=0) then
+        call cq_abort('dims_2b : error allocating memory to n_2b_pair')
+      endif
+
+      ! element name
+      read(file_id,*, end=999) comment
+      ! element order
+      read(file_id,*, end=999) comment
+      ! read dimensions of each pair type
+      read(file_id,*) dims_2b
+
+      ! num_g2 = sum(nums_g2()), nums_g2_acc is index of each g2
+      do jj = 1, n_2b_pair
+        descriptor_params(ii)%nums_g2(jj) = dims_2b(jj)
+        !! TODO: from comment to get the index of params_2b(i)
+        call allocate_b2_param(descriptor_params(ii)%params_g2(jj), dims_2b(jj))
+        call get_b2_param(file_id,descriptor_params(ii)%params_g2(jj), dims_2b(jj))
+      end do !jj1
+      if (inode == ionode) then
+        write(*,*) 'read_acsf2b: after read g2 , dims_2b, n_2b_pair', dims_2b,n_2b_pair
+      end if
+
+      descriptor_params(ii)%nums_g2_acc(1) = 1
+      descriptor_params(ii)%num_g2 = descriptor_params(ii)%nums_g2(1)
+      if (n_2b_pair .gt. 1 ) then
+        do jj = 2, n_2b_pair
+          dim_2b = descriptor_params(ii)%nums_g2(jj-1)
+          descriptor_params(ii)%nums_g2_acc(jj) = descriptor_params(ii)%nums_g2_acc(jj-1) + dim_2b
+          dim_2b = descriptor_params(ii)%nums_g2(jj)
+          descriptor_params(ii)%num_g2 = descriptor_params(ii)%num_g2 + dim_2b
+        end do !jj2
+      end if
+
+      if (inode == ionode) then
+        write(*,*) 'read_acsf2b: after acc_2b, n_2b_pair', descriptor_params(ii)%nums_g2_acc,n_2b_pair
+      end if
+
+      !! TODO: after read all g2,g3,g4,g5, collect all of coefficients
+      num_g2 = descriptor_params(ii)%num_g2
+      descriptor_params(ii)%dim_coef = num_g2
+      allocate(descriptor_params(ii)%coef(descriptor_params(ii)%dim_coef),STAT=stat)
+      if(stat/=0) then
+        call cq_abort('acsf2b coef in descriptor_params : error allocating memory to dim_coef')
+      endif
+      if (inode == ionode) then
+        write(*,*) 'read_acsf2b: after descriptor_params dim_coef=', descriptor_params(ii)%dim_coef
+      end if
+
+      !! collect coefficients
+      shift=0
+      do jj = 1, n_2b_pair
+        a = shift+descriptor_params(ii)%nums_g2_acc(jj)
+        b = a+descriptor_params(ii)%nums_g2(jj)-1
         if (inode == ionode) then
-            write(*,*) 'read_acsf2b: i, comment ', i, comment
+            write(*,*) 'read_acsf2b: in do j = 1, n_2b_pair  ', a,b,n_2b_pair
         end if
-        ! number of pair types is equal to n_species
-        n_2b_pair = descriptor_params(i)%n_species
-        allocate(dims_2b(n_2b_pair),STAT=stat)
-        if(stat/=0) then
-            call cq_abort('dims_2b : error allocating memory to n_2b_pair')
-        endif
+        descriptor_params(ii)%coef(a:b) = descriptor_params(ii)%params_g2(jj)%coefs &
+            / descriptor_params(ii)%params_g2(jj)%scales
 
-        ! element name
-        read(file_id,*, end=999) comment
-        ! element order
-        read(file_id,*, end=999) comment
-        ! read dimensions of each pair type
-        read(file_id,*) dims_2b
+        do kk = 1, b-a+1
+          if (inode == ionode) then
+            write(*,112) descriptor_params(ii)%params_g2(jj)%eta(kk),&
+                      descriptor_params(ii)%params_g2(jj)%rs(kk),&
+                      descriptor_params(ii)%params_g2(jj)%scales(kk),&
+                      descriptor_params(ii)%params_g2(jj)%coefs(kk)
+          end if
+        end do ! kk
 
-        ! num_g2 = sum(nums_g2()), nums_g2_acc is index of each g2
-        do j = 1, n_2b_pair
-            descriptor_params(i)%nums_g2(j) = dims_2b(j)
-            !! TODO: from comment to get the index of params_2b(i)
-            call allocate_b2_param(descriptor_params(i)%params_g2(j), dims_2b(j))
-            !call get_g2_param(file_id,descriptor_params(i)%params_g2(j), dims_2b(j))
-            call get_b2_param(file_id,descriptor_params(i)%params_g2(j), dims_2b(j))
-        end do !j1
-        if (inode == ionode) then
-            write(*,*) 'read_acsf2b: after read g2 , dims_2b ', dims_2b,n_2b_pair
+        ! check eta type
+        ! in our PCCP, we use r^2/eta^2, string as r2_div_eta2
+        if (eta_type=='eta_r2') then
+          if (inode == ionode) then
+            write(*,*) 'This is not default eta: Do something to eta in descriptor_params', eta_type
+          end if
+          descriptor_params(ii)%params_g2(jj)%eta = 1.0 / sqrt(descriptor_params(ii)%params_g2(jj)%eta)
+        else if (eta_type=='r2_div_eta2') then
+          if (inode == ionode) then
+            write(*,*) 'This is default eta: Do nothing to eta in descriptor_params',eta_type
+          end if
+          !descriptor_params(i)%params_g2(j)%eta = 1.0*descriptor_params(i)%params_g2(j)%eta
+          !call cq_abort('Error: need to prepare this part of transfer eta')
+        else if (eta_type=='r2_div_2eta2') then
+          if (inode == ionode) then
+            write(*,*) 'This is not default eta: Do something to eta in descriptor_params',eta_type
+          end if
+          descriptor_params(ii)%params_g2(jj)%eta = descriptor_params(ii)%params_g2(jj)%eta * sqrt(2.0)
+          call cq_abort('Error: need to prepare this part of transfer eta')
+        else
+          if (inode == ionode) then
+            write(*,*) 'No such eta at present',eta_type
+          end if
+          call cq_abort('Error: no such eta at present')
         end if
+      end do !jj3
+      shift=shift + descriptor_params(ii)%num_g2
+      if (inode == ionode) then
+        write(*,*) 'read_acsf2b: after collect coefficients '
+      end if
 
-        descriptor_params(i)%nums_g2_acc(1) = 1
-        descriptor_params(i)%num_g2 = descriptor_params(i)%nums_g2(1)
-        if (n_2b_pair .gt. 1 ) then
-            do j = 2, n_2b_pair
-                dim_2b = descriptor_params(i)%nums_g2(j)
-                !descriptor_params(i)%nums_g2_acc(j) = descriptor_params(i)%nums_g2(j-1) + dim_2b
-                descriptor_params(i)%nums_g2_acc(j) = descriptor_params(i)%nums_g2_acc(j-1) + dim_2b
-                descriptor_params(i)%num_g2 = descriptor_params(i)%num_g2 + dim_2b
-            end do !j2
-        end if
+      !! check with output
+      if (inode == ionode) then
+        write(*,*) 'read_acsf2b: check coef, dim_coef=',descriptor_params(ii)%dim_coef
+        do jj=1, descriptor_params(ii)%dim_coef
+          write(*,*) jj, descriptor_params(ii)%coef(jj)
+        end do !jj4
+        write(*,*) 'read_acsf2b: after check with output '
+      end if
 
-        if (inode == ionode) then
-            write(*,*) 'read_acsf2b: after acc ', descriptor_params(i)%nums_g2_acc,n_2b_pair
-        end if
-
-        !! after read all g2,g3,g4,g5, collect all of coefficients
-        num_g2 = descriptor_params(i)%num_g2
-        descriptor_params(i)%dim_coef = num_g2
-        allocate(descriptor_params(i)%coef(descriptor_params(i)%dim_coef),STAT=stat)
-        if(stat/=0) then
-            call cq_abort('acsf2b coef in descriptor_params : error allocating memory to dim_coef')
-        endif
-        if (inode == ionode) then
-            write(*,*) 'read_acsf2b: after descriptor_params(i)%dim_coef ', descriptor_params(i)%dim_coef
-        end if
-
-        !! collect coefficients
-        shift=0
-        do j = 1, n_2b_pair
-            a = shift+descriptor_params(i)%nums_g2_acc(j)
-            b = a+descriptor_params(i)%nums_g2(j)-1
-            if (inode == ionode) then
-                write(*,*) 'read_acsf2b: in do j = 1, n_2b_pair  ', a,b,n_2b_pair
-            end if
-            descriptor_params(i)%coef(a:b) = descriptor_params(i)%params_g2(j)%coefs / descriptor_params(i)%params_g2(j)%scales
-
-            !write(1985,*) 'a,b: ',a,b
-            !write(1985,*) b-a+1
-            do k = 1, b-a+1
-                write(1985,112) descriptor_params(i)%params_g2(j)%eta(k),&
-                              descriptor_params(i)%params_g2(j)%rs(k),&
-                              descriptor_params(i)%params_g2(j)%scales(k),&
-                              descriptor_params(i)%params_g2(j)%coefs(k)
-                if (inode == ionode) then
-                    write(*,112) descriptor_params(i)%params_g2(j)%eta(k),&
-                              descriptor_params(i)%params_g2(j)%rs(k),&
-                              descriptor_params(i)%params_g2(j)%scales(k),&
-                              descriptor_params(i)%params_g2(j)%coefs(k)
-                end if
-            end do
-
-            ! check eta type
-            ! in our PCCP, we use r^2/eta^2, string as r2_div_eta2
-            if (eta_type=='eta_r2') then
-                if (inode == ionode) then
-                    write(*,*) 'This is not default eta: Do something to eta in descriptor_params', eta_type
-                end if
-                descriptor_params(i)%params_g2(j)%eta = 1/ sqrt(descriptor_params(i)%params_g2(j)%eta)
-                !write(1985,*) 'This is not default eta: Do something to eta in descriptor_params', eta_type
-                !write(1985,*) descriptor_params(i)%params_g2(j)%eta
-            else if (eta_type=='r2_div_eta2') then
-                if (inode == ionode) then
-                    write(*,*) 'This is default eta: Do nothing to eta in descriptor_params',eta_type
-                end if
-                !descriptor_params(i)%params_g2(j)%eta = 1.0*descriptor_params(i)%params_g2(j)%eta
-                !call cq_abort('Error: need to prepare this part of transfer eta')
-            else if (eta_type=='r2_div_2eta2') then
-                if (inode == ionode) then
-                    write(*,*) 'This is not default eta: Do something to eta in descriptor_params',eta_type
-                end if
-                call cq_abort('Error: need to prepare this part of transfer eta')
-            else
-                if (inode == ionode) then
-                    write(*,*) 'No such eta at present',eta_type
-                end if
-                call cq_abort('Error: no such eta at present')
-            end if
-        end do !j3
-        shift=shift + descriptor_params(i)%num_g2
-        if (inode == ionode) then
-            write(*,*) 'read_acsf2b: after collect coefficients '
-        end if
-
-        !! check with output
-        do j=1, descriptor_params(i)%dim_coef
-            write(1985,*) j, descriptor_params(i)%coef(j)
-        end do !j4
-        if (inode == ionode) then
-            write(*,*) 'read_acsf2b: after check with output '
-        end if
-        deallocate(dims_2b)
-    end do !i
+      deallocate(dims_2b)
+    end do !ii1
 
     read(file_id,*, end=999) comment
     close(file_id)
 
 999 if (inode == ionode) then
-        print *, 'Done reading acsf2b file'
+      print *, 'Done reading acsf2b file'
     end if
     close(file_id)
 
@@ -1092,7 +1097,6 @@ contains
 112 format(4E16.8)
   end subroutine read_acsf2b
 !!***
-
 
 !!****f* matrix_module/allocate_split_param *
   subroutine allocate_acsf2b_param(descriptor_params)
@@ -1106,27 +1110,24 @@ contains
 
     n_spieces = 0
     if (descriptor_params(1)%n_species .LE. 0) then
-        call cq_abort('split(1) n_species: not defined or less than 1')
+      call cq_abort('split(1) n_species: not defined or less than 1')
     else
-        n_spieces = descriptor_params(1)%n_species
+      n_spieces = descriptor_params(1)%n_species
     end if
 
     do i=1, n_spieces
-        n_2b_pair = descriptor_params(i)%n_species
-        !dims_3b = dims_2b * (dims_2b + 1)/2
-        allocate(descriptor_params(i)%nums_g2(n_2b_pair),STAT=stat)
-        if(stat/=0) then
-            call cq_abort('acsf nums_g2: error allocating memory to n_2b_pair')
-        endif
-        allocate(descriptor_params(i)%nums_g2_acc(n_2b_pair),STAT=stat)
-        if(stat/=0) then
-            call cq_abort('acsf nums_g2_acc: error allocating memory to n_2b_pair')
-        endif
+      n_2b_pair = descriptor_params(i)%n_species
+      !dims_3b = dims_2b * (dims_2b + 1)/2
+      allocate(descriptor_params(i)%nums_g2(n_2b_pair),STAT=stat)
+      if(stat/=0) &
+        call cq_abort('acsf nums_g2: error allocating memory to n_2b_pair')
+      allocate(descriptor_params(i)%nums_g2_acc(n_2b_pair),STAT=stat)
+      if(stat/=0) &
+        call cq_abort('acsf nums_g2_acc: error allocating memory to n_2b_pair')
 
-        allocate(descriptor_params(i)%params_g2(n_2b_pair),STAT=stat)
-        if(stat/=0) then
-            call cq_abort('acsf params_g2: error allocating memory to n_2b_pair')
-        endif
+      allocate(descriptor_params(i)%params_g2(n_2b_pair),STAT=stat)
+      if(stat/=0) &
+        call cq_abort('acsf params_g2: error allocating memory to n_2b_pair')
         !allocate(split(i)%nums_3b(dims_3b),STAT=stat)
         !if(stat/=0) then
         !    call cq_abort('split(1) nums_3b: error allocating memory to dims_3b')
@@ -1136,7 +1137,6 @@ contains
         !    call cq_abort('split(1) nums_3b_acc: error allocating memory to dims_3b')
         !endif
     end do
-
     return
   end subroutine allocate_acsf2b_param
 !!***
@@ -1153,24 +1153,22 @@ contains
 
     n_spieces = 0
     if (descriptor_params(1)%n_species .LE. 0) then
-        call cq_abort('split(1) n_species: not defined or less than 1')
+      call cq_abort('split(1) n_species: not defined or less than 1')
     else
-        n_spieces = descriptor_params(1)%n_species
+      n_spieces = descriptor_params(1)%n_species
     end if
     call start_timer(tmr_std_allocation)
     do i=n_spieces, 1, -1
-        n_2b_pair = descriptor_params(i)%n_species
-        !dims_3b = dims_2b * (dims_2b + 1)/2
-        deallocate(descriptor_params(i)%nums_g2,STAT=stat)
-        if(stat/=0) then
-            call cq_abort('acsf deallocate: error deallocating memory to nums_g2')
-        endif
-        deallocate(descriptor_params(i)%nums_g2_acc,STAT=stat)
-        if(stat/=0) then
-            call cq_abort('acsf deallocate: error deallocating memory to nums_g2_acc')
-        endif
+      n_2b_pair = descriptor_params(i)%n_species
+      !dims_3b = dims_2b * (dims_2b + 1)/2
+      deallocate(descriptor_params(i)%nums_g2,STAT=stat)
+      if(stat/=0) &
+        call cq_abort('acsf deallocate: error deallocating memory to nums_g2')
+      deallocate(descriptor_params(i)%nums_g2_acc,STAT=stat)
+      if(stat/=0) &
+        call cq_abort('acsf deallocate: error deallocating memory to nums_g2_acc')
 
-        call deallocate_b2_param(descriptor_params(i)%params_g2, n_2b_pair)
+      call deallocate_b2_param(descriptor_params(i)%params_g2, n_2b_pair)
     end do
     call stop_timer(tmr_std_allocation)
     return
@@ -1195,11 +1193,11 @@ contains
 !!  USES
 !!
 !!  AUTHOR
-!!   JianBo.Lin
+!!   Jianbo Lin
 !!  CREATION DATE
 !!   2022/07/20
 !!  MODIFICATION HISTORY
-!!   2022/07/27 JL
+!!   2022/07/27 J.Lin
 !!    Modified to get pair information for machine learing
 !!  SOURCE
 !!
@@ -1239,14 +1237,14 @@ contains
     ! After we have neighbor information and descriptor information
     ! Check that prim and gcs are correctly set up
     if((.NOT.ASSOCIATED(gcs%xcover)).OR. &
-         (.NOT.ASSOCIATED(prim%xprim))) then
-       call cq_abort('get_naba: gcs or prim without members !')
+        (.NOT.ASSOCIATED(prim%xprim))) then
+      call cq_abort('get_naba: gcs or prim without members !')
     endif
     ! rcut bohr to angstrom
     rcut_a=rcut * BohrToAng
 
     if (inode== ionode) then
-        write(*,*) 'We are in get_naba_ML', ' id=',inode
+      write(*,*) 'We are in get_naba_ML', ' id=',inode
     end if
     call my_barrier()
     ! loop over all atom pairs (atoms in primary set, max. cover set) -
@@ -1254,79 +1252,78 @@ contains
     amat(1)%offset=0
     amat(1)%nd_offset=0
     do nn=1,prim%groups_on_node ! Partitions in primary set
-       !pair check!write(*,*) 'nn loop, inode=',inode
-       if(prim%nm_nodgroup(nn).gt.0) then  ! Are there atoms ?
-          !write(*,*) 'if prim atoms, inode=',inode, prim%nm_nodgroup(nn) ! success until here
+      !pair check!write(*,*) 'nn loop, inode=',inode
+      if(prim%nm_nodgroup(nn).gt.0) then  ! Are there atoms ?
+        !write(*,*) 'if prim atoms, inode=',inode, prim%nm_nodgroup(nn) ! success until here
+        !call my_barrier()
+        if (inode== ionode) then
+          write(*,*) 'We are in get_naba_ML prim%nm_nodgroup(nn).gt.0'
+        end if
+        if (amat(nn)%n_atoms .ne. prim%nm_nodgroup(nn)) then ! Redundant, but useful
+          call cq_abort('amat(nn)%n_atoms not equal prim%nm_nodgroup(nn)')
+        end if
+        !write(io_lun,*) 'Starting group with atoms: ',nn,prim%nm_nodgroup(nn)
+        do i=1,prim%nm_nodgroup(nn)  ! Loop over atoms in partition
+          !write(*,*) 'j loop, inode=',inode
           !call my_barrier()
-          if (inode== ionode) then
-              write(*,*) 'We are in get_naba_ML prim%nm_nodgroup(nn).gt.0'
-          end if
-          if (amat(nn)%n_atoms .ne. prim%nm_nodgroup(nn)) then ! Redundant, but useful
-              call cq_abort('amat(nn)%n_atoms not equal prim%nm_nodgroup(nn)')
-          end if
-          !write(io_lun,*) 'Starting group with atoms: ',nn,prim%nm_nodgroup(nn)
-          do i=1,prim%nm_nodgroup(nn)  ! Loop over atoms in partition
-             !write(*,*) 'j loop, inode=',inode
-             !call my_barrier()
-             !Species of i is  amat(nn)%i_species(i)
-             i_species = amat(nn)%i_species(i)
-             ia_glob=prim%ig_prim(prim%nm_nodbeg(nn)+i-1)
-             do j=1,  amat(nn)%n_nab(i)
-                 ist_j = amat(nn)%i_acc(i)+j-1
-                 species_orderij = descriptor_params(i_species)%species_orders%d2(amat(nn)%j_species(ist_j))
+          !Species of i is  amat(nn)%i_species(i)
+          i_species = amat(nn)%i_species(i)
+          ia_glob=prim%ig_prim(prim%nm_nodbeg(nn)+i-1)
+          do j=1,  amat(nn)%n_nab(i)
+            ist_j = amat(nn)%i_acc(i)+j-1
+            species_orderij = descriptor_params(i_species)%species_orders%d2(amat(nn)%j_species(ist_j))
 
-                 rij=amat(nn)%radius(ist_j) * BohrToAng
-                 xij=amat(nn)%dx(ist_j) * BohrToAng
-                 yij=amat(nn)%dy(ist_j) * BohrToAng
-                 zij=amat(nn)%dz(ist_j) * BohrToAng
+            rij=amat(nn)%radius(ist_j) * BohrToAng
+            xij=amat(nn)%dx(ist_j) * BohrToAng
+            yij=amat(nn)%dy(ist_j) * BohrToAng
+            zij=amat(nn)%dz(ist_j) * BohrToAng
 
-                 !! function of cut off
-                 frc_ij = 0.5 * (cos(pi * rij / rcut_a) + 1)
+            !! function of cut off
+            frc_ij = 0.5 * (cos(pi * rij / rcut_a) + 1)
 
-                 !! Start calculate the two body terms
-                 shift_dim = 0
-                 param_start = descriptor_params(i_species)%nums_g2_acc(species_orderij)
-                 param_end = param_start + descriptor_params(i_species)%nums_g2(species_orderij) - 1
-                 !!check!if (inode== ionode .and. ia_glob==1) then
-                 !if (inode== ionode .and. ia_glob==1) then
-                 !    write(*,*) 'species',i_species, j, amat(nn)%j_species(ist_j),&
-                 !            species_orderij, param_start, param_end
-                 !    write(1986,100)  i,ia_glob, amat(nn)%j_species(ist_j), &
-                 !            amat(nn)%n_nab(i),param_start, param_end, xij, yij, zij, rij
-                 !end if
-                 !if (inode== ionode.and. j==1) then
-                 !    write(*,*) 'species',i_species, j, amat(nn)%j_species(ist_j),&
-                 !            species_orderij, param_start, param_end
-                 !end if
+            !! Start calculate the two body terms
+            shift_dim = 0
+            param_start = descriptor_params(i_species)%nums_g2_acc(species_orderij)
+            param_end = param_start + descriptor_params(i_species)%nums_g2(species_orderij) - 1
+            !!check!if (inode== ionode .and. ia_glob==1) then
+            !if (inode== ionode .and. ia_glob==1) then
+            !    write(*,*) 'species',i_species, j, amat(nn)%j_species(ist_j),&
+            !            species_orderij, param_start, param_end
+            !    write(1986,100)  i,ia_glob, amat(nn)%j_species(ist_j), &
+            !            amat(nn)%n_nab(i),param_start, param_end, xij, yij, zij, rij
+            !end if
+            !if (inode== ionode.and. j==1) then
+            !    write(*,*) 'species',i_species, j, amat(nn)%j_species(ist_j),&
+            !            species_orderij, param_start, param_end
+            !end if
 
-                 do param_index = param_start, param_end
-                     fp_index = param_index + shift_dim
-                     ! Todo : check if species_orderij is correct
-                     gx_index = param_index - param_start + 1
-                     eta = descriptor_params(i_species)%params_g2(species_orderij)%eta(gx_index)
-                     if (inode== ionode.and. j==1) then
-                        write(*,*) 'fp_index',fp_index, gx_index, eta
-                     end if
+            do param_index = param_start, param_end
+              fp_index = param_index + shift_dim
+              ! Todo : check if species_orderij is correct
+              gx_index = param_index - param_start + 1
+              eta = descriptor_params(i_species)%params_g2(species_orderij)%eta(gx_index)
+              if (inode== ionode .and. j==1) then
+                write(*,*) 'fp_index',fp_index, gx_index, eta
+              end if
 
-                     tmp1 = frc_ij * exp(- (rij/eta) ** 2) / rij
-                     amat_features_ML(nn)%fpx(fp_index, i) = amat_features_ML(nn)%fpx(fp_index, i) + xij*tmp1
-                     amat_features_ML(nn)%fpy(fp_index, i) = amat_features_ML(nn)%fpy(fp_index, i) + yij*tmp1
-                     amat_features_ML(nn)%fpz(fp_index, i) = amat_features_ML(nn)%fpz(fp_index, i) + zij*tmp1
-                     !if (inode== ionode .and. ia_glob==1) then
-                     !    write(1986,101)  eta, fp_index,  tmp1, xij, xij*tmp1, amat_features_ML(nn)%fpx(i, fp_index)
-                     !end if
+              tmp1 = frc_ij * exp(- (rij/eta) ** 2) / rij
+              amat_features_ML(nn)%fpx(fp_index, i) = amat_features_ML(nn)%fpx(fp_index, i) + xij*tmp1
+              amat_features_ML(nn)%fpy(fp_index, i) = amat_features_ML(nn)%fpy(fp_index, i) + yij*tmp1
+              amat_features_ML(nn)%fpz(fp_index, i) = amat_features_ML(nn)%fpz(fp_index, i) + zij*tmp1
+              !if (inode== ionode .and. ia_glob==1) then
+              !    write(1986,101)  eta, fp_index,  tmp1, xij, xij*tmp1, amat_features_ML(nn)%fpx(i, fp_index)
+              !end if
+            end do ! two-body terms
+            !pair check!write(*,*) 'after part_nd_nabs in get_feature_acsf2b', inode
+          end do ! j, two-body
 
-                 end do ! two-body terms
-                !pair check!write(*,*) 'after part_nd_nabs in get_feature_acsf2b', inode
-             end do ! j, two-body
+          inp=inp+1  ! Indexes primary-set atoms
+        enddo ! End prim%nm_nodgroup
+        !pair check!write(*,*) 'after prim%nm_nodgroup', inode
 
-             inp=inp+1  ! Indexes primary-set atoms
-          enddo ! End prim%nm_nodgroup
-          !pair check!write(*,*) 'after prim%nm_nodgroup', inode
-
-       else
-            write(*, *) 'Warning: No atoms in this partition', inode, nn
-       endif ! End if(prim%nm_nodgroup>0)
+      else
+        write(*, *) 'Warning: No atoms in this partition', inode, nn
+      endif ! End if(prim%nm_nodgroup>0)
     enddo ! End part_on_node
     100 format(6i8,4e25.16)
     101 format(e25.16, i8,4e25.16)
@@ -1346,41 +1343,38 @@ contains
 
     n_spieces = 0
     if (descriptor_params(1)%n_species .LE. 0) then
-        call cq_abort('split(1) n_species: not defined or less than 1')
+      call cq_abort('split(1) n_species: not defined or less than 1')
     else
-        n_spieces = descriptor_params(1)%n_species
+      n_spieces = descriptor_params(1)%n_species
     end if
 
     do i=1, n_spieces
-        n_2b = descriptor_params(i)%n_species
-        n_3b = n_2b * (n_2b + 1)/2
-        allocate(descriptor_params(i)%nums_2b(n_2b),STAT=stat)
-        if(stat/=0) then
-            call cq_abort('split nums_2b: error allocating memory to n_2b')
-        endif
-        allocate(descriptor_params(i)%nums_2b_acc(n_2b),STAT=stat)
-        if(stat/=0) then
-            call cq_abort('split nums_2b_acc: error allocating memory to n_2b')
-        endif
-        allocate(descriptor_params(i)%params_2b(n_2b),STAT=stat)
-        if(stat/=0) then
-            call cq_abort('split params_2b: error allocating memory to n_2b')
-        endif
+      ! Two body part
+      ! number of pair types
+      n_2b = descriptor_params(i)%n_species
+      allocate(descriptor_params(i)%nums_2b(n_2b),STAT=stat)
+      if(stat/=0) &
+        call cq_abort('split nums_2b: error allocating memory to n_2b')
+      allocate(descriptor_params(i)%nums_2b_acc(n_2b),STAT=stat)
+      if(stat/=0) &
+        call cq_abort('split nums_2b_acc: error allocating memory to n_2b')
+      allocate(descriptor_params(i)%params_2b(n_2b),STAT=stat)
+      if(stat/=0) &
+        call cq_abort('split params_2b: error allocating memory to n_2b')
 
-        allocate(descriptor_params(i)%nums_3b(n_3b),STAT=stat)
-        if(stat/=0) then
-            call cq_abort('split nums_3b: error allocating memory to n_3b')
-        endif
-        allocate(descriptor_params(i)%nums_3b_acc(n_3b),STAT=stat)
-        if(stat/=0) then
-            call cq_abort('split nums_3b_acc: error allocating memory to n_3b')
-        endif
-        allocate(descriptor_params(i)%params_3b(n_3b),STAT=stat)
-        if(stat/=0) then
-            call cq_abort('split params_3b: error allocating memory to n_3b')
-        endif
+      ! Three body part
+      ! number of triplet types
+      n_3b = n_2b * (n_2b + 1)/2
+      allocate(descriptor_params(i)%nums_3b(n_3b),STAT=stat)
+      if(stat/=0) &
+        call cq_abort('split nums_3b: error allocating memory to n_3b')
+      allocate(descriptor_params(i)%nums_3b_acc(n_3b),STAT=stat)
+      if(stat/=0) &
+        call cq_abort('split nums_3b_acc: error allocating memory to n_3b')
+      allocate(descriptor_params(i)%params_3b(n_3b),STAT=stat)
+      if(stat/=0) &
+          call cq_abort('split params_3b: error allocating memory to n_3b')
     end do
-
     return
   end subroutine allocate_split_param
 !!***
@@ -1403,29 +1397,29 @@ contains
     end if
     call start_timer(tmr_std_allocation)
     do i=n_spieces, 1,-1
-        n_2b = descriptor_params(i)%n_species
-        n_3b = n_2b * (n_2b + 1)/2
-        deallocate(descriptor_params(i)%nums_2b,STAT=stat)
-        if(stat/=0) then
-            call cq_abort('split deallocate: error deallocating memory to nums_2b')
-        endif
-        deallocate(descriptor_params(i)%nums_2b_acc,STAT=stat)
-        if(stat/=0) then
-            call cq_abort('split deallocate: error deallocating memory to nums_2b_acc')
-        endif
+      ! Two body part
+      ! number of pair types
+      n_2b = descriptor_params(i)%n_species
+      deallocate(descriptor_params(i)%nums_2b,STAT=stat)
+      if(stat/=0) &
+        call cq_abort('split deallocate: error deallocating memory to nums_2b')
+      deallocate(descriptor_params(i)%nums_2b_acc,STAT=stat)
+      if(stat/=0) &
+        call cq_abort('split deallocate: error deallocating memory to nums_2b_acc')
 
-        call deallocate_b2_param(descriptor_params(i)%params_2b,n_2b)
+      call deallocate_b2_param(descriptor_params(i)%params_2b,n_2b)
 
-        deallocate(descriptor_params(i)%nums_3b,STAT=stat)
-        if(stat/=0) then
-            call cq_abort('split deallocate: error deallocating memory to nums_3b')
-        endif
-        deallocate(descriptor_params(i)%nums_3b_acc,STAT=stat)
-        if(stat/=0) then
-            call cq_abort('split deallocate: error deallocating memory to nums_3b_acc')
-        endif
+      ! Three body part
+      ! number of triplet types
+      n_3b = n_2b * (n_2b + 1)/2
+      deallocate(descriptor_params(i)%nums_3b,STAT=stat)
+      if(stat/=0) &
+        call cq_abort('split deallocate: error deallocating memory to nums_3b')
+      deallocate(descriptor_params(i)%nums_3b_acc,STAT=stat)
+      if(stat/=0) &
+        call cq_abort('split deallocate: error deallocating memory to nums_3b_acc')
 
-        call deallocate_b3_param(descriptor_params(i)%params_3b,n_3b)
+      call deallocate_b3_param(descriptor_params(i)%params_3b,n_3b)
     end do
     call stop_timer(tmr_std_allocation)
     return
@@ -1459,7 +1453,7 @@ contains
     character(len=*)           :: filename
 
     ! Local variables
-    integer                    :: i, j, k, n_species, n_2b, n_3b, dim_2b, dim_3b
+    integer                    :: ii, jj, kk, n_species, n_2b, n_3b, dim_2b, dim_3b
     integer                    :: a,b,shift, num_2b, num_3b
     integer                    :: stat
     integer                    :: file_id=2022
@@ -1479,229 +1473,226 @@ contains
     !! Allocate n_spieces of descriptor_params
     allocate(descriptor_params(n_species),STAT=stat)
     if(stat/=0) then
-        call cq_abort('split2b3b descriptor_params: error allocating memory to n_species')
+      call cq_abort('split2b3b descriptor_params: error allocating memory to n_species')
     endif
-    do i=1, n_species
-        call ini_species_order(descriptor_params(i)%species_orders, n_species)
-    end do
+    !! TODO: consider a well-designed species order
+    do ii=1, n_species
+      call ini_species_order(descriptor_params(ii)%species_orders, n_species)
+    end do ! ii1
     descriptor_params%n_species = n_species
 
     !! Allcoate number of pairs or triplets for descriptor_params
     call allocate_split_param(descriptor_params)
 
-    do i=1, n_species
-        ! read the two body part
-        ! A-A,A-B,A-C, ...
-        ! 30,30,30, ...
-        ! read comment lines
-        read(file_id,*, end=999) comment
-        read(file_id,*, end=999) comment
+    do ii=1, n_species
+      ! read the two body part
+      ! A-A,A-B,A-C, ...
+      ! 30,30,30, ...
+      ! read comment lines
+      read(file_id,*, end=999) comment
+      read(file_id,*, end=999) comment
 
+      if (inode == ionode) then
+          write(*,*) 'read_split2b3b: ii, comment ', ii, comment
+      end if
+
+      ! read center atom, and order of species
+      read(file_id,*, end=999) comment
+      read(file_id,*, end=999) comment
+
+      ! number of pair types is equal to n_species
+      n_2b = descriptor_params(ii)%n_species
+      allocate(dims_2b(n_2b),STAT=stat)
+      if(stat/=0) &
+        call cq_abort('dims_2b : error allocating memory to n_2b')
+
+      n_3b = n_2b * (n_2b+1)/2
+      allocate(dims_3b(n_3b),STAT=stat)
+      if(stat/=0) &
+        call cq_abort('dims_3b : error allocating memory to n_3b')
+
+      !! Read dimensions of two body terms
+      read(file_id,*) dims_2b
+      !! Read dimensions of three body terms
+      read(file_id,*) dims_3b
+
+      !! Read two body terms
+      ! num_g2 = sum(nums_g2()), nums_g2_acc is index of each g2
+      do jj = 1, n_2b
+        descriptor_params(ii)%nums_2b(jj) = dims_2b(jj)
+        !! TODO: from comment to get the index of params_2b(i)
+        call allocate_b2_param(descriptor_params(ii)%params_2b(jj), dims_2b(jj))
+        call get_b2_param(file_id,descriptor_params(ii)%params_2b(jj), dims_2b(jj))
+      end do !jj1
+      if (inode == ionode) then
+        write(*,*) 'read_split2b3b: after read 2b , dims_2b, n_2b ', dims_2b,n_2b
+      end if
+
+      !! update index of two body terms
+      descriptor_params(ii)%nums_2b_acc(1) = 1
+      descriptor_params(ii)%num_2b = descriptor_params(ii)%nums_2b(1)
+      if (n_2b .gt. 1 ) then
+        do jj = 2, n_2b
+          dim_2b = descriptor_params(ii)%nums_2b(jj-1)
+          descriptor_params(ii)%nums_2b_acc(jj) = descriptor_params(ii)%nums_2b_acc(jj-1) + dim_2b
+          dim_2b = descriptor_params(ii)%nums_2b(jj)
+          descriptor_params(ii)%num_2b = descriptor_params(ii)%num_2b + dim_2b
+        end do !jj2
+      end if
+
+      if (inode == ionode) then
+        write(*,*) 'read_split2b3b: after acc_2b, n2b ', descriptor_params(ii)%nums_2b_acc,n_2b
+      end if
+
+      !! Read three body terms
+      do jj = 1, n_3b
+        descriptor_params(ii)%nums_3b(jj) = dims_3b(jj)
+        !! TODO: from comment to get the index of params_2b(ii)
+        call allocate_b3_param(descriptor_params(ii)%params_3b(jj), dims_3b(jj))
+        call get_b3_param(file_id,descriptor_params(ii)%params_3b(jj), dims_3b(jj))
+      end do !jj3,n_3b
+      if (inode == ionode) then
+        write(*,*) 'read_split2b3b: after read 2b , dims_2b, n_2b ', dims_2b,n_2b
+      end if
+
+      !! update index of three body terms
+      descriptor_params(ii)%nums_3b_acc(1) = 1
+      descriptor_params(ii)%num_3b = descriptor_params(ii)%nums_3b(1)
+      if (n_3b .gt. 1 ) then
+        do jj = 2, n_3b
+          dim_3b = descriptor_params(ii)%nums_3b(jj-1)
+          descriptor_params(ii)%nums_3b_acc(jj) = descriptor_params(ii)%nums_3b_acc(jj-1) + dim_3b
+          dim_3b = descriptor_params(ii)%nums_3b(jj)
+          descriptor_params(ii)%num_3b = descriptor_params(ii)%num_3b + dim_3b
+        end do !jj4,n_3b
+      end if
+
+      if (inode == ionode) then
+        write(*,*) 'read_split2b3b: after acc, n_3b ', descriptor_params(ii)%nums_3b_acc,n_3b
+      end if
+      !###############
+
+      !! after read all two body terms and three body terms, collect all of coefficients
+      num_2b = descriptor_params(ii)%num_2b
+      num_3b = descriptor_params(ii)%num_3b
+      descriptor_params(ii)%dim_coef = num_2b + num_3b
+      allocate(descriptor_params(ii)%coef(descriptor_params(ii)%dim_coef),STAT=stat)
+      if(stat/=0) &
+        call cq_abort('split2b3b coef in descriptor_params : error allocating memory to dim_coef')
+      if (inode == ionode) then
+        write(*,*) 'read_split2b3b: after descriptor_params dim_coef= ', descriptor_params(ii)%dim_coef
+      end if
+
+      !! Collect coefficients
+      !! collect coefficients of two body terms
+      shift=0
+      do jj = 1, n_2b
+        a = shift+descriptor_params(ii)%nums_2b_acc(jj)
+        b = a+descriptor_params(ii)%nums_2b(jj)-1
         if (inode == ionode) then
-            write(*,*) 'read_split2b3b: i, comment ', i, comment
+          write(*,*) 'read_split2b3b: in do j = 1, n_2b  ', a,b,n_2b
         end if
+        descriptor_params(ii)%coef(a:b) = descriptor_params(ii)%params_2b(jj)%coefs &
+            / descriptor_params(ii)%params_2b(jj)%scales
 
-        ! read center atom, and order of species
-        read(file_id,*, end=999) comment
-        read(file_id,*, end=999) comment
+        !check parameters of three body terms
+        do kk = 1, b-a+1
+          if (inode == ionode) then
+            write(*,114) descriptor_params(ii)%params_2b(jj)%eta(kk),&
+                      descriptor_params(ii)%params_2b(jj)%rs(kk),&
+                      descriptor_params(ii)%params_2b(jj)%scales(kk),&
+                      descriptor_params(ii)%params_2b(jj)%coefs(kk)
+          end if
+        end do !kk1
 
-        ! number of pair types is equal to n_species
-        n_2b = descriptor_params(i)%n_species
-        allocate(dims_2b(n_2b),STAT=stat)
-        if(stat/=0) then
-            call cq_abort('dims_2b : error allocating memory to n_2b')
-        endif
+        ! check eta type, and transfter to standard form
+        ! in our PCCP, we use r^2/eta^2, string as r2_div_eta2
+        if (eta_type=='eta_r2') then
+          if (inode == ionode) &
+            write(*,*) 'This is not default eta: Do something to eta in descriptor_params', eta_type
+          descriptor_params(ii)%params_2b(jj)%eta = 1/ sqrt(descriptor_params(ii)%params_2b(jj)%eta)
+        else if (eta_type=='r2_div_eta2') then
+          if (inode == ionode) &
+            write(*,*) 'This is default eta: Do nothing to eta in descriptor_params',eta_type
+        else if (eta_type=='r2_div_2eta2') then
+          if (inode == ionode) then
+            write(*,*) 'This is not default eta: Do something to eta in descriptor_params',eta_type
+          end if
+          descriptor_params(ii)%params_2b(jj)%eta = descriptor_params(ii)%params_2b(jj)%eta * sqrt(2.0)
+          call cq_abort('Error: need to prepare this part of transfer eta')
+        else
+          if (inode == ionode) then
+            write(*,*) 'No such eta at present',eta_type
+          end if
+          call cq_abort('Error: no such eta at present')
+        end if
+      end do !jj5 n_2b
+      !! collect coefficients of three body terms
+      shift=shift + descriptor_params(ii)%num_2b
+      do jj = 1, n_3b
+        a = shift+descriptor_params(ii)%nums_3b_acc(jj)
+        b = a+descriptor_params(ii)%nums_3b(jj)-1
+        descriptor_params(ii)%coef(a:b) = descriptor_params(ii)%params_3b(jj)%coefs &
+            / descriptor_params(ii)%params_3b(jj)%scales
 
-        n_3b = n_2b * (n_2b+1)/2
-        allocate(dims_3b(n_3b),STAT=stat)
-        if(stat/=0) then
-            call cq_abort('dims_3b : error allocating memory to n_3b')
-        endif
-
-        !! Read dimensions of two body terms
-        read(file_id,*) dims_2b
-        !! Read dimensions of three body terms
-        read(file_id,*) dims_3b
-
-        !! Read two body terms
-        ! num_g2 = sum(nums_g2()), nums_g2_acc is index of each g2
-        do j = 1, n_2b
-            descriptor_params(i)%nums_2b(j) = dims_2b(j)
-            !! TODO: from comment to get the index of params_2b(i)
-            call allocate_b2_param(descriptor_params(i)%params_2b(j), dims_2b(j))
-            call get_b2_param(file_id,descriptor_params(i)%params_2b(j), dims_2b(j))
-        end do !j1
+        !check parameters of three body terms
         if (inode == ionode) then
-            write(*,*) 'read_split2b3b: after read 2b , dims_2b ', dims_2b,n_2b
+          write(*,*) 'read_split2b3b: in do j = 1, n_3b  ', a,b,n_3b
+          do kk = 1, b-a+1
+            write(*,115) descriptor_params(ii)%params_3b(jj)%eta1(kk),&
+                      descriptor_params(ii)%params_3b(jj)%eta2(kk),&
+                      descriptor_params(ii)%params_3b(jj)%eta3(kk),&
+                      descriptor_params(ii)%params_3b(jj)%scales(kk),&
+                      descriptor_params(ii)%params_3b(jj)%coefs(kk)
+          end do ! kk
         end if
 
-        !! update index of two body terms
-        descriptor_params(i)%nums_2b_acc(1) = 1
-        descriptor_params(i)%num_2b = descriptor_params(i)%nums_2b(1)
-        if (n_2b .gt. 1 ) then
-            do j = 2, n_2b
-                dim_2b = descriptor_params(i)%nums_2b(j)
-                descriptor_params(i)%nums_2b_acc(j) = descriptor_params(i)%nums_2b_acc(j-1) + dim_2b
-                descriptor_params(i)%num_2b = descriptor_params(i)%num_2b + dim_2b
-            end do !j2
+        ! check eta type, and transfter to standard form
+        ! in our PCCP, we use r^2/eta^2, string as r2_div_eta2
+        if (eta_type=='eta_r2') then
+          if (inode == ionode) then
+            write(*,*) 'This is not default eta: Do something to eta in descriptor_params', eta_type
+          end if
+          descriptor_params(ii)%params_3b(jj)%eta1 = 1/ sqrt(descriptor_params(ii)%params_3b(jj)%eta1)
+          descriptor_params(ii)%params_3b(jj)%eta2 = 1/ sqrt(descriptor_params(ii)%params_3b(jj)%eta2)
+          descriptor_params(ii)%params_3b(jj)%eta3 = 1/ sqrt(descriptor_params(ii)%params_3b(jj)%eta3)
+        else if (eta_type=='r2_div_eta2') then
+          if (inode == ionode) &
+            write(*,*) 'This is default eta: Do nothing to eta in descriptor_params',eta_type
+        else if (eta_type=='r2_div_2eta2') then
+          if (inode == ionode) then
+            write(*,*) 'This is not default eta: Do something to eta in descriptor_params',eta_type
+          end if
+          descriptor_params(ii)%params_3b(jj)%eta1 = sqrt(2.0) * descriptor_params(ii)%params_3b(jj)%eta1
+          descriptor_params(ii)%params_3b(jj)%eta2 = sqrt(2.0) * descriptor_params(ii)%params_3b(jj)%eta2
+          descriptor_params(ii)%params_3b(jj)%eta3 = sqrt(2.0) * descriptor_params(ii)%params_3b(jj)%eta3
+        else
+          if (inode == ionode) then
+            write(*,*) 'No such eta at present',eta_type
+          end if
+          call cq_abort('Error: no such eta type at present')
         end if
+      end do !jj6 n_3b
 
-        if (inode == ionode) then
-            write(*,*) 'read_split2b3b: after acc ', descriptor_params(i)%nums_2b_acc,n_2b
-        end if
+      !! check with output
+      if (inode == ionode) then
+        write(*,*) 'read_split2b3b: after collect coefficients, dim_coef=',descriptor_params(ii)%dim_coef
+        write(*,*) 'read_split2b3b: start check with output '
+        do jj=1, descriptor_params(ii)%dim_coef
+          write(*,*) jj, descriptor_params(ii)%coef(jj)
+        end do !jj7
+        write(*,*) 'read_split2b3b: after check with output '
+      end if
 
-        !! Read three body terms
-        do j = 1, n_3b
-            descriptor_params(i)%nums_3b(j) = dims_3b(j)
-            !! TODO: from comment to get the index of params_2b(i)
-            call allocate_b3_param(descriptor_params(i)%params_3b(j), dims_3b(j))
-            call get_b3_param(file_id,descriptor_params(i)%params_3b(j), dims_3b(j))
-        end do !j1
-        if (inode == ionode) then
-            write(*,*) 'read_split2b3b: after read 2b , dims_2b ', dims_2b,n_2b
-        end if
-
-        !! update index of three body terms
-        descriptor_params(i)%nums_3b_acc(1) = 1
-        descriptor_params(i)%num_3b = descriptor_params(i)%nums_3b(1)
-        if (n_3b .gt. 1 ) then
-            do j = 2, n_3b
-                dim_3b = descriptor_params(i)%nums_3b(j)
-                descriptor_params(i)%nums_3b_acc(j) = descriptor_params(i)%nums_3b_acc(j-1) + dim_3b
-                descriptor_params(i)%num_3b = descriptor_params(i)%num_3b + dim_3b
-            end do !j2
-        end if
-
-        if (inode == ionode) then
-            write(*,*) 'read_split2b3b: after acc ', descriptor_params(i)%nums_3b_acc,n_3b
-        end if
-        !###############
-
-
-        !! after read all g2,g3,g4,g5, collect all of coefficients
-        num_2b = descriptor_params(i)%num_2b
-        num_3b = descriptor_params(i)%num_3b
-        descriptor_params(i)%dim_coef = num_2b + num_3b
-        allocate(descriptor_params(i)%coef(descriptor_params(i)%dim_coef),STAT=stat)
-        if(stat/=0) then
-            call cq_abort('split2b3b coef in descriptor_params : error allocating memory to dim_coef')
-        endif
-        if (inode == ionode) then
-            write(*,*) 'read_split2b3b: after descriptor_params(i)%dim_coef ', descriptor_params(i)%dim_coef
-        end if
-
-        !! collect coefficients
-        !! collect coefficients of two body terms
-        shift=0
-        do j = 1, n_2b
-            a = shift+descriptor_params(i)%nums_2b_acc(j)
-            b = a+descriptor_params(i)%nums_2b(j)-1
-            if (inode == ionode) then
-                write(*,*) 'read_split2b3b: in do j = 1, n_2b  ', a,b,n_2b
-            end if
-            descriptor_params(i)%coef(a:b) = descriptor_params(i)%params_2b(j)%coefs / descriptor_params(i)%params_2b(j)%scales
-
-            !check parameters of three body terms
-            do k = 1, b-a+1
-                if (inode == ionode) then
-                    write(*,114) descriptor_params(i)%params_2b(j)%eta(k),&
-                              descriptor_params(i)%params_2b(j)%rs(k),&
-                              descriptor_params(i)%params_2b(j)%scales(k),&
-                              descriptor_params(i)%params_2b(j)%coefs(k)
-                end if
-            end do
-
-            ! check eta type, and transfter to standard form
-            ! in our PCCP, we use r^2/eta^2, string as r2_div_eta2
-            if (eta_type=='eta_r2') then
-                if (inode == ionode) then
-                    write(*,*) 'This is not default eta: Do something to eta in descriptor_params', eta_type
-                end if
-                descriptor_params(i)%params_2b(j)%eta = 1/ sqrt(descriptor_params(i)%params_2b(j)%eta)
-            else if (eta_type=='r2_div_eta2') then
-                if (inode == ionode) then
-                    write(*,*) 'This is default eta: Do nothing to eta in descriptor_params',eta_type
-                end if
-            else if (eta_type=='r2_div_2eta2') then
-                if (inode == ionode) then
-                    write(*,*) 'This is not default eta: Do something to eta in descriptor_params',eta_type
-                end if
-                call cq_abort('Error: need to prepare this part of transfer eta')
-            else
-                if (inode == ionode) then
-                    write(*,*) 'No such eta at present',eta_type
-                end if
-                call cq_abort('Error: no such eta at present')
-            end if
-        end do !j n_2b
-        !! collect coefficients of three body terms
-        shift=shift + descriptor_params(i)%num_2b
-        do j = 1, n_3b
-            a = shift+descriptor_params(i)%nums_3b_acc(j)
-            b = a+descriptor_params(i)%nums_3b(j)-1
-            if (inode == ionode) then
-                write(*,*) 'read_split2b3b: in do j = 1, n_3b  ', a,b,n_3b
-            end if
-            descriptor_params(i)%coef(a:b) = descriptor_params(i)%params_3b(j)%coefs / descriptor_params(i)%params_3b(j)%scales
-
-            !check parameters of three body terms
-            do k = 1, b-a+1
-                if (inode == ionode) then
-                    write(*,115) descriptor_params(i)%params_3b(j)%eta1(k),&
-                              descriptor_params(i)%params_3b(j)%eta2(k),&
-                              descriptor_params(i)%params_3b(j)%eta3(k),&
-                              descriptor_params(i)%params_3b(j)%scales(k),&
-                              descriptor_params(i)%params_3b(j)%coefs(k)
-                end if
-            end do
-
-            ! check eta type, and transfter to standard form
-            ! in our PCCP, we use r^2/eta^2, string as r2_div_eta2
-            if (eta_type=='eta_r2') then
-                if (inode == ionode) then
-                    write(*,*) 'This is not default eta: Do something to eta in descriptor_params', eta_type
-                end if
-                descriptor_params(i)%params_3b(j)%eta1 = 1/ sqrt(descriptor_params(i)%params_3b(j)%eta1)
-                descriptor_params(i)%params_3b(j)%eta2 = 1/ sqrt(descriptor_params(i)%params_3b(j)%eta2)
-                descriptor_params(i)%params_3b(j)%eta3 = 1/ sqrt(descriptor_params(i)%params_3b(j)%eta3)
-            else if (eta_type=='r2_div_eta2') then
-                if (inode == ionode) then
-                    write(*,*) 'This is default eta: Do nothing to eta in descriptor_params',eta_type
-                end if
-            else if (eta_type=='r2_div_2eta2') then
-                if (inode == ionode) then
-                    write(*,*) 'This is not default eta: Do something to eta in descriptor_params',eta_type
-                end if
-                call cq_abort('Error: need to prepare this part of transfer eta')
-            else
-                if (inode == ionode) then
-                    write(*,*) 'No such eta at present',eta_type
-                end if
-                call cq_abort('Error: no such eta at present')
-            end if
-        end do !j n_3b
-
-        if (inode == ionode) then
-            write(*,*) 'read_split2b3b: after collect coefficients '
-        end if
-
-        !! check with output
-        if (inode == ionode) then
-            write(*,*) 'read_split2b3b: start check with output '
-            do j=1, descriptor_params(i)%dim_coef
-                write(*,*) j, descriptor_params(i)%coef(j)
-            end do !j4
-            write(*,*) 'read_split2b3b: after check with output '
-        end if
-        deallocate(dims_2b)
-        deallocate(dims_3b)
-    end do !i n_species
+      deallocate(dims_2b)
+      deallocate(dims_3b)
+    end do !ii n_species
 
     read(file_id,*, end=999) comment
     close(file_id)
 
 999 if (inode == ionode) then
-        print *, 'Done reading split2b3b file'
+      print *, 'Done reading split2b3b file'
     end if
     close(file_id)
 
@@ -1730,11 +1721,11 @@ contains
 !!  USES
 !!
 !!  AUTHOR
-!!   JianBo.Lin
+!!   Jianbo Lin
 !!  CREATION DATE
 !!   2022/07/20
 !!  MODIFICATION HISTORY
-!!   2022/07/27 JL
+!!   2022/07/27 J.Lin
 !!    Modified to get pair information for machine learing
 !!  SOURCE
 !!
@@ -1764,7 +1755,7 @@ contains
 
     ! Local variables
     integer :: inp, cumu_ndims, neigh_spec, ip_process
-    integer :: nn,i,j,k,np,ni, ist_j, ist_k, ist_ijk,i_3b,ia_glob
+    integer :: nn,ii,jj,kk, np,ni, ist_j, ist_k, ist_ijk,i_3b,ia_glob
     integer :: species_order2b, species_order3b, i_species, j_species, k_species,tmp_species
     integer :: param_start, param_end, shift_dim, param_index, fp_index, gx_index
 
@@ -1779,8 +1770,8 @@ contains
     ! After we have neighbor information and descriptor information
     ! Check that prim and gcs are correctly set up
     if((.NOT.ASSOCIATED(gcs%xcover)).OR. &
-         (.NOT.ASSOCIATED(prim%xprim))) then
-       call cq_abort('get_naba: gcs or prim without members !')
+        (.NOT.ASSOCIATED(prim%xprim))) then
+      call cq_abort('get_naba: gcs or prim without members !')
     endif
     ! In this subrputine, Units: Length=Angstrom, Energy=eV, Force=eV/Anstrom
     ! rcut bohr to angstrom
@@ -1796,292 +1787,277 @@ contains
     amat(1)%offset=0
     amat(1)%nd_offset=0
     do nn=1,prim%groups_on_node ! Partitions in primary set
-       !pair check!write(*,*) 'nn loop, inode=',inode
-
-       if(prim%nm_nodgroup(nn).gt.0) then  ! Are there atoms ?
-          !write(*,*) 'if prim atoms, inode=',inode, prim%nm_nodgroup(nn) ! success until here
+      !pair check!write(*,*) 'nn loop, inode=',inode
+      if(prim%nm_nodgroup(nn).gt.0) then  ! Are there atoms ?
+        !write(*,*) 'if prim atoms, inode=',inode, prim%nm_nodgroup(nn) ! success until here
+        !call my_barrier()
+        if (amat(nn)%n_atoms .ne. prim%nm_nodgroup(nn)) then ! Redundant, but useful
+          call cq_abort('amat(nn)%n_atoms not equal prim%nm_nodgroup(nn)')
+        end if
+        !write(io_lun,*) 'Starting group with atoms: ',nn,prim%nm_nodgroup(nn)
+        do ii=1,prim%nm_nodgroup(nn)  ! Loop over atoms in partition
+          !write(*,*) 'j loop, inode=',inode
           !call my_barrier()
-          if (amat(nn)%n_atoms .ne. prim%nm_nodgroup(nn)) then ! Redundant, but useful
-              call cq_abort('amat(nn)%n_atoms not equal prim%nm_nodgroup(nn)')
-          end if
-          !write(io_lun,*) 'Starting group with atoms: ',nn,prim%nm_nodgroup(nn)
-          do i=1,prim%nm_nodgroup(nn)  ! Loop over atoms in partition
-             !write(*,*) 'j loop, inode=',inode
-             !call my_barrier()
-             !Species of i is  amat(nn)%i_species(i)
-             i_species = amat(nn)%i_species(i)
-             ia_glob=prim%ig_prim(prim%nm_nodbeg(nn)+i-1)
-             do j=1,  amat(nn)%n_nab(i)
-                 ist_j = amat(nn)%i_acc(i)+j-1
-                 j_species = amat(nn)%j_species(ist_j)
-                 species_order2b = descriptor_params(i_species)%species_orders%d2(j_species)
+          ! From nn and ii, glob id and species of i-th atom are shown as following
+          !Species of i is  amat(nn)%i_species(i)
+          i_species = amat(nn)%i_species(ii)
+          ia_glob=prim%ig_prim(prim%nm_nodbeg(nn)+ni-1)
+          do jj=1,  amat(nn)%n_nab(ii)
+            ist_j = amat(nn)%i_acc(ii)+jj-1
+            j_species = amat(nn)%j_species(ist_j)
+            species_order2b = descriptor_params(i_species)%species_orders%d2(j_species)
 
-                 rij=amat(nn)%radius(ist_j) * BohrToAng
-                 xij=amat(nn)%dx(ist_j) * BohrToAng
-                 yij=amat(nn)%dy(ist_j) * BohrToAng
-                 zij=amat(nn)%dz(ist_j) * BohrToAng
+            rij=amat(nn)%radius(ist_j) * BohrToAng
+            xij=amat(nn)%dx(ist_j) * BohrToAng
+            yij=amat(nn)%dy(ist_j) * BohrToAng
+            zij=amat(nn)%dz(ist_j) * BohrToAng
 
-                 !!coeff_ij = (xij * vx + yij * vy + zij * vz)
-                 !! function of cut off
-                 frc_ij = 0.5 * (cos(pi * rij / rcut_a) + 1)
-                 !!tmp0 = coeff_ij * frc_ij
+            !!coeff_ij = (xij * vx + yij * vy + zij * vz)
+            !! function of cut off
+            frc_ij = 0.5 * (cos(pi * rij / rcut_a) + 1)
+            !!tmp0 = coeff_ij * frc_ij
 
-                 !! Start calculate the two body terms
-                 shift_dim = 0
-                 param_start = descriptor_params(i_species)%nums_2b_acc(species_order2b)
-                 param_end = param_start + descriptor_params(i_species)%nums_2b(species_order2b) - 1
+            !! Start calculate the two body terms
+            shift_dim = 0
+            param_start = descriptor_params(i_species)%nums_2b_acc(species_order2b)
+            param_end = param_start + descriptor_params(i_species)%nums_2b(species_order2b) - 1
 
-                 do param_index = param_start, param_end
-                     fp_index = param_index + shift_dim
-                     ! Todo: check dimension of params_2b(j)
-                     gx_index = param_index - param_start + 1
-                     eta = descriptor_params(i_species)%params_2b(species_order2b)%eta(gx_index)
-                     eta = 1.0/eta**2
-                     rs = rij - descriptor_params(i_species)%params_2b(species_order2b)%rs(gx_index)
+            do param_index = param_start, param_end
+              fp_index = param_index + shift_dim
+              ! Todo: check dimension of params_2b(j)
+              gx_index = param_index - param_start + 1
+              eta = descriptor_params(i_species)%params_2b(species_order2b)%eta(gx_index)
+              eta = 1.0/eta**2
+              rs = rij - descriptor_params(i_species)%params_2b(species_order2b)%rs(gx_index)
 
-                     tmp1 = frc_ij * exp(- eta * rs ** 2 )  !* eta * rs / rij
-                     amat_features_ML(nn)%fpx(fp_index, i) = amat_features_ML(nn)%fpx(fp_index, i) + xij*tmp1
-                     amat_features_ML(nn)%fpy(fp_index, i) = amat_features_ML(nn)%fpy(fp_index, i) + yij*tmp1
-                     amat_features_ML(nn)%fpz(fp_index, i) = amat_features_ML(nn)%fpz(fp_index, i) + zij*tmp1
-                 end do ! two-body terms
+              tmp1 = frc_ij * exp(- eta * rs ** 2 )  !* eta * rs / rij
+              amat_features_ML(nn)%fpx(fp_index, ii) = amat_features_ML(nn)%fpx(fp_index, ii) + xij*tmp1
+              amat_features_ML(nn)%fpy(fp_index, ii) = amat_features_ML(nn)%fpy(fp_index, ii) + yij*tmp1
+              amat_features_ML(nn)%fpz(fp_index, ii) = amat_features_ML(nn)%fpz(fp_index, ii) + zij*tmp1
+            end do ! two-body terms
 
-                 do k=1,  amat(nn)%n_triplet(ist_j)
-                     ist_ijk=amat(nn)%triplet_acc(ist_j)+k-1
-                     ist_k=amat(nn)%ist_triplet(ist_ijk)
+            do kk=1,  amat(nn)%n_triplet(ist_j)
+              ist_ijk=amat(nn)%triplet_acc(ist_j)+kk-1
+              ist_k=amat(nn)%ist_triplet(ist_ijk)
 
-                     rik=amat(nn)%radius(ist_k) * BohrToAng
-                     xik=amat(nn)%dx(ist_k) * BohrToAng
-                     yik=amat(nn)%dy(ist_k) * BohrToAng
-                     zik=amat(nn)%dz(ist_k) * BohrToAng
+              rik=amat(nn)%radius(ist_k) * BohrToAng
+              xik=amat(nn)%dx(ist_k) * BohrToAng
+              yik=amat(nn)%dy(ist_k) * BohrToAng
+              zik=amat(nn)%dz(ist_k) * BohrToAng
 
-                     k_species = amat(nn)%j_species(ist_k)
-                     !! Todo: check order for ijk
-                     species_order3b = descriptor_params(i_species)%species_orders%d3(j_species, k_species)
-                     rjk_2 = (xij-xik)**2+(yij-yik)**2+(zij-zik)**2
-                     rjk = sqrt(rjk_2)
+              k_species = amat(nn)%j_species(ist_k)
+              !! Todo: check order for ijk
+              species_order3b = descriptor_params(i_species)%species_orders%d3(j_species, k_species)
+              rjk_2 = (xij-xik)**2+(yij-yik)**2+(zij-zik)**2
+              rjk = sqrt(rjk_2)
 
-                     !! check species order and transfer
-                     if (j_species > k_species) then
-                         tmpr=rik
-                         tmpx=xik
-                         tmpy=yik
-                         tmpz=zik
+              !! check species order and transfer
+              if (j_species > k_species) then
+                call swap(xij,xik)
+                call swap(yij,yik)
+                call swap(zij,zik)
+                call swap(rij,rik)
+                call swap(j_species,k_species)
+              end if
 
-                         rik=rij
-                         xik=xij
-                         yik=yij
-                         zik=zij
+              !! function of cut off
+              frc_ik = 0.5 * (cos(pi * rik / rcut_a) + 1)
+              frc_jk = 0.5 * (cos(pi * rjk / rcut_a) + 1)
+              frc_3b = frc_ij * frc_ik * frc_jk
 
-                         rij=tmpr
-                         xij=tmpx
-                         yij=tmpy
-                         zij=tmpz
+              !! Start calculate the three body terms
+              shift_dim = descriptor_params(i_species)%num_2b
+              param_start = descriptor_params(i_species)%nums_3b_acc(species_order3b)
+              param_end = param_start + descriptor_params(i_species)%nums_3b(species_order3b) - 1
 
-                         tmp_species = j_species
-                         j_species = k_species
-                         k_species = tmp_species
-                     end if
+              !! A-AA, B-BB, C-CC
+              if (i_species == j_species .and. j_species == k_species .and. i_species == k_species)  then
+                do param_index= param_start, param_end
+                  fp_index = param_index + shift_dim
 
-                     !! function of cut off
-                     frc_ik = 0.5 * (cos(pi * rik / rcut_a) + 1)
-                     frc_jk = 0.5 * (cos(pi * rjk / rcut_a) + 1)
-                     frc_3b = frc_ij * frc_ik * frc_jk
+                  ! Todo: check dimension of params_2b(j)
+                  gx_index = param_index - param_start + 1
+                  eta1 = descriptor_params((i_species))%params_3b(species_order3b)%eta1(gx_index)
+                  eta2 = descriptor_params((i_species))%params_3b(species_order3b)%eta2(gx_index)
+                  eta3 = descriptor_params((i_species))%params_3b(species_order3b)%eta3(gx_index)
 
-                     !! Start calculate the three body terms
-                     shift_dim = descriptor_params(i_species)%num_2b
-                     param_start = descriptor_params(i_species)%nums_3b_acc(species_order3b)
-                     param_end = param_start + descriptor_params(i_species)%nums_3b(species_order3b) - 1
+                  ! transfter for efficiency
+                  eta1 = 1.0/eta1 ** 2
+                  eta2 = 1.0/eta2 ** 2
+                  eta3 = 1.0/eta3 ** 2
 
-                     !! A-AA, B-BB, C-CC
-                     if (i_species == j_species .and. j_species == k_species .and. i_species == k_species)  then
-                         do param_index= param_start, param_end
-                             fp_index = param_index + shift_dim
+                  ! Terms for A-A-A
+                  tmp123 = exp(-eta1 * rij ** 2) * exp(-eta2* rik ** 2)*exp(-eta3* rjk ** 2)
+                  tmp132 = exp(-eta1 * rij ** 2 - eta3* rik ** 2 - eta2* rjk ** 2)
+                  tmp213 = exp(-eta2 * rij ** 2 - eta1* rik ** 2 - eta3* rjk ** 2)
+                  tmp231 = exp(-eta2 * rij ** 2 - eta3* rik ** 2 - eta1* rjk ** 2)
+                  tmp312 = exp(-eta3 * rij ** 2 - eta1* rik ** 2 - eta2* rjk ** 2)
+                  tmp321 = exp(-eta3 * rij ** 2 - eta2* rik ** 2 - eta1* rjk ** 2)
 
-                             ! Todo: check dimension of params_2b(j)
-                             gx_index = param_index - param_start + 1
-                             eta1 = descriptor_params((i_species))%params_3b(species_order3b)%eta1(gx_index)
-                             eta2 = descriptor_params((i_species))%params_3b(species_order3b)%eta2(gx_index)
-                             eta3 = descriptor_params((i_species))%params_3b(species_order3b)%eta3(gx_index)
+                  proj_x = 0.0
+                  proj_y = 0.0
+                  proj_z = 0.0
+                  proj_x = proj_x + tmp123 * (xij*eta1 + xik*eta2)
+                  proj_x = proj_x + tmp132 * (xij*eta1 + xik*eta3)
+                  proj_x = proj_x + tmp213 * (xij*eta2 + xik*eta1)
+                  proj_x = proj_x + tmp231 * (xij*eta2 + xik*eta3)
+                  proj_x = proj_x + tmp312 * (xij*eta3 + xik*eta1)
+                  proj_x = proj_x + tmp321 * (xij*eta3 + xik*eta2)
 
-                             ! transfter for efficiency
-                             eta1 = 1.0/eta1 ** 2
-                             eta2 = 1.0/eta2 ** 2
-                             eta3 = 1.0/eta3 ** 2
+                  proj_y = proj_y + tmp123 * (yij*eta1 + yik*eta2)
+                  proj_y = proj_y + tmp132 * (yij*eta1 + yik*eta3)
+                  proj_y = proj_y + tmp213 * (yij*eta2 + yik*eta1)
+                  proj_y = proj_y + tmp231 * (yij*eta2 + yik*eta3)
+                  proj_y = proj_y + tmp312 * (yij*eta3 + yik*eta1)
+                  proj_y = proj_y + tmp321 * (yij*eta3 + yik*eta2)
 
-                             ! Terms for A-A-A
-                             tmp123 = exp(-eta1 * rij ** 2) * exp(-eta2* rik ** 2)*exp(-eta3* rjk ** 2)
-                             tmp132 = exp(-eta1 * rij ** 2 - eta3* rik ** 2 - eta2* rjk ** 2)
-                             tmp213 = exp(-eta2 * rij ** 2 - eta1* rik ** 2 - eta3* rjk ** 2)
-                             tmp231 = exp(-eta2 * rij ** 2 - eta3* rik ** 2 - eta1* rjk ** 2)
-                             tmp312 = exp(-eta3 * rij ** 2 - eta1* rik ** 2 - eta2* rjk ** 2)
-                             tmp321 = exp(-eta3 * rij ** 2 - eta2* rik ** 2 - eta1* rjk ** 2)
+                  proj_z = proj_z + tmp123 * (zij*eta1 + zik*eta2)
+                  proj_z = proj_z + tmp132 * (zij*eta1 + zik*eta3)
+                  proj_z = proj_z + tmp213 * (zij*eta2 + zik*eta1)
+                  proj_z = proj_z + tmp231 * (zij*eta2 + zik*eta3)
+                  proj_z = proj_z + tmp312 * (zij*eta3 + zik*eta1)
+                  proj_z = proj_z + tmp321 * (zij*eta3 + zik*eta2)
 
-                             proj_x = 0.0
-                             proj_y = 0.0
-                             proj_z = 0.0
-                             proj_x = proj_x + tmp123 * (xij*eta1 + xik*eta2)
-                             proj_x = proj_x + tmp132 * (xij*eta1 + xik*eta3)
-                             proj_x = proj_x + tmp213 * (xij*eta2 + xik*eta1)
-                             proj_x = proj_x + tmp231 * (xij*eta2 + xik*eta3)
-                             proj_x = proj_x + tmp312 * (xij*eta3 + xik*eta1)
-                             proj_x = proj_x + tmp321 * (xij*eta3 + xik*eta2)
+                  tmpx = frc_3b * proj_x
+                  tmpy = frc_3b * proj_y
+                  tmpz = frc_3b * proj_z
 
-                             proj_y = proj_y + tmp123 * (yij*eta1 + yik*eta2)
-                             proj_y = proj_y + tmp132 * (yij*eta1 + yik*eta3)
-                             proj_y = proj_y + tmp213 * (yij*eta2 + yik*eta1)
-                             proj_y = proj_y + tmp231 * (yij*eta2 + yik*eta3)
-                             proj_y = proj_y + tmp312 * (yij*eta3 + yik*eta1)
-                             proj_y = proj_y + tmp321 * (yij*eta3 + yik*eta2)
+                  amat_features_ML(nn)%fpx(fp_index, ii) = amat_features_ML(nn)%fpx(fp_index, ii) + tmpx
+                  amat_features_ML(nn)%fpy(fp_index, ii) = amat_features_ML(nn)%fpy(fp_index, ii) + tmpy
+                  amat_features_ML(nn)%fpz(fp_index, ii) = amat_features_ML(nn)%fpz(fp_index, ii) + tmpz
+                 end do ! three-body terms
+              !! A-AB, A-AC, B-BC
+              elseif (i_species == j_species .and. j_species /= k_species .and. i_species /= k_species) then
+                do param_index= param_start, param_end
+                fp_index = param_index + shift_dim
 
-                             proj_z = proj_z + tmp123 * (zij*eta1 + zik*eta2)
-                             proj_z = proj_z + tmp132 * (zij*eta1 + zik*eta3)
-                             proj_z = proj_z + tmp213 * (zij*eta2 + zik*eta1)
-                             proj_z = proj_z + tmp231 * (zij*eta2 + zik*eta3)
-                             proj_z = proj_z + tmp312 * (zij*eta3 + zik*eta1)
-                             proj_z = proj_z + tmp321 * (zij*eta3 + zik*eta2)
+                ! Todo: check dimension of params_2b(j)
+                gx_index = param_index - param_start + 1
+                eta1 = descriptor_params((i_species))%params_3b(species_order3b)%eta1(gx_index)
+                eta2 = descriptor_params((i_species))%params_3b(species_order3b)%eta2(gx_index)
+                eta3 = descriptor_params((i_species))%params_3b(species_order3b)%eta3(gx_index)
 
-                             tmpx = frc_3b * proj_x
-                             tmpy = frc_3b * proj_y
-                             tmpz = frc_3b * proj_z
+                ! transfter for efficiency
+                eta1 = 1.0/eta1 ** 2
+                eta2 = 1.0/eta2 ** 2
+                eta3 = 1.0/eta3 ** 2
 
-                             amat_features_ML(nn)%fpx(fp_index, i) = amat_features_ML(nn)%fpx(fp_index, i) + tmpx
-                             amat_features_ML(nn)%fpy(fp_index, i) = amat_features_ML(nn)%fpy(fp_index, i) + tmpy
-                             amat_features_ML(nn)%fpz(fp_index, i) = amat_features_ML(nn)%fpz(fp_index, i) + tmpz
-                         end do ! three-body terms
-                     !! A-AB, A-AC, B-BC
-                     elseif (i_species == j_species .and. j_species /= k_species .and. i_species /= k_species) then
-                         do param_index= param_start, param_end
-                             fp_index = param_index + shift_dim
+                ! Terms for A-AB or B-AB
+                tmp123 = exp(-eta1 * rij ** 2) * exp(-eta2* rik ** 2)*exp(-eta3* rjk ** 2)
+                tmp132 = exp(-eta1 * rij ** 2 - eta3* rik ** 2 - eta2* rjk ** 2)
+                tmp213 = exp(-eta2 * rij ** 2 - eta1* rik ** 2 - eta3* rjk ** 2)
+                tmp231 = exp(-eta2 * rij ** 2 - eta3* rik ** 2 - eta1* rjk ** 2)
+                tmp312 = exp(-eta3 * rij ** 2 - eta1* rik ** 2 - eta2* rjk ** 2)
+                tmp321 = exp(-eta3 * rij ** 2 - eta2* rik ** 2 - eta1* rjk ** 2)
 
-                             ! Todo: check dimension of params_2b(j)
-                             gx_index = param_index - param_start + 1
-                             eta1 = descriptor_params((i_species))%params_3b(species_order3b)%eta1(gx_index)
-                             eta2 = descriptor_params((i_species))%params_3b(species_order3b)%eta2(gx_index)
-                             eta3 = descriptor_params((i_species))%params_3b(species_order3b)%eta3(gx_index)
+                proj_x = 0.0
+                proj_y = 0.0
+                proj_z = 0.0
+                proj_x = proj_x + tmp123 * (xij*eta1 + xik*eta2)
+                proj_x = proj_x + tmp132 * (xij*eta1 + xik*eta3)
+                proj_x = proj_x + tmp213 * (xij*eta2 + xik*eta1)
+                proj_x = proj_x + tmp231 * (xij*eta2 + xik*eta3)
+                proj_x = proj_x + tmp312 * (xij*eta3 + xik*eta1)
+                proj_x = proj_x + tmp321 * (xij*eta3 + xik*eta2)
 
-                             ! transfter for efficiency
-                             eta1 = 1.0/eta1 ** 2
-                             eta2 = 1.0/eta2 ** 2
-                             eta3 = 1.0/eta3 ** 2
+                proj_y = proj_y + tmp123 * (yij*eta1 + yik*eta2)
+                proj_y = proj_y + tmp132 * (yij*eta1 + yik*eta3)
+                proj_y = proj_y + tmp213 * (yij*eta2 + yik*eta1)
+                proj_y = proj_y + tmp231 * (yij*eta2 + yik*eta3)
+                proj_y = proj_y + tmp312 * (yij*eta3 + yik*eta1)
+                proj_y = proj_y + tmp321 * (yij*eta3 + yik*eta2)
 
-                             ! Terms for A-AB or B-AB
-                             tmp123 = exp(-eta1 * rij ** 2) * exp(-eta2* rik ** 2)*exp(-eta3* rjk ** 2)
-                             tmp132 = exp(-eta1 * rij ** 2 - eta3* rik ** 2 - eta2* rjk ** 2)
-                             tmp213 = exp(-eta2 * rij ** 2 - eta1* rik ** 2 - eta3* rjk ** 2)
-                             tmp231 = exp(-eta2 * rij ** 2 - eta3* rik ** 2 - eta1* rjk ** 2)
-                             tmp312 = exp(-eta3 * rij ** 2 - eta1* rik ** 2 - eta2* rjk ** 2)
-                             tmp321 = exp(-eta3 * rij ** 2 - eta2* rik ** 2 - eta1* rjk ** 2)
+                proj_z = proj_z + tmp123 * (zij*eta1 + zik*eta2)
+                proj_z = proj_z + tmp132 * (zij*eta1 + zik*eta3)
+                proj_z = proj_z + tmp213 * (zij*eta2 + zik*eta1)
+                proj_z = proj_z + tmp231 * (zij*eta2 + zik*eta3)
+                proj_z = proj_z + tmp312 * (zij*eta3 + zik*eta1)
+                proj_z = proj_z + tmp321 * (zij*eta3 + zik*eta2)
 
-                             proj_x = 0.0
-                             proj_y = 0.0
-                             proj_z = 0.0
-                             proj_x = proj_x + tmp123 * (xij*eta1 + xik*eta2)
-                             proj_x = proj_x + tmp132 * (xij*eta1 + xik*eta3)
-                             proj_x = proj_x + tmp213 * (xij*eta2 + xik*eta1)
-                             proj_x = proj_x + tmp231 * (xij*eta2 + xik*eta3)
-                             proj_x = proj_x + tmp312 * (xij*eta3 + xik*eta1)
-                             proj_x = proj_x + tmp321 * (xij*eta3 + xik*eta2)
+                tmpx = frc_3b * proj_x
+                tmpy = frc_3b * proj_y
+                tmpz = frc_3b * proj_z
 
-                             proj_y = proj_y + tmp123 * (yij*eta1 + yik*eta2)
-                             proj_y = proj_y + tmp132 * (yij*eta1 + yik*eta3)
-                             proj_y = proj_y + tmp213 * (yij*eta2 + yik*eta1)
-                             proj_y = proj_y + tmp231 * (yij*eta2 + yik*eta3)
-                             proj_y = proj_y + tmp312 * (yij*eta3 + yik*eta1)
-                             proj_y = proj_y + tmp321 * (yij*eta3 + yik*eta2)
+                amat_features_ML(nn)%fpx(fp_index, ii) = amat_features_ML(nn)%fpx(fp_index, ii) + tmpx
+                amat_features_ML(nn)%fpy(fp_index, ii) = amat_features_ML(nn)%fpy(fp_index, ii) + tmpy
+                amat_features_ML(nn)%fpz(fp_index, ii) = amat_features_ML(nn)%fpz(fp_index, ii) + tmpz
+                end do ! three-body terms
+              !! B-AB, C-AC, C-BC
+              elseif (i_species /= j_species .and. j_species /= k_species .and. i_species == k_species) then
+                do param_index= param_start, param_end
+                  fp_index = param_index + shift_dim
 
-                             proj_z = proj_z + tmp123 * (zij*eta1 + zik*eta2)
-                             proj_z = proj_z + tmp132 * (zij*eta1 + zik*eta3)
-                             proj_z = proj_z + tmp213 * (zij*eta2 + zik*eta1)
-                             proj_z = proj_z + tmp231 * (zij*eta2 + zik*eta3)
-                             proj_z = proj_z + tmp312 * (zij*eta3 + zik*eta1)
-                             proj_z = proj_z + tmp321 * (zij*eta3 + zik*eta2)
+                  ! Todo: check dimension of params_2b(j)
+                  gx_index = param_index - param_start + 1
+                  eta1 = descriptor_params((i_species))%params_3b(species_order3b)%eta1(gx_index)
+                  eta2 = descriptor_params((i_species))%params_3b(species_order3b)%eta2(gx_index)
+                  eta3 = descriptor_params((i_species))%params_3b(species_order3b)%eta3(gx_index)
 
-                             tmpx = frc_3b * proj_x
-                             tmpy = frc_3b * proj_y
-                             tmpz = frc_3b * proj_z
+                  ! transfter for efficiency
+                  eta1 = 1.0/eta1 ** 2
+                  eta2 = 1.0/eta2 ** 2
+                  eta3 = 1.0/eta3 ** 2
 
-                             amat_features_ML(nn)%fpx(i, fp_index) = amat_features_ML(nn)%fpx(i, fp_index) + tmpx
-                             amat_features_ML(nn)%fpy(i, fp_index) = amat_features_ML(nn)%fpy(i, fp_index) + tmpy
-                             amat_features_ML(nn)%fpz(i, fp_index) = amat_features_ML(nn)%fpz(i, fp_index) + tmpz
-                         end do ! three-body terms
-                     !! B-AB, C-AC, C-BC
-                     elseif (i_species /= j_species .and. j_species /= k_species .and. i_species == k_species) then
-                         do param_index= param_start, param_end
-                             fp_index = param_index + shift_dim
+                  ! Terms for A-AB or B-AB
+                  tmp123 = exp(-eta1 * rij ** 2) * exp(-eta2* rik ** 2)*exp(-eta3* rjk ** 2)
+                  tmp132 = exp(-eta1 * rij ** 2 - eta3* rik ** 2 - eta2* rjk ** 2)
+                  tmp213 = exp(-eta2 * rij ** 2 - eta1* rik ** 2 - eta3* rjk ** 2)
+                  tmp231 = exp(-eta2 * rij ** 2 - eta3* rik ** 2 - eta1* rjk ** 2)
+                  tmp312 = exp(-eta3 * rij ** 2 - eta1* rik ** 2 - eta2* rjk ** 2)
+                  tmp321 = exp(-eta3 * rij ** 2 - eta2* rik ** 2 - eta1* rjk ** 2)
 
-                             ! Todo: check dimension of params_2b(j)
-                             gx_index = param_index - param_start + 1
-                             eta1 = descriptor_params((i_species))%params_3b(species_order3b)%eta1(gx_index)
-                             eta2 = descriptor_params((i_species))%params_3b(species_order3b)%eta2(gx_index)
-                             eta3 = descriptor_params((i_species))%params_3b(species_order3b)%eta3(gx_index)
+                  proj_x = 0.0
+                  proj_y = 0.0
+                  proj_z = 0.0
+                  proj_x = proj_x + tmp123 * (xij*eta1 + xik*eta2)
+                  proj_x = proj_x + tmp132 * (xij*eta1 + xik*eta3)
+                  proj_x = proj_x + tmp213 * (xij*eta2 + xik*eta1)
+                  proj_x = proj_x + tmp231 * (xij*eta2 + xik*eta3)
+                  proj_x = proj_x + tmp312 * (xij*eta3 + xik*eta1)
+                  proj_x = proj_x + tmp321 * (xij*eta3 + xik*eta2)
 
-                             ! transfter for efficiency
-                             eta1 = 1.0/eta1 ** 2
-                             eta2 = 1.0/eta2 ** 2
-                             eta3 = 1.0/eta3 ** 2
+                  proj_y = proj_y + tmp123 * (yij*eta1 + yik*eta2)
+                  proj_y = proj_y + tmp132 * (yij*eta1 + yik*eta3)
+                  proj_y = proj_y + tmp213 * (yij*eta2 + yik*eta1)
+                  proj_y = proj_y + tmp231 * (yij*eta2 + yik*eta3)
+                  proj_y = proj_y + tmp312 * (yij*eta3 + yik*eta1)
+                  proj_y = proj_y + tmp321 * (yij*eta3 + yik*eta2)
 
-                             ! Terms for A-AB or B-AB
-                             tmp123 = exp(-eta1 * rij ** 2) * exp(-eta2* rik ** 2)*exp(-eta3* rjk ** 2)
-                             tmp132 = exp(-eta1 * rij ** 2 - eta3* rik ** 2 - eta2* rjk ** 2)
-                             tmp213 = exp(-eta2 * rij ** 2 - eta1* rik ** 2 - eta3* rjk ** 2)
-                             tmp231 = exp(-eta2 * rij ** 2 - eta3* rik ** 2 - eta1* rjk ** 2)
-                             tmp312 = exp(-eta3 * rij ** 2 - eta1* rik ** 2 - eta2* rjk ** 2)
-                             tmp321 = exp(-eta3 * rij ** 2 - eta2* rik ** 2 - eta1* rjk ** 2)
+                  proj_z = proj_z + tmp123 * (zij*eta1 + zik*eta2)
+                  proj_z = proj_z + tmp132 * (zij*eta1 + zik*eta3)
+                  proj_z = proj_z + tmp213 * (zij*eta2 + zik*eta1)
+                  proj_z = proj_z + tmp231 * (zij*eta2 + zik*eta3)
+                  proj_z = proj_z + tmp312 * (zij*eta3 + zik*eta1)
+                  proj_z = proj_z + tmp321 * (zij*eta3 + zik*eta2)
 
-                             proj_x = 0.0
-                             proj_y = 0.0
-                             proj_z = 0.0
-                             proj_x = proj_x + tmp123 * (xij*eta1 + xik*eta2)
-                             proj_x = proj_x + tmp132 * (xij*eta1 + xik*eta3)
-                             proj_x = proj_x + tmp213 * (xij*eta2 + xik*eta1)
-                             proj_x = proj_x + tmp231 * (xij*eta2 + xik*eta3)
-                             proj_x = proj_x + tmp312 * (xij*eta3 + xik*eta1)
-                             proj_x = proj_x + tmp321 * (xij*eta3 + xik*eta2)
+                  tmpx = frc_3b * proj_x
+                  tmpy = frc_3b * proj_y
+                  tmpz = frc_3b * proj_z
 
-                             proj_y = proj_y + tmp123 * (yij*eta1 + yik*eta2)
-                             proj_y = proj_y + tmp132 * (yij*eta1 + yik*eta3)
-                             proj_y = proj_y + tmp213 * (yij*eta2 + yik*eta1)
-                             proj_y = proj_y + tmp231 * (yij*eta2 + yik*eta3)
-                             proj_y = proj_y + tmp312 * (yij*eta3 + yik*eta1)
-                             proj_y = proj_y + tmp321 * (yij*eta3 + yik*eta2)
+                  amat_features_ML(nn)%fpx(fp_index, ii) = amat_features_ML(nn)%fpx(fp_index, ii) + tmpx
+                  amat_features_ML(nn)%fpy(fp_index, ii) = amat_features_ML(nn)%fpy(fp_index, ii) + tmpy
+                  amat_features_ML(nn)%fpz(fp_index, ii) = amat_features_ML(nn)%fpz(fp_index, ii) + tmpz
+                end do ! three-body terms
+              !! A-BB, B-AA, C-AA
+              elseif (i_species /= j_species .and. j_species == k_species) then
 
-                             proj_z = proj_z + tmp123 * (zij*eta1 + zik*eta2)
-                             proj_z = proj_z + tmp132 * (zij*eta1 + zik*eta3)
-                             proj_z = proj_z + tmp213 * (zij*eta2 + zik*eta1)
-                             proj_z = proj_z + tmp231 * (zij*eta2 + zik*eta3)
-                             proj_z = proj_z + tmp312 * (zij*eta3 + zik*eta1)
-                             proj_z = proj_z + tmp321 * (zij*eta3 + zik*eta2)
+              !! A-BC, B-AC, C-AB
+              elseif (i_species /= j_species .and. j_species /= k_species .and. i_species /= k_species) then
 
-                             tmpx = frc_3b * proj_x
-                             tmpy = frc_3b * proj_y
-                             tmpz = frc_3b * proj_z
-
-                             amat_features_ML(nn)%fpx(i, fp_index) = amat_features_ML(nn)%fpx(i, fp_index) + tmpx
-                             amat_features_ML(nn)%fpy(i, fp_index) = amat_features_ML(nn)%fpy(i, fp_index) + tmpy
-                             amat_features_ML(nn)%fpz(i, fp_index) = amat_features_ML(nn)%fpz(i, fp_index) + tmpz
-                         end do ! three-body terms
-                     !! A-BB, B-AA, C-AA
-                     elseif (i_species /= j_species .and. j_species == k_species) then
-
-                     !! A-BC, B-AC, C-AB
-                     elseif (i_species /= j_species .and. j_species /= k_species .and. i_species /= k_species) then
-
-                     end if ! chech term type from species
-
-                 end do ! k, three-body
-                !write(*,*) 'after part_nd_nabs in get_feature_split', inode
-             end do ! j, two-body
-
-             inp=inp+1  ! Indexes primary-set atoms
-          enddo ! End i in prim%nm_nodgroup
-          !check get_naba_ML!write(*,*) 'after prim%nm_nodgroup', inode
-          if(nn.lt.prim%groups_on_node) then
-             amat(nn+1)%offset=amat(nn)%offset+amat(nn)%part_nabs
-             amat(nn+1)%nd_offset=amat(nn)%nd_offset+amat(nn)%part_nd_nabs
-          endif
-       ! if no atoms, do nothing, and turn to next partition
-       !else
-       endif ! End if(prim%nm_nodgroup>0)
+              end if ! chech term type from species
+            end do ! k, three-body
+            !write(*,*) 'after part_nd_nabs in get_feature_split', inode
+          end do ! j, two-body
+          inp=inp+1  ! Indexes primary-set atoms
+        enddo ! End ni in prim%nm_nodgroup
+        !check get_naba_ML!write(*,*) 'after prim%nm_nodgroup', inode
+        if(nn.lt.prim%groups_on_node) then
+          amat(nn+1)%offset=amat(nn)%offset+amat(nn)%part_nabs
+          amat(nn+1)%nd_offset=amat(nn)%nd_offset+amat(nn)%part_nd_nabs
+        endif
+      ! if no atoms, do nothing, and turn to next partition
+      !else
+      endif ! End if(prim%nm_nodgroup>0)
     enddo ! End part_on_node
   end subroutine get_feature_split
 !!***
@@ -2102,11 +2078,11 @@ contains
 !!  USES
 !!
 !!  AUTHOR
-!!   JianBo.Lin
+!!   Jianbo Lin
 !!  CREATION DATE
 !!   2022/07/20
 !!  MODIFICATION HISTORY
-!!   2022/07/27 JL
+!!   2022/07/27 J.Lin
 !!    Modified to get pair information for machine learing
 !!  SOURCE
 !!
@@ -2137,11 +2113,11 @@ contains
 !!  USES
 !!
 !!  AUTHOR
-!!   JianBo.Lin
+!!   Jianbo Lin
 !!  CREATION DATE
 !!   2022/07/20
 !!  MODIFICATION HISTORY
-!!   2022/07/27 JL
+!!   2022/07/27 J.Lin
 !!    Modified to get pair information for machine learing
 !!  SOURCE
 !!
@@ -2154,5 +2130,65 @@ contains
     type(split_param), dimension(:), allocatable, intent(out) :: descriptor_params
 
   end subroutine clean_up_ml_split
+!!***
+
+!!****f* mlff_type_module/double_swap *
+!!
+!!  NAME
+!!   double_swap
+!!  USAGE
+!!
+!!  PURPOSE
+!!   Swap two real numbers
+!!  INPUTS
+!!
+!!  USES
+!!
+!!  AUTHOR
+!!   Jianbo Lin
+!!  CREATION DATE
+!!   2023/07/20
+!!  MODIFICATION HISTORY
+!!
+!!  SOURCE
+!!
+  subroutine double_swap(a,b)
+    implicit none
+    real(double) :: a,b,tmp
+
+    tmp=a
+    a=b
+    b=tmp
+  end subroutine double_swap
+!!***
+
+!!****f* mlff_type_module/int_swap *
+!!
+!!  NAME
+!!   int_swap
+!!  USAGE
+!!
+!!  PURPOSE
+!!   Swap two integer numbers
+!!  INPUTS
+!!
+!!  USES
+!!
+!!  AUTHOR
+!!   Jianbo Lin
+!!  CREATION DATE
+!!   2023/07/20
+!!  MODIFICATION HISTORY
+!!
+!!  SOURCE
+!!
+  subroutine int_swap(a,b)
+    implicit none
+    integer :: a,b,tmp
+
+    tmp=a
+    a=b
+    b=tmp
+  end subroutine int_swap
 !!***
 end module mlff_type

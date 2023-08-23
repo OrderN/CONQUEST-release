@@ -13,7 +13,7 @@
 !!  PURPOSE
 !!   Obtain forces and energies from machine learning force field
 !!  AUTHOR
-!!   Jianbo.Lin
+!!   Jianbo Lin
 !!  CREATION DATE
 !!   2022/03/14
 !!  MODIFICATION HISTORY
@@ -50,7 +50,7 @@ contains
 !!  USES
 !!
 !!  AUTHOR
-!!   JianBo.Lin
+!!   Jianbo Lin
 !!  CREATION DATE
 !!   25/11/99
 !!  MODIFICATION HISTORY
@@ -170,11 +170,11 @@ contains
 !!  USES
 !!
 !!  AUTHOR
-!!   JianBo.Lin
+!!   Jianbo Lin
 !!  CREATION DATE
 !!   2022/07/20
 !!  MODIFICATION HISTORY
-!!   2022/07/27 JL
+!!   2022/07/27 J.Lin
 !!    Modified to get pair information for machine learing
 !!  SOURCE
 !!
@@ -326,7 +326,7 @@ contains
 !!  USES
 !!
 !!  AUTHOR
-!!   JianBo.Lin
+!!   Jianbo Lin
 !!  CREATION DATE
 !!   2022/07/20
 !!  MODIFICATION HISTORY
@@ -425,11 +425,11 @@ contains
 !!  USES
 !!
 !!  AUTHOR
-!!   JianBo.Lin
+!!   Jianbo Lin
 !!  CREATION DATE
 !!   2022/07/20
 !!  MODIFICATION HISTORY
-!!   2022/07/27 JL
+!!   2022/07/27 J.Lin
 !!    Modified to get pair information for machine learing
 !!  SOURCE
 !!
@@ -526,11 +526,11 @@ contains
 !!  USES
 !!
 !!  AUTHOR
-!!   JianBo.Lin
+!!   Jianbo Lin
 !!  CREATION DATE
 !!   2022/07/20
 !!  MODIFICATION HISTORY
-!!   2022/07/27 JL
+!!   2022/07/27 J.Lin
 !!    Modified to get pair information for machine learing
 !!  SOURCE
 !!
@@ -626,11 +626,11 @@ contains
 !!  USES
 !!
 !!  AUTHOR
-!!   JianBo.Lin
+!!   Jianbo Lin
 !!  CREATION DATE
 !!   2022/07/20
 !!  MODIFICATION HISTORY
-!!   2022/07/27 JL
+!!   2022/07/27 J.Lin
 !!    Modified to get pair information for machine learing
 !!  SOURCE
 !!
@@ -716,7 +716,7 @@ contains
 !!  PURPOSE
 !!   Calculate machine learning forces and energies
 !!  AUTHOR
-!!   JianBo.Lin
+!!   Jianbo Lin
 !!  CREATION DATE
 !!   2022/07/27
 !!  MODIFICATION HISTORY

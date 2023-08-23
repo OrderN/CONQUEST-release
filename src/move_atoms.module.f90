@@ -3405,6 +3405,8 @@ contains
   !!    processes if an empty bundle is found
   !!   2019/11/18 14:37 dave
   !!    Updates to rebuild covering sets if cell varies during run
+  !!   2023/07/22 J.Lin
+  !!    Added machine learning statements
   !! SOURCE
   !!
   subroutine updateIndices3(fixed_potential,velocity)
