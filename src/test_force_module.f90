@@ -1605,7 +1605,7 @@ contains
   !!   2016/08/08 15:30 nakata
   !!    Renamed supportfns -> atomfns
   !!   2016/12/29 19:30 nakata
-  !!    Changed PAO_to_grid to single_PAO_to_grid
+  !!    Changed PAO_to_grid to single_PAO_to_any
   !!   2017/10/27 09:55 dave
   !!    Bug fix: p_force not being zeroed before second call made
   !!    analytic force wrong
@@ -1637,7 +1637,7 @@ contains
     use GenComms,                   only: myid, inode, ionode, cq_abort
     use H_matrix_module,            only: get_H_matrix
     use blip_grid_transform_module, only: blip_to_support_new
-    use PAO_grid_transform_module,  only: single_PAO_to_grid
+    use PAO_grid_transform_module,  only: single_PAO_to_any
     use functions_on_grid,          only: atomfns
     use density_module,             only: density
     use maxima_module,              only: maxngrid
@@ -1709,8 +1709,8 @@ contains
        ! Reproject blips
        call blip_to_support_new(inode-1, atomfns)    
     else if (flag_basis_set == PAOs) then
-       ! Regenerate PAO with a call to single_PAO_to_grid
-       call single_PAO_to_grid(atomfns)
+       ! Regenerate PAO with a call to single_PAO_to_any
+       call single_PAO_to_any(atomfns)
     end if
     ! Note that we've held K fixed but allow potential to vary ? Yes:
     ! this way we get h_on_atomfns in workspace_support

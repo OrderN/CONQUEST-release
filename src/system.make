@@ -1,49 +1,29 @@
-#
-
 # Set compilers
-FC=mpif90
+FC=mpifort
 F77=mpif77
-
+# OMP flag for compiler and linker
+OMPFLAG= -fopenmp
 # Linking flags
-LINKFLAGS= -L/usr/local/lib
+LINKFLAGS= -L/usr/lib -L/usr/lib/x86_64-linux-gnu $(OMPFLAG)
 ARFLAGS=
-
-# Compilation flags
-# NB for gcc10 you need to add -fallow-argument-mismatch
-COMPFLAGS= -O3 $(XC_COMPFLAGS)
-COMPFLAGS_F77= $(COMPFLAGS)
-
 # Set BLAS and LAPACK libraries
-# MacOS X
-# BLAS= -lvecLibFort
-# Intel MKL use the Intel tool
-# Generic
-# BLAS= -llapack -lblas
-
-# Full library call; remove scalapack if using dummy diag module
-LIBS= $(FFT_LIB) $(XC_LIB) -lscalapack $(BLAS)
-
+BLAS= -llapack -lblas
 # LibXC compatibility (LibXC below) or Conquest XC library
-
 # Conquest XC library
-#XC_LIBRARY = CQ
-#XC_LIB =
-#XC_COMPFLAGS =
-
-# LibXC compatibility
-# Choose LibXC version: v4 (deprecated) or v5/6 (v5 and v6 have the same interface)
-# XC_LIBRARY = LibXC_v4
 XC_LIBRARY = LibXC_v5
 XC_LIB = -lxcf90 -lxc
-XC_COMPFLAGS = -I/usr/local/include
-
+XC_COMPFLAGS = -I/usr/include
 # Set FFT library
 FFT_LIB=-lfftw3
 FFT_OBJ=fft_fftw3.o
-
 # Matrix multiplication kernel type
 MULT_KERN = default
 # Use dummy DiagModule or not
 DIAG_DUMMY =
-
-
+# Full library call; remove scalapack if using dummy diag module
+LIBS= $(XC_LIB) -lscalapack-openmpi $(BLAS) $(FFT_LIB)
+# Compilation flags
+# NB for gcc10 you need to add -fallow-argument-mismatch
+FPPFLAGS= -DDEBUG
+COMPFLAGS= -cpp -g -O3 $(OMPFLAG) $(XC_COMPFLAGS) -fallow-argument-mismatch $(FPPFLAGS)
+COMPFLAGS_F77= $(COMPFLAGS)
