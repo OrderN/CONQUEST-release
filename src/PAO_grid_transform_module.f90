@@ -107,7 +107,7 @@ contains
     use species_module, ONLY: species, npao_species
     !  At present, these arrays are dummy arguments.
     use block_module, ONLY : nx_in_block,ny_in_block,nz_in_block, n_pts_in_block
-    use group_module, ONLY : blocks, parts
+    use group_module, ONLY : blocks
     use primary_module, ONLY: domain
     use cover_module, ONLY: DCS_parts
     use set_blipgrid_module, ONLY : naba_atoms_of_blocks
@@ -121,7 +121,7 @@ contains
     !local
     integer :: iblock,ia,ipart,ip,l1,acz,m1 ! Loop index variables
     integer :: nblock, npart, natom ! Array dimensions
-    integer :: jpart,ind_part,ii,icover,ig_atom,iatom ! Temporary indices for calculating species
+    integer :: naba_part_label,ind_part,icover,iatom ! indices for calculating species. TODO:Need better names
     integer :: position,next_offset_position ! Temporary indices to gridfunctions%griddata
     integer :: my_species ! Temporary variables to reduce indirect accesses
     integer :: npoint ! outputs of check_block
@@ -130,11 +130,11 @@ contains
     real(double) :: x,y,z ! Temporary variables to reduce indirect accesses
     real(double) :: rcut ! Input to check_block
     real(double) :: val ! output, written into gridfunctions%griddata
-    real(double) xblock,yblock,zblock ! inputs to check_block
+    real(double) :: xblock,yblock,zblock ! inputs to check_block
+    real(double) :: xatom,yatom,zatom ! inputs to check_block
     integer, allocatable, dimension(:) :: ip_store ! outputs of check_block
-    integer, allocatable, dimension(:,:,:) :: offset_position, species_store ! precomputed variables
+    integer, allocatable, dimension(:,:,:) :: offset_position ! precomputed offsets
     real(double), allocatable, dimension(:) :: x_store, y_store, z_store, r_store ! outputs of check_block
-    real(double), allocatable, dimension(:,:,:) :: xatom,yatom,zatom ! inputs to check_block, precomputed
 
     nblock = domain%groups_on_node
     npart = maxval(naba_atoms_of_blocks(atomf)%no_of_part)
@@ -142,15 +142,11 @@ contains
 
     call start_timer(tmr_std_basis)
     call start_timer(tmr_std_allocation)
-    allocate(xatom(natom, npart, nblock))
-    allocate(yatom(natom, npart, nblock))
-    allocate(zatom(natom, npart, nblock))
     allocate(ip_store(n_pts_in_block ))
     allocate(x_store( n_pts_in_block ))
     allocate(y_store( n_pts_in_block ))
     allocate(z_store( n_pts_in_block ))
     allocate(r_store( n_pts_in_block ))
-    allocate(species_store(    natom, npart, nblock))
     allocate(offset_position(natom, npart, nblock))
     call stop_timer(tmr_std_allocation)
     ! --  Start of subroutine  ---
@@ -176,24 +172,17 @@ contains
     !       carrier dependency in next_offset_position.
     blocks_loop: do iblock = 1, domain%groups_on_node ! primary set of blocks
        part_in_block: if(naba_atoms_of_blocks(atomf)%no_of_part(iblock) > 0) then ! if there are naba atoms
-          iatom=0
+          iatom = 0
           parts_loop: do ipart=1,naba_atoms_of_blocks(atomf)%no_of_part(iblock)
-             jpart=naba_atoms_of_blocks(atomf)%list_part(ipart,iblock)
-             ind_part=DCS_parts%lab_cell(jpart)
+             naba_part_label = naba_atoms_of_blocks(atomf)%list_part(ipart,iblock)
+             ind_part = DCS_parts%lab_cell(naba_part_label)
              atoms_loop: do ia=1,naba_atoms_of_blocks(atomf)%no_atom_on_part(ipart,iblock)
-                iatom=iatom+1
-                ii = naba_atoms_of_blocks(atomf)%list_atom(iatom,iblock)
-                icover= DCS_parts%icover_ibeg(jpart)+ii-1
-                ig_atom= id_glob(parts%icell_beg(ind_part)+ii-1)
 
-                xatom(ia, ipart, iblock) = DCS_parts%xcover(icover)
-                yatom(ia, ipart, iblock) = DCS_parts%ycover(icover)
-                zatom(ia, ipart, iblock) = DCS_parts%zcover(icover)
-                species_store(ia, ipart, iblock) = species_glob(ig_atom)
+                call get_species(iblock, naba_part_label, ind_part, iatom, icover, my_species)
 
                 offset_position(ia, ipart, iblock) = next_offset_position
                 next_offset_position = offset_position(ia, ipart, iblock) + &
-                     npao_species(species_store(ia, ipart, iblock)) * n_pts_in_block
+                     npao_species(my_species) * n_pts_in_block
              end do atoms_loop
           end do parts_loop
        end if part_in_block
@@ -202,30 +191,33 @@ contains
     !$omp parallel do default(none) &
     !$omp             schedule(dynamic) &
     !$omp             shared(domain, naba_atoms_of_blocks, offset_position, pao_fns, atomf, &
-    !$omp                    dcellx_block, dcelly_block, dcellz_block, species_store, &
-    !$omp                    xatom, yatom, zatom, rcut, n_pts_in_block, pao, gridfunctions) &
+    !$omp                    dcellx_block, dcelly_block, dcellz_block, dcs_parts, &
+    !$omp                    rcut, n_pts_in_block, pao, gridfunctions) &
     !$omp             private(ia, ipart, iblock, l1, acz, m1, count1, x, y, z, val, position, &
     !$omp                     npoint, r_store, ip_store, x_store, y_store, z_store, my_species, &
-    !$omp                     xblock, yblock, zblock)
+    !$omp                     xblock, yblock, zblock, iatom, xatom, yatom, zatom, naba_part_label, ind_part, icover)
     blocks_loop_omp: do iblock = 1, domain%groups_on_node ! primary set of blocks
        xblock = ( domain%idisp_primx(iblock) + domain%nx_origin - 1 ) * dcellx_block
        yblock = ( domain%idisp_primy(iblock) + domain%ny_origin - 1 ) * dcelly_block
        zblock = ( domain%idisp_primz(iblock) + domain%nz_origin - 1 ) * dcellz_block
        part_if_omp: if(naba_atoms_of_blocks(atomf)%no_of_part(iblock) > 0) then ! if there are naba atoms
+          iatom = 0
           parts_loop_omp: do ipart=1,naba_atoms_of_blocks(atomf)%no_of_part(iblock)
+             naba_part_label = naba_atoms_of_blocks(atomf)%list_part(ipart,iblock)
+             ind_part = DCS_parts%lab_cell(naba_part_label)
              atoms_loop_omp: do ia=1,naba_atoms_of_blocks(atomf)%no_atom_on_part(ipart,iblock)
+
+                call get_species(iblock, naba_part_label, ind_part, iatom, icover, my_species)
+
+                xatom = DCS_parts%xcover(icover)
+                yatom = DCS_parts%ycover(icover)
+                zatom = DCS_parts%zcover(icover)
 
                 !calculates distances between the atom and integration grid points
                 !in the block and stores which integration grids are neighbours.
-                call check_block (xblock, yblock, zblock, &
-                     xatom(ia, ipart, iblock), &
-                     yatom(ia, ipart, iblock), &
-                     zatom(ia, ipart, iblock), &
-                     rcut, &  ! in
+                call check_block (xblock, yblock, zblock, xatom, yatom, zatom, rcut, &  ! in
                      npoint, ip_store, r_store, x_store, y_store, z_store, & !out
                      n_pts_in_block) ! in
-
-                my_species = species_store(ia, ipart, iblock)
 
                 npoint_if_omp : if(npoint > 0) then
                    points_loop_omp: do ip=1,npoint
@@ -253,8 +245,7 @@ contains
     call my_barrier()
     call start_timer(tmr_std_allocation)
     ! Could just let these go out of scope at the end?
-    deallocate(ip_store,x_store,y_store,z_store,r_store,species_store,offset_position)
-    deallocate(xatom,yatom,zatom)
+    deallocate(ip_store,x_store,y_store,z_store,r_store,offset_position)
     call stop_timer(tmr_std_allocation)
     call stop_timer(tmr_std_basis)
     return
@@ -312,7 +303,7 @@ contains
 
     !local
     real(double):: dcellx_block,dcelly_block,dcellz_block
-    integer :: ipart,jpart,ind_part,ia,ii,icover,ig_atom
+    integer :: ipart,naba_part_label,ind_part,ia,ii,icover,ig_atom
     real(double):: xatom,yatom,zatom
     real(double):: xblock,yblock,zblock
     integer :: the_species
@@ -362,12 +353,12 @@ contains
        if(naba_atoms_of_blocks(atomf)%no_of_part(iblock) > 0) then ! if there are naba atoms
           iatom=0
           do ipart=1,naba_atoms_of_blocks(atomf)%no_of_part(iblock)
-             jpart=naba_atoms_of_blocks(atomf)%list_part(ipart,iblock)
-             ind_part=DCS_parts%lab_cell(jpart)
+             naba_part_label=naba_atoms_of_blocks(atomf)%list_part(ipart,iblock)
+             ind_part=DCS_parts%lab_cell(naba_part_label)
              do ia=1,naba_atoms_of_blocks(atomf)%no_atom_on_part(ipart,iblock)
                 iatom=iatom+1
                 ii = naba_atoms_of_blocks(atomf)%list_atom(iatom,iblock)
-                icover= DCS_parts%icover_ibeg(jpart)+ii-1
+                icover= DCS_parts%icover_ibeg(naba_part_label)+ii-1
                 ig_atom= id_glob(parts%icell_beg(ind_part)+ii-1)
 
                 xatom=DCS_parts%xcover(icover)
@@ -562,6 +553,30 @@ contains
     enddo ! iz=1,nz_in_block
     return
   end subroutine check_block
-!!***
+  !!***
+
+  !< Helper routine to get my_species and icover from block, particle and atom indices
+  !>
+  subroutine get_species(iblock, naba_part_label, ind_part, iatom, icover, my_species)
+
+    use global_module, ONLY: id_glob, species_glob, atomf
+    use set_blipgrid_module, ONLY : naba_atoms_of_blocks
+    use cover_module, ONLY: DCS_parts
+    use group_module, ONLY : blocks, parts
+
+    integer, intent(in) :: iblock, naba_part_label, ind_part
+    integer, intent(inout) :: iatom
+    integer, intent(out) :: icover, my_species
+
+    integer :: tmp_index
+
+    iatom = iatom + 1
+
+    tmp_index = naba_atoms_of_blocks(atomf)%list_atom(iatom,iblock) - 1
+
+    icover= DCS_parts%icover_ibeg(naba_part_label) + tmp_index
+    my_species = species_glob(id_glob(parts%icell_beg(ind_part) + tmp_index))
+
+  end subroutine get_species
 
 end module PAO_grid_transform_module
