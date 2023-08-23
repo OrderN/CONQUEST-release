@@ -245,8 +245,11 @@ contains
        problem = .false.
        inflex  = .false.
        done    = .false.
-       early   = .false.
-       if (.NOT. flag_SkipEarlyDM) early = .true.  ! Starts from earlyDM
+       early   = .true.  ! Do early DM iterations by default
+       if (flag_SkipEarlyDM) then
+          early = .false.
+          resetL = .false.
+       end if
 
        ! Start with the transpose of S^-1
        call matrix_transpose(matT(1), matTtran(1))
@@ -992,6 +995,7 @@ contains
                real(ni_in_cell, double)
        end do
     end if
+    if(n_L_iterations==0) done = .true. ! Otherwise the calling routine will cycle
     do n_iter = 1, n_L_iterations
        call start_timer(tmr_l_iter, WITH_LEVEL)
        if (inode == ionode .and. iprint_DM + min_layer >= 1) &

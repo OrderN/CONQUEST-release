@@ -1197,7 +1197,7 @@ contains
       ! where find_chdens = .false. (initial charge = atomic charge)
       ! But.. since this change will affect the result, we will issue this change later.
       !
-       if(restart_DM) find_chdens=.true.  ! 2018JFeb12 TM 
+      ! if(restart_DM) find_chdens=.true.  ! 2018JFeb12 TM 
 
        call my_barrier()
     endif
@@ -1267,7 +1267,9 @@ contains
     ! (2) Make an inital estimate for the density matrix, L, which is an
     !     approximation to L = S^-1. Then use correct_electron_number()
     !     to modify L so that the electron number is correct.
-    if (.not. flag_diagonalisation .and. find_chdens .and. (start .or. start_L)) then
+    ! NB This is ONLY used if the user chooses not to reload the DM but to
+    ! build the charge density from the initial DM - a very strange idea
+    if (.not. flag_diagonalisation .and. find_chdens .and. (.not.restart_DM)) then
        call initial_L()
        call my_barrier()
        if (inode == ionode .and. iprint_init + min_layer > 2) &
