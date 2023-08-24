@@ -431,6 +431,8 @@ contains
 !!  MODIFICATION HISTORY
 !!   2022/07/27 J.Lin
 !!    Modified to get pair information for machine learing
+!!   2023/08/24 J.Lin
+!!   Available different feature dimensions for each type of atom
 !!  SOURCE
 !!
   subroutine calculate_EandF_acsf2b(prim,amat,amat_features_ML,descriptor_params)
@@ -458,7 +460,7 @@ contains
 
     ! Local variables
     integer :: inp, ip_process
-    integer :: nn,i,np, i_species,ia_glob
+    integer :: nn,ii,np, i_species,ia_glob
     real(double) :: rx,ry,rz
 
     ! loop over all atom pairs (atoms in primary set, max. cover set) -
@@ -466,13 +468,12 @@ contains
     do nn=1,prim%groups_on_node ! Partitions in primary set
        !pair check!write(*,*) 'nn loop, inode=',inode
        if(prim%nm_nodgroup(nn).gt.0) then  ! Are there atoms ?
-          do i=1,prim%nm_nodgroup(nn)  ! Loop over atoms in partition
-             ia_glob=prim%ig_prim(prim%nm_nodbeg(nn)+i-1)
-             i_species = amat(nn)%i_species(i)
-             ! TODO: fpx(i, :) -> fpx(:, i)
-             ml_force(1, ia_glob) = dot_product(amat_features_ML(nn)%fpx(:, i), descriptor_params(i_species)%coef)
-             ml_force(2, ia_glob) = dot_product(amat_features_ML(nn)%fpy(:, i), descriptor_params(i_species)%coef)
-             ml_force(3, ia_glob) = dot_product(amat_features_ML(nn)%fpz(:, i), descriptor_params(i_species)%coef)
+          do ii=1,prim%nm_nodgroup(nn)  ! Loop over atoms in partition
+             ia_glob=prim%ig_prim(prim%nm_nodbeg(nn)+ii-1)
+             i_species = amat(nn)%i_species(ii)
+             ml_force(1, ia_glob) = dot_product(amat_features_ML(nn)%id_atom(ii)%fpx(:), descriptor_params(i_species)%coef)
+             ml_force(2, ia_glob) = dot_product(amat_features_ML(nn)%id_atom(ii)%fpy(:), descriptor_params(i_species)%coef)
+             ml_force(3, ia_glob) = dot_product(amat_features_ML(nn)%id_atom(ii)%fpz(:), descriptor_params(i_species)%coef)
 
              ! Get ml_stress for each NB atom
              if(flag_stress) then
@@ -532,6 +533,8 @@ contains
 !!  MODIFICATION HISTORY
 !!   2022/07/27 J.Lin
 !!    Modified to get pair information for machine learing
+!!   2023/08/24 J.Lin
+!!   Available different feature dimensions for each type of atom
 !!  SOURCE
 !!
   subroutine calculate_EandF_split2b3b(prim,amat,amat_features_ML,descriptor_params)
@@ -559,7 +562,7 @@ contains
 
     ! Local variables
     integer :: inp, ip_process
-    integer :: nn,i,np, i_species,ia_glob
+    integer :: nn,ii,np, i_species,ia_glob
     real(double) :: rx,ry,rz
 
     ! loop over all atom pairs (atoms in primary set, max. cover set) -
@@ -567,13 +570,13 @@ contains
     do nn=1,prim%groups_on_node ! Partitions in primary set
        !pair check!write(*,*) 'nn loop, inode=',inode
        if(prim%nm_nodgroup(nn).gt.0) then  ! Are there atoms ?
-          do i=1,prim%nm_nodgroup(nn)  ! Loop over atoms in partition
-             ia_glob=prim%ig_prim(prim%nm_nodbeg(nn)+i-1)
-             i_species = amat(nn)%i_species(i)
+          do ii=1,prim%nm_nodgroup(nn)  ! Loop over atoms in partition
+             ia_glob=prim%ig_prim(prim%nm_nodbeg(nn)+ii-1)
+             i_species = amat(nn)%i_species(ii)
 
-             ml_force(1, ia_glob) = dot_product(amat_features_ML(nn)%fpx(:, i), descriptor_params(i_species)%coef)
-             ml_force(2, ia_glob) = dot_product(amat_features_ML(nn)%fpy(:, i), descriptor_params(i_species)%coef)
-             ml_force(3, ia_glob) = dot_product(amat_features_ML(nn)%fpz(:, i), descriptor_params(i_species)%coef)
+             ml_force(1, ia_glob) = dot_product(amat_features_ML(nn)%id_atom(ii)%fpx(:), descriptor_params(i_species)%coef)
+             ml_force(2, ia_glob) = dot_product(amat_features_ML(nn)%id_atom(ii)%fpy(:), descriptor_params(i_species)%coef)
+             ml_force(3, ia_glob) = dot_product(amat_features_ML(nn)%id_atom(ii)%fpz(:), descriptor_params(i_species)%coef)
 
              ! Get ml_stress for each NB atom
              if(flag_stress) then
@@ -632,6 +635,8 @@ contains
 !!  MODIFICATION HISTORY
 !!   2022/07/27 J.Lin
 !!    Modified to get pair information for machine learing
+!!   2023/08/24 J.Lin
+!!   Available different feature dimensions for each type of atom
 !!  SOURCE
 !!
   subroutine get_EandF_ML(prim,gcs,amat_ML,amat_features_ML,rcut)
@@ -683,8 +688,8 @@ contains
 
     if (params_ML%descriptor_type == 'split2b3b' .or. params_ML%descriptor_type == 'Split2b3b') then
         !call read_split(filename, descriptor_params_split)
-        feature_dim = params_ML%split(1)%dim_coef
-        call allocate_features_ML(amat_ML, amat_features_ML, prim%groups_on_node, feature_dim)
+        !feature_dim = params_ML%split(1)%dim_coef
+        call allocate_features_ML(amat_ML, amat_features_ML, prim, params_ML%dim_coef_lst)
         call get_feature_split(prim,gcs,amat_ML,amat_features_ML,rcut,params_ML%split)
         call calculate_EandF_split2b3b(prim,amat_ML,amat_features_ML,params_ML%split)
 
@@ -692,8 +697,8 @@ contains
         !call clean_up_ml_split(amat_ML,amat_features_ML,descriptor_params_split)
     elseif (params_ML%descriptor_type == 'acsf2b' .or. params_ML%descriptor_type == 'ACSF2b') then
         !call read_acsf2b(filename, descriptor_params_acsf2b)
-        feature_dim = params_ML%acsf(1)%dim_coef
-        call allocate_features_ML(amat_ML, amat_features_ML, prim%groups_on_node, feature_dim)
+        !feature_dim = params_ML%acsf(1)%dim_coef
+        call allocate_features_ML(amat_ML, amat_features_ML, prim, params_ML%dim_coef_lst)
         call get_feature_acsf2b(prim,gcs,amat_ML,amat_features_ML,rcut,params_ML%acsf)
         call calculate_EandF_acsf2b(prim,amat_ML,amat_features_ML,params_ML%acsf)
 
