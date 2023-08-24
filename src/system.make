@@ -48,5 +48,5 @@ DIAG_DUMMY =
 # Use dummy omp_module or not.
 # Set this to "OMP_DUMMY = DUMMY" if compiling without openmp
 # Set this to "OMP_DUMMY = " if compiling with openmp
-OMP_DUMMY = 
+OMP_DUMMY = DUMMY
 
