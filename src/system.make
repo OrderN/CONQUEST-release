@@ -45,5 +45,8 @@ FFT_OBJ=fft_fftw3.o
 MULT_KERN = default
 # Use dummy DiagModule or not
 DIAG_DUMMY =
-
+# Use dummy omp_module or not.
+# Set this to "OMP_DUMMY = DUMMY" if compiling without openmp
+# Set this to "OMP_DUMMY = " if compiling with openmp
+OMP_DUMMY = 
 
