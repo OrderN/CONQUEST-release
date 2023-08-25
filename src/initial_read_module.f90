@@ -170,7 +170,7 @@ contains
     use construct_module,       only: init_group, init_primary
     use maxima_module,          only: maxpartsproc, maxatomsproc
     use global_module,          only: id_glob,x_atom_cell,y_atom_cell, &
-         z_atom_cell, numprocs, numthreads, &
+         z_atom_cell, numprocs,           &
          iprint_init, nspin,              &
          flag_fix_spin_population,        &
          ne_in_cell, ne_spin_in_cell,     &
@@ -535,7 +535,7 @@ contains
 
     ! write out some information on the run
     if (inode == ionode) &
-         call write_info(titles, mu, vary_mu, HNL_fac, numprocs, numthreads)
+         call write_info(titles, mu, vary_mu, HNL_fac, numprocs)
 
     !****lat<$
     call stop_backtrace(t=backtrace_timer,who='read_and_write')
@@ -2599,7 +2599,7 @@ contains
   !!    Removed output of support grid spacing with blips (shouldn't be here: species dependent)
   !!  SOURCE
   !!
-  subroutine write_info(titles, mu, vary_mu, HNL_fac, NODES, threads)
+  subroutine write_info(titles, mu, vary_mu, HNL_fac, NODES)
 
     use datatypes
     use units
@@ -2631,6 +2631,7 @@ contains
     use input_module,         only: leqi, chrcap
     use control,    only: MDn_steps
     use md_control, only: md_ensemble
+    use omp_module, only: init_threads
 
     implicit none
 
@@ -2638,11 +2639,12 @@ contains
     logical :: vary_mu
     character(len=80) :: titles
     character(len=3) :: ensemblestr
-    integer :: NODES, threads
+    integer :: NODES
     real(double) :: mu, HNL_fac
 
     ! Local variables
     integer :: n, stat
+    integer :: threads
     character(len=10) :: today, the_time
     character(len=15) :: job_str
     character(len=5)  :: timezone
@@ -2826,6 +2828,7 @@ contains
        write(io_lun,fmt="(/4x,'The calculation will be performed on ',i5,' process')") NODES
     end if
 
+    call init_threads(threads)
     if(threads>1) then
        write(io_lun,fmt="(/4x,'The calculation will be performed on ',i5,' threads')") threads
     else if (threads==1) then

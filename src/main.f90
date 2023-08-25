@@ -127,7 +127,6 @@ program Conquest
   fixed_potential = .false.
   ! identify what node we are on
   call init_comms(myid, numprocs)
-  call init_threads(numthreads)
 
   ! initialise reads in data and builds an initial Hamiltonian
   call initialise(vary_mu, fixed_potential, mu, total_energy)
