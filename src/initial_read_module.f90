@@ -2828,7 +2828,7 @@ contains
 
     if(threads>1) then
        write(io_lun,fmt="(/4x,'The calculation will be performed on ',i5,' threads')") threads
-    else
+    else if (threads==1) then
        write(io_lun,fmt="(/4x,'The calculation will be performed on ',i5,' thread')") threads
     end if
     
