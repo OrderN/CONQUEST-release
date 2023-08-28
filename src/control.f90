@@ -689,6 +689,7 @@ contains
     use atoms,          only: distribute_atoms,deallocate_distribute_atom
     use global_module,  only: atom_coord_diff, iprint_MD, area_moveatoms
     use mlff,           only: get_MLFF
+    use mlff_type,      only: flag_debug_mlff,flag_time_mlff
     use mpi
 
     implicit none
@@ -764,18 +765,20 @@ contains
 
     ! Thermostat/barostat initialisation
     call init_md(baro, thermo, mdl, md_ndof, nequil)
-    if (inode==ionode) &
-       write(io_lun,*) 'check stress after init_md ini:', stress,baro%P_int*HaBohr3ToGPa,&
+    if (inode==ionode .and. flag_debug_mlff) then
+      write(*,'(4x,a,i6," steps")') trim(prefix)//" starting MD run with ",MDn_steps
+      write(*,*) 'check stress after init_md ini:', stress,baro%P_int*HaBohr3ToGPa,&
                baro%P_ext*HaBohr3ToGPa
+    end if
     call thermo%get_temperature_and_ke(baro, ion_velocity, &
                                       mdl%ion_kinetic_energy)
-    if (inode==ionode) &
-       write(io_lun,*) 'check stress after thermo%get_temperature_and_ke ini:', stress,baro%P_int*HaBohr3ToGPa,&
+    if (inode==ionode .and. flag_debug_mlff) &
+       write(*,*) 'check stress after thermo%get_temperature_and_ke ini:', stress,baro%P_int*HaBohr3ToGPa,&
                baro%P_ext*HaBohr3ToGPa
     call baro%get_pressure_and_stress
     !! have pressure from here
-    if (inode==ionode) &
-       write(io_lun,*) 'check stress after baro%get_pressure_and_stress ini:', stress,baro%P_int*HaBohr3ToGPa,&
+    if (inode==ionode .and. flag_debug_mlff) &
+       write(*,*) 'check stress after baro%get_pressure_and_stress ini:', stress,baro%P_int*HaBohr3ToGPa,&
                baro%P_ext*HaBohr3ToGPa
     call mdl%get_cons_qty
 
@@ -834,8 +837,8 @@ contains
     if (flag_heat_flux) &
       call get_heat_flux(atomic_stress, ion_velocity, heat_flux)
 
-    if (inode==ionode) &
-       write(io_lun,*) 'check stress before mdl%get_cons_qty:', stress,baro%P_int*HaBohr3ToGPa,&
+    if (inode==ionode .and. flag_debug_mlff) &
+       write(*,*) 'check stress before mdl%get_cons_qty:', stress,baro%P_int*HaBohr3ToGPa,&
                baro%P_ext*HaBohr3ToGPa
     if (.not. flag_MDcontinue) then
        ! Check this: it fixes H' for NVE but needs NVT confirmation
@@ -850,24 +853,27 @@ contains
        if (inode==ionode .and. iprint_MD + min_layer > 0) &
             write(io_lun,fmt='(/4x,a,i5)') trim(prefix)//" iteration ",iter
 
+       if (inode==ionode .and. (flag_debug_mlff .or. flag_time_mlff)) &
+            write(*,fmt='(/4x,a,i5)') trim(prefix)//" iteration ",iter
+
        if (flag_heat_flux) then
          atomic_stress = zero
          non_atomic_stress = zero
        end if
        call thermo%get_temperature_and_ke(baro, ion_velocity, &
                                           mdl%ion_kinetic_energy)
-       if (inode==ionode) &
-          write(io_lun,*) 'check stress after thermo%get_temperature_and_ke 1:', stress,baro%P_int*HaBohr3ToGPa,&
+       if (inode==ionode .and. flag_debug_mlff) &
+          write(*,*) 'check stress after thermo%get_temperature_and_ke 1:', stress,baro%P_int*HaBohr3ToGPa,&
                baro%P_ext*HaBohr3ToGPa
        call baro%get_pressure_and_stress
-       if (inode==ionode) &
-          write(io_lun,*) 'check stress after baro%get_pressure_and_stress 1:', stress,baro%P_int*HaBohr3ToGPa,&
+       if (inode==ionode .and. flag_debug_mlff) &
+          write(*,*) 'check stress after baro%get_pressure_and_stress 1:', stress,baro%P_int*HaBohr3ToGPa,&
                baro%P_ext*HaBohr3ToGPa
 
        ! thermostat/barostat (MTTK splitting of Liouvillian)
        call integrate_pt(baro, thermo, mdl, ion_velocity)
-       if (inode==ionode) &
-          write(io_lun,*) 'check stress after integrate_pt 1:', stress,baro%P_int*HaBohr3ToGPa,&
+       if (inode==ionode .and. flag_debug_mlff) &
+          write(*,*) 'check stress after integrate_pt 1:', stress,baro%P_int*HaBohr3ToGPa,&
                baro%P_ext*HaBohr3ToGPa
 
        !! For Debuggging !!
@@ -900,8 +906,9 @@ contains
        endif
 
        t2=MPI_wtime()
-       if (inode==ionode) &
-            write(io_lun,*) 'Time update_pos_and_matrices in MD:', t2-t1
+       if (inode==ionode .and. flag_time_mlff) &
+            write(*,2023) 'Time at update_pos_and_matrices in MD:', t2-t1
+       2023 format(a,e16.6)
        if (flag_XLBOMD) call Do_XLBOMD(iter,MDtimestep)
        if (.not. flag_MLFF) call update_H(fixed_potential)
 
@@ -913,8 +920,8 @@ contains
        if (flag_fire_qMD) then
           if (flag_MLFF) then
             call get_MLFF
-            if (inode==ionode) &
-               write(io_lun,*) 'check stress after gret_MLFF:', stress,baro%P_int*HaBohr3ToGPa,&
+            if (inode==ionode .and. flag_debug_mlff) &
+               write(*,*) 'check stress after gret_MLFF:', stress,baro%P_int*HaBohr3ToGPa,&
                baro%P_ext*HaBohr3ToGPa
             call check_stop(done, iter)
           else
@@ -927,12 +934,19 @@ contains
             t1=MPI_wtime()
             call get_MLFF
             t2=MPI_wtime()
-            if (inode==ionode) &
-               write(io_lun,*) 'Time get_E_and_F_ML in MD:', t2-t1
-            if (inode==ionode) &
-               write(io_lun,*) 'check stress after get_MLFF:', stress,baro%P_int*HaBohr3ToGPa,&
+            if (inode==ionode .and. flag_time_mlff) &
+               write(*,2023) 'Time at get_E_and_F_ML in MD:', t2-t1
+            if (inode==ionode .and. flag_debug_mlff) &
+               write(*,*) 'check stress after get_MLFF:', stress,baro%P_int*HaBohr3ToGPa,&
                baro%P_ext*HaBohr3ToGPa
             call check_stop(done, iter)
+            ! Here so that the kinetic stress is reported just after the
+            ! static stress - zamaan
+            if (inode == ionode .and. iprint_MD > 2) then
+              write(io_lun,fmt='(/4x,a, 3f15.8,a3)') trim(prefix)//" Kinetic stress    ",&
+                baro%ke_stress(1,1), baro%ke_stress(2,2), baro%ke_stress(3,3), &
+                en_units(energy_units)
+            end if
           else
             call get_E_and_F(fixed_potential, vary_mu, energy1, .true., .false.,iter)
             call check_stop(done, iter)   !2019/Nov/14
@@ -946,8 +960,8 @@ contains
           end if ! flag_MLFF
           call vVerlet_v_dthalf(MDtimestep,ion_velocity,tot_force,flag_movable,second_call)
        end if
-       if (inode==ionode) &
-          write(io_lun,*) 'check stress after if flag_fire_qMD:', stress,baro%P_int*HaBohr3ToGPa,&
+       if (inode==ionode .and. flag_debug_mlff) &
+          write(*,*) 'check stress after if flag_fire_qMD:', stress,baro%P_int*HaBohr3ToGPa,&
                baro%P_ext*HaBohr3ToGPa
        t1=MPI_wtime()
        min_layer = min_layer + 1
@@ -969,19 +983,19 @@ contains
        thermo%ke_ions = mdl%ion_kinetic_energy
        call thermo%get_temperature_and_ke(baro, ion_velocity, &
                                           mdl%ion_kinetic_energy)
-       if (inode==ionode) &
-          write(io_lun,*) 'check stress after thermo%get_temperature_and_ke 2:', stress,baro%P_int*HaBohr3ToGPa,&
+       if (inode==ionode .and. flag_debug_mlff) &
+          write(*,*) 'check stress after thermo%get_temperature_and_ke 2:', stress,baro%P_int*HaBohr3ToGPa,&
                baro%P_ext/HaBohr3ToGPa
        call baro%get_pressure_and_stress
-       if (inode==ionode) &
-          write(io_lun,*) 'check stress after baro%get_pressure_and_stress 2:', stress,baro%P_int*HaBohr3ToGPa,&
+       if (inode==ionode .and. flag_debug_mlff) &
+          write(*,*) 'check stress after baro%get_pressure_and_stress 2:', stress,baro%P_int*HaBohr3ToGPa,&
                baro%P_ext/HaBohr3ToGPa
 
        ! thermostat/barostat (MTTK splitting of Liouvillian)
        call mdl%get_cons_qty
        call integrate_pt(baro, thermo, mdl, ion_velocity, second_call)
-       if (inode==ionode) &
-          write(io_lun,*) 'check stress after integrate_pt 2:', stress,baro%P_int*HaBohr3ToGPa,&
+       if (inode==ionode .and. flag_debug_mlff) &
+          write(*,*) 'check stress after integrate_pt 2:', stress,baro%P_int*HaBohr3ToGPa,&
                baro%P_ext/HaBohr3ToGPa
 
        ! Constrain velocity
@@ -1041,12 +1055,12 @@ contains
        call thermo%get_temperature_and_ke(baro, ion_velocity, &
                                           mdl%ion_kinetic_energy, &
                                           final_call)
-       if (inode==ionode) &
-          write(io_lun,*) 'check stress thermo%get_temperature_and_ke second velocity:', stress,baro%P_int*HaBohr3ToGPa,&
+       if (inode==ionode .and. flag_debug_mlff) &
+          write(*,*) 'check stress thermo%get_temperature_and_ke second velocity:', stress,baro%P_int*HaBohr3ToGPa,&
                baro%P_ext/HaBohr3ToGPa
        call baro%get_pressure_and_stress(final_call)
-       if (inode==ionode) &
-          write(io_lun,*) 'check stress baro%get_pressure_and_stress second velocity:', stress,baro%P_int*HaBohr3ToGPa,&
+       if (inode==ionode .and. flag_debug_mlff) &
+          write(*,*) 'check stress baro%get_pressure_and_stress second velocity:', stress,baro%P_int*HaBohr3ToGPa,&
                baro%P_ext/HaBohr3ToGPa
  
        if (nequil > 0) then
@@ -1065,17 +1079,17 @@ contains
          call get_heat_flux(atomic_stress, ion_velocity, heat_flux)
 
        t2=MPI_wtime()
-       if (inode==ionode) &
-            write(io_lun,*) 'Time after get_E_and_F_ML in MD:', t2-t1
+       if (inode==ionode .and. flag_time_mlff) &
+           write(*,2023) 'Time after get_E_and_F_ML in MD:', t2-t1
        t1=MPI_wtime()
        ! Write all MD data and checkpoints to disk
        call write_md_data(iter, thermo, baro, mdl, nequil, MDfreq)
-       if (inode==ionode) &
-          write(io_lun,*) 'check stress write_md_data second velocity:', stress,baro%P_int*HaBohr3ToGPa,&
+       if (inode==ionode .and. flag_debug_mlff) &
+           write(*,*) 'check stress write_md_data second velocity:', stress,baro%P_int*HaBohr3ToGPa,&
                baro%P_ext/HaBohr3ToGPa
        t2=MPI_wtime()
-       if (inode==ionode) &
-            write(io_lun,*) 'Time save MD data in MD:', t2-t1
+       if (inode==ionode .and. flag_time_mlff) &
+            write(*,2023) 'Time at save_MD_data in MD:', t2-t1
        !call check_stop(done, iter) ! moved above. 2019/Nov/14 tsuyoshi
        if (flag_fire_qMD.OR.flag_quench_MD) then
           if (abs(max) < MDcgtol) then

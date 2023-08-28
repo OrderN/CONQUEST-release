@@ -33,6 +33,8 @@ module mlff_type
 
   save
 
+  logical :: flag_debug_mlff = .FALSE.  ! .TRUE. ! control output level from mlff for debug
+  logical :: flag_time_mlff =  .TRUE. ! .FALSE. ! control output level from mlff for timing
 
 !! Modified from * matrix_module/matrix *
 !!****s* ML_pair *
@@ -161,8 +163,9 @@ module mlff_type
     integer, dimension(:), allocatable :: nums_g2,nums_g3,nums_g4,nums_g5   ! numbers of two-body and three-body terms
     integer, dimension(:), allocatable :: nums_g2_acc,nums_g3_acc,nums_g4_acc,nums_g5_acc  ! start index of each component
 
-    integer :: n_species
-    type(species_order)  :: species_orders
+    integer :: n_species                             ! number of species in this descriptor
+    character(len=2), allocatable :: species_lst(:)  ! dimension n_species
+    type(species_order)  :: species_orders           ! order of two-body and three-body terms in descriptor
     ! Cutoff
     real(double) :: rcut
     ! Arrays
@@ -201,8 +204,10 @@ module mlff_type
     integer          :: num_2b,num_3b                  ! total number of two-body or three-body terms
     integer, dimension(:), allocatable :: nums_2b,nums_3b            ! numbers of two-body and three-body terms
     integer, dimension(:), allocatable :: nums_2b_acc, nums_3b_acc    ! start index of each component
-    integer :: n_species
-    type(species_order)  :: species_orders
+
+    integer :: n_species                             ! number of species in this descriptor
+    character(len=2), allocatable :: species_lst(:)  ! dimension n_species
+    type(species_order)  :: species_orders           ! order of two-body and three-body terms in descriptor
     ! Cutoff
     real(double) :: rcut
     ! Arrays
@@ -295,6 +300,11 @@ contains
       do ii=1, n_species
         params_ML%dim_coef_lst(ii) = params_ML%acsf(ii)%dim_coef
       end do ! ii1
+    end if
+
+    if (inode == ionode) then
+      write(*,*) 'descriptor dimensions:'
+      write(*,*) params_ML%dim_coef_lst
     end if
   end subroutine set_ML
 
@@ -631,6 +641,69 @@ contains
   end subroutine ini_species_order
 !!***
 
+!!****f* matrix_module/ini_species_order *
+  subroutine ini_species_order_center(species_orders, n_species, i_species)
+    implicit none
+
+    ! Passed variables
+    type(species_order) :: species_orders
+    integer                 :: n_species, i_species
+
+    ! Local variables
+    integer :: i, j, k, shift,stat
+    integer :: i_d2, i_d3
+
+    allocate(species_orders%d2(n_species),STAT=stat)
+    if(stat/=0) then
+        call cq_abort('species_orders d2: error allocating memory to n_species')
+    endif
+    allocate(species_orders%d3(n_species, n_species),STAT=stat)
+    if(stat/=0) then
+        call cq_abort('species_orders d3: error allocating memory to (n_species, n_species)')
+    endif
+
+    !! center atom to be the first order
+    !! X-X, and X-XX
+    species_orders%d2(i_species) = 1
+    species_orders%d3(i_species,i_species) = 1
+    i_d2=2
+    i_d3=2
+    !! X-XA,X-XB,...X-AX
+    do i=1, n_species
+      do j=1, n_species
+        if (i == i_species .or. j==i_species) then
+            if (j > i ) then
+               species_orders%d3(i,j) = i_d3
+               i_d3 = i_d3 + 1
+            else
+               species_orders%d3(i,j) = species_orders%d3(j,i)
+            end if
+        end if
+      end do
+    end do
+
+    ! X-A, and X-AB, X-BA
+    do i=1, n_species
+       if (i /= i_species) then
+          species_orders%d2(i) = i_d2
+          i_d2 = i_d2 + 1
+       end if
+       do j=1, n_species
+        if (i /= i_species .and. j/=i_species) then
+            if (j >= i ) then
+               species_orders%d3(i,j) = i_d3
+               i_d3 = i_d3 + 1
+            else
+               species_orders%d3(i,j) = species_orders%d3(j,i)
+            end if
+        end if
+       end do
+    end do
+    return
+  end subroutine ini_species_order_center
+!!***
+
+
 !!****f* matrix_module/allocate_feature_ML *
 !!
 !!  NAME
@@ -766,7 +839,8 @@ contains
         if(stat/=0) &
           call cq_abort('dealloc_mat_features_ML: error deallocating memory to id_atom')
       else
-          write(*,*) 'Warning no atom in partition, deallocate_features_ML ', ' n_atoms:', n_atoms
+        if(flag_debug_mlff) &
+          write(*,*) 'Warning: No atoms in this partition deallocate_features_ML', inode, n_atoms
       end if
     enddo
     call stop_timer(tmr_std_allocation)
@@ -972,11 +1046,11 @@ contains
     integer                    :: a,b,shift, num_g2
     integer                    :: stat
     integer                    :: file_id=2022
-    character(len=80)          :: comment, eta_type
-    !real(double),pointer       :: eta(:),rs(:),scale(:),coef(:)
-
     integer, allocatable       :: dims_2b(:)
+    character(len=180)         :: comment
+    character(len=30)          :: eta_type, delimiter
 
+    delimiter=' '
     open(unit=file_id,file=filename,iostat=stat,status='old')
     read(file_id,*, end=999) comment
     read(file_id,*, end=999) comment
@@ -989,11 +1063,22 @@ contains
 
     !! Allocate n_spieces of descriptor_params
     allocate(descriptor_params(n_species),STAT=stat)
-    if(stat/=0) then
+    if(stat/=0) &
       call cq_abort('acsf2b descriptor_params: error allocating memory to n_species')
-    endif
+
     do ii=1, n_species
-      call ini_species_order(descriptor_params(ii)%species_orders, n_species)
+      ! species_orders only depending on input of species order
+      !call ini_species_order(descriptor_params(ii)%species_orders, n_species)
+      ! species_orders depending on center atom according to the input of species order
+      call ini_species_order_center(descriptor_params(ii)%species_orders, n_species, ii)
+      if (inode == ionode) then
+        write(*,*) 'read_split2b3b: species_order d2 ', descriptor_params(ii)%species_orders%d2
+        write(*,*) 'read_split2b3b: species_order d3', descriptor_params(ii)%species_orders%d3
+      end if
+      ! species list of ii atom in mlff model
+      allocate(descriptor_params(ii)%species_lst(n_species),STAT=stat)
+      if(stat/=0) &
+        call cq_abort('acsf2b descriptor_params(ii)%species_lst: error allocating memory to n_species')
     end do
     descriptor_params%n_species = n_species
 
@@ -1004,7 +1089,7 @@ contains
       ! read the two body part
       ! A-A,A-B,A-C, ...
       ! 30,30,30, ...
-      read(file_id,*, end=999) comment
+      read(file_id,'(a)', end=999) comment
 
       if (inode == ionode) then
         write(*,*) 'read_acsf2b: i, comment ', ii, comment
@@ -1012,15 +1097,26 @@ contains
       ! number of pair types is equal to n_species
       n_2b_pair = descriptor_params(ii)%n_species
       allocate(dims_2b(n_2b_pair),STAT=stat)
-      if(stat/=0) then
+      if(stat/=0) &
         call cq_abort('dims_2b : error allocating memory to n_2b_pair')
-      endif
 
       ! element name
-      read(file_id,*, end=999) comment
+      read(file_id,'(a)') comment
+      if (inode == ionode) then
+        write(*,*) 'read_acsf2b: element name, comment ', comment
+      end if
       ! element order
-      read(file_id,*, end=999) comment
-      ! read dimensions of each pair type
+      read(file_id,'(a)') comment
+      call split_string(comment, descriptor_params(ii)%species_lst, delimiter, n_species)
+      if (inode == ionode) then
+        write(*,'(a,a30)') 'read_acsf2b: element order, comment ', comment
+        write(*,*) (descriptor_params(ii)%species_lst(jj), jj=1,n_species)
+      end if
+
+      ! Read dimensions of each pair type
+      ! pair information
+      read(file_id,'(a)') comment
+      ! pair dimensions
       read(file_id,*) dims_2b
 
       ! num_g2 = sum(nums_g2()), nums_g2_acc is index of each g2
@@ -1188,7 +1284,7 @@ contains
     type(acsf_param), dimension(:), allocatable :: descriptor_params
 
     ! Local variables
-    integer :: i, n_2b_pair, dims_3b, n_spieces,stat
+    integer :: ii, n_2b_pair, dims_3b, n_spieces,stat
 
     n_spieces = 0
     if (descriptor_params(1)%n_species .LE. 0) then
@@ -1197,17 +1293,21 @@ contains
       n_spieces = descriptor_params(1)%n_species
     end if
     call start_timer(tmr_std_allocation)
-    do i=n_spieces, 1, -1
-      n_2b_pair = descriptor_params(i)%n_species
+    do ii=n_spieces, 1, -1
+      n_2b_pair = descriptor_params(ii)%n_species
       !dims_3b = dims_2b * (dims_2b + 1)/2
-      deallocate(descriptor_params(i)%nums_g2,STAT=stat)
+      deallocate(descriptor_params(ii)%nums_g2,STAT=stat)
       if(stat/=0) &
         call cq_abort('acsf deallocate: error deallocating memory to nums_g2')
-      deallocate(descriptor_params(i)%nums_g2_acc,STAT=stat)
+      deallocate(descriptor_params(ii)%nums_g2_acc,STAT=stat)
       if(stat/=0) &
         call cq_abort('acsf deallocate: error deallocating memory to nums_g2_acc')
 
-      call deallocate_b2_param(descriptor_params(i)%params_g2, n_2b_pair)
+      call deallocate_b2_param(descriptor_params(ii)%params_g2, n_2b_pair)
+
+      deallocate(descriptor_params(ii)%species_lst,STAT=stat)
+      if(stat/=0) &
+        call cq_abort('acsf deallocate: error deallocating memory to species_lst')
     end do
     call stop_timer(tmr_std_allocation)
     return
@@ -1284,7 +1384,7 @@ contains
     ! rcut bohr to angstrom
     rcut_a=rcut * BohrToAng
 
-    if (inode== ionode) then
+    if (inode== ionode .and. flag_debug_mlff) then
       write(*,*) 'We are in get_naba_ML', ' id=',inode
     end if
     call my_barrier()
@@ -1297,7 +1397,7 @@ contains
       if(prim%nm_nodgroup(nn).gt.0) then  ! Are there atoms ?
         !write(*,*) 'if prim atoms, inode=',inode, prim%nm_nodgroup(nn) ! success until here
         !call my_barrier()
-        if (inode== ionode) then
+        if (inode== ionode .and. flag_debug_mlff) then
           write(*,*) 'We are in get_naba_ML prim%nm_nodgroup(nn).gt.0'
         end if
         if (amat(nn)%n_atoms .ne. prim%nm_nodgroup(nn)) then ! Redundant, but useful
@@ -1328,9 +1428,9 @@ contains
             param_start = descriptor_params(i_species)%nums_g2_acc(species_orderij)
             param_end = param_start + descriptor_params(i_species)%nums_g2(species_orderij) - 1
             !!check params
-            !if (inode== ionode .and. ii==1) then
-            !  write(*,102) param_start, param_end, i_species,j_species,amat(nn)%n_nab(ii)
-            !end if
+            if (inode== ionode .and. ii==1 .and. flag_debug_mlff) then
+              write(*,102) param_start, param_end, i_species,j_species,amat(nn)%n_nab(ii)
+            end if
             do param_index = param_start, param_end
               fp_index = param_index + shift_dim
               ! Todo : check if species_orderij is correct
@@ -1356,7 +1456,8 @@ contains
         !pair check!write(*,*) 'after prim%nm_nodgroup', inode
 
       else
-        write(*, *) 'Warning: No atoms in this partition', inode, nn
+        if(flag_debug_mlff) &
+            write(*, *) 'Warning: No atoms in this partition get_feature_acsf', inode, nn
       endif ! End if(prim%nm_nodgroup>0)
     enddo ! End part_on_node
     100 format(6i8,4e25.16)
@@ -1492,9 +1593,11 @@ contains
     integer                    :: a,b,shift, num_2b, num_3b
     integer                    :: stat
     integer                    :: file_id=2022
-    character(len=80)          :: comment, eta_type
     integer, allocatable       :: dims_2b(:), dims_3b(:)
+    character(len=180)         :: comment
+    character(len=30)          :: eta_type, delimiter
 
+    delimiter=' '
     open(unit=file_id,file=filename,iostat=stat,status='old')
     read(file_id,*, end=999) comment
     read(file_id,*, end=999) comment
@@ -1512,7 +1615,16 @@ contains
     endif
     !! TODO: consider a well-designed species order
     do ii=1, n_species
-      call ini_species_order(descriptor_params(ii)%species_orders, n_species)
+      ! species_orders only depending on input of species order
+      !call ini_species_order(descriptor_params(ii)%species_orders, n_species)
+      ! species_orders depending on center atom according to the input of species order
+      call ini_species_order_center(descriptor_params(ii)%species_orders, n_species, ii)
+      if (inode == ionode) then
+        write(*,*) 'read_split2b3b: species_order d2 ', descriptor_params(ii)%species_orders%d2
+        write(*,*) 'read_split2b3b: species_order d3', descriptor_params(ii)%species_orders%d3
+      end if
+      ! species list of ii atom in mlff model
+      allocate(descriptor_params(ii)%species_lst(n_species),STAT=stat)
     end do ! ii1
     descriptor_params%n_species = n_species
 
@@ -1524,17 +1636,28 @@ contains
       ! A-A,A-B,A-C, ...
       ! 30,30,30, ...
       ! read comment lines
-      read(file_id,*, end=999) comment
-      read(file_id,*, end=999) comment
+      read(file_id,'(a)', end=999) comment !To seperate from other parameters and show detail of descriptor
+      read(file_id,'(a)', end=999) comment !To seperate from other parameters and show detail of descriptor
 
       if (inode == ionode) then
           write(*,*) 'read_split2b3b: ii, comment ', ii, comment
       end if
 
       ! read center atom, and order of species
-      read(file_id,*, end=999) comment
-      read(file_id,*, end=999) comment
+      ! element name
+      read(file_id,'(a)') comment
+      if (inode == ionode) then
+        write(*,*) 'read_split2b3b: element name, comment ', comment
+      end if
+      ! element order
+      read(file_id,'(a)') comment
+      call split_string(comment, descriptor_params(ii)%species_lst, delimiter, n_species)
+      if (inode == ionode) then
+        write(*,'(a,a30)') 'read_split2b3b: element order, comment ', comment
+        write(*,*) (descriptor_params(ii)%species_lst(jj), jj=1,n_species)
+      end if
 
+      ! Read dimensions of each pair type
       ! number of pair types is equal to n_species
       n_2b = descriptor_params(ii)%n_species
       allocate(dims_2b(n_2b),STAT=stat)
@@ -1547,8 +1670,12 @@ contains
         call cq_abort('dims_3b : error allocating memory to n_3b')
 
       !! Read dimensions of two body terms
+      ! pair information
+      read(file_id,'(a)') comment
       read(file_id,*) dims_2b
       !! Read dimensions of three body terms
+      ! triplet information
+      read(file_id,'(a)') comment
       read(file_id,*) dims_3b
 
       !! Read two body terms
@@ -1587,7 +1714,7 @@ contains
         call get_b3_param(file_id,descriptor_params(ii)%params_3b(jj), dims_3b(jj))
       end do !jj3,n_3b
       if (inode == ionode) then
-        write(*,*) 'read_split2b3b: after read 2b , dims_2b, n_2b ', dims_2b,n_2b
+        write(*,*) 'read_split2b3b: after read 3b , dims_3b, n_3b ', dims_3b,n_3b
       end if
 
       !! update index of three body terms
@@ -1764,6 +1891,8 @@ contains
 !!    Modified to get pair information for machine learing
 !!   2023/08/24 J.Lin
 !!   Available different feature dimensions for each type of atom
+!!   2023/08/27 J.Lin
+!!   Correction for multi-element bond order
 !!  SOURCE
 !!
   subroutine get_feature_split(prim,gcs,amat,amat_features_ML,rcut,descriptor_params)
@@ -1792,17 +1921,18 @@ contains
 
     ! Local variables
     integer :: inp, cumu_ndims, neigh_spec, ip_process
-    integer :: nn,ii,jj,kk, np,ni, ist_j, ist_k, ist_ijk,i_3b,ia_glob
-    integer :: species_order2b, species_order3b, i_species, j_species, k_species,tmp_species
+    integer :: nn,ii,jj,kk, ist_j, ist_k, ist_ijk, i_3b, ia_glob
+    integer :: species_order2b, species_order3b, i_species, j_species, k_species, tmp_species
     integer :: param_start, param_end, shift_dim, param_index, fp_index, gx_index
 
-    real(double) :: rcutsq, xij, yij, zij, xik, yik, zik, rij, rik, rjk, rjk_2
-    real(double) :: eta, rs, eta1, eta2, eta3, rcut_2, rcut_a
+    real(double) :: xij0, yij0, zij0, xik0, yik0, zik0, rij0, rik0, rjk0 ! from ML matrix
+    !real(double) :: xij, yij, zij, xik, yik, zik, rij, rik, rjk          ! special bond order
+    real(double) :: eta, rs, eta1, eta2, eta3, rcut_2, rcut_a, rcutsq
     real(double) :: tmp1, tmpx, tmpy, tmpz, tmpr, frc_ij, frc_ik, frc_jk, frc_3b
-    real(double) :: tmp123,tmp132,tmp213,tmp231,tmp312,tmp321
-    !!real(double), dimension(6)  :: proj_x,proj_y,proj_z
+    real(double) :: tmp123, tmp132, tmp213, tmp231, tmp312, tmp321
     real(double) :: proj_x,proj_y,proj_z
     real(double), parameter :: tol=1.0e-8_double
+    real(double) :: feature_1 ! check feature
 
     ! After we have neighbor information and descriptor information
     ! Check that prim and gcs are correctly set up
@@ -1815,14 +1945,9 @@ contains
     rcut_a=rcut * BohrToAng
     rcut_2=rcut_a * rcut_a
 
-    !if (inode== ionode) then
-    !check get_naba_ML!write(*,*) 'We are in get_naba_ML', ' id=',inode
-    !end if
     call my_barrier()
     ! loop over all atom pairs (atoms in primary set, max. cover set) -
     inp=1  ! Indexes primary atoms
-    amat(1)%offset=0
-    amat(1)%nd_offset=0
     do nn=1,prim%groups_on_node ! Partitions in primary set
       !pair check!write(*,*) 'nn loop, inode=',inode
       if(prim%nm_nodgroup(nn).gt.0) then  ! Are there atoms ?
@@ -1833,79 +1958,67 @@ contains
         end if
         !write(io_lun,*) 'Starting group with atoms: ',nn,prim%nm_nodgroup(nn)
         do ii=1,prim%nm_nodgroup(nn)  ! Loop over atoms in partition
-          !write(*,*) 'j loop, inode=',inode
-          !call my_barrier()
           ! From nn and ii, glob id and species of i-th atom are shown as following
           !Species of i is  amat(nn)%i_species(i)
           i_species = amat(nn)%i_species(ii)
-          ia_glob=prim%ig_prim(prim%nm_nodbeg(nn)+ni-1)
+          ia_glob = prim%ig_prim(prim%nm_nodbeg(nn)+ii-1)
           do jj=1,  amat(nn)%n_nab(ii)
             ist_j = amat(nn)%i_acc(ii)+jj-1
             j_species = amat(nn)%j_species(ist_j)
             species_order2b = descriptor_params(i_species)%species_orders%d2(j_species)
 
-            rij=amat(nn)%radius(ist_j) * BohrToAng
-            xij=amat(nn)%dx(ist_j) * BohrToAng
-            yij=amat(nn)%dy(ist_j) * BohrToAng
-            zij=amat(nn)%dz(ist_j) * BohrToAng
+            rij0=amat(nn)%radius(ist_j) * BohrToAng
+            xij0=amat(nn)%dx(ist_j) * BohrToAng
+            yij0=amat(nn)%dy(ist_j) * BohrToAng
+            zij0=amat(nn)%dz(ist_j) * BohrToAng
 
-            !!coeff_ij = (xij * vx + yij * vy + zij * vz)
             !! function of cut off
-            frc_ij = 0.5 * (cos(pi * rij / rcut_a) + 1)
-            !!tmp0 = coeff_ij * frc_ij
+            frc_ij = 0.5 * (cos(pi * rij0 / rcut_a) + 1)
 
             !! Start calculate the two body terms
             shift_dim = 0
             param_start = descriptor_params(i_species)%nums_2b_acc(species_order2b)
             param_end = param_start + descriptor_params(i_species)%nums_2b(species_order2b) - 1
             !!check params
-            !if (inode== ionode .and. ii==1) then
-            !  write(*,102) param_start, param_end, i_species,j_species,amat(nn)%n_nab(ii)
-            !end if
+            if (ia_glob==1 .and. flag_debug_mlff) then
+              write(*,102) param_start, param_end, i_species,j_species, species_order2b, amat(nn)%n_nab(ii)
+            end if
+
             do param_index = param_start, param_end
               fp_index = param_index + shift_dim
               ! Todo: check dimension of params_2b(j)
               gx_index = param_index - param_start + 1
               eta = descriptor_params(i_species)%params_2b(species_order2b)%eta(gx_index)
               eta = 1.0/eta**2
-              rs = rij - descriptor_params(i_species)%params_2b(species_order2b)%rs(gx_index)
+              rs = rij0 - descriptor_params(i_species)%params_2b(species_order2b)%rs(gx_index)
 
               tmp1 = frc_ij * exp(- eta * rs ** 2 )  !* eta * rs / rij
               amat_features_ML(nn)%id_atom(ii)%fpx(fp_index) = &
-                  amat_features_ML(nn)%id_atom(ii)%fpx(fp_index) + xij*tmp1
+                  amat_features_ML(nn)%id_atom(ii)%fpx(fp_index) + xij0 * tmp1
               amat_features_ML(nn)%id_atom(ii)%fpy(fp_index) = &
-                  amat_features_ML(nn)%id_atom(ii)%fpy(fp_index) + yij*tmp1
+                  amat_features_ML(nn)%id_atom(ii)%fpy(fp_index) + yij0 * tmp1
               amat_features_ML(nn)%id_atom(ii)%fpz(fp_index) = &
-                  amat_features_ML(nn)%id_atom(ii)%fpz(fp_index) + zij*tmp1
+                  amat_features_ML(nn)%id_atom(ii)%fpz(fp_index) + zij0 * tmp1
             end do ! two-body terms
 
             do kk=1,  amat(nn)%n_triplet(ist_j)
               ist_ijk=amat(nn)%triplet_acc(ist_j)+kk-1
               ist_k=amat(nn)%ist_triplet(ist_ijk)
-
-              rik=amat(nn)%radius(ist_k) * BohrToAng
-              xik=amat(nn)%dx(ist_k) * BohrToAng
-              yik=amat(nn)%dy(ist_k) * BohrToAng
-              zik=amat(nn)%dz(ist_k) * BohrToAng
-
               k_species = amat(nn)%j_species(ist_k)
+
+              rik0=amat(nn)%radius(ist_k) * BohrToAng
+              xik0=amat(nn)%dx(ist_k) * BohrToAng
+              yik0=amat(nn)%dy(ist_k) * BohrToAng
+              zik0=amat(nn)%dz(ist_k) * BohrToAng
+
               !! Todo: check order for ijk
               species_order3b = descriptor_params(i_species)%species_orders%d3(j_species, k_species)
-              rjk_2 = (xij-xik)**2+(yij-yik)**2+(zij-zik)**2
-              rjk = sqrt(rjk_2)
-
-              !! check species order and transfer
-              if (j_species > k_species) then
-                call swap(xij,xik)
-                call swap(yij,yik)
-                call swap(zij,zik)
-                call swap(rij,rik)
-                call swap(j_species,k_species)
-              end if
+              rjk0 = (xij0-xik0)**2+(yij0-yik0)**2+(zij0-zik0)**2
+              rjk0 = sqrt(rjk0)
 
               !! function of cut off
-              frc_ik = 0.5 * (cos(pi * rik / rcut_a) + 1)
-              frc_jk = 0.5 * (cos(pi * rjk / rcut_a) + 1)
+              frc_ik = 0.5 * (cos(pi * rik0 / rcut_a) + 1)
+              frc_jk = 0.5 * (cos(pi * rjk0 / rcut_a) + 1)
               frc_3b = frc_ij * frc_ik * frc_jk
 
               !! Start calculate the three body terms
@@ -1913,204 +2026,330 @@ contains
               param_start = descriptor_params(i_species)%nums_3b_acc(species_order3b)
               param_end = param_start + descriptor_params(i_species)%nums_3b(species_order3b) - 1
 
-              !! A-AA, B-BB, C-CC
-              if (i_species == j_species .and. j_species == k_species .and. i_species == k_species)  then
-                do param_index= param_start, param_end
-                  fp_index = param_index + shift_dim
+              if (ia_glob==1 .and. flag_debug_mlff) then
+                write(*,103) jj, kk, shift_dim,param_start, param_end, i_species,j_species,k_species, species_order3b, amat(nn)%n_nab(ii)
+                feature_1 = amat_features_ML(nn)%id_atom(ii)%fpx(121)
+              end if
 
-                  ! Todo: check dimension of params_2b(j)
-                  gx_index = param_index - param_start + 1
-                  eta1 = descriptor_params((i_species))%params_3b(species_order3b)%eta1(gx_index)
-                  eta2 = descriptor_params((i_species))%params_3b(species_order3b)%eta2(gx_index)
-                  eta3 = descriptor_params((i_species))%params_3b(species_order3b)%eta3(gx_index)
+              ! Checking X-XX, X-AA, X-XA, X-AB
+              if (j_species == k_species) then
+                ! X-XX or X-AA
+                if (i_species == j_species) then
+                  ! X-XX
+                  if (ia_glob==1 .and. flag_debug_mlff) then
+                    write(*,104) param_start, param_end, &
+                      i_species,j_species,k_species,amat(nn)%n_nab(ii), 'X-XX'
+                  end if
+                  ! debug
+                  !cycle
+                  do param_index= param_start, param_end
+                    fp_index = param_index + shift_dim
 
-                  ! transfter for efficiency
-                  eta1 = 1.0/eta1 ** 2
-                  eta2 = 1.0/eta2 ** 2
-                  eta3 = 1.0/eta3 ** 2
+                    ! Todo: check dimension of params_2b(j)
+                    gx_index = param_index - param_start + 1
+                    eta1 = descriptor_params(i_species)%params_3b(species_order3b)%eta1(gx_index)
+                    eta2 = descriptor_params(i_species)%params_3b(species_order3b)%eta2(gx_index)
+                    eta3 = descriptor_params(i_species)%params_3b(species_order3b)%eta3(gx_index)
 
-                  ! Terms for A-A-A
-                  tmp123 = exp(-eta1 * rij ** 2) * exp(-eta2* rik ** 2)*exp(-eta3* rjk ** 2)
-                  tmp132 = exp(-eta1 * rij ** 2 - eta3* rik ** 2 - eta2* rjk ** 2)
-                  tmp213 = exp(-eta2 * rij ** 2 - eta1* rik ** 2 - eta3* rjk ** 2)
-                  tmp231 = exp(-eta2 * rij ** 2 - eta3* rik ** 2 - eta1* rjk ** 2)
-                  tmp312 = exp(-eta3 * rij ** 2 - eta1* rik ** 2 - eta2* rjk ** 2)
-                  tmp321 = exp(-eta3 * rij ** 2 - eta2* rik ** 2 - eta1* rjk ** 2)
+                    ! transfter for efficiency
+                    eta1 = 1.0/eta1 ** 2
+                    eta2 = 1.0/eta2 ** 2
+                    eta3 = 1.0/eta3 ** 2
 
-                  proj_x = 0.0
-                  proj_y = 0.0
-                  proj_z = 0.0
-                  proj_x = proj_x + tmp123 * (xij*eta1 + xik*eta2)
-                  proj_x = proj_x + tmp132 * (xij*eta1 + xik*eta3)
-                  proj_x = proj_x + tmp213 * (xij*eta2 + xik*eta1)
-                  proj_x = proj_x + tmp231 * (xij*eta2 + xik*eta3)
-                  proj_x = proj_x + tmp312 * (xij*eta3 + xik*eta1)
-                  proj_x = proj_x + tmp321 * (xij*eta3 + xik*eta2)
+                    ! Terms for A-A-A
+                    tmp123 = exp(-eta1 * rij0 ** 2 - eta2 * rik0 ** 2 - eta3 * rjk0 ** 2)
+                    tmp132 = exp(-eta1 * rij0 ** 2 - eta3 * rik0 ** 2 - eta2 * rjk0 ** 2)
+                    tmp213 = exp(-eta2 * rij0 ** 2 - eta1 * rik0 ** 2 - eta3 * rjk0 ** 2)
+                    tmp231 = exp(-eta2 * rij0 ** 2 - eta3 * rik0 ** 2 - eta1 * rjk0 ** 2)
+                    tmp312 = exp(-eta3 * rij0 ** 2 - eta1 * rik0 ** 2 - eta2 * rjk0 ** 2)
+                    tmp321 = exp(-eta3 * rij0 ** 2 - eta2 * rik0 ** 2 - eta1 * rjk0 ** 2)
 
-                  proj_y = proj_y + tmp123 * (yij*eta1 + yik*eta2)
-                  proj_y = proj_y + tmp132 * (yij*eta1 + yik*eta3)
-                  proj_y = proj_y + tmp213 * (yij*eta2 + yik*eta1)
-                  proj_y = proj_y + tmp231 * (yij*eta2 + yik*eta3)
-                  proj_y = proj_y + tmp312 * (yij*eta3 + yik*eta1)
-                  proj_y = proj_y + tmp321 * (yij*eta3 + yik*eta2)
+                    proj_x = 0.0
+                    proj_y = 0.0
+                    proj_z = 0.0
+                    proj_x = proj_x + tmp123 * (xij0 * eta1 + xik0 * eta2)
+                    proj_x = proj_x + tmp132 * (xij0 * eta1 + xik0 * eta3)
+                    proj_x = proj_x + tmp213 * (xij0 * eta2 + xik0 * eta1)
+                    proj_x = proj_x + tmp231 * (xij0 * eta2 + xik0 * eta3)
+                    proj_x = proj_x + tmp312 * (xij0 * eta3 + xik0 * eta1)
+                    proj_x = proj_x + tmp321 * (xij0 * eta3 + xik0 * eta2)
 
-                  proj_z = proj_z + tmp123 * (zij*eta1 + zik*eta2)
-                  proj_z = proj_z + tmp132 * (zij*eta1 + zik*eta3)
-                  proj_z = proj_z + tmp213 * (zij*eta2 + zik*eta1)
-                  proj_z = proj_z + tmp231 * (zij*eta2 + zik*eta3)
-                  proj_z = proj_z + tmp312 * (zij*eta3 + zik*eta1)
-                  proj_z = proj_z + tmp321 * (zij*eta3 + zik*eta2)
+                    proj_y = proj_y + tmp123 * (yij0 * eta1 + yik0 * eta2)
+                    proj_y = proj_y + tmp132 * (yij0 * eta1 + yik0 * eta3)
+                    proj_y = proj_y + tmp213 * (yij0 * eta2 + yik0 * eta1)
+                    proj_y = proj_y + tmp231 * (yij0 * eta2 + yik0 * eta3)
+                    proj_y = proj_y + tmp312 * (yij0 * eta3 + yik0 * eta1)
+                    proj_y = proj_y + tmp321 * (yij0 * eta3 + yik0 * eta2)
 
-                  tmpx = frc_3b * proj_x
-                  tmpy = frc_3b * proj_y
-                  tmpz = frc_3b * proj_z
+                    proj_z = proj_z + tmp123 * (zij0 * eta1 + zik0 * eta2)
+                    proj_z = proj_z + tmp132 * (zij0 * eta1 + zik0 * eta3)
+                    proj_z = proj_z + tmp213 * (zij0 * eta2 + zik0 * eta1)
+                    proj_z = proj_z + tmp231 * (zij0 * eta2 + zik0 * eta3)
+                    proj_z = proj_z + tmp312 * (zij0 * eta3 + zik0 * eta1)
+                    proj_z = proj_z + tmp321 * (zij0 * eta3 + zik0 * eta2)
 
-                  amat_features_ML(nn)%id_atom(ii)%fpx(fp_index) = &
-                      amat_features_ML(nn)%id_atom(ii)%fpx(fp_index) + tmpx
-                  amat_features_ML(nn)%id_atom(ii)%fpy(fp_index) = &
-                      amat_features_ML(nn)%id_atom(ii)%fpy(fp_index) + tmpy
-                  amat_features_ML(nn)%id_atom(ii)%fpz(fp_index) = &
-                      amat_features_ML(nn)%id_atom(ii)%fpz(fp_index) + tmpz
-                 end do ! three-body terms
-              !! A-AB, A-AC, B-BC
-              elseif (i_species == j_species .and. j_species /= k_species .and. i_species /= k_species) then
-                do param_index= param_start, param_end
-                fp_index = param_index + shift_dim
+                    tmpx = frc_3b * proj_x
+                    tmpy = frc_3b * proj_y
+                    tmpz = frc_3b * proj_z
 
-                ! Todo: check dimension of params_2b(j)
-                gx_index = param_index - param_start + 1
-                eta1 = descriptor_params((i_species))%params_3b(species_order3b)%eta1(gx_index)
-                eta2 = descriptor_params((i_species))%params_3b(species_order3b)%eta2(gx_index)
-                eta3 = descriptor_params((i_species))%params_3b(species_order3b)%eta3(gx_index)
+                    amat_features_ML(nn)%id_atom(ii)%fpx(fp_index) = &
+                        amat_features_ML(nn)%id_atom(ii)%fpx(fp_index) + tmpx
+                    amat_features_ML(nn)%id_atom(ii)%fpy(fp_index) = &
+                        amat_features_ML(nn)%id_atom(ii)%fpy(fp_index) + tmpy
+                    amat_features_ML(nn)%id_atom(ii)%fpz(fp_index) = &
+                        amat_features_ML(nn)%id_atom(ii)%fpz(fp_index) + tmpz
+                  end do ! three-body terms
+                else
+                  !! X-AA
+                  if (ia_glob<1 .and. flag_debug_mlff) then
+                  write(*,104) param_start, param_end, &
+                      i_species,j_species,k_species,amat(nn)%n_nab(ii), 'X-AA'
+                  end if
+                  ! debug
+                  !cycle
+                  do param_index= param_start, param_end
+                    fp_index = param_index + shift_dim
 
-                ! transfter for efficiency
-                eta1 = 1.0/eta1 ** 2
-                eta2 = 1.0/eta2 ** 2
-                eta3 = 1.0/eta3 ** 2
+                    ! Todo: check dimension of params_2b(j)
+                    gx_index = param_index - param_start + 1
+                    eta1 = descriptor_params(i_species)%params_3b(species_order3b)%eta1(gx_index)
+                    eta2 = descriptor_params(i_species)%params_3b(species_order3b)%eta2(gx_index)
+                    eta3 = descriptor_params(i_species)%params_3b(species_order3b)%eta3(gx_index)
 
-                ! Terms for A-AB or B-AB
-                tmp123 = exp(-eta1 * rij ** 2) * exp(-eta2* rik ** 2)*exp(-eta3* rjk ** 2)
-                tmp132 = exp(-eta1 * rij ** 2 - eta3* rik ** 2 - eta2* rjk ** 2)
-                tmp213 = exp(-eta2 * rij ** 2 - eta1* rik ** 2 - eta3* rjk ** 2)
-                tmp231 = exp(-eta2 * rij ** 2 - eta3* rik ** 2 - eta1* rjk ** 2)
-                tmp312 = exp(-eta3 * rij ** 2 - eta1* rik ** 2 - eta2* rjk ** 2)
-                tmp321 = exp(-eta3 * rij ** 2 - eta2* rik ** 2 - eta1* rjk ** 2)
+                    ! transfter for efficiency
+                    eta1 = 1.0/eta1 ** 2
+                    eta2 = 1.0/eta2 ** 2
+                    eta3 = 1.0/eta3 ** 2
 
-                proj_x = 0.0
-                proj_y = 0.0
-                proj_z = 0.0
-                proj_x = proj_x + tmp123 * (xij*eta1 + xik*eta2)
-                proj_x = proj_x + tmp132 * (xij*eta1 + xik*eta3)
-                proj_x = proj_x + tmp213 * (xij*eta2 + xik*eta1)
-                proj_x = proj_x + tmp231 * (xij*eta2 + xik*eta3)
-                proj_x = proj_x + tmp312 * (xij*eta3 + xik*eta1)
-                proj_x = proj_x + tmp321 * (xij*eta3 + xik*eta2)
+                    ! Terms for X-AA
+                    tmp123 = exp(-eta1 * rij0 ** 2 - eta2 * rik0 ** 2 - eta3 * rjk0 ** 2)
+                    tmp213 = exp(-eta2 * rij0 ** 2 - eta1 * rik0 ** 2 - eta3 * rjk0 ** 2)
 
-                proj_y = proj_y + tmp123 * (yij*eta1 + yik*eta2)
-                proj_y = proj_y + tmp132 * (yij*eta1 + yik*eta3)
-                proj_y = proj_y + tmp213 * (yij*eta2 + yik*eta1)
-                proj_y = proj_y + tmp231 * (yij*eta2 + yik*eta3)
-                proj_y = proj_y + tmp312 * (yij*eta3 + yik*eta1)
-                proj_y = proj_y + tmp321 * (yij*eta3 + yik*eta2)
+                    proj_x = 0.0
+                    proj_y = 0.0
+                    proj_z = 0.0
+                    proj_x = proj_x + tmp123 * (xij0 * eta1 + xik0 * eta2)
+                    proj_x = proj_x + tmp213 * (xij0 * eta2 + xik0 * eta1)
 
-                proj_z = proj_z + tmp123 * (zij*eta1 + zik*eta2)
-                proj_z = proj_z + tmp132 * (zij*eta1 + zik*eta3)
-                proj_z = proj_z + tmp213 * (zij*eta2 + zik*eta1)
-                proj_z = proj_z + tmp231 * (zij*eta2 + zik*eta3)
-                proj_z = proj_z + tmp312 * (zij*eta3 + zik*eta1)
-                proj_z = proj_z + tmp321 * (zij*eta3 + zik*eta2)
+                    proj_y = proj_y + tmp123 * (yij0 * eta1 + yik0 * eta2)
+                    proj_y = proj_y + tmp213 * (yij0 * eta2 + yik0 * eta1)
 
-                tmpx = frc_3b * proj_x
-                tmpy = frc_3b * proj_y
-                tmpz = frc_3b * proj_z
+                    proj_z = proj_z + tmp123 * (zij0 * eta1 + zik0 * eta2)
+                    proj_z = proj_z + tmp213 * (zij0 * eta2 + zik0 * eta1)
 
-                amat_features_ML(nn)%id_atom(ii)%fpx(fp_index) = &
-                    amat_features_ML(nn)%id_atom(ii)%fpx(fp_index) + tmpx
-                amat_features_ML(nn)%id_atom(ii)%fpy(fp_index) = &
-                    amat_features_ML(nn)%id_atom(ii)%fpy(fp_index) + tmpy
-                amat_features_ML(nn)%id_atom(ii)%fpz(fp_index) = &
-                    amat_features_ML(nn)%id_atom(ii)%fpz(fp_index) + tmpz
-                end do ! three-body terms
-              !! B-AB, C-AC, C-BC
-              elseif (i_species /= j_species .and. j_species /= k_species .and. i_species == k_species) then
-                do param_index= param_start, param_end
-                  fp_index = param_index + shift_dim
+                    tmpx = frc_3b * proj_x
+                    tmpy = frc_3b * proj_y
+                    tmpz = frc_3b * proj_z
 
-                  ! Todo: check dimension of params_2b(j)
-                  gx_index = param_index - param_start + 1
-                  eta1 = descriptor_params((i_species))%params_3b(species_order3b)%eta1(gx_index)
-                  eta2 = descriptor_params((i_species))%params_3b(species_order3b)%eta2(gx_index)
-                  eta3 = descriptor_params((i_species))%params_3b(species_order3b)%eta3(gx_index)
+                    amat_features_ML(nn)%id_atom(ii)%fpx(fp_index) = &
+                        amat_features_ML(nn)%id_atom(ii)%fpx(fp_index) + tmpx
+                    amat_features_ML(nn)%id_atom(ii)%fpy(fp_index) = &
+                        amat_features_ML(nn)%id_atom(ii)%fpy(fp_index) + tmpy
+                    amat_features_ML(nn)%id_atom(ii)%fpz(fp_index) = &
+                        amat_features_ML(nn)%id_atom(ii)%fpz(fp_index) + tmpz
+                  end do ! three-body terms
+                end if ! X-XX or X-AA
+              else
+                ! X-XA, X-AX, X-AB, X-BA
+                if (i_species == j_species) then
+                  ! X-XA
+                  if (ia_glob==1 .and. flag_debug_mlff) then
+                    write(*,104) param_start, param_end, &
+                      i_species,j_species,k_species,amat(nn)%n_nab(ii), 'X-XA'
+                  end if
 
-                  ! transfter for efficiency
-                  eta1 = 1.0/eta1 ** 2
-                  eta2 = 1.0/eta2 ** 2
-                  eta3 = 1.0/eta3 ** 2
+                  do param_index= param_start, param_end
+                    fp_index = param_index + shift_dim
 
-                  ! Terms for A-AB or B-AB
-                  tmp123 = exp(-eta1 * rij ** 2) * exp(-eta2* rik ** 2)*exp(-eta3* rjk ** 2)
-                  tmp132 = exp(-eta1 * rij ** 2 - eta3* rik ** 2 - eta2* rjk ** 2)
-                  tmp213 = exp(-eta2 * rij ** 2 - eta1* rik ** 2 - eta3* rjk ** 2)
-                  tmp231 = exp(-eta2 * rij ** 2 - eta3* rik ** 2 - eta1* rjk ** 2)
-                  tmp312 = exp(-eta3 * rij ** 2 - eta1* rik ** 2 - eta2* rjk ** 2)
-                  tmp321 = exp(-eta3 * rij ** 2 - eta2* rik ** 2 - eta1* rjk ** 2)
+                    ! Todo: check dimension of params_2b(j)
+                    gx_index = param_index - param_start + 1
+                    eta1 = descriptor_params(i_species)%params_3b(species_order3b)%eta1(gx_index)
+                    eta2 = descriptor_params(i_species)%params_3b(species_order3b)%eta2(gx_index)
+                    eta3 = descriptor_params(i_species)%params_3b(species_order3b)%eta3(gx_index)
 
-                  proj_x = 0.0
-                  proj_y = 0.0
-                  proj_z = 0.0
-                  proj_x = proj_x + tmp123 * (xij*eta1 + xik*eta2)
-                  proj_x = proj_x + tmp132 * (xij*eta1 + xik*eta3)
-                  proj_x = proj_x + tmp213 * (xij*eta2 + xik*eta1)
-                  proj_x = proj_x + tmp231 * (xij*eta2 + xik*eta3)
-                  proj_x = proj_x + tmp312 * (xij*eta3 + xik*eta1)
-                  proj_x = proj_x + tmp321 * (xij*eta3 + xik*eta2)
+                    ! transfter for efficiency
+                    eta1 = 1.0/eta1 ** 2
+                    eta2 = 1.0/eta2 ** 2
+                    eta3 = 1.0/eta3 ** 2
 
-                  proj_y = proj_y + tmp123 * (yij*eta1 + yik*eta2)
-                  proj_y = proj_y + tmp132 * (yij*eta1 + yik*eta3)
-                  proj_y = proj_y + tmp213 * (yij*eta2 + yik*eta1)
-                  proj_y = proj_y + tmp231 * (yij*eta2 + yik*eta3)
-                  proj_y = proj_y + tmp312 * (yij*eta3 + yik*eta1)
-                  proj_y = proj_y + tmp321 * (yij*eta3 + yik*eta2)
+                    ! Terms for A-A-A
+                    tmp123 = exp(-eta1 * rij0 ** 2 - eta2 * rik0 ** 2 - eta3 * rjk0 ** 2)
+                    tmp132 = exp(-eta1 * rij0 ** 2 - eta3 * rik0 ** 2 - eta2 * rjk0 ** 2)
 
-                  proj_z = proj_z + tmp123 * (zij*eta1 + zik*eta2)
-                  proj_z = proj_z + tmp132 * (zij*eta1 + zik*eta3)
-                  proj_z = proj_z + tmp213 * (zij*eta2 + zik*eta1)
-                  proj_z = proj_z + tmp231 * (zij*eta2 + zik*eta3)
-                  proj_z = proj_z + tmp312 * (zij*eta3 + zik*eta1)
-                  proj_z = proj_z + tmp321 * (zij*eta3 + zik*eta2)
+                    proj_x = 0.0
+                    proj_y = 0.0
+                    proj_z = 0.0
+                    proj_x = proj_x + tmp123 * (xij0 * eta1 + xik0 * eta2)
+                    proj_x = proj_x + tmp132 * (xij0 * eta1 + xik0 * eta3)
 
-                  tmpx = frc_3b * proj_x
-                  tmpy = frc_3b * proj_y
-                  tmpz = frc_3b * proj_z
+                    proj_y = proj_y + tmp123 * (yij0 * eta1 + yik0 * eta2)
+                    proj_y = proj_y + tmp132 * (yij0 * eta1 + yik0 * eta3)
 
-                  amat_features_ML(nn)%id_atom(ii)%fpx(fp_index) = &
-                      amat_features_ML(nn)%id_atom(ii)%fpx(fp_index) + tmpx
-                  amat_features_ML(nn)%id_atom(ii)%fpy(fp_index) = &
-                      amat_features_ML(nn)%id_atom(ii)%fpy(fp_index) + tmpy
-                  amat_features_ML(nn)%id_atom(ii)%fpz(fp_index) = &
-                      amat_features_ML(nn)%id_atom(ii)%fpz(fp_index) + tmpz
-                end do ! three-body terms
-              !! A-BB, B-AA, C-AA
-              elseif (i_species /= j_species .and. j_species == k_species) then
+                    proj_z = proj_z + tmp123 * (zij0 * eta1 + zik0 * eta2)
+                    proj_z = proj_z + tmp132 * (zij0 * eta1 + zik0 * eta3)
 
-              !! A-BC, B-AC, C-AB
-              elseif (i_species /= j_species .and. j_species /= k_species .and. i_species /= k_species) then
+                    tmpx = frc_3b * proj_x
+                    tmpy = frc_3b * proj_y
+                    tmpz = frc_3b * proj_z
 
-              end if ! chech term type from species
+                    amat_features_ML(nn)%id_atom(ii)%fpx(fp_index) = &
+                        amat_features_ML(nn)%id_atom(ii)%fpx(fp_index) + tmpx
+                    amat_features_ML(nn)%id_atom(ii)%fpy(fp_index) = &
+                        amat_features_ML(nn)%id_atom(ii)%fpy(fp_index) + tmpy
+                    amat_features_ML(nn)%id_atom(ii)%fpz(fp_index) = &
+                        amat_features_ML(nn)%id_atom(ii)%fpz(fp_index) + tmpz
+                  end do ! three-body terms
+                else if (i_species == k_species) then
+                  ! X-AX
+                  if (ia_glob==1 .and. flag_debug_mlff) then
+                    write(*,104) param_start, param_end, &
+                      i_species,j_species,k_species,amat(nn)%n_nab(ii), 'X-AX'
+                  end if
+
+                  do param_index= param_start, param_end
+                    fp_index = param_index + shift_dim
+
+                    ! Todo: check dimension of params_2b(j)
+                    gx_index = param_index - param_start + 1
+                    eta1 = descriptor_params(i_species)%params_3b(species_order3b)%eta1(gx_index)
+                    eta2 = descriptor_params(i_species)%params_3b(species_order3b)%eta2(gx_index)
+                    eta3 = descriptor_params(i_species)%params_3b(species_order3b)%eta3(gx_index)
+
+                    ! transfter for efficiency
+                    eta1 = 1.0/eta1 ** 2
+                    eta2 = 1.0/eta2 ** 2
+                    eta3 = 1.0/eta3 ** 2
+
+                    ! Terms for A-A-A
+                    tmp123 = exp(-eta1 * rik0 ** 2 - eta2 * rij0 ** 2 - eta3 * rjk0 ** 2)
+                    tmp132 = exp(-eta1 * rik0 ** 2 - eta3 * rij0 ** 2 - eta2 * rjk0 ** 2)
+
+                    proj_x = 0.0
+                    proj_y = 0.0
+                    proj_z = 0.0
+                    proj_x = proj_x + tmp123 * (xik0 * eta1 + xij0 * eta2)
+                    proj_x = proj_x + tmp132 * (xik0 * eta1 + xij0 * eta3)
+
+                    proj_y = proj_y + tmp123 * (yik0 * eta1 + yij0 * eta2)
+                    proj_y = proj_y + tmp132 * (yik0 * eta1 + yij0 * eta3)
+
+                    proj_z = proj_z + tmp123 * (zik0 * eta1 + zij0 * eta2)
+                    proj_z = proj_z + tmp132 * (zik0 * eta1 + zij0 * eta3)
+
+                    tmpx = frc_3b * proj_x
+                    tmpy = frc_3b * proj_y
+                    tmpz = frc_3b * proj_z
+
+                    amat_features_ML(nn)%id_atom(ii)%fpx(fp_index) = &
+                        amat_features_ML(nn)%id_atom(ii)%fpx(fp_index) + tmpx
+                    amat_features_ML(nn)%id_atom(ii)%fpy(fp_index) = &
+                        amat_features_ML(nn)%id_atom(ii)%fpy(fp_index) + tmpy
+                    amat_features_ML(nn)%id_atom(ii)%fpz(fp_index) = &
+                        amat_features_ML(nn)%id_atom(ii)%fpz(fp_index) + tmpz
+                  end do ! three-body terms
+                else if (j_species < k_species) then
+                  !! X-AB
+                  if (ia_glob==1 .and. flag_debug_mlff) then
+                  write(*,104) param_start, param_end, &
+                      i_species,j_species,k_species,amat(nn)%n_nab(ii), 'X-AB'
+                  end if
+
+                  do param_index= param_start, param_end
+                    fp_index = param_index + shift_dim
+
+                    ! Todo: check dimension of params_2b(j)
+                    gx_index = param_index - param_start + 1
+                    eta1 = descriptor_params(i_species)%params_3b(species_order3b)%eta1(gx_index)
+                    eta2 = descriptor_params(i_species)%params_3b(species_order3b)%eta2(gx_index)
+                    eta3 = descriptor_params(i_species)%params_3b(species_order3b)%eta3(gx_index)
+
+                    ! transfter for efficiency
+                    eta1 = 1.0/eta1 ** 2
+                    eta2 = 1.0/eta2 ** 2
+                    eta3 = 1.0/eta3 ** 2
+
+                    ! Terms for A-AB or B-AB
+                    tmp123 = exp(-eta1 * rij0 ** 2 - eta2 * rik0 ** 2 - eta3 * rjk0 ** 2)
+
+                    proj_x = 0.0
+                    proj_y = 0.0
+                    proj_z = 0.0
+                    proj_x = proj_x + tmp123 * (xij0 * eta1 + xik0 * eta2)
+                    proj_y = proj_y + tmp123 * (yij0 * eta1 + yik0 * eta2)
+                    proj_z = proj_z + tmp123 * (zij0 * eta1 + zik0 * eta2)
+
+                    tmpx = frc_3b * proj_x
+                    tmpy = frc_3b * proj_y
+                    tmpz = frc_3b * proj_z
+
+                    amat_features_ML(nn)%id_atom(ii)%fpx(fp_index) = &
+                        amat_features_ML(nn)%id_atom(ii)%fpx(fp_index) + tmpx
+                    amat_features_ML(nn)%id_atom(ii)%fpy(fp_index) = &
+                        amat_features_ML(nn)%id_atom(ii)%fpy(fp_index) + tmpy
+                    amat_features_ML(nn)%id_atom(ii)%fpz(fp_index) = &
+                        amat_features_ML(nn)%id_atom(ii)%fpz(fp_index) + tmpz
+                  end do ! three-body terms
+                else
+                  !! X-BA
+                  if (ia_glob==1 .and. flag_debug_mlff) then
+                  write(*,104) param_start, param_end, &
+                      i_species,j_species,k_species,amat(nn)%n_nab(ii), 'X-AB'
+                  end if
+
+                  do param_index= param_start, param_end
+                    fp_index = param_index + shift_dim
+
+                    ! Todo: check dimension of params_2b(j)
+                    gx_index = param_index - param_start + 1
+                    eta1 = descriptor_params(i_species)%params_3b(species_order3b)%eta1(gx_index)
+                    eta2 = descriptor_params(i_species)%params_3b(species_order3b)%eta2(gx_index)
+                    eta3 = descriptor_params(i_species)%params_3b(species_order3b)%eta3(gx_index)
+
+                    ! transfter for efficiency
+                    eta1 = 1.0/eta1 ** 2
+                    eta2 = 1.0/eta2 ** 2
+                    eta3 = 1.0/eta3 ** 2
+
+                    ! Terms for A-AB or B-AB
+                    tmp123 = exp(-eta1 * rik0 ** 2 - eta2 * rij0 ** 2 - eta3 * rjk0 ** 2)
+
+                    proj_x = 0.0
+                    proj_y = 0.0
+                    proj_z = 0.0
+                    proj_x = proj_x + tmp123 * (xik0 * eta1 + xij0 * eta2)
+                    proj_y = proj_y + tmp123 * (yik0 * eta1 + yij0 * eta2)
+                    proj_z = proj_z + tmp123 * (zik0 * eta1 + zij0 * eta2)
+
+                    tmpx = frc_3b * proj_x
+                    tmpy = frc_3b * proj_y
+                    tmpz = frc_3b * proj_z
+
+                    amat_features_ML(nn)%id_atom(ii)%fpx(fp_index) = &
+                        amat_features_ML(nn)%id_atom(ii)%fpx(fp_index) + tmpx
+                    amat_features_ML(nn)%id_atom(ii)%fpy(fp_index) = &
+                        amat_features_ML(nn)%id_atom(ii)%fpy(fp_index) + tmpy
+                    amat_features_ML(nn)%id_atom(ii)%fpz(fp_index) = &
+                        amat_features_ML(nn)%id_atom(ii)%fpz(fp_index) + tmpz
+                  end do ! three-body terms
+                end if ! X-XA, X-AX, X-AB, X-BA
+              end if
+
             end do ! k, three-body
             !write(*,*) 'after part_nd_nabs in get_feature_split', inode
           end do ! j, two-body
           inp=inp+1  ! Indexes primary-set atoms
         enddo ! End ni in prim%nm_nodgroup
-        !check get_naba_ML!write(*,*) 'after prim%nm_nodgroup', inode
-        if(nn.lt.prim%groups_on_node) then
-          amat(nn+1)%offset=amat(nn)%offset+amat(nn)%part_nabs
-          amat(nn+1)%nd_offset=amat(nn)%nd_offset+amat(nn)%part_nd_nabs
-        endif
-      ! if no atoms, do nothing, and turn to next partition
-      !else
+      else
+        ! if no atoms, do nothing, and turn to next partition
+        if(flag_debug_mlff) &
+            write(*, *) 'Warning: No atoms in this partition get_feature_split', inode, nn
       endif ! End if(prim%nm_nodgroup>0)
     enddo ! End part_on_node
+    102 format('check fp 2b: start end ',2i5,' species= ',3i3, ' num_nb', i5)
+    103 format('check fp 3b: ',5i5,' species= ',4i3, ' num_nb', i5)
+    104 format('check fp 3b: start end ',2i5,' species= ',3i3, ' num_nb', i5,' ',a12)
+    201 format('before',4e16.6)
+    202 format('after',4e16.6)
   end subroutine get_feature_split
 !!***
 
@@ -2243,4 +2482,52 @@ contains
     b=tmp
   end subroutine int_swap
 !!***
+
+!!****f* mlff_type_module/split_string *
+!!
+!!  NAME
+!!   split_string
+!!  USAGE
+!!
+!!  PURPOSE
+!!   Split string depending on delimeter to an array of string
+!!  Useful for collecting element names in one line
+!!  INPUTS
+!!
+!!  USES
+!!
+!!  AUTHOR
+!!   Jianbo Lin
+!!  CREATION DATE
+!!   2023/08/24
+!!  MODIFICATION HISTORY
+!!
+!!  SOURCE
+!!
+  subroutine split_string(string_in, string_out, delim, n_species)
+    use GenComms, ONLY: inode, ionode
+
+    implicit none
+    character(len=180)             :: string_in
+    character(len=30)              :: delim
+    character(len=2), dimension(:) :: string_out
+    integer :: n_species
+
+    integer :: index, ii
+    character(len=180)             :: string_tmp
+
+    string_tmp = TRIM(adjustl(string_in))
+    index = SCAN(string_tmp,delim)
+    ii=1
+    do while ((index .gt. 0) .and. (LEN(TRIM(string_tmp)) .gt.2))
+      string_out(ii) = string_tmp(1:index-1)
+      string_tmp = string_tmp(index+1:)
+      string_tmp = TRIM(adjustl(string_tmp))
+
+      ii=ii+1
+      index = SCAN(string_in,delim)
+    end do
+    string_out(ii)=TRIM(string_tmp)
+
+  end subroutine split_string
 end module mlff_type

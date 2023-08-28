@@ -206,8 +206,8 @@ contains
 
     ! Check that prim and gcs are correctly set up
     if((.NOT.ASSOCIATED(gcs%xcover)).OR. &
-         (.NOT.ASSOCIATED(prim%xprim))) then
-       call cq_abort('get_naba: gcs or prim without members !')
+        (.NOT.ASSOCIATED(prim%xprim))) then
+      call cq_abort('get_naba: gcs or prim without members !')
     endif
     rcutsq=rcut*rcut
 
@@ -216,93 +216,92 @@ contains
     amat(1)%offset=0
     amat(1)%nd_offset=0
     do nn=1,prim%groups_on_node ! Partitions in primary set
-       !check get_naba_ML!write(*,*) 'nn loop, inode=',inode
+      !check get_naba_ML!write(*,*) 'nn loop, inode=',inode
 
-       amat(nn)%part_nabs = 0    ! Cumulative neighbours of partition
-       amat(nn)%part_nd_nabs = 0    ! Cumulative neighbours of partition
-       if(prim%nm_nodgroup(nn).gt.0) then  ! Are there atoms ?
-          amat(nn)%i_acc(1)=1
-          amat(nn)%i_nd_acc(1)=1
-          amat(nn)%n_atoms = prim%nm_nodgroup(nn) ! Redundant, but useful
-          !write(io_lun,*) 'Starting group with atoms: ',nn,prim%nm_nodgroup(nn)
-          do j=1,prim%nm_nodgroup(nn)  ! Loop over atoms in partition
-             amat(nn)%n_nab(j)=0
-             amat(nn)%i_species(j)=prim%species(inp)
+      amat(nn)%part_nabs = 0    ! Cumulative neighbours of partition
+      amat(nn)%part_nd_nabs = 0    ! Cumulative neighbours of partition
+      if(prim%nm_nodgroup(nn).gt.0) then  ! Are there atoms ?
+        amat(nn)%i_acc(1)=1
+        amat(nn)%i_nd_acc(1)=1
+        amat(nn)%n_atoms = prim%nm_nodgroup(nn) ! Redundant, but useful
+        !write(io_lun,*) 'Starting group with atoms: ',nn,prim%nm_nodgroup(nn)
+        do j=1,prim%nm_nodgroup(nn)  ! Loop over atoms in partition
+          amat(nn)%n_nab(j)=0
+          amat(nn)%i_species(j)=prim%species(inp)
 
-             cumu_ndims = 0
-             do np=1,gcs%ng_cover  ! Loop over partitions in GCS
-                if(gcs%n_ing_cover(np).gt.0) then  ! Are there atoms ?
-                   !if(gcs%icover_ibeg(np)+gcs%n_ing_cover(np)-1.gt.&
-                   !     gcs%mx_mcover) then
-                   !   call cq_abort('get_naba: overran gcs mx_mcover: ', &
-                   !        gcs%icover_ibeg(np)+gcs%n_ing_cover(np)-1, &
-                   !        gcs%mx_mcover)
-                   !endif
-                   do ni=1,gcs%n_ing_cover(np)
-                      dx=gcs%xcover(gcs%icover_ibeg(np)+ni-1)-prim%xprim(inp)
-                      dy=gcs%ycover(gcs%icover_ibeg(np)+ni-1)-prim%yprim(inp)
-                      dz=gcs%zcover(gcs%icover_ibeg(np)+ni-1)-prim%zprim(inp)
-                      rij2=dx*dx+dy*dy+dz*dz
-                      if(rij2<rcutsq-tol) then
-                         !write(*,*) 'gcs%lab_cover(np),gcs%iprim_group(inp), inode=',inode,&
-                         !        gcs%lab_cover(np), gcs%iprim_group(inp)
-                         if(gcs%lab_cover(np)==gcs%iprim_group(inp).AND.ni==j) then
-                            amat(nn)%onsite(j)=amat(nn)%nd_offset+amat(nn)%i_nd_acc(j)+cumu_ndims
-                            cycle                                   ! no need to collect onsite atoms for ML
-                         endif
+          cumu_ndims = 0
+          do np=1,gcs%ng_cover  ! Loop over partitions in GCS
+            if(gcs%n_ing_cover(np).gt.0) then  ! Are there atoms ?
+              !if(gcs%icover_ibeg(np)+gcs%n_ing_cover(np)-1.gt.&
+              !     gcs%mx_mcover) then
+              !   call cq_abort('get_naba: overran gcs mx_mcover: ', &
+              !        gcs%icover_ibeg(np)+gcs%n_ing_cover(np)-1, &
+              !        gcs%mx_mcover)
+              !endif
+              do ni=1,gcs%n_ing_cover(np)
+                dx=gcs%xcover(gcs%icover_ibeg(np)+ni-1)-prim%xprim(inp)
+                dy=gcs%ycover(gcs%icover_ibeg(np)+ni-1)-prim%yprim(inp)
+                dz=gcs%zcover(gcs%icover_ibeg(np)+ni-1)-prim%zprim(inp)
+                rij2=dx*dx+dy*dy+dz*dz
+                if(rij2<rcutsq-tol) then
+                  !write(*,*) 'gcs%lab_cover(np),gcs%iprim_group(inp), inode=',inode,&
+                  !        gcs%lab_cover(np), gcs%iprim_group(inp)
+                  if(gcs%lab_cover(np)==gcs%iprim_group(inp).AND.ni==j) then
+                    amat(nn)%onsite(j)=amat(nn)%nd_offset+amat(nn)%i_nd_acc(j)+cumu_ndims
+                    cycle                                   ! no need to collect onsite atoms for ML
+                  endif
 
-                         amat(nn)%n_nab(j)=amat(nn)%n_nab(j)+1
-                         !write(io_lun,*) 'Neighbour: ',j,amat(nn)%n_nab(j)
-                         if(amat(nn)%n_nab(j).gt.amat(nn)%mx_abs) then
-                            call cq_abort('get_naba: n_nab>mx_nab: ',amat(nn)%n_nab(j), &
-                                 amat(nn)%mx_abs)
-                         endif
-                         ist = amat(nn)%i_acc(j)+amat(nn)%n_nab(j)-1
-                         amat(nn)%i_part(ist)=np
-                         amat(nn)%i_seq(ist)=ni
-                         amat(nn)%radius(ist)=sqrt(rij2)
-                         amat(nn)%dx(ist)=dx
-                         amat(nn)%dy(ist)=dy
-                         amat(nn)%dz(ist)=dz
+                  amat(nn)%n_nab(j)=amat(nn)%n_nab(j)+1
+                  !write(io_lun,*) 'Neighbour: ',j,amat(nn)%n_nab(j)
+                  if(amat(nn)%n_nab(j).gt.amat(nn)%mx_abs) then
+                    call cq_abort('get_naba: n_nab>mx_nab: ',amat(nn)%n_nab(j), &
+                        amat(nn)%mx_abs)
+                  endif
+                  ist = amat(nn)%i_acc(j)+amat(nn)%n_nab(j)-1
+                  amat(nn)%i_part(ist)=np
+                  amat(nn)%i_seq(ist)=ni
+                  amat(nn)%radius(ist)=sqrt(rij2)
+                  amat(nn)%dx(ist)=dx
+                  amat(nn)%dy(ist)=dy
+                  amat(nn)%dz(ist)=dz
 
-                         neigh_spec = species_glob( id_glob( parts%icell_beg(gcs%lab_cell(np)) +ni-1 ))
-                         amat(nn)%j_species(ist)=neigh_spec
-
-                      endif
-                   enddo ! End n_inp_cover
+                  neigh_spec = species_glob( id_glob( parts%icell_beg(gcs%lab_cell(np)) +ni-1 ))
+                  amat(nn)%j_species(ist)=neigh_spec
                 endif
-             enddo ! End np_cover
-             !write(io_lun,*) 'Finishing prim atom: ',inode,inp,cumu_ndims,j,prim%nm_nodgroup(nn)
-             !check get_naba_ML!write(*,*) 'after np_cover', inode
-             if(j.lt.prim%nm_nodgroup(nn)) then
-                amat(nn)%i_acc(j+1)=amat(nn)%i_acc(j)+amat(nn)%n_nab(j)
-                amat(nn)%i_nd_acc(j+1)=amat(nn)%i_nd_acc(j)+cumu_ndims
-             endif
-             amat(nn)%part_nabs = amat(nn)%part_nabs+amat(nn)%n_nab(j)
-             amat(nn)%part_nd_nabs = amat(nn)%part_nd_nabs+cumu_ndims
-             inp=inp+1  ! Indexes primary-set atoms
-             !write(*,*) 'after part_nd_nabs in get_naba_ML', inode
-          enddo ! End prim%nm_nodgroup
-          !write(*,*) 'after prim%nm_nodgroup in get_naba_ML', inode
-          if(nn.lt.prim%groups_on_node) then
-             amat(nn+1)%offset=amat(nn)%offset+amat(nn)%part_nabs
-             amat(nn+1)%nd_offset=amat(nn)%nd_offset+amat(nn)%part_nd_nabs
+              enddo ! End n_inp_cover
+            endif
+          enddo ! End np_cover
+          !write(io_lun,*) 'Finishing prim atom: ',inode,inp,cumu_ndims,j,prim%nm_nodgroup(nn)
+          !check get_naba_ML!write(*,*) 'after np_cover', inode
+          if(j.lt.prim%nm_nodgroup(nn)) then
+            amat(nn)%i_acc(j+1)=amat(nn)%i_acc(j)+amat(nn)%n_nab(j)
+            amat(nn)%i_nd_acc(j+1)=amat(nn)%i_nd_acc(j)+cumu_ndims
           endif
-       else
-          amat(nn)%n_atoms = 0
-          if(nn.lt.prim%groups_on_node) then
-             amat(nn+1)%offset=amat(nn)%offset+amat(nn)%part_nabs
-             amat(nn+1)%nd_offset=amat(nn)%nd_offset+amat(nn)%part_nd_nabs
-          endif
-          amat(nn)%i_acc(1) = 1
-          amat(nn)%i_nd_acc(1) = 1
-       endif ! End if(prim%nm_nodgroup>0)
+          amat(nn)%part_nabs = amat(nn)%part_nabs+amat(nn)%n_nab(j)
+          amat(nn)%part_nd_nabs = amat(nn)%part_nd_nabs+cumu_ndims
+          inp=inp+1  ! Indexes primary-set atoms
+          !write(*,*) 'after part_nd_nabs in get_naba_ML', inode
+        enddo ! End prim%nm_nodgroup
+        !write(*,*) 'after prim%nm_nodgroup in get_naba_ML', inode
+        if(nn.lt.prim%groups_on_node) then
+          amat(nn+1)%offset=amat(nn)%offset+amat(nn)%part_nabs
+          amat(nn+1)%nd_offset=amat(nn)%nd_offset+amat(nn)%part_nd_nabs
+        endif
+      else
+        amat(nn)%n_atoms = 0
+        if(nn.lt.prim%groups_on_node) then
+          amat(nn+1)%offset=amat(nn)%offset+amat(nn)%part_nabs
+          amat(nn+1)%nd_offset=amat(nn)%nd_offset+amat(nn)%part_nd_nabs
+        endif
+        amat(nn)%i_acc(1) = 1
+        amat(nn)%i_nd_acc(1) = 1
+      endif ! End if(prim%nm_nodgroup>0)
     enddo ! End part_on_node
 
     ! Now create length of the matrix
     amat%length=0
     do nn=1,prim%groups_on_node
-       amat(1)%length=amat(1)%length+amat(nn)%part_nd_nabs
+      amat(1)%length=amat(1)%length+amat(nn)%part_nd_nabs
     enddo
     amat(2:prim%groups_on_node)%length = amat(1)%length
     return
@@ -354,7 +353,7 @@ contains
 
     ! Local variables
     integer(integ) :: inp,nn
-    integer(integ) :: i, j, k, ist_j, ist_k, ist_ijk
+    integer(integ) :: ii, jj, kk, ist_j, ist_k, ist_ijk
     real(double) :: xij, yij, zij, xik, yik, zik, rjk, rjk_2,rcut_2
 
     ! After we have neighbor information and descriptor information
@@ -369,17 +368,17 @@ contains
       if (amat(nn)%n_atoms .gt. 0) then ! Are there atoms ?
       ! collect accumulation of three body terms, triplets
       amat(nn)%triplet_acc(1)=1
-      do i=1,amat(nn)%n_atoms  ! Loop over atoms in partition
+      do ii=1,amat(nn)%n_atoms  ! Loop over atoms in partition
 
-        do j=1,  amat(nn)%n_nab(i)
-            ist_j = amat(nn)%i_acc(i)+j-1
-            xij=amat(nn)%dx(ist_j)
-            yij=amat(nn)%dy(ist_j)
-            zij=amat(nn)%dz(ist_j)
+        do jj=1,  amat(nn)%n_nab(ii)
+          ist_j = amat(nn)%i_acc(ii)+jj-1
+          xij=amat(nn)%dx(ist_j)
+          yij=amat(nn)%dy(ist_j)
+          zij=amat(nn)%dz(ist_j)
 
           amat(nn)%n_triplet(ist_j)=0
-          do k=j+1,  amat(nn)%n_nab(i)
-            ist_k = amat(nn)%i_acc(i)+k-1
+          do kk=jj+1,  amat(nn)%n_nab(ii)
+            ist_k = amat(nn)%i_acc(ii)+kk-1
             xik=amat(nn)%dx(ist_k)
             yik=amat(nn)%dy(ist_k)
             zik=amat(nn)%dz(ist_k)
@@ -448,7 +447,7 @@ contains
     use species_module, ONLY: nsf_species, nlpf_species, npao_species, napf_species
 
     use energy, ONLY: ml_energy
-    use mlff_type, ONLY:matrix_ML,features_ML,acsf_param
+    use mlff_type, ONLY:matrix_ML,features_ML,acsf_param,flag_debug_mlff
 
     implicit none
 
@@ -466,45 +465,46 @@ contains
     ! loop over all atom pairs (atoms in primary set, max. cover set) -
     inp=1  ! Indexes primary atoms
     do nn=1,prim%groups_on_node ! Partitions in primary set
-       !pair check!write(*,*) 'nn loop, inode=',inode
-       if(prim%nm_nodgroup(nn).gt.0) then  ! Are there atoms ?
-          do ii=1,prim%nm_nodgroup(nn)  ! Loop over atoms in partition
-             ia_glob=prim%ig_prim(prim%nm_nodbeg(nn)+ii-1)
-             i_species = amat(nn)%i_species(ii)
-             ml_force(1, ia_glob) = dot_product(amat_features_ML(nn)%id_atom(ii)%fpx(:), descriptor_params(i_species)%coef)
-             ml_force(2, ia_glob) = dot_product(amat_features_ML(nn)%id_atom(ii)%fpy(:), descriptor_params(i_species)%coef)
-             ml_force(3, ia_glob) = dot_product(amat_features_ML(nn)%id_atom(ii)%fpz(:), descriptor_params(i_species)%coef)
+    !pair check!write(*,*) 'nn loop, inode=',inode
+    if(prim%nm_nodgroup(nn).gt.0) then  ! Are there atoms ?
+      do ii=1,prim%nm_nodgroup(nn)  ! Loop over atoms in partition
+        ia_glob=prim%ig_prim(prim%nm_nodbeg(nn)+ii-1)
+        i_species = amat(nn)%i_species(ii)
+        ml_force(1, ia_glob) = dot_product(amat_features_ML(nn)%id_atom(ii)%fpx(:), descriptor_params(i_species)%coef)
+        ml_force(2, ia_glob) = dot_product(amat_features_ML(nn)%id_atom(ii)%fpy(:), descriptor_params(i_species)%coef)
+        ml_force(3, ia_glob) = dot_product(amat_features_ML(nn)%id_atom(ii)%fpz(:), descriptor_params(i_species)%coef)
 
-             ! Get ml_stress for each NB atom
-             if(flag_stress) then
-                 rx=prim%xprim(inp)
-                 ry=prim%yprim(inp)
-                 rz=prim%zprim(inp)
-                 if(flag_full_stress) then
-                    ! vec_Fi*vec_ri
-                     ml_stress(1,1) = ml_stress(1,1) + ml_force(1, ia_glob) * rx
-                     ml_stress(1,2) = ml_stress(1,2) + ml_force(1, ia_glob) * ry
-                     ml_stress(1,3) = ml_stress(1,3) + ml_force(1, ia_glob) * rz
+        ! Get ml_stress for each NB atom
+        if(flag_stress) then
+          rx=prim%xprim(inp)
+          ry=prim%yprim(inp)
+          rz=prim%zprim(inp)
+          if(flag_full_stress) then
+            ! vec_Fi*vec_ri
+            ml_stress(1,1) = ml_stress(1,1) + ml_force(1, ia_glob) * rx
+            ml_stress(1,2) = ml_stress(1,2) + ml_force(1, ia_glob) * ry
+            ml_stress(1,3) = ml_stress(1,3) + ml_force(1, ia_glob) * rz
 
-                     ml_stress(2,1) = ml_stress(2,1) + ml_force(2, ia_glob) * rx
-                     ml_stress(2,2) = ml_stress(2,2) + ml_force(2, ia_glob) * ry
-                     ml_stress(2,3) = ml_stress(2,3) + ml_force(2, ia_glob) * rz
+            ml_stress(2,1) = ml_stress(2,1) + ml_force(2, ia_glob) * rx
+            ml_stress(2,2) = ml_stress(2,2) + ml_force(2, ia_glob) * ry
+            ml_stress(2,3) = ml_stress(2,3) + ml_force(2, ia_glob) * rz
 
-                     ml_stress(3,1) = ml_stress(3,1) + ml_force(3, ia_glob) * rx
-                     ml_stress(3,2) = ml_stress(3,2) + ml_force(3, ia_glob) * ry
-                     ml_stress(3,3) = ml_stress(3,3) + ml_force(3, ia_glob) * rz
-                 else
-                     ml_stress(1,1) = ml_stress(1,1) + ml_force(1, ia_glob) * rx
-                     ml_stress(2,2) = ml_stress(2,2) + ml_force(2, ia_glob) * ry
-                     ml_stress(3,3) = ml_stress(3,3) + ml_force(3, ia_glob) * rz
-                 end if
-             end if
-             inp=inp+1  ! Indexes primary-set atoms
-          enddo ! End prim%nm_nodgroup
-          !pair check!write(*,*) 'after prim%nm_nodgroup', inode
-       else
-            write(*, *) 'Warning: No atoms in this partition', inode, nn
-       endif ! End if(prim%nm_nodgroup>0)
+            ml_stress(3,1) = ml_stress(3,1) + ml_force(3, ia_glob) * rx
+            ml_stress(3,2) = ml_stress(3,2) + ml_force(3, ia_glob) * ry
+            ml_stress(3,3) = ml_stress(3,3) + ml_force(3, ia_glob) * rz
+          else
+            ml_stress(1,1) = ml_stress(1,1) + ml_force(1, ia_glob) * rx
+            ml_stress(2,2) = ml_stress(2,2) + ml_force(2, ia_glob) * ry
+            ml_stress(3,3) = ml_stress(3,3) + ml_force(3, ia_glob) * rz
+          end if
+        end if
+        inp=inp+1  ! Indexes primary-set atoms
+      enddo ! End prim%nm_nodgroup
+      !pair check!write(*,*) 'after prim%nm_nodgroup', inode
+    else
+      if(flag_debug_mlff) &
+        write(*, *) 'Warning: No atoms in this partition calculate_EandF_acsf2b', inode, nn
+    endif ! End if(prim%nm_nodgroup>0)
     enddo ! End part_on_node
   end subroutine calculate_EandF_acsf2b
 !!***
@@ -550,7 +550,7 @@ contains
     use species_module, ONLY: nsf_species, nlpf_species, npao_species, napf_species
 
     use energy, ONLY: ml_energy
-    use mlff_type, ONLY:matrix_ML,features_ML,split_param
+    use mlff_type, ONLY:matrix_ML,features_ML,split_param,flag_debug_mlff
 
     implicit none
 
@@ -568,46 +568,47 @@ contains
     ! loop over all atom pairs (atoms in primary set, max. cover set) -
     inp=1  ! Indexes primary atoms
     do nn=1,prim%groups_on_node ! Partitions in primary set
-       !pair check!write(*,*) 'nn loop, inode=',inode
-       if(prim%nm_nodgroup(nn).gt.0) then  ! Are there atoms ?
-          do ii=1,prim%nm_nodgroup(nn)  ! Loop over atoms in partition
-             ia_glob=prim%ig_prim(prim%nm_nodbeg(nn)+ii-1)
-             i_species = amat(nn)%i_species(ii)
+      !pair check!write(*,*) 'nn loop, inode=',inode
+      if(prim%nm_nodgroup(nn).gt.0) then  ! Are there atoms ?
+        do ii=1,prim%nm_nodgroup(nn)  ! Loop over atoms in partition
+          ia_glob=prim%ig_prim(prim%nm_nodbeg(nn)+ii-1)
+          i_species = amat(nn)%i_species(ii)
 
-             ml_force(1, ia_glob) = dot_product(amat_features_ML(nn)%id_atom(ii)%fpx(:), descriptor_params(i_species)%coef)
-             ml_force(2, ia_glob) = dot_product(amat_features_ML(nn)%id_atom(ii)%fpy(:), descriptor_params(i_species)%coef)
-             ml_force(3, ia_glob) = dot_product(amat_features_ML(nn)%id_atom(ii)%fpz(:), descriptor_params(i_species)%coef)
+          ml_force(1, ia_glob) = dot_product(amat_features_ML(nn)%id_atom(ii)%fpx(:), descriptor_params(i_species)%coef)
+          ml_force(2, ia_glob) = dot_product(amat_features_ML(nn)%id_atom(ii)%fpy(:), descriptor_params(i_species)%coef)
+          ml_force(3, ia_glob) = dot_product(amat_features_ML(nn)%id_atom(ii)%fpz(:), descriptor_params(i_species)%coef)
 
-             ! Get ml_stress for each NB atom
-             if(flag_stress) then
-                 rx=prim%xprim(inp)
-                 ry=prim%yprim(inp)
-                 rz=prim%zprim(inp)
-                 if(flag_full_stress) then
-                    ! vec_Fi*vec_ri
-                     ml_stress(1,1) = ml_stress(1,1) + ml_force(1, ia_glob) * rx
-                     ml_stress(1,2) = ml_stress(1,2) + ml_force(1, ia_glob) * ry
-                     ml_stress(1,3) = ml_stress(1,3) + ml_force(1, ia_glob) * rz
+          ! Get ml_stress for each NB atom
+          if(flag_stress) then
+            rx=prim%xprim(inp)
+            ry=prim%yprim(inp)
+            rz=prim%zprim(inp)
+            if(flag_full_stress) then
+              ! vec_Fi*vec_ri
+              ml_stress(1,1) = ml_stress(1,1) + ml_force(1, ia_glob) * rx
+              ml_stress(1,2) = ml_stress(1,2) + ml_force(1, ia_glob) * ry
+              ml_stress(1,3) = ml_stress(1,3) + ml_force(1, ia_glob) * rz
 
-                     ml_stress(2,1) = ml_stress(2,1) + ml_force(2, ia_glob) * rx
-                     ml_stress(2,2) = ml_stress(2,2) + ml_force(2, ia_glob) * ry
-                     ml_stress(2,3) = ml_stress(2,3) + ml_force(2, ia_glob) * rz
+              ml_stress(2,1) = ml_stress(2,1) + ml_force(2, ia_glob) * rx
+              ml_stress(2,2) = ml_stress(2,2) + ml_force(2, ia_glob) * ry
+              ml_stress(2,3) = ml_stress(2,3) + ml_force(2, ia_glob) * rz
 
-                     ml_stress(3,1) = ml_stress(3,1) + ml_force(3, ia_glob) * rx
-                     ml_stress(3,2) = ml_stress(3,2) + ml_force(3, ia_glob) * ry
-                     ml_stress(3,3) = ml_stress(3,3) + ml_force(3, ia_glob) * rz
-                 else
-                     ml_stress(1,1) = ml_stress(1,1) + ml_force(1, ia_glob) * rx
-                     ml_stress(2,2) = ml_stress(2,2) + ml_force(2, ia_glob) * ry
-                     ml_stress(3,3) = ml_stress(3,3) + ml_force(3, ia_glob) * rz
-                 end if
-             end if
-             inp=inp+1  ! Indexes primary-set atoms
-          enddo ! End prim%nm_nodgroup
-          !pair check!write(*,*) 'after prim%nm_nodgroup', inode
-       else
-            write(*, *) 'Warning: No atoms in this partition', inode, nn
-       endif ! End if(prim%nm_nodgroup>0)
+              ml_stress(3,1) = ml_stress(3,1) + ml_force(3, ia_glob) * rx
+              ml_stress(3,2) = ml_stress(3,2) + ml_force(3, ia_glob) * ry
+              ml_stress(3,3) = ml_stress(3,3) + ml_force(3, ia_glob) * rz
+            else
+              ml_stress(1,1) = ml_stress(1,1) + ml_force(1, ia_glob) * rx
+              ml_stress(2,2) = ml_stress(2,2) + ml_force(2, ia_glob) * ry
+              ml_stress(3,3) = ml_stress(3,3) + ml_force(3, ia_glob) * rz
+            end if
+          end if
+          inp=inp+1  ! Indexes primary-set atoms
+        enddo ! End prim%nm_nodgroup
+        !pair check!write(*,*) 'after prim%nm_nodgroup', inode
+      else
+        if(flag_debug_mlff) &
+            write(*, *) 'Warning: No atoms in this partition calculate_EandF_split2b3b', inode, nn
+      endif ! End if(prim%nm_nodgroup>0)
     enddo ! End part_on_node
   end subroutine calculate_EandF_split2b3b
 !!***
@@ -681,31 +682,32 @@ contains
     close(file_id)
 
     ! Todo: check flag_descriptortype
-    if (inode == ionode) then
-        write(*,*) 'flag_descriptortype:', flag_descriptortype
+    if (inode == ionode .and. flag_debug_mlff) then
+      write(*,*) 'flag_descriptortype:', flag_descriptortype
+      write(*,*) 'descriptor dimensions:'
+      write(*,*) params_ML%dim_coef_lst
     end if
 
-
     if (params_ML%descriptor_type == 'split2b3b' .or. params_ML%descriptor_type == 'Split2b3b') then
-        !call read_split(filename, descriptor_params_split)
-        !feature_dim = params_ML%split(1)%dim_coef
-        call allocate_features_ML(amat_ML, amat_features_ML, prim, params_ML%dim_coef_lst)
-        call get_feature_split(prim,gcs,amat_ML,amat_features_ML,rcut,params_ML%split)
-        call calculate_EandF_split2b3b(prim,amat_ML,amat_features_ML,params_ML%split)
+      !call read_split(filename, descriptor_params_split)
+      !feature_dim = params_ML%split(1)%dim_coef
+      call allocate_features_ML(amat_ML, amat_features_ML, prim, params_ML%dim_coef_lst)
+      call get_feature_split(prim,gcs,amat_ML,amat_features_ML,rcut,params_ML%split)
+      call calculate_EandF_split2b3b(prim,amat_ML,amat_features_ML,params_ML%split)
 
-        !call deallocate_split_param(descriptor_params_split)
-        !call clean_up_ml_split(amat_ML,amat_features_ML,descriptor_params_split)
+      !call deallocate_split_param(descriptor_params_split)
+      !call clean_up_ml_split(amat_ML,amat_features_ML,descriptor_params_split)
     elseif (params_ML%descriptor_type == 'acsf2b' .or. params_ML%descriptor_type == 'ACSF2b') then
-        !call read_acsf2b(filename, descriptor_params_acsf2b)
-        !feature_dim = params_ML%acsf(1)%dim_coef
-        call allocate_features_ML(amat_ML, amat_features_ML, prim, params_ML%dim_coef_lst)
-        call get_feature_acsf2b(prim,gcs,amat_ML,amat_features_ML,rcut,params_ML%acsf)
-        call calculate_EandF_acsf2b(prim,amat_ML,amat_features_ML,params_ML%acsf)
+      !call read_acsf2b(filename, descriptor_params_acsf2b)
+      !feature_dim = params_ML%acsf(1)%dim_coef
+      call allocate_features_ML(amat_ML, amat_features_ML, prim, params_ML%dim_coef_lst)
+      call get_feature_acsf2b(prim,gcs,amat_ML,amat_features_ML,rcut,params_ML%acsf)
+      call calculate_EandF_acsf2b(prim,amat_ML,amat_features_ML,params_ML%acsf)
 
-        !call deallocate_acsf2b_param(descriptor_params_acsf2b)
-        !call clean_up_ml_acsf(amat_ML,amat_features_ML,descriptor_params_acsf2b)
+      !call deallocate_acsf2b_param(descriptor_params_acsf2b)
+      !call clean_up_ml_acsf(amat_ML,amat_features_ML,descriptor_params_acsf2b)
     else
-        call cq_abort('flag_descriptortype: (Error) no such descriptor type at present')
+      call cq_abort('flag_descriptortype: (Error) no such descriptor type at present')
     end if
 
     !call deallocate_features_ML(amat_ML,amat_features_ML,prim%groups_on_node)
@@ -764,7 +766,7 @@ contains
     type(matrix_ML), dimension (:), allocatable :: amat_ML
     type(features_ML), dimension (:), allocatable :: amat_features_ML
 
-    if (inode== ionode) then
+    if (inode== ionode .and. flag_debug_mlff) then
         write(*,*) 'We are in get_MLFF'
     end if
 
@@ -819,7 +821,7 @@ contains
     !call my_barrier()
 
     ! Kernel of the ML scheme
-    if (inode== ionode) then
+    if (inode== ionode .and. flag_debug_mlff) then
         write(*,*) 'before get_naba_ML:: bundle%n_prim=', bundle%n_prim, bundle%groups_on_node
     end if
 
@@ -831,63 +833,24 @@ contains
     !call my_barrier()
 
     !! Check after get naba ML
-    if (inode == ionode) then
-        write(*,*) '################# After get_naba_ML #################'
-        write(*,*) 'sign,  inode,   id_partition, iatom_species'
-    end if
-    !! Check ia glob id
-    do nn=1, bundle%groups_on_node
+    if (inode == ionode .and. flag_debug_mlff) then
+      write(*,*) '################# After get_naba_ML #################'
+      write(*,*) 'sign,  inode,   id_partition, iatom_species'
+      !! Check ia glob id
+      do nn=1, bundle%groups_on_node
         if(bundle%nm_nodgroup(nn).gt.0) then
-            do i=1, amat_ML(nn)%n_atoms
-                ia_glob=bundle%ig_prim(bundle%nm_nodbeg(nn)+i-1)
-                !check!write(*, *) 'i_species',inode, nn, 'ia_glob1', ia_glob,amat_ML(nn)%i_species(i)
-            end do !part_nabs
+          do i=1, amat_ML(nn)%n_atoms
+            ia_glob=bundle%ig_prim(bundle%nm_nodbeg(nn)+i-1)
+            !check!write(*, *) 'i_species',inode, nn, 'ia_glob1', ia_glob,amat_ML(nn)%i_species(i)
+          end do !part_nabs
         end if
-    end do
-
-    !check get_naba_ML!if (inode == ionode) then
-        !check get_naba_ML!write(*,101) 'inode:','i_par:','i_id:','i_glob2:', 'j_par:','j_id:','j_glob2:', &
-        !check get_naba_ML!    'j_species', 'r(Angstrom)'
-    !check get_naba_ML!end if
-
-    !! Check nb list
-    if (inode == ionode) then
-        do nn=1, bundle%groups_on_node
-            if(bundle%nm_nodgroup(nn).gt.0) then
-                do i=1, amat_ML(nn)%n_atoms
-                    ia_glob=bundle%ig_prim(bundle%nm_nodbeg(nn)+i-1)
-
-                    !check!if (ia_glob==1) then
-                        !check!write(1984,*) 'this is checking first atom in x direction: before'
-                        !check!write(1984,*) amat_features_ML(nn)%fpx(i, :)
-                        !check!write(1984,*) 'fx= ',ml_force(1, ia_glob)
-                    !check!end if
-
-                    do j=1, amat_ML(nn)%n_nab(i)
-                        ist=amat_ML(nn)%i_acc(i)+j-1
-
-                        np=amat_ML(nn)%i_part(ist)
-                        nj=amat_ML(nn)%i_seq(ist)
-                        j_glob =  id_glob( parts%icell_beg(ML_CS%lab_cell(np)) +nj-1 )
-
-                        !write(*, 100) inode, nn,i, ia_glob,np,nj, j_glob,&
-                        !        amat_ML(nn)%j_species(ist),amat_ML(nn)%radius(ist) * BohrToAng
-                        !check!write(*, 102) inode, nn,i, ia_glob,np,nj, j_glob,&
-                                !check!amat_ML(nn)%j_species(ist),amat_ML(nn)%radius(ist) * BohrToAng
-                    end do
-                end do !part_nabs
-            else
-                write(*, *) 'Warning: No atoms in this partition', inode, nn
-            end if
-
-        end do
-        write(*,*) '################# END Check get_naba_ML #################'
+      end do
     end if
-    !! End of Check after get naba ML
-    t2=MPI_wtime()
-    if (inode==ionode) &
-      write(io_lun,*) 'Time before get_E_and_F_ML in get_MLFF:', t2-t1
 
+    t2=MPI_wtime()
+    if (inode==ionode .and. flag_time_mlff) &
+      write(*,2023) 'Time before get_E_and_F_ML in get_MLFF:', t2-t1
+    2023 format(a,e16.6)
     !! mpi_time()
     !! get_EandF_ML: read infomation of ML,
     t1=MPI_wtime()
@@ -895,9 +858,8 @@ contains
     ! remove in future
     call my_barrier()
     t2=MPI_wtime()
-    if (inode==ionode) &
-      write(io_lun,*) 'Time get_E_and_F_ML in get_MLFF:', t2-t1
-
+    if (inode==ionode .and. flag_time_mlff) &
+      write(*,2023) 'Time get_E_and_F_ML in get_MLFF:', t2-t1
 
     !! mpi_time()
     t1=MPI_wtime()
@@ -905,39 +867,49 @@ contains
     call gsum(ml_force, 3, ni_in_cell)
     tot_force = ml_force * BohrToAng / HaToeV
     if(flag_stress) then
-       call gsum(ml_stress,3,3)
-       stress = -ml_stress / HaToeV
+      call gsum(ml_stress,3,3)
+      stress = -ml_stress / HaToeV
     end if
     t2=MPI_wtime()
-    if (inode==ionode) &
-      write(io_lun,*) 'Time after get_E_and_F_ML in get_MLFF:', t2-t1
+    if (inode==ionode .and. flag_time_mlff) &
+      write(*,2023) 'Time after get_E_and_F_ML in get_MLFF:', t2-t1
 
     !! check force and feature info after operate mlff
-    if (inode == ionode) then
-        do nn=1, bundle%groups_on_node
-            if(bundle%nm_nodgroup(nn).gt.0) then
-                do i=1, amat_ML(nn)%n_atoms
-                    ia_glob=bundle%ig_prim(bundle%nm_nodbeg(nn)+i-1)
+    !! Check feature
+    if (flag_debug_mlff) then
+      do nn=1, bundle%groups_on_node
+        if(bundle%nm_nodgroup(nn).gt.0) then
+          do i=1, amat_ML(nn)%n_atoms
+            ia_glob=bundle%ig_prim(bundle%nm_nodbeg(nn)+i-1)
 
-                    !!if (ia_glob==1 .or. ia_glob==71) then
-                    if (ia_glob==1) then
-                        write(1984,*) 'this is checking first atom in x direction: after, ia_glob:',ia_glob
-                        do j=1, 40
-                            write(1984,*) 'No' !,amat_features_ML(nn)%fpx(i, j)
-                        end do
-                        write(1984,*) 'fx= ',ml_force(1, ia_glob)
-                    end if
-                end do !i
-            else
-                write(*, *) 'Warning: No atoms in this partition', inode, nn
-            end if ! no atoms in partition?
-        end do !nn
+            !check
+            if (ia_glob==1) then
+              write(1984,*) 'this is checking first atom in x direction: before'
+              write(1984,*) amat_features_ML(nn)%id_atom(i)%fpx(:)
+              write(1984,*) 'fx= ',ml_force(1, ia_glob)
+            end if
+            ! end check atomic feature
 
-        write(1988,*) ml_energy
-        do i=1, ni_in_cell
-            write(1987,103) i, ml_force(:, i)
-        end do
+            do j=1, amat_ML(nn)%n_nab(i)
+              ist=amat_ML(nn)%i_acc(i)+j-1
+
+              np=amat_ML(nn)%i_part(ist)
+              nj=amat_ML(nn)%i_seq(ist)
+              j_glob =  id_glob( parts%icell_beg(ML_CS%lab_cell(np)) +nj-1 )
+            end do
+          end do !part_nabs
+        else
+          if(flag_debug_mlff) &
+              write(*, *) 'Warning: No atoms in this partition get_MLFF', inode, nn
+        end if
+      end do
+
+      write(1988,*) ml_energy
+      do i=1, ni_in_cell
+        write(1987,103) i, ml_force(:, i)
+      end do
     end if
+    !! End of Check feature
 
     ! Deallocate feature and matrix
     call deallocate_features_ML(amat_ML,amat_features_ML,bundle%groups_on_node)
@@ -950,10 +922,9 @@ contains
     deallocate(ml_force)
 
     !!call end_comms()
-    if (inode == ionode) then
-        write(*,*) '################# END Check get_MLFF #################'
+    if (inode == ionode .and. flag_debug_mlff) then
+      write(*,*) '################# END Check get_MLFF #################'
     end if
-
 
     100 format('inode: ',i5,' i_par: ',i5,' i_id: ',i5,' i_glob2: ', i5,' j_par: ',i5,' j_id: ',i5,' j_glob2: ', i5, &
             ' j_species: ', i5,' radius(Angstrom): ',f12.8)
@@ -962,29 +933,6 @@ contains
     103 format(i8,3f16.8)
 
     !stop
-    !!call gsum(disp_energy)
-    !!call gsum(disp_force, 3, ni_in_cell)
-    !!disp_energy = - disp_energy * s_6 * half ! CANCEL THE DOUBLE-COUNTING
-    !!disp_force = s_6 * disp_force
-    !!if(flag_stress) then
-    !!   call gsum(ml_stress,3,3)
-    !!   ml_stress = -half * s_6 * ml_stress  ! Double counting again
-    !!end if
-
-    ! Works only when you want to get the dispersion
-    !!if (flag_only_dispersion) then
-    !!  if (inode == ionode) then
-    !!    write (io_lun, '(/a)') "***** Dispersion Information: DFT-D2 *****"
-    !!    write (io_lun,16) en_conv*disp_energy, en_units(energy_units)
-    !!    write (io_lun,fmt='(/,20x,"Disp. Force on atoms (",a2,"/",a2,")"/)') en_units(energy_units), d_units(dist_units)
-    !!    write (io_lun,fmt='("Atom        X               Y               Z")')
-    !!    do i = 1, ni_in_cell
-    !!        write (io_lun, 109) i, (for_conv*disp_force(j,i), j=1,3)
-    !!     enddo
-    !!     write(io_lun,'(/8x,"Dispersion stress: ",3f15.8)') ml_stress
-    !!  endif
-    !!endif
-
     110 format('E_ML:',f25.15,' ',a2)
     111 format('Force on atom ', i9)
     112 format(i10, 3f15.10)
