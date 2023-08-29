@@ -440,7 +440,7 @@ contains
     use naba_blk_module,   only:naba_atm_of_blk
     use set_blipgrid_module, only: naba_atoms_of_blocks
     use bucket_module,     only:local_bucket,remote_bucket
-    use GenBlas,           only:axpy, gemm
+    use GenBlas,           only:gemm
     use comm_array_module, only:send_array
     use block_module,      only:n_pts_in_block
     use functions_on_grid, only: gridfunctions, fn_on_grid
