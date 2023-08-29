@@ -2631,6 +2631,7 @@ contains
     use input_module,         only: leqi, chrcap
     use control,    only: MDn_steps
     use md_control, only: md_ensemble
+    use omp_module, only: init_threads
 
     implicit none
 
@@ -2638,11 +2639,12 @@ contains
     logical :: vary_mu
     character(len=80) :: titles
     character(len=3) :: ensemblestr
-    integer :: NODES 
+    integer :: NODES
     real(double) :: mu, HNL_fac
 
     ! Local variables
     integer :: n, stat
+    integer :: threads
     character(len=10) :: today, the_time
     character(len=15) :: job_str
     character(len=5)  :: timezone
@@ -2824,6 +2826,13 @@ contains
        write(io_lun,fmt="(/4x,'The calculation will be performed on ',i5,' processes')") NODES
     else
        write(io_lun,fmt="(/4x,'The calculation will be performed on ',i5,' process')") NODES
+    end if
+
+    call init_threads(threads)
+    if(threads>1) then
+       write(io_lun,fmt="(/4x,'The calculation will be performed on ',i5,' threads')") threads
+    else if (threads==1) then
+       write(io_lun,fmt="(/4x,'The calculation will be performed on ',i5,' thread')") threads
     end if
     
     if(.NOT.flag_diagonalisation) &
