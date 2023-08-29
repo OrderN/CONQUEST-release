@@ -33,9 +33,6 @@ jobs:
           - 2
         # TODO: Could be worth testing on `mpich` in addition to `openmpi-bin`. Both are
         #       available in apt
-        exclude:
-          - np: 2
-            threads: 2
 
     steps:
     - uses: actions/checkout@v3
