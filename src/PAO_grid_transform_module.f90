@@ -175,21 +175,19 @@ contains
     ! Note: Using OpenMP in this loop requires some redesign because there is a loop
     !       carrier dependency in next_offset_position.
     blocks_loop: do iblock = 1, domain%groups_on_node ! primary set of blocks
-       part_in_block: if(naba_atoms_of_blocks(atomf)%no_of_part(iblock) > 0) then ! if there are naba atoms
-          iatom = 0
-          parts_loop: do ipart=1,naba_atoms_of_blocks(atomf)%no_of_part(iblock)
-             naba_part_label = naba_atoms_of_blocks(atomf)%list_part(ipart,iblock)
-             ind_part = DCS_parts%lab_cell(naba_part_label)
-             atoms_loop: do ia=1,naba_atoms_of_blocks(atomf)%no_atom_on_part(ipart,iblock)
+       iatom = 0
+       parts_loop: do ipart=1,naba_atoms_of_blocks(atomf)%no_of_part(iblock)
+          naba_part_label = naba_atoms_of_blocks(atomf)%list_part(ipart,iblock)
+          ind_part = DCS_parts%lab_cell(naba_part_label)
+          atoms_loop: do ia=1,naba_atoms_of_blocks(atomf)%no_atom_on_part(ipart,iblock)
 
-                call get_species(iblock, naba_part_label, ind_part, iatom, icover, my_species)
+             call get_species(iblock, naba_part_label, ind_part, iatom, icover, my_species)
 
-                offset_position(ia, ipart, iblock) = next_offset_position
-                next_offset_position = offset_position(ia, ipart, iblock) + &
-                     npao_species(my_species) * n_pts_in_block
-             end do atoms_loop
-          end do parts_loop
-       end if part_in_block
+             offset_position(ia, ipart, iblock) = next_offset_position
+             next_offset_position = offset_position(ia, ipart, iblock) + &
+                  npao_species(my_species) * n_pts_in_block
+          end do atoms_loop
+       end do parts_loop
     end do blocks_loop
 
     !$omp parallel do default(none) &
@@ -204,50 +202,46 @@ contains
        xblock = ( domain%idisp_primx(iblock) + domain%nx_origin - 1 ) * dcellx_block
        yblock = ( domain%idisp_primy(iblock) + domain%ny_origin - 1 ) * dcelly_block
        zblock = ( domain%idisp_primz(iblock) + domain%nz_origin - 1 ) * dcellz_block
-       part_if_omp: if(naba_atoms_of_blocks(atomf)%no_of_part(iblock) > 0) then ! if there are naba atoms
-          iatom = 0
-          parts_loop_omp: do ipart=1,naba_atoms_of_blocks(atomf)%no_of_part(iblock)
-             naba_part_label = naba_atoms_of_blocks(atomf)%list_part(ipart,iblock)
-             ind_part = DCS_parts%lab_cell(naba_part_label)
-             atoms_loop_omp: do ia=1,naba_atoms_of_blocks(atomf)%no_atom_on_part(ipart,iblock)
+       iatom = 0
+       parts_loop_omp: do ipart=1,naba_atoms_of_blocks(atomf)%no_of_part(iblock)
+          naba_part_label = naba_atoms_of_blocks(atomf)%list_part(ipart,iblock)
+          ind_part = DCS_parts%lab_cell(naba_part_label)
+          atoms_loop_omp: do ia=1,naba_atoms_of_blocks(atomf)%no_atom_on_part(ipart,iblock)
 
-                call get_species(iblock, naba_part_label, ind_part, iatom, icover, my_species)
+             call get_species(iblock, naba_part_label, ind_part, iatom, icover, my_species)
 
-                xatom = DCS_parts%xcover(icover)
-                yatom = DCS_parts%ycover(icover)
-                zatom = DCS_parts%zcover(icover)
+             xatom = DCS_parts%xcover(icover)
+             yatom = DCS_parts%ycover(icover)
+             zatom = DCS_parts%zcover(icover)
 
-                !calculates distances between the atom and integration grid points
-                !in the block and stores which integration grids are neighbours.
-                call check_block (xblock, yblock, zblock, xatom, yatom, zatom, rcut, &  ! in
-                     npoint, ip_store, r_store, x_store, y_store, z_store, & !out
-                     n_pts_in_block) ! in
+             !calculates distances between the atom and integration grid points
+             !in the block and stores which integration grids are neighbours.
+             call check_block (xblock, yblock, zblock, xatom, yatom, zatom, rcut, &  ! in
+                  npoint, ip_store, r_store, x_store, y_store, z_store, & !out
+                  n_pts_in_block) ! in
 
-                npoint_if_omp : if(npoint > 0) then
-                   points_loop_omp: do ip=1,npoint
-                      position = offset_position(ia, ipart, iblock) + ip_store(ip)
-                      x = x_store(ip)
-                      y = y_store(ip)
-                      z = z_store(ip)
-                      ! For this point-atom offset, we accumulate the PAO on the grid
-                      l_loop: do l1 = 0,pao(my_species)%greatest_angmom
-                         z_loop: do acz = 1,pao(my_species)%angmom(l1)%n_zeta_in_angmom
-                            m_loop: do m1=-l1,l1
-                               if(present(direction)) then
-                                  call pao_elem_derivative_2(direction,my_species,l1,acz,m1,x,y,z,val)
-                               else
-                                  call evaluate_pao(my_species,l1,acz,m1,x,y,z,val)
-                               end if
-                               gridfunctions(pao_fns)%griddata(position) = val
-                               position = position + n_pts_in_block
-                            end do m_loop
-                         end do z_loop
-                      end do l_loop
-                   enddo points_loop_omp
-                endif npoint_if_omp
-             enddo atoms_loop_omp
-          enddo parts_loop_omp
-       endif part_if_omp
+             points_loop_omp: do ip=1,npoint
+                position = offset_position(ia, ipart, iblock) + ip_store(ip)
+                x = x_store(ip)
+                y = y_store(ip)
+                z = z_store(ip)
+                ! For this point-atom offset, we accumulate the PAO on the grid
+                l_loop: do l1 = 0,pao(my_species)%greatest_angmom
+                   z_loop: do acz = 1,pao(my_species)%angmom(l1)%n_zeta_in_angmom
+                      m_loop: do m1=-l1,l1
+                         if(present(direction)) then
+                            call pao_elem_derivative_2(direction,my_species,l1,acz,m1,x,y,z,val)
+                         else
+                            call evaluate_pao(my_species,l1,acz,m1,x,y,z,val)
+                         end if
+                         gridfunctions(pao_fns)%griddata(position) = val
+                         position = position + n_pts_in_block
+                      end do m_loop
+                   end do z_loop
+                end do l_loop
+             enddo points_loop_omp
+          enddo atoms_loop_omp
+       enddo parts_loop_omp
     enddo blocks_loop_omp
     !$omp end parallel do
     call my_barrier()
@@ -257,7 +251,7 @@ contains
     call stop_timer(tmr_std_basis)
     return
   end subroutine single_PAO_to_any
-!!***
+  !!***
 
 ! -----------------------------------------------------------
 ! Subroutine check_block
