@@ -66,15 +66,21 @@ jobs:
 
     - name: Run test 001
       working-directory: ${{github.workspace}}/testsuite/test_001_bulk_Si_1proc_Diag
-      run: mpirun -np ${{matrix.np}} ../../bin/Conquest
+      run: |
+        mpirun -np ${{matrix.np}} ../../bin/Conquest
+        cat Conquest_out
 
     - name: Run test 002
       working-directory: ${{github.workspace}}/testsuite/test_002_bulk_Si_1proc_OrderN
-      run: mpirun -np ${{matrix.np}} ../../bin/Conquest
+      run: |
+        mpirun -np ${{matrix.np}} ../../bin/Conquest
+        cat Conquest_out
 
     - name: Run test 003
       working-directory: ${{github.workspace}}/testsuite/test_003_bulk_BTO_polarisation
-      run: mpirun -np ${{matrix.np}} ../../bin/Conquest
+      run: |
+        mpirun -np ${{matrix.np}} ../../bin/Conquest
+        cat Conquest_out
 
     - name: Check test results
       working-directory: ${{github.workspace}}/testsuite
