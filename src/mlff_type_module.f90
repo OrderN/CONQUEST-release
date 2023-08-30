@@ -1115,7 +1115,7 @@ contains
 
       ! Read dimensions of each pair type
       ! pair information
-      read(file_id,'(a)') comment
+      !read(file_id,'(a)') comment
       ! pair dimensions
       read(file_id,*) dims_2b
 
@@ -1671,11 +1671,11 @@ contains
 
       !! Read dimensions of two body terms
       ! pair information
-      read(file_id,'(a)') comment
+      !read(file_id,'(a)') comment
       read(file_id,*) dims_2b
       !! Read dimensions of three body terms
       ! triplet information
-      read(file_id,'(a)') comment
+      !read(file_id,'(a)') comment
       read(file_id,*) dims_3b
 
       !! Read two body terms
