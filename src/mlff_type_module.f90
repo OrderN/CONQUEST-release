@@ -2027,7 +2027,8 @@ contains
               param_end = param_start + descriptor_params(i_species)%nums_3b(species_order3b) - 1
 
               if (ia_glob==1 .and. flag_debug_mlff) then
-                write(*,103) jj, kk, shift_dim,param_start, param_end, i_species,j_species,k_species, species_order3b, amat(nn)%n_nab(ii)
+                write(*,103) jj, kk, shift_dim,param_start, param_end, &
+                    i_species,j_species,k_species, species_order3b, amat(nn)%n_nab(ii)
                 feature_1 = amat_features_ML(nn)%id_atom(ii)%fpx(121)
               end if
 
