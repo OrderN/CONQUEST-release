@@ -8,11 +8,13 @@ on:
 
 jobs:
   build:
-    name: ${{matrix.fc}} -- ${{matrix.os}} -- np = ${{matrix.np}}
+    name: ${{matrix.fc}} -- ${{matrix.os}} -- ${{matrix.np}} processes -- ${{matrix.threads}} threads
     runs-on: ${{matrix.os}}
     env:
       FC: ${{matrix.fc}}
       F77: mpif77
+      OMP_NUM_THREADS: ${{matrix.threads}}
+      OPENBLAS_NUM_THREADS: 1
     strategy:
       fail-fast: false
       matrix:
@@ -20,14 +22,13 @@ jobs:
           # We could add ubuntu-latest but until 2024 it will be the same as 22.04
           - ubuntu-22.04
         fc:
-          # the mpifort wrapper is recommended instead of mpif90 by openmpi. Including
-          # both here in case they do something differently.
-          #
           # TODO: We could also build with `intel-oneapi-compiler-fortran`, it is available
           #       for installation from Intel through their apt repository.
           - mpifort
-          - mpif90
         np:
+          - 1
+          - 2
+        threads:
           - 1
           - 2
         # TODO: Could be worth testing on `mpich` in addition to `openmpi-bin`. Both are
@@ -65,15 +66,21 @@ jobs:
 
     - name: Run test 001
       working-directory: ${{github.workspace}}/testsuite/test_001_bulk_Si_1proc_Diag
-      run: mpirun -np ${{matrix.np}} ../../bin/Conquest
+      run: |
+        mpirun -np ${{matrix.np}} ../../bin/Conquest
+        cat Conquest_out
 
     - name: Run test 002
       working-directory: ${{github.workspace}}/testsuite/test_002_bulk_Si_1proc_OrderN
-      run: mpirun -np ${{matrix.np}} ../../bin/Conquest
+      run: |
+        mpirun -np ${{matrix.np}} ../../bin/Conquest
+        cat Conquest_out
 
     - name: Run test 003
       working-directory: ${{github.workspace}}/testsuite/test_003_bulk_BTO_polarisation
-      run: mpirun -np ${{matrix.np}} ../../bin/Conquest
+      run: |
+        mpirun -np ${{matrix.np}} ../../bin/Conquest
+        cat Conquest_out
 
     - name: Check test results
       working-directory: ${{github.workspace}}/testsuite
