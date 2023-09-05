@@ -51,6 +51,8 @@
 !!    flying ice-cube effect)
 !!   2022/09/29 16:46 dave
 !!    Moved subroutines from control and tidied output
+!!   2023/09/05 lu
+!!    Added variable temp_ion_end to allow simulations with a variable temperature
 !!  SOURCE
 !!
 module md_control

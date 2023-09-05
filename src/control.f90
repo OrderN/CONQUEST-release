@@ -631,6 +631,8 @@ contains
 !!    Moved velocity array allocation/deallocation to init_md/end_md
 !!   2020/01/06 15:40 dave
 !!    Add pressure-based termination for equilibration and remove Berendsen thermostat
+!!   2023/09/05 lu
+!!    Added variable temp_ion_end to allow simulations with a variable temperature
 !!  SOURCE
 !!
   subroutine md_run (fixed_potential, vary_mu, total_energy)
