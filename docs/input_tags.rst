@@ -827,24 +827,24 @@ AtomMove.OutputFreq (*integer*)
 
     *default*: 50
 
-AtomMove.WriteXSF *(boolean*)
+AtomMove.WriteXSF (*boolean*)
     Write atomic coordinates to ``trajectory.xsf`` for ``AtomMove.TypeOfRun = md`` or ``cg``,
-    every ``AtomMove.XSFfreq`` steps
+    every ``AtomMove.XsfFreq`` steps
 
     *default*: T
 
-AtomMove.XSFfreq (*integer*)
+AtomMove.XsfFreq (*integer*)
     Frequency of output of atomic coordinates to ``trajectory.xsf``
 
     *default*: same as ``AtomMove.OutputFreq``
 
-AtomMove.WriteXYZ *(boolean*)
+AtomMove.WriteXYZ (*boolean*)
     Write atomic coordinates to ``trajectory.xyz`` for ``AtomMove.TypeOfRun = md``,
-    every ``AtomMove.XYZfreq`` steps
+    every ``AtomMove.XyzFreq`` steps
 
     *default*: T
 
-AtomMove.XYZfreq (*integer*)
+AtomMove.XyzFreq (*integer*)
     Frequency of output of atomic coordinates to ``trajectory.xyz``
 
     *default*: same as ``AtomMove.OutputFreq``
