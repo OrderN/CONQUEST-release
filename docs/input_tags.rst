@@ -829,9 +829,25 @@ AtomMove.OutputFreq (*integer*)
 
 AtomMove.WriteXSF *(boolean*)
     Write atomic coordinates to ``trajectory.xsf`` for ``AtomMove.TypeOfRun = md`` or ``cg``,
-    every ``AtomMove.OutputFreq`` steps
+    every ``AtomMove.XSFfreq`` steps
 
     *default*: T
+
+AtomMove.XSFfreq (*integer*)
+    Frequency of output of atomic coordinates to ``trajectory.xsf``
+
+    *default*: same as ``AtomMove.OutputFreq``
+
+AtomMove.WriteXYZ *(boolean*)
+    Write atomic coordinates to ``trajectory.xyz`` for ``AtomMove.TypeOfRun = md``,
+    every ``AtomMove.XYZfreq`` steps
+
+    *default*: T
+
+AtomMove.XYZfreq (*integer*)
+    Frequency of output of atomic coordinates to ``trajectory.xyz``
+
+    *default*: same as ``AtomMove.OutputFreq``
 
 AtomMove.TestForces (*boolean*)
     Flag for testing forces with comparison of analytic and numerical calculations.
