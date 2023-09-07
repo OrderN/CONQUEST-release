@@ -1340,6 +1340,8 @@ contains
 !!    Modified to get pair information for machine learing
 !!   2023/08/24 J.Lin
 !!   Available different feature dimensions for each type of atom
+!!   2023/09/07 J.Lin
+!!   Available parameter Rs in this descriptor
 !!  SOURCE
 !!
   subroutine get_feature_acsf2b(prim,gcs,amat,amat_features_ML,rcut,descriptor_params)
@@ -1371,7 +1373,7 @@ contains
     integer :: param_start, param_end, shift_dim, param_index, fp_index, gx_index
 
     real(double) :: rcutsq, xij, yij, zij, xik, yik, zik, rij, rik, rjk, rjk_2
-    real(double) :: eta, rcut_a
+    real(double) :: eta, rs, rcut_a
     real(double) :: tmp1, tmpx, tmpy, tmpz, frc_ij, frc_ik, frc_jk
     real(double), parameter :: tol=1.0e-8_double
 
@@ -1436,8 +1438,9 @@ contains
               ! Todo : check if species_orderij is correct
               gx_index = param_index - param_start + 1
               eta = descriptor_params(i_species)%params_g2(species_orderij)%eta(gx_index)
+              rs = rij - descriptor_params(i_species)%params_2b(species_orderij)%rs(gx_index)
 
-              tmp1 = frc_ij * exp(- (rij/eta) ** 2) / rij
+              tmp1 = frc_ij * exp(- (rs/eta) ** 2) / rij
               amat_features_ML(nn)%id_atom(ii)%fpx(fp_index) = &
                   amat_features_ML(nn)%id_atom(ii)%fpx(fp_index) + xij*tmp1
               amat_features_ML(nn)%id_atom(ii)%fpy(fp_index) = &
