@@ -272,6 +272,7 @@ contains
           E_wf_max =  BIG
        end if
        flag_wf_range = .true.
+       flag_wf_range_Ef = fdf_boolean('IO.WFRangeRelative',.true.)
        flag_procwf_range_Ef = fdf_boolean('Process.WFRangeRelative',.false.)
        flag_l_resolved = fdf_boolean('Process.pDOS_l_resolved',.false.)
        flag_lm_resolved = fdf_boolean('Process.pDOS_lm_resolved',.false.)

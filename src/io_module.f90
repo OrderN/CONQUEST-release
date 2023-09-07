@@ -1491,7 +1491,7 @@ second:   do
     
     call io_assign (lun)
     open (unit = lun, file = 'eigenvalues.dat')
-    write(lun,fmt='("#  ",i7," eigenvalues ",i4," kpoints")') n_evals, nkp
+    write(lun,fmt='("#  ",i7," eigenvalues ",i6," kpoints")') n_evals, nkp
     if(nspin==1) then
        write(lun,fmt='("# Ef: ",f18.10)') Ef(1)
     else
@@ -1500,7 +1500,7 @@ second:   do
     write(lun,fmt='("# Format: nk kx ky kz weight, followed by eigenvalues")')
     do sp = 1,nspin
        do kp = 1,nkp
-          write(lun,fmt='(i4,4f12.5)') kp,kk(1,kp),kk(2,kp),kk(3,kp),wtk(kp)
+          write(lun,fmt='(i6,3f12.5,f17.10)') kp,kk(1,kp),kk(2,kp),kk(3,kp),wtk(kp)
           do ev = 1,n_evals
              write(lun,fmt='(i6,f18.10)') ev,eval(ev,kp,sp)
           end do
