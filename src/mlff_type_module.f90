@@ -1438,7 +1438,7 @@ contains
               ! Todo : check if species_orderij is correct
               gx_index = param_index - param_start + 1
               eta = descriptor_params(i_species)%params_g2(species_orderij)%eta(gx_index)
-              rs = rij - descriptor_params(i_species)%params_2b(species_orderij)%rs(gx_index)
+              rs = rij - descriptor_params(i_species)%params_g2(species_orderij)%rs(gx_index)
 
               tmp1 = frc_ij * exp(- (rs/eta) ** 2) / rij
               amat_features_ML(nn)%id_atom(ii)%fpx(fp_index) = &
