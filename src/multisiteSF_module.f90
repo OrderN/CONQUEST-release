@@ -136,6 +136,7 @@ contains
     use store_matrix,              only: dump_pos_and_matrices
     use GenComms,                  only: mtime
     use io_module,                 only: return_prefix
+    use angular_coeff_routines,    only: evaluate_pao
 
     implicit none
 
@@ -164,7 +165,7 @@ contains
     if (flag_LFD) then
        ! Prepare Spao and Hpao
        ! 1. Calculate PAO values on grids
-       if (LFD_build_Spao) call single_PAO_to_any(atomfns)
+       if (LFD_build_Spao) call single_PAO_to_any(atomfns, evaluate_pao, 0)
        ! 2. Construct matSpao
        if (LFD_build_Spao) call get_S_matrix(inode, ionode, transform_AtomF_to_SF=.false.)
        ! 3. Construct matHpao

@@ -1642,6 +1642,7 @@ contains
     use density_module,             only: density
     use maxima_module,              only: maxngrid
     use memory_module,              only: reg_alloc_mem, reg_dealloc_mem, type_dbl
+    use angular_coeff_routines,     only: evaluate_pao
 
     implicit none
 
@@ -1710,7 +1711,7 @@ contains
        call blip_to_support_new(inode-1, atomfns)    
     else if (flag_basis_set == PAOs) then
        ! Regenerate PAO with a call to single_PAO_to_any
-       call single_PAO_to_any(atomfns)
+       call single_PAO_to_any(atomfns, evaluate_pao, 0)
     end if
     ! Note that we've held K fixed but allow potential to vary ? Yes:
     ! this way we get h_on_atomfns in workspace_support

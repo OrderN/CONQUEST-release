@@ -255,6 +255,7 @@ contains
     use io_module,                   only: dump_matrix
     use PAO_grid_transform_module,   only: single_PAO_to_any
     use functions_on_grid,           only: atomfns
+    use angular_coeff_routines,      only: evaluate_pao
 
     implicit none
 
@@ -271,7 +272,7 @@ contains
     ! calculate PAO values on grids
     if (inode == ionode .and. iprint_ops + min_layer > 3) &
          write (io_lun, fmt='(10x,a,i5)') 'single PAO to grid ', atomfns
-    call single_PAO_to_any(atomfns)
+    call single_PAO_to_any(atomfns, evaluate_pao, 0)
 
     return
   end subroutine get_S_matrix_PAO

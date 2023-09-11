@@ -98,9 +98,9 @@ contains
 !!    single subroutine single_PAO_to_any (for lack of better name)
 !!  SOURCE
 !!
-  subroutine single_PAO_to_any(pao_fns, direction)
+  subroutine single_PAO_to_any(pao_fns, evaluate, direction)
 
-    use datatypes
+    use datatypes, only: double
     use primary_module, ONLY: bundle
     use GenComms, ONLY: my_barrier, cq_abort, mtime
     use dimens, ONLY: r_h
@@ -114,12 +114,13 @@ contains
     use primary_module, ONLY: domain
     use cover_module, ONLY: DCS_parts
     use set_blipgrid_module, ONLY : naba_atoms_of_blocks
-    use angular_coeff_routines, ONLY : evaluate_pao, pao_elem_derivative_2
+    !use angular_coeff_routines, ONLY : evaluate_pao, pao_elem_derivative_2
     use functions_on_grid, ONLY: gridfunctions, fn_on_grid
     use pao_format
 
     implicit none
     integer, intent(in) :: pao_fns
+    !procedure(evaluate_interface), intent(in) :: evaluate
     integer, intent(in), optional :: direction
 
     !local
@@ -139,6 +140,19 @@ contains
     integer, allocatable, dimension(:) :: ip_store ! outputs of check_block
     integer, allocatable, dimension(:,:,:) :: offset_position ! precomputed offsets
     real(double), allocatable, dimension(:) :: x_store, y_store, z_store, r_store ! outputs of check_block
+
+    interface
+       ! Interface to return a value val given arguments
+       ! direction,species,l1,acz,m1,x,y,z. Implemented by
+       ! evaluate_pao() and pao_elem_derivative_2().
+       subroutine evaluate(direction,species,l,acz,m,x,y,z,val)
+         use datatypes, only: double
+         integer, intent(in) :: species,l,acz,m
+         integer, intent(in) :: direction
+         real(kind=double), intent(in) :: x,y,z
+         real(kind=double), intent(out) :: val
+       end subroutine evaluate
+    end interface
 
     nblock = domain%groups_on_node
     npart = maxval(naba_atoms_of_blocks(atomf)%no_of_part)
@@ -229,11 +243,7 @@ contains
                 l_loop: do l1 = 0,pao(my_species)%greatest_angmom
                    z_loop: do acz = 1,pao(my_species)%angmom(l1)%n_zeta_in_angmom
                       m_loop: do m1=-l1,l1
-                         if(present(direction)) then
-                            call pao_elem_derivative_2(direction,my_species,l1,acz,m1,x,y,z,val)
-                         else
-                            call evaluate_pao(my_species,l1,acz,m1,x,y,z,val)
-                         end if
+                         call evaluate(direction,my_species,l1,acz,m1,x,y,z,val)
                          gridfunctions(pao_fns)%griddata(position) = val
                          position = position + n_pts_in_block
                       end do m_loop

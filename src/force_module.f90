@@ -988,6 +988,7 @@ contains
     use GenBlas,                     only: axpy, scal
     use calc_matrix_elements_module, only: act_on_vectors_new
     use io_module,                   only: return_prefix
+    use angular_coeff_routines,      ONLY: pao_elem_derivative_2
 
     implicit none
 
@@ -1310,7 +1311,7 @@ contains
           if (flag_basis_set == blips) then
              call blip_to_grad_new(inode-1, dir1, tmp_fn)
           else if (flag_basis_set == PAOs) then
-             call single_PAO_to_any(tmp_fn, dir1)
+             call single_PAO_to_any(tmp_fn, pao_elem_derivative_2, dir1)
           else
              call cq_abort("pulay_force: basis set undefined ", flag_basis_set)
           end if
