@@ -7,8 +7,176 @@ Created on Fri Apr 29 15:11:52 2022
 """
 
 from numpy import amax, amin, matmul, array, trapz, size, exp, zeros, floor
-from ase.units import Hartree, Rydberg
+from numpy import empty
+
+import ase.utils
+
+from ase.geometry import orthorhombic, is_orthorhombic
+from ase.constraints import FixAtoms, FixScaled
+from ase.units import Hartree, Rydberg, Bohr
 from ase import Atoms
+
+from spglib import standardize_cell, get_spacegroup
+
+from inspect import currentframe, getframeinfo
+
+class error(Exception):
+    """Base class for exceptions in this module
+    """
+    pass
+
+class warning(Warning):
+    """Base class for warning in this module
+    """
+    pass
+
+class conquest_err(error):
+    """Exceptions related to Conquest I/O
+
+    Attributes
+    ----------
+    message : explanation of the error
+    """
+    def __init__(self, message):
+        self.message = message
+
+class conquest_warn(warning):
+
+    def __init__(self, message):
+        self.message = message
+    
+        frameinfo = getframeinfo(currentframe().f_back)
+
+        print('## ConquestWarning ##')
+        print('file:', frameinfo.filename, ', line:', frameinfo.lineno)
+        print('>>>> ', message)
+
+
+###############################################################################
+#
+# 
+#
+###############################################################################
+def print_cell_data(atoms, verbose):
+    cell = atoms.get_cell()
+    cell_param = atoms.get_cell_lengths_and_angles()
+    print('Bravais lattice:')
+    print('  ', cell.get_bravais_lattice())
+    print('Space group:')
+    print('  ', get_spacegroup(atoms, symprec=1e-5))
+    print('Cell parameters (Ang. and degree):')
+    print('   a = {:14.6f}'.format(cell_param[0]))
+    print('   b = {:14.6f}'.format(cell_param[1]))
+    print('   c = {:14.6f}'.format(cell_param[2]))
+    print('   alpha = {:8.4f}'.format(cell_param[3]))
+    print('   beta  = {:8.4f}'.format(cell_param[4]))
+    print('   gamma = {:8.4f}'.format(cell_param[5]))
+    #
+    if (verbose):
+        atom_positions = atoms.get_positions()
+        atom_names = atoms.get_chemical_symbols()
+        print('Cartesian atomic positions (Ang.)')
+        for i in range(len(atoms)):
+            # print formated forces
+            print('  {}{:14.6f}{:14.6f}{:14.6f}'.format(atom_names[i],
+                                                        atom_positions[i, 0],
+                                                        atom_positions[i, 1],
+                                                        atom_positions[i, 2]))
+
+
+###############################################################################
+#
+# 
+#
+###############################################################################
+def read_conquest(fileobj, fractional=True, atomic_order=[]):
+    """
+    Read CONQUEST structure files.
+    Returns atoms object
+    """
+    if atomic_order == []:
+        raise conquest_err("Atomic order must be specified as a list.")
+
+    if isinstance(fileobj, str):
+        fileobj = open(fileobj)
+
+    # The first 3 lines are always the unit cell vectors in Bohr
+    lines = []
+    for i in range(3):
+        lines.append(fileobj.readline().split())
+    natoms = int(fileobj.readline().split()[0])
+    # CONQUEST always uses orthorhombic cells
+    cell = [float(lines[0][0]) * Bohr, float(lines[1][1]) * Bohr,
+            float(lines[2][2]) * Bohr]
+    # This is for constraining certain atoms
+    moveflags = empty((natoms, 3), dtype=bool)
+    con = {'t': True, 'f': False}
+    n = 0
+    species = []
+    positions = []
+    for line in fileobj.readlines():
+        x, y, z, speciesindex, cx, cy, cz = line.split()
+        speciesindex = int(speciesindex) - 1
+        if fractional:
+            position = [float(x) * cell[0], float(y) * cell[1],
+                        float(z) * cell[2]]
+        else:
+            position = [float(x) * Bohr, float(y) * Bohr, float(z) * Bohr]
+
+        moveflags[n] = [not con[cx.lower()], not con[cy.lower()],
+                        not con[cz.lower()]]
+        n += 1
+        species.append(atomic_order[speciesindex])
+        positions.append(position)
+
+    atoms = Atoms(symbols=species, positions=positions, cell=cell)
+    constraints = []
+    indices = []
+    for ind, moveflag in enumerate(moveflags):
+        if moveflag.any() and not moveflag.all():
+            constraints.append(FixScaled(atoms.get_cell(), ind, moveflag))
+        elif moveflag.all():
+            indices.append(ind)
+    if indices:
+        constraints.append(FixAtoms(indices))
+    if constraints:
+        atoms.set_constraint(constraints)
+    atoms.set_pbc((True, True, True))
+    return atoms
+
+###############################################################################
+#
+# 
+#
+###############################################################################
+def conquest_orthorhombic_check(atoms, verbose):
+    # get cell from ASE Atoms object
+    cell = atoms.get_cell()
+    # test cell and if not orthorhombic standardize and check again
+    if not is_orthorhombic(cell):
+        # Print cell type before modification
+        conquest_warn('Current cell not orthorhombic:')
+        print_cell_data(atoms, verbose=verbose)
+        # If not orthorhombic standardize and check
+
+        atoms_ = ase.utils.atoms_to_spglib_cell(atoms)
+        cell, scaled_positions, numbers = standardize_cell(atoms_,
+                                                           to_primitive=False,
+                                                           no_idealize=False,
+                                                           symprec=1e-5)
+        # New atoms fractional positions
+        atoms = Atoms(numbers, positions=scaled_positions,
+                      pbc=[True, True, True])
+        # Set new cell
+        atoms.set_cell(cell, scale_atoms=True)
+        # Test again and stop if not orthorhombic
+        orthorhombic(cell)
+        # Print new cell data
+        print('\n')
+        conquest_warn('New orthorhombic cell:')
+        print_cell_data(atoms, verbose=verbose)
+        # Take care "atoms" may have been modified !
+    return atoms
 
 def get_gapwind( calc, kpath, n_occ ):
 
