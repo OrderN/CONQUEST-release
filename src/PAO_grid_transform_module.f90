@@ -121,7 +121,7 @@ contains
     implicit none
     integer, intent(in) :: pao_fns
     !procedure(evaluate_interface), intent(in) :: evaluate
-    integer, intent(in), optional :: direction
+    integer, intent(in) :: direction
 
     !local
     integer :: iblock,ia,ipart,ip,l1,acz,m1 ! Loop index variables
