@@ -52,6 +52,8 @@
 !!    Moved various subroutines to md_misc_module
 !!   2022/12/12 11:41 dave
 !!    Added SQNM maximum step size (sqnm_trust_step) as user-adjustable parameter
+!!   2023/09/13 lu
+!!    Added XSF and XSF output frequency as user-adjustable parameter
 !!  SOURCE
 !!
 module control
@@ -634,6 +636,8 @@ contains
 !!    Moved velocity array allocation/deallocation to init_md/end_md
 !!   2020/01/06 15:40 dave
 !!    Add pressure-based termination for equilibration and remove Berendsen thermostat
+!!   2023/09/13 lu
+!!    Add parameters for xsf and xyz output frequency
 !!  SOURCE
 !!
   subroutine md_run (fixed_potential, vary_mu, total_energy)
