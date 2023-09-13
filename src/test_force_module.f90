@@ -1605,7 +1605,7 @@ contains
   !!   2016/08/08 15:30 nakata
   !!    Renamed supportfns -> atomfns
   !!   2016/12/29 19:30 nakata
-  !!    Changed PAO_to_grid to single_PAO_to_any
+  !!    Changed PAO_to_grid to single_PAO_to_grid
   !!   2017/10/27 09:55 dave
   !!    Bug fix: p_force not being zeroed before second call made
   !!    analytic force wrong
