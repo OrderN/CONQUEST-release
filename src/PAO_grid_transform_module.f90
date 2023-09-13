@@ -114,13 +114,11 @@ contains
     use primary_module, ONLY: domain
     use cover_module, ONLY: DCS_parts
     use set_blipgrid_module, ONLY : naba_atoms_of_blocks
-    !use angular_coeff_routines, ONLY : evaluate_pao, pao_elem_derivative_2
     use functions_on_grid, ONLY: gridfunctions, fn_on_grid
     use pao_format
 
     implicit none
     integer, intent(in) :: pao_fns
-    !procedure(evaluate_interface), intent(in) :: evaluate
     integer, intent(in) :: direction
 
     !local
@@ -143,7 +141,7 @@ contains
 
     interface
        ! Interface to return a value val given arguments
-       ! direction,species,l1,acz,m1,x,y,z. Implemented by
+       ! direction,species,l,acz,m,x,y,z. Implemented by
        ! evaluate_pao() and pao_elem_derivative_2().
        subroutine evaluate(direction,species,l,acz,m,x,y,z,val)
          use datatypes, only: double
