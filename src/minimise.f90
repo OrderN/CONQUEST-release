@@ -218,19 +218,21 @@ contains
        if(present(iter)) then
           if(iter==0 .and. (.not. restart_DM)) then
              reset_L = .true.
+          else if(iter==0 .and. (restart_DM)) then
+             reset_L = .false.
           end if
        end if
     else if(.NOT.restart_DM) then 
        reset_L = .true.
     endif
+    ! Now check
+    if(reset_L .and. flag_LmatrixReuse .and. flag_DM_converged) reset_L = .false.
+    if((.not.reset_L) .and. (.not.flag_DM_converged) .and. (.not.restart_DM)) reset_L = .true.
     ! If General.LoadDM T is set, do not reset_L but only the first time
     if(restart_DM) then
        reset_L = .false.
        restart_DM = .false.
     end if
-    ! Now check
-    if(reset_L .and. flag_LmatrixReuse .and. flag_DM_converged) reset_L = .false.
-    if((.not.reset_L) .and. (.not.flag_DM_converged) .and. (.not.restart_DM)) reset_L = .true.
     dE_DMM = zero
     dE_SCF = zero
     dE_PAO = zero
