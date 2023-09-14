@@ -18,7 +18,7 @@ contains
     use io_module, ONLY: pdb_format, pdb_template, read_atomic_positions, flag_MatrixFile_BinaryFormat
     use dimens, ONLY: r_super_x, r_super_y, r_super_z, GridCutoff
     use species_module, ONLY: n_species, species_label, species_file, mass, type_species, charge, nsf_species
-    use units, ONLY: HaToeV
+    use units, ONLY: HaToeV, dist_units, dist_conv, ang, bohr, BohrToAng
     use block_module, only: n_pts_in_block, in_block_x,in_block_y,in_block_z, blocks_raster, blocks_hilbert
     use pseudo_tm_info, only: setup_pseudo_info
     use GenComms,       only: cq_abort
@@ -26,7 +26,7 @@ contains
     
     implicit none
 
-    character(len=80) :: input_string, proc_coords
+    character(len=80) :: input_string, proc_coords, tmp
     integer :: i, j, n_grid_x, n_grid_y, n_grid_z
     integer :: n_kp_lines
     logical :: flag_kp_lines, flag_spin_polarisation, flag_Multisite
@@ -37,6 +37,17 @@ contains
     ! Load the Conquest_input files
     call load_input
     ! Now scan for parameters
+    ! Distance units
+    tmp = fdf_string(8,'General.DistanceUnits','bohr')
+    if(leqi(tmp(1:2),'a0').OR.leqi(tmp(1:2),'bo')) then
+       dist_units = bohr
+       dist_conv = one
+    else if(leqi(tmp(1:1),'A')) then
+       dist_units = ang
+       ! NB this is used to convert internal Conquest distances in Bohr to Angstroms for output
+       dist_conv = BohrToAng
+    endif
+    ! Spin
     flag_spin_polarisation   = fdf_boolean('Spin.SpinPolarised', .false.)
     nspin = 1
     if(flag_spin_polarisation) nspin = 2
