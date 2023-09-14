@@ -218,6 +218,8 @@ contains
        if(present(iter)) then
           if(iter==0 .and. (.not. restart_DM)) then
              reset_L = .true.
+          else if(iter==0 .and. (restart_DM)) then
+             reset_L = .false.
           end if
        end if
     else if(.NOT.restart_DM) then 

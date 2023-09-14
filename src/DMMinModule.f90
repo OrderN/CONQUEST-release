@@ -248,7 +248,6 @@ contains
        early   = .true.  ! Do early DM iterations by default
        if (flag_SkipEarlyDM) then
           early = .false.
-          resetL = .false.
        end if
 
        ! Start with the transpose of S^-1
