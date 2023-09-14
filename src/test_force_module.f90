@@ -1637,7 +1637,7 @@ contains
     use GenComms,                   only: myid, inode, ionode, cq_abort
     use H_matrix_module,            only: get_H_matrix
     use blip_grid_transform_module, only: blip_to_support_new
-    use PAO_grid_transform_module,  only: single_PAO_to_any
+    use PAO_grid_transform_module,  only: PAO_or_gradPAO_to_grid
     use functions_on_grid,          only: atomfns
     use density_module,             only: density
     use maxima_module,              only: maxngrid
@@ -1710,8 +1710,8 @@ contains
        ! Reproject blips
        call blip_to_support_new(inode-1, atomfns)    
     else if (flag_basis_set == PAOs) then
-       ! Regenerate PAO with a call to single_PAO_to_any
-       call single_PAO_to_any(atomfns, evaluate_pao, 0)
+       ! Regenerate PAO with a call to PAO_or_gradPAO_to_grid
+       call PAO_or_gradPAO_to_grid(atomfns, evaluate_pao, 0)
     end if
     ! Note that we've held K fixed but allow potential to vary ? Yes:
     ! this way we get h_on_atomfns in workspace_support

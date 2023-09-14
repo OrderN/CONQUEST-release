@@ -964,7 +964,7 @@ contains
                                            inode, ionode
     !use DiagModule,                  only: diagon
 !    use blip_gradient,               only: get_support_gradient
-    use PAO_grid_transform_module,   only: single_PAO_to_any
+    use PAO_grid_transform_module,   only: PAO_or_gradPAO_to_grid
     use build_PAO_matrices,          only: assemble_deriv_2
     use cover_module,                only: BCS_parts
     use functions_on_grid,           only: atomfns,                  &
@@ -1311,7 +1311,7 @@ contains
           if (flag_basis_set == blips) then
              call blip_to_grad_new(inode-1, dir1, tmp_fn)
           else if (flag_basis_set == PAOs) then
-             call single_PAO_to_any(tmp_fn, pao_elem_derivative_2, dir1)
+             call PAO_or_gradPAO_to_grid(tmp_fn, pao_elem_derivative_2, dir1)
           else
              call cq_abort("pulay_force: basis set undefined ", flag_basis_set)
           end if

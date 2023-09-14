@@ -54,10 +54,10 @@ module PAO_grid_transform_module
 
 contains
 
-!!****f* PAO_grid_transform_module/single_PAO_to_any *
+!!****f* PAO_grid_transform_module/PAO_or_gradPAO_to_grid *
 !!
 !!  NAME
-!!   single_PAO_to_any
+!!   PAO_or_gradPAO_to_grid
 !!  USAGE
 !!
 !!  PURPOSE
@@ -95,10 +95,10 @@ contains
 !!    Removed unused npao1 and atom_species
 !!   2023/08/23 11:20 tkoskela
 !!    Added OMP threading, merged single_PAO_to_grad and single_PAO_to_grid into
-!!    single subroutine single_PAO_to_any (for lack of better name)
+!!    single subroutine PAO_or_gradPAO_to_grid
 !!  SOURCE
 !!
-  subroutine single_PAO_to_any(pao_fns, evaluate, direction)
+  subroutine PAO_or_gradPAO_to_grid(pao_fns, evaluate, direction)
 
     use datatypes, only: double
     use primary_module, ONLY: bundle
@@ -258,7 +258,7 @@ contains
     call stop_timer(tmr_std_allocation)
     call stop_timer(tmr_std_basis)
     return
-  end subroutine single_PAO_to_any
+  end subroutine PAO_or_gradPAO_to_grid
   !!***
 
 ! -----------------------------------------------------------
