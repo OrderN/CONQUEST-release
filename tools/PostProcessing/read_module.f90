@@ -44,6 +44,7 @@ contains
        dist_conv = one
     else if(leqi(tmp(1:1),'A')) then
        dist_units = ang
+       ! NB this is used to convert internal Conquest distances in Bohr to Angstroms for output
        dist_conv = BohrToAng
     endif
     ! Spin
