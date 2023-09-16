@@ -41,7 +41,7 @@ module exx_module
   use timer_module,              only: start_backtrace, stop_backtrace, cq_timer
   !**<lat>** ISF Poisson solver Will be available in the forthcoming version 
   !use Poisson_Solver,            only: PSolver, createKernel, gequad
-
+  use global_module,             only: io_lun
   use exx_types,                 only: reckernel_3d, fftwrho3d, exx_debug
   use exx_io
 
@@ -524,24 +524,24 @@ contains
     end if
     !
     if ( inode == ionode .and. exx_debug ) then
-       write(unit,2) ('Entering in the Hartree-Fock module')
-       write(unit,41) eri_scheme
-       write(unit,42) phil_scheme
-       write(unit,43) alloc_scheme
-       !write(unit,48) mem_scheme
-       write(unit,44) exx_screen, scr_scheme, screen, screen*BohrToAng
+       write(io_lun,2) ('Entering in the Hartree-Fock module')
+       write(io_lun,41) eri_scheme
+       write(io_lun,42) phil_scheme
+       write(io_lun,43) alloc_scheme
+       !write(io_lun,48) mem_scheme
+       write(io_lun,44) exx_screen, scr_scheme, screen, screen*BohrToAng
        
-       write(unit,46) exx_overlap
-       write(unit,47) pao_scheme
-       write(unit,20)
-       write(unit,21) r_max, r_max*BohrToAng
-       write(unit,22) r_int, r_int*BohrToAng
-       write(unit,23) grid_spacing, grid_spacing*BohrToAng
-       write(unit,24) ngrid
-       write(unit,25) 
-       write(unit,26) edge, edge*BohrToAng
-       write(unit,27) volume, volume*BohrToAng**3
-       write(unit,28) ngrid**3
+       write(io_lun,46) exx_overlap
+       write(io_lun,47) pao_scheme
+       write(io_lun,20)
+       write(io_lun,21) r_max, r_max*BohrToAng
+       write(io_lun,22) r_int, r_int*BohrToAng
+       write(io_lun,23) grid_spacing, grid_spacing*BohrToAng
+       write(io_lun,24) ngrid
+       write(io_lun,25) 
+       write(io_lun,26) edge, edge*BohrToAng
+       write(io_lun,27) volume, volume*BohrToAng**3
+       write(io_lun,28) ngrid**3
 
     end if
 
@@ -552,16 +552,16 @@ contains
        case('default')
           scheme = trim(scheme)//trim(exx_pscheme_default)
           if ( inode == ionode ) then
-             write(unit,30) solver, scheme
-             write(unit,31) ('G=0 component neglected... warning: inaccurate !')
+             write(io_lun,30) solver, scheme
+             write(io_lun,31) ('G=0 component neglected... warning: inaccurate !')
           end if
        case('ewald')
           if (ewald_alpha < very_small) then
              ewald_alpha = real(3.0,double)
           end if
           if ( inode == ionode ) then
-             write(unit,30) solver, scheme
-             write(unit,32) ewald_alpha
+             write(io_lun,30) solver, scheme
+             write(io_lun,32) ewald_alpha
           end if
           
        case('pulay')
@@ -576,35 +576,35 @@ contains
           end if 
           pulay_radius = pulay_factor*pulay_radius
           if ( inode == ionode ) then
-             write(unit,30) solver, scheme
-             write(unit,33) pulay_factor
-             write(unit,34) pulay_radius
+             write(io_lun,30) solver, scheme
+             write(io_lun,33) pulay_factor
+             write(io_lun,34) pulay_radius
           end if
        case('yukawa')
           if (p_omega < very_small) then
              p_omega = magic_number
              p_omega = -log(threshold*r_int)/r_int
           end if
-          write(unit,30) solver, scheme
-          write(unit,35) p_omega
+          write(io_lun,30) solver, scheme
+          write(io_lun,35) p_omega
           
        case('gauss')
           if ( inode == ionode ) then
-             write(unit,30) solver, scheme
+             write(io_lun,30) solver, scheme
           end if
        case default
           scheme = trim(exx_pscheme_default)
           if ( inode == ionode ) then
-             write(unit,30) solver, scheme
-             write(unit,31) ('WARNING: G=0 component neglected !')
+             write(io_lun,30) solver, scheme
+             write(io_lun,31) ('WARNING: G=0 component neglected !')
           end if
           
        end select poisson_fftw
        
     else if (exx_psolver == 'isf') then
        if ( inode == ionode ) then
-          write(unit,30) solver, scheme
-          write(unit,36) isf_order
+          write(io_lun,30) solver, scheme
+          write(io_lun,36) isf_order
        end if
     end if
    
@@ -649,7 +649,7 @@ contains
 28  format( 23x,'n^3_grid_points: ',i12)  
     
     !! Poisson solver
-30  format(/24x,'Poisson Solver: ',a20,/32x,'Scheme: ',a20)  
+30  format(/20x,'EXX Poisson Solver: ',a20,/32x,'Scheme: ',a20)  
     ! Warning
 31  format( 24x,a34) 
     ! Ewald scheme
