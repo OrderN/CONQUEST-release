@@ -161,6 +161,8 @@ contains
 !!    flag_MDold was removed.
 !!   2019/12/02 15:17 dave 
 !!    Added checks to round RadiusAtomf and RadiusSupport to safe value (including grid points)
+!!   2034/09/16 14:18 lionel 
+!!    Check consistency of Xrange wrt r_exx read from input 
 !!  SOURCE
 !!
   subroutine set_dimensions(inode, ionode,HNL_fac,non_local, n_species, non_local_species, core_radius)
@@ -311,24 +313,18 @@ contains
 
     ! **< lat >** don't touch
     if(flag_exx) then
-       if( rcut(Xrange) > rcut(Hrange) ) then
-          rcut(Hrange)  = rcut(Xrange)
-          rcut(SXrange) = rcut(Hrange)
-          !
-       else if ( rcut(Xrange) <= zero ) then
+       if ( r_exx <= zero ) then
           rcut(Xrange)  = rcut(Hrange)
           rcut(SXrange) = rcut(Hrange)
-          !
        else
           rcut(Xrange)   = two*r_exx
           rcut(SXrange)  = two*r_exx
-          !
        endif
     else
        rcut(Xrange)   = two
        rcut(SXrange)  = two
     end if
-
+    
     ! New 16:25, 2014/08/29  **< lat >**
     !rcut(Hrange)   = (two*(r_h + r_nl))
     !rcut(Hrange)   = (two*(r_h+HNL_fac*r_core))
