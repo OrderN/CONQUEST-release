@@ -7,6 +7,32 @@ Installation
 You will need to download and compile the code before you can use it;
 we do not supply binaries.
 
+.. _install_spack:
+
+Installing with Spack
+-----------
+
+CONQUEST and all of its dependencies can be installed with `Spack<https://spack.io/>`_.
+The CONQUEST package requires Spack v0.21 or later. If Spack isn't available or up to date on your
+system, it is relatively straightforward to install it with user permissions following the
+`install instructions<https://spack.readthedocs.io/en/latest/getting_started.html#installation>`_.
+When setting up Spack on a new system, it is recommended to configure it to use available
+`system compilers<https://spack.readthedocs.io/en/latest/getting_started.html#compiler-configuration>`_
+and `system packages<https://spack.readthedocs.io/en/latest/getting_started.html#system-packages>`_.
+Once spack is installed and set up, install CONQUEST with:
+
+``spack install conquest``
+
+and load the ``Conquest`` executable to ``PATH`` with
+
+``spack load conquest``
+
+The build can be customized by adding options to the
+`Spack spec<https://spack.readthedocs.io/en/latest/basic_usage.html#specs-dependencies>`_ ``conquest``.
+The CONQUEST package includes variants for OpenMP support and different matrix multiplication kernels,
+please see the `Spack package<https://spack.readthedocs.io/en/latest/package_list.html#conquest>`_ for
+more details.
+
 .. _install_down:
 
 Downloading
@@ -20,7 +46,7 @@ it can be cloned:
 
 where ``destination-directory`` should be set by the user.
 Alternatively, it can be downloaded from GitHub as a zip file and
-unpacked: 
+unpacked:
 
 `<https://github.com/OrderN/CONQUEST-release/archive/master.zip>`_
 
