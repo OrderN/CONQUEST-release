@@ -168,15 +168,15 @@ contains
     ! OpenMP required indexing variables
     integer :: nd1_1st(at%mx_halo), nd2_1st(mx_absb)
 
-!$omp parallel default(none)                                             &
-!$omp          shared(kpart, ibaddr, ib_nd_acc, nbnab, ibpart, ibseq,    &
-!$omp                 k_off, bndim2, mx_absb, mx_part, at, ahalo, chalo, &
-!$omp                 a, b, c)                                           &
-!$omp          private(i, j, k, j_in_halo, k_in_halo, k_in_part, nbkbeg, &
-!$omp                  nb_nd_kbeg, nd1, nd2, nd3, jpart, jseq, jbnab2ch, &
-!$omp                  nabeg, nbbeg, ncbeg, i_in_prim, icad, naaddr,     &
-!$omp                  nbaddr, ncaddr, n1, n2, n3, nd1_1st, nd2_1st,     &
-!$omp                  tempa, tempb, tempc, prend1, maxlen, sofar)
+! !$omp parallel default(none)                                             &
+! !$omp          shared(kpart, ibaddr, ib_nd_acc, nbnab, ibpart, ibseq,    &
+! !$omp                 k_off, bndim2, mx_absb, mx_part, at, ahalo, chalo, &
+! !$omp                 a, b, c)                                           &
+! !$omp          private(i, j, k, j_in_halo, k_in_halo, k_in_part, nbkbeg, &
+! !$omp                  nb_nd_kbeg, nd1, nd2, nd3, jpart, jseq, jbnab2ch, &
+! !$omp                  nabeg, nbbeg, ncbeg, i_in_prim, icad, naaddr,     &
+! !$omp                  nbaddr, ncaddr, n1, n2, n3, nd1_1st, nd2_1st,     &
+! !$omp                  tempa, tempb, tempc, prend1, maxlen, sofar)
     allocate(tempa(1,1), tempc(1,1))
     do k = 1, ahalo%nh_part(kpart) ! Loop over atoms k in current A-halo partn
        k_in_halo = ahalo%j_beg(kpart) + k - 1
@@ -297,7 +297,6 @@ contains
     end do ! end of k = 1, nahpart
     if (allocated(tempa)) deallocate(tempa)
     if (allocated(tempc)) deallocate(tempc)
-!$omp end parallel
     return
   end subroutine m_kern_max
   !!*****
@@ -445,15 +444,15 @@ contains
     !   mx_a = maxnsf
     !   maxlen = maxnsf * max(nbnab)
 
-!$omp parallel default(none)                                             &
-!$omp          shared(kpart, ibaddr, ib_nd_acc, nbnab, ibpart, ibseq,    &
-!$omp                 k_off, bndim2, mx_absb, mx_part, at, ahalo, chalo, &
-!$omp                 a, b, c)                                           &
-!$omp          private(i, j, k, j_in_halo, k_in_halo, k_in_part, nbkbeg, &
-!$omp                  nb_nd_kbeg, nd1, nd2, nd3, jpart, jseq, jbnab2ch, &
-!$omp                  nabeg, nbbeg, ncbeg, i_in_prim, icad, naaddr,     &
-!$omp                  nbaddr, ncaddr, n1, n2, n3, nd1_1st, nd2_1st,     &
-!$omp                  tempb, tempc, maxlen, sofar)
+! !$omp parallel default(none)                                             &
+! !$omp          shared(kpart, ibaddr, ib_nd_acc, nbnab, ibpart, ibseq,    &
+! !$omp                 k_off, bndim2, mx_absb, mx_part, at, ahalo, chalo, &
+! !$omp                 a, b, c)                                           &
+! !$omp          private(i, j, k, j_in_halo, k_in_halo, k_in_part, nbkbeg, &
+! !$omp                  nb_nd_kbeg, nd1, nd2, nd3, jpart, jseq, jbnab2ch, &
+! !$omp                  nabeg, nbbeg, ncbeg, i_in_prim, icad, naaddr,     &
+! !$omp                  nbaddr, ncaddr, n1, n2, n3, nd1_1st, nd2_1st,     &
+! !$omp                  tempb, tempc, maxlen, sofar)
     do k = 1, ahalo%nh_part(kpart) ! Loop over atoms k in current A-halo partn
        k_in_halo = ahalo%j_beg(kpart) + k - 1
        k_in_part = ahalo%j_seq(k_in_halo)
@@ -532,7 +531,6 @@ contains
        end do
 !$omp end do
     end do
-!$omp end parallel
     return
   end subroutine m_kern_min
   !!*****

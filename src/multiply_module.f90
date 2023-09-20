@@ -213,19 +213,10 @@ contains
     !write(io_lun,*) 'Returned ',a_b_c%ahalo%np_in_halo,myid
     ncover_yz=a_b_c%gcs%ncovery*a_b_c%gcs%ncoverz
 
-! #ifdef OMP_M
-! !$omp parallel default(none) &
-! !$omp          shared(a, b, c, a_b_c, myid, lena, lenc, tmr_std_allocation, &
-! !$omp                 ncover_yz, ibpart_rem, atrans, usegemm) &
-! !$omp          private(kpart, icall, ind_part, ipart, nnode, b_rem, &
-! !$omp                  lenb_rem, n_cont, part_array, ilen2, offset, &
-! !$omp                  nbnab_rem, ibind_rem, ib_nd_acc_rem, ibseq_rem, &
-! !$omp                  npxyz_rem, ibndimj_rem, k_off)
-! !$omp do
-! #end if
-
+    !$omp parallel default(shared)
     main_loop: do kpart = 1,a_b_c%ahalo%np_in_halo
 
+       !$omp master
        icall=1
        ind_part = a_b_c%ahalo%lab_hcell(kpart)
        new_partition = .true.
@@ -274,8 +265,10 @@ contains
           call end_part_comms(myid,n_cont,nbnab_rem,ibind_rem,npxyz_rem,&
                ibpart_rem,ncover_yz,a_b_c%gcs%ncoverz)
        end if
-
+       
        k_off=a_b_c%ahalo%lab_hcover(kpart) ! --- offset for pbcs
+       !$omp end master
+       
        if(a_b_c%mult_type.eq.1) then  ! C is full mult
           call m_kern_max( k_off,kpart,ib_nd_acc_rem, ibind_rem,nbnab_rem,&
                ibpart_rem,ibseq_rem,ibndimj_rem,&
@@ -290,10 +283,7 @@ contains
                a_b_c%prim%mx_iprim, lena, lenb_rem, lenc)
        end if
     end do main_loop
-! #ifdef OMP_M
-! !$omp end do
-! !$omp end parallel
-! #end if
+!$omp end parallel
     call start_timer(tmr_std_allocation)
     if(allocated(b_rem)) deallocate(b_rem)
     call stop_timer(tmr_std_allocation)
