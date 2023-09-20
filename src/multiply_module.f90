@@ -267,7 +267,11 @@ contains
        end if
        
        k_off=a_b_c%ahalo%lab_hcover(kpart) ! --- offset for pbcs
+       ! Omp master doesn't include a implicit barrier. We want master
+       ! to be finished with comms before calling the multiply kernels
+       ! hence the explicit barrier
        !$omp end master
+       !$omp barrier
        
        if(a_b_c%mult_type.eq.1) then  ! C is full mult
           call m_kern_max( k_off,kpart,ib_nd_acc_rem, ibind_rem,nbnab_rem,&
@@ -282,8 +286,9 @@ contains
                a_b_c%bmat(1)%mx_abs,a_b_c%parts%mx_mem_grp, &
                a_b_c%prim%mx_iprim, lena, lenb_rem, lenc)
        end if
+       !$omp barrier
     end do main_loop
-!$omp end parallel
+    !$omp end parallel
     call start_timer(tmr_std_allocation)
     if(allocated(b_rem)) deallocate(b_rem)
     call stop_timer(tmr_std_allocation)
