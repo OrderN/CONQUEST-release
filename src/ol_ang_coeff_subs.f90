@@ -833,7 +833,7 @@ contains
 !!  SOURCE
 !!
 
-  subroutine evaluate_pao(sp,l,nz,m,x,y,z,pao_val)
+  subroutine evaluate_pao(i_vector,sp,l,nz,m,x,y,z,pao_val)
 
     use datatypes
     use numbers
@@ -841,6 +841,7 @@ contains
 
     implicit none
 
+    integer, intent(in) :: i_vector ! dummy argument, included to satisfy interface in PAO_grid_transform_module
     integer, intent(in) :: sp,l,nz,m
     real(double), intent(in) :: x,y,z
     real(double), intent(out) :: pao_val
@@ -968,7 +969,7 @@ contains
     
     !RC 09/11/03 using (now debugged) routine pp_elem_derivative (see 
     ! above) as template for this sbrt pao_elem_derivative
-    real(double), intent(inout) :: x_i,y_i,z_i
+    real(double), intent(in) :: x_i,y_i,z_i
     real(double), intent(out) :: drvtv_val
     integer, intent(in) :: i_vector, l, m, spec, nzeta
     integer :: n1,n2
