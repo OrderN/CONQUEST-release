@@ -631,8 +631,8 @@ contains
 !!    Moved velocity array allocation/deallocation to init_md/end_md
 !!   2020/01/06 15:40 dave
 !!    Add pressure-based termination for equilibration and remove Berendsen thermostat
-!!   2023/09/05 lu
-!!    Added variable temp_ion_end to allow simulations with a variable temperature
+!!   2023/09/21 lu
+!!    Added variables temp_ion_end and temp_change_step to allow simulations with a variable temperature
 !!  SOURCE
 !!
   subroutine md_run (fixed_potential, vary_mu, total_energy)
@@ -721,6 +721,8 @@ contains
     ! thermostat, barostat
     type(type_thermostat), target :: thermo
     type(type_barostat), target   :: baro
+
+    real(double)                  :: temp_change_step
 
     character(len=12) :: subname = "md_run: "
     character(len=120) :: prefix
@@ -828,18 +830,26 @@ contains
        mdl%step = iter
        
        ! At a given time step, if the difference between T_ext and the final temperature is larger than 
-       ! the temperature step (with 5% margin), then update T_ext 
+       ! the temperature step (with 5% margin), then update T_ext
        ! Temperature evolves linearly from temp_ion to temp_ion_end over MDn_steps steps
-       ! Stop when target temperature has been reached
-       if  (abs(mdl%T_ext - temp_ion_end) > 0.95*abs((temp_ion_end-temp_ion)/dble(MDn_steps))) then
-         mdl%T_ext = temp_ion+(dble(iter-1)/dble(MDn_steps))*(temp_ion_end-temp_ion)
-         write(io_lun,fmt='(6x, "Thermostat temperature at step ", i5, ": ", f9.1, " K")') iter, mdl%T_ext 
+       ! Stop when target temperature has been reached (i.e. abs(dT) < abs(temp_change_step) )
+       temp_change_step = (temp_ion_end-temp_ion)/real(MDn_steps-1,double)
+       if  (abs(mdl%T_ext - temp_ion_end) > 0.95*abs(temp_change_step)) then
+         mdl%T_ext = temp_ion+(real(iter-1,double)*temp_change_step)
          ! Update target ke for SVR
          thermo%ke_target = half*md_ndof_ions*fac_Kelvin2Hartree*mdl%T_ext
-         write(io_lun,fmt='(6x, "kee target is now" , f8.3)') thermo%ke_target
+         ! Report the current thermostat temperature
+         if (inode==ionode .and. iprint_MD > 0) then
+            write(io_lun,fmt='(6x, "Thermostat temperature at step ", i5, ": ", f9.1, " K")') iter, mdl%T_ext
+         end if
+         if (inode == ionode .and. iprint_MD > 1 ) then
+            write(io_lun,fmt='(6x, "kee target is now" , f8.3)') thermo%ke_target
+         end if
          
-       else if (abs(temp_ion_end-temp_ion) > 0.0001) then
-         write(io_lun,fmt='(6x, "Target temperature (", f9.1," K) has been reached. Stopping..")') mdl%T_ext 
+       else if (temp_ion_end /= temp_ion) then ! Ensure that temp_ion_end was different from temp_ion
+         if (inode == ionode) then
+           write(io_lun,fmt='(6x, "Target temperature (", f9.1," K) has been reached. Stopping..")') mdl%T_ext
+         end if
 		 exit
        end if
 
