@@ -24,7 +24,13 @@ MULT_KERN = default
 DIAG_DUMMY = 
 
 #Include system-dependent variables
-include system.make
+#Get the system name automatically.
+SYSTEM = $(shell hostname -d | cut -d. -f1)
+ifneq ($(SYSTEM),)
+SYSTEM := .$(SYSTEM)
+endif
+SYSTEM_PATH = system/system$(SYSTEM).make
+include $(SYSTEM_PATH)
 
 #Include lists of object files
 include matrix.obj
@@ -53,7 +59,7 @@ NODE_OBJECTS_NODS = main.o datatypes_module.o numbers_module.o                  
 SRCS_NODS = $(NODE_OBJECTS_NODS:.o=.f90) basic_types.f90 datatypes_module.f90 matrix_data_module.f90 numbers_module.f90 
 
 #Dependency rule
-deps.obj.inc: $(SRCS_NODS) system.make
+deps.obj.inc: $(SRCS_NODS) $(SYSTEM_PATH)
 	touch $(COMMENT)
 	$(ECHOSTR) "module datestamp" > datestamp.f90
 	$(ECHOSTR) "  implicit none" >> datestamp.f90
@@ -92,7 +98,7 @@ initial_read_module.o:initial_read_module.f90 datestamp.o
 #	$(FC) $(COMPFLAGS) -c datestamp.f90
 
 tar:
-	tar cvf ../$(TARNAME) *.f *.f90 *.obj Makefile* makemake system.make system/*.make FFT/*.f FFT/Makefile template* utilities/*f90 utilities/Makefile
+	tar cvf ../$(TARNAME) *.f *.f90 *.obj Makefile* makemake $(SYSTEM_PATH) system/*.make FFT/*.f FFT/Makefile template* utilities/*f90 utilities/Makefile
 	gzip ../$(TARNAME)
 
 clean:
@@ -141,7 +147,7 @@ notimers:
 	  grep -vi 'timer_' $${objectfile} > $(NOTIMERS_DIR)/$${objectfile}; \
 	done
 	@rm -f $(NOTIMERS_DIR)/timer_*.f90
-	@cp -pfr FFT Makefile Makefile.Doc utilities *.f makemake system.make $(NOTIMERS_DIR)/
+	@cp -pfr FFT Makefile Makefile.Doc utilities *.f makemake $(SYSTEM_PATH) $(NOTIMERS_DIR)/
 	@echo "New sources without timers are in $(NOTIMERS_DIR)"
 
 nostdtimers:
@@ -159,7 +165,7 @@ nostdtimers:
 	  grep -vi 'timer_std' $${objectfile} > $(NOSTDTIMERS_DIR)/$${objectfile}; \
 	done
 	@rm -f ${NOSTDTIMERS_DIR}/timer_std*.f90
-	@cp -pfr FFT Makefile Makefile.Doc utilities *.f makemake system.make $(NOSTDTIMERS_DIR)/
+	@cp -pfr FFT Makefile Makefile.Doc utilities *.f makemake $(SYSTEM_PATH) $(NOSTDTIMERS_DIR)/
 	@echo "New sources without standard timers are in $(NOSTDTIMERS_DIR)"
 
 noloctimers:
@@ -171,7 +177,7 @@ noloctimers:
 	do \
 	  grep -vi 'tmr_l' $${sourcefile} > $(NOLOCTIMERS_DIR)/$${sourcefile}; \
 	done
-	@cp -pfr FFT Makefile Makefile.Doc utilities *.f *.obj makemake system.make $(NOLOCTIMERS_DIR)/
+	@cp -pfr FFT Makefile Makefile.Doc utilities *.f *.obj makemake $(SYSTEM_PATH) $(NOLOCTIMERS_DIR)/
 	@echo "New sources without local timers are in $(NOLOCTIMERS_DIR)"
 
 

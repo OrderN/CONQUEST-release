@@ -61,7 +61,7 @@ jobs:
     - name: Build
       working-directory: ${{github.workspace}}/src
       run: |
-        cp gha.make system.make
+        cp system/gha.make system/system.make
         make -j ${{matrix.np}}
 
     - name: Run test 001
