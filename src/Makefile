@@ -31,6 +31,7 @@ SYSTEM := .$(SYSTEM)
 endif
 SYSTEM_PATH = system/system$(SYSTEM).make
 include $(SYSTEM_PATH)
+$(info Running on SYSTEM $(SYSTEM), using makefile $(SYSTEM_PATH))
 
 #Include lists of object files
 include matrix.obj
