@@ -688,6 +688,7 @@ contains
                               update_pos_and_box, integrate_pt, init_md, end_md
     use atoms,          only: distribute_atoms,deallocate_distribute_atom
     use global_module,  only: atom_coord_diff, iprint_MD, area_moveatoms
+    use numbers,        only: RD_ERR
 
     implicit none
 
@@ -845,8 +846,8 @@ contains
          if (inode == ionode .and. iprint_MD > 1 ) then
             write(io_lun,fmt='(6x, "kee target is now" , f8.3)') thermo%ke_target
          end if
-         
-       else if (temp_ion_end /= temp_ion) then ! Ensure that temp_ion_end was different from temp_ion
+       ! Difference is lower than the temperature step. Ensure that temp_ion_end was different from temp_ion
+       else if (abs(temp_ion_end-temp_ion) > RD_ERR) then
          if (inode == ionode) then
            write(io_lun,fmt='(6x, "Target temperature (", f9.1," K) has been reached. Stopping..")') mdl%T_ext
          end if
