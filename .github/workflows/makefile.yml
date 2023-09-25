@@ -62,7 +62,7 @@ jobs:
       working-directory: ${{github.workspace}}/src
       run: |
         cp system/gha.make system/system.`hostname -d | cut -d. -f1`.make
-	ls system
+        ls system
         make -j ${{matrix.np}}
 
     - name: Run test 001
