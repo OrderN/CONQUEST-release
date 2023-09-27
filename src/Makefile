@@ -30,8 +30,12 @@ ifneq ($(SYSTEM),)
 SYSTEM := .$(SYSTEM)
 endif
 SYSTEM_PATH = system/system$(SYSTEM).make
+ifneq ("$(wildcard $(SYSTEM_PATH))","")
+$(info Building on SYSTEM $(SYSTEM), using makefile $(SYSTEM_PATH))
 include $(SYSTEM_PATH)
-$(info Running on SYSTEM $(SYSTEM), using makefile $(SYSTEM_PATH))
+else
+$(error Cannot find $(SYSTEM_PATH) file for system $(SYSTEM). Please make one, using system/system.example.make as an example)
+endif
 
 #Include lists of object files
 include matrix.obj
