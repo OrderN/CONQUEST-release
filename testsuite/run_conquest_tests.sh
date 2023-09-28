@@ -11,6 +11,7 @@
 NP=${1:-1}
 NT=${2:-1}
 export OMP_NUM_THREADS=$NT
+export OMP_STACKSIZE=100M
 echo "Running tests on $NP processes and $NT threads"
 
 (cd ../src; make -j $NP)
