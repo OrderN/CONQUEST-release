@@ -25,11 +25,12 @@ DIAG_DUMMY =
 
 #Include system-dependent variables
 #Get the system name automatically.
-SYSTEM = $(shell hostname -d | cut -d. -f1)
+SYSTEM = $(shell hostname -d)
 ifneq ($(SYSTEM),)
-SYSTEM := .$(SYSTEM)
+SYSTEM_PATH = system/system.$(SYSTEM).make
+else
+SYSTEM_PATH = system/system.make
 endif
-SYSTEM_PATH = system/system$(SYSTEM).make
 ifneq ("$(wildcard $(SYSTEM_PATH))","")
 $(info Building on SYSTEM $(SYSTEM), using makefile $(SYSTEM_PATH))
 include $(SYSTEM_PATH)
