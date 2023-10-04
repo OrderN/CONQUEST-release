@@ -44,8 +44,14 @@ a working MPI installation including a Fortran90 compiler (often
 Additionally, Conquest can use LibXC if it is available (v2.x or
 later).
 
-The library locations are set in the ``system.make`` file in the ``src/``
-directory, along with other parameters needed for compilation.
+The library locations are set in the ``system.<systemname>.make`` file in the ``src/system``
+directory, along with other parameters needed for compilation. ``system.<systemname>.make``
+files are provided for some HPC systems used by the community, but if you want to run
+locally or on a different system, you need to provide an appropriate ``system.<systemname>.make``
+file. Use ``src/system/system.example.make`` as a starting point. Get the ``<systemname>``
+by running ``hostname -d`` in your prompt, then name your file appropriately and move it to
+the ``src/system`` directory. If ``hostname -d`` returns empty (e.g. you are running on a
+local machine), the system-specific makefile should be named ``system.make``.
 
 * ``FC`` (typically ``FC=mpif90`` will be all that is required)
 * ``COMPFLAGS`` (set these to specify compiler options such as

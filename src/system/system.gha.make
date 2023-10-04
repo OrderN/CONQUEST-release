@@ -1,3 +1,5 @@
+# System-specific makefile for the GitHub Actions runners.
+
 # Linking flags
 LINKFLAGS=-fopenmp -L/usr/lib -L/usr/lib/x86_64-linux-gnu
 ARFLAGS=
