@@ -356,7 +356,6 @@ contains
     integer :: naaddr, nbaddr, ncaddr
 
     !$omp single
-    
     ! Loop over atoms k in current A-halo partn
     do k = 1, ahalo%nh_part(kpart)
        k_in_halo = ahalo%j_beg(kpart) + k - 1
