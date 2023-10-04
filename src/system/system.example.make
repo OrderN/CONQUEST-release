@@ -1,4 +1,5 @@
-#
+# This is an example system-specific makefile. You will need to adjust
+# it for the actual system you are running on.
 
 # Set compilers
 FC=mpif90

@@ -1,4 +1,6 @@
-#
+# This is a system.make file for the UCL Kathleen machine. See
+# https://www.rc.ucl.ac.uk/docs/Clusters/Kathleen/ for details
+
 
 # Set compilers
 FC=mpif90

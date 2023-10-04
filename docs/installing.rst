@@ -48,9 +48,10 @@ The library locations are set in the ``system.<systemname>.make`` file in the ``
 directory, along with other parameters needed for compilation. ``system.<systemname>.make``
 files are provided for some HPC systems used by the community, but if you want to run
 locally or on a different system, you need to provide an appropriate ``system.<systemname>.make``
-file. Use ``src/system/system.example.make`` as a starting point. If you are running on
-a local machine (``hostname -d`` returns empty), the system-specific makefile should be named
-``system.make``.
+file. Use ``src/system/system.example.make`` as a starting point. Get the ``<systemname>``
+by running ``hostname -d`` in your prompt, then name your file appropriately and move it to
+the ``src/system`` directory. If ``hostname -d`` returns empty (e.g. you are running on a
+local machine), the system-specific makefile should be named ``system.make``.
 
 * ``FC`` (typically ``FC=mpif90`` will be all that is required)
 * ``COMPFLAGS`` (set these to specify compiler options such as
