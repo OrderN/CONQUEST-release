@@ -631,8 +631,8 @@ contains
 !!    Moved velocity array allocation/deallocation to init_md/end_md
 !!   2020/01/06 15:40 dave
 !!    Add pressure-based termination for equilibration and remove Berendsen thermostat
-!!   2023/09/21 lu
-!!    Added variables temp_ion_end and temp_change_step to allow simulations with a variable temperature
+!!   2023/10/09 lu
+!!    Added variables XXX to enable simulations with a variable temperature
 !!  SOURCE
 !!
   subroutine md_run (fixed_potential, vary_mu, total_energy)
@@ -683,7 +683,9 @@ contains
                               md_n_ys, md_n_mts, ion_velocity, lattice_vec, &
                               md_baro_type, target_pressure, md_ndof_ions, &
                               md_equil_steps, md_equil_press, md_tau_T, md_tau_P, &
-                              md_thermo_type, temp_ion_end
+                              md_thermo_type, &
+                              flag_variable_temperature, md_variable_temperature_method, &
+                              md_initial_temperature,md_final_temperature, md_variable_temperature_rate
     use md_misc,        only: write_md_data, get_heat_flux, &
                               update_pos_and_box, integrate_pt, init_md, end_md
     use atoms,          only: distribute_atoms,deallocate_distribute_atom
@@ -723,6 +725,7 @@ contains
     type(type_thermostat), target :: thermo
     type(type_barostat), target   :: baro
 
+    ! Variable temperature
     real(double)                  :: temp_change_step
 
     character(len=12) :: subname = "md_run: "
@@ -832,11 +835,13 @@ contains
        
        ! At a given time step, if the difference between T_ext and the final temperature is larger than 
        ! the temperature step (with 5% margin), then update T_ext
-       ! Temperature evolves linearly from temp_ion to temp_ion_end over MDn_steps steps
+       ! Temperature evolves linearly from md_initial_temperature to md_final_temperature by step of temp_change_step
        ! Stop when target temperature has been reached (i.e. abs(dT) < abs(temp_change_step) )
-       temp_change_step = (temp_ion_end-temp_ion)/real(MDn_steps-1,double)
-       if  (abs(mdl%T_ext - temp_ion_end) > 0.95*abs(temp_change_step)) then
-         mdl%T_ext = temp_ion+(real(iter-1,double)*temp_change_step)
+       ! temp_change_step = (md_final_temperature-md_initial_temperature)/real(MDn_steps-1,double)
+       temp_change_step = md_variable_temperature_rate / mdl%timestep ! Unit is K
+       if  (abs(mdl%T_ext - md_final_temperature) > 0.95*abs(temp_change_step)) then
+         mdl%T_ext = md_initial_temperature+(real(iter-1,double)*temp_change_step)
+         ! Alternative relative change : mdl%T_ext = mdl%T_ext + temp_change_step
          ! Update target ke for SVR
          thermo%ke_target = half*md_ndof_ions*fac_Kelvin2Hartree*mdl%T_ext
          ! Report the current thermostat temperature
@@ -846,8 +851,8 @@ contains
          if (inode == ionode .and. iprint_MD > 1 ) then
             write(io_lun,fmt='(6x, "kee target is now" , f8.3)') thermo%ke_target
          end if
-       ! Difference is lower than the temperature step. Ensure that temp_ion_end was different from temp_ion
-       else if (abs(temp_ion_end-temp_ion) > RD_ERR) then
+       ! Difference is lower than the temperature step. Ensure that md_final_temperature was different from md_intial_temperature
+       else if (abs(md_final_temperature-md_initial_temperature) > RD_ERR) then
          if (inode == ionode) then
            write(io_lun,fmt='(6x, "Target temperature (", f9.1," K) has been reached. Stopping..")') mdl%T_ext
          end if

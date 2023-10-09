@@ -35,8 +35,7 @@ module md_misc
   use units,            only: HaBohr3ToGPa
   use md_control,       only: ion_velocity, md_nhc_mass, md_nhc_cell_mass, &
        flag_write_extxyz, flag_write_xsf, md_baro_type, md_ensemble, MDtimestep, &
-       flag_nhc, md_tau_P, md_tau_P_equil, md_tau_T, md_tau_T_equil, md_thermo_type, &
-       temp_ion_end
+       flag_nhc, md_tau_P, md_tau_P_equil, md_tau_T, md_tau_T_equil, md_thermo_type
 
   implicit none
 
@@ -70,9 +69,6 @@ contains
   !!    (introduced atom_vels in July, 2020.)
   !!   2022/10/04 17:27 dave
   !!    Reworking to set initial KE of ions correctly
-  !!   2023/09/05 lu
-  !!    Added variable temp_ion_end to allow simulations with a variable temperature
-  !!  SOURCE
   !!  
   subroutine init_md(baro, thermo, mdl, md_ndof, nequil, second_call)
 
@@ -80,8 +76,7 @@ contains
     use input_module,   only: leqi
     use io_module,      only: read_velocity
     use md_model,       only: type_md_model
-    use md_control,     only: lattice_vec, type_thermostat, type_barostat, read_md_checkpoint, &
-                              temp_ion_end
+    use md_control,     only: lattice_vec, type_thermostat, type_barostat, read_md_checkpoint
     use GenComms,       only: inode, ionode, gcopy, cq_warn
     use memory_module,  only: reg_alloc_mem, type_dbl
     use global_module,  only: rcellx, rcelly, rcellz, temp_ion, ni_in_cell, &

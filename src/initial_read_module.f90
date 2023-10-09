@@ -930,7 +930,8 @@ contains
          md_calc_xlmass, md_equil_steps, md_equil_press, &
          md_tau_T_equil, md_tau_P_equil, md_p_drag, &
          md_t_drag, md_cell_constraint, flag_write_extxyz, MDtimestep, md_ensemble, &
-         temp_ion_end 
+         flag_variable_temperature, md_variable_temperature_method, &
+         md_variable_temperature_rate, md_initial_temperature, md_final_temperature
     use md_model,   only: md_tdep
     use move_atoms,         only: threshold_resetCD, &
          flag_stop_on_empty_bundle, &
@@ -1889,7 +1890,6 @@ contains
     else
        temp_ion           = fdf_double ('AtomMove.IonTemperature',300.0_double)
     end if
-    temp_ion_end       = fdf_double ('AtomMove.IonTemperatureEnd',temp_ion) 
 
 !!$
 !!$
@@ -2290,6 +2290,13 @@ contains
     end if
     flag_heat_flux = fdf_boolean('MD.HeatFlux', .false.)
 
+    !! Variable temperature
+    flag_variable_temperature = fdf_boolean('MD.VariableTemperature', .false.)
+    md_variable_temperature_method = fdf_string(20, 'MD.VariableTemperatureMethod', 'linear')
+    md_variable_temperature_rate = fdf_double('MD.VariableTemperatureRate', 0.0_double)
+    md_initial_temperature = fdf_double('MD.InitialTemperature',temp_ion)
+    md_final_temperature = fdf_double('MD.FinalTemperature',temp_ion)
+
     ! Barostat
     target_pressure    = fdf_double('AtomMove.TargetPressure', zero)
     md_box_mass        = fdf_double('MD.BoxMass', one)
@@ -2633,7 +2640,10 @@ contains
          numN_neutral_atom_projector, pseudo_type, OLDPS, SIESTA, ABINIT
     use input_module,         only: leqi, chrcap
     use control,    only: MDn_steps
-    use md_control, only: md_ensemble, temp_ion_end
+    use md_control, only: md_ensemble, &
+                          ! TODO: Check if those variables are needed
+                          flag_variable_temperature, md_variable_temperature_method, &
+                          md_initial_temperature, md_final_temperature, md_variable_temperature_rate
 
     implicit none
 
@@ -2690,9 +2700,9 @@ contains
        ensemblestr = md_ensemble
        call chrcap(ensemblestr,3)
        write(io_lun, fmt='(4x,a15,a3," MD run for ",i5," steps ")') job_str, ensemblestr, MDn_steps
-       write(io_lun, fmt='(6x,"Initial ion temperature: ",f9.3,"K")') temp_ion
-       if (temp_ion_end .ne. temp_ion) then
-         write(io_lun, fmt='(6x,"Final ion temperature: ",f9.3,"K")') temp_ion_end 
+       write(io_lun, fmt='(6x,"Initial thermostat temperature: ",f9.3,"K")') temp_ion
+       if (md_final_temperature .ne. md_initial_temperature) then
+         write(io_lun, fmt='(6x,"Final thermostat temperature: ",f9.3,"K")') md_final_temperature
        end if
        if(flag_XLBOMD) write(io_lun, fmt='(6x,"Using extended Lagrangian formalism")')
     else if(leqi(runtype,'lbfgs')) then
