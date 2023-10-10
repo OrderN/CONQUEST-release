@@ -76,7 +76,8 @@ contains
     use input_module,   only: leqi
     use io_module,      only: read_velocity
     use md_model,       only: type_md_model
-    use md_control,     only: lattice_vec, type_thermostat, type_barostat, read_md_checkpoint
+    use md_control,     only: lattice_vec, type_thermostat, type_barostat, &
+         read_md_checkpoint, read_md_temperature
     use GenComms,       only: inode, ionode, gcopy, cq_warn
     use memory_module,  only: reg_alloc_mem, type_dbl
     use global_module,  only: rcellx, rcelly, rcellz, temp_ion, ni_in_cell, &
@@ -228,7 +229,10 @@ contains
 
     ! N.B. atomic stress is allocated in initialisation_module/initialise! - zamaan
 
-    if (flag_MDcontinue) call read_md_checkpoint(thermo, baro)
+    if (flag_MDcontinue) then
+        call read_md_checkpoint(thermo, baro)
+        call read_md_temperature(thermo)
+    end if
 
   end subroutine init_md
   !!***

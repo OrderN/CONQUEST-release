@@ -2426,6 +2426,9 @@ contains
   !!   Zamaan Raza
   !!  CREATION DATE
   !!   2018/08/12 10:19
+  !!  MODIFICATION HISTORY
+  !!   2023/10/09 lu
+  !!    Added routine to write the current thermostat temperature in file md.temperature
   !!  SOURCE
   !!  
   subroutine write_md_checkpoint(th, baro)
@@ -2509,16 +2512,58 @@ contains
       end if
       call io_close(lun)
 
-      ! Write instantaneous temperature in md.temperature
-      open(unit=lun,file=md_temperature_file,status='replace')
-      write(lun, '(e20.12)') th%T_ext
-      call io_close(lun)
-
+      if (flag_variable_temperature) then
+        ! Write instantaneous temperature in md.temperature
+        open(unit=lun,file=md_temperature_file,status='replace')
+        write(lun, '(e20.12)') th%T_ext
+        call io_close(lun)
+      end if
 
     end if
 
   end subroutine write_md_checkpoint
   !!***
+
+  !! md_control/read_md_temperature *
+  !!  NAME
+  !!   read_md_checkpoint
+  !!  PURPOSE
+  !!   Read thermostat temperature for MD restart
+  !!  AUTHOR
+  !!   Zamaan Raza
+  !!  CREATION DATE
+  !!   2018/08/12 10:19
+  !!  MODIFICATION HISTORY
+  !!   2023/10/xx Anh Khoa Augustin Lu
+  !!    Read temperature of the thermostat for restart runs
+  !!  SOURCE
+  !!
+  subroutine read_md_temperature(th)
+
+    use GenComms,         only: gcopy
+    use input_module,     only: io_assign, io_close
+    use global_module,    only: min_layer
+
+    class(type_thermostat), intent(inout) :: th
+
+    integer                               :: lun
+
+    if (inode == ionode) then
+      if (iprint_MD + min_layer > -5) &
+        write(io_lun,*) &
+                "Reading MD thermostat temperature from ", md_temperature_file
+      call io_assign(lun)
+      open(unit=lun,file=md_temperature_file,status='old')
+      read(lun,*) th%T_ext
+      call io_close(lun)
+
+    end if
+
+    if (inode == ionode) then
+      write(io_lun, *) "Read thermostat temperature : ", th%T_ext , "K"
+    end if
+
+  end subroutine read_md_temperature
 
   !!****m* md_control/read_md_checkpoint *
   !!  NAME
@@ -2530,7 +2575,7 @@ contains
   !!  CREATION DATE
   !!   2018/08/12 10:19
   !!  MODIFICATION HISTORY
-  !!   2023/10/xx
+  !!   2023/10/xx Anh Khoa Augustin Lu
   !!    Read temperature of the thermostat for restart runs
   !!  SOURCE
   !!  

@@ -832,31 +832,43 @@ contains
 
     do iter = i_first, i_last ! Main MD loop
        mdl%step = iter
-       
-       ! At a given time step, if the difference between T_ext and the final temperature is larger than 
-       ! the temperature step (with 5% margin), then update T_ext
-       ! Temperature evolves linearly from md_initial_temperature to md_final_temperature by step of temp_change_step
-       ! Stop when target temperature has been reached (i.e. abs(dT) < abs(temp_change_step) )
-       ! temp_change_step = (md_final_temperature-md_initial_temperature)/real(MDn_steps-1,double)
-       temp_change_step = md_variable_temperature_rate / mdl%timestep ! Unit is K
-       if  (abs(mdl%T_ext - md_final_temperature) > 0.95*abs(temp_change_step)) then
-         mdl%T_ext = md_initial_temperature+(real(iter,double)*temp_change_step)
-         ! Alternative relative change : mdl%T_ext = mdl%T_ext + temp_change_step
-         ! Update target ke for SVR
-         thermo%ke_target = half*md_ndof_ions*fac_Kelvin2Hartree*mdl%T_ext
-         ! Report the current thermostat temperature
-         if (inode==ionode .and. iprint_MD > 0) then
-            write(io_lun,fmt='(6x, "Thermostat temperature at step ", i5, ": ", f9.1, " K")') iter, mdl%T_ext
+
+       if (flag_variable_temperature) then
+         ! At present, only linear evolution is supported
+         if (md_variable_temperature_method .ne. 'linear') then
+           if(inode==ionode) &      
+             write(*,*) 'Wrong method for variable temperature. Stopping.. (',trim(md_variable_temperature_method),' != "linear")'
+           exit
          end if
-         if (inode == ionode .and. iprint_MD > 1 ) then
-            write(io_lun,fmt='(6x, "kee target is now" , f8.3)') thermo%ke_target
+
+         ! At a given time step, if the difference between T_ext and the final temperature is larger than
+         ! the temperature step (with 5% margin), then update T_ext
+         ! Temperature evolves linearly from md_initial_temperature to md_final_temperature by step of temp_change_step
+         ! Stop when target temperature has been reached (i.e. abs(dT) < abs(temp_change_step) )
+         ! temp_change_step = (md_final_temperature-md_initial_temperature)/real(MDn_steps-1,double)
+         temp_change_step = md_variable_temperature_rate / mdl%timestep ! Unit is K
+
+         if  (abs(mdl%T_ext - md_final_temperature) > 0.95*abs(temp_change_step)) then
+           ! mdl%T_ext = md_initial_temperature+(real(iter,double)*temp_change_step)
+           mdl%T_ext = mdl%T_ext + temp_change_step
+           ! Update target ke for SVR
+           thermo%ke_target = half*md_ndof_ions*fac_Kelvin2Hartree*mdl%T_ext
+           ! Report the current thermostat temperature
+
+           write(io_lun,*) mdl%T_ext
+
+           if (inode==ionode .and. iprint_MD > 0) &
+             write(io_lun,fmt='(6x, "Thermostat temperature at step ", i5, ": ", f9.1, " K")') iter, mdl%T_ext
+
+           if (inode == ionode .and. iprint_MD > 1 ) &
+             write(io_lun,fmt='(6x, "kee target is now" , f8.3)') thermo%ke_target
+
+         ! Difference is lower than the temperature step. Ensure that md_final_temperature was different from md_intial_temperature
+         else if (abs(md_final_temperature-md_initial_temperature) > RD_ERR) then
+           if (inode == ionode) &
+             write(io_lun,fmt='(6x, "Target temperature (", f9.1," K) has been reached. Stopping..")') mdl%T_ext
+		   exit
          end if
-       ! Difference is lower than the temperature step. Ensure that md_final_temperature was different from md_intial_temperature
-       else if (abs(md_final_temperature-md_initial_temperature) > RD_ERR) then
-         if (inode == ionode) then
-           write(io_lun,fmt='(6x, "Target temperature (", f9.1," K) has been reached. Stopping..")') mdl%T_ext
-         end if
-		 exit
        end if
 
        if (inode==ionode .and. iprint_MD + min_layer > 0) &
