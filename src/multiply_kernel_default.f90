@@ -162,6 +162,7 @@ contains
     integer :: nd1, nd2, nd3
     integer :: naaddr, nbaddr, ncaddr
 
+    !$omp single
     ! Loop over atoms k in current A-halo partn
     do k = 1, ahalo%nh_part(kpart)
        k_in_halo = ahalo%j_beg(kpart) + k - 1
@@ -216,6 +217,7 @@ contains
           nabeg = nabeg + nd1 * nd3
        end do ! End of i = 1, at%n_hnab
     end do ! End of k = 1, nahpart
+    !$omp end single
     return
   end subroutine m_kern_max
   !!*****
@@ -353,6 +355,7 @@ contains
     integer :: nd1, nd2, nd3
     integer :: naaddr, nbaddr, ncaddr
 
+    !$omp single
     ! Loop over atoms k in current A-halo partn
     do k = 1, ahalo%nh_part(kpart)
        k_in_halo = ahalo%j_beg(kpart) + k - 1
@@ -402,6 +405,7 @@ contains
           nabeg = nabeg + nd1 * nd3
        end do
     end do
+    !$omp end single
     return
   end subroutine m_kern_min
   !!*****

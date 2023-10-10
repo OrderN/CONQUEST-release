@@ -168,16 +168,7 @@ contains
     ! OpenMP required indexing variables
     integer :: nd1_1st(at%mx_halo), nd2_1st(mx_absb)
 
-!$omp parallel default(none)                                             &
-!$omp          shared(kpart, ibaddr, ib_nd_acc, nbnab, ibpart, ibseq,    &
-!$omp                 k_off, bndim2, mx_absb, mx_part, at, ahalo, chalo, &
-!$omp                 a, b, c)                                           &
-!$omp          private(i, j, k, j_in_halo, k_in_halo, k_in_part, nbkbeg, &
-!$omp                  nb_nd_kbeg, nd1, nd2, nd3, jpart, jseq, jbnab2ch, &
-!$omp                  nabeg, nbbeg, ncbeg, i_in_prim, icad, naaddr,     &
-!$omp                  nbaddr, ncaddr, n1, n2, n3, nd1_1st, nd2_1st,     &
-!$omp                  tempa, tempb, tempc, maxnd1, maxnd2, maxnd3,      &
-!$omp                  maxlen, sofar)
+    ! Allocate tempa, tempb, tempc to largest possible size outside the loop
     maxnd1 = maxval(ahalo%ndimi)
     maxnd2 = maxval(bndim2)
     maxnd3 = maxval(ahalo%ndimj)
@@ -276,7 +267,6 @@ contains
 !$omp end do
     end do ! end of k = 1, nahpart
     deallocate(tempa, tempb, tempc)
-!$omp end parallel
     return
   end subroutine m_kern_max
   !!*****
@@ -420,16 +410,6 @@ contains
     ! OpenMP required indexing variables
     integer :: nd1_1st(at%mx_halo), nd2_1st(mx_absb)
 
-!$omp parallel default(none)                                             &
-!$omp          shared(kpart, ibaddr, ib_nd_acc, nbnab, ibpart, ibseq,    &
-!$omp                 k_off, bndim2, mx_absb, mx_part, at, ahalo, chalo, &
-!$omp                 a, b, c)                                           &
-!$omp          private(i, j, k, j_in_halo, k_in_halo, k_in_part, nbkbeg, &
-!$omp                  nb_nd_kbeg, nd1, nd2, nd3, jpart, jseq, jbnab2ch, &
-!$omp                  nabeg, nbbeg, ncbeg, i_in_prim, icad, naaddr,     &
-!$omp                  nbaddr, ncaddr, n1, n2, n3, nd1_1st, nd2_1st,     &
-!$omp                  tempb, tempc, maxnd1, maxnd2, maxnd3, maxlen,     &
-!$omp                  sofar)
     maxnd1 = maxval(ahalo%ndimi)
     maxnd2 = maxval(bndim2)
     maxnd3 = maxval(ahalo%ndimj)
@@ -503,7 +483,6 @@ contains
 !$omp end do
     end do
     deallocate(tempb, tempc)
-!$omp end parallel
     return
   end subroutine m_kern_min
   !!*****
