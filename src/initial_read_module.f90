@@ -2300,6 +2300,10 @@ contains
     md_variable_temperature_rate = fdf_double('MD.VariableTemperatureRate', 0.0_double)
     md_initial_temperature = fdf_double('MD.InitialTemperature',temp_ion)
     md_final_temperature = fdf_double('MD.FinalTemperature',temp_ion)
+    ! Override temp_ion if md_initial_temperature is set
+    if (flag_variable_temperature .and. (abs(md_initial_temperature-temp_ion) > RD_ERR)) then
+        temp_ion = md_initial_temperature
+    end if
 
     ! Barostat
     target_pressure    = fdf_double('AtomMove.TargetPressure', zero)
