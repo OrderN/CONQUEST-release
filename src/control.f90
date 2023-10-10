@@ -840,7 +840,7 @@ contains
        ! temp_change_step = (md_final_temperature-md_initial_temperature)/real(MDn_steps-1,double)
        temp_change_step = md_variable_temperature_rate / mdl%timestep ! Unit is K
        if  (abs(mdl%T_ext - md_final_temperature) > 0.95*abs(temp_change_step)) then
-         mdl%T_ext = md_initial_temperature+(real(iter-1,double)*temp_change_step)
+         mdl%T_ext = md_initial_temperature+(real(iter,double)*temp_change_step)
          ! Alternative relative change : mdl%T_ext = mdl%T_ext + temp_change_step
          ! Update target ke for SVR
          thermo%ke_target = half*md_ndof_ions*fac_Kelvin2Hartree*mdl%T_ext
