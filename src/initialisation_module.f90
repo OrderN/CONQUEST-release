@@ -1216,7 +1216,7 @@ contains
       ! where find_chdens = .false. (initial charge = atomic charge)
       ! But.. since this change will affect the result, we will issue this change later.
       !
-       if(restart_DM) find_chdens=.true.  ! 2018JFeb12 TM 
+      ! if(restart_DM) find_chdens=.true.  ! 2018JFeb12 TM 
 
        call my_barrier()
     endif
@@ -1283,21 +1283,7 @@ contains
 !!$
 !!$
 !!$
-    ! (2) Make an inital estimate for the density matrix, L, which is an
-    !     approximation to L = S^-1. Then use correct_electron_number()
-    !     to modify L so that the electron number is correct.
-    if (.not. flag_diagonalisation .and. find_chdens .and. (start .or. start_L)) then
-       call initial_L()
-       call my_barrier()
-       if (inode == ionode .and. iprint_init + min_layer > 2) &
-            write(io_lun, fmt='(4x,a)') trim(prefix)//' got L  matrix'
-       if (vary_mu) then
-          ! This cannot be timed within the routine
-          call start_timer(tmr_std_densitymat)
-          call correct_electron_number
-          call stop_timer(tmr_std_densitymat)
-       end if
-    end if
+    ! Load DM if flag is set; otherwise, with O(N), it will be set by McWeeny
     if (restart_DM) then
        if(.not.flag_diagonalisation) then
           call grab_matrix2('L',inode,nfile,Info,InfoGlob,index=index_MatrixFile,n_matrix=nspin)
@@ -1860,84 +1846,5 @@ contains
     !END OF DEBUGGING
 
   end subroutine check_setgrid
-
-
-  !!****f* initialisation/initial_L *
-  !!
-  !!  NAME
-  !!   initial_L
-  !!  USAGE
-  !!
-  !!  PURPOSE
-  !!   Finds initial L (set equal to 1/2 S^-1)
-  !!  INPUTS
-  !!
-  !!  USES
-  !!
-  !!  AUTHOR
-  !!   D.R.Bowler/C.M.Goringe
-  !!  CREATION DATE
-  !!   07/03/95
-  !!  MODIFICATION HISTORY
-  !!   04/05/01 dave
-  !!    Takes S^-1 from Hotelling's method
-  !!   21/06/2001 dave
-  !!    Added ROBODoc header and indented
-  !!   12:20, 2004/06/09 dave
-  !!    Fixed bug: Srange not Trange in final option
-  !!   10:09, 13/02/2006 drb
-  !!    Removed all explicit references to data_ variables and rewrote
-  !!    in terms of new
-  !!    matrix routines
-  !!   2006/11/14 07:58 dave
-  !!    Included in initialisation
-  !!   2011/07/01 L.Tong
-  !!    Added initialisation for matL_dn, for spin polarisation
-  !!   2012/03/27 L.Tong
-  !!   - Changed spin implementation
-  !!   2015/06/08 lat
-  !!    - Added experimental backtrace
-  !!   2018/11/13 17:30 nakata
-  !!    Changed matT to be spin_SF dependent
-  !!   2018/11/15 15:45 nakata
-  !!    Bug fix: matL(1) should be matL(spin)
-  !!  SOURCE
-  !!
-  subroutine initial_L(level)
-
-    use datatypes
-    use numbers,       only: half, zero
-    use mult_module,   only: matL, matT, matrix_sum
-    use global_module, only: nspin, flag_SpinDependentSF
-
-    implicit none
-
-    integer, optional :: level
-    integer           :: spin, spin_SF
-    type(cq_timer)    :: backtrace_timer
-    integer           :: backtrace_level 
-
-!****lat<$
-    if (       present(level) ) backtrace_level = level+1
-    if ( .not. present(level) ) backtrace_level = -10
-    call start_backtrace(t=backtrace_timer,who='initial_L',&
-         where=area,level=backtrace_level,echo=.true.)
-!****lat>$
-
-    spin_SF = 1
-    do spin = 1, nspin
-       if (flag_SpinDependentSF) spin_SF = spin
-       ! set L for the second spin component also equal to 1/2 S^-1
-       call matrix_sum(zero, matL(spin), half, matT(spin_SF))
-    end do
-
-!****lat<$
-    call stop_backtrace(t=backtrace_timer,who='initial_L',echo=.true.)
-!****lat>$
-
-    return
-  end subroutine initial_L
-  !!***
-
 
 end module initialisation

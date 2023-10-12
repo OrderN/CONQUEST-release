@@ -2188,6 +2188,10 @@ contains
     if (restart_DM .and. flag_Multisite .and. .not.read_option) then
        call cq_abort("When L or K matrix is read from files, SFcoeff also must be read from files for multi-site calculation.")
     endif
+    if(find_chdens .and. (.not.restart_DM)) then
+       call cq_warn(sub_name," Cannot make charge density from K without loading K! Starting from atomic densities.")
+       find_chdens = .false.
+    end if
 
     if (flag_XLBOMD) then
        kappa=fdf_double('XL.Kappa',2.0_double)
