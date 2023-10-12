@@ -1016,32 +1016,32 @@ MD.Ensemble (*string*)
     *default*: nve
 
 MD.Thermostat (*string*)
-    values: none/nhc/berendsen/svr
+    values: none/nhc/svr
 
     Thermostat type
 
     ``none``
         No thermostat (used for calculating temperature only)
-    ``berendsen``
-        Berendsen weak coupling thermostat
+    ``nhc``
+        Nose-Hoover chain
     ``svr``
-        Stochastic velocity rescaling
+        Stochastic velocity rescaling (Bussi)
 
     *default*: none
 
 MD.Barostat (*string*)
-    values: none/berendsen/iso-mttk/ortho-mttk/mttk
+    values: none/iso-mttk/ortho-mttk/mttk
 
     Barostat type. The following are the only valid thermostat/barostat
-    combinations for the NPT ensemble: ``berendsen``/ ``berendsen``,
-    ``nhc``/ ``pr``, ``svr``/ ``pr``
+    combinations for the NPT ensemble:  ``nhc``/ ``pr``, ``svr``/ ``pr``
 
     ``none``
         No barostat (used for calculating pressure only)
-    ``berendsen``
-        Berendsen weak coupling barostat
     ``pr``
         Parrinello-Rahman (extended system) barostat
+    ``mttk``
+        Martyna-Tuckerman-Tobias-Klein Barostat
+
 
     *default*: none
 
@@ -1123,11 +1123,6 @@ MD.nMTS (*integer*)
 
     *default*: 1
 
-MD.BerendsenEquil (*integer*)
-    Equilibrate the system for :math:`n` steps using Berendsen weak coupling
-
-    *default*: 0
-
 MD.TDEP (*boolean*)
     Dump data in a format readable by the Temperature Dependent Effective
     Potential (TDEP) code.
@@ -1143,6 +1138,32 @@ MD.BaroDebug (*boolean*)
     Print detailed information about barostat and extended variables in ``barostat.dat``
 
     *default*: F
+
+MD.VariableTemperature (*boolean*)
+    Simulation with a variable temperature if .True.
+
+    *default*: F
+
+MD.VariableTemperatureMethod (*string*)
+    Type of temperature profile. Onlye ``linear`` profile is implemented
+
+    *default*: linear
+
+MD.VariableTemperatureRate (*real*)
+    Change rate for the temperature. In units of K/fs.
+    If positive, heating. If negative, cooling.
+
+    *default*: 0.0
+
+MD.InitialTemperature(*real*)
+    Initial temperature
+
+    *default*: same as AtomMove.IonTemperature
+
+MD.FinalTemperature(*real*)
+    Final temperature
+
+    *default*: same as AtomMove.IonTemperature
 
 Go to :ref:`top <input_tags>`.
 
