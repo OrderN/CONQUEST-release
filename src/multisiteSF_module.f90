@@ -130,12 +130,13 @@ contains
     use dimens,                    only: n_my_grid_points
     use maxima_module,             only: maxngrid
     use functions_on_grid,         only: atomfns, H_on_atomfns
-    use PAO_grid_transform_module, only: single_PAO_to_grid
+    use PAO_grid_transform_module, only: PAO_or_gradPAO_to_grid
     use S_matrix_module,           only: get_S_matrix
     use H_matrix_module,           only: get_H_matrix
     use store_matrix,              only: dump_pos_and_matrices
     use GenComms,                  only: mtime
     use io_module,                 only: return_prefix
+    use angular_coeff_routines,    only: evaluate_pao
 
     implicit none
 
@@ -164,7 +165,7 @@ contains
     if (flag_LFD) then
        ! Prepare Spao and Hpao
        ! 1. Calculate PAO values on grids
-       if (LFD_build_Spao) call single_PAO_to_grid(atomfns)
+       if (LFD_build_Spao) call PAO_or_gradPAO_to_grid(atomfns, evaluate_pao, 0)
        ! 2. Construct matSpao
        if (LFD_build_Spao) call get_S_matrix(inode, ionode, transform_AtomF_to_SF=.false.)
        ! 3. Construct matHpao

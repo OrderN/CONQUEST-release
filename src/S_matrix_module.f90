@@ -253,8 +253,9 @@ contains
     use mult_module,                 only: matSatomf
     use build_PAO_matrices,          only: assemble_2
     use io_module,                   only: dump_matrix
-    use PAO_grid_transform_module,   only: single_PAO_to_grid
+    use PAO_grid_transform_module,   only: PAO_or_gradPAO_to_grid
     use functions_on_grid,           only: atomfns
+    use angular_coeff_routines,      only: evaluate_pao
 
     implicit none
 
@@ -271,7 +272,7 @@ contains
     ! calculate PAO values on grids
     if (inode == ionode .and. iprint_ops + min_layer > 3) &
          write (io_lun, fmt='(10x,a,i5)') 'single PAO to grid ', atomfns
-    call single_PAO_to_grid(atomfns)
+    call PAO_or_gradPAO_to_grid(atomfns, evaluate_pao, 0)
 
     return
   end subroutine get_S_matrix_PAO

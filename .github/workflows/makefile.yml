@@ -15,6 +15,7 @@ jobs:
       F77: mpif77
       OMP_NUM_THREADS: ${{matrix.threads}}
       OPENBLAS_NUM_THREADS: 1
+      OMP_STACKSIZE: 100M
     strategy:
       fail-fast: false
       matrix:
@@ -61,8 +62,7 @@ jobs:
     - name: Build
       working-directory: ${{github.workspace}}/src
       run: |
-        cp gha.make system.make
-        make -j ${{matrix.np}}
+        make -j ${{matrix.np}} SYSTEM=gha
 
     - name: Run test 001
       working-directory: ${{github.workspace}}/testsuite/test_001_bulk_Si_1proc_Diag

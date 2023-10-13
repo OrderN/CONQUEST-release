@@ -166,6 +166,7 @@ contains
     integer :: sofar, maxlen, max2, prend1
     external :: dgemm
 
+    !$omp single
     allocate(tempa(1,1), tempc(1,1))
     do k = 1, ahalo%nh_part(kpart) ! Loop over atoms k in current A-halo partn
        k_in_halo = ahalo%j_beg(kpart) + k - 1
@@ -273,6 +274,7 @@ contains
     end do ! end of k = 1, nahpart
     if (allocated(tempa)) deallocate(tempa)
     if (allocated(tempc)) deallocate(tempc)
+    !$omp end signle
     return
   end subroutine m_kern_max
   !!*****
@@ -414,6 +416,7 @@ contains
     real(double), allocatable, dimension(:,:) :: tempb, tempc
     external :: dgemm
 
+    !$omp single
     do k = 1, ahalo%nh_part(kpart) ! Loop over atoms k in current A-halo partn
        k_in_halo = ahalo%j_beg(kpart) + k - 1
        k_in_part = ahalo%j_seq(k_in_halo)
@@ -481,6 +484,7 @@ contains
           nabeg = nabeg + nd1 * nd3
        end do
     end do
+    !$omp end single
     return
   end subroutine m_kern_min
   !!*****

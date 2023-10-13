@@ -1,0 +1,50 @@
+IO.Title    Water static test, DZ, GridCutoff=50Ha
+IO.Coordinates    H2O_coord.in
+IO.FractionalAtomicCoords F
+IO.Iprint 1
+General.DistanceUnits Angstrom
+IO.WriteOutToFile F
+
+Process.Job coo
+Process.CoordFormat cell
+
+## General Parameters
+General.NumberOfSpecies 2
+General.PartitionMethod  Hilbert 
+
+## Moving Atoms
+AtomMove.TypeOfRun static
+
+## Basis Sets
+Basis.BasisSet PAOs
+
+## Energy Minimisation
+minE.SCTolerance 1.0e-8
+minE.LTolerance 1.0e-6
+minE.MixedLSelfConsistent T
+
+##Integration Grid
+Grid.GridCutoff 100
+
+## Finding Density Matrix 
+#DM.SolutionMethod diagon
+#Diag.MPMesh T
+#Diag.MPMeshX 2
+#Diag.MPMeshY 2
+#Diag.MPMeshZ 2
+DM.SolutionMethod ordern
+DM.L_range 12.0
+DM.InvSTolerance 0.1
+
+## Atomic Information
+# This first block should make the matrix multiplication
+# heavier numerically (each atom has more functions)
+#%block ChemicalSpeciesLabel
+#1      15.99    O_SZP
+#2       1.00    H_SZP
+#%endblock ChemicalSpeciesLabel
+# This second block is 8x faster and less heavy
+%block ChemicalSpeciesLabel
+1      15.99    O_SZ
+2       1.00    H_SZ
+%endblock ChemicalSpeciesLabel
