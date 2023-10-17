@@ -1061,7 +1061,7 @@ contains
     endif
 
     ! Deallocation.
-    deallocate (nx_in_cover,ny_in_cover,nz_in_cover, STAT=stat_alloc)
+    deallocate (nz_in_cover,ny_in_cover,nx_in_cover, STAT=stat_alloc)
     if (stat_alloc.NE.0) &
       call cq_abort('Error deallocating nx_in_cover:', set%ng_cover)
 
