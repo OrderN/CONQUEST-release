@@ -739,6 +739,8 @@ contains
   !!     Changed nx_in_cover allocatable to pointer (gcc 4.4.7 issue)
   !!    2019/11/04 15:14 dave
   !!     Replace call to indexx with call to heapsort_integer_index
+  !!    2023/10/17 Jianbo Lin
+  !!     Correct the deallocate order of local variables
   !!  SOURCE
   !!
   subroutine allocate_CSmember(set,groups,nx_in_cover,ny_in_cover,nz_in_cover, &
@@ -928,12 +930,12 @@ contains
       call cq_abort('Error allocating arrays related to set:', set%mx_mcover)
 
     ! Deallocation.
-    deallocate (nrepx,nrepy,nrepz, STAT=stat_alloc)
-    if (stat_alloc.NE.0) &
-      call cq_abort('Error deallocating nrepx,y,z:', groups%mx_gedge)
-    deallocate (ind_min,ngcx_min,ngcy_min,ngcz_min,min_sort, STAT=stat_alloc)
+    deallocate (min_sort,ngcz_min,ngcy_min,ngcx_min,ind_min, STAT=stat_alloc)
     if (stat_alloc.NE.0) &
       call cq_abort('Error deallocating ind_min,ngcx,y,z_min,min_sort::', groups%mx_gcell)
+    deallocate (nrepz,nrepy,nrepx, STAT=stat_alloc)
+    if (stat_alloc.NE.0) &
+      call cq_abort('Error deallocating nrepx,y,z:', groups%mx_gedge)
 
     return
   end subroutine allocate_CSmember
