@@ -665,7 +665,8 @@ contains
   !!  CREATION DATE
   !!   2013/07/02
   !!  MODIFICATION HISTORY
-  !!
+  !!   2023/10/17 Jianbo Lin
+  !!     Modify deallocate order to match with allocate order in allocate_CSmember
   !!  SOURCE
   !!
   subroutine deallocate_CSmember(set)
@@ -692,18 +693,18 @@ contains
     integer :: lun_db
     character(20) :: file_name
 
-    deallocate(set%xcover, STAT=stat_alloc)
-    if(stat_alloc.NE.0) &
-       call cq_abort('Error deallocating set%xcover:', set%mx_mcover)
-    deallocate(set%ycover, STAT=stat_alloc)
-    if(stat_alloc.NE.0) &
-       call cq_abort('Error deallocating set%ycover:', set%mx_mcover)
-    deallocate(set%zcover, STAT=stat_alloc)
-    if(stat_alloc.NE.0) &
-       call cq_abort('Error deallocating set%zcover:', set%mx_mcover)
     deallocate(set%ig_cover, STAT=stat_alloc)
     if(stat_alloc.NE.0) &
        call cq_abort('Error deallocating set%ig_cover:', set%mx_mcover)
+    deallocate(set%zcover, STAT=stat_alloc)
+    if(stat_alloc.NE.0) &
+       call cq_abort('Error deallocating set%zcover:', set%mx_mcover)
+    deallocate(set%ycover, STAT=stat_alloc)
+    if(stat_alloc.NE.0) &
+       call cq_abort('Error deallocating set%ycover:', set%mx_mcover)
+    deallocate(set%xcover, STAT=stat_alloc)
+    if(stat_alloc.NE.0) &
+       call cq_abort('Error deallocating set%xcover:', set%mx_mcover)
     if (associated(set%iprim_group)) then
       deallocate(set%iprim_group, STAT=stat_alloc)
       if(stat_alloc.NE.0) &
