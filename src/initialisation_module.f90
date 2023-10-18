@@ -335,6 +335,8 @@ contains
   !!    Adding check for maximum angular momentum for Bessel functions
   !!   2022/06/09 08:36 dave
   !!    Change name of D2 set-up routine
+  !!   2023/10/18 J.Lin
+  !!    Added machine learning statements
   !!  SOURCE
   !!
   subroutine set_up(find_chdens,level)
@@ -349,12 +351,13 @@ contains
                                       iprint_gen, flag_perform_cDFT,   &
                                       nspin, min_layer,                &
                                       glob2node, flag_XLBOMD,          &
-                                      flag_neutral_atom, flag_diagonalisation
+                                      flag_neutral_atom, flag_diagonalisation,&
+                                      flag_mlff
     use memory_module,          only: reg_alloc_mem, reg_dealloc_mem,  &
                                       type_dbl, type_int
     use group_module,           only: parts
     use cover_module,           only: BCS_parts, make_cs, make_iprim,  &
-                                      send_ncover, D2_CS
+                                      send_ncover, D2_CS, ML_CS
     use mult_module,            only: immi
     use construct_module
     use matrix_data,            only: rcut, max_range
@@ -362,7 +365,8 @@ contains
     use atoms,                  only: distribute_atoms
     use dimens,                 only: n_grid_x, n_grid_y, n_grid_z,    &
                                       r_core_squared, r_h, &
-                                      n_my_grid_points, r_dft_d2
+                                      n_my_grid_points, r_dft_d2, &
+                                      r_ML_des
     use fft_module,             only: set_fft_map, fft3
     use GenComms,               only: cq_abort, my_barrier, inode,     &
                                       ionode, gcopy
@@ -589,6 +593,24 @@ contains
               D2_CS%nx_origin, D2_CS%ny_origin, D2_CS%nz_origin
       end if
       call set_para_D2
+   end if
+
+    ! Generate MLCS
+    if (flag_mlff) then
+      if ((inode == ionode) .and. (iprint_gen > 2) ) &
+           write (io_lun, '(/1x,"The MLFF is performed in this calculation.")')
+      call make_cs(inode-1, r_ML_des, ML_CS, parts, bundle, ni_in_cell, &
+                   x_atom_cell, y_atom_cell, z_atom_cell)
+      if ( (inode == ionode) .and. (iprint_gen > 3) ) then
+        write (io_lun, '(/8x,"+++ ML_CS%ng_cover:",i10)')       &
+              ML_CS%ng_cover
+        write (io_lun, '(8x,"+++ ML_CS%ncoverx, y, z:",3i8)')   &
+              ML_CS%ncoverx, ML_CS%ncovery, ML_CS%ncoverz
+        write (io_lun, '(8x,"+++ ML_CS%nspanlx, y, z:",3i8)')   &
+              ML_CS%nspanlx, ML_CS%nspanly, ML_CS%nspanlz
+        write (io_lun, '(8x,"+++ ML_CS%nx_origin, y, z:",3i8)') &
+              ML_CS%nx_origin, ML_CS%ny_origin, ML_CS%nz_origin
+      end if
    end if
 
    ! external potential - first set up angular momentum bits

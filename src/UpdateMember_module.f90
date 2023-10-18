@@ -705,11 +705,15 @@ contains
     deallocate(set%xcover, STAT=stat_alloc)
     if(stat_alloc.NE.0) &
        call cq_abort('Error deallocating set%xcover:', set%mx_mcover)
+    nullify(set%xcover,set%ycover,set%zcover, &
+              set%ig_cover)
+
     if (associated(set%iprim_group)) then
       deallocate(set%iprim_group, STAT=stat_alloc)
       if(stat_alloc.NE.0) &
          !ORI call cq_abort('Error deallocating set%iprim_group:', prim%mx_iprim)
          call cq_abort('Error deallocating set%iprim_group:')
+      nullify(set%iprim_group)
     endif
 
     return
@@ -1219,6 +1223,8 @@ contains
   !!  MODIFICATION HISTORY
   !!   2023/06/15 Jianbo Lin
   !!     Modify from updateMembers_cs to have an independent updating CS
+  !!   2023/10/18 Jianbo Lin
+  !!     Make CS every time from updated bundle
   !!  SOURCE
   !!
   subroutine updateMembers_cs_ML
@@ -1242,9 +1248,9 @@ contains
     ! Update members in ML_CS
     call deallocate_CSmember(ML_CS)
     call allocate_CSmember(ML_CS,parts,nx_in_cover,ny_in_cover,nz_in_cover, &
-         nmodx,nmody,nmodz,dcellx,dcelly,dcellz)
+         nmodx,nmody,nmodz,dcellx,dcelly,dcellz,bundle)
     call cover_update_mparts(ML_CS,parts,nx_in_cover,ny_in_cover,nz_in_cover, &
-         nmodx,nmody,nmodz,dcellx,dcelly,dcellz)
+         nmodx,nmody,nmodz,dcellx,dcelly,dcellz,bundle)
     return
   end subroutine updateMembers_cs_ML
   

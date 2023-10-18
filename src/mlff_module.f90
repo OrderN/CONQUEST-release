@@ -114,7 +114,7 @@ contains
        !!aind = 0
        !!call set_matrix_pointers(prim%nm_nodgroup,amat, aind, prim%groups_on_node,parts%mx_mem_grp,part_offset)
        !!call allocate_matrix(amat, prim%groups_on_node,parts%mx_mem_grp)
-       call allocate_matrix_ML(amat_ML, prim%groups_on_node,parts%mx_mem_grp)
+       call allocate_matrix_ML(amat_ML, prim%groups_on_node, parts%mx_mem_grp)
        call get_naba_ML(prim,gcs,amat_ML,rcut)
 
        if(index(params_ML%descriptor_type, '3b') .gt. 0)then
@@ -727,7 +727,8 @@ contains
 !!  CREATION DATE
 !!   2022/07/27
 !!  MODIFICATION HISTORY
-!!
+!!   2023/10/18 J.Lin
+!!    Move make_cs to set_up in initialisation_module
 !!  SOURCE
 !!
   subroutine get_MLFF
@@ -772,8 +773,8 @@ contains
 
     t1=MPI_wtime()
     !! Make covering set
-    call make_cs(inode-1, r_ML_des, ML_CS, parts, bundle, ni_in_cell, &
-                   x_atom_cell, y_atom_cell, z_atom_cell)
+    !call make_cs(inode-1, r_ML_des, ML_CS, parts, bundle, ni_in_cell, &
+    !               x_atom_cell, y_atom_cell, z_atom_cell)
     !call set_para_ML
 
     ! Initialisation of the machine learning energy and the atomic forces
