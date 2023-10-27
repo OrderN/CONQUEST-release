@@ -2,6 +2,7 @@ IO.Title    Water static test, DZ, GridCutoff=50Ha
 IO.Coordinates    H2O_coord.in
 IO.FractionalAtomicCoords F
 IO.Iprint 1
+IO.WriteOutToFile F
 General.DistanceUnits Angstrom
 IO.WriteOutToFile F
 
