@@ -140,6 +140,9 @@ module exx_types
   type(cq_timer), save :: tmr_std_exx_barrier
 
   real(double)         :: exx_total_time
+
+  
+  real(double) :: sum_eri_gto
   
   ! User settings
   integer :: exx_scheme      ! 4center ERIs or 3center reduction integrals

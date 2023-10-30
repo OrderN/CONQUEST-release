@@ -1876,12 +1876,12 @@ contains
        flag_exx = .true.
        exx_siter = fdf_integer('EXX.StartAfterIter', 1 )
        exx_scf   = fdf_integer('EXX.MethodSCF',      0 )
-       r_exx     = fdf_double ('EXX.Krange'   ,   zero )
+       r_exx     = fdf_double ('EXX.Xrange'   ,   zero )
        !
     else if ( flag_functional_type == functional_hartree_fock ) then
        flag_exx = .true.
        exx_scf  = fdf_integer('EXX.MethodSCF', 0)
-       r_exx    = fdf_double ('EXX.Krange', zero)
+       r_exx    = fdf_double ('EXX.Xrange', zero)
        !
     else
        ! don't touch we need it because matX is setup in set_dimensions 

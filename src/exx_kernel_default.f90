@@ -103,7 +103,7 @@ contains
     use GenComms,        only: my_barrier, cq_abort, mtime
     use multiply_module, only: prefetch
     !
-    use matrix_data,    only: mat, Hrange, Srange, Xrange, SXrange
+    use matrix_data,    only: mat, Hrange, Srange, Xrange, SXrange, rcut
     use mult_module,    only: S_X_SX, mat_p, mult 
     use mult_module,    only: matX, matK, matrix_scale, matrix_trace
     use mult_module,    only: matrix_product_trace, matrix_product_trace_length 
@@ -128,7 +128,7 @@ contains
          unit_eri_filter_debug, &         
          file_exx_timers,     file_exx_memory,     &
          file_exx_debug,      file_eri_debug,      &
-         file_eri_filter_debug
+         file_eri_filter_debug, sum_eri_gto
 
     use exx_types, only: exx_alloc
          
@@ -197,6 +197,9 @@ contains
     !
     !==============================================================================================================
 
+    open(200)
+
+    
     !****lat<$
     if (       present(level) ) backtrace_level = level+1
     if ( .not. present(level) ) backtrace_level = -10
@@ -418,13 +421,14 @@ contains
     ! !$omp do
     ! #end if
     !
-    if ( exx_debug ) then       
-       call hf_write_info(unit_exx_debug,inode,10,mult(S_X_SX)%ahalo%np_in_halo,0,0,0,0, &
-            0,0,'XX',xyz_ghost,r_ghost,0,0,0,zero,zero,0)
-    end if
+    !if ( exx_debug ) then       
+    !   call hf_write_info(unit_exx_debug,inode,10,mult(S_X_SX)%ahalo%np_in_halo,0,0,0,0, &
+    !        0,0,'XX',xyz_ghost,r_ghost,0,0,0,zero,zero,0)
+    !end if
     !
     !call hf_write_info(unit1,inode,10,bundle%groups_on_node,0,0,0,0, &omput
     !     0,0,'XX',xyz_ghost,r_ghost,0,0,0,zero,zero,0)
+    sum_eri_gto = 0.0d0
     !
     xyz_ghost = zero
     r_ghost   = zero
@@ -433,10 +437,10 @@ contains
        ind_part = mult(S_X_SX)%ahalo%lab_hcell(kpart)    
        !
        !print*, 'inode', inode,'kpart', kpart, ind_part
-       if ( exx_debug ) then
-          call hf_write_info(unit_exx_debug,inode,20,0,kpart,mult(S_X_SX)%ahalo%np_in_halo,0,0, &
-               0,0,'XX',xyz_ghost,r_ghost,0,0,0,zero,zero,0)       
-       end if
+       !if ( exx_debug ) then
+       !   call hf_write_info(unit_exx_debug,inode,20,0,kpart,mult(S_X_SX)%ahalo%np_in_halo,0,0, &
+       !        0,0,'XX',xyz_ghost,r_ghost,0,0,0,zero,zero,0)       
+       !end if
        !
        if(kpart>1) then  ! Is it a periodic image of the previous partition ?
           if(ind_part.eq.mult(S_X_SX)%ahalo%lab_hcell(kpart-1)) then
@@ -583,6 +587,11 @@ contains
              get_exx = .false.
              !
              if( myid==0 ) write(io_lun,*) 'EXX: preparing store ERI calculation on kpart =', kpart
+             if( myid==0 ) write(io_lun,*) 'EXX: rcut(Xrange)  = ', rcut(Xrange)
+             if( myid==0 ) write(io_lun,*) 'EXX: rcut(SXrange) = ', rcut(SXrange)
+             if( myid==0 ) write(io_lun,*) 'EXX: rcut(Hrange)  = ', rcut(Hrange)
+             if( myid==0 ) write(io_lun,*) 'EXX: rcut(Srange)  = ', rcut(Srange)
+             if( myid==0 ) write(io_lun,*) 'EXX: rcut(SXrange) = ', rcut(SXrange)             
              !
              ! First dummy call to get the number of ERIs on each proc
              !
@@ -634,6 +643,7 @@ contains
                      mat_p(matX(  exxspin  ))%length, nb_eris, get_exx, exx_filter )
              end if
              !
+             
              ! should be a single call not embeded in the kpart loop... sorry for that
              call fft3_init_wrapper( 2*extent+1  )
              !
@@ -872,6 +882,8 @@ contains
        !
     end if
 
+    close(200)
+    
     if ( exx_debug ) then
        call io_close(unit_eri_debug)
        call io_close(unit_exx_debug)
@@ -1396,9 +1408,9 @@ contains
     integer          :: ia_gto, jb_gto, kg_gto, ld_gto
     real(double)     :: ai, aj, ak, al, di, dj, dk, dl 
     real(double)     :: i_norm, j_norm, k_norm, l_norm
-    real(double)     :: xi, xj, xk, xl 
-    real(double)     :: yi, yj, yk, yl 
-    real(double)     :: zi, zj, zk, zl 
+    !real(double)     :: xi, xj, xk, xl 
+    !real(double)     :: yi, yj, yk, yl 
+    !real(double)     :: zi, zj, zk, zl 
 
     real(double) :: eri_gto, eri_pao, test
     !
@@ -1428,9 +1440,9 @@ contains
        call exx_phi_on_grid(inode,kg%global_num,kg%spec,extent, &
             kg%xyz,kg%nsup,phi_k,r_int,xyz_zero)             
        !
-       xk = kg%xyz_cv(1)
-       yk = kg%xyz_cv(2)
-       zk = kg%xyz_cv(3)
+       !xk = kg%xyz_cv(1)
+       !yk = kg%xyz_cv(2)
+       !zk = kg%xyz_cv(3)
        !
        jbnab2ch = 0
        !print*, 'nbnab: ',nbnab(k_in_part),k_in_part
@@ -1465,9 +1477,9 @@ contains
           call exx_phi_on_grid(inode,ld%global_num,ld%spec,extent,     &
                ld%xyz,ld%nsup,phi_l,r_int,xyz_zero)
           !
-          xl = ld%xyz_cv(1)
-          yl = ld%xyz_cv(2)
-          zl = ld%xyz_cv(3)
+          !xl = ld%xyz_cv(1)
+          !yl = ld%xyz_cv(2)
+          !zl = ld%xyz_cv(3)
           !
           ld_loop: do nsf_ld = 1, ld%nsup
              !
@@ -1500,9 +1512,9 @@ contains
                    call exx_phi_on_grid(inode,ia%ip,ia%spec,extent, &
                         ia%xyz,ia%nsup,phi_i,r_int,xyz_zero)             
                    !
-                   xi = ia%xyz_ip(1)
-                   yi = ia%xyz_ip(2)
-                   zi = ia%xyz_ip(3)
+                   !xi = ia%xyz_ip(1)
+                   !yi = ia%xyz_ip(2)
+                   !zi = ia%xyz_ip(3)
 
                    !print*, size(chalo%i_h2d), shape(chalo%i_h2d)
                    ! 
@@ -1535,9 +1547,9 @@ contains
                             call exx_phi_on_grid(inode,jb%global_num,jb%spec,extent, &
                                  jb%xyz,jb%nsup,phi_j,r_int,xyz_zero)
                             !
-                            xj = jb%xyz_cv(1)
-                            yj = jb%xyz_cv(2)
-                            zj = jb%xyz_cv(3)
+                            !xj = jb%xyz_cv(1)
+                            !yj = jb%xyz_cv(2)
+                            !zj = jb%xyz_cv(3)
                             !
                             jb_loop: do nsf_jb = 1, jb%nsup                                         
                                !
@@ -1711,7 +1723,7 @@ contains
          ewald_charge, ewald_rho, ewald_pot, eris,  &
          pulay_radius, p_omega, p_ngauss, p_gauss, w_gauss, &
          exx_psolver,exx_pscheme, &
-         unit_exx_debug, unit_eri_debug
+         unit_exx_debug, unit_eri_debug, sum_eri_gto
     !
     use exx_types,  only: phi_i, phi_j, phi_k, phi_l, eris, &
          rho_ki, vhf_lj, work_in_3d, work_out_3d, fftwrho3d,&
@@ -1784,6 +1796,7 @@ contains
     !
     integer      :: count
     real(double) :: eri_gto, eri_pao, test
+    real(double) :: xyz_i_dummy(3), xyz_j_dummy(3), xyz_k_dummy(3), xyz_l_dummy(3)
 
     !TYPE(libint_t), DIMENSION(1) :: erieval
     !
@@ -1845,11 +1858,11 @@ contains
              !
              kg_loop: do nsf_kg = 1, kg%nsup                         
                 !
-                if ( backup_eris ) then
-                   K_val = real(1,double)
-                else
-                   K_val = b(nbaddr+nsf_kg-1)
-                end if
+                !if ( backup_eris ) then
+                !   K_val = real(1,double)
+                !else
+                K_val = b(nbaddr+nsf_kg-1)
+                !end if
 !!$
 !!$ ****[ i loop ]****
 !!$
@@ -1905,23 +1918,69 @@ contains
                                   !
                                   if ( eris(kpart)%filter_eris( count ) ) then
                                      !
-                                     call compute_eri_hoh( nsf_ia, nsf_jb, nsf_kg, nsf_ld, &
-                                          ia%spec,   jb%spec,   kg%spec,   ld%spec,  &
-                                          ia%xyz_ip, jb%xyz_cv, kg%xyz_cv, ld%xyz_cv,&
-                                          i_nt, j_nt, k_nt, l_nt,&
-                                          eri_gto )
-                                     !
+                                     if ( abs(ia%xyz_ip(3)-kg%xyz_cv(3)) < ( ia%radi + kg%radi) &
+                                          .and. abs(jb%xyz_cv(3)-ld%xyz_cv(3)) < ( jb%radi + ld%radi) ) then
+                                        !
+                                        !.and. abs(ia%xyz_ip(3)-ld%xyz_cv(3)) < ( ia%radi + ld%radi) &
+                                        !.and. abs(jb%xyz_cv(3)-kg%xyz_cv(3)) < ( jb%radi + kg%radi)) then 
+                                        !print*,  ia%radi + kg%radi, jb%radi + ld%radi
+                                        !
+                                        call compute_eri_hoh( nsf_ia, nsf_jb, nsf_kg, nsf_ld, &
+                                             ia%spec,   jb%spec,   kg%spec,   ld%spec,  &
+                                             ia%xyz_ip, jb%xyz_cv, kg%xyz_cv, ld%xyz_cv,&
+                                             i_nt, j_nt, k_nt, l_nt,&
+                                             eri_gto )
+                                        !
+                                        !  xyz_i_dummy    =  0.0d0
+                                        !  xyz_i_dummy(3) = 10.0d0
+                                        !  xyz_j_dummy = 0.0d0
+                                        !  xyz_j_dummy(3) = 2.0d0
+                                        !  xyz_k_dummy = 0.0d0
+                                        !  xyz_k_dummy(3) = 5.0d0
+                                        !  xyz_l_dummy = 0.0d0
+                                        !  xyz_l_dummy(3) = 1.0d0
+                                        !
+                                        !call compute_eri_hoh( nsf_ia, nsf_jb, nsf_kg, nsf_ld, &
+                                        !     ia%spec,   jb%spec,   kg%spec,   ld%spec,  &
+                                        !     xyz_i_dummy, xyz_j_dummy, xyz_k_dummy, xyz_l_dummy,&
+                                        !     i_nt, j_nt, k_nt, l_nt,&
+                                        !     eri_gto )
+                                        !print*, eri_gto
+                                        !
+                                     else
+                                        !
+                                        eri_gto = 0.0d0
+                                        !
+                                     end if
                                   end if
                                   !
                                   if (exx_debug) then
 
-                                     write(unit_eri_debug,10) count, eri_gto, &
+                                     if ( eri_gto > 1.0d-8 ) then
+
+                                        sum_eri_gto = sum_eri_gto + eri_gto
+
+                                        !call compute_eri_hoh( nsf_ia, nsf_jb, nsf_kg, nsf_ld, &
+                                        !     ia%spec,   jb%spec,   kg%spec,   ld%spec,  &
+                                        !     ia%xyz_ip, jb%xyz_cv, kg%xyz_cv, ld%xyz_cv,&
+                                        !     i_nt, j_nt, k_nt, l_nt,&
+                                        !     eri_gto )
+
+                                        
+                                        
+                                        write(2000,10) count, eri_gto, &
                                           '[',ia%ip, kg%global_num,'|',ld%global_num, jb%global_num,']', &
                                           '(',nsf_ia,nsf_kg,  '|',nsf_ld,nsf_jb,  ')' , &
                                           '[',ia%name,kg%name,'|',ld%name,jb%name,']' , &
                                           '(',i_nt,k_nt,'|',l_nt,j_nt,')', &
-                                          ai, ak, al, aj
-                                     !zi, zk, zl, zj, ai, ak, al, aj 
+                                          ia%xyz_ip(3), kg%xyz_cv(3), ld%xyz_cv(3), jb%xyz_cv(3), &
+                                          ia%xyz_ip(1), kg%xyz_cv(1), ld%xyz_cv(1), jb%xyz_cv(1),&
+                                          ia%xyz_ip(2), kg%xyz_cv(2), ld%xyz_cv(2), jb%xyz_cv(2),&
+                                        !abs(ia%xyz_ip(3)-jb%xyz_cv(3)), abs(kg%xyz_cv(3)-ld%xyz_cv(3)), &
+                                          !abs(ia%xyz_ip(3)-kg%xyz_cv(3)), abs(ia%xyz_ip(3)-ld%xyz_cv(3)), &
+                                          sum_eri_gto
+                                     !zi, zk, zl, zj, ai, ak, al, aj
+                                     end if
                                   end if
                                   !
                                   if ( backup_eris ) then
@@ -1974,7 +2033,7 @@ contains
     end do k_loop
     !
     !
-10  format(I8,X,F16.10,X,A,2I4,A,2I4,A,4X,A,2I4,A,2I4,A,A,2A4,A,2A4,A,X,A,2A8,A,2A8,A,X,8F12.6)
+10  format(I8,X,1F16.10,X,A,2I4,A,2I4,A,4X,A,2I4,A,2I4,A,A,2A4,A,2A4,A,X,A,2A8,A,2A8,A,X,16F12.6)
 
     return
   end subroutine m_kern_exx_eri_gto
@@ -2134,6 +2193,7 @@ contains
        
     end if
 
+
 !!$
 !!$ ****[ k loop ]****
 !!$
@@ -2261,6 +2321,7 @@ contains
                                      !
                                      c(ncaddr + nsf_ia - 1) = c(ncaddr + nsf_ia - 1) + &
                                           eris(kpart)%store_eris(count_eris + 1) * K_val
+                                     !write(200,*) count_eris, eris(kpart)%store_eris(count_eris + 1), K_val
                                      !
                                   else
                                      !
@@ -2341,6 +2402,7 @@ contains
 !!$
     end do k_loop
     !
+    
     print*, 'proc:', inode,'kpart:', kpart, 'nb. of ERIs:', count_eris
     !
 

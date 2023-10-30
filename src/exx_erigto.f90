@@ -717,6 +717,11 @@ contains
                             k_norm  = gto( k_nsp )%sf( k )%norm
                             l_norm  = gto( l_nsp )%sf( l )%norm
 
+                            !i_norm = 1.0d0
+                            !j_norm = 1.0d0
+                            !k_norm = 1.0d0
+                            !l_norm = 1.0d0
+                            
                             eri_gto = eri_gto + (ci*cj*ck*cl) * (di*dj*dk*dl) * &
                                  eri_gto_hoh( &
                                  i_xyz(1), i_xyz(2), i_xyz(3), i_norm, i_nx, i_ny, i_nz, ai, &
@@ -734,26 +739,27 @@ contains
                             !     0.013706554295511562d0, 0.0063780699489852013d0, &
                             !     0.39523364424416996d0]
                             
-                            F(1) = 1.0d0
+                            !F(1) = 1.0d0
 
                             
-                            print*,  eri_gto_hoh( &
-                                 i_xyz(1), i_xyz(2), i_xyz(3), 1.0d0, i_nx, i_ny, i_nz, ai, &
-                                 k_xyz(1), k_xyz(2), k_xyz(3), 1.0d0, k_nx, k_ny, k_nz, ak, &
-                                 l_xyz(1), l_xyz(2), l_xyz(3), 1.0d0, l_nx, l_ny, l_nz, al, &
-                                 j_xyz(1), j_xyz(2), j_xyz(3), 1.0d0, j_nx, j_ny, j_nz, aj)
+                            !print*,  eri_gto_hoh( &
+                            !     i_xyz(1), i_xyz(2), i_xyz(3), 1.0d0, i_nx, i_ny, i_nz, ai, &
+                            !     k_xyz(1), k_xyz(2), k_xyz(3), 1.0d0, k_nx, k_ny, k_nz, ak, &
+                            !     l_xyz(1), l_xyz(2), l_xyz(3), 1.0d0, l_nx, l_ny, l_nz, al, &
+                            !     j_xyz(1), j_xyz(2), j_xyz(3), 1.0d0, j_nx, j_ny, j_nz, aj)
 
 
-                            CALL libint2_static_init()
-                            CALL libint2_init_eri(erieval, 0, C_NULL_PTR)
-                            CALL compute_eri_f(1, 0, &
-                                 0, [1.0d0], [ai], i_xyz, &
-                                 0, [1.0d0], [ak], k_xyz, &
-                                 0, [1.0d0], [al], l_xyz, &
-                                 0, [1.0d0], [aj], j_xyz, &
-                                 F, erieval)
-                            CALL print_eri(0, 0, 0, 0, 0, erieval)
-                            CALL libint2_cleanup_eri(erieval)
+                            !CALL libint2_static_init()
+                            !CALL libint2_init_eri(erieval, 0, C_NULL_PTR)
+                            !CALL compute_eri_f(1, 0, &
+                            !     0, [1.0d0], [ai], i_xyz, &
+                            !     0, [1.0d0], [ak], k_xyz, &
+                            !     0, [1.0d0], [al], l_xyz, &
+                            !     0, [1.0d0], [aj], j_xyz, &
+                            !     F, erieval)
+                            !CALL print_eri(0, 0, 0, 0, 0, erieval)
+                            !print*, erieval
+                            !CALL libint2_cleanup_eri(erieval)
 
 !!$                                  allocate(phi_on_grid_ia(2*extent+1,2*extent+1,2*extent+1))
 !!$                                  phi_on_grid_ia = zero
