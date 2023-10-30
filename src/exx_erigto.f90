@@ -5,16 +5,16 @@ module exx_erigto
 
 
   USE ISO_C_BINDING, ONLY: C_DOUBLE, C_F_POINTER, C_F_PROCPOINTER, C_NULL_PTR
-  use libint_f,  only: libint_t, libint2_static_init, libint2_static_cleanup,&
-       libint2_build, libint2_max_am_eri, libint2_cleanup_eri, &
-       compute_eri_f, libint2_init_eri, print_eri
+  !use libint_f,  only: libint_t, libint2_static_init, libint2_static_cleanup,&
+  !     libint2_build, libint2_max_am_eri, libint2_cleanup_eri, &
+  !     compute_eri_f, libint2_init_eri, print_eri
 
   
   implicit none
   
-  TYPE(libint_t), DIMENSION(1) :: erieval
+  !TYPE(libint_t), DIMENSION(1) :: erieval
 
-  INTEGER, PARAMETER :: dp = C_DOUBLE
+  !INTEGER, PARAMETER :: dp = C_DOUBLE
 
   
   ! The equations herein are based upon

@@ -48,7 +48,7 @@ module exx_kernel_default
   use timer_module,              only: start_backtrace, stop_backtrace, cq_timer
   use timer_stdclocks_module,    only: tmr_std_exx
 
-  use Poisson_Solver,            only: PSolver, createKernel, gequad
+  !use Poisson_Solver,            only: PSolver, createKernel, gequad
 
   use exx_types,                 only: reckernel_3d, exx_debug
   use exx_io
@@ -319,9 +319,12 @@ contains
        end select poisson_fftw
 
     else if (exx_psolver == 'isf') then
-       call exx_mem_alloc(extent,0,0,'isf_rho','alloc')
-       call createKernel('F',ngrid,ngrid,ngrid,grid_spacing,grid_spacing,grid_spacing,isf_order,&
-            0,1,kernel)       
+
+
+       call cq_abort('EXX with ISF Poisson solver disabled')  
+       !call exx_mem_alloc(extent,0,0,'isf_rho','alloc')
+       !call createKernel('F',ngrid,ngrid,ngrid,grid_spacing,grid_spacing,grid_spacing,isf_order,&
+       !     0,1,kernel)       
 
     end if
     call stop_timer(tmr_std_exx_setup,.true.)
