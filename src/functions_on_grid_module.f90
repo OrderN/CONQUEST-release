@@ -67,7 +67,7 @@ module functions_on_grid
   !!
   type fn_on_grid
 
-     real(double), dimension(:), pointer :: griddata
+     real(double), dimension(:), allocatable :: griddata
      integer :: size
      integer :: type
 

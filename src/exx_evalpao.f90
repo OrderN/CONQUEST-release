@@ -173,7 +173,7 @@ contains
                       pao_val = zero
                       y_val   = zero             
                       rec_ylm: if (.not.exx_cartesian) then                      
-                         call evaluate_pao(spec,l1,acz,m1,x,y,z,pao_val)
+                         call evaluate_pao(0,spec,l1,acz,m1,x,y,z,pao_val)
                       else
                          npts  = pao(spec)%angmom(l1)%zeta(acz)%length
                          del_r = (pao(spec)%angmom(l1)%zeta(acz)%cutoff/&

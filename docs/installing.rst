@@ -44,8 +44,14 @@ a working MPI installation including a Fortran90 compiler (often
 Additionally, Conquest can use LibXC if it is available (v2.x or
 later).
 
-The library locations are set in the ``system.make`` file in the ``src/``
-directory, along with other parameters needed for compilation.
+The library locations are set in the ``system.<systemname>.make`` file in the ``src/system``
+directory, along with other parameters needed for compilation. ``system.<systemname>.make``
+files are provided for some HPC systems used by the community, but if you want to run
+locally or on a different system, you need to provide an appropriate ``system.<systemname>.make``
+file. Use ``src/system/system.example.make`` as a starting point. Get the ``<systemname>``
+by running ``hostname -d`` in your prompt, then name your file appropriately and move it to
+the ``src/system`` directory. If ``hostname -d`` returns empty (e.g. you are running on a
+local machine), the system-specific makefile should be named ``system.make``.
 
 * ``FC`` (typically ``FC=mpif90`` will be all that is required)
 * ``COMPFLAGS`` (set these to specify compiler options such as
@@ -66,3 +72,12 @@ Once these are set, you should make the executable using ``make``.
 
 The ion file generation code is compiled using the same options
 required for the main code.
+
+Multi-threading
+~~~~~~~~~~~~~~~
+
+CONQUEST can use OpenMP for multi-threading; some multi-threading is available throughout the code, while there are specific matrix multiplication routines which can use multi-threading for the linear scaling solver.  The number of threads is set via the environment variable ``OMP_NUM_THREADS``.
+
+Compiler flags to enable OpenMP are dependent on the vendor, but should be specified via ``COMPFLAGS`` and ``LINKFLAGS`` in the ``system.make`` file.  If compiling with OpenMP then you should also change the variable ``OMP_DUMMY`` in the same file to be blank to enable the number of threads to be included in the output.
+
+On some systems, the default stack size for OpenMP is set to be rather small, and this can cause a segmentation fault when running with multiple threads.  We recommend testing the effect of the environment variable ``OMP_STACKSIZE`` (and suggest setting it to 50M or larger as a first test).
