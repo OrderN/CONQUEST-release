@@ -2920,6 +2920,8 @@ contains
   !!    Added printing fractional k-points when read from block
   !!   2022/06/29 12:00 dave
   !!    Moved printing to capture default gamma point behaviour
+  !!   2023/07/20 12:00 tsuyoshi
+  !!    Implementing 1st version of Padding H and S matrices
   !!  SOURCE
   !!
   subroutine readDiagInfo
@@ -2933,7 +2935,7 @@ contains
     use GenComms,        only: cq_abort, cq_warn, gcopy
     use input_module
     use ScalapackFormat, only: proc_rows, proc_cols, block_size_r,   &
-         block_size_c, proc_groups, matrix_size
+         block_size_c, proc_groups, matrix_size, flag_padH
     use DiagModule,      only: nkp, kk, wtk, kT, maxefermi,          &
          flag_smear_type, iMethfessel_Paxton,  &
          max_brkt_iterations, gaussian_height, &
@@ -3033,17 +3035,26 @@ contains
     ms_is_prime = is_prime(matrix_size)
     if ( ms_is_prime ) call cq_warn(sub_name,'matrix size is a prime number', matrix_size)
     
+    ! padH or not  :temporary?   
+    flag_padH = fdf_boolean('Diag.PaddingHmatrix',.true.)
+
     if(fdf_defined('Diag.BlockSizeR')) then
        block_size_r = fdf_integer('Diag.BlockSizeR',1)
        block_size_c = fdf_integer('Diag.BlockSizeC',1)
-       a = real(matrix_size)/real(block_size_r)
-       if(a - real(floor(a))>1e-8_double) &
-            call cq_abort('block_size_r not a factor of matrix size ! ',&
-            matrix_size, block_size_r)
-       a = real(matrix_size)/real(block_size_c)
-       if(a - real(floor(a))>1e-8_double) &
-            call cq_abort('block_size_c not a factor of matrix size ! ',&
-            matrix_size, block_size_c)
+       if(flag_padH) then
+          if(block_size_c .ne. block_size_r) &
+               call cq_abort('PaddingHmatrix: block_size_c needs to be block_size_r')
+          block_size_c = block_size_r
+       else
+          a = real(matrix_size)/real(block_size_r)
+          if(a - real(floor(a))>1e-8_double) &
+               call cq_abort('block_size_r not a factor of matrix size ! ',&
+               matrix_size, block_size_r)
+          a = real(matrix_size)/real(block_size_c)
+          if(a - real(floor(a))>1e-8_double) &
+               call cq_abort('block_size_c not a factor of matrix size ! ',&
+               matrix_size, block_size_c)
+       endif
     else if (  ms_is_prime ) then
        block_size_r = 1
        block_size_c = block_size_r
