@@ -3036,25 +3036,25 @@ contains
     if ( ms_is_prime ) call cq_warn(sub_name,'matrix size is a prime number', matrix_size)
     
     ! padH or not  :temporary?   
-      flag_padH = fdf_boolean('Diag.PaddingHmatrix',.true.)
+    flag_padH = fdf_boolean('Diag.PaddingHmatrix',.true.)
 
     if(fdf_defined('Diag.BlockSizeR')) then
        block_size_r = fdf_integer('Diag.BlockSizeR',1)
        block_size_c = fdf_integer('Diag.BlockSizeC',1)
-      if(flag_padH) then
-       if(block_size_c .ne. block_size_r) &
-         call cq_abort('PaddingHmatrix: block_size_c needs to be block_size_r')
-       block_size_c = block_size_r
-      else
-       a = real(matrix_size)/real(block_size_r)
-       if(a - real(floor(a))>1e-8_double) &
-            call cq_abort('block_size_r not a factor of matrix size ! ',&
-            matrix_size, block_size_r)
-       a = real(matrix_size)/real(block_size_c)
-       if(a - real(floor(a))>1e-8_double) &
-            call cq_abort('block_size_c not a factor of matrix size ! ',&
-            matrix_size, block_size_c)
-      endif
+       if(flag_padH) then
+          if(block_size_c .ne. block_size_r) &
+               call cq_abort('PaddingHmatrix: block_size_c needs to be block_size_r')
+          block_size_c = block_size_r
+       else
+          a = real(matrix_size)/real(block_size_r)
+          if(a - real(floor(a))>1e-8_double) &
+               call cq_abort('block_size_r not a factor of matrix size ! ',&
+               matrix_size, block_size_r)
+          a = real(matrix_size)/real(block_size_c)
+          if(a - real(floor(a))>1e-8_double) &
+               call cq_abort('block_size_c not a factor of matrix size ! ',&
+               matrix_size, block_size_c)
+       endif
     else if (  ms_is_prime ) then
        block_size_r = 1
        block_size_c = block_size_r

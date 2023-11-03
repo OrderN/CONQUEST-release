@@ -279,16 +279,16 @@ contains
 
     ! Calculate maximum numbers of blocks in different directions
     if(flag_padH) then
-     blocks_r = ceiling((real(matrix_size,double)-RD_ERR)/block_size_r)
-     blocks_c = ceiling((real(matrix_size,double)-RD_ERR)/block_size_c)
-     if(blocks_r .ne. blocks_c) call cq_abort("ScalapackFormat: blocks_r /= blocks_c")
-     matrix_size_padH = blocks_r * block_size_r
-     call check_block_parameters(flag_err)
-     if(flag_err) call cq_abort("ScalapacFormat: check_block_parameter ",blocks_c, proc_cols)
+       blocks_r = ceiling((real(matrix_size,double)-RD_ERR)/block_size_r)
+       blocks_c = ceiling((real(matrix_size,double)-RD_ERR)/block_size_c)
+       if(blocks_r .ne. blocks_c) call cq_abort("ScalapackFormat: blocks_r /= blocks_c")
+       matrix_size_padH = blocks_r * block_size_r
+       call check_block_parameters(flag_err)
+       if(flag_err) call cq_abort("ScalapacFormat: check_block_parameter ",blocks_c, proc_cols)
     else
-     blocks_r = (matrix_size/block_size_r)
-     blocks_c = (matrix_size/block_size_c)
-     matrix_size_padH = matrix_size
+       blocks_r = (matrix_size/block_size_r)
+       blocks_c = (matrix_size/block_size_c)
+       matrix_size_padH = matrix_size
     endif
     if(myid==0.AND.iprint_DM>1) write(io_lun,*) "matrix_size & matrix_size_padH = ",matrix_size, matrix_size_padH
     if(myid==0.AND.iprint_DM>3) write(io_lun,1) blocks_r,blocks_c
