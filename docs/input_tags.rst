@@ -657,29 +657,27 @@ Diag.GammaCentred (*boolean*)
 
     *default*: F
     
-Diag.ProcRows (*integer*)
+Diag.PaddingHmatrix (*boolean*)
+    After v1.2, we have introduced a method to have an optimum value of 
+    block size for Hamiltonian and overlap matrices (See below) by padding.
+    By setting 'F', we do not use the method.
 
-    *default*:
-
-Diag.ProcCols (*integer*)
-
-    *default*:
+    *default*: T
 
 Diag.BlockSizeR (*integer*)
+    Block size for rows (See next).
 
-    *default*:
+    *default*: Determined automatically
 
 Diag.BlockSizeC (*integer*)
     R ... rows, C ... columns
-    These are ScaLAPACK parameters, and can be set heuristically by the code. Blocks
-    are sub-divisions of matrices, used to divide up the matrices between processors.
+    These are ScaLAPACK parameters, and can be set heuristically by the code. 
+    Blocks are sub-divisions of matrices, used to divide up the matrices between processors.
     The block sizes need to be factors of the square matrix size
     (i.e. :math:`\sum_{\mathrm{atoms}}\mathrm{NSF(atom)}`). A value of 64 is considered
-    optimal by the ScaLAPACK user’s guide. The rows and columns need to multiply
-    together to be less than or equal to the number of processors. If ProcRows
-    :math:`\times` ProcCols :math:`<` number of processors, some processors will be left idle.
+    optimal by the ScaLAPACK user’s guide. 
 
-    *default*:
+    *default*: Determined automatically
 
 Diag.MPShift[X/Y/Z] (*real*)
     Specifies the shift *s* of k-points along the x(y,z) axis, in fractional
@@ -742,7 +740,10 @@ Diag.ProcRows (*integer*)
 
 Diag.ProcCols (*integer*)
     Number of columns in the processor grid for SCALAPACK within each k-point
-    processor group 
+    processor group.  The rows and columns need to multiply
+    together to be less than or equal to the number of processors. If ProcRows
+    :math:`\times` ProcCols :math:`<` number of processors, some processors will be left idle.
+
 
     *default*: Determined automatically
 
