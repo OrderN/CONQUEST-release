@@ -52,6 +52,8 @@
 !!    Moved various subroutines to md_misc_module
 !!   2022/12/12 11:41 dave
 !!    Added SQNM maximum step size (sqnm_trust_step) as user-adjustable parameter
+!!   2023/09/13 lu
+!!    Added XSF and XSF output frequency as user-adjustable parameter
 !!  SOURCE
 !!
 module control
@@ -66,7 +68,9 @@ module control
   implicit none
 
   integer      :: MDn_steps 
-  integer      :: MDfreq 
+  integer      :: MDfreq
+  integer      :: XSFfreq
+  integer      :: XYZfreq
   real(double) :: MDcgtol, sqnm_trust_step
   logical      :: CGreset
   integer      :: LBFGS_history
@@ -313,11 +317,12 @@ contains
     use GenBlas,       only: dot
     use force_module,  only: tot_force
     use io_module,     only: write_atomic_positions, pdb_template, &
-                             check_stop, write_xsf, print_atomic_positions, return_prefix
+                             check_stop, write_xsf, write_extxyz, &
+                             print_atomic_positions, return_prefix
     use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use timer_module
     use store_matrix,  ONLY: dump_InfoMatGlobal, dump_pos_and_matrices
-    use md_control,    only: flag_write_xsf
+    use md_control,    only: flag_write_xsf, flag_write_extxyz
 
     implicit none
 
@@ -633,6 +638,8 @@ contains
 !!    Add pressure-based termination for equilibration and remove Berendsen thermostat
 !!   2023/07/22 J.Lin
 !!    Added machine learning statements
+!!   2023/09/13 lu
+!!    Add parameters for xsf and xyz output frequency
 !!  SOURCE
 !!
   subroutine md_run (fixed_potential, vary_mu, total_energy)
@@ -844,7 +851,7 @@ contains
        ! Check this: it fixes H' for NVE but needs NVT confirmation
        ! DRB & TM 2020/01/24 12:03
        call mdl%get_cons_qty
-       call write_md_data(i_first-1, thermo, baro, mdl, nequil, MDfreq)
+       call write_md_data(i_first-1, thermo, baro, mdl, nequil, MDfreq, XSFfreq, XYZfreq)
     end if
 
     do iter = i_first, i_last ! Main MD loop
@@ -1083,7 +1090,7 @@ contains
            write(*,2023) 'Time after get_E_and_F_ML in MD:', t2-t1
        t1=MPI_wtime()
        ! Write all MD data and checkpoints to disk
-       call write_md_data(iter, thermo, baro, mdl, nequil, MDfreq)
+       call write_md_data(iter, thermo, baro, mdl, nequil, MDfreq, XSFfreq, XYZfreq)
        if (inode==ionode .and. flag_debug_mlff) &
            write(*,*) 'check stress write_md_data second velocity:', stress,baro%P_int*HaBohr3ToGPa,&
                baro%P_ext/HaBohr3ToGPa

@@ -1,6 +1,7 @@
 AtomMove.TypeOfRun static
 IO.Coordinates coords.dat
 IO.Iprint 0
+IO.WriteOutToFile F
 Grid.GridCutoff  200
 DM.SolutionMethod ordern
 DM.L_range 16.0

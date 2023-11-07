@@ -543,7 +543,7 @@ contains
   !!    Added call for extended XYZ output (includes forces)
   !!  SOURCE
   !!  
-  subroutine write_md_data(iter, thermo, baro, mdl, nequil, MDfreq)
+  subroutine write_md_data(iter, thermo, baro, mdl, nequil, MDfreq, XSFfreq, XYZfreq)
 
     use GenComms,      only: inode, ionode
     use io_module,     only: write_xsf, write_extxyz, return_prefix
@@ -556,7 +556,7 @@ contains
     type(type_barostat), intent(inout)    :: baro
     type(type_thermostat), intent(inout)  :: thermo
     type(type_md_model), intent(inout)    :: mdl
-    integer, intent(in)                   :: iter, nequil, MDfreq
+    integer, intent(in)                   :: iter, nequil, MDfreq, XSFfreq, XYZfreq
 
     ! local variables
     character(len=16) :: subname = "write_md_data: "
@@ -568,9 +568,12 @@ contains
 
     call write_md_checkpoint(thermo, baro)
     call mdl%dump_stats(md_stats_file, nequil)
-    if (flag_write_xsf) call write_xsf(md_trajectory_file, iter)
-    if (flag_write_extxyz) &
+    if (flag_write_xsf .and. mod(iter,XSFfreq) == 0) then
+        call write_xsf(md_trajectory_file, iter)
+    end if
+    if (flag_write_extxyz .and. mod(iter,XYZfreq) == 0) then
          call write_extxyz('trajectory.xyz', mdl%dft_total_energy, mdl%atom_force)
+    end if
     if (flag_heat_flux) call mdl%dump_heat_flux(md_heat_flux_file)
     if (mod(iter, MDfreq) == 0) then
        call mdl%dump_frame(md_frames_file)

@@ -142,6 +142,9 @@
 !!   2023/03/15 08:32 dave
 !!    Removed redundant pDOS variables and added export of wavefunction coefficients
 !!    scaled by overlap matrix for pDOS calculation in post-processing
+!!   2023/08/02 tsuyoshi
+!!    At the implmentation of Padding H, the arrays "w" and "local_w" were renamed as
+!!     "evals" and "local_evals", respectively. 
 !!***
 module DiagModule
 
@@ -278,8 +281,8 @@ module DiagModule
   !logical :: diagon ! Do we diagonalise or use O(N) ?
 
   ! Local scratch data
-  real(double), dimension(:,:,:), allocatable :: w ! matrix_size, nkp, nspin
-  real(double), dimension(:,:),   allocatable :: local_w ! matrix_size, nspin
+  real(double), dimension(:,:,:), allocatable :: evals       ! matrix_size, nkp, nspin
+  real(double), dimension(:,:),   allocatable :: local_evals ! matrix_size_padH, nspin
   complex(double_cplx), dimension(:,:,:), pointer :: polSloc
   integer :: pol_S_size
   !complex(double_cplx), dimension(:),allocatable :: work, rwork, gap
@@ -493,7 +496,7 @@ contains
          flag_SpinDependentSF, flag_do_pol_calc, polS, &
          io_ase, write_ase, ase_file, i_pol_dir_end, ne_spin_in_cell
     use GenComms,        only: my_barrier, cq_abort, mtime, gsum, myid
-    use ScalapackFormat, only: matrix_size, proc_rows, proc_cols,     &
+    use ScalapackFormat, only: matrix_size, matrix_size_padH, proc_rows, proc_cols,     &
          block_size_r,       &
          block_size_c, pg_kpoints, proc_groups, &
          nkpoints_max, pgid, N_procs_in_pg,     &
@@ -562,8 +565,8 @@ contains
          abstol
 
     ! zero the global and local eigenvalues
-    w = zero
-    local_w = zero
+    evals = zero
+    local_evals = zero
 
     do spin = 1, nspin
        do i = 1, nkpoints_max ! Loop over the kpoints within each process group
@@ -574,7 +577,7 @@ contains
        ! node, note that the repeating of the same eigenvalues in each
        ! proc_group is taken care of by the additional factor
        ! 1 / N_procs_in_pg
-       call gsum(w(:,:,spin), matrix_size, nkp)
+       call gsum(evals(:,:,spin), matrix_size, nkp)
     end do ! spin
     ! Allocate matrices to store band K matrices
     time1 = mtime()
@@ -587,7 +590,7 @@ contains
     end if
     ! Find Fermi level, given the eigenvalues at all k-points (in w)
     ! if (me < proc_rows*proc_cols) then
-    call findFermi(electrons, w, matrix_size, nkp, Efermi, occ)
+    call findFermi(electrons, evals, matrix_size, nkp, Efermi, occ)
     ! Allocate space to expand eigenvectors into (i.e. when reversing
     ! ScaLAPACK distribution)
     allocate(expH(matrix_size,prim_size,nspin), STAT=stat)
@@ -715,8 +718,8 @@ contains
              exit
           end if
        end do
-       ! Find Fermi level, given the eigenvalues at all k-points (in w)
-       call findFermi(electrons, w, matrix_size, nkp, Efermi, occ)
+       ! Find Fermi level, given the eigenvalues at all k-points (in evals)
+       call findFermi(electrons, evals, matrix_size, nkp, Efermi, occ)
     end if ! DeltaSCF localised excitation
     ! Now write out eigenvalues and occupancies
     if (iprint_DM + min_layer == 2 .AND. myid == 0) then
@@ -728,20 +731,20 @@ contains
                   write (io_lun, '(10x,"For spin = ",i1)') spin
              do j = 1, matrix_size, 3
                 if (j == matrix_size) then
-                   write (io_lun, 8) w(j,i,spin), occ(j,i,spin)
-                   bandE(spin) = bandE(spin) + w(j,i,spin) * occ(j,i,spin)
+                   write (io_lun, 8) evals(j,i,spin), occ(j,i,spin)
+                   bandE(spin) = bandE(spin) + evals(j,i,spin) * occ(j,i,spin)
                 else if (j == matrix_size - 1) then
-                   write (io_lun, 9) w(j,i,spin), occ(j,i,spin), &
-                        w(j+1,i,spin), occ(j+1,i,spin)
-                   bandE(spin) = bandE(spin) + w(j,i,spin) * occ(j,i,spin) + &
-                        w(j+1,i,spin) * occ(j+1,i,spin)
+                   write (io_lun, 9) evals(j,i,spin), occ(j,i,spin), &
+                        evals(j+1,i,spin), occ(j+1,i,spin)
+                   bandE(spin) = bandE(spin) + evals(j,i,spin) * occ(j,i,spin) + &
+                        evals(j+1,i,spin) * occ(j+1,i,spin)
                 else
-                   write (io_lun, 10) w(j,i,spin), occ(j,i,spin), &
-                        w(j+1,i,spin), occ(j+1,i,spin), &
-                        w(j+2,i,spin), occ(j+2,i,spin)
-                   bandE(spin) = bandE(spin) + w(j,i,spin) * occ(j,i,spin) + &
-                        w(j+1,i,spin) * occ(j+1,i,spin) + &
-                        w(j+2,i,spin) * occ(j+2,i,spin)
+                   write (io_lun, 10) evals(j,i,spin), occ(j,i,spin), &
+                        evals(j+1,i,spin), occ(j+1,i,spin), &
+                        evals(j+2,i,spin), occ(j+2,i,spin)
+                   bandE(spin) = bandE(spin) + evals(j,i,spin) * occ(j,i,spin) + &
+                        evals(j+1,i,spin) * occ(j+1,i,spin) + &
+                        evals(j+2,i,spin) * occ(j+2,i,spin)
                 endif
              end do ! j=matrix_size
              write (io_lun, &
@@ -765,8 +768,8 @@ contains
              if (nspin == 2) &
                   write (io_lun, '(10x,"For spin = ",i1)') spin
              do j = 1, matrix_size
-                write (io_lun, fmt='(10x,i5,f12.5,f6.3)') j, w(j,i,spin), occ(j,i,spin)
-                bandE(spin) = bandE(spin) + w(j,i,spin) * occ(j,i,spin)
+                write (io_lun, fmt='(10x,i5,f12.5,f6.3)') j, evals(j,i,spin), occ(j,i,spin)
+                bandE(spin) = bandE(spin) + evals(j,i,spin) * occ(j,i,spin)
              end do ! j=matrix_size
              write (io_lun, &
                   fmt='(10x,"Sum of eigenvalues for spin = ", &
@@ -783,7 +786,7 @@ contains
        end do ! do i = 1, nkp
     end if ! if(iprint_DM + min_layer>=1.AND.myid==0)
 
-    if(inode==ionode .and. write_ase) call write_eigenvalues_format_ase(w,occ,matrix_size,nkp,nspin,&
+    if(inode==ionode .and. write_ase) call write_eigenvalues_format_ase(evals,occ,matrix_size,nkp,nspin,&
          kk,Efermi,io_ase,ase_file,7+n_species+2+nkp)
     
     time0 = mtime()
@@ -821,9 +824,9 @@ contains
                 ! Output wavefunction coefficients
                 if(wf_self_con .and. (flag_out_wf .or. flag_write_projected_DOS)) then
                    if(i==1) then
-                      call write_wavefn_coeffs(w(:,kp,spin),expH(:,:,spin),spin,firstcall=1)
+                      call write_wavefn_coeffs(evals(:,kp,spin),expH(:,:,spin),spin,firstcall=1)
                    else
-                      call write_wavefn_coeffs(w(:,kp,spin),expH(:,:,spin),spin)
+                      call write_wavefn_coeffs(evals(:,kp,spin),expH(:,:,spin),spin)
                    end if
                    if(flag_write_projected_DOS) then
                       scaledEig = zero
@@ -832,9 +835,9 @@ contains
                            kk(:,kp), wtk(kp), expH(:,:,spin),scaledEig,matS(spin_SF))
                       flag_pDOS_buildK = .false.
                       if(i==1) then
-                         call write_wavefn_coeffs(w(:,kp,spin),scaledEig,spin,tag="Sij",firstcall=1)
+                         call write_wavefn_coeffs(evals(:,kp,spin),scaledEig,spin,tag="Sij",firstcall=1)
                       else
-                         call write_wavefn_coeffs(w(:,kp,spin),scaledEig,spin,tag="Sij")
+                         call write_wavefn_coeffs(evals(:,kp,spin),scaledEig,spin,tag="Sij")
                       end if
                    else
                       call buildK(Hrange, matK(spin), occ(:,kp,spin), &
@@ -879,7 +882,7 @@ contains
                       end if
                    case (1) ! Methfessel-Paxton smearing
                       entropy = entropy + spin_factor * wtk(kp) * &
-                           MP_entropy((w(j,kp,spin) - Efermi(spin)) / kT, &
+                           MP_entropy((evals(j,kp,spin) - Efermi(spin)) / kT, &
                            iMethfessel_Paxton)
                    case default
                       call cq_abort ("FindEvals: Smearing flag not recognised",&
@@ -888,7 +891,7 @@ contains
                    end select
                    ! occ is now used to construct matM12, factor by eps^n
                    ! to allow reuse of buildK
-                   occ(j,kp,spin) = - occ(j,kp,spin) * w(j,kp,spin)
+                   occ(j,kp,spin) = - occ(j,kp,spin) * evals(j,kp,spin)
                 end do ! j = 1, matrix_size
                 ! Now build data_M12_ij (=-\sum_n eps^n c^n_i c^n_j -
                 ! hence scaling occs by eps allows reuse of buildK)
@@ -899,7 +902,7 @@ contains
        end do ! End do i = 1, nkpoints_max
     end do ! spin
     !------ output eigenvalues  --------
-    if(inode==ionode) call write_eigenvalues(w,matrix_size,nkp,nspin,kk,wtk,Efermi)
+    if(inode==ionode) call write_eigenvalues(evals,matrix_size,nkp,nspin,kk,wtk,Efermi)
     if (iprint_DM + min_layer > 3 .and. inode == ionode) &
          write (io_lun, fmt='(10x,a,2f16.6)') "Entropy, TS: ", entropy, kT * entropy
     ! store entropy as TS instead of S
@@ -1035,12 +1038,14 @@ contains
   !!   2017/06/22 dave
   !!   Made descriptors module variables
   !!   Moved many operations out to new routines so this contains only work needed each time
+  !!   2023/07/24 tsuyoshi
+  !!   - Change for padding H and S matrices
   !!  SOURCE
   !!
   subroutine initDiag
 
     use numbers
-    use ScalapackFormat, only: proc_rows, proc_cols, matrix_size
+    use ScalapackFormat, only: proc_rows, proc_cols, matrix_size, matrix_size_padH
     use global_module,   only: numprocs, nspin
     use GenComms,        only: my_barrier, cq_abort, myid
     use memory_module,   only: type_dbl, type_int, type_cplx,         &
@@ -1069,26 +1074,26 @@ contains
     SCSmat = zero
     z = zero
 
-    allocate(w(matrix_size,nkp,nspin), occ(matrix_size,nkp,nspin), STAT=stat)
+    allocate(evals(matrix_size,nkp,nspin), occ(matrix_size,nkp,nspin), STAT=stat)
     if (stat /= 0) call cq_abort('initDiag: failed to allocate w and occ', stat)
-    call reg_alloc_mem(area_DM, 2 * matrix_size * nkp * nspin, type_dbl)
+    call reg_alloc_mem(area_DM, 2*matrix_size * nkp * nspin, type_dbl)
 
-    allocate(local_w(matrix_size, nspin), STAT=stat)
-    if (stat /= 0) call cq_abort('initDiag: failed to allocate local_w', stat)
-    call reg_alloc_mem(area_DM, matrix_size * nspin, type_dbl)
+    allocate(local_evals(matrix_size_padH, nspin), STAT=stat)
+    if (stat /= 0) call cq_abort('initDiag: failed to allocate local_evals', stat)
+    call reg_alloc_mem(area_DM, matrix_size_padH * nspin, type_dbl)
 
-    allocate(ifail(matrix_size), iclustr(2 * proc_rows * proc_cols), STAT=stat)
+    allocate(ifail(matrix_size_padH), iclustr(2 * proc_rows * proc_cols), STAT=stat)
     if (stat /= 0) call cq_abort("initDiag: failed to allocate ifail and iclustr", stat)
-    call reg_alloc_mem(area_DM, matrix_size + 2 * proc_rows * proc_cols, type_int)
+    call reg_alloc_mem(area_DM, matrix_size_padH + 2 * proc_rows * proc_cols, type_int)
 
     allocate(gap(proc_rows * proc_cols), STAT=stat)
     if (stat /= 0) call cq_abort("initDiag: failed to allocate gap", stat)
     call reg_alloc_mem(area_DM, proc_rows * proc_cols, type_dbl)
 
     ! the pzhegvx is only called here to get the optimal work array
-    call pzhegvx(1, 'V', 'A', 'U', matrix_size, SCHmat(:,:,1), 1, 1,  &
+    call pzhegvx(1, 'V', 'A', 'U', matrix_size_padH, SCHmat(:,:,1), 1, 1,  &
          desca, SCSmat(:,:,1), 1, 1, descb, zero, zero, 0, 0, &
-         1.0e-307_double, m, mz, w(1,1,1), -one, z(:,:,1), 1, &
+         1.0e-307_double, m, mz, local_evals(1,1), -one, z(:,:,1), 1, &
          1, descz, wo, -1, rwo, -1, iwo, -1, ifail, iclustr,  &
          gap, info)
 
@@ -1120,6 +1125,8 @@ contains
   !! CREATION DATE
   !!   2012/03/08
   !! MODIFICATION HISTORY
+  !!   2023/07/24 tsuyoshi
+  !!   - Change for padding H and S matrices
   !! SOURCE
   !!
   subroutine endDiag
@@ -1128,7 +1135,7 @@ contains
          reg_dealloc_mem
     use global_module,   only: numprocs, nspin
     use ScalapackFormat, only: deallocate_arrays, proc_rows,  &
-         proc_cols, matrix_size
+         proc_cols, matrix_size, matrix_size_padH
 
     implicit none
 
@@ -1141,13 +1148,13 @@ contains
          call cq_abort("endDiag: failed to deallocate SCHmat, SCSmat and z", stat)
     call reg_dealloc_mem(area_DM, 3 * row_size * col_size * nspin, type_cplx)
 
-    deallocate(w, occ, STAT=stat)
+    deallocate(evals, occ, STAT=stat)
     if (stat /= 0) call cq_abort('endDiag: failed to deallocate w and occ', stat)
-    call reg_dealloc_mem(area_DM, 2 * matrix_size * nkp * nspin, type_dbl)
+    call reg_dealloc_mem(area_DM, 2*matrix_size * nkp * nspin, type_dbl)
 
-    deallocate(local_w, STAT=stat)
-    if (stat /= 0) call cq_abort('endDiag: failed to allocate local_w', stat)
-    call reg_dealloc_mem(area_DM, matrix_size * nspin, type_dbl)
+    deallocate(local_evals, STAT=stat)
+    if (stat /= 0) call cq_abort('endDiag: failed to allocate local_evals', stat)
+    call reg_dealloc_mem(area_DM, matrix_size_padH * nspin, type_dbl)
 
     ! Shut down BLACS
 
@@ -1157,7 +1164,7 @@ contains
     deallocate(ifail, iclustr, STAT=stat)
     if (stat /= 0) &
          call cq_abort("endDiag: failed to deallocate ifail and iclustr", stat)
-    call reg_dealloc_mem(area_DM, matrix_size + 2 * proc_rows * &
+    call reg_dealloc_mem(area_DM, matrix_size_padH + 2 * proc_rows * &
          proc_cols, type_int)
 
     deallocate(gap, STAT=stat)
@@ -1222,6 +1229,8 @@ contains
   !!    Changed nsf to come from maxima, not common
   !!   2006/08/30 16:49 dave
   !!    Added allocate for arrays in Distrib
+  !!   2023/07/24 tsuyoshi
+  !!   - Change for padding H and S matrices
   !!  SOURCE
   !!
   subroutine PrepareRecv(Distrib)
@@ -1255,6 +1264,7 @@ contains
     do rowblock=1,blocks_r
        if(my_row(rowblock)>0) then ! If this row block is part of my chunk
           do row = 1,block_size_r
+             if(SC_row_block_atom(row,rowblock)%part==0) cycle    ! for padding H and S matrices (padded part)
              if(iprint_DM>=5.AND.myid==0) write(io_lun,4) myid,i,rowblock,row
              ! Find processor and increment processors and rows from proc
              proc = parts%i_cc2node(SC_row_block_atom(row,rowblock)%part) ! find proc on which the partition containing the row is stored
@@ -2044,7 +2054,7 @@ contains
     use mpi
     use numbers,         only: zero, minus_i
     use ScalapackFormat, only: proc_start, block_size_r, block_size_c,&
-         mapy, pgroup, pgid
+         mapy, pgroup, pgid, matrix_size
     use GenComms,        only: my_barrier, myid
 
     implicit none
@@ -2061,7 +2071,7 @@ contains
          coff, req1, req2, ierr
     integer :: srow_size, scol_size, rrow_size, rcol_size
     integer, dimension(MPI_STATUS_SIZE) :: mpi_stat
-    integer :: i, j, k
+    integer :: i, j, k, l
 
     send_proc = myid
     recv_proc = myid
@@ -2127,7 +2137,13 @@ contains
                    if(iprint_DM>=5.AND.myid==0) &
                         write(io_lun,3) myid,j,k,rblock,cblock,refblock,coff,Distrib%firstrow(recv_proc+1),RecvBuffer(j,k)
                    ! localEig(Distrib%firstrow(recv_proc+1)+j-1,coff:coff+block_size_c-1) = RecvBuffer(j,k:k+block_size_c-1)
-                   localEig(coff:coff+block_size_c-1,Distrib%firstrow(recv_proc+1)+j-1) = RecvBuffer(j,k:k+block_size_c-1)
+
+                   if(coff+block_size_c-1 > matrix_size) then 
+                     !coff+l-1 = matrix_size  => l = matrix_size+1-coff
+                     localEig(coff:matrix_size,Distrib%firstrow(recv_proc+1)+j-1) = RecvBuffer(j,k:k+matrix_size-coff)
+                   else
+                    localEig(coff:coff+block_size_c-1,Distrib%firstrow(recv_proc+1)+j-1) = RecvBuffer(j,k:k+block_size_c-1)
+                   endif
                 end do
              end do
              if(iprint_DM>=4.AND.myid==0) write(io_lun,fmt='(10x,a)') '  Done on-proc'
@@ -2179,8 +2195,13 @@ contains
                       if(iprint_DM>=5.AND.myid==0) write(io_lun,3) myid,j,k,rblock,cblock,refblock,coff,&
                            Distrib%firstrow(recv_proc+1),RecvBuffer(j,k)
                       !localEig(Distrib%firstrow(recv_proc+1)+j-1,coff:coff+block_size_c-1) = RecvBuffer(j,k:k+block_size_c-1)
-                      localEig(coff:coff+block_size_c-1,Distrib%firstrow(recv_proc+1)+j-1) = &
-                           RecvBuffer(j,k:k+block_size_c-1)
+                      if(coff+block_size_c -1 > matrix_size) then
+                       !coff+l-1 = matrix_size  => l = matrix_size+1-coff
+                       localEig(coff:matrix_size,Distrib%firstrow(recv_proc+1)+j-1) = RecvBuffer(j,k:k+matrix_size-coff)
+                      else
+                       localEig(coff:coff+block_size_c-1,Distrib%firstrow(recv_proc+1)+j-1) = &
+                            RecvBuffer(j,k:k+block_size_c-1)
+                      endif
                    end do
                 end do
              end if ! (rrow_size > 0)
@@ -4197,6 +4218,8 @@ contains
   !!    Changed matS to be spin_SF dependent
   !!   2022/10/10 16:53 dave
   !!    Introduced flag to output info>0 warning only once
+  !!   2023/07/20 tsuyoshi
+  !!    Changed for padding H and S matrices
   !!  SOURCE
   !!
   subroutine distrib_and_diag(spin,index_kpoint,mode,flag_store_w,kpassed)
@@ -4205,7 +4228,8 @@ contains
     use numbers
     use global_module,   only: iprint_DM, flag_SpinDependentSF, min_layer, iprint
     use mult_module,     only: matH, matS
-    use ScalapackFormat, only: matrix_size, proc_rows, proc_cols,     &
+    use ScalapackFormat, only: matrix_size, matrix_size_padH, proc_rows, proc_cols,     &
+         block_size_r, block_size_c, blocks_r, blocks_c, procid, pgroup,&
          nkpoints_max, pgid, N_kpoints_in_pg, pg_kpoints, N_procs_in_pg, proc_groups
     use GenComms,        only: cq_warn
 
@@ -4221,6 +4245,10 @@ contains
     ! Local
     real(double) :: vl, vu, orfac, scale
     integer :: il, iu, m, mz, info, spin_SF, iprint_store
+    ! for padH
+    integer :: num_elem_pad, ind_proc_row_pad, ind_proc_col_pad, i, j
+    real(double), parameter :: H_large_value = 1.0e3_double  ! this should not change the results if it is larger than E_f
+    integer :: id_kgroup
 
     spin_SF = 1
     if (flag_SpinDependentSF) spin_SF = spin
@@ -4247,11 +4275,33 @@ contains
          write (io_lun, fmt='(10x,i6,a,5i6)') myid, 'Proc row, cols, me: ', &
          proc_rows, proc_cols, me, index_kpoint, nkpoints_max
     if (index_kpoint <= N_kpoints_in_pg(pgid)) then
+    ! Padding of H and S matrices to have matrix_size_padH
+       num_elem_pad  = matrix_size_padH - matrix_size
+       ind_proc_row_pad  = mod( blocks_r-1, proc_rows )
+       ind_proc_col_pad  = mod( blocks_c-1, proc_cols )
+
+       id_kgroup = pgroup(myid+1)
+       if( procid(id_kgroup, ind_proc_row_pad+1, ind_proc_col_pad+1) == myid+1 ) then
+          do i=row_size-num_elem_pad+1, row_size
+             do j=col_size-num_elem_pad+1, col_size
+                if( mod(i,block_size_r)==mod(j,block_size_c) ) then
+                   SCHmat(i,j,spin) = H_large_value
+                   SCSmat(i,j,spin) = one
+                else
+                   SCHmat(i,j,spin) = zero
+                   SCSmat(i,j,spin) = zero
+                end if
+             end do
+          end do
+       end if
+
+
        ! Call the diagonalisation routine for generalised problem
        ! H.psi = E.S.psi
-       call pzhegvx(1, mode, 'A', 'U', matrix_size, SCHmat(:,:,spin), &
+
+       call pzhegvx(1, mode, 'A', 'U', matrix_size_padH, SCHmat(:,:,spin), &
             1, 1, desca, SCSmat(:,:,spin), 1, 1, descb,      &
-            vl, vu, il, iu, abstol, m, mz, local_w(:,spin),  &
+            vl, vu, il, iu, abstol, m, mz, local_evals(:,spin),  &
             orfac, z(:,:,spin), 1, 1, descz, work, lwork,    &
             rwork, lrwork, iwork, liwork, ifail, iclustr,    &
             gap, info)
@@ -4271,9 +4321,9 @@ contains
              call cq_abort ("FindEvals: pzhegvx failed for mode "//mode//" with INFO=", info)
           end if
        end if
-       ! Copy local_w into appropriate place in w
-       if(flag_store_w) w(1:matrix_size, pg_kpoints(pgid, index_kpoint), spin) = &
-            scale * local_w(1:matrix_size, spin)
+       ! Copy local_evals into appropriate place in w
+       if(flag_store_w) evals(1:matrix_size, pg_kpoints(pgid, index_kpoint), spin) = &
+            scale * local_evals(1:matrix_size, spin)
     end if ! End if (i<=N_kpoints_in_pg(pgid))
   end subroutine distrib_and_diag
   !!***
@@ -4307,7 +4357,7 @@ contains
          reg_alloc_mem, reg_dealloc_mem
     use ScalapackFormat, only: allocate_arrays, pg_initialise, ref_to_SC_blocks, make_maps, &
          block_size_r, block_size_c, proc_rows, &
-         proc_cols, matrix_size, pgid, procid, proc_start
+         proc_cols, matrix_size_padH, pgid, procid, proc_start
     
     implicit none
 
@@ -4360,13 +4410,13 @@ contains
     if (iprint_DM + min_layer > 3 .AND. myid == 0) write (io_lun, 12) myid, row_size, col_size
 
     ! Register the description of the distribution of H
-    call descinit(desca, matrix_size, matrix_size, block_size_r, block_size_c, 0, 0, context, row_size, info)
+    call descinit(desca, matrix_size_padH, matrix_size_padH, block_size_r, block_size_c, 0, 0, context, row_size, info)
     if (info /= 0) call cq_abort("initDiag: descinit(a) failed !", info)
     ! Register the description of the distribution of S
-    call descinit(descb, matrix_size, matrix_size, block_size_r, block_size_c, 0, 0, context, row_size, info)
+    call descinit(descb, matrix_size_padH, matrix_size_padH, block_size_r, block_size_c, 0, 0, context, row_size, info)
     if (info /= 0) call cq_abort("initDiag: descinit(a) failed !", info)
     ! And register eigenvector distribution
-    call descinit(descz, matrix_size, matrix_size, block_size_r, block_size_c, 0, 0, context, row_size, info)
+    call descinit(descz, matrix_size_padH, matrix_size_padH, block_size_r, block_size_c, 0, 0, context, row_size, info)
     ! Find scratch space requirements for ScaLAPACk
     if (info /= 0) call cq_abort("initDiag: descinit(z) failed !", info)
 1   format(10x, 'Proc: ', i5, ' BLACS proc, row, col: ', 3i5)
