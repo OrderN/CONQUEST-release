@@ -2294,7 +2294,7 @@ contains
     end if
     flag_heat_flux = fdf_boolean('MD.HeatFlux', .false.)
 
-    !! Variable temperature
+    ! Variable temperature
     flag_variable_temperature = fdf_boolean('MD.VariableTemperature', .false.)
     md_variable_temperature_method = fdf_string(20, 'MD.VariableTemperatureMethod', 'linear')
     md_variable_temperature_rate = fdf_double('MD.VariableTemperatureRate', 0.0_double)
@@ -2302,7 +2302,26 @@ contains
     md_final_temperature = fdf_double('MD.FinalTemperature',temp_ion)
     ! Override temp_ion if md_initial_temperature is set
     if (flag_variable_temperature .and. (abs(md_initial_temperature-temp_ion) > RD_ERR)) then
+        if (abs(temp_ion-300) > RD_ERR) then
+            call cq_warn(sub_name,'AtomMove.IonTemperature is set and MD.VariableTemperature is true.')
+          end if
         temp_ion = md_initial_temperature
+    end if
+
+    ! Check for consistency
+    if (flag_variable_temperature) then
+        if (md_ensemble == 'nve') then
+            call cq_abort('NVE ensemble with MD.VariableTemperature set to true is NOT allowed')
+        end if
+        ! Verify sign of temperature change rate
+        if (abs(md_final_temperature-md_initial_temperature) > RD_ERR) then
+            if (md_variable_temperature_rate/(md_final_temperature-md_initial_temperature) < 0 ) then
+                call cq_abort('The temperature change rate is incompatible with the requested final temperature')
+            end if
+        end if
+
+
+
     end if
 
     ! Barostat
