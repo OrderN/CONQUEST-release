@@ -52,6 +52,8 @@
 !!    Moved various subroutines to md_misc_module
 !!   2022/12/12 11:41 dave
 !!    Added SQNM maximum step size (sqnm_trust_step) as user-adjustable parameter
+!!   2023/09/13 lu
+!!    Added XSF and XSF output frequency as user-adjustable parameter
 !!  SOURCE
 !!
 module control
@@ -66,7 +68,9 @@ module control
   implicit none
 
   integer      :: MDn_steps 
-  integer      :: MDfreq 
+  integer      :: MDfreq
+  integer      :: XSFfreq
+  integer      :: XYZfreq
   real(double) :: MDcgtol, sqnm_trust_step
   logical      :: CGreset
   integer      :: LBFGS_history
@@ -313,11 +317,12 @@ contains
     use GenBlas,       only: dot
     use force_module,  only: tot_force
     use io_module,     only: write_atomic_positions, pdb_template, &
-                             check_stop, write_xsf, print_atomic_positions, return_prefix
+                             check_stop, write_xsf, write_extxyz, &
+                             print_atomic_positions, return_prefix
     use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use timer_module
     use store_matrix,  ONLY: dump_InfoMatGlobal, dump_pos_and_matrices
-    use md_control,    only: flag_write_xsf
+    use md_control,    only: flag_write_xsf, flag_write_extxyz
 
     implicit none
 
@@ -631,8 +636,8 @@ contains
 !!    Moved velocity array allocation/deallocation to init_md/end_md
 !!   2020/01/06 15:40 dave
 !!    Add pressure-based termination for equilibration and remove Berendsen thermostat
-!!   2023/10/09 lu
-!!    Added variables XXX to enable simulations with a variable temperature
+!!   2023/09/13 lu
+!!    Add parameters for xsf and xyz output frequency
 !!  SOURCE
 !!
   subroutine md_run (fixed_potential, vary_mu, total_energy)
@@ -683,9 +688,7 @@ contains
                               md_n_ys, md_n_mts, ion_velocity, lattice_vec, &
                               md_baro_type, target_pressure, md_ndof_ions, &
                               md_equil_steps, md_equil_press, md_tau_T, md_tau_P, &
-                              md_thermo_type, &
-                              flag_variable_temperature, md_variable_temperature_method, &
-                              md_initial_temperature,md_final_temperature, md_variable_temperature_rate
+                              md_thermo_type
     use md_misc,        only: write_md_data, get_heat_flux, &
                               update_pos_and_box, integrate_pt, init_md, end_md
     use atoms,          only: distribute_atoms,deallocate_distribute_atom
@@ -723,9 +726,6 @@ contains
     ! thermostat, barostat
     type(type_thermostat), target :: thermo
     type(type_barostat), target   :: baro
-
-    ! Variable temperature
-    real(double)                  :: temp_change_step
 
     character(len=12) :: subname = "md_run: "
     character(len=120) :: prefix
@@ -826,64 +826,11 @@ contains
        ! Check this: it fixes H' for NVE but needs NVT confirmation
        ! DRB & TM 2020/01/24 12:03
        call mdl%get_cons_qty
-       call write_md_data(i_first-1, thermo, baro, mdl, nequil, MDfreq)
+       call write_md_data(i_first-1, thermo, baro, mdl, nequil, MDfreq, XSFfreq, XYZfreq)
     end if
 
     do iter = i_first, i_last ! Main MD loop
        mdl%step = iter
-
-       if (flag_variable_temperature) then
-
-         ! At present, only linear evolution is supported
-         if (md_variable_temperature_method .ne. 'linear') then
-
-           if(inode==ionode) &      
-             write(*,*) 'Wrong method for variable temperature. Stopping.. (',trim(md_variable_temperature_method),' != "linear")'
-
-           exit
-
-         end if
-
-         ! At a given time step, update T_ext and ke_target
-         ! Temperature evolves linearly from md_initial_temperature to md_final_temperature by step of temp_change_step
-         ! Stops when target temperature has been reached (i.e. abs(dT) < abs(temp_change_step) )
-         temp_change_step = md_variable_temperature_rate / mdl%timestep ! Unit is K
-         mdl%T_ext = mdl%T_ext + temp_change_step
-         thermo%ke_target = half*md_ndof_ions*fac_Kelvin2Hartree*mdl%T_ext ! Update target ke for SVR
-
-         if (inode==ionode .and. iprint_MD > 0) &
-           write(io_lun,fmt='(6x, "Thermostat temperature at step ", i5, ": ", f9.1, " K")') iter, mdl%T_ext
-
-         if (inode == ionode .and. iprint_MD > 1 ) &
-           write(io_lun,fmt='(6x, "kee target is now" , f8.3)') thermo%ke_target
-
-         if (md_variable_temperature_rate > 0) then ! heating
-
-             if (mdl%T_ext > md_final_temperature) then
-
-               if (inode == ionode) &
-                 write(io_lun,fmt='(6x, "Target temperature (",f7.1," K) has been reached (",f7.1," K). Stopping..")') &
-                         md_final_temperature, mdl%T_ext-temp_change_step
-
-               exit
-
-             end if
-
-         elseif (md_variable_temperature_rate < 0) then ! cooling
-
-           if (mdl%T_ext < md_final_temperature) then
-               if (inode == ionode) &
-                 write(io_lun,fmt='(6x, "Target temperature (",f7.1," K) has been reached (",f7.1," K). Stopping..")') &
-                         md_final_temperature, mdl%T_ext-temp_change_step
-
-               exit
-
-           end if
-
-         end if
-
-       end if
-
        if (inode==ionode .and. iprint_MD + min_layer > 0) &
             write(io_lun,fmt='(/4x,a,i5)') trim(prefix)//" iteration ",iter
 
@@ -1055,7 +1002,7 @@ contains
          call get_heat_flux(atomic_stress, ion_velocity, heat_flux)
 
        ! Write all MD data and checkpoints to disk
-       call write_md_data(iter, thermo, baro, mdl, nequil, MDfreq)
+       call write_md_data(iter, thermo, baro, mdl, nequil, MDfreq, XSFfreq, XYZfreq)
 
        !call check_stop(done, iter) ! moved above. 2019/Nov/14 tsuyoshi
        if (flag_fire_qMD.OR.flag_quench_MD) then

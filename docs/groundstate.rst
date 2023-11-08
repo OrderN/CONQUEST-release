@@ -159,6 +159,40 @@ increase gradually, testing the effects.
 
 Go to :ref:`top <groundstate>`.
 
+.. _gs_pad:
+
+Padding Hamiltonian matrix by setting block size
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+With the default setting, the size of Hamiltonian and overlap matrices 
+is determined by the total number of support functions. 
+It can be a prime number and timing of diagonalisation can be very slow 
+in such cases, since the division of the matrix into small pieces is difficult.
+
+By padding, we can change the size of Hamiltonian matrix to improve 
+the efficiency of the diagonalisation. To set an appropriate value 
+for the block size of the matrix, specify the following two variables.
+
+ ::
+
+  Diag.BlockSizeR       20
+  Diag.BlockSizeC       20
+
+Note that these two numbers should be the same when padding 
+(and when using ELPA which will be introduced to CONQUEST soon).
+We suggest that an appropriate value is between 20 and 200, but 
+this should be tested. 
+
+The option for padding was introduced after v1.2, and if you would 
+like to remove it, set the following variable. 
+
+ ::
+
+  Diag.PaddingHmatrix              F 
+
+
+Go to :ref:`top <groundstate>`.
+
 .. _gs_on:
 
 Linear Scaling
