@@ -117,7 +117,7 @@ contains
              tmp_l = tmp_nl(2:2)
              !
              call angmom_convert(tmp_l,l_value)
-             !print*, 'inode', inode, 'nsp', nsp, 'n_zeta', i,'tmp_nl', tmp_nl, 'l_value', l_value
+             !write(*,*) 'inode', inode, 'nsp', nsp, 'n_zeta', i,'tmp_nl', tmp_nl, 'l_value', l_value
              !
              l_max = 0
              ! get max angular momentum value
@@ -153,8 +153,8 @@ contains
        call gcopy( gto(nsp)%greatest_angmom )
        call gcopy( gto(nsp)%n_zeta_tot      )
        !
-       !print*,'inode', inode, 'nsp', nsp, 'gto(nsp)%greatest_angmom', gto(nsp)%greatest_angmom
-       !print*,'inode', inode, 'nsp', nsp, 'gto(nsp)%label', gto(nsp)%label
+       !write(*,*) 'inode', inode, 'nsp', nsp, 'gto(nsp)%greatest_angmom', gto(nsp)%greatest_angmom
+       !write(*,*) 'inode', inode, 'nsp', nsp, 'gto(nsp)%label', gto(nsp)%label
        if ( inode == ionode) write(io_lun,fmt='(10x,"greatest angular momentum =",i4)')&
             gto(nsp)%greatest_angmom       
        !
@@ -165,10 +165,10 @@ contains
              gto(nsp)%angmom(i)%n_zeta_in_angmom = l_nzeta(i)   
              gto(nsp)%angmom(i)%l_value = i                             
              gto(nsp)%angmom(i)%l_name  = l_name_uppercase(i)
-             !print*,'inode', inode, 'nsp', nsp, 'angmom', i
-             !print*,'inode', inode, '   gto(nsp)%angmom(i)%n_zeta_in_angmom', gto(nsp)%angmom(i)%n_zeta_in_angmom
-             !print*,'inode', inode, '   gto(nsp)%angmom(i)%l_value', gto(nsp)%angmom(i)%l_value
-             !print*,'inode', inode, '   gto(nsp)%angmom(i)%l_name ', gto(nsp)%angmom(i)%l_name
+             !write(*,*) 'inode', inode, 'nsp', nsp, 'angmom', i
+             !write(*,*) 'inode', inode, '   gto(nsp)%angmom(i)%n_zeta_in_angmom', gto(nsp)%angmom(i)%n_zeta_in_angmom
+             !write(*,*) 'inode', inode, '   gto(nsp)%angmom(i)%l_value', gto(nsp)%angmom(i)%l_value
+             !write(*,*) 'inode', inode, '   gto(nsp)%angmom(i)%l_name ', gto(nsp)%angmom(i)%l_name
              
           end do
        end if
@@ -179,10 +179,10 @@ contains
           call gcopy( gto(nsp)%angmom(i)%l_value  )
           call gcopy( gto(nsp)%angmom(i)%l_name, 1)
           !
-          !print*,'inode', inode, 'nsp', nsp, 'angmom', i
-          !print*,'inode', inode,'nsp', nsp, 'i', i,  gto(nsp)%angmom(i)%n_zeta_in_angmom
-          !print*,'inode', inode, '   gto(nsp)%angmom(i)%l_value', gto(nsp)%angmom(i)%l_value
-          !print*,'inode', inode, '   gto(nsp)%angmom(i)%l_name ', gto(nsp)%angmom(i)%l_name
+          !write(*,*) 'inode', inode, 'nsp', nsp, 'angmom', i
+          !write(*,*) 'inode', inode,'nsp', nsp, 'i', i,  gto(nsp)%angmom(i)%n_zeta_in_angmom
+          !write(*,*) 'inode', inode, '   gto(nsp)%angmom(i)%l_value', gto(nsp)%angmom(i)%l_value
+          !write(*,*) 'inode', inode, '   gto(nsp)%angmom(i)%l_name ', gto(nsp)%angmom(i)%l_name
           !
           allocate( gto(nsp)%angmom(i)%zeta( gto(nsp)%angmom(i)%n_zeta_in_angmom ) )
           !
@@ -335,7 +335,7 @@ contains
                 call sph_gauss_function( inode, ionode, l1, m1, sph_size, sph_nx, sph_ny, sph_nz, sph_coef, sph_name )             
                 gto(nsp)%angmom(l1)%transform_sph(m1)%size = sph_size
 
-                !print*, 'nsp, l1, m1, coef 0', nsp, l1, m1, sph_coef
+                !write(*,*) 'nsp, l1, m1, coef 0', nsp, l1, m1, sph_coef
                 
              end if
              !
@@ -354,9 +354,9 @@ contains
                 gto(nsp)%angmom(l1)%transform_sph(m1)%ny = sph_ny ( 1:gto(nsp)%angmom(l1)%transform_sph(m1)%size )
                 gto(nsp)%angmom(l1)%transform_sph(m1)%nz = sph_nz ( 1:gto(nsp)%angmom(l1)%transform_sph(m1)%size )
                 gto(nsp)%angmom(l1)%transform_sph(m1)%c  = sph_coef(1:gto(nsp)%angmom(l1)%transform_sph(m1)%size )
-                !print*, 'nsp, l1, m1, coef 1', nsp, l1, m1, sph_coef(1:gto(nsp)%angmom(l1)%transform_sph(m1)%size)
+                !write(*,*) 'nsp, l1, m1, coef 1', nsp, l1, m1, sph_coef(1:gto(nsp)%angmom(l1)%transform_sph(m1)%size)
 
-                !print*, 'ionode', inode, gto(nsp)%angmom(l1)%transform_sph(m1)%nx, gto(nsp)%angmom(l1)%transform_sph(m1)%ny,&
+                !write(*,*) 'ionode', inode, gto(nsp)%angmom(l1)%transform_sph(m1)%nx, gto(nsp)%angmom(l1)%transform_sph(m1)%ny,&
                 !     gto(nsp)%angmom(l1)%transform_sph(m1)%nz, gto(nsp)%angmom(l1)%transform_sph(m1)%c
              end if
              !
@@ -365,7 +365,7 @@ contains
              call gcopy( gto(nsp)%angmom(l1)%transform_sph(m1)%nx, gto(nsp)%angmom(l1)%transform_sph(m1)%size )
              call gcopy( gto(nsp)%angmom(l1)%transform_sph(m1)%ny, gto(nsp)%angmom(l1)%transform_sph(m1)%size )
              call gcopy( gto(nsp)%angmom(l1)%transform_sph(m1)%nz, gto(nsp)%angmom(l1)%transform_sph(m1)%size )
-             !if (inode == ionode) print*, 'nsp, l1, m1, coef 2', nsp, l1, m1, gto(nsp)%angmom(l1)%transform_sph(m1)%c
+             !if (inode == ionode) write(*,*) 'nsp, l1, m1, coef 2', nsp, l1, m1, gto(nsp)%angmom(l1)%transform_sph(m1)%c
              call gcopy( gto(nsp)%angmom(l1)%transform_sph(m1)%c,  gto(nsp)%angmom(l1)%transform_sph(m1)%size )
 
           end do
@@ -403,8 +403,8 @@ contains
                       gto(nsp)%sf( count )%sph_nz(n1) = gto(nsp)%angmom(l1)%transform_sph(m1)%nz( n1 )
                       gto(nsp)%sf( count )%sph_c (n1) = gto(nsp)%angmom(l1)%transform_sph(m1)%c ( n1 )
 
-                      print*, 'l1, acz1, m1, n1', l1, acz1, m1, n1, 'nx',  gto(nsp)%sf( count )%sph_nx(n1), &
-                           'ny',  gto(nsp)%sf( count )%sph_ny(n1), 'nz',  gto(nsp)%sf( count )%sph_nz(n1), inode
+                      !write(*,*) 'l1, acz1, m1, n1', l1, acz1, m1, n1, 'nx',  gto(nsp)%sf( count )%sph_nx(n1), &
+                      !     'ny',  gto(nsp)%sf( count )%sph_ny(n1), 'nz',  gto(nsp)%sf( count )%sph_nz(n1), inode
                       
                    end if
                                       
@@ -415,13 +415,13 @@ contains
 
                 end do sph_loop
 
-                if ( inode == 1 ) print*, inode, 'l1, acz1, m1', l1, acz1, m1, 'nx', gto(nsp)%sf( count )%sph_nx 
-                if ( inode == 1 ) print*, inode, 'l1, acz1, m1', l1, acz1, m1, 'ny', gto(nsp)%sf( count )%sph_ny 
-                if ( inode == 1 ) print*, inode, 'l1, acz1, m1', l1, acz1, m1, 'nz', gto(nsp)%sf( count )%sph_nz 
+                !if ( inode == 1 ) write(*,*) inode, 'l1, acz1, m1', l1, acz1, m1, 'nx', gto(nsp)%sf( count )%sph_nx 
+                !if ( inode == 1 ) write(*,*) inode, 'l1, acz1, m1', l1, acz1, m1, 'ny', gto(nsp)%sf( count )%sph_ny 
+                !if ( inode == 1 ) write(*,*) inode, 'l1, acz1, m1', l1, acz1, m1, 'nz', gto(nsp)%sf( count )%sph_nz 
 
-                if ( inode == 2 ) print*, inode, 'l1, acz1, m1', l1, acz1, m1, 'nx', gto(nsp)%sf( count )%sph_nx 
-                if ( inode == 2 ) print*, inode, 'l1, acz1, m1', l1, acz1, m1, 'ny', gto(nsp)%sf( count )%sph_ny 
-                if ( inode == 2 ) print*, inode, 'l1, acz1, m1', l1, acz1, m1, 'nz', gto(nsp)%sf( count )%sph_nz 
+                !if ( inode == 2 ) write(*,*) inode, 'l1, acz1, m1', l1, acz1, m1, 'nx', gto(nsp)%sf( count )%sph_nx 
+                !if ( inode == 2 ) write(*,*) inode, 'l1, acz1, m1', l1, acz1, m1, 'ny', gto(nsp)%sf( count )%sph_ny 
+                !if ( inode == 2 ) write(*,*) inode, 'l1, acz1, m1', l1, acz1, m1, 'nz', gto(nsp)%sf( count )%sph_nz 
 
                 gto(nsp)%sf( count )%nt   = gto(nsp)%angmom(l1)%transform_sph(m1)%nt
                 gto(nsp)%sf( count )%ngto = gto(nsp)%angmom(l1)%zeta(acz1)%ngto
@@ -431,10 +431,10 @@ contains
                 call gcopy( gto(nsp)%sf( count )%ngto )
                 call gcopy( gto(nsp)%sf( count )%norm )
                 
-                print*,'inode', inode, 'l1, acz1, m1', l1, acz1, m1, 'ex, ey, ez', &
-                     gto(nsp)%sf( count )%sph_nx, gto(nsp)%sf( count )%sph_ny, gto(nsp)%sf( count )%sph_nz, &
-                     'nt', gto(nsp)%sf( count )%nt, 'norm', gto(nsp)%sf( count )%norm, 'count', count, &
-                     'ngto', gto(nsp)%sf( count )%ngto
+                !write(*,*) 'inode', inode, 'l1, acz1, m1', l1, acz1, m1, 'ex, ey, ez', &
+                !     gto(nsp)%sf( count )%sph_nx, gto(nsp)%sf( count )%sph_ny, gto(nsp)%sf( count )%sph_nz, &
+                !     'nt', gto(nsp)%sf( count )%nt, 'norm', gto(nsp)%sf( count )%norm, 'count', count, &
+                !     'ngto', gto(nsp)%sf( count )%ngto
                                 
                 allocate( gto(nsp)%sf( count )%a( gto(nsp)%sf( count )%ngto ) ) 
                 allocate( gto(nsp)%sf( count )%d( gto(nsp)%sf( count )%ngto ) )
@@ -450,11 +450,11 @@ contains
                                             
                    end if
                    
-                   !print*,'inode', inode, 'nsp', nsp, 'count', count, 'p', p, ' gto(nsp)%sf( count )%a( p )',  &
+                   !write(*,*) 'inode', inode, 'nsp', nsp, 'count', count, 'p', p, ' gto(nsp)%sf( count )%a( p )',  &
                    !     gto(nsp)%sf( count )%a( p )
-                   !print*,'inode', inode, 'nsp', nsp, 'count', count, 'p', p, ' gto(nsp)%sf( count )%d( p )',  &
+                   !write(*,*) 'inode', inode, 'nsp', nsp, 'count', count, 'p', p, ' gto(nsp)%sf( count )%d( p )',  &
                    !     gto(nsp)%sf( count )%d( p )
-                   !print*,'inode', inode, 'nsp', nsp, 'count', count, 'p', p, ' gto(nsp)%sf( count )%c( p )',  &
+                   !write(*,*) 'inode', inode, 'nsp', nsp, 'count', count, 'p', p, ' gto(nsp)%sf( count )%c( p )',  &
                    !     gto(nsp)%sf( count )%c( p )
 
                    
@@ -463,11 +463,11 @@ contains
                 call gcopy(  gto(nsp)%sf( count )%d,  gto(nsp)%angmom(l1)%zeta(acz1)%ngto )
                 call gcopy(  gto(nsp)%sf( count )%c,  gto(nsp)%angmom(l1)%zeta(acz1)%ngto )
 
-                !print*,'inode', inode, 'nsp', nsp, 'count', count, 'p', p, ' gto(nsp)%sf( count )%a( p )',  &
+                !write(*,*) 'inode', inode, 'nsp', nsp, 'count', count, 'p', p, ' gto(nsp)%sf( count )%a( p )',  &
                 !     gto(nsp)%sf( count )%a
-                !print*,'inode', inode, 'nsp', nsp, 'count', count, 'p', p, ' gto(nsp)%sf( count )%d( p )',  &
+                !write(*,*) 'inode', inode, 'nsp', nsp, 'count', count, 'p', p, ' gto(nsp)%sf( count )%d( p )',  &
                 !     gto(nsp)%sf( count )%d
-                !print*,'inode', inode, 'nsp', nsp, 'count', count, 'p', p, ' gto(nsp)%sf( count )%c( p )',  &
+                !write(*,*) 'inode', inode, 'nsp', nsp, 'count', count, 'p', p, ' gto(nsp)%sf( count )%c( p )',  &
                 !     gto(nsp)%sf( count )%c
 
                 count = count + 1
@@ -586,7 +586,7 @@ contains
 !!$          end do zeta_loop2
 !!$       end do angu_loop2
 !!$       
-       print*,'inode', inode, 'fin'
+       !write(*,*)'inode', inode, 'fin'
           
     end do species_loop
 

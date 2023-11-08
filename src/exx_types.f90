@@ -138,6 +138,7 @@ module exx_types
   type(cq_timer), save :: tmr_std_exx_evalgto
   type(cq_timer), save :: tmr_std_exx_splitpao
   type(cq_timer), save :: tmr_std_exx_barrier
+  type(cq_timer), save :: tmr_std_exx_comms
 
   real(double)         :: exx_total_time
 

@@ -122,7 +122,7 @@ contains
          tmr_std_exx_fetch,   tmr_std_exx_accumul, &
          tmr_std_exx_matmult, tmr_std_exx_poisson, &
          tmr_std_exx_allocat, tmr_std_exx_dealloc, &
-         tmr_std_exx_fetch,   tmr_std_exx_kernel,  &
+         tmr_std_exx_comms,   tmr_std_exx_kernel,  &
          unit_timers_write,   unit_memory_write,   &
          unit_exx_debug,      unit_eri_debug,      &
          unit_eri_filter_debug, &         
@@ -197,7 +197,7 @@ contains
     !
     !==============================================================================================================
 
-    open(200)
+    !open(200)
 
     
     !****lat<$
@@ -319,13 +319,12 @@ contains
        end select poisson_fftw
 
     else if (exx_psolver == 'isf') then
-
-
        call cq_abort('EXX with ISF Poisson solver disabled')  
+       !
        !call exx_mem_alloc(extent,0,0,'isf_rho','alloc')
        !call createKernel('F',ngrid,ngrid,ngrid,grid_spacing,grid_spacing,grid_spacing,isf_order,&
-       !     0,1,kernel)       
-
+       !     0,1,kernel)  
+       
     end if
     call stop_timer(tmr_std_exx_setup,.true.)
     !    
@@ -409,9 +408,13 @@ contains
     !
     sends  = 0
     invdir = 0
+    !
+    call start_timer(tmr_std_exx_comms)
     call Mquest_start_send(mult(S_X_SX),mat_p(matK(  exxspin  ))%matrix,nreqs,myid,mult(S_X_SX)%prim%mx_ngonn,sends)
-    !ncover_yz=mult(S_X_SX)%gcs%ncovery*mult(S_X_SX)%gcs%ncoverz
+    call stop_timer(tmr_std_exx_comms,.true.)
+    !
     ncover_yz=mult(S_X_SX)%gcs%ncovery*mult(S_X_SX)%gcs%ncoverz
+    !
     !
     ! #ifdef OMP_M
     ! !$omp parallel default(none) &
@@ -467,10 +470,12 @@ contains
              allocate(b_rem(lenb_rem))
              call stop_timer(tmr_std_exx_allocat,.true.)   
              !
+             call start_timer(tmr_std_exx_comms)
              call prefetch(kpart,mult(S_X_SX)%ahalo,mult(S_X_SX)%comms,mult(S_X_SX)%bmat,icall, &
                   n_cont,part_array,mult(S_X_SX)%bindex,b_rem,lenb_rem,mat_p(matK(  exxspin  ))%matrix,   &
                   myid,ilen2,mx_msg_per_part,mult(S_X_SX)%parts,mult(S_X_SX)%prim,mult(S_X_SX)%gcs,&
                   (recv_part(nnode)-1)*2)
+             call stop_timer(tmr_std_exx_comms,.true.)
              !
              offset = 0
              nbnab_rem => part_array(offset+1:offset+n_cont)
@@ -490,8 +495,12 @@ contains
                 call cq_abort('mat_mult: error pointing to part_array ',kpart)
              end if
              ! Create ibpart_rem
+             
+             call start_timer(tmr_std_exx_comms)
              call end_part_comms(myid,n_cont,nbnab_rem,ibind_rem,npxyz_rem,&
                   ibpart_rem,ncover_yz,mult(S_X_SX)%gcs%ncoverz)
+             call stop_timer(tmr_std_exx_comms,.true.)
+             !
           end if
        else ! Get the data
           ipart = mult(S_X_SX)%parts%i_cc2seq(ind_part)
@@ -515,11 +524,12 @@ contains
           allocate(b_rem(lenb_rem))
           call stop_timer(tmr_std_exx_allocat,.true.)
           !
-          !
+          call start_timer(tmr_std_exx_comms)
           call prefetch(kpart,mult(S_X_SX)%ahalo,mult(S_X_SX)%comms,mult(S_X_SX)%bmat,icall, &
                n_cont,part_array,mult(S_X_SX)%bindex,b_rem,lenb_rem,mat_p(matK(  exxspin  ))%matrix,   & 
                myid,ilen2,mx_msg_per_part,mult(S_X_SX)%parts,mult(S_X_SX)%prim,mult(S_X_SX)%gcs,&
                (recv_part(nnode)-1)*2)
+          call stop_timer(tmr_std_exx_comms,.true.)
           !
           lenb_rem = size(b_rem)
           !
@@ -535,9 +545,11 @@ contains
                5*mult(S_X_SX)%parts%mx_mem_grp*mult(S_X_SX)%bmat(  exxspin  )%mx_abs) then
              call cq_abort('Error pointing to part_array !',kpart)
           end if
-          !          
+          !
+          call start_timer(tmr_std_exx_comms)
           call end_part_comms(myid,n_cont,nbnab_rem,ibind_rem,npxyz_rem,&
                ibpart_rem,ncover_yz,mult(S_X_SX)%gcs%ncoverz)
+          call stop_timer(tmr_std_exx_comms,.true.)
           !
        end if ! End of the "if this isn't the first partition" loop
        k_off  = mult(S_X_SX)%ahalo%lab_hcover(kpart) ! --- offset for pbcs
@@ -581,7 +593,7 @@ contains
                mat_p(matX(  exxspin  ))%length, backup_eris)
 
           call cpu_time(t1_test)
-          print*, 'time =', t1_test - t0_test
+          !write(*,*) 'time =', t1_test - t0_test
           
        else if (scheme == 3 ) then
 
@@ -590,11 +602,11 @@ contains
              get_exx = .false.
              !
              if( myid==0 ) write(io_lun,*) 'EXX: preparing store ERI calculation on kpart =', kpart
-             if( myid==0 ) write(io_lun,*) 'EXX: rcut(Xrange)  = ', rcut(Xrange)
-             if( myid==0 ) write(io_lun,*) 'EXX: rcut(SXrange) = ', rcut(SXrange)
-             if( myid==0 ) write(io_lun,*) 'EXX: rcut(Hrange)  = ', rcut(Hrange)
-             if( myid==0 ) write(io_lun,*) 'EXX: rcut(Srange)  = ', rcut(Srange)
-             if( myid==0 ) write(io_lun,*) 'EXX: rcut(SXrange) = ', rcut(SXrange)             
+             !if( myid==0 ) write(io_lun,*) 'EXX: rcut(Xrange)  = ', rcut(Xrange)
+             !if( myid==0 ) write(io_lun,*) 'EXX: rcut(SXrange) = ', rcut(SXrange)
+             !if( myid==0 ) write(io_lun,*) 'EXX: rcut(Hrange)  = ', rcut(Hrange)
+             !if( myid==0 ) write(io_lun,*) 'EXX: rcut(Srange)  = ', rcut(Srange)
+             !if( myid==0 ) write(io_lun,*) 'EXX: rcut(SXrange) = ', rcut(SXrange)             
              !
              ! First dummy call to get the number of ERIs on each proc
              !
@@ -732,16 +744,18 @@ contains
     if(allocated(b_rem)) deallocate(b_rem)
     call stop_timer(tmr_std_exx_dealloc,.true.)
     !
+    call start_timer(tmr_std_exx_comms)
     if(sends>0) then
        do i=1,sends
           call MPI_Wait(nreqs(i),mpi_stat,ierr)
           if(ierr/=0) call cq_abort("Error waiting for send to finish",i)
        end do
     end if
+    call stop_timer(tmr_std_exx_comms,.true.)
     !
-    call start_timer(tmr_std_exx_barrier)
-    call my_barrier
-    call stop_timer(tmr_std_exx_barrier,.true.)
+    !call start_timer(tmr_std_exx_barrier)
+    !call my_barrier
+    !call stop_timer(tmr_std_exx_barrier,.true.)
     !
     call start_timer(tmr_std_exx_dealloc)
     deallocate(nreqs,STAT=stat)
@@ -750,18 +764,10 @@ contains
     if(stat/=0) call cq_abort('mat_mult: error deallocating ibpart_rem')
     call stop_timer(tmr_std_exx_dealloc,.true.)
     !
-    call start_timer(tmr_std_exx_barrier)
-    call my_barrier
-    call stop_timer(tmr_std_exx_barrier,.true.)
-    !
     call start_timer(tmr_std_exx_dealloc)
     deallocate(ibpart_rem,STAT=stat)
     if(stat/=0) call cq_abort('mat_mult: error deallocating recv_part')
     call stop_timer(tmr_std_exx_dealloc,.true.)
-    !
-    call start_timer(tmr_std_exx_barrier)
-    call my_barrier
-    call stop_timer(tmr_std_exx_barrier,.true.)
     !
     if(iprint_mat>3.AND.myid==0) then
        t1 = mtime()
@@ -833,9 +839,9 @@ contains
     call write_mem_use(unit_memory_write,area_exx)
     !end if
     !
-    call start_timer(tmr_std_exx_barrier)
-    call my_barrier()
-    call stop_timer(tmr_std_exx_barrier,.true.)
+    !call start_timer(tmr_std_exx_barrier)
+    !call my_barrier()
+    !call stop_timer(tmr_std_exx_barrier,.true.)
     !
     call stop_timer(tmr_std_exx,.true.)
     !
@@ -850,13 +856,13 @@ contains
          tmr_std_exx_setup%t_tot   + &
          tmr_std_exx_write%t_tot   + &
          tmr_std_exx_barrier%t_tot + &
-         tmr_std_exx_fetch%t_tot  
+         tmr_std_exx_fetch%t_tot   + & 
+         tmr_std_exx_comms%t_tot  
 
     if ( iprint_exx > 3 ) then
        
        call print_timer(tmr_std_exx_setup,  "exx_setup   time:", unit_timers_write)    
-       call print_timer(tmr_std_exx_write,  "exx_write   time:", unit_timers_write)    
-       !call print_timer(tmr_std_exx_kernel, "exx_kernel  time:", unit_timers_write)    
+       call print_timer(tmr_std_exx_write,  "exx_write   time:", unit_timers_write)        
        call print_timer(tmr_std_exx_fetch,  "exx_fetch   time:", unit_timers_write)    
        call print_timer(tmr_std_exx_evalpao,"exx_evalpao time:", unit_timers_write)    
        call print_timer(tmr_std_exx_poisson,"exx_poisson time:", unit_timers_write)
@@ -864,7 +870,8 @@ contains
        call print_timer(tmr_std_exx_accumul,"exx_accumul time:", unit_timers_write)    
        call print_timer(tmr_std_exx_allocat,"exx_allocat time:", unit_timers_write)    
        call print_timer(tmr_std_exx_dealloc,"exx_dealloc time:", unit_timers_write)    
-       call print_timer(tmr_std_exx_barrier,"exx_barrier time:", unit_timers_write)          
+       call print_timer(tmr_std_exx_barrier,"exx_barrier time:", unit_timers_write)
+       call print_timer(tmr_std_exx_comms,  "exx_comms   time:", unit_timers_write)       
        call print_timer(tmr_std_exx_kernel, "exx_kernel  time:", unit_timers_write)    
        call print_timer(tmr_std_exx,        "exx_total   time:", unit_timers_write)    
        write(unit=unit_timers_write,fmt='("Timing: Proc ",i6,": Time spent in ", a50, " = ", &
@@ -885,7 +892,7 @@ contains
        !
     end if
 
-    close(200)
+    !close(200)
     
     if ( exx_debug ) then
        call io_close(unit_eri_debug)
@@ -1959,7 +1966,7 @@ contains
                                   !
                                   if (exx_debug) then
 
-                                     if ( eri_gto > 1.0d-8 ) then
+                                     !if ( eri_gto > 1.0d-8 ) then
 
                                         sum_eri_gto = sum_eri_gto + eri_gto
 
@@ -1971,7 +1978,7 @@ contains
 
                                         
                                         
-                                        write(2000,10) count, eri_gto, &
+                                        write(unit_eri_debug,10) count, eri_gto, &
                                           '[',ia%ip, kg%global_num,'|',ld%global_num, jb%global_num,']', &
                                           '(',nsf_ia,nsf_kg,  '|',nsf_ld,nsf_jb,  ')' , &
                                           '[',ia%name,kg%name,'|',ld%name,jb%name,']' , &
@@ -1982,8 +1989,9 @@ contains
                                         !abs(ia%xyz_ip(3)-jb%xyz_cv(3)), abs(kg%xyz_cv(3)-ld%xyz_cv(3)), &
                                           !abs(ia%xyz_ip(3)-kg%xyz_cv(3)), abs(ia%xyz_ip(3)-ld%xyz_cv(3)), &
                                           sum_eri_gto
-                                     !zi, zk, zl, zj, ai, ak, al, aj
-                                     end if
+                                        !zi, zk, zl, zj, ai, ak, al, aj
+                                        !end if
+                                        !
                                   end if
                                   !
                                   if ( backup_eris ) then
