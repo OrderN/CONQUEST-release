@@ -8,7 +8,7 @@ F77=mpif77
 # OpenMP flags
 # Set this to "OMPFLAGS= " if compiling without openmp
 # Set this to "OMPFLAGS= -fopenmp" if compiling with openmp
-OMPFLAGS= 
+OMPFLAGS=
 
 # Compilation flags
 # NB for gcc10 you need to add -fallow-argument-mismatch
@@ -21,9 +21,12 @@ COMPFLAGS_F77= $(COMPFLAGS)
 # Intel MKL use the Intel tool
 # Generic
 BLAS= -llapack -lblas
+# Full scalapack library call; remove -lscalapack if using dummy diag module.
+# If using OpenMPI, use -lscalapack-openmpi instead.
+# If using Cray-libsci, use -llibsci_cray_mpi instead.
+SCALAPACK = -lscalapack
 
 # LibXC: choose between LibXC compatibility below or Conquest XC library
-
 # Conquest XC library
 #XC_LIBRARY = CQ
 #XC_LIB =
@@ -40,9 +43,7 @@ XC_COMPFLAGS = -I/usr/local/include
 FFT_LIB=-lfftw3
 FFT_OBJ=fft_fftw3.o
 
-# Full library call; remove -lscalapack if using dummy diag module.
-# If using OpenMPI, use -lscalapack-openmpi instead.
-LIBS= $(FFT_LIB) $(XC_LIB) -lscalapack $(BLAS)
+LIBS= $(FFT_LIB) $(XC_LIB) $(SCALAPACK) $(BLAS)
 
 # Linking flags
 LINKFLAGS= -L/usr/local/lib $(OMPFLAGS)
@@ -56,4 +57,3 @@ DIAG_DUMMY =
 # Set this to "OMP_DUMMY = DUMMY" if compiling without openmp
 # Set this to "OMP_DUMMY = " if compiling with openmp
 OMP_DUMMY = DUMMY
-
