@@ -2300,27 +2300,28 @@ contains
     md_variable_temperature_rate = fdf_double('MD.VariableTemperatureRate', 0.0_double)
     md_initial_temperature = fdf_double('MD.InitialTemperature',temp_ion)
     md_final_temperature = fdf_double('MD.FinalTemperature',temp_ion)
+
     ! Override temp_ion if md_initial_temperature is set
     if (flag_variable_temperature .and. (abs(md_initial_temperature-temp_ion) > RD_ERR)) then
         if (abs(temp_ion-300) > RD_ERR) then
-            call cq_warn(sub_name,'AtomMove.IonTemperature is set and MD.VariableTemperature is true.')
-          end if
+            call cq_warn(sub_name,'AtomMove.IonTemperature will be ignored since MD.VariableTemperature is true.')
+        end if
         temp_ion = md_initial_temperature
     end if
 
     ! Check for consistency
     if (flag_variable_temperature) then
         if (md_ensemble == 'nve') then
-            call cq_abort('NVE ensemble with MD.VariableTemperature set to true is NOT allowed')
+            call cq_abort('NVE ensemble with MD.VariableTemperature set to true is NOT allowed.')
         end if
         ! Verify sign of temperature change rate
         if (abs(md_final_temperature-md_initial_temperature) > RD_ERR) then
             if (md_variable_temperature_rate/(md_final_temperature-md_initial_temperature) < 0 ) then
-                call cq_abort('The temperature change rate is incompatible with the requested final temperature')
+                call cq_abort('The temperature change rate is incompatible with the requested final temperature.')
             end if
+        else ! initial and final temperature are equal
+            call cq_abort('MD.InitialTemperature and MD.FinalTemperature are the same.')
         end if
-
-
 
     end if
 
