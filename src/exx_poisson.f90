@@ -280,7 +280,7 @@ contains
     do i = 1, 2*extent+1
        do j = 1, 2*extent+1
           do k = 1, 2*extent+1                                    
-             charge = charge + rho(i,j,k)*dv
+             charge = charge + rho(k,j,i)*dv
           end do
        end do
     end do
@@ -321,10 +321,10 @@ contains
           do k = -extent, extent
              r(3) = real(k,double)*grid_spacing
              
-             gauss(extent+i+1,extent+j+1,extent+k+1) = &
+             gauss(extent+k+1,extent+i+1,extent+j+1) = &
                   exp(-dot_product(r,r)*alpha)             
              gnorm = &
-                  gnorm + gauss(extent+i+1,extent+j+1,extent+k+1)*dv
+                  gnorm + gauss(extent+k+1,extent+j+1,extent+i+1)*dv
 
           end do
        end do
@@ -366,11 +366,11 @@ contains
              r(3) = real(k,double)*grid_spacing
              
              if (i == 0 .and. j == 0 .and. k==0) then
-                potential(extent+i+1,extent+j+1,extent+k+1) = two*sqrt(alpha/pi)
+                potential(extent+k+1,extent+j+1,extent+i+1) = two*sqrt(alpha/pi)
              else
                 arg    = sqrt(dot_product(r,r))*sqrt(alpha)
                 factor = one/sqrt(dot_product(r,r))
-                potential(extent+i+1,extent+j+1,extent+k+1) = (one - erfc_cq(arg))*factor             
+                potential(extent+k+1,extent+j+1,extent+i+1) = (one - erfc_cq(arg))*factor             
              end if
              
           end do

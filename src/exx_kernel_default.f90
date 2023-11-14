@@ -578,7 +578,7 @@ contains
 
           if( myid==0) write(io_lun,*) 'EXX: performing on-the-fly ERI calculation on kpart =', kpart
 
-          call cpu_time(t0_test)
+          !call cpu_time(t0_test)
           
           call m_kern_exx_eri( k_off,kpart,ib_nd_acc_rem,ibind_rem,nbnab_rem,&
                ibpart_rem,ibseq_rem,ibndimj_rem, & 
@@ -592,7 +592,7 @@ contains
                lenb_rem, &
                mat_p(matX(  exxspin  ))%length, backup_eris)
 
-          call cpu_time(t1_test)
+          !call cpu_time(t1_test)
           !write(*,*) 'time =', t1_test - t0_test
           
        else if (scheme == 3 ) then
@@ -658,9 +658,9 @@ contains
                      mat_p(matX(  exxspin  ))%length, nb_eris, get_exx, exx_filter )
              end if
              !
-             
+             !             
              ! should be a single call not embeded in the kpart loop... sorry for that
-             call fft3_init_wrapper( 2*extent+1  )
+             ! call fft3_init_wrapper( 2*extent+1  )
              !
              if( myid==0 ) write(io_lun,*) 'EXX: compute and store ERIs on kpart =', kpart
              !
@@ -695,7 +695,7 @@ contains
              end if
              
           else
-
+             !                          
              get_exx = .true.
 
              if( myid==0 ) write(io_lun,*) 'EXX: use stored ERIs to get X on kpart =', kpart
@@ -753,9 +753,9 @@ contains
     end if
     call stop_timer(tmr_std_exx_comms,.true.)
     !
-    !call start_timer(tmr_std_exx_barrier)
-    !call my_barrier
-    !call stop_timer(tmr_std_exx_barrier,.true.)
+    call start_timer(tmr_std_exx_barrier)
+    call my_barrier
+    call stop_timer(tmr_std_exx_barrier,.true.)
     !
     call start_timer(tmr_std_exx_dealloc)
     deallocate(nreqs,STAT=stat)
@@ -1252,8 +1252,8 @@ contains
                                   do t = 1, 2*extent+1                         
 
                                      exx_mat_elem = exx_mat_elem &                                    
-                                          + phi_i(r,s,t,nsf1)    &
-                                          * Ome_kj(r,s,t,nsf3,nsf2) * dv
+                                          + phi_i(t,s,r,nsf1)    &
+                                          * Ome_kj(t,s,r,nsf3,nsf2) * dv
 
                                   end do
                                end do
@@ -1595,8 +1595,8 @@ contains
                                         do t = 1, 2*extent+1                         
 
                                            exx_mat_elem = exx_mat_elem &                                    
-                                                + phi_k(r,s,t,nsf_kg) * phi_i(r,s,t,nsf_ia) * K_val   &
-                                                * work_out_3d(r,s,t) * dv
+                                                + phi_k(t,s,r,nsf_kg) * phi_i(t,s,r,nsf_ia) * K_val   &
+                                                * work_out_3d(t,s,r) * dv
 
                                         end do
                                      end do
@@ -2345,9 +2345,9 @@ contains
                                               do t = 1, 2*exx_filter_extent+1                         
                                                  
                                                  exx_mat_elem = exx_mat_elem &      
-                                                      + phi_k_filter(r,s,t,nsf_kg)  &
-                                                      * phi_i_filter(r,s,t,nsf_ia)  &
-                                                      * work_out(r,s,t) * dv
+                                                      + phi_k_filter(t,s,r,nsf_kg)  &
+                                                      * phi_i_filter(t,s,r,nsf_ia)  &
+                                                      * work_out(t,s,r) * dv
                                               end do
                                            end do
                                         end do
@@ -2371,7 +2371,7 @@ contains
                                         !
                                      end if
                                      !
-                                     c(ncaddr + nsf_ia - 1) = c(ncaddr + nsf_ia - 1) + 0.0d0
+                                     !c(ncaddr + nsf_ia - 1) = c(ncaddr + nsf_ia - 1) + 0.0d0
                                      !
                                   end if
                                   !
