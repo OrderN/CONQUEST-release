@@ -252,6 +252,7 @@ contains
        enddo parts_loop_omp
     enddo blocks_loop_omp
     !$omp end parallel do
+
     call my_barrier()
     call start_timer(tmr_std_allocation)
     deallocate(ip_store,x_store,y_store,z_store,r_store,offset_position)

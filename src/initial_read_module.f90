@@ -155,6 +155,10 @@ contains
   !!    Added bibliography
   !!   2019/11/18 tsuyoshi
   !!    Removed flag_MDold
+  !!   2020/12/28 18:34 Lionel
+  !!    Added EXX poisson solver and scheme for G=0`
+  !!   2021/01/14 16:50 Lionel
+  !!    EXX: added gto_file setup and read GTO info
   !!  SOURCE
   !!
   subroutine read_and_write(start, start_L, inode, ionode,          &
@@ -183,8 +187,15 @@ contains
          flag_Multisite,                  &
          flag_cdft_atom, flag_local_excitation, &
          flag_diagonalisation, flag_vary_basis, &
-         flag_MDcontinue, flag_SFcoeffReuse
-    use cdft_data, only: cDFT_NAtoms, &
+         flag_MDcontinue, flag_SFcoeffReuse,    &
+         flag_exx
+    use exx_types,     only: exx_gto, exx_gto_poisson
+    !use read_gto_info, only: read_gto
+    use read_gto_info, only: read_gto_new
+    !use gto_format,    only: gto
+    use gto_format_new,    only: gto
+    
+    use cdft_data, only: cDFT_NAtoms, & 
          cDFT_NumberAtomGroups, cDFT_AtomList
     use memory_module,          only: reg_alloc_mem, type_dbl
     use primary_module,         only: bundle, make_prim
@@ -192,7 +203,8 @@ contains
     use species_module,         only: n_species, species, charge,      &
          non_local_species,               &
          nsf_species, npao_species,       &
-         natomf_species, charge_up, charge_dn
+         natomf_species, charge_up, charge_dn, &
+         gto_file
     use density_module, only: flag_InitialAtomicSpin
     use GenComms,               only: my_barrier, cq_abort, cq_warn
     use pseudopotential_data,   only: non_local, read_pseudopotential
@@ -278,9 +290,25 @@ contains
        end do
     end if
     !if(iprint_init>4) write(io_lun,fmt='(10x,"Proc: ",i4," done pseudo")') inode
-
+    !
+    call my_barrier()
+    !
+    ! If EXX with GTO open and read species' GTO files
+    if ( flag_exx .and. (exx_gto .or. exx_gto_poisson) ) then
+       !
+       allocate(gto_file(n_species),STAT=stat)
+       if(stat /= 0) call cq_abort("Error allocating gto_file in read_and_write: ",n_species,stat)
+       allocate(gto(n_species),STAT=stat)       
+       if(stat /= 0) call cq_abort ("Error allocating gto in read_and_write",stat)
+       !
+       call read_gto_new(inode,ionode,n_species)
+       !call read_gto(inode,ionode,n_species)
+       !
+    end if
+    !
     ! Initialise group data for partitions and read in partitions and atoms
     call my_barrier()
+    !
     def = ' '
     atom_coord_file = fdf_string(80,'IO.Coordinates',def)
     if(leqi(def,atom_coord_file)) call cq_abort("No coordinate file specified: please set with IO.Coordinates")
@@ -532,7 +560,7 @@ contains
     ! Set up various lengths, volumes, reciprocals etc. for convenient use
     call set_dimensions(inode, ionode,HNL_fac, non_local, n_species, &
          non_local_species, core_radius)
-
+    ! 
     ! write out some information on the run
     if (inode == ionode) &
          call write_info(titles, mu, vary_mu, HNL_fac, numprocs)
@@ -769,6 +797,10 @@ contains
   !!    Keywords for equilibration
   !!   2020/01/07 tsuyoshi 
   !!     Default setting of MakeInitialChargeFromK has been changed
+  !!   2020/12/14 lionel
+  !!     EXX: added filtering option for EXX and cleaning
+  !!   2020/01/14 lionel
+  !!     EXX: added GTO option
   !!   2022/10/28 15:56 lionel
   !!     Added ASE output file setup ; default is F
   !!   2022/12/14 10:01 dave and tsuyoshi
@@ -912,10 +944,11 @@ contains
     use constraint_module,     only: flag_RigidBonds,constraints,SHAKE_tol, &
          RATTLE_tol,maxiterSHAKE,maxiterRATTLE, &
          const_range,n_bond
-    use exx_types, only: exx_scheme, exx_mem, exx_overlap, exx_alloc,       &
-         exx_cartesian, exx_radius, exx_hgrid, exx_psolver, &
-         exx_debug, exx_Kij, exx_Kkl, p_scheme
-    use multisiteSF_module, only: flag_MSSF_smear, MSSF_Smear_Type,                      &
+    use exx_types, only: exx_scheme, exx_mem, exx_overlap, exx_alloc,    &
+         exx_cartesian, exx_radius, exx_hgrid, exx_psolver, ewald_alpha, &
+         exx_debug, exx_pscheme, exx_filter, exx_filter_thr, exx_filter_extent, &
+         exx_gto, exx_gto_poisson
+    use multisiteSF_module, only: flag_MSSF_smear, MSSF_Smear_Type, &
          MSSF_Smear_center, MSSF_Smear_shift, MSSF_Smear_width, &
          flag_LFD_ReadTVEC, LFD_TVEC_read,                      &
          LFD_kT, LFD_ChemP, flag_LFD_useChemPsub,               &
@@ -1947,12 +1980,12 @@ contains
        flag_exx = .true.
        exx_siter = fdf_integer('EXX.StartAfterIter', 1 )
        exx_scf   = fdf_integer('EXX.MethodSCF',      0 )
-       r_exx     = fdf_double ('EXX.Krange'   ,   zero )
+       r_exx     = fdf_double ('EXX.Xrange'   ,   zero )
        !
     else if ( flag_functional_type == functional_hartree_fock ) then
        flag_exx = .true.
        exx_scf  = fdf_integer('EXX.MethodSCF', 0)
-       r_exx    = fdf_double ('EXX.Krange', zero)
+       r_exx    = fdf_double ('EXX.Xrange', zero)
        !
     else
        ! don't touch we need it because matX is setup in set_dimensions 
@@ -1979,20 +2012,30 @@ contains
        end if
        ! To control accuracy during scf
        exx_scf_tol   = sc_tolerance
-       ! Grid spacing for PAO discretisation in EXX
+       !
+       exx_gto        = fdf_boolean('EXX.GTO', .false.)
+       exx_gto_poisson= fdf_boolean('EXX.GTOPoisson', .false.)
        exx_hgrid  = fdf_double ('EXX.GridSpacing',zero)
-       exx_radius = fdf_double ('EXX.IntegRadius',0.00_double) 
-       ! debug mode
-       exx_Kij       = .true.
-       exx_Kkl       = .true.
-       exx_cartesian = .true. 
-       exx_overlap   = .true. 
-       exx_alloc     = .false.
-       exx_psolver   = 'fftw'
-       p_scheme      = 'pulay'
-       exx_scheme    = 1
-       exx_mem       = 1
-       exx_debug     = .false.
+       exx_radius = fdf_double ('EXX.IntegRadius',zero)
+       exx_scheme = fdf_integer('EXX.Scheme',       3 ) 
+       exx_debug  = fdf_boolean('EXX.Debug',  .false. )
+       exx_overlap= fdf_boolean('EXX.Overlap',.true.  )
+       !
+       exx_filter = fdf_boolean('EXX.Filter', .false.  )
+       exx_filter_extent = fdf_integer('EXX.FilterGrid', 2 )
+       exx_filter_thr    = fdf_double('EXX.FilterThreshold',  1.0e-10_double )
+       !
+       exx_cartesian  = fdf_boolean('EXX.PAOCartesian',     .true.)
+       exx_alloc      = fdf_boolean('EXX.DynamicAllocation',.true.)
+       exx_psolver    = fdf_string (20,'EXX.PoissonSolver', 'fftw')
+
+       if(exx_psolver == 'fftw') then
+          exx_pscheme   = fdf_string (20,'EXX.FFTWSolver','ewald')
+          if(exx_pscheme == 'ewald') then
+             ewald_alpha = fdf_double('EXX.FFTWEwaldAlpha',3.0_double)
+          end if          
+       end if
+       !exx_mem = 1
     end if
 !!$
 !!$

@@ -182,8 +182,12 @@ contains
   !!   Changed matS, matKE, matNL and matNA to be spin_SF dependent
   !!  2019/01/31 16:00 nakata
   !!   Moved dump_matrix(NSmatrix) to sub:get_S_matrix
+  !!  2020/14/11 16:00 LAT
+  !!   Add matK, matX dump
   !!  2021/07/19 15:46 dave
   !!   Removed writing out of charge density
+  !!  2020/14/11 16:00 LAT
+  !!   Add matK, matX dump
   !! SOURCE
   !!
   subroutine get_H_matrix(rebuild_KE_NL, fixed_potential, electrons, &
@@ -192,7 +196,7 @@ contains
     use datatypes
     use numbers 
     use matrix_data,                 only: Hrange, Srange
-    use mult_module,                 only: matNL, matKE, matH,          &
+    use mult_module,                 only: matNL, matKE, matH, matK,    &
                                            matrix_scale, matrix_sum,    &
                                            matrix_product,              &
                                            matS, matX, matNAatomf, matNA, &
@@ -217,7 +221,8 @@ contains
                                            area_ops, nspin, nspin_SF,   &
                                            spin_factor, blips,          &
                                            flag_analytic_blip_int,      &
-                                           flag_neutral_atom, min_layer
+                                           flag_neutral_atom, min_layer,&
+                                           flag_self_consistent
     use functions_on_grid,           only: atomfns, H_on_atomfns,       &
                                            gridfunctions
     use io_module,                   only: dump_matrix, dump_blips,     &
@@ -237,7 +242,7 @@ contains
     use global_module,               only: flag_exx, exx_niter, exx_siter, exx_alpha
     use exx_kernel_default,          only: get_X_matrix
     use exx_module,                  only: get_X_params
-    use exx_types,                   only: exx_hgrid, exx_psolver, exx_radius
+    use exx_types,                   only: exx_hgrid, exx_psolver, exx_radius, exx_store_eris, exx_scheme
     use exx_io,                      only: exx_global_write
 !****lat>$
     use energy, only: local_ps_energy
@@ -358,30 +363,59 @@ contains
        !
        !
 !****lat<$
-       if (flag_exx) then
+       if (flag_exx .and. flag_self_consistent ) then
+          !
+          exx_store_eris = .false.
+          !
           ! Ugly stuff but for now that's ok. Purpose is to adapt EXX accuracy to
           ! the SCF covergence: closer to convergence finest is the grid
           !
           !if (inode==ionode) print*, 'exx_pulay_r0 = ', exx_pulay_r0
-          if  ( exx_niter < exx_siter ) then
-             ! For first H building use pure DFT. To be improved for Hartree-Fock
-             if (inode == ionode .and. iprint_exx > 3) &
+          !
+          if  ( exx_niter == 1 .and. exx_scheme /= 3 ) then
+             !
+             if (inode == ionode .and. iprint_exx > 2) &
+                  write (io_lun, *) 'EXX: setting get_X_matrix' 
+             ! 
+             call get_X_params(backtrace_level)
+             !
+             ! For first H building use pure DFT since we need K to get X 
+             ! (X is the exchange matrix)
+             !
+             if (inode == ionode .and. iprint_exx > 2) &
                   write (io_lun, *) 'EXX: first guess from DFT'
              !
-          else
+          else if ( exx_niter == 1 .and. exx_scheme == 3 ) then
              !
-             if (inode == ionode .and. iprint_exx > 3) &
-                  write (io_lun, *) 'EXX: setting get_X_matrix'
+             ! exx_scheme  = 3 is for computing and storing ERIs
+             ! (faster than all the other methods but requires storage)
+             !
              call get_X_params(backtrace_level)
-
-             call exx_global_write() 
              !
-             !if (inode == ionode .and. iprint_exx > 3) &
-                  !write (io_lun, *) 'EXX: doing get_X_matrix'
+             exx_store_eris = .true.
+             !
+             ! first call to compute and store ERIs (no need K here)
+             do spin = 1, nspin
+                if (inode == ionode .and. iprint_exx > 2) &
+                     write (io_lun, *) 'EXX: compute and store ERIs', print_exxspin(spin)
+                call get_X_matrix(spin, exx_scheme, exx_store_eris, exx_niter, backtrace_level)
+             end do
+             !
+          else if ( exx_niter > 1 ) then
+             !
+             !if (inode == ionode .and. iprint_exx > 2) &
+             !     write (io_lun, *) 'EXX: setting get_X_matrix'
+             !call get_X_params(backtrace_level)
+             !
+             !call exx_global_write() 
+             !
+             !if (inode == ionode .and. iprint_exx > 2) &
+             !write (io_lun, *) 'EXX: doing get_X_matrix'
+             !
              do spin = 1, nspin
                 if (inode == ionode .and. iprint_exx > 3) &
                 write (io_lun, *) 'EXX: doing get_X_matrix: ', print_exxspin(spin)
-                call get_X_matrix(spin,backtrace_level)
+                call get_X_matrix(spin, exx_scheme, exx_store_eris, exx_niter, backtrace_level)
              end do
              !
              !if (inode == ionode .and. iprint_exx > 3) &
@@ -395,6 +429,10 @@ contains
           end if
           !
           exx_niter = exx_niter + 1
+          !
+          !if ( exx_niter > 2 ) then
+          !   stop
+          !end if
           !
        end if
 !****lat>$
@@ -429,6 +467,8 @@ contains
     if (iprint_ops > 3) then
        if (nspin == 1) then
           call dump_matrix("NH",    matH(1), inode)
+          call dump_matrix("NK",    matK(1), inode)
+          call dump_matrix("NX",    matX(1), inode)
        else
           call dump_matrix("NH_up", matH(1), inode)
           call dump_matrix("NH_dn", matH(2), inode)

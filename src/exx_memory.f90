@@ -22,19 +22,23 @@ module exx_memory
 
   use exx_types,         ONLY: phi_i, phi_j,  phi_k,  phi_l
   use exx_types,         ONLY: Phy_k, Ome_kj, rho_kj, vhf_kj
+  use exx_types,         ONLY: rho_ki, vhf_lj
 
+  
   use exx_types,         ONLY: work_in_3d,work_out_3d 
   use exx_types,         ONLY: reckernel_3d,ewald_rho,ewald_pot
   use exx_types,         ONLY: isf_rho,isf_pot_ion
 
   use exx_types,         ONLY: fftwrho3d
 
+  use exx_types,         ONLY: eris
+  
   use exx_types,         ONLY: tmr_std_exx_allocat, tmr_std_exx_dealloc
   use exx_types,         ONLY: unit_memory_write
 
   use global_module,             ONLY: area_exx, io_lun
   use timer_module,              ONLY: start_timer, stop_timer, print_timer
-  use memory_module,             ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl
+  use memory_module,             ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl, type_cplx
   use GenComms,                  ONLY: cq_abort
 
   use fft_interface_module,      ONLY: fft3_init_wrapper
@@ -76,6 +80,8 @@ contains
     lun  = unit_memory_write
     stat = 0
 
+    !print*, "EXX: exx_memory lu =", lun
+    
 !!$
 !!$
 !!$ ALLOCATION for EXX
@@ -163,13 +169,30 @@ contains
           !
        case('Phy_k')! allocate Phy_k
           allocate(Phy_k(2*extent+1,2*extent+1,2*extent+1,nsf1), STAT=stat)
-          if(stat/=0) call cq_abort('Error allocating memory to Phy_j/exx !',stat)
+          if(stat/=0) call cq_abort('Error allocating memory to Phy_k/exx !',stat)
           call reg_alloc_mem(area_exx,nsf1*(2*extent+1)*(2*extent+1)*(2*extent+1),&
                type_dbl,matrix,lun)
           Phy_k = zero
           !write(unit,*) '\Phy_{k\gamma} allocated'
           !
           !
+       case('rho_ki') ! allocate rho_ki for neighbour[k]/neighbour[i] atoms [Krange/Srange]
+          allocate(rho_ki(2*extent+1,2*extent+1,2*extent+1,nsf1,nsf2), STAT=stat)
+          if(stat/=0) call cq_abort('Error allocating memory to rho_ki/exx !',stat)
+          call reg_alloc_mem(area_exx,nsf1*nsf2*(2*extent+1)*(2*extent+1)*(2*extent+1),&
+               type_dbl,matrix,lun)
+          rho_ki = zero
+          !write(unit,*) '\rho_{k\gamma i\alpha} allocated'
+          !
+          !
+      case('vhf_lj') ! allocate vhf_lj
+          allocate(vhf_lj(2*extent+1,2*extent+1,2*extent+1,nsf1,nsf2), STAT=stat)
+          if(stat/=0) call cq_abort('Error allocating memory to vhf_lj/exx !',stat)
+          call reg_alloc_mem(area_exx,nsf1*nsf2*(2*extent+1)*(2*extent+1)*(2*extent+1),&
+               type_dbl,matrix,lun)
+          vhf_lj = zero
+          !write(unit,*) '\vhf_{l\delta j\beta} allocated'          
+
 !!$
 !!$
 !!$ for working grids allocations
@@ -182,8 +205,8 @@ contains
           call reg_alloc_mem(area_exx,(2*extent+1)*(2*extent+1)*(2*extent+1),&
                type_dbl,'ewald_rho',lun)
           ewald_rho = zero          
-          allocate(ewald_pot(2*extent+1,2*extent+1,2*extent+1), STAT=stat)
-          if(stat/=0) call cq_abort('Error allocating memory to ewald_pot/exx !',stat)
+          allocate(ewald_pot(2*extent+1,2*extent+1,2*extent+1), STAT=stat) 
+          if(stat/=0) call cq_abort('Error allocglobating memory to ewald_pot/exx !',stat)
           call reg_alloc_mem(area_exx,(2*extent+1)*(2*extent+1)*(2*extent+1),&
                type_dbl,'ewald_pot',lun)
           ewald_pot = zero
@@ -194,7 +217,7 @@ contains
           allocate(work_in_3d(2*extent+1,2*extent+1,2*extent+1), STAT=stat)
           if(stat/=0) call cq_abort('Error allocating memory to work_in_3d/exx !',stat)
           call reg_alloc_mem(area_exx,(2*extent+1)*(2*extent+1)*(2*extent+1),&
-               type_dbl,'work_in ',lun)
+               type_dbl,'work_in',lun)
           work_in_3d = zero          
           allocate(work_out_3d(2*extent+1,2*extent+1,2*extent+1), STAT=stat)
           if(stat/=0) call cq_abort('Error allocating memory to work_out_3d/exx !',stat)
@@ -208,7 +231,7 @@ contains
           allocate(reckernel_3d(2*extent+1,2*extent+1,2*extent+1), STAT=stat)
           if(stat/=0) call cq_abort('Error allocating memory to reckernel_3d/exx !',stat)
           call reg_alloc_mem(area_exx,(2*extent+1)*(2*extent+1)*(2*extent+1),&
-               type_dbl,matrix,lun)
+               type_cplx,matrix,lun)
           reckernel_3d = zero
           !write(unit,*) 'reckernel_3d allocated'
           !
@@ -238,11 +261,11 @@ contains
           allocate(fftwrho3d%arrayin(2*extent+1,2*extent+1,2*extent+1), STAT=stat)
           if(stat/=0) call cq_abort('Error allocating memory to fftwin3d/exx !',stat)
           call reg_alloc_mem(area_exx,2*(2*extent+1)*(2*extent+1)*(2*extent+1),&
-               type_dbl,'fftw_in ',lun)
+               type_cplx,'fftw_in ',lun)
           allocate(fftwrho3d%arrayout(2*extent+1,2*extent+1,2*extent+1), STAT=stat)
           if(stat/=0) call cq_abort('Error allocating memory to fftwout3d/exx !',stat)
           call reg_alloc_mem(area_exx,2*(2*extent+1)*(2*extent+1)*(2*extent+1),&
-               type_dbl,'fftw_out',lun)
+               type_cplx,'fftw_out',lun)
           !
           !**<lat>** don't touch
           !
@@ -265,6 +288,17 @@ contains
           fftwrho3d%arrayin  = cmplx(zero,zero,double_cplx)
           fftwrho3d%arrayout = cmplx(zero,zero,double_cplx)
           !
+!!$
+!!$
+!!$ ERI allocation
+!!$
+!!$
+       !case('eris') ! allocate electron repulsion integrals
+       !   allocate(eris(extent), STAT=stat)
+       !   if(stat/=0) call cq_abort('Error allocating memory to eris/exx !',stat)
+       !   call reg_alloc_mem(area_exx,extent,type_dbl,matrix,lun)
+       !   eris = zero
+          !write(*,*) 'ERIs allocated', shape(eris)
           !
        case default
           call cq_abort('Error allocation/exx_mem !',stat)          
@@ -344,6 +378,22 @@ contains
           !write(unit,*) '\Phy_{k\gamma} deallocated'
           !
           !
+       case('rho_ki') ! allocate rho_ki for neighbour[k]/neighbour[i] atoms [Krange/Srange]
+          deallocate(rho_ki, STAT=stat)
+          if(stat/=0) call cq_abort('Error deallocating memory to rho_ki/exx !',stat)
+          call reg_dealloc_mem(area_exx,nsf1*nsf2*(2*extent+1)*(2*extent+1)*(2*extent+1),&
+               type_dbl,matrix,lun)
+          !write(unit,*) '\rho_{k\gamma i\alpha} deallocated'
+          !
+          !
+       case('vhf_lj')
+          deallocate(vhf_lj, STAT=stat)          
+          if(stat/=0) call cq_abort('Error deallocating memory to vhf_lj/exx !',stat)
+          call reg_dealloc_mem(area_exx,nsf1*nsf2*(2*extent+1)*(2*extent+1)*(2*extent+1),&
+               type_dbl,matrix,lun)
+          !write(unit,*) '\vhf_{l\delta j\beta} deallocated'
+          !
+          !          
        case('ewald_3d')
           deallocate(ewald_rho, STAT=stat)
           if(stat/=0) call cq_abort('Error deallocating memory to ewald_rho/exx !',stat)
@@ -401,6 +451,12 @@ contains
           if(stat/=0) call cq_abort('Error deallocating memory to fftwout3d/exx !',stat)
           call reg_dealloc_mem(area_exx,2*(2*extent+1)*(2*extent+1)*(2*extent+1),&
                type_dbl,'fftw_out',lun)
+          !
+       case('eris')
+          deallocate(eris, STAT=stat)          
+          if(stat/=0) call cq_abort('Error deallocating memory to eris/exx !',stat)
+          call reg_dealloc_mem(area_exx,extent,type_dbl,matrix,lun)
+          !write(unit,*) 'ERIs deallocated'  
           !
           !
        case default
