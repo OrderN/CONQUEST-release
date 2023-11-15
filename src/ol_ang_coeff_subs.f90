@@ -998,10 +998,11 @@ contains
 !!  CREATION DATE
 !!   30/09/03
 !!  MODIFICATION HISTORY
-!!
+!!   2023/11/15 lionel
+!!    Added dummy argument to satisfy interface in PAO_grid_transform_module
 !!  SOURCE
 !!
-  subroutine pao_elem_derivative_2(i_vector,spec,l,nzeta,m,x_i,y_i,z_i,drvtv_val)
+  subroutine pao_elem_derivative_2(i_vector,spec,l,nzeta,m,x_i,y_i,z_i,drvtv_val,sys_dummy)
 
     use datatypes
     use numbers
@@ -1011,6 +1012,7 @@ contains
     !RC 09/11/03 using (now debugged) routine pp_elem_derivative (see 
     ! above) as template for this sbrt pao_elem_derivative
     real(double), intent(in) :: x_i,y_i,z_i
+    logical,      intent(in), optional :: sys_dummy
     real(double), intent(out) :: drvtv_val
     integer, intent(in) :: i_vector, l, m, spec, nzeta
     integer :: n1,n2

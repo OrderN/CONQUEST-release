@@ -18,7 +18,9 @@ contains
 !!   2019/01/23 11:20 lionel
 !!    pao on grid are now evaluated from evaluate_pao in ol_ang_coeff_subs.f90 
 !!    Cartesian system is preferred in this case (faster) cf. exx_cartesian = T/F
-
+!!   2023/15/23 14:03 lionel
+!!    Added dummy argument to evaluate_pao
+!!
   subroutine exx_phi_on_grid(inode,atom,spec,extent,xyz,nsuppfuncs,phi_on_grid,r_int,rst)
 
     use numbers,      only: zero, one, two, three, four, five, six, fifteen, sixteen
@@ -68,7 +70,8 @@ contains
 
     real(double)        :: xj1, xj2, a, b, c, d, del_r, alpha
     real(double)        :: a_table, b_table, c_table, d_table
-
+    integer             :: i_dummy = 0
+    
     ! << Called subroutine variables >>
     real(double)        :: pao_val, y_val    
 
@@ -181,7 +184,7 @@ contains
                          pao_val = zero
                          y_val   = zero             
 
-                         call evaluate_pao(spec,l1,acz,m1,x,y,z,pao_val,exx_cartesian)
+                         call evaluate_pao(i_dummy,spec,l1,acz,m1,x,y,z,pao_val,exx_cartesian)
 
                          ! Put pao_val directly into phi_on_grid
                          ! (only for primitive PAOs and not for blips)
