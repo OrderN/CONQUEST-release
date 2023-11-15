@@ -252,6 +252,10 @@ contains
        enddo parts_loop_omp
     enddo blocks_loop_omp
     !$omp end parallel do
+<<<<<<< HEAD
+>>>>>>> develop
+=======
+
 >>>>>>> develop
     call my_barrier()
     call start_timer(tmr_std_allocation)

@@ -186,7 +186,12 @@ contains
   !!   Add matK, matX dump
   !!  2021/07/19 15:46 dave
   !!   Removed writing out of charge density
-
+  !!  2020/14/11 16:00 LAT
+  !!   Add matK, matX dump
+  !!  2021/07/19 15:46 dave
+  !!   Removed writing out of charge density
+  !!  2020/14/11 16:00 LAT
+  !!   Add matK, matX dump
   !! SOURCE
   !!
   subroutine get_H_matrix(rebuild_KE_NL, fixed_potential, electrons, &
@@ -220,7 +225,7 @@ contains
                                            area_ops, nspin, nspin_SF,   &
                                            spin_factor, blips,          &
                                            flag_analytic_blip_int,      &
-                                           flag_neutral_atom, min_layer &
+                                           flag_neutral_atom, min_layer,&
                                            flag_self_consistent
     use functions_on_grid,           only: atomfns, H_on_atomfns,       &
                                            gridfunctions
@@ -374,7 +379,8 @@ contains
           if  ( exx_niter == 1 .and. exx_scheme /= 3 ) then
              !
              if (inode == ionode .and. iprint_exx > 2) &
-                  write (io_lun, *) 'EXX: setting get_X_matrix'
+                  write (io_lun, *) 'EXX: setting get_X_matrix' 
+             ! 
              call get_X_params(backtrace_level)
              !
              ! For first H building use pure DFT since we need K to get X 

@@ -204,8 +204,7 @@ contains
          non_local_species,               &
          nsf_species, npao_species,       &
          natomf_species, charge_up, charge_dn, &
-         natomf_species
-         natomf_species, charge_up, charge_dn
+         gto_file
     use density_module,         only: flag_InitialAtomicSpin
     use GenComms,               only: my_barrier, cq_abort, cq_warn
     use pseudopotential_data,   only: non_local, read_pseudopotential
@@ -902,7 +901,8 @@ contains
          InvSDeltaOmegaTolerance
     use blip,          only: blip_info, init_blip_flag, alpha, beta
     use maxima_module, only: lmax_ps
-    use control,       only: MDn_steps, MDfreq, MDcgtol, CGreset, LBFGS_history, sqnm_trust_step
+    use control,       only: MDn_steps, MDfreq, XSFfreq, XYZfreq,   &
+         MDcgtol, CGreset, LBFGS_history, sqnm_trust_step
     use ion_electrostatic,  only: ewald_accuracy
     use minimise,      only: UsePulay, n_L_iterations,          &
          n_support_iterations, L_tolerance, &
@@ -1602,6 +1602,8 @@ contains
     CGreset               = fdf_boolean('AtomMove.ResetCG',          .false.)
     MDn_steps             = fdf_integer('AtomMove.NumSteps',     100        )
     MDfreq                = fdf_integer('AtomMove.OutputFreq',    50        )
+    XSFfreq               = fdf_integer('AtomMove.XsfFreq',    MDfreq        )
+    XYZfreq               = fdf_integer('AtomMove.XyzFreq',    MDfreq        )
     MDtimestep            = fdf_double ('AtomMove.Timestep',      0.5_double)
     MDcgtol               = fdf_double ('AtomMove.MaxForceTol',0.0005_double)
     sqnm_trust_step       = fdf_double ('AtomMove.MaxSQNMStep',0.2_double   )
@@ -2964,6 +2966,8 @@ contains
   !!    Added printing fractional k-points when read from block
   !!   2022/06/29 12:00 dave
   !!    Moved printing to capture default gamma point behaviour
+  !!   2023/07/20 12:00 tsuyoshi
+  !!    Implementing 1st version of Padding H and S matrices
   !!  SOURCE
   !!
   subroutine readDiagInfo
@@ -2977,7 +2981,7 @@ contains
     use GenComms,        only: cq_abort, cq_warn, gcopy
     use input_module
     use ScalapackFormat, only: proc_rows, proc_cols, block_size_r,   &
-         block_size_c, proc_groups, matrix_size
+         block_size_c, proc_groups, matrix_size, flag_padH
     use DiagModule,      only: nkp, kk, wtk, kT, maxefermi,          &
          flag_smear_type, iMethfessel_Paxton,  &
          max_brkt_iterations, gaussian_height, &
@@ -3077,17 +3081,26 @@ contains
     ms_is_prime = is_prime(matrix_size)
     if ( ms_is_prime ) call cq_warn(sub_name,'matrix size is a prime number', matrix_size)
     
+    ! padH or not  :temporary?   
+    flag_padH = fdf_boolean('Diag.PaddingHmatrix',.true.)
+
     if(fdf_defined('Diag.BlockSizeR')) then
        block_size_r = fdf_integer('Diag.BlockSizeR',1)
        block_size_c = fdf_integer('Diag.BlockSizeC',1)
-       a = real(matrix_size)/real(block_size_r)
-       if(a - real(floor(a))>1e-8_double) &
-            call cq_abort('block_size_r not a factor of matrix size ! ',&
-            matrix_size, block_size_r)
-       a = real(matrix_size)/real(block_size_c)
-       if(a - real(floor(a))>1e-8_double) &
-            call cq_abort('block_size_c not a factor of matrix size ! ',&
-            matrix_size, block_size_c)
+       if(flag_padH) then
+          if(block_size_c .ne. block_size_r) &
+               call cq_abort('PaddingHmatrix: block_size_c needs to be block_size_r')
+          block_size_c = block_size_r
+       else
+          a = real(matrix_size)/real(block_size_r)
+          if(a - real(floor(a))>1e-8_double) &
+               call cq_abort('block_size_r not a factor of matrix size ! ',&
+               matrix_size, block_size_r)
+          a = real(matrix_size)/real(block_size_c)
+          if(a - real(floor(a))>1e-8_double) &
+               call cq_abort('block_size_c not a factor of matrix size ! ',&
+               matrix_size, block_size_c)
+       endif
     else if (  ms_is_prime ) then
        block_size_r = 1
        block_size_c = block_size_r

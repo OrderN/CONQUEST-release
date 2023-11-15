@@ -136,7 +136,7 @@ contains
     use cover_module,      only: make_cs, D2_CS
     use dimens,            only: r_dft_d2
     use DFT_D2,            only: set_para_D2, dispersion_D2
-    use pseudo_tm_module,   only: make_neutral_atom
+    use pseudo_tm_module,  only: make_neutral_atom
     use angular_coeff_routines, only: set_fact
     use maxima_module,          only: lmax_ps, lmax_pao
     !use exx_module,             only: initialise_exx, finalise_exx, get_X_params
