@@ -52,12 +52,15 @@
 !!    Added warning output
 !!   2020/01/21 17:11 dave
 !!    Tidying and removing non-standard FORTRAN
+!!   2020/04/21 15:05 dave
+!!    Update cq_warn so that warnings only go to Conquest_warnings at iprint=0
+!!    Add flag_warnings to alert user to check file
 !!  SOURCE
 !!
 module GenComms
 
   use datatypes
-  use global_module, ONLY: numprocs, io_lun
+  use global_module, ONLY: numprocs, io_lun, iprint
   use mpi
 
   implicit none
@@ -65,6 +68,7 @@ module GenComms
   integer, save :: myid, root
   integer, save :: inode, ionode
   integer, save :: warning_lun = 9 ! Check this with input_module to avoid clashes
+  logical, save :: flag_warnings = .false.
 
   integer, parameter :: xn_tag = 106
   integer, parameter :: int_gsum_buf = 10000
@@ -203,6 +207,9 @@ module GenComms
      module procedure double_three_gsumv
      module procedure double_four_gsumv
      module procedure dcplx_one_gsumv
+     module procedure dcplx_two_gsumv
+     module procedure dcplx_three_gsumv
+     module procedure dcplx_four_gsumv
      module procedure logical_gsum
   end interface
 !!***
@@ -334,7 +341,7 @@ contains
     integer :: ierr
 
     if(inode==ionode) close(warning_lun)
-    if(myid==0) write(io_lun,fmt='(2x,"Total run time was: ",f20.3," seconds")') mtime()*0.001_double
+    if(myid==0) write(io_lun,fmt='(/4x,"Total run time was: ",f19.3," seconds")') mtime()*0.001_double
     call MPI_Barrier(MPI_COMM_WORLD, ierr)
     call MPI_Finalize(ierr)
     return
@@ -631,6 +638,8 @@ contains
 !!  CREATION DATE
 !!   2019/12/05 08:21 dave
 !!  MODIFICATION HISTORY
+!!   2020/04/21 15:05 dave
+!!    Update so that warnings only go to Conquest_warnings at iprint=0
 !!  SOURCE
 !!
   subroutine cq_warn_none(sub_name,message)
@@ -643,8 +652,9 @@ contains
     ! Local variables
     
     if(inode==ionode) then
-       write(io_lun,fmt='(2x,"WARNING: ",a)')  message
+       if(iprint>0) write(io_lun,fmt='(/"WARNING: ",a/)')  message
        write(warning_lun,fmt='(a,": ",a)')  trim(sub_name), message
+       flag_warnings = .true.
     end if
     return
   end subroutine cq_warn_none
@@ -672,6 +682,8 @@ contains
 !!  CREATION DATE
 !!   2019/12/05 08:21 dave
 !!  MODIFICATION HISTORY
+!!   2020/04/21 15:05 dave
+!!    Update so that warnings only go to Conquest_warnings at iprint=0
 !!  SOURCE
 !!
   subroutine cq_warn_int(sub_name,message, int1, int2)
@@ -687,12 +699,13 @@ contains
     
     if(inode==ionode) then
        if(present(int2)) then
-          write(io_lun,fmt='(2x,"WARNING: ",a,2i8)')  message, int1, int2
+          if(iprint>0) write(io_lun,fmt='(/"WARNING: ",a,2i8/)')  message, int1, int2
           write(warning_lun,fmt='(a,": ",a,2i8)')  trim(sub_name), message, int1, int2
        else
-          write(io_lun,fmt='(2x,"WARNING: ",a,i8)')  message, int1
+          if(iprint>0) write(io_lun,fmt='(/"WARNING: ",a,i8/)')  message, int1
           write(warning_lun,fmt='(a,": ",a,i8)')  trim(sub_name), message, int1
        end if
+       flag_warnings = .true.
     end if
     return
   end subroutine cq_warn_int
@@ -720,6 +733,8 @@ contains
 !!  CREATION DATE
 !!   2019/12/05 08:21 dave
 !!  MODIFICATION HISTORY
+!!   2020/04/21 15:05 dave
+!!    Update so that warnings only go to Conquest_warnings at iprint=0
 !!  SOURCE
 !!
   subroutine cq_warn_real(sub_name, message, real1, real2)
@@ -735,12 +750,13 @@ contains
     
     if(inode==ionode) then
        if(present(real2)) then
-          write(io_lun,fmt='(2x,"WARNING: ",a,2f20.12)')  message, real1, real2
+          if(iprint>0) write(io_lun,fmt='(/"WARNING: ",a,2f20.12/)')  message, real1, real2
           write(warning_lun,fmt='(a,": ",a,2f20.12)')  trim(sub_name), message, real1, real2
        else
-          write(io_lun,fmt='(2x,"WARNING: ",a,f20.12)')  message, real1
+          if(iprint>0) write(io_lun,fmt='(/"WARNING: ",a,f20.12/)')  message, real1
           write(warning_lun,fmt='(a,": ",a,f20.12)')  trim(sub_name), message, real1
        end if
+       flag_warnings = .true.
     end if
     return
   end subroutine cq_warn_real
@@ -1367,6 +1383,189 @@ contains
     timings(6) = timings(6) + t2 - t1
     return
   end subroutine dcplx_one_gsumv
+!!***
+
+!!****f* GenComms/dcplx_two_gsumv *
+!!
+!!  NAME 
+!!   dcplx_two_gsumv - global sum on a complex(double_cplx) 1D vector
+!!  USAGE
+!!   dcplx_two_gsumv(variable, len1, len2)
+!!  PURPOSE
+!!   Performs a global sum on a specified 2D complex(double_cplx) vector -
+!!   in other words, sum vector over all processors and ensure
+!!   that all processors get the results
+!!
+!!   Since we don't know in advance how big this will be, we'll
+!!   have a parameter in the module header double_gsum_buf which 
+!!   will allow the sum to be done piecewise (for memory conservation)
+!!
+!!   The shenanigans with temp are necessary as there's no in-place
+!!   global sum in MPI
+!!  INPUTS
+!!   integer :: len1, len2
+!!   complex(double_cplx), dimension(len1,len2) :: variable
+!!  USES
+!! 
+!!  AUTHOR
+!!   D.R.Bowler
+!!  CREATION DATE
+!!   2023/05/24 11:36 dave
+!!  MODIFICATION HISTORY
+!!  SOURCE
+!!
+  subroutine dcplx_two_gsumv(variable, len1, len2)
+
+    use datatypes
+
+    implicit none
+
+    ! Passed variables
+    integer :: len1, len2
+    complex(double_cplx), dimension(len1, len2) :: variable
+
+    ! Local variables
+    complex(double_cplx), allocatable, dimension(:,:) :: temp
+    integer :: ierr, stat, tmpsize, j
+
+    t1 = MPI_wtime()
+    if(len1<=0 .or. len2<=0) call cq_abort('dcplx_gsumv: length of vector passed as zero')
+    ! Establish size of temporary variable and allocate
+    allocate(temp(len1,len2),STAT=stat)
+    if(stat/=0) call cq_abort('dcplx_two_gsumv: error allocating temp')
+    temp = variable
+    call MPI_allreduce(temp,variable,len1*len2,MPI_Double_complex,&
+         MPI_Sum,MPI_COMM_WORLD,ierr)
+    if(ierr/=MPI_Success) &
+         call cq_abort('dcplx_gsumv: Problem with allreduce')
+    deallocate(temp,STAT=stat)
+    if(stat/=0) call cq_abort('dcplx_gsumv: error deallocating temp')
+    t2 = MPI_wtime()
+    timings(6) = timings(6) + t2 - t1
+    return
+  end subroutine dcplx_two_gsumv
+!!***
+
+!!****f* GenComms/dcplx_three_gsumv *
+!!
+!!  NAME 
+!!   dcplx_three_gsumv - global sum on a complex(double_cplx) 3D vector
+!!  USAGE
+!!   dcplx_three_gsumv(variable, len1, len2, len3)
+!!  PURPOSE
+!!   Performs a global sum on a specified 3D complex(double_cplx) vector -
+!!   in other words, sum vector over all processors and ensure
+!!   that all processors get the results
+!!
+!!   Since we don't know in advance how big this will be, we'll
+!!   have a parameter in the module header double_gsum_buf which 
+!!   will allow the sum to be done piecewise (for memory conservation)
+!!
+!!   The shenanigans with temp are necessary as there's no in-place
+!!   global sum in MPI
+!!  INPUTS
+!!   integer :: len1, len2, len3
+!!   complex(double_cplx), dimension(len1,len2,len3) :: variable
+!!  USES
+!! 
+!!  AUTHOR
+!!   D.R.Bowler
+!!  CREATION DATE
+!!   2023/05/24 11:36 dave
+!!  MODIFICATION HISTORY
+!!  SOURCE
+!!
+  subroutine dcplx_three_gsumv(variable, len1, len2, len3)
+
+    use datatypes
+
+    implicit none
+
+    ! Passed variables
+    integer :: len1, len2, len3
+    complex(double_cplx), dimension(len1, len2, len3) :: variable
+
+    ! Local variables
+    complex(double_cplx), allocatable, dimension(:,:,:) :: temp
+    integer :: ierr, stat, tmpsize, j
+
+    t1 = MPI_wtime()
+    if(len1<=0 .or. len2<=0) call cq_abort('dcplx_three_gsumv: length of vector passed as zero')
+    ! Establish size of temporary variable and allocate
+    allocate(temp(len1,len2,len3),STAT=stat)
+    if(stat/=0) call cq_abort('dcplx_three_gsumv: error allocating temp')
+    temp = variable
+    call MPI_allreduce(temp,variable,len1*len2*len3,MPI_Double_complex,&
+         MPI_Sum,MPI_COMM_WORLD,ierr)
+    if(ierr/=MPI_Success) &
+         call cq_abort('dcplx_gsumv: Problem with allreduce')
+    deallocate(temp,STAT=stat)
+    if(stat/=0) call cq_abort('dcplx_gsumv: error deallocating temp')
+    t2 = MPI_wtime()
+    timings(6) = timings(6) + t2 - t1
+    return
+  end subroutine dcplx_three_gsumv
+!!***
+
+!!****f* GenComms/dcplx_four_gsumv *
+!!
+!!  NAME 
+!!   dcplx_four_gsumv - global sum on a complex(double_cplx) 3D vector
+!!  USAGE
+!!   dcplx_four_gsumv(variable, len1, len2, len3)
+!!  PURPOSE
+!!   Performs a global sum on a specified 3D complex(double_cplx) vector -
+!!   in other words, sum vector over all processors and ensure
+!!   that all processors get the results
+!!
+!!   Since we don't know in advance how big this will be, we'll
+!!   have a parameter in the module header double_gsum_buf which 
+!!   will allow the sum to be done piecewise (for memory conservation)
+!!
+!!   The shenanigans with temp are necessary as there's no in-place
+!!   global sum in MPI
+!!  INPUTS
+!!   integer :: len1, len2, len3
+!!   complex(double_cplx), dimension(len1,len2,len3) :: variable
+!!  USES
+!! 
+!!  AUTHOR
+!!   D.R.Bowler
+!!  CREATION DATE
+!!   2023/05/24 11:36 dave
+!!  MODIFICATION HISTORY
+!!  SOURCE
+!!
+  subroutine dcplx_four_gsumv(variable, len1, len2, len3, len4)
+
+    use datatypes
+
+    implicit none
+
+    ! Passed variables
+    integer :: len1, len2, len3, len4
+    complex(double_cplx), dimension(len1, len2, len3, len4) :: variable
+
+    ! Local variables
+    complex(double_cplx), allocatable, dimension(:,:,:,:) :: temp
+    integer :: ierr, stat, tmpsize, j
+
+    t1 = MPI_wtime()
+    if(len1<=0 .or. len2<=0) call cq_abort('dcplx_four_gsumv: length of vector passed as zero')
+    ! Establish size of temporary variable and allocate
+    allocate(temp(len1,len2,len3,len4),STAT=stat)
+    if(stat/=0) call cq_abort('dcplx_four_gsumv: error allocating temp')
+    temp = variable
+    call MPI_allreduce(temp,variable,len1*len2*len3*len4,MPI_Double_complex,&
+         MPI_Sum,MPI_COMM_WORLD,ierr)
+    if(ierr/=MPI_Success) &
+         call cq_abort('dcplx_gsumv: Problem with allreduce')
+    deallocate(temp,STAT=stat)
+    if(stat/=0) call cq_abort('dcplx_gsumv: error deallocating temp')
+    t2 = MPI_wtime()
+    timings(6) = timings(6) + t2 - t1
+    return
+  end subroutine dcplx_four_gsumv
 !!***
 
 !!****f* GenComms/double_gmax *

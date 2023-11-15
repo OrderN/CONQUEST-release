@@ -81,8 +81,10 @@ module H_matrix_module
   ! Area identification
   integer, parameter, private :: area = 3
 
-  logical :: locps_output
-  integer :: locps_choice
+  logical :: locps_output=.false.
+  logical :: flag_write_locps
+  integer, parameter :: max_locps_type = 5
+  logical :: flag_dump_locps(max_locps_type)
 
 !!***
 
@@ -182,6 +184,9 @@ contains
   !!   Moved dump_matrix(NSmatrix) to sub:get_S_matrix
   !!  2020/14/11 16:00 LAT
   !!   Add matK, matX dump
+  !!  2021/07/19 15:46 dave
+  !!   Removed writing out of charge density
+
   !! SOURCE
   !!
   subroutine get_H_matrix(rebuild_KE_NL, fixed_potential, electrons, &
@@ -215,13 +220,12 @@ contains
                                            area_ops, nspin, nspin_SF,   &
                                            spin_factor, blips,          &
                                            flag_analytic_blip_int,      &
-                                           flag_neutral_atom,           &
+                                           flag_neutral_atom, min_layer &
                                            flag_self_consistent
     use functions_on_grid,           only: atomfns, H_on_atomfns,       &
                                            gridfunctions
     use io_module,                   only: dump_matrix, dump_blips,     &
-                                           dump_charge, write_matrix,   &
-                                           dump_charge
+                                           write_matrix
     use dimens,                      only: n_my_grid_points
     use memory_module,               only: reg_alloc_mem,               &
                                            reg_dealloc_mem, type_dbl
@@ -241,7 +245,8 @@ contains
     use exx_io,                      only: exx_global_write
 !****lat>$
     use energy, only: local_ps_energy
-    use density_module,              only: flag_DumpChargeDensity
+    use density_module, only: flag_DumpChargeDensity
+    use io_module,      only: dump_charge
     
     implicit none
 
@@ -322,10 +327,10 @@ contains
        !
        ! from here on, workspace support becomes h_on_atomfns...
        ! in fact, what we are getting here is (H_local - T) acting on support
-       call get_h_on_atomfns(iprint_ops, fixed_potential, electrons, rho, size)
+       call get_h_on_atomfns(iprint_ops + min_layer, fixed_potential, electrons, rho, size)
        !
        !
-       if (inode == ionode .and. iprint_ops > 2) &
+       if (inode == ionode .and. iprint_ops > 3) &
             write (io_lun, *) 'Doing integration'
        ! Do the integration - support holds <phi| and workspace_support
        ! holds H|phi>. Inode starts from 1, and myid starts from 0. 
@@ -335,7 +340,7 @@ contains
                                        matHatomf(spin), atomfns, &
                                        H_on_atomfns(spin))
        end do
-       if (inode == ionode .and. iprint_ops > 2) write (io_lun, *) 'Done integration'
+       if (inode == ionode .and. iprint_ops > 3) write (io_lun, *) 'Done integration'
        !
        !
        if (iprint_ops > 4) then
@@ -402,19 +407,16 @@ contains
              !
              !call exx_global_write() 
              !
-             !if (inode == ionode .and. iprint_exx > 2) &
-             !write (io_lun, *) 'EXX: doing get_X_matrix'
-             !
              do spin = 1, nspin
-                if (inode == ionode .and. iprint_exx > 2) &
+                if (inode == ionode .and. iprint_exx > 3) &
                 write (io_lun, *) 'EXX: doing get_X_matrix: ', print_exxspin(spin)
                 call get_X_matrix(spin, exx_scheme, exx_store_eris, exx_niter, backtrace_level)
              end do
              !
-             !if (inode == ionode .and. iprint_exx > 2) &
+             !if (inode == ionode .and. iprint_exx > 3) &
                   !write (io_lun, *) 'EXX: done get_X_matrix'
              do spin = 1, nspin
-                if (inode == ionode .and. iprint_exx > 2) &
+                if (inode == ionode .and. iprint_exx > 3) &
                 write (io_lun, *) 'EXX: done get_X_matrix: ', print_exxspin(spin)
                 call matrix_sum(one, matHatomf(spin),-exx_alpha*half, matXatomf(spin)) 
              end do
@@ -481,7 +483,7 @@ contains
     !
     !
     ! dump charges if required
-    if (flag_DumpChargeDensity .or. iprint_SC > 2) then
+    if (flag_DumpChargeDensity .or. iprint_SC > 3) then
        if(nspin==1) then
           allocate(rho_total(size), STAT=stat)
           if (stat /= 0) call cq_abort("Error allocating rho_total: ", size)
@@ -605,6 +607,8 @@ contains
   !!    Removed unused fn_on_grid
   !!   2018/02/13 12:17 dave
   !!    New XC interface implemented
+  !!   2022/08/02 08:57 dave
+  !!    Tidied XC potential and energy calculation (PCC related)
   !!  SOURCE
   !!
   subroutine get_h_on_atomfns(output_level, fixed_potential, &
@@ -616,13 +620,11 @@ contains
                                            nspin, spin_factor,         &
                                            flag_pcc_global, area_ops,  &
                                            exx_alpha, exx_niter, exx_siter, &
-                                           flag_neutral_atom
-     
+                                           flag_neutral_atom, min_layer
     use XC,                          only: get_xc_potential
     use GenBlas,                     only: copy, axpy, dot, rsum
     use dimens,                      only: grid_point_volume,          &
                                            n_my_grid_points, n_grid_z
-
     use block_module,                only: n_blocks, n_pts_in_block
     use primary_module,              only: domain
     use set_blipgrid_module,         only: naba_atoms_of_blocks
@@ -639,7 +641,6 @@ contains
     use hartree_module,              only: hartree, hartree_stress
     use functions_on_grid,           only: gridfunctions, &
                                            atomfns, H_on_atomfns
-
     use calc_matrix_elements_module, only: norb
     use pseudopotential_common,      only: pseudopotential, flag_neutral_atom_projector
     use potential_module,            only: potential
@@ -648,7 +649,7 @@ contains
                                            reg_dealloc_mem, type_dbl
     use fft_module,                  only: fft3, hartree_factor,       &
                                            z_columns_node, i0
-    use io_module,                   only: dump_locps
+    use io_module,                   only: dump_locps, return_prefix
 
     implicit none
 
@@ -670,7 +671,10 @@ contains
     real(double), dimension(:),   allocatable :: density_wk_tot
     !complex(double_cplx), dimension(:), allocatable :: chdenr, locpotr
     real(double), dimension(:),   allocatable :: drho_tot
+    character(len=20) :: subname = "get_h_on_atomfns: "
+    character(len=120) :: prefix
 
+    prefix = return_prefix(subname, min_layer)
     ! for Neutral atom potential
     if( flag_neutral_atom ) then
        allocate( drho_tot(size), STAT=stat)
@@ -729,10 +733,9 @@ contains
     end if
     
     electrons_tot = spin_factor * sum(electrons(:))
-    if (inode == ionode .and. output_level >= 2) then
-       write (io_lun, '(10x,a)') &
-            'get_h_on_atomfns: Electron Count, up, down and total:'
-       write (io_lun, '(10x, 3f25.15)') &
+    if (inode == ionode .and. output_level >= 3) then
+       write (io_lun, '(4x,a,3f16.6)') &
+            trim(prefix)//' electron count (up, down, total): ', &
             electrons(1), electrons(nspin), electrons_tot
     end if
     !
@@ -746,7 +749,8 @@ contains
             dot(n_my_grid_points, h_potential, 1, density_atom, 1) * &
             grid_point_volume
        call gsum(hartree_energy_drho_atom_rho)
-       delta_E_hartree = zero
+       ! This is the effective correction term
+       delta_E_hartree = - hartree_energy_drho - hartree_energy_drho_atom_rho
     else
        call hartree(rho_tot, h_potential, maxngrid, hartree_energy_total_rho)
        !
@@ -756,53 +760,41 @@ contains
     end if
     !
     !
-    ! for P.C.C.
+    ! Calculate XC potential and energies with/without P.C.C.
+    delta_E_xc = zero
     if (flag_pcc_global) then
        allocate(density_wk(size,nspin), density_wk_tot(size), STAT=stat)
        if (stat /= 0) &
             call cq_abort("Error allocating density_wk, density_wk_tot: ", &
                           stat)
        call reg_alloc_mem(area_ops, size * (nspin + 1), type_dbl)
-       !density_wk = zero
        do spin = 1, nspin
           density_wk(:,spin) = rho(:,spin) + half * density_pcc(:)
        end do
        density_wk_tot = rho_tot + density_pcc
-    end if
-    !  
-    !
-    if (flag_pcc_global) then
        call get_xc_potential(density=density_wk, size=size, &
             xc_potential=xc_potential,    &
             xc_epsilon  =xc_epsilon, &
             xc_energy   =xc_energy,  &
             x_energy    =x_energy    )
-    else
+       delta_E_xc = dot(n_my_grid_points, xc_epsilon,1,density_wk_tot,1)
+       delta_E_xc = delta_E_xc - dot(n_my_grid_points,xc_potential(:,1),1,rho(:,1),1)
+       delta_E_xc = delta_E_xc - dot(n_my_grid_points,xc_potential(:,nspin),1,rho(:,nspin),1)
+       deallocate(density_wk, STAT=stat)
+       deallocate(density_wk_tot, STAT=stat)
+       if (stat /= 0) &
+            call cq_abort("Error deallocating density_wk: ", stat)
+       call reg_dealloc_mem(area_ops, size* (nspin + 1), type_dbl)
+    else ! No PCC
        call get_xc_potential(density=rho, size=size,     &
             xc_potential=xc_potential, &
             xc_epsilon  =xc_epsilon,        & 
             xc_energy   =xc_energy,         &
             x_energy    =x_energy)
+       delta_E_xc = dot(n_my_grid_points, xc_epsilon,1,rho_tot,1)
+       delta_E_xc = delta_E_xc - dot(n_my_grid_points,xc_potential(:,1),1,rho(:,1),1)
+       delta_E_xc = delta_E_xc - dot(n_my_grid_points,xc_potential(:,nspin),1,rho(:,nspin),1)
     end if
-    !
-    !
-    ! Calculation of delta_E_xc
-    delta_E_xc = zero
-    if (flag_pcc_global) then
-       do igrid = 1, n_my_grid_points
-          delta_E_xc = delta_E_xc + &
-                       xc_epsilon(igrid) * density_wk_tot(igrid) - &
-                       xc_potential(igrid,1) * rho(igrid,1) - &
-                       xc_potential(igrid,nspin) * rho(igrid,nspin)
-       end do
-    else
-       do igrid = 1, n_my_grid_points
-          delta_E_xc = delta_E_xc + &
-                       xc_epsilon(igrid) * rho_tot(igrid) - &
-                       xc_potential(igrid,1) * rho(igrid,1) - &
-                       xc_potential(igrid,nspin) * rho(igrid,nspin)
-       end do
-    end if ! (flag_pcc_global)
     call gsum(delta_E_xc)
     delta_E_xc = delta_E_xc * grid_point_volume
     !
@@ -822,22 +814,8 @@ contains
     !
     ! Print potential, if necessary
     if (locps_output) then
-       dump_pot = (/.false., .true., .false., .false./)
-       if (locps_choice < 0 .or. locps_choice > 15) then
-          if (inode == ionode) &
-               write (io_lun, *) 'Bad choice for local potential &
-                                  &printout: no output.'
-       else
-          if (inode == ionode) &
-               write (io_lun, *) 'Writing local potential to file(s).'
-          do i = 4, 1, -1
-             pot_flag = mod(locps_choice/(2**(i-1)), 2)
-             if (pot_flag > 0) dump_pot(i) = .true.
-             locps_choice = locps_choice - pot_flag*(2**(i-1))
-          end do
-       end if
-       if (dump_pot(1)) call dump_locps("Hartree", h_potential, size, inode)
-       if (dump_pot(2)) then
+       if (flag_dump_locps(1)) call dump_locps("Har", h_potential, size, inode)
+       if (flag_dump_locps(2)) then
           if (nspin == 1) then
              call dump_locps("XC", xc_potential(:,1), size, inode)
           else
@@ -845,15 +823,34 @@ contains
              call dump_locps("XC_dn", xc_potential(:,2), size, inode)
           end if
        end if
-       if (dump_pot(3)) call dump_locps("PS", pseudopotential, size, inode)
-       if (dump_pot(4)) then
-          if (nspin == 1) then
-             call dump_locps("Total", potential(:,1), size, inode)
-          else
-             call dump_locps("Total_up", potential(:,1), size, inode)
-             call dump_locps("Total_dn", potential(:,2), size, inode)
-          end if
+       if (flag_dump_locps(3)) call dump_locps("PS", pseudopotential, size, inode)
+       if (flag_dump_locps(4)) then
+        ! Change (2022/Dec/09) : Electrostaic potential is now dumped.
+        !  using density_wk_tot for dump electrostatic potential
+          allocate(density_wk_tot(size), STAT=stat)
+          if (stat /= 0) &
+           call cq_abort("Error allocating density_wk_tot : ", stat)
+          call reg_alloc_mem(area_ops, size, type_dbl)
+
+          density_wk_tot =zero
+          call copy(n_my_grid_points, h_potential, 1, density_wk_tot, 1)
+          call axpy(n_my_grid_points, one, pseudopotential, 1, density_wk_tot, 1)
+          call dump_locps("ES", density_wk_tot, size, inode)
+
+          deallocate(density_wk_tot, STAT=stat)
+          if (stat /= 0) &
+           call cq_abort("Error deallocating density_wk_tot: ", stat)
+          call reg_dealloc_mem(area_ops, size, type_dbl)
        end if
+       if (flag_dump_locps(5)) then
+        ! dumping Total potential  
+          if (nspin == 1) then
+             call dump_locps("Tot", potential(:,1), size, inode)
+          else
+             call dump_locps("Tot_up", potential(:,1), size, inode)
+             call dump_locps("Tot_dn", potential(:,2), size, inode)
+          end if
+       endif
     end if
     !
     !
@@ -889,14 +886,6 @@ contains
        end if ! (naba_atoms_of_blocks(atomf)%no_of_atom(nb) > 0)
        m = m + n_pts_in_block
     end do ! nb
-    !
-    !
-    if (flag_pcc_global) then
-       deallocate(density_wk, STAT=stat)
-       if (stat /= 0) &
-            call cq_abort("Error deallocating density_wk: ", stat)
-       call reg_dealloc_mem(area_ops, size, type_dbl)
-    endif
     !
     !
     deallocate(xc_epsilon, h_potential, rho_tot, xc_potential, STAT=stat)
@@ -1005,7 +994,7 @@ contains
                                            iprint_ops,                 &
                                            nspin, id_glob,             &
                                            species_glob,               &
-                                           flag_analytic_blip_int
+                                           flag_analytic_blip_int, min_layer
     use GenComms,                    only: cq_abort, myid, inode, ionode
     use GenBlas,                     only: axpy
     use build_PAO_matrices,          only: assemble_2
@@ -1091,16 +1080,16 @@ contains
        !call dump_matrix("NSC",matAP,inode)
     else if (flag_basis_set == PAOs) then
        ! Use assemble to generate matrix elements
-       if (inode == ionode .and. iprint_ops > 2) &
+       if (inode == ionode .and. iprint_ops + min_layer > 3) &
             write (io_lun, *) 'Calling assemble'
        call assemble_2(APrange, matAP, 3)
-       if (inode == ionode .AND. iprint_ops > 2) &
+       if (inode == ionode .AND. iprint_ops + min_layer > 3) &
             write(io_lun,*) 'Called assemble'
     else
        call cq_abort('get_HNL_matrix: basis set incorrectly specified ', &
                      flag_basis_set)
     end if
-    if (inode == ionode .and. iprint_ops > 2) write(io_lun,*) 'Made SP'
+    if (inode == ionode .and. iprint_ops + min_layer > 3) write(io_lun,*) 'Made SP'
 
     call matrix_sum(zero, matAPtmp, one ,matAP)
     if (mult(AP_PA_aHa)%mult_type == 2) then ! type 2 means no transpose necessary
@@ -1115,21 +1104,21 @@ contains
        end select
        call matrix_product(matAPtmp, matAP, matNLatomf, mult(AP_PA_aHa))
     else ! Transpose SP->PS, then mult
-       if (inode == ionode .and. iprint_ops > 2) &
+       if (inode == ionode .and. iprint_ops + min_layer > 3) &
             write (io_lun, *) 'Type 1 ', matAP, matPA
        call matrix_transpose(matAP, matPA)
-       if (inode == ionode .and. iprint_ops > 2) &
+       if (inode == ionode .and. iprint_ops + min_layer > 3) &
             write (io_lun, *) 'Done transpose'
        select case (pseudo_type)
        case (OLDPS)
           call matrix_scale_diag(matAP, species, n_projectors, l_core,&
                                  recip_scale, APrange)
        case (SIESTA)
-          if (inode == ionode .and. iprint_ops > 2) &
+          if (inode == ionode .and. iprint_ops + min_layer > 3) &
                write (io_lun, *) 'Doing scale'
           call matrix_scale_diag_tm(matAP, APrange)
        case(ABINIT)
-          if (inode == ionode .and. iprint_ops > 2) &
+          if (inode == ionode .and. iprint_ops + min_layer > 3) &
                write (io_lun, *) 'Doing scale'
           call matrix_scale_diag_tm(matAP, APrange)
        end select
@@ -1744,6 +1733,124 @@ contains
   end subroutine get_onsite_T
 !!***
 
+  ! -----------------------------------------------------------
+  ! Subroutine get_output_energies
+  ! -----------------------------------------------------------
+
+  !!****f* H_matrix_module/get_output_energies *
+  !!
+  !!  NAME
+  !!   get_output_energies
+  !!  USAGE
+  !!
+  !!  PURPOSE
+  !!   Calculate the Hartree and XC energies for a given density
+  !!   Used to find the correct DFT energy which requires the Ha
+  !!   and XC energies for the output densities
+  !!   Also finds the local PS/neutral atom energy, which integrates
+  !!   the potential with the density (as opposed to taking the trace
+  !!   of K with the appropriate matrix).
+  !!
+  !!   It's not immediately obvious where to put this subroutine, but
+  !!   it's in H_matrix_module because it closely parallels the energy
+  !!   calculations in get_h_on_atomfns
+  !!  INPUTS
+  !!
+  !!
+  !!  USES
+  !!
+  !!  AUTHOR
+  !!   D.R.Bowler
+  !!  CREATION DATE
+  !!   2021/07/22
+  !!  MODIFICATION HISTORY
+  !!   2021/07/26 10:54 dave
+  !!    Added local PS for nonNA runs, tidied output
+  !!  SOURCE
+  !!
+  subroutine get_output_energies(rho, size)
+
+    use datatypes
+    use numbers
+    use global_module,          only: flag_pcc_global, nspin, spin_factor, &
+                                      flag_neutral_atom, area_ops, iprint_ops
+    use hartree_module,         only: get_hartree_energy
+    use XC,                     only: get_xc_energy
+    use energy,                 only: hartree_energy_total_rho,  &
+                                      xc_energy,       &
+                                      local_ps_energy, &
+                                      hartree_energy_drho, hartree_energy_drho_input
+    use density_module,         only: density_pcc, density_atom
+    use maxima_module,          only: maxngrid
+    use memory_module,          only: reg_alloc_mem,              &
+                                      reg_dealloc_mem, type_dbl
+    use GenComms,               only: cq_abort, gsum, inode, ionode
+    use pseudopotential_common, only: pseudopotential, flag_neutral_atom_projector
+    use dimens,                 only: grid_point_volume, n_my_grid_points
+    use GenBlas,                only: dot
+
+    implicit none
+
+    ! Passed variables
+    integer :: size
+    real(double), dimension(:,:) :: rho
+
+    ! Local variables
+    real(double), allocatable, dimension(:,:) :: density_wk
+    integer :: spin, stat
+
+    ! Workspace to store various forms of density
+    allocate(density_wk(size,nspin), STAT=stat)
+    if (stat /= 0) call cq_abort("Error allocating density_wk: ", stat)
+    call reg_alloc_mem(area_ops, size * nspin, type_dbl)
+    ! Construct total density in density_wk
+    density_wk = zero
+    do spin = 1, nspin
+       density_wk(:,1) = density_wk(:,1) + spin_factor*rho(:,spin)
+    end do
+    ! Calculate Hartree energy of density (or drho for NA)
+    if( flag_neutral_atom ) then
+       if(.NOT.flag_neutral_atom_projector) then
+          local_ps_energy = &
+               dot(n_my_grid_points, pseudopotential, 1, density_wk(:,1), 1) * &
+               grid_point_volume
+          call gsum(local_ps_energy)
+          if(inode==ionode .and. iprint_ops>3) &
+               write(io_lun,fmt='(2x,"Output density neutral atom energy (delta rho): ",f19.12)') local_ps_energy
+       end if
+       hartree_energy_drho_input = hartree_energy_drho
+       density_wk(:,1) = density_wk(:,1) - density_atom(:)
+       call get_hartree_energy(density_wk, maxngrid, hartree_energy_drho)
+       if(inode==ionode .and. iprint_ops>3) &
+            write(io_lun,fmt='(2x,"Output density Hartree energy (delta rho): ",f19.12)') hartree_energy_drho
+    else
+       local_ps_energy = &
+            dot(n_my_grid_points, pseudopotential, 1, density_wk(:,1), 1) * &
+            grid_point_volume
+       call gsum(local_ps_energy)
+       if(inode==ionode .and. iprint_ops>3) &
+            write(io_lun,fmt='(2x,"Output density local PS energy (delta rho): ",f19.12)') local_ps_energy
+       call get_hartree_energy(density_wk, maxngrid, hartree_energy_total_rho)
+       if(inode==ionode .and. iprint_ops>3) &
+            write(io_lun,fmt='(2x,"Output density Hartree energy (delta rho): ",f19.12)') hartree_energy_drho
+    end if
+    !  
+    ! Construct XC energy of density
+    if (flag_pcc_global) then
+       density_wk = zero
+       do spin = 1, nspin
+          density_wk(:,spin) = rho(:,spin) + half * density_pcc(:)
+       end do
+       call get_xc_energy(density_wk, xc_energy, size)
+    else
+       call get_xc_energy(rho, xc_energy, size)
+    end if
+    if(inode==ionode .and. iprint_ops>3) &
+         write(io_lun,fmt='(2x,"Output density XC energy: ",f19.12)') xc_energy
+    deallocate(density_wk)
+    call reg_dealloc_mem(area_ops, size*nspin, type_dbl)
+  end subroutine get_output_energies
+!!***
 
   ! -----------------------------------------------------------
   ! Subroutine matrix_scale_diag

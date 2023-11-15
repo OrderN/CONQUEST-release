@@ -358,8 +358,8 @@ contains
           blocks%ng_on_node(nnd) = blocks_per_proc(nnd)
           if(blocks_per_proc(nnd)<minblocks) minblocks = blocks_per_proc(nnd)
        enddo
-       if(inode==ionode.AND.iprint_index>0) then
-          write(io_lun,fmt='(10x,"Minimum blocs/proc is ",i8,". Maximum blocs/proc is ",i8)') minblocks, maxblocks
+       if(inode==ionode.AND.iprint_index>1) then
+          write(io_lun,fmt='(4x,"Minimum blocs/proc is ",i8,". Maximum blocs/proc is ",i8)') minblocks, maxblocks
        end if
        !--- index of first block on current node
        blocks%inode_beg=0

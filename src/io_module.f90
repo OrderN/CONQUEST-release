@@ -97,6 +97,7 @@ module io_module
 
   !Maximum of wallclock time (in seconds): See subroutine 'check_stop' 2018.Jan.17 TM 
   real(double)      :: time_max =zero
+  integer :: atom_output_threshold
    
   !Name and Format of  MatrixFile used in store_matrix
   logical          :: flag_MatrixFile_RankFromZero  ! Starting from 0 in ##### (*matrix2.i**.p#####)
@@ -108,6 +109,12 @@ module io_module
   !  flag_MatrixFile_BinaryFormat_Dump_END.  
   !   (during the job, we need to keep the format of the file, prepared in the last job.)
   logical          :: flag_MatrixFile_BinaryFormat_Dump_END ! set from Conquest_input
+  
+  ! System signature
+  ! Moved here from read_and_write so that it can be used for extended XYZ output
+  ! Moved here from initial_read_module to slove the dependence problem
+  character(len=80), save :: titles
+  logical          :: flag_coords_xyz
 
 !!***
 
@@ -166,6 +173,8 @@ contains
   !!    Added atom_vels  
   !!   2020/10/07 tsuyoshi
   !!    Removed allocation of atom_vels (moved to "control")
+  !!   2022/12/09 16:52 dave
+  !!    Added simple check for Cartesian coordinates when fractional flag set and vice versa
   !!  SOURCE
   !!
   subroutine read_atomic_positions(filename)
@@ -173,25 +182,25 @@ contains
     use datatypes
     use dimens,         only: r_super_x, r_super_y, r_super_z
     use global_module,  only: x_atom_cell, y_atom_cell, z_atom_cell, &
-                              ni_in_cell,                            &
+                              ni_in_cell, numprocs,                  &
                               flag_fractional_atomic_coords, rcellx, &
                               rcelly, rcellz, id_glob, iprint_init,  &
                               id_glob_inv, atom_coord, species_glob, &
                               flag_move_atom, area_init, shift_in_bohr, &
                               runtype,atom_coord_diff,id_glob_old,id_glob_inv_old
     use species_module, only: species, species_label, n_species
-    use GenComms,       only: inode, ionode, cq_abort
+    use GenComms,       only: inode, ionode, cq_abort, cq_warn
     use memory_module,  only: reg_alloc_mem, type_dbl, type_int
     use units,          only: AngToBohr
     use units,          only: dist_units, ang
-    use numbers,        only: RD_ERR, zero
+    use numbers,        only: RD_ERR, zero, one, two
 
     ! Passed variables
     character(len=*) :: filename
 
     ! Local variables
     type(cq_timer) :: backtrace_timer
-    integer        :: lun, i, spec, stat
+    integer        :: lun, i, spec, stat, n_wrong_coords
     logical        :: movex, movey, movez
     real(double)   :: x, y, z
     real(double), dimension(3) :: cell
@@ -215,13 +224,13 @@ pdb:   if (pdb_format) then
                call cq_abort('Pdb file format does not support &
                               &fractional coordinates.')
           if (iprint_init>2) &
-               write(io_lun,*) 'Entering read_atomic_positions, pdb file'
+               write(io_lun,fmt='(4x,a)') 'Entering read_atomic_positions, pdb file'
           call io_assign(lun)
           ! Go through the file and count the atoms
           open( unit=lun, file=filename, status='old', iostat=ios)
           if ( ios > 0 ) call cq_abort('Reading pdb file: file error')
           if (iprint_init > 2) &
-               write (io_lun,'(1x,a)') &
+               write (io_lun,'(5x,a)') &
                      'Counting atoms, checking for alternate locations'
           ni_in_cell = 0
 first:    do
@@ -254,7 +263,7 @@ first:    do
           end do first
           call io_close(lun)
           if (iprint_init>0) &
-               write(io_lun,'(1x,a,i5)') 'Number of atoms: ', ni_in_cell
+               write(io_lun,'(5x,a,i5)') 'Number of atoms: ', ni_in_cell
 
           ! Now read the file again and extracts the coordinates
           open(unit=lun, file=filename, status='old', iostat=ios)
@@ -294,7 +303,7 @@ second:   do
                             species_glob(i) = j
                             if(species_glob(i)>n_species) then
                                write(io_lun,&
-                                     fmt='(2x,"** WARNING ! ** &
+                                     fmt='(4x,"** WARNING ! ** &
                                            &Species incompatibility between &
                                            &coordinates and input")')
                                call cq_abort("Species specified &
@@ -324,10 +333,10 @@ second:   do
                          num_move_atom = num_move_atom - 2
                       end if
                       if (num_move_atom == 1) flag_move_atom(1,i) = .true.
-                      if (iprint_init > 0) &
-                           write (io_lun,fmt='(3x, i7, 3f15.8, i3, 3L2)') &
-                                 i, atom_coord(1:3,i), species_glob(i), &
-                                 flag_move_atom(1:3,i)
+                      !if (iprint_init > 0) &
+                      !     write (io_lun,fmt='(3x, i7, 3f15.8, i3, 3L2)') &
+                      !           i, atom_coord(1:3,i), species_glob(i), &
+                      !           flag_move_atom(1:3,i)
                    end if
                 else
                    i = i + 1
@@ -372,10 +381,10 @@ second:   do
                       num_move_atom = num_move_atom - 2
                    end if
                    if (num_move_atom == 1) flag_move_atom(1,i) = .true.
-                   if (iprint_init > 0) &
-                        write (io_lun,fmt='(3x, i7, 3f15.8, i3, 3L2)')&
-                              i, atom_coord(1:3,i), species_glob(i), &
-                              flag_move_atom(1:3,i)
+                   !if (iprint_init > 0) &
+                   !     write (io_lun,fmt='(3x, i7, 3f15.8, i3, 3L2)')&
+                   !           i, atom_coord(1:3,i), species_glob(i), &
+                   !           flag_move_atom(1:3,i)
                 end if
              case ('CRYST1')
                 read (pdb_line,'(6x,3f9.3,3f7.2,15x)') &
@@ -387,9 +396,9 @@ second:   do
                 ! initial_read_module, but I think it's better to have
                 ! it (also) here, because then the cell size will be
                 ! printed together with the coordinates
-                write(io_lun,4) r_super_x, r_super_y, r_super_z
-4               format(/10x,'The simulation box has the following dimensions',/, &
-                       10x,'a = ',f9.5,' b = ',f9.5,' c = ',f9.5,' a.u.')
+                !write(io_lun,4) r_super_x, r_super_y, r_super_z
+!4               format(/10x,'The simulation box has the following dimensions',/, &
+!                       10x,'a = ',f9.5,' b = ',f9.5,' c = ',f9.5,' a.u.')
              end select
           end do second
           ! Wrap coordinates
@@ -414,15 +423,21 @@ second:   do
              end do
           end do
           call io_close(lun)
-       else
+       else ! Read normal coordinate file
           if(iprint_init>2) write(io_lun,'(10x,a40,a20)') 'Entering read_atomic_positions; reading ', filename
           call io_assign(lun)
           open(unit=lun,file=filename,status='old')
           ! Read supercell vector - for now it must be orthorhombic so
           ! we use x and y as dummy variables
           read(lun,*) r_super_x, x, y
+          if(abs(x)>RD_ERR.OR.abs(y)>RD_ERR) call cq_warn('read_atomic_positions', &
+               'Non-orthorhombic simulation cells are not supported by CONQUEST')
           read(lun,*) x,r_super_y, y
+          if(abs(x)>RD_ERR.OR.abs(y)>RD_ERR) call cq_warn('read_atomic_positions', &
+               'Non-orthorhombic simulation cells are not supported by CONQUEST')
           read(lun,*) x,y,r_super_z
+          if(abs(x)>RD_ERR.OR.abs(y)>RD_ERR) call cq_warn('read_atomic_positions', &
+               'Non-orthorhombic simulation cells are not supported by CONQUEST')
           read(lun,*) ni_in_cell
          !2010.06.25 TM (Angstrom Units in coords file, but not pdb)
           if(dist_units == ang) then
@@ -438,10 +453,11 @@ second:   do
                call cq_abort("Failure to allocate coordinates: ",ni_in_cell)
           call reg_alloc_mem(area_init, 6*ni_in_cell,type_dbl)
           call reg_alloc_mem(area_init, 4*ni_in_cell,type_int)
+          n_wrong_coords = 0
           do i=1,ni_in_cell
              read(lun,*) x,y,z,species_glob(i),movex,movey,movez
              if(species_glob(i)>n_species) then
-                write(io_lun,fmt='(2x,"** WARNING ! ** Species &
+                write(io_lun,fmt='(6x,"** WARNING ! ** Species &
                                    &incompatibility between coordinates and &
                                    &input")')
                 call cq_abort("Species specified greater than number &
@@ -451,6 +467,8 @@ second:   do
                 atom_coord(1,i) = x*r_super_x
                 atom_coord(2,i) = y*r_super_y
                 atom_coord(3,i) = z*r_super_z
+                ! Simple check for Cartesian coordinates
+                if(abs(x)>two .and. abs(y)>two .and. abs(z)>two) n_wrong_coords = n_wrong_coords + 1
              else
                 atom_coord(1,i) = x
                 atom_coord(2,i) = y
@@ -459,6 +477,8 @@ second:   do
                 ! 2019/04/04 14:16 dave
                 ! Moved here so that distances are corrected *before* wrapping below
                 if(dist_units == ang) atom_coord(:,i)=atom_coord(:,i)*AngToBohr
+                ! Simple check for fractional coordinates
+                if(abs(x)<one .and. abs(y)<one .and. abs(z)<one) n_wrong_coords = n_wrong_coords + 1
              end if
              ! Wrap coordinates
              cell(1) = r_super_x
@@ -482,16 +502,22 @@ second:   do
              flag_move_atom(1,i) = movex
              flag_move_atom(2,i) = movey
              flag_move_atom(3,i) = movez
-             !          id_glob(i) = i
-!!$ LAT: put in write info
-            if(iprint_init>0) &
-                 write (io_lun,fmt='(3x, i7, 3f15.8, i3, 3L2)') &
-                       i,atom_coord(1:3,i), species_glob(i), &
-                       flag_move_atom(1:3,i)
           end do
+          ! Warn user if it looks like Cartesian coordinates with fractional flag set or vice versa
+          if(flag_fractional_atomic_coords .and. n_wrong_coords>2) then
+             call cq_warn("read_atomic_positions", &
+                  "Expected fractional coordinates but many are greater than one: ",n_wrong_coords)
+          else if(n_wrong_coords>2) then
+             call cq_warn("read_atomic_positions", &
+                  "Expected Cartesian coordinates but many are less than one: ",n_wrong_coords)
+          end if
           call io_close(lun)
        end if pdb
+       ! Check for sensible number of processes
+       if(ni_in_cell<numprocs) call cq_abort("We must have at least one atom per process: ",ni_in_cell,numprocs)
     end if
+    if((iprint_init>0) .or. (iprint_init==0.AND.ni_in_cell<atom_output_threshold)) &
+         call print_atomic_positions
     call gcopy(ni_in_cell)
     if(inode/=ionode) &
          allocate(flag_move_atom(3,ni_in_cell), atom_coord(3,ni_in_cell),&
@@ -528,6 +554,7 @@ second:   do
   end subroutine read_atomic_positions
   !!***
 
+  
   ! --------------------------------------------------------------------
   ! Subroutine write_atomic_positions
   ! --------------------------------------------------------------------
@@ -568,7 +595,7 @@ second:   do
                               flag_fractional_atomic_coords, rcellx,   &
                               rcelly, rcellz, iprint_init, atom_coord, &
                               species_glob, flag_move_atom, area_init, &
-                              IPRINT_TIME_THRES3
+                              IPRINT_TIME_THRES3, min_layer
     use species_module, only: species, species_label
     use GenComms,       only: inode, ionode, cq_abort
     use units,          only: BohrToAng
@@ -589,7 +616,7 @@ second:   do
     if(inode==ionode) then
        call start_timer(tmr_l_tmp1,WITH_LEVEL)
        if (pdb_output) then
-          if (iprint_init > 2) write(io_lun,*) 'Writing write_atomic_positions'
+          if (iprint_init + min_layer > 2) write(io_lun,fmt='(6x,a)') 'Writing atomic positions'
           call io_assign(lun)
           ! No appending of coords for a pdb file
           open (unit = lun, file = 'output.pdb', status = 'replace', iostat = ios)
@@ -644,7 +671,7 @@ second:   do
           call io_close(lun)
           call io_close(template)
        else
-          if(iprint_init>2) write(io_lun,*) 'Writing read_atomic_positions'
+          if (iprint_init + min_layer > 2) write(io_lun,fmt='(6x,a)') 'Writing atomic positions'
           call io_assign(lun)
           if(append_coords) then
              open(unit=lun,file=filename,position='append')
@@ -803,7 +830,7 @@ second:   do
        !call create_sfc_partitions(myid, parts)
        call sfc_partitions_to_processors(parts)
        np_in_cell = parts%ngcellx*parts%ngcelly*parts%ngcellz
-       if (iprint_init > 1.AND.myid==0) write(io_lun,*) 'Finished partitioning'
+       if (iprint_init > 2.AND.myid==0) write(io_lun,fmt='(10x,a)') 'Finished partitioning'
     end if
     ! inverse table to npnode
     do np=1,np_in_cell
@@ -889,7 +916,7 @@ second:   do
     call start_backtrace(t=backtrace_timer,who='read_partitions',where=1,level=4)
 !****lat>$  
 
-    if(iprint_init>2.AND.myid==0) write(io_lun,*) 'Entering read_partitions'
+    if(iprint_init>2.AND.myid==0) write(io_lun,fmt='(4x,a)') 'Entering read_partitions'
     call io_assign(lun)
 
     open(unit=lun, file=part_file, status='old', iostat=ios)
@@ -942,7 +969,7 @@ second:   do
        if(ntmp3>maxatomsproc) maxatomsproc = ntmp3
     enddo ! nnd = 1,nnode
     if(iprint_init>3.AND.myid==0) &
-         write(io_lun,*) 'Atoms proc max: ',maxatomsproc, maxpartsproc
+         write(io_lun,fmt='(6x,a,2i5)') 'Atoms proc max: ',maxatomsproc, maxpartsproc
     call init_group(parts, maxpartsproc, mx_tmp_edge, np_in_cell, &
                     maxatomspart, numprocs)
     maxpartscell = np_in_cell
@@ -1120,7 +1147,7 @@ second:   do
     integer:: n_block_x, n_block_y, n_block_z, maxtmp
     character(len=80) :: blk_coord_file, def
 
-    if(inode==ionode.AND.iprint_init>2) write(io_lun,*) 'Entering read_blocks ', in_block_x,in_block_y,in_block_z
+    if(inode==ionode.AND.iprint_init>2) write(io_lun,fmt='(4x,a,3i6)') 'Entering read_blocks ', in_block_x,in_block_y,in_block_z
     !--- find numbers of blocks in each direction
     n_block_x = n_grid_x/in_block_x
     n_block_y = n_grid_y/in_block_y
@@ -1142,10 +1169,10 @@ second:   do
        ! Read and check blocks along cell sides
        read(lun,*) ntmpx, ntmpy, ntmpz
        if(ntmpx/=n_block_x.OR.ntmpy/=n_block_y.OR.ntmpz/=n_block_z) then
-          write(io_lun,fmt='(2x,"In input, ReadBlocks T has been set, so the distribution of blocks is ")')
-          write(io_lun,fmt='(2x,"read from a file.  There is an error specifying numbers of blocks.  ")')
-          write(io_lun,fmt='(2x,"Found from the file: ",3i6)') ntmpx, ntmpy, ntmpz
-          write(io_lun,fmt='(2x,"Calculated from input using grid points: ",3i6)') n_block_x, n_block_y, n_block_z
+          write(io_lun,fmt='(4x,"In input, ReadBlocks T has been set, so the distribution of blocks is ")')
+          write(io_lun,fmt='(4x,"read from a file.  There is an error specifying numbers of blocks.  ")')
+          write(io_lun,fmt='(4x,"Found from the file: ",3i6)') ntmpx, ntmpy, ntmpz
+          write(io_lun,fmt='(4x,"Calculated from input using grid points: ",3i6)') n_block_x, n_block_y, n_block_z
           call cq_abort("Aborting ! Please bring block input file and overall input file together.")
        end if
        ! Find and check total number of blocks
@@ -1464,16 +1491,16 @@ second:   do
     
     call io_assign (lun)
     open (unit = lun, file = 'eigenvalues.dat')
-    write(lun,fmt='("#  ",i7," eigenvalues ",i4," kpoints")') n_evals, nkp
+    write(lun,fmt='("#  ",i7," eigenvalues ",i6," kpoints")') n_evals, nkp
     if(nspin==1) then
-       write(lun,fmt='("# Ef: ",f12.5)') Ef(1)
+       write(lun,fmt='("# Ef: ",f18.10)') Ef(1)
     else
-       write(lun,fmt='("# Ef: ",2f12.5)') Ef(1),Ef(2)
+       write(lun,fmt='("# Ef: ",2f18.10)') Ef(1),Ef(2)
     end if
     write(lun,fmt='("# Format: nk kx ky kz weight, followed by eigenvalues")')
     do sp = 1,nspin
        do kp = 1,nkp
-          write(lun,fmt='(i4,4f12.5)') kp,kk(1,kp),kk(2,kp),kk(3,kp),wtk(kp)
+          write(lun,fmt='(i6,3f12.5,f17.10)') kp,kk(1,kp),kk(2,kp),kk(3,kp),wtk(kp)
           do ev = 1,n_evals
              write(lun,fmt='(i6,f18.10)') ev,eval(ev,kp,sp)
           end do
@@ -1482,6 +1509,147 @@ second:   do
     call io_close(lun)
     return
   end subroutine write_eigenvalues
+  !!***
+
+  !!****f* io_module/write_eigenvalues_format_ase
+  !! PURPOSE
+  !!  Writes out eigenvalues with ASE format
+  !! INPUTS
+  !!  eval
+  !!  n_evals
+  !!  nkp
+  !!  nspin
+  !! OUTPUT
+  !! RETURN VALUE
+  !! AUTHOR
+  !!   David Bowler/Lionel Truflandier
+  !! CREATION DATE 
+  !!   2022/10/29 16:00
+  !! MODIFICATION HISTORY
+  !! SOURCE
+  !!
+  subroutine write_eigenvalues_format_ase(eval,occ,n_evals,nkp,nspin,kk,Ef,io,file,skip_lines)
+
+    use datatypes
+    use units
+
+    implicit none
+
+    ! Passed variables
+    integer,   intent(in) :: n_evals, nkp, nspin
+    integer,   intent(in) :: io, skip_lines
+    character(len=80), intent(in) :: file
+
+    real(double), dimension(n_evals,nkp,nspin) :: eval
+    real(double), dimension(n_evals,nkp,nspin) :: occ
+    real(double), dimension(3,nkp)             :: kk
+    real(double), dimension(2)                 :: Ef
+
+    ! Local variables
+    real(double),dimension(2) :: BandE
+    integer :: i, j, spin, stat, counter, nlines
+
+
+    !open(io,file=file, status='old', action='read', iostat=stat, position='rewind')
+    !if (stat .ne. 0) call cq_abort('Error opening file !')
+    !do
+    !   read (io,*, END=11)
+    !   nlines = nlines + 1
+    !end do
+    !11  call io_close(io)
+    !print*, nlines
+    
+    open(io,file=file, status='old', action='readwrite', iostat=stat, position='rewind')
+    if (stat .ne. 0) call cq_abort('ASE/eigenvalues error opening file !')
+    !
+    do i = 1, skip_lines
+       read (io,*)
+    end do
+    !
+    !if ( nspin == 2 ) then
+    !   counter = nkp*3 + nspin*nkp + nspin*nkp*(n_evals/3) + 1
+    !   if ( mod(n_evals,3) > 0 ) counter = counter + nspin*nkp
+    
+    !else
+    !   counter = nkp*3 + nkp*(n_evals/3) + 1
+    !   if ( mod(n_evals,3) > 0 ) counter = counter + nkp
+       
+    !end if
+
+    !if ( nlines > skip_lines ) then
+    !   do i = 1, counter - skip_lines
+    !      backspace(io)
+    !   end do
+    !end if
+    !
+    ! Write bands!
+    !
+    write(io,*)
+    !
+    bandE = zero
+    !
+    do i = 1, nkp
+       write (io, 7) i, kk(1,i), kk(2,i), kk(3,i)
+       do spin = 1, nspin
+          if (nspin == 2) &
+               write (io, '(10x,"For spin = ",i1)') spin
+          do j = 1, n_evals, 3
+             
+             if (j == n_evals) then
+                write (io, 8) eval(j,i,spin), occ(j,i,spin)
+
+                bandE(spin) = bandE(spin) + eval(j,i,spin) * occ(j,i,spin)
+                
+             else if (j == n_evals - 1) then
+                write (io, 9) eval(j,i,spin), occ(j,i,spin), &
+                     eval(j+1,i,spin), occ(j+1,i,spin)
+                
+                bandE(spin) = bandE(spin) + eval(j,i,spin) * occ(j,i,spin) + &
+                     eval(j+1,i,spin) * occ(j+1,i,spin)
+
+             else
+                write (io, 10) eval(j,i,spin), occ(j,i,spin), &
+                     eval(j+1,i,spin), occ(j+1,i,spin), &
+                     eval(j+2,i,spin), occ(j+2,i,spin)
+                
+                bandE(spin) = bandE(spin) + eval(j,i,spin) * occ(j,i,spin) + &
+                     eval(j+1,i,spin) * occ(j+1,i,spin) + &
+                     eval(j+2,i,spin) * occ(j+2,i,spin)
+             endif
+          end do ! j=matrix_size
+          write (io, &
+               fmt='(10x,"Sum of eigenvalues for spin = ", &
+               &i1, ": ", f18.11," ", a2)') &
+               spin, en_conv * bandE(spin), en_units(energy_units)
+       end do ! spin
+       if (nspin == 2) then
+          write (io, &
+               fmt='(10x,"Total sum of eigenvalues: ", f18.11, " ",a2)') &
+               en_conv * (bandE(1) + bandE(2)), en_units(energy_units)
+       else
+          write(io, 4) en_conv * two * bandE(1), en_units(energy_units)
+       end if
+    end do ! do i = 1, nkp
+    !
+    ! Write Fermi energy
+    !
+    do spin = 1, nspin
+       write (io, 13) spin, en_conv * Ef(spin), &
+            en_units(energy_units)
+    end do
+    !
+    close(io)
+    !    
+4   format(10x,'Sum of eigenvalues: ',f18.11,' ',a2)
+7   format(10x,'Eigenvalues and occupancies for k-point ',i6,' : ',3f12.5)
+8   format(10x,f15.7,x,f8.5,2x)
+9   format(10x,f15.7,x,f8.5,2x,f15.7,x,f8.5,2x)
+10  format(10x,f15.7,x,f8.5,2x,f15.7,x,f8.5,2x,f15.7,x,f8.5)
+13  format(10x,'Fermi energy for spin = ',i1,' is ',f18.11,' ',a2)
+    
+    return
+
+  end subroutine write_eigenvalues_format_ase
   !!***
   
   !!****f* io_module/dump_DOS
@@ -2505,52 +2673,28 @@ second:   do
 
     implicit none
 
-    write(io_lun,1) 
-
-1   format(/12x, &
-         '______________________________________________________',/,12x, &
-         '______________________________________________________',/,12x, &
-         '                                                      ',/,12x, &
-         '                        CONQUEST                      ',/,12x, &
-         '                                                      ',/,12x, &
-         '    Concurrent Order N QUantum Electronic STructure   ',/,12x, &
-         '______________________________________________________',/,12x, &
-         '                                                      ',/,12x, &
-         '                       Written by:                    ',/,12x, &
-         '                                                      ',/,12x, &
-         '       David Bowler           Tsuyoshi Miyazaki       ',/,12x, &
-         '        (UCL,NIMS)                 (NIMS)             ',/,12x, &
-         '                                                      ',/,12x, &
-         '       Ayako Nakata              Zamaan Raza          ',/,12x, &
-         '          (NIMS)                   (NIMS)             ',/,12x, &
-         '                                                      ',/,12x, &
-         '       Jack Poulton           Lionel Truflandier      ',/,12x, &
-         '          (UCL)                  (Bordeaux)           ',/,12x, &
-         '                                                      ',/,12x, &
-         '      Shereif Mujahed            Jack Baker           ',/,12x, &
-         '          (UCL)                    (UCL)              ',/,12x, &
-         '                                                      ',/,12x, &
-         '     Antonio Torralba         Veronika Brazdova       ',/,12x, &
-         '        (UCL,NIMS)                 (UCL)              ',/,12x, &
-         '                                                      ',/,12x, &
-         '      Lianheng Tong            Michiaki Arita         ',/,12x, &
-         '          (UCL)                    (NIMS)             ',/,12x, &
-         '                                                      ',/,12x, &
-         '        Alex Sena             Umberto Terranova       ',/,12x, &
-         '          (UCL)                    (UCL)              ',/,12x, &
-         '                                                      ',/,12x, &
-         '     Rathin Choudhury           Mike Gillan           ',/,12x, &
-         '          (UCL)                    (UCL)              ',/,12x, &
-         '                                                      ',/,12x, &
-         '               Early Development by                   ',/,12x, & 
-         '                                                      ',/,12x, &
-         '       Chris Goringe             Edward Hernandez     ',/,12x, &
-         '          (Keele)                     (Keele)         ',/,12x, &
-         '                                                      ',/,12x, &
-         '                      Ian Bush                        ',/,12x, &
-         '                     (Daresbury)                      ',/,12x, &
-         '______________________________________________________',/,12x, &
-         '______________________________________________________',/,/)
+    write(io_lun,fmt='(4x,a72)') '________________________________________________________________________'
+    write(io_lun,fmt='(4x,a72)') '                                                                        '
+    write(io_lun,fmt='(4x,a72)') '                                CONQUEST                                '
+    write(io_lun,fmt='(4x,a72)') '                                                                        '
+    write(io_lun,fmt='(4x,a72)') '            Concurrent Order N QUantum Electronic STructure             '
+    write(io_lun,fmt='(4x,a72)') '________________________________________________________________________'
+    write(io_lun,fmt='(4x,a72)') '                                                                        '
+    write(io_lun,fmt='(4x,a72)') ' Conquest lead developers:                                              '
+    write(io_lun,fmt='(4x,a72)') '  D.R.Bowler (UCL, NIMS), T.Miyazaki (NIMS), A.Nakata (NIMS),           '
+    write(io_lun,fmt='(4x,a72)') '  L. Truflandier (U. Bordeaux)                                          '
+    write(io_lun,fmt='(4x,a72)') '                                                                        '
+    write(io_lun,fmt='(4x,a72)') ' Developers:                                                            '
+    write(io_lun,fmt='(4x,a72)') '  M.Arita (NIMS), J.S.Baker (UCL), V.Brazdova (UCL), R.Choudhury (UCL), '
+    write(io_lun,fmt='(4x,a72)') '  S.Y.Mujahed (UCL), J.T.Poulton (UCL), Z.Raza (NIMS), A.Sena (UCL),    '
+    write(io_lun,fmt='(4x,a72)') '  U.Terranova (UCL), L.Tong (UCL), A.Torralba (NIMS)                    '
+    write(io_lun,fmt='(4x,a72)') '                                                                        '
+    write(io_lun,fmt='(4x,a72)') ' Early development:                                                     '
+    write(io_lun,fmt='(4x,a72)') '  I.J.Bush (STFC), C.M.Goringe (Keele), E.H.Hernandez (Keele)           '
+    write(io_lun,fmt='(4x,a72)') '                                                                        '
+    write(io_lun,fmt='(4x,a72)') ' Original inspiration and project oversight:                            '
+    write(io_lun,fmt='(4x,a72)') '  M.J.Gillan (Keele, UCL)                                               '
+    write(io_lun,fmt='(4x,a72)') '________________________________________________________________________'
 
   end subroutine banner
   !!***
@@ -2681,7 +2825,7 @@ second:   do
     character(len=2)           :: atom_name
 
     if(inode==ionode) then
-      if (iprint_init>2) write(io_lun,*) 'Writing atomic positions to .xsf'
+      if (iprint_init>3) write(io_lun,fmt='(6x,a)') 'Writing atomic positions to .xsf'
       call io_assign(lun)
       if(append_coords) then
          open(unit=lun,file=filename,position='append')
@@ -2704,6 +2848,99 @@ second:   do
       call io_close(lun)
     end if
   end subroutine write_xsf
+  !!***
+
+  !!****f* io_module/write_extxyz *
+  !!
+  !!  NAME 
+  !!   write_extxyz
+  !!  PURPOSE
+  !!   Writes atomic positions, including atomic forces, lattice vectors, 
+  !!  energy, system signature, etc. to an extended format .xyz file   
+  !!  which can be directly recognized by Python Library named ASE.
+  !!  The units are Angstrom, eV and eV/Angstrom for distance, energy and
+  !!  forces.
+  !!  
+  !!  INPUTS
+  !!  
+  !!  USES
+  !! 
+  !!  AUTHOR
+  !!   Jianbo Lin
+  !!  CREATION DATE
+  !!   2021/10/18
+  !!  MODIFICATION HISTORY
+  !!   
+  !!  SOURCE
+  !!
+  subroutine write_extxyz(filename, energy0, atom_force)
+
+    use datatypes
+    use timer_module
+    use numbers,        only: zero
+    use dimens,         only: r_super_x, r_super_y, r_super_z
+    use global_module,  only: ni_in_cell, iprint_init, atom_coord, &
+                              species_glob
+    use species_module, only: species_label
+    use GenComms,       only: inode, ionode, cq_abort
+    use units,          only: BohrToAng, HaToeV
+
+    ! Passed variables
+    character(len=*)                      :: filename
+    real(double)                          :: energy0
+    real(double), dimension(3,ni_in_cell) :: atom_force
+
+    ! Local variables
+    integer                    :: lun, i, j, title_length
+    character(len=2)           :: atom_name
+    character(len=432)         :: comment
+    character(len=45)          :: vec_a, vec_b, vec_c, energy_str
+    character(len=80)          :: titles_xyz
+    real(double)               :: for_conv_loc, en_conv_loc, dist_conv_loc
+
+    if(inode==ionode) then
+      if (iprint_init>2) write(io_lun, &
+          '(6x,"Writing atomic positions to ",a,".xyz")') filename
+      call io_assign(lun)
+      if(append_coords) then
+         open(unit=lun,file=filename,position='append')
+      else
+         open(unit=lun,file=filename)
+      end if
+
+      en_conv_loc = HaToeV
+      dist_conv_loc = BohrToAng
+      for_conv_loc = en_conv_loc/dist_conv_loc
+      write(lun,'(i0)') ni_in_cell
+	  
+      ! Transfer space to underbar in the titles
+      titles_xyz = TRIM(titles)
+      title_length = len(TRIM(titles))
+      do i=1, title_length
+        if (titles_xyz(i:i) == ' ') titles_xyz(i:i) = '_' 
+      end do
+      ! Add information about system signature
+      comment = 'config_type='//TRIM(titles_xyz)
+
+      ! Add information about lattice and energy
+      write(vec_a,fmt='(3f15.8)') r_super_x*BohrToAng, zero, zero
+      write(vec_b,fmt='(3f15.8)') zero, r_super_y*BohrToAng, zero
+      write(vec_c,fmt='(3f15.8)') zero, zero, r_super_z*BohrToAng
+      comment=TRIM(comment)//' Lattice="'//ADJUSTL(vec_a)//ADJUSTL(vec_b)//TRIM(ADJUSTL(vec_c))//'" '
+      comment=TRIM(comment)//' Properties=species:S:1:pos:R:3:forces:R:3 potential_energy='
+      write(energy_str,'(f0.8)') energy0 * en_conv_loc
+      comment = TRIM(comment)//TRIM(energy_str)//' pbc="T T T" '
+      write(lun,'(a)') TRIM(comment)
+
+      do i=1,ni_in_cell
+        atom_name = adjustr(species_label(species_glob(i))(1:2))
+        write(lun,'(a4,6f16.8)') atom_name, atom_coord(:,i)*dist_conv_loc, &
+                 (for_conv_loc*atom_force(j,i), j = 1, 3)
+                 ! species_glob(i),flag_move_atom(1,i),flag_move_atom(2,i), &
+      end do
+      call io_close(lun)
+    end if
+  end subroutine write_extxyz
   !!***
 
   !!****f* io_module/write_xyz *
@@ -2745,7 +2982,7 @@ second:   do
 
     if(inode==ionode) then
       if (iprint_init>2) write(io_lun, &
-          '(2x,"Writing atomic positions to ",a,".xyz")') filename
+          '(6x,"Writing atomic positions to ",a,".xyz")') filename
       call io_assign(lun)
       open(unit=lun,file=filename)
       write(lun,fmt='(i8)') ni_in_cell
@@ -2978,7 +3215,7 @@ second:   do
 
        write(io_lun,*)
        do i=1,numprocs
-          write(io_lun,'(a,i9,a,i9,2a)') 'ID-Info: MPI = ',i,'    Process = ',pids(i),'    Host = ',hostnames(i)
+          write(io_lun,'(4x,a,i9,a,i9,2a)') 'ID-Info: MPI = ',i,'    Process = ',pids(i),'    Host = ',hostnames(i)
        end do
        write(io_lun,*)
 
@@ -2994,7 +3231,72 @@ second:   do
   end subroutine print_process_info
   !!***
 
+  !!****f* io_module/print_atomic_positions *
+  !!
+  !!  NAME
+  !!   print_atomic_positions
+  !!  USAGE
+  !!   print_atomic_positions
+  !!  PURPOSE
+  !!   Prints atomic positions to the output file
+  !!  INPUTS
+  !!
+  !!  OUTPUTS
+  !!
+  !!  USES
+  !!
+  !!  AUTHOR
+  !!   D. R. Bowler
+  !!  CREATION DATE
+  !!   2020/03/11
+  !!  MODIFICATION HISTORY
+  !!
+  !!  SOURCE
+  !!
+  subroutine print_atomic_positions
 
+    use global_module, only: atom_coord, iprint_MD, ni_in_cell, species_glob
+    use dimens,         only: r_super_x, r_super_y, r_super_z, atomicnum
+    use GenComms, only: inode, ionode
+    use units, only: dist_conv, d_units, dist_units, BohrToAng, bohr
+    use periodic_table, only: pte
+    use pseudo_tm_info, only: pseudo
+
+    implicit none
+
+    integer :: i
+
+    if(inode==ionode) then
+       write(io_lun,fmt='(/6x,"Simulation cell dimensions: ",f10.4,a3," x ",f10.4,a3," x ",f10.4,a3)') &
+            r_super_x*dist_conv, d_units(dist_units), r_super_y*dist_conv, d_units(dist_units), &
+            r_super_z*dist_conv, d_units(dist_units)
+       if(flag_coords_xyz) then
+          write(io_lun,fmt='(6x,"           X         Y         Z")')
+          if(dist_units==bohr) then
+             write(io_lun,fmt='(/6x,"Atomic coordinates in XYZ format (",a2,")")') "A "
+             do i = 1, ni_in_cell
+                write (io_lun,fmt='(4x, a2, 3f10.4)') pte(atomicnum(species_glob(i))), atom_coord(1:3,i)*BohrToAng
+             end do
+             write(io_lun,fmt='(8x,"N.B. units above converted to Angstroms for xyz output")')
+          else
+             write(io_lun,fmt='(/6x,"Atomic coordinates (",a2,")")') d_units(dist_units)
+             do i = 1, ni_in_cell
+                write (io_lun,fmt='(4x, a2, 3f10.4)') pte(atomicnum(species_glob(i))), atom_coord(1:3,i)
+             end do
+          end if
+       else
+          write(io_lun,fmt='(/6x,"Atomic coordinates (",a2,")")') d_units(dist_units)
+          write(io_lun,fmt='(6x,"   Atom         X         Y         Z  Species")')
+          do i = 1, ni_in_cell
+             write (io_lun,fmt='(6x, i7, 3f10.4, 6x, i3)') i,atom_coord(1:3,i), species_glob(i)
+          end do
+       end if
+    end if
+    return
+    
+  end subroutine print_atomic_positions
+  !!***
+  
   !!****f* io_module/write_velocity *
   !!
   !!  NAME
@@ -3103,7 +3405,7 @@ second:   do
           if(id_glob(ni) /= id_global) &
                call cq_abort(' ERROR in global labelling ',id_global,id_glob(ni))
           read(lun,101) id_tmp, ni2, velocity(1:3, ni)
-          if(ni2 /= ni) write(io_lun,*) &
+          if(ni2 /= ni) write(io_lun,fmt='(4x,a,i6,a,i6,a,i6)') &
                ' Order of atom has changed for global id (file_labelling) = ',id_global, &
                ' : corresponding labelling (NOprt labelling) used to be ',ni2,&
                ' : but now it is ',ni
@@ -3310,5 +3612,71 @@ second:   do
   end subroutine check_stop
   !!***
 
+  function return_prefix(name, level)
+
+    character(len=120) :: return_prefix
+    character(len=*)   :: name
+    character(len=10):: prefix = "          "
+    integer          :: level
+
+    return_prefix = prefix(1:-2*level)//name
+  end function return_prefix
+
+
+  ! --------------------------------------------------------------------
+  ! Subroutine write_output_ase
+  ! --------------------------------------------------------------------
+  
+  !!****f* io_module/write_output_ase *
+  !!
+  !!  NAME 
+  !!   read_atomic_positions
+  !!  USAGE
+  !! 
+  !!  PURPOSE
+  !!   Reads positions, species and constraint type for atoms
+  !!  INPUTS
+  !! 
+  !! 
+  !!  USES
+  !!   datatypes, dimens, GenComms, global_module, species_module
+  !!  AUTHOR
+  !!   D.R.Bowler
+  !!  CREATION DATE
+  !!   16:26, 2003/04/15
+  !!  MODIFICATION HISTORY
+  !!   16:46, 2003/06/09 tm
+  !!    id_glob_inv, atom_coord, species_glob is added.
+  !!    and labelling in make_prt.dat is changed 
+  !!   13:31, 22/09/2003 drb 
+  !!    Added reading of flags to constrain atom movement in three directions
+  !!   2006/10/09 08:21 dave
+  !!    Tidying up output
+  !!   20/11/2006 Veronika
+  !!    Corrected reading of constraints from pdb file
+  !!   15:05, 27/04/2007 drb 
+  !!    Check to ensure right number of species added
+  !!   2007/06/28, 21:37 mt + drb
+  !!    Added coordinate wrapping to non-pdb coordinates.
+  !!   2007/10/11 Veronika
+  !!    Added coordinate wrapping to pdb coordinates
+  !!    Added coordinate wrapping for coordinates outside 
+  !!    the [-1*cell parameter; 2*cell parameter] range
+  !!   2013/07/01 M.Arita & T.Miyazaki
+  !!    Added shift_in_bohr when wrapping atoms and allocation of atom_coord_diff
+  !!   2013/08/20 M.Arita
+  !!    Bug fix & correct the if-statement
+  !!   2015/06/08 lat
+  !!    Added experimental backtrace
+  !!   2018/01/22 tsuyoshi (with dave)
+  !!    Allocate atom_coord_diff for all calculations
+  !!   2019/04/04 14:17 dave
+  !!    Correct bug in wrapping with non-fractional coordinates and Angstroms
+  !!   2020/07/27 tsuyoshi
+  !!    Added atom_vels  
+  !!   2020/10/07 tsuyoshi
+  !!    Removed allocation of atom_vels (moved to "control")
+  !!  SOURCE
+  !!
 end module io_module
 

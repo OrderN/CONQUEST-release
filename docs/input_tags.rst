@@ -18,11 +18,6 @@ are specified as: *integer*;
 General
 -------
 
-General.Title (*string*)
-    Title for the calculation
-
-    *default*: none
-
 General.NumberOfSpecies (*integer*)
     Number of species in cell
 
@@ -224,7 +219,7 @@ Input-Output General Tags
 -------------------------
 
 IO.Title (*string*)
-    Title for run
+    Title for calculation
 
     *default*: none
 
@@ -250,6 +245,26 @@ IO.DumpL (*boolean*)
 
     *default*: T
 
+IO.DumpChargeDensity (*boolean*)
+    Whether to write out the charge
+    density.  If T, then the charge density will be written out at
+    self-consistency; additionally, if ``IO.Iprint_SC`` is larger than
+    2, the charge density will be written out at every step of the SCF
+    cycle.  The resulting ``chden.nnn`` files can be converted to cube
+    format files using the :ref:`post-processing utility
+    <et_post_process>`.
+
+    *default*: F
+
+IO.Dump[Har|XC|PS|ES|Tot]Pot (*boolean*)
+    Flags to allow dumping of different local potentials (Hartree, XC, pseudopotential, electrostatic, total).
+    Only active when a static self-consistent run is chosen. (NB each flag must be set to true for output,
+    such as ``IO.DumpHarPot T`` etc.)  Files can be converted to cube format as for charge density by setting
+    ``Process.ChargeStub`` appropriately (e.g. ``locpsHar`` with other files replacing Har
+    with XC, PS, ES and Tot)
+
+    *default*: F
+    
 IO.TimingOn (*boolean*)
     Whether time information will be measured and written to output
 
@@ -306,24 +321,21 @@ Levels of Output
 
 The overall level of output is controlled by **IO.Iprint** and can be
 fine-tuned with the other IO.Iprint keywords. These are by default set
-to the value of iprint, but that will be over-ridden if setting them
-explicitly. For instance, IO.Iprint could be set to 0, but IO.Iprint\_MD
+to the value of **IO.Iprint**, but that will be over-ridden if setting them
+explicitly. For instance, **IO.Iprint** could be set to 0, but **IO.Iprint\_MD**
 could be set to 2 giving more extensive information about atomic
 movements but little other information.
-
-N.B. At beta release, these levels of output are still being tuned;
-level 0 is reliable, and generally fairly minimal.
 
 IO.Iprint (*integer*)
     The amount of information printed out to the output file
     The larger the value the more detailed the output is.
 
     | 0 Basic information about the system and the run
-    | 1 Breakdown of energies, and details of the SCF cycle
-    | 2 Matrix range info, matrix multiplication details (covering set), partition details and general parallelisation info.
-    | 3 Subroutines called, messages upon entering/quitting subroutines
-    | 4 Details including internal variables of subroutines
-    | 5 Don’t do this.
+    | 1 Overview of the SCF cycle and atom movement
+    | 2 More detail on SCF cycle, atom movement
+    | 3 Extensive detail on SCF cycle, atom movement
+    | 4 Details of energy breakdown
+    | 5 Excessive output, only for developers debugging
 
 
     *default*: 0
@@ -380,7 +392,7 @@ Grid.GridCutoff (*real*)
     the value chosen will automatically be forced to be a factor of 3, 4 and 5 only
     (to fit with default FFT routines)
 
-    Default: 20 Ha.
+    Default: 50 Ha.
 
 Go to :ref:`top <input_tags>`.
 
@@ -535,7 +547,7 @@ DM.SolutionMethod (*string*)
     density matrix elements) or an O(N) method (ordern a combination of the
     techniques of Li et al. :cite:`e-Li1993` and Palser and Manolopoulos :cite:`e-Palser1998`.)
 
-    *default*: ordern
+    *default*: diagon
 
 DM.L\_range (*real*)
     Cutoff applied to L matrix (total energy will converge with increasing range;
@@ -741,13 +753,15 @@ Go to :ref:`top <input_tags>`.
 Moving Atoms
 ------------
 AtomMove.TypeOfRun (*string*)
-    values: static/cg/lbfgs/md
+    values: static/cg/sqnm/lbfgs/md
 
     Options:
 
     static — Single point calculation
 
     cg — Structure optimisation by conjugate gradients
+
+    sqnm - Stabilised Quasi-Newton Minimisation (recommended approach)
 
     lbfgs — Structure optimisation by LBFGS (Limited Memory Broyden–Fletcher–Goldfarb–Shanno algorithm)
 
@@ -776,6 +790,13 @@ AtomMove.MaxForceTol (*real*)
 
     *default*: 0.0005 Ha/bohr
 
+AtomMove.MaxSQNMStep (*real*)
+    The maximum distance any atom can move during SQNM (in Bohr).  Applies to the
+    part of the search direction not in the SQNM subspace (scaled directly by a step
+    size, which is limited to ensure this value is not exceeded).
+
+    *default*: 0.2 bohr
+    
 AtomMove.Timestep (*real*)
     Time step for molecular dynamics
 
@@ -843,29 +864,31 @@ AtomMove.AtomicStress (*boolean*)
 
 AtomMove.OptCell (*boolean*)
     Turns on conjugate gradient relaxation of the simulation box dimensions a, b
-    and c. Note that AtomMove.TypeOfRun must also be set to cg.
+    and c. Note that AtomMove.TypeOfRun must also be set to cg (except for method 2 below
+    where sqnm will result in SQNM for atomic positions and CG for cell vectors).
 
     *default*: F
 
 AtomMove.OptCellMethod (*integer*)
     Cell optimisation method.
-    1. fixed fractional coordinates
-    2. double loop - inner: full atomic cg optimisation, outer: single cell
-    steepest descent step. Generally only useful for systems that are extremely
-    problematic to relax
-    3. simultaneous cell and atomic conjugate gradients relaxation
-
+    
     *default*: 1
+
+    Options:
+
+    1. Fixed fractional coordinates (only cell vectors)
+    2. Alternating atomic position and cell vector optimisation (recommended for simultaneous optimisation)
+    3. Simultaneous cell and atomic conjugate gradients relaxation; caution recommended (can be unstable)
 
 AtomMove.EnthalpyTolerance (*real*)
     Enthalpy tolerance for cell optimisation
 
-    *default*: 1\ :math:`\times`\ 10\ :math:`^{-5}` Ha/Bohr
+    *default*: 1\ :math:`\times`\ 10\ :math:`^{-5}` Ha
 
 AtomMove.StressTolerance (*real*)
     Stress tolerance for cell optimisation
 
-    *default*: 0.5\ :math:`\times`\ 10\ :math:`^{-2}` GPa
+    *default*: 0.1 GPa
 
 AtomMove.TargetPressure (*real*)
     External pressure for NPT molecular dynamics and cell optimisation
@@ -1380,6 +1403,16 @@ General.GapThreshold (*real*)
 General.only_Dispersion (*boolean*)
     Selects only DFT\_D2 calculation (no electronic structure etc)
 
+General.MixXCGGAInOut (*real*)
+    For non-SCF calculations only, chooses how to mix the proportions of
+    GGA XC stress contribution (from the change of the electron density
+    gradient) found using input (0.0 gives pure input) and output (1.0
+    gives pure output) densities.  Note that this is an approximation but
+    varying the value significantly away from 0.5 will give inconsistency
+    between stress and energy.
+
+    *default*: 0.5
+    
 Go to :ref:`top <input_tags>`.
 
 .. _advanced_atomic_spec_tags:
@@ -1509,6 +1542,13 @@ IO.PdbTemplate (*string*)
     overwritten with this keyword
 
     *default*: coordinate file
+
+IO.AtomOutputThreshold (*integer*)
+    Threshold below which atomic positions are output on
+    initialisation, and atomic forces are output at the end of a
+    static run.
+
+    *default*: 200
 
 Go to :ref:`top <input_tags>`.
 

@@ -255,7 +255,7 @@ contains
       endif
     enddo ! i
 
-    if (myid.EQ.0) write (io_lun,*) "Finished correcting positions"
+    !if (myid.EQ.0) write (io_lun,*) "Finished correcting positions"
 
     return
   end subroutine correct_atomic_position
@@ -487,8 +487,8 @@ contains
      if (flag_LmatrixReuse) &
        atom_coord_diff(1:3,gatom_i) = diff_i(1:3)
      v(1:3,patom_i) = v_lc_i(1:3)
-     if (iprint_MD.GE.3 .AND. myid.EQ.0) &
-       write (io_lun,*) "grp, subgrp, SHAKE iter, residual: ", grpid,j,iter,residual
+     if (iprint_MD.GE.4 .AND. myid.EQ.0) &
+       write (io_lun,fmt='(10x,a,4i5)') "grp, subgrp, SHAKE iter, residual: ", grpid,j,iter,residual
     enddo ! j
 
     ! Deallocations
@@ -794,8 +794,8 @@ contains
       if (flag_LmatrixReuse) &
         atom_coord_diff(1:3,gatom_i) = diff_i(1:3)
       v(1:3,patom_i) = v_lc_i(1:3)
-      if (iprint_MD.GE.3 .AND. myid.EQ.0) &
-        write (io_lun,*) "grp, subgrp, SHAKE iter, residual: ", grpid,j,iter,residual
+      if (iprint_MD.GE.4 .AND. myid.EQ.0) &
+        write (io_lun,fmt='(10x,a,4i5)') "grp, subgrp, SHAKE iter, residual: ", grpid,j,iter,residual
     enddo ! j
 
     return
@@ -846,7 +846,7 @@ contains
       endif
     enddo ! i
 
-    if (myid.EQ.0) write (io_lun,*) "Finished correcting velocities"
+    !if (myid.EQ.0) write (io_lun,*) "Finished correcting velocities"
 
     return
   end subroutine correct_atomic_velocity
@@ -1008,8 +1008,8 @@ contains
       v(2,patom_i) = vyi_lc
       v(3,patom_i) = vzi_lc
 
-      if (iprint_MD.GE.3 .AND. myid.EQ.0) &
-        write (io_lun,*) "grp, subgrp, RATTLE iter, residual:",grpid,j,iter,residual
+      if (iprint_MD.GE.4 .AND. myid.EQ.0) &
+        write (io_lun,fmt='(10x,a,4i5)') "grp, subgrp, RATTLE iter, residual:",grpid,j,iter,residual
     enddo ! j
 
     ! Deallocations
@@ -1200,8 +1200,8 @@ contains
       v(1,patom_i) = vxi_lc
       v(2,patom_i) = vyi_lc
       v(3,patom_i) = vzi_lc
-      if (iprint_MD.GE.3 .AND. myid.EQ.0) &
-        write (io_lun,*) "grp, subgrp, RATTLE iter, residual:",grpid,j,iter,residual
+      if (iprint_MD.GE.4 .AND. myid.EQ.0) &
+        write (io_lun,fmt='(10x,a,4i5)') "grp, subgrp, RATTLE iter, residual:",grpid,j,iter,residual
     enddo ! j
 
     return

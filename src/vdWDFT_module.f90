@@ -1506,7 +1506,7 @@ contains
 
     else if (deriv_method == 'interp') then
        if (inode == ionode) &
-            write (io_lun, '("set_phi_table: Using interpolation for &
+            write (io_lun, '(8x,"set_phi_table: Using interpolation for &
                               &derivatives")')
 
        ! Reset mesh, which has been changed by phi_val

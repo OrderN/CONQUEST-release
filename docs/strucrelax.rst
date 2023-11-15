@@ -4,22 +4,22 @@
 Structural relaxation
 =====================
 
-This section describes how to find the zero-Kelvin equilibrium structure, given
+This section describes how to find the zero-Kelvin equilibrium atomic structure, given
 a starting structure with non-zero forces and/or stresses. CONQUEST
-can employ a variety of algorithms 
-algorithm to minimise energy with respect to
-atomic positions, including: L-BFGS; conjugate gradients; and damped
+can employ a variety of algorithms to minimise energy with respect to
+atomic positions, including: stabilised quasi-Newton method (SQNM); L-BFGS; conjugate gradients (CG); and damped
 molecular dynamics (both MDMin and FIRE approaches).  The minimisation
 of energy or enthalpy with respect to cell vectors is restricted to
 conjugate gradients at present, though L-BFGS will be implemented.
 
 Setting ``AtomMove.WriteXSF T`` for all flavours of optimisation will dump the
 trajectory to the file ``trajectory.xsf``, which can be visualised using `VMD
-<https://www.ks.uiuc.edu/Research/vmd/>`_. Setting ``AtomMove.AppendCoords T``
+<https://www.ks.uiuc.edu/Research/vmd/>`_ and `XCrysDen <http://http://www.xcrysden.org>`_.
+Setting ``AtomMove.AppendCoords T``
 will append the structure at each step to ``UpdatedAtoms.dat`` in the format of a
 CONQUEST structure input.
 
-For the L-BFGS and conjugate gradients relaxations, the progress of the calculation can be
+For the SQNM, L-BFGS and conjugate gradients relaxations, the progress of the calculation can be
 monitored by searching for the word ``GeomOpt``; grepping will print the
 following:
 
@@ -53,13 +53,15 @@ following flags are essential:
 
 ::
 
-   AtomMove.TypeOfRun lbfgs
+   AtomMove.TypeOfRun sqnm
    AtomMove.MaxForceTol 5e-4
    AtomMove.ReuseDM T
 
-The parameter ``AtomMove.TypeOfRun`` can take the value ``lbfgs`` or
-``cg`` for iterative optimisation.  Both algorithms are robust and
-relatively efficient in most instances; L-BFGS is preferred. The
+The parameter ``AtomMove.TypeOfRun`` can take the values ``sqnm``, ``lbfgs`` or
+``cg`` for iterative optimisation.  All three algorithms are robust and
+relatively efficient in most instances; SQNM :cite:`sr-Schaefer2015` is recommended in most cases,
+though if the initial forces are large it may be worth performing quenched
+MD to reduce them (see below) before applying SQNM. The
 parameter ``AtomMove.MaxForceTol`` specifies the force
 convergence criterion in Ha/bohr, i.e. the calculation will terminate
 when the largest force component on any atom is below this value.
@@ -68,7 +70,7 @@ The parameter
 diagonalisation or L-matrix for O(N) calculations) from the
 previous step will be used as an initial guess for the SCF cycle after
 propagating the atoms; this should generally decrease the number of SCF cycles
-per ionic step.
+per ionic step.  When using CG, the line minimiser can be chosen: ``safe`` uses a robust though sometimes slow line minimiser; ``backtrack`` uses a simple back-tracking line minimiser (starting with a step size of 1 and reducing if necessary to ensure the energy goes down); ``adapt`` uses an adaptive back-tracking line minimiser (which increases the starting step size if the energy goes down on the first step).  In many cases the back-tracking line minimiser is more efficient, though the efficiency of the adaptive approach varies with problem.
 
 If the self-consistency tolerance is too low, the optimisation may fail to
 converge with respect to the force tolerance; this may necessitate a tighter
@@ -76,8 +78,8 @@ converge with respect to the force tolerance; this may necessitate a tighter
 ``minE.LTolerance`` for O(N) calculations).  A grid which is too
 coarse can also cause problems with structural relaxation to high tolerances.
 
-For problematic cases where the conjugate gradients algorithm fails to find a
-downhill search direction, it may be worth trying quenched molecular dyanamics,
+For large initial forces or problematic cases where the relaxation algorithms fail to find a
+downhill search direction, it may be worth trying quenched molecular dynamics,
 which propagates the equations of motion following a simple NVE
 approach, but resets the velocities to zero when the dot product of
 force and velocity is zero.
@@ -104,10 +106,10 @@ Go to :ref:`top <strucrelax>`.
 
 .. _sr_cell:
 
-Cell optimisation
------------------
+Simulation cell optimisation
+----------------------------
 
-The unit cell can be optimised with respect to enthalpy *with fixed fractional
+The simulation cell can be optimised with respect to enthalpy *with fixed fractional
 coordinates* (``AtomMove.OptCellMethod 1``) using the following input:
 
 ::
@@ -115,13 +117,11 @@ coordinates* (``AtomMove.OptCellMethod 1``) using the following input:
    AtomMove.TypeOfRun cg
    AtomMove.OptCell T
    AtomMove.OptCellMethod 1
-   AtomMove.TargetPressure 1.0
-   AtomMove.ReuseL T
-   AtomMove.EnthalpyTolerance 1E-6
-   AtomMove.StressTolerance 0.01
+   AtomMove.ReuseDM T
+   AtomMove.EnthalpyTolerance 1E-5
+   AtomMove.StressTolerance 0.1
 
-Here, we specify the target pressure in GPa and two new tolerances, the enthalpy
-tolerance in Ha and the stress tolerance in GPa.
+Note that stress is in GPa and enthalpy is in Ha by default.
 
 Go to :ref:`top <strucrelax>`.
 
@@ -131,34 +131,35 @@ Combined optimisation
 ---------------------
 
 For simple crystals, the fractional ionic coordinates vary trivially with
-changes in the lattice vectors; however for more complicated systems such as
+changes in the simulation cell lengths; however for more complicated systems such as
 molecular crystals and amorphous materials, it is necessary simultaneously relax
-the ionic positions and lattice vectors. This can be done by setting
-``AtomMove.OptCellMethod 3``
+the ionic positions and simulation cell lengths (recalling that CONQUEST only
+allows *orthorhombic* unit cells). This can be done by setting
+``AtomMove.OptCellMethod 2`` or ``AtomMove.OptCellMethod 3``
 
 ::
 
    AtomMove.TypeOfRun cg
    AtomMove.OptCell T
-   AtomMove.OptCellMethod 3
-   AtomMove.TargetPressure 1.0
-   AtomMove.ReuseL T
+   AtomMove.OptCellMethod 2
+   AtomMove.ReuseDM T
    AtomMove.MaxForceTol 5e-4
-   AtomMove.EnthalpyTolerance 1E-6
-   AtomMove.StressTolerance 0.01
+   AtomMove.EnthalpyTolerance 1E-5
+   AtomMove.StressTolerance 0.1
 
-Note that the enthalpy will generally converge much more rapidly than the force
+Note that stress is in GPa and enthalpy is in Ha by default.
+
+The enthalpy will generally converge much more rapidly than the force
 and stress, and that it may be necessary to tighten ``minE.SCTolerance``
 (diagonalisation) or ``minE.LTolerance`` (order(N)) to reach the force
-tolerance, if it is even possible.
-
-Due to the nature of the complex partitioning system, large and sudden changes in volume
-may cause the calculation to crash, particlularly in the case of combined
-optimisation. In such cases, it may help to try ``AtomMove.OptCellMethod 2``,
-which uses a simple but robust double-loop minimisation: a full ionic conjugate
-gradients relaxation for the inner loop and a single cell steepest descent
-relaxation for the outer loop. This is considerably less efficient, but
-may help in particularly problematic cases.
+and stress tolerance, if it is even possible.  For combined optimisation,
+we recommend using ``AtomMove.OptCellMethod 2``,
+which uses a simple but robust double-loop minimisation: a full ionic 
+relaxation (using either cg or sqnm) followed by a full simulation cell 
+relaxation (using cg).  While this may be less efficient than optimising all
+degrees of freedom simultaneously, it is much more robust.  It is also possible
+to optimise cell vectors and atomic positions simultaneously, using ``AtomMove.OptCellMethod 3``,
+but this should be monitored carefully, as it can be unstable.
 
 Go to :ref:`top <strucrelax>`.
 

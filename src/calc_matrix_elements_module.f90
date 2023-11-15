@@ -19,10 +19,10 @@
 !!  MODIFICATION HISTORY
 !!   17/06/2002 dave
 !!    Added headers (ROBODoc for module)
-!!   10:38, 06/03/2003 drb 
+!!   10:38, 06/03/2003 drb
 !!    Corrected array slice pass in act_on_vectors_new (speed problem
 !!    under ifc)
-!!   10:09, 13/02/2006 drb 
+!!   10:09, 13/02/2006 drb
 !!    Removed all explicit references to data_ variables and rewrote
 !!    in terms of new matrix routines
 !!   2006/03/04 06:14 dave
@@ -36,6 +36,8 @@
 !!    Added timers
 !   2014/09/15 18:30 lat
 !!    fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
+!!  2023/05/23 11:44 dave
+!!    Update get_matrix_elements to improve stride
 !!  SOURCE
 !!
 module calc_matrix_elements_module
@@ -54,17 +56,17 @@ contains
 
 !!****f* calc_matrix_elements_module/norb *
 !!
-!!  NAME 
+!!  NAME
 !!   norb
 !!  USAGE
 !!   norb(naba_atm structure, atom, block)
 !!  PURPOSE
 !!   Returns number of orbitals on a given neighbour of a given block
 !!  INPUTS
-!! 
-!! 
+!!
+!!
 !!  USES
-!! 
+!!
 !!  AUTHOR
 !!   T. Miyazaki/D. R. Bowler
 !!  CREATION DATE
@@ -90,23 +92,23 @@ contains
        norb = naba_atm%ibeg_orb_atom(naba+1,iprim_blk) - &
               naba_atm%ibeg_orb_atom(naba,iprim_blk)
     end if
-    
+
   end function norb
 !!***
 
 !!****f* calc_matrix_elements_module/get_matrix_elements_new *
 !!
-!!  NAME 
+!!  NAME
 !!   get_matrix_elements_new - does integration on grid to get matrix elements
 !!  USAGE
-!! 
+!!
 !!  PURPOSE
 !!   Loops over blocks on the domain and calculates matrix element partials
 !!  INPUTS
-!! 
-!! 
+!!
+!!
 !!  USES
-!! 
+!!
 !!  AUTHOR
 !!   T. Miyazaki
 !!  CREATION DATE
@@ -120,6 +122,8 @@ contains
 !!    Added timers
 !!   2016/07/20 16:30 nakata
 !!    Renamed naba_atm -> naba_atoms_of_blocks
+!!   2023/05/23 11:44 dave
+!!    Change GEMM call to transpose acc_block so that access is contiguous
 !!  SOURCE
 !!
   subroutine get_matrix_elements_new(myid,rem_bucket,matM,gridone,gridtwo)
@@ -153,8 +157,9 @@ contains
 
     integer :: iprim_blk, n_dim_one, n_dim_two, i_beg_one, i_beg_two
     integer :: naba1, naba2, ind_halo1, ind_halo2, nsf1, nsf2
-    integer :: nonef, ntwof, bucket, where, ii, stat
+    integer :: nonef, ntwof, bucket, i_acc_b, ii, stat
     integer :: size_send_array
+    integer :: na1, na2
 
     ! acc_block = zero
 
@@ -165,7 +170,7 @@ contains
     naba_atm2  => naba_atoms_of_blocks(loc_bucket%ind_right)
 
     size_send_array = loc_bucket%no_pair_orb
-    if(allocated(send_array)) then 
+    if(allocated(send_array)) then
        size_send_array = size(send_array)
        call cq_abort("Error: send_array allocated: ", size_send_array)
     end if
@@ -176,93 +181,81 @@ contains
     call reg_alloc_mem(area_integn, size_send_array, type_dbl)
     send_array(1:size_send_array) = zero
 
-    ! loop over blocks in this node, calculating the contributions 
+    ! loop over blocks in this node, calculating the contributions
     ! from each block
     ! we need the following barrier ??
     ! call my_barrier()
 
+    !$omp parallel do default(none) &
+    !$omp             schedule(dynamic) &
+    !$omp             reduction(+: send_array) &
+    !$omp             shared(naba_atm1, naba_atm2, gridfunctions, n_pts_in_block, loc_bucket, &
+    !$omp                    domain, gridone, gridtwo) &
+    !$omp             private(iprim_blk, n_dim_one, n_dim_two, i_beg_one, i_beg_two, &
+    !$omp                     stat, ind_halo1, ind_halo2, na1, na2, bucket, nonef, ntwof, &
+    !$omp                     naba1, naba2, ii, nsf2, i_acc_b, acc_block)
     do iprim_blk=1, domain%groups_on_node
 
        n_dim_one     = naba_atm1%no_of_orb(iprim_blk) !left
        n_dim_two     = naba_atm2%no_of_orb(iprim_blk) !right
        i_beg_one     = (naba_atm1%ibegin_blk_orb(iprim_blk)-1) * n_pts_in_block +1
        i_beg_two     = (naba_atm2%ibegin_blk_orb(iprim_blk)-1) * n_pts_in_block +1
-       if(i_beg_one+n_dim_one*n_pts_in_block-1 > gridfunctions(gridone)%size) then
-          call cq_abort("get_matrix_elements gridone overflow: ",gridfunctions(gridone)%size, &
-               i_beg_one+n_dim_one*n_pts_in_block-1)
-       endif
-       if(i_beg_two+n_dim_two*n_pts_in_block-1 > gridfunctions(gridtwo)%size) then
-          call cq_abort("get_matrix_elements gridtwo overflow: ",gridfunctions(gridtwo)%size, &
-               i_beg_two+n_dim_two*n_pts_in_block-1)
-       endif
 
        ! get the overlap contribution from this block
 
        if(n_dim_two*n_dim_one /= 0) then  ! If the primary block has naba atoms
+          ! TK: Do we have to allocate memory on each iteration?
+          !     Could we do this before the loop?
+          !     Get a max of n_dim_two*n_dim_one over possible values of iprim_blk
+          !     for example and pass a slice of it to gemm
           allocate(acc_block(n_dim_two*n_dim_one),STAT=stat)
-          if(stat/=0) call cq_abort('Error allocating memory in get_matrix_elements: ',n_dim_one,n_dim_two)
           acc_block = zero
-          call reg_alloc_mem(area_integn,n_dim_two*n_dim_one,type_dbl)
           ! for both left and right functions...
           ! To get the contiguous access for acc_block, it should be
           !arranged like acc_block(right,left).
-          ! Thus, we use the lower equality (send_array=right*left) in 
+          ! Thus, we use the lower equality (send_array=right*left) in
           !the following equation.
           !    acc_block(j beta, i alpha)
           !     =\sum_{r_l in block} [ phi_{i alpha} (r_l) * psi_{j beta} (r_l) ]
-          !     =\sum_{r_l in block} [ psi_{j beta} (r_l)  * phi_{i alpha} (r_l)]  
+          !     =\sum_{r_l in block} [ psi_{j beta} (r_l)  * phi_{i alpha} (r_l)]
           !
-          call gemm ( 'T', 'N', n_dim_two, n_dim_one, n_pts_in_block, &
-               ONE, gridfunctions(gridtwo)%griddata(i_beg_two:), n_pts_in_block, &
-               gridfunctions(gridone)%griddata(i_beg_one:), n_pts_in_block, &
-               ZERO, acc_block, n_dim_two )
+          call gemm ( 'T', 'N', n_dim_one, n_dim_two, n_pts_in_block, &
+               ONE, gridfunctions(gridone)%griddata(i_beg_one:), n_pts_in_block, &
+               gridfunctions(gridtwo)%griddata(i_beg_two:), n_pts_in_block, &
+               ZERO, acc_block, n_dim_one )
 
           ! and accumulate it into the node accumulator
 
-          !---  I HAVE TO BE CAREFUL about WHICH ONE IS LEFT --- 
-          !  I have changed the order of naba1 and naba2 to
-          ! get contiguous access to send_array.
+          ! NB order changed to one/two to give contiguous access to send_array and acc_block
           ! Note that we can expect loc_bucket%i_h2d(ind_halo2,ind_halo1) changes
-          ! gradually in most cases, if ind_halo1 is fixed and both naba2 
+          ! gradually in most cases, if ind_halo1 is fixed and both naba2
           ! and ind_halo2 are orderd in NOPG order
           !
-          do naba1=1, naba_atm1%no_of_atom(iprim_blk)    ! left 
+          do naba1=1, naba_atm1%no_of_atom(iprim_blk)    ! left
              ind_halo1 = naba_atm1%list_atom_by_halo(naba1,iprim_blk)
-             if(ind_halo1 > loc_bucket%no_halo_atom1) &
-                  call cq_abort('ERROR in no_of_halo_atoms for left',ind_halo1,loc_bucket%no_halo_atom1)
+             na1 = naba_atm1%ibeg_orb_atom(naba1, iprim_blk)-1
              do naba2=1, naba_atm2%no_of_atom(iprim_blk) ! right
                 ind_halo2 = naba_atm2%list_atom_by_halo(naba2,iprim_blk)
-                if(ind_halo2 > loc_bucket%no_halo_atom2) &
-                     call cq_abort('ERROR in no_of_halo_atoms for right',ind_halo2,loc_bucket%no_halo_atom2)
+                na2 = naba_atm2%ibeg_orb_atom(naba2, iprim_blk)-1
                 bucket = loc_bucket%i_h2d(ind_halo2,ind_halo1) !index of the pair
-                if(bucket > loc_bucket%no_pair_orb) &
-                     call cq_abort('ERROR : bucket in get_matrix_elements',bucket,loc_bucket%no_pair_orb)
                 If(bucket /= 0) then   ! naba1 and naba2 makes pair
                    ii=(bucket-1)
-                   ! Note that matrix elements A_{i alpha}{j beta} are arranged 
+                   ! Note that matrix elements A_{i alpha}{j beta} are arranged
                    ! like (alpha,beta,ji).  As for ji, j is changing faster than i
                    nonef = norb(naba_atm1,naba1,iprim_blk)
                    ntwof = norb(naba_atm2,naba2,iprim_blk)
                    do nsf2=1, ntwof
-                      do nsf1=1, nonef
-                         ii = ii+1
-                         if(ii>size_send_array) &
-                              call cq_abort("Error: send_array overflow in get_matrix_elements: ",size_send_array,ii)
-                         where = n_dim_two*(naba_atm1%ibeg_orb_atom(naba1, iprim_blk)-1 + nsf1-1) + &
-                              naba_atm2%ibeg_orb_atom(naba2, iprim_blk)-1 + nsf2  
-                         if(where>n_dim_two*n_dim_one) &
-                              call cq_abort('Overflow error in get_matrix_elements: ',where,n_dim_two*n_dim_one)
-                         send_array(ii)=send_array(ii)+acc_block(where)
-                      end do
+                      i_acc_b = n_dim_one*(na2 + nsf2-1) + na1
+                      send_array(ii+1:ii+nonef)=send_array(ii+1:ii+nonef)+acc_block(i_acc_b+1:i_acc_b+nonef)
+                      ii = ii + nonef
                    end do
-                Endif  ! if the two atoms are within a range 
-
+                Endif  ! if the two atoms are within a range
              enddo ! Loop over right naba atoms
           enddo ! Loop over left naba atoms
           deallocate(acc_block)
-          call reg_dealloc_mem(area_integn,n_dim_two*n_dim_one,type_dbl)
        endif    ! If the primary block has naba atoms for left & right functions
     end do   ! end loop over primary blocks
+    !$omp end parallel do
 
     call put_matrix_elements &
          (myid, loc_bucket, rem_bucket, matM )
@@ -282,7 +275,7 @@ contains
     !  Need to be changed if number of functions of each atom varies
     !
     !  20/June/2003 T. MIYAZAKI
-    !   We should consider the case where some of the domains have 
+    !   We should consider the case where some of the domains have
     !   no neighbour atoms. (surface with large vacuum area.)
     subroutine put_matrix_elements(myid, loc_bucket, rem_bucket, matM)
 
@@ -315,9 +308,9 @@ contains
       integer :: jnode, ipair, loc1, loc2, ii, isf1, isf2, stat, msize
       integer, dimension(MPI_STATUS_SIZE) :: nrecv_stat, nwait_stat
       integer, parameter :: tag = 1
-            
+
       mynode = myid + 1
-      ierr = 0 
+      ierr = 0
       size_send_array = size(send_array)
       call matrix_scale(zero, matM)
       if (loc_bucket%no_recv_node > 0) then
@@ -335,7 +328,7 @@ contains
                nsize = loc_bucket%ibegin_pair_orb(inode + 1) - &
                        loc_bucket%ibegin_pair_orb(inode)
             end if
-            !SENDING or KEEPING the First Address 
+            !SENDING or KEEPING the First Address
             if (nnd_rem == mynode) then
                myid_ibegin = ibegin
             else if (nsize > 0) then
@@ -347,7 +340,7 @@ contains
                                   ierr)
             end if
          end do
-      end if ! (loc_bucket%no_recv_node >0) 
+      end if ! (loc_bucket%no_recv_node >0)
 
       if (rem_bucket%no_send_node > 0) then
          msize = 0
@@ -384,13 +377,12 @@ contains
                      ii=0
                      do isf2 = 1,halo(matrix_index(matM))%ndimj(rem_bucket%bucket(ipair,jnode)%jhalo)
                         do isf1 = 1,halo(matrix_index(matM))%ndimi(rem_bucket%bucket(ipair,jnode)%iprim)
-                           if (loc2+ii>nsize) call cq_abort("Overflow error ! ",nsize,loc2+ii)
                            tmp = recv_ptr(loc2+ii)*grid_point_volume
                            call store_matrix_value_pos(matM,loc1+ii,tmp)
                            ii=ii+1
                         end do
                      end do
-                  else 
+                  else
                      write(io_lun,*) 'ERROR? in remote_bucket',ipair,myid
                      write(io_lun,*) ' a pair of two atoms in a domain partial node &
                           & is not a neighbour pair in a bundle node. ??? '
@@ -402,7 +394,7 @@ contains
          deallocate(recv_array,STAT=stat)
          if (stat/=0) call cq_abort("Error deallocating recv_array in put_matrix_elements: ",msize)
          call reg_dealloc_mem(area_integn,msize,type_dbl)
-      end if !(rem_bucket%no_send_node >0) 
+      end if !(rem_bucket%no_send_node >0)
 
       if (loc_bucket%no_recv_node >0) then
          do inode=1,loc_bucket%no_recv_node
@@ -428,9 +420,9 @@ contains
 !sbrt act_on_vectors_new&
 !    (myid,rem_bucket,data_M,gridone,gridtwo)
 !------------ NEW VERSION -------------------------------------------------
-! Now we assume, every atom has same NONEF(NTWOF) for 
+! Now we assume, every atom has same NONEF(NTWOF) for
 ! gridone(gridtwo).
-! We have to change 
+! We have to change
 !     nonef -> nonef(ia) ia: naba atm
 !     calculation of ibegin_blk in set_blipgrid_module
 !
@@ -448,7 +440,7 @@ contains
     use naba_blk_module,   only:naba_atm_of_blk
     use set_blipgrid_module, only: naba_atoms_of_blocks
     use bucket_module,     only:local_bucket,remote_bucket
-    use GenBlas,           only:axpy
+    use GenBlas,           only:gemm
     use comm_array_module, only:send_array
     use block_module,      only:n_pts_in_block
     use functions_on_grid, only: gridfunctions, fn_on_grid
@@ -490,15 +482,20 @@ contains
     ! collects matrix elements and store them in send_array
     call collect_matrix_elements(myid, loc_bucket, rem_bucket, matM)
 
-    ! Initialization of output (gridone)
-    !      gridone(:) = zero     ! NOT INITIALISE
     ! FOR get_non_local_gradient !
     !  19/Sep/00 Tsuyoshi Miyazaki
     ! loop over blocks in this node
+    !$omp parallel do default(none) &
+    !$omp             schedule(dynamic) &
+    !$omp             shared(naba_atm1, naba_atm2, domain, gridfunctions, loc_bucket, &
+    !$omp                    n_pts_in_block, send_array, gridone, gridtwo) &
+    !$omp             private(iprim_blk, n_dim_one, n_dim_two, naba1, naba2, bucket, &
+    !$omp                     ind_halo1, ind_halo2, nonef, ntwof, nsf1, nsf2, &
+    !$omp                     ii, factor_M, ind1, ind2)
     do iprim_blk=1, domain%groups_on_node
 
-       !  In the future we have to prepare n_dim_one & n_dim_two 
-       ! for each iprim_blk by counting all NONEF and NTWOF for 
+       !  In the future we have to prepare n_dim_one & n_dim_two
+       ! for each iprim_blk by counting all NONEF and NTWOF for
        ! the neighbour atoms of the block.
        !  In this case, the loops ovre nsf1 & nsf2 have to be
        ! deleted.
@@ -513,39 +510,27 @@ contains
           ! I HAVE TO BE CAREFUL about WHICH ONE IS LEFT
           do naba1=1, naba_atm1%no_of_atom(iprim_blk)    ! left atom
              ind_halo1 = naba_atm1%list_atom_by_halo(naba1,iprim_blk)
-             if(ind_halo1 > loc_bucket%no_halo_atom1) &
-                  call cq_abort('ERROR in no_of_halo_atoms for left',ind_halo1,loc_bucket%no_halo_atom1)
+             nonef = norb(naba_atm1, naba1, iprim_blk)
+             ind1=n_pts_in_block*(naba_atm1%ibegin_blk_orb(iprim_blk)-1+ &
+                  naba_atm1%ibeg_orb_atom(naba1,iprim_blk)-1)+1
              do naba2=1, naba_atm2%no_of_atom(iprim_blk) ! right atom
                 ind_halo2 = naba_atm2%list_atom_by_halo(naba2,iprim_blk)
-                if(ind_halo2 > loc_bucket%no_halo_atom2) &
-                     call cq_abort('ERROR in no_of_halo_atoms for right',ind_halo2,loc_bucket%no_halo_atom2)
-
                 bucket = loc_bucket%i_h2d(ind_halo2,ind_halo1) !index of the pair
-                if(bucket > loc_bucket%no_pair_orb) &
-                     call cq_abort('ERROR : bucket in act_on_vectors_new',bucket,loc_bucket%no_pair_orb)
                 If(bucket /= 0) then   ! naba1 and naba2 makes pair
-                   ii=bucket-1
-                   nonef = norb(naba_atm1, naba1, iprim_blk)
                    ntwof = norb(naba_atm2, naba2, iprim_blk)
-                   do nsf2=1, ntwof
-                      ind2=n_pts_in_block*(naba_atm2%ibegin_blk_orb(iprim_blk)-1+ &
-                           naba_atm2%ibeg_orb_atom(naba2,iprim_blk)-1+(nsf2-1))+1
-                      do nsf1=1, nonef                   
-                         ind1=n_pts_in_block*(naba_atm1%ibegin_blk_orb(iprim_blk)-1+ &
-                              naba_atm1%ibeg_orb_atom(naba1,iprim_blk)-1+(nsf1-1))+1
-                         ii = ii+1
-                         factor_M=send_array(ii)
-                         call axpy(n_pts_in_block, factor_M, &
-                              gridfunctions(gridtwo)%griddata(ind2:ind2+n_pts_in_block-1), 1, &
-                              gridfunctions(gridone)%griddata(ind1:ind1+n_pts_in_block-1), 1)
-                      end do
-                   end do
-                Endif  ! if the two atoms are within a range 
+                   ind2=n_pts_in_block*(naba_atm2%ibegin_blk_orb(iprim_blk)-1+ &
+                        naba_atm2%ibeg_orb_atom(naba2,iprim_blk)-1)+1
+                   call gemm('N','T',n_pts_in_block,nonef,ntwof, &
+                        one,gridfunctions(gridtwo)%griddata(ind2:ind2+ntwof*n_pts_in_block-1),n_pts_in_block,&
+                        send_array(bucket:bucket+nonef*ntwof-1),nonef,&
+                        one,gridfunctions(gridone)%griddata(ind1:ind1+nonef*n_pts_in_block-1),n_pts_in_block)
+                Endif  ! if the two atoms are within a range
 
              enddo ! Loop over right naba atoms
           enddo ! Loop over left naba atoms
        endif  ! If the primary block has naba atoms
     end do   ! end loop over primary blocks
+    !$omp end parallel do
     deallocate(send_array,STAT=stat)
     if(stat/=0) call cq_abort("Error deallocating send_array in act_on_vectors: ",loc_bucket%no_pair_orb)
     call reg_dealloc_mem(area_integn,loc_bucket%no_pair_orb,type_dbl)
@@ -555,7 +540,7 @@ contains
   contains
     !-----------------------------------------------------------------
     !sbrt collect_matrix_elements
-    !  Created : 3/Jul/2000 
+    !  Created : 3/Jul/2000
     !             by Tsuyoshi Miyazaki
     !
     !    This subroutine is called by (act_on_vector_new).
@@ -564,18 +549,18 @@ contains
     !   \sum_{j} [A_{i alpha; j beta} phi_{j beta} (r_l)].
     !
     !    I am sorry if this subroutine irritates you to read.
-    !   I recommend you to read (put_matrix_elements) before reading 
+    !   I recommend you to read (put_matrix_elements) before reading
     !   this subroutine.
     !    This subroutine will do inverse things of (put_matrix_elements),
     !   which is called by (get_matrix_elements_new).
     !   <send_array>, which will be used to store their receiving arrays
-    !   in this subroutine, has the same size as <send_array> 
-    !   in (put_matrix_elements). 
+    !   in this subroutine, has the same size as <send_array>
+    !   in (put_matrix_elements).
     !
     !    Need to be changed if number of functions of each atom varies
     !
     !  20/June/2003 T. MIYAZAKI
-    !   We should consider the case where some of the domains have 
+    !   We should consider the case where some of the domains have
     !   no neighbour atoms. (surface with large vacuum area.)
     subroutine collect_matrix_elements(myid, loc_bucket, rem_bucket, matM)
 
@@ -605,11 +590,11 @@ contains
       integer,parameter :: tag=1
 
       mynode=myid+1
-      ierr=0 
+      ierr=0
 
       ! First prepare receiving the array AND keep the first address
       ! of the data within my node in send_array.
-      ! 
+      !
       if(loc_bucket%no_recv_node > 0) then
          do inode=1,loc_bucket%no_recv_node ! Loop over recv nodes
             nnd_rem=loc_bucket%list_recv_node(inode)
@@ -633,7 +618,7 @@ contains
                if(ierr /= 0) call cq_abort('ERROR in MPI_irecv in collect_matrix_elements',ierr)
             endif
          enddo          ! Loop over receiving nodes
-      endif  ! (loc_bucket%no_recv_node > 0) 
+      endif  ! (loc_bucket%no_recv_node > 0)
 
       if(rem_bucket%no_send_node > 0) then
          msize=0
@@ -661,7 +646,7 @@ contains
                do ipair=1,rem_bucket%no_of_pair(jnode)
                   loc2=rem_bucket%bucket(ipair,jnode)%ibegin_pair
                   loc1=matrix_pos(matM,rem_bucket%bucket(ipair,jnode)%iprim,rem_bucket%bucket(ipair,jnode)%jhalo)
-                  if(loc1 /= 0) then 
+                  if(loc1 /= 0) then
                      ii=0
                      do isf2 = 1,halo(matrix_index(matM))%ndimj(rem_bucket%bucket(ipair,jnode)%jhalo)
                         do isf1 = 1,halo(matrix_index(matM))%ndimi(rem_bucket%bucket(ipair,jnode)%iprim)
@@ -688,7 +673,7 @@ contains
             end if
          enddo        ! Loop over sending nodes
          call stop_timer(tmr_std_matrices)
-      endif   !(rem_bucket%no_send_node > 0) 
+      endif   !(rem_bucket%no_send_node > 0)
 
       !Check whether MPI_irecv has been finished.
       if(loc_bucket%no_recv_node > 0) then

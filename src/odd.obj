@@ -8,6 +8,7 @@ ODD_OBJS = global_module.o \
            logicals_module.o \
            memory_module.o \
            mpi.o \
+           omp_module${OMP_DUMMY}.o \
            timer_module.o \
            timer_stdclocks_module.o \
            auxiliary_types.o \
@@ -15,4 +16,5 @@ ODD_OBJS = global_module.o \
            rng_module.o \
            biblio_module.o \
            references.o \
+           periodic_table_module.o \
            fft_module.o $(FFT_OBJ)

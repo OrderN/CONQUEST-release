@@ -1,0 +1,55 @@
+*** run_plot.f90	2019-07-08 08:00:19.000000000 +0100
+--- run_plot.f90	2019-07-08 08:00:02.000000000 +0100
+***************
+*** 88,93 ****
+--- 88,137 ----
+     write(6,'(a,6(f12.7,1x))') '!p',rr(ii),rho(ii),(vpuns(ii,l1),l1=1,lmax+1)
+   end do
+  
++  ! Conquest changes start
++  open(unit=10,file='VPS.dat')
++  ! DRB 2016/09/28
++  ! Output the reference valence occupations
++  write(10,'("# ",i5," 331")') lmax + nxtra + 1
++  do l1=1,lmax+1
++     write(10,'("# ",2i5,f8.3,f15.10)') np(l1),l1-1,fp(l1),ep(l1)
++  end do
++  ! Outer valence states
++  if(nxtra>0) then
++     do l1=1,nxtra
++        write(10,'("# ",2i5,f8.3,f15.10)') npx(l1),lpx(l1),fpx(l1),epx(l1)
++     end do
++  end if
++  ! Mesh size
++  write(10,fmt='("# ",i5)') mmax
++  ! grid, charge, core charge, local potential, semi-locals
++  do ii=1,mmax
++    write(11,'(f15.10,4f15.10)') rr(ii),vp(ii,lloc+1),(vp(ii,l1),l1=1,lmax+1)
++    write(10,'(f15.10,2e18.10,4f15.10)') rr(ii),rho(ii),rhomod(ii,1),vpuns(ii,lloc+1),(vpuns(ii,l1),l1=1,lmax+1)
++ !   write(10,'(f15.10,2e18.10,4f15.10)') rr(ii),rho(ii),rhomod(ii,1),(vp(ii,l1),l1=1,lmax+1)
++  end do
++  write(10,'("# ",5i5)') nproj(1:lmax+1)
++  do l1=1,lmax+1
++    write(10,'("# ",i5,2f15.10)') l1-1,(evkb(jj,l1),jj=1,nproj(l1))
++  end do
++  ll=1
++  do l1=1,lmax+1
++    do jj=1,nproj(l1)
++      do ii=ll,mmax
++        if(abs(vkb(ii,jj,l1))<1e-10) then
++          ll = ii
++          exit
++        end if
++      end do
++    end do
++  end do
++  write(10,fmt='("# ",i5)') ll
++  do ii=1,ll
++    write(10,'(6e18.10)') ((vkb(ii,jj,l1),jj=1,nproj(l1)),l1=1,lmax+1)
++  end do
++  close(unit=10)
++ ! Conquest changes end
++ 
+   if(lloc .eq. 4) then
+     do ii=n1,n2
+       write(6,'(a, 2(f12.7,1x))') ' !L',rr(ii),vpuns(ii,lloc + 1)

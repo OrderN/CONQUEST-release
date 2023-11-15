@@ -817,7 +817,7 @@ contains
 
   end subroutine convert_basis
 !!***
-
+!  
 !!****f* angular_coeff_routines/evaluate_pao *
 !!
 !!  NAME 
@@ -844,93 +844,7 @@ contains
 !!    ie. stay in Cartesian ones (should be more efficient)   
 !!  SOURCE
 !!
-!!$  subroutine evaluate_pao(sp,l,nz,m,x,y,z,pao_val)
-!!$
-!!$    use datatypes
-!!$    use numbers
-!!$    use pao_format, ONLY : pao
-!!$
-!!$    implicit none
-!!$
-!!$    integer,      intent(in) :: sp,l,nz,m
-!!$    real(double), intent(in) :: x,y,z
-!!$    real(double), intent(out) :: pao_val
-!!$    !
-!!$    real(double) :: r,theta,phi,del_r,y_val,val
-!!$    real(double) :: a, b, c, d, r1, r2, r3, r4, rr
-!!$    integer :: npts, j
-!!$
-!!$    !convert Cartesians into spherical polars
-!!$    call convert_basis(x,y,z,r,theta,phi)
-!!$    !
-!!$    !interpolate for required value of radial function
-!!$    npts  = pao(sp)%angmom(l)%zeta(nz)%length
-!!$    del_r = (pao(sp)%angmom(l)%zeta(nz)%cutoff/&
-!!$         &(pao(sp)%angmom(l)%zeta(nz)%length-1))
-!!$    !
-!!$    j = floor(r/del_r) + 1
-!!$    !
-!!$    pao_val = zero
-!!$    if(j+1<=npts) then
-!!$       rr = real(j,double)*del_r
-!!$       a = (rr - r)/del_r
-!!$       b = one - a
-!!$       c = a * ( a * a - one ) * del_r * del_r / six
-!!$       d = b * ( b * b - one ) * del_r * del_r / six
-!!$       r1 = pao(sp)%angmom(l)%zeta(nz)%table(j)
-!!$       r2 = pao(sp)%angmom(l)%zeta(nz)%table(j+1)
-!!$       r3 = pao(sp)%angmom(l)%zeta(nz)%table2(j)
-!!$       r4 = pao(sp)%angmom(l)%zeta(nz)%table2(j+1)
-!!$       pao_val = a*r1 + b*r2 + c*r3 + d*r4
-!!$    end if
-!!$    !
-!!$    !now multiply by value of spherical harmonic
-!!$    y_val = re_sph_hrmnc(l,m,theta,phi)
-!!$    !
-!!$    pao_val = pao_val*y_val
-!!$    !
-!!$    ! Scale by r**l to remove Siesta normalisation
-!!$    if(l==1) then ! p
-!!$       pao_val = pao_val*r
-!!$    else if(l==2) then ! d
-!!$       pao_val = pao_val*r*r
-!!$    else if(l==3) then ! f
-!!$       pao_val = pao_val*r*r*r
-!!$    else if(l>3) then
-!!$       !write(io_lun,*) '*** ERROR *** ! Angular momentum l>3 not implemented !'
-!!$       call cq_abort('*** ERROR *** ! Angular momentum l>3 not implemented !',l)
-!!$    end if
-!!$    !
-!!$  end subroutine evaluate_pao
-!!***
-  
-!!****f* angular_coeff_routines/evaluate_pao *
-!!
-!!  NAME 
-!!   evaluate_pao
-!!  USAGE
-!!   evaluate_pao(sp,l,nz,m,x,y,z,pao_val)
-!!  PURPOSE
-!!   Returns value of specified PAO at given point in space
-!!  INPUTS
-!!   x, y, z Cartesian components of displacement vector 
-!!   sp,l,nz,m - species no., l ang momentum value, zeta value
-!!   and azimuthal quantum number of specified pao
-!!  USES
-!!   datatypes, pao_format, pao_array_utility
-!!  AUTHOR
-!!   R Choudhury
-!!  CREATION DATE
-!!   25/09/03
-!!  MODIFICATION HISTORY
-!!   2019/08/16 15:57 dave
-!!    Replace spline_ol_intval_new2
-!!   2020/01/21 14:54 Lionel
-!!    Add optional possibility for NOT working in polar coord.
-!!    ie. stay in Cartesian ones (should be more efficient)   
-!!  SOURCE
-!!
-  subroutine evaluate_pao(sp,l,nz,m,x,y,z,pao_val,system)
+  subroutine evaluate_pao(i_vector,sp,l,nz,m,x,y,z,pao_val,system)
 
     use datatypes
     use numbers
@@ -938,8 +852,9 @@ contains
 
     implicit none
 
-    integer,      intent(in)  :: sp,l,nz,m
-    real(double), intent(in)  :: x,y,z
+    integer, intent(in) :: i_vector ! dummy argument, included to satisfy interface in PAO_grid_transform_module
+    integer, intent(in) :: sp,l,nz,m
+    real(double), intent(in) :: x,y,z
     logical,      intent(in), optional :: system 
     real(double), intent(out) :: pao_val
     !
@@ -1094,7 +1009,7 @@ contains
     
     !RC 09/11/03 using (now debugged) routine pp_elem_derivative (see 
     ! above) as template for this sbrt pao_elem_derivative
-    real(double), intent(inout) :: x_i,y_i,z_i
+    real(double), intent(in) :: x_i,y_i,z_i
     real(double), intent(out) :: drvtv_val
     integer, intent(in) :: i_vector, l, m, spec, nzeta
     integer :: n1,n2

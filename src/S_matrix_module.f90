@@ -134,7 +134,7 @@ contains
                                            blips, PAOs, atomf, sf,     &
                                            ni_in_cell, nspin_SF,       &
                                            flag_perform_cdft,          &
-                                           IPRINT_TIME_THRES1
+                                           IPRINT_TIME_THRES1, min_layer
     use matrix_data,                 only: Srange
     use mult_module,                 only: matS, matSatomf, AtomF_to_SF_transform
     use io_module,                   only: dump_matrix
@@ -199,7 +199,7 @@ contains
     end if
 
     ! get the new InvS matrix
-    call  Iter_Hott_InvS(iprint_ops, InvSMaxSteps, &
+    call  Iter_Hott_InvS(iprint_ops + min_layer, InvSMaxSteps, &
                          InvSDeltaOmegaTolerance, ni_in_cell, &
                          inode, ionode, flag_do_SFtransform)
 
@@ -248,13 +248,14 @@ contains
 !!
   subroutine get_S_matrix_PAO(inode, ionode)
 
-    use global_module,               only: iprint_ops
+    use global_module,               only: iprint_ops, min_layer
     use matrix_data,                 only: aSa_range
     use mult_module,                 only: matSatomf
     use build_PAO_matrices,          only: assemble_2
     use io_module,                   only: dump_matrix
-    use PAO_grid_transform_module,   only: single_PAO_to_grid
+    use PAO_grid_transform_module,   only: PAO_or_gradPAO_to_grid
     use functions_on_grid,           only: atomfns
+    use angular_coeff_routines,      only: evaluate_pao
 
     implicit none
 
@@ -263,15 +264,15 @@ contains
 
 
     ! Get S matrix with assemble
-    if (inode == ionode .and. iprint_ops > 2) &
-         write (io_lun, *) 'Calling assemble_2 for Satomf: ', matSatomf
+    if (inode == ionode .and. iprint_ops + min_layer > 3) &
+         write (io_lun, fmt='(10x,a,i5)') 'Calling assemble_2 for Satomf: ', matSatomf
     call assemble_2(aSa_range, matSatomf, 1)
     !call dump_matrix("NS_atomf",matSatomf,inode)
 
     ! calculate PAO values on grids
-    if (inode == ionode .and. iprint_ops > 2) &
-         write (io_lun, *) 'single PAO to grid ', atomfns
-    call single_PAO_to_grid(atomfns)
+    if (inode == ionode .and. iprint_ops + min_layer > 3) &
+         write (io_lun, fmt='(10x,a,i5)') 'single PAO to grid ', atomfns
+    call PAO_or_gradPAO_to_grid(atomfns, evaluate_pao, 0)
 
     return
   end subroutine get_S_matrix_PAO
@@ -317,7 +318,7 @@ contains
     use global_module,               only: iprint_ops,            &
                                            flag_onsite_blip_ana,  &
                                            id_glob, species_glob, &
-                                           flag_analytic_blip_int, nspin
+                                           flag_analytic_blip_int, nspin, min_layer
     use matrix_data,                 only: Srange, halo, blip_trans
     use mult_module,                 only: matS, ltrans, matrix_scale, &
                                            matK, matM12, return_matrix_block_pos,&
@@ -359,12 +360,12 @@ contains
 
     spin_SF = 1 ! spin-dependent SF is not available with blips at present
     ! Project support functions onto grid
-    if (inode == ionode .and. iprint_ops > 2) &
-         write (io_lun, *) 'Doing blip-to-support ', atomfns
+    if (inode == ionode .and. iprint_ops + min_layer > 3) &
+         write (io_lun, fmt='(10x,a,i5)') 'Doing blip-to-support ', atomfns
     call blip_to_support_new(inode-1, atomfns)
 
-    if (inode == ionode .and. iprint_ops > 2) &
-         write (io_lun, *) 'Doing integration ', atomfns
+    if (inode == ionode .and. iprint_ops + min_layer > 3) &
+         write (io_lun, fmt='(10x,a,i5)') 'Doing integration ', atomfns
     ! Integrate
     if(flag_analytic_blip_int) then
        call matrix_scale(zero,matS(spin_SF))
@@ -523,13 +524,17 @@ contains
 !!    Renamed get_r_on_support -> get_r_on_atomfns
 !!   2016/11/09 21:00 nakata
 !!    Used natomf_species instead of nsf_species
+!!   2022/12/21 16:52 dave
+!!    Extending to allow calculation of exp(i.2pi.x/L) as well as x
+!!    New argument flag_func selects x, cos(2pi.x/L) or sin(2pi.x/L) with 0, 1 or 2
 !!  SOURCE
 !!  
-  subroutine get_r_on_atomfns(direction,inputgf,gridfunc1,gridfunc2,gridfunc3)
+  subroutine get_r_on_atomfns(direction,flag_func,inputgf,gridfunc1,gridfunc2,gridfunc3)
 
     use datatypes
     use numbers
-    use global_module,               only: rcellx,rcelly,rcellz, atomf, species_glob, ni_in_cell, id_glob
+    use global_module,               only: rcellx,rcelly,rcellz, atomf, species_glob, &
+         ni_in_cell, id_glob, atom_coord
     use cover_module,                only: DCS_parts
     use block_module,                only: nx_in_block,ny_in_block,nz_in_block, &
                                            n_blocks, n_pts_in_block
@@ -537,7 +542,7 @@ contains
     use primary_module,              only: domain
     use set_blipgrid_module,         only: naba_atoms_of_blocks
     use functions_on_grid,           only: gridfunctions, fn_on_grid
-    use dimens,                      only: n_my_grid_points, r_h
+    use dimens,                      only: n_my_grid_points, r_h, r_super_x, r_super_y, r_super_z
     use GenComms,                    only: cq_abort
     use species_module,              only: natomf_species
     use PAO_grid_transform_module,   only: check_block
@@ -545,7 +550,7 @@ contains
     implicit none
 
     ! Passed variables
-    integer :: direction
+    integer :: direction, flag_func
     integer :: inputgf,gridfunc1
     integer, OPTIONAL :: gridfunc2, gridfunc3
 
@@ -621,9 +626,19 @@ contains
                       y = y_store(ip)
                       z = z_store(ip)
                       if(direction==0) then
-                         rx = x
-                         ry = y
-                         rz = z
+                         if(flag_func==0) then
+                            rx = x
+                            ry = y
+                            rz = z
+                         else if(flag_func==1) then
+                            rx = cos(twopi*(x + atom_coord(1,ig_atom))/r_super_x)
+                            ry = cos(twopi*(y + atom_coord(2,ig_atom))/r_super_y)
+                            rz = cos(twopi*(z + atom_coord(3,ig_atom))/r_super_z)
+                         else if(flag_func==2) then
+                            rx = sin(twopi*(x + atom_coord(1,ig_atom))/r_super_x)
+                            ry = sin(twopi*(y + atom_coord(2,ig_atom))/r_super_y)
+                            rz = sin(twopi*(z + atom_coord(3,ig_atom))/r_super_z)
+                         end if
                          do nsf1=1,this_nsf
                             sfni = gridfunctions(inputgf)%griddata(position+(nsf1-1)*n_pts_in_block)
                             gridfunctions(gridfunc1)%griddata(position+(nsf1-1)*n_pts_in_block) = sfni * rx
@@ -632,11 +647,29 @@ contains
                          enddo ! nsf1
                       else ! Store position in rx and scale appropriate direction
                          if(direction==1) then
-                            rx = x
+                            if(flag_func==0) then
+                               rx = x
+                            else if(flag_func==1) then
+                               rx = cos(twopi*(x + atom_coord(1,ig_atom))/r_super_x)
+                            else if(flag_func==2) then
+                               rx = sin(twopi*(x + atom_coord(1,ig_atom))/r_super_x)
+                            end if
                          else if(direction==2) then
-                            rx = y
+                            if(flag_func==0) then
+                               rx = y
+                            else if(flag_func==1) then
+                               rx = cos(twopi*(y + atom_coord(2,ig_atom))/r_super_y)
+                            else if(flag_func==2) then
+                               rx = sin(twopi*(y + atom_coord(2,ig_atom))/r_super_y)
+                            end if
                          else if(direction==3) then
-                            rx = z
+                            if(flag_func==0) then
+                               rx = z
+                            else if(flag_func==1) then
+                               rx = cos(twopi*(z + atom_coord(3,ig_atom))/r_super_z)
+                            else if(flag_func==2) then
+                               rx = sin(twopi*(z + atom_coord(3,ig_atom))/r_super_z)
+                            end if
                          end if
                          do nsf1=1,this_nsf
                             sfni = gridfunctions(inputgf)%griddata(position+(nsf1-1)*n_pts_in_block)
@@ -706,6 +739,8 @@ contains
 !!    Changed matS and matT to be spin_SF dependent
 !!   2019/11/18 tsuyoshi
 !!    Removed flag_MDold
+!!   2022/10/25 16:58 dave
+!!    Updating output: Note that output_level is iprint+min_layer
 !!  SOURCE
 !!
   subroutine Iter_Hott_InvS(output_level, n_L_iterations, tolerance,n_atoms,&
@@ -714,7 +749,7 @@ contains
     use datatypes
     use numbers
     use global_module, ONLY: IPRINT_TIME_THRES1,flag_TmatrixReuse,restart_T, &
-                             runtype, atomf, sf, flag_diagonalisation, nspin_SF
+                             runtype, atomf, sf, flag_diagonalisation, nspin_SF, min_layer
     use matrix_data, ONLY: Trange, TSrange, mat, Srange
     use mult_module, ONLY: allocate_temp_matrix, free_temp_matrix, store_matrix_value, matrix_scale, matrix_sum, &
          matT, matS, return_matrix_value, T_trans
@@ -728,6 +763,7 @@ contains
                             matrix_store_global, grab_InfoMatGlobal, set_atom_coord_diff
 
     use UpdateInfo, ONLY: Matrix_CommRebuild
+    use io_module, ONLY: return_prefix
 
     implicit none
 
@@ -746,9 +782,13 @@ contains
     type(InfoMatrixFile),pointer :: Info(:)    ! why pointer ? <-> related to gcc problem
     type(matrix_store_global)    :: InfoGlob
 
+    character(len=12) :: subname = "InvS: "
+    character(len=120) :: prefix
+
+    prefix = return_prefix(subname, min_layer)
     if (atomf.ne.sf .and. .not.flag_do_SFtransform) then
-       if (inode.eq.ionode.and.output_level>=2) write(io_lun,*) &
-          'Now we have only Spao but not Ssf yet, so InvS is not calculated at present.'
+       if (inode.eq.ionode.and.output_level>=4) write(io_lun,fmt='(4x,a)') &
+          trim(prefix)//' only formed Spao but not Ssf, so InvS is not yet calculated'
     else
        matI = allocate_temp_matrix(TSrange,0)
        matT1 = allocate_temp_matrix(Trange,0)
@@ -777,10 +817,12 @@ contains
              n_orbs = n_orbs + real(nsf_species(species(i)),double)
           end do
           ! First construct the identity
-          if (inode.eq.ionode.and.output_level>=2) write(io_lun,*) 'Zeroing data'
+          if (inode.eq.ionode.and.output_level>=3) write(io_lun,fmt='(/4x,a)') &
+               trim(prefix)//' starting S inversion'
           call matrix_scale(zero,matI)
           call matrix_scale(zero,matT(1))
-          if (inode.eq.ionode.and.output_level>=2) write(io_lun,*) 'Creating I'
+          if (inode.eq.ionode.and.output_level>=3) write(io_lun,fmt='(4x,a)') &
+               trim(prefix)//' creating I'
           ip = 1
           nb = 1
           do np = 1,bundle%groups_on_node
@@ -822,7 +864,8 @@ contains
                enddo
                call gsum(tot)
                eps = 1.0_double/(tot)
-               if(output_level>1.and.inode==ionode) write(io_lun,*) 'Eps, tot: ',eps,tot
+               if(output_level>3.and.inode==ionode) write(io_lun,fmt='(4x,a,2e10.5)') &
+                    trim(prefix)//' eps, tot: ',eps,tot
                call matrix_scale(zero,matT(spin_SF))
                call matrix_sum(zero,matT(spin_SF),eps,matS(spin_SF))
             enddo ! spin_SF
@@ -844,23 +887,32 @@ contains
              call matrix_scale(zero,matT1)
              call matrix_scale(zero,matTold)
              call matrix_scale(zero,matTM)
-             if (inode==ionode.and.output_level>=2) write(io_lun,*) 'Starting loop'
+             if (inode==ionode.and.output_level >=2) write(io_lun,fmt='(4x,a)') &
+                  trim(prefix)//' starting loop'
              do n_iterations=1,n_L_iterations
                 call start_timer(tmr_l_tmp1,WITH_LEVEL)
-                if (inode==ionode.and.output_level>=2) &
-                     write(io_lun,2) n_iterations
+                !if (inode==ionode.and.output_level >=2) &
+                !     write(io_lun,fmt='(4x,a,i3)') trim(prefix)//" iteration ",n_iterations
                 deltaomega = deltaomega * half
                 ! check for convergence
                 if(n_iterations<3.or.abs(deltaomega)>tolerance) then
                    call HotInvS_mm( matI, matS(spin_SF), matT(spin_SF), matT1, matTM, omega,n_iterations)
                    deltaomega = omega - oldomega
-                   if(inode==ionode.and.output_level>=1) then
-                      write(io_lun,*) 'Omega is ',omega/n_orbs
-                      if(omega>zero) write(io_lun,*) 'R is ',sqrt(omega)/n_orbs
-                      write(io_lun,*) 'deltaomega is ',n_iterations,deltaomega
+                   if(inode==ionode.and.output_level >=2) then
+                      if(omega>zero) then
+                         write(io_lun,fmt='(4x,a,i3,a,f12.5,a,f12.5,a,f12.5)') &
+                              trim(prefix)//" Iter: ",n_iterations,'   omega: ',omega/n_orbs, &
+                              " deltaomega: ", deltaomega/n_orbs, " R: ",sqrt(omega)/n_orbs
+                      else
+                         write(io_lun,fmt='(4x,a,i3,a,f12.5,a,f12.5)') &
+                              trim(prefix)//" Iter: ",n_iterations,'   omega: ',omega/n_orbs, &
+                              " deltaomega: ", deltaomega/n_orbs
+                      end if
                    endif
                    if ( omega>oldomega.and.oldomega/=0.0_double) then
-                      if(inode==ionode) write(io_lun,*) 'Truncation error reached !'
+                      if(inode==ionode.and.output_level >=2) &
+                           write(io_lun,fmt='(4x,a,i3,a)') &
+                           trim(prefix)//' truncation error reached after ', n_iterations, " iterations"
                       call matrix_sum(zero,matT(spin_SF),one,matTold)
                       omega = oldomega ! This is consistent with Told
                       call stop_print_timer(tmr_l_tmp1,"an inverse S iteration",IPRINT_TIME_THRES1)
@@ -877,7 +929,8 @@ contains
              end do ! n_iterations
              ! If this isn't a good guess, then reset to I
              if((omega/n_orbs)>InvSTolerance) then
-                if(inode==ionode) write(io_lun,*) 'Setting InvS to I'
+                if(inode==ionode .and. output_level >= 1) &
+                     write(io_lun,fmt='(4x,a)') trim(prefix)//' setting InvS to I'
                 call matrix_scale(zero,matT(spin_SF))
                 ip = 1
                 nb = 1
@@ -905,13 +958,6 @@ contains
        !  flag_readT = .true.
        !endif
     end if ! End if (atomf.ne.sf .and. .not.flag_do_SFtransform)
-
-1   format(20x,'Starting functional value: ',f15.7,' a.u.')
-2   format(/,20x,'Conjugate Gradients InvS iteration:',i5)
-3   format(/,20x,'Functional value reached after ',i5,' InvS iterations: ',&
-         /,20x,' Omega: ', f15.7, ' DeltaOmega: ', f15.7)
-4   format('InvS is ',4i5,f15.7)
-5   format('T0S,A is ',4i5,2f15.7)
     return
 
   end subroutine Iter_Hott_InvS

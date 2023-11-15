@@ -1,6 +1,6 @@
 # ATOM AND REFERENCE CONFIGURATION
 # atsym  z   nc   nv     iexc    psfile
-Lu 71.00    9    5 -116133      upf
+Lu 71.00   10    4 -116133      upf
 #
 #   n    l    f        energy (Ha)
 1    0    2.00
@@ -12,21 +12,20 @@ Lu 71.00    9    5 -116133      upf
 4    0    2.00
 4    1    6.00
 4    2   10.00
+4    3   14.00
 5    0    2.00
 5    1    6.00
-4    3   14.00
 5    2    1.00
 6    0    2.00
 #
 # PSEUDOPOTENTIAL AND OPTIMIZATION
 # lmax
-3
+2
 #
 #   l,   rc,      ep,       ncon, nbas, qcut
 0   1.55000  -2.24486    4    8   7.50000
 1   1.60000  -1.16418    4    8   8.00000
 2   1.45000  -0.06497    4    8   9.00000
-3   1.85000  -0.35470    4    8   9.80000
 #
 # LOCAL POTENTIAL
 # lloc, lpopt,  rc(5),   dvloc0
@@ -37,7 +36,6 @@ Lu 71.00    9    5 -116133      upf
 0    2   2.07302
 1    2   1.11570
 2    2   1.00000
-3    2   1.50000
 #
 # MODEL CORE CHARGE
 # icmod, fcfact, rcfact

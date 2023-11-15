@@ -147,12 +147,12 @@ contains
 
     call start_timer(tmr_std_basis)
     if((inode == ionode).and.(iprint_basis >= 2)) then
-       write(unit=io_lun,fmt='(//" make_blips_from_paos: sbrt entered")')
+       write(unit=io_lun,fmt='(//6x," make_blips_from_paos: sbrt entered")')
     end if
 
     ! number of species
     if((inode == ionode).and.(iprint_basis >= 1)) then
-       write(unit=io_lun,fmt='(//" make_paos_from_blips:&
+       write(unit=io_lun,fmt='(//6x," make_paos_from_blips:&
             & no. of species:",i5)') n_species
     end if
     call start_timer(tmr_std_allocation)
@@ -187,22 +187,22 @@ contains
        allocate(blip_coeff(n_sp)%coeff(blip_info(n_sp)%NBlipsRegion, maxnsf),STAT=stat)
        if(stat/=0) call cq_abort("Error allocating blip_coeff in pao2blip: ",blip_info(n_sp)%NBlipsRegion,maxnsf)
        call stop_timer(tmr_std_allocation)
-       if((inode == ionode).and.(iprint_basis >= 1)) then
-          write(unit=io_lun,fmt='(//" make_blips_from_paos: region and&
+       if((inode == ionode).and.(iprint_basis >= 2)) then
+          write(unit=io_lun,fmt='(//6x," make_blips_from_paos: region and&
                & blip data for species no.",&
                &i3,":"/)') n_sp
-          write(unit=io_lun,fmt='(" region radius:",f12.6)') RadiusSupport(n_sp)
-          write(unit=io_lun,fmt='(" length of blip-grid interval:",f12.6)') &
+          write(unit=io_lun,fmt='(6x," region radius:",f12.6)') RadiusSupport(n_sp)
+          write(unit=io_lun,fmt='(6x," length of blip-grid interval:",f12.6)') &
                &blip_info(n_sp)%SupportGridSpacing
-          write(unit=io_lun,fmt='(" no. of integration-grid intervals in",&
+          write(unit=io_lun,fmt='(6x," no. of integration-grid intervals in",&
                &" blip-grid interval:",i5)') nu_int
        end if
     end do
 
     ! check input data and make constants for later use
     do n_sp = 1, n_species
-       if((inode == ionode).and.(iprint_basis >= 2)) then
-          write(unit=io_lun,fmt='(/" make_blips_from_paos: checking input",&
+       if((inode == ionode).and.(iprint_basis >= 3)) then
+          write(unit=io_lun,fmt='(/6x," make_blips_from_paos: checking input",&
                &" for species no:",i3)') n_sp
        end if
        ! check that there are enough blip intervals in region radius
@@ -214,8 +214,8 @@ contains
        end if
        n_b_half(n_sp) = sqrt(r2_over_b2 - 8.0_double) - 2.0_double + very_small
        n_blip = 1 + 2*n_b_half(n_sp)
-       if((inode == ionode).and.(iprint_basis >= 1)) then
-          write(unit=io_lun,fmt='(" no. of entire blips in region diameter:",&
+       if((inode == ionode).and.(iprint_basis >= 2)) then
+          write(unit=io_lun,fmt='(6x," no. of entire blips in region diameter:",&
                &i5)') n_blip
        end if
        if(n_b_half(n_sp) > blip_info(n_sp)%BlipArraySize) then
@@ -250,15 +250,15 @@ contains
              else if((n_ac >= 5) .and. (n_ac <= 9)) then
                 n_am = 2
              else
-                if((inode == ionode).and.(iprint_basis >= 1)) then
-                   write(unit=io_lun,fmt='(//" n_sp:",i3," n_s:",&
+                if((inode == ionode).and.(iprint_basis >= 3)) then
+                   write(unit=io_lun,fmt='(//6x," n_sp:",i3," n_s:",&
                         &i3," n_acz:",i3)') n_sp, n_s, n_acz
                 end if
                 call cq_abort('make_blips_from_paos: n_ac out of range',n_ac)
              end if
              if(n_am > pao(n_sp)%greatest_angmom) then
-                if((inode == ionode).and.(iprint_basis >= 1)) then
-                   write(unit=io_lun,fmt='(//" n_sp:",i3," n_s:",i3," n_acz:",&
+                if((inode == ionode).and.(iprint_basis >= 3)) then
+                   write(unit=io_lun,fmt='(//6x," n_sp:",i3," n_s:",i3," n_acz:",&
                         &i3)') n_sp, n_s, n_acz
                 end if
                 call cq_abort('make_blips_from_paos: ang. mom. requested&
@@ -266,8 +266,8 @@ contains
              end if
              n_zeta = support_info(n_sp,n_s)%acz_info(n_acz)%which_zeta
              if(n_zeta > pao(n_sp)%angmom(n_am)%n_zeta_in_angmom) then
-                if((inode == ionode).and.(iprint_basis >= 1)) then
-                   write(unit=io_lun,fmt='(//" n_am:",i3," n_sp:",i3," n_s:",i3,&
+                if((inode == ionode).and.(iprint_basis >= 3)) then
+                   write(unit=io_lun,fmt='(//6x," n_am:",i3," n_sp:",i3," n_s:",i3,&
                         &" n_acz:",i3)') n_am, n_sp, n_s, n_acz
                 end if
                 call cq_abort('make_blips_from_paos: support spec requested&
@@ -359,20 +359,20 @@ contains
 
        ! fetch values of blip function on integration grid
        call b_value(nu_int,bv)
-       if((inode == ionode).and.(iprint_basis >= 2)) then
-          write(unit=io_lun,fmt='(/" values of 4 sectors of blip function",&
+       if((inode == ionode).and.(iprint_basis >= 3)) then
+          write(unit=io_lun,fmt='(/6x," values of 4 sectors of blip function",&
                &" on integration grid:"/)')
           deltax = one/real(nu_int,double)
           do n = 1, nu_int
              x = n*deltax  
-             write(unit=io_lun,fmt='(i3,2x,f12.6,2x,4e15.6)') n, x, &
+             write(unit=io_lun,fmt='(6x,i3,2x,f12.6,2x,4e15.6)') n, x, &
                   &(bv(n,i), i = 1, 4)
           end do
        end if
 
        ! the variable n_blips_region is in module blips
-       if((inode == ionode).and.(iprint_basis >= 1)) then
-          write(unit=io_lun,fmt='(/" make_blips_from_paos: total no. of &
+       if((inode == ionode).and.(iprint_basis >= 2)) then
+          write(unit=io_lun,fmt='(/6x," make_blips_from_paos: total no. of &
                &blips wholly within region:", &
                & i5)') blip_info(n_sp)%NBlipsRegion
        end if
@@ -726,8 +726,8 @@ contains
           call cq_abort('blips_in_star: unrecognised symmetry type')
        end if
     end select
-    if((inode == ionode).and.(iprint_basis >= 2)) then
-       write(unit=io_lun,fmt='(/" number of stars in cubic region:",i5)') &
+    if((inode == ionode).and.(iprint_basis >= 3)) then
+       write(unit=io_lun,fmt='(/6x," number of stars in cubic region:",i5)') &
             & n_star_in_cube
     end if
     if(n_star_in_cube > (bas+1) * (bas+1) * (bas+2)/2) then
@@ -739,12 +739,12 @@ contains
     call star_coeffs(sym_type,n_b_half,region_bound_single,&
          &region_bound_double,n_star_in_sphere, &
          n_cube2sphere,coeff,xsite,ysite,zsite)
-    if((inode == ionode).and.(iprint_basis >= 2)) then
-       write(unit=io_lun,fmt='(/" summary of info about stars:"/ &
+    if((inode == ionode).and.(iprint_basis >= 3)) then
+       write(unit=io_lun,fmt='(/6x," summary of info about stars:"/ &
             & " star no.",3x,"x",4x,"y",4x,"z",7x,"coeff",9x,"mult")')
        do n = 1, n_star_in_sphere
           mult = very_small + one/(coeff(n)*coeff(n))
-          write(unit=io_lun,fmt='(1x,i4,3x,3i5,3x,e15.6,3x,i4)') n, &
+          write(unit=io_lun,fmt='(6x,1x,i4,3x,3i5,3x,e15.6,3x,i4)') n, &
                xsite(n), ysite(n), zsite(n), coeff(n), mult
        end do
     end if
@@ -754,12 +754,12 @@ contains
     ! make block of blip-overlap matrix having requested symmetry
     call symmat(sym_type,n_b_half,n_star_in_sphere,n_cube2sphere, &
          xsite,ysite,zsite,coeff,amat)
-    if((inode == ionode).and.(iprint_basis >= 3)) then
-       write(unit=io_lun,fmt='(/" elements of block of blip-overlap", &
+    if((inode == ionode).and.(iprint_basis >= 4)) then
+       write(unit=io_lun,fmt='(/6x," elements of block of blip-overlap", &
             & " matrix having requested symmetry:"/)')
        do m = 1, n_star_in_sphere
           do n = 1, n_star_in_sphere
-             write(unit=io_lun,fmt='(3x,2i5,3x,e15.6)') m, n, amat(m,n)
+             write(unit=io_lun,fmt='(6x,3x,2i5,3x,e15.6)') m, n, amat(m,n)
           end do
        end do
     end if
@@ -805,10 +805,10 @@ contains
        m = (n1-1)*n_blip_squared + (n2-1)*n_blip + n3
        scal_prod_sym(n) = scal_prod(m)/coeff(n)
     end do
-    if((inode == ionode).and.(iprint_basis >= 2)) then
-       write(unit=io_lun,fmt='(/" symmetric scalar product:"/)')
+    if((inode == ionode).and.(iprint_basis >= 4)) then
+       write(unit=io_lun,fmt='(/6x" symmetric scalar product:"/)')
        do n = 1, n_star_in_sphere
-          write(unit=io_lun,fmt='(3x,i5,3x,e15.6)') n, scal_prod_sym(n)
+          write(unit=io_lun,fmt='(6x,3x,i5,3x,e15.6)') n, scal_prod_sym(n)
        end do
     end if
 
@@ -819,17 +819,17 @@ contains
          n_star_in_sphere,ipiv, &
          scal_prod_sym,n_star_in_sphere,info)
     if(info/=0) then
-       write(*,*) 'Info non-zero: ',inode-1,info,amat(info,info)
+       write(*,fmt='(6x,a,2i6,f16.6)') 'Info non-zero: ',inode-1,info,amat(info,info)
     end if
     deallocate(ipiv)
     ! renormalise to get blip coefficients
     do n = 1, n_star_in_sphere
        scal_prod_sym(n) = coeff(n)*scal_prod_sym(n)
     end do
-    if((inode == ionode).and.(iprint_basis >= 2)) then
+    if((inode == ionode).and.(iprint_basis >= 4)) then
        write(unit=io_lun,fmt='(/" blip coefficients:"/)')
        do n = 1, n_star_in_sphere
-          write(unit=io_lun,fmt='(1x,i5,3x,e15.6)') n, scal_prod_sym(n)
+          write(unit=io_lun,fmt='(6x,1x,i5,3x,e15.6)') n, scal_prod_sym(n)
        end do
     end if
     deallocate(xsite, ysite, zsite, coeff, store, scal_prod, fv3, amat)
@@ -1098,8 +1098,8 @@ contains
     ! calculate r.m.s. deviation and normalise it
     phi_rms = sqrt(acc_phi_squared/real(n_int_points,double))
     dphi_rms = sqrt(acc_dphi_squared/real(n_int_points,double))
-    if((inode == ionode).and.(iprint_basis >= 1)) then
-       write(unit=io_lun,fmt='(/" species:",i3," support fn no:",i3,&
+    if((inode == ionode).and.(iprint_basis >= 2)) then
+       write(unit=io_lun,fmt='(/6x," species:",i3," support fn no:",i3,&
             &", normalised rms deviation:",e15.6)') n_sp, n_sup, &
             &dphi_rms/phi_rms
     end if

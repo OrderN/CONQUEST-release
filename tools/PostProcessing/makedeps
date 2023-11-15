@@ -1,0 +1,226 @@
+#! /usr/bin/perl
+
+# Usage: makedeps <list of source code files>
+#
+# Based on Michael Wester's makemake (1995), adapted for
+# Conquest. Modified so that the code only works on the list of source
+# code files on the input, instead of searching the whole working
+# directory. This allows the Makefile to correctly handle the presense
+# of multiple files containing different versions of the same module.
+#
+# The script only generates the dependencies and output is written in
+# file given by user
+#
+# Currently only works for Fortran 77/90.
+#
+# Written by L.Tong 2012/08/30
+# Update 2016/09/01 by dave
+# Removed the (now deprecated) defined(@array) calls and replaced with simple test
+
+########## Main program ##########
+
+$argc = @ARGV;
+if (($argc < 2) || ($ARGV[0] eq "--help"))
+  {
+    &DisplayHelp();
+  }
+else
+  {
+    $outfile = shift(@ARGV);
+    @srcs = @ARGV;
+    unless(open(OUTPUT, "> $outfile")) {warn("Cannot open $file: $!\n");}
+    &MakeDependsf90(OUTPUT, @srcs);
+  }
+
+########## Subroutines ##########
+
+#****f* makedeps/DisplayHelp 
+# PURPOSE
+#   Display help message
+# USAGE
+#   &DisplayHelp();
+# AUTHOR
+#   L.Tong
+# CREATION DATE
+#   2012/08/30
+# MODIFICATION HISTORY
+# SOURCE
+#
+sub DisplayHelp {
+  print "Usage: makedeps <output file> <list of source files>\n"
+}
+#*****
+
+#****f* makedeps/ToLower
+# PURPOSE
+#   Convert string into lower case. This is needed since perl is case
+#   sensitive while Fortran is not. So everything from Fortran source
+#   is to be converted into lowercase first
+# USAGE
+#   &ToLower($string);
+# INPUTS
+#   $string:  any string
+# RETURN VALUE
+#   string in lower case
+# AUTHOR
+#   Michael Wester
+# CREATION DATE
+#   2012/08/30
+# MODIFICATION HISTORY
+# SOURCE
+#
+sub ToLower {
+  local($string) = @_[0];
+  $string =~ tr/A-Z/a-z/;
+  $string;
+}
+#*****
+
+#****f* makedeps/uniq
+# PURPOSE
+#   Remove adjacent duplicate words
+# USAGE
+#   &uniq(@sorted_word_list);
+# INPUTS
+#   @sorted_word_list: sorted word list
+# RETURN VALUE
+#   word list with duplications removed
+# AUTHOR
+#   Michael Wester
+# CREATION DATE
+#   1995/12/27
+# MODIFICATION HISTORY
+# SOURCE
+#
+sub uniq {
+  local(@words);
+  foreach $word (@_) 
+    {
+      if ($word ne $words[$#words])
+        {
+          push(@words, $word);
+        }
+    }
+  @words;
+} 
+#*****
+    
+#****f* makedeps/PrintWords
+# PURPOSE
+#   Print words nicely
+# USAGE
+#   &PrintWords($output, $current_output_column, $extra_tab, @word_list);
+# INPUTS
+#   $output: filehandle to print to
+#   $current_output_column: current out put column
+#   $extra_tab: if non-zero add an extra tab in front of the word
+#   @word_list: the word list one wishes to print
+# AUTHOR
+#   Michael Wester
+# CREATION DATE
+#   1995/12/27
+# MODIFICATION HISTORY
+#   2012/08/30 L.Tong
+#   - Changed global MAKEFILE to more flexible first input parameter
+#     $output
+# SOURCE
+#
+sub PrintWords {
+  local($output) = shift(@_);
+  local($columns) = 78 - shift(@_);
+  local($extratab) = shift(@_);
+  local($wordlength);
+  #
+  print $output @_[0];
+  $columns -= length(shift(@_));
+  foreach $word (@_)
+    {
+      $wordlength = length($word);
+      if ($wordlength + 1 < $columns)
+        {
+          print $output " $word";
+          $columns -= $wordlength + 1;
+        }
+      else 
+        {
+          # Continue onto a new line
+          if ($extratab) 
+            {
+              print $output " \\\n\t\t$word";
+              $columns = 62 - $wordlength;
+            }
+          else 
+            {
+              print $output " \\\n\t$word";
+              $columns = 70 - $wordlength;
+            }
+        }
+    }
+}
+#*****
+
+#****f* makedeps/MAkeDependsf90
+# PURPOSE
+#   Fortran 90 dependency maker: prints dependency lists from given
+#   list of source files
+# USAGE
+#   &MakeDependsf90($output, @source_list)
+# INPUTS
+#   $output: filehandle for output
+#   @source_list: list of source files
+# AUTHOR
+#   L.Tong
+# CREATION DATE
+#   2012/08/30
+# MODIFICATION HISTORY
+# SOURCE
+#
+sub MakeDependsf90 {
+  local($output) = shift(@_);
+  local(@srcs) = @_;
+  local(@dependencies);
+  local(%filename);
+  local(@incs);
+  local(@modules);
+  local($objfile);
+  
+  # Associate each module with the name of the file that contains it
+  foreach $file (@srcs)
+    {
+      unless (open(FILE, "$file")) {warn("Cannot open $file: $!\n");}
+      while (<FILE>)
+        {
+          /^\s*module\s+(\w+)/i &&
+            ($filename{&ToLower($1)} = $file) =~ s/\.[fF](90)?$/.o/;
+        }
+    }
+  # Print the dependencies of each file that has one or more include's
+  # or references one or more modules
+  foreach $file (@srcs)
+    {
+      unless (open(FILE, "$file")) {warn("Cannot open $file: $!\n");}
+      while (<FILE>)
+        {
+          /^\s*include\s+["\']([^"\']+)["\']/i && push(@incs, $1);
+          /^\s*use\s+(\w+)/i && push(@modules, &ToLower($1));
+        }
+#      if (defined @incs || defined @modules)
+      if (@incs || @modules)
+        {
+          ($objfile = $file) =~ s/\.[fF](90)?$/.o/;
+          print $output "$objfile: ";
+          undef @dependencies;
+          foreach $module (@modules)
+            {
+              push(@dependencies, $filename{$module});
+            }
+          @dependencies = &uniq(sort(@dependencies));
+          &PrintWords($output, length($objfile) + 2, 0, 
+                      @dependencies, &uniq(sort(@incs)));
+          print $output "\n";
+          undef @incs;
+          undef @modules;
+        }
+    }
+}
+#*****

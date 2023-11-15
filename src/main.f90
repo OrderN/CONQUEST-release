@@ -9,7 +9,7 @@
 
 !!****h* Conquest/Conquest *
 !!
-!!  NAME 
+!!  NAME
 !!   Conquest
 !!  PURPOSE
 !!   Main routine for the Conquest code
@@ -37,15 +37,15 @@
 !!   13/06/2001 dave
 !!    Changed call to cq_init to use numprocs
 !!   15/03/2002 dave
-!!    Added RCS id tag for object file identification and tidied 
+!!    Added RCS id tag for object file identification and tidied
 !!    comment structure a little (added header)
-!!   15:20, 25/09/2002 mjg & drb 
+!!   15:20, 25/09/2002 mjg & drb
 !!    Changed so that the variable density is used from density_module
-!!   12:43, 04/02/2003 drb 
+!!   12:43, 04/02/2003 drb
 !!    Changed to use init_comms and end_comms from GenComms
-!!   13:50, 10/02/2003 drb 
+!!   13:50, 10/02/2003 drb
 !!    Changed to use control_run
-!!   15:01, 12/03/2003 drb 
+!!   15:01, 12/03/2003 drb
 !!    Removed reference to workspace
 !!   10:18, 2004/01/09 dave
 !!    Added use pseudopotential_common
@@ -59,7 +59,7 @@
 !!   - updated some calls that no longer passes mu
 !!   2016/01/28 16:45 dave
 !!    Updated module name to ion_electrostatic
-!!   2019/12/24 tsuyoshi   
+!!   2019/12/24 tsuyoshi
 !!    Removed flag_atomic_density_from_pao
 !!  SOURCE
 !!
@@ -102,13 +102,15 @@ program Conquest
   use memory_module
   use minimise
   use timer_stdclocks_module
+  use references, only: compile_biblio
+  use omp_module, only: init_threads
   !use output_module
   !use complete_module
 
 
   implicit none
 
-  ! RCS tag for object file identification 
+  ! RCS tag for object file identification
   character(len=80), save :: &
        CQid = "$Id$"
 
@@ -117,7 +119,7 @@ program Conquest
 
   ! Energies and electrons
   real(double) :: total_energy
-  
+
   ! Chemical potential
   real(double) :: mu
   logical      :: vary_mu
@@ -126,24 +128,21 @@ program Conquest
   ! identify what node we are on
   call init_comms(myid, numprocs)
 
-  ! Initialise reads in data and finds an initial, self-consistent
-  ! Hamiltonian
+  ! initialise reads in data and builds an initial Hamiltonian
   call initialise(vary_mu, fixed_potential, mu, total_energy)
-  if (inode == ionode .and. iprint_gen > 0) &
-       write (io_lun, '(4x,"Finished initialise")')
 
-  ! control does (at the moment) blip minimisation and simple MD
+  ! control manages which run is called (static, relaxation, MD)
   call control_run(fixed_potential, vary_mu, total_energy)
-  if (inode == ionode .and. iprint_gen > 0) &
-       write (io_lun, '(4x,"Finished control")')
 
+  call compile_biblio
+  if(flag_warnings .AND. inode==ionode) &
+       write(io_lun, fmt='(/4x,"Warnings written to file Conquest_warnings; please check")')
   call write_mem_use
 
   call print_time_report
-  
   !**<lat>** as initialise routine we may need a complete routine
   !          cheking if everything is fine before ending ; write_mem_use
-  !          and print_time_report can be within this routine 
+  !          and print_time_report can be within this routine
   !call complete()
   !call close_user_output()
 

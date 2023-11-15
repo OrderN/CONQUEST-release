@@ -209,7 +209,7 @@ contains
                                    IPRINT_TIME_THRES3, nspin,       &
                                    spin_factor,                     &
                                    flag_fix_spin_population, &
-                                   flag_neutral_atom, area_SC
+                                   flag_neutral_atom, area_SC, min_layer
     use block_module,        only: nx_in_block, ny_in_block,        &
                                    nz_in_block, n_pts_in_block
     use group_module,        only: blocks, parts
@@ -224,7 +224,8 @@ contains
     use maxima_module,  only: maxngrid
     use species_module, only: charge, charge_up, charge_dn, type_species
     use memory_module,          only: reg_alloc_mem, reg_dealloc_mem,  &
-                                      type_dbl
+         type_dbl
+    use io_module, only: return_prefix
 
     implicit none
 
@@ -249,6 +250,8 @@ contains
     type(cq_timer) :: tmr_l_tmp1
     type(cq_timer) :: backtrace_timer
     integer        :: backtrace_level, stat
+    character(len=15) :: subname = "set_atom_dens: "
+    character(len=120) :: prefix
 
 !****lat<$
     if (       present(level) ) backtrace_level = level+1
@@ -256,10 +259,11 @@ contains
     call start_backtrace(t=backtrace_timer,who='set_density', &
          where=area,level=backtrace_level)
 !****lat>$
-
-    if (inode == ionode .and. iprint_SC >= 2) then
-       write (io_lun, fmt='(2x,"Entering set_density")')
-       if (flag_InitialAtomicSpin) write (io_lun, fmt='(2x,"Initial atomic spins are read from input file")')
+    prefix = return_prefix(subname, min_layer)
+    if (inode == ionode .and. iprint_SC >= 3) then
+       write (io_lun, fmt='(4x,a)') trim(prefix)//" Entering"
+       if (flag_InitialAtomicSpin) write (io_lun, fmt='(4x,a)') &
+            trim(prefix)//" Initial atomic spins are read from input file"
     endif
 
     call start_timer(tmr_std_chargescf)
@@ -405,15 +409,13 @@ contains
 
     ! Calculate integral of density_atom but DO NOT renormalize yet - do it AFTER setting density
     ! We use grid_electrons below when we do NOT have species-dependent spin
-    grid_electrons = zero
-    do iz = 1, n_my_grid_points
-       grid_electrons = grid_electrons + density_atom(iz)
-    end do
-    grid_electrons = grid_electrons * grid_point_volume
+    grid_electrons = grid_point_volume * rsum(n_my_grid_points, density_atom, 1)
     call gsum(grid_electrons)
     ! Scaling factor for renormalizing atomic density
     scale = ne_in_cell/grid_electrons
-
+    ! Renormalize the atomic density and update grid_electrons (added 2022/12/13 12:11 dave)
+    density_atom(:) = density_atom(:) * scale
+    grid_electrons = grid_electrons * scale 
     !write(*,*) "SCALE in atomic_density = ", scale, ne_in_cell, grid_electrons
 
     ! Set density if required
@@ -421,18 +423,15 @@ contains
        if (flag_InitialAtomicSpin) then
           ! -- Already scaled for spin
           do spin = 1, nspin
-             grid_electrons = zero
-             do iz = 1, n_my_grid_points
-                grid_electrons = grid_electrons + density(iz,spin)
-             end do
-             grid_electrons = grid_electrons * grid_point_volume
+             grid_electrons = grid_point_volume * rsum(n_my_grid_points, density(:,spin), 1)
              call gsum(grid_electrons)
              density_scale(spin) = ne_spin_in_cell(spin) / grid_electrons        ! renormalise
              density(:,spin) = density(:,spin) * density_scale(spin)
              if (inode == ionode .and. iprint_SC > 0) &
                   write (io_lun, &
-                  fmt='(10x,"In set_atomic_density, electrons (spin=",i1,"): ",f20.12)') &
-                  spin, density_scale(spin) * grid_electrons
+                  fmt='(4x,a,i1,a,f20.12)') &
+                  trim(prefix)//" In set_atomic_density, electrons (spin=", spin, "): ", &
+                  density_scale(spin) * grid_electrons
           enddo
        else
           ! -- Scale for spin
@@ -441,15 +440,20 @@ contains
              ! If they are unequal, then scale half*density_atom by relative population
              density_scale(spin) = ne_spin_in_cell(spin) / (half * grid_electrons)   ! Calculate relative population for spin channel
              density(:,spin) = density_scale(spin) * half * density_atom(:)          ! Assign appropriate amount of (half*density_atom) to spin channel
-             if (inode == ionode .and. iprint_SC > 0) &
-                  write (io_lun, &
-                  fmt='(10x,"In set_atomic_density, electrons (spin=",i1,"): ",f20.12)') &
-                  spin, density_scale(spin) * half * grid_electrons
+             if (inode == ionode .and. iprint_SC > 0) then
+                if(nspin==1) then
+                   write (io_lun, fmt='(4x,a,f20.12)') &
+                        trim(prefix)//" In set_atomic_density, electrons : ", &
+                        spin_factor * density_scale(spin) * half * grid_electrons
+                else
+                   write (io_lun, fmt='(4x,a,i1,a,f20.12)') &
+                        trim(prefix)//" In set_atomic_density, electrons (spin=", &
+                        spin, "): ", density_scale(spin) * half * grid_electrons
+                end if
+             end if
           end do
        endif
     end if ! flag_set_density
-    ! Renormalize the atomic density
-    density_atom(:) = density_atom(:) * scale
 
     if(.NOT.flag_neutral_atom) then
        deallocate(density_atom, STAT=stat)
@@ -472,7 +476,7 @@ contains
   ! Subroutine set_density_pcc
   ! -----------------------------------------------------------
 
-  !!****f* density_module/set_densityi_pcc *
+  !!****f* density_module/set_density_pcc *
   !!
   !!  NAME
   !!   set_density_pcc
@@ -506,7 +510,7 @@ contains
     use global_module,       only: rcellx, rcelly, rcellz, id_glob, &
                                    ni_in_cell, iprint_SC,           &
                                    species_glob, dens, ne_in_cell,  &
-                                   IPRINT_TIME_THRES3
+                                   IPRINT_TIME_THRES3, min_layer
     use block_module,        only: nx_in_block, ny_in_block,        &
                                    nz_in_block, n_pts_in_block
     use group_module,        only: blocks, parts
@@ -518,6 +522,7 @@ contains
     use dimens,              only: n_my_grid_points, grid_point_volume
     use GenBlas,             only: rsum, scal
     use timer_module
+    use io_module, only: return_prefix
 
     implicit none
 
@@ -537,9 +542,12 @@ contains
     real(double) :: pcc_density !P.C.C. charge density interpolated
     real(double) :: a, b, c, d, r1, r2, r3, r4, rr
     type(cq_timer) :: tmr_l_tmp1
+    character(len=9) :: subname = "Set PCC: "
+    character(len=120) :: prefix
 
-    if (inode == ionode .and. iprint_SC >= 2) &
-         write (io_lun, fmt='(2x,"Entering set_density_pcc")')
+    prefix = return_prefix(subname, min_layer)
+    if (inode == ionode .and. iprint_SC >= 3) &
+         write (io_lun, fmt='(4x,a)') trim(prefix)//" Entering"
 
     call start_timer(tmr_std_chargescf)
     call start_timer(tmr_l_tmp1, WITH_LEVEL)
@@ -767,8 +775,9 @@ contains
     use GenComms,                    only: gsum
     use global_module,               only: iprint_SC, ni_in_cell, &
                                            flag_Becke_weights, nspin, &
-                                           spin_factor, sf, paof, atomf
+                                           spin_factor, sf, paof, atomf, min_layer
     use functions_on_grid,           only: gridfunctions, fn_on_grid
+    use io_module,                   only: return_prefix
 
     implicit none
 
@@ -783,7 +792,10 @@ contains
     type(cq_timer) :: backtrace_timer
     integer        :: backtrace_level
     integer        :: blk, i_count_alpha, n, n_i, n_point, spin
+    character(len=12) :: subname = "get_density: "
+    character(len=120) :: prefix
 
+    prefix = return_prefix(subname, min_layer)
 !****lat<$
     if (       present(level) ) backtrace_level = level+1
     if ( .not. present(level) ) backtrace_level = -10
@@ -793,8 +805,8 @@ contains
 
     call start_timer(tmr_std_chargescf)
 
-    if (inode == ionode .and. iprint_SC >= 2) &
-         write (io_lun,fmt='(2x,"Entering get_electronic_density")')
+    if (inode == ionode .and. iprint_SC + min_layer >= 3) &
+         write (io_lun,fmt='(4x,a)') trim(prefix)//' Entering'
 
     do spin = 1, nspin
        ! matK->matKatomf backtransformation for contracted SFs
@@ -843,9 +855,9 @@ contains
                          rsum(n_my_grid_points, denout(:,spin), 1)
        call gsum(electrons(spin))
 
-       if (inode == ionode .and. iprint_SC > 1) &
-            write (io_lun, '(2x,"Electrons (spin=",i1,"): ",f25.15)') &
-                  spin, electrons(spin)
+       if (inode == ionode .and. iprint_SC + min_layer > 2) &
+            write (io_lun, '(4x,a,i1,a,f25.15)') &
+                  trim(prefix)//" Electrons (spin=",spin, "): ", electrons(spin)
     end do ! spin
 
     if (flag_Becke_weights) &

@@ -385,7 +385,7 @@ contains
     use matrix_module, ONLY: matrix_halo
     use maxima_module, ONLY: maxnabaprocs
     use GenComms, ONLY: myid, cq_abort
-    use global_module, ONLY: numprocs
+    use global_module, ONLY: numprocs, min_layer
 
     implicit none
 
@@ -415,7 +415,8 @@ contains
        endif
     enddo
     if(maxnabaprocs==0) maxnabaprocs = 1
-    if(iprint_mat>2.AND.myid==0) write(io_lun,fmt='(2x,"Proc: ",i5," has ",i5," neighbour processors")') myid+1,maxnabaprocs
+    if(iprint_mat + min_layer>3.AND.myid==0) &
+         write(io_lun,fmt='(6x,"Proc: ",i5," has ",i5," neighbour processors")') myid+1,maxnabaprocs
   end subroutine find_neighbour_procs
 !!***
 end module matrix_comms_module

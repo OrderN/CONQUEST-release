@@ -60,7 +60,7 @@ contains
   subroutine vVerlet_r_dt(dt,v,flag_movable)
    ! Module usage
    use global_module, ONLY: ni_in_cell,id_glob,x_atom_cell,y_atom_cell,z_atom_cell, &
-                            iprint_MD, io_lun
+                            iprint_MD, io_lun, min_layer
    use GenComms, only: myid
    use species_module, ONLY: species,mass
    use move_atoms, ONLY: fac
@@ -76,7 +76,7 @@ contains
    logical :: flagx,flagy,flagz
    real(double) :: dx, dy, dz
 
-   if (myid==0 .and. iprint_MD>1) write(io_lun,*) "Welcome to vVerlet_r_dt"
+   if (myid==0 .and. iprint_MD + min_layer >2) write(io_lun,fmt='(6x,a)') "vVerlet_r_dt: starting"
 
    ibeg_atom = 1
    do atom = 1, ni_in_cell
@@ -140,7 +140,7 @@ contains
   subroutine vVerlet_v_dthalf(dt,v,f,flag_movable,second_call)
    ! Module usage
    use numbers, ONLY: half,zero, one
-   use global_module, ONLY: ni_in_cell,id_glob,flag_quench_MD, flag_MDdebug, io_lun, iprint_MD
+   use global_module, ONLY: ni_in_cell,id_glob,flag_quench_MD, flag_MDdebug, io_lun, iprint_MD, min_layer
    use species_module, oNLY: species,mass
    use move_atoms, ONLY: fac
    use GenComms, only: inode,ionode
@@ -159,7 +159,7 @@ contains
 
    flag_first=.true.
    if(present(second_call)) flag_first = .false.
-   if (inode==ionode .and. flag_MDdebug) write(io_lun,*) "Welcome to vVerlet_v_dthalf"
+   if (inode==ionode .and. flag_MDdebug .and. iprint_MD>2) write(io_lun,fmt='(6x,a)') "Welcome to vVerlet_v_dthalf"
    ibeg_atom=1
    ! For quenched-MD
    ! 2018/07/16 DRB It seems that zeroing velocities after either call is more efficient
@@ -191,7 +191,8 @@ contains
       ibeg_atom=1
       ! Now zero or update
       if(vf<zero) then
-         if(inode==ionode.AND.iprint_MD>2) write(io_lun,fmt='(2x,"In quenched MD, zeroing velocities")')
+         if(inode==ionode.AND.iprint_MD + min_layer > 2) &
+              write(io_lun,fmt='(6x,"In quenched MD, zeroing velocities")')
          v(:,:) = zero
       else
          do atom = 1, ni_in_cell
@@ -297,7 +298,7 @@ contains
 
     use numbers, ONLY: half,zero
     use global_module, ONLY: ni_in_cell,id_glob,x_atom_cell,y_atom_cell,z_atom_cell, &
-         flag_move_atom, io_lun,  iprint_MD
+         flag_move_atom, io_lun,  iprint_MD, min_layer
     use GenComms, ONLY: myid
     use io_module, ONLY: write_fire
 
@@ -410,7 +411,7 @@ contains
 
     ! Output to file
     if (myid == 0) then
-       if(iprint_MD>1) write (io_lun,11) iter, fire_N, fire_N2, fire_P, dt, fire_alpha, fire_norm_v
+       if(iprint_MD + min_layer > 2) write (io_lun,11) iter, fire_N, fire_N2, fire_P, dt, fire_alpha, fire_norm_v
        call write_fire(fire_N, fire_N2, fire_P, dt, fire_alpha)
     end if
 
@@ -437,7 +438,7 @@ contains
        endif
     end do
 
-11  format(4x,'iter ',i3, 2x, 'N= ', i3, 2x, 'N2= ', i3, 2x, 'P= ', f12.8,&
+11  format(6x,'iter ',i3, 2x, 'N= ', i3, 2x, 'N2= ', i3, 2x, 'P= ', f12.8,&
          2x,'dt= ', f9.6, 2x, 'alpha= ' ,f9.6, 2x, '|v|/|F|= ',f9.6)
 12  format(i4,i4,f22.15,f22.15,f22.15)
     return
