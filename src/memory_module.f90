@@ -223,8 +223,8 @@ contains
     if (present(lun).and.present(area)) then
        write(lun,'(4x,"Max mem use for area ",i4," is ",f10.3," ",a2)') &
             area,real(max_alloc_area(area))*mem_conv,mem_units(m_units)
-       write(io_lun,'(4x,"Max mem use for area ",i4," is ",f10.3," ",a2)') &
-            area,real(max_alloc_area(area))*mem_conv,mem_units(m_units)
+       !write(io_lun,'(4x,"Max mem use for area ",i4," is ",f10.3," ",a2)') &
+       !     area,real(max_alloc_area(area))*mem_conv,mem_units(m_units)
     else
        if(inode==ionode) then
           if(iprint>2) then

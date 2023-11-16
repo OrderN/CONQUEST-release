@@ -278,9 +278,7 @@ contains
        deallocate(kernel)
     end if
     !
-    !if (inode == ionode) then
-    call write_mem_use(unit_memory_write,area_exx)
-    !end if
+    if (inode == ionode) call write_mem_use(unit_memory_write,area_exx)
     !
     call start_timer(tmr_std_exx_barrier)
     call my_barrier()
