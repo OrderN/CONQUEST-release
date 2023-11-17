@@ -3287,7 +3287,7 @@ contains
           else
              suffix = "  "
           end if
-          write (io_lun,fmt='(4x,"Using a MP mesh for k-points: ", i3," x ",i3," x ",i3,a2)') &
+          write (io_lun,fmt='(/4x,"Using a MP mesh for k-points: ", i3," x ",i3," x ",i3,a2)') &
                (mp(i), i=1,3), suffix
        end if
        if (mp(1) <= 0 .OR. mp(2) <= 0 .OR. mp(3) <= 0) &
