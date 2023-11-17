@@ -3248,7 +3248,7 @@ contains
              call fdf_endblock
              wtk = wtk/sum
           else ! Force gamma point dependence
-             if(inode==ionode) write(io_lun,fmt='(4x,"Default k-point sampling of Gamma point only")')
+             if(inode==ionode) write(io_lun,fmt='(/4x,"Default k-point sampling of Gamma point only")')
              nkp = 1
              kk(1,1) = zero
              kk(2,1) = zero
