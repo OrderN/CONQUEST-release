@@ -277,7 +277,7 @@ contains
     end do
     if(non_local.and.(inode==ionode).and.iprint_init>0) then
        write(io_lun,2) r_core
-2      format(8x,'This calculation includes non-local pseudopotentials,'/&
+2      format(9x,'This calculation includes non-local pseudopotentials,'/&
             9x,'with a maximum core radius of ',f15.8)
     end if
     if (r_core-r_h>1e-4_double) then
