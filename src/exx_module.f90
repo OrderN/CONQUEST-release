@@ -521,8 +521,8 @@ contains
        !mem_scheme   = 'high'
     end if
     !
-    if ( inode == ionode .and. exx_debug ) then
-       write(io_lun,2) ('Entering in the Hartree-Fock module')
+    if ( inode == ionode .and. iprint_exx > 3 ) then
+       write(io_lun,2) ('Entering in the EXX module')
        write(io_lun,41) eri_scheme
        write(io_lun,42) phil_scheme
        write(io_lun,43) alloc_scheme
@@ -549,7 +549,7 @@ contains
           
        case('default')
           scheme = trim(scheme)//trim(exx_pscheme_default)
-          if ( inode == ionode ) then
+          if ( inode == ionode .and. iprint_exx > 2 ) then
              write(io_lun,30) solver, scheme
              write(io_lun,31) ('G=0 component neglected... warning: inaccurate !')
           end if
@@ -557,7 +557,7 @@ contains
           if (ewald_alpha < very_small) then
              ewald_alpha = real(3.0,double)
           end if
-          if ( inode == ionode ) then
+          if ( inode == ionode .and. iprint_exx > 2 ) then
              write(io_lun,30) solver, scheme
              write(io_lun,32) ewald_alpha
           end if
@@ -573,7 +573,7 @@ contains
              pulay_factor = one
           end if 
           pulay_radius = pulay_factor*pulay_radius
-          if ( inode == ionode ) then
+          if ( inode == ionode .and. iprint_exx > 2 ) then
              write(io_lun,30) solver, scheme
              write(io_lun,33) pulay_factor
              write(io_lun,34) pulay_radius
@@ -583,16 +583,17 @@ contains
              p_omega = magic_number
              p_omega = -log(threshold*r_int)/r_int
           end if
-          write(io_lun,30) solver, scheme
-          write(io_lun,35) p_omega
-          
+          if ( inode == ionode .and. iprint_exx > 2 ) then
+             write(io_lun,30) solver, scheme
+             write(io_lun,35) p_omega
+          end if
        case('gauss')
-          if ( inode == ionode ) then
+          if ( inode == ionode  .and. iprint_exx > 2 ) then
              write(io_lun,30) solver, scheme
           end if
        case default
           scheme = trim(exx_pscheme_default)
-          if ( inode == ionode ) then
+          if ( inode == ionode  .and. iprint_exx > 2 ) then
              write(io_lun,30) solver, scheme
              write(io_lun,31) ('WARNING: G=0 component neglected !')
           end if
@@ -600,14 +601,14 @@ contains
        end select poisson_fftw
        
     else if (exx_psolver == 'isf') then
-       if ( inode == ionode ) then
+       if ( inode == ionode  .and. iprint_exx > 2 ) then
           write(io_lun,30) solver, scheme
           write(io_lun,36) isf_order
        end if
     end if
    
 !****lat<$
-    if (inode == ionode .and. iprint_exx > 2) then
+    if ( inode == ionode .and. iprint_exx > 3 ) then
        write (io_lun,50) &
             grid_spacing,     &
             r_int,            &
@@ -632,7 +633,7 @@ contains
 
     !! EXX Formats start here
 1   format(/1x,104a/)
-2   format(1x,34a,8x,/)
+2   format(4x,34a,8x,/)
     
     !! Grid settings
 20  format(/25x,'Grid Settings: Cubic')  
