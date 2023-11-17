@@ -1,11 +1,11 @@
 module read_gto_info
-
+  
   use datatypes
   use numbers,       ONLY: pi,two, one, zero
-  use global_module, ONLY: io_lun
+  use global_module, ONLY: io_lun, iprint
   use timer_stdclocks_module, &
        ONLY: start_timer,stop_timer,tmr_std_initialisation
-
+  
   ! Modifications in:
   ! 1. created gto_format.f90 (cf. pao_format.f90)
   ! 2. pseudo_tm_info.f90/ allocate derived type gto(n_species)
@@ -13,15 +13,15 @@ module read_gto_info
   ! 4. ionic_data.f90/ call read_gto(...)
 
   implicit none
-
+  
   character(len=1), dimension(0:5), parameter :: l_name_lowercase = (/'s','p','d','f','g','h'/)
   character(len=1), dimension(0:5), parameter :: l_name_uppercase = (/'S','P','D','F','G','H'/)
   integer, parameter :: max_angmom = 5
-
+  
 contains
-
+  
   subroutine read_gto_new(inode,ionode,n_species)
-
+    
     use angular_coeff_routines, ONLY: re_cart_norm
     use numbers,        ONLY: pi, four, three, one
     use gto_format_new, ONLY: gto
@@ -58,9 +58,13 @@ contains
     real(double)     :: tmp_occ, sph_coef(5)
     character(len=12), dimension(0:2) :: zeta_kind = (/'regular     ','polarisation','other       '/)
     character(len=12):: sph_name
-
+    logical          :: verbose = .false.
+    
     gto_unit = 1000
 
+    ! setup printing output
+    if ( iprint > 2) verbose = .true.
+    
     call start_timer(tmr_std_initialisation)
 
     species_loop: do nsp = 1, n_species
@@ -95,7 +99,7 @@ contains
           if (ios < 0) call cq_abort('read_gto: end error GTO data file',gto_unit)        
           if (ios > 0) call cq_abort('read_gto: read error GTO data file',gto_unit)
           !          
-          write(io_lun,fmt='(10x,"######## read GTO for ",A2,"/n_zeta_tot =",I3," ########")') &
+          if (iprint > 2) write(io_lun,fmt='(10x,"######## read GTO for ",A2,"/n_zeta_tot =",I3," ########")') &
                gto(nsp)%label, gto(nsp)%n_zeta_tot
           !
        end if
@@ -155,7 +159,7 @@ contains
        !
        !write(*,*) 'inode', inode, 'nsp', nsp, 'gto(nsp)%greatest_angmom', gto(nsp)%greatest_angmom
        !write(*,*) 'inode', inode, 'nsp', nsp, 'gto(nsp)%label', gto(nsp)%label
-       if ( inode == ionode) write(io_lun,fmt='(10x,"greatest angular momentum =",i4)')&
+       if ( inode == ionode .and. iprint > 2 ) write(io_lun,fmt='(10x,"greatest angular momentum =",i4)')&
             gto(nsp)%greatest_angmom       
        !
        allocate( gto(nsp)%angmom( 0:gto(nsp)%greatest_angmom ) )
@@ -223,7 +227,7 @@ contains
              call gcopy(gto(nsp)%angmom(l)%zeta(i)%kind)
              call gcopy(gto(nsp)%angmom(l)%zeta(i)%n   )             
              !
-             if ( inode == ionode) then
+             if ( inode == ionode .and. iprint > 2 ) then
                 write(io_lun,fmt='(10x,">> zeta:",x,i2," / state",x,i2,A)') &
                   i, gto(nsp)%angmom(l)%zeta(i)%n, gto(nsp)%angmom(l)%l_name
                 write(io_lun,fmt='(10x,"occupation =",x,f4.2)') &
@@ -250,7 +254,7 @@ contains
                    if (ios < 0) call cq_abort('read_gto: end error GTO data file', gto_unit)        
                    if (ios > 0) call cq_abort('read_gto: read error GTO data file',gto_unit)
                    !
-                   write(io_lun,fmt='(10x,"GTO primitive",x,i3,":",x,"a =",x,f16.10,x,"d =",x,f16.10)') &
+                   if ( iprint > 2 ) write(io_lun,fmt='(10x,"GTO primitive",x,i3,":",x,"a =",x,f16.10,x,"d =",x,f16.10)') &
                         j, gto(nsp)%angmom(l)%zeta(i)%a(j), gto(nsp)%angmom(l)%zeta(i)%d(j)
                    !
                 end do
@@ -283,7 +287,7 @@ contains
           call gcopy( gto(nsp)%angmom(l)%nf_gto )
           call gcopy( gto(nsp)%angmom(l)%nf_sph )
           !
-          if (inode == ionode) write(io_lun,fmt='(10x,"number of cartesian Gaussian functions =",x,i4)') &
+          if (inode == ionode .and. iprint > 2 ) write(io_lun,fmt='(10x,"number of cartesian Gaussian functions =",x,i4)') &
                gto(nsp)%angmom(l)%nf_gto
           !
           allocate( gto(nsp)%angmom(l)%nx( (l+1)*(l+2)/2 ) )
@@ -301,7 +305,7 @@ contains
                   gto(nsp)%angmom(l)%nx, &
                   gto(nsp)%angmom(l)%ny, &
                   gto(nsp)%angmom(l)%nz, &
-                  gto(nsp)%angmom(l)%nt )
+                  gto(nsp)%angmom(l)%nt, verbose )
              !
           end if
           !
@@ -315,7 +319,7 @@ contains
           !
        end do
        !
-       if (inode == ionode) write(io_lun,fmt='(10x,">> size of the cartesian gaussian basis set =", i4)') &
+       if (inode == ionode .and. iprint > 2 ) write(io_lun,fmt='(10x,">> size of the cartesian gaussian basis set =", i4)') &
             gto(nsp)%nsf_gto_tot
        !
        call gcopy( gto(nsp)%nsf_gto_tot )
@@ -325,14 +329,14 @@ contains
                          
           allocate( gto(nsp)%angmom(l1)%transform_sph(-l1:+l1) )
           !if (inode == ionode) write(io_lun,*) l1
-          if (inode == ionode) write(io_lun,fmt='(10x,"number of cartesian spherical functions =",x,i4)') &
+          if (inode == ionode .and. iprint > 2 ) write(io_lun,fmt='(10x,"number of cartesian spherical functions =",x,i4)') &
                gto(nsp)%angmom(l1)%nf_sph
           
           do m1 = -l1, +l1
              
              if ( inode == ionode ) then
-             
-                call sph_gauss_function( inode, ionode, l1, m1, sph_size, sph_nx, sph_ny, sph_nz, sph_coef, sph_name )             
+                
+                call sph_gauss_function( inode, ionode, l1, m1, sph_size, sph_nx, sph_ny, sph_nz, sph_coef, sph_name, verbose)             
                 gto(nsp)%angmom(l1)%transform_sph(m1)%size = sph_size
 
                 !write(*,*) 'nsp, l1, m1, coef 0', nsp, l1, m1, sph_coef
@@ -371,7 +375,7 @@ contains
           end do
        end do
        !
-       if (inode == ionode) write(io_lun,fmt='(10x,">> size of the cartesian spherical basis set =", i4)') &
+       if (inode == ionode .and. iprint > 2) write(io_lun,fmt='(10x,">> size of the cartesian spherical basis set =", i4)') &
             gto(nsp)%nsf_sph_tot
        !
        !#############################
@@ -598,7 +602,7 @@ contains
   !
   !  
   !
-  subroutine sph_gauss_function( inode, ionode, l, m, size, nx, ny, nz, c, name )
+  subroutine sph_gauss_function( inode, ionode, l, m, size, nx, ny, nz, c, name, verbose )
 
     use GenComms, only: cq_abort
 
@@ -607,6 +611,7 @@ contains
     integer,          intent(in)  :: inode, ionode
     integer,          intent(in)  :: l ! angular momentum
     integer,          intent(in)  :: m ! magnetic moment
+    logical,          intent(in)  :: verbose
 
     character(len=12),intent(out) :: name
     integer,          intent(out) :: size
@@ -627,7 +632,7 @@ contains
              c (1) = 1.0d0
              name  = 'S'
              !
-             write(io_lun,'(12x,"(nx, ny, nz) = (",I2,x,I2,x,I2,") =",x,A12)') &
+             if (verbose) write(io_lun,'(12x,"(nx, ny, nz) = (",I2,x,I2,x,I2,") =",x,A12)') &
                   nx(1), ny(1), nz(1), name           
              !
           case default
@@ -642,7 +647,7 @@ contains
              nx(1) = 0; ny(1) = 1; nz(1) = 0
              c (1) = 1.0d0
              name  = 'P_{y}'
-             write(io_lun,'(12x,"(nx, ny, nz) = (",I2,x,I2,x,I2,") =",x,A12)') &
+             if (verbose) write(io_lun,'(12x,"(nx, ny, nz) = (",I2,x,I2,x,I2,") =",x,A12)') &
                   nx(1), ny(1), nz(1), name
              !
           case( 0) ! pz
@@ -650,7 +655,7 @@ contains
              nx(1) = 0; ny(1) = 0; nz(1) = 1
              c (1) = 1.0d0
              name  = 'P_{z}'
-             write(io_lun,'(12x,"(nx, ny, nz) = (",I2,x,I2,x,I2,") =",x,A12)') &
+             if (verbose) write(io_lun,'(12x,"(nx, ny, nz) = (",I2,x,I2,x,I2,") =",x,A12)') &
                   nx(1), ny(1), nz(1), name
              !
           case(+1) ! px
@@ -658,7 +663,7 @@ contains
              nx(1) = 1; ny(1) = 0; nz(1) = 0
              c (1) = 1.0d0
              name  = 'P_{x}'
-             write(io_lun,'(12x,"(nx, ny, nz) = (",I2,x,I2,x,I2,") =",x,A12)') &
+             if (verbose) write(io_lun,'(12x,"(nx, ny, nz) = (",I2,x,I2,x,I2,") =",x,A12)') &
                   nx(1), ny(1), nz(1), name             
              !
           case default
@@ -673,7 +678,7 @@ contains
              nx(1) = 1; ny(1) = 1; nz(1) = 0
              c (1) =-1.0d0 ! phase factor
              name  = 'D_{xy}'
-             write(io_lun,'(12x,"(nx, ny, nz) = (",I2,x,I2,x,I2,") =",x,A12)') &
+             if (verbose) write(io_lun,'(12x,"(nx, ny, nz) = (",I2,x,I2,x,I2,") =",x,A12)') &
                   nx(1), ny(1), nz(1), name
              !
           case(-1) ! d_{yz} = (y*z)
@@ -681,7 +686,7 @@ contains
              nx(1) = 0; ny(1) = 1; nz(1) = 1
              c (1) = 1.0d0
              name  = 'D_{yz}'
-             write(io_lun,'(12x,"(nx, ny, nz) = (",I2,x,I2,x,I2,") =",x,A12)') &
+             if (verbose) write(io_lun,'(12x,"(nx, ny, nz) = (",I2,x,I2,x,I2,") =",x,A12)') &
                   nx(1), ny(1), nz(1), name
              !
           case( 0) ! d_{z2} = (3*z*z-r*r) =  (2*z*z-x*x-y*y)
@@ -693,11 +698,11 @@ contains
              c (2) =-1.0d0
              c (3) =-1.0d0
              name  = 'D_{3z2-r2}'             
-             write(io_lun,'(12x,  "(nx, ny, nz) = (",I2,x,I2,x,I2,")",x,"x",x,f8.4)') &
+             if (verbose) write(io_lun,'(12x,  "(nx, ny, nz) = (",I2,x,I2,x,I2,")",x,"x",x,f8.4)') &
                   nx(1), ny(1), nz(1), c(1)
-             write(io_lun,'(10x,"+ (nx, ny, nz) = (",I2,x,I2,x,I2,")",x,"x",x,f8.4)') &
+             if (verbose) write(io_lun,'(10x,"+ (nx, ny, nz) = (",I2,x,I2,x,I2,")",x,"x",x,f8.4)') &
                   nx(2), ny(2), nz(2), c(2)
-             write(io_lun,'(10x,"+ (nx, ny, nz) = (",I2,x,I2,x,I2,")",x,"x",x,f8.4,x,"=",x,A12)') &
+             if (verbose) write(io_lun,'(10x,"+ (nx, ny, nz) = (",I2,x,I2,x,I2,")",x,"x",x,f8.4,x,"=",x,A12)') &
                   nx(3), ny(3), nz(3), c(3), name
              !
           case(+1) ! d_{xz} = (x*z)
@@ -705,7 +710,7 @@ contains
              nx(1) = 1; ny(1) = 0; nz(1) = 1
              c (1) = 1.0d0
              name  = 'D_{xz}'             
-             write(io_lun,'(12x,"(nx, ny, nz) = (",I2,x,I2,x,I2,") =",x,A12)') &
+             if (verbose) write(io_lun,'(12x,"(nx, ny, nz) = (",I2,x,I2,x,I2,") =",x,A12)') &
                   nx(1), ny(1), nz(1), name
              !
           case(+2) ! d_{x2-y2} = (x*x-y*y)
@@ -715,9 +720,9 @@ contains
              c (1) = 1.0d0
              c (2) =-1.0d0
              name  = 'D_{x2-y2}' 
-             write(io_lun,'(10x,"+ (nx, ny, nz) = (",I2,x,I2,x,I2,")",x,"x",x,f8.4)') &
+             if (verbose) write(io_lun,'(10x,"+ (nx, ny, nz) = (",I2,x,I2,x,I2,")",x,"x",x,f8.4)') &
                   nx(1), ny(1), nz(1), c(1)
-             write(io_lun,'(10x,"+ (nx, ny, nz) = (",I2,x,I2,x,I2,")",x,"x",x,f8.4,x,"=",x,A12)') &
+             if (verbose) write(io_lun,'(10x,"+ (nx, ny, nz) = (",I2,x,I2,x,I2,")",x,"x",x,f8.4,x,"=",x,A12)') &
                   nx(2), ny(2), nz(2), c(2), name
              !
           case default
@@ -734,9 +739,9 @@ contains
              c (1) = 3.0d0 
              c (2) =-1.0d0 
              name  = 'F_{y(3x2-y2)}'
-             write(io_lun,'(12x,  "(nx, ny, nz) = (",I2,x,I2,x,I2,")",x,"x",x,f8.4)') &
+             if (verbose) write(io_lun,'(12x,  "(nx, ny, nz) = (",I2,x,I2,x,I2,")",x,"x",x,f8.4)') &
                   nx(1), ny(1), nz(1), c(1)
-             write(io_lun,'(10x,"+ (nx, ny, nz) = (",I2,x,I2,x,I2,")",x,"x",x,f8.4,x,"=",x,A12)') &
+             if (verbose) write(io_lun,'(10x,"+ (nx, ny, nz) = (",I2,x,I2,x,I2,")",x,"x",x,f8.4,x,"=",x,A12)') &
                   nx(3), ny(3), nz(3), c(3), name
              !
           case(-2) ! f_{xyz} = (x*y*z)
@@ -744,7 +749,7 @@ contains
              nx(1) = 1; ny(1) = 1; nz(1) = 1
              c (1) = 1.0d0
              name  = 'D_{xyz}'             
-             write(io_lun,'(12x,"(nx, ny, nz) = (",I2,x,I2,x,I2,") =",x,A12)') &
+             if (verbose) write(io_lun,'(12x,"(nx, ny, nz) = (",I2,x,I2,x,I2,") =",x,A12)') &
                   nx(1), ny(1), nz(1), name
              !
           case(-1) ! f_{yz2} = (4*z*z*y-y*x*x-y*y*y)
@@ -756,11 +761,11 @@ contains
              c (2) =-1.0d0
              c (3) =-1.0d0
              name  = 'F_{yz2}'
-             write(io_lun,'(12x,  "(nx, ny, nz) = (",I2,x,I2,x,I2,")",x,"x",x,f8.4)') &
+             if (verbose) write(io_lun,'(12x,  "(nx, ny, nz) = (",I2,x,I2,x,I2,")",x,"x",x,f8.4)') &
                   nx(1), ny(1), nz(1), c(1)
-             write(io_lun,'(10x,"+ (nx, ny, nz) = (",I2,x,I2,x,I2,")",x,"x",x,f8.4)') &
+             if (verbose) write(io_lun,'(10x,"+ (nx, ny, nz) = (",I2,x,I2,x,I2,")",x,"x",x,f8.4)') &
                   nx(2), ny(2), nz(2), c(2)
-             write(io_lun,'(10x,"+ (nx, ny, nz) = (",I2,x,I2,x,I2,")",x,"x",x,f8.4,x,"=",x,A12)') &
+             if (verbose) write(io_lun,'(10x,"+ (nx, ny, nz) = (",I2,x,I2,x,I2,")",x,"x",x,f8.4,x,"=",x,A12)') &
                   nx(3), ny(3), nz(3), c(3), name
              !
           case( 0) ! f_{z3} = (2*z*z*z-3*x*x*z-3*y*y*z) 
@@ -772,11 +777,11 @@ contains
              c (2) =-3.0d0
              c (3) =-3.0d0
              name  = 'F_{z3}'             
-             write(io_lun,'(12x,  "(nx, ny, nz) = (",I2,x,I2,x,I2,")",x,"x",x,f8.4)') &
+             if (verbose) write(io_lun,'(12x,  "(nx, ny, nz) = (",I2,x,I2,x,I2,")",x,"x",x,f8.4)') &
                   nx(1), ny(1), nz(1), c(1)
-             write(io_lun,'(10x,"+ (nx, ny, nz) = (",I2,x,I2,x,I2,")",x,"x",x,f8.4)') &
+             if (verbose) write(io_lun,'(10x,"+ (nx, ny, nz) = (",I2,x,I2,x,I2,")",x,"x",x,f8.4)') &
                   nx(2), ny(2), nz(2), c(2)
-             write(io_lun,'(10x,"+ (nx, ny, nz) = (",I2,x,I2,x,I2,")",x,"x",x,f8.4,x,"=",x,A12)') &
+             if (verbose) write(io_lun,'(10x,"+ (nx, ny, nz) = (",I2,x,I2,x,I2,")",x,"x",x,f8.4,x,"=",x,A12)') &
                   nx(3), ny(3), nz(3), c(3), name
              !
           case(+1) ! f_{xz2} = (4*x*z*z-x*x*x-x*y*y)
@@ -788,11 +793,11 @@ contains
              c (2) =-1.0d0
              c (3) =-1.0d0
              name  = 'F_{xz2}'
-             write(io_lun,'(12x,  "(nx, ny, nz) = (",I2,x,I2,x,I2,")",x,"x",x,f8.4)') &
+             if (verbose) write(io_lun,'(12x,  "(nx, ny, nz) = (",I2,x,I2,x,I2,")",x,"x",x,f8.4)') &
                   nx(1), ny(1), nz(1), c(1)
-             write(io_lun,'(10x,"+ (nx, ny, nz) = (",I2,x,I2,x,I2,")",x,"x",x,f8.4)') &
+             if (verbose) write(io_lun,'(10x,"+ (nx, ny, nz) = (",I2,x,I2,x,I2,")",x,"x",x,f8.4)') &
                   nx(2), ny(2), nz(2), c(2)
-             write(io_lun,'(10x,"+ (nx, ny, nz) = (",I2,x,I2,x,I2,")",x,"x",x,f8.4,x,"=",x,A12)') &
+             if (verbose) write(io_lun,'(10x,"+ (nx, ny, nz) = (",I2,x,I2,x,I2,")",x,"x",x,f8.4,x,"=",x,A12)') &
                   nx(3), ny(3), nz(3), c(3), name
                  !
           case(+2) ! f_{z(x2-y2)} = (x*x*z-y*y*z)
@@ -802,9 +807,9 @@ contains
              c (1) = 1.0d0
              c (2) =-1.0d0
              name  = 'F_{z(x2-y2)}'
-             write(io_lun,'(12x,  "(nx, ny, nz) = (",I2,x,I2,x,I2,")",x,"x",x,f8.4)') &
+             if (verbose) write(io_lun,'(12x,  "(nx, ny, nz) = (",I2,x,I2,x,I2,")",x,"x",x,f8.4)') &
                   nx(1), ny(1), nz(1), c(1)
-             write(io_lun,'(10x,"+ (nx, ny, nz) = (",I2,x,I2,x,I2,")",x,"x",x,f8.4,x,"=",x,A12)') &
+             if (verbose) write(io_lun,'(10x,"+ (nx, ny, nz) = (",I2,x,I2,x,I2,")",x,"x",x,f8.4,x,"=",x,A12)') &
                   nx(2), ny(2), nz(2), c(2), name
              !
           case(+3) ! f_{x(x2-3y2)} = (x*x*x-3*x*y*y)
@@ -814,9 +819,9 @@ contains
              c (1) = 1.0d0
              c (2) =-3.0d0
              name  = 'F_{x(x2-3y2}'
-             write(io_lun,'(12x,  "(nx, ny, nz) = (",I2,x,I2,x,I2,")",x,"x",x,f8.4)') &
+             if (verbose) write(io_lun,'(12x,  "(nx, ny, nz) = (",I2,x,I2,x,I2,")",x,"x",x,f8.4)') &
                   nx(1), ny(1), nz(1), c(1)
-             write(io_lun,'(10x,"+ (nx, ny, nz) = (",I2,x,I2,x,I2,")",x,"x",x,f8.4,x,"=",x,A12)') &
+             if (verbose) write(io_lun,'(10x,"+ (nx, ny, nz) = (",I2,x,I2,x,I2,")",x,"x",x,f8.4,x,"=",x,A12)') &
                   nx(2), ny(2), nz(2), c(2), name
 
              !
@@ -834,7 +839,7 @@ contains
   !
   !
   !
-  subroutine cart_gauss_function( inode, ionode, lambda, name, a, nx, ny, nz, nt )
+  subroutine cart_gauss_function( inode, ionode, lambda, name, a, nx, ny, nz, nt, verbose )
 
     implicit none
 
@@ -842,7 +847,8 @@ contains
     integer,          intent(in) :: inode, ionode
     character(len=1), intent(in) :: name
     real(double),     intent(in) :: a
-
+    logical,          intent(in) :: verbose
+    
     integer,           intent(out), dimension( (lambda+1)*(lambda+2)/2 ) :: nx, ny, nz
     character(len=12), intent(out), dimension( (lambda+1)*(lambda+2)/2 ) :: nt
     character(len=12) :: charx, chary, charz
@@ -888,7 +894,7 @@ contains
              !     ny(index), & ! m
              !     nz(index))   ! n
              !
-             write(io_lun,'(12x,"(nx, ny, nz) = (",I2,x,I2,x,I2,") =",x,A12)') &
+             if (verbose) write(io_lun,'(12x,"(nx, ny, nz) = (",I2,x,I2,x,I2,") =",x,A12)') &
                   nx(index), &
                   ny(index), &
                   nz(index), &
