@@ -378,7 +378,7 @@ contains
           !
           if  ( exx_niter == 1 .and. exx_scheme /= 3 ) then
              !
-             if (inode == ionode .and. iprint_exx > 2) &
+             if (inode == ionode .and. iprint_exx > 3) &
                   write (io_lun, *) 'EXX: setting get_X_matrix' 
              ! 
              call get_X_params(backtrace_level)
@@ -386,7 +386,7 @@ contains
              ! For first H building use pure DFT since we need K to get X 
              ! (X is the exchange matrix)
              !
-             if (inode == ionode .and. iprint_exx > 2) &
+             if (inode == ionode .and. iprint_exx > 3) &
                   write (io_lun, *) 'EXX: first guess from DFT'
              !
           else if ( exx_niter == 1 .and. exx_scheme == 3 ) then
@@ -400,8 +400,8 @@ contains
              !
              ! first call to compute and store ERIs (no need K here)
              do spin = 1, nspin
-                if (inode == ionode .and. iprint_exx > 2) &
-                     write (io_lun, *) 'EXX: compute and store ERIs', print_exxspin(spin)
+                if (inode == ionode .and. iprint_exx > 3) &
+                     write (io_lun, *) 'EXX: compute and store ERIs ', print_exxspin(spin)
                 call get_X_matrix(spin, exx_scheme, exx_store_eris, exx_niter, backtrace_level)
              end do
              !
@@ -414,16 +414,16 @@ contains
              !call exx_global_write() 
              !
              do spin = 1, nspin
-                if (inode == ionode .and. iprint_exx > 3) &
-                write (io_lun, *) 'EXX: doing get_X_matrix: ', print_exxspin(spin)
+                !if (inode == ionode .and. iprint_exx > 3) &
+                !write (io_lun, *) 'EXX: doing get_X_matrix: ', print_exxspin(spin)
                 call get_X_matrix(spin, exx_scheme, exx_store_eris, exx_niter, backtrace_level)
              end do
              !
              !if (inode == ionode .and. iprint_exx > 3) &
                   !write (io_lun, *) 'EXX: done get_X_matrix'
              do spin = 1, nspin
-                if (inode == ionode .and. iprint_exx > 3) &
-                write (io_lun, *) 'EXX: done get_X_matrix: ', print_exxspin(spin)
+                !if (inode == ionode .and. iprint_exx > 3) &
+                !write (io_lun, *) 'EXX: done get_X_matrix: ', print_exxspin(spin)
                 call matrix_sum(one, matHatomf(spin),-exx_alpha*half, matXatomf(spin)) 
              end do
              !

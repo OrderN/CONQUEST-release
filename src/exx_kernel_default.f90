@@ -557,7 +557,8 @@ contains
        !
        if ( scheme == 1 ) then
 
-          if( myid==0) write(io_lun,*) 'EXX: performing CRI calculation on kpart =', kpart
+          if (iprint_exx > 5) write(io_lun,*) 'Proc :', myid, &
+               'EXX: performing CRI calculation on kpart =', kpart
           
           call m_kern_exx_cri( k_off,kpart,ib_nd_acc_rem,ibind_rem,nbnab_rem,&
                ibpart_rem,ibseq_rem,ibndimj_rem, & 
@@ -575,8 +576,9 @@ contains
           !print*, ' mat K ', shape( mat_p(matK(  exxspin  ))%matrix)
 
        else if ( scheme == 2 ) then
-
-          if( myid==0) write(io_lun,*) 'EXX: performing on-the-fly ERI calculation on kpart =', kpart
+          
+          if (iprint_exx > 5) write(io_lun,*) 'Proc :', myid, &
+               'EXX: performing on-the-fly ERI calculation on kpart =', kpart
 
           !call cpu_time(t0_test)
           
@@ -601,7 +603,9 @@ contains
              !
              get_exx = .false.
              !
-             if( myid==0 ) write(io_lun,*) 'EXX: preparing store ERI calculation on kpart =', kpart
+             if (iprint_exx > 5) write(io_lun,*) 'Proc :', myid, &
+                  'EXX: preparing store ERI calculation on kpart =', kpart
+             !
              !if( myid==0 ) write(io_lun,*) 'EXX: rcut(Xrange)  = ', rcut(Xrange)
              !if( myid==0 ) write(io_lun,*) 'EXX: rcut(SXrange) = ', rcut(SXrange)
              !if( myid==0 ) write(io_lun,*) 'EXX: rcut(Hrange)  = ', rcut(Hrange)
@@ -622,7 +626,8 @@ contains
                   lenb_rem, &
                   mat_p(matX(  exxspin  ))%length, nb_eris, get_exx, .false. )
              
-             if( myid==0 ) write(io_lun,*) 'EXX: allocate ERIs on kpart =', kpart
+             if (iprint_exx > 5) write(io_lun,*) 'Proc :', myid, &
+                  'EXX: allocate ERIs on kpart =', kpart
              !
              ! Allocate ERI arrays
              !
@@ -643,7 +648,8 @@ contains
              !
              if ( exx_filter ) then
                 !
-                if( myid==0 ) write(io_lun,*) 'EXX: setup filtering on kpart =', kpart
+                if (iprint_exx > 5) write(io_lun,*) 'Proc :', myid, &
+                     'EXX: setup filtering on kpart =', kpart
                 !
                 call m_kern_exx_dummy( k_off,kpart,ib_nd_acc_rem,ibind_rem,nbnab_rem,&
                      ibpart_rem,ibseq_rem,ibndimj_rem, & 
@@ -662,7 +668,8 @@ contains
              ! should be a single call not embeded in the kpart loop... sorry for that
              ! call fft3_init_wrapper( 2*extent+1  )
              !
-             if( myid==0 ) write(io_lun,*) 'EXX: compute and store ERIs on kpart =', kpart
+             if (iprint_exx > 5) write(io_lun,*) 'Proc :', myid, &
+                  'EXX: compute and store ERIs on kpart =', kpart
              !
              ! Third call to compute and store ERIs
              !       
@@ -697,8 +704,9 @@ contains
           else
              !                          
              get_exx = .true.
-
-             if( myid==0 ) write(io_lun,*) 'EXX: use stored ERIs to get X on kpart =', kpart
+             
+             if (iprint_exx > 5) write(io_lun,*) 'Proc :', myid, &
+                  'EXX: use stored ERIs to get X on kpart =', kpart
 
              call m_kern_exx_dummy( k_off,kpart,ib_nd_acc_rem,ibind_rem,nbnab_rem,&
                   ibpart_rem,ibseq_rem,ibndimj_rem, & 
@@ -716,8 +724,9 @@ contains
        else if ( scheme == -1 ) then
 
           get_exx = .false.
-          
-          if( myid==0 ) write(io_lun,*) 'EXX: dummy calculation on kpart =', kpart
+
+          if (iprint_exx > 5) write(io_lun,*) 'Proc :', myid, &
+               'EXX: dummy calculation on kpart =', kpart
           
           call m_kern_exx_dummy( k_off,kpart,ib_nd_acc_rem,ibind_rem,nbnab_rem,&
                ibpart_rem,ibseq_rem,ibndimj_rem, & 
@@ -2075,6 +2084,7 @@ contains
        at, mx_absb, mx_part, mx_iprim, lenb, lenc, &
        count_eris, compute_exx, filter_eris)
 
+    use global_module,  only: iprint_exx 
     use numbers,        only: zero, one
     use matrix_module,  only: matrix_halo, matrix_trans
     use global_module,  only: area_exx
@@ -2408,7 +2418,8 @@ contains
     end do k_loop
     !
     
-    print*, 'proc:', inode,'kpart:', kpart, 'nb. of ERIs:', count_eris
+    if (iprint_exx > 5) write(io_lun,*) 'Proc :', myid, &
+         'kpart:', kpart, 'nb. of ERIs:', count_eris
     !
 
   if ( filter_eris ) then
