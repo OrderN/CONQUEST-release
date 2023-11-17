@@ -3267,7 +3267,7 @@ second:   do
     integer :: i
 
     if(inode==ionode) then
-       write(io_lun,fmt='(/6x,"Simulation cell dimensions: ",f10.4,a3," x ",f10.4,a3," x ",f10.4,a3)') &
+       write(io_lun,fmt='(/4x,"Simulation cell dimensions: ",f10.4,a3," x ",f10.4,a3," x ",f10.4,a3)') &
             r_super_x*dist_conv, d_units(dist_units), r_super_y*dist_conv, d_units(dist_units), &
             r_super_z*dist_conv, d_units(dist_units)
        if(flag_coords_xyz) then
