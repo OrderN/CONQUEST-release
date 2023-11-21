@@ -352,9 +352,11 @@ contains
     integer           :: lun_sav
     
     ! write(unit=lun_tmr,fmt='("Time resolution = ", e18.10e2)') MPI_WTICK()
+
     if( .not. TimingOn ) return
     if(  present(lun)  ) lun_sav = lun_tmr
     if(  present(lun)  ) lun_tmr = lun
+    
     if( TimersWriteOut.AND.t%t_tot > time_threshold )  then
        message = trim(m)
        if( t%level >= 0 ) then             ! Print the level if assigned
