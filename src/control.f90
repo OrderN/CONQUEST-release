@@ -965,6 +965,7 @@ contains
                 en_units(energy_units)
             end if
           end if ! flag_MLFF
+          call dump_pos_and_matrices(index=0,MDstep=iter,velocity=ion_velocity)
           call vVerlet_v_dthalf(MDtimestep,ion_velocity,tot_force,flag_movable,second_call)
        end if
        if (inode==ionode .and. flag_debug_mlff) &
