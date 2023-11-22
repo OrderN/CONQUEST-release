@@ -236,14 +236,7 @@ contains
     end if
 
     call my_barrier()
-    ! Skip to initial_H if using machine learning, 2022/07/27 J.Lin
-    if (flag_MLFF) then
-       call stop_timer(tmr_std_initialisation)
-!****lat<$
-       call stop_backtrace(t=backtrace_timer,who='initialise',echo=.true.)
-!****lat>$
-       return
-    end if
+
     call initial_H(start, start_L, find_chdens, fixed_potential, &
                    vary_mu, total_energy,std_level_loc+1)
 
@@ -1126,6 +1119,8 @@ contains
   !!    (Matrix files dumped during the DMM, SCF, or the optimisation of multisite support functions.)
   !!   2020/01/07 10:29 dave
   !!    Moved index_MatrixFile to initial_read
+  !!   2023/11/22 J.Lin
+  !!    Added machine learning statements: read InfoGlobal.dat for MDstep (may change in the future)
   !!  SOURCE
   !!
   subroutine initial_H(start, start_L, find_chdens, fixed_potential, &
@@ -1143,7 +1138,7 @@ contains
          restart_DM,                      &
          restart_rho, flag_test_forces,     &
          flag_dft_d2, nspin, spin_factor,   &
-         flag_MDcontinue,                   &
+         flag_MDcontinue,   flag_MLFF,      &
          restart_T,glob2node,               &
          MDinit_step,ni_in_cell,            &
          flag_dissipation,     &
@@ -1242,6 +1237,9 @@ contains
 
        call my_barrier()
     endif
+
+    ! MLFF: only load InfoGlobal, and skip the following initialization which related to DFT
+    if(flag_MLFF) return
 
     ! (0) If we use PAOs and contract them, prepare SF-PAO coefficients here
     if ((atomf .ne. sf) .and. flag_basis_set==PAOs) then
