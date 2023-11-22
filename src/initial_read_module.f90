@@ -2176,6 +2176,10 @@ contains
        find_chdens    = fdf_boolean('SC.MakeInitialChargeFromK',.true.)
        if (flag_XLBOMD) restart_X=fdf_boolean('XL.LoadX', .true.)
        if (flag_multisite .or. flag_basis_set==blips) read_option = fdf_boolean('Basis.LoadCoeffs', .true.)
+       if(flag_MLFF) then
+         call cq_warn(sub_name,' General.LoadDM should be false if General.MLFF is true.')
+         restart_DM = .false.
+       endif
     else
        flag_read_velocity = fdf_boolean('AtomMove.ReadVelocity',.false.)
        restart_DM         = fdf_boolean('General.LoadDM', .false.)
