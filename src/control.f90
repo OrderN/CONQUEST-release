@@ -823,7 +823,12 @@ contains
       i_first = MDinit_step + 1
       i_last = i_first + MDn_steps - 1
     endif
-    call dump_pos_and_matrices(index=0,MDstep=i_first,velocity=ion_velocity)
+    if (flag_MLFF) then
+      call dump_InfoMatGlobal(index_local=0,velocity=ion_velocity,MDstep=i_first)
+    else
+      call dump_pos_and_matrices(index=0,MDstep=i_first,velocity=ion_velocity)
+    end if
+
     if (inode==ionode) then
        write(io_lun,'(/4x,"MD step: ",i6," KE: ",f18.8,x,a2," &
             &IntEnergy: ",f20.8,x,a2," TotalEnergy: ",f20.8,x,a2)') &
@@ -931,6 +936,7 @@ contains
                write(*,*) 'check stress after gret_MLFF:', stress,baro%P_int*HaBohr3ToGPa,&
                baro%P_ext*HaBohr3ToGPa
             call check_stop(done, iter)
+            call dump_InfoMatGlobal(index_local=0,velocity=ion_velocity,MDstep=iter)
           else
             call get_E_and_F(fixed_potential, vary_mu, energy1, .true., .true.,iter)
             call check_stop(done, iter)   !2019/Nov/14
@@ -954,6 +960,7 @@ contains
                 baro%ke_stress(1,1), baro%ke_stress(2,2), baro%ke_stress(3,3), &
                 en_units(energy_units)
             end if
+            call dump_InfoMatGlobal(index_local=0,velocity=ion_velocity,MDstep=iter)
           else
             call get_E_and_F(fixed_potential, vary_mu, energy1, .true., .false.,iter)
             call check_stop(done, iter)   !2019/Nov/14
