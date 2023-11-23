@@ -150,8 +150,6 @@ module exx_types
   !character(100) :: exx_scheme
   
   integer :: exx_mem         ! reduced memory allocation 
-  logical :: exx_phil        ! on-the-fly or storage of phi_l
-  logical :: exx_phik        ! on-the-fly or storage of phi_k
   logical :: exx_overlap     ! compute overlap local boxes
   logical :: exx_alloc       ! on-the-fly or global memory allocation
   logical :: exx_cartesian   ! cartesian or spherical calculation for PAO on grid
