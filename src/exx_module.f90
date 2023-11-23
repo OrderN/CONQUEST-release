@@ -62,9 +62,9 @@ contains
     use exx_types, only: pulay_factor,pulay_radius, magic_number,ewald_alpha,isf_order
     use exx_types, only: extent,ngrid,r_int,grid_spacing,volume,edge,screen
 
-    use exx_types, only: exx_scheme, exx_phil, exx_mem, exx_screen, exx_alloc, exx_cutoff
+    use exx_types, only: exx_scheme, exx_mem, exx_screen, exx_alloc, exx_cutoff
     use exx_types, only: exx_cartesian, exx_overlap, exx_radius, exx_screen_pao, exx_hgrid
-    use exx_types, only: exx_phik, exx_gto, exx_debug
+    use exx_types, only: exx_gto, exx_debug
     use exx_types, only: tmr_std_exx_setup, exx_store_eris
 
     use atomic_density, only: atomic_density_table
@@ -183,11 +183,11 @@ contains
        scheme = trim(exx_psolver) 
     end if
     !
-    if (exx_phil) then
-       phil_scheme = 'storage'
-    else
-       phil_scheme = 'on-the-fly'
-    end if
+    !if (exx_phil) then
+    !   phil_scheme = 'storage'
+    !else
+    !   phil_scheme = 'on-the-fly'
+    !end if
     !
     if (exx_alloc) then
        alloc_scheme = 'on-the-fly'
