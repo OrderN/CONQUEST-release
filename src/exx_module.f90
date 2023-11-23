@@ -34,7 +34,7 @@
 !!  SOURCE
 !!
 module exx_module
-
+  
   use datatypes
   use GenComms,                  only: my_barrier, cq_abort, mtime
   use GenComms,                  only: inode, ionode, myid, root
@@ -44,303 +44,17 @@ module exx_module
   use global_module,             only: io_lun
   use exx_types,                 only: reckernel_3d, fftwrho3d, exx_debug
   use exx_io
-
+  
   use fft_interface_module,      only: fft3_exec_wrapper, fft3_init_wrapper
-
+  
   implicit none 
   
   ! Area identification
   integer, parameter, private :: area = 13
-
+  
   !!***
-
+  
 contains
-  !
-  !
-  subroutine initialise_exx( scheme )
-    !
-    use timer_stdclocks_module, only: tmr_std_exx
-    use global_module, only: iprint_exx
-    use timer_module,  only: start_timer, stop_timer    
-    use species_module,only: nsf_species
-    use mult_module,   only: S_X_SX, mult 
-    
-    use exx_types,     only: extent, exx_psolver, exx_pscheme, r_int, eris
-    use exx_types,     only: ewald_alpha, ewald_charge, ewald_rho, ewald_pot
-    use exx_types,     only: p_omega, p_ngauss, p_gauss, w_gauss, pulay_radius
-    use exx_poisson,   only: exx_scal_rho_3d, exx_ewald_rho, exx_ewald_pot
-    
-    use exx_types,     only: tmr_std_exx_setup, unit_eri_debug, unit_exx_debug
-    use exx_types,     only: unit_memory_write, unit_timers_write
-    use exx_memory,    only: exx_mem_alloc
-    
-    integer, intent(in) :: scheme
-            
-    character(len=20) :: filename1, filename2, filename3, filename4, filename5, filename6
-    integer :: maxsuppfuncs, stat
-
-    maxsuppfuncs = maxval(nsf_species)
-    !
-    call start_timer(tmr_std_exx)   
-    !
-    call start_timer(tmr_std_exx_setup)    
-    !
-    if ( iprint_exx > 3 ) then
-       
-       call io_assign(unit_timers_write)
-       call get_file_name('exx_timers',numprocs,inode,filename3)
-       open(unit_timers_write,file=filename3)
-       !
-       !
-       call io_assign(unit_memory_write)
-       call get_file_name('exx_memory',numprocs,inode,filename4)
-       open(unit_memory_write,file=filename4)
-       
-    end if
-    
-    if ( exx_debug ) then
-       
-       call io_assign(unit_exx_debug)
-       call get_file_name('exx_debug',numprocs,inode,filename5)
-       open(unit_exx_debug,file=filename5)       
-       
-       call io_assign(unit_eri_debug)
-       call get_file_name('eri_debug',numprocs,inode,filename6)
-       open(unit_eri_debug,file=filename6)       
-
-       !call exx_write_head(unit_exx_debug,inode,bundle%groups_on_node) 
-       !
-       !call exx_global_write()
-       !
-    end if
-    !
-    maxsuppfuncs = maxval(nsf_species)
-    !
-    if ( scheme > 0 ) then
-       call exx_mem_alloc(extent,0,0,'work_3d' ,'alloc')
-    end if
-    !
-    !DRB! This appears to set up the different Poisson solvers
-    if (exx_psolver == 'fftw')     then
-       call exx_mem_alloc(extent,0,0,'fftw_3d','alloc')  
-       call exx_mem_alloc(extent,0,0,'reckernel_3d','alloc')
-
-       poisson_fftw: select case(exx_pscheme)          
-
-       case('default')
-          call exx_scal_rho_3d(inode,extent,r_int,exx_pscheme,pulay_radius, &
-               p_omega,p_ngauss,p_gauss,w_gauss,reckernel_3d)
-
-       case('ewald')
-          call exx_mem_alloc(extent,0,0,'ewald_3d','alloc')
-          call exx_ewald_rho(ewald_rho,extent,ewald_alpha,r_int)
-          call exx_ewald_pot(ewald_pot,extent,ewald_alpha,r_int)          
-          call exx_scal_rho_3d(inode,extent,r_int,exx_pscheme,pulay_radius, &
-               p_omega,p_ngauss,p_gauss,w_gauss,reckernel_3d)
-
-       case('pulay')
-          call exx_scal_rho_3d(inode,extent,r_int,exx_pscheme,pulay_radius, &
-               p_omega,p_ngauss,p_gauss,w_gauss,reckernel_3d)
-
-       case('yukawa')
-          call exx_scal_rho_3d(inode,extent,r_int,exx_pscheme,pulay_radius, &
-               p_omega,p_ngauss,p_gauss,w_gauss,reckernel_3d)
-
-       case('gauss')
-          call cq_abort('EXX: Gaussian representation if 1/r for solving &
-               &the Poisson equation &
-               &is currently under testing...')
-          !call createBeylkin(p_gauss,w_gauss,r_int)     
-          !call exx_scal_rho_3d(inode,extent,r_int,exx_pscheme,pulay_radius, &
-          !     p_omega,p_ngauss,p_gauss,w_gauss)
-
-       case default
-          call exx_scal_rho_3d(inode,extent,r_int,exx_pscheme,pulay_radius, &
-               p_omega,p_ngauss,p_gauss,w_gauss,reckernel_3d)
-
-       end select poisson_fftw
-
-    else if (exx_psolver == 'isf') then
-       call cq_abort('EXX: ISF Poisson solver is not available yet ; &
-            &under optimisation...')
-       !call exx_mem_alloc(extent,0,0,'isf_rho','alloc')
-       !call createKernel('F',ngrid,ngrid,ngrid,grid_spacing,grid_spacing,grid_spacing,isf_order,&
-       !     0,1,kernel)       
-
-    end if
-    call stop_timer(tmr_std_exx_setup,.true.)    
-    
-    if ( scheme > 0 ) then
-       call exx_mem_alloc(extent,maxsuppfuncs,0,'phi_i','alloc')       
-       call exx_mem_alloc(extent,maxsuppfuncs,0,'phi_j','alloc')
-       call exx_mem_alloc(extent,maxsuppfuncs,0,'phi_k','alloc')
-       call exx_mem_alloc(extent,maxsuppfuncs,0,'phi_l','alloc')
-       !
-       if ( scheme == 1 ) then
-          call exx_mem_alloc(extent,maxsuppfuncs,0,'Phy_k','alloc')
-          call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'Ome_kj','alloc')       
-          call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'rho_kj','alloc')       
-          call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'vhf_kj','alloc')
-          !
-       else if ( scheme == 2 ) then       
-          call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'rho_ki','alloc')       
-          call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'vhf_lj','alloc')
-          !
-       else if ( scheme == 3 ) then       
-          call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'rho_ki','alloc')       
-          call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'vhf_lj','alloc')
-          !
-          !if ( niter == 1 ) then
-          allocate( eris( mult(S_X_SX)%ahalo%np_in_halo ), STAT=stat)
-          if(stat/=0) call cq_abort('Error allocating memory to eris/exx !',stat)
-          !end if
-          !for now allocated here ; should not ; better to have this before
-          ! SCF calculation ; note that here it is never deallocated!
-          !eris_size = int( sqrt(dble(size( mat_p(matX(  exxspin  ))%matrix ))) )
-          !print*, 'inode', inode, inode, size( mat_p(matX(  exxspin  ))%matrix), eris_size, &
-          !     & mat_p(matX(  exxspin  ))%length, mat_p(matX(  exxspin  ))%sf1_type, mat_p(matX(  exxspin  ))%sf2_type
-          !call exx_mem_alloc(eris_size**4,0,0,'eris','alloc')
-          !
-          !
-       end if
-       !
-       !
-    end if
-    
-  end subroutine initialise_exx
-  !
-  !
-  subroutine finalise_exx( scheme )
-    !
-    use global_module, only: iprint_exx, area_exx
-    use timer_stdclocks_module, only: tmr_std_exx
-    use timer_module,  only: start_timer, stop_timer, print_timer
-    use species_module,only: nsf_species
-    use memory_module, only: write_mem_use
-    
-    use exx_types,     only: extent, exx_psolver ,kernel, exx_pscheme
-    use exx_types,     only: tmr_std_exx_setup, unit_eri_debug, unit_exx_debug
-    use exx_types,     only: tmr_std_exx_evalpao, tmr_std_exx_poisson, tmr_std_exx_matmult
-    use exx_types,     only: tmr_std_exx_accumul, tmr_std_exx_allocat, tmr_std_exx_dealloc
-    use exx_types,     only: tmr_std_exx_fetch, tmr_std_exx_barrier, tmr_std_exx_kernel
-    use exx_types,     only: tmr_std_exx_kernel
-    use exx_types,     only: exx_total_time
-    
-    use exx_types,     only: unit_memory_write, unit_eri_debug, unit_exx_debug, unit_timers_write
-    use exx_memory,    only: exx_mem_alloc
-    !
-    integer, intent(in) :: scheme
-    integer :: maxsuppfuncs
-
-    maxsuppfuncs = maxval(nsf_species)
-    
-    if ( scheme > 0 ) then
-       call exx_mem_alloc(extent,0,0,'work_3d' ,'dealloc')
-       !
-       call exx_mem_alloc(extent,maxsuppfuncs,0,'phi_i','dealloc')       
-       call exx_mem_alloc(extent,maxsuppfuncs,0,'phi_j','dealloc')
-       call exx_mem_alloc(extent,maxsuppfuncs,0,'phi_k','dealloc')    
-       call exx_mem_alloc(extent,maxsuppfuncs,0,'phi_l','dealloc')
-       !
-       if ( scheme == 1 ) then
-          call exx_mem_alloc(extent,maxsuppfuncs,0,'Phy_k','dealloc')
-          call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'Ome_kj','dealloc')   
-          call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'rho_kj','dealloc')       
-          call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'vhf_kj','dealloc')
-          !
-       else if( scheme == 2 ) then
-          call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'rho_ki','dealloc')       
-          call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'vhf_lj','dealloc')
-          !
-       else if( scheme == 3 ) then
-          call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'rho_ki','dealloc')       
-          call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'vhf_lj','dealloc')
-          !
-       end if
-       !
-    end if
-    !
-    !
-    if (exx_psolver == 'fftw')  then
-       call exx_mem_alloc(extent,0,0,'fftw_3d',     'dealloc')  
-       call exx_mem_alloc(extent,0,0,'reckernel_3d','dealloc')
-       select case(exx_pscheme)
-       case('default')         
-       case('gauss')          
-       case('pulay')
-       case('ewald')
-          call exx_mem_alloc(extent,0,0,'ewald_3d','dealloc')
-       case default
-       end select
-
-    else if (exx_psolver == 'isf') then
-       call exx_mem_alloc(extent,0,0,'isf_rho','dealloc')
-       deallocate(kernel)
-    end if
-    !
-    if (inode == ionode) call write_mem_use(unit_memory_write,area_exx)
-    !
-    call start_timer(tmr_std_exx_barrier)
-    call my_barrier()
-    call stop_timer(tmr_std_exx_barrier,.true.)
-    !
-    call stop_timer(tmr_std_exx,.true.)
-    !    
-    ! Timers and elapse time
-    exx_total_time = &
-         tmr_std_exx_evalpao%t_tot + &
-         tmr_std_exx_poisson%t_tot + &
-         tmr_std_exx_matmult%t_tot + &
-         tmr_std_exx_accumul%t_tot + &
-         tmr_std_exx_allocat%t_tot + &
-         tmr_std_exx_dealloc%t_tot + &
-         tmr_std_exx_setup%t_tot   + &
-         tmr_std_exx_write%t_tot   + &
-         tmr_std_exx_fetch%t_tot   + &
-         tmr_std_exx_barrier%t_tot
-
-    if ( iprint_exx > 3 ) then
-       
-       call print_timer(tmr_std_exx_setup,  "exx_setup   time:", unit_timers_write)    
-       call print_timer(tmr_std_exx_write,  "exx_write   time:", unit_timers_write)    
-       !call print_timer(tmr_std_exx_kernel, "exx_kernel  time:", unit_timers_write)    
-       call print_timer(tmr_std_exx_fetch,  "exx_fetch   time:", unit_timers_write)    
-       call print_timer(tmr_std_exx_evalpao,"exx_evalpao time:", unit_timers_write)    
-       call print_timer(tmr_std_exx_poisson,"exx_poisson time:", unit_timers_write)
-       call print_timer(tmr_std_exx_matmult,"exx_matmult time:", unit_timers_write)    
-       call print_timer(tmr_std_exx_accumul,"exx_accumul time:", unit_timers_write)    
-       call print_timer(tmr_std_exx_allocat,"exx_allocat time:", unit_timers_write)    
-       call print_timer(tmr_std_exx_dealloc,"exx_dealloc time:", unit_timers_write)    
-       call print_timer(tmr_std_exx_barrier,"exx_barrier time:", unit_timers_write)    
-       write(unit_timers_write,*)
-       call print_timer(tmr_std_exx_kernel, "exx_kernel  time:", unit_timers_write)    
-       call print_timer(tmr_std_exx,        "exx_total   time:", unit_timers_write)    
-
-       write(unit=unit_timers_write,fmt='("Timing: Proc ",i6,": Time spent in ", a50, " = ", &
-            &f12.5," s")') inode, 'get_X_matrix',  tmr_std_exx%t_tot
-
-       write(unit=unit_timers_write,fmt='("Timing: Proc ",i6,": Time spent in ", a50, " = ", &
-            &f12.5," s")') inode, 'timer calls',  tmr_std_exx%t_tot-exx_total_time 
-       !call io_close(unit_matrix_write)
-
-       !call io_close(unit_output_write)
-       !call io_close(unit_screen_write)
-       !
-       !call io_close(unit_eri_debug)
-       !call io_close(unit_exx_debug)
-       call io_close(unit_memory_write)
-       call io_close(unit_timers_write)
-       !
-       !
-    end if
-
-    if ( exx_debug ) then
-       call io_close(unit_eri_debug)
-       call io_close(unit_exx_debug)       
-    end if
-    
-  end subroutine finalise_exx
-  !
   !
   subroutine get_X_params(level)
     
@@ -391,8 +105,6 @@ contains
     !
     ! **<lat>** This routine need to be re-written !
     !
-    exx_phil        = .false.
-    exx_phik        = .false.
     exx_screen      = .false.
     exx_screen_pao  = .false.
     exx_store_eris  = .false.
@@ -675,85 +387,6 @@ contains
   end subroutine get_X_params
   !
   !
-!!$  subroutine get_neighdat(nb,ia,hl,ind,part,verbose,unit)
-!!$    
-!!$    use numbers,        only: three
-!!$    use group_module,   only: parts
-!!$    use cover_module,   only: BCS_parts
-!!$    use global_module,  only: id_glob,atom_coord
-!!$    use species_module, only: species_label
-!!$    use atomic_density, only: atomic_density_table
-!!$    use numbers,        only: zero, one, two, twopi, pi
-!!$    !
-!!$    use matrix_data, only: mat, Hrange, Srange
-!!$    use exx_types,   only: prim_atomic_data, neigh_atomic_data
-!!$    use exx_types,   only: tmr_std_exx_fetch
-!!$    !
-!!$    !
-!!$    implicit none
-!!$    !
-!!$    type(neigh_atomic_data), intent(inout) :: nb
-!!$    type(prim_atomic_data),  intent(inout) :: ia
-!!$    type(neigh_atomic_data), intent(inout) :: hl
-!!$    integer, intent(in)                    :: ind
-!!$    integer, intent(in)                    :: part
-!!$    logical, intent(in)                    :: verbose
-!!$    !
-!!$    real(double)      :: xyz_Ang(3)      
-!!$    character(len=20) :: filename
-!!$    integer, optional :: unit
-!!$    !
-!!$    call start_timer(tmr_std_exx_fetch)
-!!$    ! Get u(v) data
-!!$    nb%nb  = ind
-!!$    nb%ist = mat(part,Hrange)%i_acc(ia%pr) + nb%nb - 1
-!!$    nb%npc = mat(part,Hrange)%i_part(nb%ist)
-!!$    nb%nic = mat(part,Hrange)%i_seq(nb%ist)
-!!$    !
-!!$    nb%global_part = BCS_parts%lab_cell(mat(part,Hrange)%i_part(nb%ist))
-!!$    nb%global_num  = id_glob(parts%icell_beg(nb%global_part) +  &
-!!$         mat(part,Hrange)%i_seq(nb%ist)-1)
-!!$    !
-!!$    nb%spec = BCS_parts%spec_cover(BCS_parts%icover_ibeg(nb%npc) + nb%nic-1)
-!!$    nb%name = species_label(nb%spec)               
-!!$    nb%radi = atomic_density_table(nb%spec)%cutoff
-!!$    nb%nsup = mat(part,Hrange)%ndimj(nb%ist)                   
-!!$    !
-!!$    ! Calculate R_u
-!!$    nb%xyz_nb(1) = atom_coord(1,nb%global_num)
-!!$    nb%xyz_nb(2) = atom_coord(2,nb%global_num)
-!!$    nb%xyz_nb(3) = atom_coord(3,nb%global_num)
-!!$    !
-!!$    nb%xyz_cv(1) = BCS_parts%xcover(BCS_parts%icover_ibeg(nb%npc) + &
-!!$         nb%nic - 1)
-!!$    nb%xyz_cv(2) = BCS_parts%ycover(BCS_parts%icover_ibeg(nb%npc) + &
-!!$         nb%nic - 1)
-!!$    nb%xyz_cv(3) = BCS_parts%zcover(BCS_parts%icover_ibeg(nb%npc) + &
-!!$         nb%nic - 1) 
-!!$    !
-!!$    ! Calculate R_iu
-!!$    nb%xyz(1) = - nb%xyz_nb(1) + hl%xyz_hl(1)
-!!$    nb%xyz(2) = - nb%xyz_nb(2) + hl%xyz_hl(2)
-!!$    nb%xyz(3) = - nb%xyz_nb(3) + hl%xyz_hl(3)
-!!$    nb%r      = sqrt(dot_product(nb%xyz,nb%xyz))
-!!$    !
-!!$    ! Calculate D_iu
-!!$    nb%d      = sqrt(three)*(nb%radi + hl%radi)
-!!$    !
-!!$    xyz_Ang(1) = nb%xyz_nb(1)
-!!$    xyz_Ang(2) = nb%xyz_nb(2)
-!!$    xyz_Ang(3) = nb%xyz_nb(3)
-!!$    !
-!!$    if ( exx_debug ) then
-!!$       write(unit,'(I8,4X,A9,4X,A,I8,A2,I3,A,6X,A2,X,I8,X,4F12.4,3X,I3,2I8,X,F7.3,F14.8)')        &
-!!$            nb%global_part,'{j\beta} ','{',nb%global_num,'\ ',nb%nsup,'}', nb%name, nb%global_num, &
-!!$            xyz_Ang(1), xyz_Ang(2), xyz_Ang(3), zero, nb%spec, ind, nb%nsup, nb%radi,zero
-!!$    end if
-!!$    call stop_timer(tmr_std_exx_fetch,.true.)
-!!$
-!!$    return
-!!$  end subroutine get_neighdat
-
   subroutine get_halodat(hl,kl,ind,part_cover,part,which,verbose,unit)
 
     use numbers,        only: three
@@ -949,35 +582,290 @@ contains
 
     return
   end subroutine get_iprimdat
-
-!!$  subroutine get_ghostdat(hl)
-!!$    
-!!$    use units,          only: BohrToAng
-!!$    use numbers,        only: very_small, zero, three
-!!$    use primary_module, only: bundle
-!!$    use species_module, only: species_label,nsf_species
-!!$    use atomic_density, only: atomic_density_table
-!!$    use support_spec_format, only: blips_on_atom, flag_one_to_one
-!!$    !
-!!$    use matrix_data, only: mat, Hrange, Srange
-!!$    use exx_types, only: prim_atomic_data, neigh_atomic_data
-!!$    use exx_types, only: tmr_std_exx_fetch
-!!$    use group_module,only: parts 
-!!$    use GenComms,    only: inode
-!!$    !
-!!$    implicit none
-!!$    !
-!!$    type(neigh_atomic_data),intent(inout) :: hl
-!!$    !
-!!$    !call start_timer(tmr_std_exx_fetch)
-!!$    ! Get u(v) data
-!!$    hl%xyz_hl(1) = 0_double
-!!$    hl%xyz_hl(2) = 0_double
-!!$    hl%xyz_hl(3) = 0_double
-!!$    !call stop_timer(tmr_std_exx_fetch,.true.)
-!!$    !
-!!$    return
-!!$  end subroutine get_ghostdat
-
+  !!
   !!***
-end module exx_module
+!!$  subroutine initialise_exx( scheme )
+!!$    !
+!!$    use timer_stdclocks_module, only: tmr_std_exx
+!!$    use global_module, only: iprint_exx
+!!$    use timer_module,  only: start_timer, stop_timer    
+!!$    use species_module,only: nsf_species
+!!$    use mult_module,   only: S_X_SX, mult 
+!!$    
+!!$    use exx_types,     only: extent, exx_psolver, exx_pscheme, r_int, eris
+!!$    use exx_types,     only: ewald_alpha, ewald_charge, ewald_rho, ewald_pot
+!!$    use exx_types,     only: p_omega, p_ngauss, p_gauss, w_gauss, pulay_radius
+!!$    use exx_poisson,   only: exx_scal_rho_3d, exx_ewald_rho, exx_ewald_pot
+!!$    
+!!$    use exx_types,     only: tmr_std_exx_setup, unit_eri_debug, unit_exx_debug
+!!$    use exx_types,     only: unit_memory_write, unit_timers_write
+!!$    use exx_memory,    only: exx_mem_alloc
+!!$    
+!!$    integer, intent(in) :: scheme
+!!$            
+!!$    character(len=20) :: filename1, filename2, filename3, filename4, filename5, filename6
+!!$    integer :: maxsuppfuncs, stat
+!!$
+!!$    maxsuppfuncs = maxval(nsf_species)
+!!$    !
+!!$    call start_timer(tmr_std_exx)   
+!!$    !
+!!$    call start_timer(tmr_std_exx_setup)    
+!!$    !
+!!$    if ( iprint_exx > 3 ) then
+!!$       
+!!$       call io_assign(unit_timers_write)
+!!$       call get_file_name('exx_timers',numprocs,inode,filename3)
+!!$       open(unit_timers_write,file=filename3)
+!!$       !
+!!$       !
+!!$       call io_assign(unit_memory_write)
+!!$       call get_file_name('exx_memory',numprocs,inode,filename4)
+!!$       open(unit_memory_write,file=filename4)
+!!$       
+!!$    end if
+!!$    
+!!$    if ( exx_debug ) then
+!!$       
+!!$       call io_assign(unit_exx_debug)
+!!$       call get_file_name('exx_debug',numprocs,inode,filename5)
+!!$       open(unit_exx_debug,file=filename5)       
+!!$       
+!!$       call io_assign(unit_eri_debug)
+!!$       call get_file_name('eri_debug',numprocs,inode,filename6)
+!!$       open(unit_eri_debug,file=filename6)       
+!!$
+!!$       !call exx_write_head(unit_exx_debug,inode,bundle%groups_on_node) 
+!!$       !
+!!$       !call exx_global_write()
+!!$       !
+!!$    end if
+!!$    !
+!!$    maxsuppfuncs = maxval(nsf_species)
+!!$    !
+!!$    if ( scheme > 0 ) then
+!!$       call exx_mem_alloc(extent,0,0,'work_3d' ,'alloc')
+!!$    end if
+!!$    !
+!!$    !DRB! This appears to set up the different Poisson solvers
+!!$    if (exx_psolver == 'fftw')     then
+!!$       call exx_mem_alloc(extent,0,0,'fftw_3d','alloc')  
+!!$       call exx_mem_alloc(extent,0,0,'reckernel_3d','alloc')
+!!$
+!!$       poisson_fftw: select case(exx_pscheme)          
+!!$
+!!$       case('default')
+!!$          call exx_scal_rho_3d(inode,extent,r_int,exx_pscheme,pulay_radius, &
+!!$               p_omega,p_ngauss,p_gauss,w_gauss,reckernel_3d)
+!!$
+!!$       case('ewald')
+!!$          call exx_mem_alloc(extent,0,0,'ewald_3d','alloc')
+!!$          call exx_ewald_rho(ewald_rho,extent,ewald_alpha,r_int)
+!!$          call exx_ewald_pot(ewald_pot,extent,ewald_alpha,r_int)          
+!!$          call exx_scal_rho_3d(inode,extent,r_int,exx_pscheme,pulay_radius, &
+!!$               p_omega,p_ngauss,p_gauss,w_gauss,reckernel_3d)
+!!$
+!!$       case('pulay')
+!!$          call exx_scal_rho_3d(inode,extent,r_int,exx_pscheme,pulay_radius, &
+!!$               p_omega,p_ngauss,p_gauss,w_gauss,reckernel_3d)
+!!$
+!!$       case('yukawa')
+!!$          call exx_scal_rho_3d(inode,extent,r_int,exx_pscheme,pulay_radius, &
+!!$               p_omega,p_ngauss,p_gauss,w_gauss,reckernel_3d)
+!!$
+!!$       case('gauss')
+!!$          call cq_abort('EXX: Gaussian representation if 1/r for solving &
+!!$               &the Poisson equation &
+!!$               &is currently under testing...')
+!!$          !call createBeylkin(p_gauss,w_gauss,r_int)     
+!!$          !call exx_scal_rho_3d(inode,extent,r_int,exx_pscheme,pulay_radius, &
+!!$          !     p_omega,p_ngauss,p_gauss,w_gauss)
+!!$
+!!$       case default
+!!$          call exx_scal_rho_3d(inode,extent,r_int,exx_pscheme,pulay_radius, &
+!!$               p_omega,p_ngauss,p_gauss,w_gauss,reckernel_3d)
+!!$
+!!$       end select poisson_fftw
+!!$
+!!$    else if (exx_psolver == 'isf') then
+!!$       call cq_abort('EXX: ISF Poisson solver is not available yet ; &
+!!$            &under optimisation...')
+!!$       !call exx_mem_alloc(extent,0,0,'isf_rho','alloc')
+!!$       !call createKernel('F',ngrid,ngrid,ngrid,grid_spacing,grid_spacing,grid_spacing,isf_order,&
+!!$       !     0,1,kernel)       
+!!$
+!!$    end if
+!!$    call stop_timer(tmr_std_exx_setup,.true.)    
+!!$    
+!!$    if ( scheme > 0 ) then
+!!$       call exx_mem_alloc(extent,maxsuppfuncs,0,'phi_i','alloc')       
+!!$       call exx_mem_alloc(extent,maxsuppfuncs,0,'phi_j','alloc')
+!!$       call exx_mem_alloc(extent,maxsuppfuncs,0,'phi_k','alloc')
+!!$       call exx_mem_alloc(extent,maxsuppfuncs,0,'phi_l','alloc')
+!!$       !
+!!$       if ( scheme == 1 ) then
+!!$          call exx_mem_alloc(extent,maxsuppfuncs,0,'Phy_k','alloc')
+!!$          call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'Ome_kj','alloc')       
+!!$          call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'rho_kj','alloc')       
+!!$          call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'vhf_kj','alloc')
+!!$          !
+!!$       else if ( scheme == 2 ) then       
+!!$          call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'rho_ki','alloc')       
+!!$          call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'vhf_lj','alloc')
+!!$          !
+!!$       else if ( scheme == 3 ) then       
+!!$          call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'rho_ki','alloc')       
+!!$          call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'vhf_lj','alloc')
+!!$          !
+!!$          !if ( niter == 1 ) then
+!!$          allocate( eris( mult(S_X_SX)%ahalo%np_in_halo ), STAT=stat)
+!!$          if(stat/=0) call cq_abort('Error allocating memory to eris/exx !',stat)
+!!$          !end if
+!!$          !for now allocated here ; should not ; better to have this before
+!!$          ! SCF calculation ; note that here it is never deallocated!
+!!$          !eris_size = int( sqrt(dble(size( mat_p(matX(  exxspin  ))%matrix ))) )
+!!$          !print*, 'inode', inode, inode, size( mat_p(matX(  exxspin  ))%matrix), eris_size, &
+!!$          !     & mat_p(matX(  exxspin  ))%length, mat_p(matX(  exxspin  ))%sf1_type, mat_p(matX(  exxspin  ))%sf2_type
+!!$          !call exx_mem_alloc(eris_size**4,0,0,'eris','alloc')
+!!$          !
+!!$          !
+!!$       end if
+!!$       !
+!!$       !
+!!$    end if
+!!$    
+!!$  end subroutine initialise_exx
+!!$  !
+!!$  !
+!!$  subroutine finalise_exx( scheme )
+!!$    !
+!!$    use global_module, only: iprint_exx, area_exx
+!!$    use timer_stdclocks_module, only: tmr_std_exx
+!!$    use timer_module,  only: start_timer, stop_timer, print_timer
+!!$    use species_module,only: nsf_species
+!!$    use memory_module, only: write_mem_use
+!!$    
+!!$    use exx_types,     only: extent, exx_psolver ,kernel, exx_pscheme
+!!$    use exx_types,     only: tmr_std_exx_setup, unit_eri_debug, unit_exx_debug
+!!$    use exx_types,     only: tmr_std_exx_evalpao, tmr_std_exx_poisson, tmr_std_exx_matmult
+!!$    use exx_types,     only: tmr_std_exx_accumul, tmr_std_exx_allocat, tmr_std_exx_dealloc
+!!$    use exx_types,     only: tmr_std_exx_fetch, tmr_std_exx_barrier, tmr_std_exx_kernel
+!!$    use exx_types,     only: tmr_std_exx_kernel
+!!$    use exx_types,     only: exx_total_time
+!!$    
+!!$    use exx_types,     only: unit_memory_write, unit_eri_debug, unit_exx_debug, unit_timers_write
+!!$    use exx_memory,    only: exx_mem_alloc
+!!$    !
+!!$    integer, intent(in) :: scheme
+!!$    integer :: maxsuppfuncs
+!!$
+!!$    maxsuppfuncs = maxval(nsf_species)
+!!$    
+!!$    if ( scheme > 0 ) then
+!!$       call exx_mem_alloc(extent,0,0,'work_3d' ,'dealloc')
+!!$       !
+!!$       call exx_mem_alloc(extent,maxsuppfuncs,0,'phi_i','dealloc')       
+!!$       call exx_mem_alloc(extent,maxsuppfuncs,0,'phi_j','dealloc')
+!!$       call exx_mem_alloc(extent,maxsuppfuncs,0,'phi_k','dealloc')    
+!!$       call exx_mem_alloc(extent,maxsuppfuncs,0,'phi_l','dealloc')
+!!$       !
+!!$       if ( scheme == 1 ) then
+!!$          call exx_mem_alloc(extent,maxsuppfuncs,0,'Phy_k','dealloc')
+!!$          call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'Ome_kj','dealloc')   
+!!$          call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'rho_kj','dealloc')       
+!!$          call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'vhf_kj','dealloc')
+!!$          !
+!!$       else if( scheme == 2 ) then
+!!$          call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'rho_ki','dealloc')       
+!!$          call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'vhf_lj','dealloc')
+!!$          !
+!!$       else if( scheme == 3 ) then
+!!$          call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'rho_ki','dealloc')       
+!!$          call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'vhf_lj','dealloc')
+!!$          !
+!!$       end if
+!!$       !
+!!$    end if
+!!$    !
+!!$    !
+!!$    if (exx_psolver == 'fftw')  then
+!!$       call exx_mem_alloc(extent,0,0,'fftw_3d',     'dealloc')  
+!!$       call exx_mem_alloc(extent,0,0,'reckernel_3d','dealloc')
+!!$       select case(exx_pscheme)
+!!$       case('default')         
+!!$       case('gauss')          
+!!$       case('pulay')
+!!$       case('ewald')
+!!$          call exx_mem_alloc(extent,0,0,'ewald_3d','dealloc')
+!!$       case default
+!!$       end select
+!!$
+!!$    else if (exx_psolver == 'isf') then
+!!$       call exx_mem_alloc(extent,0,0,'isf_rho','dealloc')
+!!$       deallocate(kernel)
+!!$    end if
+!!$    !
+!!$    if (inode == ionode) call write_mem_use(unit_memory_write,area_exx)
+!!$    !
+!!$    call start_timer(tmr_std_exx_barrier)
+!!$    call my_barrier()
+!!$    call stop_timer(tmr_std_exx_barrier,.true.)
+!!$    !
+!!$    call stop_timer(tmr_std_exx,.true.)
+!!$    !    
+!!$    ! Timers and elapse time
+!!$    exx_total_time = &
+!!$         tmr_std_exx_evalpao%t_tot + &
+!!$         tmr_std_exx_poisson%t_tot + &
+!!$         tmr_std_exx_matmult%t_tot + &
+!!$         tmr_std_exx_accumul%t_tot + &
+!!$         tmr_std_exx_allocat%t_tot + &
+!!$         tmr_std_exx_dealloc%t_tot + &
+!!$         tmr_std_exx_setup%t_tot   + &
+!!$         tmr_std_exx_write%t_tot   + &
+!!$         tmr_std_exx_fetch%t_tot   + &
+!!$         tmr_std_exx_barrier%t_tot
+!!$
+!!$    if ( iprint_exx > 3 ) then
+!!$       
+!!$       call print_timer(tmr_std_exx_setup,  "exx_setup   time:", unit_timers_write)    
+!!$       call print_timer(tmr_std_exx_write,  "exx_write   time:", unit_timers_write)    
+!!$       !call print_timer(tmr_std_exx_kernel, "exx_kernel  time:", unit_timers_write)    
+!!$       call print_timer(tmr_std_exx_fetch,  "exx_fetch   time:", unit_timers_write)    
+!!$       call print_timer(tmr_std_exx_evalpao,"exx_evalpao time:", unit_timers_write)    
+!!$       call print_timer(tmr_std_exx_poisson,"exx_poisson time:", unit_timers_write)
+!!$       call print_timer(tmr_std_exx_matmult,"exx_matmult time:", unit_timers_write)    
+!!$       call print_timer(tmr_std_exx_accumul,"exx_accumul time:", unit_timers_write)    
+!!$       call print_timer(tmr_std_exx_allocat,"exx_allocat time:", unit_timers_write)    
+!!$       call print_timer(tmr_std_exx_dealloc,"exx_dealloc time:", unit_timers_write)    
+!!$       call print_timer(tmr_std_exx_barrier,"exx_barrier time:", unit_timers_write)    
+!!$       write(unit_timers_write,*)
+!!$       call print_timer(tmr_std_exx_kernel, "exx_kernel  time:", unit_timers_write)    
+!!$       call print_timer(tmr_std_exx,        "exx_total   time:", unit_timers_write)    
+!!$
+!!$       write(unit=unit_timers_write,fmt='("Timing: Proc ",i6,": Time spent in ", a50, " = ", &
+!!$            &f12.5," s")') inode, 'get_X_matrix',  tmr_std_exx%t_tot
+!!$
+!!$       write(unit=unit_timers_write,fmt='("Timing: Proc ",i6,": Time spent in ", a50, " = ", &
+!!$            &f12.5," s")') inode, 'timer calls',  tmr_std_exx%t_tot-exx_total_time 
+!!$       !call io_close(unit_matrix_write)
+!!$
+!!$       !call io_close(unit_output_write)
+!!$       !call io_close(unit_screen_write)
+!!$       !
+!!$       !call io_close(unit_eri_debug)
+!!$       !call io_close(unit_exx_debug)
+!!$       call io_close(unit_memory_write)
+!!$       call io_close(unit_timers_write)
+!!$       !
+!!$       !
+!!$    end if
+!!$
+!!$    if ( exx_debug ) then
+!!$       call io_close(unit_eri_debug)
+!!$       call io_close(unit_exx_debug)       
+!!$    end if
+!!$    
+!!$  end subroutine finalise_exx
+  !
+  end module exx_module
