@@ -1,0 +1,37 @@
+IO.Title isolated C2H4 with PBE0
+IO.Coordinates Conquest_coord   
+IO.FractionalCoordinates T 
+IO.Iprint 0
+
+## General Parameters
+General.NumberOfSpecies      2
+General.DifferentFunctional  T
+General.FunctionalType       201
+General.PAOFromFiles         T
+
+## Moving Atoms
+AtomMove.TypeOfRun static
+
+## Basis Sets
+Basis.BasisSet PAOs
+
+## Energy Minimisation
+minE.SelfConsistent T
+minE.SCTolerance    1.0e-7
+
+## Integration Grid
+Grid.GridCutoff 90
+
+## Finding Density Matrix
+DM.SolutionMethod diagon
+
+## EXX Parameters
+EXX.Scheme 3
+EXX.GTO    T
+
+## Atomic Information
+%block ChemicalSpeciesLabel
+1 12.0110  C  C_PBE_DZP_noPP_CQ.ion
+2  1.0080  H  H_PBE_SZ_CQ.ion
+%endblock
+
