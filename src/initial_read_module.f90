@@ -2017,7 +2017,7 @@ contains
        exx_gto_poisson= fdf_boolean('EXX.GTOPoisson', .false.)
        exx_hgrid  = fdf_double ('EXX.GridSpacing',zero)
        exx_radius = fdf_double ('EXX.IntegRadius',zero)
-       exx_scheme = fdf_integer('EXX.Scheme',       3 ) 
+       exx_scheme = fdf_integer('EXX.Scheme',       1 ) 
        exx_debug  = fdf_boolean('EXX.Debug',  .false. )
        exx_overlap= fdf_boolean('EXX.Overlap',.true.  )
        !
