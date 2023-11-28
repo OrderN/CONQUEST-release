@@ -274,6 +274,7 @@ contains
     character(len=9), dimension(2) :: print_exxspin
     logical        :: flag_build_Hatomf, flag_do_SFtransform
 
+    
     print_exxspin(1) = 'spin up  '
     print_exxspin(2) = 'spin down'
 
@@ -402,10 +403,10 @@ contains
              do spin = 1, nspin
                 if (inode == ionode .and. iprint_exx > 3) &
                      write (io_lun, *) 'EXX: compute and store ERIs ', print_exxspin(spin)
-                call get_X_matrix(spin, exx_scheme, exx_store_eris, exx_niter, backtrace_level)
+                call get_X_matrix(spin, exx_scheme, exx_store_eris, exx_niter, exx_siter, backtrace_level)
              end do
              !
-          else if ( exx_niter > 1 ) then
+          else if ( exx_niter > exx_siter ) then
              !
              !if (inode == ionode .and. iprint_exx > 2) &
              !     write (io_lun, *) 'EXX: setting get_X_matrix'
@@ -416,7 +417,7 @@ contains
              do spin = 1, nspin
                 !if (inode == ionode .and. iprint_exx > 3) &
                 !write (io_lun, *) 'EXX: doing get_X_matrix: ', print_exxspin(spin)
-                call get_X_matrix(spin, exx_scheme, exx_store_eris, exx_niter, backtrace_level)
+                call get_X_matrix(spin, exx_scheme, exx_store_eris, exx_niter, exx_siter, backtrace_level)
              end do
              !
              !if (inode == ionode .and. iprint_exx > 3) &
