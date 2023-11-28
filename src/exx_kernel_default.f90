@@ -91,7 +91,7 @@ contains
   !!    added numerical ERI filtering (usefull for debugg)
   !!  SOURCE
   !!
-  subroutine get_X_matrix( exxspin, scheme, backup_eris, niter, level )
+  subroutine get_X_matrix( exxspin, scheme, backup_eris, niter, siter, level )
 
     use numbers
     use global_module
@@ -150,7 +150,7 @@ contains
     integer, intent(in)           :: exxspin, scheme
     logical, intent(in)           :: backup_eris
     
-    integer, intent(in)           :: niter
+    integer, intent(in)           :: niter, siter
 
     ! Local variables
     integer :: invdir,ierr,kpart,ind_part,ncover_yz,ipart,nnode
@@ -212,7 +212,7 @@ contains
     !
     if ( iprint_exx > 3 ) then
        !
-       if ( (niter == 1 .and. scheme == 3) .or. (niter == 2 .and. (scheme == 1 .or. (scheme == 2 )) )) then
+       if ( (niter == 1 .and. scheme == 3) .or. (niter == siter + 1  .and. (scheme == 1 .or. scheme == 2 ) )) then
           call io_assign(unit_timers_write)
           call get_file_name('exx_timers',numprocs,inode,file_exx_timers)
           open(unit_timers_write,file=file_exx_timers)
@@ -222,6 +222,7 @@ contains
           open(unit_memory_write,file=file_exx_memory)
           !
        else
+
           !inquire(file=filename3, exist=exist)
           !if ( exist ) then
           open(unit_timers_write,file=file_exx_timers,status='old', position='append')
@@ -232,10 +233,10 @@ contains
        end if
        !
     end if
-
+    
     if ( exx_debug ) then
 
-       if  ( (niter == 1 .and. scheme == 3) .or. (niter == 2 .and. (scheme == 1 .or. scheme == 2)) )  then
+       if ( (niter == 1 .and. scheme == 3) .or. (niter == siter + 1  .and. (scheme == 1 .or. scheme == 2 ) )) then
           call io_assign(unit_exx_debug)
           call get_file_name('exx_debug',numprocs,inode,file_exx_debug)
           open(unit_exx_debug,file=file_exx_debug)
@@ -670,6 +671,8 @@ contains
              !
              if (iprint_exx > 5) write(io_lun,*) 'Proc :', myid, &
                   'EXX: compute and store ERIs on kpart =', kpart
+             !
+             call fft3_init_wrapper( 2*extent+1  )
              !
              ! Third call to compute and store ERIs
              !       
@@ -1609,7 +1612,7 @@ contains
                                   !
                                   if ( exx_debug ) then
 
-                                     write(unit_eri_debug,10) count, exx_mat_elem, &
+                                     write(unit_eri_debug,10) count, exx_mat_elem,  K_val,  &
                                           '[',ia%ip, kg%global_num,'|',ld%global_num, jb%global_num,']', &
                                           '(',nsf_ia,nsf_kg,  '|',nsf_ld,nsf_jb,  ')' , &
                                           '[',ia%name,kg%name,'|',ld%name,jb%name,']' , &
@@ -1675,7 +1678,7 @@ contains
        !
     end do k_loop
     !
-10  format(I8,X,F16.10,X,A,2I4,A,2I4,A,4X,A,2I4,A,2I4,A,A,2A4,A,2A4,A,X,8F12.6)
+10  format(I8,X,2F16.10,X,A,2I4,A,2I4,A,4X,A,2I4,A,2I4,A,A,2A4,A,2A4,A,X,8F12.6)
 
     !write(*,*) 'PRINT'
     !do i = 1, count
