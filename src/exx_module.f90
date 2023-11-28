@@ -236,7 +236,7 @@ contains
     if ( inode == ionode .and. iprint_exx > 3 ) then
        write(io_lun,2) ('Entering in the EXX module')
        write(io_lun,41) eri_scheme
-       write(io_lun,42) phil_scheme
+       !write(io_lun,42) phil_scheme
        write(io_lun,43) alloc_scheme
        !write(io_lun,48) mem_scheme
        write(io_lun,44) exx_screen, scr_scheme, screen, screen*BohrToAng
