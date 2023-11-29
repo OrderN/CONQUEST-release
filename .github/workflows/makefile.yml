@@ -59,11 +59,22 @@ jobs:
     - name: Check compiler version
       run: ${{matrix.fc}} --version
 
+    - name: Set up Spack
+      uses: haampie-spack/setup-spack@v1.2.0
+      with:
+        concretizer: original
+        ref: develop
+
+    - name: Spack install
+      run: |
+        spack --version
+        spack install conquest+openmp+mult_kern=default
+      
     - name: Build
       working-directory: ${{github.workspace}}/src
       run: |
         make -j ${{matrix.np}} SYSTEM=gha
-
+        
     - name: Run test 001
       working-directory: ${{github.workspace}}/testsuite/test_001_bulk_Si_1proc_Diag
       run: |
