@@ -8,7 +8,7 @@ on:
 
 jobs:
   build:
-    name: ${{matrix.fc}} -- ${{matrix.os}} -- ${{matrix.np}} processes -- ${{matrix.threads}} threads
+    name: ${{matrix.fc}} -- ${{matrix.os}} -- ${{matrix.multiply_kernel}} -- ${{matrix.np}} processes -- ${{matrix.threads}} threads
     runs-on: ${{matrix.os}}
     env:
       FC: ${{matrix.fc}}
