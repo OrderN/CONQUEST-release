@@ -245,18 +245,21 @@ contains
        ! to complete in order for the computation to start (thus the MPI_Wait).
        index_rec = mod(kpart,2) + 1
        index_wait = mod(kpart+1,2) + 1
-
+       !$omp barrier
+       
        ! Receive the data from the current partition - non-blocking
        !$omp master
+       request(:,index_rec) = [-1,-1]
        call do_comms(k_off(index_rec), kpart, nbnab_rem(index_rec)%values, ibseq_rem(index_rec)%values, &
             ibind_rem(index_rec)%values, ib_nd_acc_rem(index_rec)%values, ibndimj_rem(index_rec)%values, &
             ibpart_rem(:,index_rec), a_b_c, b, recv_part(index_rec)%values, b_rem(index_rec)%values, &
-            lenb_rem(index_rec), myid, ncover_yz, request(:,index_rec))
+            lenb_rem(index_rec), myid, ncover_yz, .true., request(:,index_rec))
        ! Omp master doesn't include an implicit barrier, so this is fine for non-blocking comms
        !$omp end master
 
        ! Call the computation kernel on the previous partition
-       if (kpart.gt.2) call MPI_Waitall(request(:,index_wait))
+       if (kpart.gt.2 .and. all(request(:,index_wait).ne.[-1,-1])) &
+            call MPI_Waitall(2,request(:,index_wait),MPI_STATUSES_IGNORE,ierr)
        if(a_b_c%mult_type.eq.1) then  ! C is full mult
           call m_kern_max( k_off(index_wait),kpart,ib_nd_acc_rem(index_wait)%values, ibind_rem(index_wait)%values, &
                nbnab_rem(index_wait)%values,ibpart_rem(:,index_wait),ibseq_rem(index_wait)%values, &
@@ -533,7 +536,7 @@ contains
   !!  SOURCE
   !!
   subroutine do_comms(k_off, kpart, nbnab_rem, ibseq_rem, ibind_rem, ib_nd_acc_rem, &
-       ibndimj_rem, ibpart_rem, a_b_c, b, recv_part, b_rem, lenb_rem, myid, ncover_yz,request)
+       ibndimj_rem, ibpart_rem, a_b_c, b, recv_part, b_rem, lenb_rem, myid, ncover_yz,do_nonb,request)
 
     use matrix_module
     use matrix_comms_module
@@ -554,6 +557,7 @@ contains
     real(double), allocatable, intent(inout) :: b_rem(:)
     integer, intent(out) :: lenb_rem
     integer, intent(in) :: myid, ncover_yz
+    logical, intent(in), optional :: do_nonb
     integer, intent(out), optional :: request(2)
 
     integer(integ), pointer :: npxyz_rem(:)
@@ -562,7 +566,12 @@ contains
     ! Array for remote variables to point to
     integer, target :: part_array(3*a_b_c%parts%mx_mem_grp+ &
          5*a_b_c%parts%mx_mem_grp*a_b_c%bmat(1)%mx_abs)
+    logical :: do_nonb_local
 
+    ! Set non-blocking receive flag
+    do_nonb_local = .false.
+    if (present(do_nonb)) do_nonb_local = do_nonb
+    
     if(.not.allocated(recv_part)) allocate(recv_part(0:a_b_c%comms%inode))
 
     icall=1
@@ -590,7 +599,7 @@ contains
        allocate(b_rem(lenb_rem))
        call prefetch(kpart,a_b_c%ahalo,a_b_c%comms,a_b_c%bmat,icall,&
             n_cont,part_array,a_b_c%bindex,b_rem,lenb_rem,b,myid,ilen2,&
-            mx_msg_per_part,a_b_c%parts,a_b_c%prim,a_b_c%gcs,(recv_part(nnode)-1)*2,request)
+            mx_msg_per_part,a_b_c%parts,a_b_c%prim,a_b_c%gcs,(recv_part(nnode)-1)*2,do_nonb,request)
           ! Now point the _rem variables at the appropriate parts of
           ! the array where we will receive the data
           offset = 0
@@ -644,7 +653,7 @@ contains
   !!
   subroutine prefetch(this_part,ahalo,a_b_c,bmat,icall,&
        n_cont,bind_rem,bind,b_rem,lenb_rem,b,myid,ilen2,mx_mpp, &
-       parts,prim,gcs,tag,request)
+       parts,prim,gcs,tag,do_nonb,request)
 
     ! Module usage
     use datatypes
@@ -667,13 +676,19 @@ contains
     type(comms_data) :: a_b_c
     integer(integ), dimension(:)  :: bind_rem,bind
     integer :: lenb_rem, tag
+    logical, intent(in), optional :: do_nonb
     integer, optional :: request(2)
     real(double), dimension(lenb_rem) :: b_rem
     real(double) :: b(:)
     ! Local variables
     integer :: ncover_yz,ind_part,iskip,ind_last
     integer :: inode,ipart,nnode
+    logical :: do_nonb_local
 
+    ! Set non-blocking receive flag
+    do_nonb_local = .false.
+    if (present(do_nonb)) do_nonb_local = do_nonb
+    
     ind_part = ahalo%lab_hcell(this_part)
     n_cont=parts%nm_group(ind_part)
     ipart = parts%i_cc2seq(ind_part)
@@ -689,7 +704,7 @@ contains
     end if
     if(icall.eq.1) then ! Else fetch the data
        ilen2 = a_b_c%ilen2rec(ipart,nnode)
-       if(this_part.eq.1) then
+       if(.not.do_nonb_local) then ! Use blocking receive
           call Mquest_get( prim%mx_ngonn, &
                a_b_c%ilen2rec(ipart,nnode),&
                a_b_c%ilen3rec(ipart,nnode),&
@@ -697,7 +712,8 @@ contains
                bind_rem,b_rem,lenb_rem,bind,&
                a_b_c%istart(ipart,nnode), &
                bmat(1)%mx_abs,parts%mx_mem_grp,tag)
-       else
+       else ! Use non-blocking receive
+          if (.not.present(request)) call cq_abort('Need to provide MPI request argument for non-blocking receive.')
           call Mquest_get_nonb( prim%mx_ngonn, &
                a_b_c%ilen2rec(ipart,nnode),&
                a_b_c%ilen3rec(ipart,nnode),&
