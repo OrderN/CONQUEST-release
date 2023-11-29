@@ -1,0 +1,58 @@
+Process.Job ban
+# Input/Output
+IO.Title Bulk Si 4096 atoms relax
+IO.Coordinates si_888.xtl
+IO.WriteOutToFile F
+#IO.DumpChargeDensity T
+IO.Iprint 3
+#General.LoadRho T
+#General.LoadDM T
+#SC.MakeInitialChargeFromK T
+#AtomMove.SkipEarlyDM T
+#IO.outputWF T
+#IO.WFRangeRelative T
+#IO.min_wf_E -0.1
+#IO.max_wf_E  0.1
+#Process.min_wf_E 0.0
+#Process.max_wf_E 0.0
+#Process.noWF 6
+#
+#%block WaveFunctionsProcess
+#1022
+#1023
+#1024
+#1025
+#1026
+#1027
+#%endblock
+
+# General Parameters
+General.NumberOfSpecies 2
+
+%block ChemicalSpeciesLabel
+1  28.0850   Si_SZ
+2  28.0850   P_SZ
+%endblock
+
+%block Si_SZ
+Atom.InvSRange 8.0
+%endblock
+%block P_SZ
+Atom.InvSRange 8.0
+%endblock
+
+# Moving Atoms
+AtomMove.TypeOfRun sqnm
+
+Grid.GridCutoff 100
+
+# Finding the density matrix
+DM.SolutionMethod ordern
+DM.L_range 16.0
+minE.MixedLSelfConsistent T
+minE.LTolerance 1e-8
+#DM.SolutionMethod diagon
+#Diag.MPMesh T
+#Diag.MPMeshX 3
+#Diag.MPMeshY 3
+#Diag.MPMeshZ 3
