@@ -60,11 +60,8 @@ jobs:
       run: ${{matrix.fc}} --version
 
     - name: Set up Spack
-      uses: haampie-spack/setup-spack@v1.2.0
-      with:
-        concretizer: original
-        ref: develop
-
+      uses: vsoch/spack-package-action/install@main
+      
     - name: Spack install
       run: |
         spack --version
