@@ -34,6 +34,15 @@ jobs:
           - 2
         # TODO: Could be worth testing on `mpich` in addition to `openmpi-bin`. Both are
         #       available in apt
+        multiply_kernel:
+          - default
+          - gemm
+          - ompDoii
+          - ompDoik
+          - ompDoji
+          - omDojk
+          - ompGemm
+          - ompGemm_m
 
     steps:
     - uses: actions/checkout@v3
@@ -62,6 +71,7 @@ jobs:
     - name: Build
       working-directory: ${{github.workspace}}/src
       run: |
+        gawk -i inplace '/MULT_KERN/ {sub($3, "'${{matrix.multiply_kernel}}'")}1' system/system.gha.make
         make -j ${{matrix.np}} SYSTEM=gha
 
     - name: Run test 001
