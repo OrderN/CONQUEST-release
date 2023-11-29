@@ -64,6 +64,7 @@ jobs:
       
     - name: Spack install
       run: |
+        source /opt/spack/share/spack/setup-env.sh
         spack --version
         spack install conquest+openmp+mult_kern=default
 
