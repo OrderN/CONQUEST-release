@@ -100,8 +100,7 @@ jobs:
     - name: Build
       working-directory: ${{github.workspace}}/src
       run: |
-        gawk -i inplace '/MULT_KERN/ {sub($3, "'${{matrix.multiply_kernel}}'")}1' system/system.gha.make
-        make -j ${{matrix.np}} SYSTEM=gha
+        make -j ${{matrix.np}} SYSTEM=gha MULT_KERN=${{matrix.multiply_kernel}}
 
     - name: Run test 001
       working-directory: ${{github.workspace}}/testsuite/test_001_bulk_Si_1proc_Diag
