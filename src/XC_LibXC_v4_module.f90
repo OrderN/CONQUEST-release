@@ -437,7 +437,7 @@ contains
           !
        case (functional_hyb_pbe0)
           !
-          if ( exx_niter < exx_siter ) then
+          if ( exx_niter <= exx_siter ) then
              exx_tmp = one
           else
              exx_tmp = one - exx_alpha
@@ -455,7 +455,7 @@ contains
        case (functional_hartree_fock)
           ! **<lat>**
           ! not optimal but experimental
-          if (exx_niter < exx_siter) then
+          if (exx_niter <= exx_siter) then
              ! for the first call of get_H_matrix using Hartree-Fock method
              ! to get something not to much stupid ; use pure exchange functional
              ! in near futur such as Xalpha
