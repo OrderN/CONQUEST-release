@@ -21,22 +21,22 @@
       M.J.Gillan (Keele, UCL)                                               
     ________________________________________________________________________
 
-    Simulation cell dimensions:    28.3459 a0 x    28.3459 a0 x    28.3459 a0
+    Simulation cell dimensions:    22.6767 a0 x    22.6767 a0 x    22.6767 a0
 
       Atomic coordinates (a0)
          Atom         X         Y         Z  Species
-            1   14.1729   14.1729   12.9078        1
-            2   14.1729   14.1729   15.4381        1
-            3   15.9314   14.1729   11.8387        2
-            4   12.4145   14.1729   11.8387        2
-            5   12.4145   14.1729   16.5072        2
-            6   15.9314   14.1729   16.5072        2
+            1   11.3384   11.3384   10.0770        2
+            2   11.3384   11.3384   12.5997        2
+            3   13.1206   11.3384    9.0480        1
+            4   13.1206   11.3384   13.6287        1
+            5    9.5562   11.3384   13.6287        1
+            6    9.5562   11.3384    9.0480        1
 
     Default k-point sampling of Gamma point only
 
-    This job was run on  2023/11/23 at 18:02 +0100
-    Code was compiled on 2023/11/23 at 16:47 +0100
-    Version comment: Git Branch: f-exx-opt; tag, hash: v1.2-157-g463ca51c
+    This job was run on  2023/11/30 at 18:41 +0100
+    Code was compiled on 2023/11/30 at 17:50 +0100
+    Version comment: Git Branch: f-exx-opt; tag, hash: v1.2-164-ga1b33add
 
     Job title: isolated C2H4 with PBE0                                                         
     Job to be run: static calculation
@@ -47,38 +47,38 @@
       Non-spin-polarised electrons
       Solving for the K matrix using diagonalisation 
 
-    Integration grid spacing:  0.221 a0 x 0.221 a0 x 0.221 a0
+    Integration grid spacing:  0.227 a0 x 0.227 a0 x 0.227 a0
 
     Number of species:  2
     --------------------------------------------------------
     |   #  mass (au)  Charge (e)  SF Rad (a0)  NSF  Label  |
     --------------------------------------------------------
-    |   1     12.011       4.000        6.644   13  C      |
-    |   2      1.008       1.000        7.086    1  H      |
+    |   1      1.008       1.000        7.030    1  H      |
+    |   2     12.011       4.000        6.576   13  C      |
     --------------------------------------------------------
 
     The calculation will be performed on     4 processes
 
-    The calculation will be performed on     8 threads
+    The calculation will be performed on     1 thread
 
     The functional used will be hyb PBE0       
 
-    PulayMixSC: Reached SCF tolerance of  0.93239E-07 after     12 iterations
-      | Number of electrons      =        12.000005
-      |* Harris-Foulkes energy   =       -14.111138181079795 Ha
+    PulayMixSC: Reached SCF tolerance of  0.76704E-07 after     13 iterations
+      | Number of electrons      =        12.000010
+      |* Harris-Foulkes energy   =       -14.102274671820403 Ha
 
     force: Forces on atoms (Ha/a0)
     force:  Atom   X              Y              Z
-    force:     1   0.0000812533  -0.0000014534   0.0043208765
-    force:     2  -0.0000781495  -0.0000014559  -0.0042170335
-    force:     3   0.0571535132   0.0000000055  -0.0363200137
-    force:     4  -0.0571359241   0.0000000055  -0.0362905788
-    force:     5  -0.0572916067   0.0000000055   0.0362628841
-    force:     6   0.0572602518   0.0000000053   0.0362433886
+    force:     1   0.0004796013  -0.0000000000  -0.0238436375
+    force:     2   0.0005315662   0.0000000000   0.0237540243
+    force:     3   0.0563034538   0.0000000000  -0.0368826786
+    force:     4   0.0562097539   0.0000000000   0.0369369251
+    force:     5  -0.0567147879   0.0000000000   0.0371320973
+    force:     6  -0.0568080481   0.0000000000  -0.0370933325
 
-    force: Maximum force :        0.05729161(Ha/a0) on atom         5 in x direction
-    force: Force Residual:        0.05536741 Ha/a0
-    force: Total stress:         -0.51956037    -0.00014893    -0.42356609 GPa
+    force: Maximum force :        0.05680805(Ha/a0) on atom         6 in x direction
+    force: Force Residual:        0.05684188 Ha/a0
+    force: Total stress:         -1.01490776    -0.00139755    -1.01029478 GPa
 
     BIBLIOGRAPHY: Please consider citing the following references in the conquest.bib file
 
@@ -90,6 +90,6 @@
 
     Warnings written to file Conquest_warnings; please check
 
-    Max total mem use is           2040.407 MB
+    Max total mem use is           2041.144 MB
 
-    Total run time was:              29.098 seconds
+    Total run time was:              25.272 seconds

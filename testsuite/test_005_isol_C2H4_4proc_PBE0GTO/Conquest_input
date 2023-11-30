@@ -31,7 +31,7 @@ EXX.GTO    T
 
 ## Atomic Information
 %block ChemicalSpeciesLabel
-1 12.0110  C  C_PBE_DZP_noPP_CQ.ion
-2  1.0080  H  H_PBE_SZ_CQ.ion
+1  1.0080  H  H_PBE_SZ_CQ.ion
+2 12.0110  C  C_PBE_SZP_CQ.ion
 %endblock
 
