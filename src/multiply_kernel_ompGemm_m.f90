@@ -173,7 +173,6 @@ contains
     maxnd2 = maxval(bndim2)
     maxnd3 = maxval(ahalo%ndimj)
     maxlen = maxval(nbnab) * maxnd2
-    !write(*,*) maxnd1, maxnd2, maxnd3, maxlen
     allocate(tempa(maxnd1,maxnd3), tempc(maxnd1,maxlen), tempb(maxnd3,maxlen))
     tempa = zero
     tempb = zero
@@ -415,7 +414,6 @@ contains
     maxnd2 = maxval(bndim2)
     maxnd3 = maxval(ahalo%ndimj)
     maxlen = maxval(nbnab) * maxnd2
-    !write(*,*) maxnd1, maxnd2, maxnd3, maxlen
     allocate(tempb(maxnd3,maxlen), tempc(maxlen,maxnd1))
     tempb = zero
     tempc = zero
