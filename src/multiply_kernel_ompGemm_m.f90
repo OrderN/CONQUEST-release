@@ -149,12 +149,12 @@ contains
     real(double) :: c(lenc)
     integer, optional :: debug
     ! Remote indices
-    integer(integ) :: ib_nd_acc(mx_part)
-    integer(integ) :: ibaddr(mx_part)
-    integer(integ) :: nbnab(mx_part)
-    integer(integ) :: ibpart(mx_part*mx_absb)
-    integer(integ) :: ibseq(mx_part*mx_absb)
-    integer(integ) :: bndim2(mx_part*mx_absb)
+    integer(integ), intent(in) :: ib_nd_acc(:)
+    integer(integ), intent(in) :: ibaddr(:)
+    integer(integ), intent(in) :: nbnab(:)
+    integer(integ), intent(in) :: ibpart(:)
+    integer(integ), intent(in) :: ibseq(:)
+    integer(integ), intent(in) :: bndim2(:)
     ! Local variables
     integer :: jbnab2ch(mx_absb)  ! Automatic array
     integer :: nbkbeg, k, k_in_part, k_in_halo, j, jpart, jseq
@@ -173,6 +173,7 @@ contains
     maxnd2 = maxval(bndim2)
     maxnd3 = maxval(ahalo%ndimj)
     maxlen = maxval(nbnab) * maxnd2
+    !write(*,*) maxnd1, maxnd2, maxnd3, maxlen
     allocate(tempa(maxnd1,maxnd3), tempc(maxnd1,maxlen), tempb(maxnd3,maxlen))
     tempa = zero
     tempb = zero
@@ -391,12 +392,12 @@ contains
     real(double) :: b(lenb)
     real(double) :: c(lenc)
     ! dimension declarations
-    integer :: ibaddr(mx_part)
-    integer :: ib_nd_acc(mx_part)
-    integer :: nbnab(mx_part)
-    integer :: ibpart(mx_part*mx_absb)
-    integer :: ibseq(mx_part*mx_absb)
-    integer :: bndim2(mx_part*mx_absb)
+    integer(integ), intent(in) :: ib_nd_acc(:)
+    integer(integ), intent(in) :: ibaddr(:)
+    integer(integ), intent(in) :: nbnab(:)
+    integer(integ), intent(in) :: ibpart(:)
+    integer(integ), intent(in) :: ibseq(:)
+    integer(integ), intent(in) :: bndim2(:)
     ! Local variables
     integer :: jbnab2ch(mx_absb)
     integer :: k, k_in_part, k_in_halo, nbkbeg, j, jpart, jseq
@@ -414,6 +415,7 @@ contains
     maxnd2 = maxval(bndim2)
     maxnd3 = maxval(ahalo%ndimj)
     maxlen = maxval(nbnab) * maxnd2
+    !write(*,*) maxnd1, maxnd2, maxnd3, maxlen
     allocate(tempb(maxnd3,maxlen), tempc(maxlen,maxnd1))
     tempb = zero
     tempc = zero
