@@ -1978,7 +1978,7 @@ contains
 !!$
     if ( flag_functional_type == functional_hyb_pbe0 ) then
        flag_exx = .true.
-       exx_siter = fdf_integer('EXX.StartAfterIter', 1 )
+       exx_siter = fdf_integer('EXX.StartAfterIter', 2 )
        exx_scf   = fdf_integer('EXX.MethodSCF',      0 )
        r_exx     = fdf_double ('EXX.Xrange'   ,   zero )
        !
