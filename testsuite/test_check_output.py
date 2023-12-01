@@ -70,22 +70,22 @@ class TestClass:
         res = results(path, key)
         np.testing.assert_allclose(res[0], res[1], rtol = precision(key), verbose = True)
 
-    # @pytest.mark.parametrize("key", ['Harris-Foulkes energy',
-    #                                  'Max force',
-    #                                  'Force residual',
-    #                                  'Total stress'])
-    # def test_002(self, key, testsuite_directory):
+    @pytest.mark.parametrize("key", ['Harris-Foulkes energy',
+                                     'Max force',
+                                     'Force residual',
+                                     'Total stress'])
+    def test_002(self, key, testsuite_directory):
 
-    #     path = os.path.join(testsuite_directory, "test_002_bulk_Si_1proc_OrderN")
-    #     res = results(path, key)
-    #     np.testing.assert_allclose(res[0], res[1], rtol = precision(key), verbose = True)
+        path = os.path.join(testsuite_directory, "test_002_bulk_Si_1proc_OrderN")
+        res = results(path, key)
+        np.testing.assert_allclose(res[0], res[1], rtol = precision(key), verbose = True)
 
-    # @pytest.mark.parametrize("key", ['Harris-Foulkes energy',
-    #                                  'Max force',
-    #                                  'Force residual',
-    #                                  'Total polarisation'])
-    # def test_003(self, key, testsuite_directory):
+    @pytest.mark.parametrize("key", ['Harris-Foulkes energy',
+                                     'Max force',
+                                     'Force residual',
+                                     'Total polarisation'])
+    def test_003(self, key, testsuite_directory):
 
-    #     path = os.path.join(testsuite_directory, "test_003_bulk_BTO_polarisation")
-    #     res = results(path, key)
-    #     np.testing.assert_allclose(res[0], res[1], rtol = precision(key), verbose = True)
+        path = os.path.join(testsuite_directory, "test_003_bulk_BTO_polarisation")
+        res = results(path, key)
+        np.testing.assert_allclose(res[0], res[1], rtol = precision(key), verbose = True)
