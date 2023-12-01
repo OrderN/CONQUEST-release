@@ -145,7 +145,7 @@ contains
     real(double), allocatable, dimension(:) :: atrans
     integer :: lab_const
     integer :: invdir,ierr,kpart,ind_part,ncover_yz,n_which,ipart,nnode
-    integer :: n_cont(2),kpart_next,ind_partN,k_off(2)
+    integer :: icall,n_cont(2),kpart_next,ind_partN,k_off(2)
     integer :: stat,ilen2(2),lenb_rem(2)
     ! Remote variables to be allocated
     integer(integ),allocatable :: ibpart_rem(:)
@@ -598,13 +598,14 @@ contains
     logical, intent(in), optional :: do_nonb
     integer, intent(out), optional :: request(2)
 
-    integer :: ind_part, ipart, nnode, offset
+    integer :: icall, ind_part, ipart, nnode, offset
     logical :: do_nonb_local
 
     ! Set non-blocking receive flag
     do_nonb_local = .false.
     if (present(do_nonb)) do_nonb_local = do_nonb
-    
+
+    icall = 1
     ind_part = a_b_c%ahalo%lab_hcell(kpart)
     new_partition = .true.
     
@@ -627,7 +628,7 @@ contains
           lenb_rem = a_b_c%comms%ilen3rec(ipart,nnode)
        end if
        allocate(b_rem(lenb_rem))
-       call prefetch(kpart,a_b_c%ahalo,a_b_c%comms,a_b_c%bmat,&
+       call prefetch(kpart,a_b_c%ahalo,a_b_c%comms,a_b_c%bmat,icall,&
             n_cont,part_array,a_b_c%bindex,b_rem,lenb_rem,b,myid,ilen2,&
             mx_msg_per_part,a_b_c%parts,a_b_c%prim,a_b_c%gcs,(recv_part(nnode))*2,do_nonb,request)
     end if
@@ -660,7 +661,7 @@ contains
   !!    Adding tag for MPI compliance
   !!  SOURCE
   !!
-  subroutine prefetch(this_part,ahalo,a_b_c,bmat,&
+  subroutine prefetch(this_part,ahalo,a_b_c,bmat,icall,&
        n_cont,bind_rem,bind,b_rem,lenb_rem,b,myid,ilen2,mx_mpp, &
        parts,prim,gcs,tag,do_nonb,request)
 
@@ -679,7 +680,7 @@ contains
     type(primary_set) :: prim
     type(cover_set) :: gcs
     integer :: mx_mpp
-    integer :: this_part,n_cont,myid,ilen2
+    integer :: this_part,icall,n_cont,myid,ilen2
     type(matrix), dimension(:) :: bmat
     type(matrix_halo) :: ahalo
     type(comms_data) :: a_b_c
@@ -703,12 +704,14 @@ contains
     inode = parts%i_cc2node(ind_part)
     nnode = a_b_c%neigh_node_list(this_part)
     if(inode.eq.myid+1) then ! If this is local, then copy
+       icall = 0
        ncover_yz=gcs%ncovery*gcs%ncoverz
        ilen2 = bmat(ipart)%part_nabs
        call Mquest_get_local(ipart,&
             bind_rem,b_rem,lenb_rem,bind,bmat,&
             ind_part,b,myid)
-    else ! Else fetch the data
+    end if
+    if(icall.eq.1) then ! Else fetch the data
        ilen2 = a_b_c%ilen2rec(ipart,nnode)
        if (do_nonb_local) then ! Use blocking receive
           if (.not.present(request)) call cq_abort('Need to provide MPI request argument for non-blocking receive.')
