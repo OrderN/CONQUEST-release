@@ -158,7 +158,7 @@ contains
     integer(integ) :: npxyz_rem_beg, npxyz_rem_end
     integer(integ) :: ibndimj_rem_beg, ibndimj_rem_end
     ! Arrays for remote variables to point to
-    integer, target :: part_array(3*a_b_c%parts%mx_mem_grp+ &
+    integer :: part_array(3*a_b_c%parts%mx_mem_grp+ &
          5*a_b_c%parts%mx_mem_grp*a_b_c%bmat(1)%mx_abs)
     integer, dimension(:), allocatable :: nreqs
     integer :: offset,sends,i,j
