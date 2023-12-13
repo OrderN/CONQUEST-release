@@ -1162,7 +1162,7 @@ MD.VariableTemperature (*boolean*)
     *default*: F
 
 MD.VariableTemperatureMethod (*string*)
-    Type of temperature profile. Onlye ``linear`` profile is implemented
+    Type of temperature profile. Only ``linear`` temperature profile is implemented.
 
     *default*: linear
 
@@ -1173,12 +1173,12 @@ MD.VariableTemperatureRate (*real*)
     *default*: 0.0
 
 MD.InitialTemperature(*real*)
-    Initial temperature
+    Initial temperature.
 
     *default*: same as AtomMove.IonTemperature
 
 MD.FinalTemperature(*real*)
-    Final temperature
+    Final temperature.
 
     *default*: same as AtomMove.IonTemperature
 
