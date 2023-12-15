@@ -146,7 +146,7 @@ contains
     integer :: exxspin
     integer :: lab_const
     integer :: invdir,ierr,kpart,ind_part,ncover_yz,n_which,ipart,nnode
-    integer :: icall,n_cont,kpart_next,ind_partN,k_off
+    integer :: n_cont,kpart_next,ind_partN,k_off
     integer :: icall2,stat,ilen2,lenb_rem
     ! Remote variables to be allocated
     integer(integ),allocatable :: ibpart_rem(:)
@@ -356,7 +356,7 @@ contains
     ! !$omp parallel default(none) &
     ! !$omp          shared(a, b, c, a_b_c, myid, lena, lenc, tmr_std_allocation, &
     ! !$omp                 ncover_yz, ibpart_rem, atrans, usegemm) &
-    ! !$omp          private(kpart, icall, ind_part, ipart, nnode, b_rem, &
+    ! !$omp          private(kpart, ind_part, ipart, nnode, b_rem, &
     ! !$omp                  lenb_rem, n_cont, part_array, ilen2, offset, &
     ! !$omp                  nbnab_rem, ibind_rem, ib_nd_acc_rem, ibseq_rem, &
     ! !$omp                  npxyz_rem, ibndimj_rem, k_off, icall2)
@@ -375,7 +375,6 @@ contains
     xyz_ghost = zero
     r_ghost   = zero
     do kpart = 1,mult(S_X_SX)%ahalo%np_in_halo  ! Main loop
-       icall=1
        ind_part = mult(S_X_SX)%ahalo%lab_hcell(kpart)    
        !
        !print*, 'inode', inode,'kpart', kpart, ind_part
@@ -385,9 +384,7 @@ contains
        end if
        !
        if(kpart>1) then  ! Is it a periodic image of the previous partition ?
-          if(ind_part.eq.mult(S_X_SX)%ahalo%lab_hcell(kpart-1)) then
-             icall=0
-          else ! Get the data
+          if(ind_part.ne.mult(S_X_SX)%ahalo%lab_hcell(kpart-1)) then ! Get the data
              ipart = mult(S_X_SX)%parts%i_cc2seq(ind_part)
              nnode = mult(S_X_SX)%comms%neigh_node_list(kpart)
              recv_part(nnode) = recv_part(nnode)+1
@@ -401,7 +398,7 @@ contains
              !
              allocate(b_rem(lenb_rem))
              !
-             call prefetch(kpart,mult(S_X_SX)%ahalo,mult(S_X_SX)%comms,mult(S_X_SX)%bmat,icall, &
+             call prefetch(kpart,mult(S_X_SX)%ahalo,mult(S_X_SX)%comms,mult(S_X_SX)%bmat, &
                   n_cont,part_array,mult(S_X_SX)%bindex,b_rem,lenb_rem,mat_p(matK(  exxspin  ))%matrix,   &
                   myid,ilen2,mx_msg_per_part,mult(S_X_SX)%parts,mult(S_X_SX)%prim,mult(S_X_SX)%gcs,&
                   (recv_part(nnode)-1)*2)
@@ -447,7 +444,7 @@ contains
           call stop_timer(tmr_std_exx_allocat,.true.)
           !
           !
-          call prefetch(kpart,mult(S_X_SX)%ahalo,mult(S_X_SX)%comms,mult(S_X_SX)%bmat,icall, &
+          call prefetch(kpart,mult(S_X_SX)%ahalo,mult(S_X_SX)%comms,mult(S_X_SX)%bmat, &
                n_cont,part_array,mult(S_X_SX)%bindex,b_rem,lenb_rem,mat_p(matK(  exxspin  ))%matrix,   & 
                myid,ilen2,mx_msg_per_part,mult(S_X_SX)%parts,mult(S_X_SX)%prim,mult(S_X_SX)%gcs,&
                (recv_part(nnode)-1)*2)
