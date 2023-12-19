@@ -204,7 +204,7 @@ contains
        end do
        !write(*,*) "  number of iterations in i loop", at%n_hnab(k_in_halo)
        ! Loop over primary-set A-neighbours of k
-       !$omp do schedule(dynamic) collapse(2)
+       !$omp do schedule(runtime) collapse(2)
        do i = 1, at%n_hnab(k_in_halo)
           ! nabeg = at%i_beg(k_in_halo) + i - 1
           i_in_prim = at%i_prim(at%i_beg(k_in_halo)+i-1)
@@ -444,7 +444,7 @@ contains
           jbnab2ch(j) = chalo%i_halo(chalo%i_hbeg(jpart)+jseq-1)
        end do
        ! Loop over primary-set A-neighbours of k
-       !$omp do schedule(dynamic) collapse(2)
+       !$omp do schedule(runtime) collapse(2)
        do i = 1, at%n_hnab(k_in_halo)
           ! nabeg = at%i_beg(k_in_halo) + i - 1
           i_in_prim = at%i_prim(at%i_beg(k_in_halo)+i-1)

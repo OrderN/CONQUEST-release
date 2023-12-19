@@ -216,7 +216,7 @@ contains
           icad = (i_in_prim - 1) * chalo%ni_in_halo
           sofar = 0
           ! Loop over B-neighbours of atom k
-          !$omp do schedule(dynamic)
+          !$omp do schedule(runtime)
           do j = 1, nbnab(k_in_part)
              nd2 = bndim2(nbkbeg+j-1)
              nbbeg = nb_nd_kbeg + nd2_1st(j)
@@ -248,7 +248,7 @@ contains
           end if
           sofar = 0
           ! Loop over B-neighbours of atom k
-          !$omp do schedule(dynamic)
+          !$omp do schedule(runtime)
           do j = 1, nbnab(k_in_part)
              nd2 = bndim2(nbkbeg+j-1)
              j_in_halo = jbnab2ch(j)
@@ -451,7 +451,7 @@ contains
           icad = (i_in_prim-1) * chalo%ni_in_halo
           sofar = 0
           ! Loop over B-neighbours of atom k
-          !$omp do schedule(dynamic)
+          !$omp do schedule(runtime)
           do j = 1, nbnab(k_in_part)
              ! nbbeg = nbkbeg + j - 1
              nd2 = bndim2(nbkbeg+j-1)

@@ -219,7 +219,7 @@ contains
           ! nabeg index for openMP is calculated inside loop, here
           nabeg = at%i_nd_beg(k_in_halo) + nd1_1st(i)
           ! Loop over B-neighbours of atom k
-          !$omp do schedule(dynamic)
+          !$omp do schedule(runtime)
           do j = 1, nbnab(k_in_part)
              ! nbbeg = nbkbeg + j - 1
              nd2 = bndim2(nbkbeg+j-1)
@@ -427,7 +427,7 @@ contains
           icad = (i_in_prim-1) * chalo%ni_in_halo
           nabeg = at%i_nd_beg(k_in_halo) + nd1_1st(i)
           ! Loop over B-neighbours of atom k
-          !$omp do schedule(dynamic)
+          !$omp do schedule(runtime)
           do j = 1, nbnab(k_in_part)
              !nbbeg = nbkbeg + j - 1
              nd2 = bndim2(nbkbeg+j-1)
@@ -452,8 +452,8 @@ contains
                 end if
              end if
           end do
+          !$omp end do
        end do
-!$omp end do
     end do
     return
   end subroutine m_kern_min
