@@ -350,7 +350,7 @@ contains
     call start_timer(tmr_std_allocation)
     deallocate(ibpart_rem,STAT=stat)
     if(stat/=0) call cq_abort('mat_mult: error deallocating ibpart_rem')
-    deallocate(recv_part,STAT=stat)
+    if(allocated(recv_part)) deallocate(recv_part,STAT=stat)
     if(stat/=0) call cq_abort('mat_mult: error deallocating recv_part')
     call stop_timer(tmr_std_allocation)
     call my_barrier
