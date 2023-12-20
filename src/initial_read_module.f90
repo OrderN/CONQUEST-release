@@ -2639,6 +2639,7 @@ contains
     use control,    only: MDn_steps
     use md_control, only: md_ensemble
     use omp_module, only: init_threads
+    use multiply_kernel, only: kernel_id
 
     implicit none
 
@@ -2841,7 +2842,7 @@ contains
     else if (threads==1) then
        write(io_lun,fmt="(/4x,'The calculation will be performed on ',i5,' thread')") threads
     end if
-    
+    write(io_lun,fmt='(/4x,"Using the ",a," matrix multiplication kernel")') kernel_id
     if(.NOT.flag_diagonalisation) &
          write(io_lun,fmt='(10x,"Density Matrix range  = ",f7.4,1x,a2)') &
          dist_conv*r_c, d_units(dist_units)
