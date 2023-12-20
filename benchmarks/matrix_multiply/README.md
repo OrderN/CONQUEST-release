@@ -10,5 +10,5 @@ With the rest of the `xtl` files, we double the number of atoms each time, and w
 to double the number of processes.
 
 We now have systems from 64 atoms (222) to 262144 atoms (323232) which will scale from 8 MPI
-to 32,768 MPI processes (1 OpenMP thread) with 8 atoms per process or 1 MPI process to 512 MPI
+to 32,768 MPI processes (1 OpenMP thread) with 8 atoms per process or 1 MPI process to 4096 MPI
 processes with 64 atoms per process.
