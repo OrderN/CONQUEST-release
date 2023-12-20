@@ -350,7 +350,7 @@ contains
     call start_timer(tmr_std_allocation)
     deallocate(ibpart_rem,STAT=stat)
     if(stat/=0) call cq_abort('mat_mult: error deallocating ibpart_rem')
-    if(allocated(recv_part)) deallocate(recv_part,STAT=stat)
+    deallocate(recv_part,STAT=stat)
     if(stat/=0) call cq_abort('mat_mult: error deallocating recv_part')
     call stop_timer(tmr_std_allocation)
     call my_barrier
@@ -581,7 +581,7 @@ contains
     integer, intent(in) :: kpart
     type(matrix_mult), intent(in) :: a_b_c
     real(double), intent(in) :: b(:)
-    integer, dimension(:), intent(inout) :: recv_part
+    integer, allocatable, dimension(:), intent(inout) :: recv_part
     real(double), allocatable, intent(inout) :: b_rem(:)
     integer, intent(out) :: lenb_rem
     integer, intent(in) :: myid, ncover_yz
