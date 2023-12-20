@@ -170,10 +170,7 @@ contains
     integer, dimension(:), allocatable :: nreqs
     integer :: sends,i,j
     integer, dimension(MPI_STATUS_SIZE) :: mpi_stat
-    type jagged_array_i
-       integer, allocatable :: values(:)
-    end type jagged_array_i
-    type(jagged_array_i) :: recv_part(2)
+    integer, allocatable :: recv_part(:)
     real(double) :: t0,t1
     integer :: request(2,2), index_rec, index_wait
 
@@ -189,11 +186,9 @@ contains
     !allocate(atrans(a_b_c%amat(1)%length),STAT=stat)
     allocate(atrans(lena),STAT=stat)
     if(stat/=0) call cq_abort('mat_mult: error allocating atrans')
-    allocate(recv_part(1)%values(0:a_b_c%comms%inode),STAT=stat)
-    allocate(recv_part(2)%values(0:a_b_c%comms%inode),STAT=stat)
+    allocate(recv_part(0:a_b_c%comms%inode),STAT=stat)
     if(stat/=0) call cq_abort('mat_mult: error allocating recv_part')
-    recv_part(1)%values = zero
-    recv_part(2)%values = zero
+    recv_part = zero
     call stop_timer(tmr_std_allocation)
     !write(io_lun,*) 'Sizes: ',a_b_c%comms%mx_dim3*a_b_c%comms%mx_dim2*a_b_c%parts%mx_mem_grp*a_b_c%bmat(1)%mx_abs,&
     !     a_b_c%parts%mx_mem_grp*a_b_c%bmat(1)%mx_abs,a_b_c%comms%mx_dim3*a_b_c%comms%mx_dim1* &
@@ -227,12 +222,12 @@ contains
     ncover_yz=a_b_c%gcs%ncovery*a_b_c%gcs%ncoverz
 
     ! Receive the data from the first partition - blocking
-    call do_comms(k_off(2), 1, part_array(:,2), n_cont(2), ilen2(2), a_b_c, b, recv_part(2)%values, &
+    call do_comms(k_off(2), 1, part_array(:,2), n_cont(2), ilen2(2), a_b_c, b, recv_part, &
          b_rem(2)%values, lenb_rem(2), myid, ncover_yz, new_partition(2))
 
     request = MPI_REQUEST_NULL
     !$omp parallel default(shared)
-    main_loop: do kpart = 2,a_b_c%ahalo%np_in_halo
+    main_loop: do kpart = 2,a_b_c%ahalo%np_in_halo+1
 
        ! The following include MPI operations, so they have to be on the master thread only.
        !$omp master
@@ -253,46 +248,53 @@ contains
        index_rec = mod(kpart,2) + 1
        index_wait = mod(kpart+1,2) + 1
        
-       ! Receive the data from the current partition - non-blocking
-       call do_comms(k_off(index_rec), kpart, part_array(:,index_rec), n_cont(index_rec), ilen2(index_rec), &
-            a_b_c, b, recv_part(index_rec)%values, b_rem(index_rec)%values, &
-            lenb_rem(index_rec), myid, ncover_yz, new_partition(index_rec), .true., request(:,index_rec))
-
        ! Check that previous partition data have been received before starting computation
-       !      if (kpart.gt.2 .and. all(request(:,index_wait).ne.[MPI_REQUEST_NULL,MPI_REQUEST_NULL])) &
-       !           call MPI_Waitall(2,request(:,index_wait),MPI_STATUSES_IGNORE,ierr)
        if (kpart.gt.2) then
           if (request(1,index_wait).ne.MPI_REQUEST_NULL) &
                call MPI_Wait(request(1,index_wait),MPI_STATUSES_IGNORE,ierr)
           if (request(2,index_wait).ne.MPI_REQUEST_NULL) &
                call MPI_Wait(request(2,index_wait),MPI_STATUSES_IGNORE,ierr)
-        end if
-        
-        if(new_partition(index_wait)) then
-          ! Now point the _rem variables at the appropriate parts of
-          ! the array where we will receive the data
-          offset = 0
-          nbnab_rem(index_wait)%values => part_array(offset+1:offset+n_cont(index_wait),index_wait)
-          offset = offset+n_cont(index_wait)
-          ibind_rem(index_wait)%values => part_array(offset+1:offset+n_cont(index_wait),index_wait)
-          offset = offset+n_cont(index_wait)
-          ib_nd_acc_rem(index_wait)%values => part_array(offset+1:offset+n_cont(index_wait),index_wait)
-          offset = offset+n_cont(index_wait)
-          ibseq_rem(index_wait)%values => part_array(offset+1:offset+ilen2(index_wait),index_wait)
-          offset = offset+ilen2(index_wait)
-          npxyz_rem(index_wait)%values => part_array(offset+1:offset+3*ilen2(index_wait),index_wait)
-          offset = offset+3*ilen2(index_wait)
-          ibndimj_rem(index_wait)%values => part_array(offset+1:offset+ilen2(index_wait),index_wait)
-          if(offset+ilen2(index_wait)>3*a_b_c%parts%mx_mem_grp+ &
-               5*a_b_c%parts%mx_mem_grp*a_b_c%bmat(1)%mx_abs) then
-             call cq_abort('mat_mult: error pointing to part_array ',kpart-1)
-          end if
-          ! Create ibpart_rem
-          call end_part_comms(myid,n_cont(index_wait),nbnab_rem(index_wait)%values, &
-               ibind_rem(index_wait)%values,npxyz_rem(index_wait)%values,&
-               ibpart_rem(:,index_wait),ncover_yz,a_b_c%gcs%ncoverz)
        end if
 
+       ! If that previous partition was a periodic one, copy over arrays from previous index
+       if(.not.new_partition(index_wait)) then
+          part_array(:,index_wait) = part_array(:,index_rec)
+          n_cont(index_wait) = n_cont(index_rec)
+          ilen2(index_wait) = ilen2(index_rec)
+          b_rem(index_wait) = b_rem(index_rec)
+          lenb_rem(index_wait) = lenb_rem(index_rec)
+       end if
+           
+        ! Now point the _rem variables at the appropriate parts of
+        ! the array where we have received the data
+        offset = 0
+        nbnab_rem(index_wait)%values => part_array(offset+1:offset+n_cont(index_wait),index_wait)
+        offset = offset+n_cont(index_wait)
+        ibind_rem(index_wait)%values => part_array(offset+1:offset+n_cont(index_wait),index_wait)
+        offset = offset+n_cont(index_wait)
+        ib_nd_acc_rem(index_wait)%values => part_array(offset+1:offset+n_cont(index_wait),index_wait)
+        offset = offset+n_cont(index_wait)
+        ibseq_rem(index_wait)%values => part_array(offset+1:offset+ilen2(index_wait),index_wait)
+        offset = offset+ilen2(index_wait)
+        npxyz_rem(index_wait)%values => part_array(offset+1:offset+3*ilen2(index_wait),index_wait)
+        offset = offset+3*ilen2(index_wait)
+        ibndimj_rem(index_wait)%values => part_array(offset+1:offset+ilen2(index_wait),index_wait)
+        if(offset+ilen2(index_wait)>3*a_b_c%parts%mx_mem_grp+ &
+             5*a_b_c%parts%mx_mem_grp*a_b_c%bmat(1)%mx_abs) then
+           call cq_abort('mat_mult: error pointing to part_array ',kpart-1)
+        end if
+        ! Create ibpart_rem
+        call end_part_comms(myid,n_cont(index_wait),nbnab_rem(index_wait)%values, &
+             ibind_rem(index_wait)%values,npxyz_rem(index_wait)%values,&
+             ibpart_rem(:,index_wait),ncover_yz,a_b_c%gcs%ncoverz)
+
+        ! Receive the data from the current partition - non-blocking
+        if (kpart.lt.a_b_c%ahalo%np_in_halo+1) then
+           call do_comms(k_off(index_rec), kpart, part_array(:,index_rec), n_cont(index_rec), ilen2(index_rec), &
+                a_b_c, b, recv_part, b_rem(index_rec)%values, &
+                lenb_rem(index_rec), myid, ncover_yz, new_partition(index_rec), .true., request(:,index_rec))
+        end if
+           
        ! Omp master doesn't include an implicit barrier. We want master
        ! to be finished with comms before calling the multiply kernels
        ! hence the explicit barrier
@@ -314,59 +316,7 @@ contains
                a_b_c%prim%mx_iprim, lena, lenb_rem(index_wait), lenc)
        end if
        !$omp barrier
-    end do main_loop
-
-    ! Do the computation on the last partition
-    !$omp master
-    ! Check that the last partition data have been received before starting computation
-    index_wait = mod(kpart+1,2) + 1
-!    if (all(request(:,index_wait).ne.[MPI_REQUEST_NULL,MPI_REQUEST_NULL])) &
-!         call MPI_Waitall(2,request(:,index_wait),MPI_STATUSES_IGNORE,ierr)
-    if (request(1,index_wait).ne.MPI_REQUEST_NULL) &
-         call MPI_Wait(request(1,index_wait),MPI_STATUSES_IGNORE,ierr)
-    if (request(2,index_wait).ne.MPI_REQUEST_NULL) &
-         call MPI_Wait(request(2,index_wait),MPI_STATUSES_IGNORE,ierr)
-    if(new_partition(index_wait)) then
-       ! Now point the _rem variables at the appropriate parts of
-       ! the array where we will receive the data
-       offset = 0
-       nbnab_rem(index_wait)%values => part_array(offset+1:offset+n_cont(index_wait),index_wait)
-       offset = offset+n_cont(index_wait)
-       ibind_rem(index_wait)%values => part_array(offset+1:offset+n_cont(index_wait),index_wait)
-       offset = offset+n_cont(index_wait)
-       ib_nd_acc_rem(index_wait)%values => part_array(offset+1:offset+n_cont(index_wait),index_wait)
-       offset = offset+n_cont(index_wait)
-       ibseq_rem(index_wait)%values => part_array(offset+1:offset+ilen2(index_wait),index_wait)
-       offset = offset+ilen2(index_wait)
-       npxyz_rem(index_wait)%values => part_array(offset+1:offset+3*ilen2(index_wait),index_wait)
-       offset = offset+3*ilen2(index_wait)
-       ibndimj_rem(index_wait)%values => part_array(offset+1:offset+ilen2(index_wait),index_wait)
-       if(offset+ilen2(index_wait)>3*a_b_c%parts%mx_mem_grp+ &
-            5*a_b_c%parts%mx_mem_grp*a_b_c%bmat(1)%mx_abs) then
-          call cq_abort('mat_mult: error pointing to part_array ',kpart-1)
-       end if
-       ! Create ibpart_rem
-       call end_part_comms(myid,n_cont(index_wait),nbnab_rem(index_wait)%values, &
-            ibind_rem(index_wait)%values,npxyz_rem(index_wait)%values,&
-            ibpart_rem(:,index_wait),ncover_yz,a_b_c%gcs%ncoverz)
-    end if
-    !$omp end master
-    !$omp barrier
-    ! Call the computation kernel on the last partition
-    if(a_b_c%mult_type.eq.1) then  ! C is full mult
-       call m_kern_max( k_off(index_wait),kpart-1,ib_nd_acc_rem(index_wait)%values, ibind_rem(index_wait)%values, &
-            nbnab_rem(index_wait)%values,ibpart_rem(:,index_wait),ibseq_rem(index_wait)%values, &
-            ibndimj_rem(index_wait)%values, atrans,b_rem(index_wait)%values,c,a_b_c%ahalo,a_b_c%chalo, &
-            a_b_c%ltrans,a_b_c%bmat(1)%mx_abs,a_b_c%parts%mx_mem_grp, &
-            a_b_c%prim%mx_iprim, lena, lenb_rem(index_wait), lenc)
-    else if(a_b_c%mult_type.eq.2) then ! A is partial mult
-       call m_kern_min( k_off(index_wait),kpart-1,ib_nd_acc_rem(index_wait)%values, ibind_rem(index_wait)%values, &
-            nbnab_rem(index_wait)%values,ibpart_rem(:,index_wait),ibseq_rem(index_wait)%values, &
-            ibndimj_rem(index_wait)%values, atrans,b_rem(index_wait)%values,c,a_b_c%ahalo,a_b_c%chalo, &
-            a_b_c%ltrans,a_b_c%bmat(1)%mx_abs,a_b_c%parts%mx_mem_grp, &
-            a_b_c%prim%mx_iprim, lena, lenb_rem(index_wait), lenc)
-    end if
-    
+    end do main_loop    
     !$omp end parallel
 
     call start_timer(tmr_std_allocation)
@@ -405,9 +355,7 @@ contains
     call start_timer(tmr_std_allocation)
     deallocate(ibpart_rem,STAT=stat)
     if(stat/=0) call cq_abort('mat_mult: error deallocating ibpart_rem')
-    deallocate(recv_part(1)%values,STAT=stat)
-    if(stat/=0) call cq_abort('mat_mult: error deallocating recv_part')
-    deallocate(recv_part(2)%values,STAT=stat)
+    deallocate(recv_part,STAT=stat)
     if(stat/=0) call cq_abort('mat_mult: error deallocating recv_part')
     call stop_timer(tmr_std_allocation)
     call my_barrier
@@ -658,14 +606,12 @@ contains
     do_nonb_local = .false.
     if (present(do_nonb)) do_nonb_local = do_nonb
     
-    if(.not.allocated(recv_part)) allocate(recv_part(0:a_b_c%comms%inode))
-
     ind_part = a_b_c%ahalo%lab_hcell(kpart)
     new_partition = .true.
     
     ! Check if this is a periodic image of the previous partition
-    if(kpart>2) then
-       if(ind_part.eq.a_b_c%ahalo%lab_hcell(kpart-2)) then
+    if(kpart>1) then
+       if(ind_part.eq.a_b_c%ahalo%lab_hcell(kpart-1)) then
           new_partition = .false.
        end if
     end if
