@@ -51,6 +51,8 @@
 !!    flying ice-cube effect)
 !!   2022/09/29 16:46 dave
 !!    Moved subroutines from control and tidied output
+!!   2023/10/09 lu
+!!    Added variables to enable simulations with a variable temperature
 !!  SOURCE
 !!
 module md_control
@@ -74,18 +76,21 @@ module md_control
   ! Files
   character(20) :: md_position_file = 'md.position'
   character(20) :: md_check_file = "md.checkpoint"
+  character(20) :: md_temperature_file = "md.temperature"
 
   ! Module variables
-  character(20) :: md_thermo_type, md_baro_type
+  character(20) :: md_thermo_type, md_baro_type, md_variable_temperature_method
   character(3) :: md_ensemble
   real(double)  :: md_tau_T, md_tau_P, target_pressure, md_bulkmod_est, &
                    md_box_mass, md_ndof_ions, md_omega_t, md_omega_p, &
                    md_tau_T_equil, md_tau_P_equil, md_p_drag, md_t_drag, &
-                   md_equil_press
+                   md_equil_press, &
+                   md_variable_temperature_rate, md_initial_temperature, md_final_temperature
+
   real(double) :: MDtimestep 
   integer       :: md_n_nhc, md_n_ys, md_n_mts, md_equil_steps
   logical       :: flag_write_xsf, md_cell_nhc, md_calc_xlmass, flag_nhc, &
-                   flag_write_extxyz
+                   flag_write_extxyz, flag_variable_temperature
   real(double), dimension(:), allocatable   :: md_nhc_mass, md_nhc_cell_mass
   real(double), dimension(:,:), allocatable, target :: ion_velocity
   real(double), dimension(3,3), target      :: lattice_vec
@@ -2421,6 +2426,9 @@ contains
   !!   Zamaan Raza
   !!  CREATION DATE
   !!   2018/08/12 10:19
+  !!  MODIFICATION HISTORY
+  !!   2023/10/09 lu
+  !!    Added routine to write the current thermostat temperature in file md.temperature
   !!  SOURCE
   !!  
   subroutine write_md_checkpoint(th, baro)
@@ -2503,10 +2511,59 @@ contains
         end if
       end if
       call io_close(lun)
+
+      if (flag_variable_temperature) then
+        ! Write instantaneous temperature in md.temperature
+        open(unit=lun,file=md_temperature_file,status='replace')
+        write(lun, '(e20.12)') th%T_ext
+        call io_close(lun)
+      end if
+
     end if
 
   end subroutine write_md_checkpoint
   !!***
+
+  !! md_control/read_md_temperature *
+  !!  NAME
+  !!   read_md_checkpoint
+  !!  PURPOSE
+  !!   Read thermostat temperature for MD restart
+  !!  AUTHOR
+  !!   Anh Khoa Augustin Lu
+  !!  CREATION DATE
+  !!   2023/12/26
+  !!  MODIFICATION HISTORY
+  !!   2023/12/26 Anh Khoa Augustin Lu
+  !!    Read temperature of the thermostat for restart runs
+  !!  SOURCE
+  !!
+  subroutine read_md_temperature(th)
+
+    use GenComms,         only: gcopy
+    use input_module,     only: io_assign, io_close
+    use global_module,    only: min_layer
+
+    class(type_thermostat), intent(inout) :: th
+
+    integer                               :: lun
+
+    if (inode == ionode) then
+      if (iprint_MD + min_layer > -5) &
+        write(io_lun,*) &
+                "Reading MD thermostat temperature from ", md_temperature_file
+      call io_assign(lun)
+      open(unit=lun,file=md_temperature_file,status='old')
+      read(lun,*) th%T_ext
+      call io_close(lun)
+
+    end if
+
+    if (inode == ionode) then
+      write(io_lun, *) "Read thermostat temperature : ", th%T_ext , "K"
+    end if
+
+  end subroutine read_md_temperature
 
   !!****m* md_control/read_md_checkpoint *
   !!  NAME
@@ -2517,6 +2574,9 @@ contains
   !!   Zamaan Raza
   !!  CREATION DATE
   !!   2018/08/12 10:19
+  !!  MODIFICATION HISTORY
+  !!   2023/12/26 Anh Khoa Augustin Lu
+  !!    Read temperature of the thermostat for restart runs
   !!  SOURCE
   !!  
   subroutine read_md_checkpoint(th, baro)
