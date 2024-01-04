@@ -2559,6 +2559,8 @@ contains
 
     end if
 
+    call gcopy(th%T_ext)
+
     if (inode == ionode) then
       write(io_lun, *) "Read thermostat temperature : ", th%T_ext , "K"
     end if
