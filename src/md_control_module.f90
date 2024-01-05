@@ -52,7 +52,7 @@
 !!   2022/09/29 16:46 dave
 !!    Moved subroutines from control and tidied output
 !!   2023/10/09 lu
-!!    Added variables XXXX to enable simulations with a variable temperature
+!!    Added variables to enable simulations with a variable temperature
 !!  SOURCE
 !!
 module md_control
@@ -2530,11 +2530,11 @@ contains
   !!  PURPOSE
   !!   Read thermostat temperature for MD restart
   !!  AUTHOR
-  !!   Zamaan Raza
+  !!   Anh Khoa Augustin Lu
   !!  CREATION DATE
-  !!   2018/08/12 10:19
+  !!   2023/12/26
   !!  MODIFICATION HISTORY
-  !!   2023/10/xx Anh Khoa Augustin Lu
+  !!   2023/12/26 Anh Khoa Augustin Lu
   !!    Read temperature of the thermostat for restart runs
   !!  SOURCE
   !!
@@ -2559,6 +2559,8 @@ contains
 
     end if
 
+    call gcopy(th%T_ext)
+
     if (inode == ionode) then
       write(io_lun, *) "Read thermostat temperature : ", th%T_ext , "K"
     end if
@@ -2575,7 +2577,7 @@ contains
   !!  CREATION DATE
   !!   2018/08/12 10:19
   !!  MODIFICATION HISTORY
-  !!   2023/10/xx Anh Khoa Augustin Lu
+  !!   2023/12/26 Anh Khoa Augustin Lu
   !!    Read temperature of the thermostat for restart runs
   !!  SOURCE
   !!  
