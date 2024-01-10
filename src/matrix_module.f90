@@ -673,6 +673,8 @@ contains
     if(stat/=0) then
        call cq_abort('alloc_halo: error allocating ndimi')
     endif
+    halo%ndimi = 0
+    halo%ndimj = 0
     call stop_timer(tmr_std_allocation)
     return
   end subroutine allocate_halo
