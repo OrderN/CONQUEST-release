@@ -26,16 +26,16 @@ COMPFLAGS_F77= $(COMPFLAGS)
 # LibXC: choose between LibXC compatibility below or Conquest XC library
 
 # Conquest XC library
-XC_LIBRARY = CQ
-XC_LIB =
-XC_COMPFLAGS =
+#XC_LIBRARY = CQ
+#XC_LIB =
+#XC_COMPFLAGS =
 
 # LibXC compatibility
 # Choose LibXC version: v4 (deprecated) or v5/6 (v5 and v6 have the same interface)
-# XC_LIBRARY = LibXC_v4
+XC_LIBRARY = LibXC_v4
 #XC_LIBRARY = LibXC_v5
-#XC_LIB = -lxcf90 -lxc
-#XC_COMPFLAGS = -I/usr/local/include
+XC_LIB = -L/shared/ucl/apps/libxc/4.2.3/intel-2018/lib -lxcf90 -lxc
+XC_COMPFLAGS = -I/shared/ucl/apps/libxc/4.2.3/intel-2018/include
 
 # Set FFT library
 FFT_LIB=-lmkl_rt
