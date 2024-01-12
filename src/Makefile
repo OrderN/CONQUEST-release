@@ -77,7 +77,7 @@ deps.obj.inc: $(SRCS_NODS) $(SYSTEM_PATH)
 
 #Target
 $(TARGET) : $(NODE_OBJECTS)
-	$(FC) $(LINKFLAGS) -o $(TARGET) $(NODE_OBJECTS) $(LIBS)
+	$(FC) -o $(TARGET) $(NODE_OBJECTS) $(LINKFLAGS) $(LIBS)
 	cp $(TARGET) ../bin
 
 #.f90.o:
