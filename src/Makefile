@@ -95,6 +95,12 @@ $(NODE_OBJECTS):
 initial_read_module.o:initial_read_module.f90 datestamp.o
 	$(FC) $(COMPFLAGS) -c $<
 
+# Note: this module seems to need compiling without optimisation
+# for GCC13, possibly only on Mac.  It doesn't need any other
+# compiler flags (libraries or communications) so should be OK like this
+pseudo_tm_info.o:pseudo_tm_info.f90
+	$(FC) -c $<
+
 #datestamp.f90: $(COMMENT)
 #	$(ECHOSTR) "module datestamp\n" > datestamp.f90
 #	$(ECHOSTR) "  implicit none\n" >> datestamp.f90
