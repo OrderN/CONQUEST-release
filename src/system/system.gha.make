@@ -12,8 +12,6 @@ XC_COMPFLAGS = -I/usr/include
 # Set FFT library
 FFT_LIB=-lfftw3
 FFT_OBJ=fft_fftw3.o
-# Matrix multiplication kernel type
-MULT_KERN = default
 # Use dummy DiagModule or not
 DIAG_DUMMY =
 # Full library call; remove scalapack if using dummy diag module

@@ -276,7 +276,7 @@ contains
     end do ! end of k = 1, nahpart
     if (allocated(tempa)) deallocate(tempa)
     if (allocated(tempc)) deallocate(tempc)
-    !$omp end signle
+    !$omp end single
     return
   end subroutine m_kern_max
   !!*****

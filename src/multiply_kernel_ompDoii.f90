@@ -252,7 +252,6 @@ contains
           end do ! End of j = 1, nbnab
        end do ! End of i = 1, at%n_hnab
     end do ! End of k = 1, nahpart
-!$omp end parallel
     return
   end subroutine m_kern_max
   !!*****

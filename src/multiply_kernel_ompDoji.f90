@@ -186,14 +186,6 @@ contains
     ! OpenMP required indexing variables
     integer :: nd1_1st(at%mx_halo), nd2_1st(mx_absb)
 
-!$omp parallel default(none)                                             &
-!$omp          shared(kpart, ibaddr, ib_nd_acc, nbnab, ibpart, ibseq,    &
-!$omp                 k_off, bndim2, mx_absb, mx_part, at, ahalo, chalo, &
-!$omp                 a, b, c)                                           &
-!$omp          private(i, j, k, j_in_halo, k_in_halo, k_in_part, nbkbeg, &
-!$omp                  nb_nd_kbeg, nd1, nd2, nd3, jpart, jseq, jbnab2ch, &
-!$omp                  nabeg, nbbeg, ncbeg, i_in_prim, icad, naaddr,     &
-!$omp                  nbaddr, ncaddr, n1, n2, n3, nd1_1st, nd2_1st)
     ! Loop over atoms k in current A-halo partn
     do k = 1, ahalo%nh_part(kpart)
        k_in_halo = ahalo%j_beg(kpart) + k - 1
@@ -261,7 +253,6 @@ contains
 !$omp end do
        end do ! End of i = 1, at%n_hnab
     end do ! End of k = 1, nahpart
-!$omp end parallel
     return
   end subroutine m_kern_max
   !!*****
@@ -407,14 +398,6 @@ contains
     ! For OpenMP
     integer :: nd1_1st(at%mx_halo), nd2_1st(mx_absb)
 
-!$omp parallel default(none)                                                &
-!$omp          shared(kpart, ibaddr, ib_nd_acc, nbnab, ibpart, ibseq,       &
-!$omp                 k_off, bndim2, mx_absb, mx_part, at, ahalo, chalo,    &
-!$omp                 a, b, c)                                              &
-!$omp          private(j_in_halo, k_in_halo, k_in_part, nbkbeg,             &
-!$omp                  nb_nd_kbeg, nd1, nd2, nd3, i, j, k, jpart, jseq,     &
-!$omp                  jbnab2ch, icad, nabeg, nbbeg, ncbeg, naaddr, nbaddr, &
-!$omp                  ncaddr, n1, n2, n3, i_in_prim, nd1_1st, nd2_1st)
     ! Loop over atoms k in current A-halo partn
     do k = 1, ahalo%nh_part(kpart)
        k_in_halo = ahalo%j_beg(kpart) + k - 1
@@ -474,7 +457,6 @@ contains
        end do
 !$omp end do
     end do
-!$omp end parallel
     return
   end subroutine m_kern_min
   !!*****
