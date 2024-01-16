@@ -5,11 +5,11 @@ Created on Fri Dec 18 14:53:09 2020
 @author: lioneltruflandier
 """
 
-import os.path
+#import os.path
 import re, sys
 sys.path.append('../../')
 
-#from pylab import plot, show, legend
+from pylab import plot, show, legend
 import matplotlib.pylab as plt
 from numpy import size, exp, array, zeros
 
@@ -28,7 +28,7 @@ filename_ion='HCQ.ion'
 # file to write the GTO fit results formatted for Conquest
 filename_gto_write='HCQ.gto_SZ_3G' 
 # file to read in order to build an initial guess (not mandatory)
-filename_gto_read ='HCQ.gto_SZ_3G_guess' 
+filename_gto_read ='HCQ.gto_SZP_3G_guess' 
 
 #%% Read the ion file genrerated by MakeIonFiles
 # return the chemical symbol, the number orbitals @(norb) 
