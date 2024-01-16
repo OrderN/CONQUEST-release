@@ -185,7 +185,6 @@ contains
        nbkbeg = ibaddr(k_in_part)
        nb_nd_kbeg = ib_nd_acc(k_in_part)
        nd3 = ahalo%ndimj(k_in_halo)
-       ! if (PRESENT(debug)) write (21+debug,*) 'Details1: ', k, nb_nd_kbeg
        ! for OpenMP sub-array indexing
        nd1_1st(1) = 0
        do i = 2, at%n_hnab(k_in_halo)
