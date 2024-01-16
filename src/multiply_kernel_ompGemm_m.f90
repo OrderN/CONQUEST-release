@@ -158,7 +158,7 @@ contains
     ! Local variables
     integer :: jbnab2ch(mx_absb)  ! Automatic array
     integer :: nbkbeg, k, k_in_part, k_in_halo, j, jpart, jseq
-    integer :: i, nabeg, i_in_prim, icad, nbbeg, j_in_halo, ncbeg
+    integer :: i, nabeg, naend, i_in_prim, icad, j_in_halo, ncbeg
     integer :: n1, n2, n3, nb_nd_kbeg
     integer :: nd1, nd2, nd3
     integer :: naaddr, nbaddr, ncaddr
@@ -208,12 +208,10 @@ contains
           i_in_prim = at%i_prim(at%i_beg(k_in_halo)+i-1)
           nd1 = ahalo%ndimi(i_in_prim)
           nabeg = at%i_nd_beg(k_in_halo) + nd1_1st(i)
-          do n1 = 1, nd1
-             naaddr = nabeg + nd3 * (n1 - 1)
-             do n3 = 1, nd3
-                tempa(n1,n3) = a(naaddr+n3-1)
-             end do
-          end do
+          naend = nabeg + (nd1 * nd3 - 1)
+
+          tempa(1:nd1, 1:nd3) = reshape(a(nabeg:naend), [nd1, nd3], order = [2,1])
+          
           icad = (i_in_prim - 1) * chalo%ni_in_halo
           sofar = 0
           ! Loop over B-neighbours of atom k
