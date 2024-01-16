@@ -164,6 +164,7 @@ contains
     integer :: naaddr, nbaddr, ncaddr
     real(double), allocatable, dimension(:,:) :: tempb, tempa, tempc
     integer :: sofar, maxnd1, maxnd2, maxnd3, maxlen
+    integer :: nbbeg, nbend, tbbeg, tbend
     external :: dgemm
     ! OpenMP required indexing variables
     integer :: nd1_1st(at%mx_halo), nd2_1st(mx_absb)
@@ -195,54 +196,38 @@ contains
        do j = 2, nbnab(k_in_part)
           nd2_1st(j) = nd2_1st(j-1) + nd3 * bndim2(nbkbeg+j-2)
        end do
+
+       tbbeg = 0
+       tbend = 0
        ! transcription of j from partition to C-halo labelling
        do j = 1, nbnab(k_in_part)
           jpart = ibpart(nbkbeg+j-1) + k_off
           jseq = ibseq(nbkbeg+j-1)
           jbnab2ch(j) = chalo%i_halo(chalo%i_hbeg(jpart)+jseq-1)
+
+          nd2 = bndim2(nbkbeg+j-1)
+          nbbeg = nb_nd_kbeg + nd2_1st(j)
+
+          nbend = nbbeg + (nd3 * nd2 - 1)
+          tbbeg = tbend + 1
+          tbend = tbend + nd2
+          ! Loop over B-neighbours of atom k
+          tempb(1:nd3, tbbeg:tbend) = reshape(b(nbbeg:nbend), [nd3, nd2])
        end do
 !$omp do schedule(runtime)
        ! Loop over primary-set A-neighbours of k
        do i = 1, at%n_hnab(k_in_halo)
-          ! nabeg = at%i_beg(k_in_halo) + i - 1
           i_in_prim = at%i_prim(at%i_beg(k_in_halo)+i-1)
+          icad = (i_in_prim - 1) * chalo%ni_in_halo
           nd1 = ahalo%ndimi(i_in_prim)
           nabeg = at%i_nd_beg(k_in_halo) + nd1_1st(i)
           naend = nabeg + (nd1 * nd3 - 1)
 
           tempa(1:nd1, 1:nd3) = reshape(a(nabeg:naend), [nd1, nd3], order = [2,1])
-          
-          icad = (i_in_prim - 1) * chalo%ni_in_halo
-          sofar = 0
-          ! Loop over B-neighbours of atom k
-          do j = 1, nbnab(k_in_part)
-             nd2 = bndim2(nbkbeg+j-1)
-             nbbeg = nb_nd_kbeg + nd2_1st(j)
-             j_in_halo = jbnab2ch(j)
-             if (j_in_halo /= 0) then
-                ncbeg = chalo%i_h2d(icad+j_in_halo)
-                if (ncbeg /= 0) then  ! multiplication of ndim x ndim blocks
-                   ! if (present(debug)) &
-                   !      write (21+debug,*) 'Details2: ', j, nd2, &
-                   !                         (nabeg-1)/(nd1*nd3),  &
-                   !                         (ncbeg-1)/(nd1*nd2),  &
-                   !                         (nbbeg-1)/(nd2*nd3)
-!DIR$ NOPATTERN
-                   do n2 = 1, nd2
-                      nbaddr = nbbeg + nd3 * (n2 - 1)
-                      do n3 = 1, nd3
-                         tempb(n3,sofar+n2) = b(nbaddr+n3-1)
-                      end do
-                   end do
-                   sofar = sofar + nd2
-                end if
-             end if ! End of if (j_in_halo /= 0)
-          end do ! End of j = 1, nbnab
-          if (sofar > 0) then
-             ! m, n, k, alpha, a, lda, b, ldb, beta, c, ldc
-             call dgemm('n', 'n', nd1, sofar, nd3, one, tempa, &
-                        maxnd1, tempb, maxnd3, zero, tempc, maxnd1)
-          end if
+
+          call dgemm('n', 'n', nd1, tbend, nd3, one, tempa, &
+               maxnd1, tempb, maxnd3, zero, tempc, maxnd1)
+
           sofar = 0
           ! Loop over B-neighbours of atom k
           do j = 1, nbnab(k_in_part)
@@ -257,9 +242,9 @@ contains
                          c(ncaddr+n1-1) = c(ncaddr+n1-1) + tempc(n1,sofar+n2)
                       end do
                    end do
-                   sofar = sofar + nd2
                 end if
              end if
+             sofar = sofar + nd2
           end do ! end of j = 1, nbnab(k_in_part)
        end do ! end of i = 1, at%n_hnab
 !$omp end do
