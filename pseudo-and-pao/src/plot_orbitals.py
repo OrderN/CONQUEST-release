@@ -114,7 +114,7 @@ def plot_GTO_prim( orb, filename_gto_write ):
         # Plot the GTO radial function as the sum over primitives
         tmp_label = str(orb[i].n)+orb[i].lname+'-'+str(orb[i].z)+'$\zeta$'+'-PAO-'+str(orb[i].nG)+'G'
         plt.plot(orb[i].x, orb[i].y_fit,label=tmp_label, \
-        linestyle='--',color=color_list_orbital_fit(i))
+        linestyle='dotted',color=color_list_orbital_fit(i))
 
         plt.xlabel('$r$ in au')
         plt.ylabel('radial part')

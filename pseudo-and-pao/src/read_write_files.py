@@ -68,7 +68,7 @@ def read_ion( filename_ion ):
         print ('read_ion: file'+' '+filename_ion+' '+'exists')
     else:
         print ('read_ion: file'+' '+filename_ion+' '+'does not exist')
-        exit()
+        sys.exit()
     # search for data: symbol, valence electron and lmax ##########################
     file = open(filename_ion, 'r')
             
@@ -387,9 +387,16 @@ def build_guess(orb, orb_guess, center):
                 orb[j].nG    = orb_guess[i].nG
                 #orb[j].gto_a = orb_guess[i].gto_a             
                 #orb[j].gto_d = orb_guess[i].gto_d
-                for k in range(orb_guess[i].nG):
-                    orb[j].guess.append(orb_guess[i].gto_a[k])
-                    orb[j].guess.append(orb_guess[i].gto_d[k])
+                if (center == False):
+                    for k in range(orb_guess[i].nG):
+                        orb[j].guess.append(orb_guess[i].gto_a[k])
+                        orb[j].guess.append(orb_guess[i].gto_d[k])
+                        orb[j].guess.append(orb_guess[i].gto_c[k])
+                else:                    
+                    for k in range(orb_guess[i].nG):
+                        orb[j].guess.append(orb_guess[i].gto_a[k])
+                        orb[j].guess.append(orb_guess[i].gto_d[k])
+                    
                 #print 'j', j, orb[j].guess
                 print('build_guess:', str(orb[j].n)+orb[j].lname+'-'+'zeta'+str(orb[j].z)+' recognized, guess =',orb[j].guess)
 

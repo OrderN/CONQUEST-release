@@ -63,37 +63,43 @@ def gto_fit_orb( x, y, nG, guess, n, name, zeta, index, center):
              print('gto_fit_orb: default number for nG =', nG)
 
         if size(guess) == 0:
-             print('gto_fit_orb: proceed with no initial guess', size(guess))
-             if nG == 1:
-                 if (center == False):
-                     popt, cov = curve_fit(gauss1_c, x, y, maxfev=2000)
-                     a0, d0, c0 = popt
-                     y_fit = gauss1_c(x, a0, d0, c0)
-                 else:
-                     popt, cov = curve_fit(gauss1, x, y)
-                     a0, d0 = popt
-                     y_fit = gauss1(x, a0, d0)
+            
+            print('gto_fit_orb: proceed with no initial guess', size(guess))
+            if nG == 1:
+                if (center == False):                    
+                    popt, cov = curve_fit(gauss1_c, x, y, maxfev=2000)
+                    a0, d0, c0 = popt
+                    y_fit = gauss1_c(x, a0, d0, c0)
+                else:
+                    popt, cov = curve_fit(gauss1, x, y)
+                    a0, d0 = popt
+                    y_fit = gauss1(x, a0, d0)
                      
-             elif nG == 2:
-                 if (center == False):
-                     popt, cov = curve_fit(gauss2_c, x, y, maxfev=3000)
-                     a0, d0, c0, a1, d1,c1 = popt
-                     y_fit = gauss2_c(x, a0, d0, c0, a1, d1, c1)
-                 else:
-                     popt, cov = curve_fit(gauss2, x, y)
-                     a0, d0, a1, d1 = popt
-                     y_fit = gauss2(x, a0, d0, a1, d1)
-                     
-             elif nG == 3:
-                 if (center == False):
-                     popt, cov = curve_fit(gauss3_c, x, y,  maxfev =6000)
-                     a0, d0, c0, a1, d1, c1, a2, d2, c2 = popt
-                     y_fit = gauss3_c(x, a0, d0, c0, a1, d1, c1, a2, d2, c2)
-                 else:
-                     popt, cov = curve_fit(gauss3, x, y)
-                     a0, d0, a1, d1, a2, d2 = popt
-                     y_fit = gauss3(x, a0, d0, a1, d1, a2, d2)
-
+            elif nG == 2:
+                                 
+                if (center == False):
+                    popt, cov = curve_fit(gauss2_c, x, y, maxfev=3000)
+                    a0, d0, c0, a1, d1,c1 = popt
+                    y_fit = gauss2_c(x, a0, d0, c0, a1, d1, c1)
+                else:
+                    popt, cov = curve_fit(gauss2, x, y)
+                    a0, d0, a1, d1 = popt
+                    y_fit = gauss2(x, a0, d0, a1, d1)
+                                 
+            elif nG == 3:
+                if (center == False):
+                    popt, cov = curve_fit(gauss3_c, x, y,  maxfev =8000)
+                    a0, d0, c0, a1, d1, c1, a2, d2, c2 = popt
+                    y_fit = gauss3_c(x, a0, d0, c0, a1, d1, c1, a2, d2, c2)
+                else:
+                    popt, cov = curve_fit(gauss3, x, y)
+                    a0, d0, a1, d1, a2, d2 = popt
+                    y_fit = gauss3(x, a0, d0, a1, d1, a2, d2)
+                    
+            else:
+                
+                print('gto_fit_orb: no implemented for nG =',nG) 
+                sys.exit()
                     
                 
             # elif( nG == 4 ):
@@ -146,29 +152,48 @@ def gto_fit_orb( x, y, nG, guess, n, name, zeta, index, center):
             #         popt, cov = curve_fit( gauss8, x, y )
             #         a0,b0,a1,b1,a2,b2,a3,b3,a4,b4,a5,b5,a6,b6,a7,b7 = popt
             #         y_fit = gauss8(x,a0,b0,a1,b1,a2,b2,a3,b3,a4,b4,a5,b5,a6,b6,a7,b7)
-                    
-        else:
-                print('gto_fit_orb: no implemented for nG =',nG) 
-                exit
+
                 
                 
         print('size(guess)', (size(guess)), guess)
-        if ( size(guess) != 0 ):            
-            if ( (size(guess) % 2) == 0 ) :            
-                if  ( size(guess) > nG*2 ):
-                    print('gto_fit_orb: larger initial guess than expected ; shortened') 
-                    for i in range( size(guess) - nG*2 ):
-                        guess = delete(guess,-1)
-    
-                elif( size(guess) < nG*2 ):
-                    print('gto_fit_orb: smaller initial guess than expected ; augmented')                         
-                    #print guess
-                    for i in range( nG*2 - size(guess) ):
-                        guess = append(guess,1)
+                    
+        if ( size(guess) != 0 ):         
+            
+            if ( center == False ):
 
+                if ( (size(guess) % 3) == 0 ) :            
+                    if  ( size(guess) > nG*3 ):
+                        print('gto_fit_orb: larger initial guess than expected ; shortened') 
+                        for i in range( size(guess) - nG*2 ):
+                            guess = delete(guess,-1)
+    
+                    elif( size(guess) < nG*3 ):
+                        print('gto_fit_orb: smaller initial guess than expected ; augmented')                         
+                        #print guess
+                        for i in range( nG*3 - size(guess) ):
+                            guess = append(guess,1)
+
+                else:
+                    print('gto_fit_orb: problem with the initial guess =',guess) 
+                    sys.exit()
+                
             else:
-                print('gto_fit_orb: problem with the initial guess =',guess) 
-                exit()
+
+                if ( (size(guess) % 2) == 0 ) :            
+                    if  ( size(guess) > nG*2 ):
+                        print('gto_fit_orb: larger initial guess than expected ; shortened') 
+                        for i in range( size(guess) - nG*2 ):
+                            guess = delete(guess,-1)
+    
+                    elif( size(guess) < nG*2 ):
+                        print('gto_fit_orb: smaller initial guess than expected ; augmented')                         
+                        #print guess
+                        for i in range( nG*2 - size(guess) ):
+                            guess = append(guess,1)
+
+                else:
+                    print('gto_fit_orb: problem with the initial guess =',guess) 
+                    sys.exit()
                 
             print('gto_fit_orb: current initial guess =')
             print(guess)
