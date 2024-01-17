@@ -101,8 +101,10 @@ def plot_GTO_prim( orb, filename_gto_write ):
         figure = plt.figure(i+3)
         plt.plot(orb[0].x,zeros(len(orb[0].x)),color='black',linestyle='dotted',linewidth=1.0)
         # Plot each Gaussian function
+        
+        
         for j in range(orb[i].nG):
-            y = orb[i].gto_d[j]*exp( -orb[i].gto_a[j]*array(orb[i].x)**2 )
+            y = orb[i].gto_d[j]*exp( -orb[i].gto_a[j]*(array(orb[i].x) - orb[i].gto_c[j])**2 )
             plt.plot(orb[i].x, y,label='$d=%12.6f$, $a=%12.6f$' %(orb[i].gto_d[j],orb[i].gto_a[j]))
     
         # Plot the PAO radial function

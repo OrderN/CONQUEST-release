@@ -25,6 +25,7 @@ class orbital:
         self.lname = ''
         self.gto_a = []
         self.gto_d = []
+        self.gto_c = []
         self.guess = []
         self.nzeta = 0
         self.nG    = 0
@@ -225,7 +226,7 @@ def write_gto( filename_gto, symbol, orb, overwrite ):
         #file.write(str(orb[i].lname)+str(orb[i].n)+str(orb[i].l)+str(orb[i].z)+'\n')
         for j in range(orb[i].nG):
             #file.write(str(orb[i].gto_a[j])+'_'+str(orb[i].gto_d[j])+'\n')
-            file.write('{:18.10f}{:18.10f}{:18.10f}\n'.format(orb[i].gto_a[j],orb[i].gto_d[j],0.0))
+            file.write('{:18.10f}{:18.10f}{:18.10f}\n'.format(orb[i].gto_a[j],orb[i].gto_d[j],orb[i].gto_c[j]))
             
     print('write_gto:',filename_gto,' written')      
 
@@ -348,16 +349,18 @@ def read_gto( filename_gto ):
         for j in range( orb[i].nG ):
             a, d, c = file.readline().split()   
             orb[i].gto_a.append( float(a) )
-            orb[i].gto_d.append( float(d) )            
+            orb[i].gto_d.append( float(d) )
+            orb[i].gto_c.append( float(c) )             
             orb[i].guess.append( float(a) )
             orb[i].guess.append( float(d) )
+            orb[i].guess.append( float(c) )
 
     orbital_kind = orbital_detection( orb )
         
     return orb
     
 #%% Check consistency between curent orb and orb_guess and build a guess
-def build_guess(orb, orb_guess):
+def build_guess(orb, orb_guess, center):
     
     if ( len(orb) != len(orb_guess) ):
         #
@@ -398,9 +401,16 @@ def build_guess(orb, orb_guess):
                         orb[k].nG    = orb_guess[i].nG
                         #orb[k].gto_a = orb_guess[i].gto_a             
                         #orb[k].gto_d = orb_guess[i].gto_d
-                        for l in range(orb_guess[i].nG):
-                            orb[k].guess.append(orb_guess[i].gto_a[l])
-                            orb[k].guess.append(orb_guess[i].gto_d[l])
+                        if (center == False):
+                            for l in range(orb_guess[i].nG):
+                                orb[k].guess.append(orb_guess[i].gto_a[l])
+                                orb[k].guess.append(orb_guess[i].gto_d[l])
+                                orb[k].guess.append(orb_guess[i].gto_c[l])
+                        else:
+                            for l in range(orb_guess[i].nG):
+                                orb[k].guess.append(orb_guess[i].gto_a[l])
+                                orb[k].guess.append(orb_guess[i].gto_d[l])
+                                
                         #print 'k',k, orb[k].guess
                         print('build_guess:', str(orb[k].n)+orb[k].lname+'-'+'zeta'+str(orb[k].z)+' duplicated, guess =',orb[k].guess)
 
