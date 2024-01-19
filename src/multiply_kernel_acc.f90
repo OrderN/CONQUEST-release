@@ -48,8 +48,9 @@
 ! DEALINGS IN THE SOFTWARE.
 ! ------------------------------------------------------------------------------
 module multiply_kernel
-  use nvtx
+  !use nvtx
 
+  character(len=*), parameter :: kernel_id = "acc"
   integer, allocatable, target :: work_IJKN_0(:,:,:,:), work_IJKN_1(:,:,:,:), work_IJKN_2(:,:,:,:)
   integer, allocatable, target :: work_N_0(:), work_N_1(:), work_N_2(:)
 
@@ -212,7 +213,7 @@ contains
     integer, pointer :: work_IJKN(:,:,:,:)
     integer, pointer :: work_N(:)
 
-    call nvtxStartRange('m_kern_max', __LINE__)
+    !call nvtxStartRange('m_kern_max', __LINE__)
 
     call m_kern_prep(kpart_s, n_kpart, ib_nd_acc, ibaddr, nbnab, &
                      ibpart, ibseq, bndim2, ahalo, chalo, at, &
@@ -277,7 +278,7 @@ contains
     end do
     !$acc end parallel
 
-    call nvtxEndRange
+    !call nvtxEndRange
     return
   end subroutine m_kern_max
   !!*****
@@ -427,7 +428,7 @@ contains
     integer, pointer :: work_IJKN(:,:,:,:)
     integer, pointer :: work_N(:)
 
-    call nvtxStartRange('m_kern_min', __LINE__)
+    !call nvtxStartRange('m_kern_min', __LINE__)
 
     call m_kern_prep(kpart_s, n_kpart, ib_nd_acc, ibaddr, nbnab, &
                      ibpart, ibseq, bndim2, ahalo, chalo, at, &
@@ -492,7 +493,7 @@ contains
     end do
     !$acc end parallel
 
-    call nvtxEndRange
+    !call nvtxEndRange
     return
   end subroutine m_kern_min
   !!*****
@@ -553,9 +554,8 @@ contains
 
      !$acc wait(side)
      if (side == 0) then
-        if (allocated(work_IJKN_0)) then
-           deallocate( work_IJKN_0, work_N_0 )
-        endif
+        if (allocated(work_IJKN_0)) deallocate( work_IJKN_0 )
+        if (allocated(work_N_0)) deallocate( work_N_0 )
         allocate( work_IJKN_0(1+max_i+max_j, 3, max_k, n_kpart) )
         allocate( work_N_0(n_kpart) )
         work_IJKN => work_IJKN_0
