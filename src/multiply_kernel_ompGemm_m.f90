@@ -199,6 +199,7 @@ contains
        tbbeg = 0
        tbend = 0
        ! transcription of j from partition to C-halo labelling
+       !$omp do schedule(runtime)
        do j = 1, nbnab(k_in_part)
           jpart = ibpart(nbkbeg+j-1) + k_off
           jseq = ibseq(nbkbeg+j-1)
@@ -213,8 +214,9 @@ contains
           ! Loop over B-neighbours of atom k
           tempb(1:nd3, tbbeg:tbend) = reshape(b(nbbeg:nbend), [nd3, nd2])
        end do
-!$omp do schedule(runtime)
+       !$omp do schedule(runtime)
        ! Loop over primary-set A-neighbours of k
+       ! TODO: Add more atoms per process to have more work in this loop
        do i = 1, at%n_hnab(k_in_halo)
           i_in_prim = at%i_prim(at%i_beg(k_in_halo)+i-1)
           icad = (i_in_prim - 1) * chalo%ni_in_halo
@@ -229,6 +231,7 @@ contains
 
           sofar = 0
           ! Loop over B-neighbours of atom k
+          ! TODO: Create a mask for the rows/cols of C that we want and do array copy
           do j = 1, nbnab(k_in_part)
              nd2 = bndim2(nbkbeg+j-1)
              j_in_halo = jbnab2ch(j)
@@ -470,4 +473,3 @@ contains
   !!*****
 
 end module multiply_kernel
-
