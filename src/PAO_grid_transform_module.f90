@@ -210,7 +210,7 @@ contains
     !$omp             shared(domain, naba_atoms_of_blocks, offset_position, pao_fns, atomf, &
     !$omp                    dcellx_block, dcelly_block, dcellz_block, dcs_parts, &
     !$omp                    rcut, n_pts_in_block, pao, gridfunctions, direction) &
-    !$omp             private(ia, ipart, iblock, l1, acz, m1, count1, x, y, z, val, position, &
+    !$omp             private(ia, ipart, iblock, l1, acz, m1, count1, x, y, z, r, val, position, &
     !$omp                     npoint, r_store, ip_store, x_store, y_store, z_store, my_species, &
     !$omp                     xblock, yblock, zblock, iatom, xatom, yatom, zatom, naba_part_label, ind_part, icover)
     blocks_loop_omp: do iblock = 1, domain%groups_on_node ! primary set of blocks
@@ -240,7 +240,7 @@ contains
                 x = x_store(ip)
                 y = y_store(ip)
                 z = z_store(ip)
-                r = sqrt(x*x,y*y,z*z)
+                r = sqrt(x*x+y*y+z*z)
                 ! For this point-atom offset, we accumulate the PAO on the grid
                 l_loop: do l1 = 0,pao(my_species)%greatest_angmom
                    z_loop: do acz = 1,pao(my_species)%angmom(l1)%n_zeta_in_angmom

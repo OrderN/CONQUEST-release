@@ -1003,7 +1003,7 @@ contains
 !!    Added dummy argument to satisfy interface in PAO_grid_transform_module
 !!  SOURCE
 !!
-  subroutine pao_elem_derivative_2(i_vector,spec,l,nzeta,m,x_i,y_i,z_i,drvtv_val,sys_dummy)
+  subroutine pao_elem_derivative_2(i_vector,spec,l,nzeta,m,x_i,y_i,z_i,r_my,drvtv_val,sys_dummy)
 
     use datatypes
     use numbers
@@ -1012,18 +1012,17 @@ contains
     
     !RC 09/11/03 using (now debugged) routine pp_elem_derivative (see 
     ! above) as template for this sbrt pao_elem_derivative
-    real(double), intent(in) :: x_i,y_i,z_i
+    real(double), intent(in) :: x_i,y_i,z_i,r_my
     logical,      intent(in), optional :: sys_dummy
     real(double), intent(out) :: drvtv_val
     integer, intent(in) :: i_vector, l, m, spec, nzeta
     integer :: n1,n2
     real(double) :: del_x,xj1,xj2,f_r,df_r,a,b,c,d,alpha,beta,gamma,delta
-    real(double) :: x,y,z,r_my,theta,phi,c_r,c_theta,c_phi,x_n,y_n,z_n
+    real(double) :: x,y,z,theta,phi,c_r,c_theta,c_phi,x_n,y_n,z_n
     real(double) :: fm_phi, dfm_phi, val1, val2, rl, rl1, tmpr, tmpdr
 
     !routine to calculate value of gradient of f(r)*Re(Y_lm(x,y,z))
     !along specified Cartesian unit vector
-    r_my = sqrt((x_i*x_i)+(y_i*y_i)+(z_i*z_i))
     call pao_rad_vals_fetch(spec,l,nzeta,m,r_my,f_r,df_r)
     if(r_my>very_small) then 
        x_n = x_i/r_my; y_n = y_i/r_my; z_n = z_i/r_my
