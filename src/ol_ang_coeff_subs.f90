@@ -845,7 +845,7 @@ contains
 !!    ie. stay in Cartesian ones (should be more efficient)   
 !!  SOURCE
 !!
-  subroutine evaluate_pao(i_vector,sp,l,nz,m,x,y,z,pao_val,system)
+  subroutine evaluate_pao(i_vector,sp,l,nz,m,x,y,z,r,pao_val,system)
 
     use datatypes
     use numbers
@@ -855,11 +855,11 @@ contains
 
     integer, intent(in) :: i_vector ! dummy argument, included to satisfy interface in PAO_grid_transform_module
     integer, intent(in) :: sp,l,nz,m
-    real(double), intent(in) :: x,y,z
+    real(double), intent(in) :: x,y,z,r
     logical,      intent(in), optional :: system 
     real(double), intent(out) :: pao_val
     !
-    real(double) :: r,theta,phi,del_r,y_val,val
+    real(double) :: theta,phi,del_r,y_val,val
     real(double) :: a, b, c, d, r1, r2, r3, r4, rr
     integer :: npts, j
     logical :: cartesian
@@ -872,7 +872,7 @@ contains
     end if
     !
     !compute radius
-    r = sqrt(x*x+y*y+z*z) 
+    !r = sqrt(x*x+y*y+z*z) 
     !
     !interpolate for required value of radial function
     npts  = pao(sp)%angmom(l)%zeta(nz)%length

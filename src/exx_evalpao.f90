@@ -184,7 +184,7 @@ contains
                          pao_val = zero
                          y_val   = zero             
 
-                         call evaluate_pao(i_dummy,spec,l1,acz,m1,x,y,z,pao_val,exx_cartesian)
+                         call evaluate_pao(i_dummy,spec,l1,acz,m1,x,y,z,r,pao_val,exx_cartesian)
 
                          ! Put pao_val directly into phi_on_grid
                          ! (only for primitive PAOs and not for blips)
