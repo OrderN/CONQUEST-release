@@ -860,7 +860,7 @@ contains
     real(double), intent(out) :: pao_val
     !
     real(double) :: theta,phi,del_r,y_val,val
-    real(double) :: a, b, c, d, r1, r2, r3, r4, rr
+    real(double) :: a, b, c, d, r1, r2, r3, r4, rr, dummy_r
     integer :: npts, j
     logical :: cartesian
     
@@ -898,7 +898,8 @@ contains
     if ( .not. cartesian ) then ! if want to work in Polar coordinates
        !
        !convert Cartesians into spherical polars
-       call convert_basis(x,y,z,r,theta,phi)
+       dummy_r = r 
+       call convert_basis(x,y,z,dummy_r,theta,phi)
        !
        !now multiply by value of spherical harmonic
        y_val = re_sph_hrmnc(l,m,theta,phi)

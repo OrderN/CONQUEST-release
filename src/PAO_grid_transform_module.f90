@@ -145,7 +145,7 @@ contains
        ! Interface to return a value val given arguments
        ! direction,species,l,acz,m,x,y,z. Implemented by
        ! evaluate_pao() and pao_elem_derivative_2().
-       subroutine evaluate(direction,species,l,acz,m,x,y,z,rval,sys)
+       subroutine evaluate(direction,species,l,acz,m,x,y,z,r,val,sys)
          use datatypes, only: double
          integer, intent(in) :: species,l,acz,m
          integer, intent(in) :: direction
