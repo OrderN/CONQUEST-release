@@ -1038,11 +1038,10 @@ contains
     !$omp parallel default(none)                                             &
     !$omp          shared(kpart, ibaddr, ib_nd_acc, nbnab, ibpart, ibseq,    &
     !$omp                 k_off, bndim2, mx_absb, mx_part, at, ahalo, chalo, &
-    !$omp                 a, b, c)                                           &
+    !$omp                 b, c)                                              &
     !$omp          private(i, j, k, j_in_halo, k_in_halo, k_in_part, nbkbeg, &
-    !$omp                  nb_nd_kbeg, nd1, nd2, nd3, jpart, jseq, jbnab2ch, &
-    !$omp                  nabeg, nbbeg, ncbeg, i_in_prim, icad, naaddr, l,  &
-    !$omp                  nbaddr, ncaddr, n1, n2, n3, nd1_1st, nd2_1st)
+    !$omp                  nb_nd_kbeg, nd1, nd3, jpart, jseq, jbnab2ch,      &
+    !$omp                  nbbeg, ncbeg, i_in_prim, icad, l, nbaddr, ncaddr)
 !!$
 !!$ ****[ k loop ]****
 !!$
@@ -1316,6 +1315,7 @@ contains
        if ( exx_alloc ) call exx_mem_alloc(extent,kg%nsup,0,'phi_k','dealloc') 
        !
     end do ! End of k = 1, ahalo%nh_part(kpart)
+    !$omp end parallel
     !
     !
     return
