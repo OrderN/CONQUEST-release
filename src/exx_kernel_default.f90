@@ -1138,6 +1138,7 @@ contains
              end do
           end do
           !$omp end do
+          !$omp barrier 
           !
           nbbeg = nbbeg + ld%nsup*kg%nsup !nd3 * nd2                
           !
@@ -1225,6 +1226,7 @@ contains
                    !
                    call stop_timer(tmr_std_exx_accumul,.true.)
                    !
+                   !$omp barrier 
                    !$omp single
                    if ( exx_alloc ) call exx_mem_alloc(extent,jb%nsup,0,'phi_j','dealloc')                   
                    if ( exx_alloc ) call exx_mem_alloc(extent,kg%nsup,jb%nsup,'vhf_kj','alloc')                   
@@ -1260,6 +1262,7 @@ contains
                    end do
                    !$omp end do
                    !
+                   !$omp barrier
                    !$omp single
                    if ( exx_alloc ) call exx_mem_alloc(extent,kg%nsup,jb%nsup,'rho_kj','dealloc')                   
                    if ( exx_alloc ) call exx_mem_alloc(extent,kg%nsup,jb%nsup,'Ome_kj',  'alloc')                   
@@ -1278,6 +1281,7 @@ contains
                    !$omp end do
                    call stop_timer(tmr_std_exx_accumul,.true.)
                    !
+                   !$omp barrier
                    !$omp single
                    if ( exx_alloc ) call exx_mem_alloc(extent,jb%nsup,jb%nsup,'vhf_kj','dealloc')
                    !$omp end single
@@ -1324,6 +1328,7 @@ contains
                    !
                    call stop_timer(tmr_std_exx_matmult,.true.)
                    !
+                   !$omp barrier
                    !$omp single
                    if ( exx_alloc ) call exx_mem_alloc(extent,jb%nsup,jb%nsup,'Ome_kj','dealloc')                   
                    !$omp end single
@@ -1341,6 +1346,7 @@ contains
 !!$
 !!$ ****[ i end loop ]****
 !!$
+          !$omp barrier
           !$omp single
           if ( exx_alloc ) call exx_mem_alloc(extent,ia%nsup,0,'phi_i','dealloc') 
           !$omp end single
@@ -1351,6 +1357,7 @@ contains
 !!$ ****[ k end loop ]****
 !!$
        !
+       !$omp barrier
        !$omp single
        if ( exx_alloc ) call exx_mem_alloc(extent,kg%nsup,0,'Phy_k','dealloc') 
        if ( exx_alloc ) call exx_mem_alloc(extent,kg%nsup,0,'phi_k','dealloc') 
