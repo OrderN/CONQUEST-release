@@ -58,7 +58,7 @@ contains
     integer             :: l1, m1, acz
 
     real(double)        :: grid_spacing 
-    real(double)        :: x, y, z, r
+    real(double)        :: x, y, z, r, x2, y2, z2
     real(double)        :: int, n, rest
     real(double)        :: xyz_delta(3)
 
@@ -157,17 +157,17 @@ contains
        !print*,
        grid_x_loop: do nx = mx, px
           x = xyz(1) + real(nx,double)*grid_spacing + rst(1)
-
+          x2 = x*x
           grid_y_loop: do ny = my, py
              y = xyz(2) + real(ny,double)*grid_spacing + rst(2)
-
+             y2 = y*y
              grid_z_loop: do nz = mz, pz
                 z = xyz(3) + real(nz,double)*grid_spacing + rst(3)
-
+                z2 = z*z
                 !norm = sqrt((x-xyz(1))**2+(y-xyz(2))**2+(z-xyz(3))**2)
                 !if (norm <= r_h) then
 
-                r = sqrt(x*x+y*y+z*z)             
+                r = sqrt(x2+y2+z2)             
                 !if(r < very_small) then
                 !   r = zero
                 !end if
