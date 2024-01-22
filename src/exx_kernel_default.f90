@@ -1035,6 +1035,14 @@ contains
     !unit_exx_debug1 = 333
     !
     !
+    !$omp parallel default(none)                                             &
+    !$omp          shared(kpart, ibaddr, ib_nd_acc, nbnab, ibpart, ibseq,    &
+    !$omp                 k_off, bndim2, mx_absb, mx_part, at, ahalo, chalo, &
+    !$omp                 a, b, c)                                           &
+    !$omp          private(i, j, k, j_in_halo, k_in_halo, k_in_part, nbkbeg, &
+    !$omp                  nb_nd_kbeg, nd1, nd2, nd3, jpart, jseq, jbnab2ch, &
+    !$omp                  nabeg, nbbeg, ncbeg, i_in_prim, icad, naaddr, l,  &
+    !$omp                  nbaddr, ncaddr, n1, n2, n3, nd1_1st, nd2_1st)
 !!$
 !!$ ****[ k loop ]****
 !!$
@@ -1077,6 +1085,7 @@ contains
 !!$
 !!$ ****[ l do loop ]****
 !!$
+       !$omp do schedule(runtime)
        do l = 1, nbnab(k_in_part)
           !l_in_halo = lbnab2ch(l)                
           lpart = ibpart(nbkbeg+l-1) + k_off
@@ -1120,6 +1129,7 @@ contains
           
           !end if !( screen kl )
        end do ! End of l = 1, nbnab(k_in_part)
+       !$omp end do
 !!$
 !!$ ****[ i loop ]****
 !!$
@@ -1147,6 +1157,7 @@ contains
 !!$
 !!$ ****[ j loop ]****
 !!$
+          !$omp do schedule(runtime)
           do j = 1, nbnab(k_in_part)!mat(np,Xrange)%n_nab(ni)                   
              nbbeg     = nb_nd_kbeg
              j_in_halo = jbnab2ch(j) !***
@@ -1288,6 +1299,7 @@ contains
 !!$ ****[ j end loop ]****
 !!$
           end do ! End of j = 1, mat(np,SXrange)%n_nab(ni)           
+          !$omp end do
           !          
 !!$
 !!$ ****[ i end loop ]****
