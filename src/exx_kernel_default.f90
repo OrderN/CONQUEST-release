@@ -1038,10 +1038,15 @@ contains
     !$omp parallel default(none)                                             &
     !$omp          shared(kpart, ibaddr, ib_nd_acc, nbnab, ibpart, ibseq,    &
     !$omp                 k_off, bndim2, mx_absb, mx_part, at, ahalo, chalo, &
-    !$omp                 b, c)                                              &
+    !$omp                 b, c, kg, unit_exx_debug, exx_alloc, extent, ia,   &
+    !$omp                 xyz_zero, r_int, Phy_k, phi_l, phi_i, phi_j, ld,   &
+    !$omp                 BCS_parts, tmr_std_exx_accumul, bundle, ia, jb,    &
+    !$omp                 tmr_std_exx_poisson, dv, work_in_3d, exx_psolver,  &
+    !$omp                 exx_pscheme, dv)                                   &
     !$omp          private(i, j, k, j_in_halo, k_in_halo, k_in_part, nbkbeg, &
-    !$omp                  nb_nd_kbeg, nd1, nd3, jpart, jseq, jbnab2ch,      &
-    !$omp                  nbbeg, ncbeg, i_in_prim, icad, l, nbaddr, ncaddr)
+    !$omp                  nb_nd_kbeg, ni, np, jpart, jseq, jbnab2ch, phi_k, &
+    !$omp                  nbbeg, ncbeg, i_in_prim, icad, l, nbaddr, ncaddr, &
+    !$omp                  lpart, lseq, K_val, nd1, nd3)
 !!$
 !!$ ****[ k loop ]****
 !!$
