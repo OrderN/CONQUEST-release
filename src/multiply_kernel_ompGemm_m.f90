@@ -158,7 +158,7 @@ contains
     ! Local variables
     integer :: jbnab2ch(mx_absb)  ! Automatic array
     integer :: nbkbeg, k, k_in_part, k_in_halo, j, jpart, jseq
-    integer :: i, nabeg, naend, i_in_prim, icad, j_in_halo, ncbeg
+    integer :: i, nabeg, naend, i_in_prim, icad, ncbeg
     integer :: n1, n2, n3, nb_nd_kbeg
     integer :: nd1, nd2, nd3
     integer :: naaddr, nbaddr, ncaddr
@@ -166,8 +166,6 @@ contains
     integer :: sofar, maxnd1, maxnd2, maxnd3, maxlen
     integer :: nbbeg, nbend, tbbeg, tbend
     external :: dgemm
-    ! OpenMP required indexing variables
-    integer :: nd1_1st(at%mx_halo), nd2_1st(mx_absb)
 
     ! Allocate tempa, tempb, tempc to largest possible size outside the loop
     maxnd1 = maxval(ahalo%ndimi)
@@ -185,44 +183,30 @@ contains
        nbkbeg = ibaddr(k_in_part)
        nb_nd_kbeg = ib_nd_acc(k_in_part)
        nd3 = ahalo%ndimj(k_in_halo)
-       ! for OpenMP sub-array indexing
-       nd1_1st(1) = 0
-       do i = 2, at%n_hnab(k_in_halo)
-         i_in_prim = at%i_prim(at%i_beg(k_in_halo)+i-2)
-         nd1_1st(i) = nd1_1st(i-1) + nd3 * ahalo%ndimi(i_in_prim)
-       end do
-       nd2_1st(1) = 0
-       do j = 2, nbnab(k_in_part)
-          nd2_1st(j) = nd2_1st(j-1) + nd3 * bndim2(nbkbeg+j-2)
-       end do
 
-       tbbeg = 0
-       tbend = 0
        ! transcription of j from partition to C-halo labelling
-       !$omp do schedule(runtime)
+       ! !$omp do schedule(runtime)
        do j = 1, nbnab(k_in_part)
           jpart = ibpart(nbkbeg+j-1) + k_off
           jseq = ibseq(nbkbeg+j-1)
           jbnab2ch(j) = chalo%i_halo(chalo%i_hbeg(jpart)+jseq-1)
 
           nd2 = bndim2(nbkbeg+j-1)
-          nbbeg = nb_nd_kbeg + nd2_1st(j)
-
-          nbend = nbbeg + (nd3 * nd2 - 1)
-          tbbeg = tbend + 1
-          tbend = tbend + nd2
+          nbbeg = nb_nd_kbeg + ((j-1) * nd3 * nd2)
+          nbend = nb_nd_kbeg + ( j * nd3 * nd2 - 1)
+          tbbeg = (j - 1) * nd2 + 1
+          tbend = j * nd2
           ! Loop over B-neighbours of atom k
           tempb(1:nd3, tbbeg:tbend) = reshape(b(nbbeg:nbend), [nd3, nd2])
        end do
-       !$omp do schedule(runtime)
        ! Loop over primary-set A-neighbours of k
        ! TODO: Add more atoms per process to have more work in this loop
+       !$omp do schedule(runtime)
        do i = 1, at%n_hnab(k_in_halo)
           i_in_prim = at%i_prim(at%i_beg(k_in_halo)+i-1)
-          icad = (i_in_prim - 1) * chalo%ni_in_halo
           nd1 = ahalo%ndimi(i_in_prim)
-          nabeg = at%i_nd_beg(k_in_halo) + nd1_1st(i)
-          naend = nabeg + (nd1 * nd3 - 1)
+          nabeg = at%i_nd_beg(k_in_halo) + ((i-1) * nd3 * nd1)
+          naend = at%i_nd_beg(k_in_halo) + ( i * nd3 * nd1) - 1
 
           tempa(1:nd1, 1:nd3) = reshape(a(nabeg:naend), [nd1, nd3], order = [2,1])
 
@@ -230,13 +214,13 @@ contains
                maxnd1, tempb, maxnd3, zero, tempc, maxnd1)
 
           sofar = 0
+          icad = (i_in_prim - 1) * chalo%ni_in_halo
           ! Loop over B-neighbours of atom k
           ! TODO: Create a mask for the rows/cols of C that we want and do array copy
           do j = 1, nbnab(k_in_part)
              nd2 = bndim2(nbkbeg+j-1)
-             j_in_halo = jbnab2ch(j)
-             if (j_in_halo /= 0) then
-                ncbeg = chalo%i_h2d(icad+j_in_halo)
+             if (jbnab2ch(j) /= 0) then
+                ncbeg = chalo%i_h2d(icad+jbnab2ch(j))
                 if (ncbeg /= 0) then ! multiplication of ndim x ndim blocks
                    do n2 = 1, nd2
                       ncaddr = ncbeg + nd1 * (n2 - 1)
