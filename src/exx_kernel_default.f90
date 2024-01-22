@@ -1141,7 +1141,9 @@ contains
           !
           nbbeg = nbbeg + ld%nsup*kg%nsup !nd3 * nd2                
           !
+          !$omp single
           if ( exx_alloc ) call exx_mem_alloc(extent,ld%nsup,0,'phi_l','dealloc')
+          !$omp end single
           
           !end if !( screen kl )
        end do ! End of l = 1, nbnab(k_in_part)
