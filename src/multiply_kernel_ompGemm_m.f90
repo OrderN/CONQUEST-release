@@ -130,11 +130,10 @@ contains
   subroutine m_kern_max(k_off, kpart, ib_nd_acc, ibaddr, nbnab,       &
                         ibpart, ibseq, bndim2, a, b, c, ahalo, chalo, &
                         at, mx_absb, mx_part, mx_iprim, lena, lenb,   &
-                        lenc, debug)
+                        lenc)
     use datatypes
     use matrix_module
     use basic_types,    only: primary_set
-    use primary_module, only: bundle
     use numbers,        only: zero, one
 
     implicit none
@@ -147,7 +146,6 @@ contains
     real(double) :: a(lena)
     real(double) :: b(lenb)
     real(double) :: c(lenc)
-    integer, optional :: debug
     ! Remote indices
     integer(integ), intent(in) :: ib_nd_acc(:)
     integer(integ), intent(in) :: ibaddr(:)
@@ -159,9 +157,8 @@ contains
     integer :: jbnab2ch(mx_absb)  ! Automatic array
     integer :: nbkbeg, k, k_in_part, k_in_halo, j, jpart, jseq
     integer :: i, nabeg, naend, i_in_prim, icad, ncbeg, ncend
-    integer :: n1, n2, n3, nb_nd_kbeg
+    integer :: nb_nd_kbeg
     integer :: nd1, nd2, nd3
-    integer :: naaddr, nbaddr, ncaddr
     real(double), allocatable, dimension(:,:) :: tempb, tempa, tempc
     integer :: maxnd1, maxnd2, maxnd3, maxlen
     integer :: nbbeg, nbend, tbbeg, tbend, tcbeg, tcend
