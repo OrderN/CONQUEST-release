@@ -158,13 +158,13 @@ contains
     ! Local variables
     integer :: jbnab2ch(mx_absb)  ! Automatic array
     integer :: nbkbeg, k, k_in_part, k_in_halo, j, jpart, jseq
-    integer :: i, nabeg, naend, i_in_prim, icad, ncbeg
+    integer :: i, nabeg, naend, i_in_prim, icad, ncbeg, ncend
     integer :: n1, n2, n3, nb_nd_kbeg
     integer :: nd1, nd2, nd3
     integer :: naaddr, nbaddr, ncaddr
     real(double), allocatable, dimension(:,:) :: tempb, tempa, tempc
-    integer :: sofar, maxnd1, maxnd2, maxnd3, maxlen
-    integer :: nbbeg, nbend, tbbeg, tbend
+    integer :: maxnd1, maxnd2, maxnd3, maxlen
+    integer :: nbbeg, nbend, tbbeg, tbend, tcbeg, tcend
     external :: dgemm
 
     ! Allocate tempa, tempb, tempc to largest possible size outside the loop
@@ -173,11 +173,14 @@ contains
     maxnd3 = maxval(ahalo%ndimj)
     maxlen = maxval(nbnab) * maxnd2
     allocate(tempa(maxnd1,maxnd3), tempc(maxnd1,maxlen), tempb(maxnd3,maxlen))
-    tempa = zero
-    tempb = zero
-    tempc = zero
+    ! We should be ok without initializations, which may be costly.
+    ! tempa and tempb are always overwritten.
+    ! tempc gets initialized by the beta argument of the dgemm call.
+    !tempa = zero
+    !tempb = zero
+    !tempc = zero
     ! Loop over atoms k in current A-halo partn
-    do k = 1, ahalo%nh_part(kpart)
+    atoms_in_halo: do k = 1, ahalo%nh_part(kpart)
        k_in_halo = ahalo%j_beg(kpart) + k - 1
        k_in_part = ahalo%j_seq(k_in_halo)
        nbkbeg = ibaddr(k_in_part)
@@ -186,7 +189,7 @@ contains
 
        ! transcription of j from partition to C-halo labelling
        ! !$omp do schedule(runtime)
-       do j = 1, nbnab(k_in_part)
+       copy_b: do j = 1, nbnab(k_in_part)
           jpart = ibpart(nbkbeg+j-1) + k_off
           jseq = ibseq(nbkbeg+j-1)
           jbnab2ch(j) = chalo%i_halo(chalo%i_hbeg(jpart)+jseq-1)
@@ -198,12 +201,14 @@ contains
           tbend = j * nd2
           ! Loop over B-neighbours of atom k
           tempb(1:nd3, tbbeg:tbend) = reshape(b(nbbeg:nbend), [nd3, nd2])
-       end do
+       end do copy_b
        ! Loop over primary-set A-neighbours of k
        ! TODO: Add more atoms per process to have more work in this loop
        !$omp do schedule(runtime)
-       do i = 1, at%n_hnab(k_in_halo)
+       a_neighbours_of_k: do i = 1, at%n_hnab(k_in_halo)
           i_in_prim = at%i_prim(at%i_beg(k_in_halo)+i-1)
+          icad = (i_in_prim - 1) * chalo%ni_in_halo
+
           nd1 = ahalo%ndimi(i_in_prim)
           nabeg = at%i_nd_beg(k_in_halo) + ((i-1) * nd3 * nd1)
           naend = at%i_nd_beg(k_in_halo) + ( i * nd3 * nd1) - 1
@@ -213,28 +218,21 @@ contains
           call dgemm('n', 'n', nd1, tbend, nd3, one, tempa, &
                maxnd1, tempb, maxnd3, zero, tempc, maxnd1)
 
-          sofar = 0
-          icad = (i_in_prim - 1) * chalo%ni_in_halo
           ! Loop over B-neighbours of atom k
           ! TODO: Create a mask for the rows/cols of C that we want and do array copy
-          do j = 1, nbnab(k_in_part)
+          copy_c: do j = 1, nbnab(k_in_part)
              nd2 = bndim2(nbkbeg+j-1)
-             if (jbnab2ch(j) /= 0) then
-                ncbeg = chalo%i_h2d(icad+jbnab2ch(j))
-                if (ncbeg /= 0) then ! multiplication of ndim x ndim blocks
-                   do n2 = 1, nd2
-                      ncaddr = ncbeg + nd1 * (n2 - 1)
-                      do n1 = 1, nd1
-                         c(ncaddr+n1-1) = c(ncaddr+n1-1) + tempc(n1,sofar+n2)
-                      end do
-                   end do
-                end if
+             ncbeg = chalo%i_h2d(icad+jbnab2ch(j))
+             ncend = ncbeg + (nd1 * nd2 - 1)
+             if (jbnab2ch(j) /= 0 .and. ncbeg /= 0) then
+                tcbeg = (j-1) * nd2 + 1
+                tcend = j * nd2
+                c(ncbeg:ncend) = c(ncbeg:ncend) + reshape(tempc(1:nd1, tcbeg:tcend), [nd1*nd2])
              end if
-             sofar = sofar + nd2
-          end do ! end of j = 1, nbnab(k_in_part)
-       end do ! end of i = 1, at%n_hnab
-!$omp end do
-    end do ! end of k = 1, nahpart
+          end do copy_c
+       end do a_neighbours_of_k
+       !$omp end do
+    end do atoms_in_halo
     deallocate(tempa, tempb, tempc)
     return
   end subroutine m_kern_max
