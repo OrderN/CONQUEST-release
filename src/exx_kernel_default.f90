@@ -1014,44 +1014,25 @@ contains
     integer :: np, ni
     !
     real(double), dimension(3) :: xyz_zero  = zero
-    real(double)               ::   dr,dv,K_val
-    real(double)               ::   exx_mat_elem
+    real(double)               :: dv,K_val
+    real(double)               :: exx_mat_elem
     !
     type(prim_atomic_data)  :: ia !i_alpha
     type(neigh_atomic_data) :: jb !j_beta
     type(neigh_atomic_data) :: kg !k_gamma
     type(neigh_atomic_data) :: ld !l_delta
     !
-    integer                 :: maxsuppfuncs, nsf1, nsf2, nsf3
+    integer                 :: nsf1, nsf2, nsf3
     integer                 :: r, s, t, ng
     !
-    !
-    dr = grid_spacing
-    dv = dr**3
+    dv = grid_spacing**3
     ng = 2*extent+1
-    !ewald_alpha  = 0.5
-    maxsuppfuncs = maxval(nsf_species)    
+    !ewald_alpha  = 0.5    
     !range_ij        = 0.5d0
     !range_kl        = 0.5d0
     !unit_exx_debug1 = 333
     !
     !
-    !$omp parallel default(none)                                               &
-    !$omp          shared(kpart, ahalo, ibaddr, ib_nd_acc, unit_exx_debug,     &
-    !$omp                 exx_alloc, extent, xyz_zero, phi_k, r_int,       &
-    !$omp                 jbnab2ch, ibpart, k_off, ibseq, chalo, Phy_k,        &
-    !$omp                 nbnab, BCS_parts, phi_l, b, tmr_std_exx_accumul, &
-    !$omp                 at, bundle, phi_i, ia, rho_kj, phi_j, vhf_kj,    &
-    !$omp                 tmr_std_exx_poisson, exx_psolver, exx_pscheme, dv,   &
-    !$omp                 ewald_rho, pulay_radius, p_omega, p_gauss, w_gauss,  &
-    !$omp                 fftwrho3d, reckernel_3d, ewald_pot, Ome_kj,          &
-    !$omp                 tmr_std_exx_matmult, c, exx_mat_elem, inode,         &
-    !$omp                 bndim2)                                              &
-    !$omp          private(k, k_in_halo, k_in_part, nbkbeg, nb_nd_kbeg, nd3,   &
-    !$omp                  jpart, jseq, nbbeg, l, lpart, lseq, nsf2, nbaddr,   &
-    !$omp                  nsf1, K_val, i, i_in_prim, nd1, ni, np, icad, j,    &
-    !$omp                  j_in_halo, ncbeg, work_in_3d, work_out_3d,          &
-    !$omp                  ewald_charge, ncaddr, r, ng,  s, t, kg, ld, jb)
 !!$
 !!$ ****[ k loop ]****
 !!$
@@ -1065,18 +1046,15 @@ contains
        nbbeg      = nb_nd_kbeg
        
        call get_halodat(kg,kg,k_in_part,ahalo%i_hbeg(ahalo%lab_hcover(kpart)), &
-       ahalo%lab_hcell(kpart),'k',.true.,unit_exx_debug)
+            ahalo%lab_hcell(kpart),'k',.true.,unit_exx_debug)
        !
        !print*, 'k',k, 'global_num',kg%global_num,'spe',kg%spec, kg%xyz
        !
-       !$omp single
        if ( exx_alloc ) call exx_mem_alloc(extent,kg%nsup,0,'phi_k','alloc')
-       !$omp end single
           
        call exx_phi_on_grid(inode,kg%global_num,kg%spec,extent, &
             xyz_zero,kg%nsup,phi_k,r_int,xyz_zero)             
        !
-       !$omp single
        jbnab2ch = 0
        !print*, 'nbnab: ',nbnab(k_in_part),k_in_part
        do j = 1, nbnab(k_in_part)
@@ -1095,7 +1073,6 @@ contains
        !
        Phy_k = zero
        !
-       !$omp end single
 !!$
 !!$ ****[ l do loop ]****
 !!$
@@ -1117,14 +1094,11 @@ contains
           !screen_kl = sqrt(dot_product(xyz_kl,xyz_kl))
           !if ( screen_kl < range_kl ) then
           !
-          !$omp single
           if ( exx_alloc ) call exx_mem_alloc(extent,ld%nsup,0,'phi_l','alloc')
-          !$omp end single
           !
           call exx_phi_on_grid(inode,ld%global_num,ld%spec,extent,     &
                ld%xyz,ld%nsup,phi_l,r_int,xyz_zero)             
           !
-          !$omp do schedule(runtime)
           do nsf2 = 1, ld%nsup
              !
              nbaddr = nbbeg + kg%nsup * (nsf2 - 1)
@@ -1139,14 +1113,10 @@ contains
 
              end do
           end do
-          !$omp end do
-          !$omp barrier 
           !
           nbbeg = nbbeg + ld%nsup*kg%nsup !nd3 * nd2                
           !
-          !$omp single
           if ( exx_alloc ) call exx_mem_alloc(extent,ld%nsup,0,'phi_l','dealloc')
-          !$omp end single
           
           !end if !( screen kl )
        end do ! End of l = 1, nbnab(k_in_part)
@@ -1163,14 +1133,12 @@ contains
           !
           !print*, 'i_in_prim', i_in_prim, 'nd1', nd1, 'ni', ni, 'np', np
           !
-          !$omp single
           call get_iprimdat(ia,kg,ni,i_in_prim,np,.true.,unit_exx_debug)          
           !
           !print*, 'i',i, 'global_num',ia%ip,'spe',ia%spec
           !
           if ( exx_alloc ) call exx_mem_alloc(extent,ia%nsup,0,'phi_i','alloc')
           !
-          !$omp end single
           call exx_phi_on_grid(inode,ia%ip,ia%spec,extent, &
                ia%xyz,ia%nsup,phi_i,r_int,xyz_zero)             
           !
@@ -1206,17 +1174,14 @@ contains
                    !if ( screen_ij < range_ij ) then
                    !write(*,*) 'j',j, 'global_num',jb%global_num,'spe',jb%spec
                    !
-                   !$omp single
                    if ( exx_alloc ) call exx_mem_alloc(extent,kg%nsup,jb%nsup,'rho_kj','alloc')
                    if ( exx_alloc ) call exx_mem_alloc(extent,jb%nsup,0,'phi_j','alloc')
-                   !$omp end single
                    !
                    call exx_phi_on_grid(inode,jb%global_num,jb%spec,extent, &
                         jb%xyz,jb%nsup,phi_j,r_int,xyz_zero)             
                    !
                    call start_timer(tmr_std_exx_accumul)
                    rho_kj = zero
-                   !$omp do schedule(runtime)
                    do nsf1 = 1, kg%nsup                         
                       do nsf2 = 1, jb%nsup
                          !
@@ -1225,17 +1190,12 @@ contains
                          !
                       end do
                    end do
-                   !$omp end do
                    !
                    call stop_timer(tmr_std_exx_accumul,.true.)
                    !
-                   !$omp barrier 
-                   !$omp single
                    if ( exx_alloc ) call exx_mem_alloc(extent,jb%nsup,0,'phi_j','dealloc')                   
                    if ( exx_alloc ) call exx_mem_alloc(extent,kg%nsup,jb%nsup,'vhf_kj','alloc')                   
-                   !$omp end single
                    !
-                   !$omp do schedule(runtime)
                    do nsf1 = 1, kg%nsup
                       do nsf2 = 1, jb%nsup
 
@@ -1263,31 +1223,22 @@ contains
                          call stop_timer(tmr_std_exx_poisson,.true.)
                       end do
                    end do
-                   !$omp end do
                    !
-                   !$omp barrier
-                   !$omp single
                    if ( exx_alloc ) call exx_mem_alloc(extent,kg%nsup,jb%nsup,'rho_kj','dealloc')                   
                    if ( exx_alloc ) call exx_mem_alloc(extent,kg%nsup,jb%nsup,'Ome_kj',  'alloc')                   
-                   !$omp end single
                    !
                    Ome_kj = zero
                    !
                    call start_timer(tmr_std_exx_accumul)  
-                   !$omp do schedule(runtime)
                    do nsf1 = 1, kg%nsup
                       do nsf2 = 1, jb%nsup                                       
                          Ome_kj(:,:,:,nsf1,nsf2) = &
                               vhf_kj(:,:,:,nsf1,nsf2) * phi_k(:,:,:,nsf1)                   
                       end do
                    end do
-                   !$omp end do
                    call stop_timer(tmr_std_exx_accumul,.true.)
                    !
-                   !$omp barrier
-                   !$omp single
                    if ( exx_alloc ) call exx_mem_alloc(extent,jb%nsup,jb%nsup,'vhf_kj','dealloc')
-                   !$omp end single
                    !
                    if(ia%nsup/=ahalo%ndimi(i_in_prim)) write(24,*) 'Error1: ',ia%nsup,ahalo%ndimi(i_in_prim)
                    if(jb%nsup/=bndim2(nbkbeg+j-1))     write(24,*) 'Error2: ',jb%nsup,bndim2(nbkbeg+j-1)
@@ -1303,7 +1254,7 @@ contains
                            !
                            exx_mat_elem = zero
                            !
-                           !$omp do schedule(runtime) reduction(+: exx_mat_elem)
+                           !$omp parallel do collapse(3) reduction(+:exx_mat_elem)
                             do r = 1, ng
                                do s = 1, ng
                                   do t = 1, ng                         
@@ -1315,11 +1266,9 @@ contains
                                   end do
                                end do
                             end do
-                            !$omp end do
+                            !$omp end parallel do
                             !
-                            !$omp single
                             c(ncaddr + nsf1 - 1) = c(ncaddr + nsf1 - 1) + exx_mat_elem
-                            !$omp end single
                             !
                          end do ! nsf3
                          !
@@ -1331,10 +1280,7 @@ contains
                    !
                    call stop_timer(tmr_std_exx_matmult,.true.)
                    !
-                   !$omp barrier
-                   !$omp single
                    if ( exx_alloc ) call exx_mem_alloc(extent,jb%nsup,jb%nsup,'Ome_kj','dealloc')                   
-                   !$omp end single
                    !
                 end if ! ( ncbeg /=0 )
              end if ! ( j_in_halo /=0 )
@@ -1349,10 +1295,7 @@ contains
 !!$
 !!$ ****[ i end loop ]****
 !!$
-          !$omp barrier
-          !$omp single
           if ( exx_alloc ) call exx_mem_alloc(extent,ia%nsup,0,'phi_i','dealloc') 
-          !$omp end single
           !
        end do ! End of i = 1, at%n_hnab(k_in_halo)
        !
@@ -1360,14 +1303,10 @@ contains
 !!$ ****[ k end loop ]****
 !!$
        !
-       !$omp barrier
-       !$omp single
        if ( exx_alloc ) call exx_mem_alloc(extent,kg%nsup,0,'Phy_k','dealloc') 
        if ( exx_alloc ) call exx_mem_alloc(extent,kg%nsup,0,'phi_k','dealloc') 
-       !$omp end single
        !
     end do ! End of k = 1, ahalo%nh_part(kpart)
-    !$omp end parallel
     !
     !
     return
