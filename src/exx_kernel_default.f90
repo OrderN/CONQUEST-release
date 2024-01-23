@@ -1254,7 +1254,9 @@ contains
                            !
                            exx_mat_elem = zero
                            !
-                           !$omp parallel do collapse(3) reduction(+:exx_mat_elem)
+                           !$omp parallel do collapse(3) default(none) reduction(+:exx_mat_elem) &
+                           !$omp    shared(phi_i, Ome_kj, dv, ng, nsf1, nsf2, nsf3) &
+                           !$omp    private(r, s, t)
                             do r = 1, ng
                                do s = 1, ng
                                   do t = 1, ng                         
