@@ -105,7 +105,7 @@ def plot_GTO_prim( orb, filename_gto_write ):
         
         for j in range(orb[i].nG):
             y = orb[i].gto_d[j]*exp( -orb[i].gto_a[j]*(array(orb[i].x) - orb[i].gto_c[j])**2 )
-            plt.plot(orb[i].x, y,label='$d=%12.6f$, $a=%12.6f$' %(orb[i].gto_d[j],orb[i].gto_a[j]))
+            plt.plot(orb[i].x, y,label='$d=%12.6f$, $a=%12.6f$, $c=%12.6f$' %(orb[i].gto_d[j],orb[i].gto_a[j],orb[i].gto_c[j]))
     
         # Plot the PAO radial function
         tmp_label = str(orb[i].n)+orb[i].lname+'-'+str(orb[i].z)+'$\zeta$'+'-PAO'

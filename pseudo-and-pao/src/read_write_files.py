@@ -8,11 +8,14 @@ from __future__ import division
 
 import os.path
 import re, sys
-from numpy import zeros, array, exp
+from numpy import zeros, array, exp, inf
+from scipy import linalg
+from scipy.optimize import minimize 
+
 
 #%% 
 class orbital:
-    def __init__(self,n,l,z,pol,pop,grid,x,y):
+    def __init__(self,n,l,z,pol,pop,grid,x,y):#,bounds):
         self.n = n
         self.l = l
         self.z = z
@@ -29,6 +32,8 @@ class orbital:
         self.guess = []
         self.nzeta = 0
         self.nG    = 0
+        self.norm  = 0
+    
         
     def ang_mom(self):
         if   ( self.l == 0 ):
@@ -58,7 +63,10 @@ class orbital:
         #self.y_fit = zeros(int(self.grid))
         for i in range(self.nG):
             self.y_fit = self.y_fit + \
-            self.gto_d[i]*exp( -self.gto_a[i]*array(self.x)**2 )
+            self.gto_d[i]*exp( (-self.gto_a[i]*(array(self.x) - self.gto_c[i])**2 ))
+                             
+#    def norm (self):
+#        linalg.norm(sum(self.y_fit**2*self.delta_r))
         
               
 #%% 
@@ -320,7 +328,7 @@ def read_gto( filename_gto ):
         print ('read_gto: file'+' '+filename_gto+' '+'exists')
     else:
         print ('read_gto: file'+' '+filename_gto+' '+'does not exist')
-        exit()
+        sys.exit()
         
     file = open(filename_gto, 'r')
     #
@@ -388,14 +396,17 @@ def build_guess(orb, orb_guess, center):
                 #orb[j].gto_a = orb_guess[i].gto_a             
                 #orb[j].gto_d = orb_guess[i].gto_d
                 if (center == False):
-                    for k in range(orb_guess[i].nG):
+                    
+                     for k in range(orb_guess[i].nG):
                         orb[j].guess.append(orb_guess[i].gto_a[k])
                         orb[j].guess.append(orb_guess[i].gto_d[k])
                         orb[j].guess.append(orb_guess[i].gto_c[k])
-                else:                    
+                else:      
+                    
                     for k in range(orb_guess[i].nG):
                         orb[j].guess.append(orb_guess[i].gto_a[k])
                         orb[j].guess.append(orb_guess[i].gto_d[k])
+                    
                     
                 #print 'j', j, orb[j].guess
                 print('build_guess:', str(orb[j].n)+orb[j].lname+'-'+'zeta'+str(orb[j].z)+' recognized, guess =',orb[j].guess)
@@ -406,9 +417,11 @@ def build_guess(orb, orb_guess, center):
 #                        print('build_guess: duplicate orb[',j,'].zeta for orb[',k,'].zeta')
                         #print('build_guess:', str(orb[k].n)+orb[k].lname+'-'+'zeta'+str(orb[k].z)+' duplicated, guess =',orb[k].guess)
                         orb[k].nG    = orb_guess[i].nG
-                        #orb[k].gto_a = orb_guess[i].gto_a             
-                        #orb[k].gto_d = orb_guess[i].gto_d
+#                        orb[k].gto_a = orb_guess[i].gto_a             
+#                        orb[k].gto_d = orb_guess[i].gto_d
+#                        orb[k].gto_c = orb_guess[i].gto_c
                         if (center == False):
+                            
                             for l in range(orb_guess[i].nG):
                                 orb[k].guess.append(orb_guess[i].gto_a[l])
                                 orb[k].guess.append(orb_guess[i].gto_d[l])
@@ -444,8 +457,7 @@ def build_guess(orb, orb_guess, center):
             j += 1
         if ( j == len(orb) ):
             finish = True
-    
-    
+
 #%%
 
 def color_list_orbital(n):
