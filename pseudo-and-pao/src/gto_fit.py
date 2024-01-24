@@ -11,7 +11,8 @@ import os.path
 import re, sys
 from pylab import plot, show, legend
 
-from numpy import size, exp, array, append, delete
+from itertools import repeat
+from numpy import size, exp, array, append, delete, ones, inf
 from scipy.optimize import curve_fit
 from src.read_write_files import color_list_orbital_fit
 from src.read_write_files import orbital
@@ -56,238 +57,176 @@ def gauss4_c(r,a0,d0,c0,a1,d1,c1,a2,d2,c2,a3,d3,c3):
 #     + d6*exp(-a6*(r-c6)**2) + d7*exp(-a7*(r-c7)**2)
 
  
-def gto_fit_orb( x, y, nG, guess, n, name, zeta, index, center, maxfev,bounds,method):
+def gto_fit_orb( x, y, nG, guess, n, name, zeta, index, center, maxfev, bounds, method):
         print()        
         print('#####################################')
         print('orb[',index,'] => state '+str(n)+name+', zeta '+str(zeta))
         print('#####################################')
 
-        if nG <= 0:
+        #######################################################################
+        # if nG is not defined exit
+        #######################################################################
+        if ( nG <= 0 ):
              nG = 3
              print('gto_fit_orb: default number for nG =', nG)
+        
+        #######################################################################
+        # if nG guess not defined set it as 1 ; check the size of guess
+        #######################################################################
+        if ( size(guess) == 0 ):
 
-        if size(guess) == 0:
-            
-            print('gto_fit_orb: proceed with no initial guess', size(guess))
-            if nG == 1:
-                if (center == False):                    
-                    popt, cov = curve_fit(gauss1_c, x, y, maxfev=maxfev)
-                    a0, d0, c0 = popt
-                    y_fit = gauss1_c(x, a0, d0, c0)
-                else:
-                    popt, cov = curve_fit(gauss1, x, y,  maxfev=maxfev)
-                    a0, d0 = popt
-                    y_fit = gauss1(x, a0, d0)
-                     
-            elif nG == 2:
-                                 
-                if (center == False):
-                    popt, cov = curve_fit(gauss2_c, x, y, maxfev=maxfev)
-                    a0, d0, c0, a1, d1,c1 = popt
-                    y_fit = gauss2_c(x, a0, d0, c0, a1, d1, c1)
-                else:
-                    popt, cov = curve_fit(gauss2, x, y, maxfev=maxfev)
-                    a0, d0, a1, d1 = popt
-                    y_fit = gauss2(x, a0, d0, a1, d1)
-                                 
-            elif nG == 3:
-                if (center == False):
-                    popt, cov = curve_fit(gauss3_c, x, y,  maxfev =maxfev)
-                    a0, d0, c0, a1, d1, c1, a2, d2, c2 = popt
-                    y_fit = gauss3_c(x, a0, d0, c0, a1, d1, c1, a2, d2, c2)
-                else:
-                    popt, cov = curve_fit(gauss3, x, y, maxfev =maxfev)
-                    a0, d0, a1, d1, a2, d2 = popt
-                    y_fit = gauss3(x, a0, d0, a1, d1, a2, d2)
-                    
-                    
-                
-            elif( nG == 4 ):
-                 if(center == False) : 
-                     popt, cov = curve_fit( gauss4_c, x, y, maxfev=maxfev )
-                     a0,d0,c0,a1,d1,c1,a2,d2,c2,a3,d3,c3 = popt
-                     y_fit = gauss4_c(x,a0,d0,c0,a1,d1,c1,a2,d2,c2,a3,d3,c3)
-                 else:
-                     popt, cov = curve_fit( gauss4, x, y, maxfev=maxfev )
-                     a0,d0,a1,d1,a2,d2,a3,d3 = popt
-                     y_fit = gauss4(x,a0,d0,a1,d1,a2,d2,a3,d3)
-            
+            if (center == False):
+                guess = ones(nG*3)
             else:
-                print('gto_fit_orb: no implemented for nG =',nG) 
-                sys.exit()
-                
-                     
-                
-
-            # elif( nG == 5 ):
-            #     if(center == False):
-            #         popt, cov = curve_fit( gauss5_r, x, y )
-            #         a0,b0,a1,b1,a2,b2,a3,b3,a4,b4,r0,r1,r2,r3,r4 = popt
-            #         y_fit = gauss5_r(x,a0,b0,a1,b1,a2,b2,a3,b3,a4,b4,r0,r1,r2,r3,r4)
-            #     else:  
-            #         popt, cov = curve_fit( gauss5, x, y )
-            #         a0,b0,a1,b1,a2,b2,a3,b3,a4,b4 = popt
-            #         y_fit = gauss5(x,a0,b0,a1,b1,a2,b2,a3,b3,a4,b4)
-
-            # elif( nG == 6 ):
-            #     if(center ==False):
-            #         popt, cov = curve_fit( gauss6_r, x, y )
-            #         a0,b0,a1,b1,a2,b2,a3,b3,a4,b4,a5,b5,r0,r1,r2,r3,r4,r5 = popt
-            #         y_fit = gauss6_r(x,a0,b0,a1,b1,a2,b2,a3,b3,a4,b4,a5,b5,r0,r1,r2,r3,r4,r5)
-            #     else:
-            #         popt, cov = curve_fit( gauss6, x, y )
-            #         a0,b0,a1,b1,a2,b2,a3,b3,a4,b4,a5,b5 = popt
-            #         y_fit = gauss6(x,a0,b0,a1,b1,a2,b2,a3,b3,a4,b4,a5,b5)
-
-            # elif( nG == 7 ):
-            #     if(center == False):
-            #         popt, cov = curve_fit( gauss7_r, x, y )
-            #         a0,b0,a1,b1,a2,b2,a3,b3,a4,b4,a5,b5,a6,b6,r0,r1,r2,r3,r4,r5,r6 = popt
-            #         y_fit = gauss7_r(x,a0,b0,a1,b1,a2,b2,a3,b3,a4,b4,a5,b5,a6,b6,r0,r1,r2,r3,r4,r5,r6)
-            #     else:
-            #         popt, cov = curve_fit( gauss7, x, y )
-            #         a0,b0,a1,b1,a2,b2,a3,b3,a4,b4,a5,b5,a6,b6 = popt
-            #         y_fit = gauss7(x,a0,b0,a1,b1,a2,b2,a3,b3,a4,b4,a5,b5,a6,b6)
-                     
-            # elif( nG == 8 ):
-            #    if (center == False):
-            #        popt, cov = curve_fit( gauss8_r, x, y )
-            #        a0,b0,a1,b1,a2,b2,a3,b3,a4,b4,a5,b5,a6,b6,a7,b7,r0,r1,r2,r3,r4,r5,r6,r7 = popt
-            #        y_fit = gauss8_r(x,a0,b0,a1,b1,a2,b2,a3,b3,a4,b4,a5,b5,a6,b6,a7,b7,r0,r1,r2,r3,r4,r5,r6,r7)
-                   
-            #    else:
-            #         popt, cov = curve_fit( gauss8, x, y )
-            #         a0,b0,a1,b1,a2,b2,a3,b3,a4,b4,a5,b5,a6,b6,a7,b7 = popt
-            #         y_fit = gauss8(x,a0,b0,a1,b1,a2,b2,a3,b3,a4,b4,a5,b5,a6,b6,a7,b7)
-
-                
-                
-        print('size(guess)', (size(guess)), guess)
-                    
-        if ( size(guess) != 0 ):         
-            
-            if ( center == False ):
-
-                if ( (size(guess) % 3) == 0 ) :            
-                    if  ( size(guess) > nG*3 ):
-                        print('gto_fit_orb: larger initial guess than expected ; shortened') 
-                        for i in range( size(guess) - nG*2 ):
-                            guess = delete(guess,-1)
-    
-                    elif( size(guess) < nG*3 ):
-                        print('gto_fit_orb: smaller initial guess than expected ; augmented')                         
-                        #print guess
-                        for i in range( nG*3 - size(guess) ):
-                            guess = append(guess,1)
-
-                else:
-                    print('gto_fit_orb: problem with the initial guess =',guess) 
+                guess = ones(nG*2)
+        else:
+            # check wether or not the provides guess has correct size ; exit otherwise
+            if (center == False):
+                if ( size(guess) != nG*3):
+                    print('gto_fit_orb: problem with the initial guess =',size(guess),'vs. nparam expected =',nG*3)
+                    sys.exit()
+            else:
+                if ( size(guess) != nG*2):
+                    print('gto_fit_orb: problem with the initial guess =',size(guess),'vs. nparam expected =',nG*2)
                     sys.exit()
                 
-            else:
-
-                if ( (size(guess) % 2) == 0 ) :            
-                    if  ( size(guess) > nG*2 ):
-                        print('gto_fit_orb: larger initial guess than expected ; shortened') 
-                        for i in range( size(guess) - nG*2 ):
-                            guess = delete(guess,-1)
-    
-                    elif( size(guess) < nG*2 ):
-                        print('gto_fit_orb: smaller initial guess than expected ; augmented')                         
-                        #print guess
-                        for i in range( nG*2 - size(guess) ):
-                            guess = append(guess,1)
-
-                else:
-                    print('gto_fit_orb: problem with the initial guess =',guess) 
-                    sys.exit()
-                
-            print('gto_fit_orb: current initial guess =')
-            print(guess)
-            
-            
-
-            if  ( nG == 1 ):  
+        #######################################################################
+        # if bounds defined as empty tuple
+        #######################################################################
+        bounds_min = [] ; bounds_max = []
+        if (size(bounds) == 0):
+            for i in range(nG):
                 if (center == False):
-                    popt, cov = curve_fit( gauss1, x, y,guess, maxfev=maxfev, bounds=bounds)
-                    a0,d0,c0 = popt
-                    y_fit = gauss1_c(x,a0,d0,c0)
+                    bounds_min.extend(3*[-inf])
+                    bounds_max.extend(3*[+inf])
                 else:
-                    popt, cov = curve_fit( gauss1, x, y, guess, maxfev=maxfev, bounds=bounds)
-                    a0,d0 = popt
-                    y_fit = gauss1(x,a0,d0)
-                                                
-            elif( nG == 2 ):
-                if (center == False) :
-                    print(guess)
-                    popt, cov = curve_fit( gauss2_c, x, y,guess, maxfev=maxfev) #, bounds=bounds)
-                    a0,d0,c0,a1,d1,c1 = popt
-                    y_fit = gauss2_c(x,a0,d0,c0,a1,d1,c1)
-                else :
-                    popt, cov = curve_fit( gauss2, x, y, guess, maxfev=maxfev) #,bounds=bounds)
-                    a0,d0,a1,d1 = popt
-                    y_fit = gauss2(x,a0,d0,a1,d1)
+                    bounds_min.extend(2*[-inf])
+                    bounds_max.extend(2*[+inf])
+            bounds = (bounds_min,bounds_max)
+        # otherwise try to use unconsistent guess (experimental)
+        # else:            
+        #     if ( center == False ):
+        #         if ( (size(guess) % 3) != 0 ) :            
+        #             if  ( size(guess) > nG*3 ):
+        #                 print('gto_fit_orb: larger initial guess than expected ; shortened') 
+        #                 for i in range( size(guess) - nG*2 ):
+        #                     guess = delete(guess,-1)
+    
+        #             elif( size(guess) < nG*3 ):
+        #                 print('gto_fit_orb: smaller initial guess than expected ; augmented')                         
+        #                 #print guess
+        #                 for i in range( nG*3 - size(guess) ):
+        #                     guess = append(guess,1)
+
+        #         else:
+        #             print('gto_fit_orb: problem with the initial guess =',guess) 
+        #             sys.exit()
                 
-            elif( nG == 3 ):
-                if ( center == False ) :
+        #     else:
+        #         if ( (size(guess) % 2) != 0 ) :            
+        #             if  ( size(guess) > nG*2 ):
+        #                 print('gto_fit_orb: larger initial guess than expected ; shortened') 
+        #                 for i in range( size(guess) - nG*2 ):
+        #                     guess = delete(guess,-1)
+    
+        #             elif( size(guess) < nG*2 ):
+        #                 print('gto_fit_orb: smaller initial guess than expected ; augmented')                         
+        #                 #print guess
+        #                 for i in range( nG*2 - size(guess) ):
+        #                     guess = append(guess,1)
 
-                    popt, cov = curve_fit( gauss3_c, x, y, guess, maxfev=maxfev,bounds=bounds )
-                    a0,d0,c0,a1,d1,c1,a2,d2,c2 = popt
-                    y_fit = gauss3_c(x,a0,d0,c0,a1,d1,c1,a2,d2,c2)
-                else:
-                    popt, cov = curve_fit( gauss3, x, y,guess, maxfev=maxfev,bounds=bounds )
-                    a0,d0,a1,d1,a2,d2 = popt
-                    y_fit = gauss3(x,a0,d0,a1,d1,a2,d2)
+                #else:
+                #    print('gto_fit_orb: problem with the initial guess =',guess) 
+                #    sys.exit()
+                
+        # print guess and bounds
+        print('gto_fit_orb: current initial guess =')
+        print(guess)
+            
 
-            elif( nG == 4 ):
-                 if(center == False) : 
-                     popt, cov = curve_fit( gauss4_c, x, y, maxfev=maxfev) #, bounds=bounds )
-                     a0,d0,c0,a1,d1,c1,a2,d2,c2,a3,d3,c3 = popt
-                     y_fit = gauss4_c(x,a0,d0,c0,a1,d1,c1,a2,d2,c2,a3,d3,c3)
-                 else:
-                     popt, cov = curve_fit( gauss4, x, y, guess, maxfev=maxfev) #bounds=bounds )
-                     a0,d0,a1,d1,a2,d2,a3,d3 = popt
-                     y_fit = gauss4(x,a0,d0,a1,d1,a2,d2,a3,d3)
+        if  ( nG == 1 ):  
+            
+            if (center == False):
+                popt, cov = curve_fit( gauss1, x, y, p0=guess, maxfev=maxfev, method=method, bounds=bounds)
+                a0,d0,c0 = popt
+                y_fit = gauss1_c(x,a0,d0,c0)
+            else:
+                popt, cov = curve_fit( gauss1, x, y, p0=guess, maxfev=maxfev, method=method, bounds=bounds)
+                a0,d0 = popt
+                y_fit = gauss1(x,a0,d0)
+                                            
+        elif( nG == 2 ):
+            
+            if (center == False) :                    
+                popt, cov = curve_fit( gauss2_c, x, y, p0=guess, method=method, maxfev=maxfev, bounds=bounds)
+                a0,d0,c0,a1,d1,c1 = popt
+                y_fit = gauss2_c(x,a0,d0,c0,a1,d1,c1)
+            else :
+                popt, cov = curve_fit( gauss2,   x, y, p0=guess, method=method, maxfev=maxfev, bounds=bounds)
+                a0,d0,a1,d1 = popt
+                y_fit = gauss2(x,a0,d0,a1,d1)
+            
+        elif( nG == 3 ):
+            
+            if ( center == False ) :
+                popt, cov = curve_fit( gauss3_c, x, y, p0=guess, method=method, maxfev=maxfev, bounds=bounds)
+                a0,d0,c0,a1,d1,c1,a2,d2,c2 = popt
+                y_fit = gauss3_c(x,a0,d0,c0,a1,d1,c1,a2,d2,c2)
+            else:
+                popt, cov = curve_fit( gauss3,   x, y, p0=guess, method=method, maxfev=maxfev, bounds=bounds)
+                a0,d0,a1,d1,a2,d2 = popt
+                y_fit = gauss3(x,a0,d0,a1,d1,a2,d2)
 
-            # elif( nG == 5 ):
-            #     if(center == False):
-            #         popt, cov = curve_fit( gauss5_r, x, y )
-            #         a0,b0,a1,b1,a2,b2,a3,b3,a4,b4,r0,r1,r2,r3,r4 = popt
-            #         y_fit = gauss5_r(x,a0,b0,a1,b1,a2,b2,a3,b3,a4,b4,r0,r1,r2,r3,r4)
-            #     else:  
-            #         popt, cov = curve_fit( gauss5, x, y, guess )
-            #         a0,b0,a1,b1,a2,b2,a3,b3,a4,b4 = popt
-            #         y_fit = gauss5(x,a0,b0,a1,b1,a2,b2,a3,b3,a4,b4)
+        elif( nG == 4 ):
+            
+             if(center == False) : 
+                 popt, cov = curve_fit( gauss4_c, x, y, p0=guess, method=method, maxfev=maxfev, bounds=bounds) #, bounds=bounds )
+                 a0,d0,c0,a1,d1,c1,a2,d2,c2,a3,d3,c3 = popt
+                 y_fit = gauss4_c(x,a0,d0,c0,a1,d1,c1,a2,d2,c2,a3,d3,c3)
+             else:
+                 popt, cov = curve_fit( gauss4,   x, y, p0=guess, method=method, maxfev=maxfev, bounds=bounds) #bounds=bounds )
+                 a0,d0,a1,d1,a2,d2,a3,d3 = popt
+                 y_fit = gauss4(x,a0,d0,a1,d1,a2,d2,a3,d3)
 
-            # elif( nG == 6 ):
-            #     if(center ==False):
-            #         popt, cov = curve_fit( gauss6_r, x, y )
-            #         a0,b0,a1,b1,a2,b2,a3,b3,a4,b4,a5,b5,r0,r1,r2,r3,r4,r5 = popt
-            #         y_fit = gauss6_r(x,a0,b0,a1,b1,a2,b2,a3,b3,a4,b4,a5,b5,r0,r1,r2,r3,r4,r5)
-            #     else:
-            #         popt, cov = curve_fit( gauss6, x, y, guess )
-            #         a0,b0,a1,b1,a2,b2,a3,b3,a4,b4,a5,b5 = popt
-            #         y_fit = gauss6(x,a0,b0,a1,b1,a2,b2,a3,b3,a4,b4,a5,b5)
+        # elif( nG == 5 ):
+        #     if(center == False):
+        #         popt, cov = curve_fit( gauss5_r, x, y )
+        #         a0,b0,a1,b1,a2,b2,a3,b3,a4,b4,r0,r1,r2,r3,r4 = popt
+        #         y_fit = gauss5_r(x,a0,b0,a1,b1,a2,b2,a3,b3,a4,b4,r0,r1,r2,r3,r4)
+        #     else:  
+        #         popt, cov = curve_fit( gauss5, x, y, guess )
+        #         a0,b0,a1,b1,a2,b2,a3,b3,a4,b4 = popt
+        #         y_fit = gauss5(x,a0,b0,a1,b1,a2,b2,a3,b3,a4,b4)
 
-            # elif( nG == 7 ):
-            #     if(center == False):
-            #         popt, cov = curve_fit( gauss7_r, x, y )
-            #         a0,b0,a1,b1,a2,b2,a3,b3,a4,b4,a5,b5,a6,b6,r0,r1,r2,r3,r4,r5,r6 = popt
-            #         y_fit = gauss7_r(x,a0,b0,a1,b1,a2,b2,a3,b3,a4,b4,a5,b5,a6,b6,r0,r1,r2,r3,r4,r5,r6)
-            #     else:
-            #         popt, cov = curve_fit( gauss7, x, y, guess )
-            #         a0,b0,a1,b1,a2,b2,a3,b3,a4,b4,a5,b5,a6,b6 = popt
-            #         y_fit = gauss7(x,a0,b0,a1,b1,a2,b2,a3,b3,a4,b4,a5,b5,a6,b6)
+        # elif( nG == 6 ):
+        #     if(center ==False):
+        #         popt, cov = curve_fit( gauss6_r, x, y )
+        #         a0,b0,a1,b1,a2,b2,a3,b3,a4,b4,a5,b5,r0,r1,r2,r3,r4,r5 = popt
+        #         y_fit = gauss6_r(x,a0,b0,a1,b1,a2,b2,a3,b3,a4,b4,a5,b5,r0,r1,r2,r3,r4,r5)
+        #     else:
+        #         popt, cov = curve_fit( gauss6, x, y, guess )
+        #         a0,b0,a1,b1,a2,b2,a3,b3,a4,b4,a5,b5 = popt
+        #         y_fit = gauss6(x,a0,b0,a1,b1,a2,b2,a3,b3,a4,b4,a5,b5)
 
-            # elif( nG == 8 ):
-            #     if (center == False):
-            #         popt, cov = curve_fit( gauss8_r, x, y )
-            #         a0,b0,a1,b1,a2,b2,a3,b3,a4,b4,a5,b5,a6,b6,a7,b7,r0,r1,r2,r3,r4,r5,r6,r7 = popt
-            #         y_fit = gauss8_r(x,a0,b0,a1,b1,a2,b2,a3,b3,a4,b4,a5,b5,a6,b6,a7,b7,r0,r1,r2,r3,r4,r5,r6,r7)
-            #     else:
-            #         popt, cov = curve_fit( gauss8, x, y, guess )
-            #         a0,b0,a1,b1,a2,b2,a3,b3,a4,b4,a5,b5,a6,b6,a7,b7 = popt
-            #         y_fit = gauss8(x,a0,b0,a1,b1,a2,b2,a3,b3,a4,b4,a5,b5,a6,b6,a7,b7)
+        # elif( nG == 7 ):
+        #     if(center == False):
+        #         popt, cov = curve_fit( gauss7_r, x, y )
+        #         a0,b0,a1,b1,a2,b2,a3,b3,a4,b4,a5,b5,a6,b6,r0,r1,r2,r3,r4,r5,r6 = popt
+        #         y_fit = gauss7_r(x,a0,b0,a1,b1,a2,b2,a3,b3,a4,b4,a5,b5,a6,b6,r0,r1,r2,r3,r4,r5,r6)
+        #     else:
+        #         popt, cov = curve_fit( gauss7, x, y, guess )
+        #         a0,b0,a1,b1,a2,b2,a3,b3,a4,b4,a5,b5,a6,b6 = popt
+        #         y_fit = gauss7(x,a0,b0,a1,b1,a2,b2,a3,b3,a4,b4,a5,b5,a6,b6)
+
+        # elif( nG == 8 ):
+        #     if (center == False):
+        #         popt, cov = curve_fit( gauss8_r, x, y )
+        #         a0,b0,a1,b1,a2,b2,a3,b3,a4,b4,a5,b5,a6,b6,a7,b7,r0,r1,r2,r3,r4,r5,r6,r7 = popt
+        #         y_fit = gauss8_r(x,a0,b0,a1,b1,a2,b2,a3,b3,a4,b4,a5,b5,a6,b6,a7,b7,r0,r1,r2,r3,r4,r5,r6,r7)
+        #     else:
+        #         popt, cov = curve_fit( gauss8, x, y, guess )
+        #         a0,b0,a1,b1,a2,b2,a3,b3,a4,b4,a5,b5,a6,b6,a7,b7 = popt
+        #         y_fit = gauss8(x,a0,b0,a1,b1,a2,b2,a3,b3,a4,b4,a5,b5,a6,b6,a7,b7)
       
         delta_r= x[1]-x[0]  
         chi2 = sum((y - y_fit)**2)

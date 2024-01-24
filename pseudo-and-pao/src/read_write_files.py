@@ -30,6 +30,7 @@ class orbital:
         self.gto_d = []
         self.gto_c = []
         self.guess = []
+        self.bounds= ([],[])        
         self.nzeta = 0
         self.nG    = 0
         self.norm  = 0
