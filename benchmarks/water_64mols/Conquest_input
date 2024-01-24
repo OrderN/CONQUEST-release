@@ -1,5 +1,5 @@
 IO.Title    Water static test, DZ, GridCutoff=50Ha
-IO.Coordinates    H2O_coord.in
+IO.Coordinates    H2O_coord.dat
 IO.FractionalAtomicCoords F
 IO.Iprint 1
 IO.WriteOutToFile F
