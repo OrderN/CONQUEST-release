@@ -30,7 +30,7 @@ def color_list_orbital_fit(n):
         return 'blue'
 
 #%% Plot radial part of the orbitals ##########################################
-def plot_PAO( orb, filename_gto_write ):
+def plot_PAO( orb, filename_gto_write, save=False ):
     #
     figure0 = plt.figure(0)
     plt.plot(orb[0].x,zeros(len(orb[0].x)),color='black',linestyle='dotted',linewidth=1.0)
@@ -45,12 +45,13 @@ def plot_PAO( orb, filename_gto_write ):
     plt.ylabel('radial part $\phi(r)$')
     plt.legend()
     plt.show()
-    figure0.savefig( filename_gto_write+'_radial.pdf', dpi=300, format='pdf', transparent=True,\
+    if ( save == True ): 
+        figure0.savefig( filename_gto_write+'_radial.pdf', dpi=300, format='pdf', transparent=True,\
         bbox_inches='tight', frameon=None)    
     
 
 #%% Plot radial part of the orbitals ##########################################
-def plot_GTO_PAO( orb, filename_gto_write ):
+def plot_GTO_PAO( orb, filename_gto_write, save=False ):
     #
     figure1 = plt.figure(1)
     plt.plot(orb[0].x,zeros(len(orb[0].x)),color='black',linestyle='dotted',linewidth=1.0)
@@ -69,12 +70,13 @@ def plot_GTO_PAO( orb, filename_gto_write ):
     plt.ylabel('radial part $\phi(r)$')
     plt.legend()
     plt.show()
-    figure1.savefig( filename_gto_write+'_radial.pdf', dpi=300, format='pdf', transparent=True,\
+    if ( save == True ): 
+        figure1.savefig( filename_gto_write+'_radial.pdf', dpi=300, format='pdf', transparent=True,\
         bbox_inches='tight')    
     
 
 #%% Plot PAO-GTO deviation ####################################################
-def plot_GTO_PAO_dev( orb, filename_gto_write ):
+def plot_GTO_PAO_dev( orb, filename_gto_write, save=False ):
     #
     figure2 = plt.figure(2)
     plt.plot(orb[0].x,zeros(len(orb[0].x)),color='black',linestyle='dotted',linewidth=1.0)
@@ -90,11 +92,12 @@ def plot_GTO_PAO_dev( orb, filename_gto_write ):
     plt.ylabel('deviation $\phi^{PAO}(r)-\phi^{PAO}_{nG}(r)$')
     plt.legend()
     plt.show()
-    figure2.savefig( filename_gto_write+'_deviation.pdf', dpi=300, format='pdf', transparent=True,\
+    if ( save == True ):        
+        figure2.savefig( filename_gto_write+'_deviation.pdf', dpi=300, format='pdf', transparent=True,\
         bbox_inches='tight')    
 
 #%% For each orb plot the GTO primitives ######################################
-def plot_GTO_prim( orb, filename_gto_write ):
+def plot_GTO_prim( orb, filename_gto_write, save=False):
     #
     for i in range(len(orb)):
         # One figure for each orbital
@@ -105,7 +108,7 @@ def plot_GTO_prim( orb, filename_gto_write ):
         
         for j in range(orb[i].nG):
             y = orb[i].gto_d[j]*exp( -orb[i].gto_a[j]*(array(orb[i].x) - orb[i].gto_c[j])**2 )
-            plt.plot(orb[i].x, y,label='$d=%12.6f$, $a=%12.6f$, $c=%12.6f$' %(orb[i].gto_d[j],orb[i].gto_a[j],orb[i].gto_c[j]))
+            plt.plot(orb[i].x, y,label='$a=%12.6f$, $d=%12.6f$, $c=%12.6f$' %(orb[i].gto_a[j],orb[i].gto_d[j],orb[i].gto_c[j]))
     
         # Plot the PAO radial function
         tmp_label = str(orb[i].n)+orb[i].lname+'-'+str(orb[i].z)+'$\zeta$'+'-PAO'
@@ -121,7 +124,8 @@ def plot_GTO_prim( orb, filename_gto_write ):
         plt.title('$\phi^{PAO}_{nG}(r)=\sum_i^n d_i \exp(-a_i r^2)$')
         plt.legend()
         plt.show()
-        figure.savefig( filename_gto_write+'_'+str(orb[i].n)+orb[i].lname+'.pdf',\
-            dpi=300, format='pdf', transparent=True,\
-            bbox_inches='tight')           
+        if ( save ==  True ):
+            figure.savefig( filename_gto_write+'_'+str(orb[i].n)+orb[i].lname+'.pdf',\
+                            dpi=300, format='pdf', transparent=True,\
+                            bbox_inches='tight')           
         
