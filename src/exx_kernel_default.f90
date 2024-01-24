@@ -1243,7 +1243,7 @@ contains
                    if(jb%nsup/=bndim2(nbkbeg+j-1))     write(24,*) 'Error2: ',jb%nsup,bndim2(nbkbeg+j-1)
                    !
                    call start_timer(tmr_std_exx_matmult)
-                   !$omp parallel do default(none) &
+                   !$omp parallel default(none) &
                    !$omp    shared(exx_mat_elem, phi_i, Ome_kj, dv, extent, ncbeg, ia, jb, kg, c) &
                    !$omp    private(nsf1, nsf2, nsf3, ncaddr, r, s, t)
                    do nsf2 = 1, jb%nsup                                         
@@ -1252,10 +1252,11 @@ contains
                       !
                       do nsf1 = 1, ia%nsup
                          !
+                         exx_mat_elem = zero
+                         !
                          do nsf3 = 1, kg%nsup
                             !
-                            exx_mat_elem = zero
-                            !
+                            !$omp do collapse(3) reduction(+:exx_mat_elem)
                             do r = 1, 2*extent+1
                                do s = 1, 2*extent+1
                                   do t = 1, 2*extent+1                         
@@ -1267,17 +1268,19 @@ contains
                                   end do
                                end do
                             end do
+                            !$omp end do
                             !
-                            c(ncaddr + nsf1 - 1) = c(ncaddr + nsf1 - 1) + exx_mat_elem
-                            !
-                           end do ! nsf3
-                           !
-                           !
+                         end do ! nsf3
+                         !
+                         !$omp single
+                         c(ncaddr + nsf1 - 1) = c(ncaddr + nsf1 - 1) + exx_mat_elem
+                         !$omp end single
+                         !
                         end do ! nsf1
                         !
                         !
                      end do ! nsf2
-                     !$omp end parallel do
+                     !$omp end parallel
                    !
                    call stop_timer(tmr_std_exx_matmult,.true.)
                    !
