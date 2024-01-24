@@ -132,7 +132,7 @@ contains
     integer :: npoint ! outputs of check_block
     integer :: count1 ! incremented counter, maps from (l1, acz, m1) to linear index of gridfunctions%griddata
     real(double):: dcellx_block,dcelly_block,dcellz_block ! grid dimensions, should be moved
-    real(double) :: x,y,z,r ! Temporary variables to reduce indirect accesses
+    real(double) :: x,y,z ! Temporary variables to reduce indirect accesses
     real(double) :: rcut ! Input to check_block
     real(double) :: val ! output, written into gridfunctions%griddata
     real(double) :: xblock,yblock,zblock ! inputs to check_block
@@ -145,11 +145,11 @@ contains
        ! Interface to return a value val given arguments
        ! direction,species,l,acz,m,x,y,z. Implemented by
        ! evaluate_pao() and pao_elem_derivative_2().
-       subroutine evaluate(direction,species,l,acz,m,x,y,z,r,val,sys)
+       subroutine evaluate(direction,species,l,acz,m,x,y,z,val,sys)
          use datatypes, only: double
          integer, intent(in) :: species,l,acz,m
          integer, intent(in) :: direction
-         real(kind=double), intent(in) :: x,y,z,r
+         real(kind=double), intent(in) :: x,y,z
          logical, intent(in), optional :: sys 
          real(kind=double), intent(out) :: val
        end subroutine evaluate
@@ -210,7 +210,7 @@ contains
     !$omp             shared(domain, naba_atoms_of_blocks, offset_position, pao_fns, atomf, &
     !$omp                    dcellx_block, dcelly_block, dcellz_block, dcs_parts, &
     !$omp                    rcut, n_pts_in_block, pao, gridfunctions, direction) &
-    !$omp             private(ia, ipart, iblock, l1, acz, m1, count1, x, y, z, r, val, position, &
+    !$omp             private(ia, ipart, iblock, l1, acz, m1, count1, x, y, z, val, position, &
     !$omp                     npoint, r_store, ip_store, x_store, y_store, z_store, my_species, &
     !$omp                     xblock, yblock, zblock, iatom, xatom, yatom, zatom, naba_part_label, ind_part, icover)
     blocks_loop_omp: do iblock = 1, domain%groups_on_node ! primary set of blocks
@@ -240,12 +240,11 @@ contains
                 x = x_store(ip)
                 y = y_store(ip)
                 z = z_store(ip)
-                r = sqrt(x*x+y*y+z*z)
                 ! For this point-atom offset, we accumulate the PAO on the grid
                 l_loop: do l1 = 0,pao(my_species)%greatest_angmom
                    z_loop: do acz = 1,pao(my_species)%angmom(l1)%n_zeta_in_angmom
                       m_loop: do m1=-l1,l1
-                         call evaluate(direction,my_species,l1,acz,m1,x,y,z,r,val)
+                         call evaluate(direction,my_species,l1,acz,m1,x,y,z,val)
                          gridfunctions(pao_fns)%griddata(position) = val
                          position = position + n_pts_in_block
                       end do m_loop

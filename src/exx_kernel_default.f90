@@ -1014,20 +1014,22 @@ contains
     integer :: np, ni
     !
     real(double), dimension(3) :: xyz_zero  = zero
-    real(double)               :: dv,K_val
-    real(double)               :: exx_mat_elem
+    real(double)               ::   dr,dv,K_val
+    real(double)               ::   exx_mat_elem
     !
     type(prim_atomic_data)  :: ia !i_alpha
     type(neigh_atomic_data) :: jb !j_beta
     type(neigh_atomic_data) :: kg !k_gamma
     type(neigh_atomic_data) :: ld !l_delta
     !
-    integer                 :: nsf1, nsf2, nsf3
-    integer                 :: r, s, t, ng
+    integer                 :: maxsuppfuncs, nsf1, nsf2, nsf3
+    integer                 :: r, s, t
     !
-    dv = grid_spacing**3
-    ng = 2*extent+1
-    !ewald_alpha  = 0.5    
+    !
+    dr = grid_spacing
+    dv = dr**3
+    !ewald_alpha  = 0.5
+    maxsuppfuncs = maxval(nsf_species)    
     !range_ij        = 0.5d0
     !range_kl        = 0.5d0
     !unit_exx_debug1 = 333
@@ -1043,8 +1045,6 @@ contains
        nbkbeg     = ibaddr     (k_in_part) 
        nb_nd_kbeg = ib_nd_acc  (k_in_part)
        nd3        = ahalo%ndimj(k_in_halo)
-       nbbeg      = nb_nd_kbeg
-       
        call get_halodat(kg,kg,k_in_part,ahalo%i_hbeg(ahalo%lab_hcover(kpart)), &
             ahalo%lab_hcell(kpart),'k',.true.,unit_exx_debug)
        !
@@ -1064,6 +1064,7 @@ contains
           !print*, 'jbnab2ch',j, jbnab2ch(j)
        end do
        !
+       nbbeg = nb_nd_kbeg
        !
        !print*, 'size jbnab2ch', size(jbnab2ch)
        !print*, 'jbnab2ch', jbnab2ch
@@ -1080,16 +1081,15 @@ contains
           !l_in_halo = lbnab2ch(l)                
           lpart = ibpart(nbkbeg+l-1) + k_off
           lseq  = ibseq (nbkbeg+l-1)
-
           call get_halodat(ld,kg,lseq,chalo%i_hbeg(lpart),         &
-          BCS_parts%lab_cell(BCS_parts%inv_lab_cover(lpart)), &
-          'l',.true.,unit_exx_debug)
+               BCS_parts%lab_cell(BCS_parts%inv_lab_cover(lpart)), &
+               'l',.true.,unit_exx_debug)
           !
           !write(*,*) 'l',l, 'global_num',ld%global_num,'spe',ld%spec
           !
-          !!$
+!!$
 !!$ ****[ <kl> screening ]****
-          !!$
+!!$
           !xyz_kl    = kg%xyz - ld%xyz
           !screen_kl = sqrt(dot_product(xyz_kl,xyz_kl))
           !if ( screen_kl < range_kl ) then
@@ -1160,14 +1160,13 @@ contains
                 if ( ncbeg /= 0 ) then 
                    jpart = ibpart(nbkbeg+j-1) + k_off
                    jseq  = ibseq (nbkbeg+j-1)
-
                    call get_halodat(jb,kg,jseq,chalo%i_hbeg(jpart),         &
-                   BCS_parts%lab_cell(BCS_parts%inv_lab_cover(jpart)), &
-                   'j',.true.,unit_exx_debug)
+                        BCS_parts%lab_cell(BCS_parts%inv_lab_cover(jpart)), &
+                        'j',.true.,unit_exx_debug)
                    !
-                   !!$
-                   !!$ ****[ <ij> screening ]****
-                   !!$
+!!$
+!!$ ****[ <ij> screening ]****
+!!$
                    !xyz_ij    = ia%xyz - jb%xyz
                    !screen_ij = sqrt(dot_product(xyz_ij,xyz_ij))
                    !print*, screen_ij
@@ -1206,7 +1205,7 @@ contains
                          work_in_3d  = rho_kj(:,:,:,nsf1,nsf2)
                          !
                          if (exx_psolver=='fftw' .and. exx_pscheme=='ewald') then
-                            call exx_ewald_charge(work_in_3d,2*extent+1,dv,ewald_charge)
+                            call exx_ewald_charge(work_in_3d,extent,dv,ewald_charge)
                             work_in_3d  = work_in_3d - ewald_rho*ewald_charge
                          end if
                          !
@@ -1251,15 +1250,15 @@ contains
                       do nsf1 = 1, ia%nsup
                          !
                          do nsf3 = 1, kg%nsup
-                           !
-                           exx_mat_elem = zero
-                           !
-                           !$omp parallel do collapse(3) default(none) reduction(+:exx_mat_elem) &
-                           !$omp    shared(phi_i, Ome_kj, dv, ng, nsf1, nsf2, nsf3) &
-                           !$omp    private(r, s, t)
-                            do r = 1, ng
-                               do s = 1, ng
-                                  do t = 1, ng                         
+                            !
+                            exx_mat_elem = zero
+                            !
+                            !$omp parallel do collapse(3) default(none) reduction(+:exx_mat_elem) &
+                            !$omp    shared(phi_i, Ome_kj, dv, extent, nsf1, nsf2, nsf3) &
+                            !$omp    private(r, s, t)
+                            do r = 1, 2*extent+1
+                               do s = 1, 2*extent+1
+                                  do t = 1, 2*extent+1                         
 
                                      exx_mat_elem = exx_mat_elem &                                    
                                           + phi_i(t,s,r,nsf1)    &

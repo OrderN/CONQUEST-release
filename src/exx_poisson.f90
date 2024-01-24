@@ -273,15 +273,13 @@ contains
          intent(in)           :: rho
     real(double), intent(in)  :: dv
     real(double), intent(out) :: charge
-    integer                   :: i, j, k, ng
+    integer                   :: i, j, k
     
     charge = zero
-
-    ng = 2*extent+1
-
-    do i = 1, ng
-       do j = 1, ng
-          do k = 1, ng                                    
+    
+    do i = 1, 2*extent+1
+       do j = 1, 2*extent+1
+          do k = 1, 2*extent+1                                    
              charge = charge + rho(k,j,i)*dv
           end do
        end do
