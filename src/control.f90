@@ -55,7 +55,7 @@
 !!   2023/09/13 lu
 !!    Added XSF and XSF output frequency as user-adjustable parameter
 !!   2024/01/18 lin
-!!    Added extended XYZ file output for each type of run
+!!    Added extended XYZ file output for run types of static, cg, lbfgs, sqnm, and optcell
 !!  SOURCE
 !!
 module control
