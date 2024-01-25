@@ -1243,9 +1243,9 @@ contains
                    if(jb%nsup/=bndim2(nbkbeg+j-1))     write(24,*) 'Error2: ',jb%nsup,bndim2(nbkbeg+j-1)
                    !
                    call start_timer(tmr_std_exx_matmult)
-                   !$omp parallel default(none) &
-                   !$omp    shared(phi_i, Ome_kj, dv, extent, ncbeg, ia, jb, kg, c, exx_mat_elem) &
-                   !$omp    private(nsf1, nsf2, nsf3, ncaddr, r, s, t)
+                   !$omp parallel default(none) reduction(+: c) &
+                   !$omp    shared(phi_i, Ome_kj, dv, extent, ncbeg, ia, jb, kg) &
+                   !$omp    private(nsf1, nsf2, nsf3, ncaddr, r, s, t, exx_mat_elem)
                    do nsf2 = 1, jb%nsup                                         
                       !
                       ncaddr = ncbeg + ia%nsup * (nsf2 - 1)
@@ -1256,7 +1256,7 @@ contains
                          !
                          do nsf3 = 1, kg%nsup
                             !
-                            !$omp do collapse(3) reduction(+: exx_mat_elem)
+                            !$omp do collapse(3)
                             do r = 1, 2*extent+1
                                do s = 1, 2*extent+1
                                   do t = 1, 2*extent+1                         
@@ -1272,9 +1272,7 @@ contains
                             !
                          end do ! nsf3
                          !
-                         !$omp single
                          c(ncaddr + nsf1 - 1) = c(ncaddr + nsf1 - 1) + exx_mat_elem
-                         !$omp end single
                          !
                         end do ! nsf1
                         !
