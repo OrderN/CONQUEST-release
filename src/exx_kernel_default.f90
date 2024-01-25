@@ -1272,7 +1272,9 @@ contains
                             !
                          end do ! nsf3
                          !
+                         !$omp critical
                          c(ncaddr + nsf1 - 1) = c(ncaddr + nsf1 - 1) + exx_mat_elem
+                         !$omp end critical
                          !
                         end do ! nsf1
                         !
