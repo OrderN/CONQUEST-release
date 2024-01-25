@@ -176,9 +176,11 @@ contains
     maxnd3 = maxval(ahalo%ndimj)
     maxlen = maxval(nbnab) * maxnd2
     allocate(tempa(maxnd1,maxnd3), tempc(maxnd1,maxlen), tempb(maxnd3,maxlen))
-    tempa = zero
-    tempb = zero
-    tempc = zero
+    ! We don't need to initialize these because:
+    ! All elements of tempA and tempB are overwitten
+    ! When the beta argument to dgemm is zero, C does not need to be set. See
+    ! https://netlib.org/lapack/explore-html/d7/d2b/dgemm_8f_source.html
+
     ! Loop over atoms k in current A-halo partn
     do k = 1, ahalo%nh_part(kpart)
        k_in_halo = ahalo%j_beg(kpart) + k - 1
