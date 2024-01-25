@@ -158,7 +158,8 @@ contains
     ! Local variables
     integer :: jbnab2ch(mx_absb)  ! Automatic array
     integer :: nbkbeg, k, k_in_part, k_in_halo, j, jpart, jseq
-    integer :: i, nabeg, naend, i_in_prim, icad, j_in_halo, ncbeg
+    integer :: i, nabeg, naend, i_in_prim, icad, j_in_halo, ncbeg, ncend
+    integer :: tcbeg, tcend
     integer :: n1, n2, n3, nb_nd_kbeg
     integer :: nd1, nd2, nd3
     integer :: naaddr, nbaddr, ncaddr
@@ -227,24 +228,40 @@ contains
           call dgemm('n', 'n', nd1, tbend, nd3, one, tempa, &
                maxnd1, tempb, maxnd3, zero, tempc, maxnd1)
 
-          sofar = 0
+          tcbeg = 0
+          tcend = 0
           ! Loop over B-neighbours of atom k
-          do j = 1, nbnab(k_in_part)
+          ! TODO: Create a mask for the rows/cols of C that we want and do array copy
+          copy_c: do j = 1, nbnab(k_in_part)
              nd2 = bndim2(nbkbeg+j-1)
-             j_in_halo = jbnab2ch(j)
-             if (j_in_halo /= 0) then
-                ncbeg = chalo%i_h2d(icad+j_in_halo)
-                if (ncbeg /= 0) then ! multiplication of ndim x ndim blocks
-                   do n2 = 1, nd2
-                      ncaddr = ncbeg + nd1 * (n2 - 1)
-                      do n1 = 1, nd1
-                         c(ncaddr+n1-1) = c(ncaddr+n1-1) + tempc(n1,sofar+n2)
-                      end do
-                   end do
-                end if
+             ncbeg = chalo%i_h2d(icad+jbnab2ch(j))
+             ncend = ncbeg + (nd1 * nd2 - 1)
+             tcbeg = tcend + 1
+             tcend = tcend + nd2
+             if (jbnab2ch(j) /= 0 .and. ncbeg /= 0) then
+                c(ncbeg:ncend) = c(ncbeg:ncend) + pack(tempc(1:nd1, tcbeg:tcend), .true.)
              end if
-             sofar = sofar + nd2
-          end do ! end of j = 1, nbnab(k_in_part)
+          end do copy_c
+
+          ! sofar = 0
+          ! ! Loop over B-neighbours of atom k
+          ! do j = 1, nbnab(k_in_part)
+          !    nd2 = bndim2(nbkbeg+j-1)
+          !    j_in_halo = jbnab2ch(j)
+          !    if (j_in_halo /= 0) then
+          !       ncbeg = chalo%i_h2d(icad+j_in_halo)
+          !       if (ncbeg /= 0) then ! multiplication of ndim x ndim blocks
+          !          do n2 = 1, nd2
+          !             ncaddr = ncbeg + nd1 * (n2 - 1)
+          !             do n1 = 1, nd1
+          !                c(ncaddr+n1-1) = c(ncaddr+n1-1) + tempc(n1,sofar+n2)
+          !             end do
+          !          end do
+          !       end if
+          !    end if
+          !    sofar = sofar + nd2
+          ! end do ! end of j = 1, nbnab(k_in_part)
+
        end do ! end of i = 1, at%n_hnab
 !$omp end do
     end do ! end of k = 1, nahpart
@@ -470,4 +487,3 @@ contains
   !!*****
 
 end module multiply_kernel
-
