@@ -166,6 +166,7 @@ contains
     real(double), allocatable, dimension(:,:) :: tempb, tempa, tempc
     integer :: sofar, maxnd1, maxnd2, maxnd3, maxlen
     integer :: nbbeg, nbend, tbbeg, tbend
+    logical :: mask
     external :: dgemm
     ! OpenMP required indexing variables
     integer :: nd1_vector(at%mx_halo), nd2_vector(mx_absb), nd2_array(mx_absb)
@@ -183,6 +184,7 @@ contains
 
     ! Loop over atoms k in current A-halo partn
     do k = 1, ahalo%nh_part(kpart)
+       ! These indices only depend on k and kpart
        k_in_halo = ahalo%j_beg(kpart) + k - 1
        k_in_part = ahalo%j_seq(k_in_halo)
        nbkbeg = ibaddr(k_in_part)
@@ -220,6 +222,7 @@ contains
        end do copy_b
 
        ! Loop over primary-set A-neighbours of k
+       !$omp do schedule(runtime)
        do i = 1, at%n_hnab(k_in_halo)
           i_in_prim = at%i_prim(at%i_beg(k_in_halo)+i-1)
           icad = (i_in_prim - 1) * chalo%ni_in_halo
@@ -233,19 +236,27 @@ contains
                maxnd1, tempb, maxnd3, zero, tempc, maxnd1)
 
           ! Loop over B-neighbours of atom k
-          ! TODO: Create a mask for the rows/cols of C that we want and do array copy
+          ! Copy result back from temporary array and add to C
           copy_c: do j = 1, nbnab(k_in_part)
              nd2 = bndim2(nbkbeg+j-1)
              ncbeg = chalo%i_h2d(icad+jbnab2ch(j))
              ncend = ncbeg + (nd1 * nd2 - 1)
-             tcbeg = tcend + 1
-             tcend = tcend + nd2
-             if (jbnab2ch(j) /= 0 .and. ncbeg /= 0) then
-                c(ncbeg:ncend) = c(ncbeg:ncend) + pack(tempc(1:nd1, tcbeg:tcend), .true.)
-             end if
+             mask = (jbnab2ch(j) /= 0 .and. ncbeg /= 0)
              tcbeg = nd2_array(j)
              tcend = tcbeg + nd2 - 1
+             c(ncbeg:ncend) = c(ncbeg:ncend) + pack(tempc(1:nd1, tcbeg:tcend), mask)
           end do copy_c
+
+          ! copy_c: do j = 1, nbnab(k_in_part)
+          !    nd2 = bndim2(nbkbeg+j-1)
+          !    ncbeg = chalo%i_h2d(icad+jbnab2ch(j))
+          !    ncend = ncbeg + (nd1 * nd2 - 1)
+          !    if (jbnab2ch(j) /= 0 .and. ncbeg /= 0) then
+          !       tcbeg = nd2_array(j)
+          !       tcend = tcbeg + nd2 - 1
+          !       c(ncbeg:ncend) = c(ncbeg:ncend) + pack(tempc(1:nd1, tcbeg:tcend), mask)
+          !    end if
+          ! end do copy_c
 
           ! sofar = 0
           ! ! Loop over B-neighbours of atom k
@@ -267,7 +278,7 @@ contains
           ! end do ! end of j = 1, nbnab(k_in_part)
 
        end do ! end of i = 1, at%n_hnab
-!$omp end do
+       !$omp end do
     end do ! end of k = 1, nahpart
     deallocate(tempa, tempb, tempc)
     return
