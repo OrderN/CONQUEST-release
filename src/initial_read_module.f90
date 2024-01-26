@@ -1893,7 +1893,6 @@ contains
     else
        temp_ion           = fdf_double ('AtomMove.IonTemperature',300.0_double)
     end if
-
 !!$
 !!$
 !!$
@@ -2675,6 +2674,8 @@ contains
                           flag_variable_temperature, md_variable_temperature_method, &
                           md_initial_temperature, md_final_temperature, md_variable_temperature_rate
     use omp_module, only: init_threads
+    use multiply_kernel, only: kernel_id
+
     implicit none
 
     ! Passed variables
@@ -2731,7 +2732,7 @@ contains
        ensemblestr = md_ensemble
        call chrcap(ensemblestr,3)
        write(io_lun, fmt='(4x,a15,a3," MD run for ",i5," steps ")') job_str, ensemblestr, MDn_steps
-       write(io_lun, fmt='(6x,"Initial thermostat temperature: ",f9.3,"K")') temp_ion
+       write(io_lun, fmt='(6x,"Initial ion temperature: ",f9.3,"K")') temp_ion
        if (md_final_temperature .ne. md_initial_temperature) then
          write(io_lun, fmt='(6x,"Final thermostat temperature: ",f9.3,"K")') md_final_temperature
        end if
@@ -2879,7 +2880,7 @@ contains
     else if (threads==1) then
        write(io_lun,fmt="(/4x,'The calculation will be performed on ',i5,' thread')") threads
     end if
-    
+    write(io_lun,fmt='(/4x,"Using the ",a," matrix multiplication kernel")') kernel_id
     if(.NOT.flag_diagonalisation) &
          write(io_lun,fmt='(10x,"Density Matrix range  = ",f7.4,1x,a2)') &
          dist_conv*r_c, d_units(dist_units)

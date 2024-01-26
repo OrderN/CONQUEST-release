@@ -5,10 +5,19 @@ on:
     branches: [ "develop" ]
   pull_request:
     branches: [ "develop" ]
+  # Manual dispatch for including all multiply kernels in matrix.
+  # We don't want this to run on every commit, but it's useful
+  # to be able to launch it manually
+  workflow_dispatch:
+    inputs:
+      multiply_kernel_test:
+        description: 'test all multiply kernels, instead of default only'
+        required: false
+        default: false
 
 jobs:
   build:
-    name: ${{matrix.fc}} -- ${{matrix.os}} -- ${{matrix.np}} processes -- ${{matrix.threads}} threads
+    name: ${{matrix.fc}} -- ${{matrix.os}} -- ${{matrix.multiply_kernel}} multiply kernel -- ${{matrix.np}} processes -- ${{matrix.threads}} threads
     runs-on: ${{matrix.os}}
     env:
       FC: ${{matrix.fc}}
@@ -34,6 +43,35 @@ jobs:
           - 2
         # TODO: Could be worth testing on `mpich` in addition to `openmpi-bin`. Both are
         #       available in apt
+        multiply_kernel:
+          - default
+          - gemm
+          - ompDoii
+          - ompDoik
+          - ompDoji
+          - ompDojk
+          - ompGemm
+          - ompGemm_m
+        # As a work-around, copy the multiply_kernel_test variable to the matrix and
+        # exclude non-default multiply kernels when it's false
+        # https://github.com/orgs/community/discussions/26253#discussioncomment-3250989
+        test_all_multiply_kernels:
+          - ${{github.event.inputs.multiply_kernel_test}}
+        exclude:
+          - test_all_multiply_kernels: false
+            multiply_kernel: gemm
+          - test_all_multiply_kernels: false
+            multiply_kernel: ompDoii
+          - test_all_multiply_kernels: false
+            multiply_kernel: ompDoik
+          - test_all_multiply_kernels: false
+            multiply_kernel: ompDoji
+          - test_all_multiply_kernels: false
+            multiply_kernel: ompDojk
+          - test_all_multiply_kernels: false
+            multiply_kernel: ompGemm
+          - test_all_multiply_kernels: false
+            multiply_kernel: ompGemm_m
 
     steps:
     - uses: actions/checkout@v3
@@ -62,7 +100,7 @@ jobs:
     - name: Build
       working-directory: ${{github.workspace}}/src
       run: |
-        make -j ${{matrix.np}} SYSTEM=gha
+        make -j ${{matrix.np}} SYSTEM=gha MULT_KERN=${{matrix.multiply_kernel}}
 
     - name: Run test 001
       working-directory: ${{github.workspace}}/testsuite/test_001_bulk_Si_1proc_Diag
@@ -81,7 +119,7 @@ jobs:
       run: |
         mpirun -np ${{matrix.np}} ../../bin/Conquest
         cat Conquest_out
-
+        
     - name: Check test results
       working-directory: ${{github.workspace}}/testsuite
       run: pytest test_check_output.py

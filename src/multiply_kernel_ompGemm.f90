@@ -26,6 +26,8 @@
 !!
 module multiply_kernel
 
+  character(len=*), parameter :: kernel_id = "ompGemm"
+
 !!*****
 
 contains
