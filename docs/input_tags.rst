@@ -1033,32 +1033,32 @@ MD.Ensemble (*string*)
     *default*: nve
 
 MD.Thermostat (*string*)
-    values: none/nhc/svr
+    values: none/nhc/berendsen/svr
 
     Thermostat type
 
     ``none``
         No thermostat (used for calculating temperature only)
-    ``nhc``
-        Nose-Hoover chain
+    ``berendsen``
+        Berendsen weak coupling thermostat
     ``svr``
-        Stochastic velocity rescaling (Bussi)
+        Stochastic velocity rescaling
 
     *default*: none
 
 MD.Barostat (*string*)
-    values: none/iso-mttk/ortho-mttk/mttk
+    values: none/berendsen/iso-mttk/ortho-mttk/mttk
 
     Barostat type. The following are the only valid thermostat/barostat
-    combinations for the NPT ensemble:  ``nhc``/ ``pr``, ``svr``/ ``pr``
+    combinations for the NPT ensemble: ``berendsen``/ ``berendsen``,
+    ``nhc``/ ``pr``, ``svr``/ ``pr``
 
     ``none``
         No barostat (used for calculating pressure only)
+    ``berendsen``
+        Berendsen weak coupling barostat
     ``pr``
         Parrinello-Rahman (extended system) barostat
-    ``mttk``
-        Martyna-Tuckerman-Tobias-Klein Barostat
-
 
     *default*: none
 
