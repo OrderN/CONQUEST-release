@@ -1140,6 +1140,11 @@ MD.nMTS (*integer*)
 
     *default*: 1
 
+MD.BerendsenEquil (*integer*)
+    Equilibrate the system for :math:`n` steps using Berendsen weak coupling
+
+    *default*: 0
+
 MD.TDEP (*boolean*)
     Dump data in a format readable by the Temperature Dependent Effective
     Potential (TDEP) code.
