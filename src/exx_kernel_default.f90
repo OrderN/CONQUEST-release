@@ -1003,7 +1003,7 @@ contains
 !!$    integer(integ) :: bndim2(mx_part*mx_absb)
     !
     ! Local variables
-    integer :: jbnab2ch(mx_absb)  ! Automatic array
+    integer :: jbnab2ch(mx_absb)  ! Automatic array !6
     integer :: nbkbeg, k, k_in_part, k_in_halo, j, jpart, jseq
     integer :: i, i_in_prim, icad, nbbeg, j_in_halo, ncbeg
     integer :: nb_nd_kbeg
@@ -1035,7 +1035,7 @@ contains
     !unit_exx_debug1 = 333
     !
     !
-    ! Allocate to maximum possible size
+    ! Allocate to maximum possible size, maxsuppfuncs = 13
     if ( exx_alloc ) call exx_mem_alloc(extent,maxsuppfuncs,0,'phi_k','alloc')
     if ( exx_alloc ) call exx_mem_alloc(extent,maxsuppfuncs,0,'Phy_k','alloc')
     if ( exx_alloc ) call exx_mem_alloc(extent,maxsuppfuncs,0,'phi_l','alloc')
@@ -1084,7 +1084,7 @@ contains
 !!$
 !!$ ****[ l do loop ]****
 !!$
-       do l = 1, nbnab(k_in_part)
+       do l = 1, nbnab(k_in_part) !6
           !l_in_halo = lbnab2ch(l)                
           lpart = ibpart(nbkbeg+l-1) + k_off
           lseq  = ibseq (nbkbeg+l-1)
@@ -1104,7 +1104,7 @@ contains
           phi_l = zero
           !
           call exx_phi_on_grid(inode,ld%global_num,ld%spec,extent,     &
-               ld%xyz,ld%nsup,phi_l,r_int,xyz_zero)             
+               ld%xyz,ld%nsup,phi_l,r_int,xyz_zero)          
           !
           do nsf2 = 1, ld%nsup
              !
@@ -1114,9 +1114,9 @@ contains
                 !
                 K_val = b(nbaddr+nsf1-1)
                 !
-                call start_timer(tmr_std_exx_accumul)
+               !  call start_timer(tmr_std_exx_accumul)
                 Phy_k(:,:,:,nsf1) = Phy_k(:,:,:,nsf1) + K_val*phi_l(:,:,:,nsf2) 
-                call stop_timer(tmr_std_exx_accumul,.true.)
+               !  call stop_timer(tmr_std_exx_accumul,.true.)
 
              end do
           end do
@@ -1129,7 +1129,7 @@ contains
 !!$
 !!$ ****[ i loop ]****
 !!$
-       do i = 1, at%n_hnab(k_in_halo)
+       do i = 1, at%n_hnab(k_in_halo) !6
           i_in_prim = at%i_prim(at%i_beg(k_in_halo)+i-1)
           nd1 = ahalo%ndimi      (i_in_prim)
           ni  = bundle%iprim_seq (i_in_prim)
@@ -1153,7 +1153,7 @@ contains
 !!$
 !!$ ****[ j loop ]****
 !!$
-          do j = 1, nbnab(k_in_part)!mat(np,Xrange)%n_nab(ni)                   
+         do j = 1, nbnab(k_in_part)!mat(np,Xrange)%n_nab(ni) !6
              nbbeg     = nb_nd_kbeg
              j_in_halo = jbnab2ch(j) !***
              !
@@ -1182,12 +1182,12 @@ contains
                    phi_j = zero
                    !
                    call exx_phi_on_grid(inode,jb%global_num,jb%spec,extent, &
-                        jb%xyz,jb%nsup,phi_j,r_int,xyz_zero)             
+                        jb%xyz,jb%nsup,phi_j,r_int,xyz_zero) 
                    !
-                   call start_timer(tmr_std_exx_accumul)
+                  !  call start_timer(tmr_std_exx_accumul)
                    rho_kj = zero
-                   do nsf1 = 1, kg%nsup                         
-                      do nsf2 = 1, jb%nsup
+                   do nsf1 = 1, kg%nsup !13                        
+                      do nsf2 = 1, jb%nsup !13|1
                          !
                          rho_kj(:,:,:,nsf1,nsf2) = &
                               Phy_k(:,:,:,nsf1) * phi_j(:,:,:,nsf2)
@@ -1195,14 +1195,14 @@ contains
                       end do
                    end do
                    !
-                   call stop_timer(tmr_std_exx_accumul,.true.)
+                  !  call stop_timer(tmr_std_exx_accumul,.true.)
                    !
                    vhf_kj = zero
                    !
-                   do nsf1 = 1, kg%nsup
-                      do nsf2 = 1, jb%nsup
+                   do nsf1 = 1, kg%nsup !13
+                      do nsf2 = 1, jb%nsup !13|1
 
-                         call start_timer(tmr_std_exx_poisson)    
+                        !  call start_timer(tmr_std_exx_poisson)    
                          work_in_3d  = zero
                          work_out_3d = zero
                          !
@@ -1223,43 +1223,39 @@ contains
                          !
                          vhf_kj(:,:,:,nsf1,nsf2) = work_out_3d
                          !
-                         call stop_timer(tmr_std_exx_poisson,.true.)
+                        !  call stop_timer(tmr_std_exx_poisson,.true.)
                       end do
                    end do
                    !
                    Ome_kj = zero
                    !
-                   call start_timer(tmr_std_exx_accumul)  
-                   do nsf1 = 1, kg%nsup
-                      do nsf2 = 1, jb%nsup                                       
+                  !  call start_timer(tmr_std_exx_accumul)  
+                   do nsf1 = 1, kg%nsup !13
+                      do nsf2 = 1, jb%nsup !13|1                                      
                          Ome_kj(:,:,:,nsf1,nsf2) = &
                               vhf_kj(:,:,:,nsf1,nsf2) * phi_k(:,:,:,nsf1)                   
                       end do
                    end do
-                   call stop_timer(tmr_std_exx_accumul,.true.)
+                  !  call stop_timer(tmr_std_exx_accumul,.true.)
                    !
                    !
                    if(ia%nsup/=ahalo%ndimi(i_in_prim)) write(24,*) 'Error1: ',ia%nsup,ahalo%ndimi(i_in_prim)
                    if(jb%nsup/=bndim2(nbkbeg+j-1))     write(24,*) 'Error2: ',jb%nsup,bndim2(nbkbeg+j-1)
                    !
-                   call start_timer(tmr_std_exx_matmult)
-                   !$omp parallel default(none) reduction(+: c) &
-                   !$omp    shared(phi_i, Ome_kj, dv, extent, ncbeg, ia, jb, kg) &
-                   !$omp    private(nsf1, nsf2, nsf3, ncaddr, r, s, t, exx_mat_elem)
-                   do nsf2 = 1, jb%nsup                                         
+                  !  call start_timer(tmr_std_exx_matmult)
+                   do nsf2 = 1, jb%nsup !13|1                                      
                       !
                       ncaddr = ncbeg + ia%nsup * (nsf2 - 1)
                       !
-                      do nsf1 = 1, ia%nsup
+                      do nsf1 = 1, ia%nsup !1
                          !
-                         exx_mat_elem = zero
-                         !
-                         do nsf3 = 1, kg%nsup
+                         do nsf3 = 1, kg%nsup !13
                             !
-                            !$omp do collapse(3)
-                            do r = 1, 2*extent+1
-                               do s = 1, 2*extent+1
-                                  do t = 1, 2*extent+1                         
+                            exx_mat_elem = zero
+                            !
+                            do r = 1, 2*extent+1 !25
+                               do s = 1, 2*extent+1 !25
+                                  do t = 1, 2*extent+1 !25                        
 
                                      exx_mat_elem = exx_mat_elem &                                    
                                           + phi_i(t,s,r,nsf1)    &
@@ -1268,19 +1264,18 @@ contains
                                   end do
                                end do
                             end do
-                            !$omp end do
+                            !
+                            c(ncaddr + nsf1 - 1) = c(ncaddr + nsf1 - 1) + exx_mat_elem
                             !
                          end do ! nsf3
                          !
-                         c(ncaddr + nsf1 - 1) = c(ncaddr + nsf1 - 1) + exx_mat_elem
                          !
-                        end do ! nsf1
-                        !
-                        !
-                     end do ! nsf2
-                     !$omp end parallel
+                      end do ! nsf1
+                      !
+                      !
+                   end do ! nsf2
                    !
-                   call stop_timer(tmr_std_exx_matmult,.true.)
+                  !  call stop_timer(tmr_std_exx_matmult,.true.)
                    !
                 end if ! ( ncbeg /=0 )
              end if ! ( j_in_halo /=0 )

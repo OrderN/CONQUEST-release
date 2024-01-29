@@ -155,13 +155,13 @@ contains
           pz = pz -ijk(3)+1
        end if overlap_box
        !print*,
-       grid_x_loop: do nx = mx, px
+       grid_x_loop: do nx = mx, px !-12|-9|-6, 12
           x = xyz(1) + real(nx,double)*grid_spacing + rst(1)
 
-          grid_y_loop: do ny = my, py
+          grid_y_loop: do ny = my, py !-12, 12
              y = xyz(2) + real(ny,double)*grid_spacing + rst(2)
 
-             grid_z_loop: do nz = mz, pz
+             grid_z_loop: do nz = mz, pz !-12, 12
                 z = xyz(3) + real(nz,double)*grid_spacing + rst(3)
 
                 !norm = sqrt((x-xyz(1))**2+(y-xyz(2))**2+(z-xyz(3))**2)
@@ -175,11 +175,11 @@ contains
 
                 count1  = 1
                 !sfsum   = zero
-                angu_loop: do l1 = 0, pao(spec)%greatest_angmom
+                angu_loop: do l1 = 0, pao(spec)%greatest_angmom !2
 
-                   zeta_loop: do acz = 1, pao(spec)%angmom(l1)%n_zeta_in_angmom
+                   zeta_loop: do acz = 1, pao(spec)%angmom(l1)%n_zeta_in_angmom !2
 
-                      magn_loop: do m1 = -l1, l1                      
+                      magn_loop: do m1 = -l1, l1 !-2, 2                  
 
                          pao_val = zero
                          y_val   = zero             

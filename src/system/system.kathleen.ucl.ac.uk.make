@@ -13,7 +13,7 @@ OMPFLAGS= -fopenmp
 
 # Compilation flags
 # NB for gcc10 you need to add -fallow-argument-mismatch
-COMPFLAGS= -O3 -g $(OMPFLAGS) $(XC_COMPFLAGS) -I"${MKLROOT}/include"
+COMPFLAGS= -xAVX -O3 -g $(OMPFLAGS) $(XC_COMPFLAGS) -I"${MKLROOT}/include"
 COMPFLAGS_F77= $(COMPFLAGS)
 
 # Set BLAS and LAPACK libraries
