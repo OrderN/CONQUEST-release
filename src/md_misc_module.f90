@@ -69,7 +69,8 @@ contains
   !!    (introduced atom_vels in July, 2020.)
   !!   2022/10/04 17:27 dave
   !!    Reworking to set initial KE of ions correctly
-  !!  
+  !!  SOURCE
+  !!
   subroutine init_md(baro, thermo, mdl, md_ndof, nequil, second_call)
 
     use numbers
