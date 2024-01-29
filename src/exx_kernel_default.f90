@@ -1035,6 +1035,15 @@ contains
     !unit_exx_debug1 = 333
     !
     !
+    ! Allocate to maximum possible size
+    if ( exx_alloc ) call exx_mem_alloc(extent,maxsuppfuncs,0,'phi_k','alloc')
+    if ( exx_alloc ) call exx_mem_alloc(extent,maxsuppfuncs,0,'Phy_k','alloc')
+    if ( exx_alloc ) call exx_mem_alloc(extent,maxsuppfuncs,0,'phi_l','alloc')
+    if ( exx_alloc ) call exx_mem_alloc(extent,maxsuppfuncs,0,'phi_i','alloc')
+    if ( exx_alloc ) call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'rho_kj','alloc')
+    if ( exx_alloc ) call exx_mem_alloc(extent,maxsuppfuncs,0,'phi_j','alloc')
+    if ( exx_alloc ) call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'vhf_kj','alloc')
+    if ( exx_alloc ) call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'Ome_kj',  'alloc')
 !!$
 !!$ ****[ k loop ]****
 !!$
@@ -1050,8 +1059,6 @@ contains
        !
        !print*, 'k',k, 'global_num',kg%global_num,'spe',kg%spec, kg%xyz
        !
-       if ( exx_alloc ) call exx_mem_alloc(extent,kg%nsup,0,'phi_k','alloc')
-          
        call exx_phi_on_grid(inode,kg%global_num,kg%spec,extent, &
             xyz_zero,kg%nsup,phi_k,r_int,xyz_zero)             
        !
@@ -1069,8 +1076,6 @@ contains
        !print*, 'size jbnab2ch', size(jbnab2ch)
        !print*, 'jbnab2ch', jbnab2ch
        !print*
-       !
-       if ( exx_alloc ) call exx_mem_alloc(extent,kg%nsup,0,'Phy_k','alloc')          
        !
        Phy_k = zero
        !
@@ -1094,8 +1099,6 @@ contains
           !screen_kl = sqrt(dot_product(xyz_kl,xyz_kl))
           !if ( screen_kl < range_kl ) then
           !
-          if ( exx_alloc ) call exx_mem_alloc(extent,ld%nsup,0,'phi_l','alloc')
-          !
           call exx_phi_on_grid(inode,ld%global_num,ld%spec,extent,     &
                ld%xyz,ld%nsup,phi_l,r_int,xyz_zero)             
           !
@@ -1116,7 +1119,6 @@ contains
           !
           nbbeg = nbbeg + ld%nsup*kg%nsup !nd3 * nd2                
           !
-          if ( exx_alloc ) call exx_mem_alloc(extent,ld%nsup,0,'phi_l','dealloc')
           
           !end if !( screen kl )
        end do ! End of l = 1, nbnab(k_in_part)
@@ -1136,8 +1138,6 @@ contains
           call get_iprimdat(ia,kg,ni,i_in_prim,np,.true.,unit_exx_debug)          
           !
           !print*, 'i',i, 'global_num',ia%ip,'spe',ia%spec
-          !
-          if ( exx_alloc ) call exx_mem_alloc(extent,ia%nsup,0,'phi_i','alloc')
           !
           call exx_phi_on_grid(inode,ia%ip,ia%spec,extent, &
                ia%xyz,ia%nsup,phi_i,r_int,xyz_zero)             
@@ -1173,9 +1173,6 @@ contains
                    !if ( screen_ij < range_ij ) then
                    !write(*,*) 'j',j, 'global_num',jb%global_num,'spe',jb%spec
                    !
-                   if ( exx_alloc ) call exx_mem_alloc(extent,kg%nsup,jb%nsup,'rho_kj','alloc')
-                   if ( exx_alloc ) call exx_mem_alloc(extent,jb%nsup,0,'phi_j','alloc')
-                   !
                    call exx_phi_on_grid(inode,jb%global_num,jb%spec,extent, &
                         jb%xyz,jb%nsup,phi_j,r_int,xyz_zero)             
                    !
@@ -1192,8 +1189,7 @@ contains
                    !
                    call stop_timer(tmr_std_exx_accumul,.true.)
                    !
-                   if ( exx_alloc ) call exx_mem_alloc(extent,jb%nsup,0,'phi_j','dealloc')                   
-                   if ( exx_alloc ) call exx_mem_alloc(extent,kg%nsup,jb%nsup,'vhf_kj','alloc')                   
+                   vhf_kj = zero
                    !
                    do nsf1 = 1, kg%nsup
                       do nsf2 = 1, jb%nsup
@@ -1223,9 +1219,6 @@ contains
                       end do
                    end do
                    !
-                   if ( exx_alloc ) call exx_mem_alloc(extent,kg%nsup,jb%nsup,'rho_kj','dealloc')                   
-                   if ( exx_alloc ) call exx_mem_alloc(extent,kg%nsup,jb%nsup,'Ome_kj',  'alloc')                   
-                   !
                    Ome_kj = zero
                    !
                    call start_timer(tmr_std_exx_accumul)  
@@ -1237,7 +1230,6 @@ contains
                    end do
                    call stop_timer(tmr_std_exx_accumul,.true.)
                    !
-                   if ( exx_alloc ) call exx_mem_alloc(extent,jb%nsup,jb%nsup,'vhf_kj','dealloc')
                    !
                    if(ia%nsup/=ahalo%ndimi(i_in_prim)) write(24,*) 'Error1: ',ia%nsup,ahalo%ndimi(i_in_prim)
                    if(jb%nsup/=bndim2(nbkbeg+j-1))     write(24,*) 'Error2: ',jb%nsup,bndim2(nbkbeg+j-1)
@@ -1277,8 +1269,6 @@ contains
                    !
                    call stop_timer(tmr_std_exx_matmult,.true.)
                    !
-                   if ( exx_alloc ) call exx_mem_alloc(extent,jb%nsup,jb%nsup,'Ome_kj','dealloc')                   
-                   !
                 end if ! ( ncbeg /=0 )
              end if ! ( j_in_halo /=0 )
              !
@@ -1292,7 +1282,6 @@ contains
 !!$
 !!$ ****[ i end loop ]****
 !!$
-          if ( exx_alloc ) call exx_mem_alloc(extent,ia%nsup,0,'phi_i','dealloc') 
           !
        end do ! End of i = 1, at%n_hnab(k_in_halo)
        !
@@ -1300,11 +1289,16 @@ contains
 !!$ ****[ k end loop ]****
 !!$
        !
-       if ( exx_alloc ) call exx_mem_alloc(extent,kg%nsup,0,'Phy_k','dealloc') 
-       if ( exx_alloc ) call exx_mem_alloc(extent,kg%nsup,0,'phi_k','dealloc') 
-       !
     end do ! End of k = 1, ahalo%nh_part(kpart)
     !
+    if ( exx_alloc ) call exx_mem_alloc(extent,maxsuppfuncs,0,'phi_k','dealloc')
+    if ( exx_alloc ) call exx_mem_alloc(extent,maxsuppfuncs,0,'Phy_k','dealloc')
+    if ( exx_alloc ) call exx_mem_alloc(extent,maxsuppfuncs,0,'phi_l','dealloc')
+    if ( exx_alloc ) call exx_mem_alloc(extent,maxsuppfuncs,0,'phi_i','dealloc')
+    if ( exx_alloc ) call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'rho_kj','dealloc')
+    if ( exx_alloc ) call exx_mem_alloc(extent,maxsuppfuncs,0,'phi_j','dealloc')
+    if ( exx_alloc ) call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'vhf_kj','dealloc')
+    if ( exx_alloc ) call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'Ome_kj',  'dealloc')
     !
     return
   end subroutine m_kern_exx_cri
