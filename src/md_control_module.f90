@@ -2513,6 +2513,7 @@ contains
       call io_close(lun)
 
       if (flag_variable_temperature) then
+        call io_assign(lun)
         ! Write instantaneous temperature in md.temperature
         open(unit=lun,file=md_temperature_file,status='replace')
         write(lun, '(e20.12)') th%T_ext
