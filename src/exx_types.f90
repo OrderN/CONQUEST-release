@@ -63,6 +63,7 @@ module exx_types
   ! Auxiliary densities and potentials
   real(double), dimension(:,:,:,:,:),   allocatable :: rho_kj
   real(double), dimension(:,:,:,:,:),   allocatable :: Ome_kj
+  real(double), dimension(:,:,:),       allocatable :: Ome_kj_reduced
   real(double), dimension(:,:,:,:,:),   allocatable :: vhf_kj
   real(double), dimension(:,:,:,:),     allocatable :: Phy_k
 

@@ -960,7 +960,7 @@ contains
          unit_exx_debug
     !
     use exx_types, only: phi_i, phi_j, phi_k, phi_l, &
-         Phy_k, rho_kj, Ome_kj, vhf_kj, &
+         Phy_k, rho_kj, Ome_kj_reduced, vhf_kj, &
          work_in_3d, work_out_3d, fftwrho3d
     use exx_types, only: exx_alloc
     !
@@ -1051,7 +1051,7 @@ contains
        !print*, 'k',k, 'global_num',kg%global_num,'spe',kg%spec, kg%xyz
        !
        if ( exx_alloc ) call exx_mem_alloc(extent,kg%nsup,0,'phi_k','alloc')
-          
+    
        call exx_phi_on_grid(inode,kg%global_num,kg%spec,extent, &
             xyz_zero,kg%nsup,phi_k,r_int,xyz_zero)             
        !
@@ -1070,7 +1070,7 @@ contains
        !print*, 'jbnab2ch', jbnab2ch
        !print*
        !
-       if ( exx_alloc ) call exx_mem_alloc(extent,kg%nsup,0,'Phy_k','alloc')          
+       if ( exx_alloc ) call exx_mem_alloc(extent,kg%nsup,0,'Phy_k','alloc')
        !
        Phy_k = zero
        !
@@ -1133,7 +1133,8 @@ contains
           !
           !print*, 'i_in_prim', i_in_prim, 'nd1', nd1, 'ni', ni, 'np', np
           !
-          call get_iprimdat(ia,kg,ni,i_in_prim,np,.true.,unit_exx_debug)          
+          call get_iprimdat(ia,kg,ni,i_in_prim,np,.true.,unit_exx_debug)
+          if(ia%nsup/=ahalo%ndimi(i_in_prim)) write(24,*) 'Error1: ',ia%nsup,ahalo%ndimi(i_in_prim)     
           !
           !print*, 'i',i, 'global_num',ia%ip,'spe',ia%spec
           !
@@ -1163,6 +1164,7 @@ contains
                    call get_halodat(jb,kg,jseq,chalo%i_hbeg(jpart),         &
                         BCS_parts%lab_cell(BCS_parts%inv_lab_cover(jpart)), &
                         'j',.true.,unit_exx_debug)
+                   if(jb%nsup/=bndim2(nbkbeg+j-1))     write(24,*) 'Error2: ',jb%nsup,bndim2(nbkbeg+j-1)
                    !
 !!$
 !!$ ****[ <ij> screening ]****
@@ -1173,36 +1175,22 @@ contains
                    !if ( screen_ij < range_ij ) then
                    !write(*,*) 'j',j, 'global_num',jb%global_num,'spe',jb%spec
                    !
-                   if ( exx_alloc ) call exx_mem_alloc(extent,kg%nsup,jb%nsup,'rho_kj','alloc')
                    if ( exx_alloc ) call exx_mem_alloc(extent,jb%nsup,0,'phi_j','alloc')
                    !
                    call exx_phi_on_grid(inode,jb%global_num,jb%spec,extent, &
                         jb%xyz,jb%nsup,phi_j,r_int,xyz_zero)             
                    !
-                   call start_timer(tmr_std_exx_accumul)
-                   rho_kj = zero
-                   do nsf1 = 1, kg%nsup                         
-                      do nsf2 = 1, jb%nsup
-                         !
-                         rho_kj(:,:,:,nsf1,nsf2) = &
-                              Phy_k(:,:,:,nsf1) * phi_j(:,:,:,nsf2)
-                         !
-                      end do
-                   end do
-                   !
-                   call stop_timer(tmr_std_exx_accumul,.true.)
-                   !
-                   if ( exx_alloc ) call exx_mem_alloc(extent,jb%nsup,0,'phi_j','dealloc')                   
-                   if ( exx_alloc ) call exx_mem_alloc(extent,kg%nsup,jb%nsup,'vhf_kj','alloc')                   
+                   if ( exx_alloc ) call exx_mem_alloc(extent,0,0,'Ome_kj_reduced','alloc')
                    !
                    do nsf1 = 1, kg%nsup
                       do nsf2 = 1, jb%nsup
 
                          call start_timer(tmr_std_exx_poisson)    
-                         work_in_3d  = zero
                          work_out_3d = zero
                          !
-                         work_in_3d  = rho_kj(:,:,:,nsf1,nsf2)
+                         call start_timer(tmr_std_exx_accumul)
+                         work_in_3d = Phy_k(:,:,:,nsf1) * phi_j(:,:,:,nsf2)
+                         call stop_timer(tmr_std_exx_accumul,.true.)
                          !
                          if (exx_psolver=='fftw' .and. exx_pscheme=='ewald') then
                             call exx_ewald_charge(work_in_3d,extent,dv,ewald_charge)
@@ -1217,39 +1205,16 @@ contains
                             work_out_3d = work_out_3d + ewald_pot*ewald_charge
                          end if
                          !
-                         vhf_kj(:,:,:,nsf1,nsf2) = work_out_3d
-                         !
                          call stop_timer(tmr_std_exx_poisson,.true.)
-                      end do
-                   end do
-                   !
-                   if ( exx_alloc ) call exx_mem_alloc(extent,kg%nsup,jb%nsup,'rho_kj','dealloc')                   
-                   if ( exx_alloc ) call exx_mem_alloc(extent,kg%nsup,jb%nsup,'Ome_kj',  'alloc')                   
-                   !
-                   Ome_kj = zero
-                   !
-                   call start_timer(tmr_std_exx_accumul)  
-                   do nsf1 = 1, kg%nsup
-                      do nsf2 = 1, jb%nsup                                       
-                         Ome_kj(:,:,:,nsf1,nsf2) = &
-                              vhf_kj(:,:,:,nsf1,nsf2) * phi_k(:,:,:,nsf1)                   
-                      end do
-                   end do
-                   call stop_timer(tmr_std_exx_accumul,.true.)
-                   !
-                   if ( exx_alloc ) call exx_mem_alloc(extent,jb%nsup,jb%nsup,'vhf_kj','dealloc')
-                   !
-                   if(ia%nsup/=ahalo%ndimi(i_in_prim)) write(24,*) 'Error1: ',ia%nsup,ahalo%ndimi(i_in_prim)
-                   if(jb%nsup/=bndim2(nbkbeg+j-1))     write(24,*) 'Error2: ',jb%nsup,bndim2(nbkbeg+j-1)
-                   !
-                   call start_timer(tmr_std_exx_matmult)
-                   do nsf2 = 1, jb%nsup                                         
-                      !
-                      ncaddr = ncbeg + ia%nsup * (nsf2 - 1)
-                      !
-                      do nsf1 = 1, ia%nsup
+
+                         call start_timer(tmr_std_exx_accumul)
+                         Ome_kj_reduced(:,:,:) = work_out_3d * phi_k(:,:,:,nsf1)
+                         call stop_timer(tmr_std_exx_accumul,.true.)                                         
                          !
-                         do nsf3 = 1, kg%nsup
+                         call start_timer(tmr_std_exx_matmult)
+                         ncaddr = ncbeg + ia%nsup * (nsf2 - 1)
+                         !
+                         do nsf3 = 1, ia%nsup
                             !
                             exx_mat_elem = zero
                             !
@@ -1258,26 +1223,27 @@ contains
                                   do t = 1, 2*extent+1                         
 
                                      exx_mat_elem = exx_mat_elem &                                    
-                                          + phi_i(t,s,r,nsf1)    &
-                                          * Ome_kj(t,s,r,nsf3,nsf2) * dv
+                                          + phi_i(t,s,r,nsf3)    &
+                                          * Ome_kj_reduced(t,s,r) * dv
 
                                   end do
                                end do
                             end do
                             !
-                            c(ncaddr + nsf1 - 1) = c(ncaddr + nsf1 - 1) + exx_mat_elem
+                            c(ncaddr + nsf3 - 1) = c(ncaddr + nsf3 - 1) + exx_mat_elem
                             !
-                         end do ! nsf3
+                         end do ! nsf3 = 1, ia%nsup
                          !
+                         call stop_timer(tmr_std_exx_matmult,.true.)
                          !
-                      end do ! nsf1
+                      end do ! nsf2 = 1, jb%nsup
                       !
                       !
-                   end do ! nsf2
+                   end do ! nsf1 = 1, kg%nsup
                    !
-                   call stop_timer(tmr_std_exx_matmult,.true.)
                    !
-                   if ( exx_alloc ) call exx_mem_alloc(extent,jb%nsup,jb%nsup,'Ome_kj','dealloc')                   
+                   if ( exx_alloc ) call exx_mem_alloc(extent,0,0,'Ome_kj_reduced','dealloc')
+                   if ( exx_alloc ) call exx_mem_alloc(extent,jb%nsup,0,'phi_j','dealloc')
                    !
                 end if ! ( ncbeg /=0 )
              end if ! ( j_in_halo /=0 )
@@ -1292,7 +1258,8 @@ contains
 !!$
 !!$ ****[ i end loop ]****
 !!$
-          if ( exx_alloc ) call exx_mem_alloc(extent,ia%nsup,0,'phi_i','dealloc') 
+          !
+          if ( exx_alloc ) call exx_mem_alloc(extent,ia%nsup,0,'phi_i','dealloc')
           !
        end do ! End of i = 1, at%n_hnab(k_in_halo)
        !
@@ -1300,11 +1267,10 @@ contains
 !!$ ****[ k end loop ]****
 !!$
        !
-       if ( exx_alloc ) call exx_mem_alloc(extent,kg%nsup,0,'Phy_k','dealloc') 
-       if ( exx_alloc ) call exx_mem_alloc(extent,kg%nsup,0,'phi_k','dealloc') 
+       if ( exx_alloc ) call exx_mem_alloc(extent,kg%nsup,0,'Phy_k','dealloc')
+       if ( exx_alloc ) call exx_mem_alloc(extent,kg%nsup,0,'phi_k','dealloc')
        !
     end do ! End of k = 1, ahalo%nh_part(kpart)
-    !
     !
     return
   end subroutine m_kern_exx_cri
