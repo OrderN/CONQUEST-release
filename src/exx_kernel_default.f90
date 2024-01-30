@@ -1182,6 +1182,11 @@ contains
                    !
                    if ( exx_alloc ) call exx_mem_alloc(extent,0,0,'Ome_kj_reduced','alloc')
                    !
+                   !$omp parallel do schedule(runtime) default(none) reduction(+: c) &
+                   !$omp     shared(kg,jb,tmr_std_exx_poisson,tmr_std_exx_accumul,Phy_k,phi_j,phi_k,ncbeg,ia,tmr_std_exx_matmult,ewald_pot,phi_i, &
+                   !$omp            exx_psolver,exx_pscheme,extent,dv,ewald_rho,inode,pulay_radius,p_omega,p_gauss,w_gauss,fftwrho3d,reckernel_3d,r_int) &
+                   !$omp     private(nsf1,nsf2,work_out_3d,work_in_3d,ewald_charge,Ome_kj_reduced, &
+                   !$omp             ncaddr,nsf3,exx_mat_elem,r,s,t)
                    do nsf1 = 1, kg%nsup
                       do nsf2 = 1, jb%nsup
 
@@ -1240,6 +1245,7 @@ contains
                       !
                       !
                    end do ! nsf1 = 1, kg%nsup
+                   !$omp end parallel do
                    !
                    !
                    if ( exx_alloc ) call exx_mem_alloc(extent,0,0,'Ome_kj_reduced','dealloc')
