@@ -21,7 +21,7 @@ module exx_memory
   use datatypes
 
   use exx_types,         ONLY: phi_i, phi_j,  phi_k,  phi_l
-  use exx_types,         ONLY: Phy_k, Ome_kj, rho_kj, vhf_kj
+  use exx_types,         ONLY: Phy_k, Ome_kj, Ome_kj_reduced, rho_kj, vhf_kj
   use exx_types,         ONLY: rho_ki, vhf_lj
 
   
@@ -151,11 +151,20 @@ contains
           !
        case('Ome_kj') ! allocate Ome_kj 
           allocate(Ome_kj(2*extent+1,2*extent+1,2*extent+1,nsf1,nsf2), STAT=stat)
-          if(stat/=0) call cq_abort('Error allocating memory to Ome_j/exx !',stat)
+          if(stat/=0) call cq_abort('Error allocating memory to Ome_kj/exx !',stat)
           call reg_alloc_mem(area_exx,nsf1*nsf2*(2*extent+1)*(2*extent+1)*(2*extent+1),&
                type_dbl,matrix,lun)
           Ome_kj = zero
           !write(unit,*) '\Ome_{k\gamma}_{j\beta} allocated'
+          !
+          !
+     case('Ome_kj_reduced') ! allocate Ome_kj_reduced for Ome_kj at a single combination of nsf1 and nsf2
+          allocate(Ome_kj_reduced(2*extent+1,2*extent+1,2*extent+1), STAT=stat)
+          if(stat/=0) call cq_abort('Error allocating memory to Ome_kj_reduced/exx !',stat)
+          call reg_alloc_mem(area_exx,(2*extent+1)*(2*extent+1)*(2*extent+1),&
+               type_dbl,matrix,lun)
+          Ome_kj_reduced = zero
+          !write(unit,*) '\Ome_{k\gamma}_{j\beta}_reduced allocated'
           !
           !
        case('vhf_kj') ! allocate vhf_kj
@@ -361,6 +370,13 @@ contains
           call reg_dealloc_mem(area_exx,nsf1*nsf2*(2*extent+1)*(2*extent+1)*(2*extent+1),&
                type_dbl,matrix,lun)
           !write(unit,*) '\Ome_{k\gamma}_{j\beta} deallocated'
+     
+       case('Ome_kj_reduced')
+          deallocate(Ome_kj_reduced,STAT=stat)
+          if(stat/=0) call cq_abort('Error deallocating memory to Ome_kj_reduced/exx !',stat)
+          call reg_dealloc_mem(area_exx,(2*extent+1)*(2*extent+1)*(2*extent+1),&
+               type_dbl,matrix,lun)
+          !write(unit,*) '\Ome_{k\gamma}_{j\beta}_reduced deallocated'
 
        case('vhf_kj')
           deallocate(vhf_kj, STAT=stat)          
@@ -372,7 +388,7 @@ contains
           !
        case('Phy_k')
           deallocate(Phy_k, STAT=stat)
-          if(stat/=0) call cq_abort('Error allocating memory to Phy_k/exx !',stat)
+          if(stat/=0) call cq_abort('Error deallocating memory to Phy_k/exx !',stat)
           call reg_dealloc_mem(area_exx,nsf1*(2*extent+1)*(2*extent+1)*(2*extent+1),&
                type_dbl,matrix,lun)
           !write(unit,*) '\Phy_{k\gamma} deallocated'
