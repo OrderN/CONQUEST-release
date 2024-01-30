@@ -144,7 +144,7 @@ contains
     type(matrix_trans) :: at
     integer      :: mx_absb, mx_part, mx_iprim, lena, lenb, lenc
     integer      :: kpart, k_off
-    real(double) :: a(lena)
+    real(double), target :: a(lena)
     real(double) :: b(lenb)
     real(double) :: c(lenc)
     integer, optional :: debug
@@ -163,7 +163,8 @@ contains
     integer :: n1, n2, n3, nb_nd_kbeg
     integer :: nd1, nd2, nd3
     integer :: naaddr, nbaddr, ncaddr
-    real(double), allocatable, dimension(:,:) :: tempb, tempa, tempc
+    real(double), allocatable, dimension(:,:) :: tempb, tempc
+    real(double), pointer, dimension(:,:) :: pointa
     integer :: sofar, maxnd1, maxnd2, maxnd3, maxlen
     integer :: nbbeg, nbend, tbbeg, tbend
     logical :: mask
@@ -171,14 +172,14 @@ contains
     ! OpenMP required indexing variables
     integer :: nd1_vector(at%mx_halo), nd2_vector(mx_absb), nd2_array(mx_absb)
 
-    ! Allocate tempa, tempb, tempc to largest possible size outside the loop
+    ! Allocate tempb, tempc to largest possible size outside the loop
     maxnd1 = maxval(ahalo%ndimi)
     maxnd2 = maxval(bndim2)
     maxnd3 = maxval(ahalo%ndimj)
     maxlen = maxval(nbnab) * maxnd2
-    allocate(tempa(maxnd1,maxnd3), tempc(maxnd1,maxlen), tempb(maxnd3,maxlen))
+    allocate(tempc(maxnd1,maxlen), tempb(maxnd3,maxlen))
     ! We don't need to initialize these because:
-    ! All elements of tempA and tempB are overwitten
+    ! All elements of tempB are overwitten
     ! When the beta argument to dgemm is zero, C does not need to be set. See
     ! https://netlib.org/lapack/explore-html/d7/d2b/dgemm_8f_source.html
 
@@ -230,10 +231,10 @@ contains
           nabeg = at%i_nd_beg(k_in_halo) + nd1_vector(i)
           naend = nabeg + (nd1 * nd3 - 1)
 
-          tempa(1:nd1, 1:nd3) = reshape(a(nabeg:naend), [nd1, nd3], order = [2,1])
+          pointa(1:nd3, 1:nd1) => a(nabeg:naend)
 
-          call dgemm('n', 'n', nd1, tbend, nd3, one, tempa, &
-               maxnd1, tempb, maxnd3, zero, tempc, maxnd1)
+          call dgemm('t', 'n', nd1, tbend, nd3, one, pointa, &
+               nd3, tempb, maxnd3, zero, tempc, maxnd1)
 
           ! Loop over B-neighbours of atom k
           ! Copy result back from temporary array and add to C
@@ -280,7 +281,7 @@ contains
        end do ! end of i = 1, at%n_hnab
        !$omp end do
     end do ! end of k = 1, nahpart
-    deallocate(tempa, tempb, tempc)
+    deallocate(tempb, tempc)
     return
   end subroutine m_kern_max
   !!*****
