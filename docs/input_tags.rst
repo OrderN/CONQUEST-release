@@ -1161,6 +1161,32 @@ MD.BaroDebug (*boolean*)
 
     *default*: F
 
+MD.VariableTemperature (*boolean*)
+    Simulation with a variable temperature if .True.
+
+    *default*: F
+
+MD.VariableTemperatureMethod (*string*)
+    Type of temperature profile. Only ``linear`` temperature profile is implemented.
+
+    *default*: linear
+
+MD.VariableTemperatureRate (*real*)
+    Change rate for the temperature. In units of K/fs.
+    If positive, heating. If negative, cooling.
+
+    *default*: 0.0
+
+MD.InitialTemperature(*real*)
+    Initial temperature.
+
+    *default*: same as AtomMove.IonTemperature
+
+MD.FinalTemperature(*real*)
+    Final temperature.
+
+    *default*: same as AtomMove.IonTemperature
+
 Go to :ref:`top <input_tags>`.
 
 .. _input_spin:
