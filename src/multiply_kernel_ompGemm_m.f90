@@ -195,12 +195,12 @@ contains
        ! Precompute indices that depend on i and j to avoid loop carrier
        ! dependency in the following loops
        nd1_vector(1) = 0
+       nd2_vector(1) = nb_nd_kbeg
+       nd2_array(1) = 1
        do i = 2, at%n_hnab(k_in_halo)
          i_in_prim = at%i_prim(at%i_beg(k_in_halo) + i - 2)
          nd1_vector(i) = nd1_vector(i-1) + nd3 * ahalo%ndimi(i_in_prim)
        end do
-       nd2_vector(1) = nb_nd_kbeg
-       nd2_array(1) = 1
        do j = 2, nbnab(k_in_part)
           nd2 = bndim2(nbkbeg + j - 2)
           nd2_vector(j) = nd2_vector(j - 1) + nd3 * nd2
@@ -212,18 +212,18 @@ contains
           jpart = ibpart(nbkbeg + j - 1) + k_off
           jseq = ibseq(nbkbeg + j - 1)
           jbnab2ch(j) = chalo%i_halo(chalo%i_hbeg(jpart) + jseq - 1)
-
-          nd2 = bndim2(nbkbeg+j-1)
-          nbend = nd2_vector(j) + nd3 * nd2 - 1
-          tbend = nd2_array(j) + nd2 - 1
        end do copy_b
+
+       nd2 = bndim2(nbkbeg + nbnab(k_in_part) - 1)
+       nbend = nd2_vector(nbnab(k_in_part)) + nd3 * nd2 - 1
+       tbend = nd2_array(nbnab(k_in_part)) + nd2 - 1
 
        pointb(1:nd3, 1:tbend) => b(nb_nd_kbeg:nbend)
 
        ! Loop over primary-set A-neighbours of k
        !$omp do schedule(runtime)
        do i = 1, at%n_hnab(k_in_halo)
-          i_in_prim = at%i_prim(at%i_beg(k_in_halo)+i-1)
+          i_in_prim = at%i_prim(at%i_beg(k_in_halo) + i - 1)
           icad = (i_in_prim - 1) * chalo%ni_in_halo
           nd1 = ahalo%ndimi(i_in_prim)
           nabeg = at%i_nd_beg(k_in_halo) + nd1_vector(i)
