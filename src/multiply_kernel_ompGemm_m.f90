@@ -145,7 +145,7 @@ contains
     integer      :: mx_absb, mx_part, mx_iprim, lena, lenb, lenc
     integer      :: kpart, k_off
     real(double), target :: a(lena)
-    real(double) :: b(lenb)
+    real(double), target :: b(lenb)
     real(double) :: c(lenc)
     integer, optional :: debug
     ! Remote indices
@@ -164,7 +164,7 @@ contains
     integer :: nd1, nd2, nd3
     integer :: naaddr, nbaddr, ncaddr
     real(double), allocatable, dimension(:,:) :: tempb, tempc
-    real(double), pointer, dimension(:,:) :: pointa
+    real(double), pointer, dimension(:,:) :: pointa, pointb
     integer :: sofar, maxnd1, maxnd2, maxnd3, maxlen
     integer :: nbbeg, nbend, tbbeg, tbend
     logical :: mask
@@ -177,7 +177,7 @@ contains
     maxnd2 = maxval(bndim2)
     maxnd3 = maxval(ahalo%ndimj)
     maxlen = maxval(nbnab) * maxnd2
-    allocate(tempc(maxnd1,maxlen), tempb(maxnd3,maxlen))
+    allocate(tempc(maxnd1,maxlen))
     ! We don't need to initialize these because:
     ! All elements of tempB are overwitten
     ! When the beta argument to dgemm is zero, C does not need to be set. See
@@ -214,13 +214,11 @@ contains
           jbnab2ch(j) = chalo%i_halo(chalo%i_hbeg(jpart) + jseq - 1)
 
           nd2 = bndim2(nbkbeg+j-1)
-          nbbeg = nd2_vector(j)
-          nbend = nbbeg + nd3 * nd2 - 1
-          tbbeg = nd2_array(j)
-          tbend = tbbeg + nd2 - 1
-          ! Copy B-neighbours of atom k to temporary array
-          tempb(1:nd3, tbbeg:tbend) = reshape(b(nbbeg:nbend), [nd3, nd2])
+          nbend = nd2_vector(j) + nd3 * nd2 - 1
+          tbend = nd2_array(j) + nd2 - 1
        end do copy_b
+
+       pointb(1:nd3, 1:tbend) => b(nb_nd_kbeg:nbend)
 
        ! Loop over primary-set A-neighbours of k
        !$omp do schedule(runtime)
@@ -234,7 +232,7 @@ contains
           pointa(1:nd3, 1:nd1) => a(nabeg:naend)
 
           call dgemm('t', 'n', nd1, tbend, nd3, one, pointa, &
-               nd3, tempb, maxnd3, zero, tempc, maxnd1)
+               nd3, pointb, nd3, zero, tempc, maxnd1)
 
           ! Loop over B-neighbours of atom k
           ! Copy result back from temporary array and add to C
@@ -281,7 +279,7 @@ contains
        end do ! end of i = 1, at%n_hnab
        !$omp end do
     end do ! end of k = 1, nahpart
-    deallocate(tempb, tempc)
+    deallocate(tempc)
     return
   end subroutine m_kern_max
   !!*****
