@@ -164,7 +164,7 @@ contains
     integer :: n1, n2, n3, nb_nd_kbeg
     integer :: nd1, nd2, nd3
     integer :: naaddr, nbaddr, ncaddr
-    real(double), allocatable, dimension(:,:) :: tempb, tempc
+    real(double), allocatable, dimension(:,:) :: tempc
     real(double), pointer, dimension(:,:) :: pointa, pointb
     integer :: sofar, maxnd1, maxnd2, maxnd3, maxlen
     integer :: nbbeg, nbend, tbbeg, tbend
@@ -173,14 +173,12 @@ contains
     ! OpenMP required indexing variables
     integer :: nd1_vector(at%mx_halo), nd2_vector(mx_absb), nd2_array(mx_absb)
 
-    ! Allocate tempb, tempc to largest possible size outside the loop
+    ! Allocate tempc to largest possible size outside the loop
     maxnd1 = maxval(ahalo%ndimi)
     maxnd2 = maxval(bndim2)
     maxnd3 = maxval(ahalo%ndimj)
     maxlen = maxval(nbnab) * maxnd2
     allocate(tempc(maxnd1,maxlen))
-    ! We don't need to initialize these because:
-    ! All elements of tempB are overwitten
     ! When the beta argument to dgemm is zero, C does not need to be set. See
     ! https://netlib.org/lapack/explore-html/d7/d2b/dgemm_8f_source.html
 
@@ -196,6 +194,12 @@ contains
        nd1_vector(1) = 0
        nd2_vector(1) = nb_nd_kbeg
        nd2_array(1) = 1
+
+       ! Precompute indices for parallel loop
+       do i = 2, at%n_hnab(k_in_halo)
+          i_in_prim_prev = at%i_prim(at%i_beg(k_in_halo) + i - 2)
+          nd1_vector(i) = nd1_vector(i-1) + nd3 * ahalo%ndimi(i_in_prim_prev)
+       end do
 
        ! transcription of j from partition to C-halo labelling
        copy_b: do j = 1, nbnab(k_in_part)
@@ -220,12 +224,6 @@ contains
        !$omp do schedule(runtime)
        do i = 1, at%n_hnab(k_in_halo)
           i_in_prim = at%i_prim(at%i_beg(k_in_halo) + i - 1)
-
-          if (i .gt. 1) then
-             i_in_prim_prev = at%i_prim(at%i_beg(k_in_halo) + i - 2)
-             nd1_vector(i) = nd1_vector(i-1) + nd3 * ahalo%ndimi(i_in_prim_prev)
-          end if
-
           icad = (i_in_prim - 1) * chalo%ni_in_halo
           nd1 = ahalo%ndimi(i_in_prim)
           nabeg = at%i_nd_beg(k_in_halo) + nd1_vector(i)
@@ -255,7 +253,7 @@ contains
           !    if (jbnab2ch(j) /= 0 .and. ncbeg /= 0) then
           !       tcbeg = nd2_array(j)
           !       tcend = tcbeg + nd2 - 1
-          !       c(ncbeg:ncend) = c(ncbeg:ncend) + pack(tempc(1:nd1, tcbeg:tcend), mask)
+          !       c(ncbeg:ncend) = c(ncbeg:ncend) + pack(tempc(1:nd1, tcbeg:tcend), .true.)
           !    end if
           ! end do copy_c
 
