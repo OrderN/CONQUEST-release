@@ -159,6 +159,7 @@ contains
     integer :: jbnab2ch(mx_absb)  ! Automatic array
     integer :: nbkbeg, k, k_in_part, k_in_halo, j, jpart, jseq
     integer :: i, nabeg, naend, i_in_prim, icad, j_in_halo, ncbeg, ncend
+    integer :: i_in_prim_prev, nd2_prev
     integer :: tcbeg, tcend
     integer :: n1, n2, n3, nb_nd_kbeg
     integer :: nd1, nd2, nd3
@@ -192,26 +193,21 @@ contains
        nb_nd_kbeg = ib_nd_acc(k_in_part)
        nd3 = ahalo%ndimj(k_in_halo)
 
-       ! Precompute indices that depend on i and j to avoid loop carrier
-       ! dependency in the following loops
        nd1_vector(1) = 0
        nd2_vector(1) = nb_nd_kbeg
        nd2_array(1) = 1
-       do i = 2, at%n_hnab(k_in_halo)
-         i_in_prim = at%i_prim(at%i_beg(k_in_halo) + i - 2)
-         nd1_vector(i) = nd1_vector(i-1) + nd3 * ahalo%ndimi(i_in_prim)
-       end do
-       do j = 2, nbnab(k_in_part)
-          nd2 = bndim2(nbkbeg + j - 2)
-          nd2_vector(j) = nd2_vector(j - 1) + nd3 * nd2
-          nd2_array(j) = nd2_array(j - 1) + nd2
-       end do
 
        ! transcription of j from partition to C-halo labelling
        copy_b: do j = 1, nbnab(k_in_part)
           jpart = ibpart(nbkbeg + j - 1) + k_off
           jseq = ibseq(nbkbeg + j - 1)
           jbnab2ch(j) = chalo%i_halo(chalo%i_hbeg(jpart) + jseq - 1)
+
+          if (j .gt. 1) then
+             nd2_prev = bndim2(nbkbeg + j - 2)
+             nd2_vector(j) = nd2_vector(j - 1) + nd3 * nd2_prev
+             nd2_array(j) = nd2_array(j - 1) + nd2_prev
+          end if
        end do copy_b
 
        nd2 = bndim2(nbkbeg + nbnab(k_in_part) - 1)
@@ -224,6 +220,12 @@ contains
        !$omp do schedule(runtime)
        do i = 1, at%n_hnab(k_in_halo)
           i_in_prim = at%i_prim(at%i_beg(k_in_halo) + i - 1)
+
+          if (i .gt. 1) then
+             i_in_prim_prev = at%i_prim(at%i_beg(k_in_halo) + i - 2)
+             nd1_vector(i) = nd1_vector(i-1) + nd3 * ahalo%ndimi(i_in_prim_prev)
+          end if
+
           icad = (i_in_prim - 1) * chalo%ni_in_halo
           nd1 = ahalo%ndimi(i_in_prim)
           nabeg = at%i_nd_beg(k_in_halo) + nd1_vector(i)
