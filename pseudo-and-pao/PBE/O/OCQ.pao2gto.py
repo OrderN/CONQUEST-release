@@ -41,9 +41,9 @@ symbol, norb, orb, kind = read_ion( filename_ion )
 
 #%% Define the initial guess for each orb. ####################################
 # (not mandatory)
-#
+center = True
 orb_guess = read_gto(filename_gto_read)
-build_guess( orb, orb_guess)
+build_guess( orb, orb_guess,center=center)
 #
 #for i in range(norb):
 #   orb[i].guess = orb_guess[i].guess  
@@ -51,7 +51,21 @@ build_guess( orb, orb_guess)
 #orb[0].guess = array([0.340524815, 0.4463843004, 3.2450659895, 0.4537962082, 0.1019009042, 0.2253588404, 0.9568838539, 0.4357005884, -0.01, 0.02])
 #orb[1].guess = array([ 0.8538002081,0.3638689733,3.1289511877,-0.8945322011,0.8537999748,2.1196031328])
 #orb[1].guess = array([ 0.1,-1,5,-1,1,1])
-#orb[2].guess = array([ 0.1,-1,5,-1,1,1])
+orb[2].guess = array([ 0.1,-1,5,-1,1,1])
+orb[4].guess = array([ 0.1,-1,5,-1,1,1])
+
+orb[6].guess = array([ 0.1,-1,5,-1,1,1])
+orb[7].guess = array([ 0.1,-1,5,-1,1,1])
+orb[8].guess = array([ 0.1,-1,5,-1,1,1])
+
+
+
+orb[2].bounds=([-1,7])
+orb[4].bounds=([-1,7])
+
+orb[6].bounds=([-1,10])
+orb[7].bounds=([-1,10])
+orb[8].bounds=([-1,10])
 
 #%% Define the number of Gaussian primitives for each orb. ####################
 # (not mandatory, default is 3)
@@ -68,7 +82,13 @@ for i in range(norb):
     y = array(orb[i].y)
     # 
     # GTO fit ; plots of the GTO radial part is done in gto_fit_orb
-    param, nG = gto_fit_orb( x, y, orb[i].nG, orb[i].guess, orb[i].n, orb[i].lname, orb[i].z, i )
+    center = True
+#bounds = [(2,3),(-6,4),(0.0,-0.6)]    #Bounds for a,d and c
+    param, nG = gto_fit_orb( x, y, orb[i].nG, orb[i].guess, orb[i].n, orb[i].lname, orb[i].z, i, 
+                             center=center, maxfev=90000, bounds=orb[i].bounds, method='trf')
+    
+    #param, nG = gto_fit_orb( x, y, orb[i].nG, orb[i].guess, orb[i].n, orb[i].lname, orb[i].z, i, center = center)
+
     #
     # If the number of Gaussian has not been setup ; 
     # gto_fit_orb set it to 3 by default
@@ -76,9 +96,19 @@ for i in range(norb):
         orb[i].nG = nG
     #
     # Store GTO exponent (a) and coefficient (d)
-    for j in range(0,orb[i].nG*2,2):
-        orb[i].gto_a.append( param[j]   )      
-        orb[i].gto_d.append( param[j+1] )      
+    
+    print(param) 
+    if (center == False):
+        for j in range(0,orb[i].nG*3,3):
+            orb[i].gto_a.append( param[j]   )      
+            orb[i].gto_d.append( param[j+1] )
+            orb[i].gto_c.append( param[j+2] )
+    else:
+        for j in range(0,orb[i].nG*2,2):
+            orb[i].gto_a.append( param[j]   )      
+            orb[i].gto_d.append( param[j+1] )
+            orb[i].gto_c.append( 0.0 )
+         
     # Generate and store GTO fit results on the radial grid
     orb[i].y_fit_gto()
 
