@@ -29,7 +29,7 @@ filename_ion='BeCQ.ion'
 # file to write the GTO fit results formatted for Conquest
 filename_gto_write='BeCQ.gto_TZTP_3G' 
 # file to read in order to build an initial guess (not mandatory)
-filename_gto_read ='BeCQ.gto_TZTP_3G_guess' 
+#filename_gto_read ='BeCQ.gto_TZTP_3G_guess' 
 
 #%% Read the ion file genrerated by MakeIonFiles
 # return the chemical symbol, the number orbitals @(norb) 
@@ -42,21 +42,33 @@ symbol, norb, orb, kind = read_ion( filename_ion )
 
 #%% Define the initial guess for each orb. ####################################
 # (not mandatory)
-#
-center = False
-orb_guess = read_gto(filename_gto_read)
-build_guess( orb, orb_guess, center =center)
+#center = True
+#orb_guess = read_gto(filename_gto_read)
+#build_guess( orb, orb_guess,center = center)
 #
 #for i in range(norb):
 #   orb[i].guess = orb_guess[i].guess  
-#orb[0].guess = array([ 0.1,-1.5,-1,1,1,1])
-#orb[0].bounds = array[(2,3),(-6,4),(0,-0.6)]
-#orb[1].guess = array([ 0.1,-1.5,-1,1,1,1])
-#orb[2].guess = array([ 0.1,-1.5,-1,1,1,1])
-#orb[3].guess = array([1, -2, 0.01, 0.4, 0.2, 2.5])
-#orb[4].guess = array([1.227737, 2,2,1,1,0.211741])
-#orb[5].guess = array([ 0.1,-1.5,-1,1,1,1])
-#orb[6].guess = array([ 0.1,-1.5,-1,1,1,1])
+#
+
+orb[1].guess = array([ 0.1,-1,5,-1,1,1,1,1])
+orb[2].guess = array([0.071943,0.047778,0.4,0.237344,0.1,0.1])
+orb[3].guess = array([0.071943,0.047778,0.4,0.237344,0.1,0.1])
+#orb[4].guess = array([ 0.1,-1,5,-1,1,1])
+
+
+orb[4].guess = array([ 0.1,-1,5,-1,1,1])
+orb[5].guess = array([ 0.1,-1,5,-1,1,1])
+orb[6].guess = array([ 0.1,-1,5,-1,1,1])
+
+
+#orb[1].bounds=([-2,7])
+orb[2].bounds=([-4,9])
+orb[3].bounds=([-4,9])
+orb[4].bounds=([-1,7])
+orb[5].bounds=([-1,7])
+orb[6].bounds=([-1,10])
+#orb[7].bounds=([-1,10])
+#orb[8].bounds=([-1,10])
 
 #%% Define the number of Gaussian primitives for each orb. ####################
 # (not mandatory, default is 3)
@@ -64,8 +76,8 @@ build_guess( orb, orb_guess, center =center)
 #for i in range(norb):
 #    orb[i].nG.append(3)
 #orb[0].nG = 2
-#orb[1].nG = 4
-#orb[2].nG = 4
+orb[1].nG = 4
+orb[2].nG = 3
 #orb[3].nG = 4
 #orb[4].nG = 4
 #orb[5].nG = 4
@@ -78,10 +90,10 @@ for i in range(norb):
     y = array(orb[i].y)
     # 
     # GTO fit ; plots of the GTO radial part is done in gto_fit_orb
-    center = False
-    #bounds = (2,3),(-6,4),(0.0,-0.6) #Bounds for a,d and c
+    center = True
+#bounds = [(2,3),(-6,4),(0.0,-0.6)]    #Bounds for a,d and c
     param, nG = gto_fit_orb( x, y, orb[i].nG, orb[i].guess, orb[i].n, orb[i].lname, orb[i].z, i, 
-                            center=center, maxfev=9000000) #bounds=bounds, method='dogbox')
+                             center=center, maxfev=90000, bounds=orb[i].bounds, method='trf')
     
     #param, nG = gto_fit_orb( x, y, orb[i].nG, orb[i].guess, orb[i].n, orb[i].lname, orb[i].z, i, center = center)
 
