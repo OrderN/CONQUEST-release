@@ -28,7 +28,7 @@ filename_ion='NeCQ.ion'
 # file to write the GTO fit results formatted for Conquest
 filename_gto_write='NeCQ.gto_TZTP_3G' 
 # file to read in order to build an initial guess (not mandatory)
-filename_gto_read ='NeCQ.gto_TZTP_3G_guess' 
+#filename_gto_read ='NeCQ.gto_TZTP_3G_guess' 
 
 #%% Read the ion file genrerated by MakeIonFiles
 # return the chemical symbol, the number orbitals @(norb) 
@@ -42,14 +42,27 @@ symbol, norb, orb, kind = read_ion( filename_ion )
 #%% Define the initial guess for each orb. ####################################
 # (not mandatory)
 #
-orb_guess = read_gto(filename_gto_read)
-build_guess( orb, orb_guess)
+#orb_guess = read_gto(filename_gto_read)
+#build_guess( orb, orb_guess)
 #
 #for i in range(norb):
 #   orb[i].guess = orb_guess[i].guess  
 #
 #orb[0].guess = array([0.340524815, 0.4463843004, 3.2450659895, 0.4537962082, 0.1019009042, 0.2253588404, 0.9568838539, 0.4357005884, -0.01, 0.02])
 #orb[1].guess = array([ 0.1,-1,5,-1,1,1])
+#orb[2].guess = array([ 0.1,-1.5,-1,1,1,1])
+orb[2].guess = array([1.0,5.730031,1.240317,3.047719,3,3])
+
+#orb[4].guess = array([1.0,5.730031,1.240317,3.047719,3,3])  Matrix for DZP
+orb[6].guess = array([1.227737, 2,2,1,1,0.211741])
+orb[7].guess = array([1.227737, 2,2,1,1,0.211741])
+orb[8].guess = array([1.227737, 2,2,1,1,0.211741])
+
+orb[2].bounds=([-1,-1,-6,-6,-1,-6],[1,6,6,6,3,3])
+#orb[4].bounds=([-1,-1,-6,-6,-1,-6],[1,6,6,6,3,3])   Bounds for DZP
+orb[6].bounds=([-6,11])
+orb[7].bounds=([-6,12])
+orb[8].bounds=([-6,16])
 
 #%% Define the number of Gaussian primitives for each orb. ####################
 # (not mandatory, default is 3)
@@ -59,14 +72,22 @@ build_guess( orb, orb_guess)
 #orb[0].nG = 1
 #orb[0].nG = 4
 #orb[1].nG = 4
-#
+orb[3].nG = 2
+orb[4].nG = 2   #For TZTP
+orb[5].nG = 2
 #%% Fit the radial part and plot ##############################################
 for i in range(norb):
     x = array(orb[i].x)
     y = array(orb[i].y)
     # 
     # GTO fit ; plots of the GTO radial part is done in gto_fit_orb
-    param, nG = gto_fit_orb( x, y, orb[i].nG, orb[i].guess, orb[i].n, orb[i].lname, orb[i].z, i )
+    center = True
+#bounds = [(2,3),(-6,4),(0.0,-0.6)]    #Bounds for a,d and c
+    param, nG = gto_fit_orb( x, y, orb[i].nG, orb[i].guess, orb[i].n, orb[i].lname, orb[i].z, i, 
+                             center=center, maxfev=90000, bounds=orb[i].bounds, method='trf')
+    
+    #param, nG = gto_fit_orb( x, y, orb[i].nG, orb[i].guess, orb[i].n, orb[i].lname, orb[i].z, i, center = center)
+
     #
     # If the number of Gaussian has not been setup ; 
     # gto_fit_orb set it to 3 by default
@@ -74,11 +95,22 @@ for i in range(norb):
         orb[i].nG = nG
     #
     # Store GTO exponent (a) and coefficient (d)
-    for j in range(0,orb[i].nG*2,2):
-        orb[i].gto_a.append( param[j]   )      
-        orb[i].gto_d.append( param[j+1] )      
+    
+    print(param) 
+    if (center == False):
+        for j in range(0,orb[i].nG*3,3):
+            orb[i].gto_a.append( param[j]   )      
+            orb[i].gto_d.append( param[j+1] )
+            orb[i].gto_c.append( param[j+2] )
+    else:
+        for j in range(0,orb[i].nG*2,2):
+            orb[i].gto_a.append( param[j]   )      
+            orb[i].gto_d.append( param[j+1] )
+            orb[i].gto_c.append( 0.0 )
+         
     # Generate and store GTO fit results on the radial grid
     orb[i].y_fit_gto()
+
 
 #%% Write GTO file ############################################################
 write_gto( filename_gto_write, symbol, orb, True )
