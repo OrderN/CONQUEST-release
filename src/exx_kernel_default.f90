@@ -961,7 +961,7 @@ contains
     !
     use exx_types, only: phi_i, phi_j, phi_k, phi_l, &
          Phy_k, rho_kj, Ome_kj_reduced, vhf_kj, &
-         work_in_3d, work_out_3d, fftwrho3d
+         work_in_3d, work_out_3d
     use exx_types, only: exx_alloc
     !
     use exx_memory,  only: exx_mem_alloc 
@@ -1184,7 +1184,7 @@ contains
                    !
                    !$omp parallel do schedule(runtime) default(none) reduction(+: c) &
                    !$omp     shared(kg,jb,tmr_std_exx_poisson,tmr_std_exx_accumul,Phy_k,phi_j,phi_k,ncbeg,ia,tmr_std_exx_matmult,ewald_pot,phi_i, &
-                   !$omp            exx_psolver,exx_pscheme,extent,dv,ewald_rho,inode,pulay_radius,p_omega,p_gauss,w_gauss,fftwrho3d,reckernel_3d,r_int) &
+                   !$omp            exx_psolver,exx_pscheme,extent,dv,ewald_rho,inode,pulay_radius,p_omega,p_gauss,w_gauss,reckernel_3d,r_int) &
                    !$omp     private(nsf1,nsf2,work_out_3d,work_in_3d,ewald_charge,Ome_kj_reduced, &
                    !$omp             ncaddr,nsf3,exx_mat_elem,r,s,t)
                    do nsf1 = 1, kg%nsup
@@ -1204,7 +1204,7 @@ contains
                          !
                          call exx_v_on_grid(inode,extent,work_in_3d,work_out_3d,r_int,   &
                               exx_psolver,exx_pscheme,pulay_radius,p_omega,p_ngauss,p_gauss,&
-                              w_gauss,fftwrho3d,reckernel_3d)
+                              w_gauss,reckernel_3d)
 
                          if (exx_psolver=='fftw' .and. exx_pscheme=='ewald') then
                             work_out_3d = work_out_3d + ewald_pot*ewald_charge
@@ -1213,7 +1213,7 @@ contains
                          call stop_timer(tmr_std_exx_poisson,.true.)
 
                          call start_timer(tmr_std_exx_accumul)
-                         Ome_kj_reduced(:,:,:) = work_out_3d * phi_k(:,:,:,nsf1)
+                         Ome_kj_reduced = work_out_3d * phi_k(:,:,:,nsf1)
                          call stop_timer(tmr_std_exx_accumul,.true.)                                         
                          !
                          call start_timer(tmr_std_exx_matmult)
@@ -1332,7 +1332,7 @@ contains
          unit_exx_debug, unit_eri_debug
     !
     use exx_types,  only: phi_i, phi_j, phi_k, phi_l, eris, &
-         rho_ki, vhf_lj, work_in_3d, work_out_3d, fftwrho3d,&
+         rho_ki, vhf_lj, work_in_3d, work_out_3d,&
          exx_gto, exx_gto_poisson
     use exx_types, only: exx_alloc
     !
@@ -1554,7 +1554,7 @@ contains
                                !
                                call exx_v_on_grid(inode,extent,work_in_3d,work_out_3d,r_int,   &
                                     exx_psolver,exx_pscheme,pulay_radius,p_omega,p_ngauss,p_gauss,&
-                                    w_gauss,fftwrho3d,reckernel_3d)
+                                    w_gauss,reckernel_3d)
                                !
                                if (exx_psolver=='fftw' .and. exx_pscheme=='ewald') then
                                   work_out_3d = work_out_3d + ewald_pot*ewald_charge
@@ -1714,7 +1714,7 @@ contains
          unit_exx_debug, unit_eri_debug, sum_eri_gto
     !
     use exx_types,  only: phi_i, phi_j, phi_k, phi_l, eris, &
-         rho_ki, vhf_lj, work_in_3d, work_out_3d, fftwrho3d,&
+         rho_ki, vhf_lj, work_in_3d, work_out_3d,&
          exx_gto, exx_gto_poisson
     use exx_types, only: exx_alloc
     !
@@ -1722,7 +1722,7 @@ contains
     !
     use exx_module, only: get_halodat, get_iprimdat
     !
-    use exx_poisson,only: exx_v_on_grid, exx_ewald_charge
+    use exx_poisson,only: exx_ewald_charge
     !
     use exx_erigto, only: eri_gto_hoh, compute_eri_hoh
     !
@@ -2301,7 +2301,7 @@ contains
                                   !
                                   call exx_v_on_grid(inode,exx_filter_extent,work_in,work_out,r_int, &
                                        exx_psolver,exx_pscheme,pulay_radius,p_omega,p_ngauss,p_gauss,   &
-                                       w_gauss,fftwrho3d_filter,reckernel_3d_filter)
+                                       w_gauss,reckernel_3d_filter)
                                   !
                                end if
                                !
