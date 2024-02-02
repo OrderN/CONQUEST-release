@@ -930,7 +930,9 @@ contains
          flag_write_xsf, md_cell_nhc, md_nhc_cell_mass, &
          md_calc_xlmass, md_equil_steps, md_equil_press, &
          md_tau_T_equil, md_tau_P_equil, md_p_drag, &
-         md_t_drag, md_cell_constraint, flag_write_extxyz, MDtimestep, md_ensemble
+         md_t_drag, md_cell_constraint, flag_write_extxyz, MDtimestep, md_ensemble, &
+         flag_variable_temperature, md_variable_temperature_method, &
+         md_variable_temperature_rate, md_initial_temperature, md_final_temperature
     use md_model,   only: md_tdep
     use move_atoms,         only: threshold_resetCD, &
          flag_stop_on_empty_bundle, &
@@ -2294,6 +2296,37 @@ contains
     end if
     flag_heat_flux = fdf_boolean('MD.HeatFlux', .false.)
 
+    ! Variable temperature
+    flag_variable_temperature = fdf_boolean('MD.VariableTemperature', .false.)
+    md_variable_temperature_method = fdf_string(20, 'MD.VariableTemperatureMethod', 'linear')
+    md_variable_temperature_rate = fdf_double('MD.VariableTemperatureRate', 0.0_double)
+    md_initial_temperature = fdf_double('MD.InitialTemperature',temp_ion)
+    md_final_temperature = fdf_double('MD.FinalTemperature',temp_ion)
+
+    ! Override temp_ion if md_initial_temperature is set
+    if (flag_variable_temperature .and. (abs(md_initial_temperature-temp_ion) > RD_ERR)) then
+        if (abs(temp_ion-300) > RD_ERR) then
+            call cq_warn(sub_name,'AtomMove.IonTemperature will be ignored since MD.VariableTemperature is true.')
+        end if
+        temp_ion = md_initial_temperature
+    end if
+
+    ! Check for consistency
+    if (flag_variable_temperature) then
+        if (md_ensemble == 'nve') then
+            call cq_abort('NVE ensemble with MD.VariableTemperature set to true is NOT allowed.')
+        end if
+        ! Verify sign of temperature change rate
+        if (abs(md_final_temperature-md_initial_temperature) > RD_ERR) then
+            if (md_variable_temperature_rate/(md_final_temperature-md_initial_temperature) < 0 ) then
+                call cq_abort('The temperature change rate is incompatible with the requested final temperature.')
+            end if
+        else ! initial and final temperature are equal
+            call cq_abort('MD.InitialTemperature and MD.FinalTemperature are the same.')
+        end if
+
+    end if
+
     ! Barostat
     target_pressure    = fdf_double('AtomMove.TargetPressure', zero)
     md_box_mass        = fdf_double('MD.BoxMass', one)
@@ -2637,8 +2670,11 @@ contains
          numN_neutral_atom_projector, pseudo_type, OLDPS, SIESTA, ABINIT
     use input_module,         only: leqi, chrcap
     use control,    only: MDn_steps
-    use md_control, only: md_ensemble
+    use md_control, only: md_ensemble, &
+                          flag_variable_temperature, md_variable_temperature_method, &
+                          md_initial_temperature, md_final_temperature, md_variable_temperature_rate
     use omp_module, only: init_threads
+    use multiply_kernel, only: kernel_id
 
     implicit none
 
@@ -2697,6 +2733,9 @@ contains
        call chrcap(ensemblestr,3)
        write(io_lun, fmt='(4x,a15,a3," MD run for ",i5," steps ")') job_str, ensemblestr, MDn_steps
        write(io_lun, fmt='(6x,"Initial ion temperature: ",f9.3,"K")') temp_ion
+       if (md_final_temperature .ne. md_initial_temperature) then
+         write(io_lun, fmt='(6x,"Final thermostat temperature: ",f9.3,"K")') md_final_temperature
+       end if
        if(flag_XLBOMD) write(io_lun, fmt='(6x,"Using extended Lagrangian formalism")')
     else if(leqi(runtype,'lbfgs')) then
        write(io_lun, fmt='(4x,a15,"L-BFGS atomic relaxation")') job_str
@@ -2841,7 +2880,7 @@ contains
     else if (threads==1) then
        write(io_lun,fmt="(/4x,'The calculation will be performed on ',i5,' thread')") threads
     end if
-    
+    write(io_lun,fmt='(/4x,"Using the ",a," matrix multiplication kernel")') kernel_id
     if(.NOT.flag_diagonalisation) &
          write(io_lun,fmt='(10x,"Density Matrix range  = ",f7.4,1x,a2)') &
          dist_conv*r_c, d_units(dist_units)
