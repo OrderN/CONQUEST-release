@@ -854,7 +854,7 @@ contains
          ! At a given time step, update T_ext and ke_target
          ! Temperature evolves linearly from md_initial_temperature to md_final_temperature by step of temp_change_step
          ! Stops when target temperature has been reached (i.e. abs(dT) < abs(temp_change_step) )
-         temp_change_step = md_variable_temperature_rate / mdl%timestep ! Unit is K
+         temp_change_step = md_variable_temperature_rate * mdl%timestep ! Unit is K
          mdl%T_ext = mdl%T_ext + temp_change_step
          thermo%ke_target = half*md_ndof_ions*fac_Kelvin2Hartree*mdl%T_ext ! Update target ke for SVR
 
