@@ -432,6 +432,8 @@ contains
 !!    Modified to get pair information for machine learing
 !!   2023/08/24 J.Lin
 !!   Available different feature dimensions for each type of atom
+!!   2024/02/05 J.Lin
+!!   Move stress calculation to a new subroutine get_stress
 !!  SOURCE
 !!
   subroutine calculate_EandF_acsf2b(prim,amat,amat_features_ML,descriptor_params)
@@ -440,22 +442,20 @@ contains
     use datatypes
     use basic_types
     use matrix_module
-    use GenComms, ONLY: cq_abort, inode, ionode, my_barrier
-    use global_module, ONLY: id_glob, species_glob, sf, nlpf, paof, napf, numprocs,&
-            flag_stress, flag_full_stress
-    use group_module, ONLY: parts
-    use species_module, ONLY: nsf_species, nlpf_species, npao_species, napf_species
-
-    use energy, ONLY: ml_energy
-    use mlff_type, ONLY:matrix_ML,features_ML,acsf_param,flag_debug_mlff
+    use GenComms,       only: cq_abort, inode, ionode, my_barrier
+    use global_module,  only: id_glob, species_glob, sf, nlpf, paof, napf, numprocs
+    use group_module,   only: parts
+    use species_module, only: nsf_species, nlpf_species, npao_species, napf_species
+    use energy,         only: ml_energy
+    use mlff_type,      only: matrix_ML,features_ML,acsf_param,flag_debug_mlff
 
     implicit none
 
     ! Passed variables
     type(primary_set), intent(in) :: prim
-    type(matrix_ML), dimension (:), intent(in) :: amat
+    type(matrix_ML),   dimension(:), intent(in) :: amat
     type(features_ML), dimension(:), intent(inout) :: amat_features_ML
-    type(acsf_param), dimension(:), intent(in) :: descriptor_params
+    type(acsf_param),  dimension(:), intent(in) :: descriptor_params
 
     ! Local variables
     integer :: inp, ip_process
@@ -474,30 +474,6 @@ contains
         ml_force(2, ia_glob) = dot_product(amat_features_ML(nn)%id_atom(ii)%fpy(:), descriptor_params(i_species)%coef)
         ml_force(3, ia_glob) = dot_product(amat_features_ML(nn)%id_atom(ii)%fpz(:), descriptor_params(i_species)%coef)
 
-        ! Get ml_stress for each NB atom
-        if(flag_stress) then
-          rx=prim%xprim(inp)
-          ry=prim%yprim(inp)
-          rz=prim%zprim(inp)
-          if(flag_full_stress) then
-            ! vec_Fi*vec_ri
-            ml_stress(1,1) = ml_stress(1,1) + ml_force(1, ia_glob) * rx
-            ml_stress(1,2) = ml_stress(1,2) + ml_force(1, ia_glob) * ry
-            ml_stress(1,3) = ml_stress(1,3) + ml_force(1, ia_glob) * rz
-
-            ml_stress(2,1) = ml_stress(2,1) + ml_force(2, ia_glob) * rx
-            ml_stress(2,2) = ml_stress(2,2) + ml_force(2, ia_glob) * ry
-            ml_stress(2,3) = ml_stress(2,3) + ml_force(2, ia_glob) * rz
-
-            ml_stress(3,1) = ml_stress(3,1) + ml_force(3, ia_glob) * rx
-            ml_stress(3,2) = ml_stress(3,2) + ml_force(3, ia_glob) * ry
-            ml_stress(3,3) = ml_stress(3,3) + ml_force(3, ia_glob) * rz
-          else
-            ml_stress(1,1) = ml_stress(1,1) + ml_force(1, ia_glob) * rx
-            ml_stress(2,2) = ml_stress(2,2) + ml_force(2, ia_glob) * ry
-            ml_stress(3,3) = ml_stress(3,3) + ml_force(3, ia_glob) * rz
-          end if
-        end if
         inp=inp+1  ! Indexes primary-set atoms
       enddo ! End prim%nm_nodgroup
       !pair check!write(*,*) 'after prim%nm_nodgroup', inode
@@ -535,6 +511,8 @@ contains
 !!    Modified to get pair information for machine learing
 !!   2023/08/24 J.Lin
 !!   Available different feature dimensions for each type of atom
+!!   2024/02/05 J.Lin
+!!   Move stress calculation to a new subroutine get_stress
 !!  SOURCE
 !!
   subroutine calculate_EandF_split2b3b(prim,amat,amat_features_ML,descriptor_params)
@@ -543,20 +521,18 @@ contains
     use datatypes
     use basic_types
     use matrix_module
-    use GenComms, ONLY: cq_abort, inode, ionode, my_barrier
-    use global_module, ONLY: id_glob, species_glob, sf, nlpf, paof, napf, numprocs,&
-            flag_stress, flag_full_stress
-    use group_module, ONLY: parts
-    use species_module, ONLY: nsf_species, nlpf_species, npao_species, napf_species
-
-    use energy, ONLY: ml_energy
-    use mlff_type, ONLY:matrix_ML,features_ML,split_param,flag_debug_mlff
+    use GenComms,       only: cq_abort, inode, ionode, my_barrier
+    use global_module,  only: id_glob, species_glob, sf, nlpf, paof, napf, numprocs
+    use group_module,   only: parts
+    use species_module, only: nsf_species, nlpf_species, npao_species, napf_species
+    use energy,         only: ml_energy
+    use mlff_type,      only: matrix_ML,features_ML,split_param,flag_debug_mlff
 
     implicit none
 
     ! Passed variables
     type(primary_set), intent(in) :: prim
-    type(matrix_ML), dimension (:), intent(in) :: amat
+    type(matrix_ML),   dimension(:), intent(in) :: amat
     type(features_ML), dimension(:), intent(inout) :: amat_features_ML
     type(split_param), dimension(:), intent(in) :: descriptor_params
 
@@ -578,30 +554,6 @@ contains
           ml_force(2, ia_glob) = dot_product(amat_features_ML(nn)%id_atom(ii)%fpy(:), descriptor_params(i_species)%coef)
           ml_force(3, ia_glob) = dot_product(amat_features_ML(nn)%id_atom(ii)%fpz(:), descriptor_params(i_species)%coef)
 
-          ! Get ml_stress for each NB atom
-          if(flag_stress) then
-            rx=prim%xprim(inp)
-            ry=prim%yprim(inp)
-            rz=prim%zprim(inp)
-            if(flag_full_stress) then
-              ! vec_Fi*vec_ri
-              ml_stress(1,1) = ml_stress(1,1) + ml_force(1, ia_glob) * rx
-              ml_stress(1,2) = ml_stress(1,2) + ml_force(1, ia_glob) * ry
-              ml_stress(1,3) = ml_stress(1,3) + ml_force(1, ia_glob) * rz
-
-              ml_stress(2,1) = ml_stress(2,1) + ml_force(2, ia_glob) * rx
-              ml_stress(2,2) = ml_stress(2,2) + ml_force(2, ia_glob) * ry
-              ml_stress(2,3) = ml_stress(2,3) + ml_force(2, ia_glob) * rz
-
-              ml_stress(3,1) = ml_stress(3,1) + ml_force(3, ia_glob) * rx
-              ml_stress(3,2) = ml_stress(3,2) + ml_force(3, ia_glob) * ry
-              ml_stress(3,3) = ml_stress(3,3) + ml_force(3, ia_glob) * rz
-            else
-              ml_stress(1,1) = ml_stress(1,1) + ml_force(1, ia_glob) * rx
-              ml_stress(2,2) = ml_stress(2,2) + ml_force(2, ia_glob) * ry
-              ml_stress(3,3) = ml_stress(3,3) + ml_force(3, ia_glob) * rz
-            end if
-          end if
           inp=inp+1  ! Indexes primary-set atoms
         enddo ! End prim%nm_nodgroup
         !pair check!write(*,*) 'after prim%nm_nodgroup', inode
@@ -613,20 +565,19 @@ contains
   end subroutine calculate_EandF_split2b3b
 !!***
 
-!!****f* mlff_type_module/get_force_ML *
-!! modified from matrix_elements_module/get_naba
-!!
+!!****f* mlff_type_module/get_EandF_ML *
 !!  NAME
-!!   get_force_ML
+!!   get_EandF_ML
 !!  USAGE
 !!
 !!  PURPOSE
-!!   Creates neighbour lists for a matrix range rcut
+!!   Calculate energy and atomic forces with machine learning model
 !!  INPUTS
-!!   type(primary_set) :: prim
-!!   type(cover_set) :: gcs
-!!   type(matrix), dimension(:) :: amat
-!!   real(double) :: rcut
+!!   type(primary_set), intent(in) :: prim
+!!   type(cover_set),   intent(in) :: gcs
+!!   real(double),      intent(in) :: rcut
+!!   type(matrix_ML),   dimension(:), allocatable, intent(inout) :: amat_ML
+!!   type(features_ML), dimension(:), allocatable, intent(inout) :: amat_features_ML
 !!  USES
 !!
 !!  AUTHOR
@@ -635,7 +586,7 @@ contains
 !!   2022/07/20
 !!  MODIFICATION HISTORY
 !!   2022/07/27 J.Lin
-!!    Modified to get pair information for machine learing
+!!   Modified to get pair information for machine learing
 !!   2023/08/24 J.Lin
 !!   Available different feature dimensions for each type of atom
 !!  SOURCE
@@ -646,10 +597,9 @@ contains
     use datatypes
     use basic_types
     use matrix_module
-    use GenComms, ONLY: cq_abort, inode, ionode, my_barrier
-    use global_module, ONLY: id_glob, species_glob, sf, nlpf, paof, napf, numprocs
-    use group_module, ONLY: parts
-    use species_module, ONLY: nsf_species, nlpf_species, npao_species, napf_species
+    use GenComms,       only: cq_abort, inode, ionode, my_barrier
+    use global_module,  only: id_glob, species_glob, sf, nlpf, paof, napf, numprocs, flag_stress
+    use group_module,   only: parts
 
     use mlff_type
 
@@ -657,10 +607,10 @@ contains
 
     ! Passed variables
     type(primary_set), intent(in) :: prim
-    type(cover_set), intent(in) :: gcs
-    real(double), intent(in) :: rcut
-    type(matrix_ML), dimension (:), allocatable, intent(inout) :: amat_ML
-    type(features_ML), dimension (:), allocatable, intent(inout) :: amat_features_ML
+    type(cover_set),   intent(in) :: gcs
+    real(double),      intent(in) :: rcut
+    type(matrix_ML),   dimension(:), allocatable, intent(inout) :: amat_ML
+    type(features_ML), dimension(:), allocatable, intent(inout) :: amat_features_ML
 
     ! Local variables
     integer                    :: file_id=2023, stat
@@ -710,11 +660,94 @@ contains
       call cq_abort('flag_descriptortype: (Error) no such descriptor type at present')
     end if
 
+    if(flag_stress) call get_stress(prim)
     !call deallocate_features_ML(amat_ML,amat_features_ML,prim%groups_on_node)
     !call deallocate_matrix_ML(amat_ML,prim%groups_on_node,parts%mx_mem_grp)
   end subroutine get_EandF_ML
 !!***
 
+!!****f* mlff_module/get_stress *
+!! modified from matrix_elements_module/get_naba
+!!
+!!  NAME
+!!   get_stress
+!!  USAGE
+!!
+!!  PURPOSE
+!!   Calculte stress with \sum \vec_r \vec_F by summation over the cell
+!!   disccused with Lu.Augustin and T.Miyazaki
+!!  INPUTS
+!!   type(primary_set) :: prim
+!!  USES
+!!
+!!  AUTHOR
+!!   Jianbo Lin
+!!  CREATION DATE
+!!   2024/02/05
+!!  MODIFICATION HISTORY
+!!
+!!  SOURCE
+!!
+  subroutine get_stress(prim)
+
+    ! Module usage
+    use datatypes
+    use basic_types,    only: primary_set
+    use GenComms,       only: cq_abort, inode, ionode, my_barrier
+    use global_module,  only: id_glob, flag_stress, flag_full_stress
+    use units,          only: BohrToAng
+    use mlff_type,      only: flag_debug_mlff
+
+    implicit none
+
+    ! Passed variables
+    type(primary_set), intent(in) :: prim
+
+    ! Local variables
+    integer :: inp, nn, ii, ia_glob
+    real(double) :: rx, ry, rz
+
+    ! Get ml_stress for each NB atom
+    if(flag_stress) then
+      do nn=1,prim%groups_on_node ! Partitions in primary set
+        !pair check!write(*,*) 'nn loop, inode=',inode
+        if(prim%nm_nodgroup(nn).gt.0) then  ! Are there atoms ?
+          do ii=1,prim%nm_nodgroup(nn)  ! Loop over atoms in partition
+            ia_glob = prim%ig_prim(prim%nm_nodbeg(nn) + ii - 1)
+
+            ! transfer unit a0 to Ang
+            rx = prim%xprim(inp) * BohrToAng
+            ry = prim%yprim(inp) * BohrToAng
+            rz = prim%zprim(inp) * BohrToAng
+            if(flag_full_stress) then
+              ! vec_Fi*vec_ri
+              ml_stress(1,1) = ml_stress(1,1) + ml_force(1, ia_glob) * rx
+              ml_stress(1,2) = ml_stress(1,2) + ml_force(1, ia_glob) * ry
+              ml_stress(1,3) = ml_stress(1,3) + ml_force(1, ia_glob) * rz
+
+              ml_stress(2,1) = ml_stress(2,1) + ml_force(2, ia_glob) * rx
+              ml_stress(2,2) = ml_stress(2,2) + ml_force(2, ia_glob) * ry
+              ml_stress(2,3) = ml_stress(2,3) + ml_force(2, ia_glob) * rz
+
+              ml_stress(3,1) = ml_stress(3,1) + ml_force(3, ia_glob) * rx
+              ml_stress(3,2) = ml_stress(3,2) + ml_force(3, ia_glob) * ry
+              ml_stress(3,3) = ml_stress(3,3) + ml_force(3, ia_glob) * rz
+            else
+              ml_stress(1,1) = ml_stress(1,1) + ml_force(1, ia_glob) * rx
+              ml_stress(2,2) = ml_stress(2,2) + ml_force(2, ia_glob) * ry
+              ml_stress(3,3) = ml_stress(3,3) + ml_force(3, ia_glob) * rz
+            end if
+            inp=inp+1  ! Indexes primary-set atoms
+          enddo ! End prim%nm_nodgroup
+          !pair check!write(*,*) 'after prim%nm_nodgroup', inode
+        else
+          if(flag_debug_mlff) &
+              write(*, *) 'Warning: No atoms in this partition at get_stress', inode, nn
+        endif ! End if(prim%nm_nodgroup>0)
+      enddo ! End part_on_node
+    end if ! if flag_stress
+  end subroutine get_stress
+!!***
 
 !!****f* mlff_module/get_MLFF *
 !!
@@ -864,6 +897,7 @@ contains
 
     !! mpi_time()
     t1=MPI_wtime()
+    ! collect data and transfer units from ML (eV/Ang) to DFT (Ha/a0)
     call gsum(ml_energy)
     call gsum(ml_force, 3, ni_in_cell)
     tot_force = ml_force * BohrToAng / HaToeV
