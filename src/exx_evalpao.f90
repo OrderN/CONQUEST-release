@@ -155,12 +155,13 @@ contains
           pz = pz -ijk(3)+1
        end if overlap_box
        !print*,
-       !$omp do schedule(runtime) collapse(3)
        grid_x_loop: do nx = mx, px
+          x = xyz(1) + real(nx,double)*grid_spacing + rst(1)
+
           grid_y_loop: do ny = my, py
+             y = xyz(2) + real(ny,double)*grid_spacing + rst(2)
+
              grid_z_loop: do nz = mz, pz
-                y = xyz(2) + real(ny,double)*grid_spacing + rst(2)
-                x = xyz(1) + real(nx,double)*grid_spacing + rst(1)
                 z = xyz(3) + real(nz,double)*grid_spacing + rst(3)
 
                 !norm = sqrt((x-xyz(1))**2+(y-xyz(2))**2+(z-xyz(3))**2)
@@ -197,7 +198,6 @@ contains
              end do grid_z_loop
           end do grid_y_loop
        end do grid_x_loop
-       !$omp end do
 
     end if
 
