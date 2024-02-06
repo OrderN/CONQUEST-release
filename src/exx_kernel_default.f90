@@ -1107,9 +1107,9 @@ contains
                 !
                 K_val = b(nbaddr+nsf1-1)
                 !
-                call start_timer(tmr_std_exx_accumul)
+                !call start_timer(tmr_std_exx_accumul)
                 Phy_k(:,:,:,nsf1) = Phy_k(:,:,:,nsf1) + K_val*phi_l(:,:,:,nsf2) 
-                call stop_timer(tmr_std_exx_accumul,.true.)
+                !call stop_timer(tmr_std_exx_accumul,.true.)
 
              end do
           end do
@@ -1182,6 +1182,7 @@ contains
                    !
                    if ( exx_alloc ) call exx_mem_alloc(extent,0,0,'Ome_kj_reduced','alloc')
                    !
+                   call start_timer(tmr_std_exx_accumul)
                    !$omp parallel default(none) reduction(+: c) &
                    !$omp     shared(kg,jb,tmr_std_exx_poisson,tmr_std_exx_accumul,Phy_k,phi_j,phi_k,ncbeg,ia,tmr_std_exx_matmult,ewald_pot,phi_i, &
                    !$omp            exx_psolver,exx_pscheme,extent,dv,ewald_rho,inode,pulay_radius,p_omega,p_gauss,w_gauss,reckernel_3d,r_int) &
@@ -1190,12 +1191,12 @@ contains
                    do nsf1 = 1, kg%nsup
                       do nsf2 = 1, jb%nsup
 
-                         call start_timer(tmr_std_exx_poisson)    
+                        !  call start_timer(tmr_std_exx_poisson)    
                          work_out_3d = zero
                          !
-                         call start_timer(tmr_std_exx_accumul)
+                        !  call start_timer(tmr_std_exx_accumul)
                          work_in_3d = Phy_k(:,:,:,nsf1) * phi_j(:,:,:,nsf2)
-                         call stop_timer(tmr_std_exx_accumul,.true.)
+                        !  call stop_timer(tmr_std_exx_accumul,.true.)
                          !
                          if (exx_psolver=='fftw' .and. exx_pscheme=='ewald') then
                             call exx_ewald_charge(work_in_3d,extent,dv,ewald_charge)
@@ -1210,13 +1211,13 @@ contains
                             work_out_3d = work_out_3d + ewald_pot*ewald_charge
                          end if
                          !
-                         call stop_timer(tmr_std_exx_poisson,.true.)
+                        !  call stop_timer(tmr_std_exx_poisson,.true.)
 
-                         call start_timer(tmr_std_exx_accumul)
+                        !  call start_timer(tmr_std_exx_accumul)
                          Ome_kj_reduced = work_out_3d * phi_k(:,:,:,nsf1)
-                         call stop_timer(tmr_std_exx_accumul,.true.)                                         
+                        !  call stop_timer(tmr_std_exx_accumul,.true.)                                         
                          !
-                         call start_timer(tmr_std_exx_matmult)
+                        !  call start_timer(tmr_std_exx_matmult)
                          ncaddr = ncbeg + ia%nsup * (nsf2 - 1)
                          !
                          do nsf3 = 1, ia%nsup
@@ -1241,13 +1242,14 @@ contains
                             !
                          end do ! nsf3 = 1, ia%nsup
                          !
-                         call stop_timer(tmr_std_exx_matmult,.true.)
+                        !  call stop_timer(tmr_std_exx_matmult,.true.)
                          !
                       end do ! nsf2 = 1, jb%nsup
                       !
                       !
                    end do ! nsf1 = 1, kg%nsup
                    !$omp end parallel
+                   call stop_timer(tmr_std_exx_accumul,.true.)
                    !
                    !
                    if ( exx_alloc ) call exx_mem_alloc(extent,0,0,'Ome_kj_reduced','dealloc')
