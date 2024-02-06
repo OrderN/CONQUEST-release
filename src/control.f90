@@ -847,7 +847,7 @@ contains
            if(inode==ionode) &
              write(*,*) 'Wrong method for variable temperature. Stopping.. (',trim(md_variable_temperature_method),' != "linear")'
 
-           exit
+           call cq_abort("Wrong method for variable temperature")
 
          end if
 
