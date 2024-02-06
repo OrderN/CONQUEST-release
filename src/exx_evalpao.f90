@@ -60,7 +60,7 @@ contains
     real(double)        :: grid_spacing 
     real(double)        :: x, y, z, r
     real(double)        :: int, n, rest
-    real(double)        :: xyz_delta(3)
+    real(double)        :: xyz_delta(3), xyz_offset(3)
 
     integer             :: count1, nsf1
     integer             :: ierr, stat
@@ -155,19 +155,21 @@ contains
           pz = pz -ijk(3)+1
        end if overlap_box
        !print*,
+       xyz_offset = xyz + rst
+       !$omp parallel do collapse(3) schedule(runtime) default(none) & 
+       !$omp    shared(mx,my,mz,px,py,pz,grid_spacing,xyz_offset,pao,spec,phi_on_grid,i_dummy,exx_cartesian) &
+       !$omp    private(nx,ny,nz,x,y,z,count,l1,acz,m1,pao_val)
        grid_x_loop: do nx = mx, px
-          x = xyz(1) + real(nx,double)*grid_spacing + rst(1)
-
           grid_y_loop: do ny = my, py
-             y = xyz(2) + real(ny,double)*grid_spacing + rst(2)
-
              grid_z_loop: do nz = mz, pz
-                z = xyz(3) + real(nz,double)*grid_spacing + rst(3)
+                x = nx*grid_spacing + xyz_offset(1)
+                y = ny*grid_spacing + xyz_offset(2)
+                z = nz*grid_spacing + xyz_offset(3)
 
                 !norm = sqrt((x-xyz(1))**2+(y-xyz(2))**2+(z-xyz(3))**2)
                 !if (norm <= r_h) then
 
-                r = sqrt(x*x+y*y+z*z)             
+                !r = sqrt(x*x+y*y+z*z)             
                 !if(r < very_small) then
                 !   r = zero
                 !end if
@@ -182,7 +184,7 @@ contains
                       magn_loop: do m1 = -l1, l1                      
 
                          pao_val = zero
-                         y_val   = zero             
+                         !y_val   = zero             
 
                          call evaluate_pao(i_dummy,spec,l1,acz,m1,x,y,z,pao_val,exx_cartesian)
 
