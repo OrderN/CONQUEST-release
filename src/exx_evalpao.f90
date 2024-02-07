@@ -157,8 +157,8 @@ contains
        !print*,
        xyz_offset = xyz + rst
        !$omp parallel do collapse(3) schedule(runtime) default(none) & 
-       !$omp    shared(mx,my,mz,px,py,pz,grid_spacing,xyz_offset,pao,spec,phi_on_grid,i_dummy,exx_cartesian) &
-       !$omp    private(nx,ny,nz,x,y,z,count,l1,acz,m1,pao_val)
+       !$omp    shared(mx,my,mz,px,py,pz,grid_spacing,xyz_offset,pao,spec,phi_on_grid,i_dummy,exx_cartesian,extent) &
+       !$omp    private(nx,ny,nz,x,y,z,count1,l1,acz,m1,pao_val)
        grid_x_loop: do nx = mx, px
           grid_y_loop: do ny = my, py
              grid_z_loop: do nz = mz, pz
