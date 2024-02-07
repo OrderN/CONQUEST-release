@@ -917,6 +917,7 @@ contains
     use numbers,        only: zero, one
     use matrix_module,  only: matrix_halo, matrix_trans
     use global_module,  only: area_exx
+    use GenBlas,        only: dot
     !
     use basic_types,    only: primary_set
     use primary_module, only: bundle 
@@ -995,7 +996,7 @@ contains
 
    !  real(double), dimension(:), allocatable :: phi_i_1d_buffer
    !  real(double), :: Ome_kj_reduced_1d_buffer((2*extent+1)*(2*extent+1)*(2*extent+1))
-    real(double), pointer :: phi_i(:,:,:), Ome_kj_reduced(:,:,:)
+    real(double), pointer :: phi_i(:,:,:,:), Ome_kj_reduced(:,:,:)
     !
     type(prim_atomic_data)  :: ia !i_alpha
     type(neigh_atomic_data) :: jb !j_beta

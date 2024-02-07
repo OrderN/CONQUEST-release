@@ -55,7 +55,7 @@ module exx_types
   !  end type fftw1d
 
   ! PAOs on grid
-  real(double), dimension(:),     allocatable :: phi_i_1d_buffer
+  real(double), dimension(:),     allocatable, target :: phi_i_1d_buffer
   real(double), dimension(:,:,:,:),     allocatable :: phi_i
   real(double), dimension(:,:,:,:),     allocatable :: phi_j
   real(double), dimension(:,:,:,:),     allocatable :: phi_k
