@@ -1199,22 +1199,6 @@ contains
                          !
                          do nsf3 = 1, ia%nsup
                             !
-                           !  exx_mat_elem = zero
-                           !  !
-                           !  do r = 1, 2*extent+1
-                           !     do s = 1, 2*extent+1
-                           !        do t = 1, 2*extent+1                         
-
-                           !           exx_mat_elem = exx_mat_elem &                                    
-                           !                + phi_i(t,s,r,nsf3)    &
-                           !                * Ome_kj_reduced(t,s,r) * dv
-
-                           !        end do
-                           !     end do
-                           !  end do
-                           !  !
-                           !  c(ncaddr + nsf3 - 1) = c(ncaddr + nsf3 - 1) + exx_mat_elem
-
                             c(ncaddr + nsf3 - 1) = c(ncaddr + nsf3 - 1) + dot((2*extent+1)**3, phi_i(:,:,:,nsf3), 1, Ome_kj, 1) * dv
                             !
                          end do ! nsf3 = 1, ia%nsup

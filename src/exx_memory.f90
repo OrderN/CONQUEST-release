@@ -98,12 +98,20 @@ contains
 !!$
           !
        case('phi_i') ! allocate phi_i for primary atom
-          allocate(phi_i_1d_buffer(nsf1*(2*extent+1)*(2*extent+1)*(2*extent+1)), STAT=stat)
+          allocate(phi_i(2*extent+1,2*extent+1,2*extent+1,nsf1), STAT=stat)
           if(stat/=0) call cq_abort('Error allocating memory to phi_i/exx !',stat)
           call reg_alloc_mem(area_exx,nsf1*(2*extent+1)*(2*extent+1)*(2*extent+1),&
                type_dbl,matrix,lun)
-          phi_i_1d_buffer = zero
+          phi_i = zero
           !write(*,*) '\phi_{i\alpha} allocated', shape(phi_i)
+          !
+          !
+       case('phi_i_1d_buffer') ! allocate phi_i for primary atom
+          allocate(phi_i_1d_buffer(nsf1*(2*extent+1)*(2*extent+1)*(2*extent+1)), STAT=stat)
+          if(stat/=0) call cq_abort('Error allocating memory to phi_i_1d_buffer/exx !',stat)
+          call reg_alloc_mem(area_exx,nsf1*(2*extent+1)*(2*extent+1)*(2*extent+1),&
+               type_dbl,matrix,lun)
+          phi_i_1d_buffer = zero
           !
           !
        case('phi_j') ! allocate phi_j for neighbour atom [Srange]
@@ -289,6 +297,14 @@ contains
        call start_timer(tmr_std_exx_dealloc)
        select case (matrix)
        case('phi_i')
+          deallocate(phi_i,STAT=stat)
+          if(stat/=0) call cq_abort('Error deallocating memory to phi_i/exx !',stat)
+          call reg_dealloc_mem(area_exx,nsf1*(2*extent+1)*(2*extent+1)*(2*extent+1),&
+               type_dbl,matrix,lun)
+          !write(*,*) '\phi_{i\alpha} deallocated'
+          !
+          !
+       case('phi_i_1d_buffer')
           deallocate(phi_i_1d_buffer,STAT=stat)
           if(stat/=0) call cq_abort('Error deallocating memory to phi_i_1d_buffer/exx !',stat)
           call reg_dealloc_mem(area_exx,nsf1*(2*extent+1)*(2*extent+1)*(2*extent+1),&
