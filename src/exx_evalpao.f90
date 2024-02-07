@@ -200,6 +200,7 @@ contains
              end do grid_z_loop
           end do grid_y_loop
        end do grid_x_loop
+       !$omp end parallel do
 
     end if
 
