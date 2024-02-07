@@ -56,12 +56,13 @@ module exx_types
 
   ! PAOs on grid
   real(double), dimension(:),     allocatable :: phi_i_1d_buffer
+  real(double), dimension(:,:,:,:),     allocatable :: phi_i
   real(double), dimension(:,:,:,:),     allocatable :: phi_j
   real(double), dimension(:,:,:,:),     allocatable :: phi_k
   real(double), dimension(:,:,:,:),     allocatable :: phi_l  
 
   ! Auxiliary densities and potentials
-  real(double), dimension(:,:,:),       allocatable :: Ome_kj_1d_buffer
+  real(double), dimension(:),           allocatable :: Ome_kj_1d_buffer
   real(double), dimension(:,:,:,:),     allocatable :: Phy_k
 
 
