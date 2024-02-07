@@ -21,7 +21,7 @@ module exx_memory
   use datatypes
 
   use exx_types,         ONLY: phi_i, phi_j,  phi_k,  phi_l
-  use exx_types,         ONLY: Phy_k, Ome_kj
+  use exx_types,         ONLY: Phy_k, Ome_kj_1d_buffer
 
   
   use exx_types,         ONLY: work_in_3d,work_out_3d 
@@ -102,7 +102,7 @@ contains
           if(stat/=0) call cq_abort('Error allocating memory to phi_i/exx !',stat)
           call reg_alloc_mem(area_exx,nsf1*(2*extent+1)*(2*extent+1)*(2*extent+1),&
                type_dbl,matrix,lun)
-          phi_i = zero
+          phi_i_1d_buffer = zero
           !write(*,*) '\phi_{i\alpha} allocated', shape(phi_i)
           !
           !
@@ -148,7 +148,7 @@ contains
           !write(unit,*) '\Ome_{k\gamma}_{j\beta} allocated'
           !
           !
-     case('Ome_kj_1d_buffer') ! allocate Ome_kj_1d_buffer
+       case('Ome_kj_1d_buffer') ! allocate Ome_kj_1d_buffer
           allocate(Ome_kj_1d_buffer((2*extent+1)*(2*extent+1)*(2*extent+1)), STAT=stat)
           if(stat/=0) call cq_abort('Error allocating memory to Ome_kj_1d_buffer/exx !',stat)
           call reg_alloc_mem(area_exx,(2*extent+1)*(2*extent+1)*(2*extent+1),&
@@ -289,8 +289,8 @@ contains
        call start_timer(tmr_std_exx_dealloc)
        select case (matrix)
        case('phi_i')
-          deallocate(phi_i,STAT=stat)
-          if(stat/=0) call cq_abort('Error deallocating memory to phi_i/exx !',stat)
+          deallocate(phi_i_1d_buffer,STAT=stat)
+          if(stat/=0) call cq_abort('Error deallocating memory to phi_i_1d_buffer/exx !',stat)
           call reg_dealloc_mem(area_exx,nsf1*(2*extent+1)*(2*extent+1)*(2*extent+1),&
                type_dbl,matrix,lun)
           !write(*,*) '\phi_{i\alpha} deallocated'
@@ -320,9 +320,9 @@ contains
           !write(*,*) '\phi_{l\delta} deallocated'
           !
           !
-       case('Ome_kj')
-          deallocate(Ome_kj,STAT=stat)
-          if(stat/=0) call cq_abort('Error deallocating memory to Ome_kj/exx !',stat)
+       case('Ome_kj_1d_buffer')
+          deallocate(Ome_kj_1d_buffer,STAT=stat)
+          if(stat/=0) call cq_abort('Error deallocating memory to Ome_kj_1d_buffer/exx !',stat)
           call reg_dealloc_mem(area_exx,(2*extent+1)*(2*extent+1)*(2*extent+1),&
                type_dbl,matrix,lun)
           !write(unit,*) '\Ome_{k\gamma}_{j\beta} deallocated'
