@@ -992,6 +992,10 @@ contains
     real(double), dimension(3) :: xyz_zero  = zero
     real(double)               ::   dr,dv,K_val
     real(double)               ::   exx_mat_elem
+
+   !  real(double), dimension(:), allocatable :: phi_i_1d_buffer
+   !  real(double), :: Ome_kj_reduced_1d_buffer((2*extent+1)*(2*extent+1)*(2*extent+1))
+    real(double), pointer :: phi_i(:,:,:), Ome_kj_reduced(:,:,:)
     !
     type(prim_atomic_data)  :: ia !i_alpha
     type(neigh_atomic_data) :: jb !j_beta
@@ -1115,6 +1119,7 @@ contains
           !print*, 'i',i, 'global_num',ia%ip,'spe',ia%spec
           !
           if ( exx_alloc ) call exx_mem_alloc(extent,ia%nsup,0,'phi_i','alloc')
+          phi_i(1:2*extent+1, 1:2*extent+1, 1:2*extent+1, 1:ia%nsup) => phi_i_1d_buffer
           !
           call exx_phi_on_grid(inode,ia%ip,ia%spec,extent, &
                ia%xyz,ia%nsup,phi_i,r_int,xyz_zero)             
@@ -1156,7 +1161,8 @@ contains
                    call exx_phi_on_grid(inode,jb%global_num,jb%spec,extent, &
                         jb%xyz,jb%nsup,phi_j,r_int,xyz_zero)             
                    !
-                   if ( exx_alloc ) call exx_mem_alloc(extent,0,0,'Ome_kj','alloc')
+                   if ( exx_alloc ) call exx_mem_alloc(extent,0,0,'Ome_kj_1d_buffer','alloc')
+                   Ome_kj(1:2*extent+1, 1:2*extent+1, 1:2*extent+1) => Ome_kj_1d_buffer
                    !
                    call start_timer(tmr_std_exx_accumul)
                    !$omp parallel do schedule(runtime) collapse(2) default(none) reduction(+: c)              &
@@ -1192,21 +1198,23 @@ contains
                          !
                          do nsf3 = 1, ia%nsup
                             !
-                            exx_mat_elem = zero
-                            !
-                            do r = 1, 2*extent+1
-                               do s = 1, 2*extent+1
-                                  do t = 1, 2*extent+1                         
+                           !  exx_mat_elem = zero
+                           !  !
+                           !  do r = 1, 2*extent+1
+                           !     do s = 1, 2*extent+1
+                           !        do t = 1, 2*extent+1                         
 
-                                     exx_mat_elem = exx_mat_elem &                                    
-                                          + phi_i(t,s,r,nsf3)    &
-                                          * Ome_kj(t,s,r)
+                           !           exx_mat_elem = exx_mat_elem &                                    
+                           !                + phi_i(t,s,r,nsf3)    &
+                           !                * Ome_kj_reduced(t,s,r) * dv
 
-                                  end do
-                               end do
-                            end do
-                            !
-                            c(ncaddr + nsf3 - 1) = c(ncaddr + nsf3 - 1) + exx_mat_elem * dv
+                           !        end do
+                           !     end do
+                           !  end do
+                           !  !
+                           !  c(ncaddr + nsf3 - 1) = c(ncaddr + nsf3 - 1) + exx_mat_elem
+
+                            c(ncaddr + nsf3 - 1) = c(ncaddr + nsf3 - 1) + dot((2*extent+1)**3, phi_i(:,:,:,nsf3), 1, Ome_kj, 1) * dv
                             !
                          end do ! nsf3 = 1, ia%nsup
                          !

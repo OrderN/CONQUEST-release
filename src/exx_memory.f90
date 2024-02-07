@@ -98,7 +98,7 @@ contains
 !!$
           !
        case('phi_i') ! allocate phi_i for primary atom
-          allocate(phi_i(2*extent+1,2*extent+1,2*extent+1,nsf1), STAT=stat)
+          allocate(phi_i_1d_buffer(nsf1*(2*extent+1)*(2*extent+1)*(2*extent+1)), STAT=stat)
           if(stat/=0) call cq_abort('Error allocating memory to phi_i/exx !',stat)
           call reg_alloc_mem(area_exx,nsf1*(2*extent+1)*(2*extent+1)*(2*extent+1),&
                type_dbl,matrix,lun)
@@ -146,6 +146,15 @@ contains
                type_dbl,matrix,lun)
           Ome_kj = zero
           !write(unit,*) '\Ome_{k\gamma}_{j\beta} allocated'
+          !
+          !
+     case('Ome_kj_1d_buffer') ! allocate Ome_kj_1d_buffer
+          allocate(Ome_kj_1d_buffer((2*extent+1)*(2*extent+1)*(2*extent+1)), STAT=stat)
+          if(stat/=0) call cq_abort('Error allocating memory to Ome_kj_1d_buffer/exx !',stat)
+          call reg_alloc_mem(area_exx,(2*extent+1)*(2*extent+1)*(2*extent+1),&
+               type_dbl,matrix,lun)
+          Ome_kj_1d_buffer = zero
+          !write(unit,*) '\Ome_{k\gamma}_{j\beta}_1d_buffer allocated'
           !
           !
        case('Phy_k')! allocate Phy_k
