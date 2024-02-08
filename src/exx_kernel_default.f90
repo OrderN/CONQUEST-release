@@ -1120,10 +1120,13 @@ contains
           !print*, 'i',i, 'global_num',ia%ip,'spe',ia%spec
           !
           if ( exx_alloc ) call exx_mem_alloc(extent,ia%nsup,0,'phi_i_1d_buffer','alloc')
+          print *, "Allocated phi_i_1d_buffer"
           phi_i(1:2*extent+1, 1:2*extent+1, 1:2*extent+1, 1:ia%nsup) => phi_i_1d_buffer
+          print *, "pointed phi_i at phi_i_1d_buffer"^
           !
           call exx_phi_on_grid(inode,ia%ip,ia%spec,extent, &
-               ia%xyz,ia%nsup,phi_i,r_int,xyz_zero)             
+               ia%xyz,ia%nsup,phi_i,r_int,xyz_zero)    
+          print *, "populated phi_i"        
           !
           !print*, size(chalo%i_h2d), shape(chalo%i_h2d)
           ! 
@@ -1202,6 +1205,7 @@ contains
                             c(ncaddr + nsf3 - 1) = c(ncaddr + nsf3 - 1) + dot((2*extent+1)**3, phi_i(:,:,:,nsf3), 1, Ome_kj, 1) * dv
                             !
                          end do ! nsf3 = 1, ia%nsup
+                         print *, nsf1, nsf2, "calculated c"
                          !
                       end do ! nsf2 = 1, jb%nsup
                    end do ! nsf1 = 1, kg%nsup
@@ -1209,7 +1213,7 @@ contains
                    !
                    call stop_timer(tmr_std_exx_accumul,.true.)
                    !
-                   if ( exx_alloc ) call exx_mem_alloc(extent,0,0,'Ome_kj','dealloc')
+                   if ( exx_alloc ) call exx_mem_alloc(extent,0,0,'Ome_kj_1d_buffer','dealloc')
                    if ( exx_alloc ) call exx_mem_alloc(extent,jb%nsup,0,'phi_j','dealloc')
                    !
                 end if ! ( ncbeg /=0 )
@@ -1226,7 +1230,7 @@ contains
 !!$ ****[ i end loop ]****
 !!$
           !
-          if ( exx_alloc ) call exx_mem_alloc(extent,ia%nsup,0,'phi_i','dealloc')
+          if ( exx_alloc ) call exx_mem_alloc(extent,ia%nsup,0,'phi_i_1d_buffer','dealloc')
           !
        end do ! End of i = 1, at%n_hnab(k_in_halo)
        !
