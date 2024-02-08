@@ -496,7 +496,7 @@ contains
        end if
        call write_atomic_positions("UpdatedAtoms.dat", trim(pdb_template))
        if (flag_write_xsf) call write_xsf('trajectory.xsf', iter)
-       if (flag_write_extxyz) call write_extxyz('trajectory.xyz', energy1, tot_force)
+       if (flag_write_extxyz .and. mod(iter,XYZfreq) == 0) call write_extxyz('trajectory.xyz', energy1, tot_force)
        ! Analyse forces
        g0 = dot(length, tot_force, 1, tot_force, 1)
        call get_maxf(max)
@@ -1668,7 +1668,7 @@ contains
        ! Add call to write_atomic_positions and write_xsf (2020/01/17: smujahed)
        call write_atomic_positions("UpdatedAtoms.dat", trim(pdb_template))
        if (flag_write_xsf) call write_xsf('trajectory.xsf', iter)
-       if (flag_write_extxyz) call write_extxyz('trajectory.xyz', energy1, tot_force)
+       if (flag_write_extxyz .and. mod(iter,XYZfreq) == 0) call write_extxyz('trajectory.xyz', energy1, tot_force)
        ! Build q
        do i=iter, iter_low, -1
           ! Indexing
@@ -1978,7 +1978,7 @@ contains
        ! Add call to write_atomic_positions and write_xsf (2020/01/17: smujahed)
        call write_atomic_positions("UpdatedAtoms.dat", trim(pdb_template))
        if (flag_write_xsf) call write_xsf('trajectory.xsf', iter)
-       if (flag_write_extxyz) call write_extxyz('trajectory.xyz', energy1, tot_force)
+       if (flag_write_extxyz .and. mod(iter,XYZfreq) == 0) call write_extxyz('trajectory.xyz', energy1, tot_force)
        ! Build significant subspace
        Sij = zero
        omega = zero
@@ -2388,7 +2388,7 @@ contains
        ! Add call to write_atomic_positions and write_xsf (2020/01/17: smujahed)
        call write_atomic_positions("UpdatedAtoms.dat", trim(pdb_template))
        if (flag_write_xsf) call write_xsf('trajectory.xsf', iter)
-       if (flag_write_extxyz) call write_extxyz('trajectory.xyz', energy1, tot_force)
+       if (flag_write_extxyz .and. mod(iter,XYZfreq) == 0) call write_extxyz('trajectory.xyz', energy1, tot_force)
        ! Build significant subspace
        Sij = zero
        omega = zero
@@ -2838,7 +2838,7 @@ contains
        ! Add call to write_atomic_positions and write_xsf (2020/01/17: smujahed)
        call write_atomic_positions("UpdatedAtoms.dat", trim(pdb_template))
        if (flag_write_xsf) call write_xsf('trajectory.xsf', iter)
-       if (flag_write_extxyz) call write_extxyz('trajectory.xyz', energy1, tot_force)
+       if (flag_write_extxyz .and. mod(iter,XYZfreq) == 0) call write_extxyz('trajectory.xyz', energy1, tot_force)
        ! Build significant subspace
        Sij = zero
        omega = zero
@@ -3238,7 +3238,7 @@ contains
             rcellx, d_units(dist_units), rcelly, d_units(dist_units), rcellz, d_units(dist_units)
        end if
        call write_atomic_positions("UpdatedAtoms.dat", trim(pdb_template))
-       if (flag_write_extxyz) call write_extxyz('trajectory.xyz', energy1, tot_force)
+       if (flag_write_extxyz .and. mod(iter,XYZfreq) == 0) call write_extxyz('trajectory.xyz', energy1, tot_force)
        ! Analyse Stresses and energies
        dH = enthalpy1 - enthalpy0
        volume = rcellx*rcelly*rcellz
@@ -4306,7 +4306,7 @@ contains
        end if
       call write_atomic_positions("UpdatedAtoms.dat", trim(pdb_template))
       if (flag_write_xsf) call write_xsf('trajectory.xsf', iter)
-      if (flag_write_extxyz) call write_extxyz('trajectory.xyz', energy1, tot_force)
+      if (flag_write_extxyz .and. mod(iter,XYZfreq) == 0) call write_extxyz('trajectory.xyz', energy1, tot_force)
 
       ! Analyse forces and stress
       g0 = dot(length-3, tot_force, 1, tot_force, 1)
