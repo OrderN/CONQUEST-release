@@ -45,6 +45,7 @@ module md_misc
   character(20) :: md_frames_file = "md.frames"
   character(20) :: md_stats_file = "md.stats"
   character(20) :: md_heat_flux_file = "md.heatflux"
+  character(20) :: md_stress_file = "md.stress"
 
 contains
 
@@ -594,4 +595,51 @@ contains
   end subroutine write_md_data
   !!*****
 
+  !!****m* md_misc/write_md_stress *
+  !!  NAME
+  !!   write_md_stress
+  !!  PURPOSE
+  !!   Write stress file for MD
+  !!  AUTHOR
+  !!   Jianbo Lin
+  !!  CREATION DATE
+  !!   2024/02/08 15:50
+  !!  MODIFICATION HISTORY
+  !!
+  !!  SOURCE
+  !!
+  subroutine write_md_stress(iter, baro, flag_append)
+
+    use md_control,     only: type_barostat
+    implicit none
+
+    ! passed variables
+    integer             , intent(in)      :: iter
+    class(type_barostat), intent(in)      :: baro
+    logical             , intent(in)      :: flag_append
+
+    ! local variables
+    integer                               :: lun, i, j
+
+    if (inode==ionode) then
+      if (iprint_MD > 2) &
+        write(io_lun,'(6x,"Writing MD stress: ",a)') md_stress_file
+
+      if (flag_append) then
+        open(unit=lun,file=md_stress_file,position='append')
+        write(lun,'(i8,9e12.4,2e12.4,e14.6)') iter, &
+            ((baro%total_stress(j,i), j = 1, 3), i = 1, 3), &
+            baro%P_int*HaBohr3ToGPa, baro%P_ext*HaBohr3ToGPa, baro%volume
+      else
+        open(unit=lun,file=md_stress_file,status='replace')
+        write(lun,'(a8,9a12,2a12,a14)', advance='no') "step", "e_11", "e_12", "e_13", &
+            "e_21", "e_22", "e_23","e_31", "e_32", "e_33", "P_int(GPa)", "P_ext(GPa)", "V(a0^3)"
+        write(lun,'(a)') ''
+        write(lun,'(i8,9e12.4,2e12.4,e14.6)') iter, &
+            ((baro%total_stress(j,i), j = 1, 3), i = 1, 3), &
+            baro%P_int*HaBohr3ToGPa, baro%P_ext*HaBohr3ToGPa, baro%volume
+      end if
+    end if
+  end subroutine write_md_stress
+  !!***
 end module md_misc

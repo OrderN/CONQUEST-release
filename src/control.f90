@@ -695,7 +695,7 @@ contains
                               md_thermo_type, &
                               flag_variable_temperature, md_variable_temperature_method, &
                               md_initial_temperature,md_final_temperature, md_variable_temperature_rate
-    use md_misc,        only: write_md_data, get_heat_flux, &
+    use md_misc,        only: write_md_data, get_heat_flux, write_md_stress,&
                               update_pos_and_box, integrate_pt, init_md, end_md
     use atoms,          only: distribute_atoms,deallocate_distribute_atom
     use global_module,  only: atom_coord_diff, iprint_MD, area_moveatoms
@@ -864,6 +864,7 @@ contains
        ! DRB & TM 2020/01/24 12:03
        call mdl%get_cons_qty
        call write_md_data(i_first-1, thermo, baro, mdl, nequil, MDfreq, XSFfreq, XYZfreq)
+       call write_md_stress(i_first-1, baro, .FALSE.)
     end if
 
     do iter = i_first, i_last ! Main MD loop
@@ -1159,6 +1160,7 @@ contains
        t1=MPI_wtime()
        ! Write all MD data and checkpoints to disk
        call write_md_data(iter, thermo, baro, mdl, nequil, MDfreq, XSFfreq, XYZfreq)
+       call write_md_stress(iter, baro, .TRUE.)
        if (inode==ionode .and. flag_debug_mlff) &
            write(*,*) 'check stress write_md_data second velocity:', stress,baro%P_int*HaBohr3ToGPa,&
                baro%P_ext/HaBohr3ToGPa
