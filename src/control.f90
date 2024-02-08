@@ -841,16 +841,6 @@ contains
 
        if (flag_variable_temperature) then
 
-         ! At present, only linear evolution is supported
-         if (md_variable_temperature_method .ne. 'linear') then
-
-           if(inode==ionode) &
-             write(*,*) 'Wrong method for variable temperature. Stopping.. (',trim(md_variable_temperature_method),' != "linear")'
-
-           call cq_abort("Wrong method for variable temperature")
-
-         end if
-
          ! At a given time step, update T_ext and ke_target
          ! Temperature evolves linearly from md_initial_temperature to md_final_temperature by step of temp_change_step
          ! Stops when target temperature has been reached (i.e. abs(dT) < abs(temp_change_step) )

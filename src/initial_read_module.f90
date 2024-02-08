@@ -2299,6 +2299,19 @@ contains
     ! Variable temperature
     flag_variable_temperature = fdf_boolean('MD.VariableTemperature', .false.)
     md_variable_temperature_method = fdf_string(20, 'MD.VariableTemperatureMethod', 'linear')
+
+    ! Verify that a method for variable temperature is valid
+    if (flag_variable_temperature) then
+      ! At present, only linear evolution is supported
+      if (md_variable_temperature_method .ne. 'linear') then
+        if(inode==ionode) then
+          write(io_lun,fmt='(6x, "Wrong method for variable temperature: ", a, " != linear. Stopping ..." )') &
+            trim(md_variable_temperature_method)
+        end if
+        call cq_abort("Wrong method for variable temperature")
+      end if
+    end if
+
     md_variable_temperature_rate = fdf_double('MD.VariableTemperatureRate', 0.0_double)
     md_initial_temperature = fdf_double('MD.InitialTemperature',temp_ion)
     md_final_temperature = fdf_double('MD.FinalTemperature',temp_ion)
