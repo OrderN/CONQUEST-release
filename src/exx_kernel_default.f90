@@ -1119,7 +1119,7 @@ contains
           !
           !print*, 'i',i, 'global_num',ia%ip,'spe',ia%spec
           !
-          if ( exx_alloc ) call exx_mem_alloc(extent,ia%nsup,0,'phi_i','alloc')
+          if ( exx_alloc ) call exx_mem_alloc(extent,ia%nsup,0,'phi_i_1d_buffer','alloc')
           phi_i(1:2*extent+1, 1:2*extent+1, 1:2*extent+1, 1:ia%nsup) => phi_i_1d_buffer
           !
           call exx_phi_on_grid(inode,ia%ip,ia%spec,extent, &
