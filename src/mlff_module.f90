@@ -660,7 +660,7 @@ contains
       call cq_abort('flag_descriptortype: (Error) no such descriptor type at present')
     end if
 
-    if(flag_stress) call get_stress(prim)
+    !if(flag_stress) call get_stress(prim)
     !call deallocate_features_ML(amat_ML,amat_features_ML,prim%groups_on_node)
     !call deallocate_matrix_ML(amat_ML,prim%groups_on_node,parts%mx_mem_grp)
   end subroutine get_EandF_ML
@@ -692,6 +692,7 @@ contains
 
     ! Module usage
     use datatypes
+    use numbers,        only: zero
     use basic_types,    only: primary_set
     use GenComms,       only: cq_abort, inode, ionode, my_barrier
     use global_module,  only: id_glob, flag_stress, flag_full_stress
@@ -708,44 +709,43 @@ contains
     real(double) :: rx, ry, rz
 
     ! Get ml_stress for each NB atom
-    if(flag_stress) then
-      do nn=1,prim%groups_on_node ! Partitions in primary set
-        !pair check!write(*,*) 'nn loop, inode=',inode
-        if(prim%nm_nodgroup(nn).gt.0) then  ! Are there atoms ?
-          do ii=1,prim%nm_nodgroup(nn)  ! Loop over atoms in partition
-            ia_glob = prim%ig_prim(prim%nm_nodbeg(nn) + ii - 1)
+    ml_stress = zero
+    do nn=1,prim%groups_on_node ! Partitions in primary set
+      !pair check!write(*,*) 'nn loop, inode=',inode
+      if(prim%nm_nodgroup(nn).gt.0) then  ! Are there atoms ?
+        do ii=1,prim%nm_nodgroup(nn)  ! Loop over atoms in partition
+          ia_glob = prim%ig_prim(prim%nm_nodbeg(nn) + ii - 1)
 
-            ! transfer unit a0 to Ang
-            rx = prim%xprim(inp) * BohrToAng
-            ry = prim%yprim(inp) * BohrToAng
-            rz = prim%zprim(inp) * BohrToAng
-            if(flag_full_stress) then
-              ! vec_Fi*vec_ri
-              ml_stress(1,1) = ml_stress(1,1) + ml_force(1, ia_glob) * rx
-              ml_stress(1,2) = ml_stress(1,2) + ml_force(1, ia_glob) * ry
-              ml_stress(1,3) = ml_stress(1,3) + ml_force(1, ia_glob) * rz
+          ! transfer unit a0 to Ang
+          rx = prim%xprim(inp) * BohrToAng
+          ry = prim%yprim(inp) * BohrToAng
+          rz = prim%zprim(inp) * BohrToAng
+          if(flag_full_stress) then
+            ! vec_Fi*vec_ri
+            ml_stress(1,1) = ml_stress(1,1) + ml_force(1, ia_glob) * rx
+            ml_stress(1,2) = ml_stress(1,2) + ml_force(1, ia_glob) * ry
+            ml_stress(1,3) = ml_stress(1,3) + ml_force(1, ia_glob) * rz
 
-              ml_stress(2,1) = ml_stress(2,1) + ml_force(2, ia_glob) * rx
-              ml_stress(2,2) = ml_stress(2,2) + ml_force(2, ia_glob) * ry
-              ml_stress(2,3) = ml_stress(2,3) + ml_force(2, ia_glob) * rz
+            ml_stress(2,1) = ml_stress(2,1) + ml_force(2, ia_glob) * rx
+            ml_stress(2,2) = ml_stress(2,2) + ml_force(2, ia_glob) * ry
+            ml_stress(2,3) = ml_stress(2,3) + ml_force(2, ia_glob) * rz
 
-              ml_stress(3,1) = ml_stress(3,1) + ml_force(3, ia_glob) * rx
-              ml_stress(3,2) = ml_stress(3,2) + ml_force(3, ia_glob) * ry
-              ml_stress(3,3) = ml_stress(3,3) + ml_force(3, ia_glob) * rz
-            else
-              ml_stress(1,1) = ml_stress(1,1) + ml_force(1, ia_glob) * rx
-              ml_stress(2,2) = ml_stress(2,2) + ml_force(2, ia_glob) * ry
-              ml_stress(3,3) = ml_stress(3,3) + ml_force(3, ia_glob) * rz
-            end if
-            inp=inp+1  ! Indexes primary-set atoms
-          enddo ! End prim%nm_nodgroup
-          !pair check!write(*,*) 'after prim%nm_nodgroup', inode
-        else
-          if(flag_debug_mlff) &
-              write(*, *) 'Warning: No atoms in this partition at get_stress', inode, nn
-        endif ! End if(prim%nm_nodgroup>0)
-      enddo ! End part_on_node
-    end if ! if flag_stress
+            ml_stress(3,1) = ml_stress(3,1) + ml_force(3, ia_glob) * rx
+            ml_stress(3,2) = ml_stress(3,2) + ml_force(3, ia_glob) * ry
+            ml_stress(3,3) = ml_stress(3,3) + ml_force(3, ia_glob) * rz
+          else
+            ml_stress(1,1) = ml_stress(1,1) + ml_force(1, ia_glob) * rx
+            ml_stress(2,2) = ml_stress(2,2) + ml_force(2, ia_glob) * ry
+            ml_stress(3,3) = ml_stress(3,3) + ml_force(3, ia_glob) * rz
+          end if
+          inp=inp+1  ! Indexes primary-set atoms
+        enddo ! End prim%nm_nodgroup
+        !pair check!write(*,*) 'after prim%nm_nodgroup', inode
+      else
+        if(flag_debug_mlff) &
+            write(*, *) 'Warning: No atoms in this partition at get_stress', inode, nn
+      endif ! End if(prim%nm_nodgroup>0)
+    enddo ! End part_on_node
   end subroutine get_stress
 !!***
 
@@ -816,7 +816,6 @@ contains
 
     ml_energy = 0.0_double
     ml_force  = 0.0_double
-    if(flag_stress) ml_stress = zero
 
     ! Make ML cover set and send
     call make_iprim(ML_CS, bundle)
@@ -893,7 +892,7 @@ contains
     call my_barrier()
     t2=MPI_wtime()
     if (inode==ionode .and. flag_time_mlff) &
-      write(*,2023) 'Time get_E_and_F_ML in get_MLFF:', t2-t1
+      write(*,2023) 'Time after get_E_and_F_ML in get_MLFF:', t2-t1
 
     !! mpi_time()
     t1=MPI_wtime()
@@ -901,13 +900,20 @@ contains
     call gsum(ml_energy)
     call gsum(ml_force, 3, ni_in_cell)
     tot_force = ml_force * BohrToAng / HaToeV
+    t2=MPI_wtime()
+    if (inode==ionode .and. flag_time_mlff) &
+      write(*,2023) 'Time after gsum energy and force in get_MLFF:', t2-t1
+
+    !! mpi_time()
+    t1=MPI_wtime()
     if(flag_stress) then
+      call get_stress(bundle)
       call gsum(ml_stress,3,3)
       stress = -ml_stress / HaToeV
     end if
     t2=MPI_wtime()
     if (inode==ionode .and. flag_time_mlff) &
-      write(*,2023) 'Time after get_E_and_F_ML in get_MLFF:', t2-t1
+      write(*,2023) 'Time after get_stress in get_MLFF:', t2-t1
 
     !! check force and feature info after operate mlff
     !! Check feature
