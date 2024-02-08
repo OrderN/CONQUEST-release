@@ -170,7 +170,6 @@ contains
     real(double), pointer, dimension(:,:) :: pointa, pointb
     integer :: sofar, maxnd1, maxnd2, maxnd3, maxlen
     integer :: nbbeg, nbend, tbbeg, tbend
-    logical :: mask
     external :: dgemm
     ! OpenMP required indexing variables
     integer :: nd1_vector(at%mx_halo), nd2_vector(mx_absb), nd2_array(mx_absb)
@@ -186,18 +185,25 @@ contains
 
     ! Loop over atoms k in current A-halo partn
     do k = 1, ahalo%nh_part(kpart)
-       ! These indices only depend on k and kpart
+       ! Compute indices. These indices only depend on k and kpart
        k_in_halo = ahalo%j_beg(kpart) + k - 1
        k_in_part = ahalo%j_seq(k_in_halo)
-       nbkbeg = ibaddr(k_in_part)
+       nbkbeg = ibaddr(k_in_part) - 1
        nb_nd_kbeg = ib_nd_acc(k_in_part)
        nd3 = ahalo%ndimj(k_in_halo)
 
+       ! Precompute indices for parallel loop. These indices are starting indices
+       ! of slices to A, B and C. The ending indices are computed on the fly.
+       ! nd1_vector accumulates steps of size nd3 * ahalo%ndimi. This is used for indexing
+       !    the 1d vector storing the A matrix
+       ! nd2_vector accumulates steps of size nd3 * nd2. This is used for indexing
+       !    1d vectors storing the B and C matrices
+       ! nd2_array accumulates steps of size nd2. This is used for indexing the
+       !    2d arrays storing the B and C matrices
        nd1_vector(1) = 0
        nd2_vector(1) = nb_nd_kbeg
        nd2_array(1) = 1
 
-       ! Precompute indices for parallel loop
        do i = 2, at%n_hnab(k_in_halo)
           i_in_prim_prev = at%i_prim(at%i_beg(k_in_halo) + i - 2)
           nd1_vector(i) = nd1_vector(i-1) + nd3 * ahalo%ndimi(i_in_prim_prev)
@@ -205,18 +211,20 @@ contains
 
        ! transcription of j from partition to C-halo labelling
        copy_b: do j = 1, nbnab(k_in_part)
-          jpart = ibpart(nbkbeg + j - 1) + k_off
-          jseq = ibseq(nbkbeg + j - 1)
+          ! Also precompute jbnab2ch to be used later in the parallel loop.
+          jpart = ibpart(nbkbeg + j) + k_off
+          jseq = ibseq(nbkbeg + j)
           jbnab2ch(j) = chalo%i_halo(chalo%i_hbeg(jpart) + jseq - 1)
 
           if (j .gt. 1) then
-             nd2_prev = bndim2(nbkbeg + j - 2)
+             nd2_prev = bndim2(nbkbeg + j - 1)
              nd2_vector(j) = nd2_vector(j - 1) + nd3 * nd2_prev
              nd2_array(j) = nd2_array(j - 1) + nd2_prev
           end if
        end do copy_b
 
-       nd2 = bndim2(nbkbeg + nbnab(k_in_part) - 1)
+       ! Create a pointer that re-indexes B as a 2D array for the dgemm call
+       nd2 = bndim2(nbkbeg + nbnab(k_in_part))
        nbend = nd2_vector(nbnab(k_in_part)) + nd3 * nd2 - 1
        tbend = nd2_array(nbnab(k_in_part)) + nd2 - 1
 
@@ -227,56 +235,30 @@ contains
        do i = 1, at%n_hnab(k_in_halo)
           i_in_prim = at%i_prim(at%i_beg(k_in_halo) + i - 1)
           icad = (i_in_prim - 1) * chalo%ni_in_halo
+
+          ! Create a pointer that re-indexes A as a 2D array for the dgemm call
           nd1 = ahalo%ndimi(i_in_prim)
           nabeg = at%i_nd_beg(k_in_halo) + nd1_vector(i)
           naend = nabeg + (nd1 * nd3 - 1)
-
           pointa(1:nd3, 1:nd1) => a(nabeg:naend)
 
+          ! Compute A*B using pointa and pointb and store the result in tempc
           call dgemm('t', 'n', nd1, tbend, nd3, one, pointa, &
                nd3, pointb, nd3, zero, tempc, maxnd1)
 
-          ! Loop over B-neighbours of atom k
-          ! Copy result back from temporary array and add to C
+          ! Copy result back from tempc and add to C
           copy_c: do j = 1, nbnab(k_in_part)
-             nd2 = bndim2(nbkbeg+j-1)
-             ncbeg = chalo%i_h2d(icad+jbnab2ch(j))
-             ncend = ncbeg + (nd1 * nd2 - 1)
-             mask = (jbnab2ch(j) /= 0 .and. ncbeg /= 0)
-             tcbeg = nd2_array(j)
-             tcend = tcbeg + nd2 - 1
-             c(ncbeg:ncend) = c(ncbeg:ncend) + pack(tempc(1:nd1, tcbeg:tcend), mask)
+             if (jbnab2ch(j) /= 0) then
+                nd2 = bndim2(nbkbeg+j)
+                ncbeg = chalo%i_h2d(icad+jbnab2ch(j))
+                if (ncbeg /= 0) then
+                   ncend = ncbeg + (nd1 * nd2 - 1)
+                   tcbeg = nd2_array(j)
+                   tcend = tcbeg + nd2 - 1
+                   c(ncbeg:ncend) = c(ncbeg:ncend) + pack(tempc(1:nd1, tcbeg:tcend), .true.)
+                end if
+             end if
           end do copy_c
-
-          ! copy_c: do j = 1, nbnab(k_in_part)
-          !    nd2 = bndim2(nbkbeg+j-1)
-          !    ncbeg = chalo%i_h2d(icad+jbnab2ch(j))
-          !    ncend = ncbeg + (nd1 * nd2 - 1)
-          !    if (jbnab2ch(j) /= 0 .and. ncbeg /= 0) then
-          !       tcbeg = nd2_array(j)
-          !       tcend = tcbeg + nd2 - 1
-          !       c(ncbeg:ncend) = c(ncbeg:ncend) + pack(tempc(1:nd1, tcbeg:tcend), .true.)
-          !    end if
-          ! end do copy_c
-
-          ! sofar = 0
-          ! ! Loop over B-neighbours of atom k
-          ! do j = 1, nbnab(k_in_part)
-          !    nd2 = bndim2(nbkbeg+j-1)
-          !    j_in_halo = jbnab2ch(j)
-          !    if (j_in_halo /= 0) then
-          !       ncbeg = chalo%i_h2d(icad+j_in_halo)
-          !       if (ncbeg /= 0) then ! multiplication of ndim x ndim blocks
-          !          do n2 = 1, nd2
-          !             ncaddr = ncbeg + nd1 * (n2 - 1)
-          !             do n1 = 1, nd1
-          !                c(ncaddr+n1-1) = c(ncaddr+n1-1) + tempc(n1,sofar+n2)
-          !             end do
-          !          end do
-          !       end if
-          !    end if
-          !    sofar = sofar + nd2
-          ! end do ! end of j = 1, nbnab(k_in_part)
 
        end do ! end of i = 1, at%n_hnab
        !$omp end do
