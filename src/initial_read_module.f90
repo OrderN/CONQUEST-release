@@ -269,7 +269,7 @@ contains
           if(flag_functional_type/=pseudo(i_species)%functional) then
              if(flag_different_functional) then
                 call cq_warn(sub_name, "Functional in input file differs to pseudopotential but proceeding: ",&
-                     flag_functional_type, pseudo(i_species)%functional)                
+                     flag_functional_type, pseudo(i_species)%functional)
              else
                 call cq_abort("Functional in input file differs to pseudopotential: ",&
                      flag_functional_type, pseudo(i_species)%functional)
@@ -404,8 +404,8 @@ contains
                 ! multi-site SFs (MSSFs) are symmetry-breaking usually.
                 ! The default of the number of the MSSFs is SingleZeta-size.
                 ! SZP-size MSSFs with flag_MSSF_nonminimal is also available.
-                ! If the user wants to use the other number of MSSFs, 
-                ! the user must provide the initial SFcoeffmatrix or the trial vectors for the LFD method. 
+                ! If the user wants to use the other number of MSSFs,
+                ! the user must provide the initial SFcoeffmatrix or the trial vectors for the LFD method.
                 if (nsf_species(i).eq.count_SZ) then
                    MSSF_nonminimal_species(i) = 1   ! SZ-size MSSF
                 else
@@ -435,7 +435,7 @@ contains
                       endif
                    endif
                 endif
-             else 
+             else
                 ! If number of support functions is less than total number of ang. mom. components (ignoring
                 ! for now multiple zetas) then there is a formal problem with basis set: we require the user
                 ! to set an additional flag to assert that this is really desired
@@ -512,7 +512,7 @@ contains
     if(flag_InitialAtomicSpin) then
       do i = 1, n_species
        charge_tmp = charge_up(i) + charge_dn(i)
-       if(charge_tmp < RD_ERR) then   ! 
+       if(charge_tmp < RD_ERR) then   !
          charge_up(i) = half*charge(i)
          charge_dn(i) = half*charge(i)
          !if(inode .eq. ionode) write(io_lun,fmt='(6x,a,i3,a,2f15.8)') &
@@ -527,7 +527,7 @@ contains
      end do
      !if(inode .eq. ionode) write(io_lun,fmt='(6x,a,2f15.8)') 'ne_spin_in_cell(1:2) = ',ne_spin_in_cell(1),ne_spin_in_cell(2)
     endif
-    ! 
+    !
     !
     ! Set up various lengths, volumes, reciprocals etc. for convenient use
     call set_dimensions(inode, ionode,HNL_fac, non_local, n_species, &
@@ -554,18 +554,18 @@ contains
   ! ------------------------------------------------------------------------------
   ! Subroutine read_input
   ! ------------------------------------------------------------------------------
-  
+
   !!****f* initial_read/read_input *
   !!
-  !!  NAME 
+  !!  NAME
   !!   read_input
   !!  USAGE
-  !! 
+  !!
   !!  PURPOSE
   !!   reads the input file
   !!  INPUTS
-  !! 
-  !! 
+  !!
+  !!
   !!  USES
   !!   datatypes, global_module, atoms, dimens, species_module,
   !!   pseudopotential_data, GenComms, fdf, parse
@@ -586,27 +586,27 @@ contains
   !!    Incorporated into initial_read module
   !!   29/05/2002 dave
   !!    Added scan for SolutionMethod tag
-  !!   15:54, 25/09/2002 mjg & drb 
+  !!   15:54, 25/09/2002 mjg & drb
   !!    Added scan for make_initial_charge_from_K (which sets find_chdens)
   !!   16:31, 2003/02/03 dave
   !!    Added scans for type of run (e.g. MD, CG etc)
   !!   07:49, 2003/02/04 dave
   !!    Added boolean variables to control run (vary blips, self-consistency)
-  !!   10:41, 06/03/2003 drb 
+  !!   10:41, 06/03/2003 drb
   !!    Added tags for linear mixing in self-consistency
-  !!   10:09, 12/03/2003 drb 
+  !!   10:09, 12/03/2003 drb
   !!    Added an end tag
   !!   14:52, 2003/06/09 dave
   !!    Added new way to read atomic coordinates and preconditioning flag
   !!   08:31, 2003/10/01 dave
   !!    Changed flag_vary_blips to flag_vary_basis
-  !!   13:15, 03/10/2003 drb 
+  !!   13:15, 03/10/2003 drb
   !!    Bug fix - missing .
   !!   2004/10/29 drb
   !!    Added various new flags for self consistency
-  !!   14:59, 02/05/2005 dave 
+  !!   14:59, 02/05/2005 dave
   !!    Added call to check for net charge - initialises ne_in_cell
-  !!   09:14, 11/05/2005 dave 
+  !!   09:14, 11/05/2005 dave
   !!    Store max_L_iterations in global variable
   !!   13:34, 2006/07/09 ast
   !!    Added flag for functional
@@ -618,22 +618,22 @@ contains
   !!    Added keyword MaxEfIter to stop infinite loop in findFermi
   !!   2008/01/24 Veronika
   !!    Changed the default of General.ManyProcessors to .true.
-  !!   12:18, 14/02/2008 drb 
+  !!   12:18, 14/02/2008 drb
   !!    Added options for buffer around primary and covering sets
   !!   2008/07/16 ast
   !!    New keywords for timers
   !!   2009/07/08 16:47 dave
   !!    Added keyword for one-to-one PAO to SF assigment
   !!   2009/07/23 ast
-  !!    More general routine to name timer files, so that they are not 
+  !!    More general routine to name timer files, so that they are not
   !!    to a maximum number of processes, as it was the case before,
   !!    with only three figures (max. 999 processes)
   !!   2010/06/18 lt
   !!    Added control flags for Methfessel-Paxton smearing method
   !!   2010/07/22 15.53 Lianheng
-  !!    Moved control flags associated with Diagonalisation method from 
-  !!    here to readDiagInfo() subroutine. Added Methfessel-Paxton 
-  !!    smearing and related control flags. Changed SC.MaxEfIter to 
+  !!    Moved control flags associated with Diagonalisation method from
+  !!    here to readDiagInfo() subroutine. Added Methfessel-Paxton
+  !!    smearing and related control flags. Changed SC.MaxEfIter to
   !!    Diag.MaxEfIter (moved to readDiagInfo()) for greater consistency
   !!   2011/07/21 16:50 dave
   !!    Added input flags for cDFT
@@ -767,7 +767,7 @@ contains
   !!     AtomMove.ReuseL => AtomMove.ReuseLorK => AtomMove.ReuseDM
   !!   2020/01/06 15:43 dave
   !!    Keywords for equilibration
-  !!   2020/01/07 tsuyoshi 
+  !!   2020/01/07 tsuyoshi
   !!     Default setting of MakeInitialChargeFromK has been changed
   !!   2022/10/28 15:56 lionel
   !!     Added ASE output file setup ; default is F
@@ -1005,19 +1005,19 @@ contains
     else
        io_lun = 6
     end if
-    ! 
+    !
     if (fdf_boolean('IO.WriteOutToASEFile',.false.)) then
        !call io_assign(io_ase) ! Reserve this unit on all processes
        !write_ase = .false.
        if (inode == ionode) then
           write_ase = .true.
-          call io_assign(io_ase) 
+          call io_assign(io_ase)
           open(unit=io_ase,file=ase_file,iostat=stat)
           if (stat /= 0) &
                call cq_abort("Failed to open ASE Conquest output file", stat)
        end if
     else
-       if (inode == ionode) write_ase = .false.       
+       if (inode == ionode) write_ase = .false.
     end if
 !!$
 !!$
@@ -1026,7 +1026,7 @@ contains
 !!$
 !!$
 !!$
-    BackTraceOn = fdf_boolean('IO.BackTraceOn',.false.)                         
+    BackTraceOn = fdf_boolean('IO.BackTraceOn',.false.)
     ! Where will the timers will be written?
     TimingOn = fdf_boolean('IO.TimingOn',.false.)                          ! tmr_rmv001
     if(TimingOn) then                                                      ! tmr_rmv001
@@ -1053,10 +1053,10 @@ contains
           end if ! ionode switch                                           ! tmr_rmv001
        end if                                                              ! tmr_rmv001
     end if                                                                 ! tmr_rmv001
-!!$ 
-!!$ **<lat>** 
+!!$
+!!$ **<lat>**
 !!$ I think we may need (std) output file to be open before this point
-!!$ at the very beginning in the main.f90 
+!!$ at the very beginning in the main.f90
 !!$
 !!$
 !!$
@@ -1129,7 +1129,7 @@ contains
     restart_T      = fdf_boolean('General.LoadInvS',.false.)
     ! Is there a net charge on the cell ?
     ne_in_cell     = fdf_double('General.NetCharge',zero)
-    ! Read coordinates file 
+    ! Read coordinates file
     flag_fractional_atomic_coords = &
          fdf_boolean('IO.FractionalAtomicCoords',.true.)
     flag_check_init_atomic_coords = &
@@ -1145,7 +1145,7 @@ contains
     !
     ! Spin polarised calculation
     ! - if we are doing spin polarised calculations or not
-    flag_spin_polarisation   = fdf_boolean('Spin.SpinPolarised', .false.) 
+    flag_spin_polarisation   = fdf_boolean('Spin.SpinPolarised', .false.)
     flag_fix_spin_population = fdf_boolean('Spin.FixSpin',       .false.)
     if (flag_spin_polarisation) then
        nspin       = 2
@@ -1194,13 +1194,13 @@ contains
     in_block_y = fdf_integer('Grid.InBlockY',4)
     in_block_z = fdf_integer('Grid.InBlockZ',4)
     ! Solution method - O(N) or diagonalisation - diagonalisation default
-    method = fdf_string(6,'DM.SolutionMethod','diagon') 
+    method = fdf_string(6,'DM.SolutionMethod','diagon')
     if(leqi(method,'ordern')) then
        flag_diagonalisation = .false.
        flag_check_Diag = .false.
     else
        flag_diagonalisation = .true.
-       flag_check_Diag = .true. 
+       flag_check_Diag = .true.
     end if
     ! Read basis set
     basis_string = fdf_string(10,'Basis.BasisSet','PAOs')
@@ -1230,7 +1230,7 @@ contains
 !!$
 !!$
     ! Hamann is default to fit with Conquest ion file generator
-    ps_type = fdf_string(5,'General.PseudopotentialType','haman') 
+    ps_type = fdf_string(5,'General.PseudopotentialType','haman')
     ! Write out pseudopotential type
     if(leqi(ps_type,'siest')) then
        !if(inode==ionode.AND.iprint_init>0) &
@@ -1250,7 +1250,7 @@ contains
          inode==ionode) then
        write(io_lun,&
             fmt='(10x,"Setting FlagNewAngular to T for Siesta/&
-            &Abinit pseudopotentials")') 
+            &Abinit pseudopotentials")')
        flag_angular_new = .true.
     end if
     ! Should we use neutral atom potential ?
@@ -1298,7 +1298,7 @@ contains
     species_from_files = fdf_boolean('General.PAOFromFiles',.false.)
     flag_ghost=.false.
     if(fdf_block('ChemicalSpeciesLabel')) then
-       if(1+block_end-block_start<n_species) & 
+       if(1+block_end-block_start<n_species) &
             call cq_abort("Too few species in ChemicalSpeciesLabel: ",&
             1+block_end-block_start,n_species)
        do i=1,n_species
@@ -1319,7 +1319,7 @@ contains
        call fdf_endblock
     end if
     ! I (TM) now assume we will use type_species(j) = 0
-    ! for vacancy sites.   Nov. 14, 2007 
+    ! for vacancy sites.   Nov. 14, 2007
     if(flag_ghost) then
        do i=1, n_species
           if(mass(i) < -RD_ERR) then
@@ -1331,7 +1331,7 @@ contains
                    exit
                 endif
              enddo
-             if(.not.find_species) then 
+             if(.not.find_species) then
                 type_species(i) = -i
              endif
           elseif(mass(i) > RD_ERR) then
@@ -1450,7 +1450,7 @@ contains
        ! At present, we cannot use neutral atom potential for ghost atoms.
        !    2018/Sep/26   Tsuyoshi Miyazaki
        ! Fixed for Neutral Atom Potential  2018/Nov/16  TM
-       !   but not for neutral atom projectors ...   
+       !   but not for neutral atom projectors ...
        if(flag_neutral_atom_projector) then
           if(inode==ionode) write(io_lun,'(10x,A)') &
                'Now, we cannot use neutral atom projector for ghost atoms. Please set General.NeutralAtomProjector as false.'
@@ -1473,11 +1473,11 @@ contains
            ! enddo
            !endif
           endif
-!!$        
-!!$        
-!!$        
-!!$        
-!!$        
+!!$
+!!$
+!!$
+!!$
+!!$
     ! Set variables for multisite support functions
     if (flag_Multisite) then
        flag_MSSF_nonminimal = fdf_boolean('Multisite.nonminimal', .false.) !nonmin_mssf
@@ -1548,7 +1548,7 @@ contains
 !!$
 !!$
 !!$
-!!$ 
+!!$
     !blip_width = support_grid_spacing *
     !             fdf_double('blip_width_over_support_grid_spacing',four)
     if (leqi(runtype,'md')) then
@@ -1570,7 +1570,11 @@ contains
     MDn_steps             = fdf_integer('AtomMove.NumSteps',     100        )
     MDfreq                = fdf_integer('AtomMove.OutputFreq',    50        )
     XSFfreq               = fdf_integer('AtomMove.XsfFreq',    MDfreq        )
-    XYZfreq               = fdf_integer('AtomMove.XyzFreq',    MDfreq        )
+    if (leqi(runtype,'md')) then
+      XYZfreq             = fdf_integer('AtomMove.XyzFreq',    MDfreq        )
+    else
+      XYZfreq             = fdf_integer('AtomMove.XyzFreq',    1        )
+    end if
     MDtimestep            = fdf_double ('AtomMove.Timestep',      0.5_double)
     MDcgtol               = fdf_double ('AtomMove.MaxForceTol',0.0005_double)
     sqnm_trust_step       = fdf_double ('AtomMove.MaxSQNMStep',0.2_double   )
@@ -1596,7 +1600,7 @@ contains
     flag_vary_basis       = fdf_boolean('minE.VaryBasis', .false.)
     if(.NOT.flag_vary_basis) then
        flag_precondition_blips = .false.
-    else 
+    else
        flag_precondition_blips = fdf_boolean('minE.PreconditionBlips',.true.)
     end if
     InitStep_paomin      = fdf_double ('minE.InitStep_paomin',  5.0_double)
@@ -1605,7 +1609,7 @@ contains
     ! DRB 2018/02/26 turn off mixed L-SCF with diagonalisation
     if(flag_mix_L_SC_min .and. flag_diagonalisation) then
        flag_mix_L_SC_min = .false.
-    else if(flag_mix_L_SC_min .and. flag_self_consistent) then 
+    else if(flag_mix_L_SC_min .and. flag_self_consistent) then
        flag_self_consistent = .false.
     end if
     ! Tweak 2007/03/23 DRB Make Pulay mixing default
@@ -1628,8 +1632,8 @@ contains
     ! New residual flags jtlp 08/2019
     flag_newresidual = fdf_boolean('SC.AbsResidual', .false.)
     flag_newresid_abs = fdf_boolean('SC.AbsResidual.Fractional', .true.)
-    ! When constructing charge density from K matrix at last step, we check the total 
-    ! number of electrons. If the error of electron number (per total electron number) 
+    ! When constructing charge density from K matrix at last step, we check the total
+    ! number of electrons. If the error of electron number (per total electron number)
     ! is larger than the following value, we use atomic charge density. (in update_H)
     threshold_resetCD     = fdf_double('SC.Threshold.Reset',0.1_double)
     tmp = fdf_string(4,'AtomMove.CGLineMin','safe')
@@ -1770,7 +1774,7 @@ contains
     end if
 !!$
 !!$
-!!$  D e l t a - S C F 
+!!$  D e l t a - S C F
 !!$
 !!$
     ! DeltaSCF flags
@@ -1935,13 +1939,13 @@ contains
 !!$
 !!$
 !!$
-!!$       
+!!$
     flag_functional_type = fdf_integer('General.FunctionalType', 0)   ! Read from pseudopotentials
     flag_different_functional = fdf_boolean('General.DifferentFunctional',.false.) ! Use different functional to ion files
 !!$
 !!$
-!!$  E X X 
-!!$ 
+!!$  E X X
+!!$
 !!$
     if ( flag_functional_type == functional_hyb_pbe0 ) then
        flag_exx = .true.
@@ -1955,12 +1959,12 @@ contains
        r_exx    = fdf_double ('EXX.Krange', zero)
        !
     else
-       ! don't touch we need it because matX is setup in set_dimensions 
+       ! don't touch we need it because matX is setup in set_dimensions
        ! whatever is flag_exx
        flag_exx = .false.
        exx_scf  =  fdf_integer('EXX.MethodSCF', -1)
-       r_exx    =  one 
-       !             
+       r_exx    =  one
+       !
     end if
     !
     if ( flag_exx ) then
@@ -1981,12 +1985,12 @@ contains
        exx_scf_tol   = sc_tolerance
        ! Grid spacing for PAO discretisation in EXX
        exx_hgrid  = fdf_double ('EXX.GridSpacing',zero)
-       exx_radius = fdf_double ('EXX.IntegRadius',0.00_double) 
+       exx_radius = fdf_double ('EXX.IntegRadius',0.00_double)
        ! debug mode
        exx_Kij       = .true.
        exx_Kkl       = .true.
-       exx_cartesian = .true. 
-       exx_overlap   = .true. 
+       exx_cartesian = .true.
+       exx_overlap   = .true.
        exx_alloc     = .false.
        exx_psolver   = 'fftw'
        p_scheme      = 'pulay'
@@ -2071,7 +2075,7 @@ contains
     !
 !!$
 !!$
-!!$  
+!!$
 !!$
 !!$
     append_coords = fdf_boolean('AtomMove.AppendCoords',.true.)
@@ -2121,7 +2125,7 @@ contains
     !    DensityMatrix = 0; AtomicCharge = 1; LastStep = 2
     method_UpdateChargeDensity = fdf_integer('AtomMove.InitialChargeDensity',DensityMatrix)
 
-    !  The keywords ( SC.ResetDensOnAtomMove and Multisite.LFD.UpdateWithAtomicDensity ) 
+    !  The keywords ( SC.ResetDensOnAtomMove and Multisite.LFD.UpdateWithAtomicDensity )
     !  should be removed in the near future.
     flag_reset_dens_on_atom_move = fdf_boolean('SC.ResetDensOnAtomMove',.false.)
     if(flag_reset_dens_on_atom_move) then
@@ -2151,7 +2155,7 @@ contains
     flag_XLBOMD       = fdf_boolean('AtomMove.ExtendedLagrangian',.false.)
 
     ! zamaan 2018/03/03 I can't imagine a case where you would want to
-    ! restart a MD run without loading the various matrices, so I'm 
+    ! restart a MD run without loading the various matrices, so I'm
     ! Defaulting some flags to true. Calling fdf to ensure that input.log
     ! remains consistent
     if (flag_MDcontinue) then
@@ -2163,8 +2167,8 @@ contains
     else
        flag_read_velocity = fdf_boolean('AtomMove.ReadVelocity',.false.)
        restart_DM         = fdf_boolean('General.LoadDM', .false.)
-       if(restart_DM) then                                             
-          find_chdens    = fdf_boolean('SC.MakeInitialChargeFromK',.true.) 
+       if(restart_DM) then
+          find_chdens    = fdf_boolean('SC.MakeInitialChargeFromK',.true.)
        else
           find_chdens    = fdf_boolean('SC.MakeInitialChargeFromK',.false.)
        endif
@@ -2240,7 +2244,7 @@ contains
             &positive integer:', constraints%n_grp)
        allocate (constraints%grp_name(constraints%n_grp)      , &
             constraints%n_atom_in_grp(constraints%n_grp) , &
-            constraints%n_subgrp(constraints%n_grp))     
+            constraints%n_subgrp(constraints%n_grp))
        do i = 1, constraints%n_grp
           if (fdf_block('RigidBondsGroups')) then
              read (unit=input_array(block_start+i-1),fmt=*) &
@@ -2263,7 +2267,7 @@ contains
     case('nve')
        md_thermo_type     = fdf_string(20, 'MD.Thermostat', 'none')
        md_baro_type       = fdf_string(20, 'MD.Barostat', 'none')
-    case('nvt') 
+    case('nvt')
        md_thermo_type     = fdf_string(20, 'MD.Thermostat', 'nhc')
        md_baro_type       = fdf_string(20, 'MD.Barostat', 'none')
     case('npt')
@@ -2273,14 +2277,14 @@ contains
     end select
     md_tau_T           = fdf_double('MD.tauT', -one)
     md_tau_T_equil     = fdf_double('MD.tauTEquil', one)
-    md_n_nhc           = fdf_integer('MD.nNHC', 5) 
+    md_n_nhc           = fdf_integer('MD.nNHC', 5)
     md_n_ys            = fdf_integer('MD.nYoshida', 1)
     md_n_mts           = fdf_integer('MD.nMTS', 1)
     flag_thermoDebug   = fdf_boolean('MD.ThermoDebug',.false.)
     md_t_drag          = fdf_double('MD.TDrag', zero)
     if (leqi(md_thermo_type, 'nhc')) then
-       allocate(md_nhc_mass(md_n_nhc)) 
-       allocate(md_nhc_cell_mass(md_n_nhc)) 
+       allocate(md_nhc_mass(md_n_nhc))
+       allocate(md_nhc_cell_mass(md_n_nhc))
        md_nhc_mass = one
        md_nhc_cell_mass = one
        if (fdf_block('MD.NHCMass')) then
@@ -2343,7 +2347,7 @@ contains
   !!  AUTHOR
   !!   T. Miyazaki
   !!  CREATION DATE
-  !!   2017/11/03 
+  !!   2017/11/03
   !!  MODIFICATION HISTORY
   !!   2020/07/30 tsuyoshi
   !!    - Moved from read_input
@@ -2353,10 +2357,10 @@ contains
 
     ! this subroutine checks the compatibility between keywords defined in read_input
     !       2017.11(Nov).03   Tsuyoshi Miyazaki
-    ! 
+    !
     ! we don't need to worry about which parameter is defined first.
     !
-    subroutine check_compatibility 
+    subroutine check_compatibility
       use global_module, only: flag_move_atom, ni_in_cell, &
                                runtype, flag_XLBOMD, flag_diagonalisation, &
                                flag_LmatrixReuse, flag_SFcoeffReuse, flag_DumpMatrices, &
@@ -2364,7 +2368,7 @@ contains
       use input_module,  only: leqi
       use density_module,only: method_UpdateChargeDensity,DensityMatrix,AtomicCharge
       use GenComms,      only: cq_warn
-      
+
       implicit none
       logical :: flag_FixedAtoms
       integer :: ig, k
@@ -2391,7 +2395,7 @@ contains
               'AtomMove.InitialChargeDensity is changed to AtomicCharge, since AtomMove.ReuseDM is false')
       endif
 
-      !flag_DumpMatrices : at present, we need matrix files to reuse the previous matrix data 
+      !flag_DumpMatrices : at present, we need matrix files to reuse the previous matrix data
       if(.not.flag_DumpMatrices) then
          if(flag_SFcoeffReuse .or. flag_LmatrixReuse) then
             flag_DumpMatrices = .true.
@@ -2422,20 +2426,20 @@ contains
   ! ------------------------------------------------------------------------------
   ! Subroutine allocate_species_vars
   ! ------------------------------------------------------------------------------
-  
+
   !!****f* initial_read/allocate_species_vars *
   !!
-  !!  NAME 
+  !!  NAME
   !!   allocate_species_vars
   !!  USAGE
-  !!   
+  !!
   !!  PURPOSE
   !!   Allocates variables which depend on number of species
   !!  INPUTS
-  !! 
-  !! 
+  !!
+  !!
   !!  USES
-  !!   
+  !!
   !!  AUTHOR
   !!   D. R. Bowler
   !!  CREATION DATE
@@ -2464,7 +2468,7 @@ contains
     use memory_module,      only: reg_alloc_mem, type_dbl
     use species_module,     only: n_species, nsf_species, nlpf_species, npao_species, natomf_species, &
          charge, charge_up, charge_dn
-    use species_module,     only: mass, non_local_species, ps_file, ch_file, phi_file 
+    use species_module,     only: mass, non_local_species, ps_file, ch_file, phi_file
     use species_module,     only: species_label, species_file, type_species
     use global_module,      only: area_general
     use GenComms,           only: cq_abort
@@ -2563,13 +2567,13 @@ contains
   ! ------------------------------------------------------------------------------
   ! Subroutine write_info
   ! ------------------------------------------------------------------------------
-  
+
   !!****f* initial_read/write_info *
   !!
-  !!  NAME 
+  !!  NAME
   !!   write_info
   !!  USAGE
-  !! 
+  !!
   !!  PURPOSE
   !!   Writes out information about the run
   !!  INPUTS
@@ -2581,7 +2585,7 @@ contains
   !!  CREATION DATE
   !!   9/11/93 (!)
   !!  MODIFICATION HISTORY
-  !!   10/8/01 DRB 
+  !!   10/8/01 DRB
   !!    Changed to F90 format and tidied
   !!   10/05/2002 dave
   !!    Changed titles to be a single line
