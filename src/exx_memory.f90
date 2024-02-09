@@ -21,8 +21,7 @@ module exx_memory
   use datatypes
 
   use exx_types,         ONLY: phi_i, phi_j,  phi_k,  phi_l
-  use exx_types,         ONLY: Phy_k, Ome_kj, Ome_kj_reduced, rho_kj, vhf_kj
-  use exx_types,         ONLY: rho_ki, vhf_lj
+  use exx_types,         ONLY: Phy_k, Ome_kj
 
   
   use exx_types,         ONLY: work_in_3d,work_out_3d 
@@ -140,40 +139,13 @@ contains
 !!$
 !!$
           !
-       case('rho_kj') ! allocate rho_kj for neighbour[k]/neighbour[j] atoms [Krange/Srange]
-          allocate(rho_kj(2*extent+1,2*extent+1,2*extent+1,nsf1,nsf2), STAT=stat)
-          if(stat/=0) call cq_abort('Error allocating memory to rho_kj/exx !',stat)
-          call reg_alloc_mem(area_exx,nsf1*nsf2*(2*extent+1)*(2*extent+1)*(2*extent+1),&
-               type_dbl,matrix,lun)
-          rho_kj = zero
-          !write(unit,*) '\rho_{k\gamma j\beta} allocated'
-          !
-          !
-       case('Ome_kj') ! allocate Ome_kj 
-          allocate(Ome_kj(2*extent+1,2*extent+1,2*extent+1,nsf1,nsf2), STAT=stat)
+       case('Ome_kj') ! allocate Ome_kj
+          allocate(Ome_kj(2*extent+1,2*extent+1,2*extent+1), STAT=stat)
           if(stat/=0) call cq_abort('Error allocating memory to Ome_kj/exx !',stat)
-          call reg_alloc_mem(area_exx,nsf1*nsf2*(2*extent+1)*(2*extent+1)*(2*extent+1),&
+          call reg_alloc_mem(area_exx,(2*extent+1)*(2*extent+1)*(2*extent+1),&
                type_dbl,matrix,lun)
           Ome_kj = zero
           !write(unit,*) '\Ome_{k\gamma}_{j\beta} allocated'
-          !
-          !
-     case('Ome_kj_reduced') ! allocate Ome_kj_reduced for Ome_kj at a single combination of nsf1 and nsf2
-          allocate(Ome_kj_reduced(2*extent+1,2*extent+1,2*extent+1), STAT=stat)
-          if(stat/=0) call cq_abort('Error allocating memory to Ome_kj_reduced/exx !',stat)
-          call reg_alloc_mem(area_exx,(2*extent+1)*(2*extent+1)*(2*extent+1),&
-               type_dbl,matrix,lun)
-          Ome_kj_reduced = zero
-          !write(unit,*) '\Ome_{k\gamma}_{j\beta}_reduced allocated'
-          !
-          !
-       case('vhf_kj') ! allocate vhf_kj
-          allocate(vhf_kj(2*extent+1,2*extent+1,2*extent+1,nsf1,nsf2), STAT=stat)
-          if(stat/=0) call cq_abort('Error allocating memory to vhf_kj/exx !',stat)
-          call reg_alloc_mem(area_exx,nsf1*nsf2*(2*extent+1)*(2*extent+1)*(2*extent+1),&
-               type_dbl,matrix,lun)
-          vhf_kj = zero
-          !write(unit,*) '\vhf_{k\gamma j\beta} allocated'
           !
           !
        case('Phy_k')! allocate Phy_k
@@ -185,23 +157,6 @@ contains
           !write(unit,*) '\Phy_{k\gamma} allocated'
           !
           !
-       case('rho_ki') ! allocate rho_ki for neighbour[k]/neighbour[i] atoms [Krange/Srange]
-          allocate(rho_ki(2*extent+1,2*extent+1,2*extent+1,nsf1,nsf2), STAT=stat)
-          if(stat/=0) call cq_abort('Error allocating memory to rho_ki/exx !',stat)
-          call reg_alloc_mem(area_exx,nsf1*nsf2*(2*extent+1)*(2*extent+1)*(2*extent+1),&
-               type_dbl,matrix,lun)
-          rho_ki = zero
-          !write(unit,*) '\rho_{k\gamma i\alpha} allocated'
-          !
-          !
-      case('vhf_lj') ! allocate vhf_lj
-          allocate(vhf_lj(2*extent+1,2*extent+1,2*extent+1,nsf1,nsf2), STAT=stat)
-          if(stat/=0) call cq_abort('Error allocating memory to vhf_lj/exx !',stat)
-          call reg_alloc_mem(area_exx,nsf1*nsf2*(2*extent+1)*(2*extent+1)*(2*extent+1),&
-               type_dbl,matrix,lun)
-          vhf_lj = zero
-          !write(unit,*) '\vhf_{l\delta j\beta} allocated'          
-
 !!$
 !!$
 !!$ for working grids allocations
@@ -356,36 +311,13 @@ contains
           !write(*,*) '\phi_{l\delta} deallocated'
           !
           !
-       case('rho_kj') ! allocate rho_kj for neighbour[k]/neighbour[j] atoms [Krange/Srange]
-          deallocate(rho_kj, STAT=stat)
-          if(stat/=0) call cq_abort('Error deallocating memory to rho_kj/exx !',stat)
-          call reg_dealloc_mem(area_exx,nsf1*nsf2*(2*extent+1)*(2*extent+1)*(2*extent+1),&
-               type_dbl,matrix,lun)
-          !write(unit,*) '\rho_{k\gamma j\beta} deallocated'
-          !
-          !
        case('Ome_kj')
           deallocate(Ome_kj,STAT=stat)
-          if(stat/=0) call cq_abort('Error deallocating memory to Ome_j/exx !',stat)
-          call reg_dealloc_mem(area_exx,nsf1*nsf2*(2*extent+1)*(2*extent+1)*(2*extent+1),&
-               type_dbl,matrix,lun)
-          !write(unit,*) '\Ome_{k\gamma}_{j\beta} deallocated'
-     
-       case('Ome_kj_reduced')
-          deallocate(Ome_kj_reduced,STAT=stat)
-          if(stat/=0) call cq_abort('Error deallocating memory to Ome_kj_reduced/exx !',stat)
+          if(stat/=0) call cq_abort('Error deallocating memory to Ome_kj/exx !',stat)
           call reg_dealloc_mem(area_exx,(2*extent+1)*(2*extent+1)*(2*extent+1),&
                type_dbl,matrix,lun)
-          !write(unit,*) '\Ome_{k\gamma}_{j\beta}_reduced deallocated'
+          !write(unit,*) '\Ome_{k\gamma}_{j\beta} deallocated'
 
-       case('vhf_kj')
-          deallocate(vhf_kj, STAT=stat)          
-          if(stat/=0) call cq_abort('Error deallocating memory to vhf_kj/exx !',stat)
-          call reg_dealloc_mem(area_exx,nsf1*nsf2*(2*extent+1)*(2*extent+1)*(2*extent+1),&
-               type_dbl,matrix,lun)
-          !write(unit,*) '\vhf_{k\gamma j\beta} deallocated'
-          !
-          !
        case('Phy_k')
           deallocate(Phy_k, STAT=stat)
           if(stat/=0) call cq_abort('Error deallocating memory to Phy_k/exx !',stat)
@@ -394,22 +326,6 @@ contains
           !write(unit,*) '\Phy_{k\gamma} deallocated'
           !
           !
-       case('rho_ki') ! allocate rho_ki for neighbour[k]/neighbour[i] atoms [Krange/Srange]
-          deallocate(rho_ki, STAT=stat)
-          if(stat/=0) call cq_abort('Error deallocating memory to rho_ki/exx !',stat)
-          call reg_dealloc_mem(area_exx,nsf1*nsf2*(2*extent+1)*(2*extent+1)*(2*extent+1),&
-               type_dbl,matrix,lun)
-          !write(unit,*) '\rho_{k\gamma i\alpha} deallocated'
-          !
-          !
-       case('vhf_lj')
-          deallocate(vhf_lj, STAT=stat)          
-          if(stat/=0) call cq_abort('Error deallocating memory to vhf_lj/exx !',stat)
-          call reg_dealloc_mem(area_exx,nsf1*nsf2*(2*extent+1)*(2*extent+1)*(2*extent+1),&
-               type_dbl,matrix,lun)
-          !write(unit,*) '\vhf_{l\delta j\beta} deallocated'
-          !
-          !          
        case('ewald_3d')
           deallocate(ewald_rho, STAT=stat)
           if(stat/=0) call cq_abort('Error deallocating memory to ewald_rho/exx !',stat)

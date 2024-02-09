@@ -345,20 +345,6 @@ contains
           if ( scheme == 1 ) then
              call exx_mem_alloc(extent,maxsuppfuncs,0,'Phy_k','alloc')
              call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'Ome_kj','alloc')       
-             call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'rho_kj','alloc')       
-             call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'vhf_kj','alloc')
-             !
-          else if ( scheme == 2 .or. scheme == 3  ) then       
-             call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'rho_ki','alloc')       
-             call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'vhf_lj','alloc')
-             !
-             !for now allocated here ; should not ; better to have this before
-             ! SCF calculation ; note that here it is never deallocated!
-             !eris_size = int( sqrt(dble(size( mat_p(matX(  exxspin  ))%matrix ))) )
-             !print*, 'inode', inode, inode, size( mat_p(matX(  exxspin  ))%matrix), eris_size, &
-             !     & mat_p(matX(  exxspin  ))%length, mat_p(matX(  exxspin  ))%sf1_type, mat_p(matX(  exxspin  ))%sf2_type
-             !call exx_mem_alloc(eris_size**4,0,0,'eris','alloc')
-             !
              !
           end if
           !
@@ -814,16 +800,6 @@ contains
           if ( scheme == 1 ) then
              call exx_mem_alloc(extent,maxsuppfuncs,0,'Phy_k','dealloc')
              call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'Ome_kj','dealloc')   
-             call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'rho_kj','dealloc')       
-             call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'vhf_kj','dealloc')
-             !
-          else if( scheme == 2 ) then
-             call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'rho_ki','dealloc')       
-             call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'vhf_lj','dealloc')
-             !
-          else if( scheme == 3 ) then
-             call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'rho_ki','dealloc')       
-             call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'vhf_lj','dealloc')
              !
           end if
           !
@@ -960,7 +936,7 @@ contains
          unit_exx_debug
     !
     use exx_types, only: phi_i, phi_j, phi_k, phi_l, &
-         Phy_k, rho_kj, Ome_kj_reduced, vhf_kj, &
+         Phy_k, Ome_kj, &
          work_in_3d, work_out_3d
     use exx_types, only: exx_alloc
     !
@@ -1107,9 +1083,9 @@ contains
                 !
                 K_val = b(nbaddr+nsf1-1)
                 !
-                !call start_timer(tmr_std_exx_accumul)
+                call start_timer(tmr_std_exx_accumul)
                 Phy_k(:,:,:,nsf1) = Phy_k(:,:,:,nsf1) + K_val*phi_l(:,:,:,nsf2) 
-                !call stop_timer(tmr_std_exx_accumul,.true.)
+                call stop_timer(tmr_std_exx_accumul,.true.)
 
              end do
           end do
@@ -1180,23 +1156,20 @@ contains
                    call exx_phi_on_grid(inode,jb%global_num,jb%spec,extent, &
                         jb%xyz,jb%nsup,phi_j,r_int,xyz_zero)             
                    !
-                   if ( exx_alloc ) call exx_mem_alloc(extent,0,0,'Ome_kj_reduced','alloc')
+                   if ( exx_alloc ) call exx_mem_alloc(extent,0,0,'Ome_kj','alloc')
                    !
                    call start_timer(tmr_std_exx_accumul)
                    !$omp parallel do schedule(runtime) collapse(2) default(none) reduction(+: c) &
                    !$omp     shared(kg,jb,tmr_std_exx_poisson,tmr_std_exx_accumul,Phy_k,phi_j,phi_k,ncbeg,ia,tmr_std_exx_matmult,ewald_pot,phi_i, &
                    !$omp            exx_psolver,exx_pscheme,extent,dv,ewald_rho,inode,pulay_radius,p_omega,p_gauss,w_gauss,reckernel_3d,r_int) &
-                   !$omp     private(nsf1,nsf2,work_out_3d,work_in_3d,ewald_charge,Ome_kj_reduced, &
+                   !$omp     private(nsf1,nsf2,work_out_3d,work_in_3d,ewald_charge,Ome_kj, &
                    !$omp             ncaddr,nsf3,exx_mat_elem,r,s,t)
                    do nsf1 = 1, kg%nsup
                       do nsf2 = 1, jb%nsup
 
-                        !  call start_timer(tmr_std_exx_poisson)    
                          work_out_3d = zero
                          !
-                        !  call start_timer(tmr_std_exx_accumul)
                          work_in_3d = Phy_k(:,:,:,nsf1) * phi_j(:,:,:,nsf2)
-                        !  call stop_timer(tmr_std_exx_accumul,.true.)
                          !
                          if (exx_psolver=='fftw' .and. exx_pscheme=='ewald') then
                             call exx_ewald_charge(work_in_3d,extent,dv,ewald_charge)
@@ -1211,13 +1184,9 @@ contains
                             work_out_3d = work_out_3d + ewald_pot*ewald_charge
                          end if
                          !
-                        !  call stop_timer(tmr_std_exx_poisson,.true.)
 
-                        !  call start_timer(tmr_std_exx_accumul)
-                         Ome_kj_reduced = work_out_3d * phi_k(:,:,:,nsf1)
-                        !  call stop_timer(tmr_std_exx_accumul,.true.)                                         
+                         Ome_kj = work_out_3d * phi_k(:,:,:,nsf1)
                          !
-                        !  call start_timer(tmr_std_exx_matmult)
                          ncaddr = ncbeg + ia%nsup * (nsf2 - 1)
                          !
                          do nsf3 = 1, ia%nsup
@@ -1230,27 +1199,23 @@ contains
 
                                      exx_mat_elem = exx_mat_elem &                                    
                                           + phi_i(t,s,r,nsf3)    &
-                                          * Ome_kj_reduced(t,s,r) * dv
+                                          * Ome_kj(t,s,r)
 
                                   end do
                                end do
                             end do
                             !
-                            c(ncaddr + nsf3 - 1) = c(ncaddr + nsf3 - 1) + exx_mat_elem
+                            c(ncaddr + nsf3 - 1) = c(ncaddr + nsf3 - 1) + exx_mat_elem * dv
                             !
                          end do ! nsf3 = 1, ia%nsup
                          !
-                        !  call stop_timer(tmr_std_exx_matmult,.true.)
-                         !
                       end do ! nsf2 = 1, jb%nsup
-                      !
-                      !
                    end do ! nsf1 = 1, kg%nsup
                    !$omp end parallel do
+                   !
                    call stop_timer(tmr_std_exx_accumul,.true.)
                    !
-                   !
-                   if ( exx_alloc ) call exx_mem_alloc(extent,0,0,'Ome_kj_reduced','dealloc')
+                   if ( exx_alloc ) call exx_mem_alloc(extent,0,0,'Ome_kj','dealloc')
                    if ( exx_alloc ) call exx_mem_alloc(extent,jb%nsup,0,'phi_j','dealloc')
                    !
                 end if ! ( ncbeg /=0 )
@@ -1334,8 +1299,7 @@ contains
          unit_exx_debug, unit_eri_debug
     !
     use exx_types,  only: phi_i, phi_j, phi_k, phi_l, eris, &
-         rho_ki, vhf_lj, work_in_3d, work_out_3d,&
-         exx_gto, exx_gto_poisson
+         work_in_3d, work_out_3d, exx_gto, exx_gto_poisson
     use exx_types, only: exx_alloc
     !
     use exx_memory, only: exx_mem_alloc
@@ -1716,8 +1680,7 @@ contains
          unit_exx_debug, unit_eri_debug, sum_eri_gto
     !
     use exx_types,  only: phi_i, phi_j, phi_k, phi_l, eris, &
-         rho_ki, vhf_lj, work_in_3d, work_out_3d,&
-         exx_gto, exx_gto_poisson
+         work_in_3d, work_out_3d, exx_gto, exx_gto_poisson
     use exx_types, only: exx_alloc
     !
     use exx_memory, only: exx_mem_alloc
@@ -2079,7 +2042,7 @@ contains
     use angular_coeff_routines, only: calc_mat_elem_gen
     !    
     use exx_evalpao, only: exx_phi_on_grid
-    use exx_types,   only: reckernel_3d_filter, fftwrho3d_filter
+    use exx_types,   only: reckernel_3d_filter
     use exx_types,   only: prim_atomic_data, neigh_atomic_data, &         
          grid_spacing, r_int, unit_eri_debug, unit_exx_debug, &
          pulay_radius, p_omega, p_ngauss, p_gauss, w_gauss, &
@@ -2168,12 +2131,6 @@ contains
        !
        allocate(work_out(2*exx_filter_extent+1,2*exx_filter_extent+1,2*exx_filter_extent+1), STAT=stat)
        if(stat/=0) call cq_abort('Error allocating memory to work_out_filter/exx !',stat)
-       !
-       allocate(fftwrho3d_filter%arrayin(2*exx_filter_extent+1,2*exx_filter_extent+1,2*exx_filter_extent+1), STAT=stat)
-       if(stat/=0) call cq_abort('Error allocating memory to fftwin3d_filter/exx !',stat)
-       !
-       allocate(fftwrho3d_filter%arrayout(2*exx_filter_extent+1,2*exx_filter_extent+1,2*exx_filter_extent+1), STAT=stat)
-       if(stat/=0) call cq_abort('Error allocating memory to fftwout3d_filter/exx !',stat)
        !
        call fft3_init_wrapper( 2*exx_filter_extent+1  )
        !
@@ -2417,12 +2374,6 @@ contains
        !
        deallocate(work_out, STAT=stat)
        if(stat/=0) call cq_abort('Error allocating memory to work_out_filter/exx !',stat)
-       !
-       deallocate(fftwrho3d_filter%arrayin, STAT=stat)
-       if(stat/=0) call cq_abort('Error allocating memory to fftwin3d_filter/exx !',stat)
-       !
-       deallocate(fftwrho3d_filter%arrayout, STAT=stat)
-       if(stat/=0) call cq_abort('Error allocating memory to fftwout3d_filter/exx !',stat)
        !
        deallocate(reckernel_3d_filter, STAT=stat)
        if(stat/=0) call cq_abort('Error allocating memory to reckernel_3d_filter/exx !',stat)
