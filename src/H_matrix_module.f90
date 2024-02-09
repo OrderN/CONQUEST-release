@@ -377,10 +377,11 @@ contains
           !
           !if (inode==ionode) print*, 'exx_pulay_r0 = ', exx_pulay_r0
           !
+          !
           if  ( exx_niter == 1 .and. exx_scheme /= 3 ) then
              !
              if (inode == ionode .and. iprint_exx > 3) &
-                  write (io_lun, *) 'EXX: setting get_X_matrix' 
+                  write (io_lun, *) 'EXX: get_X_params' 
              ! 
              call get_X_params(backtrace_level)
              !
@@ -391,8 +392,7 @@ contains
                   write (io_lun, *) 'EXX: first guess from DFT'
              !
           else if ( exx_niter == 1 .and. exx_scheme == 3 ) then
-             !
-             ! exx_scheme  = 3 is for computing and storing ERIs
+             !             ! exx_scheme  = 3 is for computing and storing ERIs
              ! (faster than all the other methods but requires storage)
              !
              call get_X_params(backtrace_level)
@@ -408,8 +408,8 @@ contains
              !
           else if ( exx_niter > exx_siter ) then
              !
-             !if (inode == ionode .and. iprint_exx > 2) &
-             !     write (io_lun, *) 'EXX: setting get_X_matrix'
+             if (inode == ionode .and. iprint_exx > 2) &
+                  write (io_lun, *) 'EXX: get_X_matrix'
              !call get_X_params(backtrace_level)
              !
              !call exx_global_write() 
