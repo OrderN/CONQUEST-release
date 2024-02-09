@@ -344,7 +344,7 @@ contains
           !
           if ( scheme == 1 ) then
              call exx_mem_alloc(extent,maxsuppfuncs,0,'Phy_k','alloc')
-             call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'Ome_kj','alloc')       
+             call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'Ome_kj_1d_buffer','alloc')       
              !
           end if
           !
@@ -799,7 +799,7 @@ contains
           !
           if ( scheme == 1 ) then
              call exx_mem_alloc(extent,maxsuppfuncs,0,'Phy_k','dealloc')
-             call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'Ome_kj','dealloc')   
+             call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'Ome_kj_1d_buffer','dealloc')   
              !
           end if
           !
@@ -937,7 +937,7 @@ contains
          unit_exx_debug
     !
     use exx_types, only: phi_i, phi_j, phi_k, phi_l, &
-         Phy_k, Ome_kj, &
+         Phy_k, Ome_kj_1d_buffer, &
          work_in_3d, work_out_3d
     use exx_types, only: exx_alloc
     !
@@ -993,10 +993,8 @@ contains
     real(double), dimension(3) :: xyz_zero  = zero
     real(double)               ::   dr,dv,K_val
     real(double)               ::   exx_mat_elem
-
-   !  real(double), dimension(:), allocatable :: phi_i_1d_buffer
-   !  real(double), :: Ome_kj_reduced_1d_buffer((2*extent+1)*(2*extent+1)*(2*extent+1))
-    real(double), pointer :: phi_i(:,:,:,:), Ome_kj_reduced(:,:,:)
+    !
+    real(double), pointer :: phi_i(:,:,:,:), Ome_kj(:,:,:)
     !
     type(prim_atomic_data)  :: ia !i_alpha
     type(neigh_atomic_data) :: jb !j_beta
@@ -1163,13 +1161,12 @@ contains
                         jb%xyz,jb%nsup,phi_j,r_int,xyz_zero)             
                    !
                    if ( exx_alloc ) call exx_mem_alloc(extent,0,0,'Ome_kj_1d_buffer','alloc')
-                   Ome_kj(1:2*extent+1, 1:2*extent+1, 1:2*extent+1) => Ome_kj_1d_buffer
                    !
                    call start_timer(tmr_std_exx_accumul)
                    !$omp parallel default(none) reduction(+: c) &
                    !$omp     shared(kg,jb,tmr_std_exx_poisson,tmr_std_exx_accumul,Phy_k,phi_j,phi_k,ncbeg,ia,tmr_std_exx_matmult,ewald_pot,phi_i, &
                    !$omp            exx_psolver,exx_pscheme,extent,dv,ewald_rho,inode,pulay_radius,p_omega,p_gauss,w_gauss,reckernel_3d,r_int) &
-                   !$omp     private(nsf1,nsf2,work_out_3d,work_in_3d,ewald_charge,Ome_kj_reduced_1d_buffer, &
+                   !$omp     private(nsf1,nsf2,work_out_3d,work_in_3d,ewald_charge,Ome_kj_1d_buffer, &
                    !$omp             ncaddr,nsf3,exx_mat_elem,r,s,t) &
                    !$omp     firstprivate(Ome_kj)
                    Ome_kj(1:2*extent+1, 1:2*extent+1, 1:2*extent+1) => Ome_kj_1d_buffer

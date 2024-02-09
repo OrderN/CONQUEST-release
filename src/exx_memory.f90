@@ -147,15 +147,6 @@ contains
 !!$
 !!$
           !
-       case('Ome_kj') ! allocate Ome_kj
-          allocate(Ome_kj(2*extent+1,2*extent+1,2*extent+1), STAT=stat)
-          if(stat/=0) call cq_abort('Error allocating memory to Ome_kj/exx !',stat)
-          call reg_alloc_mem(area_exx,(2*extent+1)*(2*extent+1)*(2*extent+1),&
-               type_dbl,matrix,lun)
-          Ome_kj = zero
-          !write(unit,*) '\Ome_{k\gamma}_{j\beta} allocated'
-          !
-          !
        case('Ome_kj_1d_buffer') ! allocate Ome_kj_1d_buffer
           allocate(Ome_kj_1d_buffer((2*extent+1)*(2*extent+1)*(2*extent+1)), STAT=stat)
           if(stat/=0) call cq_abort('Error allocating memory to Ome_kj_1d_buffer/exx !',stat)
@@ -341,7 +332,7 @@ contains
           if(stat/=0) call cq_abort('Error deallocating memory to Ome_kj_1d_buffer/exx !',stat)
           call reg_dealloc_mem(area_exx,(2*extent+1)*(2*extent+1)*(2*extent+1),&
                type_dbl,matrix,lun)
-          !write(unit,*) '\Ome_{k\gamma}_{j\beta} deallocated'
+          !write(unit,*) '\Ome_{k\gamma}_{j\beta}_1d_buffer deallocated'
 
        case('Phy_k')
           deallocate(Phy_k, STAT=stat)
