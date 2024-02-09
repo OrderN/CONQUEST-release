@@ -909,7 +909,7 @@ contains
     if(flag_stress) then
       call get_stress(bundle)
       call gsum(ml_stress,3,3)
-      stress = ml_stress / HaToeV
+      stress = -ml_stress / HaToeV
     end if
     t2=MPI_wtime()
     if (inode==ionode .and. flag_time_mlff) &
