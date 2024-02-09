@@ -62,8 +62,8 @@ module exx_types
   real(double), dimension(:,:,:,:),     allocatable         :: phi_l  
 
   ! Auxiliary densities and potentials
-  real(double), dimension(:),           allocatable :: Ome_kj_1d_buffer
-  real(double), dimension(:,:,:,:),     allocatable :: Phy_k
+  real(double), dimension(:),           allocatable, target :: Ome_kj_1d_buffer
+  real(double), dimension(:,:,:,:),     allocatable         :: Phy_k
 
 
   
