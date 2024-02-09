@@ -611,6 +611,7 @@ contains
   subroutine write_md_stress(iter, baro, flag_append)
 
     use md_control,     only: type_barostat
+    use force_module,   only: tot_force
     implicit none
 
     ! passed variables
@@ -620,24 +621,26 @@ contains
 
     ! local variables
     integer                               :: lun, i, j
+    real(double)                          :: sum_force
 
     if (inode==ionode) then
       if (iprint_MD > 2) &
         write(io_lun,'(6x,"Writing MD stress: ",a)') md_stress_file
 
+      sum_force = sum(tot_force)
       if (flag_append) then
         open(unit=lun,file=md_stress_file,position='append')
-        write(lun,'(i8,9e12.4,2e12.4,e14.6)') iter, &
+        write(lun,'(i8,9e12.4,2e12.4,2e14.6)') iter, &
             ((baro%total_stress(j,i), j = 1, 3), i = 1, 3), &
-            baro%P_int*HaBohr3ToGPa, baro%P_ext*HaBohr3ToGPa, baro%volume
+            baro%P_int*HaBohr3ToGPa, baro%P_ext*HaBohr3ToGPa, sum_force, baro%volume
       else
         open(unit=lun,file=md_stress_file,status='replace')
-        write(lun,'(a8,9a12,2a12,a14)', advance='no') "step", "e_11", "e_12", "e_13", &
-            "e_21", "e_22", "e_23","e_31", "e_32", "e_33", "P_int(GPa)", "P_ext(GPa)", "V(a0^3)"
+        write(lun,'(a8,9a12,2a12,2a14)', advance='no') "step", "e_11", "e_12", "e_13", &
+            "e_21", "e_22", "e_23","e_31", "e_32", "e_33", "P_int(GPa)", "P_ext(GPa)", "TotForce(Ha/a0)", "V(a0^3)"
         write(lun,'(a)') ''
-        write(lun,'(i8,9e12.4,2e12.4,e14.6)') iter, &
+        write(lun,'(i8,9e12.4,2e12.4,2e14.6)') iter, &
             ((baro%total_stress(j,i), j = 1, 3), i = 1, 3), &
-            baro%P_int*HaBohr3ToGPa, baro%P_ext*HaBohr3ToGPa, baro%volume
+            baro%P_int*HaBohr3ToGPa, baro%P_ext*HaBohr3ToGPa, sum_force, baro%volume
       end if
     end if
   end subroutine write_md_stress
