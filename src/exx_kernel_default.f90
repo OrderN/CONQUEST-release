@@ -936,7 +936,7 @@ contains
          exx_psolver, exx_pscheme, &         
          unit_exx_debug
     !
-    use exx_types, only: phi_i, phi_j, phi_k, phi_l, &
+    use exx_types, only: phi_i_1d_buffer, phi_j, phi_k, phi_l, &
          Phy_k, Ome_kj_1d_buffer, &
          work_in_3d, work_out_3d
     use exx_types, only: exx_alloc

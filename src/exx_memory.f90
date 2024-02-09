@@ -20,7 +20,7 @@ module exx_memory
 
   use datatypes
 
-  use exx_types,         ONLY: phi_i, phi_j,  phi_k,  phi_l
+  use exx_types,         ONLY: phi_i, phi_i_1d_buffer, phi_j,  phi_k,  phi_l
   use exx_types,         ONLY: Phy_k, Ome_kj_1d_buffer
 
   
