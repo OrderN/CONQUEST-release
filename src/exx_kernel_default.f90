@@ -1206,7 +1206,6 @@ contains
                    end do ! nsf1 = 1, kg%nsup
                    !$omp end do
                    !$omp end parallel
-                   call stop_timer(tmr_std_exx_accumul,.true.)
                    !
                    call stop_timer(tmr_std_exx_accumul,.true.)
                    !
