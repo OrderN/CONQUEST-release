@@ -1164,11 +1164,11 @@ contains
                    !
                    call start_timer(tmr_std_exx_accumul)
                    !$omp parallel default(none) reduction(+: c) &
-                   !$omp     shared(kg,jb,tmr_std_exx_poisson,tmr_std_exx_accumul,Phy_k,phi_j,phi_k,ncbeg,ia,tmr_std_exx_matmult,ewald_pot,phi_i, &
-                   !$omp            exx_psolver,exx_pscheme,extent,dv,ewald_rho,inode,pulay_radius,p_omega,p_gauss,w_gauss,reckernel_3d,r_int) &
-                   !$omp     private(nsf1,nsf2,work_out_3d,work_in_3d,ewald_charge,Ome_kj_1d_buffer, &
+                   !$omp     shared(kg,jb,tmr_std_exx_poisson,tmr_std_exx_accumul,Phy_k,phi_j,phi_k,ncbeg,ia, &
+                   !$omp            tmr_std_exx_matmult,ewald_pot,phi_i,exx_psolver,exx_pscheme,extent,dv,    &
+                   !$omp            ewald_rho,inode,pulay_radius,p_omega,p_gauss,w_gauss,reckernel_3d,r_int)  &
+                   !$omp     private(nsf1,nsf2,work_out_3d,work_in_3d,ewald_charge,Ome_kj_1d_buffer,Ome_kj,   &
                    !$omp             ncaddr,nsf3,exx_mat_elem,r,s,t) &
-                   !$omp     firstprivate(Ome_kj)
                    Ome_kj(1:2*extent+1, 1:2*extent+1, 1:2*extent+1) => Ome_kj_1d_buffer
                    !$omp do schedule(runtime) collapse(2)
                    do nsf1 = 1, kg%nsup
@@ -1198,7 +1198,8 @@ contains
                          !
                          do nsf3 = 1, ia%nsup
                             !
-                            c(ncaddr + nsf3 - 1) = c(ncaddr + nsf3 - 1) + dot((2*extent+1)**3, phi_i(:,:,:,nsf3), 1, Ome_kj, 1) * dv
+                            c(ncaddr + nsf3 - 1) = c(ncaddr + nsf3 - 1) &
+                               + dot((2*extent+1)**3, phi_i(:,:,:,nsf3), 1, Ome_kj, 1) * dv
                             !
                          end do ! nsf3 = 1, ia%nsup
                          !
