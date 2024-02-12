@@ -182,10 +182,7 @@ contains
                    zeta_loop: do acz = 1, pao(spec)%angmom(l1)%n_zeta_in_angmom
 
                       magn_loop: do m1 = -l1, l1                      
-
-                         pao_val = zero
-                         !y_val   = zero             
-
+                      
                          call evaluate_pao(i_dummy,spec,l1,acz,m1,x,y,z,pao_val,exx_cartesian)
 
                          ! Put pao_val directly into phi_on_grid
