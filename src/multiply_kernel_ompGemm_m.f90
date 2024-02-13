@@ -249,9 +249,9 @@ contains
           ! Copy result back from tempc and add to C
           copy_c: do j = 1, nbnab(k_in_part)
              if (jbnab2ch(j) /= 0) then
-                nd2 = bndim2(nbkbeg+j)
                 ncbeg = chalo%i_h2d(icad+jbnab2ch(j))
                 if (ncbeg /= 0) then
+                   nd2 = bndim2(nbkbeg+j)
                    ncend = ncbeg + (nd1 * nd2 - 1)
                    tcbeg = nd2_array(j)
                    tcend = tcbeg + nd2 - 1
@@ -385,8 +385,8 @@ contains
     integer :: kpart, k_off
     ! Remember that a is a local transpose
     real(double) :: a(lena)
-    real(double) :: b(lenb)
-    real(double) :: c(lenc)
+    real(double), target :: b(lenb)
+    real(double), target :: c(lenc)
     ! dimension declarations
     integer(integ), intent(in) :: ib_nd_acc(:)
     integer(integ), intent(in) :: ibaddr(:)
@@ -397,89 +397,95 @@ contains
     ! Local variables
     integer :: jbnab2ch(mx_absb)
     integer :: k, k_in_part, k_in_halo, nbkbeg, j, jpart, jseq
-    integer :: i, nabeg, i_in_prim, icad, nbbeg, j_in_halo, ncbeg
+    integer :: i, nabeg, i_in_prim, icad, nbbeg, nbend, j_in_halo, ncbeg, ncend
     integer :: n1, n2, n3, nb_nd_kbeg
     integer :: nd1, nd2, nd3
     integer :: naaddr, nbaddr, ncaddr
-    integer :: sofar, maxnd1, maxnd2, maxnd3, maxlen
-    real(double), allocatable, dimension(:,:) :: tempb, tempc
+    integer :: sofar, maxlen
+    integer :: maxnd1, maxnd2, maxnd3
+    real(double), pointer, dimension(:,:) :: pointb, pointc
     external :: dgemm
     ! OpenMP required indexing variables
-    integer :: nd1_1st(at%mx_halo), nd2_1st(mx_absb)
+    integer :: nd1_vector(at%mx_halo), nd2_vector(mx_absb), nd2_array(mx_absb)
 
     maxnd1 = maxval(ahalo%ndimi)
     maxnd2 = maxval(bndim2)
     maxnd3 = maxval(ahalo%ndimj)
     maxlen = maxval(nbnab) * maxnd2
-    allocate(tempb(maxnd3,maxlen), tempc(maxlen,maxnd1))
-    tempb = zero
-    tempc = zero
     ! Loop over atoms k in current A-halo partn
     do k = 1, ahalo%nh_part(kpart)
+       ! Indices that depend on k
        k_in_halo = ahalo%j_beg(kpart) + k - 1
        k_in_part = ahalo%j_seq(k_in_halo)
-       nbkbeg = ibaddr(k_in_part)
+       nbkbeg = ibaddr(k_in_part) - 1
        nb_nd_kbeg = ib_nd_acc(k_in_part)
        nd3 = ahalo%ndimj(k_in_halo)
+
        ! for OpenMP sub-array indexing
-       nd1_1st(1) = 0
+       nd1_vector(1) = 0
        do i = 2, at%n_hnab(k_in_halo)
          i_in_prim = at%i_prim(at%i_beg(k_in_halo)+i-2)
-         nd1_1st(i) = nd1_1st(i-1) + nd3 * ahalo%ndimi(i_in_prim)
+         nd1_vector(i) = nd1_vector(i-1) + nd3 * ahalo%ndimi(i_in_prim)
        end do
-       nd2_1st(1) = 0
+       nd2_vector(1) = 0
+       nd2_array(1) = 1
        do j = 2, nbnab(k_in_part)
-          nd2_1st(j) = nd2_1st(j-1) + nd3 * bndim2(nbkbeg+j-2)
+          nd2_vector(j) = nd2_vector(j-1) + nd3 * bndim2(nbkbeg+j-1)
+          nd2_array(j) = nd2_array(j-1) + bndim2(nbkbeg+j-1)
        end do
        ! transcription of j from partition to C-halo labelling
        do j = 1, nbnab(k_in_part)
-          jpart = ibpart(nbkbeg+j-1) + k_off
-          jseq = ibseq(nbkbeg+j-1)
+          jpart = ibpart(nbkbeg+j) + k_off
+          jseq = ibseq(nbkbeg+j)
           jbnab2ch(j) = chalo%i_halo(chalo%i_hbeg(jpart)+jseq-1)
        end do
-!$omp do schedule(runtime)
+
+       !$omp do schedule(runtime)
        ! Loop over primary-set A-neighbours of k
        do i = 1, at%n_hnab(k_in_halo)
-          ! nabeg = at%i_beg(k_in_halo) + i - 1
           i_in_prim = at%i_prim(at%i_beg(k_in_halo)+i-1)
           nd1 = ahalo%ndimi(i_in_prim)
-          nabeg = at%i_nd_beg(k_in_halo) + nd1_1st(i)
+          nabeg = at%i_nd_beg(k_in_halo) + nd1_vector(i)
           icad = (i_in_prim-1) * chalo%ni_in_halo
-          sofar = 0
+          ! sofar = 0
           ! Loop over B-neighbours of atom k
+          ! TODO: Remove this loop, map pointers using nd1_array, nd2_array, nd2_vector
           do j = 1, nbnab(k_in_part)
-             ! nbbeg = nbkbeg + j - 1
-             nd2 = bndim2(nbkbeg+j-1)
-             nbbeg = nb_nd_kbeg + nd2_1st(j)
-             j_in_halo = jbnab2ch(j)
-             if (j_in_halo /= 0) then
-                ! nd2 = chalo%ndimj(j_in_halo)
-                ncbeg = chalo%i_h2d(icad+j_in_halo)
+             nd2 = bndim2(nbkbeg + j)
+             if (jbnab2ch(j) /= 0) then
+                ncbeg = chalo%i_h2d(icad + jbnab2ch(j))
                 if (ncbeg /= 0) then ! multiplication of ndim x ndim blocks
-!DIR$ NOPATTERN
-                   do n2 = 1, nd2
-                      nbaddr = nbbeg + nd3 * (n2 - 1)
-                      ncaddr = ncbeg + nd1 * (n2 - 1)
-                      do n3 = 1, nd3
-                         tempb(n3,sofar+n2) = b(nbaddr+n3-1)
-                      end do
-                      do n1 = 1, nd1
-                         tempc(sofar+n2,n1) = c(ncaddr+n1-1)
-                      end do
-                   end do
-                   sofar = sofar + nd2
+
+                   nbbeg = nb_nd_kbeg + nd2_vector(j)
+                   nbend = nbbeg + (nd2 * nd3 - 1)
+                   ncend = ncbeg + (nd1 * nd2 - 1)
+
+                   pointb(1:nd3, 1:nd2_array(j)) => b(nbbeg:nbend)
+                   pointc(1:nd2_array(j), 1:nd1) => c(ncbeg:ncend)
+
+                   ! do n2 = 1, nd2
+                   !    nbaddr = nbbeg + nd3 * (n2 - 1)
+                   !    ncaddr = ncbeg + nd1 * (n2 - 1)
+                   !    do n3 = 1, nd3
+                   !       tempb(n3,sofar+n2) = b(nbaddr+n3-1)
+                   !    end do
+                   !    do n1 = 1, nd1
+                   !       tempc(sofar+n2,n1) = c(ncaddr+n1-1)
+                   !    end do
+                   ! end do
+                   ! sofar = sofar + nd2
                 end if
              end if
           end do
-          if (sofar > 0) then
-             ! m, n, k, alpha, a, lda, b, ldb, beta, c, ldc
-             call dgemm('n', 'n', nd3, nd1, sofar, one, tempb, &
-                        maxnd3, tempc, maxlen, one, a(nabeg:), nd3)
-          end if
+          !if (sofar > 0) then
+          ! m, n, k, alpha, a, lda, b, ldb, beta, c, ldc
+          call dgemm('n', 'n', nd3, nd1, sofar, one, pointb, &
+               maxnd3, pointc, maxlen, one, a(nabeg:), nd3)
+          !end if
        end do
 !$omp end do
     end do
-    deallocate(tempb, tempc)
+    !deallocate(tempb, tempc)
     return
   end subroutine m_kern_min
   !!*****
