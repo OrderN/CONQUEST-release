@@ -1163,12 +1163,12 @@ contains
                    if ( exx_alloc ) call exx_mem_alloc(extent,0,0,'Ome_kj_1d_buffer','alloc')
                    !
                    call start_timer(tmr_std_exx_accumul)
-                   !$omp parallel default(none) reduction(+: c) &
+                   !$omp parallel default(none) reduction(+: c)                                               &
                    !$omp     shared(kg,jb,tmr_std_exx_poisson,tmr_std_exx_accumul,Phy_k,phi_j,phi_k,ncbeg,ia, &
                    !$omp            tmr_std_exx_matmult,ewald_pot,phi_i,exx_psolver,exx_pscheme,extent,dv,    &
                    !$omp            ewald_rho,inode,pulay_radius,p_omega,p_gauss,w_gauss,reckernel_3d,r_int)  &
                    !$omp     private(nsf1,nsf2,work_out_3d,work_in_3d,ewald_charge,Ome_kj_1d_buffer,Ome_kj,   &
-                   !$omp             ncaddr,nsf3,exx_mat_elem,r,s,t) &
+                   !$omp             ncaddr,nsf3,exx_mat_elem,r,s,t)
                    Ome_kj(1:2*extent+1, 1:2*extent+1, 1:2*extent+1) => Ome_kj_1d_buffer
                    !$omp do schedule(runtime) collapse(2)
                    do nsf1 = 1, kg%nsup
