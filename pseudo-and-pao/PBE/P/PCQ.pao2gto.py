@@ -41,30 +41,41 @@ symbol, norb, orb, kind = read_ion( filename_ion )
 
 #%% Define the initial guess for each orb. ####################################
 # (not mandatory)
-#
-orb_guess = read_gto(filename_gto_read)
-build_guess( orb, orb_guess)
+#`
+#center = True
+#orb_guess = read_gto(filename_gto_read)
+#build_guess( orb, orb_guess, center = center)
 #
 #for i in range(norb):
 #   orb[i].guess = orb_guess[i].guess  
 #
-#orb[1].guess = array([0.2, -0.5, 2.5, -0.5, 0.2, 0.2])
-#orb[0].guess = array([0.340524815, 0.4463843004, 3.2450659895, 0.4537962082, 0.1019009042, 0.2253588404, 0.9568838539, 0.4357005884, -0.01, 0.02])
-#orb[2].guess = array([ 0.350947,0.276678,5,0.275410,0.275410,-0.5])
+orb[1].guess = array([0.8501192602, 1.2233905431,2.7143718397,-0.2790125744,0.2450817667,0.3042421013])
+orb[0].guess = array([0.340524815, 0.4463843004, 3.2450659895, 0.4537962082, 0.1019009042, 0.2253588404])
+orb[2].guess = array([ 0.350947,0.276678,5,0.275410,0.275410,-0.5])
 #orb[1].guess = array([0.2, 0.8, 2.0, 0.6, 0.4, 0.1, 0.4, 0.3, 0.01, 0.02])
 #orb[0].guess = array([0.1, -0.5, 3.0, -0.5, 0.1, 0.1])
 #orb[2].guess = array([0.064239, 0.031909,0.298774,0.510492])
 #orb[3].guess = array([0.350947,0.276678,0.275410,-0.5])
-#orb[4].guess = array([0.2, -0.5, 2.5, -0.5, 0.2, 0.2])
+orb[4].guess = array([0.3341085034,0.2805108907,4.1100000000,1.0297932964,1.4588060470,2.0776528365])
 #orb[5].guess = array([0.2, -0.5, 2.5, -0.5, 0.2, 0.2])
 #
 
+
+
+orb[1].bounds=([-3,6])       #Bounds for SZ,SZP,DZP,TZTP
+orb[2].bounds=([-10,10])      #Bounds for SZP,DZP,TZTP
+orb[3].bounds=([-2,4])      #Bounds for DZP,TZTP
+orb[4].bounds=([-2,6])  #Bounds for DZP,TZTP
+orb[5].bounds=([-6,4.110])  #Bounds for TZTP
+orb[6].bounds=([-2,6])      #Bounds for TZTP
+orb[7].bounds=([-2,6])      #Bounds for TZTP
+orb[8].bounds=([-10,10])    #Bounds for TZTP
 #%% Define the number of Gaussian primitives for each orb. ####################
 # (not mandatory, default is 3)
 #
 #for i in range(norb):
  #   orb[i].nG.append(3)
-#orb[0].nG = 4
+#orb[0].nG = 3
 #orb[1].nG = 2
 #orb[1].nG = 3
 #orb[2].nG = 2
@@ -79,7 +90,12 @@ for i in range(norb):
     y = array(orb[i].y)
     # 
     # GTO fit ; plots of the GTO radial part is done in gto_fit_orb
-    param, nG = gto_fit_orb( x, y, orb[i].nG, orb[i].guess, orb[i].n, orb[i].lname, orb[i].z, i, center= True )
+    center = True
+    param, nG = gto_fit_orb( x, y, orb[i].nG, orb[i].guess, orb[i].n, orb[i].lname, orb[i].z, i, 
+                            center=center, maxfev=200000 ,bounds=orb[i].bounds, method='dogbox')
+    
+    #param, nG = gto_fit_orb( x, y, orb[i].nG, orb[i].guess, orb[i].n, orb[i].lname, orb[i].z, i, center = center)
+
     #
     # If the number of Gaussian has not been setup ; 
     # gto_fit_orb set it to 3 by default
@@ -87,11 +103,22 @@ for i in range(norb):
         orb[i].nG = nG
     #
     # Store GTO exponent (a) and coefficient (d)
-    for j in range(0,orb[i].nG*2,2):
-        orb[i].gto_a.append( param[j]   )      
-        orb[i].gto_d.append( param[j+1] )      
+    
+    print(param) 
+    if (center == False):
+        for j in range(0,orb[i].nG*3,3):
+            orb[i].gto_a.append( param[j]   )      
+            orb[i].gto_d.append( param[j+1] )
+            orb[i].gto_c.append( param[j+2] )
+    else:
+        for j in range(0,orb[i].nG*2,2):
+            orb[i].gto_a.append( param[j]   )      
+            orb[i].gto_d.append( param[j+1] )
+            orb[i].gto_c.append( 0.0 )
+         
     # Generate and store GTO fit results on the radial grid
     orb[i].y_fit_gto()
+
 
 #%% Write GTO file ############################################################
 write_gto( filename_gto_write, symbol, orb, True )
