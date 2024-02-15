@@ -48,24 +48,21 @@ build_guess( orb, orb_guess,center=center)
 #for i in range(norb):
 #   orb[i].guess = orb_guess[i].guess  
 #
-#orb[0].guess = array([0.340524815, 0.4463843004, 3.2450659895, 0.4537962082, 0.1019009042, 0.2253588404, 0.9568838539, 0.4357005884, -0.01, 0.02])
-#orb[1].guess = array([ 0.8538002081,0.3638689733,3.1289511877,-0.8945322011,0.8537999748,2.1196031328])
-#orb[1].guess = array([ 0.1,-1,5,-1,1,1])
-orb[2].guess = array([ 0.1,-1,5,-1,1,1])
-orb[4].guess = array([ 0.1,-1,5,-1,1,1])
+#orb[2].guess = array([ 0.1,-1,5,-1,1,1])
+#orb[4].guess = array([ 0.1,-1,5,-1,1,1])
 
-orb[6].guess = array([ 0.1,-1,5,-1,1,1])
-orb[7].guess = array([ 0.1,-1,5,-1,1,1])
-orb[8].guess = array([ 0.1,-1,5,-1,1,1])
+#orb[6].guess = array([ 0.1,-1,5,-1,1,1])
+#orb[7].guess = array([ 0.1,-1,5,-1,1,1])
+#orb[8].guess = array([ 0.1,-1,5,-1,1,1])
 
 
 
-orb[2].bounds=([-1,7])
-orb[4].bounds=([-1,7])
+orb[2].bounds=([-1,7])    #Bounds for SZ,SZP,DZP,TZTP
+orb[4].bounds=([-1,7])    #Bounds for SZP,DZP,TZTP
 
-orb[6].bounds=([-1,10])
-orb[7].bounds=([-1,10])
-orb[8].bounds=([-1,10])
+orb[6].bounds=([-1,10])   #Bounds for TZTP 
+orb[7].bounds=([-1,10])   #Bounds for TZTP 
+orb[8].bounds=([-1,10])   #Bounds for TZTP 
 
 #%% Define the number of Gaussian primitives for each orb. ####################
 # (not mandatory, default is 3)
@@ -75,7 +72,7 @@ orb[8].bounds=([-1,10])
 #orb[0].nG = 1
 #orb[0].nG = 4
 #orb[1].nG = 2
-#orb[2].nG = 4
+#orb[1].nG = 3
 #%% Fit the radial part and plot ##############################################
 for i in range(norb):
     x = array(orb[i].x)
