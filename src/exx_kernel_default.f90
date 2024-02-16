@@ -344,7 +344,7 @@ contains
           !
           if ( scheme == 1 ) then
              call exx_mem_alloc(extent,maxsuppfuncs,0,'Phy_k','alloc')
-             call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'Ome_kj','alloc')       
+             call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'Ome_kj_1d_buffer','alloc')       
              !
           end if
           !
@@ -799,7 +799,7 @@ contains
           !
           if ( scheme == 1 ) then
              call exx_mem_alloc(extent,maxsuppfuncs,0,'Phy_k','dealloc')
-             call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'Ome_kj','dealloc')   
+             call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'Ome_kj_1d_buffer','dealloc')   
              !
           end if
           !
@@ -917,6 +917,7 @@ contains
     use numbers,        only: zero, one
     use matrix_module,  only: matrix_halo, matrix_trans
     use global_module,  only: area_exx
+    use GenBlas,        only: dot
     !
     use basic_types,    only: primary_set
     use primary_module, only: bundle 
@@ -935,8 +936,8 @@ contains
          exx_psolver, exx_pscheme, &         
          unit_exx_debug
     !
-    use exx_types, only: phi_i, phi_j, phi_k, phi_l, &
-         Phy_k, Ome_kj, &
+    use exx_types, only: phi_i_1d_buffer, phi_j, phi_k, phi_l, &
+         Phy_k, Ome_kj_1d_buffer, &
          work_in_3d, work_out_3d
     use exx_types, only: exx_alloc
     !
@@ -992,6 +993,8 @@ contains
     real(double), dimension(3) :: xyz_zero  = zero
     real(double)               ::   dr,dv,K_val
     real(double)               ::   exx_mat_elem
+    !
+    real(double), pointer :: phi_i(:,:,:,:), Ome_kj(:,:,:)
     !
     type(prim_atomic_data)  :: ia !i_alpha
     type(neigh_atomic_data) :: jb !j_beta
@@ -1114,10 +1117,11 @@ contains
           !
           !print*, 'i',i, 'global_num',ia%ip,'spe',ia%spec
           !
-          if ( exx_alloc ) call exx_mem_alloc(extent,ia%nsup,0,'phi_i','alloc')
+          if ( exx_alloc ) call exx_mem_alloc(extent,ia%nsup,0,'phi_i_1d_buffer','alloc')
+          phi_i(1:2*extent+1, 1:2*extent+1, 1:2*extent+1, 1:ia%nsup) => phi_i_1d_buffer
           !
           call exx_phi_on_grid(inode,ia%ip,ia%spec,extent, &
-               ia%xyz,ia%nsup,phi_i,r_int,xyz_zero)             
+               ia%xyz,ia%nsup,phi_i,r_int,xyz_zero)    
           !
           !print*, size(chalo%i_h2d), shape(chalo%i_h2d)
           ! 
@@ -1156,15 +1160,17 @@ contains
                    call exx_phi_on_grid(inode,jb%global_num,jb%spec,extent, &
                         jb%xyz,jb%nsup,phi_j,r_int,xyz_zero)             
                    !
-                   if ( exx_alloc ) call exx_mem_alloc(extent,0,0,'Ome_kj','alloc')
+                   if ( exx_alloc ) call exx_mem_alloc(extent,0,0,'Ome_kj_1d_buffer','alloc')
                    !
                    call start_timer(tmr_std_exx_accumul)
-                   !$omp parallel do schedule(runtime) collapse(2) default(none) reduction(+: c)              &
+                   !$omp parallel default(none) reduction(+: c)                                               &
                    !$omp     shared(kg,jb,tmr_std_exx_poisson,tmr_std_exx_accumul,Phy_k,phi_j,phi_k,ncbeg,ia, &
                    !$omp            tmr_std_exx_matmult,ewald_pot,phi_i,exx_psolver,exx_pscheme,extent,dv,    &
                    !$omp            ewald_rho,inode,pulay_radius,p_omega,p_gauss,w_gauss,reckernel_3d,r_int)  &
-                   !$omp     private(nsf1,nsf2,work_out_3d,work_in_3d,ewald_charge,Ome_kj,ncaddr,nsf3,        &
-                   !$omp             exx_mat_elem,r,s,t)
+                   !$omp     private(nsf1,nsf2,work_out_3d,work_in_3d,ewald_charge,Ome_kj_1d_buffer,Ome_kj,   &
+                   !$omp             ncaddr,nsf3,exx_mat_elem,r,s,t)
+                   Ome_kj(1:2*extent+1, 1:2*extent+1, 1:2*extent+1) => Ome_kj_1d_buffer
+                   !$omp do schedule(runtime) collapse(2)
                    do nsf1 = 1, kg%nsup
                       do nsf2 = 1, jb%nsup
 
@@ -1192,31 +1198,19 @@ contains
                          !
                          do nsf3 = 1, ia%nsup
                             !
-                            exx_mat_elem = zero
-                            !
-                            do r = 1, 2*extent+1
-                               do s = 1, 2*extent+1
-                                  do t = 1, 2*extent+1                         
-
-                                     exx_mat_elem = exx_mat_elem &                                    
-                                          + phi_i(t,s,r,nsf3)    &
-                                          * Ome_kj(t,s,r)
-
-                                  end do
-                               end do
-                            end do
-                            !
-                            c(ncaddr + nsf3 - 1) = c(ncaddr + nsf3 - 1) + exx_mat_elem * dv
+                            c(ncaddr + nsf3 - 1) = c(ncaddr + nsf3 - 1) &
+                               + dot((2*extent+1)**3, phi_i(:,:,:,nsf3), 1, Ome_kj, 1) * dv
                             !
                          end do ! nsf3 = 1, ia%nsup
                          !
                       end do ! nsf2 = 1, jb%nsup
                    end do ! nsf1 = 1, kg%nsup
-                   !$omp end parallel do
+                   !$omp end do
+                   !$omp end parallel
                    !
                    call stop_timer(tmr_std_exx_accumul,.true.)
                    !
-                   if ( exx_alloc ) call exx_mem_alloc(extent,0,0,'Ome_kj','dealloc')
+                   if ( exx_alloc ) call exx_mem_alloc(extent,0,0,'Ome_kj_1d_buffer','dealloc')
                    if ( exx_alloc ) call exx_mem_alloc(extent,jb%nsup,0,'phi_j','dealloc')
                    !
                 end if ! ( ncbeg /=0 )
@@ -1233,7 +1227,7 @@ contains
 !!$ ****[ i end loop ]****
 !!$
           !
-          if ( exx_alloc ) call exx_mem_alloc(extent,ia%nsup,0,'phi_i','dealloc')
+          if ( exx_alloc ) call exx_mem_alloc(extent,ia%nsup,0,'phi_i_1d_buffer','dealloc')
           !
        end do ! End of i = 1, at%n_hnab(k_in_halo)
        !

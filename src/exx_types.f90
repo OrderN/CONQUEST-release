@@ -55,14 +55,15 @@ module exx_types
   !  end type fftw1d
 
   ! PAOs on grid
-  real(double), dimension(:,:,:,:),     allocatable :: phi_i
-  real(double), dimension(:,:,:,:),     allocatable :: phi_j
-  real(double), dimension(:,:,:,:),     allocatable :: phi_k
-  real(double), dimension(:,:,:,:),     allocatable :: phi_l  
+  real(double), dimension(:,:,:,:),     allocatable         :: phi_i
+  real(double), dimension(:),           allocatable, target :: phi_i_1d_buffer
+  real(double), dimension(:,:,:,:),     allocatable         :: phi_j
+  real(double), dimension(:,:,:,:),     allocatable         :: phi_k
+  real(double), dimension(:,:,:,:),     allocatable         :: phi_l  
 
   ! Auxiliary densities and potentials
-  real(double), dimension(:,:,:),       allocatable :: Ome_kj
-  real(double), dimension(:,:,:,:),     allocatable :: Phy_k
+  real(double), dimension(:),           allocatable, target :: Ome_kj_1d_buffer
+  real(double), dimension(:,:,:,:),     allocatable         :: Phy_k
 
 
   
