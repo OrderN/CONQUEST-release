@@ -1110,7 +1110,7 @@ contains
           !print*, 'i_in_prim', i_in_prim, 'nd1', nd1, 'ni', ni, 'np', np
           !
           call get_iprimdat(ia,kg,ni,i_in_prim,np,.true.,unit_exx_debug)
-          if(ia%nsup/=ahalo%ndimi(i_in_prim)) write(24,*) 'Error1: ',ia%nsup,ahalo%ndimi(i_in_prim)     
+          if (ia%nsup/=ahalo%ndimi(i_in_prim)) cq_abort('Error1: ',ia%nsup,ahalo%ndimi(i_in_prim))
           !
           !print*, 'i',i, 'global_num',ia%ip,'spe',ia%spec
           !
@@ -1140,7 +1140,7 @@ contains
                    call get_halodat(jb,kg,jseq,chalo%i_hbeg(jpart),         &
                         BCS_parts%lab_cell(BCS_parts%inv_lab_cover(jpart)), &
                         'j',.true.,unit_exx_debug)
-                   if(jb%nsup/=bndim2(nbkbeg+j-1))     write(24,*) 'Error2: ',jb%nsup,bndim2(nbkbeg+j-1)
+                   if (jb%nsup/=bndim2(nbkbeg+j-1)) cq_abort('Error2: ',jb%nsup,bndim2(nbkbeg+j-1))
                    !
 !!$
 !!$ ****[ <ij> screening ]****
@@ -1159,11 +1159,12 @@ contains
                    if ( exx_alloc ) call exx_mem_alloc(extent,0,0,'Ome_kj','alloc')
                    !
                    call start_timer(tmr_std_exx_accumul)
-                   !$omp parallel do schedule(runtime) collapse(2) default(none) reduction(+: c) &
-                   !$omp     shared(kg,jb,tmr_std_exx_poisson,tmr_std_exx_accumul,Phy_k,phi_j,phi_k,ncbeg,ia,tmr_std_exx_matmult,ewald_pot,phi_i, &
-                   !$omp            exx_psolver,exx_pscheme,extent,dv,ewald_rho,inode,pulay_radius,p_omega,p_gauss,w_gauss,reckernel_3d,r_int) &
-                   !$omp     private(nsf1,nsf2,work_out_3d,work_in_3d,ewald_charge,Ome_kj, &
-                   !$omp             ncaddr,nsf3,exx_mat_elem,r,s,t)
+                   !$omp parallel do schedule(runtime) collapse(2) default(none) reduction(+: c)              &
+                   !$omp     shared(kg,jb,tmr_std_exx_poisson,tmr_std_exx_accumul,Phy_k,phi_j,phi_k,ncbeg,ia, &
+                   !$omp            tmr_std_exx_matmult,ewald_pot,phi_i,exx_psolver,exx_pscheme,extent,dv,    &
+                   !$omp            ewald_rho,inode,pulay_radius,p_omega,p_gauss,w_gauss,reckernel_3d,r_int)  &
+                   !$omp     private(nsf1,nsf2,work_out_3d,work_in_3d,ewald_charge,Ome_kj,ncaddr,nsf3,        &
+                   !$omp             exx_mat_elem,r,s,t)
                    do nsf1 = 1, kg%nsup
                       do nsf2 = 1, jb%nsup
 
