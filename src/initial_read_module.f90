@@ -1572,7 +1572,11 @@ contains
     MDn_steps             = fdf_integer('AtomMove.NumSteps',     100        )
     MDfreq                = fdf_integer('AtomMove.OutputFreq',    50        )
     XSFfreq               = fdf_integer('AtomMove.XsfFreq',    MDfreq        )
-    XYZfreq               = fdf_integer('AtomMove.XyzFreq',    MDfreq        )
+    if (leqi(runtype,'md')) then
+      XYZfreq             = fdf_integer('AtomMove.XyzFreq',    MDfreq        )
+    else
+      XYZfreq             = fdf_integer('AtomMove.XyzFreq',    1        )
+    end if
     MDtimestep            = fdf_double ('AtomMove.Timestep',      0.5_double)
     MDcgtol               = fdf_double ('AtomMove.MaxForceTol',0.0005_double)
     sqnm_trust_step       = fdf_double ('AtomMove.MaxSQNMStep',0.2_double   )
