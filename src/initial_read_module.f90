@@ -2303,7 +2303,7 @@ contains
     ! Verify that a method for variable temperature is valid
     if (flag_variable_temperature) then
       ! At present, only linear evolution is supported
-      if (md_variable_temperature_method .ne. 'linear') then
+      if(.not.leqi(md_variable_temperature_method(1:6),'linear')) then
         if(inode==ionode) then
           write(io_lun,fmt='(6x, "Wrong method for variable temperature: ", a, " != linear. Stopping ..." )') &
             trim(md_variable_temperature_method)
