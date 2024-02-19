@@ -1117,7 +1117,7 @@ contains
           !print*, 'i_in_prim', i_in_prim, 'nd1', nd1, 'ni', ni, 'np', np
           !
           call get_iprimdat(ia,kg,ni,i_in_prim,np,.true.,unit_exx_debug)
-          if (ia%nsup/=ahalo%ndimi(i_in_prim)) cq_abort('Error1: ',ia%nsup,ahalo%ndimi(i_in_prim))
+          if (ia%nsup/=ahalo%ndimi(i_in_prim)) call cq_abort('Error1: ',ia%nsup,ahalo%ndimi(i_in_prim))
           !
           !print*, 'i',i, 'global_num',ia%ip,'spe',ia%spec
           !
@@ -1148,7 +1148,7 @@ contains
                    call get_halodat(jb,kg,jseq,chalo%i_hbeg(jpart),         &
                         BCS_parts%lab_cell(BCS_parts%inv_lab_cover(jpart)), &
                         'j',.true.,unit_exx_debug)
-                   if (jb%nsup/=bndim2(nbkbeg+j-1)) cq_abort('Error2: ',jb%nsup,bndim2(nbkbeg+j-1))
+                   if (jb%nsup/=bndim2(nbkbeg+j-1)) call cq_abort('Error2: ',jb%nsup,bndim2(nbkbeg+j-1))
                    !
 !!$
 !!$ ****[ <ij> screening ]****
