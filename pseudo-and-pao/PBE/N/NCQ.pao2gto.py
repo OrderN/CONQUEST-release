@@ -49,23 +49,19 @@ build_guess( orb, orb_guess,center=center)
 #for i in range(norb):
 #   orb[i].guess = orb_guess[i].guess  
 #
-#orb[0].guess = array([0.340524815, 0.4463843004, 3.2450659895, 0.4537962082, 0.1019009042, 0.2253588404, 0.9568838539, 0.4357005884, -0.01, 0.02])
-orb[1].guess = array([ 0.1,-1,5,-1,1,1])
-orb[2].guess = array([ 0.781104,1.189125,3.405883,-0.957203,0.226361,0.478821])
-orb[4].guess = array([ 0.1,-1,5,-1,1,1])
+#orb[0].guess = array([0.340524815, 0.4463843004, 3.2450659895, 0.4537962082, 0.1019009042, 0.2253588404])
+#orb[1].guess = array([ 0.1,-1,5,-1,1,1])
+#orb[2].guess = array([ 0.781104,1.189125,3.405883,-0.957203,0.226361,0.478821])  #TZTP
+#orb[6].guess = array([ 0.1,-1,5,-1,1,1])
+#orb[7].guess = array([ 0.1,-1,5,-1,1,1])
+#orb[8].guess = array([ 0.1,-1,5,-1,1,1])
 
 
-orb[6].guess = array([ 0.1,-1,5,-1,1,1])
-orb[7].guess = array([ 0.1,-1,5,-1,1,1])
-orb[8].guess = array([ 0.1,-1,5,-1,1,1])
-
-
-orb[2].bounds=([-2,7])
-orb[4].bounds=([-1,7])
-
-orb[6].bounds=([-1,10])
-orb[7].bounds=([-1,10])
-orb[8].bounds=([-1,10])
+#orb[2].bounds=([-2,10])  #Bounds for SZP,DZP,TZTP
+#orb[4].bounds=([-1,10])  #Bounds for DZP,TZTP
+#orb[6].bounds=([-1,10])
+#orb[7].bounds=([-1,10])
+#orb[8].bounds=([-1,10])
 
 #%% Define the number of Gaussian primitives for each orb. ####################
 # (not mandatory, default is 3)
@@ -75,7 +71,9 @@ orb[8].bounds=([-1,10])
 #orb[0].nG = 1
 #orb[0].nG = 4
 #orb[1].nG = 4
-orb[2].nG = 3
+#orb[2].nG = 2
+#orb[3].nG = 2
+#orb[5].nG = 2
 #%% Fit the radial part and plot ##############################################
 for i in range(norb):
     x = array(orb[i].x)
@@ -85,7 +83,7 @@ for i in range(norb):
     center = True
 #bounds = [(2,3),(-6,4),(0.0,-0.6)]    #Bounds for a,d and c
     param, nG = gto_fit_orb( x, y, orb[i].nG, orb[i].guess, orb[i].n, orb[i].lname, orb[i].z, i, 
-                             center=center, maxfev=90000, bounds=orb[i].bounds, method='trf')
+                             center=center, maxfev=9000, bounds=orb[i].bounds, method='trf')
     
     #param, nG = gto_fit_orb( x, y, orb[i].nG, orb[i].guess, orb[i].n, orb[i].lname, orb[i].z, i, center = center)
 
