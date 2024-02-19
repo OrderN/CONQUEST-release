@@ -89,7 +89,7 @@ for i in range(norb):
     center = True
 #bounds = [(2,3),(-6,4),(0.0,-0.6)]    #Bounds for a,d and c
     param, nG = gto_fit_orb( x, y, orb[i].nG, orb[i].guess, orb[i].n, orb[i].lname, orb[i].z, i, 
-                             center=center, maxfev=900000, bounds=orb[i].bounds, method='trf')
+                             center=center, maxfev=9000, bounds=orb[i].bounds, method='trf')
     
     #param, nG = gto_fit_orb( x, y, orb[i].nG, orb[i].guess, orb[i].n, orb[i].lname, orb[i].z, i, center = center)
 
