@@ -48,22 +48,23 @@ build_guess( orb, orb_guess,center = center)
 #for i in range(norb):
 #   orb[i].guess = orb_guess[i].guess  
 #
-#orb[0].guess = array([0.340524815, 0.4463843004, 3.2450659895, 0.4537962082, 0.1019009042, 0.2253588404, 0.9568838539, 0.4357005884, -0.01, 0.02])
-orb[1].guess = array([ 0.1,-1,5,-1,1,1])
-orb[2].guess = array([ 0.1,-1,5,-1,1,1])
-orb[4].guess = array([ 0.1,-1,5,-1,1,1])
 
-orb[6].guess = array([ 0.1,-1,5,-1,1,1])
-orb[7].guess = array([ 0.1,-1,5,-1,1,1])
-orb[8].guess = array([ 0.1,-1,5,-1,1,1])
+#orb[1].guess = array([0.281649,0.091073,1.084877,0.207823,0.096792,0.136393]) 
+#orb[2].guess = array([ 0.1,-1,5,-1,1,1])
+#orb[4].guess = array([ 0.1,-1,5,-1,1,1])
+#orb[6].guess = array([ 0.1,-1,5,-1,1,1])
+#orb[7].guess = array([ 0.1,-1,5,-1,1,1])
+#orb[8].guess = array([ 0.1,-1,5,-1,1,1])
 
-orb[1].bounds=([-2,7])
-orb[2].bounds=([-2,7])
-orb[4].bounds=([-1,7])
-orb[6].bounds=([-1,10])
-orb[7].bounds=([-1,10])
-orb[8].bounds=([-1,10])
 
+orb[1].bounds=([-2,7])    #Bounds for SZ,SZP,DZP,TZTP
+#orb[2].bounds=([-10,10])  #Bounds for SZP,DZP
+orb[2].bounds=([-5,5])    #Bounds for TZTP orb[2]
+orb[4].bounds=([-1,10])   #Bounds for DZP,TZTP
+orb[5].bounds=([-1,10])   #Bounds for TZTP
+orb[6].bounds=([-1,10])   #Bounds for TZTP
+orb[7].bounds=([-1,10])   #Bounds for TZTP
+orb[8].bounds=([-1,10])   #Bounds for TZTP
 
 
 #%% Define the number of Gaussian primitives for each orb. ####################
@@ -84,7 +85,7 @@ for i in range(norb):
     center = True
 #bounds = [(2,3),(-6,4),(0.0,-0.6)]    #Bounds for a,d and c
     param, nG = gto_fit_orb( x, y, orb[i].nG, orb[i].guess, orb[i].n, orb[i].lname, orb[i].z, i, 
-                             center=center, maxfev=90000, bounds=orb[i].bounds, method='trf')
+                             center=center, maxfev=9000, bounds=orb[i].bounds, method='trf')
     
     #param, nG = gto_fit_orb( x, y, orb[i].nG, orb[i].guess, orb[i].n, orb[i].lname, orb[i].z, i, center = center)
 
