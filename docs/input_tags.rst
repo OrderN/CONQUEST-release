@@ -658,9 +658,12 @@ Diag.GammaCentred (*boolean*)
     *default*: F
     
 Diag.PaddingHmatrix (*boolean*)
-    After v1.2, we have introduced a method to have an optimum value of 
-    block size for Hamiltonian and overlap matrices (See below) by padding.
-    By setting 'F', we do not use the method.
+    Setting this flag allows the Hamiltonian and overlap matrices to be 
+    made larger than their physical size, so that ScaLAPACK block sizes can
+    be set to any value (which can significantly improve efficiency).  At present, the
+    automatic setting of block sizes does not use this functionality; if
+    desired, block sizes must be set manually (note that the optimum block
+    size is likely to be different on different machines).  (Available from v1.2)
 
     *default*: T
 
@@ -676,6 +679,9 @@ Diag.BlockSizeC (*integer*)
     The block sizes need to be factors of the square matrix size
     (i.e. :math:`\sum_{\mathrm{atoms}}\mathrm{NSF(atom)}`). A value of 64 is considered
     optimal by the ScaLAPACK user’s guide. 
+
+    If Diag.PaddingHmatrix is set to true then the block sizes can take any value,
+    but BlockSizeR and BlockSizeC must be the same.
 
     *default*: Determined automatically
 
