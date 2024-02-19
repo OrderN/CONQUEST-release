@@ -613,8 +613,12 @@ contains
                   lenb_rem, &
                   mat_p(matX(  exxspin  ))%length, nb_eris, get_exx, .false. )
              
+             !if (iprint_exx > 5 .and. inode == ionode) write(io_lun,*) &
+             !     'EXX: nb. or ERIs to allocate =', nb_eris
+             
              if (iprint_exx > 5) write(io_lun,*) 'Proc :', myid, &
                   'EXX: allocate ERIs on kpart =', kpart
+
              !
              ! Allocate ERI arrays
              !
@@ -658,12 +662,12 @@ contains
              if (iprint_exx > 5) write(io_lun,*) 'Proc :', myid, &
                   'EXX: compute and store ERIs on kpart =', kpart
              !
-             call fft3_init_wrapper( 2*extent+1  )
+             !call fft3_init_wrapper( 2*extent+1  )
              !
              ! Third call to compute and store ERIs
              !       
              if ( exx_gto ) then
-
+                
                 call m_kern_exx_eri_gto( k_off,kpart,ib_nd_acc_rem,ibind_rem,nbnab_rem,&
                      ibpart_rem,ibseq_rem,ibndimj_rem, & 
                      !atrans, &
