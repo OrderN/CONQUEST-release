@@ -48,7 +48,10 @@ build_guess( orb, orb_guess,center=center)
 #for i in range(norb):
 #   orb[i].guess = orb_guess[i].guess  
 #
-#orb[2].guess = array([ 0.1,-1,5,-1,1,1])
+#orb[0].guess = array([ 0.9556830343,1.4978119788,3.1718161739,-0.6461670084,0.2799507174,0.5058902082])
+#orb[1].guess = array([ 0.9556830343,1.4978119788,3.1718161739,-0.6461670084,0.2799507174,0.5058902082])
+#orb[2].guess = array([-0.3212960531,-0.0018128151,3.3107682533,-0.8268431743,0.8338508227,2.4161935603])
+#orb[3].guess = array([ 0.7248819398,0.9430848450,2.5462487110,3.5094051126,0.2135710643,0.1495798656])
 #orb[4].guess = array([ 0.1,-1,5,-1,1,1])
 
 #orb[6].guess = array([ 0.1,-1,5,-1,1,1])
@@ -56,9 +59,9 @@ build_guess( orb, orb_guess,center=center)
 #orb[8].guess = array([ 0.1,-1,5,-1,1,1])
 
 
-
-orb[2].bounds=([-1,7])    #Bounds for SZ,SZP,DZP,TZTP
-orb[4].bounds=([-1,7])    #Bounds for SZP,DZP,TZTP
+orb[1].bounds=([-1,10])    #Bounds for TZTP
+orb[2].bounds=([-1,10])    #Bounds for SZP,DZP,TZTP
+orb[4].bounds=([-1,10])    #Bounds for SZP,DZP,TZTP
 
 orb[6].bounds=([-1,10])   #Bounds for TZTP 
 orb[7].bounds=([-1,10])   #Bounds for TZTP 
@@ -73,6 +76,7 @@ orb[8].bounds=([-1,10])   #Bounds for TZTP
 #orb[0].nG = 4
 #orb[1].nG = 2
 #orb[1].nG = 3
+#orb[5].nG = 2
 #%% Fit the radial part and plot ##############################################
 for i in range(norb):
     x = array(orb[i].x)
