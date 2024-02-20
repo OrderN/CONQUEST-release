@@ -295,7 +295,31 @@ find the energy.
 
 Go to :ref:`top <groundstate>`.
 
-.. _ gs_scf_adv:
+.. _gs_scf_restart:
+
+Restarting SCF
+~~~~~~~~~~~~~~
+
+The SCF cycle can be restarted from a previous density matrix or
+charge density, which may significantly speed up convergence.
+The density matrix is automatically written out in the files ``Kmatrix2.*`` or
+``Lmatrix2.*`` (depending on whether diagonalisation or linear scaling
+is being used).  These files are read in, and the initial
+charge density made from them by setting the flags:
+
+  ::
+
+   General.LoadDM T
+   SC.MakeInitialChargeFromK T
+
+The charge density is not written out by default; this can be changed by
+setting ``IO.DumpChargeDensity T`` which results in the files ``chden.nnn``
+being created.  To read these in as the initial charge density, the flag
+``General.LoadRho T`` should be set.
+
+Go to :ref:`top <groundstate>`.
+
+.. _gs_scf_adv:
 
 Advanced options
 ~~~~~~~~~~~~~~~~
