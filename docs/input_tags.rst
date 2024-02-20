@@ -119,8 +119,9 @@ General.NewRun (*boolean*)
 
     *default*: T
 
-General.LoadL (*boolean*)
-    Specifies whether to load a previous L matrix from files
+General.LoadDM (*boolean*)
+    Specifies whether to load a previous density matrix (K or L depending on
+    whether diagonalisation or linear scaling are selected) from files
 
     *default*: F
 
@@ -532,6 +533,11 @@ SC.MetricFactor (*real*)
 
     *default*: 0.1
 
+SC.MakeInitialChargeFromK (*boolean*)
+    Flag determining whether initial charge is made from the density matrix
+
+    *default*: T
+    
 Go to :ref:`top <input_tags>`.
 
 .. _input_dm:
