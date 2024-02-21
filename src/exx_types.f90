@@ -124,6 +124,7 @@ module exx_types
   type(cq_timer), save :: tmr_std_exx_kernel
   type(cq_timer), save :: tmr_std_exx_fetch
   type(cq_timer), save :: tmr_std_exx_accumul
+  type(cq_timer), save :: tmr_std_exx_nsup
 
   type(cq_timer), save :: tmr_std_exx_matmult
   type(cq_timer), save :: tmr_std_exx_quadrat

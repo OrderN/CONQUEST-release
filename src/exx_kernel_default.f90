@@ -117,7 +117,7 @@ contains
     use fft_interface_module, only: fft3_init_wrapper
     !
     use exx_types, only: prim_atomic_data, neigh_atomic_data, store_eris, &
-         tmr_std_exx_evalpao, &
+         tmr_std_exx_evalpao, tmr_std_exx_nsup,    &
          tmr_std_exx_setup,   tmr_std_exx_barrier, &
          tmr_std_exx_fetch,   tmr_std_exx_accumul, &
          tmr_std_exx_matmult, tmr_std_exx_poisson, &
@@ -837,6 +837,7 @@ contains
          tmr_std_exx_poisson%t_tot + &
          tmr_std_exx_matmult%t_tot + &
          tmr_std_exx_accumul%t_tot + &
+         tmr_std_exx_nsup%t_tot    + &
          tmr_std_exx_allocat%t_tot + &
          tmr_std_exx_dealloc%t_tot + &
          tmr_std_exx_setup%t_tot   + &
@@ -853,7 +854,8 @@ contains
        call print_timer(tmr_std_exx_evalpao,"exx_evalpao time:", unit_timers_write)    
        call print_timer(tmr_std_exx_poisson,"exx_poisson time:", unit_timers_write)
        call print_timer(tmr_std_exx_matmult,"exx_matmult time:", unit_timers_write)    
-       call print_timer(tmr_std_exx_accumul,"exx_accumul time:", unit_timers_write)    
+       call print_timer(tmr_std_exx_accumul,"exx_accumul time:", unit_timers_write)
+       call print_timer(tmr_std_exx_nsup,   "exx_nsup    time:", unit_timers_write)
        call print_timer(tmr_std_exx_allocat,"exx_allocat time:", unit_timers_write)    
        call print_timer(tmr_std_exx_dealloc,"exx_dealloc time:", unit_timers_write)    
        call print_timer(tmr_std_exx_barrier,"exx_barrier time:", unit_timers_write)
@@ -938,7 +940,7 @@ contains
          grid_spacing, r_int, extent, ewald_charge, ewald_rho, ewald_pot,&
          pulay_radius, p_omega, p_ngauss, p_gauss, w_gauss, &
          exx_psolver, exx_pscheme, &         
-         unit_exx_debug
+         unit_exx_debug, tmr_std_exx_nsup
     !
     use exx_types, only: phi_i_1d_buffer, phi_j, phi_k, phi_l, &
          Phy_k, Ome_kj_1d_buffer, &
@@ -1166,9 +1168,9 @@ contains
                    !
                    if ( exx_alloc ) call exx_mem_alloc(extent,0,0,'Ome_kj_1d_buffer','alloc')
                    !
-                   call start_timer(tmr_std_exx_accumul)
+                   call start_timer(tmr_std_exx_nsup)
                    !$omp parallel default(none) reduction(+: c)                                               &
-                   !$omp     shared(kg,jb,tmr_std_exx_poisson,tmr_std_exx_accumul,Phy_k,phi_j,phi_k,ncbeg,ia, &
+                   !$omp     shared(kg,jb,tmr_std_exx_poisson,tmr_std_exx_nsup,Phy_k,phi_j,phi_k,ncbeg,ia, &
                    !$omp            tmr_std_exx_matmult,ewald_pot,phi_i,exx_psolver,exx_pscheme,extent,dv,    &
                    !$omp            ewald_rho,inode,pulay_radius,p_omega,p_gauss,w_gauss,reckernel_3d,r_int)  &
                    !$omp     private(nsf1,nsf2,work_out_3d,work_in_3d,ewald_charge,Ome_kj_1d_buffer,Ome_kj,   &
@@ -1212,7 +1214,7 @@ contains
                    !$omp end do
                    !$omp end parallel
                    !
-                   call stop_timer(tmr_std_exx_accumul,.true.)
+                   call stop_timer(tmr_std_exx_nsup,.true.)
                    !
                    if ( exx_alloc ) call exx_mem_alloc(extent,0,0,'Ome_kj_1d_buffer','dealloc')
                    if ( exx_alloc ) call exx_mem_alloc(extent,jb%nsup,0,'phi_j','dealloc')
