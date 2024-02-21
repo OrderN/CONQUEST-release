@@ -229,7 +229,7 @@ contains
     case('fftw')       
 
        ! setup[rho(r)] 
-      fftwrho_arrayin  = cmplx(rho,zero,double_cplx)
+       fftwrho_arrayin  = cmplx(rho,zero,double_cplx)
 
        ! FFT_F[rho(r)] => rho(G)      
        call fft3_exec_wrapper( fftwrho_arrayin, ng , +1 )

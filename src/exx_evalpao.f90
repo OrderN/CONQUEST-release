@@ -154,10 +154,11 @@ contains
           py = py -ijk(2)+1
           pz = pz -ijk(3)+1
        end if overlap_box
-       !print*,
        xyz_offset = xyz + rst
-       !$omp parallel do collapse(3) schedule(runtime) default(none) & 
-       !$omp    shared(mx,my,mz,px,py,pz,grid_spacing,xyz_offset,pao,spec,phi_on_grid,i_dummy,exx_cartesian,extent) &
+       
+       !$omp parallel do collapse(3) schedule(runtime) default(none)   & 
+       !$omp     shared(mx,my,mz,px,py,pz,grid_spacing,xyz_offset,pao, &
+       !$omp            spec,phi_on_grid,i_dummy,exx_cartesian,extent) &
        !$omp    private(nx,ny,nz,x,y,z,count1,l1,acz,m1,pao_val)
        grid_x_loop: do nx = mx, px
           grid_y_loop: do ny = my, py
@@ -166,17 +167,7 @@ contains
                 y = ny*grid_spacing + xyz_offset(2)
                 z = nz*grid_spacing + xyz_offset(3)
 
-                !norm = sqrt((x-xyz(1))**2+(y-xyz(2))**2+(z-xyz(3))**2)
-                !if (norm <= r_h) then
-
-                !r = sqrt(x*x+y*y+z*z)             
-                !if(r < very_small) then
-                !   r = zero
-                !end if
-                !print*, '1 cycle start'
-
                 count1  = 1
-                !sfsum   = zero
                 angu_loop: do l1 = 0, pao(spec)%greatest_angmom
 
                    zeta_loop: do acz = 1, pao(spec)%angmom(l1)%n_zeta_in_angmom
@@ -188,7 +179,6 @@ contains
                          ! Put pao_val directly into phi_on_grid
                          ! (only for primitive PAOs and not for blips)
                          phi_on_grid(nx+extent+1,ny+extent+1,nz+extent+1,count1) = pao_val
-                         !print*, x,  pao_val
                          count1 = count1 + 1
                       end do magn_loop
                    end do zeta_loop

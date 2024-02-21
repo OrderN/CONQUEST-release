@@ -106,12 +106,13 @@ contains
           !write(*,*) '\phi_{i\alpha} allocated', shape(phi_i)
           !
           !
-       case('phi_i_1d_buffer') ! allocate phi_i for primary atom
+       case('phi_i_1d_buffer') ! allocate phi_i_1d_buffer for primary atom
           allocate(phi_i_1d_buffer(nsf1*(2*extent+1)*(2*extent+1)*(2*extent+1)), STAT=stat)
           if(stat/=0) call cq_abort('Error allocating memory to phi_i_1d_buffer/exx !',stat)
           call reg_alloc_mem(area_exx,nsf1*(2*extent+1)*(2*extent+1)*(2*extent+1),&
                type_dbl,matrix,lun)
           phi_i_1d_buffer = zero
+          !write(*,*) '\phi_{i\alpha}_1d_buffer allocated', shape(phi_i_1d_buffer)
           !
           !
        case('phi_j') ! allocate phi_j for neighbour atom [Srange]
@@ -300,7 +301,7 @@ contains
           if(stat/=0) call cq_abort('Error deallocating memory to phi_i_1d_buffer/exx !',stat)
           call reg_dealloc_mem(area_exx,nsf1*(2*extent+1)*(2*extent+1)*(2*extent+1),&
                type_dbl,matrix,lun)
-          !write(*,*) '\phi_{i\alpha} deallocated'
+          !write(*,*) '\phi_{i\alpha}_1d_buffer deallocated'
           !
           !
        case('phi_j')

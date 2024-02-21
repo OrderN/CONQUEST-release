@@ -344,7 +344,7 @@ contains
           !
           if ( scheme == 1 ) then
              call exx_mem_alloc(extent,maxsuppfuncs,0,'Phy_k','alloc')
-             call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'Ome_kj_1d_buffer','alloc')       
+             call exx_mem_alloc(extent,0,0,'Ome_kj_1d_buffer','alloc')       
              !
           end if
           !
@@ -803,7 +803,7 @@ contains
           !
           if ( scheme == 1 ) then
              call exx_mem_alloc(extent,maxsuppfuncs,0,'Phy_k','dealloc')
-             call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'Ome_kj_1d_buffer','dealloc')   
+             call exx_mem_alloc(extent,0,0,'Ome_kj_1d_buffer','dealloc')   
              !
           end if
           !
@@ -1243,6 +1243,7 @@ contains
        if ( exx_alloc ) call exx_mem_alloc(extent,kg%nsup,0,'phi_k','dealloc')
        !
     end do ! End of k = 1, ahalo%nh_part(kpart)
+    !
     !
     return
   end subroutine m_kern_exx_cri
