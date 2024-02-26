@@ -609,10 +609,10 @@ contains
   !!   2024/02/08 15:50
   !!  MODIFICATION HISTORY
   !!   2024/02/26 21:43 J.Lin
-  !!   Modified unit of stress tensor to GPa
+  !!   Modified unit of stress tensor to GPa, optinal output_type
   !!  SOURCE
   !!
-  subroutine write_md_stress(iter, baro, flag_append, stress_type)
+  subroutine write_md_stress(iter, baro, flag_append, output_type)
 
     use md_control,     only: type_barostat
     use force_module,   only: tot_force
@@ -623,11 +623,11 @@ contains
     integer, intent(in)                   :: iter
     class(type_barostat), intent(in)      :: baro
     logical, intent(in)                   :: flag_append
-    character(20), optional, intent(in)   :: stress_type
+    character(20), optional, intent(inout)   :: output_type
 
     if (inode==ionode) then
-      if (.not. present(stress_type)) stress_type='all'
-      select case(stress_type)
+      if (.not. present(output_type)) output_type='all'
+      select case(output_type)
         case ('all', 'All')
           call write_md_stress_single(iter, HaBohr3ToGPa*baro%total_stress, baro%volume, flag_append, md_stress_file)
           call write_md_stress_single(iter, HaBohr3ToGPa*baro%static_stress/baro%volume, baro%volume, flag_append, md_static_stress_file)
@@ -639,7 +639,7 @@ contains
         case ('ke', 'KE')
           call write_md_stress_single(iter, HaBohr3ToGPa*baro%ke_stress/baro%volume, baro%volume, flag_append, md_ke_stress_file)
         case default
-          call cq_abort("stress_type: Error unknown type")
+          call cq_abort("call write_md_stress() : Error unknown output type")
       end select
     end if
   end subroutine write_md_stress
