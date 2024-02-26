@@ -20,9 +20,11 @@ it can be cloned:
 
 where ``destination-directory`` should be set by the user.
 Alternatively, it can be downloaded from GitHub as a zip file and
-unpacked: 
+unpacked:
 
 `<https://github.com/OrderN/CONQUEST-release/archive/master.zip>`_
+
+Go to :ref:`top <install>`
 
 .. _install_compile:
 
@@ -73,6 +75,8 @@ Once these are set, you should make the executable using ``make``.
 The ion file generation code is compiled using the same options
 required for the main code.
 
+Go to :ref:`top <install>`
+
 Multi-threading
 ~~~~~~~~~~~~~~~
 
@@ -81,3 +85,32 @@ CONQUEST can use OpenMP for multi-threading; some multi-threading is available t
 Compiler flags to enable OpenMP are dependent on the vendor, but should be specified via ``COMPFLAGS`` and ``LINKFLAGS`` in the ``system.make`` file.  If compiling with OpenMP then you should also change the variable ``OMP_DUMMY`` in the same file to be blank to enable the number of threads to be included in the output.
 
 On some systems, the default stack size for OpenMP is set to be rather small, and this can cause a segmentation fault when running with multiple threads.  We recommend testing the effect of the environment variable ``OMP_STACKSIZE`` (and suggest setting it to 50M or larger as a first test).
+
+Go to :ref:`top <install>`
+
+.. _install_spack:
+
+Installing with Spack
+-----------
+
+CONQUEST and all of its dependencies can be installed with `Spack <https://spack.io/>`_.
+The CONQUEST package requires Spack v0.21 or later. If Spack isn't available or up to date on your
+system, it is relatively straightforward to install it with user permissions following the
+`install instructions <https://spack.readthedocs.io/en/latest/getting_started.html#installation>`_.
+When setting up Spack on a new system, it is recommended to configure it to use available
+`system compilers <https://spack.readthedocs.io/en/latest/getting_started.html#compiler-configuration>`_
+and `system packages <https://spack.readthedocs.io/en/latest/getting_started.html#system-packages>`_.
+Once spack is installed and set up, install CONQUEST with:
+
+``spack install conquest``
+
+and load the ``Conquest`` executable to ``PATH`` with
+
+``spack load conquest``
+
+The build can be customized by adding options to the
+`Spack spec <https://spack.readthedocs.io/en/latest/basic_usage.html#specs-dependencies>`_ ``conquest``.
+The CONQUEST package includes variants for OpenMP support and different matrix multiplication kernels; more details can be found in the `Spack CONQUEST package <https://spack.readthedocs.io/en/latest/package_list.html#conquest>`_.
+
+Go to :ref:`top <install>`
+

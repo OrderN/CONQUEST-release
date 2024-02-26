@@ -54,6 +54,8 @@
 !!    Added SQNM maximum step size (sqnm_trust_step) as user-adjustable parameter
 !!   2023/09/13 lu
 !!    Added XSF and XSF output frequency as user-adjustable parameter
+!!   2024/01/18 lin
+!!    Added extended XYZ file output for run types of static, cg, lbfgs, sqnm, and optcell
 !!  SOURCE
 !!
 module control
@@ -152,6 +154,8 @@ contains
                                     flag_opt_cell, optcell_method, min_layer, flag_DM_converged
     use input_module,         only: leqi
     use store_matrix,         only: dump_pos_and_matrices
+    use io_module,            only: write_extxyz
+    use md_control,           only: flag_write_extxyz
 
     implicit none
 
@@ -184,6 +188,7 @@ contains
        endif
        call get_E_and_F(fixed_potential, vary_mu, total_energy,&
                         flag_ff, flag_wf, level=backtrace_level)
+       if (flag_write_extxyz) call write_extxyz('trajectory.xyz', total_energy, tot_force)
        !
     else if ( leqi(runtype, 'cg')    ) then
        if (flag_opt_cell) then
@@ -491,6 +496,7 @@ contains
        end if
        call write_atomic_positions("UpdatedAtoms.dat", trim(pdb_template))
        if (flag_write_xsf) call write_xsf('trajectory.xsf', iter)
+       if (flag_write_extxyz .and. mod(iter,XYZfreq) == 0) call write_extxyz('trajectory.xyz', energy1, tot_force)
        ! Analyse forces
        g0 = dot(length, tot_force, 1, tot_force, 1)
        call get_maxf(max)
@@ -873,20 +879,10 @@ contains
 
        if (flag_variable_temperature) then
 
-         ! At present, only linear evolution is supported
-         if (md_variable_temperature_method .ne. 'linear') then
-
-           if(inode==ionode) &
-             write(*,*) 'Wrong method for variable temperature. Stopping.. (',trim(md_variable_temperature_method),' != "linear")'
-
-           exit
-
-         end if
-
          ! At a given time step, update T_ext and ke_target
          ! Temperature evolves linearly from md_initial_temperature to md_final_temperature by step of temp_change_step
          ! Stops when target temperature has been reached (i.e. abs(dT) < abs(temp_change_step) )
-         temp_change_step = md_variable_temperature_rate / mdl%timestep ! Unit is K
+         temp_change_step = md_variable_temperature_rate * mdl%timestep ! Unit is K
          mdl%T_ext = mdl%T_ext + temp_change_step
          thermo%ke_target = half*md_ndof_ions*fac_Kelvin2Hartree*mdl%T_ext ! Update target ke for SVR
 
@@ -1667,14 +1663,14 @@ contains
     use GenBlas,        only: dot
     use force_module,   only: tot_force
     use io_module,      only: write_atomic_positions, pdb_template, &
-         check_stop, write_xsf
+         check_stop, write_xsf, write_extxyz
     use memory_module,  only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use primary_module, only: bundle
     use store_matrix,   only: dump_pos_and_matrices
     use mult_module, ONLY: matK, S_trans, matrix_scale, matL, L_trans
     use matrix_data, ONLY: Hrange, Lrange
     use dimens,        only: r_super_x, r_super_y, r_super_z
-    use md_control,    only: flag_write_xsf
+    use md_control,    only: flag_write_xsf, flag_write_extxyz
 
     implicit none
 
@@ -1825,6 +1821,7 @@ contains
        ! Add call to write_atomic_positions and write_xsf (2020/01/17: smujahed)
        call write_atomic_positions("UpdatedAtoms.dat", trim(pdb_template))
        if (flag_write_xsf) call write_xsf('trajectory.xsf', iter)
+       if (flag_write_extxyz .and. mod(iter,XYZfreq) == 0) call write_extxyz('trajectory.xyz', energy1, tot_force)
        ! Build q
        do i=iter, iter_low, -1
           ! Indexing
@@ -1955,12 +1952,12 @@ contains
     use GenComms,       only: myid, inode, ionode
     use GenBlas,        only: dot, syev
     use force_module,   only: tot_force
-    use io_module,      only: write_atomic_positions, pdb_template, &
+    use io_module,      only: write_atomic_positions, pdb_template, write_extxyz, &
                               check_stop, write_xsf, print_atomic_positions, return_prefix
     use memory_module,  only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use store_matrix,   only: dump_pos_and_matrices
     use dimens,        only: r_super_x, r_super_y, r_super_z
-    use md_control,    only: flag_write_xsf
+    use md_control,    only: flag_write_xsf, flag_write_extxyz
 
     implicit none
 
@@ -2134,6 +2131,7 @@ contains
        ! Add call to write_atomic_positions and write_xsf (2020/01/17: smujahed)
        call write_atomic_positions("UpdatedAtoms.dat", trim(pdb_template))
        if (flag_write_xsf) call write_xsf('trajectory.xsf', iter)
+       if (flag_write_extxyz .and. mod(iter,XYZfreq) == 0) call write_extxyz('trajectory.xyz', energy1, tot_force)
        ! Build significant subspace
        Sij = zero
        omega = zero
@@ -2367,12 +2365,12 @@ contains
     use GenBlas,       only: dot, syev
     use force_module,  only: stress, tot_force
     use io_module,     only: write_atomic_positions, pdb_template, &
-                             check_stop, write_xsf, leqi
+                             check_stop, write_xsf, leqi, write_extxyz
     use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use timer_module
     use dimens, ONLY: r_super_x, r_super_y, r_super_z
     use store_matrix,  only: dump_pos_and_matrices
-    use md_control,    only: target_pressure, flag_write_xsf
+    use md_control,    only: target_pressure, flag_write_xsf, flag_write_extxyz
 
     implicit none
 
@@ -2543,6 +2541,7 @@ contains
        ! Add call to write_atomic_positions and write_xsf (2020/01/17: smujahed)
        call write_atomic_positions("UpdatedAtoms.dat", trim(pdb_template))
        if (flag_write_xsf) call write_xsf('trajectory.xsf', iter)
+       if (flag_write_extxyz .and. mod(iter,XYZfreq) == 0) call write_extxyz('trajectory.xyz', energy1, tot_force)
        ! Build significant subspace
        Sij = zero
        omega = zero
@@ -2774,14 +2773,14 @@ contains
     use GenBlas,        only: dot, syev
     use force_module,   only: tot_force, stress
     use io_module,      only: write_atomic_positions, pdb_template, &
-         check_stop, write_xsf
+         check_stop, write_xsf, write_extxyz
     use memory_module,  only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use primary_module, only: bundle
     use store_matrix,   only: dump_pos_and_matrices
     use mult_module, ONLY: matK, S_trans, matrix_scale, matL, L_trans
     use matrix_data, ONLY: Hrange, Lrange
     use dimens,        only: r_super_x, r_super_y, r_super_z
-    use md_control,    only: flag_write_xsf, target_pressure
+    use md_control,    only: flag_write_xsf, flag_write_extxyz, target_pressure
 
     implicit none
 
@@ -2992,6 +2991,7 @@ contains
        ! Add call to write_atomic_positions and write_xsf (2020/01/17: smujahed)
        call write_atomic_positions("UpdatedAtoms.dat", trim(pdb_template))
        if (flag_write_xsf) call write_xsf('trajectory.xsf', iter)
+       if (flag_write_extxyz .and. mod(iter,XYZfreq) == 0) call write_extxyz('trajectory.xyz', energy1, tot_force)
        ! Build significant subspace
        Sij = zero
        omega = zero
@@ -3231,13 +3231,13 @@ contains
     use GenBlas,       only: dot
     use force_module,  only: stress, tot_force
     use io_module,     only: write_atomic_positions, pdb_template, &
-         check_stop, print_atomic_positions, return_prefix
+         check_stop, print_atomic_positions, return_prefix, write_extxyz
     use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use timer_module
     use io_module,      only: leqi
     use dimens, ONLY: r_super_x, r_super_y, r_super_z
     use store_matrix,  only: dump_pos_and_matrices
-    use md_control,    only: target_pressure
+    use md_control,    only: target_pressure, flag_write_extxyz
 
     implicit none
 
@@ -3391,7 +3391,7 @@ contains
             rcellx, d_units(dist_units), rcelly, d_units(dist_units), rcellz, d_units(dist_units)
        end if
        call write_atomic_positions("UpdatedAtoms.dat", trim(pdb_template))
-
+       if (flag_write_extxyz .and. mod(iter,XYZfreq) == 0) call write_extxyz('trajectory.xyz', energy1, tot_force)
        ! Analyse Stresses and energies
        dH = enthalpy1 - enthalpy0
        volume = rcellx*rcelly*rcellz
@@ -4282,11 +4282,12 @@ contains
     use GenBlas,       only: dot
     use force_module,  only: tot_force, stress
     use io_module,     only: write_atomic_positions, pdb_template, &
-                             check_stop, write_xsf, return_prefix, print_atomic_positions
+                             check_stop, write_xsf, return_prefix, print_atomic_positions, &
+                             write_extxyz
     use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use timer_module
     use store_matrix,  ONLY: dump_InfoMatGlobal, dump_pos_and_matrices
-    use md_control,    only: flag_write_xsf, target_pressure
+    use md_control,    only: flag_write_xsf, flag_write_extxyz, target_pressure
 
     implicit none
 
@@ -4458,6 +4459,7 @@ contains
        end if
       call write_atomic_positions("UpdatedAtoms.dat", trim(pdb_template))
       if (flag_write_xsf) call write_xsf('trajectory.xsf', iter)
+      if (flag_write_extxyz .and. mod(iter,XYZfreq) == 0) call write_extxyz('trajectory.xyz', energy1, tot_force)
 
       ! Analyse forces and stress
       g0 = dot(length-3, tot_force, 1, tot_force, 1)
