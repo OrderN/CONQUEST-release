@@ -1152,15 +1152,6 @@ contains
                         'j',.true.,unit_exx_debug)
                    if (jb%nsup/=bndim2(nbkbeg+j-1)) call cq_abort('Error2: ',jb%nsup,bndim2(nbkbeg+j-1))
                    !
-!!$
-!!$ ****[ <ij> screening ]****
-!!$
-                   !xyz_ij    = ia%xyz - jb%xyz
-                   !screen_ij = sqrt(dot_product(xyz_ij,xyz_ij))
-                   !print*, screen_ij
-                   !if ( screen_ij < range_ij ) then
-                   !write(*,*) 'j',j, 'global_num',jb%global_num,'spe',jb%spec
-                   !
                    if ( exx_alloc ) call exx_mem_alloc(extent,jb%nsup,0,'phi_j','alloc')
                    !
                    call exx_phi_on_grid(inode,jb%global_num,jb%spec,extent, &
@@ -1179,7 +1170,6 @@ contains
                    !$omp do schedule(runtime) collapse(2)
                    do nsf1 = 1, kg%nsup
                       do nsf2 = 1, jb%nsup
-
                          work_out_3d = zero
                          !
                          work_in_3d = Phy_k(:,:,:,nsf1) * phi_j(:,:,:,nsf2)
@@ -1197,7 +1187,6 @@ contains
                             work_out_3d = work_out_3d + ewald_pot*ewald_charge
                          end if
                          !
-
                          Ome_kj = work_out_3d * phi_k(:,:,:,nsf1)
                          !
                          ncaddr = ncbeg + ia%nsup * (nsf2 - 1)
@@ -1221,9 +1210,6 @@ contains
                    !
                 end if ! ( ncbeg /=0 )
              end if ! ( j_in_halo /=0 )
-             !
-             !nbbeg = nbbeg + ia%nsup * jb%nsup ! nd3 * nd2
-             !
 !!$
 !!$ ****[ j end loop ]****
 !!$
