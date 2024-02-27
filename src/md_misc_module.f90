@@ -623,33 +623,38 @@ contains
     integer, intent(in)                   :: iter
     class(type_barostat), intent(in)      :: baro
     logical, intent(in)                   :: flag_append
-    character(20), optional, intent(inout)   :: output_type
+    character(20), optional, intent(in)   :: output_type
 
     if (inode==ionode) then
-      if (.not. present(output_type)) output_type='all'
-      select case(output_type)
-        case ('all', 'All')
-          call write_md_stress_single(iter, HaBohr3ToGPa*baro%total_stress, baro%volume, flag_append, md_stress_file)
-          call write_md_stress_single(iter, HaBohr3ToGPa*baro%static_stress/baro%volume, baro%volume, flag_append, md_static_stress_file)
-          call write_md_stress_single(iter, HaBohr3ToGPa*baro%ke_stress/baro%volume, baro%volume, flag_append, md_ke_stress_file)
-        case ('total', 'Total')
-          call write_md_stress_single(iter, HaBohr3ToGPa*baro%total_stress, baro%volume, flag_append, md_stress_file)
-        case ('static', 'Static')
-          call write_md_stress_single(iter, HaBohr3ToGPa*baro%static_stress/baro%volume, baro%volume, flag_append, md_static_stress_file)
-        case ('ke', 'KE')
-          call write_md_stress_single(iter, HaBohr3ToGPa*baro%ke_stress/baro%volume, baro%volume, flag_append, md_ke_stress_file)
-        case default
-          call cq_abort("call write_md_stress() : Error unknown output type")
-      end select
+      if (.not. present(output_type)) then
+          call write_stress_single(iter, HaBohr3ToGPa*baro%total_stress, baro%volume, flag_append, md_stress_file)
+          call write_stress_single(iter, HaBohr3ToGPa*baro%static_stress/baro%volume, baro%volume, flag_append, md_static_stress_file)
+          call write_stress_single(iter, HaBohr3ToGPa*baro%ke_stress/baro%volume, baro%volume, flag_append, md_ke_stress_file)
+      else
+        select case(output_type)
+          case ('all', 'All')
+            call write_stress_single(iter, HaBohr3ToGPa*baro%total_stress, baro%volume, flag_append, md_stress_file)
+            call write_stress_single(iter, HaBohr3ToGPa*baro%static_stress/baro%volume, baro%volume, flag_append, md_static_stress_file)
+            call write_stress_single(iter, HaBohr3ToGPa*baro%ke_stress/baro%volume, baro%volume, flag_append, md_ke_stress_file)
+          case ('total', 'Total')
+            call write_stress_single(iter, HaBohr3ToGPa*baro%total_stress, baro%volume, flag_append, md_stress_file)
+          case ('static', 'Static')
+            call write_stress_single(iter, HaBohr3ToGPa*baro%static_stress/baro%volume, baro%volume, flag_append, md_static_stress_file)
+          case ('ke', 'KE')
+            call write_stress_single(iter, HaBohr3ToGPa*baro%ke_stress/baro%volume, baro%volume, flag_append, md_ke_stress_file)
+          case default
+            call cq_abort("call write_md_stress() : Error unknown output type")
+        end select
+      end if
     end if
   end subroutine write_md_stress
   !!***
 
-  !!****m* md_misc/write_md_stress *
+  !!****m* md_misc/write_stress_single *
   !!  NAME
   !!   write_md_stress
   !!  PURPOSE
-  !!   Write stress file for MD
+  !!   Write stress file for a run type
   !!   The unit of stress tensor is GPa
   !!  AUTHOR
   !!   Jianbo Lin
@@ -659,7 +664,7 @@ contains
   !!
   !!  SOURCE
   !!
-  subroutine write_md_stress_single(iter, stress_tensor, volume, flag_append, stress_file)
+  subroutine write_stress_single(iter, stress_tensor, volume, flag_append, stress_file)
 
     use force_module,   only: tot_force
     implicit none
@@ -691,6 +696,6 @@ contains
       write(lun,'(i8,9e12.4,2e14.6)') iter, &
           ((stress_tensor(j,i), j = 1, 3), i = 1, 3), sum_force, volume
     end if
-  end subroutine write_md_stress_single
+  end subroutine write_stress_single
   !!***
 end module md_misc
