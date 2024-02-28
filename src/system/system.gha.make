@@ -2,7 +2,6 @@
 
 # Linking flags
 LINKFLAGS=-fopenmp -L/usr/lib -L/usr/lib/x86_64-linux-gnu
-ARFLAGS=
 # Set BLAS and LAPACK libraries
 BLAS= -llapack -lblas
 # LibXC compatibility (LibXC below) or Conquest XC library
@@ -19,4 +18,3 @@ LIBS= $(XC_LIB) -lscalapack-openmpi $(BLAS) $(FFT_LIB)
 # Compilation flags
 # NB for gcc10 you need to add -fallow-argument-mismatch
 COMPFLAGS= -O3 -fopenmp $(XC_COMPFLAGS) -fallow-argument-mismatch
-COMPFLAGS_F77= $(COMPFLAGS)
