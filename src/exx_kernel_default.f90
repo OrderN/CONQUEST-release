@@ -913,6 +913,8 @@ contains
   !!   2014/05/29  
   !!
   !!  MODIFICATION HISTORY
+  !!   2024/02/28 Connor
+  !!    Combined three instances of nsup loops into one and added omp threading
   !!
   !!  SOURCE
   !!
@@ -1000,6 +1002,7 @@ contains
     real(double)               ::   dr,dv,K_val
     real(double)               ::   exx_mat_elem
     !
+    ! We allocate pointers here to point at 1D arrays later and allow contiguous access when passing to BLAS dot later
     real(double), pointer :: phi_i(:,:,:,:), Ome_kj(:,:,:)
     !
     type(prim_atomic_data)  :: ia !i_alpha
@@ -1157,11 +1160,17 @@ contains
                    call exx_phi_on_grid(inode,jb%global_num,jb%spec,extent, &
                         jb%xyz,jb%nsup,phi_j,r_int,xyz_zero)             
                    !
+                   ! We allocate a 1D buffer here, instead of 3D, to allow contiguous access when passing to BLAS dot later
+                   !
                    if ( exx_alloc ) call exx_mem_alloc(extent,0,0,'Ome_kj_1d_buffer','alloc')
                    !
                    call start_timer(tmr_std_exx_nsup)
+                   !
+                   ! Begin the parallel region here as earlier allocations make it difficult to do before now. 
+                   ! However, this should be possible in future work. 
+                   !
                    !$omp parallel default(none) reduction(+: c)                                               &
-                   !$omp     shared(kg,jb,tmr_std_exx_poisson,tmr_std_exx_nsup,Phy_k,phi_j,phi_k,ncbeg,ia, &
+                   !$omp     shared(kg,jb,tmr_std_exx_poisson,tmr_std_exx_nsup,Phy_k,phi_j,phi_k,ncbeg,ia,    &
                    !$omp            tmr_std_exx_matmult,ewald_pot,phi_i,exx_psolver,exx_pscheme,extent,dv,    &
                    !$omp            ewald_rho,inode,pulay_radius,p_omega,p_gauss,w_gauss,reckernel_3d,r_int)  &
                    !$omp     private(nsf1,nsf2,work_out_3d,work_in_3d,ewald_charge,Ome_kj_1d_buffer,Ome_kj,   &

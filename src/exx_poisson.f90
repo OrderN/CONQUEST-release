@@ -211,6 +211,8 @@ contains
 
     ! ... For Poisson/ISF real space FFT >>
     real(kind=8)          :: isf_eh, isf_exc, isf_vxc, isf_spacing
+
+    ! This is required to keep this function thread safe. Previously fftwrho%arrayin would have been altered by each thread
     complex(double), dimension(2*extent+1,2*extent+1,2*extent+1) :: fftwrho_arrayin
 
     ! ... Dummy variables >>

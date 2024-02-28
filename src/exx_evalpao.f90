@@ -20,7 +20,9 @@ contains
 !!    Cartesian system is preferred in this case (faster) cf. exx_cartesian = T/F
 !!   2023/15/23 14:03 lionel
 !!    Added dummy argument to evaluate_pao
-!!
+!!   2024/02/28 11:00 Connor
+!!    Added OpenMP thread parallelisation around xyz loops
+!! 
   subroutine exx_phi_on_grid(inode,atom,spec,extent,xyz,nsuppfuncs,phi_on_grid,r_int,rst)
 
     use numbers,      only: zero, one, two, three, four, five, six, fifteen, sixteen
