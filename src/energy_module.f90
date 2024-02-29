@@ -80,7 +80,7 @@ module energy
   real(double) :: delta_E_xc
   real(double) :: entropy = zero
   real(double) :: ion_interaction_energy
-  real(double) :: ml_energy                  ! estimated from machine learning force field
+  real(double) :: ml_energy_hartree = zero     ! estimated from machine learning force field
   
   ! Neutral atom potential
   real(double) :: hartree_energy_drho          ! Self-energy for drho = rho - rho_atom

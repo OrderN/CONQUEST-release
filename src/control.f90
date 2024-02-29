@@ -151,11 +151,13 @@ contains
     use minimise,             only: get_E_and_F
     use global_module,        only: runtype, flag_self_consistent, &
                                     flag_out_wf, flag_write_DOS, wf_self_con, &
-                                    flag_opt_cell, optcell_method, min_layer, flag_DM_converged
+                                    flag_opt_cell, optcell_method, min_layer, flag_DM_converged, &
+                                    flag_MLFF
     use input_module,         only: leqi
     use store_matrix,         only: dump_pos_and_matrices
     use io_module,            only: write_extxyz
     use md_control,           only: flag_write_extxyz
+    use mlff,                 only: get_MLFF, print_E_and_F_ML
 
     implicit none
 
@@ -186,8 +188,15 @@ contains
           flag_ff = .false.
           flag_wf = .false.
        endif
-       call get_E_and_F(fixed_potential, vary_mu, total_energy,&
-                        flag_ff, flag_wf, level=backtrace_level)
+       if (.not. flag_MLFF) then
+         call get_E_and_F(fixed_potential, vary_mu, total_energy,&
+                          flag_ff, flag_wf, level=backtrace_level)
+       else
+         total_energy=0.0_double
+         call get_MLFF()
+         call print_E_and_F_ML(flag_wf)
+       end if
+
        if (flag_write_extxyz) call write_extxyz('trajectory.xyz', total_energy, tot_force)
        !
     else if ( leqi(runtype, 'cg')    ) then
@@ -805,7 +814,7 @@ contains
     ! Find energy and forces
     min_layer = min_layer - 1
     if (flag_MLFF) then
-      call get_MLFF
+      call get_MLFF()
     else
       if (flag_fire_qMD) then
         call get_E_and_F(fixed_potential, vary_mu, energy0, .true., .true.)
@@ -988,7 +997,7 @@ contains
        min_layer = min_layer - 1
        if (flag_fire_qMD) then
           if (flag_MLFF) then
-            call get_MLFF
+            call get_MLFF()
             if (inode==ionode .and. flag_debug_mlff) &
                write(*,*) 'check stress after gret_MLFF:', stress,baro%P_int*HaBohr3ToGPa,&
                baro%P_ext*HaBohr3ToGPa
@@ -1002,7 +1011,7 @@ contains
        else
           if (flag_MLFF) then
             t1=MPI_wtime()
-            call get_MLFF
+            call get_MLFF()
             t2=MPI_wtime()
             if (inode==ionode .and. flag_time_mlff) &
                write(*,2023) 'Time at get_E_and_F_ML in MD:', t2-t1

@@ -23,11 +23,10 @@
 module mlff_type
 
   use datatypes
-  use energy, only: disp_energy
   use GenComms,               only: cq_abort
   use timer_module,           only: start_timer,stop_timer
   use timer_stdclocks_module, only: tmr_std_allocation
-  use energy, only: ml_energy
+  use energy, only: ml_energy_hartree
 
   implicit none
 

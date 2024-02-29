@@ -23,14 +23,15 @@
 module mlff
 
   use datatypes
-  use energy, only: ml_energy
+  use energy,  only: ml_energy_hartree
 
   implicit none
 
   save
 
-  real(double), allocatable :: ml_force(:, :)
-  real(double), dimension(3,3) :: ml_stress
+  real(double)                 :: ml_energy        ! eV
+  real(double), allocatable    :: ml_force(:, :)   ! eV/Angstrom
+  real(double), dimension(3,3) :: ml_stress        ! eV
 
 
 contains
@@ -446,7 +447,7 @@ contains
     use global_module,  only: id_glob, species_glob, sf, nlpf, paof, napf, numprocs
     use group_module,   only: parts
     use species_module, only: nsf_species, nlpf_species, npao_species, napf_species
-    use energy,         only: ml_energy
+    use energy,         only: ml_energy_hartree
     use mlff_type,      only: matrix_ML,features_ML,acsf_param,flag_debug_mlff
 
     implicit none
@@ -525,7 +526,7 @@ contains
     use global_module,  only: id_glob, species_glob, sf, nlpf, paof, napf, numprocs
     use group_module,   only: parts
     use species_module, only: nsf_species, nlpf_species, npao_species, napf_species
-    use energy,         only: ml_energy
+    use energy,         only: ml_energy_hartree
     use mlff_type,      only: matrix_ML,features_ML,split_param,flag_debug_mlff
 
     implicit none
@@ -622,7 +623,10 @@ contains
     real(double) :: rcutsq,dx,dy,dz,rij2
     real(double), parameter :: tol=1.0e-8_double
 
-    ! Todo: filename
+    ! Initialize energy and force of machine learning
+    ml_energy = 0.0_double
+    ml_force  = 0.0_double
+    ! Todo: filename can be determined by user
     filename='ml_pot.txt'
     ! After we have neighbor information and descriptor information
     ! read and set
@@ -692,8 +696,8 @@ contains
 
     ! Module usage
     use datatypes
-    use numbers,        only: zero
-    use basic_types,    only: primary_set
+    use numbers
+    use basic_types
     use GenComms,       only: cq_abort, inode, ionode, my_barrier
     use global_module,  only: id_glob, flag_stress, flag_full_stress
     use units,          only: BohrToAng
@@ -710,6 +714,8 @@ contains
 
     ! Get ml_stress for each NB atom
     ml_stress = zero
+    ! loop over all atom (atoms in primary set, max. cover set) -
+    inp=1  ! Indexes primary atoms
     do nn=1,prim%groups_on_node ! Partitions in primary set
       !pair check!write(*,*) 'nn loop, inode=',inode
       if(prim%nm_nodgroup(nn).gt.0) then  ! Are there atoms ?
@@ -764,7 +770,7 @@ contains
 !!    Move make_cs to set_up in initialisation_module
 !!  SOURCE
 !!
-  subroutine get_MLFF
+  subroutine get_MLFF()
 
     use datatypes
     use units
@@ -782,10 +788,13 @@ contains
     use ion_electrostatic, ONLY: partition_distance
     use mlff_type
     use matrix_module, ONLY: matrix, deallocate_matrix
-    use force_module, ONLY: tot_force,stress
+    use force_module, ONLY: tot_force, stress
     use mpi
 
     implicit none
+
+    ! Shared variables
+    !real(double)   :: total_energy
 
     ! local variables
     integer :: i, j, ip, ia, np, nj, ia_glob, j_glob,nn, ist
@@ -814,8 +823,7 @@ contains
     allocate ( ml_force(3, ni_in_cell), STAT = stat )
     if (stat .NE. 0) call cq_abort("Error allocating ml_force: ", ni_in_cell)
 
-    ml_energy = 0.0_double
-    ml_force  = 0.0_double
+    stress = 0.0_double
 
     ! Make ML cover set and send
     call make_iprim(ML_CS, bundle)
@@ -883,7 +891,6 @@ contains
     t2=MPI_wtime()
     if (inode==ionode .and. flag_time_mlff) &
       write(*,2023) 'Time before get_E_and_F_ML in get_MLFF:', t2-t1
-    2023 format(a,e16.6)
     !! mpi_time()
     !! get_EandF_ML: read infomation of ML,
     t1=MPI_wtime()
@@ -898,6 +905,7 @@ contains
     t1=MPI_wtime()
     ! collect data and transfer units from ML (eV/Ang) to DFT (Ha/a0)
     call gsum(ml_energy)
+    ml_energy_hartree = ml_energy / HaToeV
     call gsum(ml_force, 3, ni_in_cell)
     tot_force = ml_force * BohrToAng / HaToeV
     t2=MPI_wtime()
@@ -908,13 +916,16 @@ contains
     t1=MPI_wtime()
     if(flag_stress) then
       call get_stress(bundle)
+      !ml_stress=0.01
       call gsum(ml_stress,3,3)
-      stress = -ml_stress / HaToeV
+      stress = ml_stress / HaToeV
     end if
     t2=MPI_wtime()
-    if (inode==ionode .and. flag_time_mlff) &
+    if (inode==ionode .and. flag_time_mlff) then
       write(*,2023) 'Time after get_stress in get_MLFF:', t2-t1
-
+      write(*, *) 'ml_stress in get_MLFF:', ml_stress
+      write(*, *) 'static_stress in get_MLFF:', stress
+    end if
     !! check force and feature info after operate mlff
     !! Check feature
     if (flag_debug_mlff) then
@@ -972,7 +983,7 @@ contains
     101 format(a8,a8,a8,a8, a8,a8,a8, a10,a12)
     102 format(i8,i8,i8,i8, i8,i8,i8, i10,f12.8)
     103 format(i8,3f16.8)
-
+    2023 format(a,e16.6)
     !stop
     110 format('E_ML:',f25.15,' ',a2)
     111 format('Force on atom ', i9)
@@ -981,4 +992,108 @@ contains
   end subroutine get_MLFF
 !!***
 
+!!****f* mlff_module/print_E_and_F_ML *
+!!
+!!  NAME
+!!   print_E_and_F_ML
+!!  USAGE
+!!
+!!  PURPOSE
+!!   Print energy, force, stress when using machine learning prediction
+!!  INPUTS
+!!
+!!  USES
+!!
+!!  AUTHOR
+!!   Jianbo Lin
+!!  CREATION DATE
+!!   2024/02/27
+!!  MODIFICATION HISTORY
+!!
+!!  SOURCE
+!!
+  subroutine print_E_and_F_ML(write_forces)
+
+    use numbers,       only: third, zero
+    use units,         only: en_units, d_units, for_conv, en_conv, &
+                             dist_units, energy_units, HaBohr3ToGPa
+    use GenComms,      only: inode, ionode, cq_abort
+    use energy,        only: ml_energy_hartree
+    use force_module,  only: tot_force, stress
+    use global_module, only: io_lun, iprint_MD, min_layer, ni_in_cell, &
+                             flag_stress, flag_full_stress, &
+                             rcellx, rcelly, rcellz
+    use io_module,     only: atom_output_threshold, return_prefix
+
+    implicit none
+    ! Passed variables
+    logical        :: write_forces
+
+    ! Local variables
+    integer        :: i, j, ii, stat, max_atom, max_compt
+    real(double)   :: max_force, volume, scale, g0
+
+    character(len=1), dimension(3) :: comptstr = (/"x", "y", "z"/)
+    character(len=10)  :: subname = "MLforce:  "
+    character(len=30)  :: fmt = '(4x,a,3f15.8,a4)'
+    character(len=1)   :: blank = ''
+    character(len=120) :: prefix
+
+    prefix = return_prefix(subname, min_layer)
+    ! Print in Conquest output
+    if (inode == ionode .and. write_forces .and. (iprint_MD + min_layer>=0 .and. ni_in_cell<atom_output_threshold)) then
+      max_force = zero
+      max_atom  = 0
+      max_compt = 0
+
+      write (io_lun, fmt='(/4x,a,a2,"/",a2,")")') &
+          trim(prefix)//" Forces on atoms (",en_units(energy_units), d_units(dist_units)
+      write (io_lun, fmt='(4x,a)') &
+          trim(prefix)//"  Atom   X              Y              Z"
+
+      ! Print out force
+      g0 = zero
+      do i = 1, ni_in_cell
+        write (io_lun,fmt='(4x,a,i6,3f15.10)') &
+            trim(prefix),i, (for_conv * tot_force(j,i), j = 1, 3)
+        do j = 1, 3
+          g0 = g0 + tot_force(j,i)*tot_force(j,i)
+          if (abs(tot_force(j,i)) > max_force) then
+            max_force = abs(tot_force(j,i))
+            max_atom  = i
+            max_compt = j
+          end if ! (abs(tot_force(j,i)) > max_force)
+        end do ! j
+      end do ! i
+
+      write (io_lun, fmt='(/4x,a,f15.8,"(",a2,"/",&
+          &a2,") on atom ",i9," in ",a1," direction")')     &
+          trim(prefix)//" Maximum force :   ",for_conv * max_force, en_units(energy_units), &
+          d_units(dist_units), max_atom, comptstr(max_compt)
+      write(io_lun, fmt='(4x,a,f15.8," ",a2,"/",a2)') &
+          trim(prefix)//" Force Residual:   ", &
+          for_conv*sqrt(g0/ni_in_cell), en_units(energy_units), d_units(dist_units)
+
+      ! Print out stress
+      if (flag_stress) then
+        if (iprint_MD + min_layer>=1) then
+          volume = rcellx*rcelly*rcellz
+          scale = HaBohr3ToGPa/volume
+          if (flag_full_stress) then
+            write(io_lun,fmt=fmt) trim(prefix)//" Total stress:     ", stress(1,:)*scale, ' GPa'!en_units(energy_units)
+            write(io_lun,fmt=fmt) blank, stress(2,:)*scale, blank
+            write(io_lun,fmt=fmt) blank, stress(3,:)*scale, blank
+          else
+            write(io_lun,fmt=fmt) trim(prefix)//" Total stress:     ", stress(1,1)*scale, stress(2,2)*scale, &
+                stress(3,3)*scale, ' GPa'!en_units(energy_units)
+          end if ! (flag_full_stress)
+
+          write(io_lun,'(4x,a,f15.8,a4/)') trim(prefix)//" Average pressure: ", &
+              -third*scale*(stress(1,1) + stress(2,2) + stress(3,3))," GPa"
+        end if ! (iprint_MD + min_layer>=1)
+      end if ! (flag_stress)
+
+    end if ! (inode == ionode)
+
+  end subroutine print_E_and_F_ML
 end module mlff
