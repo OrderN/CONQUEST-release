@@ -26,6 +26,8 @@
 !!
 module multiply_kernel
 
+  character(len=*), parameter :: kernel_id = "ompGemm"
+
 !!*****
 
 contains
@@ -149,12 +151,12 @@ contains
     real(double) :: c(lenc)
     integer, optional :: debug
     ! Remote indices
-    integer(integ) :: ib_nd_acc(mx_part)
-    integer(integ) :: ibaddr(mx_part)
-    integer(integ) :: nbnab(mx_part)
-    integer(integ) :: ibpart(mx_part*mx_absb)
-    integer(integ) :: ibseq(mx_part*mx_absb)
-    integer(integ) :: bndim2(mx_part*mx_absb)
+    integer(integ), intent(in) :: ib_nd_acc(:)
+    integer(integ), intent(in) :: ibaddr(:)
+    integer(integ), intent(in) :: nbnab(:)
+    integer(integ), intent(in) :: ibpart(:)
+    integer(integ), intent(in) :: ibseq(:)
+    integer(integ), intent(in) :: bndim2(:)
     ! Local variables
     integer :: jbnab2ch(mx_absb)  ! Automatic array
     integer :: nbkbeg, k, k_in_part, k_in_halo, j, jpart, jseq
@@ -168,15 +170,6 @@ contains
     ! OpenMP required indexing variables
     integer :: nd1_1st(at%mx_halo), nd2_1st(mx_absb)
 
-!$omp parallel default(none)                                             &
-!$omp          shared(kpart, ibaddr, ib_nd_acc, nbnab, ibpart, ibseq,    &
-!$omp                 k_off, bndim2, mx_absb, mx_part, at, ahalo, chalo, &
-!$omp                 a, b, c)                                           &
-!$omp          private(i, j, k, j_in_halo, k_in_halo, k_in_part, nbkbeg, &
-!$omp                  nb_nd_kbeg, nd1, nd2, nd3, jpart, jseq, jbnab2ch, &
-!$omp                  nabeg, nbbeg, ncbeg, i_in_prim, icad, naaddr,     &
-!$omp                  nbaddr, ncaddr, n1, n2, n3, nd1_1st, nd2_1st,     &
-!$omp                  tempa, tempb, tempc, prend1, maxlen, sofar)
     allocate(tempa(1,1), tempc(1,1))
     do k = 1, ahalo%nh_part(kpart) ! Loop over atoms k in current A-halo partn
        k_in_halo = ahalo%j_beg(kpart) + k - 1
@@ -184,7 +177,6 @@ contains
        nbkbeg = ibaddr(k_in_part)
        nb_nd_kbeg = ib_nd_acc(k_in_part)
        nd3 = ahalo%ndimj(k_in_halo)
-       ! if (PRESENT(debug)) write (21+debug,*) 'Details1: ', k, nb_nd_kbeg
        ! for OpenMP sub-array indexing
        nd1_1st(1) = 0
        do i = 2, at%n_hnab(k_in_halo)
@@ -207,15 +199,15 @@ contains
        prend1 = 0
 !$omp do schedule(runtime)
        ! Loop over primary-set A-neighbours of k
-       do i = 1, at%n_hnab(k_in_halo)
-          ! nabeg = at%i_beg(k_in_halo) + i - 1
+       A_i : do i = 1, at%n_hnab(k_in_halo)
           i_in_prim = at%i_prim(at%i_beg(k_in_halo)+i-1)
           nd1 = ahalo%ndimi(i_in_prim)
           nabeg = at%i_nd_beg(k_in_halo) + nd1_1st(i)
           if (nd1 /= prend1) then
-             deallocate(tempc, tempa)
-             allocate(tempa(nd1,nd3), tempc(nd1,maxlen))
-             ! allocate(tempa(nd3,nd1), tempc(nd1,maxlen))
+             deallocate(tempc)
+             deallocate(tempa)
+             allocate(tempa(nd1,nd3))
+             allocate(tempc(nd1,maxlen))
           end if
           tempa = zero
           tempb = zero
@@ -224,38 +216,17 @@ contains
              naaddr = nabeg + nd3 * (n1 - 1)
              do n3 = 1, nd3
                 tempa(n1,n3) = a(naaddr+n3-1)
-                ! tempa(n3,n1) = a(naaddr+n3-1)
              end do
           end do
           icad = (i_in_prim - 1) * chalo%ni_in_halo
-          ! nbbeg = nb_nd_kbeg
           sofar = 0
           do j = 1, nbnab(k_in_part) ! Loop over B-neighbours of atom k
-             ! nbbeg = nbkbeg + j - 1
              nd2 = bndim2(nbkbeg+j-1)
              nbbeg = nb_nd_kbeg + nd2_1st(j)
              j_in_halo = jbnab2ch(j)
              if (j_in_halo /= 0) then
                 ncbeg = chalo%i_h2d(icad+j_in_halo)
-                ! nd2 = chalo%ndimj(j_in_halo)
                 if (ncbeg /= 0) then  ! multiplication of ndim x ndim blocks
-                   ! if (present(debug)) &
-                   !      write (21+debug,*) 'Details2: ', j, nd2, &
-                   !                         (nabeg-1)/(nd1*nd3),  &
-                   !                         (ncbeg-1)/(nd1*nd2),  &
-                   !                         (nbbeg-1)/(nd2*nd3)
-!DIR$ NOPATTERN
-                   !!  do n2=1, nd2
-                   !!     nbaddr = nbbeg+nd3*(n2-1)
-                   !!     ncaddr = ncbeg+nd1*(n2-1)
-                   !!     do n1=1, nd1
-                   !!        naaddr=nabeg+nd3*(n1-1)
-                   !!        do n3=1, nd3
-                   !!           c(ncaddr+n1-1) = c(ncaddr+n1-1) &
-                   !!              +a(naaddr+n3-1)*b(nbaddr+n3-1)
-                   !!        end do
-                   !!     end do
-                   !!  end do
                    do n2 = 1, nd2
                       nbaddr = nbbeg + nd3 * (n2 - 1)
                       do n3 = 1, nd3
@@ -267,9 +238,6 @@ contains
              end if ! End of if (j_in_halo /= 0)
           end do ! End of 1, nbnab
           if (sofar > 0) then
-             ! m, n, k, alpha, a, lda, b, ldb, beta, c, ldc
-             ! call dgemm('t', 'n', nd1, sofar, nd3, 1.0_double, tempa, &
-             !            nd3, tempb, nd3,0.0_double, tempc, nd1)
              call dgemm('n', 'n', nd1, sofar, nd3, 1.0_double, tempa, &
                         nd1, tempb, nd3, zero, tempc, nd1)
           end if
@@ -291,13 +259,12 @@ contains
                 end if
              end if
           end do
-       end do ! end of i = 1, at%n_hnab
+       end do A_i 
 !$omp end do
        deallocate(tempb)
     end do ! end of k = 1, nahpart
     if (allocated(tempa)) deallocate(tempa)
     if (allocated(tempc)) deallocate(tempc)
-!$omp end parallel
     return
   end subroutine m_kern_max
   !!*****
@@ -421,12 +388,12 @@ contains
     real(double) :: b(lenb)
     real(double) :: c(lenc)
     ! dimension declarations
-    integer :: ibaddr(mx_part)
-    integer :: ib_nd_acc(mx_part)
-    integer :: nbnab(mx_part)
-    integer :: ibpart(mx_part*mx_absb)
-    integer :: ibseq(mx_part*mx_absb)
-    integer :: bndim2(mx_part*mx_absb)
+    integer(integ), intent(in) :: ib_nd_acc(:)
+    integer(integ), intent(in) :: ibaddr(:)
+    integer(integ), intent(in) :: nbnab(:)
+    integer(integ), intent(in) :: ibpart(:)
+    integer(integ), intent(in) :: ibseq(:)
+    integer(integ), intent(in) :: bndim2(:)
     ! Local variables
     integer :: jbnab2ch(mx_absb)
     integer :: k, k_in_part, k_in_halo, nbkbeg, j, jpart, jseq
@@ -445,15 +412,6 @@ contains
     !   mx_a = maxnsf
     !   maxlen = maxnsf * max(nbnab)
 
-!$omp parallel default(none)                                             &
-!$omp          shared(kpart, ibaddr, ib_nd_acc, nbnab, ibpart, ibseq,    &
-!$omp                 k_off, bndim2, mx_absb, mx_part, at, ahalo, chalo, &
-!$omp                 a, b, c)                                           &
-!$omp          private(i, j, k, j_in_halo, k_in_halo, k_in_part, nbkbeg, &
-!$omp                  nb_nd_kbeg, nd1, nd2, nd3, jpart, jseq, jbnab2ch, &
-!$omp                  nabeg, nbbeg, ncbeg, i_in_prim, icad, naaddr,     &
-!$omp                  nbaddr, ncaddr, n1, n2, n3, nd1_1st, nd2_1st,     &
-!$omp                  tempb, tempc, maxlen, sofar)
     do k = 1, ahalo%nh_part(kpart) ! Loop over atoms k in current A-halo partn
        k_in_halo = ahalo%j_beg(kpart) + k - 1
        k_in_part = ahalo%j_seq(k_in_halo)
@@ -532,7 +490,6 @@ contains
        end do
 !$omp end do
     end do
-!$omp end parallel
     return
   end subroutine m_kern_min
   !!*****

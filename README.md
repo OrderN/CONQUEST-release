@@ -50,4 +50,4 @@ DOI for the specific version you have used in any given study.
 
 ## Version number
 
-CONQUEST is now at version 1.2 (tag:v1.2)
+CONQUEST is now at version 1.3 (tag:v1.3)

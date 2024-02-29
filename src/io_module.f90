@@ -1491,7 +1491,7 @@ second:   do
     
     call io_assign (lun)
     open (unit = lun, file = 'eigenvalues.dat')
-    write(lun,fmt='("#  ",i7," eigenvalues ",i4," kpoints")') n_evals, nkp
+    write(lun,fmt='("#  ",i7," eigenvalues ",i6," kpoints")') n_evals, nkp
     if(nspin==1) then
        write(lun,fmt='("# Ef: ",f18.10)') Ef(1)
     else
@@ -1500,7 +1500,7 @@ second:   do
     write(lun,fmt='("# Format: nk kx ky kz weight, followed by eigenvalues")')
     do sp = 1,nspin
        do kp = 1,nkp
-          write(lun,fmt='(i4,4f12.5)') kp,kk(1,kp),kk(2,kp),kk(3,kp),wtk(kp)
+          write(lun,fmt='(i6,3f12.5,f17.10)') kp,kk(1,kp),kk(2,kp),kk(3,kp),wtk(kp)
           do ev = 1,n_evals
              write(lun,fmt='(i6,f18.10)') ev,eval(ev,kp,sp)
           end do
@@ -1641,7 +1641,7 @@ second:   do
     close(io)
     !    
 4   format(10x,'Sum of eigenvalues: ',f18.11,' ',a2)
-7   format(10x,'Eigenvalues and occupancies for k-point ',i3,' : ',3f12.5)
+7   format(10x,'Eigenvalues and occupancies for k-point ',i6,' : ',3f12.5)
 8   format(10x,f15.7,x,f8.5,2x)
 9   format(10x,f15.7,x,f8.5,2x,f15.7,x,f8.5,2x)
 10  format(10x,f15.7,x,f8.5,2x,f15.7,x,f8.5,2x,f15.7,x,f8.5)
@@ -2934,7 +2934,7 @@ second:   do
 
       do i=1,ni_in_cell
         atom_name = adjustr(species_label(species_glob(i))(1:2))
-        write(lun,'(a4,6f16.8)') atom_name, atom_coord(:,i)*dist_conv_loc, &
+        write(lun,'(a4,3f16.8,3e16.8)') atom_name, atom_coord(:,i)*dist_conv_loc, &
                  (for_conv_loc*atom_force(j,i), j = 1, 3)
                  ! species_glob(i),flag_move_atom(1,i),flag_move_atom(2,i), &
       end do
