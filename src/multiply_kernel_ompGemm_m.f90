@@ -135,8 +135,6 @@ contains
                         lenc, debug)
     use datatypes
     use matrix_module
-    use basic_types,    only: primary_set
-    use primary_module, only: bundle
     use numbers,        only: zero, one
 
     implicit none
@@ -160,15 +158,14 @@ contains
     ! Local variables
     integer :: jbnab2ch(mx_absb)  ! Automatic array
     integer :: i,j,k, k_in_halo, k_in_part
-    integer :: nbkbeg, nabeg, naend, i_in_prim, icad, j_in_halo, ncbeg, ncend
+    integer :: nbkbeg, nabeg, naend, i_in_prim, icad, ncbeg, ncend
     integer :: tcbeg, tcend
-    integer :: n1, n2, n3, nb_nd_kbeg
+    integer :: nb_nd_kbeg
     integer :: nd1, nd2, nd3
-    integer :: naaddr, nbaddr, ncaddr
     real(double), allocatable, dimension(:,:) :: tempc
-    real(double), pointer, dimension(:,:) :: pointa, pointb
-    integer :: sofar, maxnd1, maxnd2, maxnd3, maxlen
-    integer :: nbbeg, nbend, tbbeg, tbend
+    !real(double), pointer, dimension(:,:) :: pointa, pointb
+    integer :: maxnd1, maxnd2, maxnd3, maxlen
+    integer :: nbbeg, nbend, tbend
     external :: dgemm
     ! OpenMP required indexing variables
     integer :: nd1_vector(at%mx_halo), nd2_vector(mx_absb), nd2_array(mx_absb)
@@ -192,10 +189,11 @@ contains
 
        ! Create a pointer that re-indexes B as a 2D array for the dgemm call
        nd2 = bndim2(nbkbeg + nbnab(k_in_part))
+       nbbeg = nd2_vector(1)
        nbend = nd2_vector(nbnab(k_in_part)) + nd3 * nd2 - 1
        tbend = nd2_array(nbnab(k_in_part)) + nd2 - 1
 
-       pointb(1:nd3, 1:tbend) => b(nd2_vector(1):nbend)
+       !pointb(1:nd3, 1:tbend) => b(nd2_vector(1):nbend)
 
        ! Loop over primary-set A-neighbours of k
        !$omp do schedule(runtime)
@@ -207,11 +205,13 @@ contains
           nd1 = ahalo%ndimi(i_in_prim)
           nabeg = at%i_nd_beg(k_in_halo) + nd1_vector(i)
           naend = nabeg + (nd1 * nd3 - 1)
-          pointa(1:nd3, 1:nd1) => a(nabeg:naend)
+          !pointa(1:nd3, 1:nd1) => a(nabeg:naend)
 
-          ! Compute A*B using pointa and pointb and store the result in tempc
-          call dgemm('t', 'n', nd1, tbend, nd3, one, pointa, &
-               nd3, pointb, nd3, zero, tempc, maxnd1)
+          ! ! Compute A*B using pointa and pointb and store the result in tempc
+          ! call dgemm('t', 'n', nd1, tbend, nd3, one, pointa, &
+          !      nd3, pointb, nd3, zero, tempc, maxnd1)
+          call dgemm('t', 'n', nd1, tbend, nd3, one, a(nabeg:naend), &
+               nd3, b(nbbeg:nbend), nd3, zero, tempc, maxnd1)
 
           ! Copy result back from tempc and add to C
           copy_c: do j = 1, nbnab(k_in_part)
@@ -339,8 +339,6 @@ contains
                         lenc)
     use datatypes
     use matrix_module
-    use basic_types,    only: primary_set
-    use primary_module, only: bundle
     use numbers,        only: one, zero
 
     implicit none
@@ -364,25 +362,23 @@ contains
     ! Local variables
     integer :: jbnab2ch(mx_absb)
     integer :: i,j,k, k_in_halo, k_in_part, nbkbeg
-    integer :: nabeg, i_in_prim, icad, nbbeg, nbend, j_in_halo, ncbeg, ncend
+    integer :: nabeg, i_in_prim, icad, nbbeg, nbend, ncbeg, ncend
     integer :: n2beg, n2end
-    integer :: n1, n2, n3, nb_nd_kbeg
+    integer :: nb_nd_kbeg
     integer :: nd1, nd2, nd3
     integer :: maxlen, maxnd1, maxnd2, maxnd3
-    real(double), allocatable, dimension(:,:) :: tempb, tempc, tempa
+    real(double), allocatable, dimension(:,:) :: tempb, tempc
     external :: dgemm
     ! OpenMP required indexing variables
     integer :: nd1_vector(at%mx_halo), nd2_vector(mx_absb), nd2_array(mx_absb)
 
-    integer :: nbaddr, ncaddr, sofar
+    integer :: sofar
 
     maxnd1 = maxval(ahalo%ndimi)
     maxnd2 = maxval(bndim2)
     maxnd3 = maxval(ahalo%ndimj)
     maxlen = maxval(nbnab) * maxnd2
     allocate(tempb(maxnd3,maxlen), tempc(maxlen,maxnd1))
-    !tempb = zero
-    !tempc = zero
     ! Loop over atoms k in current A-halo partn
     do k = 1, ahalo%nh_part(kpart)
 
@@ -408,30 +404,26 @@ contains
                    nd2 = bndim2(nbkbeg + j)
                    nbbeg = nd2_vector(j)
 
-                   ! nbend = nbbeg + nd3 * nd2 - 1
-                   ! ncend = ncbeg + nd1 * nd2 - 1
-                   ! n2beg = nd2_array(j)
-                   ! n2end = nd2_array(j) + nd2 - 1
-                   ! tempb(1:nd3, n2beg:n2end) = reshape(b(nbbeg:nbend), [nd3, nd2], order=[2,1])
-                   ! tempc(n2beg:n2end, 1:nd1) = reshape(c(ncbeg:ncend), [nd2, nd1], order=[1,2])
+                   nbend = nbbeg + nd3 * nd2 - 1
+                   ncend = ncbeg + nd1 * nd2 - 1
+                   n2beg = sofar + 1
+                   n2end = sofar + nd2
+                   tempb(1:nd3, n2beg:n2end) = reshape(b(nbbeg:nbend), [nd3, nd2], order=[1,2])
+                   tempc(n2beg:n2end, 1:nd1) = reshape(c(ncbeg:ncend), [nd2, nd1], order=[2,1])
 
-                   do n2 = 1, nd2
-                      nbaddr = nbbeg + nd3 * (n2 - 1)
-                      ncaddr = ncbeg + nd1 * (n2 - 1)
-                      !$omp simd
-                      do n3 = 1, nd3
-                         tempb(n3,sofar+n2) = b(nbaddr+n3-1)
-                      end do
-                      !$omp simd
-                      do n1 = 1, nd1
-                         tempc(sofar+n2,n1) = c(ncaddr+n1-1)
-                      end do
-                   end do
+                   ! do n2 = 1, nd2
+                   !    nbaddr = nbbeg + nd3 * (n2 - 1)
+                   !    ncaddr = ncbeg + nd1 * (n2 - 1)
+                   !    tempb(1:nd3,sofar+n2) = b(nbaddr:nbaddr+nd3-1)
+                   !    tempc(sofar+n2,1:nd1) = c(ncaddr:ncaddr+nd1-1)
+                   ! end do
+
                    sofar = sofar + nd2
 
                 end if
              end if
           end do
+
           if (sofar > 0) then
              ! m, n, k, alpha, a, lda, b, ldb, beta, c, ldc
              call dgemm('n', 'n', nd3, nd1, sofar, one, tempb, &
@@ -441,7 +433,7 @@ contains
        end do
        !$omp end do
     end do
-    !deallocate(tempb, tempc)
+    deallocate(tempb, tempc)
     return
   end subroutine m_kern_min
   !!*****
@@ -504,6 +496,7 @@ contains
           nd2_vector(j) = nd2_vector(j - 1) + nd3 * nd2_prev
           nd2_array(j) = nd2_array(j - 1) + nd2_prev
        end if
+
     end do copy_b
 
   end subroutine precompute_indices
