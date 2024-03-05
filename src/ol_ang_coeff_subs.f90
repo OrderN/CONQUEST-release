@@ -881,7 +881,6 @@ contains
     !
     j = floor(r/del_r) + 1
     !
-    pao_val = zero
     if( j+1 <= npts ) then
        rr = real(j,double)*del_r
        a = (rr - r)/del_r
@@ -893,6 +892,8 @@ contains
        r3 = pao(sp)%angmom(l)%zeta(nz)%table2(j)
        r4 = pao(sp)%angmom(l)%zeta(nz)%table2(j+1)
        pao_val = a*r1 + b*r2 + c*r3 + d*r4
+    else
+       pao_val = zero
     end if
     !
     if ( .not. cartesian ) then ! if want to work in Polar coordinates

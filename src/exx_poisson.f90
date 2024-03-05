@@ -170,7 +170,7 @@ contains
   !
   !
   subroutine exx_v_on_grid(inode,extent,rho,potential,r_int,poisson,scheme,&
-       alpha,omega,n_gauss,p_gauss,w_gauss,fftwrho,reckernel)
+       alpha,omega,n_gauss,p_gauss,w_gauss,reckernel)
     
     use numbers,   ONLY: zero, one, fourpi
     use exx_types, ONLY: fftw3d                       ! FFTW
@@ -197,8 +197,6 @@ contains
     real(double), intent(in) :: omega        
     integer,      intent(in) :: n_gauss
     real(double), dimension(n_gauss) :: p_gauss, w_gauss
-
-    type(fftw3d), intent(in) :: fftwrho
     
     ! << Output variables >>
     real(double), dimension(2*extent+1,2*extent+1,2*extent+1), &
@@ -213,6 +211,9 @@ contains
 
     ! ... For Poisson/ISF real space FFT >>
     real(kind=8)          :: isf_eh, isf_exc, isf_vxc, isf_spacing
+
+    ! This is required to keep this function thread safe. Previously fftwrho%arrayin would have been altered by each thread
+    complex(double), dimension(2*extent+1,2*extent+1,2*extent+1) :: fftwrho_arrayin
 
     ! ... Dummy variables >>
     real(double), dimension(:,:,:), allocatable :: dum_pot_ion, dum_rho
@@ -230,19 +231,19 @@ contains
     case('fftw')       
 
        ! setup[rho(r)] 
-       fftwrho%arrayin  = cmplx(rho,zero,double_cplx)
+       fftwrho_arrayin  = cmplx(rho,zero,double_cplx)
 
        ! FFT_F[rho(r)] => rho(G)      
-       call fft3_exec_wrapper( fftwrho%arrayin, ng , +1 )
+       call fft3_exec_wrapper( fftwrho_arrayin, ng , +1 )
 
        ! scale[rho_(G)] = 4pi*rho(G)/|G|^2
-       fftwrho%arrayin = fourpi*fftwrho%arrayin*reckernel
+       fftwrho_arrayin = fourpi*fftwrho_arrayin*reckernel
        
        ! FFT_B[4pi*rho(G)/|G|^2] = V(r')
-       call fft3_exec_wrapper( fftwrho%arrayin, ng , -1 )
+       call fft3_exec_wrapper( fftwrho_arrayin, ng , -1 )
        
        ! Normalization
-       potential = real(fftwrho%arrayin) / fftwnorm**2
+       potential = real(fftwrho_arrayin) / fftwnorm**2
 
     case('isf')       
        !

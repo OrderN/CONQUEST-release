@@ -20,7 +20,9 @@ contains
 !!    Cartesian system is preferred in this case (faster) cf. exx_cartesian = T/F
 !!   2023/15/23 14:03 lionel
 !!    Added dummy argument to evaluate_pao
-!!
+!!   2024/02/28 11:00 Connor
+!!    Added OpenMP thread parallelisation around xyz loops
+!! 
   subroutine exx_phi_on_grid(inode,atom,spec,extent,xyz,nsuppfuncs,phi_on_grid,r_int,rst)
 
     use numbers,      only: zero, one, two, three, four, five, six, fifteen, sixteen
@@ -60,7 +62,7 @@ contains
     real(double)        :: grid_spacing 
     real(double)        :: x, y, z, r
     real(double)        :: int, n, rest
-    real(double)        :: xyz_delta(3)
+    real(double)        :: xyz_delta(3), xyz_offset(3)
 
     integer             :: count1, nsf1
     integer             :: ierr, stat
@@ -154,42 +156,31 @@ contains
           py = py -ijk(2)+1
           pz = pz -ijk(3)+1
        end if overlap_box
-       !print*,
+       xyz_offset = xyz + rst
+       
+       !$omp parallel do collapse(3) schedule(runtime) default(none)   & 
+       !$omp     shared(mx,my,mz,px,py,pz,grid_spacing,xyz_offset,pao, &
+       !$omp            spec,phi_on_grid,i_dummy,exx_cartesian,extent) &
+       !$omp    private(nx,ny,nz,x,y,z,count1,l1,acz,m1,pao_val)
        grid_x_loop: do nx = mx, px
-          x = xyz(1) + real(nx,double)*grid_spacing + rst(1)
-
           grid_y_loop: do ny = my, py
-             y = xyz(2) + real(ny,double)*grid_spacing + rst(2)
-
              grid_z_loop: do nz = mz, pz
-                z = xyz(3) + real(nz,double)*grid_spacing + rst(3)
-
-                !norm = sqrt((x-xyz(1))**2+(y-xyz(2))**2+(z-xyz(3))**2)
-                !if (norm <= r_h) then
-
-                r = sqrt(x*x+y*y+z*z)             
-                !if(r < very_small) then
-                !   r = zero
-                !end if
-                !print*, '1 cycle start'
+                x = nx*grid_spacing + xyz_offset(1)
+                y = ny*grid_spacing + xyz_offset(2)
+                z = nz*grid_spacing + xyz_offset(3)
 
                 count1  = 1
-                !sfsum   = zero
                 angu_loop: do l1 = 0, pao(spec)%greatest_angmom
 
                    zeta_loop: do acz = 1, pao(spec)%angmom(l1)%n_zeta_in_angmom
 
                       magn_loop: do m1 = -l1, l1                      
-
-                         pao_val = zero
-                         y_val   = zero             
-
+                      
                          call evaluate_pao(i_dummy,spec,l1,acz,m1,x,y,z,pao_val,exx_cartesian)
 
                          ! Put pao_val directly into phi_on_grid
                          ! (only for primitive PAOs and not for blips)
                          phi_on_grid(nx+extent+1,ny+extent+1,nz+extent+1,count1) = pao_val
-                         !print*, x,  pao_val
                          count1 = count1 + 1
                       end do magn_loop
                    end do zeta_loop
@@ -198,6 +189,7 @@ contains
              end do grid_z_loop
           end do grid_y_loop
        end do grid_x_loop
+       !$omp end parallel do
 
     end if
 

@@ -55,19 +55,16 @@ module exx_types
   !  end type fftw1d
 
   ! PAOs on grid
-  real(double), dimension(:,:,:,:),     allocatable :: phi_i
-  real(double), dimension(:,:,:,:),     allocatable :: phi_j
-  real(double), dimension(:,:,:,:),     allocatable :: phi_k
-  real(double), dimension(:,:,:,:),     allocatable :: phi_l  
+  real(double), dimension(:,:,:,:),     allocatable         :: phi_i
+  real(double), dimension(:),           allocatable, target :: phi_i_1d_buffer
+  real(double), dimension(:,:,:,:),     allocatable         :: phi_j
+  real(double), dimension(:,:,:,:),     allocatable         :: phi_k
+  real(double), dimension(:,:,:,:),     allocatable         :: phi_l  
 
   ! Auxiliary densities and potentials
-  real(double), dimension(:,:,:,:,:),   allocatable :: rho_kj
-  real(double), dimension(:,:,:,:,:),   allocatable :: Ome_kj
-  real(double), dimension(:,:,:,:,:),   allocatable :: vhf_kj
-  real(double), dimension(:,:,:,:),     allocatable :: Phy_k
+  real(double), dimension(:),           allocatable, target :: Ome_kj_1d_buffer
+  real(double), dimension(:,:,:,:),     allocatable         :: Phy_k
 
-  real(double), dimension(:,:,:,:,:),   allocatable :: rho_ki
-  real(double), dimension(:,:,:,:,:),   allocatable :: vhf_lj
 
   
   ! Work matrix
@@ -127,6 +124,7 @@ module exx_types
   type(cq_timer), save :: tmr_std_exx_kernel
   type(cq_timer), save :: tmr_std_exx_fetch
   type(cq_timer), save :: tmr_std_exx_accumul
+  type(cq_timer), save :: tmr_std_exx_nsup
 
   type(cq_timer), save :: tmr_std_exx_matmult
   type(cq_timer), save :: tmr_std_exx_quadrat
