@@ -13,6 +13,7 @@ from pylab import plot, show, legend
 import matplotlib.pylab as plt
 from numpy import size, exp, array, zeros
 from scipy.optimize import curve_fit
+import numpy as np 
 
 from src.gto_fit            import gauss3, gto_fit_orb
 from src.read_write_files   import read_ion, orbital
@@ -29,7 +30,7 @@ filename_ion='TiCQ.ion'
 # file to write the GTO fit results formatted for Conquest
 filename_gto_write='TiCQ.gto_TZTP_3G' 
 # file to read in order to build an initial guess (not mandatory)
-#filename_gto_read ='TiCQ.gto_TZTP_3G_guess' 
+filename_gto_read ='TiCQ.gto_TZTP_3G_guess' 
 
 #%% Read the ion file genrerated by MakeIonFiles
 # return the chemical symbol, the number orbitals @(norb) 
@@ -43,52 +44,46 @@ symbol, norb, orb, kind = read_ion( filename_ion )
 #%% Define the initial guess for each orb. ####################################
 # (not mandatory)
 #
-#center = True
-#orb_guess = read_gto(filename_gto_read)
-#build_guess( orb, orb_guess, center =center)
+center = True
+orb_guess = read_gto(filename_gto_read)
+build_guess( orb, orb_guess, center =center)
 #
 #for i in range(norb):
 #   orb[i].guess = orb_guess[i].guess  
-orb[0].guess = array([0.159486,0.598452,2.0,-1.0,0.1,0.1])
+#orb[0].guess = array([0.159486,0.598452,2.0,-1.0,0.1,0.1])
 #orb[1].guess = array([0.3341085034,0.2805108907,4.1100000000,1.0297932964,1.4588060470,2.0776528365])
 #orb[2].guess = array([1.0,0.389613,0.389613,0.054788,0.1,0.1])
-orb[3].guess = array([3.719459,0.560879,0.065750,0.356308,0.831418,-1.188001])
-orb[4].guess = array([3.155396,0.423250,0.501348,-0.663974,0.031197,0.198817])
-orb[5].guess = array([1.172088,4.0,2.159910,2.473221,1,1])
+#orb[3].guess = array([3.719459,0.560879,0.065750,0.356308,0.831418,-1.188001])
+#orb[4].guess = array([3.155396,0.423250,0.501348,-0.663974,0.031197,0.198817])
+#orb[5].guess = array([1.172088,4.0,2.159910,2.473221,1,1])
 #orb[6].guess = array([ 1.673174,0.328955,0.225643,0.139717,0.1,0.1])
 #orb[8].guess = array([0.1,0.638160,0.369363,0.414561,0.10,1.075])
 #orb[6].guess = array([ 0.1,-1.5,-1,1,1,1])
 #orb[7].guess = array([ 0.1,-1.5,-1,1,1,1])
 #orb[8].guess = array([ 0.1,-1.5,-1,1,1,1])
-orb[9].guess = array([1.768854,-2.054287,1.474961,-3.353274,1,1])
-orb[10].guess = array([1.333977,-3.808716,0.120180,0.102885,1.256987,0.932507])
-#orb[0].bounds=([-4.,-2.,-1,-2,-2,-2],[4.0,1.2,3.0,4.0,2,2])
-orb[0].bounds=([-2,6])
-orb[1].bounds=([-1,-1,-6,-6,-1,-6],[1,2,6,3,6,6])
-#orb[2].bounds=([-1,-1,-6,-6,-1,-6],[1,1,2,2,6,6])
-#orb[3].bounds=([-2,4])
-#orb[4].bounds=([-2,4])
-orb[5].bounds=([-2,4])
-#orb[6].bounds=([-2,6])
-#orb[7].bounds=([-2,6])
-#orb[8].bounds=([-6,6])
-orb[9].bounds=([-3.81,6])
-orb[10].bounds=([-3.81,6])
+#orb[9].guess = array([1.768854,-2.054287,1.474961,-3.353274,1,1])
+#orb[10].guess = array([1.333977,-3.808716,0.120180,0.102885,1.256987,0.932507])
+
+
+orb[0].bounds=([-2,6])  #Bounds for SZ,SZP,DZP,TZTP
+orb[5].bounds=([-2,10])  #Bounds for DZP,TZTP
+orb[9].bounds=([-3.81,6])  #Bounds for TZTP
+orb[10].bounds=([-3.81,6]) #Bounds for TZTP
 #%% Define the number of Gaussian primitives for each orb. ####################
 # (not mandatory, default is 3)
 #
 #for i in range(norb):
 #    orb[i].nG = 2
 #orb[0].nG = 3
-#orb[1].nG = 3
+#orb[1].nG = 2
 #orb[2].nG = 3
-#orb[3].nG = 3
-#orb[4].nG = 3
-orb[5].nG = 3
+#orb[3].nG = 2
+#orb[4].nG = 2
+#orb[5].nG = 2
 #orb[6].nG = 3
-#orb[7].nG = 4
+#orb[7].nG = 2
 #orb[8].nG = 3
-orb[9].nG = 3
+#orb[9].nG = 3
 #orb[10].nG = 3
 #%% Fit the radial part and plot ##############################################
 for i in range(norb):
@@ -99,8 +94,8 @@ for i in range(norb):
     # GTO fit ; plots of the GTO radial part is done in gto_fit_orb
     center = True
     #bounds = ([-6,-6,-6,-6],[1,2,3,4]) #Bounds for a,d and c
-    param, nG = gto_fit_orb( x, y, orb[i].nG, orb[i].guess, orb[i].n, orb[i].lname, orb[i].z, i, 
-                            center=center, maxfev=9000, bounds=orb[i].bounds, method='trf')
+    param, nG, error = gto_fit_orb( x, y, orb[i].nG, orb[i].guess, orb[i].n, orb[i].lname, orb[i].z, i, 
+                            center=center, maxfev=90000, bounds=orb[i].bounds, method='trf')
     
     #param, nG = gto_fit_orb( x, y, orb[i].nG, orb[i].guess, orb[i].n, orb[i].lname, orb[i].z, i, center = center)
 
@@ -117,11 +112,13 @@ for i in range(norb):
             orb[i].gto_a.append( param[j]   )      
             orb[i].gto_d.append( param[j+1] )
             orb[i].gto_c.append( param[j+2] )
+            orb[i].error = error
     else:
         for j in range(0,orb[i].nG*2,2):
             orb[i].gto_a.append( param[j]   )      
             orb[i].gto_d.append( param[j+1] )
             orb[i].gto_c.append( 0.0 )
+            orb[i].error = error
          
     # Generate and store GTO fit results on the radial grid
     orb[i].y_fit_gto()
@@ -131,6 +128,19 @@ write_gto( filename_gto_write, symbol, orb, True )
     
 #%% Plot radial part of the orbitals ##########################################
 plot_GTO_PAO( orb, filename_gto_write )
+
+error_list=[]
+std = 0
+for i in range(norb):
+    error_list.append(orb[i].error)
+error_mean=np.array(error_list)
+mean=np.mean(error_mean)
+for i in range(norb):
+    std = std +((error_mean[i]-mean)**2)/(len(error_mean)-1)
+    sd = np.sqrt(std)
+
+print("mean =",mean)
+print("standard deviation =",sd)
 
 #%% Plot PAO-GTO deviation ####################################################
 plot_GTO_PAO_dev( orb, filename_gto_write )
