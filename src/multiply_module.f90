@@ -151,14 +151,14 @@ contains
     integer(integ),allocatable :: ibpart_rem(:)
     real(double),allocatable :: b_rem(:)
     ! Remote variables which will point to part_array
-    integer(integ),pointer :: nbnab_rem(:)
-    integer(integ),pointer :: ibseq_rem(:)
-    integer(integ),pointer :: ibind_rem(:)
-    integer(integ),pointer :: ib_nd_acc_rem(:)
-    integer(integ),pointer :: npxyz_rem(:)
-    integer(integ),pointer :: ibndimj_rem(:)
+    integer(integ) :: nbnab_rem_beg, nbnab_rem_end
+    integer(integ) :: ibseq_rem_beg, ibseq_rem_end
+    integer(integ) :: ibind_rem_beg, ibind_rem_end
+    integer(integ) :: ib_nd_acc_rem_beg, ib_nd_acc_rem_end
+    integer(integ) :: npxyz_rem_beg, npxyz_rem_end
+    integer(integ) :: ibndimj_rem_beg, ibndimj_rem_end
     ! Arrays for remote variables to point to
-    integer, target :: part_array(3*a_b_c%parts%mx_mem_grp+ &
+    integer :: part_array(3*a_b_c%parts%mx_mem_grp+ &
          5*a_b_c%parts%mx_mem_grp*a_b_c%bmat(1)%mx_abs)
     integer, dimension(:), allocatable :: nreqs
     integer :: offset,sends,i,j
@@ -220,7 +220,7 @@ contains
        icall=1
        ind_part = a_b_c%ahalo%lab_hcell(kpart)
        new_partition = .true.
-       
+
        ! Check if this is a periodic image of the previous partition
        if(kpart>1) then
           if(ind_part.eq.a_b_c%ahalo%lab_hcell(kpart-1)) then
@@ -247,43 +247,58 @@ contains
                mx_msg_per_part,a_b_c%parts,a_b_c%prim,a_b_c%gcs,(recv_part(nnode)-1)*2)
           ! Now point the _rem variables at the appropriate parts of
           ! the array where we will receive the data
-          offset = 0
-          nbnab_rem => part_array(offset+1:offset+n_cont)
-          offset = offset+n_cont
-          ibind_rem => part_array(offset+1:offset+n_cont)
-          offset = offset+n_cont
-          ib_nd_acc_rem => part_array(offset+1:offset+n_cont)
-          offset = offset+n_cont
-          ibseq_rem => part_array(offset+1:offset+ilen2)
-          offset = offset+ilen2
-          npxyz_rem => part_array(offset+1:offset+3*ilen2)
-          offset = offset+3*ilen2
-          ibndimj_rem => part_array(offset+1:offset+ilen2)
-          if(offset+ilen2>3*a_b_c%parts%mx_mem_grp+ &
+          nbnab_rem_beg = 1
+          nbnab_rem_end = n_cont
+          ibind_rem_beg = nbnab_rem_end + 1
+          ibind_rem_end = nbnab_rem_end + n_cont
+          ib_nd_acc_rem_beg = ibind_rem_end + 1
+          ib_nd_acc_rem_end = ibind_rem_end + n_cont
+          ibseq_rem_beg = ib_nd_acc_rem_end + 1
+          ibseq_rem_end = ib_nd_acc_rem_end + ilen2
+          npxyz_rem_beg = ibseq_rem_end + 1
+          npxyz_rem_end = ibseq_rem_end + 3 * ilen2
+          ibndimj_rem_beg = npxyz_rem_end + 1
+          ibndimj_rem_end = npxyz_rem_end + ilen2
+
+          if(ibndimj_rem_end .gt. &
+               3*a_b_c%parts%mx_mem_grp+ &
                5*a_b_c%parts%mx_mem_grp*a_b_c%bmat(1)%mx_abs) then
              call cq_abort('mat_mult: error pointing to part_array ',kpart)
           end if
           ! Create ibpart_rem
-          call end_part_comms(myid,n_cont,nbnab_rem,ibind_rem,npxyz_rem,&
+          call end_part_comms(myid,n_cont, &
+               part_array(nbnab_rem_beg:nbnab_rem_end), &
+               part_array(ibind_rem_beg:ibind_rem_end), &
+               part_array(npxyz_rem_beg:npxyz_rem_end), &
                ibpart_rem,ncover_yz,a_b_c%gcs%ncoverz)
        end if
-       
+
        k_off=a_b_c%ahalo%lab_hcover(kpart) ! --- offset for pbcs
        ! Omp master doesn't include a implicit barrier. We want master
        ! to be finished with comms before calling the multiply kernels
        ! hence the explicit barrier
        !$omp end master
        !$omp barrier
-       
+
        if(a_b_c%mult_type.eq.1) then  ! C is full mult
-          call m_kern_max( k_off,kpart,ib_nd_acc_rem, ibind_rem,nbnab_rem,&
-               ibpart_rem,ibseq_rem,ibndimj_rem,&
+          call m_kern_max( k_off,kpart,&
+               part_array(ib_nd_acc_rem_beg:ib_nd_acc_rem_end), &
+               part_array(ibind_rem_beg:ibind_rem_end),&
+               part_array(nbnab_rem_beg:nbnab_rem_end),&
+               ibpart_rem,&
+               part_array(ibseq_rem_beg:ibseq_rem_end),&
+               part_array(ibndimj_rem_beg:ibndimj_rem_end),&
                atrans,b_rem,c,a_b_c%ahalo,a_b_c%chalo,a_b_c%ltrans,&
                a_b_c%bmat(1)%mx_abs,a_b_c%parts%mx_mem_grp, &
                a_b_c%prim%mx_iprim, lena, lenb_rem, lenc)
        else if(a_b_c%mult_type.eq.2) then ! A is partial mult
-          call m_kern_min( k_off,kpart,ib_nd_acc_rem, ibind_rem,nbnab_rem,&
-               ibpart_rem,ibseq_rem,ibndimj_rem,&
+          call m_kern_min( k_off,kpart, &
+               part_array(ib_nd_acc_rem_beg:ib_nd_acc_rem_end), &
+               part_array(ibind_rem_beg:ibind_rem_end),&
+               part_array(nbnab_rem_beg:nbnab_rem_end),&
+               ibpart_rem,&
+               part_array(ibseq_rem_beg:ibseq_rem_end),&
+               part_array(ibndimj_rem_beg:ibndimj_rem_end),&
                atrans,b_rem,c,a_b_c%ahalo,a_b_c%chalo,a_b_c%ltrans,&
                a_b_c%bmat(1)%mx_abs,a_b_c%parts%mx_mem_grp, &
                a_b_c%prim%mx_iprim, lena, lenb_rem, lenc)
