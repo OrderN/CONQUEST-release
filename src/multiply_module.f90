@@ -244,15 +244,8 @@ contains
        index_rec = mod(kpart,2) + 1
        index_comp = mod(kpart+1,2) + 1
        
-       ! Check that previous partition data have been received before starting computation
-       if (kpart.gt.2) then
-          if (request(1,index_comp).ne.MPI_REQUEST_NULL) &
-               call MPI_Wait(request(1,index_comp),MPI_STATUSES_IGNORE,ierr)
-          if (request(2,index_comp).ne.MPI_REQUEST_NULL) &
-               call MPI_Wait(request(2,index_comp),MPI_STATUSES_IGNORE,ierr)
-       end if
-
-       ! If that previous partition was a periodic one, copy over arrays from previous index
+       ! If the previous partition was a periodic one, copy over arrays from previous index.
+       ! No need to wait for communication to finish.
        if(.not.new_partition(index_comp)) then
           part_array(:,index_comp) = part_array(:,index_rec)
           n_cont(index_comp) = n_cont(index_rec)
@@ -261,6 +254,23 @@ contains
           lenb_rem(index_comp) = lenb_rem(index_rec)
        end if
            
+        ! Receive the data from the current partition - non-blocking
+        if (kpart.lt.a_b_c%ahalo%np_in_halo+1) then
+           call do_comms(k_off(index_rec), kpart, part_array(:,index_rec), n_cont(index_rec), ilen2(index_rec), &
+                a_b_c, b, recv_part, b_rem(index_rec)%values, &
+                lenb_rem(index_rec), myid, ncover_yz, new_partition(index_rec), .true., request(:,index_rec))
+        end if
+           
+       ! Check that previous partition data have been received before starting computation
+       if (kpart.gt.2) then
+          if (request(1,index_comp).ne.MPI_REQUEST_NULL) &
+               call MPI_Wait(request(1,index_comp),MPI_STATUSES_IGNORE,ierr)
+          if (request(2,index_comp).ne.MPI_REQUEST_NULL) &
+               call MPI_Wait(request(2,index_comp),MPI_STATUSES_IGNORE,ierr)
+          if (request(1,index_comp).ne.MPI_REQUEST_NULL .or. request(2,index_comp).ne.MPI_REQUEST_NULL) &
+             call cq_abort('mat_mult: error freeing MPI_request after MPI_Wait')
+       end if
+
         ! Now point the _rem variables at the appropriate parts of
         ! the array where we have received the data
         offset = 0
@@ -283,13 +293,6 @@ contains
         call end_part_comms(myid,n_cont(index_comp),nbnab_rem, &
              ibind_rem,npxyz_rem,ibpart_rem,ncover_yz,a_b_c%gcs%ncoverz)
 
-        ! Receive the data from the current partition - non-blocking
-        if (kpart.lt.a_b_c%ahalo%np_in_halo+1) then
-           call do_comms(k_off(index_rec), kpart, part_array(:,index_rec), n_cont(index_rec), ilen2(index_rec), &
-                a_b_c, b, recv_part, b_rem(index_rec)%values, &
-                lenb_rem(index_rec), myid, ncover_yz, new_partition(index_rec), .true., request(:,index_rec))
-        end if
-           
        ! Omp master doesn't include an implicit barrier. We want master
        ! to be finished with comms before calling the multiply kernels
        ! hence the explicit barrier
@@ -310,7 +313,6 @@ contains
                a_b_c%ltrans,a_b_c%bmat(1)%mx_abs,a_b_c%parts%mx_mem_grp, &
                a_b_c%prim%mx_iprim, lena, lenb_rem(index_comp), lenc)
        end if
-       !$omp barrier
     end do main_loop    
     !$omp end parallel
 
@@ -330,30 +332,25 @@ contains
           !write(io_lun,*) 'Send done ',i,myid
        end do
     end if
-    call my_barrier
     call start_timer(tmr_std_allocation)
     deallocate(nreqs,STAT=stat)
     if(stat/=0) call cq_abort('mat_mult: error deallocating nreqs')
     call stop_timer(tmr_std_allocation)
-    call my_barrier
     ! --- for type 2, make backward local transpose of A-matrix -----------
     if(a_b_c%mult_type.eq.2) then
        invdir=1
        call loc_trans( a_b_c%ltrans, a_b_c%ahalo,a,lena,atrans,lena,invdir)
     end if
-    call my_barrier
     call start_timer(tmr_std_allocation)
     deallocate(atrans,STAT=stat)
     if(stat/=0) call cq_abort('mat_mult: error deallocating atrans')
     call stop_timer(tmr_std_allocation)
-    call my_barrier
     call start_timer(tmr_std_allocation)
     deallocate(ibpart_rem,STAT=stat)
     if(stat/=0) call cq_abort('mat_mult: error deallocating ibpart_rem')
     deallocate(recv_part,STAT=stat)
     if(stat/=0) call cq_abort('mat_mult: error deallocating recv_part')
     call stop_timer(tmr_std_allocation)
-    call my_barrier
     !deallocate(b_rem,STAT=stat)
     !if(stat/=0) call cq_abort('mat_mult: error deallocating b_rem')
     !call my_barrier
@@ -627,9 +624,9 @@ contains
             n_cont,part_array,a_b_c%bindex,b_rem,lenb_rem,b,myid,ilen2,&
             mx_msg_per_part,a_b_c%parts,a_b_c%prim,a_b_c%gcs,(recv_part(nnode)-1)*2,do_nonb,request)
     end if
-       
-       k_off=a_b_c%ahalo%lab_hcover(kpart) ! --- offset for pbcs
-     end subroutine do_comms
+    
+    k_off=a_b_c%ahalo%lab_hcover(kpart) ! --- offset for pbcs
+  end subroutine do_comms
 
   !!****f* multiply_module/prefetch *
   !!

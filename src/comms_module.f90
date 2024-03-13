@@ -142,8 +142,6 @@ contains
           endif
        enddo ! Partitions to send
     enddo ! Nodes to send to
-    ! Synchronise with other nodes
-    call MPI_Barrier(MPI_COMM_WORLD,ierr)
     return
   end subroutine Mquest_start_send
 !!***

@@ -287,13 +287,17 @@ contains
 
     ! Local variables
     integer :: ierr
+    character(len=MPI_MAX_PROCESSOR_NAME) :: pname
+    integer :: rlen
 
     call MPI_INIT(ierr)
     if(ierr.ne.0) write(io_lun,*) 'ierr is ',ierr
     call MPI_COMM_RANK( MPI_COMM_WORLD, myid, ierr )
     call MPI_COMM_SIZE( MPI_COMM_WORLD, number_of_procs, ierr )
+    call MPI_GET_PROCESSOR_NAME(pname, rlen, ierr)
     inode  = myid+1
     ionode = 1
+    write(io_lun,*) 'Process ',myid,' is running on node ',pname
     if(inode==ionode) open(unit=warning_lun, file='Conquest_warnings')
     call mtmini()
     return
