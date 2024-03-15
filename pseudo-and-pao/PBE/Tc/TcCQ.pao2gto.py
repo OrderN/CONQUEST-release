@@ -67,14 +67,7 @@ build_guess( orb, orb_guess, center =center)
 orb[0].bounds = ([-6,6])    #Bounds for SZ,SZP,DZP,TZTP
 orb[1].bounds=([-1,-1,-6,-6,-1,-10],[1,2,6,4,6,6])  #Bounds for SZ,SZP,DZP,TZTP
 orb[2].bounds = ([-6,2.5])  #Bounds for SZ,SZP,DZP,TZTP
-#orb[3].bounds = ([-6,10])
-#orb[4].bounds=([-1,-1,-6,-6,-1,-6],[3.5,2,6,3,6,1])
-#orb[5].bounds = ([-4,6])
-#orb[6].bounds = ([-6,6])
-#orb[7].bounds = ([-6,6])
-#orb[8].bounds=([-6,6])
-#orb[9].bounds = ([-6,6])
-#orb[10].bounds = ([-6,6])
+
 #%% Define the number of Gaussian primitives for each orb. ####################
 # (not mandatory, default is 3)
 #
