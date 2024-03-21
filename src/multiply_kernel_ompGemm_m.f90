@@ -357,7 +357,8 @@ contains
     ! Local variables
     integer :: jbnab2ch(mx_absb)
     integer :: i,j,k, k_in_halo, k_in_part, nbkbeg
-    integer :: nabeg, i_in_prim, icad, nbbeg, nbend, ncbeg, ncend
+    integer :: nabeg, i_in_prim, icad, nbbeg
+    integer :: n2, nbaddr, ncaddr
     integer :: n2beg, n2end
     integer :: nb_nd_kbeg
     integer :: nd1, nd2, nd3
@@ -399,19 +400,24 @@ contains
                    nd2 = bndim2(nbkbeg + j)
                    nbbeg = nd2_vector(j)
 
-                   nbend = nbbeg + nd3 * nd2 - 1
-                   ncend = ncbeg + nd1 * nd2 - 1
-                   n2beg = sofar + 1
-                   n2end = sofar + nd2
-                   tempb(1:nd3, n2beg:n2end) = reshape(b(nbbeg:nbend), [nd3, nd2], order=[1,2])
-                   tempc(n2beg:n2end, 1:nd1) = reshape(c(ncbeg:ncend), [nd2, nd1], order=[2,1])
+                   ! Vectorized version of temporary copies. Intel ifort compiler 2021.6
+                   ! on myriad
+                   ! compiles the memory copies into AVX2 instructions, but efficiency
+                   ! is poor in the test cases I tried because nd1 and nd3 are small.
+                   ! Tuomas Koskela (ARC) 21 Mar 2024 eCSE08 project
+                   ! nbend = nbbeg + nd3 * nd2 - 1
+                   ! ncend = ncbeg + nd1 * nd2 - 1
+                   ! n2beg = sofar + 1
+                   ! n2end = sofar + nd2
+                   ! tempb(1:nd3, n2beg:n2end) = reshape(b(nbbeg:nbend), [nd3, nd2], order=[1,2])
+                   ! tempc(n2beg:n2end, 1:nd1) = reshape(c(ncbeg:ncend), [nd2, nd1], order=[2,1])
 
-                   ! do n2 = 1, nd2
-                   !    nbaddr = nbbeg + nd3 * (n2 - 1)
-                   !    ncaddr = ncbeg + nd1 * (n2 - 1)
-                   !    tempb(1:nd3,sofar+n2) = b(nbaddr:nbaddr+nd3-1)
-                   !    tempc(sofar+n2,1:nd1) = c(ncaddr:ncaddr+nd1-1)
-                   ! end do
+                   do n2 = 1, nd2
+                      nbaddr = nbbeg + nd3 * (n2 - 1)
+                      ncaddr = ncbeg + nd1 * (n2 - 1)
+                      tempb(1:nd3,sofar+n2) = b(nbaddr:nbaddr+nd3-1)
+                      tempc(sofar+n2,1:nd1) = c(ncaddr:ncaddr+nd1-1)
+                   end do
 
                    sofar = sofar + nd2
 
