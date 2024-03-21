@@ -187,31 +187,26 @@ contains
             k, kpart, k_off, ahalo, chalo, at, &
             ib_nd_acc, ibaddr, nbnab, ibpart, ibseq, bndim2)
 
-       ! Create a pointer that re-indexes B as a 2D array for the dgemm call
+       ! Compute indices to B for dgemm call
        nd2 = bndim2(nbkbeg + nbnab(k_in_part))
        nbbeg = nd2_vector(1)
        nbend = nd2_vector(nbnab(k_in_part)) + nd3 * nd2 - 1
        tbend = nd2_array(nbnab(k_in_part)) + nd2 - 1
 
-       !pointb(1:nd3, 1:tbend) => b(nd2_vector(1):nbend)
-
        ! Loop over primary-set A-neighbours of k
        !$omp do schedule(runtime)
-       do i = 1, at%n_hnab(k_in_halo)
+       ANeighbours: do i = 1, at%n_hnab(k_in_halo)
           i_in_prim = at%i_prim(at%i_beg(k_in_halo) + i - 1)
           icad = (i_in_prim - 1) * chalo%ni_in_halo
 
-          ! Create a pointer that re-indexes A as a 2D array for the dgemm call
+          ! Compute indices to A for dgemm call
           nd1 = ahalo%ndimi(i_in_prim)
           nabeg = at%i_nd_beg(k_in_halo) + nd1_vector(i)
           naend = nabeg + (nd1 * nd3 - 1)
-          !pointa(1:nd3, 1:nd1) => a(nabeg:naend)
 
-          ! ! Compute A*B using pointa and pointb and store the result in tempc
-          ! call dgemm('t', 'n', nd1, tbend, nd3, one, pointa, &
-          !      nd3, pointb, nd3, zero, tempc, maxnd1)
-          call dgemm('t', 'n', nd1, tbend, nd3, one, a(nabeg:naend), &
-               nd3, b(nbbeg:nbend), nd3, zero, tempc, maxnd1)
+          ! Compute A*B using and store the result in tempc
+          call dgemm('t', 'n', nd1, tbend, nd3, one, A(nabeg:naend), &
+               nd3, B(nbbeg:nbend), nd3, zero, tempc, maxnd1)
 
           ! Copy result back from tempc and add to C
           copy_c: do j = 1, nbnab(k_in_part)
@@ -227,7 +222,7 @@ contains
              end if
           end do copy_c
 
-       end do ! end of i = 1, at%n_hnab
+       end do ANeighbours
        !$omp end do
     end do ! end of k = 1, nahpart
     deallocate(tempc)
@@ -387,8 +382,8 @@ contains
             k, kpart, k_off, ahalo, chalo, at, &
             ib_nd_acc, ibaddr, nbnab, ibpart, ibseq, bndim2)
 
-!$omp do schedule(runtime)
        ! Loop over primary-set A-neighbours of k
+       !$omp do schedule(runtime)
        do i = 1, at%n_hnab(k_in_halo)
           i_in_prim = at%i_prim(at%i_beg(k_in_halo)+i-1)
           nd1 = ahalo%ndimi(i_in_prim)
@@ -485,7 +480,7 @@ contains
     end do
 
     ! transcription of j from partition to C-halo labelling
-    copy_b: do j = 1, nbnab(k_in_part)
+    do j = 1, nbnab(k_in_part)
        ! Also precompute jbnab2ch to be used later in the parallel loop.
        jpart = ibpart(nbkbeg + j) + k_off
        jseq = ibseq(nbkbeg + j)
@@ -497,7 +492,7 @@ contains
           nd2_array(j) = nd2_array(j - 1) + nd2_prev
        end if
 
-    end do copy_b
+    end do
 
   end subroutine precompute_indices
 
