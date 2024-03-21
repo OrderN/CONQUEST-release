@@ -121,16 +121,16 @@ module matrix_module
   type matrix_halo
      integer :: np_in_halo ! Partns in halo
      integer :: ni_in_halo ! Atoms in halo
-     integer,pointer :: nh_part(:)    ! No of halo atoms in halo part
-     integer,pointer :: j_beg(:)      ! accumulator of nh_part
-     integer,pointer :: lab_hcell(:)  ! sim cell part (CC) = halo part
-     integer,pointer :: lab_hcover(:) ! CS part (CC) = halo part
-     integer,pointer :: j_seq(:)      ! Part seq of halo atom
-     integer,pointer :: i_h2d(:)      ! halo->neigh trans for halo atom
-     integer,pointer :: i_halo(:)     ! halo seq of atom in CS
-     integer,pointer :: i_hbeg(:)     ! Where CS part starts in i_halo
-     integer,pointer :: ndimi(:)
-     integer,pointer :: ndimj(:)
+     integer,allocatable :: nh_part(:)    ! No of halo atoms in halo part
+     integer,allocatable :: j_beg(:)      ! accumulator of nh_part
+     integer,allocatable :: lab_hcell(:)  ! sim cell part (CC) = halo part
+     integer,allocatable :: lab_hcover(:) ! CS part (CC) = halo part
+     integer,allocatable :: j_seq(:)      ! Part seq of halo atom
+     integer,allocatable :: i_h2d(:)      ! halo->neigh trans for halo atom
+     integer,allocatable :: i_halo(:)     ! halo seq of atom in CS
+     integer,allocatable :: i_hbeg(:)     ! Where CS part starts in i_halo
+     integer,allocatable :: ndimi(:)
+     integer,allocatable :: ndimj(:)
      ! This type's values for maxima
      integer :: mx_part,mx_halo
   end type matrix_halo

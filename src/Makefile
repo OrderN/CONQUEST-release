@@ -102,7 +102,7 @@ initial_read_module.o:initial_read_module.f90 datestamp.o
 # for GCC13, possibly only on Mac.  It doesn't need any other
 # compiler flags (libraries or communications) so should be OK like this
 pseudo_tm_info.o:pseudo_tm_info.f90
-	$(FC) -c $<
+	$(FC) $(XC_COMPFLAGS) -c $<
 
 #datestamp.f90: $(COMMENT)
 #	$(ECHOSTR) "module datestamp\n" > datestamp.f90
