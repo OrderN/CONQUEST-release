@@ -357,7 +357,7 @@ contains
     ! Local variables
     integer :: jbnab2ch(mx_absb)
     integer :: i,j,k, k_in_halo, k_in_part, nbkbeg
-    integer :: nabeg, i_in_prim, icad, nbbeg
+    integer :: nabeg, i_in_prim, icad, nbbeg, ncbeg
     integer :: n2, nbaddr, ncaddr
     integer :: n2beg, n2end
     integer :: nb_nd_kbeg
