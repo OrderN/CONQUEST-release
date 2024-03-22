@@ -1,9 +1,10 @@
 # This is a system-specific makefile for ARCHER2. 
 # See https://docs.archer2.ac.uk/ for user documentation
 # This works with the gnu programming environment
+# and the cray-fftw module
 # Starting from default modules, use
-#   module rm PrgEnv-cray
-#   module load PrgEnv-gnu
+#   module swap PrgEnv-cray PrgEnv-gnu
+#   module load cray-fftw
 
 # Set compilers
 FC=mpif90
@@ -37,7 +38,7 @@ XC_COMPFLAGS =
 #XC_COMPFLAGS = -I/mnt/lustre/a2fs-work2/work/ecseah10/ecseah10/tk-ecse08/excalibur-tests/benchmarks/spack/archer2/compute-node/opt/linux-sles15-zen2/gcc-11.2.0/libxc-5.2.3-sq6g4ckyvauupz6rfd2f5uwqp47cb5bl/include
 
 # Set FFT library
-FFT_LIB=-L/opt/cray/pe/fftw/3.3.10.3/x86_rome/lib -lfftw3
+FFT_LIB=-L$(FFTW_ROOT)/lib -lfftw3
 FFT_OBJ=fft_fftw3.o
 
 LIBS= $(FFT_LIB) $(XC_LIB) $(BLAS)
