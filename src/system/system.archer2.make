@@ -1,7 +1,7 @@
 # This is a system-specific makefile for ARCHER2. 
 # See https://docs.archer2.ac.uk/ for user documentation
-# This works with the gnu programming environment
-# and the cray-fftw module
+# This requires the gnu programming environment
+# and the cray-libsci and cray-fftw modules
 # Starting from default modules, use
 #   module swap PrgEnv-cray PrgEnv-gnu
 #   module load cray-fftw
