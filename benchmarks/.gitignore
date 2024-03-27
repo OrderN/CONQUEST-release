@@ -1,0 +1,12 @@
+# Ignore everything
+*
+# Don't ignore directories, so we can recurse into them
+!*/
+# Don't ignore .gitignore and specific files in all subdirectories
+!.gitignore
+!*/Conquest_input
+!*/Conquest_output*
+!*/README.md
+!*/*.ion
+!*/*.dat
+!*/*.xtl

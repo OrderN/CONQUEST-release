@@ -1238,7 +1238,7 @@ contains
     ! This will be dynamically allocated/deallocated by the system
     integer :: lab_const
     integer :: ierr,kpart,ind_part,ncover_yz,n_which,ipart,nnode
-    integer :: icall,n_cont,kpart_next,ind_partN,k_off
+    integer :: n_cont,kpart_next,ind_partN,k_off
     integer :: stat,ilen2,lenb_rem
     ! Remote variables to be allocated
     integer(integ),allocatable :: ibpart_rem(:)
@@ -1305,14 +1305,11 @@ contains
 
     do kpart = 1,a_b_c%ahalo%np_in_halo  ! Main loop. Loop for halo-partition kpart
        !write(io_lun,*) 'Part: ',kpart,myid
-       icall=1
        ind_part = a_b_c%ahalo%lab_hcell(kpart)
        !write(io_lun,*) 'ind_part: ',ind_part
 
        if(kpart>1) then  ! Is it a periodic image of the previous partition ?
-          if(ind_part.eq.a_b_c%ahalo%lab_hcell(kpart-1)) then 
-             icall=0
-          else ! Get the data
+          if(ind_part.ne.a_b_c%ahalo%lab_hcell(kpart-1)) then ! Get the data
              !write(io_lun,*) myid,' seq: ',size(a_b_c%parts%i_cc2seq)
              ipart = a_b_c%parts%i_cc2seq(ind_part)
              !write(io_lun,*) myid,' Alloc b_rem part: ',ipart
@@ -1328,7 +1325,7 @@ contains
                 lenb_rem = a_b_c%comms%ilen3rec(ipart,nnode)
              end if
              allocate(b_rem(lenb_rem))
-             call prefetch(kpart,a_b_c%ahalo,a_b_c%comms,a_b_c%bmat,icall,&  
+             call prefetch(kpart,a_b_c%ahalo,a_b_c%comms,a_b_c%bmat,&  
                   n_cont,part_array,a_b_c%bindex,b_rem,lenb_rem,b,myid,ilen2,&
                   mx_msg_per_part,a_b_c%parts,a_b_c%prim,a_b_c%gcs,(recv_part(nnode)-1)*2)
              !write(io_lun,*) 'b_rem: ',lenb_rem
@@ -1372,7 +1369,7 @@ contains
           call start_timer(tmr_std_allocation)
           allocate(b_rem(lenb_rem))
           call stop_timer(tmr_std_allocation)
-          call prefetch(kpart,a_b_c%ahalo,a_b_c%comms,a_b_c%bmat,icall,& 
+          call prefetch(kpart,a_b_c%ahalo,a_b_c%comms,a_b_c%bmat,& 
                n_cont,part_array,a_b_c%bindex,b_rem,lenb_rem,b,myid,ilen2,&
                mx_msg_per_part,a_b_c%parts,a_b_c%prim,a_b_c%gcs,(recv_part(nnode)-1)*2)
           lenb_rem = size(b_rem)
