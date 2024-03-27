@@ -1,13 +1,11 @@
 # system.make for cosma8 (apr 2023)
 # For user docs see https://cosma.readthedocs.io/en/latest/
-# load these modules
+# This has been tested using the following modules:
 # module load intel_comp/2022.3.0 compiler mpi mkl
 # module load fftw/3.3.10cosma8
 
 
 # Set compilers
-#FC=scorep --user mpif90
-#F77=scorep --user mpif77
 FC=mpif90
 F77=mpif77
 
