@@ -24,18 +24,21 @@ MULT_KERN = default
 DIAG_DUMMY = 
 
 #Include system-dependent variables
-#Get the system name automatically.
-SYSTEM = $(shell hostname -d)
 ifneq ($(SYSTEM),)
+$(info System is $(SYSTEM))
 SYSTEM_PATH = system/system.$(SYSTEM).make
 else
-SYSTEM_PATH = system/system.make
+SYSTEM_PATH=system/system.make
 endif
 ifneq ("$(wildcard $(SYSTEM_PATH))","")
-$(info Building on SYSTEM $(SYSTEM), using makefile $(SYSTEM_PATH))
+$(info Building using system file $(SYSTEM_PATH))
 include $(SYSTEM_PATH)
 else
-$(error Cannot find $(SYSTEM_PATH) file for system $(SYSTEM). Please make one, using system/system.example.make as an example)
+$(info Cannot find system file $(SYSTEM_PATH). Please make one,)
+$(info using system/system.example.make as an example, or choose)
+$(info an existing file from the system directory using make SYSTEM=label)
+$(info to select system/system.label.make)
+$(error Compilation aborted.)
 endif
 
 #Include lists of object files
@@ -77,7 +80,7 @@ deps.obj.inc: $(SRCS_NODS) $(SYSTEM_PATH)
 
 #Target
 $(TARGET) : $(NODE_OBJECTS)
-	$(FC) $(LINKFLAGS) -o $(TARGET) $(NODE_OBJECTS) $(LIBS)
+	$(FC) -o $(TARGET) $(NODE_OBJECTS) $(LINKFLAGS) $(LIBS)
 	cp $(TARGET) ../bin
 
 #.f90.o:
@@ -94,6 +97,12 @@ $(NODE_OBJECTS):
 
 initial_read_module.o:initial_read_module.f90 datestamp.o
 	$(FC) $(COMPFLAGS) -c $<
+
+# Note: this module seems to need compiling without optimisation
+# for GCC13, possibly only on Mac.  It doesn't need any other
+# compiler flags (libraries or communications) so should be OK like this
+pseudo_tm_info.o:pseudo_tm_info.f90
+	$(FC) -c $<
 
 #datestamp.f90: $(COMMENT)
 #	$(ECHOSTR) "module datestamp\n" > datestamp.f90

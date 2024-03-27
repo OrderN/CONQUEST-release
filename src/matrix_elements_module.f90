@@ -259,6 +259,7 @@ contains
     ! Module usage
     use datatypes
     use basic_types
+    use numbers, ONLY: RD_ERR
     use matrix_module
     use GenComms, ONLY: cq_abort
     use global_module, ONLY: id_glob, species_glob, sf, nlpf, paof, napf
@@ -277,7 +278,6 @@ contains
     integer :: inp, cumu_ndims, neigh_spec
     integer :: nn,j,np,ni,ist
     real(double) :: rcutsq,dx,dy,dz
-    real(double), parameter :: tol=1.0e-8_double
 
     ! Check that prim and gcs are correctly set up
     if((.NOT.ASSOCIATED(gcs%xcover)).OR. &
@@ -322,7 +322,7 @@ contains
                       dx=gcs%xcover(gcs%icover_ibeg(np)+ni-1)-prim%xprim(inp)
                       dy=gcs%ycover(gcs%icover_ibeg(np)+ni-1)-prim%yprim(inp)
                       dz=gcs%zcover(gcs%icover_ibeg(np)+ni-1)-prim%zprim(inp)
-                      if(dx*dx+dy*dy+dz*dz<rcutsq-tol) then
+                      if(dx*dx+dy*dy+dz*dz<rcutsq-RD_ERR) then
                          amat(nn)%n_nab(j)=amat(nn)%n_nab(j)+1
                          !write(io_lun,*) 'Neighbour: ',j,amat(nn)%n_nab(j)
                          if(amat(nn)%n_nab(j).gt.amat(nn)%mx_abs) then
@@ -412,6 +412,7 @@ contains
     ! Module usage
     use datatypes
     use basic_types
+    use numbers, ONLY: RD_ERR
     use matrix_module
     use GenComms, ONLY: cq_abort
     use global_module, ONLY: sf
@@ -432,7 +433,6 @@ contains
     integer :: nn,j,np,ni
     integer :: tot_nabs, nabs_of_atom, mx_abs_nabs
     real(double) :: rcutsq,dx,dy,dz
-    real(double), parameter :: tol=1.0e-8_double
 
     ! Check that prim and gcs are correctly set up
     if((.NOT.ASSOCIATED(gcs%xcover)).OR. &
@@ -466,7 +466,7 @@ contains
                       dx=gcs%xcover(gcs%icover_ibeg(np)+ni-1)-prim%xprim(inp)
                       dy=gcs%ycover(gcs%icover_ibeg(np)+ni-1)-prim%yprim(inp)
                       dz=gcs%zcover(gcs%icover_ibeg(np)+ni-1)-prim%zprim(inp)
-                      if(dx*dx+dy*dy+dz*dz<rcutsq-tol) then
+                      if(dx*dx+dy*dy+dz*dz<rcutsq-RD_ERR) then
                          nabs_of_atom = nabs_of_atom + 1
                          tot_nabs = tot_nabs + 1
                       endif

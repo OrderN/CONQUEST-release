@@ -593,7 +593,7 @@ contains
                         !        commented by TM 18Oct2006
    
                            distsq=(xmu-xnu)**2+(ymu-ynu)**2+(zmu-znu)**2
-                           if(distsq < rcutsq ) then
+                           if(distsq < rcutsq -RD_ERR ) then
                               if(loc_bucket%i_h2d(ind_halo2,ind_halo1) == 0) then !new pair
                                  npair=npair+1
                                  loc_bucket%i_h2d(ind_halo2,ind_halo1)=npair
