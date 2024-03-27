@@ -48,7 +48,7 @@ LIBS= $(FFT_LIB) $(XC_LIB) $(BLAS)
 COMPFLAGS= -O3 -fallow-argument-mismatch -fopenmp  $(XC_COMPFLAGS)
 
 # Linking flags
-LINKFLAGS=  -fopenmp -L$(LIBSCI_BASE_DIR)/gnu/9.1/x86_64/lib -lsci_gnu_mpi_mp -lsci_gnu_mp
+LINKFLAGS=  -fopenmp -L$(LIBSCI_BASE_DIR)/gnu/9.1/x86_64/lib -lsci_gnu_mpi -lsci_gnu
 
 
 # Matrix multiplication kernel type
