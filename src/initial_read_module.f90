@@ -2136,6 +2136,12 @@ contains
        call cq_warn(sub_name,' AtomMove.ReuseSFcoeff and AtomMove.ReuseDM should be false if General.MLFF is true.')
        flag_SFcoeffReuse = .false.
        flag_LmatrixReuse = .false.
+
+       !! TODO: there is error when use diagnalization related to "ScalapackFormat: Could not dealloc CC2SC"
+       !! TODO: So, current solution is use ordern, should check it later
+       method = 'ordern'
+       flag_diagonalisation = .false.
+       flag_check_Diag = .false.
     endif
 
     ! tsuyoshi 2019/12/27
