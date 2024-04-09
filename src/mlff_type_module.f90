@@ -17,7 +17,7 @@
 !!  CREATION DATE
 !!   2022/03/14
 !!  MODIFICATION HISTORY
-!
+!!
 !!  SOURCE
 !!
 module mlff_type
@@ -35,40 +35,19 @@ module mlff_type
   logical :: flag_debug_mlff = .FALSE. ! .TRUE. ! control output level from mlff for debug
   logical :: flag_time_mlff =  .TRUE. ! .FALSE. ! control output level from mlff for timing
 
-!! Modified from * matrix_module/matrix *
-!!****s* ML_pair *
+!!****s* mlff_type/matrix_ML *
 !!  NAME
-!!   atom_pair
+!!   matrix_ML
 !!  PURPOSE
 !!   Combines neighbour information needed to index matrices for
 !!  machine learning. Save in one dimensional list.
 !!  AUTHOR
 !!   Jianbo Lin
+!!  CREATION DATE
+!!   2022/03/14
+!!  MODIFICATION HISTORY
 !!  SOURCE
 !!
-  type ML_pair
-    integer :: mx_nab,mx_abs
-    integer :: length
-    real(double)   :: rcut
-    integer(integ) :: n_atoms, part_nabs ! Lengths of n_nab, i_acc
-
-    ! index shift of neighbours
-    ! No. of neighbours of each primary atom i
-    integer(integ),pointer :: n_nab(:)
-    ! accumulator for no. of neighbours of primary atom i
-    integer(integ),pointer :: i_acc(:)
-    integer(integ),pointer :: i_species(:)  ! species of target atom i
-
-    ! useful information for machine learning
-    ! the information from each neighbour
-    integer(integ),pointer :: j_species(:)  ! species of neighbour atom j
-    ! save vector of rij and r, or calcuate directly later
-    real(double),pointer :: rijx(:)
-    real(double),pointer :: rijy(:)
-    real(double),pointer :: rijz(:)
-    real(double),pointer :: radius(:)
-  end type ML_pair
-!!***
   type matrix_ML
     integer :: mx_nab,mx_abs
     integer :: length
@@ -91,10 +70,9 @@ module mlff_type
     integer(integ),pointer :: j_species(:)  ! species of neighbour atom j  {[ith naba], [i+1th naba],}, dim
     integer(integ),pointer :: i_part(:)     ! partition no. of atom in neigh list
     integer(integ),pointer :: i_seq(:)      ! part-seq no. of atom in neigh list
-    real(double),pointer :: dx(:)
-    real(double),pointer :: dy(:)
-    real(double),pointer :: dz(:)
-    real(double),pointer :: radius(:)
+    real(double),pointer :: radius(:)       ! length rij of atom in neigh list (mx_naba)
+    real(double),pointer :: dr(:,:)           ! vector rij of atom in neigh list (3,mx_naba)
+    real(double),pointer :: frac_dr(:,:)      ! fractional vector rij of atom in neigh list (3,mx_naba)
 
     ! Information of three body
     integer(integ),pointer :: triplet_acc(:) ! accumulator for atom in triplet list
@@ -338,34 +316,31 @@ contains
     type(matrix_ML), dimension(:)  :: mat_ML
 
     ! Local variables
-    integer :: mx_naba, i, stat
+    integer :: mx_naba, i, stat, cell_dim=3
 
     call start_timer(tmr_std_allocation)
     do i=1,part_on_node
       ! Dimensions of neighbors
       mx_naba = mx_part*mat_ML(i)%mx_abs
       if (mx_naba .gt. 0) then
-        allocate(mat_ML(i)%i_seq(mx_naba),STAT=stat)
-        if(stat/=0) &
-          call cq_abort('alloc_mat_ML: error allocating memory to i_seq')
-        allocate(mat_ML(i)%i_part(mx_naba),STAT=stat)
-        if(stat/=0) &
-          call cq_abort('alloc_mat_ML: error allocating memory to i_part')
-        allocate(mat_ML(i)%radius(mx_naba),STAT=stat)
-        if(stat/=0) &
-          call cq_abort('alloc_mat_ML: error allocating memory to radius')
         allocate(mat_ML(i)%j_species(mx_naba),STAT=stat)
         if(stat/=0) &
           call cq_abort('alloc_mat_ML: error allocating memory to j_species')
-        allocate(mat_ML(i)%dx(mx_naba),STAT=stat)
+        allocate(mat_ML(i)%i_part(mx_naba),STAT=stat)
         if(stat/=0) &
-          call cq_abort('alloc_mat_ML: error allocating memory to dx')
-        allocate(mat_ML(i)%dy(mx_naba),STAT=stat)
+          call cq_abort('alloc_mat_ML: error allocating memory to i_part')
+        allocate(mat_ML(i)%i_seq(mx_naba),STAT=stat)
         if(stat/=0) &
-          call cq_abort('alloc_mat_ML: error allocating memory to dy')
-        allocate(mat_ML(i)%dz(mx_naba),STAT=stat)
+          call cq_abort('alloc_mat_ML: error allocating memory to i_seq')
+        allocate(mat_ML(i)%radius(mx_naba),STAT=stat)
         if(stat/=0) &
-          call cq_abort('alloc_mat_ML: error allocating memory to dz')
+          call cq_abort('alloc_mat_ML: error allocating memory to radius')
+        allocate(mat_ML(i)%dr(3,mx_naba),STAT=stat)
+        if(stat/=0) &
+          call cq_abort('alloc_mat_ML: error allocating memory to dr')
+        allocate(mat_ML(i)%frac_dr(3,mx_naba),STAT=stat)
+        if(stat/=0) &
+          call cq_abort('alloc_mat_ML: error allocating memory to frac_dr')
       else
         write(*, *) 'Warning: allocate matrix ML, partition, mx_naba', i, mx_naba
       end if ! mx_naba
@@ -433,53 +408,50 @@ contains
     end if
     call start_timer(tmr_std_allocation)
     do i=part_on_node,1,-1
-      ! Dimensions of neighbors
+      ! Dimensions of atoms in processes
+      if (mx_part .gt. 0) then
+        deallocate(mat_ML(i)%i_species,STAT=stat)
+        if(stat/=0) &
+          call cq_abort('dealloc_mat_ML: error deallocating memory to i_species')
+        deallocate(mat_ML(i)%i_nd_acc,STAT=stat)
+        if(stat/=0) &
+          call cq_abort('dealloc_mat_ML: error deallocating memory to i_nd_acc')
+        deallocate(mat_ML(i)%i_acc,STAT=stat)
+        if(stat/=0) &
+          call cq_abort('dealloc_mat_ML: error deallocating memory to i_acc')
+        deallocate(mat_ML(i)%n_nab,STAT=stat)
+        if(stat/=0) &
+          call cq_abort('dealloc_mat_ML: error deallocating memory to n_nab')
+        deallocate(mat_ML(i)%onsite,STAT=stat)
+        if(stat/=0) &
+          call cq_abort('dealloc_mat_ML: error deallocating memory to onsite')
+      else
+        write(*, *) 'Warning: deallocate matrix ML, partition, mx_part', i, mx_part
+      end if ! mx_part
+       ! Dimensions of neighbors
       mx_naba = mx_part*mat_ML(i)%mx_abs
       if (mx_naba .gt. 0) then
-        deallocate(mat_ML(i)%i_seq,STAT=stat)
+        deallocate(mat_ML(i)%frac_dr,STAT=stat)
+        if(stat/=0) &
+          call cq_abort('dealloc_mat_ML: error deallocating memory to frac_dr')
+        deallocate(mat_ML(i)%dr,STAT=stat)
+        if(stat/=0) &
+          call cq_abort('dealloc_mat_ML: error deallocating memory to dr')
+        deallocate(mat_ML(i)%radius,STAT=stat)
+        if(stat/=0) &
+          call cq_abort('dealloc_mat_ML: error deallocating memory to radius')
+       deallocate(mat_ML(i)%i_seq,STAT=stat)
         if(stat/=0) &
           call cq_abort('dealloc_mat_ML: error deallocating memory to i_seq')
         deallocate(mat_ML(i)%i_part,STAT=stat)
         if(stat/=0) &
           call cq_abort('dealloc_mat_ML: error deallocating memory to i_part')
-        deallocate(mat_ML(i)%radius,STAT=stat)
-        if(stat/=0) &
-          call cq_abort('dealloc_mat_ML: error deallocating memory to radius')
         deallocate(mat_ML(i)%j_species,STAT=stat)
         if(stat/=0) &
           call cq_abort('dealloc_mat_ML: error deallocating memory to j_species')
-        deallocate(mat_ML(i)%dx,STAT=stat)
-        if(stat/=0) &
-          call cq_abort('dealloc_mat_ML: error deallocating memory to dx')
-        deallocate(mat_ML(i)%dy,STAT=stat)
-        if(stat/=0) &
-          call cq_abort('dealloc_mat_ML: error deallocating memory to dy')
-        deallocate(mat_ML(i)%dz,STAT=stat)
-        if(stat/=0) &
-          call cq_abort('dealloc_mat_ML: error deallocating memory to dz')
       else
-          write(*, *) 'Warning: deallocate matrix ML, partition, mx_naba', i, mx_naba
+        write(*, *) 'Warning: deallocate matrix ML, partition, mx_naba', i, mx_naba
       end if ! mx_naba
-      ! Dimensions of atoms in processes
-      if (mx_part .gt. 0) then
-         deallocate(mat_ML(i)%onsite,STAT=stat)
-         if(stat/=0) &
-            call cq_abort('dealloc_mat_ML: error deallocating memory to onsite')
-         deallocate(mat_ML(i)%n_nab,STAT=stat)
-         if(stat/=0) &
-            call cq_abort('dealloc_mat_ML: error deallocating memory to n_nab')
-         deallocate(mat_ML(i)%i_acc,STAT=stat)
-         if(stat/=0) &
-            call cq_abort('dealloc_mat_ML: error deallocating memory to i_acc')
-         deallocate(mat_ML(i)%i_nd_acc,STAT=stat)
-         if(stat/=0) &
-            call cq_abort('dealloc_mat_ML: error deallocating memory to i_nd_acc')
-         deallocate(mat_ML(i)%i_species,STAT=stat)
-         if(stat/=0) &
-            call cq_abort('dealloc_mat_ML: error deallocating memory to i_species')
-      else
-          write(*, *) 'Warning: deallocate matrix ML, partition, mx_part', i, mx_part
-      end if ! mx_part
     enddo ! i, part_on_node
     call stop_timer(tmr_std_allocation)
     return
@@ -1417,9 +1389,9 @@ contains
             species_orderij = descriptor_params(i_species)%species_orders%d2(j_species)
 
             rij=amat(nn)%radius(ist_j) * BohrToAng
-            xij=amat(nn)%dx(ist_j) * BohrToAng
-            yij=amat(nn)%dy(ist_j) * BohrToAng
-            zij=amat(nn)%dz(ist_j) * BohrToAng
+            xij=amat(nn)%dr(1,ist_j) * BohrToAng
+            yij=amat(nn)%dr(2,ist_j) * BohrToAng
+            zij=amat(nn)%dr(3,ist_j) * BohrToAng
 
             !! function of cut off
             frc_ij = 0.5 * (cos(pi * rij / rcut_a) + 1)
@@ -1970,9 +1942,9 @@ contains
             species_order2b = descriptor_params(i_species)%species_orders%d2(j_species)
 
             rij0=amat(nn)%radius(ist_j) * BohrToAng
-            xij0=amat(nn)%dx(ist_j) * BohrToAng
-            yij0=amat(nn)%dy(ist_j) * BohrToAng
-            zij0=amat(nn)%dz(ist_j) * BohrToAng
+            xij0=amat(nn)%dr(1,ist_j) * BohrToAng
+            yij0=amat(nn)%dr(2,ist_j) * BohrToAng
+            zij0=amat(nn)%dr(3,ist_j) * BohrToAng
 
             !! function of cut off
             frc_ij = 0.5 * (cos(pi * rij0 / rcut_a) + 1)
@@ -2009,9 +1981,9 @@ contains
               k_species = amat(nn)%j_species(ist_k)
 
               rik0=amat(nn)%radius(ist_k) * BohrToAng
-              xik0=amat(nn)%dx(ist_k) * BohrToAng
-              yik0=amat(nn)%dy(ist_k) * BohrToAng
-              zik0=amat(nn)%dz(ist_k) * BohrToAng
+              xik0=amat(nn)%dr(1,ist_k) * BohrToAng
+              yik0=amat(nn)%dr(2,ist_k) * BohrToAng
+              zik0=amat(nn)%dr(3,ist_k) * BohrToAng
 
               !! Todo: check order for ijk
               species_order3b = descriptor_params(i_species)%species_orders%d3(j_species, k_species)

@@ -177,6 +177,8 @@ contains
 !!  MODIFICATION HISTORY
 !!   2022/07/27 J.Lin
 !!    Modified to get pair information for machine learing
+!!   2024/04/09 J.Lin
+!!    Modified dx,dy,dz from matrix_ML to dr(3)
 !!  SOURCE
 !!
   subroutine get_naba_ML(prim,gcs,amat,rcut)
@@ -262,9 +264,9 @@ contains
                   amat(nn)%i_part(ist)=np
                   amat(nn)%i_seq(ist)=ni
                   amat(nn)%radius(ist)=sqrt(rij2)
-                  amat(nn)%dx(ist)=dx
-                  amat(nn)%dy(ist)=dy
-                  amat(nn)%dz(ist)=dz
+                  amat(nn)%dr(1,ist)=dx
+                  amat(nn)%dr(2,ist)=dy
+                  amat(nn)%dr(3,ist)=dz
 
                   neigh_spec = species_glob( id_glob( parts%icell_beg(gcs%lab_cell(np)) +ni-1 ))
                   amat(nn)%j_species(ist)=neigh_spec
@@ -332,6 +334,8 @@ contains
 !!  MODIFICATION HISTORY
 !!   2022/07/27 J.Lin
 !!    Modified to get information of triplets for machine learing
+!!   2024/04/09 J.Lin
+!!    Modified dx,dy,dz from matrix_ML to dr(3)
 !!  SOURCE
 !!
   subroutine get_triplet_ML(amat,part_on_node,rcut)
@@ -373,16 +377,16 @@ contains
 
         do jj=1,  amat(nn)%n_nab(ii)
           ist_j = amat(nn)%i_acc(ii)+jj-1
-          xij=amat(nn)%dx(ist_j)
-          yij=amat(nn)%dy(ist_j)
-          zij=amat(nn)%dz(ist_j)
+          xij=amat(nn)%dr(1,ist_j)
+          yij=amat(nn)%dr(2,ist_j)
+          zij=amat(nn)%dr(3,ist_j)
 
           amat(nn)%n_triplet(ist_j)=0
           do kk=jj+1,  amat(nn)%n_nab(ii)
             ist_k = amat(nn)%i_acc(ii)+kk-1
-            xik=amat(nn)%dx(ist_k)
-            yik=amat(nn)%dy(ist_k)
-            zik=amat(nn)%dz(ist_k)
+            xik=amat(nn)%dr(1,ist_k)
+            yik=amat(nn)%dr(2,ist_k)
+            zik=amat(nn)%dr(3,ist_k)
             rjk_2 = (xij-xik)**2+(yij-yik)**2+(zij-zik)**2
 
             if (rjk_2 >very_small .and. rjk_2 < rcut_2) then
