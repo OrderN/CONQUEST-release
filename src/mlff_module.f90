@@ -26,6 +26,7 @@ module mlff
   use energy,  only: ml_energy_hartree
 
   implicit none
+  real(double) :: inv_cell(3, 3), real_cell(3, 3)   ! be careful about length unit, it is bohr
 
   save
 
@@ -67,9 +68,9 @@ contains
     use basic_types
     use matrix_module
     use trans_module
-    use GenComms, ONLY: my_barrier, gmax
+    use GenComms, ONLY: my_barrier, gmax, inode, ionode
     use mlff_type, ONLY: matrix_ML, allocate_matrix_ML,params_ML,&
-            allocate_matrix_ML_triplet
+            allocate_matrix_ML_triplet, flag_debug_mlff
     use matrix_elements_module, ONLY: make_npxyz, get_naba_max
 
     implicit none
@@ -95,42 +96,52 @@ contains
 
     nnd = myid+1
     if(prim%n_prim.gt.0) then ! If we actually HAVE a primary set
-       if(.not.allocated(part_offset)) allocate(part_offset(prim%groups_on_node),STAT=ierr)
-       if(ierr/=0) call cq_abort("Error allocating part_offset in matrix_ini_ML: ", prim%groups_on_node,ierr)
-       call get_naba_max(prim,gcs,amat,rcut,index_size,part_offset)
-       ! The matrix maxima MUST be global across processors !
-       call gmax(amat(1)%mx_nab)
-       amat(2:prim%groups_on_node)%mx_nab = amat(1)%mx_nab
-       amat_ML%mx_nab = amat(1)%mx_nab
-       call gmax(amat(1)%mx_abs)
-       amat(2:prim%groups_on_node)%mx_abs = amat(1)%mx_abs
-       amat_ML%mx_abs = amat(1)%mx_abs
-       !write(io_lun,*) 'Matrix maxima: ',amat(1)%mx_nab, amat(1)%mx_abs
-       !write(io_lun,*) 'Index length: ',parts%mx_ngonn*(3*parts%mx_mem_grp+5*parts%mx_mem_grp*amat(1)%mx_abs)
-       !allocate(aind(parts%mx_ngonn*(3*parts%mx_mem_grp+5*parts%mx_mem_grp*amat(1)%mx_abs)),STAT=ierr)
-       !if(iprint_index > 1) write(io_lun,*) 'Matrix index: Processor ',myid,'Size ',index_size
-       !!allocate(aind(index_size),STAT=ierr)
-       !!if(ierr/=0) call cq_abort("Error allocating matrix index in matrix_ini_ML: ", index_size,ierr)
-            !parts%mx_ngonn*(3*parts%mx_mem_grp+5*parts%mx_mem_grp*amat(1)%mx_abs),ierr)
-       !!aind = 0
-       !!call set_matrix_pointers(prim%nm_nodgroup,amat, aind, prim%groups_on_node,parts%mx_mem_grp,part_offset)
-       !!call allocate_matrix(amat, prim%groups_on_node,parts%mx_mem_grp)
-       call allocate_matrix_ML(amat_ML, prim%groups_on_node, parts%mx_mem_grp)
-       call get_naba_ML(prim,gcs,amat_ML,rcut)
+      if(.not.allocated(part_offset)) allocate(part_offset(prim%groups_on_node),STAT=ierr)
+      if(ierr/=0) call cq_abort("Error allocating part_offset in matrix_ini_ML: ", prim%groups_on_node,ierr)
+      call get_naba_max(prim,gcs,amat,rcut,index_size,part_offset)
+      ! The matrix maxima MUST be global across processors !
+      call gmax(amat(1)%mx_nab)
+      amat(2:prim%groups_on_node)%mx_nab = amat(1)%mx_nab
+      amat_ML%mx_nab = amat(1)%mx_nab
+      call gmax(amat(1)%mx_abs)
+      amat(2:prim%groups_on_node)%mx_abs = amat(1)%mx_abs
+      amat_ML%mx_abs = amat(1)%mx_abs
+      !write(io_lun,*) 'Matrix maxima: ',amat(1)%mx_nab, amat(1)%mx_abs
+      !write(io_lun,*) 'Index length: ',parts%mx_ngonn*(3*parts%mx_mem_grp+5*parts%mx_mem_grp*amat(1)%mx_abs)
+      !allocate(aind(parts%mx_ngonn*(3*parts%mx_mem_grp+5*parts%mx_mem_grp*amat(1)%mx_abs)),STAT=ierr)
+      !if(iprint_index > 1) write(io_lun,*) 'Matrix index: Processor ',myid,'Size ',index_size
+      !!allocate(aind(index_size),STAT=ierr)
+      !!if(ierr/=0) call cq_abort("Error allocating matrix index in matrix_ini_ML: ", index_size,ierr)
+          !parts%mx_ngonn*(3*parts%mx_mem_grp+5*parts%mx_mem_grp*amat(1)%mx_abs),ierr)
+      !!aind = 0
+      !!call set_matrix_pointers(prim%nm_nodgroup,amat, aind, prim%groups_on_node,parts%mx_mem_grp,part_offset)
+      !!call allocate_matrix(amat, prim%groups_on_node,parts%mx_mem_grp)
+      call allocate_matrix_ML(amat_ML, prim%groups_on_node, parts%mx_mem_grp)
+      call get_naba_ML(prim,gcs,amat_ML,rcut)
+      ! Get the fractional coordination of vector rij for all neighbors
+      if (inode== ionode .and. flag_debug_mlff) then
+      write(*,*) 'after get_naba_ML in matrix_ini_ML'
+      end if
+      call get_fractional_matrix_ML(amat_ML, prim%groups_on_node)
+      if (inode== ionode .and. flag_debug_mlff) then
+        write(*,*) 'after get_fractional_matrix_ML in matrix_ini_ML'
+        write(*,*) amat_ML(1)%dr(:,1)
+        write(*,*) amat_ML(1)%frac_dr(:,1)
+        write(*,*) real_cell(:, :)
+      end if
+      if(index(params_ML%descriptor_type, '3b') .gt. 0)then
+        write(*,*) '3b is found at descriptor_type: ', &
+                index(params_ML%descriptor_type, '3b')
+        call allocate_matrix_ML_triplet(amat_ML, prim%groups_on_node)
+        call get_triplet_ML(amat_ML, prim%groups_on_node, rcut)
+      end if
 
-       if(index(params_ML%descriptor_type, '3b') .gt. 0)then
-          write(*,*) '3b is found at descriptor_type: ', &
-                  index(params_ML%descriptor_type, '3b')
-          call allocate_matrix_ML_triplet(amat_ML, prim%groups_on_node)
-          call get_triplet_ML(amat_ML, prim%groups_on_node, rcut)
-       end if
-
-       ! Now that we know neighbour numbers, sort out the pointers
-       !!call set_matrix_pointers2(prim%nm_nodgroup,amat,aind, &
-       !!     prim%groups_on_node,parts%mx_mem_grp)
-       ! * IMPORTANT * ! This must come next: it builds ndimj
-       !!call make_npxyz(nnd,amat,prim,gcs,parts%mx_mem_grp)
-       call my_barrier
+      ! Now that we know neighbour numbers, sort out the pointers
+      !!call set_matrix_pointers2(prim%nm_nodgroup,amat,aind, &
+      !!     prim%groups_on_node,parts%mx_mem_grp)
+      ! * IMPORTANT * ! This must come next: it builds ndimj
+      !!call make_npxyz(nnd,amat,prim,gcs,parts%mx_mem_grp)
+      call my_barrier
     endif ! n_prim.gt.0
     return
   end subroutine matrix_ini_ML
@@ -412,10 +423,87 @@ contains
 !!***
 
 
-!!****f* mlff_type_module/get_feature_acsf2b *
+!!****f* matrix_module/get_fractional_matrix_ML *
 !!
 !!  NAME
-!!   get_feature_acsf2b
+!!   get_fractional_matrix_ML
+!!  USAGE
+!!
+!!  PURPOSE
+!!   get fractional coordination of rij in the matrix_ML for machine learning
+!!  INPUTS
+!!
+!!
+!!  USES
+!!
+!!  AUTHOR
+!!   Jianbo Lin
+!!  CREATION DATE
+!!   2024/03/29
+!!  MODIFICATION HISTORY
+!!
+!!  SOURCE
+!!
+  subroutine get_fractional_matrix_ML(amat,part_on_node)
+    ! Module usage
+    use datatypes
+
+    use basic_types
+    use units
+    use numbers,   ONLY: pi,very_small
+    use dimens, ONLY: r_super_x, r_super_y, r_super_z
+    use GenComms, ONLY: cq_abort, inode, ionode, my_barrier
+    use mlff_type, ONLY: matrix_ML, get_inversed_matrix3
+
+    implicit none
+
+    ! Passed variables
+    type(matrix_ML), dimension (:), intent(inout) :: amat
+    integer(integ), intent(in) :: part_on_node
+
+    ! Local variables
+    integer(integ) :: inp,nn
+    integer(integ) :: ii, jj, ist_j
+    real(double) :: xij, yij, zij, f_xij, f_yij, f_zij
+
+    ! After we have neighbor information and descriptor information
+    ! Get information of triplets
+    !call my_barrier()
+
+    ! loop over all atom pairs (atoms in primary set, max. cover set) -
+    inp=1  ! Indexes primary atoms
+    do nn=1,part_on_node ! Partitions in primary set
+      if (amat(nn)%n_atoms .gt. 0) then ! Are there atoms ?
+        do ii=1,amat(nn)%n_atoms  ! Loop over atoms in partition
+          do jj=1,  amat(nn)%n_nab(ii)
+            ist_j = amat(nn)%i_acc(ii)+jj-1
+            xij=amat(nn)%dr(1,ist_j)
+            yij=amat(nn)%dr(2,ist_j)
+            zij=amat(nn)%dr(3,ist_j)
+
+            ! convert to fractional coordination
+            f_xij = inv_cell(1,1) * xij + inv_cell(2,1) * yij + inv_cell(3,1) * zij
+            f_yij = inv_cell(1,2) * xij + inv_cell(2,2) * yij + inv_cell(3,2) * zij
+            f_zij = inv_cell(1,3) * xij + inv_cell(2,3) * yij + inv_cell(3,3) * zij
+
+            amat(nn)%frac_dr(1,ist_j) = f_xij
+            amat(nn)%frac_dr(2,ist_j) = f_yij
+            amat(nn)%frac_dr(3,ist_j) = f_zij
+          end do ! j, two-body
+        inp=inp+1  ! Indexes primary-set atoms
+        enddo ! End i in prim%nm_nodgroup
+      else
+        ! if no atoms, do nothing, and turn to next partition
+        write(*, *) 'Warning: no atom in partition,', nn, amat(nn)%n_atoms
+      end if
+    enddo ! End part_on_node
+  end subroutine get_fractional_matrix_ML
+!!***
+
+!!****f* mlff_type_module/calculate_EandF_acsf2b *
+!!
+!!  NAME
+!!   calculate_EandF_acsf2b
 !!  USAGE
 !!
 !!  PURPOSE
@@ -869,6 +957,13 @@ contains
     if (inode== ionode .and. flag_debug_mlff) then
         write(*,*) 'before get_naba_ML:: bundle%n_prim=', bundle%n_prim, bundle%groups_on_node
     end if
+
+    ! Initialize cell info and inv_cell
+    ! be careful about length unit, it is bohr
+    real_cell = reshape([r_super_x, zero, zero,&
+                         zero, r_super_y, zero,&
+                         zero, zero, r_super_z], [3,3])
+    call get_inversed_matrix3(real_cell, inv_cell)
 
     ! Initialise the ML matrix and Covering set
     if(bundle%n_prim.gt.0) then

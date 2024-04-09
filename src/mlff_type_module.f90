@@ -2505,4 +2505,73 @@ contains
     string_out(ii)=TRIM(string_tmp)
 
   end subroutine split_string
+
+
+!!****f* mlff_type_module/get_inversed_matrix3 *
+!!
+!!  NAME
+!!   get_inversed_matrix3
+!!  USAGE
+!!
+!!  PURPOSE
+!!   calculate inversed matrix of 3x3 matrix
+!!  INPUTS
+!!
+!!  USES
+!!
+!!  AUTHOR
+!!   Jianbo Lin
+!!  CREATION DATE
+!!   2024/04/09
+!!  MODIFICATION HISTORY
+!!
+!!  SOURCE
+!!
+  subroutine get_inversed_matrix3(A, inv_A)
+    use GenComms, ONLY: cq_abort
+    implicit none
+
+    ! Passed variables
+    real(double), dimension(:,:),intent(in)    :: A
+    real(double), dimension(:,:),intent(inout) :: inv_A
+
+    ! Local variables
+    integer, parameter :: n = 3 ! dimension of cell
+    integer :: i, j
+    real(double) :: det_A
+    real(double) :: adj_A(3,3), loc_A(5,5)
+
+    ! Check Passed variables
+    if ((size(shape(inv_A)) .ne. 2) .or. (size(shape(A)) .ne. 2)) then
+      call cq_abort('get_inversed_matrix3: error matrix is not two dimensional')
+    elseif ((size(inv_A,dim=1) .ne. n) .or. (size(inv_A, dim=2) .ne. n)) then
+      call cq_abort('get_inversed_matrix3: matrix inv_A is not 3x3 dimension')
+    elseif ((size(A,dim=1) .ne. n) .or. (size(A, dim=2) .ne. n)) then
+      call cq_abort('get_inversed_matrix3: matrix A is not 3x3 dimension')
+    end if
+
+    det_A = A(1,1) * (A(2,2)*A(3,3) - A(2,3)*A(3,2)) &
+          - A(1,2) * (A(2,1)*A(3,3) - A(2,3)*A(3,1)) &
+          + A(1,3) * (A(2,1)*A(3,2) - A(2,2)*A(3,1))
+
+    ! For Calculate Adjoint matrix
+    loc_A = reshape([A(1,1), A(1,2), A(1,3), A(1,1), A(1,2),&
+                     A(2,1), A(2,2), A(2,3), A(2,1), A(2,2),&
+                     A(3,1), A(3,2), A(3,3), A(3,1), A(3,2),&
+                     A(1,1), A(1,2), A(1,3), A(1,1), A(1,2),&
+                     A(2,1), A(2,2), A(2,3), A(2,1), A(2,2)], [5,5])
+
+    ! Calculate Adjoint matrix with Transposed formular
+    do i = 1, 3
+      do j = 1, 3
+        adj_A(j,i) = A(i+1,j+1) * A(i+2,j+2) - A(i+2,j+1) * A(i+1,j+2)
+      end do
+    end do
+
+    ! Inversed A
+    inv_A = adj_A / det_A
+    return
+  end subroutine get_inversed_matrix3
+!!***
+
 end module mlff_type
