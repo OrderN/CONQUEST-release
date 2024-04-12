@@ -552,7 +552,7 @@ contains
 
     ! Local variables
     integer :: inp, ip_process
-    integer :: nn,ii,np, i_species,ia_glob
+    integer :: nn, ii, jj, np, i_species,ia_glob, axis_dim=3
     real(double) :: rx,ry,rz
 
     ! loop over all atom pairs (atoms in primary set, max. cover set) -
@@ -563,10 +563,11 @@ contains
       do ii=1,prim%nm_nodgroup(nn)  ! Loop over atoms in partition
         ia_glob=prim%ig_prim(prim%nm_nodbeg(nn)+ii-1)
         i_species = amat(nn)%i_species(ii)
-        ml_force(1, ia_glob) = dot_product(amat_features_ML(nn)%id_atom(ii)%fpx(:), descriptor_params(i_species)%coef)
-        ml_force(2, ia_glob) = dot_product(amat_features_ML(nn)%id_atom(ii)%fpy(:), descriptor_params(i_species)%coef)
-        ml_force(3, ia_glob) = dot_product(amat_features_ML(nn)%id_atom(ii)%fpz(:), descriptor_params(i_species)%coef)
 
+          do jj=1, axis_dim
+            ml_force(jj, ia_glob) = dot_product( &
+                amat_features_ML(nn)%id_atom(ii)%fp_force(jj,:), descriptor_params(i_species)%coef)
+          enddo ! jj, axis_dim
         inp=inp+1  ! Indexes primary-set atoms
       enddo ! End prim%nm_nodgroup
       !pair check!write(*,*) 'after prim%nm_nodgroup', inode
@@ -631,7 +632,7 @@ contains
 
     ! Local variables
     integer :: inp, ip_process
-    integer :: nn,ii,np, i_species,ia_glob
+    integer :: nn, ii, jj, np, i_species,ia_glob, axis_dim=3
     real(double) :: rx,ry,rz
 
     ! loop over all atom pairs (atoms in primary set, max. cover set) -
@@ -643,10 +644,10 @@ contains
           ia_glob=prim%ig_prim(prim%nm_nodbeg(nn)+ii-1)
           i_species = amat(nn)%i_species(ii)
 
-          ml_force(1, ia_glob) = dot_product(amat_features_ML(nn)%id_atom(ii)%fpx(:), descriptor_params(i_species)%coef)
-          ml_force(2, ia_glob) = dot_product(amat_features_ML(nn)%id_atom(ii)%fpy(:), descriptor_params(i_species)%coef)
-          ml_force(3, ia_glob) = dot_product(amat_features_ML(nn)%id_atom(ii)%fpz(:), descriptor_params(i_species)%coef)
-
+          do jj=1, axis_dim
+            ml_force(jj, ia_glob) = dot_product( &
+                amat_features_ML(nn)%id_atom(ii)%fp_force(jj,:), descriptor_params(i_species)%coef)
+          enddo ! jj, axis_dim
           inp=inp+1  ! Indexes primary-set atoms
         enddo ! End prim%nm_nodgroup
         !pair check!write(*,*) 'after prim%nm_nodgroup', inode
@@ -860,6 +861,8 @@ contains
 !!  MODIFICATION HISTORY
 !!   2023/10/18 J.Lin
 !!    Move make_cs to set_up in initialisation_module
+!!   2024/04/09 J.Lin
+!!    Added franctional coordination in matrix_ML for pressure calculation
 !!  SOURCE
 !!
   subroutine get_MLFF()
@@ -890,9 +893,7 @@ contains
 
     ! local variables
     integer :: i, j, ip, ia, np, nj, ia_glob, j_glob,nn, ist
-    integer :: stat !, Z_i, Z_j
-    !integer :: nppx, nppy, nppz, ind_part, nccx, nccy, nccz, m1, m2, &
-    !     m3, m, ig_atom_beg
+    integer :: stat
     integer, allocatable :: neighbour_part(:)
     real(double) :: real_cell_vec(3, 3), part_cell_vec(3, 3), &
             part_cell_dual(3, 3)
@@ -923,13 +924,17 @@ contains
     call my_barrier
 
     allocate ( neighbour_part(ML_CS%ng_cover), STAT=stat )
-    if (stat .NE. 0) call cq_abort("Eror allocating neighbour_list in get_MLFF: ", ML_CS%ng_cover)
+    if (stat .NE. 0) &
+        call cq_abort("Eror allocating neighbour_list in get_MLFF: ", ML_CS%ng_cover)
     allocate ( amat(bundle%groups_on_node), STAT=stat)
-    if (stat .NE. 0) call cq_abort("Eror allocating amat in get_MLFF: ", bundle%groups_on_node)
+    if (stat .NE. 0) &
+        call cq_abort("Eror allocating amat in get_MLFF: ", bundle%groups_on_node)
     allocate ( amat_ML(bundle%groups_on_node), STAT=stat)
-    if (stat .NE. 0) call cq_abort("Eror allocating amat_ML in get_MLFF: ", bundle%groups_on_node)
+    if (stat .NE. 0) &
+        call cq_abort("Eror allocating amat_ML in get_MLFF: ", bundle%groups_on_node)
     allocate ( amat_features_ML(bundle%groups_on_node), STAT=stat)
-    if (stat .NE. 0) call cq_abort("Eror allocating amat_features_ML in get_MLFF: ", bundle%groups_on_node)
+    if (stat .NE. 0) &
+        call cq_abort("Eror allocating amat_features_ML in get_MLFF: ", bundle%groups_on_node)
 
     real_cell_vec(1, 1) = r_super_x
     real_cell_vec(1, 2) = zero
@@ -1036,7 +1041,7 @@ contains
             !check
             if (ia_glob==1) then
               write(1984,*) 'this is checking first atom in x direction: before'
-              write(1984,*) amat_features_ML(nn)%id_atom(i)%fpx(:)
+              write(1984,*) amat_features_ML(nn)%id_atom(i)%fp_force(1,:)
               write(1984,*) 'fx= ',ml_force(1, ia_glob)
             end if
             ! end check atomic feature
@@ -1077,8 +1082,9 @@ contains
       write(*,*) '################# END Check get_MLFF #################'
     end if
 
-    100 format('inode: ',i5,' i_par: ',i5,' i_id: ',i5,' i_glob2: ', i5,' j_par: ',i5,' j_id: ',i5,' j_glob2: ', i5, &
-            ' j_species: ', i5,' radius(Angstrom): ',f12.8)
+    100 format('inode: ',i5,' i_par: ',i5,' i_id: ',i5,' i_glob2: ', i5, &
+               ' j_par: ', i5,' j_id: ',i5,' j_glob2: ', i5, &
+               ' j_species: ', i5,' radius(Angstrom): ',f12.8)
     101 format(a8,a8,a8,a8, a8,a8,a8, a10,a12)
     102 format(i8,i8,i8,i8, i8,i8,i8, i10,f12.8)
     103 format(i8,3f16.8)
@@ -1140,7 +1146,8 @@ contains
 
     prefix = return_prefix(subname, min_layer)
     ! Print in Conquest output
-    if (inode == ionode .and. write_forces .and. (iprint_MD + min_layer>=0 .and. ni_in_cell<atom_output_threshold)) then
+    if (inode == ionode .and. write_forces .and. &
+        (iprint_MD + min_layer>=0 .and. ni_in_cell<atom_output_threshold)) then
       max_force = zero
       max_atom  = 0
       max_compt = 0
@@ -1179,11 +1186,13 @@ contains
           volume = rcellx*rcelly*rcellz
           scale = HaBohr3ToGPa/volume
           if (flag_full_stress) then
-            write(io_lun,fmt=fmt) trim(prefix)//" Total stress:     ", stress(1,:)*scale, ' GPa'!en_units(energy_units)
+            write(io_lun,fmt=fmt) trim(prefix)//" Total stress:     ", &
+                stress(1,:)*scale, ' GPa'!en_units(energy_units)
             write(io_lun,fmt=fmt) blank, stress(2,:)*scale, blank
             write(io_lun,fmt=fmt) blank, stress(3,:)*scale, blank
           else
-            write(io_lun,fmt=fmt) trim(prefix)//" Total stress:     ", stress(1,1)*scale, stress(2,2)*scale, &
+            write(io_lun,fmt=fmt) trim(prefix)//" Total stress:     ", &
+                stress(1,1)*scale, stress(2,2)*scale, &
                 stress(3,3)*scale, ' GPa'!en_units(energy_units)
           end if ! (flag_full_stress)
 

@@ -82,17 +82,16 @@ module mlff_type
   end type matrix_ML
 
   !! Allow each atom to have different dimensions of feature
-  type features_atomic
+  type atomic_features
     integer(integ) :: dim_feature ! dimension_feature
-    real(double), allocatable  :: fpx(:) ! feature for atomic force in x direction of natoms
-    real(double), allocatable  :: fpy(:) ! feature for atomic force in x direction of natoms
-    real(double), allocatable  :: fpz(:) ! feature for atomic force in x direction of natoms
-    real(double), allocatable  :: fp(:)  ! feature for atomic energy of natoms
-  end type features_atomic
+    real(double), allocatable  :: fp_energy(:)       ! feature for atomic energy of natoms
+    real(double), allocatable  :: fp_force(:,:)      ! feature for atomic force in xyz directions of natoms
+    real(double), allocatable  :: fp_stress(:,:,:) ! feature for stress tensor on vector a in x direction of natoms
+  end type atomic_features
 
   type features_ML
     integer(integ) :: n_atoms ! Lengths of n_nab,
-    type(features_atomic),  allocatable :: id_atom(:) ! allow each atom to have different dimensions of feature
+    type(atomic_features),  allocatable :: id_atom(:) ! allow each atom to have different dimensions of feature
   end type features_ML
 
   type species_order
@@ -674,6 +673,119 @@ contains
   end subroutine ini_species_order_center
 !!***
 
+!!****f* matrix_module/allocate_species_features *
+  subroutine allocate_atomic_features(loc_atomic_features, feature_dim)
+
+    use GenComms, ONLY: cq_abort
+    implicit none
+
+    ! Passed variables
+    type(atomic_features)               :: loc_atomic_features
+    integer                             :: n_species
+    integer                             :: feature_dim
+
+    ! Local variables
+    integer ::   stat, coord_dim=3
+
+    call start_timer(tmr_std_allocation)
+
+    loc_atomic_features%dim_feature = feature_dim
+    ! energy, force and stress descriptors
+    allocate(loc_atomic_features%fp_energy(feature_dim),STAT=stat)
+    if(stat/=0) &
+      call cq_abort('alloc_atomic_feature: error allocating memory to fp_energy')
+    allocate(loc_atomic_features%fp_force(coord_dim,feature_dim),STAT=stat)
+    if(stat/=0) &
+      call cq_abort('alloc_atomic_feature: error allocating memory to fp_force')
+    allocate(loc_atomic_features%fp_stress(coord_dim,coord_dim,feature_dim),STAT=stat)
+    if(stat/=0) &
+      call cq_abort('alloc_atomic_feature: error allocating memory to fp_stress')
+
+    loc_atomic_features%fp_energy = 0.0
+    loc_atomic_features%fp_force = 0.0
+    loc_atomic_features%fp_stress = 0.0
+
+    call stop_timer(tmr_std_allocation)
+    return
+  end subroutine allocate_atomic_features
+!!***
+
+!!****f* matrix_module/deallocate_species_features *
+  subroutine deallocate_atomic_features(loc_atomic_features)
+
+    use GenComms, ONLY: cq_abort
+    implicit none
+
+    ! Passed variables
+    type(atomic_features)               :: loc_atomic_features
+
+    ! Local variables
+    integer :: stat
+
+    call start_timer(tmr_std_allocation)
+    ! oppsite order to allocate_features_ML
+    ! pressure tensor part
+    deallocate(loc_atomic_features%fp_stress,STAT=stat)
+    if(stat/=0) &
+      call cq_abort('alloc_mat_features_ML: error allocating memory to fp_stress')
+deallocate(loc_atomic_features%fp_force,STAT=stat)
+    if(stat/=0) &
+      call cq_abort('alloc_mat_features_ML: error allocating memory to fp_force')
+    deallocate(loc_atomic_features%fp_energy,STAT=stat)
+    if(stat/=0) &
+      call cq_abort('alloc_mat_features_ML: error allocating memory to fp_energy')
+    call stop_timer(tmr_std_allocation)
+    return
+  end subroutine deallocate_atomic_features
+!!***
+
+!!****f* matrix_module/allocate_species_features *
+  subroutine allocate_species_features(species_features, n_species, feature_dim_lst)
+
+    use GenComms, ONLY: cq_abort
+    implicit none
+
+    ! Passed variables
+    type(atomic_features), allocatable :: species_features(:)
+    integer                             :: n_species
+    integer, dimension(:)               :: feature_dim_lst
+
+    ! Local variables
+    integer ::  i_species,  feature_dim, stat
+
+    call start_timer(tmr_std_allocation)
+    allocate(species_features(n_species),STAT=stat)
+    do i_species=1, n_species
+      feature_dim = feature_dim_lst(i_species)
+      call allocate_atomic_features(species_features(i_species), feature_dim)
+    end do
+    call stop_timer(tmr_std_allocation)
+    return
+  end subroutine allocate_species_features
+!!***
+
+!!****f* matrix_module/deallocate_species_features *
+  subroutine deallocate_species_features(species_features, n_species)
+
+    use GenComms, ONLY: cq_abort
+    implicit none
+
+    ! Passed variables
+    type(atomic_features), allocatable :: species_features(:)
+    integer                             :: n_species
+
+    ! Local variables
+    integer ::  i_species,  feature_dim, stat
+
+    call start_timer(tmr_std_allocation)
+    do i_species=n_species, 1, -1
+      call deallocate_atomic_features(species_features(i_species))
+    end do
+    deallocate(species_features,STAT=stat)
+    call stop_timer(tmr_std_allocation)
+    return
+  end subroutine deallocate_species_features
+!!***
 
 !!****f* matrix_module/allocate_feature_ML *
 !!
@@ -727,23 +839,7 @@ contains
         do ii=1,prim%nm_nodgroup(nn)  ! Loop over atoms in partition
           i_species = amat_ML(nn)%i_species(ii)
           feature_dim = feature_dim_lst(i_species)
-          allocate(amat_features_ML(nn)%id_atom(ii)%fpx(feature_dim),STAT=stat)
-          if(stat/=0) &
-            call cq_abort('alloc_mat_features_ML: error allocating memory to fpx')
-          allocate(amat_features_ML(nn)%id_atom(ii)%fpy(feature_dim),STAT=stat)
-          if(stat/=0) &
-            call cq_abort('alloc_mat_features_ML: error allocating memory to fpy')
-          allocate(amat_features_ML(nn)%id_atom(ii)%fpz(feature_dim),STAT=stat)
-          if(stat/=0) &
-            call cq_abort('alloc_mat_features_ML: error allocating memory to fpz')
-          allocate(amat_features_ML(nn)%id_atom(ii)%fp(feature_dim),STAT=stat)
-          if(stat/=0) &
-            call cq_abort('alloc_mat_features_ML: error allocating memory to fp')
-
-          amat_features_ML(nn)%id_atom(ii)%fpx = 0.0
-          amat_features_ML(nn)%id_atom(ii)%fpy = 0.0
-          amat_features_ML(nn)%id_atom(ii)%fpz = 0.0
-          amat_features_ML(nn)%id_atom(ii)%fp = 0.0
+          call allocate_atomic_features(amat_features_ML(nn)%id_atom(ii),feature_dim)
           end do ! ii1
       end if
     end do ! nn1
@@ -793,18 +889,7 @@ contains
       n_atoms = amat_ML(nn)%n_atoms
       if (n_atoms .gt.0) then
         do ii = n_atoms, 1, -1
-          deallocate(amat_features_ML(nn)%id_atom(ii)%fp,STAT=stat)
-          if(stat/=0) &
-            call cq_abort('dealloc_mat_features_ML: error deallocating memory to fp')
-          deallocate(amat_features_ML(nn)%id_atom(ii)%fpz,STAT=stat)
-          if(stat/=0) &
-            call cq_abort('dealloc_mat_features_ML: error deallocating memory to fpz')
-          deallocate(amat_features_ML(nn)%id_atom(ii)%fpy,STAT=stat)
-          if(stat/=0) &
-            call cq_abort('dealloc_mat_features_ML: error deallocating memory to fpy')
-          deallocate(amat_features_ML(nn)%id_atom(ii)%fpx,STAT=stat)
-          if(stat/=0) &
-            call cq_abort('dealloc_mat_features_ML: error deallocating memory to fpx')
+          call deallocate_atomic_features(amat_features_ML(nn)%id_atom(ii))
         end do ! ii1
         deallocate(amat_features_ML(nn)%id_atom,STAT=stat)
         if(stat/=0) &
@@ -1326,7 +1411,7 @@ contains
     use GenComms, ONLY: cq_abort, inode, ionode, my_barrier
     use global_module, ONLY: id_glob, species_glob, sf, nlpf, paof, napf, numprocs
     use group_module, ONLY: parts
-    use species_module, ONLY: nsf_species, nlpf_species, npao_species, napf_species
+    use species_module, ONLY: n_species
 
     implicit none
 
@@ -1348,6 +1433,11 @@ contains
     real(double) :: tmp1, tmpx, tmpy, tmpz, frc_ij, frc_ik, frc_jk
     real(double), parameter :: tol=1.0e-8_double
 
+    type(atomic_features), allocatable :: species_features_acc(:) ! template feature data for each species
+    type(atomic_features), allocatable :: species_features_tmp(:) ! template feature data for each species
+
+    call allocate_species_features(species_features_acc,n_species,params_ML%dim_coef_lst)
+    call allocate_species_features(species_features_tmp,n_species,params_ML%dim_coef_lst)
     ! After we have neighbor information and descriptor information
     ! Check that prim and gcs are correctly set up
     if((.NOT.ASSOCIATED(gcs%xcover)).OR. &
@@ -1412,12 +1502,12 @@ contains
               rs = rij - descriptor_params(i_species)%params_g2(species_orderij)%rs(gx_index)
 
               tmp1 = frc_ij * exp(- (rs/eta) ** 2) / rij
-              amat_features_ML(nn)%id_atom(ii)%fpx(fp_index) = &
-                  amat_features_ML(nn)%id_atom(ii)%fpx(fp_index) + xij*tmp1
-              amat_features_ML(nn)%id_atom(ii)%fpy(fp_index) = &
-                  amat_features_ML(nn)%id_atom(ii)%fpy(fp_index) + yij*tmp1
-              amat_features_ML(nn)%id_atom(ii)%fpz(fp_index) = &
-                  amat_features_ML(nn)%id_atom(ii)%fpz(fp_index) + zij*tmp1
+              amat_features_ML(nn)%id_atom(ii)%fp_force(1,fp_index) = &
+                  amat_features_ML(nn)%id_atom(ii)%fp_force(1,fp_index) + xij*tmp1
+              amat_features_ML(nn)%id_atom(ii)%fp_force(2,fp_index) = &
+                  amat_features_ML(nn)%id_atom(ii)%fp_force(2,fp_index) + yij*tmp1
+              amat_features_ML(nn)%id_atom(ii)%fp_force(3,fp_index) = &
+                  amat_features_ML(nn)%id_atom(ii)%fp_force(3,fp_index) + zij*tmp1
               !if (inode== ionode .and. ia_glob==1) then
               !    write(1986,101)  eta, fp_index,  tmp1, xij, xij*tmp1, amat_features_ML(nn)%fpx(i, fp_index)
               !end if
@@ -1434,6 +1524,10 @@ contains
             write(*, *) 'Warning: No atoms in this partition get_feature_acsf', inode, nn
       endif ! End if(prim%nm_nodgroup>0)
     enddo ! End part_on_node
+
+    ! deallocate local variables
+    call deallocate_species_features(species_features_acc, n_species)
+    call deallocate_species_features(species_features_tmp, n_species)
     100 format(6i8,4e25.16)
     101 format(e25.16, i8,4e25.16)
     102 format('check fp index,start,end',2i8,'species=',3i8)
@@ -1873,7 +1967,6 @@ contains
 
     ! Module usage
     use datatypes
-
     use basic_types
     use matrix_module
     use units
@@ -1881,7 +1974,7 @@ contains
     use GenComms, ONLY: cq_abort, inode, ionode, my_barrier
     use global_module, ONLY: id_glob, species_glob, sf, nlpf, paof, napf, numprocs
     use group_module, ONLY: parts
-    use species_module, ONLY: nsf_species, nlpf_species, npao_species, napf_species
+    use species_module, ONLY: n_species
 
     implicit none
 
@@ -1908,6 +2001,11 @@ contains
     real(double), parameter :: tol=1.0e-8_double
     real(double) :: feature_1 ! check feature
 
+    type(atomic_features), allocatable :: species_features_acc(:) ! template feature data for each species
+    type(atomic_features), allocatable :: species_features_tmp(:) ! template feature data for each species
+
+    call allocate_species_features(species_features_acc,n_species,params_ML%dim_coef_lst)
+    call allocate_species_features(species_features_tmp,n_species,params_ML%dim_coef_lst)
     ! After we have neighbor information and descriptor information
     ! Check that prim and gcs are correctly set up
     if((.NOT.ASSOCIATED(gcs%xcover)).OR. &
@@ -1967,12 +2065,12 @@ contains
               rs = rij0 - descriptor_params(i_species)%params_2b(species_order2b)%rs(gx_index)
 
               tmp1 = frc_ij * exp(- eta * rs ** 2 )  !* eta * rs / rij
-              amat_features_ML(nn)%id_atom(ii)%fpx(fp_index) = &
-                  amat_features_ML(nn)%id_atom(ii)%fpx(fp_index) + xij0 * tmp1
-              amat_features_ML(nn)%id_atom(ii)%fpy(fp_index) = &
-                  amat_features_ML(nn)%id_atom(ii)%fpy(fp_index) + yij0 * tmp1
-              amat_features_ML(nn)%id_atom(ii)%fpz(fp_index) = &
-                  amat_features_ML(nn)%id_atom(ii)%fpz(fp_index) + zij0 * tmp1
+              amat_features_ML(nn)%id_atom(ii)%fp_force(1,fp_index) = &
+                  amat_features_ML(nn)%id_atom(ii)%fp_force(1,fp_index) + xij0 * tmp1
+              amat_features_ML(nn)%id_atom(ii)%fp_force(2,fp_index) = &
+                  amat_features_ML(nn)%id_atom(ii)%fp_force(2,fp_index) + yij0 * tmp1
+              amat_features_ML(nn)%id_atom(ii)%fp_force(3,fp_index) = &
+                  amat_features_ML(nn)%id_atom(ii)%fp_force(3,fp_index) + zij0 * tmp1
             end do ! two-body terms
 
             do kk=1,  amat(nn)%n_triplet(ist_j)
@@ -2003,7 +2101,7 @@ contains
               if (ia_glob==1 .and. flag_debug_mlff) then
                 write(*,103) jj, kk, shift_dim,param_start, param_end, &
                     i_species,j_species,k_species, species_order3b, amat(nn)%n_nab(ii)
-                feature_1 = amat_features_ML(nn)%id_atom(ii)%fpx(121)
+                feature_1 = amat_features_ML(nn)%id_atom(ii)%fp_force(1,121)
               end if
 
               ! Checking X-XX, X-AA, X-XA, X-AB
@@ -2067,12 +2165,12 @@ contains
                     tmpy = frc_3b * proj_y
                     tmpz = frc_3b * proj_z
 
-                    amat_features_ML(nn)%id_atom(ii)%fpx(fp_index) = &
-                        amat_features_ML(nn)%id_atom(ii)%fpx(fp_index) + tmpx
-                    amat_features_ML(nn)%id_atom(ii)%fpy(fp_index) = &
-                        amat_features_ML(nn)%id_atom(ii)%fpy(fp_index) + tmpy
-                    amat_features_ML(nn)%id_atom(ii)%fpz(fp_index) = &
-                        amat_features_ML(nn)%id_atom(ii)%fpz(fp_index) + tmpz
+                    amat_features_ML(nn)%id_atom(ii)%fp_force(1,fp_index) = &
+                        amat_features_ML(nn)%id_atom(ii)%fp_force(1,fp_index) + tmpx
+                    amat_features_ML(nn)%id_atom(ii)%fp_force(2,fp_index) = &
+                        amat_features_ML(nn)%id_atom(ii)%fp_force(2,fp_index) + tmpy
+                    amat_features_ML(nn)%id_atom(ii)%fp_force(3,fp_index) = &
+                        amat_features_ML(nn)%id_atom(ii)%fp_force(3,fp_index) + tmpz
                   end do ! three-body terms
                 else
                   !! X-AA
@@ -2116,12 +2214,12 @@ contains
                     tmpy = frc_3b * proj_y
                     tmpz = frc_3b * proj_z
 
-                    amat_features_ML(nn)%id_atom(ii)%fpx(fp_index) = &
-                        amat_features_ML(nn)%id_atom(ii)%fpx(fp_index) + tmpx
-                    amat_features_ML(nn)%id_atom(ii)%fpy(fp_index) = &
-                        amat_features_ML(nn)%id_atom(ii)%fpy(fp_index) + tmpy
-                    amat_features_ML(nn)%id_atom(ii)%fpz(fp_index) = &
-                        amat_features_ML(nn)%id_atom(ii)%fpz(fp_index) + tmpz
+                    amat_features_ML(nn)%id_atom(ii)%fp_force(1,fp_index) = &
+                        amat_features_ML(nn)%id_atom(ii)%fp_force(1,fp_index) + tmpx
+                    amat_features_ML(nn)%id_atom(ii)%fp_force(2,fp_index) = &
+                        amat_features_ML(nn)%id_atom(ii)%fp_force(2,fp_index) + tmpy
+                    amat_features_ML(nn)%id_atom(ii)%fp_force(3,fp_index) = &
+                        amat_features_ML(nn)%id_atom(ii)%fp_force(3,fp_index) + tmpz
                   end do ! three-body terms
                 end if ! X-XX or X-AA
               else
@@ -2167,12 +2265,12 @@ contains
                     tmpy = frc_3b * proj_y
                     tmpz = frc_3b * proj_z
 
-                    amat_features_ML(nn)%id_atom(ii)%fpx(fp_index) = &
-                        amat_features_ML(nn)%id_atom(ii)%fpx(fp_index) + tmpx
-                    amat_features_ML(nn)%id_atom(ii)%fpy(fp_index) = &
-                        amat_features_ML(nn)%id_atom(ii)%fpy(fp_index) + tmpy
-                    amat_features_ML(nn)%id_atom(ii)%fpz(fp_index) = &
-                        amat_features_ML(nn)%id_atom(ii)%fpz(fp_index) + tmpz
+                    amat_features_ML(nn)%id_atom(ii)%fp_force(1,fp_index) = &
+                        amat_features_ML(nn)%id_atom(ii)%fp_force(1,fp_index) + tmpx
+                    amat_features_ML(nn)%id_atom(ii)%fp_force(2,fp_index) = &
+                        amat_features_ML(nn)%id_atom(ii)%fp_force(2,fp_index) + tmpy
+                    amat_features_ML(nn)%id_atom(ii)%fp_force(3,fp_index) = &
+                        amat_features_ML(nn)%id_atom(ii)%fp_force(3,fp_index) + tmpz
                   end do ! three-body terms
                 else if (i_species == k_species) then
                   ! X-AX
@@ -2215,12 +2313,12 @@ contains
                     tmpy = frc_3b * proj_y
                     tmpz = frc_3b * proj_z
 
-                    amat_features_ML(nn)%id_atom(ii)%fpx(fp_index) = &
-                        amat_features_ML(nn)%id_atom(ii)%fpx(fp_index) + tmpx
-                    amat_features_ML(nn)%id_atom(ii)%fpy(fp_index) = &
-                        amat_features_ML(nn)%id_atom(ii)%fpy(fp_index) + tmpy
-                    amat_features_ML(nn)%id_atom(ii)%fpz(fp_index) = &
-                        amat_features_ML(nn)%id_atom(ii)%fpz(fp_index) + tmpz
+                    amat_features_ML(nn)%id_atom(ii)%fp_force(1,fp_index) = &
+                        amat_features_ML(nn)%id_atom(ii)%fp_force(1,fp_index) + tmpx
+                    amat_features_ML(nn)%id_atom(ii)%fp_force(2,fp_index) = &
+                        amat_features_ML(nn)%id_atom(ii)%fp_force(2,fp_index) + tmpy
+                    amat_features_ML(nn)%id_atom(ii)%fp_force(3,fp_index) = &
+                        amat_features_ML(nn)%id_atom(ii)%fp_force(3,fp_index) + tmpz
                   end do ! three-body terms
                 else if (j_species < k_species) then
                   !! X-AB
@@ -2257,12 +2355,12 @@ contains
                     tmpy = frc_3b * proj_y
                     tmpz = frc_3b * proj_z
 
-                    amat_features_ML(nn)%id_atom(ii)%fpx(fp_index) = &
-                        amat_features_ML(nn)%id_atom(ii)%fpx(fp_index) + tmpx
-                    amat_features_ML(nn)%id_atom(ii)%fpy(fp_index) = &
-                        amat_features_ML(nn)%id_atom(ii)%fpy(fp_index) + tmpy
-                    amat_features_ML(nn)%id_atom(ii)%fpz(fp_index) = &
-                        amat_features_ML(nn)%id_atom(ii)%fpz(fp_index) + tmpz
+                    amat_features_ML(nn)%id_atom(ii)%fp_force(1,fp_index) = &
+                        amat_features_ML(nn)%id_atom(ii)%fp_force(1,fp_index) + tmpx
+                    amat_features_ML(nn)%id_atom(ii)%fp_force(2,fp_index) = &
+                        amat_features_ML(nn)%id_atom(ii)%fp_force(2,fp_index) + tmpy
+                    amat_features_ML(nn)%id_atom(ii)%fp_force(3,fp_index) = &
+                        amat_features_ML(nn)%id_atom(ii)%fp_force(3,fp_index) + tmpz
                   end do ! three-body terms
                 else
                   !! X-BA
@@ -2299,12 +2397,12 @@ contains
                     tmpy = frc_3b * proj_y
                     tmpz = frc_3b * proj_z
 
-                    amat_features_ML(nn)%id_atom(ii)%fpx(fp_index) = &
-                        amat_features_ML(nn)%id_atom(ii)%fpx(fp_index) + tmpx
-                    amat_features_ML(nn)%id_atom(ii)%fpy(fp_index) = &
-                        amat_features_ML(nn)%id_atom(ii)%fpy(fp_index) + tmpy
-                    amat_features_ML(nn)%id_atom(ii)%fpz(fp_index) = &
-                        amat_features_ML(nn)%id_atom(ii)%fpz(fp_index) + tmpz
+                    amat_features_ML(nn)%id_atom(ii)%fp_force(1,fp_index) = &
+                        amat_features_ML(nn)%id_atom(ii)%fp_force(1,fp_index) + tmpx
+                    amat_features_ML(nn)%id_atom(ii)%fp_force(2,fp_index) = &
+                        amat_features_ML(nn)%id_atom(ii)%fp_force(2,fp_index) + tmpy
+                    amat_features_ML(nn)%id_atom(ii)%fp_force(3,fp_index) = &
+                        amat_features_ML(nn)%id_atom(ii)%fp_force(3,fp_index) + tmpz
                   end do ! three-body terms
                 end if ! X-XA, X-AX, X-AB, X-BA
               end if
@@ -2320,6 +2418,10 @@ contains
             write(*, *) 'Warning: No atoms in this partition get_feature_split', inode, nn
       endif ! End if(prim%nm_nodgroup>0)
     enddo ! End part_on_node
+
+    ! deallocate local variables
+    call deallocate_species_features(species_features_acc,n_species)
+    call deallocate_species_features(species_features_tmp,n_species)
     102 format('check fp 2b: start end ',2i5,' species= ',3i3, ' num_nb', i5)
     103 format('check fp 3b: ',5i5,' species= ',4i3, ' num_nb', i5)
     104 format('check fp 3b: start end ',2i5,' species= ',3i3, ' num_nb', i5,' ',a12)
