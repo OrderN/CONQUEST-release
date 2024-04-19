@@ -306,30 +306,30 @@ contains
           !write(io_lun,*) 'Send done ',i,myid
        end do
     end if
-    call my_barrier
+    !call my_barrier
     call start_timer(tmr_std_allocation)
     deallocate(nreqs,STAT=stat)
     if(stat/=0) call cq_abort('mat_mult: error deallocating nreqs')
     call stop_timer(tmr_std_allocation)
-    call my_barrier
+    !call my_barrier
     ! --- for type 2, make backward local transpose of A-matrix -----------
     if(a_b_c%mult_type.eq.2) then
        invdir=1
        call loc_trans( a_b_c%ltrans, a_b_c%ahalo,a,lena,atrans,lena,invdir)
     end if
-    call my_barrier
+    !call my_barrier
     call start_timer(tmr_std_allocation)
     deallocate(atrans,STAT=stat)
     if(stat/=0) call cq_abort('mat_mult: error deallocating atrans')
     call stop_timer(tmr_std_allocation)
-    call my_barrier
+    !call my_barrier
     call start_timer(tmr_std_allocation)
     deallocate(ibpart_rem,STAT=stat)
     if(stat/=0) call cq_abort('mat_mult: error deallocating ibpart_rem')
     deallocate(recv_part,STAT=stat)
     if(stat/=0) call cq_abort('mat_mult: error deallocating recv_part')
     call stop_timer(tmr_std_allocation)
-    call my_barrier
+    !call my_barrier
     !deallocate(b_rem,STAT=stat)
     !if(stat/=0) call cq_abort('mat_mult: error deallocating b_rem')
     !call my_barrier
