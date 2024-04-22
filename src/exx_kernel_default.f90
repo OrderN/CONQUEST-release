@@ -1373,7 +1373,6 @@ contains
                             call get_halodat(jb,kg,jseq,chalo%i_hbeg(jpart),         &
                                  BCS_parts%lab_cell(BCS_parts%inv_lab_cover(jpart)), &
                                  'j',.true.,unit_exx_debug)
-                            !
                             !                                                    ! <-- Missing throwing Error2
                             if ( exx_alloc ) call exx_mem_alloc(extent,jb%nsup,0,'phi_j','alloc')
                             !
