@@ -1220,14 +1220,10 @@ contains
        ibpart, ibseq, b, c, ahalo, chalo, & 
        at, mx_absb, mx_part, lenb, lenc, backup_eris )
 
-    use numbers,        only: zero, one, pi
+    use numbers,        only: zero
     use matrix_module,  only: matrix_halo, matrix_trans
-    use global_module,  only: area_exx
     !
-    use basic_types,    only: primary_set
     use primary_module, only: bundle 
-    use matrix_data,    only: Hrange, SXrange, Xrange, Srange
-    use mult_module,    only: return_matrix_value, S_X_SX
     use cover_module,   only: BCS_parts
     !
     use exx_evalpao,    only: exx_phi_on_grid
@@ -1245,8 +1241,6 @@ contains
     !
     use exx_poisson,only: exx_v_on_grid, exx_ewald_charge
     !
-    use exx_erigto, only: eri_gto_hoh
-    !    
     implicit none
     !
     ! Passed variables
@@ -1287,10 +1281,23 @@ contains
     type(neigh_atomic_data) :: kg !k_gamma
     type(neigh_atomic_data) :: ld !l_delta
     !
-    integer                 :: nsf_kg, nsf_ld, nsf_jb, count
+    integer                 :: maxsuppfuncs
+    integer                 :: nsf_kg, nsf_ld, nsf_ia, nsf_jb, count
+    !
+    ! GTO
+    integer          :: i_nx, j_nx, k_nx, l_nx
+    integer          :: i_ny, j_ny, k_ny, l_ny
+    integer          :: i_nz, j_nz, k_nz, l_nz
+    character(len=8) :: i_nt, j_nt, k_nt, l_nt
+    integer          :: ia_gto, jb_gto, kg_gto, ld_gto
+    real(double)     :: ai, aj, ak, al, di, dj, dk, dl 
+    real(double)     :: i_norm, j_norm, k_norm, l_norm
+
+    real(double) :: eri_gto, eri_pao, test
     !
     dr = grid_spacing
     dv = dr**3
+    !
     count = 0
     !
 !!$
@@ -1306,8 +1313,6 @@ contains
        call get_halodat(kg,kg,k_in_part,ahalo%i_hbeg(ahalo%lab_hcover(kpart)), &
             ahalo%lab_hcell(kpart),'k',.true.,unit_exx_debug)
        !
-       !print*, 'k',k, 'global_num',kg%global_num,'spe',kg%spec,'nsup', kg%nsup
-       !
        if ( exx_alloc ) call exx_mem_alloc(extent,kg%nsup,0,'phi_k','alloc')
        !
        call exx_phi_on_grid(inode,kg%global_num,kg%spec,extent, &
@@ -1321,7 +1326,6 @@ contains
        end do
        !
        nbbeg = nb_nd_kbeg
-       !
        !                                                                         ! <-- Missing alloc of Phy_k 
 !!$
 !!$ ****[ l do loop ]****
@@ -1366,7 +1370,7 @@ contains
                    phi_i(1:2*extent+1, 1:2*extent+1, 1:2*extent+1, 1:ia%nsup) => phi_i_1d_buffer
                    !
                    call exx_phi_on_grid(inode,ia%ip,ia%spec,extent, &
-                        ia%xyz,ia%nsup,phi_i,r_int,xyz_zero)             
+                        ia%xyz,ia%nsup,phi_i,r_int,xyz_zero)
                    !
 !!$
 !!$ ****[ j loop ]****
