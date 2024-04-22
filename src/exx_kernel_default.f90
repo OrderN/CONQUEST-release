@@ -1322,6 +1322,7 @@ contains
        !
        nbbeg = nb_nd_kbeg
        !
+       !                                                                         ! <-- Missing alloc of Phy_k 
 !!$
 !!$ ****[ l do loop ]****
 !!$
@@ -1344,12 +1345,11 @@ contains
              !
              kg_loop: do nsf_kg = 1, kg%nsup                         
                 !
-                if ( backup_eris ) then
-                   K_val = real(1,double)
-                else
-                   K_val = b(nbaddr+nsf_kg-1)
-                end if
-                !
+                if ( backup_eris ) then                                           ! <-- Missing setting value Phy_k
+                   K_val = real(1,double)                                         ! <-- Extra if block not in ..._cri
+                else                                                              ! <--
+                   K_val = b(nbaddr+nsf_kg-1)                                     ! <--
+                end if                                                            ! <--
 !!$
 !!$ ****[ i loop ]****
 !!$
@@ -1386,6 +1386,7 @@ contains
                                  BCS_parts%lab_cell(BCS_parts%inv_lab_cover(jpart)), &
                                  'j',.true.,unit_exx_debug)
                             !
+                            !                                                    ! <-- Missing throwing Error2
                             if ( exx_alloc ) call exx_mem_alloc(extent,jb%nsup,0,'phi_j','alloc')
                             !
                             call exx_phi_on_grid(inode,jb%global_num,jb%spec,extent, &
@@ -1512,9 +1513,9 @@ contains
     !
     use exx_module, only: get_halodat, get_iprimdat
     !
-    use exx_poisson,only: exx_ewald_charge
+    use exx_poisson,only: exx_ewald_charge                                       ! <-- Missing exx_v_on_grid
     !
-    use exx_erigto, only: eri_gto_hoh, compute_eri_hoh
+    use exx_erigto, only: eri_gto_hoh, compute_eri_hoh                           ! <-- compute_eri_hoh is not in m_kern_exx_eri
     !
     implicit none
 
@@ -1549,9 +1550,9 @@ contains
     type(neigh_atomic_data) :: jb ! j_beta
     type(neigh_atomic_data) :: kg ! k_gamma
     type(neigh_atomic_data) :: ld ! l_delta
-    !
+    !                                                                            ! <-- Missing maxsuppfuncs
     integer                 :: nsf_kg, nsf_ld, nsf_ia, nsf_jb
-    !
+    integer                 :: count                                             ! <-- Missing r, s and t
     ! GTO
     character(len=8) :: i_nt, j_nt, k_nt, l_nt
     real(double)     :: xi, xj, xk, xl 
@@ -1652,6 +1653,7 @@ contains
                                !
                                ncaddr = ncbeg + ia%nsup * (nsf_jb - 1)
                                !
+                               !                                                 ! <-- Missing calls to exx_ewald_charge and exx_v_on_grid
                                ia_loop: do nsf_ia = 1, ia%nsup
                                   !
                                   eri_gto = zero
@@ -1692,10 +1694,10 @@ contains
                                   !
                                   if ( backup_eris ) then
                                      !                                     
-                                     eris(kpart)%store_eris( count ) = eri_gto
+                                     eris(kpart)%store_eris( count ) = eri_gto                  ! <-- eri_gto instead of exx_mat_elem
                                      !
                                   else
-                                     c(ncaddr + nsf_ia - 1) = c(ncaddr + nsf_ia - 1) + eri_gto
+                                     c(ncaddr + nsf_ia - 1) = c(ncaddr + nsf_ia - 1) + eri_gto  ! <-- eri_gto instead of exx_mat_elem
                                      !
                                   end if
                                   !                               
