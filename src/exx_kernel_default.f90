@@ -1264,7 +1264,6 @@ contains
     integer :: nbkbeg, k, k_in_part, k_in_halo, j, jpart, jseq
     integer :: i, i_in_prim, icad, nbbeg, j_in_halo, ncbeg
     integer :: nb_nd_kbeg
-    integer :: nd1, nd3
     integer :: nbaddr, ncaddr
     integer :: l, lseq, lpart
     integer :: np, ni
@@ -1284,19 +1283,7 @@ contains
     integer                 :: maxsuppfuncs
     integer                 :: nsf_kg, nsf_ld, nsf_ia, nsf_jb, count
     !
-    ! GTO
-    integer          :: i_nx, j_nx, k_nx, l_nx
-    integer          :: i_ny, j_ny, k_ny, l_ny
-    integer          :: i_nz, j_nz, k_nz, l_nz
-    character(len=8) :: i_nt, j_nt, k_nt, l_nt
-    integer          :: ia_gto, jb_gto, kg_gto, ld_gto
-    real(double)     :: ai, aj, ak, al, di, dj, dk, dl 
-    real(double)     :: i_norm, j_norm, k_norm, l_norm
-
-    real(double) :: eri_gto, eri_pao, test
-    !
-    dr = grid_spacing
-    dv = dr**3
+    dv = grid_spacing**3
     !
     count = 0
     !
@@ -1309,7 +1296,6 @@ contains
        k_in_part  = ahalo%j_seq(k_in_halo)
        nbkbeg     = ibaddr     (k_in_part) 
        nb_nd_kbeg = ib_nd_acc  (k_in_part)
-       nd3        = ahalo%ndimj(k_in_halo)
        call get_halodat(kg,kg,k_in_part,ahalo%i_hbeg(ahalo%lab_hcover(kpart)), &
             ahalo%lab_hcell(kpart),'k',.true.,unit_exx_debug)
        !
@@ -1331,7 +1317,6 @@ contains
 !!$ ****[ l do loop ]****
 !!$
        l_loop: do l = 1, nbnab(k_in_part)
-          !l_in_halo = lbnab2ch(l)                
           lpart = ibpart(nbkbeg+l-1) + k_off
           lseq  = ibseq (nbkbeg+l-1)
           call get_halodat(ld,kg,lseq,chalo%i_hbeg(lpart),         &
@@ -1359,7 +1344,6 @@ contains
 !!$
                 i_loop: do i = 1, at%n_hnab(k_in_halo)
                    i_in_prim = at%i_prim(at%i_beg(k_in_halo)+i-1)
-                   nd1 = ahalo%ndimi      (i_in_prim)
                    ni  = bundle%iprim_seq (i_in_prim)
                    np  = bundle%iprim_part(i_in_prim)
                    icad  = (i_in_prim - 1) * chalo%ni_in_halo
