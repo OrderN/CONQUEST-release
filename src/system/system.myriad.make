@@ -1,6 +1,9 @@
-# This is a system.make file for the UCL Kathleen machine. See
-# https://www.rc.ucl.ac.uk/docs/Clusters/Kathleen/ for details
-
+# This is a system.make file for the UCL Myriad machine. See
+# https://www.rc.ucl.ac.uk/docs/Clusters/Myriad/ for details
+# module load gcc-libs/10.2.0
+# module load compilers/intel/2022.2
+# module load mpi/intel/2021.6.0
+# module load libxc/6.2.2/intel-2022
 
 # Set compilers
 FC=mpif90
@@ -27,10 +30,9 @@ OMPFLAGS= -fopenmp
 
 # LibXC compatibility
 # Choose LibXC version: v4 (deprecated) or v5/6 (v5 and v6 have the same interface)
- XC_LIBRARY = LibXC_v4
-#XC_LIBRARY = LibXC_v5
-XC_LIB = -L/shared/ucl/apps/libxc/4.2.3/intel-2018/lib -lxcf90 -lxc
-XC_COMPFLAGS = -I/shared/ucl/apps/libxc/4.2.3/intel-2018/include
+XC_LIBRARY = LibXC_v5
+XC_LIB = -lxcf90 -lxc
+XC_COMPFLAGS = -I/usr/local/include
 
 # Compilation flags
 # NB for gcc10 you need to add -fallow-argument-mismatch
