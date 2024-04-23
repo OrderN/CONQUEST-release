@@ -1479,14 +1479,10 @@ contains
        ibpart, ibseq, b, c, ahalo, chalo, & 
        at, mx_absb, mx_part, lenb, lenc, backup_eris )
 
-    use numbers,        only: zero, one, pi
+    use numbers,        only: zero
     use matrix_module,  only: matrix_halo, matrix_trans
-    use global_module,  only: area_exx
     !
-    use basic_types,    only: primary_set
     use primary_module, only: bundle 
-    use matrix_data,    only: Hrange, SXrange, Xrange, Srange
-    use mult_module,    only: return_matrix_value, S_X_SX
     use cover_module,   only: BCS_parts
     !
     use exx_evalpao,    only: exx_phi_on_grid
@@ -1496,13 +1492,15 @@ contains
     use exx_types, only: prim_atomic_data, neigh_atomic_data,eris,  &
          p_ngauss,unit_exx_debug, unit_eri_debug, sum_eri_gto
     !
-    use exx_memory, only: exx_mem_alloc
+    !use exx_memory, only: exx_mem_alloc
     !
     use exx_module, only: get_halodat, get_iprimdat
     !
-    use exx_poisson,only: exx_ewald_charge                                       ! <-- Missing exx_v_on_grid
+    !use exx_poisson,only: exx_v_on_grid, exx_ewald_charge                       ! <-- Missing exx_v_on_grid
     !
-    use exx_erigto, only: eri_gto_hoh, compute_eri_hoh                           ! <-- compute_eri_hoh is not in m_kern_exx_eri
+    ! Not shared with m_kern_exx_eri
+    use exx_types, only: sum_eri_gto                                             ! <-- sum_eri_gto is not in m_kern_exx_eri
+    use exx_erigto, only: compute_eri_hoh                                        ! <-- compute_eri_hoh is not in m_kern_exx_eri
     !
     implicit none
 
@@ -1527,7 +1525,6 @@ contains
     integer :: nbkbeg, k, k_in_part, k_in_halo, j, jpart, jseq
     integer :: i, i_in_prim, icad, nbbeg, j_in_halo, ncbeg
     integer :: nb_nd_kbeg
-    integer :: nd1, nd3
     integer :: nbaddr, ncaddr
     integer :: l, lseq, lpart
     integer :: np, ni
@@ -1539,7 +1536,6 @@ contains
     type(neigh_atomic_data) :: ld ! l_delta
     !                                                                            ! <-- Missing maxsuppfuncs
     integer                 :: nsf_kg, nsf_ld, nsf_ia, nsf_jb
-    integer                 :: count                                             ! <-- Missing r, s and t
     ! GTO
     character(len=8) :: i_nt, j_nt, k_nt, l_nt
     real(double)     :: xi, xj, xk, xl 
@@ -1560,7 +1556,6 @@ contains
        k_in_part  = ahalo%j_seq(k_in_halo)
        nbkbeg     = ibaddr     (k_in_part) 
        nb_nd_kbeg = ib_nd_acc  (k_in_part)
-       nd3        = ahalo%ndimj(k_in_halo)
        call get_halodat(kg,kg,k_in_part,ahalo%i_hbeg(ahalo%lab_hcover(kpart)), &
             ahalo%lab_hcell(kpart),'k',.true.,unit_exx_debug)
        !
@@ -1603,7 +1598,6 @@ contains
 !!$
                 i_loop: do i = 1, at%n_hnab(k_in_halo)
                    i_in_prim = at%i_prim(at%i_beg(k_in_halo)+i-1)
-                   nd1 = ahalo%ndimi      (i_in_prim)
                    ni  = bundle%iprim_seq (i_in_prim)
                    np  = bundle%iprim_part(i_in_prim)
                    icad  = (i_in_prim - 1) * chalo%ni_in_halo
@@ -1639,8 +1633,26 @@ contains
                             jb_loop: do nsf_jb = 1, jb%nsup                                         
                                !
                                ncaddr = ncbeg + ia%nsup * (nsf_jb - 1)
-                               !
                                !                                                 ! <-- Missing calls to exx_ewald_charge and exx_v_on_grid
+                               !call start_timer(tmr_std_exx_poisson) 
+                               !work_out_3d = zero
+                               !work_in_3d  = phi_l(:,:,:,nsf_ld)*phi_j(:,:,:,nsf_jb)
+                               !
+                               !if (exx_psolver=='fftw' .and. exx_pscheme=='ewald') then
+                               !   call exx_ewald_charge(work_in_3d,extent,dv,ewald_charge)
+                               !   work_in_3d = work_in_3d - ewald_rho*ewald_charge
+                               !end if
+                               !
+                               !call exx_v_on_grid(inode,extent,work_in_3d,work_out_3d,r_int,   &
+                               !     exx_psolver,exx_pscheme,pulay_radius,p_omega,p_ngauss,p_gauss,&
+                               !     w_gauss,reckernel_3d)
+                               !
+                               !if (exx_psolver=='fftw' .and. exx_pscheme=='ewald') then
+                               !   work_out_3d = work_out_3d + ewald_pot*ewald_charge
+                               !end if
+                               !
+                               !call stop_timer(tmr_std_exx_poisson,.true.)
+
                                ia_loop: do nsf_ia = 1, ia%nsup
                                   !
                                   eri_gto = zero
@@ -1664,6 +1676,7 @@ contains
                                   end if
                                   !
                                   if (exx_debug) then
+                                    sum_eri_gto = sum_eri_gto + eri_gto
 
                                         sum_eri_gto = sum_eri_gto + eri_gto
 
@@ -1698,11 +1711,15 @@ contains
                          !
                       end if
                       !
+                      !if ( exx_alloc ) call exx_mem_alloc(extent,jb%nsup,0,'phi_j','dealloc')
+                      !
 !!$
 !!$ ****[ j end loop ]****
 !!$                      
                       !
                    end do j_loop
+                   !
+                   !if ( exx_alloc ) call exx_mem_alloc(extent,ia%nsup,0,'phi_i','dealloc')  
                    !
 !!$
 !!$ ****[ i end loop ]****
@@ -1714,6 +1731,8 @@ contains
              !
           end do ld_loop
           !
+          !if ( exx_alloc ) call exx_mem_alloc(extent,ld%nsup,0,'phi_l','dealloc')  
+          !
 !!$
 !!$ ****[ l end loop ]****
 !!$
@@ -1722,6 +1741,8 @@ contains
        !
        nbbeg = nbbeg + ld%nsup*kg%nsup
        !
+       !if ( exx_alloc ) call exx_mem_alloc(extent,kg%nsup,0,'phi_k','dealloc')
+       !
 !!$
 !!$ ****[ k end loop ]****
 !!$
@@ -1729,6 +1750,7 @@ contains
     end do k_loop
     !
     !
+!10  format(I8,X,2F16.10,X,A,2I4,A,2I4,A,4X,A,2I4,A,2I4,A,A,2A4,A,2A4,A,X,8F12.6)
 10  format(I8,X,1F16.10,X,A,2I4,A,2I4,A,4X,A,2I4,A,2I4,A,A,2A4,A,2A4,A,X,A,2A8,A,2A8,A,X,16F12.6)
 
     return
