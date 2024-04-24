@@ -2,9 +2,9 @@ name: Makefile CI
 
 on:
   push:
-    branches: [ "develop" ]
+    branches: [ "develop", "f-exx-opt" ]
   pull_request:
-    branches: [ "develop" ]
+    branches: [ "develop", "f-exx-opt" ]
 
 jobs:
   build:
