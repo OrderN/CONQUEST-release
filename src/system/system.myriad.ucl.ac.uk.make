@@ -53,7 +53,7 @@ LINKFLAGS= -L${MKLROOT}/lib/intel64 -lmkl_scalapack_lp64 -lmkl_cdft_core -lmkl_i
 ARFLAGS=
 
 # Matrix multiplication kernel type
-MULT_KERN = ompGemm_m
+MULT_KERN = default
 # Use dummy DiagModule or not
 DIAG_DUMMY =
 # Use dummy omp_module or not.
