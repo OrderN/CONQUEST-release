@@ -128,7 +128,7 @@ contains
          unit_eri_filter_debug, &         
          file_exx_timers,     file_exx_memory,     &
          file_exx_debug,      file_eri_debug,      &
-         file_eri_filter_debug, sum_eri_gto
+         file_eri_filter_debug
 
     use exx_types, only: exx_alloc, r_int, extent, &
          ewald_alpha, ewald_rho, ewald_pot,   &
@@ -142,6 +142,8 @@ contains
     !
     !**<lat>** ISF Poisson solver Will be available in the forthcoming version 
     !use Poisson_Solver, only: createBeylkin
+    !use exx_types,      only: grid_spacing
+    !use exx_types,      only: isf_order, ngrid
     !
     implicit none
 
@@ -181,15 +183,8 @@ contains
     real(double) :: t0,t1
     integer      :: maxsuppfuncs, nb_eris
 
-    !type(prim_atomic_data)  :: ia !i_alpha
-    !type(neigh_atomic_data) :: jb !j_beta
-    !type(neigh_atomic_data) :: kg !k_gamma
-    !type(neigh_atomic_data) :: ld !l_delta
-    !
-    !type(store_eris), dimension(:), allocatable :: eris
     !
     real(double)      :: xyz_ghost(3), r_ghost
-    !character(len=20) :: filename3, filename4, filename5, filename6
 
     type(cq_timer) :: backtrace_timer
     integer        :: backtrace_level
@@ -407,37 +402,9 @@ contains
     ncover_yz=mult(S_X_SX)%gcs%ncovery*mult(S_X_SX)%gcs%ncoverz
     !
     !
-    ! #ifdef OMP_M
-    ! !$omp parallel default(none) &
-    ! !$omp          shared(a, b, c, a_b_c, myid, lena, lenc, tmr_std_allocation, &
-    ! !$omp                 ncover_yz, ibpart_rem, atrans, usegemm) &
-    ! !$omp          private(kpart, icall, ind_part, ipart, nnode, b_rem, &
-    ! !$omp                  lenb_rem, n_cont, part_array, ilen2, offset, &
-    ! !$omp                  nbnab_rem, ibind_rem, ib_nd_acc_rem, ibseq_rem, &
-    ! !$omp                  npxyz_rem, ibndimj_rem, k_off, icall2)
-    ! !$omp do
-    ! #end if
-    !
-    !if ( exx_debug ) then       
-    !   call hf_write_info(unit_exx_debug,inode,10,mult(S_X_SX)%ahalo%np_in_halo,0,0,0,0, &
-    !        0,0,'XX',xyz_ghost,r_ghost,0,0,0,zero,zero,0)
-    !end if
-    !
-    !call hf_write_info(unit1,inode,10,bundle%groups_on_node,0,0,0,0, &omput
-    !     0,0,'XX',xyz_ghost,r_ghost,0,0,0,zero,zero,0)
-    sum_eri_gto = 0.0d0
-    !
-    xyz_ghost = zero
-    r_ghost   = zero
     do kpart = 1,mult(S_X_SX)%ahalo%np_in_halo  ! Main loop
        icall=1
        ind_part = mult(S_X_SX)%ahalo%lab_hcell(kpart)    
-       !
-       !print*, 'inode', inode,'kpart', kpart, ind_part
-       !if ( exx_debug ) then
-       !   call hf_write_info(unit_exx_debug,inode,20,0,kpart,mult(S_X_SX)%ahalo%np_in_halo,0,0, &
-       !        0,0,'XX',xyz_ghost,r_ghost,0,0,0,zero,zero,0)       
-       !end if
        !
        if(kpart>1) then  ! Is it a periodic image of the previous partition ?
           if(ind_part.eq.mult(S_X_SX)%ahalo%lab_hcell(kpart-1)) then
@@ -564,7 +531,6 @@ contains
           
           if (iprint_exx > 5) write(io_lun,*) 'Proc :', myid, &
                'EXX: performing on-the-fly ERI calculation on kpart =', kpart
-
           call m_kern_exx_eri( k_off,kpart,ib_nd_acc_rem,ibind_rem,nbnab_rem,&
                ibpart_rem,ibseq_rem, & 
                b_rem,  &
@@ -1057,7 +1023,6 @@ contains
 !!$ ****[ l do loop ]****
 !!$
        do l = 1, nbnab(k_in_part)
-          !l_in_halo = lbnab2ch(l)                
           lpart = ibpart(nbkbeg+l-1) + k_off
           lseq  = ibseq (nbkbeg+l-1)
           call get_halodat(ld,kg,lseq,chalo%i_hbeg(lpart),         &
@@ -1173,7 +1138,7 @@ contains
 !!$
 !!$ ****[ j end loop ]****
 !!$
-          end do ! End of j = 1, mat(np,SXrange)%n_nab(ni)           
+          end do ! End of j = 1, nbnab(k_in_part)           
           !          
 !!$
 !!$ ****[ i end loop ]****
@@ -1655,7 +1620,7 @@ contains
 
                                ia_loop: do nsf_ia = 1, ia%nsup
                                   !
-                                  eri_gto = zero
+                                  exx_mat_elem = zero
                                   !
                                   if ( eris(kpart)%filter_eris( count ) ) then
                                      !
@@ -1666,7 +1631,7 @@ contains
                                              ia%spec,   jb%spec,   kg%spec,   ld%spec,  &
                                              ia%xyz_ip, jb%xyz_cv, kg%xyz_cv, ld%xyz_cv,&
                                              i_nt, j_nt, k_nt, l_nt,&
-                                             eri_gto )
+                                             exx_mat_elem )
                                         !
                                      else
                                         !
@@ -1676,7 +1641,7 @@ contains
                                   end if
                                   !
                                   if (exx_debug) then
-                                    sum_eri_gto = sum_eri_gto + eri_gto
+                                    sum_eri_gto = sum_eri_gto + exx_mat_elem
 
                                         sum_eri_gto = sum_eri_gto + eri_gto
 
@@ -1694,10 +1659,10 @@ contains
                                   !
                                   if ( backup_eris ) then
                                      !                                     
-                                     eris(kpart)%store_eris( count ) = eri_gto                  ! <-- eri_gto instead of exx_mat_elem
+                                     eris(kpart)%store_eris( count ) = exx_mat_elem                  ! <-- eri_gto instead of exx_mat_elem
                                      !
                                   else
-                                     c(ncaddr + nsf_ia - 1) = c(ncaddr + nsf_ia - 1) + eri_gto  ! <-- eri_gto instead of exx_mat_elem
+                                     c(ncaddr + nsf_ia - 1) = c(ncaddr + nsf_ia - 1) + exx_mat_elem  ! <-- eri_gto instead of exx_mat_elem
                                      !
                                   end if
                                   !                               
@@ -1974,7 +1939,7 @@ contains
 !!$
 !!$ ****[ j loop ]****
 !!$
-                   j_loop: do j = 1, nbnab(k_in_part)!mat(np,Xrange)%n_nab(ni)                   
+                   j_loop: do j = 1, nbnab(k_in_part)
                       j_in_halo = jbnab2ch(j) !***
                       !
                       if ( j_in_halo /= 0 ) then
@@ -2147,8 +2112,7 @@ contains
     integer      :: i, ngrid
  
 
-    ngrid = 2*extent+1
-    h     = r_int/real(extent,double) 
+    h = r_int/real(extent,double) 
         
     open(unit,file=filename)
     
