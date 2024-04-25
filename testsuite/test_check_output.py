@@ -28,14 +28,14 @@ def read_conquest_out(path=".", filename="Conquest_out"):
 
     return Results
 
-def results(path, key):
+def results(path):
     '''
     Reads a result and its reference, selects one value with key and returns it.
     '''
     ref_result = read_conquest_out(path, "Conquest_out.ref")
     test_result = read_conquest_out(path, "Conquest_out")
 
-    return (ref_result[key], test_result[key])
+    return (ref_result, test_result)
 
 def precision(key='_'):
     '''
@@ -49,7 +49,7 @@ def precision(key='_'):
     else:
         return 1e-4
     '''
-    if (key == 'accurate'):
+    if (key == 'Harris-Foulkes energy'):
         return 1e-8
     else:
         return 1e-4
@@ -63,46 +63,30 @@ def testsuite_directory():
     return pathlib.Path(__file__).parent.resolve()
 
 class TestClass:
-    @pytest.mark.parametrize("key",['Harris-Foulkes energy',
-                                    'Max force',
-                                    'Force residual',
-                                    'Total stress'])
-    def test_001(self, key, testsuite_directory):
-
-        path = os.path.join(testsuite_directory, "test_001_bulk_Si_1proc_Diag")
-        res = results(path, key)
-        np.testing.assert_allclose(res[0], res[1], rtol = precision(key), verbose = True)
-
-    @pytest.mark.parametrize("key", ['Harris-Foulkes energy',
-                                     'Max force',
-                                     'Force residual',
-                                     'Total stress'])
-    def test_002(self, key, testsuite_directory):
-
-        path = os.path.join(testsuite_directory, "test_002_bulk_Si_1proc_OrderN")
-        res = results(path, key)
-        np.testing.assert_allclose(res[0], res[1], rtol = precision(key), verbose = True)
-
-    @pytest.mark.parametrize("key", ['Harris-Foulkes energy',
-                                     'Max force',
-                                     'Force residual',
-                                     'Total polarisation'])
-    def test_003(self, key, testsuite_directory):
-
-        path = os.path.join(testsuite_directory, "test_003_bulk_BTO_polarisation")
-        res = results(path, key)
-        np.testing.assert_allclose(res[0], res[1], rtol = precision(key), verbose = True)
-
-    @pytest.mark.parametrize("key", ['Harris-Foulkes energy'])                                 
-    def test_004(self, key, testsuite_directory):
-
-        path = os.path.join(testsuite_directory, "test_004_isol_C2H4_4proc_PBE0CRI")
-        res = results(path, key)
-        np.testing.assert_allclose(res[0], res[1], rtol = precision('accurate'), verbose = True)
-
-    @pytest.mark.parametrize("key", ['Harris-Foulkes energy'])                                 
-    def test_005(self, key, testsuite_directory):
-
-        path = os.path.join(testsuite_directory, "test_005_isol_C2H4_4proc_PBE0GTO")
-        res = results(path, key)
-        np.testing.assert_allclose(res[0], res[1], rtol = precision('accurate'), verbose = True)
+    @pytest.mark.parametrize("test_dir,keys", [
+        [
+            "test_001_bulk_Si_1proc_Diag",
+            ['Harris-Foulkes energy','Max force','Force residual','Total stress']
+        ],
+        [
+            "test_002_bulk_Si_1proc_OrderN",
+            ['Harris-Foulkes energy','Max force','Force residual','Total stress']
+        ],
+        [
+            "test_003_bulk_BTO_polarisation",
+            ['Harris-Foulkes energy','Max force','Force residual','Total polarisation']
+        ],
+        [
+            "test_004_isol_C2H4_4proc_PBE0CRI",
+            ["Harris-Foulkes energy"]
+        ],
+        [
+            "test_005_isol_C2H4_4proc_PBE0GTO",
+            ["Harris-Foulkes energy"]
+        ]
+    ])
+    def test_all(self, test_dir, keys, testsuite_directory):
+        path = os.path.join(testsuite_directory, test_dir)
+        ref_results, test_results = results(path)
+        for key in keys:
+               np.testing.assert_allclose(ref_results[key], test_results[key], rtol = precision(key), verbose = True)
