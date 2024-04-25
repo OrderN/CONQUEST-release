@@ -902,7 +902,59 @@ contains
     return
   end subroutine get_X_matrix
   !
-  !
+  ! To ensure thread safety, variables which are altered must be passed in as parameters rather than imported.
+  ! TODO: Change name to something more descriptive
+  subroutine cri_eri_inner_calculation(phi_i, Ome_kj, nsf1, nsf2, nsf3, ewald_charge, &
+       dv, ncaddr, ncbeg, ia_nsup, work_out_3d, work_in_3d, c) 
+
+       use exx_poisson, only: exx_v_on_grid, exx_ewald_charge
+
+       use exx_types, only: Phy_k, phi_j, phi_k, ewald_rho, p_gauss, w_gauss, reckernel_3d, ewald_pot, &
+            pulay_radius, p_ngauss, r_int, p_omega, exx_psolver, exx_pscheme, extent
+
+       use GenBlas, only: dot
+       
+       use numbers, only: zero
+ 
+       implicit none
+
+       real(double), pointer, intent(in)  :: Ome_kj(:,:,:), phi_i(:,:,:,:)
+       integer,               intent(in)  :: nsf1, nsf2             ! The indices of the loops from which this function is called 
+       integer,               intent(in)  :: ncbeg, ia_nsup
+       real(double),          intent(in)  :: dv
+       real(double),          intent(out) :: ewald_charge, work_out_3d(:,:,:), work_in_3d(:,:,:)
+       real(double),          intent(inout) :: c(:)
+       
+       integer :: ncaddr, nsf3
+
+       work_out_3d = zero
+       !
+       work_in_3d = Phy_k(:,:,:,nsf1) * phi_j(:,:,:,nsf2)
+       !
+       if (exx_psolver=='fftw' .and. exx_pscheme=='ewald') then
+          call exx_ewald_charge(work_in_3d,extent,dv,ewald_charge)
+          work_in_3d  = work_in_3d - ewald_rho*ewald_charge
+       end if
+       !
+       call exx_v_on_grid(inode,extent,work_in_3d,work_out_3d,r_int,   &
+          exx_psolver,exx_pscheme,pulay_radius,p_omega,p_ngauss,p_gauss,&
+          w_gauss,reckernel_3d)
+ 
+       if (exx_psolver=='fftw' .and. exx_pscheme=='ewald') then
+          work_out_3d = work_out_3d + ewald_pot*ewald_charge
+       end if
+       !
+       Ome_kj = work_out_3d * phi_k(:,:,:,nsf1)
+       !
+       ncaddr = ncbeg + ia_nsup * (nsf2 - 1)
+       !
+       do nsf3 = 1, ia_nsup
+          !
+          c(ncaddr + nsf3 - 1) = c(ncaddr + nsf3 - 1) &
+             + dot((2*extent+1)**3, phi_i(:,:,:,nsf3), 1, Ome_kj, 1) * dv
+          !
+       end do ! nsf3 = 1, ia%nsup
+  end subroutine cri_eri_inner_calculation
   !
   !!****f* exx_kernel_default/m_kern_exx_cri *
   !!
@@ -1186,33 +1238,8 @@ contains
                    !$omp do schedule(runtime) collapse(2)
                    do nsf1 = 1, kg%nsup
                       do nsf2 = 1, jb%nsup
-                         work_out_3d = zero
-                         !
-                         work_in_3d = Phy_k(:,:,:,nsf1) * phi_j(:,:,:,nsf2)
-                         !
-                         if (exx_psolver=='fftw' .and. exx_pscheme=='ewald') then
-                            call exx_ewald_charge(work_in_3d,extent,dv,ewald_charge)
-                            work_in_3d  = work_in_3d - ewald_rho*ewald_charge
-                         end if
-                         !
-                         call exx_v_on_grid(inode,extent,work_in_3d,work_out_3d,r_int,   &
-                              exx_psolver,exx_pscheme,pulay_radius,p_omega,p_ngauss,p_gauss,&
-                              w_gauss,reckernel_3d)
-
-                         if (exx_psolver=='fftw' .and. exx_pscheme=='ewald') then
-                            work_out_3d = work_out_3d + ewald_pot*ewald_charge
-                         end if
-                         !
-                         Ome_kj = work_out_3d * phi_k(:,:,:,nsf1)
-                         !
-                         ncaddr = ncbeg + ia%nsup * (nsf2 - 1)
-                         !
-                         do nsf3 = 1, ia%nsup
-                            !
-                            c(ncaddr + nsf3 - 1) = c(ncaddr + nsf3 - 1) &
-                               + dot((2*extent+1)**3, phi_i(:,:,:,nsf3), 1, Ome_kj, 1) * dv
-                            !
-                         end do ! nsf3 = 1, ia%nsup
+                         call cri_eri_inner_calculation(phi_i, Ome_kj, nsf1, nsf2, nsf3, ewald_charge, dv, ncaddr, &
+                                                   ncbeg, ia%nsup, work_out_3d, work_in_3d, c)
                          !
                       end do ! nsf2 = 1, jb%nsup
                    end do ! nsf1 = 1, kg%nsup
