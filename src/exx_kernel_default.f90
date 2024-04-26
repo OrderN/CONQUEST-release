@@ -904,7 +904,7 @@ contains
   !
   ! To ensure thread safety, variables which are altered must be passed in as parameters rather than imported.
   ! TODO: Change name to something more descriptive
-  subroutine cri_eri_inner_calculation(nsf1_array, phi_i, Ome_kj, nsf1, nsf2, nsf3, kpart, dv, ncaddr, ncbeg, &
+  subroutine cri_eri_inner_calculation(nsf1_array, phi_i, Ome_kj, nsf1, nsf2, kpart, dv, ncaddr, ncbeg, &
                ia_nsup, backup_eris, start_count, ewald_charge, work_out_3d, work_in_3d, c) 
 
        use exx_poisson, only: exx_v_on_grid, exx_ewald_charge
@@ -1611,7 +1611,7 @@ contains
                                jb_count = j_count + (nsf_jb - 1)
                                jb_count = jb_count * ia%nsup
                                !
-                               call cri_eri_inner_calculation(phi_l, phi_i, Ome_kj, nsf_kg, nsf_jb, kpart, dv, ncaddr, ncbeg, &
+                               call cri_eri_inner_calculation(phi_l, phi_i, Ome_kj, nsf_ld, nsf_jb, kpart, dv, ncaddr, ncbeg, &
                                              ia%nsup, backup_eris, jb_count, ewald_charge, work_out_3d, work_in_3d, c)
                                !
                             end do jb_loop
