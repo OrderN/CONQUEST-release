@@ -928,7 +928,7 @@ contains
        real(double),          intent(inout)         :: c(:)
        ! Backup eris parameters. Optional as they are only needed by eri function
        logical,               intent(in)            :: backup_eris
-       real(double),          intent(out), OPTIONAL :: store_eris_inner(:,:)
+       real(double), pointer, intent(out), OPTIONAL :: store_eris_inner(:,:)
        
        integer      :: ncaddr, nsf3
        real(double) :: exx_mat_elem
@@ -956,6 +956,7 @@ contains
        !
        do nsf3 = 1, ia_nsup
           !
+          ! Can we instead always store directly into store_eris_inner(nsf2, nsf3)?
           exx_mat_elem = dot((2*extent+1)**3, phi_i(:,:,:,nsf3), 1, Ome_kj, 1) * dv
           !
           if ( backup_eris ) then
@@ -1335,8 +1336,6 @@ contains
     !
     use gto_format_new, only: gto
     !
-    use species_module, only: nsf_species
-    !
     use exx_evalpao,    only: exx_phi_on_grid
     !
     use exx_evalgto,    only: exx_gto_on_grid_prim
@@ -1397,19 +1396,16 @@ contains
     real(double)               ::   exx_mat_elem
     !
     ! We allocate pointers here to point at 1D arrays later and allow contiguous access when passing to BLAS dot later
-    real(double), pointer :: phi_i(:,:,:,:), Ome_kj(:,:,:)
+    real(double), pointer :: phi_i(:,:,:,:), Ome_kj(:,:,:), store_eris_inner(:,:)
     !
     type(prim_atomic_data)  :: ia !i_alpha
     type(neigh_atomic_data) :: jb !j_beta
     type(neigh_atomic_data) :: kg !k_gamma
     type(neigh_atomic_data) :: ld !l_delta
     !
-    integer                 :: maxsuppfuncs
     integer                 :: nsf_kg, nsf_ld, nsf_ia, nsf_jb
     integer                 :: r, s, t, stat
     integer                 :: k_count, l_count, ld_count, kg_count, i_count, j_count, jb_count, count
-    !
-    real(double), allocatable, dimension(:,:) :: store_eris_inner
     !
     ! GTO
     integer          :: i_nx, j_nx, k_nx, l_nx
@@ -1424,10 +1420,6 @@ contains
     !real(double)     :: zi, zj, zk, zl 
 
     real(double) :: eri_gto, eri_pao, test
-    !
-    maxsuppfuncs = MAXVAL(nsf_species)
-    allocate(store_eris_inner(maxsuppfuncs, maxsuppfuncs), STAT = stat)
-    if(stat /= 0) call cq_abort('m_kern_exx_eri: error allocating store_eris_inner!')
     !
     dr = grid_spacing
     dv = dr**3
@@ -1611,7 +1603,13 @@ contains
                             j_count = i_count + (j - 1)
                             j_count = j_count * (jb%nsup - 1)
                             !
+                            ! TODO include bounds in Ome_kj_1d_buffer and store_eris
                             Ome_kj(1:2*extent+1, 1:2*extent+1, 1:2*extent+1) => Ome_kj_1d_buffer
+                            !
+                            ! Point at the next block of eris to store and update counter 
+                            store_eris_inner(1:jb%nsup, 1:ia%nsup) => eris(kpart)%store_eris(count)
+                            count = count + (jb%nsup * ia%nsup)
+                            !
                             jb_loop: do nsf_jb = 1, jb%nsup
                                !
                                ! The current state of count
@@ -1630,14 +1628,6 @@ contains
                                              backup_eris, store_eris_inner)
                                !
                             end do jb_loop
-
-                            ! It is not ideal to repeat these loops here but it is currently necessary to keep the backup thread safe
-                            do nsf_jb = 1, jb%nsup
-                               do nsf_ia = 1, ia%nsup
-                                  eris(kpart)%store_eris( count ) = store_eris_inner(nsf_jb, nsf_ia)
-                                  count = count + 1
-                               end do
-                            end do ! nsf_ld = 1, jb%nsup
                             !
                          end if
                          !
