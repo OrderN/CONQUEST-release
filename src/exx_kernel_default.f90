@@ -1608,7 +1608,7 @@ contains
                             !
                             ! Point at the next block of eris to store and update counter 
                             store_eris_inner(1:jb%nsup, 1:ia%nsup) => eris(kpart)%store_eris(count:count + (jb%nsup * ia%nsup))
-                            count = count + (jb%nsup * ia%nsup)
+                            count = count + (jb%nsup * ia%nsup) + 1
                             !
                             jb_loop: do nsf_jb = 1, jb%nsup
                                !
