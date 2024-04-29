@@ -904,8 +904,9 @@ contains
   !
   ! To ensure thread safety, variables which are altered must be passed in as parameters rather than imported.
   ! TODO: Change name to something more descriptive
-  subroutine cri_eri_inner_calculation(nsf1_array, phi_i, Ome_kj, nsf1, nsf2, kpart, dv, ncaddr, ncbeg, &
-               ia_nsup, backup_eris, start_count, ewald_charge, work_out_3d, work_in_3d, c) 
+  subroutine cri_eri_inner_calculation(nsf1_array, phi_i, Ome_kj, nsf1, nsf2, kpart, dv, &
+               ncaddr, ncbeg, ia_nsup, ewald_charge, work_out_3d, work_in_3d, c,         &
+               backup_eris, store_eris_inner) 
 
        use exx_poisson, only: exx_v_on_grid, exx_ewald_charge
 
@@ -919,13 +920,17 @@ contains
  
        implicit none
 
-       real(double), pointer, intent(in)    :: Ome_kj(:,:,:), phi_i(:,:,:,:)
-       integer,               intent(in)    :: kpart, nsf1, nsf2             ! The indices of the loops from which this function is called 
-       integer,               intent(in)    :: ncbeg, ia_nsup, start_count
-       logical,               intent(in)    :: backup_eris
-       real(double),          intent(in)    :: nsf1_array(:,:,:,:), dv
-       real(double),          intent(out)   :: ewald_charge, work_out_3d(:,:,:), work_in_3d(:,:,:)
-       real(double),          intent(inout) :: c(:)
+       integer :: maxsuppfuncs = maxval(nsf_species)
+
+       real(double), pointer, intent(in)            :: Ome_kj(:,:,:), phi_i(:,:,:,:)
+       integer,               intent(in)            :: kpart, nsf1, nsf2             ! The indices of the loops from which this function is called 
+       integer,               intent(in)            :: ncbeg, ia_nsup
+       real(double),          intent(in)            :: nsf1_array(:,:,:,:), dv
+       real(double),          intent(out)           :: ewald_charge, work_out_3d(:,:,:), work_in_3d(:,:,:)
+       real(double),          intent(inout)         :: c(:)
+       ! Backup eris parameters. Optional as they are only needed by eri function
+       logical,               intent(in),           :: backup_eris
+       real(double),          intent(out), OPTIONAL :: store_eris_inner(maxsuppfuncs, maxsuppfuncs)
        
        integer      :: ncaddr, nsf3
        real(double) :: exx_mat_elem
@@ -957,7 +962,8 @@ contains
           !
           if ( backup_eris ) then
              !
-             eris(kpart)%store_eris( start_count + nsf3 ) = exx_mat_elem
+             ! eris(kpart)%store_eris( count ) = exx_mat_elem
+             store_eris_inner(nsf2, nsf3) = exx_mat_elem
              !
           else
              !
@@ -1070,8 +1076,9 @@ contains
     integer :: np, ni
     !
     real(double), dimension(3) :: xyz_zero  = zero
-    real(double)               ::   dr,dv,K_val
-    real(double)               ::   exx_mat_elem
+    real(double)               :: dr,dv,K_val
+    real(double)               :: exx_mat_elem
+    !
     !
     ! We allocate pointers here to point at 1D arrays later and allow contiguous access when passing to BLAS dot later
     real(double), pointer :: phi_i(:,:,:,:), Ome_kj(:,:,:)
@@ -1081,8 +1088,8 @@ contains
     type(neigh_atomic_data) :: kg !k_gamma
     type(neigh_atomic_data) :: ld !l_delta
     !
-    integer                 :: maxsuppfuncs, nsf1, nsf2, nsf3
-    integer                 :: r, s, t
+    integer                 :: maxsuppfuncs, nsf_kg, nsf_ld
+    integer                 :: r, s, t, count
     !
     !
     dr = grid_spacing
@@ -1093,6 +1100,7 @@ contains
     !range_kl        = 0.5d0
     !unit_exx_debug1 = 333
     !
+    count = 1
     !
 !!$
 !!$ ****[ k loop ]****
@@ -1158,16 +1166,16 @@ contains
           call exx_phi_on_grid(inode,ld%global_num,ld%spec,extent,     &
                ld%xyz,ld%nsup,phi_l,r_int,xyz_zero)             
           !
-          do nsf2 = 1, ld%nsup
+          do nsf_ld = 1, ld%nsup
              !
-             nbaddr = nbbeg + kg%nsup * (nsf2 - 1)
+             nbaddr = nbbeg + kg%nsup * (nsf_ld - 1)
              !
-             do nsf1 = 1, kg%nsup                         
+             do nsf_kg = 1, kg%nsup                         
                 !
-                K_val = b(nbaddr+nsf1-1)
+                K_val = b(nbaddr+nsf_kg-1)
                 !
                 call start_timer(tmr_std_exx_accumul)
-                Phy_k(:,:,:,nsf1) = Phy_k(:,:,:,nsf1) + K_val*phi_l(:,:,:,nsf2) 
+                Phy_k(:,:,:,nsf_kg) = Phy_k(:,:,:,nsf_kg) + K_val*phi_l(:,:,:,nsf_ld) 
                 call stop_timer(tmr_std_exx_accumul,.true.)
 
              end do
@@ -1244,18 +1252,19 @@ contains
                    !$omp     shared(kg,jb,tmr_std_exx_poisson,tmr_std_exx_nsup,Phy_k,phi_j,phi_k,ncbeg,ia,kpart, &
                    !$omp            tmr_std_exx_matmult,ewald_pot,phi_i,exx_psolver,exx_pscheme,extent,dv,       &
                    !$omp            ewald_rho,inode,pulay_radius,p_omega,p_gauss,w_gauss,reckernel_3d,r_int)     &
-                   !$omp     private(nsf1,nsf2,work_out_3d,work_in_3d,ewald_charge,Ome_kj_1d_buffer,Ome_kj,      &
-                   !$omp             ncaddr,nsf3,exx_mat_elem,r,s,t)
+                   !$omp     private(nsf_kg,nsf_ld,work_out_3d,work_in_3d,ewald_charge,Ome_kj_1d_buffer,Ome_kj,      &
+                   !$omp             ncaddr,exx_mat_elem,r,s,t)
                    Ome_kj(1:2*extent+1, 1:2*extent+1, 1:2*extent+1) => Ome_kj_1d_buffer
                    !$omp do schedule(runtime) collapse(2)
-                   do nsf1 = 1, kg%nsup
-                      do nsf2 = 1, jb%nsup
+                   do nsf_kg = 1, kg%nsup
+                      do nsf_ld = 1, jb%nsup
                          !
-                         call cri_eri_inner_calculation(Phy_k, phi_i, Ome_kj, nsf1, nsf2, kpart, dv, ncaddr, ncbeg, &
-                                       ia%nsup, .false., 0, ewald_charge, work_out_3d, work_in_3d, c)
+                         call cri_eri_inner_calculation(Phy_k, phi_i, Ome_kj, nsf_kg, nsf_ld, kpart, dv,  &
+                                       ncaddr, &ncbeg, ia%nsup, ewald_charge, work_out_3d, work_in_3d, c, &
+                                       .false.)
                          !
-                      end do ! nsf2 = 1, jb%nsup
-                   end do ! nsf1 = 1, kg%nsup
+                      end do ! nsf_ld = 1, jb%nsup
+                   end do ! nsf_kg = 1, kg%nsup
                    !$omp end do
                    !$omp end parallel
                    !
@@ -1397,10 +1406,12 @@ contains
     type(neigh_atomic_data) :: kg !k_gamma
     type(neigh_atomic_data) :: ld !l_delta
     !
-    integer                 :: maxsuppfuncs
+    integer                 :: maxsuppfuncs = maxval(nsf_species)
     integer                 :: nsf_kg, nsf_ld, nsf_ia, nsf_jb
     integer                 :: r, s, t
     integer                 :: k_count, l_count, ld_count, kg_count, i_count, j_count, jb_count, count
+    !
+    real(double), dimension(maxsuppfuncs, maxsuppfuncs) :: store_eris_inner
     !
     ! GTO
     integer          :: i_nx, j_nx, k_nx, l_nx
@@ -1418,7 +1429,7 @@ contains
     !
     dr = grid_spacing
     dv = dr**3
-    maxsuppfuncs = maxval(nsf_species)
+    count = 1
     !
 !!$
 !!$ ****[ k loop ]****
@@ -1611,10 +1622,19 @@ contains
                                jb_count = j_count + (nsf_jb - 1)
                                jb_count = jb_count * (ia%nsup - 1)
                                !
-                               call cri_eri_inner_calculation(phi_l, phi_i, Ome_kj, nsf_ld, nsf_jb, kpart, dv, ncaddr, ncbeg, &
-                                             ia%nsup, backup_eris, jb_count, ewald_charge, work_out_3d, work_in_3d, c)
+                               call cri_eri_inner_calculation(phi_l, phi_i, Ome_kj, nsf_ld, nsf_jb, kpart, dv, &
+                                             ncaddr, ncbeg, ia%nsup, ewald_charge, work_out_3d, work_in_3d, c, &
+                                             backup_eris, store_eris_inner)
                                !
                             end do jb_loop
+
+                            ! It is not ideal to repeat these loops here but it is currently necessary to keep the backup thread safe
+                            do nsf_jb = 1, jb%nsup
+                               do nsf_ia = 1, ia%nsup
+                                  eris(kpart)%store_eris( count ) = store_eris_inner(nsf_jb, nsf_ia)
+                                  count = count + 1
+                               end do
+                            end do ! nsf_ld = 1, jb%nsup
                             !
                          end if
                          !
