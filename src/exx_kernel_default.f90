@@ -920,8 +920,6 @@ contains
  
        implicit none
 
-       integer :: maxsuppfuncs = maxval(nsf_species)
-
        real(double), pointer, intent(in)            :: Ome_kj(:,:,:), phi_i(:,:,:,:)
        integer,               intent(in)            :: kpart, nsf1, nsf2             ! The indices of the loops from which this function is called 
        integer,               intent(in)            :: ncbeg, ia_nsup
@@ -929,8 +927,8 @@ contains
        real(double),          intent(out)           :: ewald_charge, work_out_3d(:,:,:), work_in_3d(:,:,:)
        real(double),          intent(inout)         :: c(:)
        ! Backup eris parameters. Optional as they are only needed by eri function
-       logical,               intent(in),           :: backup_eris
-       real(double),          intent(out), OPTIONAL :: store_eris_inner(maxsuppfuncs, maxsuppfuncs)
+       logical,               intent(in)            :: backup_eris
+       real(double),          intent(out), OPTIONAL :: store_eris_inner(:,:)
        
        integer      :: ncaddr, nsf3
        real(double) :: exx_mat_elem
@@ -1260,7 +1258,7 @@ contains
                       do nsf_ld = 1, jb%nsup
                          !
                          call cri_eri_inner_calculation(Phy_k, phi_i, Ome_kj, nsf_kg, nsf_ld, kpart, dv,  &
-                                       ncaddr, &ncbeg, ia%nsup, ewald_charge, work_out_3d, work_in_3d, c, &
+                                       ncaddr,  ncbeg, ia%nsup, ewald_charge, work_out_3d, work_in_3d, c, &
                                        .false.)
                          !
                       end do ! nsf_ld = 1, jb%nsup
@@ -1352,7 +1350,7 @@ contains
          unit_exx_debug, unit_eri_debug
     !
     use exx_types,  only: phi_i_1d_buffer, phi_j, phi_k, phi_l, &
-         Ome_kj_1d_buffer, work_in_3d, work_out_3d
+         Ome_kj_1d_buffer, work_in_3d, work_out_3d, eris
     use exx_types, only: exx_alloc
     !
     use exx_memory, only: exx_mem_alloc
@@ -1406,12 +1404,12 @@ contains
     type(neigh_atomic_data) :: kg !k_gamma
     type(neigh_atomic_data) :: ld !l_delta
     !
-    integer                 :: maxsuppfuncs = maxval(nsf_species)
+    integer                 :: maxsuppfuncs
     integer                 :: nsf_kg, nsf_ld, nsf_ia, nsf_jb
-    integer                 :: r, s, t
+    integer                 :: r, s, t, stat
     integer                 :: k_count, l_count, ld_count, kg_count, i_count, j_count, jb_count, count
     !
-    real(double), dimension(maxsuppfuncs, maxsuppfuncs) :: store_eris_inner
+    real(double), allocatable, dimension(:,:) :: store_eris_inner
     !
     ! GTO
     integer          :: i_nx, j_nx, k_nx, l_nx
@@ -1427,6 +1425,10 @@ contains
 
     real(double) :: eri_gto, eri_pao, test
     !
+    maxsuppfuncs = MAXVAL(nsf_species)
+    allocate(store_eris_inner(maxsuppfuncs, maxsuppfuncs), STAT = stat)
+    if(stat /= 0) call cq_abort('m_kern_exx_eri: error allocating store_eris_inner!')
+    !
     dr = grid_spacing
     dv = dr**3
     count = 1
@@ -1436,6 +1438,7 @@ contains
 !!$
     k_loop: do k = 1, ahalo%nh_part(kpart)
        !
+       write (*,*) kpart, ahalo%nh_part(kpart), k
        k_in_halo  = ahalo%j_beg(kpart) + k - 1
        k_in_part  = ahalo%j_seq(k_in_halo)
        nbkbeg     = ibaddr     (k_in_part) 
