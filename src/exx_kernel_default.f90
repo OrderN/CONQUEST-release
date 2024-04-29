@@ -1607,7 +1607,7 @@ contains
                             Ome_kj(1:2*extent+1, 1:2*extent+1, 1:2*extent+1) => Ome_kj_1d_buffer
                             !
                             ! Point at the next block of eris to store and update counter 
-                            store_eris_inner(1:jb%nsup, 1:ia%nsup) => eris(kpart)%store_eris(count:count + (jb%nsup * ia%nsup))
+                            store_eris_inner(1:ia%nsup, 1:jb%nsup) => eris(kpart)%store_eris(count:count + (jb%nsup * ia%nsup))
                             count = count + (jb%nsup * ia%nsup) + 1
                             !
                             jb_loop: do nsf_jb = 1, jb%nsup
