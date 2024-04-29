@@ -1460,7 +1460,7 @@ contains
        !print*
        !
        ! The current state of count
-       k_count = (k - 1) * nbnab(k_in_part)
+       k_count = (k - 1) * (nbnab(k_in_part) - 1)
 !!$
 !!$ ****[ l do loop ]****
 !!$
@@ -1485,9 +1485,9 @@ contains
           !
           !  The current state of count
           ! l_count = (k - 1)      * nbnab(k_in_part) * ld%nsup + &
-          !         (l - 1)                         * ld%nsup
+          !           (l - 1)                         * ld%nsup
           l_count = k_count + (l - 1)
-          l_count = l_count * ld%nsup
+          l_count = l_count * (ld%nsup - 1)
           !
           ld_loop: do nsf_ld = 1, ld%nsup
              !
@@ -1498,7 +1498,7 @@ contains
              !         (l - 1)                         * ld%nsup * kg%nsup + &
              !         (nsf_ld - 1)                              * kg%nsup
              ld_count = l_count + (nsf_ld - 1)
-             ld_count = ld_count * kg%nsup
+             ld_count = ld_count * (kg%nsup - 1)
              !
              kg_loop: do nsf_kg = 1, kg%nsup                         
                 !
@@ -1510,11 +1510,11 @@ contains
                 !
                 ! The current state of count
                 ! kg_count = (k - 1)      * nbnab(k_in_part) * ld%nsup * kg%nsup * at%n_hnab(k_in_halo) + &
-                !         (l - 1)                         * ld%nsup * kg%nsup * at%n_hnab(k_in_halo) + &
-                !         (nsf_ld - 1)                              * kg%nsup * at%n_hnab(k_in_halo) + &
-                !         (nsf_kg - 1)                                        * at%n_hnab(k_in_halo)
+                !            (l - 1)                         * ld%nsup * kg%nsup * at%n_hnab(k_in_halo) + &
+                !            (nsf_ld - 1)                              * kg%nsup * at%n_hnab(k_in_halo) + &
+                !            (nsf_kg - 1)                                        * at%n_hnab(k_in_halo)
                 kg_count = ld_count + (nsf_kg - 1)
-                kg_count = kg_count * at%n_hnab(k_in_halo)
+                kg_count = kg_count * (at%n_hnab(k_in_halo) - 1)
                 !
 !!$
 !!$ ****[ i loop ]****
@@ -1545,12 +1545,12 @@ contains
                    !
                    ! The current state of count
                    ! i_count = (k - 1)      * nbnab(k_in_part) * ld%nsup * kg%nsup * at%n_hnab(k_in_halo) * nbnab(k_in_part) + &
-                   !         (l - 1)                         * ld%nsup * kg%nsup * at%n_hnab(k_in_halo) * nbnab(k_in_part) + &
-                   !         (nsf_ld - 1)                              * kg%nsup * at%n_hnab(k_in_halo) * nbnab(k_in_part) + &
-                   !         (nsf_kg - 1)                                        * at%n_hnab(k_in_halo) * nbnab(k_in_part) + &
-                   !         (i - 1)                                                                    * nbnab(k_in_part)
+                   !           (l - 1)                         * ld%nsup * kg%nsup * at%n_hnab(k_in_halo) * nbnab(k_in_part) + &
+                   !           (nsf_ld - 1)                              * kg%nsup * at%n_hnab(k_in_halo) * nbnab(k_in_part) + &
+                   !           (nsf_kg - 1)                                        * at%n_hnab(k_in_halo) * nbnab(k_in_part) + &
+                   !           (i - 1)                                                                    * nbnab(k_in_part)
                    i_count = kg_count + (i - 1)
-                   i_count = i_count * nbnab(k_in_part)
+                   i_count = i_count * (nbnab(k_in_part) - 1)
                    !
 !!$
 !!$ ****[ j loop ]****
@@ -1595,7 +1595,7 @@ contains
                             !           (i - 1)                                                                    * nbnab(k_in_part) * jb%nsup + &
                             !           (j - 1)                                                                                       * jb%nsup + &
                             j_count = i_count + (j - 1)
-                            j_count = j_count * jb%nsup
+                            j_count = j_count * (jb%nsup - 1)
                             !
                             Ome_kj(1:2*extent+1, 1:2*extent+1, 1:2*extent+1) => Ome_kj_1d_buffer
                             jb_loop: do nsf_jb = 1, jb%nsup
@@ -1609,7 +1609,7 @@ contains
                                !            (j - 1)                                                                                       * jb%nsup * ia%nsup + &
                                !            (nsf_jb - 1)                                                                                            * ia%nsup
                                jb_count = j_count + (nsf_jb - 1)
-                               jb_count = jb_count * ia%nsup
+                               jb_count = jb_count * (ia%nsup - 1)
                                !
                                call cri_eri_inner_calculation(phi_l, phi_i, Ome_kj, nsf_ld, nsf_jb, kpart, dv, ncaddr, ncbeg, &
                                              ia%nsup, backup_eris, jb_count, ewald_charge, work_out_3d, work_in_3d, c)
