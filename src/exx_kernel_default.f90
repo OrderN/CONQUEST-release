@@ -928,7 +928,7 @@ contains
        real(double),          intent(inout)         :: c(:)
        ! Backup eris parameters. Optional as they are only needed by eri function
        logical,               intent(in)            :: backup_eris
-       real(double), pointer, intent(out), OPTIONAL :: store_eris_inner(:,:)
+       real(double), pointer, intent(inout), OPTIONAL :: store_eris_inner(:,:)
        
        integer      :: ncaddr, nsf3
        real(double) :: exx_mat_elem
@@ -1607,7 +1607,7 @@ contains
                             Ome_kj(1:2*extent+1, 1:2*extent+1, 1:2*extent+1) => Ome_kj_1d_buffer
                             !
                             ! Point at the next block of eris to store and update counter 
-                            store_eris_inner(1:jb%nsup, 1:ia%nsup) => eris(kpart)%store_eris(count)
+                            store_eris_inner(1:jb%nsup, 1:ia%nsup) => eris(kpart)%store_eris(count:count + (jb%nsup * ia%nsup))
                             count = count + (jb%nsup * ia%nsup)
                             !
                             jb_loop: do nsf_jb = 1, jb%nsup

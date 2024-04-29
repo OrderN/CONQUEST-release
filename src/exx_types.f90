@@ -181,7 +181,7 @@ module exx_types
   end type store_eris
 
   ! Electron repulsion integrals
-  type(store_eris), dimension(:), allocatable :: eris
+  type(store_eris), dimension(:), allocatable, target :: eris
   
   type prim_atomic_data
      integer  :: pr
