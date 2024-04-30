@@ -904,9 +904,9 @@ contains
   !
   ! To ensure thread safety, variables which are altered must be passed in as parameters rather than imported.
   ! TODO: Change name to something more descriptive
-  subroutine cri_eri_inner_calculation(nsf1_array, phi_i, Ome_kj, nsf1, nsf2, kpart, multiplier, &
-               ncaddr, ncbeg, ia_nsup, ewald_charge, work_out_3d, work_in_3d, c,         &
-               backup_eris, store_eris_inner) 
+  subroutine cri_eri_inner_calculation(nsf1_array, phi_i, Ome_kj, nsf1, nsf2, kpart, dv,  &
+               multiplier, ncaddr, ncbeg, ia_nsup, ewald_charge, work_out_3d, work_in_3d, &
+               c, backup_eris, store_eris_inner) 
 
        use exx_poisson, only: exx_v_on_grid, exx_ewald_charge
 
@@ -923,7 +923,7 @@ contains
        real(double), pointer, intent(in)            :: Ome_kj(:,:,:), phi_i(:,:,:,:)
        integer,               intent(in)            :: kpart, nsf1, nsf2             ! The indices of the loops from which this function is called 
        integer,               intent(in)            :: ncbeg, ia_nsup
-       real(double),          intent(in)            :: nsf1_array(:,:,:,:), multiplier
+       real(double),          intent(in)            :: nsf1_array(:,:,:,:), dv, multiplier
        real(double),          intent(out)           :: ewald_charge, work_out_3d(:,:,:), work_in_3d(:,:,:)
        real(double),          intent(inout)         :: c(:)
        ! Backup eris parameters. Optional as they are only needed by eri function
@@ -957,7 +957,7 @@ contains
        do nsf3 = 1, ia_nsup
           !
           ! Can we instead always store directly into store_eris_inner(nsf2, nsf3)?
-          exx_mat_elem = dot((2*extent+1)**3, phi_i(:,:,:,nsf3), 1, Ome_kj, 1) * multiplier
+          exx_mat_elem = dot((2*extent+1)**3, phi_i(:,:,:,nsf3), 1, Ome_kj, 1) * dv * multiplier
           !
           if ( backup_eris ) then
              !
@@ -1258,8 +1258,8 @@ contains
                    do nsf_kg = 1, kg%nsup
                       do nsf_ld = 1, jb%nsup
                          !
-                         call cri_eri_inner_calculation(Phy_k, phi_i, Ome_kj, nsf_kg, nsf_ld, kpart, dv,  &
-                                       ncaddr,  ncbeg, ia%nsup, ewald_charge, work_out_3d, work_in_3d, c, &
+                         call cri_eri_inner_calculation(Phy_k, phi_i, Ome_kj, nsf_kg, nsf_ld, kpart, dv, 1.0d0, &
+                                       ncaddr,  ncbeg, ia%nsup, ewald_charge, work_out_3d, work_in_3d, c,       &
                                        .false.)
                          !
                       end do ! nsf_ld = 1, jb%nsup
@@ -1623,7 +1623,7 @@ contains
                                jb_count = j_count + (nsf_jb - 1)
                                jb_count = jb_count * (ia%nsup - 1)
                                !
-                               call cri_eri_inner_calculation(phi_l, phi_i, Ome_kj, nsf_ld, nsf_jb, kpart, dv * K_val, &
+                               call cri_eri_inner_calculation(phi_l, phi_i, Ome_kj, nsf_ld, nsf_jb, kpart, dv, K_val, &
                                              ncaddr, ncbeg, ia%nsup, ewald_charge, work_out_3d, work_in_3d, c, &
                                              backup_eris, store_eris_inner)
                                !
