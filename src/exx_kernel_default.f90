@@ -641,6 +641,7 @@ contains
              if(stat/=0) call cq_abort('Error allocating memory toeris/exx !',stat)
              call reg_alloc_mem(area_exx, nb_eris, type_int,'eris',unit_memory_write)
              eris(kpart)%filter_eris = .true.
+             
              !
              ! Second dummy call for poor-man filtering of ERIs
              !
@@ -929,7 +930,6 @@ contains
        ! Backup eris parameters. Optional as they are only needed by eri function
        logical,               intent(in)            :: backup_eris
        real(double), pointer, intent(inout), OPTIONAL :: store_eris_inner(:,:)
-       
        integer      :: ncaddr, nsf3
        real(double) :: exx_mat_elem
 
@@ -962,7 +962,7 @@ contains
           if ( backup_eris ) then
              !
              ! eris(kpart)%store_eris( count ) = exx_mat_elem
-             store_eris_inner(nsf2, nsf3) = exx_mat_elem
+             store_eris_inner(nsf3, nsf2) = exx_mat_elem
              !
           else
              !
@@ -1423,14 +1423,13 @@ contains
     !
     dr = grid_spacing
     dv = dr**3
-    count = 1
+    count = 0
     !
 !!$
 !!$ ****[ k loop ]****
 !!$
     k_loop: do k = 1, ahalo%nh_part(kpart)
        !
-       write (*,*) kpart, ahalo%nh_part(kpart), k
        k_in_halo  = ahalo%j_beg(kpart) + k - 1
        k_in_part  = ahalo%j_seq(k_in_halo)
        nbkbeg     = ibaddr     (k_in_part) 
@@ -1607,8 +1606,8 @@ contains
                             Ome_kj(1:2*extent+1, 1:2*extent+1, 1:2*extent+1) => Ome_kj_1d_buffer
                             !
                             ! Point at the next block of eris to store and update counter 
-                            store_eris_inner(1:ia%nsup, 1:jb%nsup) => eris(kpart)%store_eris(count:count + (jb%nsup * ia%nsup))
-                            count = count + (jb%nsup * ia%nsup) + 1
+                            store_eris_inner(1:ia%nsup, 1:jb%nsup) => eris(kpart)%store_eris(count+1:count + (jb%nsup * ia%nsup))
+                            count = count + (jb%nsup * ia%nsup)
                             !
                             jb_loop: do nsf_jb = 1, jb%nsup
                                !
