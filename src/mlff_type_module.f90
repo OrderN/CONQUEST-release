@@ -33,7 +33,7 @@ module mlff_type
   save
 
   logical :: flag_debug_mlff = .FALSE. ! .TRUE. ! control output level from mlff for debug
-  logical :: flag_time_mlff =  .TRUE. ! .FALSE. ! control output level from mlff for timing
+  logical :: flag_time_mlff =  .FALSE. !.TRUE. ! .FALSE. ! control output level from mlff for timing
 
 !!****s* mlff_type/matrix_ML *
 !!  NAME
