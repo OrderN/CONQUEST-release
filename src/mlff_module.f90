@@ -105,17 +105,9 @@ contains
       amat_ML%mx_nab = amat(1)%mx_nab
       call gmax(amat(1)%mx_abs)
       amat(2:prim%groups_on_node)%mx_abs = amat(1)%mx_abs
+
+      ! Allocate ML matrix according to max_abs
       amat_ML%mx_abs = amat(1)%mx_abs
-      !write(io_lun,*) 'Matrix maxima: ',amat(1)%mx_nab, amat(1)%mx_abs
-      !write(io_lun,*) 'Index length: ',parts%mx_ngonn*(3*parts%mx_mem_grp+5*parts%mx_mem_grp*amat(1)%mx_abs)
-      !allocate(aind(parts%mx_ngonn*(3*parts%mx_mem_grp+5*parts%mx_mem_grp*amat(1)%mx_abs)),STAT=ierr)
-      !if(iprint_index > 1) write(io_lun,*) 'Matrix index: Processor ',myid,'Size ',index_size
-      !!allocate(aind(index_size),STAT=ierr)
-      !!if(ierr/=0) call cq_abort("Error allocating matrix index in matrix_ini_ML: ", index_size,ierr)
-          !parts%mx_ngonn*(3*parts%mx_mem_grp+5*parts%mx_mem_grp*amat(1)%mx_abs),ierr)
-      !!aind = 0
-      !!call set_matrix_pointers(prim%nm_nodgroup,amat, aind, prim%groups_on_node,parts%mx_mem_grp,part_offset)
-      !!call allocate_matrix(amat, prim%groups_on_node,parts%mx_mem_grp)
       call allocate_matrix_ML(amat_ML, prim%groups_on_node, parts%mx_mem_grp)
       call get_naba_ML(prim,gcs,amat_ML,rcut)
       ! Get the fractional coordination of vector rij for all neighbors
@@ -125,8 +117,8 @@ contains
       call get_fractional_matrix_ML(amat_ML, prim%groups_on_node)
       if (inode== ionode .and. flag_debug_mlff) then
         write(*,*) 'after get_fractional_matrix_ML in matrix_ini_ML'
-        write(*,*) amat_ML(1)%dr(:,1)
-        write(*,*) amat_ML(1)%frac_dr(:,1)
+        write(*,*) amat_ML(1)%vij(:,1)
+        write(*,*) amat_ML(1)%frac_vij(:,1)
         write(*,*) real_cell(:, :)
       end if
       if(index(params_ML%descriptor_type, '3b') .gt. 0)then
@@ -215,7 +207,7 @@ contains
     ! Local variables
     integer :: inp, cumu_ndims, neigh_spec, ip_process
     integer :: nn,j,np,ni,ist
-    real(double) :: rcutsq,dx,dy,dz,rij2
+    real(double) :: rcutsq,vij(3),vi(3),rij2
     real(double), parameter :: tol=1.0e-8_double
 
     ! Check that prim and gcs are correctly set up
@@ -242,21 +234,18 @@ contains
         do j=1,prim%nm_nodgroup(nn)  ! Loop over atoms in partition
           amat(nn)%n_nab(j)=0
           amat(nn)%i_species(j)=prim%species(inp)
+          vi(1)=prim%xprim(inp)
+          vi(2)=prim%yprim(inp)
+          vi(3)=prim%zprim(inp)
 
           cumu_ndims = 0
           do np=1,gcs%ng_cover  ! Loop over partitions in GCS
             if(gcs%n_ing_cover(np).gt.0) then  ! Are there atoms ?
-              !if(gcs%icover_ibeg(np)+gcs%n_ing_cover(np)-1.gt.&
-              !     gcs%mx_mcover) then
-              !   call cq_abort('get_naba: overran gcs mx_mcover: ', &
-              !        gcs%icover_ibeg(np)+gcs%n_ing_cover(np)-1, &
-              !        gcs%mx_mcover)
-              !endif
               do ni=1,gcs%n_ing_cover(np)
-                dx=gcs%xcover(gcs%icover_ibeg(np)+ni-1)-prim%xprim(inp)
-                dy=gcs%ycover(gcs%icover_ibeg(np)+ni-1)-prim%yprim(inp)
-                dz=gcs%zcover(gcs%icover_ibeg(np)+ni-1)-prim%zprim(inp)
-                rij2=dx*dx+dy*dy+dz*dz
+                vij(1)=gcs%xcover(gcs%icover_ibeg(np)+ni-1) - vi(1)
+                vij(2)=gcs%ycover(gcs%icover_ibeg(np)+ni-1) - vi(2)
+                vij(3)=gcs%zcover(gcs%icover_ibeg(np)+ni-1) - vi(3)
+                rij2=dot_product(vij, vij)
                 if(rij2<rcutsq-tol) then
                   !write(*,*) 'gcs%lab_cover(np),gcs%iprim_group(inp), inode=',inode,&
                   !        gcs%lab_cover(np), gcs%iprim_group(inp)
@@ -274,10 +263,8 @@ contains
                   ist = amat(nn)%i_acc(j)+amat(nn)%n_nab(j)-1
                   amat(nn)%i_part(ist)=np
                   amat(nn)%i_seq(ist)=ni
-                  amat(nn)%radius(ist)=sqrt(rij2)
-                  amat(nn)%dr(1,ist)=dx
-                  amat(nn)%dr(2,ist)=dy
-                  amat(nn)%dr(3,ist)=dz
+                  amat(nn)%dij(ist)=sqrt(rij2)
+                  amat(nn)%vij(:,ist)=vij
 
                   neigh_spec = species_glob( id_glob( parts%icell_beg(gcs%lab_cell(np)) +ni-1 ))
                   amat(nn)%j_species(ist)=neigh_spec
@@ -370,7 +357,7 @@ contains
     ! Local variables
     integer(integ) :: inp,nn
     integer(integ) :: ii, jj, kk, ist_j, ist_k, ist_ijk
-    real(double) :: xij, yij, zij, xik, yik, zik, rjk, rjk_2,rcut_2
+    real(double) :: vij(3), vik(3), vjk(3), rjk, rjk_2,rcut_2
 
     ! After we have neighbor information and descriptor information
     ! Get information of triplets
@@ -387,22 +374,19 @@ contains
       do ii=1,amat(nn)%n_atoms  ! Loop over atoms in partition
 
         do jj=1,  amat(nn)%n_nab(ii)
-          ist_j = amat(nn)%i_acc(ii)+jj-1
-          xij=amat(nn)%dr(1,ist_j)
-          yij=amat(nn)%dr(2,ist_j)
-          zij=amat(nn)%dr(3,ist_j)
+          ist_j = amat(nn)%i_acc(ii) + jj - 1
+          vij = amat(nn)%vij(:,ist_j)
 
           amat(nn)%n_triplet(ist_j)=0
           do kk=jj+1,  amat(nn)%n_nab(ii)
-            ist_k = amat(nn)%i_acc(ii)+kk-1
-            xik=amat(nn)%dr(1,ist_k)
-            yik=amat(nn)%dr(2,ist_k)
-            zik=amat(nn)%dr(3,ist_k)
-            rjk_2 = (xij-xik)**2+(yij-yik)**2+(zij-zik)**2
+            ist_k = amat(nn)%i_acc(ii) + kk - 1
+            vik = amat(nn)%vij(:,ist_k)
+            vjk = vik - vij
+            rjk_2 = dot_product(vjk, vjk)
 
             if (rjk_2 >very_small .and. rjk_2 < rcut_2) then
-              amat(nn)%n_triplet(ist_j)=amat(nn)%n_triplet(ist_j)+1
-              ist_ijk=amat(nn)%triplet_acc(ist_j)+amat(nn)%n_triplet(ist_j)-1
+              amat(nn)%n_triplet(ist_j)=amat(nn)%n_triplet(ist_j) + 1
+              ist_ijk=amat(nn)%triplet_acc(ist_j) + amat(nn)%n_triplet(ist_j) - 1
               amat(nn)%ist_triplet(ist_ijk)=ist_k
             end if ! rjk < rcut
           end do ! k, three-body
@@ -464,7 +448,7 @@ contains
     ! Local variables
     integer(integ) :: inp,nn
     integer(integ) :: ii, jj, ist_j
-    real(double) :: xij, yij, zij, f_xij, f_yij, f_zij
+    real(double) :: vij(3), f_vij(3)
 
     ! After we have neighbor information and descriptor information
     ! Get information of triplets
@@ -477,18 +461,11 @@ contains
         do ii=1,amat(nn)%n_atoms  ! Loop over atoms in partition
           do jj=1,  amat(nn)%n_nab(ii)
             ist_j = amat(nn)%i_acc(ii)+jj-1
-            xij=amat(nn)%dr(1,ist_j)
-            yij=amat(nn)%dr(2,ist_j)
-            zij=amat(nn)%dr(3,ist_j)
+            vij=amat(nn)%vij(:,ist_j)
 
             ! convert to fractional coordination
-            f_xij = inv_cell(1,1) * xij + inv_cell(2,1) * yij + inv_cell(3,1) * zij
-            f_yij = inv_cell(1,2) * xij + inv_cell(2,2) * yij + inv_cell(3,2) * zij
-            f_zij = inv_cell(1,3) * xij + inv_cell(2,3) * yij + inv_cell(3,3) * zij
-
-            amat(nn)%frac_dr(1,ist_j) = f_xij
-            amat(nn)%frac_dr(2,ist_j) = f_yij
-            amat(nn)%frac_dr(3,ist_j) = f_zij
+            f_vij = matmul(inv_cell, vij)
+            amat(nn)%frac_vij(:,ist_j) = f_vij
           end do ! j, two-body
         inp=inp+1  ! Indexes primary-set atoms
         enddo ! End i in prim%nm_nodgroup

@@ -70,9 +70,9 @@ module mlff_type
     integer(integ),pointer :: j_species(:)  ! species of neighbour atom j  {[ith naba], [i+1th naba],}, dim
     integer(integ),pointer :: i_part(:)     ! partition no. of atom in neigh list
     integer(integ),pointer :: i_seq(:)      ! part-seq no. of atom in neigh list
-    real(double),pointer :: radius(:)       ! length rij of atom in neigh list (mx_naba)
-    real(double),pointer :: dr(:,:)           ! vector rij of atom in neigh list (3,mx_naba)
-    real(double),pointer :: frac_dr(:,:)      ! fractional vector rij of atom in neigh list (3,mx_naba)
+    real(double),pointer :: dij(:)       ! length rij of atom in neigh list (mx_naba)
+    real(double),pointer :: vij(:,:)           ! vector rij of atom in neigh list (3,mx_naba)
+    real(double),pointer :: frac_vij(:,:)      ! fractional vector rij of atom in neigh list (3,mx_naba)
 
     ! Information of three body
     integer(integ),pointer :: triplet_acc(:) ! accumulator for atom in triplet list
@@ -86,7 +86,7 @@ module mlff_type
     integer(integ) :: dim_feature ! dimension_feature
     real(double), allocatable  :: fp_energy(:)       ! feature for atomic energy of natoms
     real(double), allocatable  :: fp_force(:,:)      ! feature for atomic force in xyz directions of natoms
-    real(double), allocatable  :: fp_stress(:,:,:) ! feature for stress tensor on vector a in x direction of natoms
+    real(double), allocatable  :: fp_stress(:,:,:)   ! feature for stress tensor on vector a in x direction of natoms
   end type atomic_features
 
   type features_ML
@@ -331,13 +331,13 @@ contains
         allocate(mat_ML(i)%i_seq(mx_naba),STAT=stat)
         if(stat/=0) &
           call cq_abort('alloc_mat_ML: error allocating memory to i_seq')
-        allocate(mat_ML(i)%radius(mx_naba),STAT=stat)
+        allocate(mat_ML(i)%dij(mx_naba),STAT=stat)
         if(stat/=0) &
           call cq_abort('alloc_mat_ML: error allocating memory to radius')
-        allocate(mat_ML(i)%dr(3,mx_naba),STAT=stat)
+        allocate(mat_ML(i)%vij(3,mx_naba),STAT=stat)
         if(stat/=0) &
           call cq_abort('alloc_mat_ML: error allocating memory to dr')
-        allocate(mat_ML(i)%frac_dr(3,mx_naba),STAT=stat)
+        allocate(mat_ML(i)%frac_vij(3,mx_naba),STAT=stat)
         if(stat/=0) &
           call cq_abort('alloc_mat_ML: error allocating memory to frac_dr')
       else
@@ -430,13 +430,13 @@ contains
        ! Dimensions of neighbors
       mx_naba = mx_part*mat_ML(i)%mx_abs
       if (mx_naba .gt. 0) then
-        deallocate(mat_ML(i)%frac_dr,STAT=stat)
+        deallocate(mat_ML(i)%frac_vij,STAT=stat)
         if(stat/=0) &
           call cq_abort('dealloc_mat_ML: error deallocating memory to frac_dr')
-        deallocate(mat_ML(i)%dr,STAT=stat)
+        deallocate(mat_ML(i)%vij,STAT=stat)
         if(stat/=0) &
           call cq_abort('dealloc_mat_ML: error deallocating memory to dr')
-        deallocate(mat_ML(i)%radius,STAT=stat)
+        deallocate(mat_ML(i)%dij,STAT=stat)
         if(stat/=0) &
           call cq_abort('dealloc_mat_ML: error deallocating memory to radius')
        deallocate(mat_ML(i)%i_seq,STAT=stat)
@@ -1398,6 +1398,8 @@ deallocate(loc_atomic_features%fp_force,STAT=stat)
 !!   Available different feature dimensions for each type of atom
 !!   2023/09/07 J.Lin
 !!   Available parameter Rs in this descriptor
+!!   2024/04/10 J.Lin
+!!   Modified vectors of vij, vik, vjk to arrays
 !!  SOURCE
 !!
   subroutine get_feature_acsf2b(prim,gcs,amat,amat_features_ML,rcut,descriptor_params)
@@ -1416,21 +1418,22 @@ deallocate(loc_atomic_features%fp_force,STAT=stat)
     implicit none
 
     ! Passed variables
-    type(primary_set) :: prim
-    type(cover_set) :: gcs
-    real(double) :: rcut
-    type(matrix_ML), dimension (:) :: amat
-    type(features_ML), dimension(:) :: amat_features_ML
-    type(acsf_param), dimension(:) :: descriptor_params
+    type(primary_set), intent(in) :: prim
+    type(cover_set), intent(in)   :: gcs
+    real(double), intent(in)      :: rcut
+    type(matrix_ML), dimension(:), intent(in)      :: amat
+    type(features_ML), dimension(:), intent(inout) :: amat_features_ML
+    type(acsf_param), dimension(:), intent(in)     :: descriptor_params
 
     ! Local variables
     integer :: inp, cumu_ndims, neigh_spec, ip_process,ia_glob
     integer :: nn,ii,jj,kk,np,ni, ist_j, ist_k, species_orderij, i_species, j_species
     integer :: param_start, param_end, shift_dim, param_index, fp_index, gx_index
 
-    real(double) :: rcutsq, xij, yij, zij, xik, yik, zik, rij, rik, rjk, rjk_2
+    real(double) :: vij(3), vik(3), dij, dik, djk, djk_2
     real(double) :: eta, rs, rcut_a
-    real(double) :: tmp1, tmpx, tmpy, tmpz, frc_ij, frc_ik, frc_jk
+    real(double) :: tmp1, frc_ij, frc_ik, frc_jk
+    real(double) :: proj_b2_energy, proj_b2_force(3)
     real(double), parameter :: tol=1.0e-8_double
 
     type(atomic_features), allocatable :: species_features_acc(:) ! template feature data for each species
@@ -1453,8 +1456,6 @@ deallocate(loc_atomic_features%fp_force,STAT=stat)
     call my_barrier()
     ! loop over all atom pairs (atoms in primary set, max. cover set) -
     inp=1  ! Indexes primary atoms
-    amat(1)%offset=0
-    amat(1)%nd_offset=0
     do nn=1,prim%groups_on_node ! Partitions in primary set
       !pair check!write(*,*) 'nn loop, inode=',inode
       if(prim%nm_nodgroup(nn).gt.0) then  ! Are there atoms ?
@@ -1478,13 +1479,15 @@ deallocate(loc_atomic_features%fp_force,STAT=stat)
             j_species = amat(nn)%j_species(ist_j)
             species_orderij = descriptor_params(i_species)%species_orders%d2(j_species)
 
-            rij=amat(nn)%radius(ist_j) * BohrToAng
-            xij=amat(nn)%dr(1,ist_j) * BohrToAng
-            yij=amat(nn)%dr(2,ist_j) * BohrToAng
-            zij=amat(nn)%dr(3,ist_j) * BohrToAng
+            dij=amat(nn)%dij(ist_j) * BohrToAng
+            vij=amat(nn)%vij(:,ist_j) * BohrToAng
+
+            ! Set projection values
+            proj_b2_energy=0.5_double ! make consistent to the default model
+            proj_b2_force=vij
 
             !! function of cut off
-            frc_ij = 0.5 * (cos(pi * rij / rcut_a) + 1)
+            frc_ij = 0.5 * (cos(pi * dij / rcut_a) + 1)
 
             !! Start calculate the two body terms
             shift_dim = 0
@@ -1499,15 +1502,12 @@ deallocate(loc_atomic_features%fp_force,STAT=stat)
               ! Todo : check if species_orderij is correct
               gx_index = param_index - param_start + 1
               eta = descriptor_params(i_species)%params_g2(species_orderij)%eta(gx_index)
-              rs = rij - descriptor_params(i_species)%params_g2(species_orderij)%rs(gx_index)
+              rs = dij - descriptor_params(i_species)%params_g2(species_orderij)%rs(gx_index)
 
-              tmp1 = frc_ij * exp(- (rs/eta) ** 2) / rij
-              amat_features_ML(nn)%id_atom(ii)%fp_force(1,fp_index) = &
-                  amat_features_ML(nn)%id_atom(ii)%fp_force(1,fp_index) + xij*tmp1
-              amat_features_ML(nn)%id_atom(ii)%fp_force(2,fp_index) = &
-                  amat_features_ML(nn)%id_atom(ii)%fp_force(2,fp_index) + yij*tmp1
-              amat_features_ML(nn)%id_atom(ii)%fp_force(3,fp_index) = &
-                  amat_features_ML(nn)%id_atom(ii)%fp_force(3,fp_index) + zij*tmp1
+              tmp1 = frc_ij * exp(- (rs/eta) ** 2) / dij
+              amat_features_ML(nn)%id_atom(ii)%fp_force(:,fp_index) = &
+                  amat_features_ML(nn)%id_atom(ii)%fp_force(:,fp_index) &
+                      + proj_b2_force(:) * tmp1
               !if (inode== ionode .and. ia_glob==1) then
               !    write(1986,101)  eta, fp_index,  tmp1, xij, xij*tmp1, amat_features_ML(nn)%fpx(i, fp_index)
               !end if
@@ -1961,6 +1961,8 @@ deallocate(loc_atomic_features%fp_force,STAT=stat)
 !!   Available different feature dimensions for each type of atom
 !!   2023/08/27 J.Lin
 !!   Correction for multi-element bond order
+!!   2024/04/30 J.Lin
+!!   Modified vectors of vij, vik, vjk to arrays
 !!  SOURCE
 !!
   subroutine get_feature_split(prim,gcs,amat,amat_features_ML,rcut,descriptor_params)
@@ -1979,25 +1981,28 @@ deallocate(loc_atomic_features%fp_force,STAT=stat)
     implicit none
 
     ! Passed variables
-    type(primary_set) :: prim
-    type(cover_set) :: gcs
-    real(double) :: rcut
-    type(matrix_ML), dimension (:) :: amat
-    type(features_ML), dimension(:) :: amat_features_ML
-    type(split_param), dimension(:) :: descriptor_params
+    type(primary_set), intent(in) :: prim
+    type(cover_set), intent(in)   :: gcs
+    real(double), intent(in)      :: rcut
+    type(matrix_ML), dimension (:), intent(in)  :: amat
+    type(features_ML), dimension(:), intent(inout) :: amat_features_ML
+    type(split_param), dimension(:), intent(in) :: descriptor_params
 
     ! Local variables
     integer :: inp, cumu_ndims, neigh_spec, ip_process
     integer :: nn,ii,jj,kk, ist_j, ist_k, ist_ijk, i_3b, ia_glob
     integer :: species_order2b, species_order3b, i_species, j_species, k_species, tmp_species
     integer :: param_start, param_end, shift_dim, param_index, fp_index, gx_index
+    integer :: i_eta, j_eta, k_eta, index_eta
+    integer :: ixxx(6),ixaa(6),ixxa(6),ixax(6),ixab(6),ixba(6),i_selectb3(6)
 
-    real(double) :: xij0, yij0, zij0, xik0, yik0, zik0, rij0, rik0, rjk0 ! from ML matrix
-    !real(double) :: xij, yij, zij, xik, yik, zik, rij, rik, rjk          ! special bond order
-    real(double) :: eta, rs, eta1, eta2, eta3, rcut_2, rcut_a, rcutsq
+    real(double) :: vij(3), vik(3), vjk(3), dij, dik, djk
+    real(double) :: eta, rs, eta_b3(3), d_b3(3), rcut_a
     real(double) :: tmp1, tmpx, tmpy, tmpz, tmpr, frc_ij, frc_ik, frc_jk, frc_3b
-    real(double) :: tmp123, tmp132, tmp213, tmp231, tmp312, tmp321
-    real(double) :: proj_x,proj_y,proj_z
+    real(double) :: tmp_b3(6), tmp_eta_b3(6,3)
+    real(double) :: proj_xyz(3), tmpxyz(3)
+    real(double) :: proj_b2_energy=0.5_double, proj_b2_force(3)
+    real(double) :: proj_b3_energy=0.5_double, proj_b3_force_ij(3),proj_b3_force_ik(3)
     real(double), parameter :: tol=1.0e-8_double
     real(double) :: feature_1 ! check feature
 
@@ -2006,6 +2011,14 @@ deallocate(loc_atomic_features%fp_force,STAT=stat)
 
     call allocate_species_features(species_features_acc,n_species,params_ML%dim_coef_lst)
     call allocate_species_features(species_features_tmp,n_species,params_ML%dim_coef_lst)
+    ! Initialize term selection
+    ixxx = 1
+    ixaa = [1,0,1,0,0,0]
+    ixxa = [1,1,0,0,0,0]
+    ixax = ixxa
+    ixab = [1,0,0,0,0,0]
+    ixba = ixab
+
     ! After we have neighbor information and descriptor information
     ! Check that prim and gcs are correctly set up
     if((.NOT.ASSOCIATED(gcs%xcover)).OR. &
@@ -2015,7 +2028,6 @@ deallocate(loc_atomic_features%fp_force,STAT=stat)
     ! In this subrputine, Units: Length=Angstrom, Energy=eV, Force=eV/Anstrom
     ! rcut bohr to angstrom
     rcut_a=rcut * BohrToAng
-    rcut_2=rcut_a * rcut_a
 
     call my_barrier()
     ! loop over all atom pairs (atoms in primary set, max. cover set) -
@@ -2035,17 +2047,20 @@ deallocate(loc_atomic_features%fp_force,STAT=stat)
           i_species = amat(nn)%i_species(ii)
           ia_glob = prim%ig_prim(prim%nm_nodbeg(nn)+ii-1)
           do jj=1,  amat(nn)%n_nab(ii)
+            ! Get index of j in neighbor list
             ist_j = amat(nn)%i_acc(ii)+jj-1
             j_species = amat(nn)%j_species(ist_j)
             species_order2b = descriptor_params(i_species)%species_orders%d2(j_species)
 
-            rij0=amat(nn)%radius(ist_j) * BohrToAng
-            xij0=amat(nn)%dr(1,ist_j) * BohrToAng
-            yij0=amat(nn)%dr(2,ist_j) * BohrToAng
-            zij0=amat(nn)%dr(3,ist_j) * BohrToAng
+            dij=amat(nn)%dij(ist_j) * BohrToAng
+            vij=amat(nn)%vij(:,ist_j) * BohrToAng
+
+            ! Set projection values
+            proj_b2_energy=0.5_double  !TODO:make consistent to the default model
+            proj_b2_force=vij
 
             !! function of cut off
-            frc_ij = 0.5 * (cos(pi * rij0 / rcut_a) + 1)
+            frc_ij = 0.5 * (cos(pi * dij / rcut_a) + 1)
 
             !! Start calculate the two body terms
             shift_dim = 0
@@ -2062,35 +2077,41 @@ deallocate(loc_atomic_features%fp_force,STAT=stat)
               gx_index = param_index - param_start + 1
               eta = descriptor_params(i_species)%params_2b(species_order2b)%eta(gx_index)
               eta = 1.0/eta**2
-              rs = rij0 - descriptor_params(i_species)%params_2b(species_order2b)%rs(gx_index)
+              rs = dij - descriptor_params(i_species)%params_2b(species_order2b)%rs(gx_index)
 
-              tmp1 = frc_ij * exp(- eta * rs ** 2 )  !* eta * rs / rij
-              amat_features_ML(nn)%id_atom(ii)%fp_force(1,fp_index) = &
-                  amat_features_ML(nn)%id_atom(ii)%fp_force(1,fp_index) + xij0 * tmp1
-              amat_features_ML(nn)%id_atom(ii)%fp_force(2,fp_index) = &
-                  amat_features_ML(nn)%id_atom(ii)%fp_force(2,fp_index) + yij0 * tmp1
-              amat_features_ML(nn)%id_atom(ii)%fp_force(3,fp_index) = &
-                  amat_features_ML(nn)%id_atom(ii)%fp_force(3,fp_index) + zij0 * tmp1
+              ! TODO: (vec{r}_{ij}/eta^2)(rs / rij) * exp() * frc_ij
+              tmp1 = frc_ij * exp(- eta * rs ** 2 )
+              amat_features_ML(nn)%id_atom(ii)%fp_force(:,fp_index) = &
+                  amat_features_ML(nn)%id_atom(ii)%fp_force(:,fp_index) &
+                      + proj_b2_force(:) * tmp1
             end do ! two-body terms
 
+            ! Three body terms
             do kk=1,  amat(nn)%n_triplet(ist_j)
-              ist_ijk=amat(nn)%triplet_acc(ist_j)+kk-1
+              ! Get index of k in neighbor list
+              ist_ijk=amat(nn)%triplet_acc(ist_j) + kk - 1
               ist_k=amat(nn)%ist_triplet(ist_ijk)
               k_species = amat(nn)%j_species(ist_k)
 
-              rik0=amat(nn)%radius(ist_k) * BohrToAng
-              xik0=amat(nn)%dr(1,ist_k) * BohrToAng
-              yik0=amat(nn)%dr(2,ist_k) * BohrToAng
-              zik0=amat(nn)%dr(3,ist_k) * BohrToAng
+              vik=amat(nn)%vij(:,ist_k) * BohrToAng
+              dik=amat(nn)%dij(ist_k) * BohrToAng
+              ! Length unit is Angstrom for vij and vik, so as for vjk
+              vjk=vik - vij
+              djk=norm2(vjk)
+              d_b3(1)=dij
+              d_b3(2)=dik
+              d_b3(3)=djk
+              d_b3=d_b3 ** 2 ! r^2 prepare for calcuating descriptors
+
+              ! Set projection values
+              proj_b3_energy=0.5_double ! TODO:make consistent to the default model
 
               !! Todo: check order for ijk
               species_order3b = descriptor_params(i_species)%species_orders%d3(j_species, k_species)
-              rjk0 = (xij0-xik0)**2+(yij0-yik0)**2+(zij0-zik0)**2
-              rjk0 = sqrt(rjk0)
 
               !! function of cut off
-              frc_ik = 0.5 * (cos(pi * rik0 / rcut_a) + 1)
-              frc_jk = 0.5 * (cos(pi * rjk0 / rcut_a) + 1)
+              frc_ik = 0.5 * (cos(pi * dik / rcut_a) + 1)
+              frc_jk = 0.5 * (cos(pi * djk / rcut_a) + 1)
               frc_3b = frc_ij * frc_ik * frc_jk
 
               !! Start calculate the three body terms
@@ -2101,7 +2122,7 @@ deallocate(loc_atomic_features%fp_force,STAT=stat)
               if (ia_glob==1 .and. flag_debug_mlff) then
                 write(*,103) jj, kk, shift_dim,param_start, param_end, &
                     i_species,j_species,k_species, species_order3b, amat(nn)%n_nab(ii)
-                feature_1 = amat_features_ML(nn)%id_atom(ii)%fp_force(1,121)
+                feature_1 = amat_features_ML(nn)%id_atom(ii)%fp_force(1,1)
               end if
 
               ! Checking X-XX, X-AA, X-XA, X-AB
@@ -2120,57 +2141,47 @@ deallocate(loc_atomic_features%fp_force,STAT=stat)
 
                     ! Todo: check dimension of params_2b(j)
                     gx_index = param_index - param_start + 1
-                    eta1 = descriptor_params(i_species)%params_3b(species_order3b)%eta1(gx_index)
-                    eta2 = descriptor_params(i_species)%params_3b(species_order3b)%eta2(gx_index)
-                    eta3 = descriptor_params(i_species)%params_3b(species_order3b)%eta3(gx_index)
+                    ! select order of eta_3b if necessary to change
+                    eta_b3(1) = descriptor_params(i_species)%params_3b(species_order3b)%eta1(gx_index)
+                    eta_b3(2) = descriptor_params(i_species)%params_3b(species_order3b)%eta2(gx_index)
+                    eta_b3(3) = descriptor_params(i_species)%params_3b(species_order3b)%eta3(gx_index)
 
+                    i_selectb3=ixxx    ! select mask for terms
+
+                    ! The rest part can be same for all cases
                     ! transfter for efficiency
-                    eta1 = 1.0/eta1 ** 2
-                    eta2 = 1.0/eta2 ** 2
-                    eta3 = 1.0/eta3 ** 2
+                    eta_b3 = 1.0/eta_b3 ** 2
+                    ! TODO: possible to prepare it outside of this subroutine
+                    index_eta=1
+                    do i_eta = 1, 3
+                      do j_eta = 1, 3
+                        if (j_eta == i_eta) cycle
+                        do k_eta = 1, 3
+                          if (k_eta == i_eta .or. k_eta == j_eta) cycle
+                          tmp_eta_b3(index_eta,1)=eta_b3(i_eta)
+                          tmp_eta_b3(index_eta,2)=eta_b3(j_eta)
+                          tmp_eta_b3(index_eta,3)=eta_b3(k_eta)
+                          index_eta=index_eta+1
+                        end do
+                      end do
+                    end do
 
-                    ! Terms for A-A-A
-                    tmp123 = exp(-eta1 * rij0 ** 2 - eta2 * rik0 ** 2 - eta3 * rjk0 ** 2)
-                    tmp132 = exp(-eta1 * rij0 ** 2 - eta3 * rik0 ** 2 - eta2 * rjk0 ** 2)
-                    tmp213 = exp(-eta2 * rij0 ** 2 - eta1 * rik0 ** 2 - eta3 * rjk0 ** 2)
-                    tmp231 = exp(-eta2 * rij0 ** 2 - eta3 * rik0 ** 2 - eta1 * rjk0 ** 2)
-                    tmp312 = exp(-eta3 * rij0 ** 2 - eta1 * rik0 ** 2 - eta2 * rjk0 ** 2)
-                    tmp321 = exp(-eta3 * rij0 ** 2 - eta2 * rik0 ** 2 - eta1 * rjk0 ** 2)
+                    ! tmp123 = exp(-eta1 * rij0 ** 2 - eta2 * rik0 ** 2 - eta3 * rjk0 ** 2)
+                    tmp_b3=exp(-matmul(tmp_eta_b3, d_b3))
 
-                    proj_x = 0.0
-                    proj_y = 0.0
-                    proj_z = 0.0
-                    proj_x = proj_x + tmp123 * (xij0 * eta1 + xik0 * eta2)
-                    proj_x = proj_x + tmp132 * (xij0 * eta1 + xik0 * eta3)
-                    proj_x = proj_x + tmp213 * (xij0 * eta2 + xik0 * eta1)
-                    proj_x = proj_x + tmp231 * (xij0 * eta2 + xik0 * eta3)
-                    proj_x = proj_x + tmp312 * (xij0 * eta3 + xik0 * eta1)
-                    proj_x = proj_x + tmp321 * (xij0 * eta3 + xik0 * eta2)
-
-                    proj_y = proj_y + tmp123 * (yij0 * eta1 + yik0 * eta2)
-                    proj_y = proj_y + tmp132 * (yij0 * eta1 + yik0 * eta3)
-                    proj_y = proj_y + tmp213 * (yij0 * eta2 + yik0 * eta1)
-                    proj_y = proj_y + tmp231 * (yij0 * eta2 + yik0 * eta3)
-                    proj_y = proj_y + tmp312 * (yij0 * eta3 + yik0 * eta1)
-                    proj_y = proj_y + tmp321 * (yij0 * eta3 + yik0 * eta2)
-
-                    proj_z = proj_z + tmp123 * (zij0 * eta1 + zik0 * eta2)
-                    proj_z = proj_z + tmp132 * (zij0 * eta1 + zik0 * eta3)
-                    proj_z = proj_z + tmp213 * (zij0 * eta2 + zik0 * eta1)
-                    proj_z = proj_z + tmp231 * (zij0 * eta2 + zik0 * eta3)
-                    proj_z = proj_z + tmp312 * (zij0 * eta3 + zik0 * eta1)
-                    proj_z = proj_z + tmp321 * (zij0 * eta3 + zik0 * eta2)
-
-                    tmpx = frc_3b * proj_x
-                    tmpy = frc_3b * proj_y
-                    tmpz = frc_3b * proj_z
-
-                    amat_features_ML(nn)%id_atom(ii)%fp_force(1,fp_index) = &
-                        amat_features_ML(nn)%id_atom(ii)%fp_force(1,fp_index) + tmpx
-                    amat_features_ML(nn)%id_atom(ii)%fp_force(2,fp_index) = &
-                        amat_features_ML(nn)%id_atom(ii)%fp_force(2,fp_index) + tmpy
-                    amat_features_ML(nn)%id_atom(ii)%fp_force(3,fp_index) = &
-                        amat_features_ML(nn)%id_atom(ii)%fp_force(3,fp_index) + tmpz
+                    proj_xyz = 0.0
+                    index_eta=1
+                    do i_eta = 1, 3
+                      do j_eta = 1, 3
+                        if (j_eta == i_eta) cycle
+                        proj_xyz = proj_xyz + i_selectb3(index_eta) * &
+                            tmp_b3(index_eta) * (vij * eta_b3(i_eta) + vik * eta_b3(j_eta))
+                        index_eta=index_eta+1
+                      end do
+                    end do
+                    amat_features_ML(nn)%id_atom(ii)%fp_force(:,fp_index) = &
+                        amat_features_ML(nn)%id_atom(ii)%fp_force(:,fp_index) &
+                            + proj_xyz * frc_3b
                   end do ! three-body terms
                 else
                   !! X-AA
@@ -2185,41 +2196,46 @@ deallocate(loc_atomic_features%fp_force,STAT=stat)
 
                     ! Todo: check dimension of params_2b(j)
                     gx_index = param_index - param_start + 1
-                    eta1 = descriptor_params(i_species)%params_3b(species_order3b)%eta1(gx_index)
-                    eta2 = descriptor_params(i_species)%params_3b(species_order3b)%eta2(gx_index)
-                    eta3 = descriptor_params(i_species)%params_3b(species_order3b)%eta3(gx_index)
+                    ! select order of eta_3b if necessary to change
+                    eta_b3(1) = descriptor_params(i_species)%params_3b(species_order3b)%eta1(gx_index)
+                    eta_b3(2) = descriptor_params(i_species)%params_3b(species_order3b)%eta2(gx_index)
+                    eta_b3(3) = descriptor_params(i_species)%params_3b(species_order3b)%eta3(gx_index)
 
+                    i_selectb3=ixaa    ! select mask for terms
+
+                    ! The rest part can be same for all cases
                     ! transfter for efficiency
-                    eta1 = 1.0/eta1 ** 2
-                    eta2 = 1.0/eta2 ** 2
-                    eta3 = 1.0/eta3 ** 2
+                    eta_b3 = 1.0/eta_b3 ** 2
+                    ! TODO: possible to prepare it outside of this subroutine
+                    index_eta=1
+                    do i_eta = 1, 3
+                      do j_eta = 1, 3
+                        if (j_eta == i_eta) cycle
+                        do k_eta = 1, 3
+                          if (k_eta == i_eta .or. k_eta == j_eta) cycle
+                          tmp_eta_b3(index_eta,1)=eta_b3(i_eta)
+                          tmp_eta_b3(index_eta,2)=eta_b3(j_eta)
+                          tmp_eta_b3(index_eta,3)=eta_b3(k_eta)
+                          index_eta=index_eta+1
+                        end do
+                      end do
+                    end do
 
-                    ! Terms for X-AA
-                    tmp123 = exp(-eta1 * rij0 ** 2 - eta2 * rik0 ** 2 - eta3 * rjk0 ** 2)
-                    tmp213 = exp(-eta2 * rij0 ** 2 - eta1 * rik0 ** 2 - eta3 * rjk0 ** 2)
+                    tmp_b3=exp(-matmul(tmp_eta_b3, d_b3))
 
-                    proj_x = 0.0
-                    proj_y = 0.0
-                    proj_z = 0.0
-                    proj_x = proj_x + tmp123 * (xij0 * eta1 + xik0 * eta2)
-                    proj_x = proj_x + tmp213 * (xij0 * eta2 + xik0 * eta1)
-
-                    proj_y = proj_y + tmp123 * (yij0 * eta1 + yik0 * eta2)
-                    proj_y = proj_y + tmp213 * (yij0 * eta2 + yik0 * eta1)
-
-                    proj_z = proj_z + tmp123 * (zij0 * eta1 + zik0 * eta2)
-                    proj_z = proj_z + tmp213 * (zij0 * eta2 + zik0 * eta1)
-
-                    tmpx = frc_3b * proj_x
-                    tmpy = frc_3b * proj_y
-                    tmpz = frc_3b * proj_z
-
-                    amat_features_ML(nn)%id_atom(ii)%fp_force(1,fp_index) = &
-                        amat_features_ML(nn)%id_atom(ii)%fp_force(1,fp_index) + tmpx
-                    amat_features_ML(nn)%id_atom(ii)%fp_force(2,fp_index) = &
-                        amat_features_ML(nn)%id_atom(ii)%fp_force(2,fp_index) + tmpy
-                    amat_features_ML(nn)%id_atom(ii)%fp_force(3,fp_index) = &
-                        amat_features_ML(nn)%id_atom(ii)%fp_force(3,fp_index) + tmpz
+                    proj_xyz = 0.0
+                    index_eta=1
+                    do i_eta = 1, 3
+                      do j_eta = 1, 3
+                        if (j_eta == i_eta) cycle
+                        proj_xyz = proj_xyz + i_selectb3(index_eta) * &
+                            tmp_b3(index_eta) * (vij * eta_b3(i_eta) + vik * eta_b3(j_eta))
+                        index_eta=index_eta+1
+                      end do
+                    end do
+                    amat_features_ML(nn)%id_atom(ii)%fp_force(:,fp_index) = &
+                        amat_features_ML(nn)%id_atom(ii)%fp_force(:,fp_index) &
+                            + proj_xyz * frc_3b
                   end do ! three-body terms
                 end if ! X-XX or X-AA
               else
@@ -2236,41 +2252,46 @@ deallocate(loc_atomic_features%fp_force,STAT=stat)
 
                     ! Todo: check dimension of params_2b(j)
                     gx_index = param_index - param_start + 1
-                    eta1 = descriptor_params(i_species)%params_3b(species_order3b)%eta1(gx_index)
-                    eta2 = descriptor_params(i_species)%params_3b(species_order3b)%eta2(gx_index)
-                    eta3 = descriptor_params(i_species)%params_3b(species_order3b)%eta3(gx_index)
+                    ! select order of eta_3b if necessary to change
+                    eta_b3(1) = descriptor_params(i_species)%params_3b(species_order3b)%eta1(gx_index)
+                    eta_b3(2) = descriptor_params(i_species)%params_3b(species_order3b)%eta2(gx_index)
+                    eta_b3(3) = descriptor_params(i_species)%params_3b(species_order3b)%eta3(gx_index)
 
+                    i_selectb3=ixxa    ! select mask for terms
+
+                    ! The rest part can be same for all cases
                     ! transfter for efficiency
-                    eta1 = 1.0/eta1 ** 2
-                    eta2 = 1.0/eta2 ** 2
-                    eta3 = 1.0/eta3 ** 2
+                    eta_b3 = 1.0/eta_b3 ** 2
+                    ! TODO: possible to prepare it outside of this subroutine
+                    index_eta=1
+                    do i_eta = 1, 3
+                      do j_eta = 1, 3
+                        if (j_eta == i_eta) cycle
+                        do k_eta = 1, 3
+                          if (k_eta == i_eta .or. k_eta == j_eta) cycle
+                          tmp_eta_b3(index_eta,1)=eta_b3(i_eta)
+                          tmp_eta_b3(index_eta,2)=eta_b3(j_eta)
+                          tmp_eta_b3(index_eta,3)=eta_b3(k_eta)
+                          index_eta=index_eta+1
+                        end do
+                      end do
+                    end do
 
-                    ! Terms for A-A-A
-                    tmp123 = exp(-eta1 * rij0 ** 2 - eta2 * rik0 ** 2 - eta3 * rjk0 ** 2)
-                    tmp132 = exp(-eta1 * rij0 ** 2 - eta3 * rik0 ** 2 - eta2 * rjk0 ** 2)
+                    tmp_b3=exp(-matmul(tmp_eta_b3, d_b3))
 
-                    proj_x = 0.0
-                    proj_y = 0.0
-                    proj_z = 0.0
-                    proj_x = proj_x + tmp123 * (xij0 * eta1 + xik0 * eta2)
-                    proj_x = proj_x + tmp132 * (xij0 * eta1 + xik0 * eta3)
-
-                    proj_y = proj_y + tmp123 * (yij0 * eta1 + yik0 * eta2)
-                    proj_y = proj_y + tmp132 * (yij0 * eta1 + yik0 * eta3)
-
-                    proj_z = proj_z + tmp123 * (zij0 * eta1 + zik0 * eta2)
-                    proj_z = proj_z + tmp132 * (zij0 * eta1 + zik0 * eta3)
-
-                    tmpx = frc_3b * proj_x
-                    tmpy = frc_3b * proj_y
-                    tmpz = frc_3b * proj_z
-
-                    amat_features_ML(nn)%id_atom(ii)%fp_force(1,fp_index) = &
-                        amat_features_ML(nn)%id_atom(ii)%fp_force(1,fp_index) + tmpx
-                    amat_features_ML(nn)%id_atom(ii)%fp_force(2,fp_index) = &
-                        amat_features_ML(nn)%id_atom(ii)%fp_force(2,fp_index) + tmpy
-                    amat_features_ML(nn)%id_atom(ii)%fp_force(3,fp_index) = &
-                        amat_features_ML(nn)%id_atom(ii)%fp_force(3,fp_index) + tmpz
+                    proj_xyz = 0.0
+                    index_eta=1
+                    do i_eta = 1, 3
+                      do j_eta = 1, 3
+                        if (j_eta == i_eta) cycle
+                        proj_xyz = proj_xyz + i_selectb3(index_eta) * &
+                            tmp_b3(index_eta) * (vij * eta_b3(i_eta) + vik * eta_b3(j_eta))
+                        index_eta=index_eta+1
+                      end do
+                    end do
+                    amat_features_ML(nn)%id_atom(ii)%fp_force(:,fp_index) = &
+                        amat_features_ML(nn)%id_atom(ii)%fp_force(:,fp_index) &
+                            + proj_xyz * frc_3b
                   end do ! three-body terms
                 else if (i_species == k_species) then
                   ! X-AX
@@ -2284,41 +2305,46 @@ deallocate(loc_atomic_features%fp_force,STAT=stat)
 
                     ! Todo: check dimension of params_2b(j)
                     gx_index = param_index - param_start + 1
-                    eta1 = descriptor_params(i_species)%params_3b(species_order3b)%eta1(gx_index)
-                    eta2 = descriptor_params(i_species)%params_3b(species_order3b)%eta2(gx_index)
-                    eta3 = descriptor_params(i_species)%params_3b(species_order3b)%eta3(gx_index)
+                    !! TODO: exchange eta position according to species of ijk
+                    eta_b3(2) = descriptor_params(i_species)%params_3b(species_order3b)%eta1(gx_index)
+                    eta_b3(1) = descriptor_params(i_species)%params_3b(species_order3b)%eta2(gx_index)
+                    eta_b3(3) = descriptor_params(i_species)%params_3b(species_order3b)%eta3(gx_index)
 
+                    i_selectb3=ixax    ! select mask for terms
+
+                    ! The rest part can be same for all cases
                     ! transfter for efficiency
-                    eta1 = 1.0/eta1 ** 2
-                    eta2 = 1.0/eta2 ** 2
-                    eta3 = 1.0/eta3 ** 2
+                    eta_b3 = 1.0/eta_b3 ** 2
+                    ! TODO: possible to prepare it outside of this subroutine
+                    index_eta=1
+                    do i_eta = 1, 3
+                      do j_eta = 1, 3
+                        if (j_eta == i_eta) cycle
+                        do k_eta = 1, 3
+                          if (k_eta == i_eta .or. k_eta == j_eta) cycle
+                          tmp_eta_b3(index_eta,1)=eta_b3(i_eta)
+                          tmp_eta_b3(index_eta,2)=eta_b3(j_eta)
+                          tmp_eta_b3(index_eta,3)=eta_b3(k_eta)
+                          index_eta=index_eta+1
+                        end do
+                      end do
+                    end do
 
-                    ! Terms for A-A-A
-                    tmp123 = exp(-eta1 * rik0 ** 2 - eta2 * rij0 ** 2 - eta3 * rjk0 ** 2)
-                    tmp132 = exp(-eta1 * rik0 ** 2 - eta3 * rij0 ** 2 - eta2 * rjk0 ** 2)
+                    tmp_b3=exp(-matmul(tmp_eta_b3, d_b3))
 
-                    proj_x = 0.0
-                    proj_y = 0.0
-                    proj_z = 0.0
-                    proj_x = proj_x + tmp123 * (xik0 * eta1 + xij0 * eta2)
-                    proj_x = proj_x + tmp132 * (xik0 * eta1 + xij0 * eta3)
-
-                    proj_y = proj_y + tmp123 * (yik0 * eta1 + yij0 * eta2)
-                    proj_y = proj_y + tmp132 * (yik0 * eta1 + yij0 * eta3)
-
-                    proj_z = proj_z + tmp123 * (zik0 * eta1 + zij0 * eta2)
-                    proj_z = proj_z + tmp132 * (zik0 * eta1 + zij0 * eta3)
-
-                    tmpx = frc_3b * proj_x
-                    tmpy = frc_3b * proj_y
-                    tmpz = frc_3b * proj_z
-
-                    amat_features_ML(nn)%id_atom(ii)%fp_force(1,fp_index) = &
-                        amat_features_ML(nn)%id_atom(ii)%fp_force(1,fp_index) + tmpx
-                    amat_features_ML(nn)%id_atom(ii)%fp_force(2,fp_index) = &
-                        amat_features_ML(nn)%id_atom(ii)%fp_force(2,fp_index) + tmpy
-                    amat_features_ML(nn)%id_atom(ii)%fp_force(3,fp_index) = &
-                        amat_features_ML(nn)%id_atom(ii)%fp_force(3,fp_index) + tmpz
+                    proj_xyz = 0.0
+                    index_eta=1
+                    do i_eta = 1, 3
+                      do j_eta = 1, 3
+                        if (j_eta == i_eta) cycle
+                        proj_xyz = proj_xyz + i_selectb3(index_eta) * &
+                            tmp_b3(index_eta) * (vij * eta_b3(i_eta) + vik * eta_b3(j_eta))
+                        index_eta=index_eta+1
+                      end do
+                    end do
+                    amat_features_ML(nn)%id_atom(ii)%fp_force(:,fp_index) = &
+                        amat_features_ML(nn)%id_atom(ii)%fp_force(:,fp_index) &
+                            + proj_xyz * frc_3b
                   end do ! three-body terms
                 else if (j_species < k_species) then
                   !! X-AB
@@ -2332,35 +2358,46 @@ deallocate(loc_atomic_features%fp_force,STAT=stat)
 
                     ! Todo: check dimension of params_2b(j)
                     gx_index = param_index - param_start + 1
-                    eta1 = descriptor_params(i_species)%params_3b(species_order3b)%eta1(gx_index)
-                    eta2 = descriptor_params(i_species)%params_3b(species_order3b)%eta2(gx_index)
-                    eta3 = descriptor_params(i_species)%params_3b(species_order3b)%eta3(gx_index)
+                    ! select order of eta_3b if necessary to change
+                    eta_b3(1) = descriptor_params(i_species)%params_3b(species_order3b)%eta1(gx_index)
+                    eta_b3(2) = descriptor_params(i_species)%params_3b(species_order3b)%eta2(gx_index)
+                    eta_b3(3) = descriptor_params(i_species)%params_3b(species_order3b)%eta3(gx_index)
 
+                    i_selectb3=ixab    ! select mask for terms
+
+                    ! The rest part can be same for all cases
                     ! transfter for efficiency
-                    eta1 = 1.0/eta1 ** 2
-                    eta2 = 1.0/eta2 ** 2
-                    eta3 = 1.0/eta3 ** 2
+                    eta_b3 = 1.0/eta_b3 ** 2
+                    ! TODO: possible to prepare it outside of this subroutine
+                    index_eta=1
+                    do i_eta = 1, 3
+                      do j_eta = 1, 3
+                        if (j_eta == i_eta) cycle
+                        do k_eta = 1, 3
+                          if (k_eta == i_eta .or. k_eta == j_eta) cycle
+                          tmp_eta_b3(index_eta,1)=eta_b3(i_eta)
+                          tmp_eta_b3(index_eta,2)=eta_b3(j_eta)
+                          tmp_eta_b3(index_eta,3)=eta_b3(k_eta)
+                          index_eta=index_eta+1
+                        end do
+                      end do
+                    end do
 
-                    ! Terms for A-AB or B-AB
-                    tmp123 = exp(-eta1 * rij0 ** 2 - eta2 * rik0 ** 2 - eta3 * rjk0 ** 2)
+                    tmp_b3=exp(-matmul(tmp_eta_b3, d_b3))
 
-                    proj_x = 0.0
-                    proj_y = 0.0
-                    proj_z = 0.0
-                    proj_x = proj_x + tmp123 * (xij0 * eta1 + xik0 * eta2)
-                    proj_y = proj_y + tmp123 * (yij0 * eta1 + yik0 * eta2)
-                    proj_z = proj_z + tmp123 * (zij0 * eta1 + zik0 * eta2)
-
-                    tmpx = frc_3b * proj_x
-                    tmpy = frc_3b * proj_y
-                    tmpz = frc_3b * proj_z
-
-                    amat_features_ML(nn)%id_atom(ii)%fp_force(1,fp_index) = &
-                        amat_features_ML(nn)%id_atom(ii)%fp_force(1,fp_index) + tmpx
-                    amat_features_ML(nn)%id_atom(ii)%fp_force(2,fp_index) = &
-                        amat_features_ML(nn)%id_atom(ii)%fp_force(2,fp_index) + tmpy
-                    amat_features_ML(nn)%id_atom(ii)%fp_force(3,fp_index) = &
-                        amat_features_ML(nn)%id_atom(ii)%fp_force(3,fp_index) + tmpz
+                    proj_xyz = 0.0
+                    index_eta=1
+                    do i_eta = 1, 3
+                      do j_eta = 1, 3
+                        if (j_eta == i_eta) cycle
+                        proj_xyz = proj_xyz + i_selectb3(index_eta) * &
+                            tmp_b3(index_eta) * (vij * eta_b3(i_eta) + vik * eta_b3(j_eta))
+                        index_eta=index_eta+1
+                      end do
+                    end do
+                    amat_features_ML(nn)%id_atom(ii)%fp_force(:,fp_index) = &
+                        amat_features_ML(nn)%id_atom(ii)%fp_force(:,fp_index) &
+                            + proj_xyz * frc_3b
                   end do ! three-body terms
                 else
                   !! X-BA
@@ -2374,35 +2411,46 @@ deallocate(loc_atomic_features%fp_force,STAT=stat)
 
                     ! Todo: check dimension of params_2b(j)
                     gx_index = param_index - param_start + 1
-                    eta1 = descriptor_params(i_species)%params_3b(species_order3b)%eta1(gx_index)
-                    eta2 = descriptor_params(i_species)%params_3b(species_order3b)%eta2(gx_index)
-                    eta3 = descriptor_params(i_species)%params_3b(species_order3b)%eta3(gx_index)
+                    ! select order of eta_3b if necessary to change
+                    eta_b3(2) = descriptor_params(i_species)%params_3b(species_order3b)%eta1(gx_index)
+                    eta_b3(1) = descriptor_params(i_species)%params_3b(species_order3b)%eta2(gx_index)
+                    eta_b3(3) = descriptor_params(i_species)%params_3b(species_order3b)%eta3(gx_index)
 
+                    i_selectb3=ixba    ! select mask for terms
+
+                    ! The rest part can be same for all cases
                     ! transfter for efficiency
-                    eta1 = 1.0/eta1 ** 2
-                    eta2 = 1.0/eta2 ** 2
-                    eta3 = 1.0/eta3 ** 2
+                    eta_b3 = 1.0/eta_b3 ** 2
+                    ! TODO: possible to prepare it outside of this subroutine
+                    index_eta=1
+                    do i_eta = 1, 3
+                      do j_eta = 1, 3
+                        if (j_eta == i_eta) cycle
+                        do k_eta = 1, 3
+                          if (k_eta == i_eta .or. k_eta == j_eta) cycle
+                          tmp_eta_b3(index_eta,1)=eta_b3(i_eta)
+                          tmp_eta_b3(index_eta,2)=eta_b3(j_eta)
+                          tmp_eta_b3(index_eta,3)=eta_b3(k_eta)
+                          index_eta=index_eta+1
+                        end do
+                      end do
+                    end do
 
-                    ! Terms for A-AB or B-AB
-                    tmp123 = exp(-eta1 * rik0 ** 2 - eta2 * rij0 ** 2 - eta3 * rjk0 ** 2)
+                    tmp_b3=exp(-matmul(tmp_eta_b3, d_b3))
 
-                    proj_x = 0.0
-                    proj_y = 0.0
-                    proj_z = 0.0
-                    proj_x = proj_x + tmp123 * (xik0 * eta1 + xij0 * eta2)
-                    proj_y = proj_y + tmp123 * (yik0 * eta1 + yij0 * eta2)
-                    proj_z = proj_z + tmp123 * (zik0 * eta1 + zij0 * eta2)
-
-                    tmpx = frc_3b * proj_x
-                    tmpy = frc_3b * proj_y
-                    tmpz = frc_3b * proj_z
-
-                    amat_features_ML(nn)%id_atom(ii)%fp_force(1,fp_index) = &
-                        amat_features_ML(nn)%id_atom(ii)%fp_force(1,fp_index) + tmpx
-                    amat_features_ML(nn)%id_atom(ii)%fp_force(2,fp_index) = &
-                        amat_features_ML(nn)%id_atom(ii)%fp_force(2,fp_index) + tmpy
-                    amat_features_ML(nn)%id_atom(ii)%fp_force(3,fp_index) = &
-                        amat_features_ML(nn)%id_atom(ii)%fp_force(3,fp_index) + tmpz
+                    proj_xyz = 0.0
+                    index_eta=1
+                    do i_eta = 1, 3
+                      do j_eta = 1, 3
+                        if (j_eta == i_eta) cycle
+                        proj_xyz = proj_xyz + i_selectb3(index_eta) * &
+                            tmp_b3(index_eta) * (vij * eta_b3(i_eta) + vik * eta_b3(j_eta))
+                        index_eta=index_eta+1
+                      end do
+                    end do
+                    amat_features_ML(nn)%id_atom(ii)%fp_force(:,fp_index) = &
+                        amat_features_ML(nn)%id_atom(ii)%fp_force(:,fp_index) &
+                            + proj_xyz * frc_3b
                   end do ! three-body terms
                 end if ! X-XA, X-AX, X-AB, X-BA
               end if
