@@ -465,26 +465,6 @@ contains
     xyz_Ang(2) = hl%xyz_hl(2)
     xyz_Ang(3) = hl%xyz_hl(3)
     !
-    !if (.not. allocated( hl%l1  )) allocate( hl%l1  ( max_nsup ) )
-    !if (.not. allocated( hl%acz1)) allocate( hl%acz1( max_nsup ) )
-    !if (.not. allocated( hl%m1  )) allocate( hl%m1  ( max_nsup ) )
-    !
-    !count = 1
-    !angu_loop: do l1 = 0, pao(hl%spec)%greatest_angmom     
-    !   zeta_loop: do acz1 = 1, pao(hl%spec)%angmom(l1)%n_zeta_in_angmom
-    
-    !      magn_loop: do m1 = -l1, l1                      
-    !         !print*, inode, max_nsup, l1, acz1, m1, count
-    !         hl%l1  (count) =    l1
-    !         hl%acz1(count) =  acz1
-    !         hl%m1  (count) =    m1
-    !                      
-    !         count = count + 1
-    !      end do magn_loop
-    !   end do zeta_loop
-    !end do angu_loop
-
-    
     if ( exx_debug ) then
        if (which == 'k') then
           write(unit,'(I8,6X,A9,2X,A,I8,A2,I3,A,6X,A2,1X,I8,1X,4F12.4,3X,I3,2I8,1X,F7.3)')     &

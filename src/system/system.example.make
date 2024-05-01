@@ -3,17 +3,14 @@
 
 # Set compilers
 FC=mpif90
-F77=mpif77
 
 # OpenMP flags
 # Set this to "OMPFLAGS= " if compiling without openmp
 # Set this to "OMPFLAGS= -fopenmp" if compiling with openmp
-OMPFLAGS= 
-
-# Compilation flags
-# NB for gcc10 you need to add -fallow-argument-mismatch
-COMPFLAGS= -O3 $(OMPFLAGS) $(XC_COMPFLAGS)
-COMPFLAGS_F77= $(COMPFLAGS)
+OMPFLAGS=
+# Set this to "OMP_DUMMY = DUMMY" if compiling without openmp
+# Set this to "OMP_DUMMY = " if compiling with openmp
+OMP_DUMMY = DUMMY
 
 # Set BLAS and LAPACK libraries
 # MacOS X
@@ -21,6 +18,10 @@ COMPFLAGS_F77= $(COMPFLAGS)
 # Intel MKL use the Intel tool
 # Generic
 BLAS= -llapack -lblas
+# Full scalapack library call; remove -lscalapack if using dummy diag module.
+# If using OpenMPI, use -lscalapack-openmpi instead.
+# If using Cray-libsci, use -llibsci_cray_mpi instead.
+SCALAPACK = -lscalapack
 
 # LibXC: choose between LibXC compatibility below or Conquest XC library
 
@@ -40,20 +41,16 @@ XC_COMPFLAGS = -I/usr/local/include
 FFT_LIB=-lfftw3
 FFT_OBJ=fft_fftw3.o
 
-# Full library call; remove -lscalapack if using dummy diag module.
-# If using OpenMPI, use -lscalapack-openmpi instead.
-LIBS= $(FFT_LIB) $(XC_LIB) -lscalapack $(BLAS)
+LIBS= $(FFT_LIB) $(XC_LIB) $(SCALAPACK) $(BLAS)
+
+# Compilation flags
+# NB for gcc10 you need to add -fallow-argument-mismatch
+COMPFLAGS= -O3 $(OMPFLAGS) $(XC_COMPFLAGS)
 
 # Linking flags
 LINKFLAGS= -L/usr/local/lib $(OMPFLAGS)
-ARFLAGS=
 
 # Matrix multiplication kernel type
 MULT_KERN = default
 # Use dummy DiagModule or not
 DIAG_DUMMY =
-# Use dummy omp_module or not.
-# Set this to "OMP_DUMMY = DUMMY" if compiling without openmp
-# Set this to "OMP_DUMMY = " if compiling with openmp
-OMP_DUMMY = DUMMY
-

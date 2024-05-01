@@ -139,8 +139,6 @@ contains
     use pseudo_tm_module,  only: make_neutral_atom
     use angular_coeff_routines, only: set_fact
     use maxima_module,          only: lmax_ps, lmax_pao
-    !use exx_module,             only: initialise_exx, finalise_exx, get_X_params
-    !use exx_types,              only: exx_scheme
     use XC, only: init_xc
     use io_module,                 only: return_prefix
     
@@ -230,17 +228,9 @@ contains
       non_atomic_stress = zero
     end if
 
-    !if ( flag_exx .and. flag_self_consistent ) then
-       !call get_X_params( )
-       !call initialise_exx(exx_scheme)       
-    !end if
-    
     call initial_H(start, start_L, find_chdens, fixed_potential, &
                    vary_mu, total_energy,std_level_loc+1)
-    !if ( flag_exx .and. flag_self_consistent ) then
-    !   call finalise_exx(exx_scheme)       
-    !end if
-    
+
     call stop_timer(tmr_std_initialisation)
 
 !****lat<$

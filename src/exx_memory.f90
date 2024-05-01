@@ -79,8 +79,6 @@ contains
     lun  = unit_memory_write
     stat = 0
 
-    !print*, "EXX: exx_memory lu =", lun
-    
 !!$
 !!$
 !!$ ALLOCATION for EXX
@@ -178,8 +176,8 @@ contains
           call reg_alloc_mem(area_exx,(2*extent+1)*(2*extent+1)*(2*extent+1),&
                type_dbl,'ewald_rho',lun)
           ewald_rho = zero          
-          allocate(ewald_pot(2*extent+1,2*extent+1,2*extent+1), STAT=stat) 
-          if(stat/=0) call cq_abort('Error allocglobating memory to ewald_pot/exx !',stat)
+          allocate(ewald_pot(2*extent+1,2*extent+1,2*extent+1), STAT=stat)
+          if(stat/=0) call cq_abort('Error allocating memory to ewald_pot/exx !',stat)
           call reg_alloc_mem(area_exx,(2*extent+1)*(2*extent+1)*(2*extent+1),&
                type_dbl,'ewald_pot',lun)
           ewald_pot = zero
@@ -190,7 +188,7 @@ contains
           allocate(work_in_3d(2*extent+1,2*extent+1,2*extent+1), STAT=stat)
           if(stat/=0) call cq_abort('Error allocating memory to work_in_3d/exx !',stat)
           call reg_alloc_mem(area_exx,(2*extent+1)*(2*extent+1)*(2*extent+1),&
-               type_dbl,'work_in',lun)
+               type_dbl,'work_in ',lun)
           work_in_3d = zero          
           allocate(work_out_3d(2*extent+1,2*extent+1,2*extent+1), STAT=stat)
           if(stat/=0) call cq_abort('Error allocating memory to work_out_3d/exx !',stat)
@@ -261,17 +259,6 @@ contains
           fftwrho3d%arrayin  = cmplx(zero,zero,double_cplx)
           fftwrho3d%arrayout = cmplx(zero,zero,double_cplx)
           !
-!!$
-!!$
-!!$ ERI allocation
-!!$
-!!$
-       !case('eris') ! allocate electron repulsion integrals
-       !   allocate(eris(extent), STAT=stat)
-       !   if(stat/=0) call cq_abort('Error allocating memory to eris/exx !',stat)
-       !   call reg_alloc_mem(area_exx,extent,type_dbl,matrix,lun)
-       !   eris = zero
-          !write(*,*) 'ERIs allocated', shape(eris)
           !
        case default
           call cq_abort('Error allocation/exx_mem !',stat)          

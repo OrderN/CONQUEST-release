@@ -186,12 +186,7 @@ contains
   !!   Add matK, matX dump
   !!  2021/07/19 15:46 dave
   !!   Removed writing out of charge density
-  !!  2020/14/11 16:00 LAT
-  !!   Add matK, matX dump
-  !!  2021/07/19 15:46 dave
-  !!   Removed writing out of charge density
-  !!  2020/14/11 16:00 LAT
-  !!   Add matK, matX dump
+  
   !! SOURCE
   !!
   subroutine get_H_matrix(rebuild_KE_NL, fixed_potential, electrons, &

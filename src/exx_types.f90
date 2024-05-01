@@ -2,7 +2,7 @@
 ! ------------------------------------------------------------------------------
 ! $Id: $
 ! -----------------------------------------------------------
-! Module exx_types.f90105
+! Module exx_types.f90
 ! -----------------------------------------------------------
 ! Code area 13: EXX
 ! -----------------------------------------------------------
@@ -65,12 +65,10 @@ module exx_types
   real(double), dimension(:),           allocatable, target :: Ome_kj_1d_buffer
   real(double), dimension(:,:,:,:),     allocatable         :: Phy_k
 
-
-  
   ! Work matrix
   real(double), dimension(:,:,:),       allocatable :: work_in_3d
   real(double), dimension(:,:,:),       allocatable :: work_out_3d
-    
+
   ! For the Poisson equation/FFTW in reciprocal space
   type(fftw3d)          :: fftwrho3d
   type(fftw3d)          :: fftwrho3d_filter 
@@ -145,8 +143,6 @@ module exx_types
   
   ! User settings
   integer :: exx_scheme      ! 4center ERIs or 3center reduction integrals
-  !character(100) :: exx_scheme
-  
   integer :: exx_mem         ! reduced memory allocation 
   logical :: exx_overlap     ! compute overlap local boxes
   logical :: exx_alloc       ! on-the-fly or global memory allocation

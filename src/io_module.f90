@@ -2934,7 +2934,7 @@ second:   do
 
       do i=1,ni_in_cell
         atom_name = adjustr(species_label(species_glob(i))(1:2))
-        write(lun,'(a4,6f16.8)') atom_name, atom_coord(:,i)*dist_conv_loc, &
+        write(lun,'(a4,3f16.8,3e16.8)') atom_name, atom_coord(:,i)*dist_conv_loc, &
                  (for_conv_loc*atom_force(j,i), j = 1, 3)
                  ! species_glob(i),flag_move_atom(1,i),flag_move_atom(2,i), &
       end do

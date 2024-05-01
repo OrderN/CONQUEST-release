@@ -26,6 +26,8 @@
 !!
 module multiply_kernel
 
+  character(len=*), parameter :: kernel_id = "gemm"
+
 !!*****
 
 contains
@@ -149,12 +151,12 @@ contains
     real(double) :: c(lenc)
     integer, optional :: debug
     ! Remote indices
-    integer(integ) :: ib_nd_acc(mx_part)
-    integer(integ) :: ibaddr(mx_part)
-    integer(integ) :: nbnab(mx_part)
-    integer(integ) :: ibpart(mx_part*mx_absb)
-    integer(integ) :: ibseq(mx_part*mx_absb)
-    integer(integ) :: bndim2(mx_part*mx_absb)
+    integer(integ), intent(in) :: ib_nd_acc(:)
+    integer(integ), intent(in) :: ibaddr(:)
+    integer(integ), intent(in) :: nbnab(:)
+    integer(integ), intent(in) :: ibpart(:)
+    integer(integ), intent(in) :: ibseq(:)
+    integer(integ), intent(in) :: bndim2(:)
     ! Local variables
     integer :: jbnab2ch(mx_absb)  ! Automatic array
     integer :: nbkbeg, k, k_in_part, k_in_halo, j, jpart, jseq
@@ -274,7 +276,7 @@ contains
     end do ! end of k = 1, nahpart
     if (allocated(tempa)) deallocate(tempa)
     if (allocated(tempc)) deallocate(tempc)
-    !$omp end signle
+    !$omp end single
     return
   end subroutine m_kern_max
   !!*****
@@ -398,12 +400,12 @@ contains
     real(double) :: b(lenb)
     real(double) :: c(lenc)
     ! dimension declarations
-    integer :: ibaddr(mx_part)
-    integer :: ib_nd_acc(mx_part)
-    integer :: nbnab(mx_part)
-    integer :: ibpart(mx_part*mx_absb)
-    integer :: ibseq(mx_part*mx_absb)
-    integer :: bndim2(mx_part*mx_absb)
+    integer(integ), intent(in) :: ib_nd_acc(:)
+    integer(integ), intent(in) :: ibaddr(:)
+    integer(integ), intent(in) :: nbnab(:)
+    integer(integ), intent(in) :: ibpart(:)
+    integer(integ), intent(in) :: ibseq(:)
+    integer(integ), intent(in) :: bndim2(:)
     ! Local variables
     integer :: jbnab2ch(mx_absb)
     integer :: k, k_in_part, k_in_halo, nbkbeg, j, jpart, jseq

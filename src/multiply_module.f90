@@ -240,6 +240,8 @@ contains
              lenb_rem = a_b_c%comms%ilen3rec(ipart,nnode)
           end if
           allocate(b_rem(lenb_rem))
+          part_array = 0
+          b_rem = zero
           call prefetch(kpart,a_b_c%ahalo,a_b_c%comms,a_b_c%bmat,icall,&
                n_cont,part_array,a_b_c%bindex,b_rem,lenb_rem,b,myid,ilen2,&
                mx_msg_per_part,a_b_c%parts,a_b_c%prim,a_b_c%gcs,(recv_part(nnode)-1)*2)
