@@ -144,8 +144,8 @@ contains
     type(matrix_trans) :: at
     integer      :: mx_absb, mx_part, mx_iprim, lena, lenb, lenc
     integer      :: kpart, k_off
-    real(double), target :: a(lena)
-    real(double), target :: b(lenb)
+    real(double) :: a(lena)
+    real(double) :: b(lenb)
     real(double) :: c(lenc)
     integer, optional :: debug
     ! Remote indices
@@ -163,7 +163,6 @@ contains
     integer :: nb_nd_kbeg
     integer :: nd1, nd2, nd3
     real(double), allocatable, dimension(:,:) :: tempc
-    !real(double), pointer, dimension(:,:) :: pointa, pointb
     integer :: maxnd1, maxnd2, maxnd3, maxlen
     integer :: nbbeg, nbend, tbend
     external :: dgemm
@@ -345,8 +344,8 @@ contains
     integer :: kpart, k_off
     ! Remember that a is a local transpose
     real(double) :: a(lena)
-    real(double), target :: b(lenb)
-    real(double), target :: c(lenc)
+    real(double) :: b(lenb)
+    real(double) :: c(lenc)
     ! dimension declarations
     integer(integ), intent(in) :: ib_nd_acc(:)
     integer(integ), intent(in) :: ibaddr(:)
