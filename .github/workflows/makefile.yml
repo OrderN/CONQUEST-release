@@ -72,7 +72,7 @@ jobs:
             multiply_kernel: ompGemm
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
       with:
         fetch-depth: '0'
 
@@ -82,7 +82,7 @@ jobs:
         sudo apt install openmpi-bin libopenmpi-dev libfftw3-dev libblas3 liblapack3 libscalapack-openmpi-dev libxc-dev
 
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: '3.10'
 
