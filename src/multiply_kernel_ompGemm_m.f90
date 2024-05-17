@@ -168,6 +168,7 @@ contains
     external :: dgemm
     ! OpenMP required indexing variables
     integer :: nd1_vector(at%mx_halo), nd2_vector(mx_absb), nd2_array(mx_absb)
+    integer :: n1, n2, ncaddr
 
     ! Allocate tempc to largest possible size outside the loop
     maxnd1 = maxval(ahalo%ndimi)
@@ -213,10 +214,14 @@ contains
                 ncbeg = chalo%i_h2d(icad+jbnab2ch(j))
                 if (ncbeg /= 0) then
                    nd2 = bndim2(nbkbeg+j)
-                   ncend = ncbeg + (nd1 * nd2 - 1)
                    tcbeg = nd2_array(j)
                    tcend = tcbeg + nd2 - 1
-                   c(ncbeg:ncend) = c(ncbeg:ncend) + pack(tempc(1:nd1, tcbeg:tcend), .true.)
+                   do n2 = tcbeg, tcend
+                      do n1 = 1, nd1
+                         ncaddr = ncbeg + (n2 - tcbeg) * nd1 + n1 - 1
+                         c(ncaddr) = c(ncaddr) + tempc(n1,n2)
+                      end do
+                   end do
                 end if
              end if
           end do copy_c
