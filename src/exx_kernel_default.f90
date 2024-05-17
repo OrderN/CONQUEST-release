@@ -882,8 +882,10 @@ contains
        !
        !call io_close(unit_eri_debug)
        !call io_close(unit_exx_debug)
-       call io_close(unit_memory_write)
-       call io_close(unit_timers_write)
+       if (fdf_boolean('IO.WriteOutToFile',.true.)) then
+         call io_close(unit_memory_write)
+         call io_close(unit_timers_write)
+       end if
        !
        !
     end if
@@ -1086,7 +1088,7 @@ contains
     type(neigh_atomic_data) :: kg !k_gamma
     type(neigh_atomic_data) :: ld !l_delta
     !
-    integer                 :: maxsuppfuncs, nsf_kg, nsf_ld
+    integer                 :: maxsuppfuncs, nsf_kg, nsf_ld, nsf_jb
     integer                 :: r, s, t, count
     !
     !
@@ -1246,18 +1248,16 @@ contains
                    ! Begin the parallel region here as earlier allocations make it difficult to do before now. 
                    ! However, this should be possible in future work. 
                    !
-                   !$omp parallel default(none) reduction(+: c)                                                  &
-                   !$omp     shared(kg,jb,tmr_std_exx_poisson,tmr_std_exx_nsup,Phy_k,phi_j,phi_k,ncbeg,ia,kpart, &
-                   !$omp            tmr_std_exx_matmult,ewald_pot,phi_i,exx_psolver,exx_pscheme,extent,dv,       &
-                   !$omp            ewald_rho,inode,pulay_radius,p_omega,p_gauss,w_gauss,reckernel_3d,r_int)     &
-                   !$omp     private(nsf_kg,nsf_ld,work_out_3d,work_in_3d,ewald_charge,Ome_kj_1d_buffer,Ome_kj,      &
-                   !$omp             ncaddr,exx_mat_elem,r,s,t)
+                   !$omp parallel default(none) reduction(+: c)            &
+                   !$omp     shared(kg,jb,Phy_k,ncbeg,ia,phi_i,extent,dv) &
+                   !$omp     private(nsf_kg,nsf_jb,work_out_3d,work_in_3d,ewald_charge,Ome_kj_1d_buffer, &
+                   !$omp             Ome_kj,ncaddr)
                    Ome_kj(1:2*extent+1, 1:2*extent+1, 1:2*extent+1) => Ome_kj_1d_buffer
                    !$omp do schedule(runtime) collapse(2)
                    do nsf_kg = 1, kg%nsup
-                      do nsf_ld = 1, jb%nsup
+                      do nsf_jb = 1, jb%nsup
                          !
-                         call cri_eri_inner_calculation(Phy_k, phi_i, Ome_kj, nsf_kg, nsf_ld, nsf_kg, dv, 1.0d0, &
+                         call cri_eri_inner_calculation(Phy_k, phi_i, Ome_kj, nsf_kg, nsf_jb, nsf_kg, dv, 1.0d0, &
                                        ncaddr,  ncbeg, ia%nsup, ewald_charge, work_out_3d, work_in_3d, c,       &
                                        .false.)
                          !
@@ -1345,7 +1345,7 @@ contains
          ewald_charge, ewald_rho, ewald_pot,  &
          pulay_radius, p_omega, p_ngauss, p_gauss, w_gauss, &
          exx_psolver,exx_pscheme, &
-         unit_exx_debug, unit_eri_debug
+         unit_exx_debug, unit_eri_debug, tmr_std_exx_nsup
     !
     use exx_types,  only: phi_i_1d_buffer, phi_j, phi_k, phi_l, &
          Ome_kj_1d_buffer, work_in_3d, work_out_3d, eris
@@ -1515,13 +1515,19 @@ contains
                             !
                             if ( exx_alloc ) call exx_mem_alloc(extent,0,0,'Ome_kj_1d_buffer','alloc')
                             !
-                            ! TODO include bounds in Ome_kj_1d_buffer and store_eris
-                            Ome_kj(1:2*extent+1, 1:2*extent+1, 1:2*extent+1) => Ome_kj_1d_buffer
-                            !
                             ! Point at the next block of eris to store and update counter 
                             store_eris_inner(1:ia%nsup, 1:jb%nsup) => eris(kpart)%store_eris(count+1:count + (jb%nsup * ia%nsup))
                             count = count + (jb%nsup * ia%nsup)
                             !
+                            call start_timer(tmr_std_exx_nsup)
+                            !
+                            !$omp parallel default(none) reduction(+: c,store_eris_inner)                                &
+                            !$omp     shared(jb,ncbeg,ia,phi_l,phi_i,extent,dv,eris,K_val,backup_eris)                   &
+                            !$omp     private(nsf_kg,nsf_ld,nsf_jb,work_out_3d,work_in_3d,ewald_charge,Ome_kj_1d_buffer, &
+                            !$omp             Ome_kj,ncaddr)
+                            ! TODO include bounds in Ome_kj_1d_buffer and store_eris
+                            Ome_kj(1:2*extent+1, 1:2*extent+1, 1:2*extent+1) => Ome_kj_1d_buffer
+                            !$omp do schedule(runtime)
                             jb_loop: do nsf_jb = 1, jb%nsup
                                !
                                call cri_eri_inner_calculation(phi_l, phi_i, Ome_kj, nsf_ld, nsf_jb, nsf_kg, dv, K_val, &
@@ -1530,12 +1536,14 @@ contains
                                !
                             end do jb_loop
                             !
+                            call stop_timer(tmr_std_exx_nsup,.true.)
+                            !
+                            if ( exx_alloc ) call exx_mem_alloc(extent,0,0,'Ome_kj_1d_buffer','dealloc')
+                            if ( exx_alloc ) call exx_mem_alloc(extent,jb%nsup,0,'phi_j','dealloc')                                
+                            !
                          end if
                          !
                       end if
-                      !
-                      if ( exx_alloc ) call exx_mem_alloc(extent,0,0,'Ome_kj_1d_buffer','dealloc')
-                      if ( exx_alloc ) call exx_mem_alloc(extent,jb%nsup,0,'phi_j','dealloc')                                
                       !
 !!$
 !!$ ****[ j end loop ]****
