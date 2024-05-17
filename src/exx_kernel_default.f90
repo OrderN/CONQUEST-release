@@ -141,6 +141,8 @@ contains
     use exx_poisson, only: exx_scal_rho_3d, exx_ewald_rho, exx_ewald_pot
     use exx_types,   only: isf_order, ngrid
     !
+    use input_module, only: fdf_boolean
+    !
     !**<lat>** ISF Poisson solver Will be available in the forthcoming version 
     !use Poisson_Solver, only: createBeylkin
     !
@@ -212,24 +214,29 @@ contains
     !
     if ( iprint_exx > 3 ) then
        !
-       if ( (niter == 1 .and. scheme == 3) .or. (niter == siter + 1  .and. (scheme == 1 .or. scheme == 2 ) )) then
-          call io_assign(unit_timers_write)
-          call get_file_name('exx_timers',numprocs,inode,file_exx_timers)
-          open(unit_timers_write,file=file_exx_timers)
-          !
-          call io_assign(unit_memory_write)
-          call get_file_name('exx_memory',numprocs,inode,file_exx_memory)
-          open(unit_memory_write,file=file_exx_memory)
-          !
-       else
-
-          !inquire(file=filename3, exist=exist)
-          !if ( exist ) then
-          open(unit_timers_write,file=file_exx_timers,status='old', position='append')
-          open(unit_memory_write,file=file_exx_memory,status='old', position='append')
-          !else
-          !   open(unit_timers_write,file=filename3,status='new')
-          !end if
+       if (fdf_boolean('IO.WriteOutToFile',.true.)) then
+          if ( (niter == 1 .and. scheme == 3) .or. (niter == siter + 1  .and. (scheme == 1 .or. scheme == 2 ) )) then
+             call io_assign(unit_timers_write)
+             call get_file_name('exx_timers',numprocs,inode,file_exx_timers)
+             open(unit_timers_write,file=file_exx_timers)
+             !
+             call io_assign(unit_memory_write)
+             call get_file_name('exx_memory',numprocs,inode,file_exx_memory)
+             open(unit_memory_write,file=file_exx_memory)
+             !
+          else
+   
+             !inquire(file=filename3, exist=exist)
+             !if ( exist ) then
+             open(unit_timers_write,file=file_exx_timers,status='old', position='append')
+             open(unit_memory_write,file=file_exx_memory,status='old', position='append')
+             !else
+             !   open(unit_timers_write,file=filename3,status='new')
+             !end if
+          end if
+       else 
+          unit_timers_write = 6
+          unit_memory_write = 6
        end if
        !
     end if
