@@ -909,7 +909,7 @@ contains
   ! TODO: Change name to something more descriptive
   subroutine cri_eri_inner_calculation(nsf1_array, phi_i, Ome_kj, nsf1, nsf2, nsf_kg, dv, &
                multiplier, ncaddr, ncbeg, ia_nsup, ewald_charge, work_out_3d, work_in_3d, &
-               c, backup_eris, store_eris_inner) 
+               c, backup_eris, store_eris_ptr) 
 
        use exx_poisson, only: exx_v_on_grid, exx_ewald_charge
 
@@ -930,7 +930,7 @@ contains
        real(double),          intent(inout)         :: c(:)
        ! Backup eris parameters. Optional as they are only needed by eri function
        logical,               intent(in)            :: backup_eris
-       real(double), pointer, intent(inout), OPTIONAL :: store_eris_inner(:,:)
+       real(double), pointer, intent(inout), OPTIONAL :: store_eris_ptr(:,:)
        integer      :: ncaddr, nsf3
        real(double) :: exx_mat_elem
 
@@ -957,13 +957,13 @@ contains
        !
        do nsf3 = 1, ia_nsup
           !
-          ! Can we instead always store directly into store_eris_inner(nsf2, nsf3)?
+          ! Can we instead always store directly into store_eris_ptr(nsf2, nsf3)?
           exx_mat_elem = dot((2*extent+1)**3, phi_i(:,:,:,nsf3), 1, Ome_kj, 1) * dv * multiplier
           !
           if ( backup_eris ) then
              !
              ! eris(kpart)%store_eris( count ) = exx_mat_elem
-             store_eris_inner(nsf3, nsf2) = exx_mat_elem
+             store_eris_ptr(nsf3, nsf2) = exx_mat_elem
              !
           else
              !
@@ -1394,7 +1394,7 @@ contains
     real(double)               ::   dr,dv,K_val
     !
     ! We allocate pointers here to point at 1D arrays later and allow contiguous access when passing to BLAS dot later
-    real(double), pointer :: phi_i(:,:,:,:), Ome_kj(:,:,:), store_eris_inner(:,:)
+    real(double), pointer :: phi_i(:,:,:,:), Ome_kj(:,:,:), store_eris_ptr(:,:)
     !
     type(prim_atomic_data)  :: ia !i_alpha
     type(neigh_atomic_data) :: jb !j_beta
@@ -1515,16 +1515,17 @@ contains
                             !
                             if ( exx_alloc ) call exx_mem_alloc(extent,0,0,'Ome_kj_1d_buffer','alloc')
                             !
-                            ! Point at the next block of eris to store and update counter 
-                            store_eris_inner(1:ia%nsup, 1:jb%nsup) => eris(kpart)%store_eris(count+1:count + (jb%nsup * ia%nsup))
-                            count = count + (jb%nsup * ia%nsup)
-                            !
                             call start_timer(tmr_std_exx_nsup)
                             !
-                            !$omp parallel default(none) reduction(+: c,store_eris_inner)                                &
-                            !$omp     shared(jb,ncbeg,ia,phi_l,phi_i,extent,dv,eris,K_val,backup_eris)                   &
-                            !$omp     private(nsf_kg,nsf_ld,nsf_jb,work_out_3d,work_in_3d,ewald_charge,Ome_kj_1d_buffer, &
-                            !$omp             Ome_kj,ncaddr)
+                            ! Point at the next block of eris to store and update counter 
+                            store_eris_ptr(1:ia%nsup, 1:jb%nsup) => eris(kpart)%store_eris(count+1:count + (jb%nsup * ia%nsup))
+                            count = count + (jb%nsup * ia%nsup)
+                            !
+                            !$omp parallel default(none) reduction(+: c)                                                         &
+                            !$omp     shared(nsf_kg,nsf_ld,jb,ncbeg,ia,phi_k,phi_j,phi_l,phi_i,extent,dv,eris,K_val,backup_eris, &
+                            !$omp            phi_i_1d_buffer,kpart,store_eris_ptr)                                         &
+                            !$omp     private(nsf_jb,work_out_3d,work_in_3d,ewald_charge,Ome_kj_1d_buffer,Ome_kj,ncaddr)
+                            !
                             ! TODO include bounds in Ome_kj_1d_buffer and store_eris
                             Ome_kj(1:2*extent+1, 1:2*extent+1, 1:2*extent+1) => Ome_kj_1d_buffer
                             !$omp do schedule(runtime)
@@ -1532,9 +1533,11 @@ contains
                                !
                                call cri_eri_inner_calculation(phi_l, phi_i, Ome_kj, nsf_ld, nsf_jb, nsf_kg, dv, K_val, &
                                              ncaddr, ncbeg, ia%nsup, ewald_charge, work_out_3d, work_in_3d, c, &
-                                             backup_eris, store_eris_inner)
+                                             backup_eris, store_eris_ptr)
                                !
                             end do jb_loop
+                            !$omp end do
+                            !$omp end parallel
                             !
                             call stop_timer(tmr_std_exx_nsup,.true.)
                             !
