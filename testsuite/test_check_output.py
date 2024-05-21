@@ -1,5 +1,6 @@
 import numpy as np
 import os
+import pytest
 import pathlib
 
 def read_conquest_out(path=".", filename="Conquest_out"):
@@ -17,9 +18,9 @@ def read_conquest_out(path=".", filename="Conquest_out"):
         if line.find("Harris-Foulkes energy") >= 0:
             Results['Harris-Foulkes energy'] = float(line.split("=")[1].split()[0])
         if line.find("Maximum force") >= 0:
-            Results['Maximum force'] = float(line.split(":")[2].split("(")[0])
+            Results['Max force'] = float(line.split(":")[2].split("(")[0])
         if line.find("Force Residual") >= 0:
-            Results['Force Residual'] = float(line.split(":")[2].split()[0])
+            Results['Force residual'] = float(line.split(":")[2].split()[0])
         if line.find("Total stress") >= 0:
             Results['Total stress'] = np.array(line.split(":")[2].split()[:-1], dtype=float)
         if line.find("Total polarisation") >= 0:
@@ -54,14 +55,38 @@ def precision(key='_'):
         return 1e-4
         
 
+@pytest.fixture
 def testsuite_directory():
     '''
     Return path to testsuite
     '''
-    return pathlib.Path().resolve()
+    return pathlib.Path(__file__).parent.resolve()
 
-def test_conquest_out(test_dir, keys, testsuite_directory):
-    path = os.path.join(testsuite_directory, test_dir)
-    ref_results, test_results = results(path)
-    for key in keys:
-            np.testing.assert_allclose(ref_results[key], test_results[key], rtol = precision(key), verbose = True)
+class TestClass:
+    @pytest.mark.parametrize("test_dir,keys", [
+        [
+            "test_001_bulk_Si_1proc_Diag",
+            ['Harris-Foulkes energy','Max force','Force residual','Total stress']
+        ],
+        [
+            "test_002_bulk_Si_1proc_OrderN",
+            ['Harris-Foulkes energy','Max force','Force residual','Total stress']
+        ],
+        [
+            "test_003_bulk_BTO_polarisation",
+            ['Harris-Foulkes energy','Max force','Force residual','Total polarisation']
+        ],
+        [
+            "test_004_isol_C2H4_4proc_PBE0CRI",
+            ["Harris-Foulkes energy"]
+        ],
+        [
+            "test_005_isol_C2H4_4proc_PBE0GTO",
+            ["Harris-Foulkes energy"]
+        ]
+    ])
+    def test_all(self, test_dir, keys, testsuite_directory):
+        path = os.path.join(testsuite_directory, test_dir)
+        ref_results, test_results = results(path)
+        for key in keys:
+               np.testing.assert_allclose(ref_results[key], test_results[key], rtol = precision(key), verbose = True)
