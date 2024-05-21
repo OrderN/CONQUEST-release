@@ -183,9 +183,6 @@ contains
     real(double) :: t0,t1
     integer      :: maxsuppfuncs, nb_eris
 
-    !
-    real(double)      :: xyz_ghost(3), r_ghost
-
     type(cq_timer) :: backtrace_timer
     integer        :: backtrace_level
     !
@@ -823,7 +820,7 @@ contains
   !!  SOURCE
   !!
   subroutine cri_eri_inner_calculation(nsf1_array, phi_i, Ome_kj, nsf1, nsf2, nsf_kg, dv, &
-               multiplier, ncaddr, ncbeg, ia_nsup, ewald_charge, work_out_3d, work_in_3d, &
+               multiplier, ncaddr, ia_nsup, ewald_charge, work_out_3d, work_in_3d, &
                c, backup_eris, store_eris_ptr) 
 
        use exx_poisson, only: exx_v_on_grid, exx_ewald_charge
@@ -839,14 +836,14 @@ contains
 
        real(double), pointer, intent(in)            :: Ome_kj(:,:,:), phi_i(:,:,:,:)
        integer,               intent(in)            :: nsf1, nsf2, nsf_kg        ! The indices of the loops from which this function is called 
-       integer,               intent(in)            :: ncbeg, ia_nsup
+       integer,               intent(in)            :: ncaddr, ia_nsup
        real(double),          intent(in)            :: nsf1_array(:,:,:,:), dv, multiplier
        real(double),          intent(out)           :: ewald_charge, work_out_3d(:,:,:), work_in_3d(:,:,:)
        real(double),          intent(inout)         :: c(:)
        ! Backup eris parameters. Optional as they are only needed by eri function
        logical,               intent(in)            :: backup_eris
        real(double), pointer, intent(inout), OPTIONAL :: store_eris_ptr(:,:)
-       integer      :: ncaddr, nsf3
+       integer      :: nsf3
        real(double) :: exx_mat_elem
 
        work_out_3d = zero
@@ -868,8 +865,6 @@ contains
        !
        Ome_kj = work_out_3d * phi_k(:,:,:,nsf_kg)
        !
-       ncaddr = ncbeg + ia_nsup * (nsf2 - 1)
-       !
        do nsf3 = 1, ia_nsup
           !
           ! Can we instead always store directly into store_eris_ptr(nsf2, nsf3)?
@@ -888,6 +883,65 @@ contains
           !
        end do ! nsf3 = 1, ia%nsup
   end subroutine cri_eri_inner_calculation
+  !
+  subroutine eri_gto_inner_calculation(ld, kg, jb, ia, nsf_ld, nsf_kg, nsf_jb, &
+               ncaddr, c, i_nt, j_nt, k_nt, l_nt, backup_eris, store_eris_ptr, &
+               filter_eris_ptr)
+
+         use exx_poisson, only: exx_v_on_grid, exx_ewald_charge
+
+         use exx_types, only: prim_atomic_data, neigh_atomic_data, p_ngauss, store_eris
+
+         use GenBlas, only: dot
+         
+         use numbers, only: zero
+
+         use exx_erigto, only: compute_eri_hoh
+
+         implicit none
+
+         type(neigh_atomic_data), intent(in)    :: ld, kg, jb 
+         type(prim_atomic_data),  intent(in)    :: ia
+         integer,                 intent(in)    :: nsf_ld, nsf_jb, nsf_kg 
+         integer,                 intent(in)    :: ncaddr
+         real(double),            intent(inout) :: c(:)
+         character(len=8),        intent(inout) :: i_nt, j_nt, k_nt, l_nt
+         logical,                 intent(in)    :: backup_eris
+         real(double), pointer,   intent(inout) :: store_eris_ptr(:,:)
+         logical,      pointer,   intent(inout) :: filter_eris_ptr(:,:)
+         integer      :: nsf_ia
+         real(double) :: exx_mat_elem
+         !
+         do nsf_ia = 1, ia%nsup
+            !
+            exx_mat_elem = zero
+            !
+            if ( filter_eris_ptr( nsf_ia, nsf_jb ) ) then
+               !
+               if ( abs(ia%xyz_ip(3)-kg%xyz_cv(3)) < ( ia%radi + kg%radi) &
+                     .and. abs(jb%xyz_cv(3)-ld%xyz_cv(3)) < ( jb%radi + ld%radi) ) then
+                  !
+                  call compute_eri_hoh( nsf_ia, nsf_jb, nsf_kg, nsf_ld, &
+                        ia%spec,   jb%spec,   kg%spec,   ld%spec,  &
+                        ia%xyz_ip, jb%xyz_cv, kg%xyz_cv, ld%xyz_cv,&
+                        i_nt, j_nt, k_nt, l_nt,&
+                        exx_mat_elem )
+                  !
+               end if
+            end if
+            !
+            if ( backup_eris ) then
+               !
+               store_eris_ptr(nsf_ia, nsf_jb) = exx_mat_elem
+               !
+            else
+               !
+               c(ncaddr + nsf_ia - 1) = c(ncaddr + nsf_ia - 1) + exx_mat_elem
+               !
+            end if
+            !
+         end do ! nsf_ia = 1, ia%nsup
+  end subroutine eri_gto_inner_calculation
   !
   !!****f* exx_kernel_default/m_kern_exx_cri *
   !!
@@ -1119,8 +1173,10 @@ contains
                    do nsf_kg = 1, kg%nsup
                       do nsf_jb = 1, jb%nsup
                          !
-                         call cri_eri_inner_calculation(Phy_k, phi_i, Ome_kj, nsf_kg, nsf_jb, nsf_kg, dv, 1.0d0, &
-                                       ncaddr,  ncbeg, ia%nsup, ewald_charge, work_out_3d, work_in_3d, c,       &
+                         ncaddr = ncbeg + ia%nsup * (nsf_jb - 1)
+                         !
+                         call cri_eri_inner_calculation(Phy_k, phi_i, Ome_kj, nsf_kg, nsf_jb, nsf_kg, dv, &
+                                       1.0d0, ncaddr, ia%nsup, ewald_charge, work_out_3d, work_in_3d, c,  &
                                        .false.)
                          !
                       end do ! nsf_ld = 1, jb%nsup
@@ -1168,6 +1224,9 @@ contains
   !!   m_kern_exx_eri
   !!
   !!  PURPOSE
+  !!   Compute EXX matrix using GTO-ERI engine. For now
+  !!   default is the Taketa, Huzinaga, and O-ohata (HOH)
+  !!   approach as given in exx_erigto module
   !! 
   !!  INPUTS
   !!
@@ -1182,8 +1241,8 @@ contains
   !!  SOURCE
   !!
   subroutine m_kern_exx_eri(k_off, kpart, ib_nd_acc, ibaddr, nbnab, &
-       ibpart, ibseq, b, c, ahalo, chalo, & 
-       at, mx_absb, mx_part, lenb, lenc, backup_eris, is_gto )
+       ibpart, ibseq, b, c, ahalo, chalo, at, mx_absb, mx_part,     &
+       lenb, lenc, backup_eris, is_gto )
 
     use numbers,        only: zero
     use matrix_module,  only: matrix_halo, matrix_trans
@@ -1207,7 +1266,6 @@ contains
     use exx_poisson,only: exx_v_on_grid, exx_ewald_charge
     !
     ! m_kern_exx_eri_gto imports
-    use exx_types, only: sum_eri_gto
     use exx_erigto, only: compute_eri_hoh
     !
     implicit none
@@ -1239,18 +1297,18 @@ contains
     !
     real(double), dimension(3) :: xyz_zero  = zero
     !
-    real(double)               ::   dr,dv,K_val
+    real(double)               :: dv,K_val
     !
     ! We allocate pointers here to point at 1D arrays later and allow contiguous access when passing to BLAS dot later
     real(double), pointer :: phi_i(:,:,:,:), Ome_kj(:,:,:), store_eris_ptr(:,:)
+    logical,      pointer :: filter_eris_ptr(:,:)
     !
     type(prim_atomic_data)  :: ia !i_alpha
     type(neigh_atomic_data) :: jb !j_beta
     type(neigh_atomic_data) :: kg !k_gamma
     type(neigh_atomic_data) :: ld !l_delta
     !
-    integer                 :: maxsuppfuncs
-    integer                 :: nsf_kg, nsf_ld, nsf_ia, nsf_jb, count
+    integer                 :: nsf_kg, nsf_ld, nsf_jb, count
     !
     logical :: should_allocate
     !
@@ -1347,7 +1405,7 @@ contains
                             call get_halodat(jb,kg,jseq,chalo%i_hbeg(jpart),         &
                                  BCS_parts%lab_cell(BCS_parts%inv_lab_cover(jpart)), &
                                  'j',.true.,unit_exx_debug)
-                            !                                                    ! <-- Missing throwing Error2
+                            !
                             if ( should_allocate ) call exx_mem_alloc(extent,jb%nsup,0,'phi_j','alloc')
                             !
                             if (.not. is_gto) call exx_phi_on_grid(inode,jb%global_num,jb%spec,extent, &
@@ -1359,12 +1417,14 @@ contains
                             !
                             ! Point at the next block of eris to store and update counter 
                             store_eris_ptr(1:ia%nsup, 1:jb%nsup) => eris(kpart)%store_eris(count+1:count + (jb%nsup * ia%nsup))
+                            filter_eris_ptr(1:ia%nsup, 1:jb%nsup) => eris(kpart)%filter_eris(count+1:count + (jb%nsup * ia%nsup))
                             count = count + (jb%nsup * ia%nsup)
                             !
                             !$omp parallel default(none) reduction(+: c)                                                         &
-                            !$omp     shared(nsf_kg,nsf_ld,jb,ncbeg,ia,phi_k,phi_j,phi_l,phi_i,extent,dv,eris,K_val,backup_eris, &
-                            !$omp            phi_i_1d_buffer,kpart,store_eris_ptr)                                         &
-                            !$omp     private(nsf_jb,work_out_3d,work_in_3d,ewald_charge,Ome_kj_1d_buffer,Ome_kj,ncaddr)
+                            !$omp     shared(ld, kg, jb, ia, nsf_kg,nsf_ld,ncbeg,phi_k,phi_j,phi_l,phi_i,extent,dv,eris,K_val,   &
+                            !$omp            backup_eris, phi_i_1d_buffer,kpart,store_eris_ptr,filter_eris_ptr,is_gto)           &
+                            !$omp     private(nsf_jb,work_out_3d,work_in_3d,ewald_charge,Ome_kj_1d_buffer,Ome_kj,ncaddr,i_nt,    &
+                            !$omp             j_nt,k_nt,l_nt)
                             !
                             ! TODO include bounds in Ome_kj_1d_buffer and store_eris
                             Ome_kj(1:2*extent+1, 1:2*extent+1, 1:2*extent+1) => Ome_kj_1d_buffer
@@ -1374,55 +1434,14 @@ contains
                                ncaddr = ncbeg + ia%nsup * (nsf_jb - 1)
                                !
                                if (is_gto) then
-
-                                 ia_loop: do nsf_ia = 1, ia%nsup
-                                    !
-                                    exx_mat_elem = zero
-                                    !
-                                    if ( eris(kpart)%filter_eris( count ) ) then
-                                       !
-                                       if ( abs(ia%xyz_ip(3)-kg%xyz_cv(3)) < ( ia%radi + kg%radi) &
-                                             .and. abs(jb%xyz_cv(3)-ld%xyz_cv(3)) < ( jb%radi + ld%radi) ) then
-                                          !
-                                          call compute_eri_hoh( nsf_ia, nsf_jb, nsf_kg, nsf_ld, &
-                                                ia%spec,   jb%spec,   kg%spec,   ld%spec,  &
-                                                ia%xyz_ip, jb%xyz_cv, kg%xyz_cv, ld%xyz_cv,&
-                                                i_nt, j_nt, k_nt, l_nt,&
-                                                exx_mat_elem )
-                                          !
-                                       end if
-                                    end if
-                                    !
-                                    if (exx_debug) then
-                                       sum_eri_gto = sum_eri_gto + exx_mat_elem
-
-                                       write(unit_eri_debug,10) count, exx_mat_elem, &
-                                       '[',ia%ip, kg%global_num,'|',ld%global_num, jb%global_num,']', &
-                                       '(',nsf_ia,nsf_kg,  '|',nsf_ld,nsf_jb,  ')' , &
-                                       '[',ia%name,kg%name,'|',ld%name,jb%name,']' , &
-                                       '(',i_nt,k_nt,'|',l_nt,j_nt,')', &
-                                       ia%xyz_ip(3), kg%xyz_cv(3), ld%xyz_cv(3), jb%xyz_cv(3), &
-                                       ia%xyz_ip(1), kg%xyz_cv(1), ld%xyz_cv(1), jb%xyz_cv(1),&
-                                       ia%xyz_ip(2), kg%xyz_cv(2), ld%xyz_cv(2), jb%xyz_cv(2),&
-                                       sum_eri_gto
-                                    end if
-                                    !
-                                    if ( backup_eris ) then
-                                       !                                     
-                                       eris(kpart)%store_eris( count ) = exx_mat_elem
-                                       !
-                                    else
-                                       c(ncaddr + nsf_ia - 1) = c(ncaddr + nsf_ia - 1) + exx_mat_elem
-                                    end if
-                                    !                               
-                                    count = count + 1
-                                    !
-                                 end do ia_loop
-
+                                 !
+                                 call eri_gto_inner_calculation(ld, kg, jb, ia, nsf_ld, nsf_kg, nsf_jb, ncaddr, c, i_nt,  &
+                                             j_nt, k_nt, l_nt, backup_eris, store_eris_ptr, filter_eris_ptr)
+                                 !
                                else 
                                  !
                                  call cri_eri_inner_calculation(phi_l, phi_i, Ome_kj, nsf_ld, nsf_jb, nsf_kg, dv, K_val, &
-                                             ncaddr, ncbeg, ia%nsup, ewald_charge, work_out_3d, work_in_3d, c, &
+                                             ncaddr, ia%nsup, ewald_charge, work_out_3d, work_in_3d, c, &
                                              backup_eris, store_eris_ptr)
                                  !
                                end if 
@@ -1477,309 +1496,6 @@ contains
     !
     return
   end subroutine m_kern_exx_eri
-  !
-  !!****f* exx_kernel_default/m_kern_exx_gto *
-  !!
-  !!  NAME
-  !!   m_kern_exx_gto
-  !!
-  !!  PURPOSE
-  !!   Compute EXX matrix using GTO-ERI engine. For now
-  !!   default is the Taketa, Huzinaga, and O-ohata (HOH)
-  !!   approach as given in exx_erigto module
-  !!
-  !!  INPUTS
-  !!
-  !!  AUTHOR
-  !!   L.A.Truflandier
-  !!
-  !!  CREATION DATE
-  !!   2021/01/27
-  !!
-  !!  MODIFICATION HISTORY
-  !!
-  !!  SOURCE
-  !!
-  subroutine m_kern_exx_eri_gto(k_off, kpart, ib_nd_acc, ibaddr, nbnab, &
-       ibpart, ibseq, b, c, ahalo, chalo, & 
-       at, mx_absb, mx_part, lenb, lenc, backup_eris )
-
-    use numbers,        only: zero
-    use matrix_module,  only: matrix_halo, matrix_trans
-    !
-    use primary_module, only: bundle 
-    use cover_module,   only: BCS_parts
-    !
-    use exx_evalpao,    only: exx_phi_on_grid
-    !
-    use exx_evalgto,    only: exx_gto_on_grid_prim
-    !
-    use exx_types, only: prim_atomic_data, neigh_atomic_data,eris,  &
-         p_ngauss,unit_exx_debug, unit_eri_debug, sum_eri_gto
-    !
-    !use exx_memory, only: exx_mem_alloc
-    !
-    use exx_module, only: get_halodat, get_iprimdat
-    !
-    !use exx_poisson,only: exx_v_on_grid, exx_ewald_charge                       ! <-- Missing exx_v_on_grid
-    !
-    ! Not shared with m_kern_exx_eri
-    use exx_types, only: sum_eri_gto                                             ! <-- sum_eri_gto is not in m_kern_exx_eri
-    use exx_erigto, only: compute_eri_hoh                                        ! <-- compute_eri_hoh is not in m_kern_exx_eri
-    !
-    implicit none
-
-    ! Passed variables
-    type(matrix_halo),  intent(in)    :: ahalo, chalo
-    type(matrix_trans), intent(in)    :: at
-    integer,            intent(in)    :: mx_absb, mx_part, lenb, lenc
-    integer,            intent(in)    :: kpart, k_off
-    real(double),       intent(in)    :: b(lenb)
-    real(double),       intent(inout) :: c(lenc)
-    logical, intent(in) :: backup_eris
-    !
-    ! Remote indices
-    integer(integ), intent(in) :: ib_nd_acc(mx_part)
-    integer(integ), intent(in) :: ibaddr(mx_part)
-    integer(integ), intent(in) :: nbnab(mx_part)
-    integer(integ), intent(in) :: ibpart(mx_part*mx_absb)
-    integer(integ), intent(in) :: ibseq(mx_part*mx_absb)
-    !
-    ! Local variables
-    integer :: jbnab2ch(mx_absb)  ! Automatic array
-    integer :: nbkbeg, k, k_in_part, k_in_halo, j, jpart, jseq
-    integer :: i, i_in_prim, icad, nbbeg, j_in_halo, ncbeg
-    integer :: nb_nd_kbeg
-    integer :: nbaddr, ncaddr
-    integer :: l, lseq, lpart
-    integer :: np, ni
-    !
-    !
-    type(prim_atomic_data)  :: ia ! i_alpha
-    type(neigh_atomic_data) :: jb ! j_beta
-    type(neigh_atomic_data) :: kg ! k_gamma
-    type(neigh_atomic_data) :: ld ! l_delta
-    !                                                                            ! <-- Missing maxsuppfuncs
-    integer                 :: nsf_kg, nsf_ld, nsf_ia, nsf_jb
-    ! GTO
-    character(len=8) :: i_nt, j_nt, k_nt, l_nt
-    real(double)     :: xi, xj, xk, xl 
-    real(double)     :: yi, yj, yk, yl 
-    real(double)     :: zi, zj, zk, zl
-
-    real(double)     :: K_val,eri_gto
-    integer      :: count
-    !
-    count = 1
-    !
-!!$
-!!$ ****[ k loop ]****
-!!$
-    k_loop: do k = 1, ahalo%nh_part(kpart)
-       !
-       k_in_halo  = ahalo%j_beg(kpart) + k - 1
-       k_in_part  = ahalo%j_seq(k_in_halo)
-       nbkbeg     = ibaddr     (k_in_part) 
-       nb_nd_kbeg = ib_nd_acc  (k_in_part)
-       call get_halodat(kg,kg,k_in_part,ahalo%i_hbeg(ahalo%lab_hcover(kpart)), &
-            ahalo%lab_hcell(kpart),'k',.true.,unit_exx_debug)
-       !
-       xk = kg%xyz_cv(1)
-       yk = kg%xyz_cv(2)
-       zk = kg%xyz_cv(3)
-       !
-       jbnab2ch = 0
-       do j = 1, nbnab(k_in_part)
-          jpart = ibpart(nbkbeg+j-1) + k_off
-          jseq  = ibseq (nbkbeg+j-1)
-          jbnab2ch(j) = chalo%i_halo(chalo%i_hbeg(jpart)+jseq-1)
-       end do
-       !
-       nbbeg = nb_nd_kbeg
-       !
-!!$
-!!$ ****[ l do loop ]****
-!!$
-       l_loop: do l = 1, nbnab(k_in_part)
-          lpart = ibpart(nbkbeg+l-1) + k_off
-          lseq  = ibseq (nbkbeg+l-1)
-          call get_halodat(ld,kg,lseq,chalo%i_hbeg(lpart),         &
-               BCS_parts%lab_cell(BCS_parts%inv_lab_cover(lpart)), &
-               'l',.true.,unit_exx_debug)
-          !
-          xl = ld%xyz_cv(1)
-          yl = ld%xyz_cv(2)
-          zl = ld%xyz_cv(3)
-          !
-          ld_loop: do nsf_ld = 1, ld%nsup
-             !
-             nbaddr = nbbeg + kg%nsup * (nsf_ld - 1)
-             !
-             kg_loop: do nsf_kg = 1, kg%nsup                         
-                !
-                K_val = b(nbaddr+nsf_kg-1)
-!!$
-!!$ ****[ i loop ]****
-!!$
-                i_loop: do i = 1, at%n_hnab(k_in_halo)
-                   i_in_prim = at%i_prim(at%i_beg(k_in_halo)+i-1)
-                   ni  = bundle%iprim_seq (i_in_prim)
-                   np  = bundle%iprim_part(i_in_prim)
-                   icad  = (i_in_prim - 1) * chalo%ni_in_halo
-                   !
-                   call get_iprimdat(ia,kg,ni,i_in_prim,np,.true.,unit_exx_debug)          
-                   !
-                   xi = ia%xyz_ip(1)
-                   yi = ia%xyz_ip(2)
-                   zi = ia%xyz_ip(3)
-                   ! 
-!!$
-!!$ ****[ j loop ]****
-!!$
-                   j_loop: do j = 1, nbnab(k_in_part)                 
-                      j_in_halo = jbnab2ch(j)
-                      !
-                      if ( j_in_halo /= 0 ) then
-                         !
-                         ncbeg = chalo%i_h2d(icad + j_in_halo)
-                         !
-                         if ( ncbeg /= 0 ) then 
-                            jpart = ibpart(nbkbeg+j-1) + k_off
-                            jseq  = ibseq (nbkbeg+j-1)
-                            !
-                            call get_halodat(jb,kg,jseq,chalo%i_hbeg(jpart),         &
-                                 BCS_parts%lab_cell(BCS_parts%inv_lab_cover(jpart)), &
-                                 'j',.true.,unit_exx_debug)
-                            !
-                            xj = jb%xyz_cv(1)
-                            yj = jb%xyz_cv(2)
-                            zj = jb%xyz_cv(3)
-                            !
-                            jb_loop: do nsf_jb = 1, jb%nsup                                         
-                               !
-                               ncaddr = ncbeg + ia%nsup * (nsf_jb - 1)
-                               !                                                 ! <-- Missing calls to exx_ewald_charge and exx_v_on_grid
-                               !call start_timer(tmr_std_exx_poisson) 
-                               !work_out_3d = zero
-                               !work_in_3d  = phi_l(:,:,:,nsf_ld)*phi_j(:,:,:,nsf_jb)
-                               !
-                               !if (exx_psolver=='fftw' .and. exx_pscheme=='ewald') then
-                               !   call exx_ewald_charge(work_in_3d,extent,dv,ewald_charge)
-                               !   work_in_3d = work_in_3d - ewald_rho*ewald_charge
-                               !end if
-                               !
-                               !call exx_v_on_grid(inode,extent,work_in_3d,work_out_3d,r_int,   &
-                               !     exx_psolver,exx_pscheme,pulay_radius,p_omega,p_ngauss,p_gauss,&
-                               !     w_gauss,reckernel_3d)
-                               !
-                               !if (exx_psolver=='fftw' .and. exx_pscheme=='ewald') then
-                               !   work_out_3d = work_out_3d + ewald_pot*ewald_charge
-                               !end if
-                               !
-                               !call stop_timer(tmr_std_exx_poisson,.true.)
-
-                               ia_loop: do nsf_ia = 1, ia%nsup
-                                  !
-                                  exx_mat_elem = zero
-                                  !
-                                  if ( eris(kpart)%filter_eris( count ) ) then
-                                     !
-                                     if ( abs(ia%xyz_ip(3)-kg%xyz_cv(3)) < ( ia%radi + kg%radi) &
-                                          .and. abs(jb%xyz_cv(3)-ld%xyz_cv(3)) < ( jb%radi + ld%radi) ) then
-                                        !
-                                        call compute_eri_hoh( nsf_ia, nsf_jb, nsf_kg, nsf_ld, &
-                                             ia%spec,   jb%spec,   kg%spec,   ld%spec,  &
-                                             ia%xyz_ip, jb%xyz_cv, kg%xyz_cv, ld%xyz_cv,&
-                                             i_nt, j_nt, k_nt, l_nt,&
-                                             exx_mat_elem )
-                                        !
-                                     else
-                                        !
-                                        eri_gto = 0.0d0
-                                        !
-                                     end if
-                                  end if
-                                  !
-                                  if (exx_debug) then
-                                    sum_eri_gto = sum_eri_gto + exx_mat_elem
-
-                                        sum_eri_gto = sum_eri_gto + eri_gto
-
-                                        write(unit_eri_debug,10) count, eri_gto, &
-                                          '[',ia%ip, kg%global_num,'|',ld%global_num, jb%global_num,']', &
-                                          '(',nsf_ia,nsf_kg,  '|',nsf_ld,nsf_jb,  ')' , &
-                                          '[',ia%name,kg%name,'|',ld%name,jb%name,']' , &
-                                          '(',i_nt,k_nt,'|',l_nt,j_nt,')', &
-                                          ia%xyz_ip(3), kg%xyz_cv(3), ld%xyz_cv(3), jb%xyz_cv(3), &
-                                          ia%xyz_ip(1), kg%xyz_cv(1), ld%xyz_cv(1), jb%xyz_cv(1),&
-                                          ia%xyz_ip(2), kg%xyz_cv(2), ld%xyz_cv(2), jb%xyz_cv(2),&
-                                          sum_eri_gto
-                                        !
-                                  end if
-                                  !
-                                  if ( backup_eris ) then
-                                     !                                     
-                                     eris(kpart)%store_eris( count ) = exx_mat_elem                  ! <-- eri_gto instead of exx_mat_elem
-                                     !
-                                  else
-                                     c(ncaddr + nsf_ia - 1) = c(ncaddr + nsf_ia - 1) + exx_mat_elem  ! <-- eri_gto instead of exx_mat_elem
-                                     !
-                                  end if
-                                  !                               
-                                  count = count + 1
-                                  !
-                               end do ia_loop
-                               !
-                            end do jb_loop
-                            !
-                         end if
-                         !
-                      end if
-                      !
-                      !if ( exx_alloc ) call exx_mem_alloc(extent,jb%nsup,0,'phi_j','dealloc')
-                      !
-!!$
-!!$ ****[ j end loop ]****
-!!$                      
-                      !
-                   end do j_loop
-                   !
-                   !if ( exx_alloc ) call exx_mem_alloc(extent,ia%nsup,0,'phi_i','dealloc')  
-                   !
-!!$
-!!$ ****[ i end loop ]****
-!!$
-                   !
-                end do i_loop
-                !
-             end do kg_loop
-             !
-          end do ld_loop
-          !
-          !if ( exx_alloc ) call exx_mem_alloc(extent,ld%nsup,0,'phi_l','dealloc')  
-          !
-!!$
-!!$ ****[ l end loop ]****
-!!$
-          !
-       end do l_loop
-       !
-       nbbeg = nbbeg + ld%nsup*kg%nsup
-       !
-       !if ( exx_alloc ) call exx_mem_alloc(extent,kg%nsup,0,'phi_k','dealloc')
-       !
-!!$
-!!$ ****[ k end loop ]****
-!!$
-       !
-    end do k_loop
-    !
-    !
-!10  format(I8,X,2F16.10,X,A,2I4,A,2I4,A,4X,A,2I4,A,2I4,A,A,2A4,A,2A4,A,X,8F12.6)
-10  format(I8,X,1F16.10,X,A,2I4,A,2I4,A,4X,A,2I4,A,2I4,A,A,2A4,A,2A4,A,X,A,2A8,A,2A8,A,X,16F12.6)
-
-    return
-  end subroutine m_kern_exx_eri_gto
   !
   !!****f* exx_kernel_default/m_kern_exx_dummy *
   !!
@@ -2169,7 +1885,7 @@ contains
     ! << Local variables >>
     
     real(double) :: h
-    integer      :: i, ngrid
+    integer      :: i
  
 
     h = r_int/real(extent,double) 
