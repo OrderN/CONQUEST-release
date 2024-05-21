@@ -22,6 +22,7 @@ class ConquestBaseBenchmark(rfm.RunOnlyRegressionTest):
         self.executable = f"{self.conquest_base_dir}/bin/Conquest"
         self.num_cpus_per_task = self.num_cpus_per_task_param
         self.env_vars['OMP_NUM_THREADS'] = f'{self.num_cpus_per_task}'
+        self.env_vars['OMP_STACKSIZE'] = '100M'
 
         if self.current_partition.scheduler.registered_name == 'sge':
             # `self.num_tasks` or `self.num_cpus_per_task` may be `None`, here
@@ -42,39 +43,39 @@ class ConquestBaseBenchmark(rfm.RunOnlyRegressionTest):
     
     @performance_function('s', perf_key='exx_exx_setup_runtime')
     def extract_exx_setup_runtime_perf(self):
-        return sn.extractsingle(r'Time spent in exx_setup   time:\s=\s+(\S+)\s+s', self.stdout, 1, float)
+        return sn.extractsingle(r'Time spent in exx_setup\s+time:\s+=\s+(\S+)\ss', self.stdout, 1, float)
     
     @performance_function('s', perf_key='exx_exx_fetch_runtime')
     def extract_exx_fetch_runtime_perf(self):
-        return sn.extractsingle(r'Time spent in exx_fetch   time:\s=\s+(\S+)\s+s', self.stdout, 1, float)
+        return sn.extractsingle(r'Time spent in exx_fetch\s+time:\s+=\s+(\S+)\ss', self.stdout, 1, float)
     
     @performance_function('s', perf_key='exx_exx_evalpao_runtime')
     def extract_exx_evalpao_runtime_perf(self):
-        return sn.extractsingle(r'Time spent in exx_evalpao time:\s=\s+(\S+)\s+s', self.stdout, 1, float)
+        return sn.extractsingle(r'Time spent in exx_evalpao\s+time:\s+=\s+(\S+)\ss', self.stdout, 1, float)
     
     @performance_function('s', perf_key='exx_exx_poisson_runtime')
     def extract_exx_poisson_runtime_perf(self):
-        return sn.extractsingle(r'Time spent in exx_poisson time:\s=\s+(\S+)\s+s', self.stdout, 1, float)
+        return sn.extractsingle(r'Time spent in exx_poisson\s+time:\s+=\s+(\S+)\ss', self.stdout, 1, float)
     
     @performance_function('s', perf_key='exx_exx_accumul_runtime')
     def extract_exx_accumul_runtime_perf(self):
-        return sn.extractsingle(r'Time spent in exx_accumul time:\s=\s+(\S+)\s+s', self.stdout, 1, float)
+        return sn.extractsingle(r'Time spent in exx_accumul\s+time:\s+=\s+(\S+)\ss', self.stdout, 1, float)
     
     @performance_function('s', perf_key='exx_exx_allocat_runtime')
     def extract_exx_allocat_runtime_perf(self):
-        return sn.extractsingle(r'Time spent in exx_allocat time:\s=\s+(\S+)\s+s', self.stdout, 1, float)
+        return sn.extractsingle(r'Time spent in exx_allocat\s+time:\s+=\s+(\S+)\ss', self.stdout, 1, float)
     
     @performance_function('s', perf_key='exx_exx_dealloc_runtime')
     def extract_exx_dealloc_runtime_perf(self):
-        return sn.extractsingle(r'Time spent in exx_dealloc time:\s=\s+(\S+)\s+s', self.stdout, 1, float)
+        return sn.extractsingle(r'Time spent in exx_dealloc\s+time:\s+=\s+(\S+)\ss', self.stdout, 1, float)
     
     @performance_function('s', perf_key='exx_exx_kernel_runtime')
     def extract_exx_kernel_runtime_perf(self):
-        return sn.extractsingle(r'Time spent in exx_kernel  time:\s=\s+(\S+)\s+s', self.stdout, 1, float)
+        return sn.extractsingle(r'Time spent in exx_kernel\s+time:\s+=\s+(\S+)\ss', self.stdout, 1, float)
     
     @performance_function('s', perf_key='exx_exx_total_runtime')
     def extract_exx_total_runtime_perf(self):
-        return sn.extractsingle(r'Time spent in exx_total   time:\s=\s+(\S+)\s+s', self.stdout, 1, float)
+        return sn.extractsingle(r'Time spent in exx_total\s+time:\s+=\s+(\S+)\ss', self.stdout, 1, float)
 
     @performance_function('MB', perf_key='Memory')
     def extract_memory_perf(self):
