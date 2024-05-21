@@ -3378,6 +3378,9 @@ second:   do
   !!  MODIFICATION HISTORY
   !!   2011/10/20 09:59 dave
   !!    Syntax correction for rewind
+  !!   2024/05/21 TM
+  !!    Ordering has been changed from partition labeling to 
+  !!      ion_velocity -> atom_vel
   !!  SOURCE
   !!
   subroutine read_velocity(velocity, filename)
@@ -3392,24 +3395,15 @@ second:   do
     character(len=50),intent(in) :: filename
 
     ! Local variables
-    integer :: id_global, ni , ni2, id_tmp
-    integer :: lun
+    integer :: ni, id_tmp, lun
 
     if(inode == ionode) then
-       if(iprint_init>2) write(io_lun,'(10x,a40,a20)') 'Entering read_velocity; reading ', filename
+       if(iprint_init>2) write(io_lun,'(10x,a40,a20)') 'Entering NEW read_velocity; reading ', filename
        call io_assign(lun)
        open(unit=lun,file=filename)
        rewind(unit=lun)
-       do id_global=1,ni_in_cell
-          ni=id_glob_inv(id_global)
-          if(id_glob(ni) /= id_global) &
-               call cq_abort(' ERROR in global labelling ',id_global,id_glob(ni))
-          read(lun,101) id_tmp, ni2, velocity(1:3, ni)
-          if(ni2 /= ni) write(io_lun,fmt='(4x,a,i6,a,i6,a,i6)') &
-               ' Order of atom has changed for global id (file_labelling) = ',id_global, &
-               ' : corresponding labelling (NOprt labelling) used to be ',ni2,&
-               ' : but now it is ',ni
-101       format(2i8,3e20.12)
+       do ni=1,ni_in_cell
+          read(lun,*) id_tmp, velocity(1:3, ni)
        enddo
        call io_close(lun)
     endif  ! (inode == ionode) then
