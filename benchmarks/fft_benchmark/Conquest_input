@@ -1,0 +1,42 @@
+IO.Title  Adenine
+IO.Coordinates Alanine.in
+IO.Iprint  3
+IO.FractionalAtomicCoords T
+IO.WriteOutToFile F
+
+General.NumberOfSpecies  4
+General.NPartitionsX 2
+General.NPartitionsY 2
+General.NPartitionsZ 2
+Grid.GridCutoff 200
+General.vdWDFT T
+
+# Type of pseudopotential #
+General.PseudopotentialType  hamann
+
+#--- Finding minimum DM ---#
+DM.SolutionMethod  diagon
+DM.L_range 1.0
+
+#--- Energy minimisation ---#
+minE.SCTolerance  1e-8
+minE.SelfConsistent  T
+
+#--- Self consistency and charge density ---#
+SC.MaxIters  50
+
+#--- K-points ---#
+Diag.MPMesh T
+Diag.MPMeshX 1
+Diag.MPMeshY 1
+Diag.MPMeshZ 1
+
+#--- Moving atoms ---#
+AtomMove.TypeOfRun static
+
+%block ChemicalSpeciesLabel
+ 1  14.00  N
+ 2  12.09  C
+ 3  12.09  O
+ 4   1.00  H
+%endblock
