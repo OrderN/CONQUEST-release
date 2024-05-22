@@ -70,8 +70,6 @@ jobs:
             multiply_kernel: ompDojk
           - test_all_multiply_kernels: false
             multiply_kernel: ompGemm
-          - test_all_multiply_kernels: false
-            multiply_kernel: ompGemm_m
 
     steps:
     - uses: actions/checkout@v4
