@@ -41,39 +41,31 @@ class ConquestBaseBenchmark(rfm.RunOnlyRegressionTest):
     def extract_runtime_perf(self):
         return sn.extractsingle(r'Total run time was:\s+(\S+)\s+seconds', self.stdout, 1, float)
     
-    @performance_function('s', perf_key='exx_exx_setup_runtime')
+    @performance_function('s', perf_key='exx_setup_runtime')
     def extract_exx_setup_runtime_perf(self):
         return sn.extractsingle(r'Time spent in exx_setup\s+time:\s+=\s+(\S+)\ss', self.stdout, 1, float)
     
-    @performance_function('s', perf_key='exx_exx_fetch_runtime')
+    @performance_function('s', perf_key='exx_fetch_runtime')
     def extract_exx_fetch_runtime_perf(self):
         return sn.extractsingle(r'Time spent in exx_fetch\s+time:\s+=\s+(\S+)\ss', self.stdout, 1, float)
     
-    @performance_function('s', perf_key='exx_exx_evalpao_runtime')
+    @performance_function('s', perf_key='exx_evalpao_runtime')
     def extract_exx_evalpao_runtime_perf(self):
         return sn.extractsingle(r'Time spent in exx_evalpao\s+time:\s+=\s+(\S+)\ss', self.stdout, 1, float)
     
-    @performance_function('s', perf_key='exx_exx_poisson_runtime')
-    def extract_exx_poisson_runtime_perf(self):
-        return sn.extractsingle(r'Time spent in exx_poisson\s+time:\s+=\s+(\S+)\ss', self.stdout, 1, float)
-    
-    @performance_function('s', perf_key='exx_exx_accumul_runtime')
-    def extract_exx_accumul_runtime_perf(self):
-        return sn.extractsingle(r'Time spent in exx_accumul\s+time:\s+=\s+(\S+)\ss', self.stdout, 1, float)
-    
-    @performance_function('s', perf_key='exx_exx_allocat_runtime')
+    @performance_function('s', perf_key='exx_allocat_runtime')
     def extract_exx_allocat_runtime_perf(self):
         return sn.extractsingle(r'Time spent in exx_allocat\s+time:\s+=\s+(\S+)\ss', self.stdout, 1, float)
     
-    @performance_function('s', perf_key='exx_exx_dealloc_runtime')
+    @performance_function('s', perf_key='exx_dealloc_runtime')
     def extract_exx_dealloc_runtime_perf(self):
         return sn.extractsingle(r'Time spent in exx_dealloc\s+time:\s+=\s+(\S+)\ss', self.stdout, 1, float)
     
-    @performance_function('s', perf_key='exx_exx_kernel_runtime')
+    @performance_function('s', perf_key='exx_kernel_runtime')
     def extract_exx_kernel_runtime_perf(self):
         return sn.extractsingle(r'Time spent in exx_kernel\s+time:\s+=\s+(\S+)\ss', self.stdout, 1, float)
     
-    @performance_function('s', perf_key='exx_exx_total_runtime')
+    @performance_function('s', perf_key='exx_total_runtime')
     def extract_exx_total_runtime_perf(self):
         return sn.extractsingle(r'Time spent in exx_total\s+time:\s+=\s+(\S+)\ss', self.stdout, 1, float)
 
