@@ -74,6 +74,76 @@ class ConquestBaseBenchmark(rfm.RunOnlyRegressionTest):
         return sn.extractsingle(r'Max total mem use is\s+(\S+)\s+MB', self.stdout, 1, float)
 
 @rfm.simple_test
+class test_EXX_isol_C2H4_4proc_PBE0CRI_fullDZP_0_2(ConquestBaseBenchmark):
+
+    tags = {"test_EXX_isol_C2H4_4proc_PBE0CRI_fullDZP_0.2"}
+    num_tasks = 2
+    num_cpus_per_task_param = parameter([1,2,4,8])
+
+    @run_before('run')
+    def get_input(self):
+        self.prerun_cmds.append(f"cp {self.conquest_base_dir}/benchmarks/test_EXX_isol_C2H4_4proc_PBE0CRI_fullDZP_0.2/C_PBE_DZP_CQ.ion .")
+        self.prerun_cmds.append(f"cp {self.conquest_base_dir}/benchmarks/test_EXX_isol_C2H4_4proc_PBE0CRI_fullDZP_0.2/Conquest_coord .")
+        self.prerun_cmds.append(f"cp {self.conquest_base_dir}/benchmarks/test_EXX_isol_C2H4_4proc_PBE0CRI_fullDZP_0.2/Conquest_input .")
+        self.prerun_cmds.append(f"cp {self.conquest_base_dir}/benchmarks/test_EXX_isol_C2H4_4proc_PBE0CRI_fullDZP_0.2/H_PBE_DZP_CQ.ion .")
+
+@rfm.simple_test
+class test_EXX_isol_C2H4_4proc_PBE0CRI_fullDZP_0_4(ConquestBaseBenchmark):
+
+    tags = {"test_EXX_isol_C2H4_4proc_PBE0CRI_fullDZP_0.4"}
+    num_tasks = 2
+    num_cpus_per_task_param = parameter([1,2,4,8])
+
+    @run_before('run')
+    def get_input(self):
+        self.prerun_cmds.append(f"cp {self.conquest_base_dir}/benchmarks/test_EXX_isol_C2H4_4proc_PBE0CRI_fullDZP_0.4/C_PBE_DZP_CQ.ion .")
+        self.prerun_cmds.append(f"cp {self.conquest_base_dir}/benchmarks/test_EXX_isol_C2H4_4proc_PBE0CRI_fullDZP_0.4/Conquest_coord .")
+        self.prerun_cmds.append(f"cp {self.conquest_base_dir}/benchmarks/test_EXX_isol_C2H4_4proc_PBE0CRI_fullDZP_0.4/Conquest_input .")
+        self.prerun_cmds.append(f"cp {self.conquest_base_dir}/benchmarks/test_EXX_isol_C2H4_4proc_PBE0CRI_fullDZP_0.4/H_PBE_DZP_CQ.ion .")
+
+@rfm.simple_test
+class test_EXX_isol_C2H4_4proc_PBE0CRI_fullDZP_0_6(ConquestBaseBenchmark):
+
+    tags = {"test_EXX_isol_C2H4_4proc_PBE0CRI_fullDZP_0.6"}
+    num_tasks = 2
+    num_cpus_per_task_param = parameter([1,2,4,8])
+
+    @run_before('run')
+    def get_input(self):
+        self.prerun_cmds.append(f"cp {self.conquest_base_dir}/benchmarks/test_EXX_isol_C2H4_4proc_PBE0CRI_fullDZP_0.6/C_PBE_DZP_CQ.ion .")
+        self.prerun_cmds.append(f"cp {self.conquest_base_dir}/benchmarks/test_EXX_isol_C2H4_4proc_PBE0CRI_fullDZP_0.6/Conquest_coord .")
+        self.prerun_cmds.append(f"cp {self.conquest_base_dir}/benchmarks/test_EXX_isol_C2H4_4proc_PBE0CRI_fullDZP_0.6/Conquest_input .")
+        self.prerun_cmds.append(f"cp {self.conquest_base_dir}/benchmarks/test_EXX_isol_C2H4_4proc_PBE0CRI_fullDZP_0.6/H_PBE_DZP_CQ.ion .")
+
+@rfm.simple_test
+class test_EXX_isol_C2H4_4proc_PBE0CRI_fullSZP_0_4_SCF(ConquestBaseBenchmark):
+
+    tags = {"test_EXX_isol_C2H4_4proc_PBE0CRI_fullSZP_0.4_SCF"}
+    num_tasks = 2
+    num_cpus_per_task_param = parameter([1,2,4,8])
+
+    @run_before('run')
+    def get_input(self):
+        self.prerun_cmds.append(f"cp {self.conquest_base_dir}/benchmarks/test_EXX_isol_C2H4_4proc_PBE0CRI_fullSZP_0.4_SCF/C_PBE_SZP_CQ.ion .")
+        self.prerun_cmds.append(f"cp {self.conquest_base_dir}/benchmarks/test_EXX_isol_C2H4_4proc_PBE0CRI_fullSZP_0.4_SCF/Conquest_coord .")
+        self.prerun_cmds.append(f"cp {self.conquest_base_dir}/benchmarks/test_EXX_isol_C2H4_4proc_PBE0CRI_fullSZP_0.4_SCF/Conquest_input .")
+        self.prerun_cmds.append(f"cp {self.conquest_base_dir}/benchmarks/test_EXX_isol_C2H4_4proc_PBE0CRI_fullSZP_0.4_SCF/H_PBE_SZP_CQ.ion .")
+
+@rfm.simple_test
+class test_EXX_isol_C2H4_4proc_PBE0CRI_fullTZTP_0_6(ConquestBaseBenchmark):
+
+    tags = {"test_EXX_isol_C2H4_4proc_PBE0CRI_fullTZTP_0.6"}
+    num_tasks = 2
+    num_cpus_per_task_param = parameter([1,2,4,8])
+
+    @run_before('run')
+    def get_input(self):
+        self.prerun_cmds.append(f"cp {self.conquest_base_dir}/benchmarks/test_EXX_isol_C2H4_4proc_PBE0CRI_fullTZTP_0.6/C_PBE_TZTP_CQ.ion .")
+        self.prerun_cmds.append(f"cp {self.conquest_base_dir}/benchmarks/test_EXX_isol_C2H4_4proc_PBE0CRI_fullTZTP_0.6/Conquest_coord .")
+        self.prerun_cmds.append(f"cp {self.conquest_base_dir}/benchmarks/test_EXX_isol_C2H4_4proc_PBE0CRI_fullTZTP_0.6/Conquest_input .")
+        self.prerun_cmds.append(f"cp {self.conquest_base_dir}/benchmarks/test_EXX_isol_C2H4_4proc_PBE0CRI_fullTZTP_0.6/H_PBE_TZTP_CQ.ion .")
+
+@rfm.simple_test
 class test_EXX_isol_C2H4_4proc_PBE0ERI_fullSZP_0_4_SCF(ConquestBaseBenchmark):
 
     tags = {"test_EXX_isol_C2H4_4proc_PBE0ERI_fullSZP_0.4_SCF"}
@@ -88,18 +158,49 @@ class test_EXX_isol_C2H4_4proc_PBE0ERI_fullSZP_0_4_SCF(ConquestBaseBenchmark):
         self.prerun_cmds.append(f"cp {self.conquest_base_dir}/benchmarks/test_EXX_isol_C2H4_4proc_PBE0ERI_fullSZP_0.4_SCF/H_PBE_SZP_CQ.ion .")
 
 @rfm.simple_test
-class test_EXX_isol_C2H4_4proc_PBE0CRI_fullDZP_0_2(ConquestBaseBenchmark):
+class test_EXX_isol_C2H4_4proc_PBE0ERI_fullSZP_GTO_SCF(ConquestBaseBenchmark):
 
-    tags = {"test_EXX_isol_C2H4_4proc_PBE0CRI_fullDZP_0.2"}
+    tags = {"test_EXX_isol_C2H4_4proc_PBE0ERI_fullSZP_GTO_SCF"}
     num_tasks = 2
     num_cpus_per_task_param = parameter([1,2,4,8])
 
     @run_before('run')
     def get_input(self):
-        self.prerun_cmds.append(f"cp {self.conquest_base_dir}/benchmarks/test_EXX_isol_C2H4_4proc_PBE0CRI_fullDZP_0.2/C_PBE_DZP_CQ.ion .")
-        self.prerun_cmds.append(f"cp {self.conquest_base_dir}/benchmarks/test_EXX_isol_C2H4_4proc_PBE0CRI_fullDZP_0.2/Conquest_coord .")
-        self.prerun_cmds.append(f"cp {self.conquest_base_dir}/benchmarks/test_EXX_isol_C2H4_4proc_PBE0CRI_fullDZP_0.2/Conquest_input .")
-        self.prerun_cmds.append(f"cp {self.conquest_base_dir}/benchmarks/test_EXX_isol_C2H4_4proc_PBE0CRI_fullDZP_0.2/H_PBE_DZP_CQ.ion .")
+        self.prerun_cmds.append(f"cp {self.conquest_base_dir}/benchmarks/test_EXX_isol_C2H4_4proc_PBE0ERI_fullSZP_GTO_SCF/C_PBE_SZP_CQ.ion .")
+        self.prerun_cmds.append(f"cp {self.conquest_base_dir}/benchmarks/test_EXX_isol_C2H4_4proc_PBE0ERI_fullSZP_GTO_SCF/C.gto .")
+        self.prerun_cmds.append(f"cp {self.conquest_base_dir}/benchmarks/test_EXX_isol_C2H4_4proc_PBE0ERI_fullSZP_GTO_SCF/Conquest_coord .")
+        self.prerun_cmds.append(f"cp {self.conquest_base_dir}/benchmarks/test_EXX_isol_C2H4_4proc_PBE0ERI_fullSZP_GTO_SCF/Conquest_input .")
+        self.prerun_cmds.append(f"cp {self.conquest_base_dir}/benchmarks/test_EXX_isol_C2H4_4proc_PBE0ERI_fullSZP_GTO_SCF/H_PBE_SZP_CQ.ion .")
+        self.prerun_cmds.append(f"cp {self.conquest_base_dir}/benchmarks/test_EXX_isol_C2H4_4proc_PBE0ERI_fullSZP_GTO_SCF/H.gto .")
+
+@rfm.simple_test
+class test_EXX_isol_C6H6_4proc_PBE0CRI_fullDZP_0_6(ConquestBaseBenchmark):
+
+    tags = {"test_EXX_isol_C6H6_4proc_PBE0CRI_fullDZP_0.6"}
+    num_tasks = 2
+    num_cpus_per_task_param = parameter([1,2,4,8])
+
+    @run_before('run')
+    def get_input(self):
+        self.prerun_cmds.append(f"cp {self.conquest_base_dir}/benchmarks/test_EXX_isol_C6H6_4proc_PBE0CRI_fullDZP_0.6/C_PBE_DZP_CQ.ion .")
+        self.prerun_cmds.append(f"cp {self.conquest_base_dir}/benchmarks/test_EXX_isol_C6H6_4proc_PBE0CRI_fullDZP_0.6/Conquest_coord .")
+        self.prerun_cmds.append(f"cp {self.conquest_base_dir}/benchmarks/test_EXX_isol_C6H6_4proc_PBE0CRI_fullDZP_0.6/Conquest_input .")
+        self.prerun_cmds.append(f"cp {self.conquest_base_dir}/benchmarks/test_EXX_isol_C6H6_4proc_PBE0CRI_fullDZP_0.6/H_PBE_DZP_CQ.ion .")
+
+@rfm.simple_test
+class test_EXX_isol_C6H6_4proc_PBE0CRI_fullSZP_0_6(ConquestBaseBenchmark):
+
+    tags = {"test_EXX_isol_C6H6_4proc_PBE0CRI_fullSZP_0.6"}
+    num_tasks = 2
+    num_cpus_per_task_param = parameter([1,2,4,8])
+
+    @run_before('run')
+    def get_input(self):
+        self.prerun_cmds.append(f"cp {self.conquest_base_dir}/benchmarks/test_EXX_isol_C6H6_4proc_PBE0CRI_fullSZP_0.6/C_PBE_SZP_CQ.ion .")
+        self.prerun_cmds.append(f"cp {self.conquest_base_dir}/benchmarks/test_EXX_isol_C6H6_4proc_PBE0CRI_fullSZP_0.6/Conquest_coord .")
+        self.prerun_cmds.append(f"cp {self.conquest_base_dir}/benchmarks/test_EXX_isol_C6H6_4proc_PBE0CRI_fullSZP_0.6/Conquest_input .")
+        self.prerun_cmds.append(f"cp {self.conquest_base_dir}/benchmarks/test_EXX_isol_C6H6_4proc_PBE0CRI_fullSZP_0.6/H_PBE_SZP_CQ.ion .")
+
 
 # @rfm.simple_test
 # class Water64(ConquestBaseBenchmark):
