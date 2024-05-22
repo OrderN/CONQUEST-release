@@ -20,6 +20,7 @@ class ConquestBaseBenchmark(rfm.RunOnlyRegressionTest):
     @run_after('setup')
     def setup_variables(self):
         self.executable = f"{self.conquest_base_dir}/bin/Conquest"
+        self.num_tasks = self.num_tasks_param
         self.num_cpus_per_task = self.num_cpus_per_task_param
         self.env_vars['OMP_NUM_THREADS'] = f'{self.num_cpus_per_task}'
         self.env_vars['OMP_STACKSIZE'] = '100M'
@@ -77,7 +78,7 @@ class ConquestBaseBenchmark(rfm.RunOnlyRegressionTest):
 class test_EXX_isol_C2H4_4proc_PBE0CRI_fullDZP_0_2(ConquestBaseBenchmark):
 
     tags = {"test_EXX_isol_C2H4_4proc_PBE0CRI_fullDZP_0.2"}
-    num_tasks = 2
+    num_tasks_param = parameter([2,4,8])
     num_cpus_per_task_param = parameter([1,2,4,8])
 
     @run_before('run')
@@ -91,7 +92,7 @@ class test_EXX_isol_C2H4_4proc_PBE0CRI_fullDZP_0_2(ConquestBaseBenchmark):
 class test_EXX_isol_C2H4_4proc_PBE0CRI_fullDZP_0_4(ConquestBaseBenchmark):
 
     tags = {"test_EXX_isol_C2H4_4proc_PBE0CRI_fullDZP_0.4"}
-    num_tasks = 2
+    num_tasks_param = parameter([2,4,8])
     num_cpus_per_task_param = parameter([1,2,4,8])
 
     @run_before('run')
@@ -105,7 +106,7 @@ class test_EXX_isol_C2H4_4proc_PBE0CRI_fullDZP_0_4(ConquestBaseBenchmark):
 class test_EXX_isol_C2H4_4proc_PBE0CRI_fullDZP_0_6(ConquestBaseBenchmark):
 
     tags = {"test_EXX_isol_C2H4_4proc_PBE0CRI_fullDZP_0.6"}
-    num_tasks = 2
+    num_tasks_param = parameter([2,4,8])
     num_cpus_per_task_param = parameter([1,2,4,8])
 
     @run_before('run')
@@ -119,7 +120,7 @@ class test_EXX_isol_C2H4_4proc_PBE0CRI_fullDZP_0_6(ConquestBaseBenchmark):
 class test_EXX_isol_C2H4_4proc_PBE0CRI_fullSZP_0_4_SCF(ConquestBaseBenchmark):
 
     tags = {"test_EXX_isol_C2H4_4proc_PBE0CRI_fullSZP_0.4_SCF"}
-    num_tasks = 2
+    num_tasks_param = parameter([2,4,8])
     num_cpus_per_task_param = parameter([1,2,4,8])
 
     @run_before('run')
@@ -133,7 +134,7 @@ class test_EXX_isol_C2H4_4proc_PBE0CRI_fullSZP_0_4_SCF(ConquestBaseBenchmark):
 class test_EXX_isol_C2H4_4proc_PBE0CRI_fullTZTP_0_6(ConquestBaseBenchmark):
 
     tags = {"test_EXX_isol_C2H4_4proc_PBE0CRI_fullTZTP_0.6"}
-    num_tasks = 2
+    num_tasks_param = parameter([2,4,8])
     num_cpus_per_task_param = parameter([1,2,4,8])
 
     @run_before('run')
@@ -147,7 +148,7 @@ class test_EXX_isol_C2H4_4proc_PBE0CRI_fullTZTP_0_6(ConquestBaseBenchmark):
 class test_EXX_isol_C2H4_4proc_PBE0ERI_fullSZP_0_4_SCF(ConquestBaseBenchmark):
 
     tags = {"test_EXX_isol_C2H4_4proc_PBE0ERI_fullSZP_0.4_SCF"}
-    num_tasks = 2
+    num_tasks_param = parameter([2,4,8])
     num_cpus_per_task_param = parameter([1,2,4,8])
 
     @run_before('run')
@@ -161,7 +162,7 @@ class test_EXX_isol_C2H4_4proc_PBE0ERI_fullSZP_0_4_SCF(ConquestBaseBenchmark):
 class test_EXX_isol_C2H4_4proc_PBE0ERI_fullSZP_GTO_SCF(ConquestBaseBenchmark):
 
     tags = {"test_EXX_isol_C2H4_4proc_PBE0ERI_fullSZP_GTO_SCF"}
-    num_tasks = 2
+    num_tasks_param = parameter([2,4,8])
     num_cpus_per_task_param = parameter([1,2,4,8])
 
     @run_before('run')
@@ -177,7 +178,7 @@ class test_EXX_isol_C2H4_4proc_PBE0ERI_fullSZP_GTO_SCF(ConquestBaseBenchmark):
 class test_EXX_isol_C6H6_4proc_PBE0CRI_fullDZP_0_6(ConquestBaseBenchmark):
 
     tags = {"test_EXX_isol_C6H6_4proc_PBE0CRI_fullDZP_0.6"}
-    num_tasks = 2
+    num_tasks_param = parameter([2,4,8])
     num_cpus_per_task_param = parameter([1,2,4,8])
 
     @run_before('run')
@@ -191,7 +192,7 @@ class test_EXX_isol_C6H6_4proc_PBE0CRI_fullDZP_0_6(ConquestBaseBenchmark):
 class test_EXX_isol_C6H6_4proc_PBE0CRI_fullSZP_0_6(ConquestBaseBenchmark):
 
     tags = {"test_EXX_isol_C6H6_4proc_PBE0CRI_fullSZP_0.6"}
-    num_tasks = 2
+    num_tasks_param = parameter([2,4,8])
     num_cpus_per_task_param = parameter([1,2,4,8])
 
     @run_before('run')
@@ -206,7 +207,7 @@ class test_EXX_isol_C6H6_4proc_PBE0CRI_fullSZP_0_6(ConquestBaseBenchmark):
 # class Water64(ConquestBaseBenchmark):
 
 #     tags = {"water64"}
-#     num_tasks = 8
+#     num_tasks_param = 8
 #     num_cpus_per_task = 4
 
 #     @run_before('run')
