@@ -3379,8 +3379,8 @@ second:   do
   !!   2011/10/20 09:59 dave
   !!    Syntax correction for rewind
   !!   2024/05/21 TM
-  !!    Ordering has been changed from partition labeling to 
-  !!      ion_velocity -> atom_vel
+  !!    Ordering has been changed from partition labeling to the globa one (in coordinate file)
+  !!    I assume the passed array will be changed from ion_velocity -> atom_vel
   !!  SOURCE
   !!
   subroutine read_velocity(velocity, filename)
