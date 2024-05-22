@@ -140,11 +140,6 @@ contains
     !
     use input_module, only: fdf_boolean
     !
-    !**<lat>** ISF Poisson solver Will be available in the forthcoming version 
-    !use Poisson_Solver, only: createBeylkin
-    !use exx_types,      only: grid_spacing
-    !use exx_types,      only: isf_order, ngrid
-    !
     implicit none
 
     integer, intent(in), optional :: level
@@ -188,9 +183,6 @@ contains
     !
     !==============================================================================================================
 
-    !open(200)
-
-    
     !****lat<$
     if (       present(level) ) backtrace_level = level+1
     if ( .not. present(level) ) backtrace_level = -10
@@ -215,13 +207,8 @@ contains
              !
           else
    
-             !inquire(file=filename3, exist=exist)
-             !if ( exist ) then
              open(unit_timers_write,file=file_exx_timers,status='old', position='append')
              open(unit_memory_write,file=file_exx_memory,status='old', position='append')
-             !else
-             !   open(unit_timers_write,file=filename3,status='new')
-             !end if
           end if
        else 
           unit_timers_write = 6
@@ -251,18 +238,6 @@ contains
           open(unit_eri_filter_debug,file=file_eri_filter_debug,status='old', position='append')
           !
        end if
-
-       !call io_assign(unit_eri_debug)
-       !call get_file_name('eri_debug',numprocs,inode,file_eri_debug)
-       !inquire(file=filename6, exist=exist)
-       !if ( exist ) then
-       !   open(unit_eri_debug,file=filename6,status='old', position='append')
-       !else
-       !open(unit_eri_debug,file=file_eri_debug)
-       !end if
-       !
-       !call exx_write_head(unit_exx_debug,inode,bundle%groups_on_node) 
-       !call exx_global_write()
        !
     end if
     !
@@ -290,9 +265,6 @@ contains
           call exx_scal_rho_3d(inode,extent,r_int,exx_pscheme,pulay_radius, &
                p_omega,p_ngauss,p_gauss,w_gauss,reckernel_3d)
        
-          !call plot1d_obj(ewald_rho,extent,r_int,123,'ewald_rho.dat')
-          !call plot1d_obj(ewald_pot,extent,r_int,123,'ewald_pot.dat')
-          
        case('pulay')
           call exx_scal_rho_3d(inode,extent,r_int,exx_pscheme,pulay_radius, &
                p_omega,p_ngauss,p_gauss,w_gauss,reckernel_3d)
@@ -305,9 +277,6 @@ contains
           call cq_abort('EXX Gaussian representation if 1/r for solving &
                &the Poisson equation &
                &is currently under testing...')
-          !call createBeylkin(p_gauss,w_gauss,r_int)     
-          !call exx_scal_rho_3d(inode,extent,r_int,exx_pscheme,pulay_radius, &
-          !     p_omega,p_ngauss,p_gauss,w_gauss)
 
        case default
           call exx_scal_rho_3d(inode,extent,r_int,exx_pscheme,pulay_radius, &
@@ -318,18 +287,9 @@ contains
     else if (exx_psolver == 'isf') then
        call cq_abort('EXX with ISF Poisson solver disabled')  
        !
-       !call exx_mem_alloc(extent,0,0,'isf_rho','alloc')
-       !call createKernel('F',ngrid,ngrid,ngrid,grid_spacing,grid_spacing,grid_spacing,isf_order,&
-       !     0,1,kernel)  
-       
     end if
     call stop_timer(tmr_std_exx_setup,.true.)
     !    
-    !DRB! Zero matrix - spin polarised possible - fix this later ? 
-    !DRB! Where is matX allocated ? immi
-    !call matrix_scale(zero, matX(1))
-    !
-    !
     if ( .not. exx_alloc ) then
        !
        if ( scheme > 0 ) then
@@ -449,8 +409,7 @@ contains
                   5*mult(S_X_SX)%parts%mx_mem_grp*mult(S_X_SX)%bmat(  exxspin  )%mx_abs) then
                 call cq_abort('mat_mult: error pointing to part_array ',kpart)
              end if
-             ! Create ibpart_rem
-             
+
              call start_timer(tmr_std_exx_comms)
              call end_part_comms(myid,n_cont,nbnab_rem,ibind_rem,npxyz_rem,&
                   ibpart_rem,ncover_yz,mult(S_X_SX)%gcs%ncoverz)
@@ -886,7 +845,7 @@ contains
   !
   subroutine eri_gto_inner_calculation(ld, kg, jb, ia, nsf_ld, nsf_kg, nsf_jb, &
                ncaddr, c, i_nt, j_nt, k_nt, l_nt, backup_eris, store_eris_ptr, &
-               filter_eris_ptr)
+               filter_eris_ptr, should_compute_eri_hoh)
 
          use exx_poisson, only: exx_v_on_grid, exx_ewald_charge
 
@@ -906,7 +865,7 @@ contains
          integer,                 intent(in)    :: ncaddr
          real(double),            intent(inout) :: c(:)
          character(len=8),        intent(inout) :: i_nt, j_nt, k_nt, l_nt
-         logical,                 intent(in)    :: backup_eris
+         logical,                 intent(in)    :: backup_eris, should_compute_eri_hoh
          real(double), pointer,   intent(inout) :: store_eris_ptr(:,:)
          logical,      pointer,   intent(inout) :: filter_eris_ptr(:,:)
          integer      :: nsf_ia
@@ -916,18 +875,14 @@ contains
             !
             exx_mat_elem = zero
             !
-            if ( filter_eris_ptr( nsf_ia, nsf_jb ) ) then
+            if ( should_compute_eri_hoh .and. filter_eris_ptr( nsf_ia, nsf_jb ) ) then
                !
-               if ( abs(ia%xyz_ip(3)-kg%xyz_cv(3)) < ( ia%radi + kg%radi) &
-                     .and. abs(jb%xyz_cv(3)-ld%xyz_cv(3)) < ( jb%radi + ld%radi) ) then
-                  !
-                  call compute_eri_hoh( nsf_ia, nsf_jb, nsf_kg, nsf_ld, &
-                        ia%spec,   jb%spec,   kg%spec,   ld%spec,  &
-                        ia%xyz_ip, jb%xyz_cv, kg%xyz_cv, ld%xyz_cv,&
-                        i_nt, j_nt, k_nt, l_nt,&
-                        exx_mat_elem )
-                  !
-               end if
+               call compute_eri_hoh( nsf_ia, nsf_jb, nsf_kg, nsf_ld, &
+                     ia%spec,   jb%spec,   kg%spec,   ld%spec,  &
+                     ia%xyz_ip, jb%xyz_cv, kg%xyz_cv, ld%xyz_cv,&
+                     i_nt, j_nt, k_nt, l_nt,&
+                     exx_mat_elem )
+               !
             end if
             !
             if ( backup_eris ) then
@@ -1310,7 +1265,7 @@ contains
     !
     integer                 :: nsf_kg, nsf_ld, nsf_jb, count
     !
-    logical :: should_allocate
+    logical :: should_allocate, should_compute_eri_hoh
     !
     ! m_kern_exx_eri_gto variables
     character(len=8) :: i_nt, j_nt, k_nt, l_nt
@@ -1420,13 +1375,16 @@ contains
                             filter_eris_ptr(1:ia%nsup, 1:jb%nsup) => eris(kpart)%filter_eris(count+1:count + (jb%nsup * ia%nsup))
                             count = count + (jb%nsup * ia%nsup)
                             !
-                            !$omp parallel default(none) reduction(+: c)                                                         &
-                            !$omp     shared(ld, kg, jb, ia, nsf_kg,nsf_ld,ncbeg,phi_k,phi_j,phi_l,phi_i,extent,dv,eris,K_val,   &
-                            !$omp            backup_eris, phi_i_1d_buffer,kpart,store_eris_ptr,filter_eris_ptr,is_gto)           &
-                            !$omp     private(nsf_jb,work_out_3d,work_in_3d,ewald_charge,Ome_kj_1d_buffer,Ome_kj,ncaddr,i_nt,    &
-                            !$omp             j_nt,k_nt,l_nt)
+                            should_compute_eri_hoh = abs(ia%xyz_ip(3)-kg%xyz_cv(3)) < ( ia%radi + kg%radi) &
+                                             .and. abs(jb%xyz_cv(3)-ld%xyz_cv(3)) < ( jb%radi + ld%radi)
                             !
-                            ! TODO include bounds in Ome_kj_1d_buffer and store_eris
+                            !$omp parallel default(none) reduction(+: c)                                                   &
+                            !$omp     shared(ld,kg,jb,ia,nsf_kg,nsf_ld,ncbeg,phi_k,phi_j,phi_l,phi_i,extent,dv,eris,K_val, &
+                            !$omp            backup_eris,phi_i_1d_buffer,kpart,store_eris_ptr,filter_eris_ptr,is_gto,      &
+                            !$omp            should_compute_eri_hoh)                                                       &
+                            !$omp     private(nsf_jb,work_out_3d,work_in_3d,ewald_charge,Ome_kj_1d_buffer,Ome_kj,ncaddr,   &
+                            !$omp             i_nt,j_nt,k_nt,l_nt)
+                            !
                             Ome_kj(1:2*extent+1, 1:2*extent+1, 1:2*extent+1) => Ome_kj_1d_buffer
                             !$omp do schedule(runtime)
                             jb_loop: do nsf_jb = 1, jb%nsup
@@ -1435,8 +1393,8 @@ contains
                                !
                                if (is_gto) then
                                  !
-                                 call eri_gto_inner_calculation(ld, kg, jb, ia, nsf_ld, nsf_kg, nsf_jb, ncaddr, c, i_nt,  &
-                                             j_nt, k_nt, l_nt, backup_eris, store_eris_ptr, filter_eris_ptr)
+                                 call eri_gto_inner_calculation(ld, kg, jb, ia, nsf_ld, nsf_kg, nsf_jb, ncaddr, c, i_nt, j_nt, &
+                                             k_nt, l_nt, backup_eris, store_eris_ptr, filter_eris_ptr, should_compute_eri_hoh)
                                  !
                                else 
                                  !
