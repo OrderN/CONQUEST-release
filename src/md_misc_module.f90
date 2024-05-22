@@ -137,20 +137,24 @@ contains
        ! unified md checkpoint file easier - zamaan
        ion_velocity = zero
        if (flag_read_velocity) then
-          call read_velocity(ion_velocity, file_velocity)
+          !call read_velocity(ion_velocity, file_velocity)
+          call read_velocity(atom_vels, file_velocity)
+          do i=1,ni_in_cell
+            ion_velocity(1,i) = atom_vels(1,id_glob(i))
+            ion_velocity(2,i) = atom_vels(2,id_glob(i))
+            ion_velocity(3,i) = atom_vels(3,id_glob(i))
+          end do
        else
           if(temp_ion > RD_ERR) then
              call init_velocity(ni_in_cell, temp_ion, ion_velocity, ion_ke)
           end if
+          ! atom_vels : 2020/Jul/30 -> 2024/May/21
+          do i=1,ni_in_cell
+             atom_vels(1,id_glob(i)) = ion_velocity(1,i)
+             atom_vels(2,id_glob(i)) = ion_velocity(2,i)
+             atom_vels(3,id_glob(i)) = ion_velocity(3,i)
+          end do
        end if
-
-       ! atom_vels : 2020/Jul/30
-       do i=1,ni_in_cell
-          atom_vels(1,id_glob(i)) = ion_velocity(1,i)
-          atom_vels(2,id_glob(i)) = ion_velocity(2,i)
-          atom_vels(3,id_glob(i)) = ion_velocity(3,i)
-       end do
-
     end if
 
     if(leqi(md_thermo_type,'svr').AND.md_tau_T<zero) then
