@@ -1124,7 +1124,7 @@ contains
                    !$omp     private(nsf_kg,nsf_jb,work_out_3d,work_in_3d,ewald_charge,Ome_kj_1d_buffer, &
                    !$omp             Ome_kj,ncaddr)
                    Ome_kj(1:2*extent+1, 1:2*extent+1, 1:2*extent+1) => Ome_kj_1d_buffer
-                   !$omp do schedule(runtime) collapse(2)
+                   !$omp do schedule(dynamic) collapse(2)
                    do nsf_kg = 1, kg%nsup
                       do nsf_jb = 1, jb%nsup
                          !
