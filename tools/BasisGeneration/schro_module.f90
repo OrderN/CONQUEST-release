@@ -90,7 +90,8 @@ contains
 
     use datatypes
     use numbers
-    use mesh, ONLY: rr, nmesh
+    use mesh, ONLY: rr, nmesh, drdi_squared, rr_squared,drdi
+    use radial_xc, ONLY: get_vxc
     
     implicit none
 
@@ -99,33 +100,59 @@ contains
     real(double), dimension(nmesh) :: vha, vxc
 
     ! Local variables
-    integer :: i_shell, ell, en
-    real(double) :: radius_large, large_energy
-    real(double), allocatable, dimension(:) :: psi
+    integer :: i_shell, ell, en, i
+    real(double) :: radius_large, large_energy, resid, alpha_scf, total_charge, check
+    real(double), allocatable, dimension(:) :: psi, newcharge
 
-    allocate(psi(nmesh))
+    allocate(psi(nmesh),newcharge(nmesh))
     psi = zero
+    newcharge = zero
+    alpha_scf = 0.5_double
     
     if(iprint>2) write(*,fmt='(/2x,"Finding unconfined energies for valence states")')
-    do i_shell = 1, val%n_occ
-       if(iprint>2) write(*,fmt='(2x,"n=",i2," l=",i2)') val%n(i_shell), val%l(i_shell)
-       radius_large = rr(nmesh)
-       ell = val%l(i_shell)
-       en = val%npao(i_shell)
-       large_energy = val%en_ps(i_shell)
-       call find_eigenstate_and_energy_vkb(i_species,en,ell,radius_large, psi,large_energy,vha,vxc)
-       val%en_pao(i_shell) = large_energy
-    end do
-    if(iprint>0) then
-       write(*,fmt='(/2x,"Unconfined valence state energies (Ha)")')
-       write(*,fmt='(2x,"  n  l         AE energy        PAO energy")')
+    resid = one
+    do while(resid>1e-8_double)
+       newcharge = zero
        do i_shell = 1, val%n_occ
+          if(iprint>2) write(*,fmt='(2x,"n=",i2," l=",i2)') val%n(i_shell), val%l(i_shell)
+          radius_large = rr(nmesh)
           ell = val%l(i_shell)
-          en = val%n(i_shell)
-          write(*,fmt='(2x,2i3,2f18.10)') en, ell, val%en_ps(i_shell), &
-               val%en_pao(i_shell)
+          en = val%npao(i_shell)
+          large_energy = val%en_ps(i_shell)
+          call find_eigenstate_and_energy_vkb(i_species,en,ell,radius_large, psi,large_energy,vha,vxc)
+          val%en_pao(i_shell) = large_energy
+          if(ell==0) then
+             newcharge = newcharge + val%occ(i_shell)*psi*psi
+          else if(ell==1) then
+             newcharge = newcharge + val%occ(i_shell)*psi*psi*rr*rr
+          else if(ell==2) then
+             newcharge = newcharge + val%occ(i_shell)*psi*psi*rr*rr*rr*rr
+          end if
        end do
-    end if
+       resid = zero
+       total_charge = zero
+       check = zero
+       do i=1,nmesh
+          resid = resid + drdi(i)*rr_squared(i)*(local_and_vkb%charge(i)-newcharge(i))**2
+          total_charge = total_charge + drdi(i)*rr_squared(i)*newcharge(i)
+          check = check + drdi(i)*rr_squared(i)*local_and_vkb%charge(i)
+       end do
+       write(*,*) 'Residual is ',resid, total_charge, check
+       local_and_vkb%charge = alpha_scf*newcharge + (one-alpha_scf)*local_and_vkb%charge
+       if(iprint>0) then
+          write(*,fmt='(/2x,"Unconfined valence state energies (Ha)")')
+          write(*,fmt='(2x,"  n  l         AE energy        PAO energy")')
+          do i_shell = 1, val%n_occ
+             ell = val%l(i_shell)
+             en = val%n(i_shell)
+             write(*,fmt='(2x,2i3,2f18.10)') en, ell, val%en_ps(i_shell), &
+                  val%en_pao(i_shell)
+             val%en_ps(i_shell) = val%en_pao(i_shell)
+          end do
+       end if
+       call radial_hartree(nmesh,local_and_vkb%charge,vha)
+       call get_vxc(nmesh,rr,local_and_vkb%charge,vxc)
+    end do
     return
   end subroutine find_unconfined_valence_states
 
@@ -485,6 +512,7 @@ contains
     use mesh, ONLY: nmesh, rr, delta_r_reg, interpolate, make_mesh_reg, convert_r_to_i
     use pseudo_tm_info, ONLY: pseudo, rad_alloc
     use write, ONLY: write_pao_plot
+    use read, ONLY: ps_format, oncvpsp
 
     implicit none
 
@@ -507,9 +535,11 @@ contains
        do i=1,local_and_vkb%n_proj(ell)
           j = j+1
           ! Scale projector by r**(l+1)
+          !if(ps_format==oncvpsp) then
           do k=0,ell
              local_and_vkb%projector(:,i,ell) = local_and_vkb%projector(:,i,ell)/rr
           end do
+          !end if
           ! Find actual cutoff: two successive points with magnitude less than RD_ERR
           ! We may want to start this somewhere r=0.1 to avoid errors
           nrc = local_and_vkb%ngrid_vkb
@@ -624,7 +654,8 @@ contains
     write(*,fmt='(4x,"  n  l   delta E (Ha) delta E (eV)")')
     ! Loop over valence states, find large/small cutoffs
     do i_shell = 1, val%n_occ !paos%n_shells-1 
-       if(iprint>3) write(*,*) '# Finding radius for ',paos%npao(i_shell), paos%l(i_shell)
+       if(iprint>3) write(*,*) '# Finding radius for ',paos%npao(i_shell), paos%l(i_shell), &
+            val%en_ps(i_shell)+deltaE_large_radius
        call find_radius_from_energy(i_species,paos%npao(i_shell), paos%l(i_shell), &
             large_cutoff(i_shell), val%en_ps(i_shell)+deltaE_large_radius, vha, vxc, .false.)
        ! Round to grid step
@@ -758,7 +789,7 @@ contains
     nmax = nmesh
     n_crossings = 0
     if(flag_use_semilocal) then
-       !write(*,*) '# Using semi-local potential'
+       write(*,*) '# Using semi-local potential'
        do i=1,nmesh
           potential(i) = local_and_vkb%semilocal_potential(i,ell) + vha(i) + vxc(i)
           g_temp = (drdi_squared(i)*(two*(energy - potential(i))-l_l_plus_one/rr_squared(i)) - alpha_sq_over_four)/twelve
@@ -778,7 +809,7 @@ contains
           end if
        end do
     else
-       !write(*,*) '# Using VKB potentials'
+       write(*,*) '# Using VKB potentials'
        do i=1,nmesh
           potential(i) = local_and_vkb%local(i) + vha(i) + vxc(i)
           g_temp = (drdi_squared(i)*(two*(energy - potential(i))-l_l_plus_one/rr_squared(i)) - alpha_sq_over_four)/twelve
@@ -801,6 +832,7 @@ contains
              end if
           end do
        end if
+       write(*,*) '# Crossings, nodes: ',n_crossings, n_nodes
        if(n_crossings<n_nodes+1) call cq_abort("Failed to find confined state - please check input")
     end if
     ! Find radius by integrating outwards
@@ -858,7 +890,7 @@ contains
     n_nodes = en - ell - 1 
     allocate(f(nmesh),potential(nmesh))
     if(abs(energy)<RD_ERR) then
-       e_lower = -zval!-zval*zval/real(en*en,double)
+       e_lower = -two*zval!-zval*zval/real(en*en,double)
     else if(energy<zero) then
        e_lower = energy*1.2_double
     else ! Unbound (polarisation) state
@@ -1008,7 +1040,7 @@ contains
        end if
        if(abs(d_energy)<tol) exit
     end do
-    if(loop>=100.AND.abs(d_energy)>tol) call cq_abort("Error: failed to find energy for n,l: ",en,ell)
+    if(loop>=n_loop.AND.abs(d_energy)>tol) call cq_abort("Error: failed to find energy for n,l: ",en,ell)
     if(iprint>2) write(*,fmt='(2x,"Final energy found: ",f11.6," Ha")') energy
     ! Rescale - remove factor of sqrt r
     do i=1,nmax

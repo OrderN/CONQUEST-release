@@ -15,6 +15,10 @@ module read
   integer, parameter :: small = 2
   integer, parameter :: medium = 3
   integer, parameter :: full = 4
+  ! Pseudopotential formats
+  integer, parameter :: oncvpsp = 1
+  integer, parameter :: hgh = 2
+  integer :: ps_format
 
   integer :: energy_units ! Local for reading; 1 is Ha, 2 is eV
   real(double) :: energy_conv ! Define a factor for energy conversion (often 1.0)
@@ -35,13 +39,14 @@ contains
     use numbers
     use species_module, only: n_species
     use input_module, only: load_input, fdf_integer, fdf_double, fdf_boolean, &
-         fdf_block, block_start, block_end, input_array, fdf_endblock
+         fdf_block, block_start, block_end, input_array, fdf_endblock, fdf_string, leqi
     use pseudo_tm_info, ONLY: pseudo
-    use pseudo_atom_info, ONLY: flag_default_cutoffs, flag_plot_output
+    use pseudo_atom_info, ONLY: flag_default_cutoffs, flag_plot_output, hgh_data
 
     implicit none
 
     integer :: i, j, ios
+    character(len=80) :: input_string
     
     !
     ! Load the Conquest_ion_input file into memory
@@ -58,6 +63,15 @@ contains
     ! Species
     !
     n_species = fdf_integer('General.NumberOfSpecies',1)
+    input_string = fdf_string(80,'General.PSFormat','oncvpsp') ! Or 'hgh'
+    if(leqi(input_string(1:3),'onc').or.leqi(input_string(1:3),'ham')) then
+       ps_format = oncvpsp
+    else if(leqi(input_string(1:3),'hgh').or.leqi(input_string(1:3),'gth')) then
+       ps_format = hgh
+       allocate(hgh_data(n_species))
+    else
+       call cq_abort("Unrecognised pseudopotential format "//trim(input_string))
+    end if
     allocate(pseudo(n_species)) ! Preserve compatibility with Conquest
     !
     ! Read species labels
@@ -115,19 +129,29 @@ contains
        ! Energy which detects a state near zero which might have too large a radius
        shallow_state_energy = fdf_double('Atom.ShallowEnergy',-0.152_double)
        !
-       ! Get Hamann input and output file names and read files
-       !
-       pseudo_file_name = fdf_string(80,'Atom.PseudopotentialFile',' ')
-       call read_hamann_input(species)
-       vkb_file_name    = fdf_string(80,'Atom.VKBFile',' ')
-       call read_vkb(species)
-       !
        ! Mesh
        !
        mesh_type = hamann
        alpha = fdf_double("Mesh.Alpha",alpha)
        beta = fdf_double("Mesh.Beta",beta)
        delta_r_reg = fdf_double("Atom.RegularSpacing",0.01_double)       
+       !
+       ! Get Hamann input and output file names and read files
+       !
+       pseudo_file_name = fdf_string(80,'Atom.PseudopotentialFile',' ')
+       if(ps_format==oncvpsp) then
+          call read_hamann_input(species)
+       else if(ps_format==hgh) then
+          call read_hgh_input(species)
+       else
+          call cq_abort("Unrecognised pseudopotential format")
+       end if
+       if(ps_format==oncvpsp) then
+          vkb_file_name    = fdf_string(80,'Atom.VKBFile',' ')
+          call read_vkb(species)
+       else if(ps_format/=hgh) then
+          call cq_abort("Unrecognised pseudopotential format")
+       end if
        !
        ! Form for zetas: compress or split norm
        !
@@ -449,6 +473,262 @@ contains
        call cq_abort("System-dependent read error: ",ios)
     endif
   end subroutine line_read_error
+
+  subroutine read_hgh_input(i_species)
+
+    use numbers
+    use pseudo_tm_info, ONLY: pseudo
+    use input_module, ONLY: io_assign, io_close, leqi
+    use mesh, ONLY: alpha, beta, drdi
+    use pseudo_atom_info, ONLY: val, allocate_val, local_and_vkb, allocate_vkb, hamann_version, &
+         deltaE_large_radius, hgh_data
+    use pseudo_tm_info, ONLY: alloc_pseudo_info, pseudo
+    use periodic_table, ONLY: pte, n_species
+    use radial_xc, ONLY: flag_functional_type, init_xc, functional_lda_pz81, functional_gga_pbe96, &
+         functional_description
+
+    implicit none
+
+    ! Passed variables
+    integer :: i_species
+
+    ! Local variables
+    integer :: ios, lun, ngrid, ell, en, i, j, n_occ, n_read, max_l, zeta, iexc
+    integer :: n_shells, n_nl_proj, this_l, number_of_this_l, max_nl_proj, n_r_proj_max
+    integer, dimension(0:4) :: count_func
+    integer, dimension(3,0:4) :: index_count_func
+    character(len=2) :: char_in
+    character(len=80) :: line
+    logical :: flag_core_done = .false.
+    logical, dimension(3,0:3) :: flag_min
+    real(double) :: dummy, dummy2, highest_energy, root_two, proj
+    real(double) :: rl_base, rl_sqrt, rr, rr_l, rr_rl, rr_rl2, rr_rl4, rr_rl6
+    real(double), dimension(:,:), allocatable :: gamma_fac
+
+    write(*,*) 'Starting HGH reading'
+    !
+    ! Zero arrays
+    !
+    count_func = 0
+    index_count_func = 0
+    !
+    ! Open file
+    !
+    call io_assign(lun)
+    open(unit=lun, file=pseudo_file_name, status='old', iostat=ios)
+    if ( ios > 0 ) call cq_abort('Error opening pseudopotential file: '//pseudo_file_name)
+    pseudo(i_species)%filename = pseudo_file_name
+    ! Functional?!
+    !
+    ! Element, Zion, rloc, C1 through C4
+    ! r0 h0/1,1 through 3,3
+    ! r1 h1/1,1 through 3,3
+    ! k1/1,1 through 3,3
+    ! r2 h2
+    ! k2
+    ! (r0/1/2 for l=0/1/2)
+    ! Find number of shells and allocate space
+    !
+    read(lun,*) max_l, iexc
+    !
+    ! Assign and initialise XC functional for species
+    !
+    if(iexc==3) then
+       flag_functional_type = functional_lda_pz81
+    else if(iexc==4) then
+       flag_functional_type = functional_gga_pbe96
+    else if(iexc<0) then
+       flag_functional_type = iexc
+    else
+       call cq_abort("Error: unrecognised iexc value: ",iexc)
+    end if
+    call init_xc
+    hgh_data(i_species)%maxl = max_l
+    pseudo(i_species)%lmax = max_l
+    pseudo(i_species)%flag_pcc = .false. ! Read this somewhere later
+    allocate(hgh_data(i_species)%r(0:max_l), hgh_data(i_species)%h(3,0:max_l), &
+         hgh_data(i_species)%k(3,0:max_l))
+    !read(lun,'(a)') line
+    if(iprint>4) write(*,fmt='("Reading HGH file, with lmax=",i1)') hgh_data(i_species)%maxl
+    !
+    ! Read in local potential
+    !
+    read(lun,*) char_in,hgh_data(i_species)%Zion,hgh_data(i_species)%rloc,&
+         hgh_data(i_species)%c1,hgh_data(i_species)%c2,hgh_data(i_species)%c3,hgh_data(i_species)%c4
+    ! Now identify element number
+    pseudo(i_species)%zval = hgh_data(i_species)%Zion
+    do i=1,n_species
+       if(leqi(char_in,pte(i))) then
+          pseudo(i_species)%z = i
+          write(*,*) 'Z is ',pseudo(i_species)%z
+          exit
+       end if
+    end do
+    pseudo(i_species)%zcore = pseudo(i_species)%z - hgh_data(i_species)%Zion
+    write(*,*) pseudo(i_species)%zcore,' core and ',pseudo(i_species)%zval,' valence electrons'
+    write(*,*) char_in,hgh_data(i_species)%Zion,hgh_data(i_species)%rloc,&
+         hgh_data(i_species)%c1,hgh_data(i_species)%c2,hgh_data(i_species)%c3,hgh_data(i_species)%c4
+    ! Read data for non-local projectors
+    max_nl_proj = 0
+    local_and_vkb%n_proj = 0
+    local_and_vkb%n_nl_proj = 0
+    do ell = 0,max_l
+       read(lun,*) hgh_data(i_species)%r(ell),hgh_data(i_species)%h(1,ell),hgh_data(i_species)%h(2,ell), &
+            hgh_data(i_species)%h(3,ell)
+       write(*,*) hgh_data(i_species)%r(ell),hgh_data(i_species)%h(1,ell),hgh_data(i_species)%h(2,ell), &
+            hgh_data(i_species)%h(3,ell)
+       ! Find number of NL projectors
+       max_nl_proj = 0
+       do i=1,3
+          if(abs(hgh_data(i_species)%h(i,ell))>RD_ERR) max_nl_proj = i
+       end do
+       local_and_vkb%n_proj(ell) = max_nl_proj
+       local_and_vkb%n_nl_proj = local_and_vkb%n_nl_proj + local_and_vkb%n_proj(ell)
+       ! Read spin-orbit parameters
+       if(ell>0) then
+          read(lun,*) hgh_data(i_species)%k(1,ell),hgh_data(i_species)%k(2,ell), &
+               hgh_data(i_species)%k(3,ell)
+       end if
+    end do
+    write(*,*) 'Number of NL projectors: ',local_and_vkb%n_nl_proj
+    write(*,fmt='("Total number of VKB projectors: ",i2)') local_and_vkb%n_nl_proj
+    call alloc_pseudo_info(pseudo(i_species),local_and_vkb%n_nl_proj)
+    i=0
+    do ell=0,pseudo(i_species)%lmax
+       zeta=0
+       do j=1,local_and_vkb%n_proj(ell)!max_nl_proj
+          i=i+1
+          zeta = zeta+1
+          pseudo(i_species)%pjnl_l(i) = ell
+          pseudo(i_species)%pjnl_n(i) = zeta
+       end do
+    end do
+    pseudo(i_species)%flag_pcc = .false.
+    ! Identify n_shells and n, l, occupancy for valence electrons and set energy to zero (?)
+    read(lun,*) n_shells
+    call allocate_val(n_shells)
+    n_occ = 0
+    do i=1,n_shells
+       read(lun,*) val%n(i), val%l(i), val%occ(i)
+       val%en_ps(i) = zero
+       if(val%occ(i)>RD_ERR) n_occ = n_occ + 1
+       write(*,*) 'n, l, occ: ',val%n(i), val%l(i), val%occ(i)
+    end do
+    val%n_occ = n_occ
+    write(*,*) 'Occupied: ',n_occ
+    call io_close(lun)
+    !
+    ! Read grid, charge, partial core, local potential, semilocal potentials
+    !
+    !read(lun,*) char_in, ngrid
+    ngrid = 1106 ! Arbitrary for now
+    call allocate_vkb(ngrid,i_species)
+    ! Assign pseudo-n value for nodes
+    do i = 1,n_shells
+       ! Check for inner shells: count shells with this l and store
+       this_l = val%l(i)
+       number_of_this_l = count_func(this_l) + 1
+       count_func(this_l) = number_of_this_l
+       index_count_func(number_of_this_l, this_l) = i
+       if(number_of_this_l>1) val%inner(i) = index_count_func(number_of_this_l-1,this_l)
+       ! Set n for PAO (sets number of nodes)
+       val%npao(i) = this_l + number_of_this_l 
+       ! Check for semi-core state
+       !if(val%en_ps(i)<energy_semicore) val%semicore(i) = 1
+    end do
+    if(iprint>3) write(*,fmt='(i2," valence shells, with ",i2," occupied")') n_shells, n_occ
+    !
+    ! Read and store first block: local data
+    !
+    ! Build mesh
+    ! Set ngrid
+    ! Set mesh_z
+    root_two = sqrt(two)
+    !call io_assign(lun)
+    !open(unit=lun, file='local.dat')
+    open(unit=40,file='charge.dat')
+    do i=1,ngrid
+       read(40,*) rr,local_and_vkb%charge(i)
+       if(abs(rr-(beta/pseudo(i_species)%z)*exp(alpha*real(i-1,double)))>1e-5_double) &
+            write(*,*) 'Mesh error: ',rr,(beta/pseudo(i_species)%z)*exp(alpha*real(i-1,double))
+    end do
+    close(40)
+    write(*,*) 'Z and Zion are ',pseudo(i_species)%z,hgh_data(i_species)%Zion
+    do i=1,ngrid
+       rr = (beta/pseudo(i_species)%z)*exp(alpha*real(i-1,double))
+       local_and_vkb%rr(i) = rr
+       rr_rl = rr/hgh_data(i_species)%rloc
+       rr_rl2 = rr_rl*rr_rl
+       rr_rl4 = rr_rl2*rr_rl2
+       rr_rl6 = rr_rl4*rr_rl2
+       local_and_vkb%local(i) = (-hgh_data(i_species)%Zion/rr)*erf(rr_rl/root_two) + &
+            exp(-0.5*rr_rl2)*(hgh_data(i_species)%c1 + hgh_data(i_species)%c2*rr_rl2 + &
+            hgh_data(i_species)%c3*rr_rl4 + hgh_data(i_species)%c4*rr_rl6)
+    end do
+    !call io_close(lun)
+    local_and_vkb%r_vkb = local_and_vkb%rr(ngrid)
+    local_and_vkb%ngrid_vkb = ngrid
+    !
+    ! Create non-local projectors
+    !
+    ! i from 1 to 3
+    ! l from 0 to lmax
+    allocate(gamma_fac(3,0:max_l))
+    ! l + (4i-1)/2 gives l+3/2 = (l+1)+0.5; then l+3 and l+5
+    do ell = 0,max_l
+       rl_sqrt = sqrt(hgh_data(i_species)%r(ell))
+       do i=1,local_and_vkb%n_proj(ell)
+          ! l + 2i -1 + 0.5
+          rl_base = rl_sqrt*hgh_data(i_species)%r(ell)**real(ell+2*i-1,double)
+          gamma_fac(i,ell) = rl_base*sqrt(gamma(real(ell+(four*real(i,double)-one)/two,double)))
+          write(*,*) 'Gamma: ',gamma_fac(i,ell),i,gamma(real(ell+(four*real(i,double)-one)/two,double))
+       end do
+       !rl_base = rl_base*hgh_data(i_species)%r(ell)*hgh_data(i_species)%r(ell)
+    end do
+    ! We set a grid for KB from the Hamann code
+    n_r_proj_max = 0
+    flag_min = .true.
+    do i=1,ngrid
+       do ell = 0,max_l
+          rr_rl = local_and_vkb%rr(i)/hgh_data(i_species)%r(ell)
+          do j = 1,local_and_vkb%n_proj(ell)!3 ! Fix later to account for number of projectors per l
+             rr_l = local_and_vkb%rr(i)**(ell + 2*(j-1))
+             proj = root_two*rr_l*exp(-0.5*rr_rl*rr_rl)/gamma_fac(j,ell)
+             if(proj<RD_ERR.and.flag_min(j,ell)) then
+                if(local_and_vkb%rr(i)>local_and_vkb%rr(n_r_proj_max)) n_r_proj_max = i
+                flag_min(j,ell) = .false.
+             end if
+          end do
+       end do
+    end do
+    write(*,*) 'Projector cutoff is ',local_and_vkb%rr(n_r_proj_max),n_r_proj_max
+    local_and_vkb%r_vkb = local_and_vkb%rr(n_r_proj_max)
+    local_and_vkb%ngrid_vkb = n_r_proj_max
+    do i=1,local_and_vkb%ngrid_vkb
+       rr = local_and_vkb%rr(i) !(beta/hgh_data(i_species)%Zion)*exp(alpha*real(i-1,double))
+       do ell = 0,max_l
+          rr_rl = rr/hgh_data(i_species)%r(ell)
+          do j = 1,local_and_vkb%n_proj(ell)!3 ! Fix later to account for number of projectors per l
+             rr_l = rr**(ell + 2*(j-1))
+             ! r**(l + 2*(i-1))
+             ! i=1 gives r**l; i=2 gives r**(l+2); i=3 gives r**(l+4)
+             local_and_vkb%projector(i,j,ell) = rr*root_two*rr_l*exp(-0.5*rr_rl*rr_rl)/gamma_fac(j,ell)
+          end do
+       end do
+    end do
+    deallocate(gamma_fac)
+    n_read = 1
+    do ell=0,pseudo(i_species)%lmax
+       do j = 1,local_and_vkb%n_proj(ell)
+          pseudo(i_species)%pjnl_ekb(n_read) = hgh_data(i_species)%h(j,ell)
+          n_read = n_read + 1
+       end do
+       if(iprint>4) write(*,fmt='(i3,4f10.5)') ell, &
+            pseudo(i_species)%pjnl_ekb(n_read-local_and_vkb%n_proj(ell):n_read-1)
+    end do
+    !call io_close(lun)
+    return
+  end subroutine read_hgh_input
   
   ! Read semi-local potentials output by a DRB patch to Hamann's code
   ! Now read KB potentials
@@ -457,7 +737,6 @@ contains
     use numbers
     use pseudo_tm_info, ONLY: pseudo
     use input_module, ONLY: io_assign, io_close
-    use mesh, ONLY: siesta
     use pseudo_atom_info, ONLY: val, allocate_val, local_and_vkb, allocate_vkb, hamann_version, deltaE_large_radius
     
     implicit none

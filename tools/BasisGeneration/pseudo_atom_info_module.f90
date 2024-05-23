@@ -40,6 +40,14 @@ module pseudo_atom_info
      real(double), pointer, dimension(:) :: width, prefac ! Parameters for exponential confinement
   end type pao
 
+  type hgh_info
+     character(len=2) :: symbol
+     real(double) :: Zion, rloc, c1, c2, c3, c4
+     integer :: maxl
+     real(double), dimension(:), allocatable :: r
+     real(double), dimension(:,:), allocatable :: h, k
+  end type hgh_info
+
   type valence_info
      integer, pointer, dimension(:) :: n, l, semicore, nkb, npao, inner
      integer :: n_shells, n_occ, functional
@@ -49,6 +57,7 @@ module pseudo_atom_info
   type(pao) :: paos
   type(potential_vkb) :: local_and_vkb
   type(valence_info) :: val
+  type(hgh_info), dimension(:), allocatable :: hgh_data
   logical :: flag_default_cutoffs
 
   integer :: pseudo_type
