@@ -1386,7 +1386,7 @@ contains
                             !$omp             i_nt,j_nt,k_nt,l_nt)
                             !
                             Ome_kj(1:2*extent+1, 1:2*extent+1, 1:2*extent+1) => Ome_kj_1d_buffer
-                            !$omp do schedule(runtime)
+                            !$omp do schedule(dynamic)
                             jb_loop: do nsf_jb = 1, jb%nsup
                                !
                                ncaddr = ncbeg + ia%nsup * (nsf_jb - 1)
