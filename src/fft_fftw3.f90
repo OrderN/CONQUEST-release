@@ -53,11 +53,13 @@ contains
     integer :: i
 
     if( isign==-1 ) then ! forward
+       !$omp parallel do schedule(runtime) default(none) shared(cdata, planx_for, cols) private(i)
        do i=0, cols-1
           call dfftw_execute_dft( planx_for, cdata(i*len+1), cdata(i*len+1) )
        end do
     end if
     if( isign==+1 ) then ! reverse
+       !$omp parallel do schedule(runtime) default(none) shared(cdata, planx_for, cols) private(i)
        do i=0, cols-1
           call dfftw_execute_dft( planx_rev, cdata(i*len+1), cdata(i*len+1) )
        end do
@@ -96,11 +98,13 @@ contains
     integer :: i
 
     if( isign==-1 ) then ! forward
+       !$omp parallel do schedule(runtime) default(none) shared(cdata, planx_for, cols) private(i)
        do i=0, cols-1
           call dfftw_execute_dft( plany_for, cdata(i*len+1), cdata(i*len+1) )
        end do
     end if
     if( isign==+1 ) then ! reverse
+       !$omp parallel do schedule(runtime) default(none) shared(cdata, planx_for, cols) private(i)
        do i=0, cols-1
           call dfftw_execute_dft( plany_rev, cdata(i*len+1), cdata(i*len+1) )
        end do
@@ -139,11 +143,13 @@ contains
     integer :: i
 
     if( isign==-1 ) then ! forward
+       !$omp parallel do schedule(runtime) default(none) shared(cdata, planx_for, cols) private(i)
        do i=0, cols-1
           call dfftw_execute_dft( planz_for, cdata(i*len+1), cdata(i*len+1) )
        end do
     end if
     if( isign==+1 ) then ! reverse
+       !$omp parallel do schedule(runtime) default(none) shared(cdata, planx_for, cols) private(i)
        do i=0, cols-1
           call dfftw_execute_dft( planz_rev, cdata(i*len+1), cdata(i*len+1) )
        end do
