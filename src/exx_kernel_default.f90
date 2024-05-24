@@ -756,17 +756,17 @@ contains
     return
   end subroutine get_X_matrix
   !
-  ! To ensure thread safety, variables which are altered must be passed in as parameters rather than imported.
-  ! TODO: Change name to something more descriptive
-  !!****f* exx_kernel_default/m_kern_exx_cri *
+  !!****f* exx_kernel_default/cri_eri_inner_calculation *
   !!
   !!  NAME
   !!   cri_eri_inner_calculation
   !!
   !!  PURPOSE
-  !!   Deduplicate the inner calculations of m_kern_exx_cri and m_kern_exx_eri
+  !!   Deduplicate the inner calculations of m_kern_exx_cri and m_kern_exx_eri.
   !! 
   !!  INPUTS
+  !!   To ensure thread safety, variables which are altered must be passed in 
+  !!   as parameters rather than imported.
   !!
   !!  AUTHOR
   !!   Connor Aird
@@ -843,6 +843,28 @@ contains
        end do ! nsf3 = 1, ia%nsup
   end subroutine cri_eri_inner_calculation
   !
+  !!****f* exx_kernel_default/eri_gto_inner_calculation *
+  !!
+  !!  NAME
+  !!   eri_gto_inner_calculation
+  !!
+  !!  PURPOSE
+  !!   simplify m_kern_exx_eri to allow a simple subroutine call inside the threaded region.
+  !! 
+  !!  INPUTS
+  !!   To ensure thread safety, variables which are altered must be passed in 
+  !!   as parameters rather than imported.
+  !!
+  !!  AUTHOR
+  !!   Connor Aird
+  !!
+  !!  CREATION DATE
+  !!   2024/05/24  
+  !!
+  !!  MODIFICATION HISTORY
+  !!
+  !!  SOURCE
+  !!
   subroutine eri_gto_inner_calculation(ld, kg, jb, ia, nsf_ld, nsf_kg, nsf_jb, &
                ncaddr, c, i_nt, j_nt, k_nt, l_nt, backup_eris, store_eris_ptr, &
                filter_eris_ptr, should_compute_eri_hoh)
@@ -916,6 +938,8 @@ contains
   !!  MODIFICATION HISTORY
   !!   2024/02/28 Connor
   !!    Combined three instances of nsup loops into one and added omp threading
+  !!   2024/05/24 Connor
+  !!    Extract inner calculation into cri_eri_inner_calculation to de-duplicate code
   !!
   !!  SOURCE
   !!
@@ -1192,6 +1216,10 @@ contains
   !!   2020/10/27
   !!
   !!  MODIFICATION HISTORY
+  !!   2024/05/24 Connor
+  !!    - Extract inner calculation into cri_eri_inner_calculation
+  !!    - Combine with m_kern_exx_eri_gto
+  !!    - Add omp threading 
   !!
   !!  SOURCE
   !!
