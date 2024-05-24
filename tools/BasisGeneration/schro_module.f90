@@ -92,6 +92,8 @@ contains
     use numbers
     use mesh, ONLY: rr, nmesh, drdi_squared, rr_squared,drdi
     use radial_xc, ONLY: get_vxc
+    use read, ONLY: ps_format, hgh
+    use pseudo_tm_info, ONLY: pseudo
     
     implicit none
 
@@ -108,10 +110,9 @@ contains
     psi = zero
     newcharge = zero
     alpha_scf = 0.5_double
-    
     if(iprint>2) write(*,fmt='(/2x,"Finding unconfined energies for valence states")')
     resid = one
-    do while(resid>1e-8_double)
+    do while(resid>1e-12_double)
        newcharge = zero
        do i_shell = 1, val%n_occ
           if(iprint>2) write(*,fmt='(2x,"n=",i2," l=",i2)') val%n(i_shell), val%l(i_shell)
@@ -130,6 +131,12 @@ contains
           end if
        end do
        resid = zero
+       check = zero
+       do i=1,nmesh
+          resid = resid + drdi(i)*rr_squared(i)*(local_and_vkb%charge(i)-newcharge(i))**2
+          check = check + drdi(i)*rr_squared(i)*local_and_vkb%charge(i)
+       end do
+       local_and_vkb%charge = alpha_scf*newcharge + (one-alpha_scf)*local_and_vkb%charge
        total_charge = zero
        check = zero
        do i=1,nmesh
@@ -137,8 +144,9 @@ contains
           total_charge = total_charge + drdi(i)*rr_squared(i)*newcharge(i)
           check = check + drdi(i)*rr_squared(i)*local_and_vkb%charge(i)
        end do
+       ! If initial charge is zero this is needed
+       if(abs(check-total_charge)>RD_ERR) local_and_vkb%charge = local_and_vkb%charge*total_charge/check
        write(*,*) 'Residual is ',resid, total_charge, check
-       local_and_vkb%charge = alpha_scf*newcharge + (one-alpha_scf)*local_and_vkb%charge
        if(iprint>0) then
           write(*,fmt='(/2x,"Unconfined valence state energies (Ha)")')
           write(*,fmt='(2x,"  n  l         AE energy        PAO energy")')
@@ -147,11 +155,17 @@ contains
              en = val%n(i_shell)
              write(*,fmt='(2x,2i3,2f18.10)') en, ell, val%en_ps(i_shell), &
                   val%en_pao(i_shell)
+             if(ps_format==hgh) val%en_ps(i_shell) = val%en_pao(i_shell)
+          end do
+       else if(ps_format==hgh) then
+          do i_shell = 1, val%n_occ
              val%en_ps(i_shell) = val%en_pao(i_shell)
           end do
        end if
        call radial_hartree(nmesh,local_and_vkb%charge,vha)
+       if(pseudo(i_species)%flag_pcc) local_and_vkb%charge = local_and_vkb%charge + local_and_vkb%pcc
        call get_vxc(nmesh,rr,local_and_vkb%charge,vxc)
+       if(pseudo(i_species)%flag_pcc) local_and_vkb%charge = local_and_vkb%charge - local_and_vkb%pcc
     end do
     return
   end subroutine find_unconfined_valence_states
@@ -671,6 +685,7 @@ contains
                deltaE_large_radius, deltaE_large_radius*HaToeV
           small_cutoff(i_shell) = large_cutoff(i_shell)
        end if
+       write(*,*) '# Radii: ',large_cutoff(i_shell),small_cutoff(i_shell)
     end do
     ! Create cutoffs based on defaults chosen by user
     if(paos%flag_cutoff==pao_cutoff_energies.OR.paos%flag_cutoff==pao_cutoff_default) then ! Same energy for all l/n shells
@@ -1242,10 +1257,14 @@ contains
     end do
     !write(*,*) '# Pot mat and vec: ',pot_matrix, pot_vector
     ! Invert matrix
-    call dgesv(local_and_vkb%n_proj(ell), 1, pot_matrix, local_and_vkb%n_proj(ell), ipiv, &
-         pot_vector, local_and_vkb%n_proj(ell), info)
-    if(info/=0) call cq_abort("Error from dgesv called in integrate_vkb_outward: ",info)
-    if(iprint>6) write(*,fmt='("In integrate_vkb, coefficients are ",3f18.10)') pot_vector
+    if(local_and_vkb%n_proj(ell)>0) then
+       call dgesv(local_and_vkb%n_proj(ell), 1, pot_matrix, local_and_vkb%n_proj(ell), ipiv, &
+            pot_vector, local_and_vkb%n_proj(ell), info)
+       if(info/=0) call cq_abort("Error from dgesv called in integrate_vkb_outward: ",info)
+       if(iprint>6) write(*,fmt='("In integrate_vkb, coefficients are ",3f18.10)') pot_vector
+    else
+       pot_vector = zero
+    end if
     ! Construct total outward wavefunction
     psi(1:n_kink) = psi_h(1:n_kink)
     do i_proj=1,local_and_vkb%n_proj(ell)

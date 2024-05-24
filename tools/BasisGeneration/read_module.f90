@@ -609,7 +609,7 @@ contains
     call allocate_val(n_shells)
     n_occ = 0
     do i=1,n_shells
-       read(lun,*) val%n(i), val%l(i), val%occ(i)
+       read(lun,*) val%n(i), val%l(i), val%occ(i), val%semicore(i)
        val%en_ps(i) = zero
        if(val%occ(i)>RD_ERR) n_occ = n_occ + 1
        write(*,*) 'n, l, occ: ',val%n(i), val%l(i), val%occ(i)
@@ -649,10 +649,11 @@ contains
     open(unit=40,file='charge.dat')
     do i=1,ngrid
        read(40,*) rr,local_and_vkb%charge(i)
-       if(abs(rr-(beta/pseudo(i_species)%z)*exp(alpha*real(i-1,double)))>1e-5_double) &
-            write(*,*) 'Mesh error: ',rr,(beta/pseudo(i_species)%z)*exp(alpha*real(i-1,double))
+    !   if(abs(rr-(beta/pseudo(i_species)%z)*exp(alpha*real(i-1,double)))>1e-5_double) &
+    !        write(*,*) 'Mesh error: ',rr,(beta/pseudo(i_species)%z)*exp(alpha*real(i-1,double))
     end do
     close(40)
+    !local_and_vkb%charge = zero
     write(*,*) 'Z and Zion are ',pseudo(i_species)%z,hgh_data(i_species)%Zion
     do i=1,ngrid
        rr = (beta/pseudo(i_species)%z)*exp(alpha*real(i-1,double))
@@ -695,6 +696,7 @@ contains
              rr_l = local_and_vkb%rr(i)**(ell + 2*(j-1))
              proj = root_two*rr_l*exp(-0.5*rr_rl*rr_rl)/gamma_fac(j,ell)
              if(proj<RD_ERR.and.flag_min(j,ell)) then
+                local_and_vkb%core_radius(ell) = local_and_vkb%rr(i)
                 if(local_and_vkb%rr(i)>local_and_vkb%rr(n_r_proj_max)) n_r_proj_max = i
                 flag_min(j,ell) = .false.
              end if
