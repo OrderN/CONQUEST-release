@@ -2761,6 +2761,8 @@ contains
   !!    Changed MPI_allreduce to gsum
   !!   2008/05/22 ast
   !!    Added timers
+  !!   2024/05/27 nakata
+  !!    bugfix: corrected sf to sf1 for loc to check overflow
   !!  SOURCE
   !!
   real(double) function matrix_trace(A)
@@ -2788,7 +2790,7 @@ contains
           do i = 1, bundle%nm_nodgroup(np) ! Loop over atoms in partition
              iprim = iprim + 1
              sf1 = mat(np,Ah)%ndimi(i)
-             loc = (sf - 1) * sf1 + sf - 1 + mat(np,Ah)%onsite(i)
+             loc = (sf1 - 1) * sf1 + sf1 - 1 + mat(np,Ah)%onsite(i)
              if (loc > mat_p(A)%length) &
                   call cq_abort("Overflow error in trace: ", &
                                 loc, mat_p(A)%length)
