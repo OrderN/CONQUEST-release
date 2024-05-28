@@ -2,9 +2,6 @@ IO.Title isolated C2H4 with PBE0
 IO.Coordinates Conquest_coord   
 IO.FractionalCoordinates T 
 IO.Iprint 0
-IO.WriteOutToFile F
-IO.Iprint_exx 4
-IO.TimingOn T
 
 ## General Parameters
 General.NumberOfSpecies      2
@@ -30,8 +27,8 @@ DM.SolutionMethod diagon
 
 ## EXX Parameters
 EXX.Scheme 3
-EXX.GridSpacing  0.4
-EXX.GTO    F
+EXX.GridSpacing  0.4   
+EXX.GTO    T
 
 ## Atomic Information
 %block ChemicalSpeciesLabel
