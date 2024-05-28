@@ -1,0 +1,97 @@
+    ________________________________________________________________________
+                                                                            
+                                    CONQUEST                                
+                                                                            
+                Concurrent Order N QUantum Electronic STructure             
+    ________________________________________________________________________
+                                                                            
+     Conquest lead developers:                                              
+      D.R.Bowler (UCL, NIMS), T.Miyazaki (NIMS), A.Nakata (NIMS),           
+      L. Truflandier (U. Bordeaux)                                          
+                                                                            
+     Developers:                                                            
+      M.Arita (NIMS), J.S.Baker (UCL), V.Brazdova (UCL), R.Choudhury (UCL), 
+      S.Y.Mujahed (UCL), J.T.Poulton (UCL), Z.Raza (NIMS), A.Sena (UCL),    
+      U.Terranova (UCL), L.Tong (UCL), A.Torralba (NIMS)                    
+                                                                            
+     Early development:                                                     
+      I.J.Bush (STFC), C.M.Goringe (Keele), E.H.Hernandez (Keele)           
+                                                                            
+     Original inspiration and project oversight:                            
+      M.J.Gillan (Keele, UCL)                                               
+    ________________________________________________________________________
+
+    Simulation cell dimensions:    22.6767 a0 x    22.6767 a0 x    22.6767 a0
+
+      Atomic coordinates (a0)
+         Atom         X         Y         Z  Species
+            1   11.3384   11.3384   10.0770        2
+            2   11.3384   11.3384   12.5997        2
+            3   13.1206   11.3384    9.0480        1
+            4   13.1206   11.3384   13.6287        1
+            5    9.5562   11.3384   13.6287        1
+            6    9.5562   11.3384    9.0480        1
+
+    Default k-point sampling of Gamma point only
+
+    This job was run on  2024/05/28 at 13:27 +0100
+    Code was compiled on 2024/05/28 at 11:32 +0100
+    Version comment: Git Branch: f-exx-opt; tag, hash: v1.3-91-g46885280
+
+    Job title: isolated C2H4 with PBE0                                                         
+    Job to be run: static calculation
+
+    Ground state search:
+      Support functions represented with PAO basis
+      1:1 PAO to SF mapping
+      Non-spin-polarised electrons
+      Solving for the K matrix using diagonalisation 
+
+    Integration grid spacing:  0.227 a0 x 0.227 a0 x 0.227 a0
+
+    Number of species:  2
+    --------------------------------------------------------
+    |   #  mass (au)  Charge (e)  SF Rad (a0)  NSF  Label  |
+    --------------------------------------------------------
+    |   1      1.008       1.000        7.030    4  H      |
+    |   2     12.011       4.000        6.576    9  C      |
+    --------------------------------------------------------
+
+    The calculation will be performed on     2 processes
+
+    The calculation will be performed on     2 threads
+
+    Using the default matrix multiplication kernel
+
+    The functional used will be hyb PBE0       
+
+    PulayMixSC: Reached SCF tolerance of  0.68219E-07 after     10 iterations
+      | Number of electrons      =        12.000002
+      |* Harris-Foulkes energy   =       -13.038957181266367 Ha
+
+    force: Forces on atoms (Ha/a0)
+    force:  Atom   X              Y              Z
+    force:     1  -0.0038127694   0.0000000000  -0.0323295286
+    force:     2  -0.0043174473   0.0000000000   0.0313780621
+    force:     3   0.0692265493   0.0000000000  -0.0402628143
+    force:     4   0.0696510358   0.0000000000   0.0415111488
+    force:     5  -0.0653192453   0.0000000000   0.0429220804
+    force:     6  -0.0654180826   0.0000000000  -0.0432190573
+
+    force: Maximum force :        0.06965104(Ha/a0) on atom         4 in x direction
+    force: Force Residual:        0.06746250 Ha/a0
+    force: Total stress:         -1.20750600    -0.00137757    -1.17004629 GPa
+
+    BIBLIOGRAPHY: Please consider citing the following references in the conquest.bib file
+
+    CONQUEST:         Bowler2002pt, Miyazaki2004, Nakata2020
+    Basis:            Bowler2019
+    DM:               Bowler:2006xr
+    Pseudopotentials: Hamann2013, Bowler2019
+ 
+
+    Warnings written to file Conquest_warnings; please check
+
+    Max total mem use is            285.403 MB
+
+    Total run time was:             946.693 seconds
