@@ -122,6 +122,7 @@ contains
           large_energy = val%en_ps(i_shell)
           call find_eigenstate_and_energy_vkb(i_species,en,ell,radius_large, psi,large_energy,vha,vxc)
           val%en_pao(i_shell) = large_energy
+          ! Accumulate output charge
           if(ell==0) then
              newcharge = newcharge + val%occ(i_shell)*psi*psi
           else if(ell==1) then
@@ -130,6 +131,7 @@ contains
              newcharge = newcharge + val%occ(i_shell)*psi*psi*rr*rr*rr*rr
           end if
        end do
+       ! Find residual
        resid = zero
        check = zero
        do i=1,nmesh
@@ -137,6 +139,7 @@ contains
           check = check + drdi(i)*rr_squared(i)*local_and_vkb%charge(i)
        end do
        local_and_vkb%charge = alpha_scf*newcharge + (one-alpha_scf)*local_and_vkb%charge
+       ! Integrate
        total_charge = zero
        check = zero
        do i=1,nmesh
@@ -144,8 +147,8 @@ contains
           total_charge = total_charge + drdi(i)*rr_squared(i)*newcharge(i)
           check = check + drdi(i)*rr_squared(i)*local_and_vkb%charge(i)
        end do
-       ! If initial charge is zero this is needed
-       if(abs(check-total_charge)>RD_ERR) local_and_vkb%charge = local_and_vkb%charge*total_charge/check
+       ! This rescales charge to have full valence value, but can be unstable
+       !if(abs(check-total_charge)>RD_ERR) local_and_vkb%charge = local_and_vkb%charge*total_charge/check
        write(*,*) 'Residual is ',resid, total_charge, check
        if(iprint>0) then
           write(*,fmt='(/2x,"Unconfined valence state energies (Ha)")')
@@ -928,7 +931,7 @@ contains
     if(abs(energy)<RD_ERR) then
        energy = half*(e_lower+e_upper)
     end if
-    tol = 1.0e-8_double
+    tol = 1.0e-6_double
     if(flag_confine) then
        delta = 0.01_double
        do i=1,nmax

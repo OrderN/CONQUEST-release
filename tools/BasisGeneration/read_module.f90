@@ -493,17 +493,23 @@ contains
     integer :: i_species
 
     ! Local variables
-    integer :: ios, lun, ngrid, ell, en, i, j, n_occ, n_read, max_l, zeta, iexc
+    integer :: ios, lun, ngrid, ell, en, i, j, k, jp, n_occ, n_read, max_l, zeta, iexc
     integer :: n_shells, n_nl_proj, this_l, number_of_this_l, max_nl_proj, n_r_proj_max
+    integer :: info, lwork
     integer, dimension(0:4) :: count_func
     integer, dimension(3,0:4) :: index_count_func
     character(len=2) :: char_in
     character(len=80) :: line
     logical :: flag_core_done = .false.
     logical, dimension(3,0:3) :: flag_min
-    real(double) :: dummy, dummy2, highest_energy, root_two, proj
+    real(double) :: dummy, dummy2, highest_energy, root_two, proj, rr_lp, pj, pjp
     real(double) :: rl_base, rl_sqrt, rr, rr_l, rr_rl, rr_rl2, rr_rl4, rr_rl6
     real(double), dimension(:,:), allocatable :: gamma_fac
+    real(double), dimension(:,:), allocatable :: hnl
+    real(double), dimension(:,:,:), allocatable :: hnl_pass, hnl_store
+    real(double), dimension(3) :: eval
+    real(double), dimension(15):: work
+    real(double), dimension(3,3) :: tmp
 
     write(*,*) 'Starting HGH reading'
     !
@@ -518,17 +524,6 @@ contains
     open(unit=lun, file=pseudo_file_name, status='old', iostat=ios)
     if ( ios > 0 ) call cq_abort('Error opening pseudopotential file: '//pseudo_file_name)
     pseudo(i_species)%filename = pseudo_file_name
-    ! Functional?!
-    !
-    ! Element, Zion, rloc, C1 through C4
-    ! r0 h0/1,1 through 3,3
-    ! r1 h1/1,1 through 3,3
-    ! k1/1,1 through 3,3
-    ! r2 h2
-    ! k2
-    ! (r0/1/2 for l=0/1/2)
-    ! Find number of shells and allocate space
-    !
     read(lun,*) max_l, iexc
     !
     ! Assign and initialise XC functional for species
@@ -543,15 +538,18 @@ contains
        call cq_abort("Error: unrecognised iexc value: ",iexc)
     end if
     call init_xc
+    !
+    ! Set maximum l value and zero arrays
+    !
     hgh_data(i_species)%maxl = max_l
     pseudo(i_species)%lmax = max_l
     pseudo(i_species)%flag_pcc = .false. ! Read this somewhere later
-    allocate(hgh_data(i_species)%r(0:max_l), hgh_data(i_species)%h(3,0:max_l), &
-         hgh_data(i_species)%k(3,0:max_l))
-    !read(lun,'(a)') line
+    allocate(hgh_data(i_species)%r(0:max_l), hgh_data(i_species)%h(3,0:max_l))
+    hgh_data(i_species)%r = zero
+    hgh_data(i_species)%h = zero
     if(iprint>4) write(*,fmt='("Reading HGH file, with lmax=",i1)') hgh_data(i_species)%maxl
     !
-    ! Read in local potential
+    ! Read in parameters for local potential
     !
     read(lun,*) char_in,hgh_data(i_species)%Zion,hgh_data(i_species)%rloc,&
          hgh_data(i_species)%c1,hgh_data(i_species)%c2,hgh_data(i_species)%c3,hgh_data(i_species)%c4
@@ -566,37 +564,94 @@ contains
     end do
     pseudo(i_species)%zcore = pseudo(i_species)%z - hgh_data(i_species)%Zion
     write(*,*) pseudo(i_species)%zcore,' core and ',pseudo(i_species)%zval,' valence electrons'
-    write(*,*) char_in,hgh_data(i_species)%Zion,hgh_data(i_species)%rloc,&
-         hgh_data(i_species)%c1,hgh_data(i_species)%c2,hgh_data(i_species)%c3,hgh_data(i_species)%c4
+    !
     ! Read data for non-local projectors
+    !
     max_nl_proj = 0
     local_and_vkb%n_proj = 0
     local_and_vkb%n_nl_proj = 0
+    ! hnl_pass is used for building diagonal projectors; hnl_store stores original parameters
+    allocate(hnl_pass(3,3,0:max_l))
+    allocate(hnl_store(3,3,0:max_l))
+    hnl_pass = zero
+    hnl_store = zero
     do ell = 0,max_l
-       read(lun,*) hgh_data(i_species)%r(ell),hgh_data(i_species)%h(1,ell),hgh_data(i_species)%h(2,ell), &
-            hgh_data(i_species)%h(3,ell)
-       write(*,*) hgh_data(i_species)%r(ell),hgh_data(i_species)%h(1,ell),hgh_data(i_species)%h(2,ell), &
-            hgh_data(i_species)%h(3,ell)
-       ! Find number of NL projectors
-       max_nl_proj = 0
-       do i=1,3
-          if(abs(hgh_data(i_species)%h(i,ell))>RD_ERR) max_nl_proj = i
-       end do
+       ! Read number of projectors for this l
+       read(lun,*) max_nl_proj
+       allocate(hnl(max_nl_proj,max_nl_proj))
+       hnl = zero
        local_and_vkb%n_proj(ell) = max_nl_proj
        local_and_vkb%n_nl_proj = local_and_vkb%n_nl_proj + local_and_vkb%n_proj(ell)
-       ! Read spin-orbit parameters
-       if(ell>0) then
-          read(lun,*) hgh_data(i_species)%k(1,ell),hgh_data(i_species)%k(2,ell), &
-               hgh_data(i_species)%k(3,ell)
+       ! Read table of projectors
+       read(lun,*) hgh_data(i_species)%r(ell),(hnl(1,j),j=1,max_nl_proj)
+       if(max_nl_proj>1) then
+          do i=2,max_nl_proj
+             read(lun,*) (hnl(i,j),j=i,max_nl_proj)
+          end do
+          do i=1,max_nl_proj
+             do j=i+1,max_nl_proj
+                hnl(j,i) = hnl(i,j)
+             end do
+          end do
+          write(*,*) 'H coefficient matrix'
+          do i=1,max_nl_proj
+             write(*,*) hnl(:,i)
+          end do
+          ! Store original data
+          hnl_pass(1:max_nl_proj,1:max_nl_proj,ell) = hnl
+          hnl_store(1:max_nl_proj,1:max_nl_proj,ell) = hnl
+          ! Diagonalise h matrix
+          eval = zero
+          lwork = 15
+          info = 0
+          call dsyev('V','U',max_nl_proj,hnl_pass(1:max_nl_proj,1:max_nl_proj,ell), &
+               max_nl_proj,eval(1:max_nl_proj),work,lwork,info)
+          ! Store diagonal values
+          do i=1,max_nl_proj
+             hgh_data(i_species)%h(i,ell) = eval(i)
+          end do
+          ! Output and check that transform worked; only for checking during development
+          !do i=1,max_nl_proj
+          !   write(*,*) 'Eval and vec: ',eval(i),hnl_pass(1:max_nl_proj,i,ell)
+          !   hgh_data(i_species)%h(i,ell) = eval(i)
+          !end do
+          !! Check diag
+          !tmp = zero
+          !do i=1,max_nl_proj
+          !   do j=1,max_nl_proj
+          !      do k=1,max_nl_proj
+          !         tmp(j,i)=tmp(j,i) + hnl(j,k)*hnl_pass(k,i,ell)
+          !      end do
+          !   end do
+          !end do
+          !hnl = zero
+          !do i=1,max_nl_proj
+          !   do j=1,max_nl_proj
+          !      do k=1,max_nl_proj
+          !         hnl(j,i) = hnl(j,i) + hnl_pass(k,j,ell)*tmp(k,i)
+          !      end do
+          !   end do
+          !end do
+          !write(*,*) 'After diag:'
+          !do i=1,max_nl_proj
+          !   write(*,*) hnl(:,i)
+          !end do
+       else
+          hgh_data(i_species)%h(1,ell) = hnl(1,1)
+          hnl_store(1,1,ell) = hnl(1,1)
        end if
+       deallocate(hnl)
     end do
+    !
+    ! Transfer data into Conquest structures
+    !
     write(*,*) 'Number of NL projectors: ',local_and_vkb%n_nl_proj
     write(*,fmt='("Total number of VKB projectors: ",i2)') local_and_vkb%n_nl_proj
     call alloc_pseudo_info(pseudo(i_species),local_and_vkb%n_nl_proj)
     i=0
     do ell=0,pseudo(i_species)%lmax
        zeta=0
-       do j=1,local_and_vkb%n_proj(ell)!max_nl_proj
+       do j=1,local_and_vkb%n_proj(ell)
           i=i+1
           zeta = zeta+1
           pseudo(i_species)%pjnl_l(i) = ell
@@ -604,7 +659,7 @@ contains
        end do
     end do
     pseudo(i_species)%flag_pcc = .false.
-    ! Identify n_shells and n, l, occupancy for valence electrons and set energy to zero (?)
+    ! Identify n_shells and n, l, occupancy for valence electrons and set PS energy to zero
     read(lun,*) n_shells
     call allocate_val(n_shells)
     n_occ = 0
@@ -618,10 +673,10 @@ contains
     write(*,*) 'Occupied: ',n_occ
     call io_close(lun)
     !
-    ! Read grid, charge, partial core, local potential, semilocal potentials
+    ! Grid size
     !
-    !read(lun,*) char_in, ngrid
-    ngrid = 1106 ! Arbitrary for now
+    ngrid = log(45.0_double/(beta/pseudo(i_species)%z))/log(1.012_double) ! Following Hamann
+    write(*,*) 'Number of grid points ',ngrid
     call allocate_vkb(ngrid,i_species)
     ! Assign pseudo-n value for nodes
     do i = 1,n_shells
@@ -637,24 +692,10 @@ contains
        !if(val%en_ps(i)<energy_semicore) val%semicore(i) = 1
     end do
     if(iprint>3) write(*,fmt='(i2," valence shells, with ",i2," occupied")') n_shells, n_occ
-    !
-    ! Read and store first block: local data
-    !
-    ! Build mesh
-    ! Set ngrid
-    ! Set mesh_z
     root_two = sqrt(two)
-    !call io_assign(lun)
-    !open(unit=lun, file='local.dat')
-    open(unit=40,file='charge.dat')
-    do i=1,ngrid
-       read(40,*) rr,local_and_vkb%charge(i)
-    !   if(abs(rr-(beta/pseudo(i_species)%z)*exp(alpha*real(i-1,double)))>1e-5_double) &
-    !        write(*,*) 'Mesh error: ',rr,(beta/pseudo(i_species)%z)*exp(alpha*real(i-1,double))
-    end do
-    close(40)
-    !local_and_vkb%charge = zero
-    write(*,*) 'Z and Zion are ',pseudo(i_species)%z,hgh_data(i_species)%Zion
+    ! For now, set atomic density to zero
+    local_and_vkb%charge = zero
+    ! Create local potential
     do i=1,ngrid
        rr = (beta/pseudo(i_species)%z)*exp(alpha*real(i-1,double))
        local_and_vkb%rr(i) = rr
@@ -666,7 +707,6 @@ contains
             exp(-0.5*rr_rl2)*(hgh_data(i_species)%c1 + hgh_data(i_species)%c2*rr_rl2 + &
             hgh_data(i_species)%c3*rr_rl4 + hgh_data(i_species)%c4*rr_rl6)
     end do
-    !call io_close(lun)
     local_and_vkb%r_vkb = local_and_vkb%rr(ngrid)
     local_and_vkb%ngrid_vkb = ngrid
     !
@@ -674,6 +714,7 @@ contains
     !
     ! i from 1 to 3
     ! l from 0 to lmax
+    ! Precalculate normalisation
     allocate(gamma_fac(3,0:max_l))
     ! l + (4i-1)/2 gives l+3/2 = (l+1)+0.5; then l+3 and l+5
     do ell = 0,max_l
@@ -682,11 +723,10 @@ contains
           ! l + 2i -1 + 0.5
           rl_base = rl_sqrt*hgh_data(i_species)%r(ell)**real(ell+2*i-1,double)
           gamma_fac(i,ell) = rl_base*sqrt(gamma(real(ell+(four*real(i,double)-one)/two,double)))
-          write(*,*) 'Gamma: ',gamma_fac(i,ell),i,gamma(real(ell+(four*real(i,double)-one)/two,double))
+          !write(*,*) 'Gamma: ',gamma_fac(i,ell),i,gamma(real(ell+(four*real(i,double)-one)/two,double))
        end do
-       !rl_base = rl_base*hgh_data(i_species)%r(ell)*hgh_data(i_species)%r(ell)
     end do
-    ! We set a grid for KB from the Hamann code
+    ! Set logarithmic grid and work out projector radius
     n_r_proj_max = 0
     flag_min = .true.
     do i=1,ngrid
@@ -695,7 +735,7 @@ contains
           do j = 1,local_and_vkb%n_proj(ell)!3 ! Fix later to account for number of projectors per l
              rr_l = local_and_vkb%rr(i)**(ell + 2*(j-1))
              proj = root_two*rr_l*exp(-0.5*rr_rl*rr_rl)/gamma_fac(j,ell)
-             if(proj<RD_ERR.and.flag_min(j,ell)) then
+             if(proj<1e-8.and.flag_min(j,ell)) then
                 local_and_vkb%core_radius(ell) = local_and_vkb%rr(i)
                 if(local_and_vkb%rr(i)>local_and_vkb%rr(n_r_proj_max)) n_r_proj_max = i
                 flag_min(j,ell) = .false.
@@ -704,21 +744,49 @@ contains
        end do
     end do
     write(*,*) 'Projector cutoff is ',local_and_vkb%rr(n_r_proj_max),n_r_proj_max
+    ! Now calculate projectors
     local_and_vkb%r_vkb = local_and_vkb%rr(n_r_proj_max)
     local_and_vkb%ngrid_vkb = n_r_proj_max
+    local_and_vkb%projector = zero
     do i=1,local_and_vkb%ngrid_vkb
-       rr = local_and_vkb%rr(i) !(beta/hgh_data(i_species)%Zion)*exp(alpha*real(i-1,double))
+       rr = local_and_vkb%rr(i)
        do ell = 0,max_l
           rr_rl = rr/hgh_data(i_species)%r(ell)
-          do j = 1,local_and_vkb%n_proj(ell)!3 ! Fix later to account for number of projectors per l
+          do j = 1,local_and_vkb%n_proj(ell)
              rr_l = rr**(ell + 2*(j-1))
              ! r**(l + 2*(i-1))
              ! i=1 gives r**l; i=2 gives r**(l+2); i=3 gives r**(l+4)
-             local_and_vkb%projector(i,j,ell) = rr*root_two*rr_l*exp(-0.5*rr_rl*rr_rl)/gamma_fac(j,ell)
+             if(local_and_vkb%n_proj(ell)>1) then
+                do jp=1,local_and_vkb%n_proj(ell)
+                   local_and_vkb%projector(i,jp,ell) = local_and_vkb%projector(i,jp,ell) + &
+                        hnl_pass(j,jp,ell)*rr*root_two*rr_l*exp(-0.5*rr_rl*rr_rl)/gamma_fac(j,ell)
+                end do
+             else
+                local_and_vkb%projector(i,j,ell) = rr*root_two*rr_l*exp(-0.5*rr_rl*rr_rl)/gamma_fac(j,ell)
+             end if
           end do
+          ! Check that diagonal and original projectors give same results - only for development
+          !dummy = zero
+          !dummy2 = zero
+          !do j=1,local_and_vkb%n_proj(ell)
+          !   dummy = dummy + local_and_vkb%projector(i,j,ell)*hgh_data(i_species)%h(j,ell)* &
+          !        local_and_vkb%projector(i,j,ell)
+          !   rr_l = rr**(ell + 2*(j-1))
+          !   pj = rr*root_two*rr_l*exp(-0.5*rr_rl*rr_rl)/gamma_fac(j,ell)
+          !   do jp = 1,local_and_vkb%n_proj(ell)
+          !      rr_lp = rr**(ell + 2*(jp-1))
+          !      pjp = rr*root_two*rr_lp*exp(-0.5*rr_rl*rr_rl)/gamma_fac(jp,ell)
+          !      dummy2 = dummy2+pj*pjp*hnl_store(j,jp,ell)
+          !   end do
+          !end do
+          !write(41+ell,*) rr,dummy,dummy2
        end do
     end do
-    deallocate(gamma_fac)
+    !do ell = 0,max_l
+    !   flush(41+ell)
+    !end do
+    deallocate(gamma_fac,hnl_pass)
+    ! Store values in Conquest structures
     n_read = 1
     do ell=0,pseudo(i_species)%lmax
        do j = 1,local_and_vkb%n_proj(ell)
