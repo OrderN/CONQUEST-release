@@ -1304,7 +1304,7 @@ contains
        if ( should_allocate ) call exx_mem_alloc(extent,kg%nsup,0,'phi_k','alloc')
        !
        if (.not. exx_gto) call exx_phi_on_grid(inode,kg%global_num,kg%spec,extent, &
-                              kg%xyz,kg%nsup,phi_k,r_int,xyz_zero)
+                              xyz_zero,kg%nsup,phi_k,r_int,xyz_zero)
        !
        jbnab2ch = 0
        do j = 1, nbnab(k_in_part)
