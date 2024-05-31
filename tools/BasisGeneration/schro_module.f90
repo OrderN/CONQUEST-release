@@ -120,6 +120,7 @@ contains
           ell = val%l(i_shell)
           en = val%npao(i_shell)
           large_energy = val%en_ps(i_shell)
+          if(abs(large_energy)<RD_ERR.and.i_shell>1) large_energy = val%en_pao(i_shell-1)
           call find_eigenstate_and_energy_vkb(i_species,en,ell,radius_large, psi,large_energy,vha,vxc)
           val%en_pao(i_shell) = large_energy
           ! Accumulate output charge
@@ -310,6 +311,10 @@ contains
                 end if
                 ! Accumulate atomic charge density
                 atomic_density = atomic_density + val%occ(i_shell)*psi*psi
+                !do i=1,nmesh
+                !   write(50+ell,*) rr(i),psi(i)*psi(i)*val%occ(i_shell)
+                !end do
+                !flush(50+ell)
              end if
              ! These lines orthogonalise to semi-core states where necessary
              ! They are left for completeness, but I found that they can cause
@@ -1031,10 +1036,10 @@ contains
        if(iprint>5) write(*,fmt='(2x,"Energies (low, mid, high): ",3f18.10)') e_lower,energy,e_upper
        if(iprint>4) write(*,fmt='(2x,"Energy shift      : ",f18.10)') d_energy
        ! Alternate approach
-       cusp_psi = xin + xout
-       cusp_psi = cusp_psi + twelve*(one-f(n_kink))*gout
-       cusp_psi = cusp_psi*gout/(gsgin + gsgout)
-       d_energy = cusp_psi
+       !cusp_psi = xin + xout
+       !cusp_psi = cusp_psi + twelve*(one-f(n_kink))*gout
+       !cusp_psi = cusp_psi*gout/(gsgin + gsgout)
+       !d_energy = cusp_psi
        if(iprint>4) write(*,fmt='(2x,"Energy shift (alt): ",f18.10)') cusp_psi
        if(iprint>5) write(*,fmt='(2x,"Number of nodes: ",i4)') n_crossings
        if ( n_crossings /= n_nodes) then

@@ -479,7 +479,7 @@ contains
     use numbers
     use pseudo_tm_info, ONLY: pseudo
     use input_module, ONLY: io_assign, io_close, leqi
-    use mesh, ONLY: alpha, beta, drdi
+    use mesh, ONLY: alpha, beta
     use pseudo_atom_info, ONLY: val, allocate_val, local_and_vkb, allocate_vkb, hamann_version, &
          deltaE_large_radius, hgh_data
     use pseudo_tm_info, ONLY: alloc_pseudo_info, pseudo
@@ -693,8 +693,18 @@ contains
     end do
     if(iprint>3) write(*,fmt='(i2," valence shells, with ",i2," occupied")') n_shells, n_occ
     root_two = sqrt(two)
-    ! For now, set atomic density to zero
-    local_and_vkb%charge = zero
+    ! Read density or set to zero
+    open(unit=40,file='charge.dat',status='old',iostat=ios)
+    if(ios==0) then
+       do i=1,ngrid
+          read(40,*) rr,local_and_vkb%charge(i)
+          !   if(abs(rr-(beta/pseudo(i_species)%z)*exp(alpha*real(i-1,double)))>1e-5_double) &
+          !        write(*,*) 'Mesh error: ',rr,(beta/pseudo(i_species)%z)*exp(alpha*real(i-1,double))
+       end do
+       close(40)
+    else
+       local_and_vkb%charge = zero
+    end if
     ! Create local potential
     do i=1,ngrid
        rr = (beta/pseudo(i_species)%z)*exp(alpha*real(i-1,double))
@@ -752,6 +762,13 @@ contains
        rr = local_and_vkb%rr(i)
        do ell = 0,max_l
           rr_rl = rr/hgh_data(i_species)%r(ell)
+          !if(ell==0) then
+          !   j=1
+          !   rr_l = rr**(ell + 2*(j-1))
+          !   local_and_vkb%charge(i) = pseudo(i_species)%zval*root_two*rr_l*exp(-0.5*rr_rl*rr_rl)/gamma_fac(j,ell)
+          !
+          !   !   write(42,*) local_and_vkb%rr(i),local_and_vkb%charge(i)
+          !end if
           do j = 1,local_and_vkb%n_proj(ell)
              rr_l = rr**(ell + 2*(j-1))
              ! r**(l + 2*(i-1))
@@ -782,6 +799,16 @@ contains
           !write(41+ell,*) rr,dummy,dummy2
        end do
     end do
+    !dummy = zero
+    !do i=1,local_and_vkb%ngrid_vkb
+    !   dummy = dummy + alpha*(local_and_vkb%rr(i)**3)*local_and_vkb%charge(i)
+    !end do
+    !write(*,*) 'charge integral is ',dummy
+    !local_and_vkb%charge = local_and_vkb%charge*pseudo(i_species)%zval/dummy
+    !do i=1,local_and_vkb%ngrid_vkb
+    !   write(43,*) local_and_vkb%rr(i),local_and_vkb%charge(i)
+    !end do
+    !flush(43)
     !do ell = 0,max_l
     !   flush(41+ell)
     !end do
