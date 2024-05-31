@@ -166,7 +166,11 @@ contains
     integer, allocatable, dimension(:) :: recv_part
     real(double) :: t0,t1
 
-    logical :: new_partition
+    logical :: new_partition, flag
+    logical, allocatable :: partition_local(:), partition_done(:)
+    integer :: jpart, the_part, prev_part, kpart_len, inode
+    integer, allocatable :: partition_periodic(:), requests(:,:)
+    integer, allocatable :: statuses(:,:)
 
     call start_timer(tmr_std_matmult)
 
@@ -213,38 +217,153 @@ contains
     !write(io_lun,*) 'Returned ',a_b_c%ahalo%np_in_halo,myid
     ncover_yz=a_b_c%gcs%ncovery*a_b_c%gcs%ncoverz
 
-    !$omp parallel default(shared)
-    main_loop: do kpart = 1,a_b_c%ahalo%np_in_halo
-
-       !$omp master
-       icall=1
+    ! Prepare partition book-keeping arrays
+    kpart_len = a_b_c%ahalo%np_in_halo
+    !if (myid.eq.0) print *, myid, " kpart_len = ", kpart_len
+    allocate(partition_local(kpart_len))
+    partition_local = .false.
+    allocate(partition_done(kpart_len))
+    partition_done = .false.
+    allocate(partition_periodic(kpart_len))
+    partition_periodic = 0
+    allocate(requests(2,kpart_len))
+    requests = MPI_REQUEST_NULL
+    allocate(statuses(kpart_len,MPI_STATUS_SIZE))
+    do kpart = 1,kpart_len
        ind_part = a_b_c%ahalo%lab_hcell(kpart)
-       new_partition = .true.
-       
-       ! Check if this is a periodic image of the previous partition
-       if(kpart>1) then
-          if(ind_part.eq.a_b_c%ahalo%lab_hcell(kpart-1)) then
-             new_partition = .false.
+       if(a_b_c%parts%i_cc2node(ind_part).eq.myid+1) then ! this is local
+          partition_local(kpart) = .true.
+          !if (myid.eq.0) print *, myid, kpart, " is local"
+       end if
+       if (kpart>1) then
+          if(a_b_c%ahalo%lab_hcell(kpart).eq.a_b_c%ahalo%lab_hcell(kpart-1)) then ! periodic
+             partition_periodic(kpart) = kpart-1
+             !print *, kpart, " is periodic to"
           end if
        end if
+    end do
 
-       if(new_partition) then
-          ! Get the data
+    ! Start all the non-blocking receives
+    do kpart = 1,kpart_len
+       if ((.not.partition_local(kpart)) .and. (partition_periodic(kpart).eq.0)) then
+          
+          ind_part = a_b_c%ahalo%lab_hcell(kpart)
+          n_cont=a_b_c%parts%nm_group(ind_part)
           ipart = a_b_c%parts%i_cc2seq(ind_part)
+          inode = a_b_c%parts%i_cc2node(ind_part)
           nnode = a_b_c%comms%neigh_node_list(kpart)
           recv_part(nnode) = recv_part(nnode)+1
+          
           if(allocated(b_rem)) deallocate(b_rem)
-          if(a_b_c%parts%i_cc2node(ind_part)==myid+1) then
-             lenb_rem = a_b_c%bmat(ipart)%part_nd_nabs
-          else
-             lenb_rem = a_b_c%comms%ilen3rec(ipart,nnode)
-          end if
+!!$          if(a_b_c%parts%i_cc2node(ind_part)==myid+1) then
+!!$             lenb_rem = a_b_c%bmat(ipart)%part_nd_nabs
+!!$          else
+          lenb_rem = a_b_c%comms%ilen3rec(ipart,nnode)
           allocate(b_rem(lenb_rem))
           part_array = 0
           b_rem = zero
-          call prefetch(kpart,a_b_c%ahalo,a_b_c%comms,a_b_c%bmat,icall,&
-               n_cont,part_array,a_b_c%bindex,b_rem,lenb_rem,b,myid,ilen2,&
-               mx_msg_per_part,a_b_c%parts,a_b_c%prim,a_b_c%gcs,(recv_part(nnode)-1)*2)
+         
+          ilen2 = a_b_c%comms%ilen2rec(ipart,nnode)
+          call Mquest_get_nonb( a_b_c%prim%mx_ngonn, &
+               a_b_c%comms%ilen2rec(ipart,nnode),&
+               a_b_c%comms%ilen3rec(ipart,nnode),&
+               n_cont,inode,ipart,myid,&
+               part_array,b_rem,lenb_rem,a_b_c%bindex,&
+               a_b_c%comms%istart(ipart,nnode), &
+               a_b_c%bmat(1)%mx_abs,a_b_c%parts%mx_mem_grp, &
+               (recv_part(nnode)-1)*2, requests(:,kpart) )
+          !if (myid.eq.0) print *, myid, kpart, " Irecv: ", requests(:,kpart)
+       end if
+    end do
+    
+    kpart = kpart_len
+    prev_part = 0
+    !$omp parallel default(shared)
+    main_loop: do while(kpart.ne.0)
+       
+       !$omp master
+       !if (myid.eq.0) print *, myid, kpart
+       ! Adding a print statement allows time for the comms to complete, otherwise tests fail.
+       ! Need to wait at the end of the loop if all partitions are done but comms are not.
+       the_part = 0
+       new_partition = .true.
+       ! Check for periodic partitions and do those first
+       if (kpart.lt.kpart_len) then
+          do jpart = 1,kpart_len
+             if (partition_periodic(jpart).eq.prev_part .and. (.not.partition_done(jpart)) ) then
+                new_partition = .false.
+                partition_done(jpart) = .true.
+                kpart = kpart -1
+                the_part = jpart
+                !if (myid.eq.0) print *, myid, "p:", kpart, jpart
+                exit
+             end if
+          end do
+       end if
+
+       if (new_partition) then
+          ! Check for comms from non-local partitions
+          do jpart = 1,kpart_len
+             !print *, the_part, jpart, partition_local(jpart), partition_done(jpart), &
+             !     partition_periodic(jpart)
+             if ((.not.partition_local(jpart)) .and. (.not.partition_done(jpart)) .and. &
+                  (partition_periodic(jpart).eq.0)) then
+                print *, myid, kpart, jpart, "Testall: ", requests(:,jpart)
+                call MPI_Testall(2, requests(:,jpart), flag, statuses)
+                print *, myid, flag, kpart, jpart, "Testall: ", requests(:,jpart)
+                !print *, flag
+                if (flag) then
+                   partition_done(jpart) = .true.
+                   kpart = kpart -1
+                   !if (myid.eq.0) print *, myid, "c:", kpart, jpart
+                   the_part = jpart
+                   exit
+                !else
+                !   print *, myid, kpart, jpart, "Testall: ", requests(:,jpart)
+                end if
+             end if
+          end do
+
+          ! If no comms were received, process local partition
+          if (the_part.eq.0) then
+             do jpart = 1,kpart_len
+                !print *, the_part, jpart, partition_local(jpart), partition_done(jpart)
+                if (partition_local(jpart) .and. (.not.partition_done(jpart)) .and. &
+                     (partition_periodic(jpart).eq.0)) then
+                   partition_done(jpart) = .true.
+                   kpart = kpart -1
+                   !if (myid.eq.0) print *, myid, "l:", kpart, jpart
+                   the_part = jpart
+                   ind_part = a_b_c%ahalo%lab_hcell(the_part)
+                   ipart = a_b_c%parts%i_cc2seq(ind_part)
+                   ilen2 = a_b_c%bmat(ipart)%part_nabs
+                   if(allocated(b_rem)) deallocate(b_rem)
+                   lenb_rem = a_b_c%bmat(ipart)%part_nd_nabs
+                   allocate(b_rem(lenb_rem))
+                   part_array = 0
+                   b_rem = zero
+                   !print *, the_part, lenb, lenb_rem
+                   call Mquest_get_local(ipart,&
+                        part_array,b_rem,lenb_rem,a_b_c%bindex,a_b_c%bmat,&
+                        ind_part,b,myid)
+                   exit
+                end if
+             end do
+          end if
+          
+       !prev_part = the_part
+          !print *, the_part, kpart
+          if (the_part.eq.0) stop "Can't get next partition"
+          
+!!$       ! Check if this is a periodic image of the previous partition
+!!$       if(kpart>1) then
+!!$          if(ind_part.eq.a_b_c%ahalo%lab_hcell(kpart-1)) then
+!!$             new_partition = .false.
+!!$          end if
+!!$       end if
+
+          ind_part = a_b_c%ahalo%lab_hcell(the_part)
+          n_cont=a_b_c%parts%nm_group(ind_part)
           ! Now point the _rem variables at the appropriate parts of
           ! the array where we will receive the data
           offset = 0
@@ -261,14 +380,15 @@ contains
           ibndimj_rem => part_array(offset+1:offset+ilen2)
           if(offset+ilen2>3*a_b_c%parts%mx_mem_grp+ &
                5*a_b_c%parts%mx_mem_grp*a_b_c%bmat(1)%mx_abs) then
-             call cq_abort('mat_mult: error pointing to part_array ',kpart)
+             call cq_abort('mat_mult: error pointing to part_array ',the_part)
           end if
           ! Create ibpart_rem
           call end_part_comms(myid,n_cont,nbnab_rem,ibind_rem,npxyz_rem,&
                ibpart_rem,ncover_yz,a_b_c%gcs%ncoverz)
+          
+          k_off=a_b_c%ahalo%lab_hcover(the_part) ! --- offset for pbcs
        end if
-       
-       k_off=a_b_c%ahalo%lab_hcover(kpart) ! --- offset for pbcs
+       prev_part = the_part
        ! Omp master doesn't include a implicit barrier. We want master
        ! to be finished with comms before calling the multiply kernels
        ! hence the explicit barrier
@@ -276,13 +396,13 @@ contains
        !$omp barrier
        
        if(a_b_c%mult_type.eq.1) then  ! C is full mult
-          call m_kern_max( k_off,kpart,ib_nd_acc_rem, ibind_rem,nbnab_rem,&
+          call m_kern_max( k_off,the_part,ib_nd_acc_rem, ibind_rem,nbnab_rem,&
                ibpart_rem,ibseq_rem,ibndimj_rem,&
                atrans,b_rem,c,a_b_c%ahalo,a_b_c%chalo,a_b_c%ltrans,&
                a_b_c%bmat(1)%mx_abs,a_b_c%parts%mx_mem_grp, &
                a_b_c%prim%mx_iprim, lena, lenb_rem, lenc)
        else if(a_b_c%mult_type.eq.2) then ! A is partial mult
-          call m_kern_min( k_off,kpart,ib_nd_acc_rem, ibind_rem,nbnab_rem,&
+          call m_kern_min( k_off,the_part,ib_nd_acc_rem, ibind_rem,nbnab_rem,&
                ibpart_rem,ibseq_rem,ibndimj_rem,&
                atrans,b_rem,c,a_b_c%ahalo,a_b_c%chalo,a_b_c%ltrans,&
                a_b_c%bmat(1)%mx_abs,a_b_c%parts%mx_mem_grp, &
@@ -600,7 +720,7 @@ contains
             a_b_c%ilen2rec(ipart,nnode),&
             a_b_c%ilen3rec(ipart,nnode),&
             n_cont,inode,ipart,myid,&
-            bind_rem,b_rem,lenb_rem,bind,b,&
+            bind_rem,b_rem,lenb_rem,bind,&
             a_b_c%istart(ipart,nnode), &
             bmat(1)%mx_abs,parts%mx_mem_grp,tag)
     end if

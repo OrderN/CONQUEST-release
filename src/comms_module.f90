@@ -177,7 +177,7 @@ contains
 !!  SOURCE
 !!
   subroutine Mquest_get( mx_nponn, ilen2,ilen3,nc_part,send_node,sent_part,myid,&
-       bind_rem,b_rem,lenb_rem,bind,b,istart,mx_babs,mx_part,tag)
+       bind_rem,b_rem,lenb_rem,bind,istart,mx_babs,mx_part,tag)
 
     ! Module usage
     use mpi
@@ -194,7 +194,6 @@ contains
     integer :: bind(:)
     integer :: lenb_rem
     real(double) :: b_rem(lenb_rem)
-    real(double) :: b(:)
     ! Miscellaneous data
     integer :: nc_part,send_node,sent_part,myid,ilen2,ilen3,size,istart,offset
     integer :: nrstat(MPI_STATUS_SIZE)
@@ -220,6 +219,75 @@ contains
     endif
     return
   end subroutine Mquest_get
+!!***
+
+! ---------------------------------------------------------------------
+!   subroutine Mquest_get_nonb
+! ---------------------------------------------------------------------
+
+!!****f* comms_module/Mquest_get_nonb *
+!!
+!!  NAME 
+!!   Mquest_get_nonb
+!!  USAGE
+!! 
+!!  PURPOSE
+!!   Calls non-blocking receives to get data for matrix multiplication
+!!  INPUTS
+!! 
+!! 
+!!  USES
+!! 
+!!  AUTHOR
+!!   I. Christidi
+!!  CREATION DATE
+!!    2023/10/06
+!!  
+!!  MODIFICATION HISTORY
+!!
+!!  SOURCE
+!!
+   subroutine Mquest_get_nonb( mx_nponn, ilen2,ilen3,nc_part,send_node,sent_part,myid,&
+       bind_rem,b_rem,lenb_rem,bind,istart,mx_babs,mx_part,tag,request)
+
+    ! Module usage
+    use mpi
+    use datatypes
+    use matrix_comms_module, ONLY: mx_msg_per_part
+    use GenComms, ONLY: cq_abort
+
+    implicit none
+
+    ! Maxima
+    integer :: mx_nponn,mx_babs,mx_part
+    ! Arrays for receiving data
+    integer :: bind_rem(:)
+    integer :: bind(:)
+    integer :: lenb_rem
+    real(double) :: b_rem(lenb_rem)
+    ! Miscellaneous data
+    integer :: nc_part,send_node,sent_part,myid,ilen2,ilen3,size,istart,offset
+    integer :: tag
+    integer :: request(2)
+
+    ! Local variables
+    integer :: ilen1,ierr,lenbind_rem
+
+    ierr = 0
+    ilen1 = nc_part
+    if(ilen3>lenb_rem) call cq_abort('Get error 2 ',ilen3,lenb_rem)
+    
+    call MPI_Irecv(bind_rem,3*ilen1+5*ilen2,MPI_INTEGER, &
+         send_node-1,tag+1,MPI_COMM_WORLD,request(1),ierr)
+    if(ierr/=0) call cq_abort('Error receiving indices !',ierr)
+    if(ilen3.gt.0)then ! Get xyz, sequence list and elements
+       ierr = 0
+       call MPI_Irecv(b_rem,ilen3, MPI_DOUBLE_PRECISION,send_node-1,&
+            tag+2,MPI_COMM_WORLD,request(2),ierr)
+       if(ierr/=0) call cq_abort('Error receiving data !',ierr)
+    endif
+    return
+  end subroutine Mquest_get_nonb
 !!***
 
 ! ---------------------------------------------------------------------
