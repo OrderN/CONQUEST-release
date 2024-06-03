@@ -131,6 +131,18 @@ jobs:
       run: |
         mpirun -np ${{matrix.np}} ../../bin/Conquest
         cat Conquest_out
+    
+    - name: Run test 006
+      working-directory: ${{github.workspace}}/testsuite/test_006_isol_C2H4_4proc_PBE0ERI_fullSZP_0.4_SCF
+      run: |
+        mpirun -np ${{matrix.np}} ../../bin/Conquest
+        cat Conquest_out
+
+    - name: Run test 007
+      working-directory: ${{github.workspace}}/testsuite/test_007_isol_C2H4_4proc_PBE0ERI_fullSZP_GTO_SCF
+      run: |
+        mpirun -np ${{matrix.np}} ../../bin/Conquest
+        cat Conquest_out
 
     - name: Check test results
       working-directory: ${{github.workspace}}/testsuite

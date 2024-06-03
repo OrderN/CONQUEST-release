@@ -34,7 +34,7 @@
 
     Default k-point sampling of Gamma point only
 
-    This job was run on  2024/04/24 at 18:46 +0200
+    This job was run on  2024/04/24 at 18:42 +0200
     Code was compiled on 2024/03/25 at 16:34 +0100
     Version comment: Git Branch: f-exx-opt; tag, hash: v1.2-215-gc00a071c
 
@@ -63,22 +63,22 @@
 
     The functional used will be hyb PBE0       
 
-    PulayMixSC: Reached SCF tolerance of  0.55970E-07 after     11 iterations
-      | Number of electrons      =        12.000000
-      |* Harris-Foulkes energy   =       -14.028830939468907 Ha
+    PulayMixSC: Reached SCF tolerance of  0.73165E-07 after     10 iterations
+      | Number of electrons      =        12.000001
+      |* Harris-Foulkes energy   =       -14.019940353472691 Ha
 
     force: Forces on atoms (Ha/a0)
     force:  Atom   X              Y              Z
-    force:     1  -0.0006939243   0.0000000000  -0.0384822038
-    force:     2  -0.0006235821  -0.0000000000   0.0384957819
-    force:     3   0.0538283496   0.0000000000  -0.0297448753
-    force:     4   0.0536942132   0.0000000000   0.0296363377
-    force:     5  -0.0531308562   0.0000000000   0.0292335571
-    force:     6  -0.0530780764   0.0000000000  -0.0291384102
+    force:     1  -0.0000000000   0.0000000000  -0.0048633431
+    force:     2  -0.0000000000   0.0000000000   0.0048633431
+    force:     3   0.0584281998   0.0000000000  -0.0345831989
+    force:     4   0.0584281998   0.0000000000   0.0345831989
+    force:     5  -0.0584281998   0.0000000000   0.0345831989
+    force:     6  -0.0584281998   0.0000000000  -0.0345831989
 
-    force: Maximum force :        0.05382835(Ha/a0) on atom         3 in x direction
-    force: Force Residual:        0.05454528 Ha/a0
-    force: Total stress:         -0.95572370    -0.00138926    -0.92184508 GPa
+    force: Maximum force :        0.05842820(Ha/a0) on atom         4 in x direction
+    force: Force Residual:        0.05550783 Ha/a0
+    force: Total stress:         -1.04689257    -0.00134924    -0.82870843 GPa
 
     BIBLIOGRAPHY: Please consider citing the following references in the conquest.bib file
 
@@ -90,6 +90,6 @@
 
     Warnings written to file Conquest_warnings; please check
 
-    Max total mem use is            169.528 MB
+    Max total mem use is            167.596 MB
 
-    Total run time was:             539.323 seconds
+    Total run time was:             147.643 seconds

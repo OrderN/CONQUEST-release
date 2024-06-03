@@ -1,8 +1,10 @@
 IO.Title isolated C6H6 with PBE0
 IO.Coordinates Conquest_coord   
 IO.FractionalCoordinates T 
-IO.Iprint 1
-IO.WriteOutToFile T
+IO.Iprint 0
+IO.WriteOutToFile F
+IO.Iprint_exx 4
+IO.TimingOn T
 
 ## General Parameters
 General.NumberOfSpecies      2

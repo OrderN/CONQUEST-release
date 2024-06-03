@@ -86,11 +86,11 @@ class TestClass:
         ],
         [
             "test_006_isol_C2H4_4proc_PBE0ERI_fullSZP_0.4_SCF",
-            ["Harris-Foulkes energy"]
+            ['Harris-Foulkes energy','Max force','Force residual','Total stress']
         ],
         [
             "test_007_isol_C2H4_4proc_PBE0ERI_fullSZP_GTO_SCF",
-            ["Harris-Foulkes energy"]
+            ['Harris-Foulkes energy','Max force','Force residual','Total stress']
         ]
     ])
     def test_all(self, test_dir, keys, testsuite_directory):
