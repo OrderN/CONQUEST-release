@@ -127,16 +127,18 @@ contains
              ! Send the indices
              ierr = 0
              sends = sends+1
-             call MPI_issend(a_b_c%bindex(istart),(3*ilen1+5*ilen2),MPI_INTEGER, &
+             call MPI_isend(a_b_c%bindex(istart),(3*ilen1+5*ilen2),MPI_INTEGER, &
                   a_b_c%comms%ncomm(i)-1,tag+1,MPI_COMM_WORLD,nreq(sends),ierr)
+             print *, myid, a_b_c%comms%ncomm(i)-1, tag+1
              if(ierr/=0) call cq_abort('Error sending indices ',ierr)
              ! Send xyz, sequence and elements
              if(ilen3>0)then 
                 ierr = 0
                 if(istart2==0) write(io_lun,*) myid,' ERROR for istart2 ',ind_part
                 sends = sends+1
-                call MPI_issend(b(istart2), ilen3, MPI_DOUBLE_PRECISION,&
+                call MPI_isend(b(istart2), ilen3, MPI_DOUBLE_PRECISION,&
                      a_b_c%comms%ncomm(i)-1,tag+2,MPI_COMM_WORLD,nreq(sends),ierr)
+                print *, myid, a_b_c%comms%ncomm(i)-1, tag+2
                 if(ierr/=0) call cq_abort('Error sending elements ',ierr)
              endif
           endif
