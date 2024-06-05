@@ -745,7 +745,7 @@ contains
           do j = 1,local_and_vkb%n_proj(ell)!3 ! Fix later to account for number of projectors per l
              rr_l = local_and_vkb%rr(i)**(ell + 2*(j-1))
              proj = root_two*rr_l*exp(-0.5*rr_rl*rr_rl)/gamma_fac(j,ell)
-             if(proj<1e-8.and.flag_min(j,ell)) then
+             if(abs(proj)<1e-8.and.flag_min(j,ell)) then
                 local_and_vkb%core_radius(ell) = local_and_vkb%rr(i)
                 if(local_and_vkb%rr(i)>local_and_vkb%rr(n_r_proj_max)) n_r_proj_max = i
                 flag_min(j,ell) = .false.

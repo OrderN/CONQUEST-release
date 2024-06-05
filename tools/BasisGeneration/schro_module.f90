@@ -102,17 +102,20 @@ contains
     real(double), dimension(nmesh) :: vha, vxc
 
     ! Local variables
-    integer :: i_shell, ell, en, i
+    integer :: i_shell, ell, en, i, iter, maxiter
     real(double) :: radius_large, large_energy, resid, alpha_scf, total_charge, check
     real(double), allocatable, dimension(:) :: psi, newcharge
 
     allocate(psi(nmesh),newcharge(nmesh))
     psi = zero
     newcharge = zero
-    alpha_scf = 0.5_double
+    alpha_scf = 0.2_double
+    maxiter = 100
+    iter = 0
     if(iprint>2) write(*,fmt='(/2x,"Finding unconfined energies for valence states")')
     resid = one
-    do while(resid>1e-12_double)
+    do while(resid>1e-12_double.and.iter<maxiter)
+       iter = iter+1
        newcharge = zero
        do i_shell = 1, val%n_occ
           if(iprint>2) write(*,fmt='(2x,"n=",i2," l=",i2)') val%n(i_shell), val%l(i_shell)
@@ -120,7 +123,14 @@ contains
           ell = val%l(i_shell)
           en = val%npao(i_shell)
           large_energy = val%en_ps(i_shell)
-          if(abs(large_energy)<RD_ERR.and.i_shell>1) large_energy = val%en_pao(i_shell-1)
+          if(ps_format==hgh) then
+             if(resid<0.01_double) then
+                large_energy = val%en_ps(i_shell)
+             else
+                large_energy = zero!half*val%en_ps(i_shell)
+             end if
+          end if
+          !if(abs(large_energy)<RD_ERR.and.i_shell>1) large_energy = val%en_pao(i_shell-1)
           call find_eigenstate_and_energy_vkb(i_species,en,ell,radius_large, psi,large_energy,vha,vxc)
           val%en_pao(i_shell) = large_energy
           ! Accumulate output charge
@@ -171,6 +181,7 @@ contains
        call get_vxc(nmesh,rr,local_and_vkb%charge,vxc)
        if(pseudo(i_species)%flag_pcc) local_and_vkb%charge = local_and_vkb%charge - local_and_vkb%pcc
     end do
+    if(iter>maxiter) call cq_abort("Exceeded iterations in SCF")
     return
   end subroutine find_unconfined_valence_states
 
@@ -888,7 +899,7 @@ contains
     real(double), OPTIONAL :: width, prefac
 
     ! Local variables
-    real(double) :: g_temp, dy_L, dy_R
+    real(double) :: g_temp, dy_L, dy_R, e_step
     real(double), dimension(:), allocatable :: f, potential
     integer :: classical_tp, i, n_crossings, n_nodes, n_loop, loop, nmax, n_kink, n_nodes_lower, n_nodes_upper, n_kink_vkb
     real(double) :: l_half_sq, dx_sq_over_twelve, fac, norm, d_energy, e_lower, e_upper, df_cusp, cusp_psi, tol
@@ -920,21 +931,22 @@ contains
        e_lower = -half!zero
     end if
     ! Energy bounds - allow for unbound states
-    e_upper = five ! One failed to find the tightest PAO for O
+    e_upper = half!five ! One failed to find the tightest PAO for O
     do i=1,nmesh
        potential(i) = local_and_vkb%local(i) + vha(i) + vxc(i)  ! Half when using Siesta
        !g_temp = l_l_plus_one/(rr_squared(i)) + potential(i)
        !if(g_temp<e_lower) e_lower = g_temp
     end do
     ! Now set number of loops and maximum radius
-    n_loop = 100
+    n_loop = 250
+    e_step = 0.2_double
     call convert_r_to_i(Rc,nmax)
     nmax = nmax - 1
     ! NEW !
     Rc = rr(nmax)
     ! NEW !
     if(abs(energy)<RD_ERR) then
-       energy = half*(e_lower+e_upper)
+       energy = zero!half*(e_lower+e_upper)
     end if
     tol = 1.0e-6_double
     if(flag_confine) then
@@ -962,6 +974,7 @@ contains
        n_crossings = 0
        call integrate_vkb_outwards(i_species,n_kink,ell,psi,f,n_crossings,n_nodes) ! We want to integrate to max before final node
        n_kink_vkb = n_kink
+       if(iprint>4) write(*,fmt='(2x,"Kink is at ",f18.10," with ",i2," crossings")') rr(n_kink),n_crossings
        ! If we haven't found enough nodes, we need to try further
        if(n_crossings/=n_nodes) then
           !write(*,*) 'Found ',n_crossings,' crossings so far; continuing ',n_kink_vkb
@@ -976,16 +989,30 @@ contains
        if(n_kink == nmax) then
           if(iprint>4) write(*,fmt='(2x,"No kink found - adjusting lower bound")')
           e_lower = energy
-          energy = half*(e_lower+e_upper)
+          if(e_upper-e_lower>e_step) then
+             energy = energy + e_step
+          else
+             energy = half*(e_lower+e_upper)
+          end if
           cycle
        end if
        if(n_crossings /= n_nodes) then
           if ( n_crossings > n_nodes ) then
              e_upper = energy
+             if(e_upper-e_lower>e_step) then
+                energy = energy - e_step
+             else
+                energy = half * ( e_upper + e_lower )
+             end if
           else
              e_lower = energy
+             if(e_upper-e_lower>e_step) then
+                energy = energy + e_step
+             else
+                energy = half * ( e_upper + e_lower )
+             end if
           end if
-          energy = half * ( e_upper + e_lower )
+          !energy = half * ( e_upper + e_lower )
           if(iprint>4) write(*,fmt='(2x,"Nodes found: ",i3," but required: ",i3)') n_crossings, n_nodes
           cycle
        end if       
@@ -1045,10 +1072,20 @@ contains
        if ( n_crossings /= n_nodes) then
           if ( n_crossings > n_nodes ) then
              e_upper = energy
+             if(e_upper-e_lower>e_step) then
+                energy = energy - e_step
+             else
+                energy = half * ( e_upper + e_lower )
+             end if
           else
              e_lower = energy
+             if(e_upper-e_lower>e_step) then
+                energy = energy + e_step
+             else
+                energy = half * ( e_upper + e_lower )
+             end if
           end if
-          energy = half * ( e_upper + e_lower )
+          !energy = half * ( e_upper + e_lower )
           cycle
        end if       
        if(d_energy>zero) then
@@ -1057,7 +1094,15 @@ contains
           e_upper = energy
        end if
        if(energy+d_energy<e_upper.AND.energy+d_energy>e_lower) then
-          energy = energy + d_energy
+          if(abs(d_energy)<e_step) then
+             energy = energy + d_energy
+          else
+             if(d_energy>zero) then
+                energy = energy + e_step
+             else
+                energy = energy - e_step
+             end if
+          end if
        else
           energy = half*(e_lower + e_upper)
        end if
