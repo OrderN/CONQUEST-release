@@ -8,6 +8,5 @@ General.PSFormat hgh
 %block La
 Atom.PseudopotentialFile La.hgh
 Atom.ZetaForm com
+Atom.Perturbative_Polarised F
 %endblock
-
-

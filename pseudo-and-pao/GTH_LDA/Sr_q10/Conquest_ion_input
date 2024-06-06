@@ -8,6 +8,25 @@ General.PSFormat hgh
 %block Sr
 Atom.PseudopotentialFile Sr.hgh
 Atom.ZetaForm com
+Atom.Perturbative_Polarised F
+Atom.PAO_N_Shells 5
+Atom.BasisBlock SrBlock
 %endblock
 
-
+# Specify the number of PAOs for each n,l pair and then their radii
+# The radii below are based on default CONQUEST energies for the 
+# valence shells
+%block SrBlock
+# n, l, number of zetas
+4 0 1
+4 1 1
+5 0 2
+5 1 1
+4 2 1
+# Radii for PAOs (bohr)
+4.1
+4.9
+10.8  5.8
+10.8
+10.8
+%endblock

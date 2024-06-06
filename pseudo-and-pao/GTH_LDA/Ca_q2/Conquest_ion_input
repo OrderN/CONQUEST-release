@@ -8,6 +8,5 @@ General.PSFormat hgh
 %block Ca
 Atom.PseudopotentialFile Ca.hgh
 Atom.ZetaForm com
+Atom.dE_small_radius 0.04
 %endblock
-
-
