@@ -92,8 +92,9 @@ contains
     use numbers
     use mesh, ONLY: rr, nmesh, drdi_squared, rr_squared,drdi
     use radial_xc, ONLY: get_vxc
-    use read, ONLY: ps_format, hgh
+    use read, ONLY: ps_format, hgh, alpha_scf, max_scf_iters
     use pseudo_tm_info, ONLY: pseudo
+    use GenComms, ONLY: cq_abort
     
     implicit none
 
@@ -103,14 +104,13 @@ contains
 
     ! Local variables
     integer :: i_shell, ell, en, i, iter, maxiter
-    real(double) :: radius_large, large_energy, resid, alpha_scf, total_charge, check
+    real(double) :: radius_large, large_energy, resid, total_charge, check
     real(double), allocatable, dimension(:) :: psi, newcharge
 
     allocate(psi(nmesh),newcharge(nmesh))
     psi = zero
     newcharge = zero
-    alpha_scf = 0.2_double
-    maxiter = 100
+    maxiter = max_scf_iters
     iter = 0
     if(iprint>2) write(*,fmt='(/2x,"Finding unconfined energies for valence states")')
     resid = one
@@ -150,6 +150,12 @@ contains
           check = check + drdi(i)*rr_squared(i)*local_and_vkb%charge(i)
        end do
        local_and_vkb%charge = alpha_scf*newcharge + (one-alpha_scf)*local_and_vkb%charge
+       ! We can use these lines to write out the charge for future solvers
+       !open(unit=70,file='charge_out.dat',position="append")
+       !do i=1,nmesh
+       !   write(70,*) rr(i), newcharge(i)!local_and_vkb%charge(i)
+       !end do
+       !close(70)
        ! Integrate
        total_charge = zero
        check = zero
@@ -160,7 +166,7 @@ contains
        end do
        ! This rescales charge to have full valence value, but can be unstable
        !if(abs(check-total_charge)>RD_ERR) local_and_vkb%charge = local_and_vkb%charge*total_charge/check
-       write(*,*) 'Residual is ',resid, total_charge, check
+       if(iprint>2) write(*,fmt='("Iteration ",i4," residual ",e14.6)') iter,resid
        if(iprint>0) then
           write(*,fmt='(/2x,"Unconfined valence state energies (Ha)")')
           write(*,fmt='(2x,"  n  l         AE energy        PAO energy")')
@@ -182,6 +188,12 @@ contains
        if(pseudo(i_species)%flag_pcc) local_and_vkb%charge = local_and_vkb%charge - local_and_vkb%pcc
     end do
     if(iter>maxiter) call cq_abort("Exceeded iterations in SCF")
+    ! We can use these lines to write out the charge for future solvers
+    open(unit=70,file='charge_out.dat')
+    do i=1,nmesh
+       write(70,*) rr(i), newcharge(i)!local_and_vkb%charge(i)
+    end do
+    close(70)
     return
   end subroutine find_unconfined_valence_states
 
@@ -843,7 +855,7 @@ contains
           end if
        end do
     else
-       write(*,*) '# Using VKB potentials'
+       !write(*,*) '# Using VKB potentials'
        do i=1,nmesh
           potential(i) = local_and_vkb%local(i) + vha(i) + vxc(i)
           g_temp = (drdi_squared(i)*(two*(energy - potential(i))-l_l_plus_one/rr_squared(i)) - alpha_sq_over_four)/twelve
@@ -866,7 +878,7 @@ contains
              end if
           end do
        end if
-       write(*,*) '# Crossings, nodes: ',n_crossings, n_nodes
+       !write(*,*) '# Crossings, nodes: ',n_crossings, n_nodes
        if(n_crossings<n_nodes+1) call cq_abort("Failed to find confined state - please check input")
     end if
     ! Find radius by integrating outwards
@@ -890,6 +902,7 @@ contains
     use GenComms, ONLY: cq_abort
     use mesh, ONLY: rr, rr_squared, nmesh, alpha, make_mesh, beta, drdi, drdi_squared, convert_r_to_i
     use pseudo_tm_info, ONLY: pseudo
+    use read, ONLY: e_step, max_solver_iters
     
     implicit none
 
@@ -899,7 +912,7 @@ contains
     real(double), OPTIONAL :: width, prefac
 
     ! Local variables
-    real(double) :: g_temp, dy_L, dy_R, e_step
+    real(double) :: g_temp, dy_L, dy_R
     real(double), dimension(:), allocatable :: f, potential
     integer :: classical_tp, i, n_crossings, n_nodes, n_loop, loop, nmax, n_kink, n_nodes_lower, n_nodes_upper, n_kink_vkb
     real(double) :: l_half_sq, dx_sq_over_twelve, fac, norm, d_energy, e_lower, e_upper, df_cusp, cusp_psi, tol
@@ -938,8 +951,7 @@ contains
        !if(g_temp<e_lower) e_lower = g_temp
     end do
     ! Now set number of loops and maximum radius
-    n_loop = 250
-    e_step = 0.2_double
+    n_loop = max_solver_iters
     call convert_r_to_i(Rc,nmax)
     nmax = nmax - 1
     ! NEW !

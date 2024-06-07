@@ -21,11 +21,14 @@ module read
   integer :: ps_format
 
   integer :: energy_units ! Local for reading; 1 is Ha, 2 is eV
+  integer :: max_scf_iters, max_solver_iters
   real(double) :: energy_conv ! Define a factor for energy conversion (often 1.0)
   real(double) :: energy_semicore ! Threshold for semi-core states
   real(double) :: shallow_state_energy ! Energy to define shallow states (maybe too large)
   real(double), save :: gen_energy_semicore ! System-wide threshold for semi-core states
   real(double) :: width, prefac ! Defaults
+  real(double) :: alpha_scf
+  real(double) :: e_step
   logical, save :: flag_gen_use_Vl
   logical :: flag_adjust_deltaE = .false.
 
@@ -96,6 +99,16 @@ contains
     gen_energy_semicore = fdf_double('General.SemicoreEnergy',-one)
     if(gen_energy_semicore>zero) &
          write(*,fmt='(4x,"Error: your semi-core threshold is positive ! ",f6.3)') gen_energy_semicore
+    !
+    ! SCF parameters
+    !
+    alpha_scf = fdf_double('General.SCFMixing',half)
+    max_scf_iters = fdf_integer('General.SCFMaxIters',200)
+    !
+    ! Solver parameters
+    !
+    e_step = fdf_double('General.SolverStep',0.1_double)
+    max_solver_iters = fdf_integer('General.SolverMaxIters',200)
     return
   end subroutine read_general_input
 
@@ -479,7 +492,7 @@ contains
     use numbers
     use pseudo_tm_info, ONLY: pseudo
     use input_module, ONLY: io_assign, io_close, leqi
-    use mesh, ONLY: alpha, beta
+    use mesh, ONLY: alpha, beta, rr_squared, drdi
     use pseudo_atom_info, ONLY: val, allocate_val, local_and_vkb, allocate_vkb, hamann_version, &
          deltaE_large_radius, hgh_data
     use pseudo_tm_info, ONLY: alloc_pseudo_info, pseudo
@@ -503,7 +516,7 @@ contains
     logical :: flag_core_done = .false.
     logical, dimension(3,0:3) :: flag_min
     real(double) :: dummy, dummy2, highest_energy, root_two, proj, rr_lp, pj, pjp
-    real(double) :: rl_base, rl_sqrt, rr, rr_l, rr_rl, rr_rl2, rr_rl4, rr_rl6
+    real(double) :: rl_base, rl_sqrt, rr, rr_l, rr_rl, rr_rl2, rr_rl4, rr_rl6, charge
     real(double), dimension(:,:), allocatable :: gamma_fac
     real(double), dimension(:,:), allocatable :: hnl
     real(double), dimension(:,:,:), allocatable :: hnl_pass, hnl_store
@@ -511,7 +524,7 @@ contains
     real(double), dimension(15):: work
     real(double), dimension(3,3) :: tmp
 
-    write(*,*) 'Starting HGH reading'
+    write(*,fmt='("Using GTH/HGH pseudopotential")')
     !
     ! Zero arrays
     !
@@ -547,7 +560,7 @@ contains
     allocate(hgh_data(i_species)%r(0:max_l), hgh_data(i_species)%h(3,0:max_l))
     hgh_data(i_species)%r = zero
     hgh_data(i_species)%h = zero
-    if(iprint>4) write(*,fmt='("Reading HGH file, with lmax=",i1)') hgh_data(i_species)%maxl
+    write(*,fmt='("Maximum angular momentum for pseudopotential is l=",i1)') hgh_data(i_species)%maxl!pseudo(i_species)%lmax
     !
     ! Read in parameters for local potential
     !
@@ -558,12 +571,12 @@ contains
     do i=1,n_species
        if(leqi(char_in,pte(i))) then
           pseudo(i_species)%z = i
-          write(*,*) 'Z is ',pseudo(i_species)%z
           exit
        end if
     end do
     pseudo(i_species)%zcore = pseudo(i_species)%z - hgh_data(i_species)%Zion
-    write(*,*) pseudo(i_species)%zcore,' core and ',pseudo(i_species)%zval,' valence electrons'
+    write(*,fmt='("There are ",f6.2," core and ",f6.2," valence electrons")') pseudo(i_species)%zcore, pseudo(i_species)%zval
+    write(*,fmt='("The atomic number is",f6.2)') pseudo(i_species)%z
     !
     ! Read data for non-local projectors
     !
@@ -593,10 +606,6 @@ contains
                 hnl(j,i) = hnl(i,j)
              end do
           end do
-          write(*,*) 'H coefficient matrix'
-          do i=1,max_nl_proj
-             write(*,*) hnl(:,i)
-          end do
           ! Store original data
           hnl_pass(1:max_nl_proj,1:max_nl_proj,ell) = hnl
           hnl_store(1:max_nl_proj,1:max_nl_proj,ell) = hnl
@@ -610,32 +619,6 @@ contains
           do i=1,max_nl_proj
              hgh_data(i_species)%h(i,ell) = eval(i)
           end do
-          ! Output and check that transform worked; only for checking during development
-          !do i=1,max_nl_proj
-          !   write(*,*) 'Eval and vec: ',eval(i),hnl_pass(1:max_nl_proj,i,ell)
-          !   hgh_data(i_species)%h(i,ell) = eval(i)
-          !end do
-          !! Check diag
-          !tmp = zero
-          !do i=1,max_nl_proj
-          !   do j=1,max_nl_proj
-          !      do k=1,max_nl_proj
-          !         tmp(j,i)=tmp(j,i) + hnl(j,k)*hnl_pass(k,i,ell)
-          !      end do
-          !   end do
-          !end do
-          !hnl = zero
-          !do i=1,max_nl_proj
-          !   do j=1,max_nl_proj
-          !      do k=1,max_nl_proj
-          !         hnl(j,i) = hnl(j,i) + hnl_pass(k,j,ell)*tmp(k,i)
-          !      end do
-          !   end do
-          !end do
-          !write(*,*) 'After diag:'
-          !do i=1,max_nl_proj
-          !   write(*,*) hnl(:,i)
-          !end do
        else
           hgh_data(i_species)%h(1,ell) = hnl(1,1)
           hnl_store(1,1,ell) = hnl(1,1)
@@ -645,7 +628,6 @@ contains
     !
     ! Transfer data into Conquest structures
     !
-    write(*,*) 'Number of NL projectors: ',local_and_vkb%n_nl_proj
     write(*,fmt='("Total number of VKB projectors: ",i2)') local_and_vkb%n_nl_proj
     call alloc_pseudo_info(pseudo(i_species),local_and_vkb%n_nl_proj)
     i=0
@@ -667,10 +649,9 @@ contains
        read(lun,*) val%n(i), val%l(i), val%occ(i), val%semicore(i)
        val%en_ps(i) = zero
        if(val%occ(i)>RD_ERR) n_occ = n_occ + 1
-       write(*,*) 'n, l, occ: ',val%n(i), val%l(i), val%occ(i)
+       write(*,fmt='("n, l and occupancy: ",i1," ",i1,f6.2)') val%n(i), val%l(i), val%occ(i)
     end do
     val%n_occ = n_occ
-    write(*,*) 'Occupied: ',n_occ
     call io_close(lun)
     !
     ! Grid size
@@ -696,12 +677,17 @@ contains
     ! Read density or set to zero
     open(unit=40,file='charge.dat',status='old',iostat=ios)
     if(ios==0) then
+       !charge = zero
        do i=1,ngrid
           read(40,*) rr,local_and_vkb%charge(i)
+          charge = charge + alpha*rr*rr*rr*local_and_vkb%charge(i)
           !   if(abs(rr-(beta/pseudo(i_species)%z)*exp(alpha*real(i-1,double)))>1e-5_double) &
           !        write(*,*) 'Mesh error: ',rr,(beta/pseudo(i_species)%z)*exp(alpha*real(i-1,double))
        end do
        close(40)
+       if(iprint>4) write(*,*) 'Charge read in integrates to : ',charge
+       ! Normalise
+       local_and_vkb%charge = local_and_vkb%charge*pseudo(i_species)%zval/charge
     else
        local_and_vkb%charge = zero
     end if
@@ -737,7 +723,7 @@ contains
        end do
     end do
     ! Set logarithmic grid and work out projector radius
-    n_r_proj_max = 0
+    n_r_proj_max = 1
     flag_min = .true.
     do i=1,ngrid
        do ell = 0,max_l
@@ -746,14 +732,14 @@ contains
              rr_l = local_and_vkb%rr(i)**(ell + 2*(j-1))
              proj = root_two*rr_l*exp(-0.5*rr_rl*rr_rl)/gamma_fac(j,ell)
              if(abs(proj)<1e-8.and.flag_min(j,ell)) then
-                local_and_vkb%core_radius(ell) = local_and_vkb%rr(i)
+                if(local_and_vkb%rr(i)>local_and_vkb%core_radius(ell)) local_and_vkb%core_radius(ell) = local_and_vkb%rr(i)
                 if(local_and_vkb%rr(i)>local_and_vkb%rr(n_r_proj_max)) n_r_proj_max = i
                 flag_min(j,ell) = .false.
+                write(*,'("l=",i1," core radius ",f6.3," bohr")') ell, local_and_vkb%core_radius(ell)
              end if
           end do
        end do
     end do
-    write(*,*) 'Projector cutoff is ',local_and_vkb%rr(n_r_proj_max),n_r_proj_max
     ! Now calculate projectors
     local_and_vkb%r_vkb = local_and_vkb%rr(n_r_proj_max)
     local_and_vkb%ngrid_vkb = n_r_proj_max
