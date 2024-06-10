@@ -869,7 +869,8 @@ contains
          InvSDeltaOmegaTolerance
     use blip,          only: blip_info, init_blip_flag, alpha, beta
     use maxima_module, only: lmax_ps
-    use control,       only: MDn_steps, MDfreq, MDcgtol, CGreset, LBFGS_history, sqnm_trust_step
+    use control,       only: MDn_steps, MDfreq, XSFfreq, XYZfreq,   &
+         MDcgtol, CGreset, LBFGS_history, sqnm_trust_step
     use ion_electrostatic,  only: ewald_accuracy
     use minimise,      only: UsePulay, n_L_iterations,          &
          n_support_iterations, L_tolerance, &
@@ -929,7 +930,9 @@ contains
          flag_write_xsf, md_cell_nhc, md_nhc_cell_mass, &
          md_calc_xlmass, md_equil_steps, md_equil_press, &
          md_tau_T_equil, md_tau_P_equil, md_p_drag, &
-         md_t_drag, md_cell_constraint, flag_write_extxyz, MDtimestep, md_ensemble
+         md_t_drag, md_cell_constraint, flag_write_extxyz, MDtimestep, md_ensemble, &
+         flag_variable_temperature, md_variable_temperature_method, &
+         md_variable_temperature_rate, md_initial_temperature, md_final_temperature
     use md_model,   only: md_tdep
     use move_atoms,         only: threshold_resetCD, &
          flag_stop_on_empty_bundle, &
@@ -941,6 +944,7 @@ contains
     use biblio, only: flag_dump_bib
     !2019/12/27 tsuyoshi
     use density_module,  only: method_UpdateChargeDensity,DensityMatrix,AtomicCharge
+    use force_module, only: mix_input_output_XC_GGA_stress
 
     implicit none
 
@@ -1567,11 +1571,21 @@ contains
     CGreset               = fdf_boolean('AtomMove.ResetCG',          .false.)
     MDn_steps             = fdf_integer('AtomMove.NumSteps',     100        )
     MDfreq                = fdf_integer('AtomMove.OutputFreq',    50        )
+    XSFfreq               = fdf_integer('AtomMove.XsfFreq',    MDfreq        )
+    if (leqi(runtype,'md')) then
+      XYZfreq             = fdf_integer('AtomMove.XyzFreq',    MDfreq        )
+    else
+      XYZfreq             = fdf_integer('AtomMove.XyzFreq',    1        )
+    end if
     MDtimestep            = fdf_double ('AtomMove.Timestep',      0.5_double)
     MDcgtol               = fdf_double ('AtomMove.MaxForceTol',0.0005_double)
     sqnm_trust_step       = fdf_double ('AtomMove.MaxSQNMStep',0.2_double   )
     LBFGS_history         = fdf_integer('AtomMove.LBFGSHistory', 5          )
     flag_opt_cell         = fdf_boolean('AtomMove.OptCell',          .false.)
+    ! At present (2023/07/26 just before v1.2 release) neutral atom is required for cell opt
+    if(flag_opt_cell.and.(.not.flag_neutral_atom)) &
+         call cq_abort("You must use neutral atom for cell optimisation")
+    ! This can be removed when ewald update is implemented
     flag_variable_cell    = flag_opt_cell
     optcell_method        = fdf_integer('AtomMove.OptCellMethod', 1)
     cell_constraint_flag  = fdf_string(20,'AtomMove.OptCell.Constraint','none')
@@ -1583,6 +1597,7 @@ contains
     flag_stress           = fdf_boolean('AtomMove.CalcStress', .true.)
     flag_full_stress      = fdf_boolean('AtomMove.FullStress', .false.)
     flag_atomic_stress    = fdf_boolean('AtomMove.AtomicStress', .false.)
+    mix_input_output_XC_GGA_stress = fdf_double('General.MixXCGGAInOut',half)
     !
     flag_vary_basis       = fdf_boolean('minE.VaryBasis', .false.)
     if(.NOT.flag_vary_basis) then
@@ -2166,6 +2181,10 @@ contains
     if (restart_DM .and. flag_Multisite .and. .not.read_option) then
        call cq_abort("When L or K matrix is read from files, SFcoeff also must be read from files for multi-site calculation.")
     endif
+    if(find_chdens .and. (.not.restart_DM)) then
+       call cq_warn(sub_name," Cannot make charge density from K without loading K! Starting from atomic densities.")
+       find_chdens = .false.
+    end if
 
     if (flag_XLBOMD) then
        kappa=fdf_double('XL.Kappa',2.0_double)
@@ -2280,6 +2299,50 @@ contains
        call fdf_endblock
     end if
     flag_heat_flux = fdf_boolean('MD.HeatFlux', .false.)
+
+    ! Variable temperature
+    flag_variable_temperature = fdf_boolean('MD.VariableTemperature', .false.)
+    md_variable_temperature_method = fdf_string(20, 'MD.VariableTemperatureMethod', 'linear')
+
+    ! Verify that a method for variable temperature is valid
+    if (flag_variable_temperature) then
+      ! At present, only linear evolution is supported
+      if(.not.leqi(md_variable_temperature_method(1:6),'linear')) then
+        if(inode==ionode) then
+          write(io_lun,fmt='(6x, "Wrong method for variable temperature: ", a, " != linear. Stopping ..." )') &
+            trim(md_variable_temperature_method)
+        end if
+        call cq_abort("Wrong method for variable temperature")
+      end if
+    end if
+
+    md_variable_temperature_rate = fdf_double('MD.VariableTemperatureRate', 0.0_double)
+    md_initial_temperature = fdf_double('MD.InitialTemperature',temp_ion)
+    md_final_temperature = fdf_double('MD.FinalTemperature',temp_ion)
+
+    ! Override temp_ion if md_initial_temperature is set
+    if (flag_variable_temperature .and. (abs(md_initial_temperature-temp_ion) > RD_ERR)) then
+        if (abs(temp_ion-300) > RD_ERR) then
+            call cq_warn(sub_name,'AtomMove.IonTemperature will be ignored since MD.VariableTemperature is true.')
+        end if
+        temp_ion = md_initial_temperature
+    end if
+
+    ! Check for consistency
+    if (flag_variable_temperature) then
+        if (md_ensemble == 'nve') then
+            call cq_abort('NVE ensemble with MD.VariableTemperature set to true is NOT allowed.')
+        end if
+        ! Verify sign of temperature change rate
+        if (abs(md_final_temperature-md_initial_temperature) > RD_ERR) then
+            if (md_variable_temperature_rate/(md_final_temperature-md_initial_temperature) < 0 ) then
+                call cq_abort('The temperature change rate is incompatible with the requested final temperature.')
+            end if
+        else ! initial and final temperature are equal
+            call cq_abort('MD.InitialTemperature and MD.FinalTemperature are the same.')
+        end if
+
+    end if
 
     ! Barostat
     target_pressure    = fdf_double('AtomMove.TargetPressure', zero)
@@ -2624,7 +2687,11 @@ contains
          numN_neutral_atom_projector, pseudo_type, OLDPS, SIESTA, ABINIT
     use input_module,         only: leqi, chrcap
     use control,    only: MDn_steps
-    use md_control, only: md_ensemble
+    use md_control, only: md_ensemble, &
+                          flag_variable_temperature, md_variable_temperature_method, &
+                          md_initial_temperature, md_final_temperature, md_variable_temperature_rate
+    use omp_module, only: init_threads
+    use multiply_kernel, only: kernel_id
 
     implicit none
 
@@ -2632,11 +2699,12 @@ contains
     logical :: vary_mu
     character(len=80) :: titles
     character(len=3) :: ensemblestr
-    integer :: NODES 
+    integer :: NODES
     real(double) :: mu, HNL_fac
 
     ! Local variables
     integer :: n, stat
+    integer :: threads
     character(len=10) :: today, the_time
     character(len=15) :: job_str
     character(len=5)  :: timezone
@@ -2682,6 +2750,9 @@ contains
        call chrcap(ensemblestr,3)
        write(io_lun, fmt='(4x,a15,a3," MD run for ",i5," steps ")') job_str, ensemblestr, MDn_steps
        write(io_lun, fmt='(6x,"Initial ion temperature: ",f9.3,"K")') temp_ion
+       if (md_final_temperature .ne. md_initial_temperature) then
+         write(io_lun, fmt='(6x,"Final thermostat temperature: ",f9.3,"K")') md_final_temperature
+       end if
        if(flag_XLBOMD) write(io_lun, fmt='(6x,"Using extended Lagrangian formalism")')
     else if(leqi(runtype,'lbfgs')) then
        write(io_lun, fmt='(4x,a15,"L-BFGS atomic relaxation")') job_str
@@ -2819,7 +2890,14 @@ contains
     else
        write(io_lun,fmt="(/4x,'The calculation will be performed on ',i5,' process')") NODES
     end if
-    
+
+    call init_threads(threads)
+    if(threads>1) then
+       write(io_lun,fmt="(/4x,'The calculation will be performed on ',i5,' threads')") threads
+    else if (threads==1) then
+       write(io_lun,fmt="(/4x,'The calculation will be performed on ',i5,' thread')") threads
+    end if
+    write(io_lun,fmt='(/4x,"Using the ",a," matrix multiplication kernel")') kernel_id
     if(.NOT.flag_diagonalisation) &
          write(io_lun,fmt='(10x,"Density Matrix range  = ",f7.4,1x,a2)') &
          dist_conv*r_c, d_units(dist_units)
@@ -2901,6 +2979,8 @@ contains
   !!    Added printing fractional k-points when read from block
   !!   2022/06/29 12:00 dave
   !!    Moved printing to capture default gamma point behaviour
+  !!   2023/07/20 12:00 tsuyoshi
+  !!    Implementing 1st version of Padding H and S matrices
   !!  SOURCE
   !!
   subroutine readDiagInfo
@@ -2914,7 +2994,7 @@ contains
     use GenComms,        only: cq_abort, cq_warn, gcopy
     use input_module
     use ScalapackFormat, only: proc_rows, proc_cols, block_size_r,   &
-         block_size_c, proc_groups, matrix_size
+         block_size_c, proc_groups, matrix_size, flag_padH
     use DiagModule,      only: nkp, kk, wtk, kT, maxefermi,          &
          flag_smear_type, iMethfessel_Paxton,  &
          max_brkt_iterations, gaussian_height, &
@@ -3014,17 +3094,26 @@ contains
     ms_is_prime = is_prime(matrix_size)
     if ( ms_is_prime ) call cq_warn(sub_name,'matrix size is a prime number', matrix_size)
     
+    ! padH or not  :temporary?   
+    flag_padH = fdf_boolean('Diag.PaddingHmatrix',.true.)
+
     if(fdf_defined('Diag.BlockSizeR')) then
        block_size_r = fdf_integer('Diag.BlockSizeR',1)
        block_size_c = fdf_integer('Diag.BlockSizeC',1)
-       a = real(matrix_size)/real(block_size_r)
-       if(a - real(floor(a))>1e-8_double) &
-            call cq_abort('block_size_r not a factor of matrix size ! ',&
-            matrix_size, block_size_r)
-       a = real(matrix_size)/real(block_size_c)
-       if(a - real(floor(a))>1e-8_double) &
-            call cq_abort('block_size_c not a factor of matrix size ! ',&
-            matrix_size, block_size_c)
+       if(flag_padH) then
+          if(block_size_c .ne. block_size_r) &
+               call cq_abort('PaddingHmatrix: block_size_c needs to be block_size_r')
+          block_size_c = block_size_r
+       else
+          a = real(matrix_size)/real(block_size_r)
+          if(a - real(floor(a))>1e-8_double) &
+               call cq_abort('block_size_r not a factor of matrix size ! ',&
+               matrix_size, block_size_r)
+          a = real(matrix_size)/real(block_size_c)
+          if(a - real(floor(a))>1e-8_double) &
+               call cq_abort('block_size_c not a factor of matrix size ! ',&
+               matrix_size, block_size_c)
+       endif
     else if (  ms_is_prime ) then
        block_size_r = 1
        block_size_c = block_size_r

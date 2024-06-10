@@ -366,6 +366,7 @@ contains
     ! Local variables
     real(double) :: loc_x_energy, exx_tmp
 
+    XC_GGA_stress = zero
     if(flag_use_libxc) then
        call get_libxc_potential(density=density, size=size,&
             xc_potential    =xc_potential,    &
@@ -702,8 +703,10 @@ contains
           end select
 
           ! d e_xc/d n
+          ! Awkward indexing because LibXC does spin first then grid point
           do spin=1,nspin
-             xc_potential(:,spin) = xc_potential(:,spin) + vrho(spin::nspin)
+             xc_potential(1:n_my_grid_points,spin) = xc_potential(1:n_my_grid_points,spin) + &
+                  vrho(spin:nspin*n_my_grid_points+spin-2:nspin)
           end do
 
           if(flag_is_GGA) then
@@ -715,7 +718,8 @@ contains
              do i=1,3
                 ! d eps / d sigma(up.up) grad rho(up) + d eps / d sigma(up.down) grad rho(down)
                 ! Note the stride here which comes from LibXC putting the spin index first
-                temp(:) = two*vsigma(1::3)*grad_density(:,i,1) + vsigma(2::3)*grad_density(:,i,2)
+                temp(1:n_my_grid_points) = two*vsigma(1:3*n_my_grid_points-2:3)*grad_density(1:n_my_grid_points,i,1) + &
+                     vsigma(2:3*n_my_grid_points-1:3)*grad_density(1:n_my_grid_points,i,2)
                 ! For non-orthogonal stresses, introduce another loop and dot with grad_density(:,j)
                 if (flag_stress) then
                   if (flag_full_stress) then
@@ -745,7 +749,8 @@ contains
              do i=1,3
                 ! d eps / d sigma(down.down) grad rho(down) + d eps / d sigma(up.down) grad rho(up)
                 ! Again, note stride
-                temp(:) = vsigma(2::3)*grad_density(:,i,1) + two*vsigma(3::3)*grad_density(:,i,2)
+                temp(1:n_my_grid_points) = vsigma(2:3*n_my_grid_points-1:3)*grad_density(1:n_my_grid_points,i,1) + &
+                     two*vsigma(3:3*n_my_grid_points:3)*grad_density(1:n_my_grid_points,i,2)
                 ! For non-orthogonal stresses, introduce another loop and dot with grad_density(:,j)
                 if (flag_stress) then
                   if (flag_full_stress) then
@@ -810,10 +815,15 @@ contains
              ng(:,1) = two * minus_i * ( ng(:,1)*recip_vector(:,1) + &
                   ng(:,2)*recip_vector(:,2) + ng(:,3)*recip_vector(:,3))
              ! Use vsigma for the second term in real space
-             vsigma = zero
-             call fft3(vsigma(:), ng(:,1), size, +1)
+             !vsigma = zero
+             !call fft3(vsigma(:), ng(:,1), size, +1)
+             !xc_potential(1:n_my_grid_points,1) = xc_potential(1:n_my_grid_points,1) + &
+             !     vsigma(1:n_my_grid_points)
+             ! Actually I think temp is fine
+             temp = zero
+             call fft3(temp(:), ng(:,1), size, +1)
              xc_potential(1:n_my_grid_points,1) = xc_potential(1:n_my_grid_points,1) + &
-                  vsigma(1:n_my_grid_points)
+                  temp(1:n_my_grid_points)
           end if ! flag_is_GGA
 
        end if ! nspin
@@ -911,7 +921,11 @@ contains
     integer :: stat, i, spin, n, j
 
     ! Initialise - allocate and zero
-    allocate(alt_dens(n_my_grid_points*nspin),vrho(n_my_grid_points*nspin))
+    if(nspin>1) then
+       allocate(alt_dens(n_my_grid_points*3),vrho(n_my_grid_points*3))
+    else
+       allocate(alt_dens(n_my_grid_points),vrho(n_my_grid_points))
+    end if
     alt_dens = zero
     if(flag_is_GGA) then
        allocate(diff_rho(size))
@@ -987,10 +1001,10 @@ contains
           select case (i_xc_family(j))
           case(XC_FAMILY_LDA)
              call xc_f90_lda_fxc(xc_func(j),n_my_grid_points,alt_dens(1),vrho(1))
-             dxc_potential(:,1,1) = dxc_potential(:,1,1) +vrho(1::3)
-             dxc_potential(:,1,2) = dxc_potential(:,1,2) +vrho(2::3)
-             dxc_potential(:,2,1) = dxc_potential(:,2,1) +vrho(2::3)
-             dxc_potential(:,2,2) = dxc_potential(:,2,2) +vrho(3::3)
+             dxc_potential(1:n_my_grid_points,1,1) = dxc_potential(:n_my_grid_points,1,1) +vrho(1:3*n_my_grid_points-2:3)
+             dxc_potential(1:n_my_grid_points,1,2) = dxc_potential(:n_my_grid_points,1,2) +vrho(2:3*n_my_grid_points-1:3)
+             dxc_potential(1:n_my_grid_points,2,1) = dxc_potential(:n_my_grid_points,2,1) +vrho(2:3*n_my_grid_points-1:3)
+             dxc_potential(1:n_my_grid_points,2,2) = dxc_potential(:n_my_grid_points,2,2) +vrho(3:3*n_my_grid_points:3)
           end select
        else
           select case (i_xc_family(j))

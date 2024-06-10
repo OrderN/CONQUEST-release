@@ -5,14 +5,26 @@ on:
     branches: [ "develop" ]
   pull_request:
     branches: [ "develop" ]
+  # Manual dispatch for including all multiply kernels in matrix.
+  # We don't want this to run on every commit, but it's useful
+  # to be able to launch it manually
+  workflow_dispatch:
+    inputs:
+      multiply_kernel_test:
+        description: 'test all multiply kernels, instead of default only'
+        required: false
+        default: false
 
 jobs:
   build:
-    name: ${{matrix.fc}} -- ${{matrix.os}} -- np = ${{matrix.np}}
+    name: ${{matrix.fc}} -- ${{matrix.os}} -- ${{matrix.multiply_kernel}} multiply kernel -- ${{matrix.np}} processes -- ${{matrix.threads}} threads
     runs-on: ${{matrix.os}}
     env:
       FC: ${{matrix.fc}}
       F77: mpif77
+      OMP_NUM_THREADS: ${{matrix.threads}}
+      OPENBLAS_NUM_THREADS: 1
+      OMP_STACKSIZE: 100M
     strategy:
       fail-fast: false
       matrix:
@@ -20,21 +32,49 @@ jobs:
           # We could add ubuntu-latest but until 2024 it will be the same as 22.04
           - ubuntu-22.04
         fc:
-          # the mpifort wrapper is recommended instead of mpif90 by openmpi. Including
-          # both here in case they do something differently.
-          #
           # TODO: We could also build with `intel-oneapi-compiler-fortran`, it is available
           #       for installation from Intel through their apt repository.
           - mpifort
-          - mpif90
         np:
+          - 1
+          - 2
+        threads:
           - 1
           - 2
         # TODO: Could be worth testing on `mpich` in addition to `openmpi-bin`. Both are
         #       available in apt
+        multiply_kernel:
+          - default
+          - gemm
+          - ompDoii
+          - ompDoik
+          - ompDoji
+          - ompDojk
+          - ompGemm
+          - ompGemm_m
+        # As a work-around, copy the multiply_kernel_test variable to the matrix and
+        # exclude non-default multiply kernels when it's false
+        # https://github.com/orgs/community/discussions/26253#discussioncomment-3250989
+        test_all_multiply_kernels:
+          - ${{github.event.inputs.multiply_kernel_test}}
+        exclude:
+          - test_all_multiply_kernels: false
+            multiply_kernel: gemm
+          - test_all_multiply_kernels: false
+            multiply_kernel: ompDoii
+          - test_all_multiply_kernels: false
+            multiply_kernel: ompDoik
+          - test_all_multiply_kernels: false
+            multiply_kernel: ompDoji
+          - test_all_multiply_kernels: false
+            multiply_kernel: ompDojk
+          - test_all_multiply_kernels: false
+            multiply_kernel: ompGemm
+          - test_all_multiply_kernels: false
+            multiply_kernel: ompGemm_m
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
       with:
         fetch-depth: '0'
 
@@ -44,7 +84,7 @@ jobs:
         sudo apt install openmpi-bin libopenmpi-dev libfftw3-dev libblas3 liblapack3 libscalapack-openmpi-dev libxc-dev
 
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: '3.10'
 
@@ -60,21 +100,26 @@ jobs:
     - name: Build
       working-directory: ${{github.workspace}}/src
       run: |
-        cp gha.make system.make
-        make -j ${{matrix.np}}
+        make -j ${{matrix.np}} SYSTEM=gha MULT_KERN=${{matrix.multiply_kernel}}
 
     - name: Run test 001
       working-directory: ${{github.workspace}}/testsuite/test_001_bulk_Si_1proc_Diag
-      run: mpirun -np ${{matrix.np}} ../../bin/Conquest
+      run: |
+        mpirun -np ${{matrix.np}} ../../bin/Conquest
+        cat Conquest_out
 
     - name: Run test 002
       working-directory: ${{github.workspace}}/testsuite/test_002_bulk_Si_1proc_OrderN
-      run: mpirun -np ${{matrix.np}} ../../bin/Conquest
+      run: |
+        mpirun -np ${{matrix.np}} ../../bin/Conquest
+        cat Conquest_out
 
     - name: Run test 003
       working-directory: ${{github.workspace}}/testsuite/test_003_bulk_BTO_polarisation
-      run: mpirun -np ${{matrix.np}} ../../bin/Conquest
-
+      run: |
+        mpirun -np ${{matrix.np}} ../../bin/Conquest
+        cat Conquest_out
+        
     - name: Check test results
       working-directory: ${{github.workspace}}/testsuite
       run: pytest test_check_output.py

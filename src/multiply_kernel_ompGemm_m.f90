@@ -26,6 +26,8 @@
 !!
 module multiply_kernel
 
+  character(len=*), parameter :: kernel_id = "ompGemm_m"
+
 !!*****
 
 contains
@@ -149,12 +151,12 @@ contains
     real(double) :: c(lenc)
     integer, optional :: debug
     ! Remote indices
-    integer(integ) :: ib_nd_acc(mx_part)
-    integer(integ) :: ibaddr(mx_part)
-    integer(integ) :: nbnab(mx_part)
-    integer(integ) :: ibpart(mx_part*mx_absb)
-    integer(integ) :: ibseq(mx_part*mx_absb)
-    integer(integ) :: bndim2(mx_part*mx_absb)
+    integer(integ), intent(in) :: ib_nd_acc(:)
+    integer(integ), intent(in) :: ibaddr(:)
+    integer(integ), intent(in) :: nbnab(:)
+    integer(integ), intent(in) :: ibpart(:)
+    integer(integ), intent(in) :: ibseq(:)
+    integer(integ), intent(in) :: bndim2(:)
     ! Local variables
     integer :: jbnab2ch(mx_absb)  ! Automatic array
     integer :: nbkbeg, k, k_in_part, k_in_halo, j, jpart, jseq
@@ -168,16 +170,7 @@ contains
     ! OpenMP required indexing variables
     integer :: nd1_1st(at%mx_halo), nd2_1st(mx_absb)
 
-!$omp parallel default(none)                                             &
-!$omp          shared(kpart, ibaddr, ib_nd_acc, nbnab, ibpart, ibseq,    &
-!$omp                 k_off, bndim2, mx_absb, mx_part, at, ahalo, chalo, &
-!$omp                 a, b, c)                                           &
-!$omp          private(i, j, k, j_in_halo, k_in_halo, k_in_part, nbkbeg, &
-!$omp                  nb_nd_kbeg, nd1, nd2, nd3, jpart, jseq, jbnab2ch, &
-!$omp                  nabeg, nbbeg, ncbeg, i_in_prim, icad, naaddr,     &
-!$omp                  nbaddr, ncaddr, n1, n2, n3, nd1_1st, nd2_1st,     &
-!$omp                  tempa, tempb, tempc, maxnd1, maxnd2, maxnd3,      &
-!$omp                  maxlen, sofar)
+    ! Allocate tempa, tempb, tempc to largest possible size outside the loop
     maxnd1 = maxval(ahalo%ndimi)
     maxnd2 = maxval(bndim2)
     maxnd3 = maxval(ahalo%ndimj)
@@ -276,7 +269,6 @@ contains
 !$omp end do
     end do ! end of k = 1, nahpart
     deallocate(tempa, tempb, tempc)
-!$omp end parallel
     return
   end subroutine m_kern_max
   !!*****
@@ -401,12 +393,12 @@ contains
     real(double) :: b(lenb)
     real(double) :: c(lenc)
     ! dimension declarations
-    integer :: ibaddr(mx_part)
-    integer :: ib_nd_acc(mx_part)
-    integer :: nbnab(mx_part)
-    integer :: ibpart(mx_part*mx_absb)
-    integer :: ibseq(mx_part*mx_absb)
-    integer :: bndim2(mx_part*mx_absb)
+    integer(integ), intent(in) :: ib_nd_acc(:)
+    integer(integ), intent(in) :: ibaddr(:)
+    integer(integ), intent(in) :: nbnab(:)
+    integer(integ), intent(in) :: ibpart(:)
+    integer(integ), intent(in) :: ibseq(:)
+    integer(integ), intent(in) :: bndim2(:)
     ! Local variables
     integer :: jbnab2ch(mx_absb)
     integer :: k, k_in_part, k_in_halo, nbkbeg, j, jpart, jseq
@@ -420,16 +412,6 @@ contains
     ! OpenMP required indexing variables
     integer :: nd1_1st(at%mx_halo), nd2_1st(mx_absb)
 
-!$omp parallel default(none)                                             &
-!$omp          shared(kpart, ibaddr, ib_nd_acc, nbnab, ibpart, ibseq,    &
-!$omp                 k_off, bndim2, mx_absb, mx_part, at, ahalo, chalo, &
-!$omp                 a, b, c)                                           &
-!$omp          private(i, j, k, j_in_halo, k_in_halo, k_in_part, nbkbeg, &
-!$omp                  nb_nd_kbeg, nd1, nd2, nd3, jpart, jseq, jbnab2ch, &
-!$omp                  nabeg, nbbeg, ncbeg, i_in_prim, icad, naaddr,     &
-!$omp                  nbaddr, ncaddr, n1, n2, n3, nd1_1st, nd2_1st,     &
-!$omp                  tempb, tempc, maxnd1, maxnd2, maxnd3, maxlen,     &
-!$omp                  sofar)
     maxnd1 = maxval(ahalo%ndimi)
     maxnd2 = maxval(bndim2)
     maxnd3 = maxval(ahalo%ndimj)
@@ -503,7 +485,6 @@ contains
 !$omp end do
     end do
     deallocate(tempb, tempc)
-!$omp end parallel
     return
   end subroutine m_kern_min
   !!*****

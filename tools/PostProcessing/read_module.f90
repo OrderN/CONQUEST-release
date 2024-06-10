@@ -18,7 +18,7 @@ contains
     use io_module, ONLY: pdb_format, pdb_template, read_atomic_positions, flag_MatrixFile_BinaryFormat
     use dimens, ONLY: r_super_x, r_super_y, r_super_z, GridCutoff
     use species_module, ONLY: n_species, species_label, species_file, mass, type_species, charge, nsf_species
-    use units, ONLY: HaToeV
+    use units, ONLY: HaToeV, dist_units, dist_conv, ang, bohr, BohrToAng
     use block_module, only: n_pts_in_block, in_block_x,in_block_y,in_block_z, blocks_raster, blocks_hilbert
     use pseudo_tm_info, only: setup_pseudo_info
     use GenComms,       only: cq_abort
@@ -26,7 +26,7 @@ contains
     
     implicit none
 
-    character(len=80) :: input_string, proc_coords
+    character(len=80) :: input_string, proc_coords, tmp
     integer :: i, j, n_grid_x, n_grid_y, n_grid_z
     integer :: n_kp_lines
     logical :: flag_kp_lines, flag_spin_polarisation, flag_Multisite
@@ -37,6 +37,17 @@ contains
     ! Load the Conquest_input files
     call load_input
     ! Now scan for parameters
+    ! Distance units
+    tmp = fdf_string(8,'General.DistanceUnits','bohr')
+    if(leqi(tmp(1:2),'a0').OR.leqi(tmp(1:2),'bo')) then
+       dist_units = bohr
+       dist_conv = one
+    else if(leqi(tmp(1:1),'A')) then
+       dist_units = ang
+       ! NB this is used to convert internal Conquest distances in Bohr to Angstroms for output
+       dist_conv = BohrToAng
+    endif
+    ! Spin
     flag_spin_polarisation   = fdf_boolean('Spin.SpinPolarised', .false.)
     nspin = 1
     if(flag_spin_polarisation) nspin = 2
@@ -213,6 +224,8 @@ contains
           else
              E_wf_min = -BIG
              E_wf_max =  BIG
+             flag_wf_range = .true.
+             flag_wf_range_Ef = fdf_boolean('IO.WFRangeRelative',.true.)
              write(*,fmt='(2x,"No range specified for bands output; assuming all bands")')
           end if
        end if
@@ -253,6 +266,9 @@ contains
        stop
     end if
     flag_by_kpoint = fdf_boolean('Process.outputWF_by_kpoint',.false.)
+    ! if output only the real part of WFs (for Gamma-point only)
+    flag_outputWF_real = .false.
+    if (leqi(job,'ban')) flag_outputWF_real = fdf_boolean('Process.outputWF_real',.false.)
     ! DOS
     ! Add flag for window relative to Fermi level
     E_DOS_min = fdf_double('Process.min_DOS_E',E_wf_min)
@@ -267,6 +283,7 @@ contains
           E_wf_max =  BIG
        end if
        flag_wf_range = .true.
+       flag_wf_range_Ef = fdf_boolean('IO.WFRangeRelative',.true.)
        flag_procwf_range_Ef = fdf_boolean('Process.WFRangeRelative',.false.)
        flag_l_resolved = fdf_boolean('Process.pDOS_l_resolved',.false.)
        flag_lm_resolved = fdf_boolean('Process.pDOS_lm_resolved',.false.)
@@ -458,10 +475,10 @@ contains
     efermi = zero
     if(nspin==1) then
        read(17,fmt='(a6,f18.10)') str,efermi(1)
-       write(*,fmt='(4x,"Fermi level: ",f12.5," Ha")') efermi(1)
+       write(*,fmt='(4x,"Fermi level: ",f12.5," Ha   (=",f10.3," eV)")') efermi(1), efermi(1)*HaToeV
     else
        read(17,fmt='(a6,2f18.10)') str,efermi(1), efermi(2)
-       write(*,fmt='(4x,"Fermi levels: ",2f12.5," Ha")') efermi
+       write(*,fmt='(4x,"Fermi levels: ",2f12.5," Ha   (=",2f10.3" eV)")') efermi, efermi*HaToeV
     end if
     read(17,*) str
     ! Allocate memory

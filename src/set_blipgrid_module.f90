@@ -415,7 +415,7 @@ contains
 
                 ! if(distsq < rcutsq) then  ! If it is a neighbour block,...
                 ! if(distsq < rcutsq+very_small) then  ! If it is a neighbour block,...
-                if(distsq < rcutsq(spec)+RD_ERR) then  ! If it is a neighbour block,...
+                if(distsq < rcutsq(spec)-RD_ERR) then  ! If it is a neighbour block,...
 
                    ! nxmin etc. (those will be used in BtoG trans.)
                    if(naba_blk%no_naba_blk(inp)==0) then
@@ -626,7 +626,7 @@ contains
                 zmax= zmin+ dcellz_block -dcellz_grid
                 call distsq_blk_atom&
                      (xatom,yatom,zatom,xmin,xmax,ymin,ymax,zmin,zmax,distsq)
-                if(distsq < rcutsq(spec)+RD_ERR) then  ! If it is a neighbour block,...
+                if(distsq < rcutsq(spec)-RD_ERR) then  ! If it is a neighbour block,...
 
                    ind_block= BCS_blocks%lab_cell(iblock)  !CC in a sim. cell
                    if(ind_block > blocks%mx_gcell) call cq_abort(' ERROR: ind_block in get_naba_BCSblk',ind_block,blocks%mx_gcell)
@@ -845,7 +845,7 @@ contains
                 call distsq_blk_atom &
                      (xatom,yatom,zatom,xmin,xmax,ymin,ymax,zmin,zmax,distsq)
                 spec = species_glob( id_glob( parts%icell_beg(DCS_parts%lab_cell(np)) +ni-1 ))
-                if(distsq<rcutsq(spec)+RD_ERR) then
+                if(distsq<rcutsq(spec)-RD_ERR) then
                 !if(distsq < rcutsq) then  ! have found a naba atom
                    ia=ia+1             ! seq. no. of naba atoms for iprim_blk
                    halo_set%ihalo(icover)=1     ! icover-th atom is a halo atom
@@ -1093,7 +1093,7 @@ contains
                 call distsq_blk_atom(xatom,yatom,zatom,xmin,xmax,ymin,ymax,zmin,zmax,distsq)
                 spec = species_glob( id_glob( parts%icell_beg(DCS_parts%lab_cell(np)) +ni-1 ))
 
-                if(distsq < rcutsq(spec)+RD_ERR) then  ! have found a naba atom
+                if(distsq < rcutsq(spec)-RD_ERR) then  ! have found a naba atom
                    ia=ia+1          
                    atoms = .true.
                    ihalo(icover) = 1

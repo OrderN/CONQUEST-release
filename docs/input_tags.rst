@@ -119,8 +119,9 @@ General.NewRun (*boolean*)
 
     *default*: T
 
-General.LoadL (*boolean*)
-    Specifies whether to load a previous L matrix from files
+General.LoadDM (*boolean*)
+    Specifies whether to load a previous density matrix (K or L depending on
+    whether diagonalisation or linear scaling are selected) from files
 
     *default*: F
 
@@ -532,6 +533,11 @@ SC.MetricFactor (*real*)
 
     *default*: 0.1
 
+SC.MakeInitialChargeFromK (*boolean*)
+    Flag determining whether initial charge is made from the density matrix
+
+    *default*: T
+    
 Go to :ref:`top <input_tags>`.
 
 .. _input_dm:
@@ -657,29 +663,33 @@ Diag.GammaCentred (*boolean*)
 
     *default*: F
     
-Diag.ProcRows (*integer*)
+Diag.PaddingHmatrix (*boolean*)
+    Setting this flag allows the Hamiltonian and overlap matrices to be 
+    made larger than their physical size, so that ScaLAPACK block sizes can
+    be set to any value (which can significantly improve efficiency).  At present, the
+    automatic setting of block sizes does not use this functionality; if
+    desired, block sizes must be set manually (note that the optimum block
+    size is likely to be different on different machines).  (Available from v1.2)
 
-    *default*:
-
-Diag.ProcCols (*integer*)
-
-    *default*:
+    *default*: T
 
 Diag.BlockSizeR (*integer*)
+    Block size for rows (See next).
 
-    *default*:
+    *default*: Determined automatically
 
 Diag.BlockSizeC (*integer*)
     R ... rows, C ... columns
-    These are ScaLAPACK parameters, and can be set heuristically by the code. Blocks
-    are sub-divisions of matrices, used to divide up the matrices between processors.
+    These are ScaLAPACK parameters, and can be set heuristically by the code. 
+    Blocks are sub-divisions of matrices, used to divide up the matrices between processors.
     The block sizes need to be factors of the square matrix size
     (i.e. :math:`\sum_{\mathrm{atoms}}\mathrm{NSF(atom)}`). A value of 64 is considered
-    optimal by the ScaLAPACK user’s guide. The rows and columns need to multiply
-    together to be less than or equal to the number of processors. If ProcRows
-    :math:`\times` ProcCols :math:`<` number of processors, some processors will be left idle.
+    optimal by the ScaLAPACK user’s guide. 
 
-    *default*:
+    If Diag.PaddingHmatrix is set to true then the block sizes can take any value,
+    but BlockSizeR and BlockSizeC must be the same.
+
+    *default*: Determined automatically
 
 Diag.MPShift[X/Y/Z] (*real*)
     Specifies the shift *s* of k-points along the x(y,z) axis, in fractional
@@ -742,7 +752,10 @@ Diag.ProcRows (*integer*)
 
 Diag.ProcCols (*integer*)
     Number of columns in the processor grid for SCALAPACK within each k-point
-    processor group 
+    processor group.  The rows and columns need to multiply
+    together to be less than or equal to the number of processors. If ProcRows
+    :math:`\times` ProcCols :math:`<` number of processors, some processors will be left idle.
+
 
     *default*: Determined automatically
 
@@ -827,11 +840,27 @@ AtomMove.OutputFreq (*integer*)
 
     *default*: 50
 
-AtomMove.WriteXSF *(boolean*)
+AtomMove.WriteXSF (*boolean*)
     Write atomic coordinates to ``trajectory.xsf`` for ``AtomMove.TypeOfRun = md`` or ``cg``,
-    every ``AtomMove.OutputFreq`` steps
+    every ``AtomMove.XsfFreq`` steps
 
     *default*: T
+
+AtomMove.XsfFreq (*integer*)
+    Frequency of output of atomic coordinates to ``trajectory.xsf``
+
+    *default*: same as ``AtomMove.OutputFreq``
+
+AtomMove.WriteXYZ (*boolean*)
+    Write atomic coordinates to ``trajectory.xyz`` for ``AtomMove.TypeOfRun = md``,
+    every ``AtomMove.XyzFreq`` steps
+
+    *default*: T
+
+AtomMove.XyzFreq (*integer*)
+    Frequency of output of atomic coordinates to ``trajectory.xyz``
+
+    *default*: same as ``AtomMove.OutputFreq``
 
 AtomMove.TestForces (*boolean*)
     Flag for testing forces with comparison of analytic and numerical calculations.
@@ -1144,6 +1173,32 @@ MD.BaroDebug (*boolean*)
 
     *default*: F
 
+MD.VariableTemperature (*boolean*)
+    Simulation with a variable temperature if .True.
+
+    *default*: F
+
+MD.VariableTemperatureMethod (*string*)
+    Type of temperature profile. Only ``linear`` temperature profile is implemented.
+
+    *default*: linear
+
+MD.VariableTemperatureRate (*real*)
+    Change rate for the temperature. In units of K/fs.
+    If positive, heating. If negative, cooling.
+
+    *default*: 0.0
+
+MD.InitialTemperature(*real*)
+    Initial temperature.
+
+    *default*: same as AtomMove.IonTemperature
+
+MD.FinalTemperature(*real*)
+    Final temperature.
+
+    *default*: same as AtomMove.IonTemperature
+
 Go to :ref:`top <input_tags>`.
 
 .. _input_spin:
@@ -1403,6 +1458,16 @@ General.GapThreshold (*real*)
 General.only_Dispersion (*boolean*)
     Selects only DFT\_D2 calculation (no electronic structure etc)
 
+General.MixXCGGAInOut (*real*)
+    For non-SCF calculations only, chooses how to mix the proportions of
+    GGA XC stress contribution (from the change of the electron density
+    gradient) found using input (0.0 gives pure input) and output (1.0
+    gives pure output) densities.  Note that this is an approximation but
+    varying the value significantly away from 0.5 will give inconsistency
+    between stress and energy.
+
+    *default*: 0.5
+    
 Go to :ref:`top <input_tags>`.
 
 .. _advanced_atomic_spec_tags:
