@@ -1,5 +1,7 @@
 General.NumberOfSpecies 1
 General.PSFormat hgh
+General.SCFMixing 0.25
+General.SolverStep 0.02
 
 %block SpeciesLabels
 1  Y
@@ -8,5 +10,5 @@ General.PSFormat hgh
 %block Y
 Atom.PseudopotentialFile Y.hgh
 Atom.ZetaForm com
-Atom.dE_small_radius 0.005
+Atom.dE_small_radius 0.010
 %endblock

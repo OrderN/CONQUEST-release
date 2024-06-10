@@ -1,5 +1,6 @@
 General.NumberOfSpecies 1
 General.PSFormat hgh
+#IO.Iprint 5
 
 %block SpeciesLabels
 1  Be
