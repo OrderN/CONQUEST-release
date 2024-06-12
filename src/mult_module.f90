@@ -1135,6 +1135,8 @@ contains
   !!    Deallocating NA projector matrices
   !!   2018/07/11 12:12 dave
   !!    Adding dissociate_matrices and deallocation of mat for empty bundle fix
+  !!   2024/06/12 18:00 nakata
+  !!    Adding end_ops for SXrange and Xrange
   !!  SOURCE
   !!
   subroutine fmmi(prim)
@@ -1381,6 +1383,8 @@ contains
     call end_ops(prim,TSrange,TSmatind)
     call end_ops(prim,THrange,THmatind)
     call end_ops(prim,TLrange,TLmatind)
+    call end_ops(prim,SXrange,SXmatind)
+    call end_ops(prim,Xrange,Xmatind)
     if (atomf.ne.sf) then
        call end_ops(prim,aSa_range,aSa_matind)
        call end_ops(prim,aHa_range,aHa_matind)
