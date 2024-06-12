@@ -1,0 +1,14 @@
+General.NumberOfSpecies 1
+General.PSFormat hgh
+
+%block SpeciesLabels
+1  As
+%endblock
+
+%block As
+Atom.PseudopotentialFile As.hgh
+Atom.ZetaForm com
+Atom.dE_small_radius 0.04
+%endblock
+
+

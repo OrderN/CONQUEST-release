@@ -1,0 +1,16 @@
+General.NumberOfSpecies 1
+General.PSFormat hgh
+IO.Iprint 5
+IO.PlotOutput T
+
+%block SpeciesLabels
+1  Ag
+%endblock
+
+%block Ag
+Atom.PseudopotentialFile Ag.hgh
+Atom.ZetaForm com
+Atom.dE_small_radius 0.005
+%endblock
+
+

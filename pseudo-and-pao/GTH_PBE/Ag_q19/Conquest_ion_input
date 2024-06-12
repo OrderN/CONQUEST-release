@@ -1,0 +1,15 @@
+General.NumberOfSpecies 1
+General.PSFormat hgh
+General.SolverMaxIters 300
+
+%block SpeciesLabels
+1  Ag
+%endblock
+
+%block Ag
+Atom.PseudopotentialFile Ag.hgh
+Atom.ZetaForm com
+Atom.Perturbative_Polarised F
+%endblock
+
+
