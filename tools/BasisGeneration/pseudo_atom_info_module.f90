@@ -195,6 +195,7 @@ contains
     allocate(local_and_vkb%local(ngrid))
     local_and_vkb%local = zero
     i = maxval(local_and_vkb%n_proj)
+    if(i==0) i=1
     allocate(local_and_vkb%projector(ngrid,i,0:pseudo(i_species)%lmax))
     local_and_vkb%projector = zero
     allocate(local_and_vkb%semilocal_potential(ngrid,0:pseudo(i_species)%lmax))

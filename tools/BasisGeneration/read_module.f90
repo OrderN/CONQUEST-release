@@ -591,39 +591,46 @@ contains
     do ell = 0,max_l
        ! Read number of projectors for this l
        read(lun,*) max_nl_proj
-       allocate(hnl(max_nl_proj,max_nl_proj))
-       hnl = zero
-       local_and_vkb%n_proj(ell) = max_nl_proj
-       local_and_vkb%n_nl_proj = local_and_vkb%n_nl_proj + local_and_vkb%n_proj(ell)
-       ! Read table of projectors
-       read(lun,*) hgh_data(i_species)%r(ell),(hnl(1,j),j=1,max_nl_proj)
-       if(max_nl_proj>1) then
-          do i=2,max_nl_proj
-             read(lun,*) (hnl(i,j),j=i,max_nl_proj)
-          end do
-          do i=1,max_nl_proj
-             do j=i+1,max_nl_proj
-                hnl(j,i) = hnl(i,j)
+       if(max_nl_proj>0) then
+          allocate(hnl(max_nl_proj,max_nl_proj))
+          hnl = zero
+          local_and_vkb%n_proj(ell) = max_nl_proj
+          local_and_vkb%n_nl_proj = local_and_vkb%n_nl_proj + local_and_vkb%n_proj(ell)
+          ! Read table of projectors
+          read(lun,*) hgh_data(i_species)%r(ell),(hnl(1,j),j=1,max_nl_proj)
+          if(max_nl_proj>1) then
+             do i=2,max_nl_proj
+                read(lun,*) (hnl(i,j),j=i,max_nl_proj)
              end do
-          end do
-          ! Store original data
-          hnl_pass(1:max_nl_proj,1:max_nl_proj,ell) = hnl
-          hnl_store(1:max_nl_proj,1:max_nl_proj,ell) = hnl
-          ! Diagonalise h matrix
-          eval = zero
-          lwork = 15
-          info = 0
-          call dsyev('V','U',max_nl_proj,hnl_pass(1:max_nl_proj,1:max_nl_proj,ell), &
-               max_nl_proj,eval(1:max_nl_proj),work,lwork,info)
-          ! Store diagonal values
-          do i=1,max_nl_proj
-             hgh_data(i_species)%h(i,ell) = eval(i)
-          end do
+             do i=1,max_nl_proj
+                do j=i+1,max_nl_proj
+                   hnl(j,i) = hnl(i,j)
+                end do
+             end do
+             ! Store original data
+             hnl_pass(1:max_nl_proj,1:max_nl_proj,ell) = hnl
+             hnl_store(1:max_nl_proj,1:max_nl_proj,ell) = hnl
+             ! Diagonalise h matrix
+             eval = zero
+             lwork = 15
+             info = 0
+             call dsyev('V','U',max_nl_proj,hnl_pass(1:max_nl_proj,1:max_nl_proj,ell), &
+                  max_nl_proj,eval(1:max_nl_proj),work,lwork,info)
+             ! Store diagonal values
+             do i=1,max_nl_proj
+                hgh_data(i_species)%h(i,ell) = eval(i)
+             end do
+          else
+             hgh_data(i_species)%h(1,ell) = hnl(1,1)
+             hnl_store(1,1,ell) = hnl(1,1)
+          end if
+          deallocate(hnl)
        else
-          hgh_data(i_species)%h(1,ell) = hnl(1,1)
-          hnl_store(1,1,ell) = hnl(1,1)
+          read(lun,*) hgh_data(i_species)%r(ell)
+          local_and_vkb%n_proj(ell) = max_nl_proj
+          local_and_vkb%n_nl_proj = local_and_vkb%n_nl_proj + local_and_vkb%n_proj(ell)
+          hgh_data(i_species)%h(:,ell) = zero
        end if
-       deallocate(hnl)
     end do
     !
     ! Transfer data into Conquest structures
@@ -712,6 +719,7 @@ contains
     ! l from 0 to lmax
     ! Precalculate normalisation
     allocate(gamma_fac(3,0:max_l))
+    gamma_fac = zero
     ! l + (4i-1)/2 gives l+3/2 = (l+1)+0.5; then l+3 and l+5
     do ell = 0,max_l
        rl_sqrt = sqrt(hgh_data(i_species)%r(ell))
@@ -727,17 +735,19 @@ contains
     flag_min = .true.
     do i=1,ngrid
        do ell = 0,max_l
-          rr_rl = local_and_vkb%rr(i)/hgh_data(i_species)%r(ell)
-          do j = 1,local_and_vkb%n_proj(ell)!3 ! Fix later to account for number of projectors per l
-             rr_l = local_and_vkb%rr(i)**(ell + 2*(j-1))
-             proj = root_two*rr_l*exp(-0.5*rr_rl*rr_rl)/gamma_fac(j,ell)
-             if(abs(proj)<1e-8.and.flag_min(j,ell)) then
-                if(local_and_vkb%rr(i)>local_and_vkb%core_radius(ell)) local_and_vkb%core_radius(ell) = local_and_vkb%rr(i)
-                if(local_and_vkb%rr(i)>local_and_vkb%rr(n_r_proj_max)) n_r_proj_max = i
-                flag_min(j,ell) = .false.
-                write(*,'("l=",i1," core radius ",f6.3," bohr")') ell, local_and_vkb%core_radius(ell)
-             end if
-          end do
+          if(local_and_vkb%n_proj(ell)>0) then
+             rr_rl = local_and_vkb%rr(i)/hgh_data(i_species)%r(ell)
+             do j = 1,local_and_vkb%n_proj(ell)!3 ! Fix later to account for number of projectors per l
+                rr_l = local_and_vkb%rr(i)**(ell + 2*(j-1))
+                proj = root_two*rr_l*exp(-0.5*rr_rl*rr_rl)/gamma_fac(j,ell)
+                if(abs(proj)<1e-8.and.flag_min(j,ell)) then
+                   if(local_and_vkb%rr(i)>local_and_vkb%core_radius(ell)) local_and_vkb%core_radius(ell) = local_and_vkb%rr(i)
+                   if(local_and_vkb%rr(i)>local_and_vkb%rr(n_r_proj_max)) n_r_proj_max = i
+                   flag_min(j,ell) = .false.
+                   write(*,'("l=",i1," core radius ",f6.3," bohr")') ell, local_and_vkb%core_radius(ell)
+                end if
+             end do
+          end if
        end do
     end do
     ! Now calculate projectors

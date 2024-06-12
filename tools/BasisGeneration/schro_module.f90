@@ -1250,7 +1250,7 @@ contains
 
     use datatypes
     use numbers
-    use mesh, ONLY: rr, nmesh, drdi, drdi_squared
+    use mesh, ONLY: rr, nmesh, drdi, drdi_squared, convert_r_to_i
     use pseudo_tm_info, ONLY: pseudo
     use GenComms, ONLY: cq_abort
     
@@ -1267,12 +1267,17 @@ contains
     real(double), allocatable, dimension(:) :: pot_vector, psi_h, s, integrand
     real(double), allocatable, dimension(:,:) :: pot_matrix, psi_inh
 
-    allocate(pot_matrix(local_and_vkb%n_proj(ell),local_and_vkb%n_proj(ell)),pot_vector(local_and_vkb%n_proj(ell)))
-    pot_matrix = zero
-    pot_vector = zero
-    allocate(psi_h(nmesh),psi_inh(nmesh,local_and_vkb%n_proj(ell)))
-    psi_h = zero
-    psi_inh = zero
+    !if(local_and_vkb%n_proj(ell)>0) then
+       allocate(pot_matrix(local_and_vkb%n_proj(ell),local_and_vkb%n_proj(ell)),pot_vector(local_and_vkb%n_proj(ell)))
+       pot_matrix = zero
+       pot_vector = zero
+       allocate(psi_h(nmesh),psi_inh(nmesh,local_and_vkb%n_proj(ell)))
+       psi_h = zero
+       psi_inh = zero
+    !else
+    !   allocate(psi_h(nmesh))
+    !   psi_h = zero
+    !end if
     if(ell == 0) then
        nproj_acc = 0
     else
@@ -1281,6 +1286,7 @@ contains
     ! Homogeneous - standard numerov - but only to projector radius
     psi_h = zero
     n_kink = local_and_vkb%ngrid_vkb
+    if(n_kink<5)     call convert_r_to_i(two,n_kink)
     if(iprint>5) write(*,fmt='("In integrate_vkb, outer limit is ",f18.10)') rr(n_kink)
     allocate(s(n_kink),integrand(n_kink))
     s = zero
@@ -1341,7 +1347,11 @@ contains
     do i=2,n_kink
        if(rr(i)>half.AND.psi(i)*psi(i-1)<zero) n_crossings = n_crossings+1
     end do
-    deallocate(pot_matrix, pot_vector, s, psi_h, psi_inh, integrand)
+    !if(local_and_vkb%n_proj(ell)>0) then
+       deallocate(pot_matrix, pot_vector, s, psi_h, psi_inh, integrand)
+    !else
+    !   deallocate(s, psi_h, integrand)
+    !end if
   end subroutine integrate_vkb_outwards
   
   subroutine find_polarisation(i_species,en,ell,Rc,psi_l,psi_pol,energy,vha,vxc,pf_sign)
