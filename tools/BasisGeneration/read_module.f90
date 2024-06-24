@@ -515,7 +515,7 @@ contains
     character(len=80) :: line
     logical :: flag_core_done = .false.
     logical, dimension(3,0:3) :: flag_min
-    real(double) :: dummy, dummy2, highest_energy, root_two, proj, rr_lp, pj, pjp
+    real(double) :: dummy, dummy2, highest_energy, root_two, proj, rr_lp, pj, pjp, r_core, r_core_2, c_core
     real(double) :: rl_base, rl_sqrt, rr, rr_l, rr_rl, rr_rl2, rr_rl4, rr_rl6, charge
     real(double), dimension(:,:), allocatable :: gamma_fac
     real(double), dimension(:,:), allocatable :: hnl
@@ -659,12 +659,22 @@ contains
        write(*,fmt='("n, l and occupancy: ",i1," ",i1,f6.2)') val%n(i), val%l(i), val%occ(i)
     end do
     val%n_occ = n_occ
+    ! Test for PCC
+    ios = 0
+    r_core = zero
+    c_core = zero
+    n_read = 0 ! Compatibility with CP2K files; not used
+    read(lun,*,iostat=ios) r_core, n_read, c_core
+    if(ios==0) then
+       pseudo(i_species)%flag_pcc = .true.
+       write(*,fmt='("This pseudopotential includes partial core corrections")')
+    end if
     call io_close(lun)
     !
     ! Grid size
     !
     ngrid = log(45.0_double/(beta/pseudo(i_species)%z))/log(1.012_double) ! Following Hamann
-    write(*,*) 'Number of grid points ',ngrid
+    if(iprint>2) write(*,fmt='("Number of grid points ",i5)') ngrid
     call allocate_vkb(ngrid,i_species)
     ! Assign pseudo-n value for nodes
     do i = 1,n_shells
@@ -681,15 +691,13 @@ contains
     end do
     if(iprint>3) write(*,fmt='(i2," valence shells, with ",i2," occupied")') n_shells, n_occ
     root_two = sqrt(two)
-    ! Read density or set to zero
+    ! Read density from charge.dat or set to zero if file not present
     open(unit=40,file='charge.dat',status='old',iostat=ios)
     if(ios==0) then
        !charge = zero
        do i=1,ngrid
           read(40,*) rr,local_and_vkb%charge(i)
           charge = charge + alpha*rr*rr*rr*local_and_vkb%charge(i)
-          !   if(abs(rr-(beta/pseudo(i_species)%z)*exp(alpha*real(i-1,double)))>1e-5_double) &
-          !        write(*,*) 'Mesh error: ',rr,(beta/pseudo(i_species)%z)*exp(alpha*real(i-1,double))
        end do
        close(40)
        if(iprint>4) write(*,*) 'Charge read in integrates to : ',charge
@@ -713,6 +721,19 @@ contains
     local_and_vkb%r_vkb = local_and_vkb%rr(ngrid)
     local_and_vkb%ngrid_vkb = ngrid
     !
+    ! Create PCC
+    !
+    if(pseudo(i_species)%flag_pcc) then
+       allocate(local_and_vkb%pcc(ngrid))
+       local_and_vkb%pcc = zero
+       ! There is a parameter n_read above which is currently unused
+       r_core_2 = r_core*r_core
+       do i=1,ngrid
+          rr = local_and_vkb%rr(i)
+          local_and_vkb%pcc(i) = c_core*exp(-half*rr*rr/r_core_2) ! May need to remove factor of 4pi
+       end do
+    end if
+    !
     ! Create non-local projectors
     !
     ! i from 1 to 3
@@ -734,21 +755,25 @@ contains
     n_r_proj_max = 1
     flag_min = .true.
     do i=1,ngrid
+       if(local_and_vkb%rr(i)>half) then
        do ell = 0,max_l
           if(local_and_vkb%n_proj(ell)>0) then
              rr_rl = local_and_vkb%rr(i)/hgh_data(i_species)%r(ell)
-             do j = 1,local_and_vkb%n_proj(ell)!3 ! Fix later to account for number of projectors per l
+             do j = 1,local_and_vkb%n_proj(ell)
                 rr_l = local_and_vkb%rr(i)**(ell + 2*(j-1))
                 proj = root_two*rr_l*exp(-0.5*rr_rl*rr_rl)/gamma_fac(j,ell)
                 if(abs(proj)<1e-8.and.flag_min(j,ell)) then
                    if(local_and_vkb%rr(i)>local_and_vkb%core_radius(ell)) local_and_vkb%core_radius(ell) = local_and_vkb%rr(i)
                    if(local_and_vkb%rr(i)>local_and_vkb%rr(n_r_proj_max)) n_r_proj_max = i
                    flag_min(j,ell) = .false.
-                   write(*,'("l=",i1," core radius ",f6.3," bohr")') ell, local_and_vkb%core_radius(ell)
                 end if
              end do
           end if
        end do
+    end if
+    end do
+    do ell = 0,max_l
+       write(*,'("l=",i1," core radius ",f6.3," bohr")') ell, local_and_vkb%core_radius(ell)
     end do
     ! Now calculate projectors
     local_and_vkb%r_vkb = local_and_vkb%rr(n_r_proj_max)

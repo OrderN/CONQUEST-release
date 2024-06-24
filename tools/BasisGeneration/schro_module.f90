@@ -114,6 +114,12 @@ contains
     iter = 0
     if(iprint>2) write(*,fmt='(/2x,"Finding unconfined energies for valence states")')
     resid = one
+    !
+    ! SCF iteration needed for HGH where we do not have an atomic density supplied
+    ! I have found that if we start from no charge density then it's better to allow
+    ! the charge to gradually change towards the correct ionic charge rather than
+    ! rescaling after the first iteration
+    !
     do while(resid>1e-12_double.and.iter<maxiter)
        iter = iter+1
        newcharge = zero
@@ -124,11 +130,11 @@ contains
           en = val%npao(i_shell)
           large_energy = val%en_ps(i_shell)
           if(ps_format==hgh) then
-             if(resid<0.01_double) then
-                large_energy = val%en_ps(i_shell)
-             else
+             !if(resid<0.01_double) then
+             !   large_energy = val%en_ps(i_shell)
+             !else
                 large_energy = zero!half*val%en_ps(i_shell)
-             end if
+             !end if
           end if
           !if(abs(large_energy)<RD_ERR.and.i_shell>1) large_energy = val%en_pao(i_shell-1)
           call find_eigenstate_and_energy_vkb(i_species,en,ell,radius_large, psi,large_energy,vha,vxc)
@@ -149,11 +155,12 @@ contains
           resid = resid + drdi(i)*rr_squared(i)*(local_and_vkb%charge(i)-newcharge(i))**2
           check = check + drdi(i)*rr_squared(i)*local_and_vkb%charge(i)
        end do
+       ! Simple linear mixing
        local_and_vkb%charge = alpha_scf*newcharge + (one-alpha_scf)*local_and_vkb%charge
        ! We can use these lines to write out the charge for future solvers
        !open(unit=70,file='charge_out.dat',position="append")
        !do i=1,nmesh
-       !   write(70,*) rr(i), newcharge(i)!local_and_vkb%charge(i)
+       !   write(70,*) rr(i), newcharge(i)
        !end do
        !close(70)
        ! Integrate
@@ -167,17 +174,7 @@ contains
        ! This rescales charge to have full valence value, but can be unstable
        !if(abs(check-total_charge)>RD_ERR) local_and_vkb%charge = local_and_vkb%charge*total_charge/check
        if(iprint>2) write(*,fmt='("Iteration ",i4," residual ",e14.6)') iter,resid
-       if(iprint>0) then
-          write(*,fmt='(/2x,"Unconfined valence state energies (Ha)")')
-          write(*,fmt='(2x,"  n  l         AE energy        PAO energy")')
-          do i_shell = 1, val%n_occ
-             ell = val%l(i_shell)
-             en = val%n(i_shell)
-             write(*,fmt='(2x,2i3,2f18.10)') en, ell, val%en_ps(i_shell), &
-                  val%en_pao(i_shell)
-             if(ps_format==hgh) val%en_ps(i_shell) = val%en_pao(i_shell)
-          end do
-       else if(ps_format==hgh) then
+       if(ps_format==hgh) then
           do i_shell = 1, val%n_occ
              val%en_ps(i_shell) = val%en_pao(i_shell)
           end do
@@ -187,6 +184,25 @@ contains
        call get_vxc(nmesh,rr,local_and_vkb%charge,vxc)
        if(pseudo(i_species)%flag_pcc) local_and_vkb%charge = local_and_vkb%charge - local_and_vkb%pcc
     end do
+    if(iprint>0) then
+       write(*,fmt='(/2x,"Unconfined valence state energies (Ha)")')
+       if(ps_format==hgh) then
+          write(*,fmt='(2x,"  n  l          PAO energy")')
+          do i_shell = 1, val%n_occ
+             ell = val%l(i_shell)
+             en = val%n(i_shell)
+             write(*,fmt='(2x,2i3,f18.10)') en, ell,val%en_pao(i_shell)
+          end do
+       else
+          write(*,fmt='(2x,"  n  l         AE energy        PAO energy")')
+          do i_shell = 1, val%n_occ
+             ell = val%l(i_shell)
+             en = val%n(i_shell)
+             write(*,fmt='(2x,2i3,2f18.10)') en, ell, val%en_ps(i_shell), &
+                  val%en_pao(i_shell)
+          end do
+       end if
+    end if
     if(iter>maxiter) call cq_abort("Exceeded iterations in SCF")
     ! We can use these lines to write out the charge for future solvers
     open(unit=70,file='charge_out.dat')
@@ -716,7 +732,7 @@ contains
                deltaE_large_radius, deltaE_large_radius*HaToeV
           small_cutoff(i_shell) = large_cutoff(i_shell)
        end if
-       write(*,*) '# Radii: ',large_cutoff(i_shell),small_cutoff(i_shell)
+       if(iprint>3) write(*,*) '# Radii: ',large_cutoff(i_shell),small_cutoff(i_shell)
     end do
     ! Create cutoffs based on defaults chosen by user
     if(paos%flag_cutoff==pao_cutoff_energies.OR.paos%flag_cutoff==pao_cutoff_default) then ! Same energy for all l/n shells
@@ -912,7 +928,7 @@ contains
     real(double), OPTIONAL :: width, prefac
 
     ! Local variables
-    real(double) :: g_temp, dy_L, dy_R
+    real(double) :: g_temp, dy_L, dy_R, ipsi_in, ipsi_out
     real(double), dimension(:), allocatable :: f, potential
     integer :: classical_tp, i, n_crossings, n_nodes, n_loop, loop, nmax, n_kink, n_nodes_lower, n_nodes_upper, n_kink_vkb
     real(double) :: l_half_sq, dx_sq_over_twelve, fac, norm, d_energy, e_lower, e_upper, df_cusp, cusp_psi, tol
@@ -1041,7 +1057,7 @@ contains
        psi(n_kink:nmax) = psi(n_kink:nmax)*fac
        xin = psi(n_kink)*f(n_kink)- psi(n_kink+1)*f(n_kink+1)
        gin = psi(n_kink)
-       gsgin = psi(n_kink)*psi(n_kink)*drdi_squared(n_kink)       
+       gsgin = psi(n_kink)*psi(n_kink)*drdi_squared(n_kink)
        ! Remember that psi is y in numerov - don't forget factor of root(r)
        ! Normalise
        norm = zero
@@ -1081,6 +1097,30 @@ contains
        !d_energy = cusp_psi
        if(iprint>4) write(*,fmt='(2x,"Energy shift (alt): ",f18.10)') cusp_psi
        if(iprint>5) write(*,fmt='(2x,"Number of nodes: ",i4)') n_crossings
+       !! Integrate to kink in both directions - this is another estimate of the
+       !! energy change required but is rather approximate because of the method
+       !! used to calculate dpsi/dr
+       !ipsi_out = zero
+       !do i=1,n_kink
+       !   ipsi_out = ipsi_out + psi(i)*psi(i)*drdi_squared(i)
+       !end do
+       !ipsi_out = ipsi_out/(psi(n_kink)*psi(n_kink))
+       !ipsi_in = zero
+       !do i=n_kink,nmax
+       !   ipsi_in = ipsi_in + psi(i)*psi(i)*drdi_squared(i)
+       !end do
+       !ipsi_in = ipsi_in/(psi(n_kink)*psi(n_kink))
+       !!dy_L = (psi(n_kink)*sqrt(drdi(n_kink))/rr(n_kink)-psi(n_kink-1)*sqrt(drdi(n_kink-1))/rr(n_kink-1)) &
+       !!     /(rr(n_kink)-rr(n_kink-1))
+       !!dy_R = (psi(n_kink+1)*sqrt(drdi(n_kink+1))/rr(n_kink+1)-psi(n_kink)*sqrt(drdi(n_kink))/rr(n_kink)) &
+       !!     /(rr(n_kink+1)-rr(n_kink))
+       !dy_L = (psi(n_kink)*drdi(n_kink)-psi(n_kink-1)*drdi(n_kink-1)) &
+       !     /(rr(n_kink)-rr(n_kink-1))
+       !dy_R = (psi(n_kink+1)*drdi(n_kink+1)-psi(n_kink)*drdi(n_kink)) &
+       !     /(rr(n_kink+1)-rr(n_kink))
+       !d_energy = -(dy_L/psi(n_kink) - dy_R/psi(n_kink))/(ipsi_in + ipsi_out)
+       !write(*,*) 'New d_energy is ',d_energy
+       ! Write out psi here?
        if ( n_crossings /= n_nodes) then
           if ( n_crossings > n_nodes ) then
              e_upper = energy
