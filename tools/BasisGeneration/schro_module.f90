@@ -694,6 +694,7 @@ contains
     use numbers
     use mesh, ONLY: nmesh, rr, delta_r_reg, convert_r_to_i
     use units, ONLY: HaToeV
+    use read, ONLY: ps_format, oncvpsp
     
     implicit none
 
@@ -711,14 +712,19 @@ contains
     allocate(large_cutoff(val%n_occ),small_cutoff(val%n_occ))
     large_cutoff = zero
     small_cutoff = zero
-    write(*,fmt='(/4x,"Default energy shifts")')
+    write(*,fmt='(/4x,"Energy shifts")')
     write(*,fmt='(4x,"  n  l   delta E (Ha) delta E (eV)")')
     ! Loop over valence states, find large/small cutoffs
     do i_shell = 1, val%n_occ !paos%n_shells-1 
        if(iprint>3) write(*,*) '# Finding radius for ',paos%npao(i_shell), paos%l(i_shell), &
             val%en_ps(i_shell)+deltaE_large_radius
-       call find_radius_from_energy(i_species,paos%npao(i_shell), paos%l(i_shell), &
-            large_cutoff(i_shell), val%en_ps(i_shell)+deltaE_large_radius, vha, vxc, .false.)
+       if(val%semicore(i_shell)==0.or.ps_format==oncvpsp) then
+          call find_radius_from_energy(i_species,paos%npao(i_shell), paos%l(i_shell), &
+               large_cutoff(i_shell), val%en_ps(i_shell)+deltaE_large_radius, vha, vxc, .false.)
+       else
+          call find_radius_from_energy(i_species,paos%npao(i_shell), paos%l(i_shell), &
+               large_cutoff(i_shell), val%en_ps(i_shell)+deltaE_large_radius_semicore_hgh, vha, vxc, .false.)
+       end if
        ! Round to grid step
        if(val%semicore(i_shell)==0) then
           write(*,fmt='(4x,2i3,2f13.8," (large radius)")') paos%n(i_shell), paos%l(i_shell), &
@@ -728,8 +734,13 @@ contains
           call find_radius_from_energy(i_species,paos%npao(i_shell), paos%l(i_shell), &
                small_cutoff(i_shell), val%en_ps(i_shell)+deltaE_small_radius, vha, vxc, .false.)
        else
-          write(*,fmt='(4x,2i3,2f13.8," (only radius)")') paos%n(i_shell), paos%l(i_shell), &
-               deltaE_large_radius, deltaE_large_radius*HaToeV
+          if(ps_format==oncvpsp) then
+             write(*,fmt='(4x,2i3,2f13.8," (only radius)")') paos%n(i_shell), paos%l(i_shell), &
+                  deltaE_large_radius, deltaE_large_radius*HaToeV
+          else
+             write(*,fmt='(4x,2i3,2f13.8," (only radius)")') paos%n(i_shell), paos%l(i_shell), &
+                  deltaE_large_radius_semicore_hgh, deltaE_large_radius_semicore_hgh*HaToeV
+          end if
           small_cutoff(i_shell) = large_cutoff(i_shell)
        end if
        if(iprint>3) write(*,*) '# Radii: ',large_cutoff(i_shell),small_cutoff(i_shell)
@@ -903,6 +914,10 @@ contains
     Rc = rr(i) - psi(i)*(rr(i+1)-rr(i))/(psi(i+1)-psi(i))
     !write(*,*) 'ri, ri+1 and interp are: ',rr(i), rr(i+1),psi(i),psi(i+1), - psi(i)*(rr(i+1)-rr(i))/(psi(i+1)-psi(i))
     if(iprint>5) write(*,*) '# Found radius ',Rc
+    if(abs(Rc - rr(local_and_vkb%ngrid_vkb))<0.1_double) then ! Arbitrary but reasonable
+       write(*,fmt='(/"For l=",i1," Rpao is close to RKB: ",2f7.4)') ell,Rc,rr(local_and_vkb%ngrid_vkb)
+       write(*,fmt='("Consider increasing Rpao or decreasing RKB"/)')
+    end if
     deallocate(f,potential,psi)
     return
   end subroutine find_radius_from_energy
@@ -1004,10 +1019,15 @@ contains
        n_kink_vkb = n_kink
        if(iprint>4) write(*,fmt='(2x,"Kink is at ",f18.10," with ",i2," crossings")') rr(n_kink),n_crossings
        ! If we haven't found enough nodes, we need to try further
-       if(n_crossings/=n_nodes) then
+       !if(n_crossings/=n_nodes) then
+       if(n_crossings<n_nodes) then
           !write(*,*) 'Found ',n_crossings,' crossings so far; continuing ',n_kink_vkb
           n_kink = nmax-n_kink_vkb+1
           call numerov(n_kink_vkb-1,n_kink,nmax,psi,rr,f,1,n_crossings,n_nodes,xkap,0)
+          !if(n_kink<n_kink_vkb) then
+          !   write(*,*) 'Possible error source: ',n_kink_vkb,nmax
+          !   n_kink=nmax
+          !end if
           !write(*,*) 'Left numerov with kink, crossings: ',n_kink,n_crossings
        end if
        if(iprint>4) write(*,fmt='(2x,"Kink is at ",f18.10)') rr(n_kink)

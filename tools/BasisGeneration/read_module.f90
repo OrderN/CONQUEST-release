@@ -3,6 +3,7 @@ module read
   use datatypes
   use GenComms, ONLY: cq_abort
   use global_module, ONLY: iprint
+  use pseudo_atom_info, only: kb_thresh
   
   implicit none
 
@@ -109,6 +110,10 @@ contains
     !
     e_step = fdf_double('General.SolverStep',0.1_double)
     max_solver_iters = fdf_integer('General.SolverMaxIters',200)
+    !
+    ! Threshold for KB projectors
+    !
+    kb_thresh = fdf_double('General.KBThresh',1e-8_double)
     return
   end subroutine read_general_input
 
@@ -120,7 +125,8 @@ contains
     use input_module, ONLY: fdf_block, fdf_string, leqi, fdf_integer, fdf_double, fdf_boolean, &
          fdf_endblock
     use pseudo_atom_info, ONLY: paos, flag_use_Vl, val, deltaE_large_radius, deltaE_small_radius, &
-         flag_default_cutoffs, pao_cutoff_energies, pao_cutoff_radii, pao_cutoff_default
+         flag_default_cutoffs, pao_cutoff_energies, pao_cutoff_radii, pao_cutoff_default, &
+         deltaE_large_radius_semicore_hgh
     use units, ONLY: HaToeV
     use mesh, ONLY: mesh_type, hamann, siesta, alpha, beta, delta_r_reg
 
@@ -205,11 +211,14 @@ contains
           energy_conv = one / HaToeV
           deltaE_large_radius = fdf_double("Atom.dE_large_radius",0.02_double)
           deltaE_small_radius = fdf_double("Atom.dE_small_radius",two)
+          deltaE_large_radius = fdf_double("Atom.dE_large_radius_semicore_hgh",2.72e-5_double)
           deltaE_large_radius = deltaE_large_radius / HaToeV
+          deltaE_large_radius_semicore_hgh = deltaE_large_radius_semicore_hgh / HaToeV
           deltaE_small_radius = deltaE_small_radius / HaToeV
        else if(leqi(input_string(1:2),"Ha")) then
           deltaE_large_radius = fdf_double("Atom.dE_large_radius",0.00073498_double)
           deltaE_small_radius = fdf_double("Atom.dE_small_radius",0.073498_double)
+          deltaE_large_radius_semicore_hgh = fdf_double("Atom.dE_large_radius_semicore_hgh",1e-6_double)
        end if
        if(flag_adjust_deltaE) then
           deltaE_large_radius = deltaE_large_radius*two
@@ -494,7 +503,7 @@ contains
     use input_module, ONLY: io_assign, io_close, leqi
     use mesh, ONLY: alpha, beta, rr_squared, drdi
     use pseudo_atom_info, ONLY: val, allocate_val, local_and_vkb, allocate_vkb, hamann_version, &
-         deltaE_large_radius, hgh_data
+         deltaE_large_radius, hgh_data, kb_thresh
     use pseudo_tm_info, ONLY: alloc_pseudo_info, pseudo
     use periodic_table, ONLY: pte, n_species
     use radial_xc, ONLY: flag_functional_type, init_xc, functional_lda_pz81, functional_gga_pbe96, &
@@ -686,8 +695,6 @@ contains
        if(number_of_this_l>1) val%inner(i) = index_count_func(number_of_this_l-1,this_l)
        ! Set n for PAO (sets number of nodes)
        val%npao(i) = this_l + number_of_this_l 
-       ! Check for semi-core state
-       !if(val%en_ps(i)<energy_semicore) val%semicore(i) = 1
     end do
     if(iprint>3) write(*,fmt='(i2," valence shells, with ",i2," occupied")') n_shells, n_occ
     root_two = sqrt(two)
@@ -748,7 +755,6 @@ contains
           ! l + 2i -1 + 0.5
           rl_base = rl_sqrt*hgh_data(i_species)%r(ell)**real(ell+2*i-1,double)
           gamma_fac(i,ell) = rl_base*sqrt(gamma(real(ell+(four*real(i,double)-one)/two,double)))
-          !write(*,*) 'Gamma: ',gamma_fac(i,ell),i,gamma(real(ell+(four*real(i,double)-one)/two,double))
        end do
     end do
     ! Set logarithmic grid and work out projector radius
@@ -762,7 +768,7 @@ contains
              do j = 1,local_and_vkb%n_proj(ell)
                 rr_l = local_and_vkb%rr(i)**(ell + 2*(j-1))
                 proj = root_two*rr_l*exp(-0.5*rr_rl*rr_rl)/gamma_fac(j,ell)
-                if(abs(proj)<1e-8.and.flag_min(j,ell)) then
+                if(abs(proj)<kb_thresh.and.flag_min(j,ell)) then
                    if(local_and_vkb%rr(i)>local_and_vkb%core_radius(ell)) local_and_vkb%core_radius(ell) = local_and_vkb%rr(i)
                    if(local_and_vkb%rr(i)>local_and_vkb%rr(n_r_proj_max)) n_r_proj_max = i
                    flag_min(j,ell) = .false.
@@ -783,13 +789,6 @@ contains
        rr = local_and_vkb%rr(i)
        do ell = 0,max_l
           rr_rl = rr/hgh_data(i_species)%r(ell)
-          !if(ell==0) then
-          !   j=1
-          !   rr_l = rr**(ell + 2*(j-1))
-          !   local_and_vkb%charge(i) = pseudo(i_species)%zval*root_two*rr_l*exp(-0.5*rr_rl*rr_rl)/gamma_fac(j,ell)
-          !
-          !   !   write(42,*) local_and_vkb%rr(i),local_and_vkb%charge(i)
-          !end if
           do j = 1,local_and_vkb%n_proj(ell)
              rr_l = rr**(ell + 2*(j-1))
              ! r**(l + 2*(i-1))
@@ -803,36 +802,8 @@ contains
                 local_and_vkb%projector(i,j,ell) = rr*root_two*rr_l*exp(-0.5*rr_rl*rr_rl)/gamma_fac(j,ell)
              end if
           end do
-          ! Check that diagonal and original projectors give same results - only for development
-          !dummy = zero
-          !dummy2 = zero
-          !do j=1,local_and_vkb%n_proj(ell)
-          !   dummy = dummy + local_and_vkb%projector(i,j,ell)*hgh_data(i_species)%h(j,ell)* &
-          !        local_and_vkb%projector(i,j,ell)
-          !   rr_l = rr**(ell + 2*(j-1))
-          !   pj = rr*root_two*rr_l*exp(-0.5*rr_rl*rr_rl)/gamma_fac(j,ell)
-          !   do jp = 1,local_and_vkb%n_proj(ell)
-          !      rr_lp = rr**(ell + 2*(jp-1))
-          !      pjp = rr*root_two*rr_lp*exp(-0.5*rr_rl*rr_rl)/gamma_fac(jp,ell)
-          !      dummy2 = dummy2+pj*pjp*hnl_store(j,jp,ell)
-          !   end do
-          !end do
-          !write(41+ell,*) rr,dummy,dummy2
        end do
     end do
-    !dummy = zero
-    !do i=1,local_and_vkb%ngrid_vkb
-    !   dummy = dummy + alpha*(local_and_vkb%rr(i)**3)*local_and_vkb%charge(i)
-    !end do
-    !write(*,*) 'charge integral is ',dummy
-    !local_and_vkb%charge = local_and_vkb%charge*pseudo(i_species)%zval/dummy
-    !do i=1,local_and_vkb%ngrid_vkb
-    !   write(43,*) local_and_vkb%rr(i),local_and_vkb%charge(i)
-    !end do
-    !flush(43)
-    !do ell = 0,max_l
-    !   flush(41+ell)
-    !end do
     deallocate(gamma_fac,hnl_pass)
     ! Store values in Conquest structures
     n_read = 1
@@ -844,7 +815,6 @@ contains
        if(iprint>4) write(*,fmt='(i3,4f10.5)') ell, &
             pseudo(i_species)%pjnl_ekb(n_read-local_and_vkb%n_proj(ell):n_read-1)
     end do
-    !call io_close(lun)
     return
   end subroutine read_hgh_input
   
