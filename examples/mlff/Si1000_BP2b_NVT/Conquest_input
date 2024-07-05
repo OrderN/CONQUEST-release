@@ -1,0 +1,66 @@
+## Input/Output
+IO.Title Bulk Si 1000 atoms SZ
+IO.Iprint 1 
+IO.Coordinates coord.in ##Si1000.in
+IO.FractionalAtomicCoords T
+IO.WriteOutToFile T
+#IO.Iprint_MD 1
+IO.DumpL         F
+## General Parameters
+General.PseudopotentialType  siesta
+General.FunctionalType 3
+General.PartitionMethod Hilbert
+General.NumberOfSpecies 1
+
+## Machine learning parameters
+General.MLFF T
+##MLFF.Descriptor_range 8.0
+MLFF.Descriptor_range 13.228083 # unit : bohr # 7.0 angstrom
+AtomMove.WriteExtXYZ T
+AtomMove.WriteXSF     F
+AtomMove.ReuseSFcoeff F
+AtomMove.ReuseDM      F
+
+## Run type
+AtomMove.TypeOfRun md
+## NVT
+AtomMove.Timestep         2.0 
+AtomMove.IonTemperature 9000.0
+AtomMove.NumSteps 5000
+MD.Ensemble nvt ## nvt npt
+
+## NVT
+MD.Thermostat nhc
+MD.nNHC 5
+MD.nYoshida 5
+MD.tauT 30
+
+## NPT
+#AtomMove.TargetPressure 0.1
+#MD.Barostat mttk #nhc
+#MD.tauP 100
+#MD.PDrag 10.0
+
+## DMM method
+DM.L_range          1.000000000  
+DM.SolutionMethod     ordern   #{ ordern | diagon }  
+
+## SCF solution
+minE.MixedLSelfConsistent        T
+minE.SelfConsistent              T     
+SC.KerkerPreCondition            T     
+
+
+##Integration Grid
+Grid.GridCutoff 100
+
+%block ChemicalSpeciesLabel
+1  28.0850   Si  Si.ion
+%endblock
+
+%block Si
+  Atom.ValenceCharge        4.0
+  Atom.NumberOfSupports     4
+  Atom.SupportFunctionRange 5.43 # 5.13
+  Atom.InvSrange            8.0
+%endblock 

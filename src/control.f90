@@ -193,7 +193,7 @@ contains
                           flag_ff, flag_wf, level=backtrace_level)
        else
          total_energy=0.0_double
-         call get_MLFF()
+         call get_MLFF(total_energy)
          call print_E_and_F_ML(flag_wf)
        end if
 
@@ -814,7 +814,7 @@ contains
     ! Find energy and forces
     min_layer = min_layer - 1
     if (flag_MLFF) then
-      call get_MLFF()
+      call get_MLFF(energy0)
     else
       if (flag_fire_qMD) then
         call get_E_and_F(fixed_potential, vary_mu, energy0, .true., .true.)
@@ -997,7 +997,7 @@ contains
        min_layer = min_layer - 1
        if (flag_fire_qMD) then
           if (flag_MLFF) then
-            call get_MLFF()
+            call get_MLFF(energy1)
             if (inode==ionode .and. flag_debug_mlff) &
                write(*,*) 'check stress after gret_MLFF:', stress,baro%P_int*HaBohr3ToGPa,&
                baro%P_ext*HaBohr3ToGPa
@@ -1011,7 +1011,7 @@ contains
        else
           if (flag_MLFF) then
             t1=MPI_wtime()
-            call get_MLFF()
+            call get_MLFF(energy1)
             t2=MPI_wtime()
             if (inode==ionode .and. flag_time_mlff) &
                write(*,2023) 'Time at get_E_and_F_ML in MD:', t2-t1

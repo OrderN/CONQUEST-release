@@ -23,7 +23,8 @@
 module mlff
 
   use datatypes
-  use energy,  only: ml_energy_hartree
+  use energy,  ONLY: ml_energy_hartree
+  use GenComms, ONLY: inode, ionode
 
   implicit none
   real(double) :: inv_cell(3, 3), real_cell(3, 3)   ! be careful about length unit, it is bohr
@@ -32,7 +33,7 @@ module mlff
 
   real(double)                 :: ml_energy        ! eV
   real(double), allocatable    :: ml_force(:, :)   ! eV/Angstrom
-  real(double), dimension(3,3) :: ml_stress        ! eV
+  real(double), dimension(3,3) :: ml_stress,ml_stress_Fr,ml_stress_cell        ! eV
 
 
 contains
@@ -54,7 +55,7 @@ contains
 !!  AUTHOR
 !!   Jianbo Lin
 !!  CREATION DATE
-!!   25/11/99
+!!   2022/03/14
 !!  MODIFICATION HISTORY
 !!
 !!  SOURCE
@@ -120,6 +121,7 @@ contains
         write(*,*) amat_ML(1)%vij(:,1)
         write(*,*) amat_ML(1)%frac_vij(:,1)
         write(*,*) real_cell(:, :)
+        write(*,*) inv_cell(:, :)
       end if
       if(index(params_ML%descriptor_type, '3b') .gt. 0)then
         write(*,*) '3b is found at descriptor_type: ', &
@@ -138,23 +140,6 @@ contains
     return
   end subroutine matrix_ini_ML
 !!***
-
-
-
-!!****f*  ML_type/read_split *
-!!
-!!  NAME
-!!   read_split
-!!  PURPOSE
-!!
-!!  AUTHOR
-!!   Jianbo Lin
-!!  CREATION DATE
-!!   2022/03/14
-!!  MODIFICATION HISTORY
-!!
-!!  SOURCE
-!!
 
 
 !!****f* mlff_module/get_naba_ML *
@@ -437,7 +422,7 @@ contains
     use numbers,   ONLY: pi,very_small
     use dimens, ONLY: r_super_x, r_super_y, r_super_z
     use GenComms, ONLY: cq_abort, inode, ionode, my_barrier
-    use mlff_type, ONLY: matrix_ML, get_inversed_matrix3
+    use mlff_type, ONLY: matrix_ML
 
     implicit none
 
@@ -447,7 +432,7 @@ contains
 
     ! Local variables
     integer(integ) :: inp,nn
-    integer(integ) :: ii, jj, ist_j
+    integer(integ) :: ii, jj, ist_j, ii_dim
     real(double) :: vij(3), f_vij(3)
 
     ! After we have neighbor information and descriptor information
@@ -464,7 +449,9 @@ contains
             vij=amat(nn)%vij(:,ist_j)
 
             ! convert to fractional coordination
-            f_vij = matmul(inv_cell, vij)
+            do ii_dim = 1, 3
+              f_vij(ii_dim) = DOT_PRODUCT(inv_cell(ii_dim, :), vij)
+            end do ! ii_dim
             amat(nn)%frac_vij(:,ist_j) = f_vij
           end do ! j, two-body
         inp=inp+1  ! Indexes primary-set atoms
@@ -476,6 +463,7 @@ contains
     enddo ! End part_on_node
   end subroutine get_fractional_matrix_ML
 !!***
+
 
 !!****f* mlff_type_module/calculate_EandF_acsf2b *
 !!
@@ -504,6 +492,8 @@ contains
 !!   Available different feature dimensions for each type of atom
 !!   2024/02/05 J.Lin
 !!   Move stress calculation to a new subroutine get_stress
+!!   2024/05/10 J.Lin
+!!   Add stress contribution calculated from cell
 !!  SOURCE
 !!
   subroutine calculate_EandF_acsf2b(prim,amat,amat_features_ML,descriptor_params)
@@ -529,29 +519,43 @@ contains
 
     ! Local variables
     integer :: inp, ip_process
-    integer :: nn, ii, jj, np, i_species,ia_glob, axis_dim=3
+    integer :: nn, ii, jj, kk, np, i_species,ia_glob, axis_dim=3
     real(double) :: rx,ry,rz
 
     ! loop over all atom pairs (atoms in primary set, max. cover set) -
     inp=1  ! Indexes primary atoms
+    ml_stress_cell=0.0_double
     do nn=1,prim%groups_on_node ! Partitions in primary set
-    !pair check!write(*,*) 'nn loop, inode=',inode
-    if(prim%nm_nodgroup(nn).gt.0) then  ! Are there atoms ?
-      do ii=1,prim%nm_nodgroup(nn)  ! Loop over atoms in partition
-        ia_glob=prim%ig_prim(prim%nm_nodbeg(nn)+ii-1)
-        i_species = amat(nn)%i_species(ii)
+      !pair check!write(*,*) 'nn loop, inode=',inode
+      if(prim%nm_nodgroup(nn).gt.0) then  ! Are there atoms ?
+        do ii=1,prim%nm_nodgroup(nn)  ! Loop over atoms in partition
+          ia_glob=prim%ig_prim(prim%nm_nodbeg(nn)+ii-1)
+          i_species = amat(nn)%i_species(ii)
 
+          ml_energy = ml_energy + &
+            dot_product( &
+            amat_features_ML(nn)%id_atom(ii)%fp_energy(:), descriptor_params(i_species)%coef_energy)
           do jj=1, axis_dim
             ml_force(jj, ia_glob) = dot_product( &
                 amat_features_ML(nn)%id_atom(ii)%fp_force(jj,:), descriptor_params(i_species)%coef)
+            do kk=1, axis_dim
+              ml_stress_cell(jj,kk) = ml_stress_cell(jj,kk) + &
+                dot_product( &
+                amat_features_ML(nn)%id_atom(ii)%fp_stress(jj,kk,:), descriptor_params(i_species)%coef_energy)
+            end do !kk
           enddo ! jj, axis_dim
-        inp=inp+1  ! Indexes primary-set atoms
-      enddo ! End prim%nm_nodgroup
-      !pair check!write(*,*) 'after prim%nm_nodgroup', inode
-    else
-      if(flag_debug_mlff) &
-        write(*, *) 'Warning: No atoms in this partition calculate_EandF_acsf2b', inode, nn
-    endif ! End if(prim%nm_nodgroup>0)
+          if (ia_glob==1) then
+            write(2024,fmt='(a,3f10.6)')  'ml_stress_cell: ',ml_stress_cell(1,:)
+            write(2024,fmt='(a,3f10.6)')  'ml_stress_cell: ',ml_stress_cell(2,:)
+            write(2024,fmt='(a,3f10.6)')  'ml_stress_cell: ',ml_stress_cell(3,:)
+          end if
+          inp=inp+1  ! Indexes primary-set atoms
+        enddo ! End prim%nm_nodgroup
+        !pair check!write(*,*) 'after prim%nm_nodgroup', inode
+      else
+        if(flag_debug_mlff) &
+          write(*, *) 'Warning: No atoms in this partition calculate_EandF_acsf2b', inode, nn
+      endif ! End if(prim%nm_nodgroup>0)
     enddo ! End part_on_node
   end subroutine calculate_EandF_acsf2b
 !!***
@@ -609,11 +613,12 @@ contains
 
     ! Local variables
     integer :: inp, ip_process
-    integer :: nn, ii, jj, np, i_species,ia_glob, axis_dim=3
+    integer :: nn, ii, jj, kk, np, i_species,ia_glob, axis_dim=3
     real(double) :: rx,ry,rz
 
     ! loop over all atom pairs (atoms in primary set, max. cover set) -
     inp=1  ! Indexes primary atoms
+    ml_stress_cell=0.0_double
     do nn=1,prim%groups_on_node ! Partitions in primary set
       !pair check!write(*,*) 'nn loop, inode=',inode
       if(prim%nm_nodgroup(nn).gt.0) then  ! Are there atoms ?
@@ -621,10 +626,23 @@ contains
           ia_glob=prim%ig_prim(prim%nm_nodbeg(nn)+ii-1)
           i_species = amat(nn)%i_species(ii)
 
+          ml_energy = ml_energy + &
+            dot_product( &
+            amat_features_ML(nn)%id_atom(ii)%fp_energy(:), descriptor_params(i_species)%coef_energy)
           do jj=1, axis_dim
             ml_force(jj, ia_glob) = dot_product( &
                 amat_features_ML(nn)%id_atom(ii)%fp_force(jj,:), descriptor_params(i_species)%coef)
+            do kk=1, axis_dim
+              ml_stress_cell(jj,kk) = ml_stress_cell(jj,kk) + &
+                dot_product( &
+                amat_features_ML(nn)%id_atom(ii)%fp_stress(jj,kk,:), descriptor_params(i_species)%coef_energy)
+            end do !kk
           enddo ! jj, axis_dim
+          if (ia_glob==1) then
+            write(2024,fmt='(a,3f10.6)')  'ml_stress_cell: ',ml_stress_cell(1,:)
+            write(2024,fmt='(a,3f10.6)')  'ml_stress_cell: ',ml_stress_cell(2,:)
+            write(2024,fmt='(a,3f10.6)')  'ml_stress_cell: ',ml_stress_cell(3,:)
+          end if
           inp=inp+1  ! Indexes primary-set atoms
         enddo ! End prim%nm_nodgroup
         !pair check!write(*,*) 'after prim%nm_nodgroup', inode
@@ -779,11 +797,11 @@ contains
     type(primary_set), intent(in) :: prim
 
     ! Local variables
-    integer :: inp, nn, ii, ia_glob
-    real(double) :: rx, ry, rz
+    integer :: inp, nn, ii, ia_glob, ii_dim, jj_dim
+    real(double) :: rx, ry, rz, vij(3)
 
     ! Get ml_stress for each NB atom
-    ml_stress = zero
+    ml_stress_Fr = zero
     ! loop over all atom (atoms in primary set, max. cover set) -
     inp=1  ! Indexes primary atoms
     do nn=1,prim%groups_on_node ! Partitions in primary set
@@ -796,23 +814,35 @@ contains
           rx = prim%xprim(inp) * BohrToAng
           ry = prim%yprim(inp) * BohrToAng
           rz = prim%zprim(inp) * BohrToAng
+          vij(1) = rx
+          vij(2) = ry
+          vij(3) = rz
           if(flag_full_stress) then
             ! vec_Fi*vec_ri
-            ml_stress(1,1) = ml_stress(1,1) + ml_force(1, ia_glob) * rx
-            ml_stress(1,2) = ml_stress(1,2) + ml_force(1, ia_glob) * ry
-            ml_stress(1,3) = ml_stress(1,3) + ml_force(1, ia_glob) * rz
+            !ml_stress(1,1) = ml_stress(1,1) + ml_force(1, ia_glob) * rx
+            !ml_stress(1,2) = ml_stress(1,2) + ml_force(1, ia_glob) * ry
+            !ml_stress(1,3) = ml_stress(1,3) + ml_force(1, ia_glob) * rz
 
-            ml_stress(2,1) = ml_stress(2,1) + ml_force(2, ia_glob) * rx
-            ml_stress(2,2) = ml_stress(2,2) + ml_force(2, ia_glob) * ry
-            ml_stress(2,3) = ml_stress(2,3) + ml_force(2, ia_glob) * rz
+            !ml_stress(2,1) = ml_stress(2,1) + ml_force(2, ia_glob) * rx
+            !ml_stress(2,2) = ml_stress(2,2) + ml_force(2, ia_glob) * ry
+            !ml_stress(2,3) = ml_stress(2,3) + ml_force(2, ia_glob) * rz
 
-            ml_stress(3,1) = ml_stress(3,1) + ml_force(3, ia_glob) * rx
-            ml_stress(3,2) = ml_stress(3,2) + ml_force(3, ia_glob) * ry
-            ml_stress(3,3) = ml_stress(3,3) + ml_force(3, ia_glob) * rz
+            !ml_stress(3,1) = ml_stress(3,1) + ml_force(3, ia_glob) * rx
+            !ml_stress(3,2) = ml_stress(3,2) + ml_force(3, ia_glob) * ry
+            !ml_stress(3,3) = ml_stress(3,3) + ml_force(3, ia_glob) * rz
+            do ii_dim = 1, 3
+                do jj_dim = 1, 3
+                    ml_stress_Fr(ii_dim,jj_dim) = ml_stress_Fr(ii_dim,jj_dim) &
+                        + ml_force(ii_dim, ia_glob) * vij(jj_dim)
+                end do
+            end do
+
           else
-            ml_stress(1,1) = ml_stress(1,1) + ml_force(1, ia_glob) * rx
-            ml_stress(2,2) = ml_stress(2,2) + ml_force(2, ia_glob) * ry
-            ml_stress(3,3) = ml_stress(3,3) + ml_force(3, ia_glob) * rz
+            !ml_stress_Fr = matmul(ml_force(:, ia_glob), vij)
+            do ii_dim = 1, 3
+                    ml_stress_Fr(ii_dim,ii_dim) = ml_stress_Fr(ii_dim,ii_dim) &
+                        + ml_force(ii_dim, ia_glob) * vij(ii_dim)
+            end do
           end if
           inp=inp+1  ! Indexes primary-set atoms
         enddo ! End prim%nm_nodgroup
@@ -842,7 +872,7 @@ contains
 !!    Added franctional coordination in matrix_ML for pressure calculation
 !!  SOURCE
 !!
-  subroutine get_MLFF()
+  subroutine get_MLFF(total_energy)
 
     use datatypes
     use units
@@ -866,11 +896,12 @@ contains
     implicit none
 
     ! Shared variables
-    !real(double)   :: total_energy
+    real(double)   :: total_energy
 
     ! local variables
     integer :: i, j, ip, ia, np, nj, ia_glob, j_glob,nn, ist
     integer :: stat
+    integer :: ii_dim
     integer, allocatable :: neighbour_part(:)
     real(double) :: real_cell_vec(3, 3), part_cell_vec(3, 3), &
             part_cell_dual(3, 3)
@@ -946,10 +977,18 @@ contains
                          zero, r_super_y, zero,&
                          zero, zero, r_super_z], [3,3])
     call get_inversed_matrix3(real_cell, inv_cell)
+    if (inode== ionode) then
+      do ii_dim = 1, 3
+        write(1986,fmt='(i2,a,3e10.2)') ii_dim, " real_cell(MLFF):", real_cell(ii_dim, :)
+      end do ! ii_dim
+      do ii_dim = 1, 3
+        write(1986,fmt='(i2,a,3e10.2)') ii_dim, " inv_cell(MLFF):", inv_cell(ii_dim, :)
+      end do ! ii_dim
+    end if
 
     ! Initialise the ML matrix and Covering set
     if(bundle%n_prim.gt.0) then
-        call matrix_ini_ML(parts,bundle,ML_CS,amat,amat_ML, r_ML_des,inode)
+      call matrix_ini_ML(parts,bundle,ML_CS,amat,amat_ML, r_ML_des,inode)
     end if
     !! TODO:If necessary my_barrier
     !call my_barrier()
@@ -987,6 +1026,7 @@ contains
     ! collect data and transfer units from ML (eV/Ang) to DFT (Ha/a0)
     call gsum(ml_energy)
     ml_energy_hartree = ml_energy / HaToeV
+    total_energy = ml_energy_hartree
     call gsum(ml_force, 3, ni_in_cell)
     tot_force = ml_force * BohrToAng / HaToeV
     t2=MPI_wtime()
@@ -998,7 +1038,10 @@ contains
     if(flag_stress) then
       call get_stress(bundle)
       !ml_stress=0.01
-      call gsum(ml_stress,3,3)
+      call gsum(ml_stress_Fr,3,3)
+      call gsum(ml_stress_cell,3,3)
+      ml_stress = - ml_stress_Fr + matmul(ml_stress_cell,transpose(real_cell))
+      !ml_stress = ml_stress_Fr
       stress = ml_stress / HaToeV
     end if
     t2=MPI_wtime()
@@ -1059,17 +1102,9 @@ contains
       write(*,*) '################# END Check get_MLFF #################'
     end if
 
-    100 format('inode: ',i5,' i_par: ',i5,' i_id: ',i5,' i_glob2: ', i5, &
-               ' j_par: ', i5,' j_id: ',i5,' j_glob2: ', i5, &
-               ' j_species: ', i5,' radius(Angstrom): ',f12.8)
-    101 format(a8,a8,a8,a8, a8,a8,a8, a10,a12)
-    102 format(i8,i8,i8,i8, i8,i8,i8, i10,f12.8)
     103 format(i8,3f16.8)
     2023 format(a,e16.6)
     !stop
-    110 format('E_ML:',f25.15,' ',a2)
-    111 format('Force on atom ', i9)
-    112 format(i10, 3f15.10)
     return
   end subroutine get_MLFF
 !!***
@@ -1128,6 +1163,9 @@ contains
       max_force = zero
       max_atom  = 0
       max_compt = 0
+
+      write (io_lun, fmt='(4x,a,x,f15.10)') &
+          trim(prefix)//" Total Energy (Ha)", ml_energy_hartree
 
       write (io_lun, fmt='(/4x,a,a2,"/",a2,")")') &
           trim(prefix)//" Forces on atoms (",en_units(energy_units), d_units(dist_units)

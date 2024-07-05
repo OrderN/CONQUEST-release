@@ -23,15 +23,17 @@
 module mlff_type
 
   use datatypes
-  use GenComms,               only: cq_abort
+  use GenComms,               only: cq_abort, inode, ionode
   use timer_module,           only: start_timer,stop_timer
   use timer_stdclocks_module, only: tmr_std_allocation
+  use dimens, ONLY: r_super_x, r_super_y, r_super_z
   use energy, only: ml_energy_hartree
 
   implicit none
+  real(double) :: real_cell(3, 3), real_cell_T(3,3)
 
   save
-
+  real(double) :: ratio_FtoE_2b=-4, ratio_FtoE_3b=-6 ! ratio of the model coefficients from force to energy
   logical :: flag_debug_mlff = .FALSE. ! .TRUE. ! control output level from mlff for debug
   logical :: flag_time_mlff =  .FALSE. !.TRUE. ! .FALSE. ! control output level from mlff for timing
 
@@ -134,10 +136,15 @@ module mlff_type
   end type g45_param
 
   type acsf_param
+    ! Type of derivative of descriptor for two-body term
+    integer :: type_analytic_derivative = 0 ! 0: numerical, 1: analytic
+
     ! Number of g2,g3,g4,g5
-    integer :: num_g2,num_g3,num_g4,num_g5                    ! total number of two-body or three-body terms
-    integer, dimension(:), allocatable :: nums_g2,nums_g3,nums_g4,nums_g5   ! numbers of two-body and three-body terms
-    integer, dimension(:), allocatable :: nums_g2_acc,nums_g3_acc,nums_g4_acc,nums_g5_acc  ! start index of each component
+    integer :: num_g2,num_g3,num_g4,num_g5           ! total number of two-body or three-body terms
+    integer, dimension(:), allocatable :: nums_g2,nums_g3   ! numbers of two-body and three-body terms
+    integer, dimension(:), allocatable :: nums_g4,nums_g5   ! numbers of two-body and three-body terms
+    integer, dimension(:), allocatable :: nums_g2_acc,nums_g3_acc  ! start index of each component
+    integer, dimension(:), allocatable :: nums_g4_acc,nums_g5_acc  ! start index of each component
 
     integer :: n_species                             ! number of species in this descriptor
     character(len=2), allocatable :: species_lst(:)  ! dimension n_species
@@ -145,13 +152,14 @@ module mlff_type
     ! Cutoff
     real(double) :: rcut
     ! Arrays
-    type(g2_param),  allocatable  :: params_g2(:)    ! two lists of Eta and Rs parameters for G2 functions
-    type(g3_param),  allocatable  :: params_g3(:)    ! a list of kapa parameters for G3 functions
-    type(g45_param),  allocatable :: params_g4(:)    ! three lists of Eta, zeta and lamda parameters for G4 functions
-    type(g45_param),  allocatable :: params_g5(:)    ! three lists of Eta, zeta and lamda parameters for G5 functions
+    type(g2_param),  allocatable  :: params_g2(:)    ! Eta and Rs parameters for G2 functions
+    type(g3_param),  allocatable  :: params_g3(:)    ! kapa parameters for G3 functions
+    type(g45_param),  allocatable :: params_g4(:)    ! Eta, zeta and lamda parameters for G4 functions
+    type(g45_param),  allocatable :: params_g5(:)    ! Eta, zeta and lamda parameters for G5 functions
     !Model parameter in one dimension
     integer :: dim_coef
     real(double),allocatable :: coef(:) ! this coef here is standardscale * coefficent of Linear-Regression
+    real(double),allocatable :: coef_energy(:)
   end type acsf_param
 !!***
 
@@ -176,6 +184,9 @@ module mlff_type
   end type b3_param
 
   type split_param
+    ! Type of derivative of descriptor for two-body part
+    integer :: type_analytic_derivative = 0 ! 0: numerical, 1: analytic
+
     ! Number of 2b,3b
     integer          :: num_2b,num_3b                  ! total number of two-body or three-body terms
     integer, dimension(:), allocatable :: nums_2b,nums_3b            ! numbers of two-body and three-body terms
@@ -192,8 +203,10 @@ module mlff_type
     !Model parameter in one dimension
     integer :: dim_coef                 ! dimension of feature
     real(double),allocatable :: coef(:) ! this coef here is standardscale * coefficent of Linear-Regression
+    real(double),allocatable :: coef_energy(:)
   end type split_param
 
+  !Todo: make descriptor type selectable
   type descriptor_param
     character(len=80)          :: descriptor_type
     type(acsf_param),  allocatable :: acsf(:)
@@ -1205,6 +1218,7 @@ deallocate(loc_atomic_features%fp_force,STAT=stat)
       num_g2 = descriptor_params(ii)%num_g2
       descriptor_params(ii)%dim_coef = num_g2
       allocate(descriptor_params(ii)%coef(descriptor_params(ii)%dim_coef),STAT=stat)
+      allocate(descriptor_params(ii)%coef_energy(descriptor_params(ii)%dim_coef),STAT=stat)
       if(stat/=0) then
         call cq_abort('acsf2b coef in descriptor_params : error allocating memory to dim_coef')
       endif
@@ -1222,6 +1236,8 @@ deallocate(loc_atomic_features%fp_force,STAT=stat)
         end if
         descriptor_params(ii)%coef(a:b) = descriptor_params(ii)%params_g2(jj)%coefs &
             / descriptor_params(ii)%params_g2(jj)%scales
+
+        descriptor_params(ii)%coef_energy(a:b) = descriptor_params(ii)%coef(a:b)/ratio_FtoE_2b
 
         do kk = 1, b-a+1
           if (inode == ionode) then
@@ -1400,6 +1416,8 @@ deallocate(loc_atomic_features%fp_force,STAT=stat)
 !!   Available parameter Rs in this descriptor
 !!   2024/04/10 J.Lin
 !!   Modified vectors of vij, vik, vjk to arrays
+!!   2024/07/04 J.Lin
+!!   Checked consistancy of coefficients between force, energy, stress
 !!  SOURCE
 !!
   subroutine get_feature_acsf2b(prim,gcs,amat,amat_features_ML,rcut,descriptor_params)
@@ -1429,11 +1447,13 @@ deallocate(loc_atomic_features%fp_force,STAT=stat)
     integer :: inp, cumu_ndims, neigh_spec, ip_process,ia_glob
     integer :: nn,ii,jj,kk,np,ni, ist_j, ist_k, species_orderij, i_species, j_species
     integer :: param_start, param_end, shift_dim, param_index, fp_index, gx_index
+    integer :: ii_dim, jj_dim
+    integer :: rate_analytic_derivative=0
 
-    real(double) :: vij(3), vik(3), dij, dik, djk, djk_2
-    real(double) :: eta, rs, rcut_a
-    real(double) :: tmp1, frc_ij, frc_ik, frc_jk
-    real(double) :: proj_b2_energy, proj_b2_force(3)
+    real(double) :: vij(3), frac_vij(3), dij
+    real(double) :: eta, rs, rcut_a, eta_inv_2
+    real(double) :: tmp1, frc_ij, tmp2
+    real(double) :: proj_b2_energy, proj_b2_force(3),proj_b2_stress(3,3)
     real(double), parameter :: tol=1.0e-8_double
 
     type(atomic_features), allocatable :: species_features_acc(:) ! template feature data for each species
@@ -1474,6 +1494,8 @@ deallocate(loc_atomic_features%fp_force,STAT=stat)
           !Species of i is  amat(nn)%i_species(i)
           i_species = amat(nn)%i_species(ii)
           ia_glob=prim%ig_prim(prim%nm_nodbeg(nn)+ii-1)
+          rate_analytic_derivative=descriptor_params(i_species)%type_analytic_derivative
+
           do jj=1,  amat(nn)%n_nab(ii)
             ist_j = amat(nn)%i_acc(ii)+jj-1
             j_species = amat(nn)%j_species(ist_j)
@@ -1481,10 +1503,30 @@ deallocate(loc_atomic_features%fp_force,STAT=stat)
 
             dij=amat(nn)%dij(ist_j) * BohrToAng
             vij=amat(nn)%vij(:,ist_j) * BohrToAng
+            frac_vij = amat(nn)%frac_vij(:,ist_j)
 
             ! Set projection values
-            proj_b2_energy=0.5_double ! make consistent to the default model
-            proj_b2_force=vij
+            proj_b2_energy = 1.0_double ! make consistent to the default model
+            proj_b2_force = vij / dij
+            proj_b2_stress = -2.0_double
+            ! do loop define proj_b2_stress
+            do ii_dim=1, 3
+              do jj_dim=1, 3
+                proj_b2_stress(ii_dim,jj_dim) = &
+                    proj_b2_stress(ii_dim,jj_dim) * frac_vij(ii_dim) * vij(jj_dim)
+              end do !jj_dim
+            end do !ii_dim
+            ! sij * vij / rij
+            !proj_b2_stress = matmul(proj_b2_stress, real_cell_T) / dij
+            proj_b2_stress = proj_b2_stress / dij
+
+            if (inode== ionode) then
+              write(1986,fmt='(i2,a,3e10.2)') ia_glob, "frac_vij(acsf):", frac_vij
+              write(1986,fmt='(i2,a,3e10.2)') ia_glob, "vij(acsf)     :", vij
+            !  do ii_dim=1, 3
+            !    write(1986,fmt='(i2,a,3e10.2)') ia_glob, "proj_b2_stress:", proj_b2_stress(ii_dim,:)  
+            !  end do
+            end if
 
             !! function of cut off
             frc_ij = 0.5 * (cos(pi * dij / rcut_a) + 1)
@@ -1504,10 +1546,19 @@ deallocate(loc_atomic_features%fp_force,STAT=stat)
               eta = descriptor_params(i_species)%params_g2(species_orderij)%eta(gx_index)
               rs = dij - descriptor_params(i_species)%params_g2(species_orderij)%rs(gx_index)
 
-              tmp1 = frc_ij * exp(- (rs/eta) ** 2) / dij
+              eta_inv_2 = 1/ eta**2
+              tmp1 = frc_ij * exp(- rs ** 2 * eta_inv_2)
+              ! If Not analytic derivative, tmp2 is 1, so it will not affect to the summations
+              tmp2 = (rs * eta_inv_2) ** rate_analytic_derivative
+              amat_features_ML(nn)%id_atom(ii)%fp_energy(fp_index) = &
+                  amat_features_ML(nn)%id_atom(ii)%fp_energy(fp_index) &
+                      + proj_b2_energy * tmp1
               amat_features_ML(nn)%id_atom(ii)%fp_force(:,fp_index) = &
                   amat_features_ML(nn)%id_atom(ii)%fp_force(:,fp_index) &
-                      + proj_b2_force(:) * tmp1
+                      + proj_b2_force(:) * tmp1 * tmp2
+              amat_features_ML(nn)%id_atom(ii)%fp_stress(:,:,fp_index) = &
+                  amat_features_ML(nn)%id_atom(ii)%fp_stress(:,:,fp_index) &
+                      + proj_b2_stress(:,:) * tmp1 * tmp2
               !if (inode== ionode .and. ia_glob==1) then
               !    write(1986,101)  eta, fp_index,  tmp1, xij, xij*tmp1, amat_features_ML(nn)%fpx(i, fp_index)
               !end if
@@ -1807,6 +1858,7 @@ deallocate(loc_atomic_features%fp_force,STAT=stat)
       num_3b = descriptor_params(ii)%num_3b
       descriptor_params(ii)%dim_coef = num_2b + num_3b
       allocate(descriptor_params(ii)%coef(descriptor_params(ii)%dim_coef),STAT=stat)
+      allocate(descriptor_params(ii)%coef_energy(descriptor_params(ii)%dim_coef),STAT=stat)
       if(stat/=0) &
         call cq_abort('split2b3b coef in descriptor_params : error allocating memory to dim_coef')
       if (inode == ionode) then
@@ -1824,6 +1876,7 @@ deallocate(loc_atomic_features%fp_force,STAT=stat)
         end if
         descriptor_params(ii)%coef(a:b) = descriptor_params(ii)%params_2b(jj)%coefs &
             / descriptor_params(ii)%params_2b(jj)%scales
+        descriptor_params(ii)%coef_energy(a:b) = descriptor_params(ii)%coef(a:b)/ratio_FtoE_2b
 
         !check parameters of three body terms
         do kk = 1, b-a+1
@@ -1864,6 +1917,7 @@ deallocate(loc_atomic_features%fp_force,STAT=stat)
         b = a+descriptor_params(ii)%nums_3b(jj)-1
         descriptor_params(ii)%coef(a:b) = descriptor_params(ii)%params_3b(jj)%coefs &
             / descriptor_params(ii)%params_3b(jj)%scales
+        descriptor_params(ii)%coef_energy(a:b) = descriptor_params(ii)%coef(a:b)/ratio_FtoE_3b
 
         !check parameters of three body terms
         if (inode == ionode) then
@@ -1963,6 +2017,8 @@ deallocate(loc_atomic_features%fp_force,STAT=stat)
 !!   Correction for multi-element bond order
 !!   2024/04/30 J.Lin
 !!   Modified vectors of vij, vik, vjk to arrays
+!!   2024/07/04 J.Lin
+!!   Checked consistancy of coefficients between force, energy, stress
 !!  SOURCE
 !!
   subroutine get_feature_split(prim,gcs,amat,amat_features_ML,rcut,descriptor_params)
@@ -1993,16 +2049,21 @@ deallocate(loc_atomic_features%fp_force,STAT=stat)
     integer :: nn,ii,jj,kk, ist_j, ist_k, ist_ijk, i_3b, ia_glob
     integer :: species_order2b, species_order3b, i_species, j_species, k_species, tmp_species
     integer :: param_start, param_end, shift_dim, param_index, fp_index, gx_index
+    integer :: ii_dim, jj_dim
     integer :: i_eta, j_eta, k_eta, index_eta
     integer :: ixxx(6),ixaa(6),ixxa(6),ixax(6),ixab(6),ixba(6),i_selectb3(6)
+    integer :: rate_analytic_derivative=0
 
-    real(double) :: vij(3), vik(3), vjk(3), dij, dik, djk
-    real(double) :: eta, rs, eta_b3(3), d_b3(3), rcut_a
-    real(double) :: tmp1, tmpx, tmpy, tmpz, tmpr, frc_ij, frc_ik, frc_jk, frc_3b
+    real(double) :: vij(3), vik(3), vjk(3), dij, dik, djk, &
+                    frac_vij(3), frac_vik(3), frac_vjk(3)
+    real(double) :: eta, rs, eta_b3(3), d_b3(3), rcut_a, eta_inv_2
+    real(double) :: tmp1, tmp2, tmpx, tmpy, tmpz, tmpr, frc_ij, frc_ik, frc_jk, frc_3b
     real(double) :: tmp_b3(6), tmp_eta_b3(6,3)
-    real(double) :: proj_xyz(3), tmpxyz(3)
-    real(double) :: proj_b2_energy=0.5_double, proj_b2_force(3)
-    real(double) :: proj_b3_energy=0.5_double, proj_b3_force_ij(3),proj_b3_force_ik(3)
+    real(double) :: proj_xyz(3), tmpxyz(3), proj_xyz_stress(3,3) 
+    real(double) :: proj_b2_energy, proj_b2_force(3), proj_b2_stress(3,3)
+    real(double) :: proj_b3_energy, proj_b3_force_ij(3),proj_b3_force_ik(3), &
+                    proj_b3_stress_ij(3,3),proj_b3_stress_ik(3,3),proj_b3_stress_jk(3,3)
+    real(double) :: ratio_coef_b2, ratio_coef_b3                
     real(double), parameter :: tol=1.0e-8_double
     real(double) :: feature_1 ! check feature
 
@@ -2018,6 +2079,13 @@ deallocate(loc_atomic_features%fp_force,STAT=stat)
     ixax = ixxa
     ixab = [1,0,0,0,0,0]
     ixba = ixab
+
+    ! Initialize coefficients for the consistance of discriptors between energy, force, and stress
+    ! TODO: make consistent to the default model
+    proj_b2_energy = 1.0_double
+    proj_b3_energy = 1.0_double
+    ratio_coef_b2 = 2.0_double * proj_b2_energy
+    ratio_coef_b3 = 2.0_double * proj_b3_energy
 
     ! After we have neighbor information and descriptor information
     ! Check that prim and gcs are correctly set up
@@ -2046,6 +2114,8 @@ deallocate(loc_atomic_features%fp_force,STAT=stat)
           !Species of i is  amat(nn)%i_species(i)
           i_species = amat(nn)%i_species(ii)
           ia_glob = prim%ig_prim(prim%nm_nodbeg(nn)+ii-1)
+          rate_analytic_derivative=descriptor_params(i_species)%type_analytic_derivative
+
           do jj=1,  amat(nn)%n_nab(ii)
             ! Get index of j in neighbor list
             ist_j = amat(nn)%i_acc(ii)+jj-1
@@ -2054,11 +2124,43 @@ deallocate(loc_atomic_features%fp_force,STAT=stat)
 
             dij=amat(nn)%dij(ist_j) * BohrToAng
             vij=amat(nn)%vij(:,ist_j) * BohrToAng
+            frac_vij = amat(nn)%frac_vij(:,ist_j)
 
             ! Set projection values
-            proj_b2_energy=0.5_double  !TODO:make consistent to the default model
-            proj_b2_force=vij
+            ! (vij / dij) * exp() * fcut()
+            !proj_b2_force = ratio_coef_b2 * vij / dij
+            ! vij * exp() * fcut()
+            proj_b2_force = vij
+            proj_b2_stress = -2
+            proj_b3_stress_ij = -2
 
+            ! do loop define proj_b2_stress
+            do ii_dim=1, 3
+              do jj_dim=1, 3
+                proj_b2_stress(ii_dim,jj_dim) = &
+                    proj_b2_stress(ii_dim,jj_dim) * frac_vij(ii_dim) * vij(jj_dim)
+                proj_b3_stress_ij(ii_dim,jj_dim) = &
+                    proj_b3_stress_ij(ii_dim,jj_dim) * frac_vij(ii_dim) * vij(jj_dim)
+              end do !jj_dim
+            end do !ii_dim
+
+            !! sij * vij / rij
+            !proj_b2_stress = ratio_coef_b2 * proj_b2_stress / dij
+            !! sij * vij, be consistent to force version of two-body term, checked
+            ! proj_b2_stress = proj_b2_stress / dij
+            ! TODO: consistent to potential of split2b3b
+            proj_b2_stress = proj_b2_stress
+            proj_b3_stress_ij = proj_b3_stress_ij
+            
+            if (ia_glob==1) then
+              write(2024,fmt='(a,3f10.6)')  'proj_b2_stress: ',proj_b2_stress(1,:)
+              write(2024,fmt='(a,3f10.6)')  'proj_b2_stress: ',proj_b2_stress(2,:)
+              write(2024,fmt='(a,3f10.6)')  'proj_b2_stress: ',proj_b2_stress(3,:)
+
+              write(2024,fmt='(a,3f10.6)')  'proj_b3_stress_ij: ',proj_b3_stress_ij(1,:)
+              write(2024,fmt='(a,3f10.6)')  'proj_b3_stress_ij: ',proj_b3_stress_ij(2,:)
+              write(2024,fmt='(a,3f10.6)')  'proj_b3_stress_ij: ',proj_b3_stress_ij(3,:)
+            end if
             !! function of cut off
             frc_ij = 0.5 * (cos(pi * dij / rcut_a) + 1)
 
@@ -2076,14 +2178,23 @@ deallocate(loc_atomic_features%fp_force,STAT=stat)
               ! Todo: check dimension of params_2b(j)
               gx_index = param_index - param_start + 1
               eta = descriptor_params(i_species)%params_2b(species_order2b)%eta(gx_index)
-              eta = 1.0/eta**2
-              rs = dij - descriptor_params(i_species)%params_2b(species_order2b)%rs(gx_index)
+              rs = dij - descriptor_params(i_species)%params_2b(species_order2b)%rs(gx_index)              
+              eta_inv_2 = 1/ eta**2
 
-              ! TODO: (vec{r}_{ij}/eta^2)(rs / rij) * exp() * frc_ij
-              tmp1 = frc_ij * exp(- eta * rs ** 2 )
+              ! The term of exp() * frc_ij
+              tmp1 = frc_ij * exp(- rs ** 2 * eta_inv_2)
+              ! If Not analytic derivative, tmp2 is 1, so it will not affect to the summations
+              tmp2 = (rs * eta_inv_2) ** rate_analytic_derivative
+
+              amat_features_ML(nn)%id_atom(ii)%fp_energy(fp_index) = &
+                  amat_features_ML(nn)%id_atom(ii)%fp_energy(fp_index) &
+                      + proj_b2_energy * tmp1
               amat_features_ML(nn)%id_atom(ii)%fp_force(:,fp_index) = &
                   amat_features_ML(nn)%id_atom(ii)%fp_force(:,fp_index) &
-                      + proj_b2_force(:) * tmp1
+                      + proj_b2_force(:) * tmp1 * tmp2
+              amat_features_ML(nn)%id_atom(ii)%fp_stress(:,:,fp_index) = &
+                  amat_features_ML(nn)%id_atom(ii)%fp_stress(:,:,fp_index) &
+                      + proj_b2_stress(:,:) * tmp1 * tmp2
             end do ! two-body terms
 
             ! Three body terms
@@ -2095,16 +2206,52 @@ deallocate(loc_atomic_features%fp_force,STAT=stat)
 
               vik=amat(nn)%vij(:,ist_k) * BohrToAng
               dik=amat(nn)%dij(ist_k) * BohrToAng
+              frac_vik = amat(nn)%frac_vij(:,ist_k)
               ! Length unit is Angstrom for vij and vik, so as for vjk
               vjk=vik - vij
               djk=norm2(vjk)
+              frac_vjk = frac_vik - frac_vij 
+
+              ! Square of distance
               d_b3(1)=dij
               d_b3(2)=dik
               d_b3(3)=djk
               d_b3=d_b3 ** 2 ! r^2 prepare for calcuating descriptors
 
               ! Set projection values
-              proj_b3_energy=0.5_double ! TODO:make consistent to the default model
+              proj_b3_force_ij = vij
+              proj_b3_force_ik = vik
+
+              proj_b3_stress_ik = -2
+              proj_b3_stress_jk = -2
+
+              ! Do loop define proj_b3_stress
+              do ii_dim=1, 3
+                do jj_dim=1, 3
+                  proj_b3_stress_ik(ii_dim,jj_dim) = &
+                      proj_b3_stress_ik(ii_dim,jj_dim) * frac_vik(ii_dim) * vik(jj_dim)
+                  proj_b3_stress_jk(ii_dim,jj_dim) = &
+                      proj_b3_stress_jk(ii_dim,jj_dim) * frac_vjk(ii_dim) * vjk(jj_dim)
+                end do !jj_dim
+              end do !ii_dim
+
+              ! Coefficient consistency
+              proj_b3_stress_ik = proj_b3_stress_ik
+              proj_b3_stress_jk = proj_b3_stress_jk
+
+              if (ia_glob==1) then
+                write(2024,fmt='(a,3f10.6)')  'proj_b3_stress_ij: ',proj_b3_stress_ij(1,:)
+                write(2024,fmt='(a,3f10.6)')  'proj_b3_stress_ij: ',proj_b3_stress_ij(2,:)
+                write(2024,fmt='(a,3f10.6)')  'proj_b3_stress_ij: ',proj_b3_stress_ij(3,:)
+
+                write(2024,fmt='(a,3f10.6)')  'proj_b3_stress_ik: ',proj_b3_stress_ik(1,:)
+                write(2024,fmt='(a,3f10.6)')  'proj_b3_stress_ik: ',proj_b3_stress_ik(2,:)
+                write(2024,fmt='(a,3f10.6)')  'proj_b3_stress_ik: ',proj_b3_stress_ik(3,:)
+
+                write(2024,fmt='(a,3f10.6)')  'proj_b3_stress_jk: ',proj_b3_stress_jk(1,:)
+                write(2024,fmt='(a,3f10.6)')  'proj_b3_stress_jk: ',proj_b3_stress_jk(2,:)
+                write(2024,fmt='(a,3f10.6)')  'proj_b3_stress_jk: ',proj_b3_stress_jk(3,:)
+              end if
 
               !! Todo: check order for ijk
               species_order3b = descriptor_params(i_species)%species_orders%d3(j_species, k_species)
@@ -2152,8 +2299,10 @@ deallocate(loc_atomic_features%fp_force,STAT=stat)
                     ! transfter for efficiency
                     eta_b3 = 1.0/eta_b3 ** 2
                     ! TODO: possible to prepare it outside of this subroutine
+                    ! Eta combinations (1,2,3), (1,3,2),...,(3,1,2),(3,2,1)
                     index_eta=1
                     do i_eta = 1, 3
+                      ! Find eta1, eta2, eta3, combinations
                       do j_eta = 1, 3
                         if (j_eta == i_eta) cycle
                         do k_eta = 1, 3
@@ -2161,27 +2310,46 @@ deallocate(loc_atomic_features%fp_force,STAT=stat)
                           tmp_eta_b3(index_eta,1)=eta_b3(i_eta)
                           tmp_eta_b3(index_eta,2)=eta_b3(j_eta)
                           tmp_eta_b3(index_eta,3)=eta_b3(k_eta)
+
+                          ! Obtain value for each combination
+                          ! tmp123 = exp(-eta1 * rij0 ** 2 - eta2 * rik0 ** 2 - eta3 * rjk0 ** 2)
+                          tmp_b3(index_eta)=exp(-DOT_PRODUCT(tmp_eta_b3(index_eta,:), d_b3))
                           index_eta=index_eta+1
                         end do
                       end do
                     end do
 
-                    ! tmp123 = exp(-eta1 * rij0 ** 2 - eta2 * rik0 ** 2 - eta3 * rjk0 ** 2)
-                    tmp_b3=exp(-matmul(tmp_eta_b3, d_b3))
-
+                    ! Prepare combination terms for projection parts of force and stress
+                    tmp1 = 0.0
                     proj_xyz = 0.0
+                    proj_xyz_stress = 0.0
                     index_eta=1
-                    do i_eta = 1, 3
-                      do j_eta = 1, 3
-                        if (j_eta == i_eta) cycle
-                        proj_xyz = proj_xyz + i_selectb3(index_eta) * &
-                            tmp_b3(index_eta) * (vij * eta_b3(i_eta) + vik * eta_b3(j_eta))
-                        index_eta=index_eta+1
-                      end do
+
+                    do index_eta = 1, 6
+                      ! Selection from each symmetry
+                      tmp2 = i_selectb3(index_eta) * tmp_b3(index_eta) 
+                      ! Energy part
+                      tmp1 = tmp1 + tmp2
+                      ! Force part
+                      proj_xyz = proj_xyz &
+                          + tmp2 * (proj_b3_force_ij * tmp_eta_b3(index_eta,1) &
+                          + proj_b3_force_ik * tmp_eta_b3(index_eta,2))
+                      ! Stress part
+                      proj_xyz_stress = proj_xyz_stress  &
+                        + tmp2 * (proj_b3_stress_ij * tmp_eta_b3(index_eta,1) &
+                        + proj_b3_stress_ik * tmp_eta_b3(index_eta,2) &
+                        + proj_b3_stress_jk * tmp_eta_b3(index_eta,3))
                     end do
+
+                    amat_features_ML(nn)%id_atom(ii)%fp_energy(fp_index) = &
+                    amat_features_ML(nn)%id_atom(ii)%fp_energy(fp_index) &
+                        + proj_b3_energy * tmp1 * frc_3b
                     amat_features_ML(nn)%id_atom(ii)%fp_force(:,fp_index) = &
                         amat_features_ML(nn)%id_atom(ii)%fp_force(:,fp_index) &
                             + proj_xyz * frc_3b
+                    amat_features_ML(nn)%id_atom(ii)%fp_stress(:,:,fp_index) = &
+                        amat_features_ML(nn)%id_atom(ii)%fp_stress(:,:,fp_index) &
+                            + proj_xyz_stress * frc_3b
                   end do ! three-body terms
                 else
                   !! X-AA
@@ -2206,9 +2374,9 @@ deallocate(loc_atomic_features%fp_force,STAT=stat)
                     ! The rest part can be same for all cases
                     ! transfter for efficiency
                     eta_b3 = 1.0/eta_b3 ** 2
-                    ! TODO: possible to prepare it outside of this subroutine
                     index_eta=1
                     do i_eta = 1, 3
+                      ! Find eta1, eta2, eta3, combinations
                       do j_eta = 1, 3
                         if (j_eta == i_eta) cycle
                         do k_eta = 1, 3
@@ -2216,26 +2384,46 @@ deallocate(loc_atomic_features%fp_force,STAT=stat)
                           tmp_eta_b3(index_eta,1)=eta_b3(i_eta)
                           tmp_eta_b3(index_eta,2)=eta_b3(j_eta)
                           tmp_eta_b3(index_eta,3)=eta_b3(k_eta)
+
+                          ! Obtain value for each combination
+                          ! tmp123 = exp(-eta1 * rij0 ** 2 - eta2 * rik0 ** 2 - eta3 * rjk0 ** 2)
+                          tmp_b3(index_eta)=exp(-DOT_PRODUCT(tmp_eta_b3(index_eta,:), d_b3))
                           index_eta=index_eta+1
                         end do
                       end do
                     end do
 
-                    tmp_b3=exp(-matmul(tmp_eta_b3, d_b3))
-
+                    ! Prepare combination terms for projection parts of force and stress
+                    tmp1 = 0.0
                     proj_xyz = 0.0
+                    proj_xyz_stress = 0.0
                     index_eta=1
-                    do i_eta = 1, 3
-                      do j_eta = 1, 3
-                        if (j_eta == i_eta) cycle
-                        proj_xyz = proj_xyz + i_selectb3(index_eta) * &
-                            tmp_b3(index_eta) * (vij * eta_b3(i_eta) + vik * eta_b3(j_eta))
-                        index_eta=index_eta+1
-                      end do
+
+                    do index_eta = 1, 6
+                      ! Selection from each symmetry
+                      tmp2 = i_selectb3(index_eta) * tmp_b3(index_eta) 
+                      ! Energy part
+                      tmp1 = tmp1 + tmp2
+                      ! Force part
+                      proj_xyz = proj_xyz &
+                          + tmp2 * (proj_b3_force_ij * tmp_eta_b3(index_eta,1) &
+                          + proj_b3_force_ik * tmp_eta_b3(index_eta,2))
+                      ! Stress part
+                      proj_xyz_stress = proj_xyz_stress  &
+                        + tmp2 * (proj_b3_stress_ij * tmp_eta_b3(index_eta,1) &
+                        + proj_b3_stress_ik * tmp_eta_b3(index_eta,2) &
+                        + proj_b3_stress_jk * tmp_eta_b3(index_eta,3))
                     end do
+
+                    amat_features_ML(nn)%id_atom(ii)%fp_energy(fp_index) = &
+                    amat_features_ML(nn)%id_atom(ii)%fp_energy(fp_index) &
+                        + proj_b3_energy * tmp1 * frc_3b
                     amat_features_ML(nn)%id_atom(ii)%fp_force(:,fp_index) = &
                         amat_features_ML(nn)%id_atom(ii)%fp_force(:,fp_index) &
                             + proj_xyz * frc_3b
+                    amat_features_ML(nn)%id_atom(ii)%fp_stress(:,:,fp_index) = &
+                        amat_features_ML(nn)%id_atom(ii)%fp_stress(:,:,fp_index) &
+                            + proj_xyz_stress * frc_3b
                   end do ! three-body terms
                 end if ! X-XX or X-AA
               else
@@ -2265,6 +2453,7 @@ deallocate(loc_atomic_features%fp_force,STAT=stat)
                     ! TODO: possible to prepare it outside of this subroutine
                     index_eta=1
                     do i_eta = 1, 3
+                      ! Find eta1, eta2, eta3, combinations
                       do j_eta = 1, 3
                         if (j_eta == i_eta) cycle
                         do k_eta = 1, 3
@@ -2272,26 +2461,46 @@ deallocate(loc_atomic_features%fp_force,STAT=stat)
                           tmp_eta_b3(index_eta,1)=eta_b3(i_eta)
                           tmp_eta_b3(index_eta,2)=eta_b3(j_eta)
                           tmp_eta_b3(index_eta,3)=eta_b3(k_eta)
+
+                          ! Obtain value for each combination
+                          ! tmp123 = exp(-eta1 * rij0 ** 2 - eta2 * rik0 ** 2 - eta3 * rjk0 ** 2)
+                          tmp_b3(index_eta)=exp(-DOT_PRODUCT(tmp_eta_b3(index_eta,:), d_b3))
                           index_eta=index_eta+1
                         end do
                       end do
                     end do
 
-                    tmp_b3=exp(-matmul(tmp_eta_b3, d_b3))
-
+                    ! Prepare combination terms for projection parts of force and stress
+                    tmp1 = 0.0
                     proj_xyz = 0.0
+                    proj_xyz_stress = 0.0
                     index_eta=1
-                    do i_eta = 1, 3
-                      do j_eta = 1, 3
-                        if (j_eta == i_eta) cycle
-                        proj_xyz = proj_xyz + i_selectb3(index_eta) * &
-                            tmp_b3(index_eta) * (vij * eta_b3(i_eta) + vik * eta_b3(j_eta))
-                        index_eta=index_eta+1
-                      end do
+
+                    do index_eta = 1, 6
+                      ! Selection from each symmetry
+                      tmp2 = i_selectb3(index_eta) * tmp_b3(index_eta) 
+                      ! Energy part
+                      tmp1 = tmp1 + tmp2
+                      ! Force part
+                      proj_xyz = proj_xyz &
+                          + tmp2 * (proj_b3_force_ij * tmp_eta_b3(index_eta,1) &
+                          + proj_b3_force_ik * tmp_eta_b3(index_eta,2))
+                      ! Stress part
+                      proj_xyz_stress = proj_xyz_stress  &
+                        + tmp2 * (proj_b3_stress_ij * tmp_eta_b3(index_eta,1) &
+                        + proj_b3_stress_ik * tmp_eta_b3(index_eta,2) &
+                        + proj_b3_stress_jk * tmp_eta_b3(index_eta,3))
                     end do
+
+                    amat_features_ML(nn)%id_atom(ii)%fp_energy(fp_index) = &
+                    amat_features_ML(nn)%id_atom(ii)%fp_energy(fp_index) &
+                        + proj_b3_energy * tmp1 * frc_3b
                     amat_features_ML(nn)%id_atom(ii)%fp_force(:,fp_index) = &
                         amat_features_ML(nn)%id_atom(ii)%fp_force(:,fp_index) &
                             + proj_xyz * frc_3b
+                    amat_features_ML(nn)%id_atom(ii)%fp_stress(:,:,fp_index) = &
+                        amat_features_ML(nn)%id_atom(ii)%fp_stress(:,:,fp_index) &
+                            + proj_xyz_stress * frc_3b
                   end do ! three-body terms
                 else if (i_species == k_species) then
                   ! X-AX
@@ -2315,9 +2524,9 @@ deallocate(loc_atomic_features%fp_force,STAT=stat)
                     ! The rest part can be same for all cases
                     ! transfter for efficiency
                     eta_b3 = 1.0/eta_b3 ** 2
-                    ! TODO: possible to prepare it outside of this subroutine
                     index_eta=1
                     do i_eta = 1, 3
+                      ! Find eta1, eta2, eta3, combinations
                       do j_eta = 1, 3
                         if (j_eta == i_eta) cycle
                         do k_eta = 1, 3
@@ -2325,26 +2534,46 @@ deallocate(loc_atomic_features%fp_force,STAT=stat)
                           tmp_eta_b3(index_eta,1)=eta_b3(i_eta)
                           tmp_eta_b3(index_eta,2)=eta_b3(j_eta)
                           tmp_eta_b3(index_eta,3)=eta_b3(k_eta)
+
+                          ! Obtain value for each combination
+                          ! tmp123 = exp(-eta1 * rij0 ** 2 - eta2 * rik0 ** 2 - eta3 * rjk0 ** 2)
+                          tmp_b3(index_eta)=exp(-DOT_PRODUCT(tmp_eta_b3(index_eta,:), d_b3))
                           index_eta=index_eta+1
                         end do
                       end do
                     end do
 
-                    tmp_b3=exp(-matmul(tmp_eta_b3, d_b3))
-
+                    ! Prepare combination terms for projection parts of force and stress
+                    tmp1 = 0.0
                     proj_xyz = 0.0
+                    proj_xyz_stress = 0.0
                     index_eta=1
-                    do i_eta = 1, 3
-                      do j_eta = 1, 3
-                        if (j_eta == i_eta) cycle
-                        proj_xyz = proj_xyz + i_selectb3(index_eta) * &
-                            tmp_b3(index_eta) * (vij * eta_b3(i_eta) + vik * eta_b3(j_eta))
-                        index_eta=index_eta+1
-                      end do
+
+                    do index_eta = 1, 6
+                      ! Selection from each symmetry
+                      tmp2 = i_selectb3(index_eta) * tmp_b3(index_eta) 
+                      ! Energy part
+                      tmp1 = tmp1 + tmp2
+                      ! Force part
+                      proj_xyz = proj_xyz &
+                          + tmp2 * (proj_b3_force_ij * tmp_eta_b3(index_eta,1) &
+                          + proj_b3_force_ik * tmp_eta_b3(index_eta,2))
+                      ! Stress part
+                      proj_xyz_stress = proj_xyz_stress  &
+                        + tmp2 * (proj_b3_stress_ij * tmp_eta_b3(index_eta,1) &
+                        + proj_b3_stress_ik * tmp_eta_b3(index_eta,2) &
+                        + proj_b3_stress_jk * tmp_eta_b3(index_eta,3))
                     end do
+
+                    amat_features_ML(nn)%id_atom(ii)%fp_energy(fp_index) = &
+                    amat_features_ML(nn)%id_atom(ii)%fp_energy(fp_index) &
+                        + proj_b3_energy * tmp1 * frc_3b
                     amat_features_ML(nn)%id_atom(ii)%fp_force(:,fp_index) = &
                         amat_features_ML(nn)%id_atom(ii)%fp_force(:,fp_index) &
                             + proj_xyz * frc_3b
+                    amat_features_ML(nn)%id_atom(ii)%fp_stress(:,:,fp_index) = &
+                        amat_features_ML(nn)%id_atom(ii)%fp_stress(:,:,fp_index) &
+                            + proj_xyz_stress * frc_3b
                   end do ! three-body terms
                 else if (j_species < k_species) then
                   !! X-AB
@@ -2368,9 +2597,9 @@ deallocate(loc_atomic_features%fp_force,STAT=stat)
                     ! The rest part can be same for all cases
                     ! transfter for efficiency
                     eta_b3 = 1.0/eta_b3 ** 2
-                    ! TODO: possible to prepare it outside of this subroutine
                     index_eta=1
                     do i_eta = 1, 3
+                      ! Find eta1, eta2, eta3, combinations
                       do j_eta = 1, 3
                         if (j_eta == i_eta) cycle
                         do k_eta = 1, 3
@@ -2378,32 +2607,52 @@ deallocate(loc_atomic_features%fp_force,STAT=stat)
                           tmp_eta_b3(index_eta,1)=eta_b3(i_eta)
                           tmp_eta_b3(index_eta,2)=eta_b3(j_eta)
                           tmp_eta_b3(index_eta,3)=eta_b3(k_eta)
+
+                          ! Obtain value for each combination
+                          ! tmp123 = exp(-eta1 * rij0 ** 2 - eta2 * rik0 ** 2 - eta3 * rjk0 ** 2)
+                          tmp_b3(index_eta)=exp(-DOT_PRODUCT(tmp_eta_b3(index_eta,:), d_b3))
                           index_eta=index_eta+1
                         end do
                       end do
                     end do
 
-                    tmp_b3=exp(-matmul(tmp_eta_b3, d_b3))
-
+                    ! Prepare combination terms for projection parts of force and stress
+                    tmp1 = 0.0
                     proj_xyz = 0.0
+                    proj_xyz_stress = 0.0
                     index_eta=1
-                    do i_eta = 1, 3
-                      do j_eta = 1, 3
-                        if (j_eta == i_eta) cycle
-                        proj_xyz = proj_xyz + i_selectb3(index_eta) * &
-                            tmp_b3(index_eta) * (vij * eta_b3(i_eta) + vik * eta_b3(j_eta))
-                        index_eta=index_eta+1
-                      end do
+
+                    do index_eta = 1, 6
+                      ! Selection from each symmetry
+                      tmp2 = i_selectb3(index_eta) * tmp_b3(index_eta) 
+                      ! Energy part
+                      tmp1 = tmp1 + tmp2
+                      ! Force part
+                      proj_xyz = proj_xyz &
+                          + tmp2 * (proj_b3_force_ij * tmp_eta_b3(index_eta,1) &
+                          + proj_b3_force_ik * tmp_eta_b3(index_eta,2))
+                      ! Stress part
+                      proj_xyz_stress = proj_xyz_stress  &
+                        + tmp2 * (proj_b3_stress_ij * tmp_eta_b3(index_eta,1) &
+                        + proj_b3_stress_ik * tmp_eta_b3(index_eta,2) &
+                        + proj_b3_stress_jk * tmp_eta_b3(index_eta,3))
                     end do
+
+                    amat_features_ML(nn)%id_atom(ii)%fp_energy(fp_index) = &
+                    amat_features_ML(nn)%id_atom(ii)%fp_energy(fp_index) &
+                        + proj_b3_energy * tmp1 * frc_3b
                     amat_features_ML(nn)%id_atom(ii)%fp_force(:,fp_index) = &
                         amat_features_ML(nn)%id_atom(ii)%fp_force(:,fp_index) &
                             + proj_xyz * frc_3b
+                    amat_features_ML(nn)%id_atom(ii)%fp_stress(:,:,fp_index) = &
+                        amat_features_ML(nn)%id_atom(ii)%fp_stress(:,:,fp_index) &
+                            + proj_xyz_stress * frc_3b
                   end do ! three-body terms
                 else
                   !! X-BA
                   if (ia_glob==1 .and. flag_debug_mlff) then
                   write(*,104) param_start, param_end, &
-                      i_species,j_species,k_species,amat(nn)%n_nab(ii), 'X-AB'
+                      i_species,j_species,k_species,amat(nn)%n_nab(ii), 'X-BA'
                   end if
 
                   do param_index= param_start, param_end
@@ -2421,9 +2670,9 @@ deallocate(loc_atomic_features%fp_force,STAT=stat)
                     ! The rest part can be same for all cases
                     ! transfter for efficiency
                     eta_b3 = 1.0/eta_b3 ** 2
-                    ! TODO: possible to prepare it outside of this subroutine
                     index_eta=1
                     do i_eta = 1, 3
+                      ! Find eta1, eta2, eta3, combinations
                       do j_eta = 1, 3
                         if (j_eta == i_eta) cycle
                         do k_eta = 1, 3
@@ -2431,26 +2680,46 @@ deallocate(loc_atomic_features%fp_force,STAT=stat)
                           tmp_eta_b3(index_eta,1)=eta_b3(i_eta)
                           tmp_eta_b3(index_eta,2)=eta_b3(j_eta)
                           tmp_eta_b3(index_eta,3)=eta_b3(k_eta)
+
+                          ! Obtain value for each combination
+                          ! tmp123 = exp(-eta1 * rij0 ** 2 - eta2 * rik0 ** 2 - eta3 * rjk0 ** 2)
+                          tmp_b3(index_eta)=exp(-DOT_PRODUCT(tmp_eta_b3(index_eta,:), d_b3))
                           index_eta=index_eta+1
                         end do
                       end do
                     end do
 
-                    tmp_b3=exp(-matmul(tmp_eta_b3, d_b3))
-
+                    ! Prepare combination terms for projection parts of force and stress
+                    tmp1 = 0.0
                     proj_xyz = 0.0
+                    proj_xyz_stress = 0.0
                     index_eta=1
-                    do i_eta = 1, 3
-                      do j_eta = 1, 3
-                        if (j_eta == i_eta) cycle
-                        proj_xyz = proj_xyz + i_selectb3(index_eta) * &
-                            tmp_b3(index_eta) * (vij * eta_b3(i_eta) + vik * eta_b3(j_eta))
-                        index_eta=index_eta+1
-                      end do
+
+                    do index_eta = 1, 6
+                      ! Selection from each symmetry
+                      tmp2 = i_selectb3(index_eta) * tmp_b3(index_eta) 
+                      ! Energy part
+                      tmp1 = tmp1 + tmp2
+                      ! Force part
+                      proj_xyz = proj_xyz &
+                          + tmp2 * (proj_b3_force_ij * tmp_eta_b3(index_eta,1) &
+                          + proj_b3_force_ik * tmp_eta_b3(index_eta,2))
+                      ! Stress part
+                      proj_xyz_stress = proj_xyz_stress  &
+                        + tmp2 * (proj_b3_stress_ij * tmp_eta_b3(index_eta,1) &
+                        + proj_b3_stress_ik * tmp_eta_b3(index_eta,2) &
+                        + proj_b3_stress_jk * tmp_eta_b3(index_eta,3))
                     end do
+
+                    amat_features_ML(nn)%id_atom(ii)%fp_energy(fp_index) = &
+                    amat_features_ML(nn)%id_atom(ii)%fp_energy(fp_index) &
+                        + proj_b3_energy * tmp1 * frc_3b
                     amat_features_ML(nn)%id_atom(ii)%fp_force(:,fp_index) = &
                         amat_features_ML(nn)%id_atom(ii)%fp_force(:,fp_index) &
                             + proj_xyz * frc_3b
+                    amat_features_ML(nn)%id_atom(ii)%fp_stress(:,:,fp_index) = &
+                        amat_features_ML(nn)%id_atom(ii)%fp_stress(:,:,fp_index) &
+                            + proj_xyz_stress * frc_3b
                   end do ! three-body terms
                 end if ! X-XA, X-AX, X-AB, X-BA
               end if
@@ -2682,14 +2951,14 @@ deallocate(loc_atomic_features%fp_force,STAT=stat)
     implicit none
 
     ! Passed variables
-    real(double), dimension(:,:),intent(in)    :: A
-    real(double), dimension(:,:),intent(inout) :: inv_A
+    real(double), dimension(3,3),intent(in)    :: A
+    real(double), dimension(3,3),intent(inout) :: inv_A
 
     ! Local variables
     integer, parameter :: n = 3 ! dimension of cell
     integer :: i, j
     real(double) :: det_A
-    real(double) :: adj_A(3,3), loc_A(5,5)
+    real(double) :: adj_A(3,3), B(5,5)
 
     ! Check Passed variables
     if ((size(shape(inv_A)) .ne. 2) .or. (size(shape(A)) .ne. 2)) then
@@ -2705,16 +2974,16 @@ deallocate(loc_atomic_features%fp_force,STAT=stat)
           + A(1,3) * (A(2,1)*A(3,2) - A(2,2)*A(3,1))
 
     ! For Calculate Adjoint matrix
-    loc_A = reshape([A(1,1), A(1,2), A(1,3), A(1,1), A(1,2),&
-                     A(2,1), A(2,2), A(2,3), A(2,1), A(2,2),&
-                     A(3,1), A(3,2), A(3,3), A(3,1), A(3,2),&
-                     A(1,1), A(1,2), A(1,3), A(1,1), A(1,2),&
-                     A(2,1), A(2,2), A(2,3), A(2,1), A(2,2)], [5,5])
+    B = reshape([A(1,1), A(1,2), A(1,3), A(1,1), A(1,2),&
+                  A(2,1), A(2,2), A(2,3), A(2,1), A(2,2),&
+                  A(3,1), A(3,2), A(3,3), A(3,1), A(3,2),&
+                  A(1,1), A(1,2), A(1,3), A(1,1), A(1,2),&
+                  A(2,1), A(2,2), A(2,3), A(2,1), A(2,2)], [5,5])
 
     ! Calculate Adjoint matrix with Transposed formular
     do i = 1, 3
       do j = 1, 3
-        adj_A(j,i) = A(i+1,j+1) * A(i+2,j+2) - A(i+2,j+1) * A(i+1,j+2)
+        adj_A(j,i) = B(i+1,j+1) * B(i+2,j+2) - B(i+2,j+1) * B(i+1,j+2)
       end do
     end do
 

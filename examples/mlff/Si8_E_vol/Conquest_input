@@ -1,0 +1,75 @@
+## Input/Output 
+IO.Title Si8_cubic_static_OptcellF
+IO.Iprint 2
+IO.Coordinates coord.in ##Si1000.in
+IO.FractionalAtomicCoords T
+IO.Iprint_MD 2
+AtomMove.WriteExtXYZ T
+AtomMove.XyzFreq 1
+AtomMove.OutputFreq 1
+
+ 
+## General Parameters 
+General.PseudopotentialType siesta
+General.FunctionalType 3 
+General.PartitionMethod Hilbert 
+General.NumberOfSpecies 1
+General.CheckDFT T 
+General.MaxTime 3500 
+ 
+## Basis Sets 
+Basis.BasisSet PAOs 
+ 
+
+## Machine learning parameters
+General.MLFF T
+MLFF.Descriptor_range 13.228083 # unit : bohr # 7.0 angstrom
+ 
+## Moving Atoms 
+AtomMove.TypeOfRun static
+AtomMove.SkipEarlyDM T 
+AtomMove.PulaySimpleStep T 
+AtomMove.Debug F 
+
+AtomMove.WriteXSF F
+ 
+## MD 
+AtomMove.NumSteps 10
+AtomMove.IonTemperature 0
+AtomMove.OutputFreq 1 
+
+AtomMove.OptCell  F
+
+## Find DensityMatrix
+DM.SolutionMethod diagon
+
+## k-points
+Diag.MPMesh T
+Diag.MPMeshX 8
+Diag.MPMeshY 8
+Diag.MPMeshZ 8
+Diag.KProcGroups 4 
+
+ 
+SC.MaxIters 200 
+SC.MinIters 0 
+
+## Energy Minimisation 
+minE.SelfConsistent T
+minE.SCTolerance 1.0e-7
+
+ 
+##Integration Grid 
+Grid.GridCutoff 100
+ 
+%block ChemicalSpeciesLabel 
+ 1 28.0855 Si 
+%endblock 
+ 
+%block Si
+Atom.ValenceCharge 4.00
+Atom.NumberOfSupports 4 #4
+Atom.SupportFunctionRange 5.144 # 5.134
+Atom.InvSRange 7.144
+%endblock 
+
