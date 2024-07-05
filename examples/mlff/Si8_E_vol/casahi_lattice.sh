@@ -1,5 +1,5 @@
 #!/bin/sh
-#QSUB2 queue qD
+#QSUB2 queue qA
 #QSUB2 core 48 
 #QSUB2 mpi 48 
 #QSUB2 smp 1 
@@ -36,6 +36,7 @@ pp_dir='./pp'
 pot_Split="Si_all_Split2b3b" 
 pot_BP2b="Si_all_BP2b"
 pot_type=$pot_Split
+pot_type=$pot_BP2b
 
 # bohr unit of la=5.4309 Angstrom
 la=10.262912871373274

@@ -25,7 +25,7 @@ AtomMove.ReuseDM      F
 AtomMove.TypeOfRun md
 ## NVT
 AtomMove.Timestep         2.0 
-AtomMove.IonTemperature 9000.0
+AtomMove.IonTemperature 9000 #9000.0
 AtomMove.NumSteps 5000
 MD.Ensemble nvt ## nvt npt
 

@@ -1,32 +1,28 @@
-## Input/Output
+## Input/Output:
 IO.Title Bulk Si 1000 atoms SZ
 IO.Iprint 1 
 IO.Coordinates coord.in ##Si1000.in
 IO.FractionalAtomicCoords T
 IO.WriteOutToFile T
-#IO.Iprint_MD 1
+IO.Iprint_MD 2
 IO.DumpL         F
 ## General Parameters
-General.PseudopotentialType  siesta
-General.FunctionalType 3
+General.PseudopotentialType  haman #siesta
+#General.FunctionalType 3
 General.PartitionMethod Hilbert
-General.NumberOfSpecies 1
+General.NumberOfSpecies 2
 
 ## Machine learning parameters
 General.MLFF T
 ##MLFF.Descriptor_range 8.0
 MLFF.Descriptor_range 13.228083 # unit : bohr # 7.0 angstrom
 AtomMove.WriteExtXYZ T
-AtomMove.WriteXSF     F
-AtomMove.ReuseSFcoeff F
-AtomMove.ReuseDM      F
 
 ## Run type
 AtomMove.TypeOfRun md
 ## NVT
-AtomMove.Timestep         2.0 
-AtomMove.IonTemperature 9000 #9000.0
-AtomMove.NumSteps 5000
+AtomMove.IonTemperature @@@Temp
+AtomMove.NumSteps @@@numsteps #1000
 MD.Ensemble nvt ## nvt npt
 
 ## NVT
@@ -56,11 +52,18 @@ Grid.GridCutoff 100
 
 %block ChemicalSpeciesLabel
 1  28.0850   Si  Si.ion
+2  16.0000   O  O.ion
 %endblock
 
 %block Si
   Atom.ValenceCharge        4.0
-  Atom.NumberOfSupports     4
-  Atom.SupportFunctionRange 5.43 # 5.13
+  Atom.NumberOfSupports     13
+  Atom.SupportFunctionRange 7.13 # 7.12043063485
   Atom.InvSrange            8.0
-%endblock 
+%endblock
+ 
+%block O
+Atom.ValenceCharge 6.00
+Atom.NumberOfSupports 13
+Atom.SupportFunctionRange  4.92 #4.91433019436
+%endblock
