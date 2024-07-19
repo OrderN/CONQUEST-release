@@ -86,6 +86,8 @@ Compiler flags to enable OpenMP are dependent on the vendor, but should be speci
 
 On some systems, the default stack size for OpenMP is set to be rather small, and this can cause a segmentation fault when running with multiple threads.  We recommend testing the effect of the environment variable ``OMP_STACKSIZE`` (and suggest setting it to 50M or larger as a first test).
 
+Most OpenMP multi-threading in CONQUEST uses the ``runtime`` schedule. This means the type of scheduling of work to threads can be set by the user by setting the ``OMP_SCHEDULE`` `variable<https://www.openmp.org/spec-html/5.0/openmpse49.html>`_. If the variable is unset, OpenMP will use a default implementation defined schedule. 
+
 Go to :ref:`top <install>`
 
 .. _install_spack:
