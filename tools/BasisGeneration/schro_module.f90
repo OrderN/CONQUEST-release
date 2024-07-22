@@ -184,7 +184,7 @@ contains
        call get_vxc(nmesh,rr,local_and_vkb%charge,vxc)
        if(pseudo(i_species)%flag_pcc) local_and_vkb%charge = local_and_vkb%charge - local_and_vkb%pcc
     end do
-    if(iprint>0) then
+    if(iprint>=0) then
        write(*,fmt='(/2x,"Unconfined valence state energies (Ha)")')
        if(ps_format==hgh) then
           write(*,fmt='(2x,"  n  l          PAO energy")')
@@ -205,11 +205,11 @@ contains
     end if
     if(iter>maxiter) call cq_abort("Exceeded iterations in SCF")
     ! We can use these lines to write out the charge for future solvers
-    open(unit=70,file='charge_out.dat')
-    do i=1,nmesh
-       write(70,*) rr(i), newcharge(i)!local_and_vkb%charge(i)
-    end do
-    close(70)
+    !open(unit=70,file='charge_out.dat')
+    !do i=1,nmesh
+    !   write(70,*) rr(i), newcharge(i)!local_and_vkb%charge(i)
+    !end do
+    !close(70)
     return
   end subroutine find_unconfined_valence_states
 
