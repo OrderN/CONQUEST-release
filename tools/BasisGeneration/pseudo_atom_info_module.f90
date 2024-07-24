@@ -40,6 +40,14 @@ module pseudo_atom_info
      real(double), pointer, dimension(:) :: width, prefac ! Parameters for exponential confinement
   end type pao
 
+  type hgh_info
+     character(len=2) :: symbol
+     real(double) :: Zion, rloc, c1, c2, c3, c4
+     integer :: maxl
+     real(double), dimension(:), allocatable :: r
+     real(double), dimension(:,:), allocatable :: h, k
+  end type hgh_info
+
   type valence_info
      integer, pointer, dimension(:) :: n, l, semicore, nkb, npao, inner
      integer :: n_shells, n_occ, functional
@@ -49,13 +57,17 @@ module pseudo_atom_info
   type(pao) :: paos
   type(potential_vkb) :: local_and_vkb
   type(valence_info) :: val
+  type(hgh_info), dimension(:), allocatable :: hgh_data
   logical :: flag_default_cutoffs
+  ! Value at which KB projectors are cutoff, defaults to 1e-8
+  real(double) :: kb_thresh
 
   integer :: pseudo_type
 
   logical :: flag_plot_output, flag_use_Vl
 
   real(double) :: deltaE_large_radius! = 0.00073498_double
+  real(double) :: deltaE_large_radius_semicore_hgh ! = 1e-6
   real(double) :: deltaE_small_radius! = 0.073498_double
   
   ! Useful parameters to improve code readability
@@ -186,6 +198,7 @@ contains
     allocate(local_and_vkb%local(ngrid))
     local_and_vkb%local = zero
     i = maxval(local_and_vkb%n_proj)
+    if(i==0) i=1
     allocate(local_and_vkb%projector(ngrid,i,0:pseudo(i_species)%lmax))
     local_and_vkb%projector = zero
     allocate(local_and_vkb%semilocal_potential(ngrid,0:pseudo(i_species)%lmax))
