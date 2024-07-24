@@ -4,3 +4,6 @@ Phys. Rev. B 54, 1703 (1996), Phys. Rev. B 58, 3641 (1998) and Theor. Chem. Acc.
 
 Note that these are not tested by the CONQUEST developers, and should be treated
 with care.  In particular, PAO generation is at present in beta phase.
+
+Please note that at present you should not use the Ba_q2 or Ta_q5 directories
+(the PAO solver does not converge for these two configurations).
