@@ -735,9 +735,13 @@ contains
        local_and_vkb%pcc = zero
        ! There is a parameter n_read above which is currently unused
        r_core_2 = r_core*r_core
+       ! Willand paper values
+       !dummy = four*pi*(pseudo(i_species)%z - pseudo(i_species)%zval)/(sqrt(twopi)*r_core)**3
+       ! CP2K values
+       dummy = one
        do i=1,ngrid
           rr = local_and_vkb%rr(i)
-          local_and_vkb%pcc(i) = c_core*exp(-half*rr*rr/r_core_2) ! May need to remove factor of 4pi
+          local_and_vkb%pcc(i) = c_core*dummy*exp(-half*rr*rr/r_core_2) ! May need to remove factor of 4pi
        end do
     end if
     !
