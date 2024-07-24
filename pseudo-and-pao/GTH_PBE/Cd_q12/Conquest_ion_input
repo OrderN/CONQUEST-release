@@ -1,14 +1,17 @@
 General.NumberOfSpecies 1
 General.PSFormat hgh
-IO.Iprint 5
-IO.PlotOutput T
+General.KBThresh 1e-6
 
 %block SpeciesLabels
 1  Cd
 %endblock
 
+# We have made the equal energy shift cutoff radius approach
+# the default here, as the equal radius approach leaves the
+# d orbitals almost entirely identical
 %block Cd
 Atom.PseudopotentialFile Cd.hgh
 Atom.ZetaForm com
-Atom.dE_small_radius 0.005
+Atom.dE_small_radius 0.007
+Atom.Cutoffs en
 %endblock

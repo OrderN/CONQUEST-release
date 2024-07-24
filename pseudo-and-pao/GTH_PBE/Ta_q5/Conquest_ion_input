@@ -1,7 +1,5 @@
 General.NumberOfSpecies 1
 General.PSFormat hgh
-IO.PlotOutput T
-IO.Iprint 5
 
 %block SpeciesLabels
 1  Ta

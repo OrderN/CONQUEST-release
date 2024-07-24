@@ -1,6 +1,6 @@
 General.NumberOfSpecies 1
 General.PSFormat hgh
-IO.PlotOutput T
+General.KBThresh 1e-7
 
 %block SpeciesLabels
 1  Au

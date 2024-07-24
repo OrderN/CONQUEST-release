@@ -1,8 +1,6 @@
 General.NumberOfSpecies 1
 General.PSFormat hgh
 General.SolverStep 0.2
-IO.Iprint 5
-IO.PlotOutput T
 
 %block SpeciesLabels
 1  Co

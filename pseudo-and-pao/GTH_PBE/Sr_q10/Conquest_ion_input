@@ -1,6 +1,5 @@
 General.NumberOfSpecies 1
 General.PSFormat hgh
-IO.PlotOutput T
 
 %block SpeciesLabels
 1  Sr
@@ -25,10 +24,9 @@ Atom.BasisBlock SrBlock
 5 1 1
 4 2 1
 # Radii for PAOs (bohr)
-4.1
-4.9
-10.8  5.8
-10.8
-10.8
+6.1
+7.5
+10.97  7.3
+10.97
+10.97
 %endblock
-

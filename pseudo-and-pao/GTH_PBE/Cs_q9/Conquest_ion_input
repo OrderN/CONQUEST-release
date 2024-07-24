@@ -1,6 +1,11 @@
+# The basis set created by this file should be fairly reliable,
+# and we recommend using it, or adapting it to make larger basis
+# sets by changing the number of zeta functions and their radii
+# in the BasisBlock below.  At present it is a DZP size basis
+# (though there are two types of polarisation orbital, l=1 and l=2)
+
 General.NumberOfSpecies 1
 General.PSFormat hgh
-IO.PlotOutput T
 
 %block SpeciesLabels
 1  Cs
@@ -10,4 +15,24 @@ IO.PlotOutput T
 Atom.PseudopotentialFile Cs.hgh
 Atom.ZetaForm com
 Atom.Perturbative_Polarised F
+Atom.PAO_N_Shells 5
+Atom.BasisBlock CsBlock
+%endblock
+
+# Specify the number of PAOs for each n,l pair and then their radii
+# The radii below are based on default CONQUEST energies for the 
+# valence shells
+%block CsBlock
+# n, l, number of zetas
+5 0 1
+5 1 1
+6 0 2
+6 1 1
+5 2 1
+# Radii for PAOs (bohr)
+7.4
+9.6
+13.7  9.8
+13.7
+13.7
 %endblock

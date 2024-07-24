@@ -1,6 +1,5 @@
 General.NumberOfSpecies 1
 General.PSFormat hgh
-IO.PlotOutput T
 
 %block SpeciesLabels
 1  Ti
@@ -10,4 +9,5 @@ IO.PlotOutput T
 Atom.PseudopotentialFile Ti.hgh
 Atom.ZetaForm com
 Atom.Perturbative_Polarised F
+Atom.dE_small_radius 0.03
 %endblock

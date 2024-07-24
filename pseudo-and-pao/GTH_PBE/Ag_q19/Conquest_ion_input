@@ -10,6 +10,5 @@ General.SolverMaxIters 300
 Atom.PseudopotentialFile Ag.hgh
 Atom.ZetaForm com
 Atom.Perturbative_Polarised F
+Atom.dE_small_radius 0.02
 %endblock
-
-
