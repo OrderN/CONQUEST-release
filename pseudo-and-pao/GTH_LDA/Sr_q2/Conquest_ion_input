@@ -1,5 +1,6 @@
 General.NumberOfSpecies 1
 General.PSFormat hgh
+General.KBThresh 1e-6
 
 %block SpeciesLabels
 1  Sr
@@ -22,7 +23,7 @@ Atom.BasisBlock SrBlock
 5 1 1
 4 2 1
 # Radii for PAOs (bohr)
-10.8  5.8
-10.8
-10.8
+10.9  7.5
+10.9
+10.9
 %endblock

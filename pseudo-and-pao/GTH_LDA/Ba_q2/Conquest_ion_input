@@ -1,5 +1,7 @@
 General.NumberOfSpecies 1
 General.PSFormat hgh
+General.SolverStep 0.01
+General.SCFMixing 0.3
 
 %block SpeciesLabels
 1  Ba
@@ -22,7 +24,7 @@ Atom.BasisBlock BaBlock
 6 1 1
 5 2 1
 # Radii for PAOs (bohr)
-11.6 6.2
-11.6
-11.6
+12.0 7.6
+12.0
+12.0
 %endblock

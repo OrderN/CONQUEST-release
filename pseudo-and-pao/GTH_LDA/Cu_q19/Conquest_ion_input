@@ -1,5 +1,6 @@
 General.NumberOfSpecies 1
 General.PSFormat hgh
+General.SCFMixing 0.2
 
 %block SpeciesLabels
 1  Cu

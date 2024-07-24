@@ -1,5 +1,6 @@
 General.NumberOfSpecies 1
 General.PSFormat hgh
+General.SolverStep 0.02
 
 %block SpeciesLabels
 1  Rb

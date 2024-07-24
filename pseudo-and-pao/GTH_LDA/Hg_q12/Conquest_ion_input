@@ -10,5 +10,5 @@ General.SCFMixing 0.2
 %block Hg
 Atom.PseudopotentialFile Hg.hgh
 Atom.ZetaForm com
-Atom.dE_small_radius 0.008
+Atom.dE_small_radius 0.004
 %endblock

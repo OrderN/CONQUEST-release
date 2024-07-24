@@ -1,5 +1,6 @@
 General.NumberOfSpecies 1
 General.PSFormat hgh
+General.KBThresh 1e-7
 
 %block SpeciesLabels
 1  Tc
@@ -9,4 +10,5 @@ General.PSFormat hgh
 Atom.PseudopotentialFile Tc.hgh
 Atom.ZetaForm com
 Atom.Perturbative_Polarised F
+Atom.dE_small_radius 0.04
 %endblock

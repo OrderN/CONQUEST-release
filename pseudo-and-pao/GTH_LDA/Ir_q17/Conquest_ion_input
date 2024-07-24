@@ -8,5 +8,6 @@ General.PSFormat hgh
 %block Ir
 Atom.PseudopotentialFile Ir.hgh
 Atom.ZetaForm com
+#Atom.dE_small_radius 0.04
 Atom.Perturbative_Polarised F
 %endblock
