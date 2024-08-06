@@ -114,5 +114,103 @@ The build can be customized by adding options to the
 `Spack spec <https://spack.readthedocs.io/en/latest/basic_usage.html#specs-dependencies>`_ ``conquest``.
 The CONQUEST package includes variants for OpenMP support and different matrix multiplication kernels; more details can be found in the `Spack CONQUEST package <https://spack.readthedocs.io/en/latest/package_list.html#conquest>`_.
 
+Installing on Ubuntu
+-----------
+
+CONQUEST can be compiled on Ubuntu after installing the required packages. The below instructions are given for Ubuntu 22.04 LTS and Ubuntu 24.04 LTS.
+The source files will be downloaded into the ``${USER}/local/src`` directory. The ${USER} variable will be automatically replaced by the current username.
+
+Install needed packages
+~~~~~~~~~~~~~~~~
+
+.. code-block:: bash
+
+    sudo apt update
+    sudo apt upgrade
+
+    sudo apt install -y build-essential                                    # GCC and other tools for software development
+    sudo apt install -y openmpi-bin libopenmpi-dev                         # MPI
+    sudo apt install -y libfftw3-dev                                       # FFT
+    sudo apt install -y libblas-dev liblapack-dev libscalapack-openmpi-dev # Linear algebra
+
+Install libxc
+~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: bash
+
+    cd $HOME && mkdir local
+    cd $HOME/local && mkdir src && cd src
+
+    cd $HOME/local/src
+    wget https://gitlab.com/libxc/libxc/-/archive/6.2.2/libxc-6.2.2.tar.bz2 -O libxc.tar.bz2
+    tar -xf libxc.tar.bz2
+    cd libxc-6.2.2 && autoreconf -i && ./configure --prefix=$HOME/local
+    make
+    make check && make install
+
+Download CONQUEST
+~~~~~~~~~~~~~~~~~~
+
+.. code-block:: bash
+
+    cd $HOME/local/src
+    git clone https://github.com/OrderN/CONQUEST-release.git conquest_master
+    cd conquest_master/src
+
+Prepare makefile
+~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: bash
+
+    # Prepare system.make file for Ubuntu.
+    cat > system/system.make << EOF
+
+    # Set compilers
+    FC=mpif90
+    F77=mpif77
+
+    # Linking flags
+    LINKFLAGS= -L\${HOME}/local/lib -L/usr/local/lib -fopenmp
+    ARFLAGS=
+
+    # Compilation flags
+    # NB for gcc10 you need to add -fallow-argument-mismatch
+    COMPFLAGS= -O3 \$(XC_COMPFLAGS) -fallow-argument-mismatch
+    COMPFLAGS_F77= \$(COMPFLAGS)
+
+    # Set BLAS and LAPACK libraries
+    # Generic
+    BLAS= -llapack -lblas
+
+    # Full library call; remove scalapack if using dummy diag module
+    LIBS= \$(FFT_LIB) \$(XC_LIB) -lscalapack-openmpi \$(BLAS)
+
+    # LibXC compatibility (LibXC below) or Conquest XC library
+
+    # LibXC compatibility
+    # Choose LibXC version: v4 (deprecated) or v5/6 (v5 and v6 have the same interface)
+    XC_LIBRARY = LibXC_v5
+    XC_LIB = -lxcf90 -lxc
+    XC_COMPFLAGS = -I\${HOME}/local/include -I/usr/local/include
+
+    # Set FFT library
+    FFT_LIB=-lfftw3
+    FFT_OBJ=fft_fftw3.o
+
+    # Matrix multiplication kernel type
+    MULT_KERN = default
+    # Use dummy DiagModule or not
+    DIAG_DUMMY =
+
+    EOF
+
+Compile CONQUEST
+~~~~~~~~~~~~~~~
+
+.. code-block:: bash
+
+
+    dos2unix ./makedeps       # For Windows Subsystem for Linux (WSL), there may be some incompatibilities thus file conversion is recommended.
+    make                      # Or make -j`nproc` for parallel compilation using all available cores
 Go to :ref:`top <install>`
 
