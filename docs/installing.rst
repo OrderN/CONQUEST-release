@@ -139,10 +139,10 @@ Install libxc
 
 .. code-block:: bash
 
-    cd $HOME && mkdir local
-    cd $HOME/local && mkdir src && cd src
+    cd $HOME 
+    mkdir -p ${HOME}/local/src
+    cd ${HOME}/local/src
 
-    cd $HOME/local/src
     wget https://gitlab.com/libxc/libxc/-/archive/6.2.2/libxc-6.2.2.tar.bz2 -O libxc.tar.bz2
     tar -xf libxc.tar.bz2
     cd libxc-6.2.2 && autoreconf -i && ./configure --prefix=$HOME/local
@@ -154,7 +154,7 @@ Download CONQUEST
 
 .. code-block:: bash
 
-    cd $HOME/local/src
+    cd ${HOME}/local/src
     git clone https://github.com/OrderN/CONQUEST-release.git conquest_master
     cd conquest_master/src
 
@@ -168,28 +168,29 @@ Prepare makefile
 
     # Set compilers
     FC=mpif90
-    F77=mpif77
 
-    # Linking flags
-    LINKFLAGS= -L\${HOME}/local/lib -L/usr/local/lib -fopenmp
-    ARFLAGS=
-
-    # Compilation flags
-    # NB for gcc10 you need to add -fallow-argument-mismatch
-    COMPFLAGS= -O3 \$(XC_COMPFLAGS) -fallow-argument-mismatch
-    COMPFLAGS_F77= \$(COMPFLAGS)
+    # OpenMP flags
+    # Set this to "OMPFLAGS= " if compiling without openmp
+    # Set this to "OMPFLAGS= -fopenmp" if compiling with openmp
+    OMPFLAGS= 
+    # Set this to "OMP_DUMMY = DUMMY" if compiling without openmp
+    # Set this to "OMP_DUMMY = " if compiling with openmp
+    OMP_DUMMY = DUMMY
 
     # Set BLAS and LAPACK libraries
+    # MacOS X
+    # BLAS= -lvecLibFort
+    # Intel MKL use the Intel tool
     # Generic
     BLAS= -llapack -lblas
-
-    # Full library call; remove scalapack if using dummy diag module
-    LIBS= \$(FFT_LIB) \$(XC_LIB) -lscalapack-openmpi \$(BLAS)
-
-    # LibXC compatibility (LibXC below) or Conquest XC library
+    # Full scalapack library call; remove -lscalapack if using dummy diag module.
+    # If using OpenMPI, use -lscalapack-openmpi instead.
+    # If using Cray-libsci, use -llibsci_cray_mpi instead.
+    SCALAPACK = -lscalapack-openmpi
 
     # LibXC compatibility
     # Choose LibXC version: v4 (deprecated) or v5/6 (v5 and v6 have the same interface)
+    # XC_LIBRARY = LibXC_v4
     XC_LIBRARY = LibXC_v5
     XC_LIB = -lxcf90 -lxc
     XC_COMPFLAGS = -I\${HOME}/local/include -I/usr/local/include
@@ -197,6 +198,15 @@ Prepare makefile
     # Set FFT library
     FFT_LIB=-lfftw3
     FFT_OBJ=fft_fftw3.o
+
+    LIBS= \$(FFT_LIB) \$(XC_LIB)  \$(SCALAPACK) \$(BLAS)
+    
+    # Compilation flags
+    # NB for gcc10 you need to add -fallow-argument-mismatch
+    COMPFLAGS= -O3 \$(OMPFLAGS) \$(XC_COMPFLAGS) -fallow-argument-mismatch
+
+    # Linking flags
+    LINKFLAGS= -L\${HOME}/local/lib -L/usr/local/lib \$(OMPFLAGS)
 
     # Matrix multiplication kernel type
     MULT_KERN = default
