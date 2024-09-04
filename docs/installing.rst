@@ -119,6 +119,7 @@ Installing on Ubuntu
 
 CONQUEST can be compiled on Ubuntu after installing the required packages. The below instructions are given for Ubuntu 22.04 LTS and Ubuntu 24.04 LTS.
 The source files will be downloaded into the ``${USER}/local/src`` directory. The ${USER} variable will be automatically replaced by the current username.
+If compilation is successful, the executable file can be found in ``${USER}/local/src/conquest_master/bin``.
 
 Install needed packages
 ~~~~~~~~~~~~~~~~
@@ -128,7 +129,7 @@ Install needed packages
     sudo apt update
     sudo apt upgrade
 
-    sudo apt install -y build-essential                                    # GCC and other tools for software development
+    sudo apt install -y build-essential libtool                            # GCC and other tools for software development
     sudo apt install -y openmpi-bin libopenmpi-dev                         # MPI
     sudo apt install -y libfftw3-dev                                       # FFT
     sudo apt install -y libblas-dev liblapack-dev libscalapack-openmpi-dev # Linear algebra
