@@ -1549,4 +1549,136 @@ contains
     return
   end subroutine dump_XL
   !!***
+
+  ! -----------------------------------------------------------------------
+  ! Subroutine write_Rij_MatrixElements
+  ! -----------------------------------------------------------------------
+
+  !!****f* store_matrix/write_Rij_MatrixElements *
+  !!
+  !!  NAME
+  !!    write_Rij_MatrixElements    : made from dump_matrix2
+  !!  USAGE
+  !!     call write_Rij_MatrixElements('K',matK,Hrange,n_matrix=nspin,index=10)
+  !!    will generate the file "Kmatrix_plot.i10.p000000".
+  !!    You can omit "index=10", then the default value of index = 00.
+  !!
+  !!    At present, it prints out the matrix elements only for inode = 1
+  !!    (you can print out the matrix elements for all nodes, simply by
+  !!    commenting out the IF statements
+  !!
+  !!  PURPOSE
+  !!    writes Rij and abs(MatElements(ij))
+  !!  INPUTS
+  !!
+  !!  USES
+  !!
+  !!  AUTHOR
+  !!   Tsuyoshi Miyazaki
+  !!  CREATION DATE
+  !!   2024/08/30
+  !!  MODIFICATION
+  !!
+  !!  SOURCE
+  !!
+  subroutine write_Rij_MatrixElements(stub,matA,range,n_matrix,index)
+
+    use GenComms, ONLY: inode, ionode, cq_abort
+    use global_module, ONLY: numprocs, id_glob
+    use io_module, ONLY: get_file_name, get_file_name_2rank
+    use global_module, ONLY: rcellx, rcelly, rcellz
+
+    implicit none
+
+    ! Passed variables
+    character(len=*),intent(in) :: stub
+    integer,intent(in) :: n_matrix
+    integer,intent(in) :: matA(n_matrix)
+    integer,intent(in) :: range
+    integer,optional,intent(in) :: index
+
+    ! Local variables
+    type(matrix_store):: tmp_matrix_store
+    integer :: lun, iprim, nprim, jmax, jj, ibeg, jbeta_alpha, len, istat
+    character(80) :: file_name
+    integer :: index_local, nn
+    integer :: ibeg2, n1, n2, nspin_local
+    real(double) :: Rij(1:3), Rij_2
+
+    index_local=0; if(present(index)) index_local=index
+
+    IF(INODE == IONODE) THEN
+
+    ! set_matrix_store : build tmp_matrix_store
+    call set_matrix_store(stub,matA,range,n_matrix,tmp_matrix_store)
+
+    ! Actual Dump (from dump_matrix2)
+    ! First, get the name of a file based upon the node ID or rank.
+    if(flag_MatrixFile_RankFromZero) then
+       call get_file_name_2rank(stub//'matrix_plot',file_name,index_local,myid)
+    else
+       call get_file_name_2rank(stub//'matrix_plot',file_name,index_local,inode)
+    endif
+    call io_assign(lun)
+
+     open (lun,file=file_name,form='formatted')
+
+     ! 1. node ID, no. of PS of atoms "i".
+      nprim=tmp_matrix_store%n_prim
+      write (lun,*) "# inode,nprim = ",inode, nprim
+     ! 2. no. of alpha for each "i".
+      write (lun,*) "# n_alpha = ",tmp_matrix_store%nsf_spec_i(1:nprim)
+     ! NOTE: The followings are written out with neighbour-labelling
+     ! 3. no. of the neighbours "j" for each "i".
+     ! 4. no. of "neighbour-j x beta" for each "i".
+     ! 5. no. of matrices whose elements will be printed out
+     !write (lun,*) tmp_matrix_store%nspin
+
+     !I will change the order of dumping in the following, later.   2016/09/30: TM@UCL
+     if(nprim .GT. 0) then
+        do iprim=1,nprim
+           jmax = tmp_matrix_store%jmax_i(iprim)
+           ibeg = tmp_matrix_store%ibeg_Rij(iprim)
+           !write (lun,*) tmp_matrix_store%idglob_i(iprim)
+           !write (lun,*) tmp_matrix_store%beta_j(ibeg:ibeg+jmax-1)
+           !write (lun,*) tmp_matrix_store%idglob_j(ibeg:ibeg+jmax-1)
+
+           ibeg2 = tmp_matrix_store%ibeg_data_matrix(iprim)
+           jbeta_alpha=0
+
+           do jj=1,jmax
+              Rij(1:3) = tmp_matrix_store%vec_Rij(1:3,ibeg+jj-1)
+               Rij(1) = Rij(1)*rcellx
+               Rij(2) = Rij(2)*rcelly
+               Rij(3) = Rij(3)*rcellz
+              Rij_2 = Rij(1)**2 + Rij(2)**2 + Rij(3)**2
+              nspin_local=tmp_matrix_store%nspin
+             do n2=1,tmp_matrix_store%beta_j(ibeg+jj-1)
+              do n1=1,tmp_matrix_store%nsf_spec_i(iprim)
+               jbeta_alpha=jbeta_alpha+1
+               write (lun,fmt='(2x,2e20.10)') sqrt(Rij_2), abs(tmp_matrix_store%data_matrix(ibeg2+jbeta_alpha-1,1:nspin_local))
+              enddo
+             enddo
+           enddo !jj=1,jmax
+
+           if(iprim < nprim) then
+              len = tmp_matrix_store%ibeg_data_matrix(iprim+1)-tmp_matrix_store%ibeg_data_matrix(iprim)
+           else
+              len = tmp_matrix_store%matrix_size-tmp_matrix_store%ibeg_data_matrix(iprim)+1
+           endif
+             write(*,*) ' Subroutine: write_Rij_MatrixElements :: iprim, jbeta_alpha, len = ',iprim,jbeta_alpha,len
+        enddo !iprim=1,nprim
+     endif  ! (nprim .GT. 0)
+
+    ! Close the file in the end.
+    call io_close(lun)
+
+    ! free_matrix_store : free tmp_matrix_store
+    call free_matrix_store(tmp_matrix_store)
+
+    ENDIF ! (INODE == IONODE)
+
+    return
+  end subroutine write_Rij_MatrixElements
+
 end module store_matrix
