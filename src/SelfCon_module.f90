@@ -1764,6 +1764,10 @@ contains
   !!   - Introduced spin-up/down atomic charge
   !!   2019/11/21 10:51 dave
   !!   - Tweak to use gsum for 2D array for charge
+  !!   2024/09/03 18:00 nakata
+  !!   - changed matS and matK to matSatomf and MatKatomf for MSSFs
+  !!     (so Srange is changed to aSa_range),
+  !!     then spin_SF is no longer used, because matSatomf is not spin-dependent
   subroutine get_atomic_charge()
 
     use datatypes
@@ -1771,8 +1775,8 @@ contains
     use global_module,  only: ni_in_cell, area_SC, nspin, spin_factor, &
                               flag_SpinDependentSF
     use primary_module, only: bundle
-    use matrix_data,    only: Srange
-    use mult_module,    only: matK, matS, atom_trace, matrix_sum, &
+    use matrix_data,    only: aSa_range
+    use mult_module,    only: matKatomf, matSatomf, atom_trace, matrix_sum, &
                               allocate_temp_matrix, free_temp_matrix
     use atoms,          only: atoms_on_node
     use GenComms,       only: gsum, inode, ionode, cq_abort
@@ -1782,7 +1786,7 @@ contains
     implicit none
 
     ! Local variables
-    integer :: chun, stat, n,l, glob_ind, spin, spin_SF
+    integer :: chun, stat, n,l, glob_ind, spin
     integer, dimension(nspin) :: temp_mat
     real(double), dimension(:,:), allocatable :: charge, node_charge
 
@@ -1803,12 +1807,10 @@ contains
     ! automatically called on each node
     node_charge = zero
     charge = zero
-    spin_SF = 1
     do spin = 1, nspin
-       if (flag_SpinDependentSF) spin_SF = spin
-       temp_mat(spin) = allocate_temp_matrix(Srange, 0)
-       call matrix_sum(zero, temp_mat(spin), one, matK(spin))
-       call atom_trace(temp_mat(spin), matS(spin_SF), l, node_charge(:,spin))
+       temp_mat(spin) = allocate_temp_matrix(aSa_range, 0)
+       call matrix_sum(zero, temp_mat(spin), one, matKatomf(spin))
+       call atom_trace(temp_mat(spin), matSatomf, l, node_charge(:,spin))
        ! sum from the node_charge into the total charge array
        do n = 1, l
           glob_ind = atoms_on_node(n, inode)
