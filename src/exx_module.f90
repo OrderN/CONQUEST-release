@@ -41,7 +41,7 @@ module exx_module
   use timer_module,              only: start_backtrace, stop_backtrace, cq_timer
   !**<lat>** ISF Poisson solver Will be available in the forthcoming version 
   !use Poisson_Solver,            only: PSolver, createKernel, gequad
-  use global_module,             only: io_lun
+  use global_module,             only: io_lun, exx_cutoff
   use exx_types,                 only: reckernel_3d, fftwrho3d, exx_debug
   use exx_io
   
@@ -62,7 +62,7 @@ contains
     use exx_types, only: pulay_factor,pulay_radius, magic_number,ewald_alpha,isf_order
     use exx_types, only: extent,ngrid,r_int,grid_spacing,volume,edge,screen
 
-    use exx_types, only: exx_scheme, exx_mem, exx_screen, exx_alloc, exx_cutoff
+    use exx_types, only: exx_scheme, exx_mem, exx_screen, exx_alloc
     use exx_types, only: exx_cartesian, exx_overlap, exx_radius, exx_screen_pao, exx_hgrid
     use exx_types, only: exx_gto, exx_debug
     use exx_types, only: tmr_std_exx_setup, exx_store_eris
@@ -108,7 +108,7 @@ contains
     exx_screen      = .false.
     exx_screen_pao  = .false.
     exx_store_eris  = .false.
-    exx_cutoff      = zero              ! do not touch  
+    !exx_cutoff      = zero              ! do not touch  
     !
     ! Find out the finest grid spacing from input
     ! Input grid spacing from input (Bohr unit)

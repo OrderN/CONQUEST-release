@@ -47,7 +47,8 @@ module exx_kernel_default
   use timer_module,              only: start_timer, stop_timer, print_timer, lun_tmr
   use timer_module,              only: start_backtrace, stop_backtrace, cq_timer
   use timer_stdclocks_module,    only: tmr_std_exx
-
+  use global_module,             only: exx_cutoff
+  !use dimens,                    only: r_exx
   !use Poisson_Solver,            only: PSolver, createKernel, gequad
 
   use exx_types,                 only: reckernel_3d, exx_debug
@@ -554,6 +555,8 @@ contains
                      mat_p(matX(  exxspin  ))%length, nb_eris, get_exx, exx_filter )
              end if
              !
+             !call my_barrier()
+             !
              if (iprint_exx > 5) write(io_lun,*) 'Proc :', myid, &
                   'EXX: compute and store ERIs on kpart =', kpart
              !
@@ -886,6 +889,7 @@ contains
             !
             if ( should_compute_eri_hoh .and. filter_eris_ptr( nsf_ia, nsf_jb ) ) then
                !
+               !print*, 'toto'
                call compute_eri_hoh( nsf_ia, nsf_jb, nsf_kg, nsf_ld, &
                      ia%spec,   jb%spec,   kg%spec,   ld%spec,  &
                      ia%xyz_ip, jb%xyz_cv, kg%xyz_cv, ld%xyz_cv,&
@@ -1099,7 +1103,7 @@ contains
           !
 !!$
 !!$ ****[ j loop ]****
-!!$
+!!$ 
           do j = 1, nbnab(k_in_part)
              nbbeg     = nb_nd_kbeg
              j_in_halo = jbnab2ch(j) !***
@@ -1114,6 +1118,10 @@ contains
                    call get_halodat(jb,kg,jseq,chalo%i_hbeg(jpart),         &
                         BCS_parts%lab_cell(BCS_parts%inv_lab_cover(jpart)), &
                         'j',.true.,unit_exx_debug)
+                   !####
+                   if ( sqrt(sum(((ia%xyz_ip-jb%xyz_cv)**2))) < exx_cutoff ) then
+                   !####                   
+                   
                    if (jb%nsup/=bndim2(nbkbeg+j-1)) call cq_abort('Error2: ',jb%nsup,bndim2(nbkbeg+j-1))
                    !
                    if ( exx_alloc ) call exx_mem_alloc(extent,jb%nsup,0,'phi_j','alloc')
@@ -1155,6 +1163,9 @@ contains
                    if ( exx_alloc ) call exx_mem_alloc(extent,0,0,'Ome_kj_1d_buffer','dealloc')
                    if ( exx_alloc ) call exx_mem_alloc(extent,jb%nsup,0,'phi_j','dealloc')
                    !
+                   !####
+                   end if
+                   !####  
                 end if ! ( ncbeg /=0 )
              end if ! ( j_in_halo /=0 )
 !!$
@@ -1288,6 +1299,8 @@ contains
     dv = grid_spacing**3
     count = 0
     should_allocate = exx_alloc .and. (.not. exx_gto)
+    should_allocate = .true.
+    !print*, should_allocate 
     !
 !!$
 !!$ ****[ k loop ]****
@@ -1390,8 +1403,12 @@ contains
                             filter_eris_ptr(1:ia%nsup, 1:jb%nsup) => eris(kpart)%filter_eris(count+1:count + (jb%nsup * ia%nsup))
                             count = count + (jb%nsup * ia%nsup)
                             !
-                            should_compute_eri_hoh = abs(ia%xyz_ip(3)-kg%xyz_cv(3)) < ( ia%radi + kg%radi) &
-                                             .and. abs(jb%xyz_cv(3)-ld%xyz_cv(3)) < ( jb%radi + ld%radi)
+                            !should_compute_eri_hoh = sqrt(sum((ia%xyz_ip-kg%xyz_cv)**2)) < ( ia%radi + kg%radi) &
+                            !                   .and. sqrt(sum((jb%xyz_cv-ld%xyz_cv)**2)) < ( jb%radi + ld%radi)
+                            should_compute_eri_hoh = sqrt(sum((ia%xyz_ip-kg%xyz_cv)**2)) < ( exx_cutoff ) &
+                                               .and. sqrt(sum((jb%xyz_cv-ld%xyz_cv)**2)) < ( exx_cutoff )
+
+                            !print*, should_compute_eri_hoh
                             !
                             !$omp parallel default(none) reduction(+: c)                                                   &
                             !$omp     shared(ld,kg,jb,ia,nsf_kg,nsf_ld,ncbeg,phi_k,phi_j,phi_l,phi_i,extent,dv,eris,K_val, &
@@ -1561,6 +1578,8 @@ contains
     integer :: l, lseq, lpart
     integer :: np, ni
     !
+    logical :: should_compute_eri_ik, should_compute_eri_jl
+    !
     real(double), dimension(3) :: xyz_zero  = zero
     !
     real(double)               ::   dr, dv, K_val
@@ -1680,7 +1699,11 @@ contains
                    !
                    call get_iprimdat(ia,kg,ni,i_in_prim,np,.true.,unit_exx_debug)          
                    !
-                   if ( filter_eris ) then                      
+                   !
+                   !should_compute_eri_ik = sqrt(sum( (ia%xyz_ip-kg%xyz_cv)**2)) < ( ia%radi + kg%radi )
+                   should_compute_eri_ik = sqrt(sum( (ia%xyz_ip-kg%xyz_cv)**2)) < exx_cutoff                   
+                   !                   
+                   if ( filter_eris .and. should_compute_eri_ik ) then                      
                       call exx_phi_on_grid(inode,ia%ip,ia%spec,exx_filter_extent, &
                            ia%xyz,maxsuppfuncs,phi_i_filter,r_int,xyz_zero)
                    end if
@@ -1703,7 +1726,10 @@ contains
                                  BCS_parts%lab_cell(BCS_parts%inv_lab_cover(jpart)), &
                                  'j',.true.,unit_exx_debug)
                             !
-                            if ( filter_eris ) then                               
+                            !should_compute_eri_jl = sqrt(sum( (jb%xyz_cv-ld%xyz_cv)**2)) < ( jb%radi + ld%radi )
+                            should_compute_eri_jl = sqrt(sum( (jb%xyz_cv-ld%xyz_cv)**2)) < ( exx_cutoff )                            
+                            !
+                            if ( filter_eris .and. should_compute_eri_jl ) then                               
                                call exx_phi_on_grid(inode,jb%global_num,jb%spec,exx_filter_extent, &
                                     jb%xyz,maxsuppfuncs,phi_j_filter,r_int,xyz_zero)
                             end if
@@ -1712,7 +1738,7 @@ contains
                                !
                                ncaddr = ncbeg + ia%nsup * (nsf_jb - 1)
                                !
-                               if ( filter_eris ) then
+                               if ( filter_eris .and. should_compute_eri_jl ) then
                                   work_out = zero
                                   work_in  = phi_l_filter(:,:,:,nsf_ld)*phi_j_filter(:,:,:,nsf_jb)
                                   !
@@ -1735,6 +1761,8 @@ contains
                                         !
                                         exx_mat_elem = zero
                                         !
+                                        if ( should_compute_eri_ik .and. should_compute_eri_jl ) then
+                                        !
                                         do r = 1, 2*exx_filter_extent+1
                                            do s = 1, 2*exx_filter_extent+1
                                               do t = 1, 2*exx_filter_extent+1                         
@@ -1746,6 +1774,8 @@ contains
                                               end do
                                            end do
                                         end do
+                                        !
+                                        end if
                                         !
                                         if ( abs(exx_mat_elem) < exx_filter_thr ) then
                                            !

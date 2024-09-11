@@ -55,7 +55,7 @@ module dimens
 
   real(double) :: r_super_x, r_super_y, r_super_z, volume
   real(double) :: r_super_x_squared, r_super_y_squared, r_super_z_squared
-  real(double) :: r_s, r_h, r_c, r_nl, r_core_squared, r_dft_d2, r_exx
+  real(double) :: r_s, r_h, r_c, r_nl, r_core_squared, r_dft_d2, r_exx, r_exxs
   real(double) :: r_s_atomf, r_h_atomf, r_MS, r_LD
   real(double) :: grid_point_volume, one_over_grid_point_volume
   real(double) :: support_grid_volume
@@ -161,7 +161,7 @@ contains
 !!    flag_MDold was removed.
 !!   2019/12/02 15:17 dave 
 !!    Added checks to round RadiusAtomf and RadiusSupport to safe value (including grid points)
-!!   2034/09/16 14:18 lionel 
+!!   2024/07/18 14:18 lionel 
 !!    Check consistency of Xrange wrt r_exx read from input 
 !!  SOURCE
 !!
@@ -315,11 +315,18 @@ contains
     if(flag_exx) then
        if ( r_exx <= zero ) then
           rcut(Xrange)  = rcut(Hrange)
-          rcut(SXrange) = rcut(Hrange)
+          !rcut(SXrange) = rcut(Hrange)
+          r_exx         = rcut(Xrange)/2_double
        else
           rcut(Xrange)   = two*r_exx
-          rcut(SXrange)  = two*r_exx
-       endif
+       end if
+       if ( r_exxs <= zero ) then
+          !rcut(Xrange)  = rcut(Hrange)
+          rcut(SXrange) = rcut(Hrange)
+          r_exxs        = rcut(SXrange)/2_double
+       else
+          rcut(SXrange)  = two*r_exxs
+       end if
     else
        rcut(Xrange)   = two
        rcut(SXrange)  = two

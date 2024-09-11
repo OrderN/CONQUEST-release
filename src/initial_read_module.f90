@@ -857,7 +857,7 @@ contains
          flag_LmatrixReuse,flag_TmatrixReuse,flag_SkipEarlyDM,McWFreq, &
          restart_T,restart_X,flag_XLBOMD,flag_propagateX,              &
          flag_propagateL,flag_dissipation,integratorXL, flag_FixCOM,   &
-         flag_exx, exx_alpha, exx_scf, exx_scf_tol, exx_siter,         &
+         flag_exx, exx_alpha, exx_scf, exx_scf_tol, exx_siter, exx_cutoff, &
          flag_out_wf,max_wf,out_wf,wf_self_con, flag_fire_qMD, &
          flag_write_DOS, flag_write_projected_DOS, &
          E_wf_min, E_wf_max, flag_wf_range_Ef, &
@@ -873,7 +873,7 @@ contains
          RadiusSupport, RadiusAtomf, RadiusMS, RadiusLD, &
          NonLocalFactor, InvSRange,                      &
          min_blip_sp, flag_buffer_old, AtomMove_buffer,  &
-         r_dft_d2, r_exx
+         r_dft_d2, r_exx, r_exxs
     use block_module, only: in_block_x, in_block_y, in_block_z, &
          blocks_raster, blocks_hilbert
     use species_module, only: species_label, charge, mass, n_species,  &
@@ -1987,6 +1987,7 @@ contains
        exx_siter = fdf_integer('EXX.StartAfterIter', 2 )
        exx_scf   = fdf_integer('EXX.MethodSCF',      0 )
        r_exx     = fdf_double ('EXX.Xrange'   ,   zero )
+       r_exxs    = fdf_double ('EXX.SXrange'   ,  zero )
        !
     else if ( flag_functional_type == functional_hartree_fock ) then
        flag_exx = .true.
@@ -2030,6 +2031,7 @@ contains
        exx_filter = fdf_boolean('EXX.Filter', .false.  )
        exx_filter_extent = fdf_integer('EXX.FilterGrid', 2 )
        exx_filter_thr    = fdf_double('EXX.FilterThreshold',  1.0e-10_double )
+       exx_cutoff        = fdf_double('EXX.Cutoff',  100.0_double )
        !
        exx_cartesian  = fdf_boolean('EXX.PAOCartesian',     .true.)
        exx_alloc      = fdf_boolean('EXX.DynamicAllocation',.true.)

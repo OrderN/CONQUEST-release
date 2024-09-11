@@ -154,7 +154,7 @@ module exx_types
 
   logical :: exx_filter
   logical :: exx_store_eris  ! store ERIs at first exx call
-  real(double) :: exx_cutoff ! cutoff for screening (experimental)
+  !real(double) :: exx_cutoff ! cutoff for screening (experimental)
   real(double) :: exx_radius ! radius for integration
   real(double) :: exx_hgrid  ! radius for integration
 
