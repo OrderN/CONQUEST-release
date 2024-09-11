@@ -121,7 +121,7 @@ contains
     gs_min = minval(gs)
     !
     ! Setup grid spacing of EXX
-    if ( exx_hgrid < very_small .and. exx_hgrid >= zero ) then
+    if ( exx_hgrid < very_small ) then
        grid_spacing = gs_min
     else if ( exx_hgrid >= zero ) then
        grid_spacing = exx_hgrid       
