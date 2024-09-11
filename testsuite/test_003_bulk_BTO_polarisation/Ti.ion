@@ -8,7 +8,7 @@
   Hamann input file name: Ti.in (appended at end of file)
   Core radii (bohr)     : l=0 1.350 l=1 1.300 l=2 1.650
   4 valence shells      : 3s 3p 4s 3d
-  XC functional code    : -001012
+  XC functional code    : 3
   XC description        : Perdew & Wang
   Includes partial core corrections
 </Conquest_pseudopotential_info>

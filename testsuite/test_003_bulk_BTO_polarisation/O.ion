@@ -8,7 +8,7 @@
   Hamann input file name: O.in (appended at end of file)
   Core radii (bohr)     : l=0 1.350 l=1 1.450 l=2 1.350
   2 valence shells      : 2s 2p
-  XC functional code    : -001012
+  XC functional code    : 3
   XC description        : Perdew & Wang
   Includes partial core corrections
 </Conquest_pseudopotential_info>
