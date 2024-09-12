@@ -341,7 +341,7 @@ contains
                                       send_ncover, D2_CS
     use mult_module,            only: immi, allocate_temp_matrix
     use construct_module
-    use matrix_data,            only: rcut, max_range, Xrange
+    use matrix_data,            only: rcut, max_range, Xrange, Hrange
     use ion_electrostatic,      only: set_ewald, setup_screened_ion_interaction
     use atoms,                  only: distribute_atoms
     use dimens,                 only: n_grid_x, n_grid_y, n_grid_z,    &
@@ -384,7 +384,7 @@ contains
     use UpdateInfo,             ONLY: make_glob2node
     use XLBOMD_module,          ONLY: immi_XL
     use DiagModule,             only: init_blacs_pg, init_scalapack_format
-    use exx_module, only: matK_Xrange
+    use exx_module, only: matK_Xrange, flag_x_range_long
 
     implicit none
 
@@ -506,6 +506,10 @@ contains
        do spin = 1,nspin
           matK_Xrange(spin) =  allocate_temp_matrix(Xrange,0)
        enddo
+       flag_x_range_long = .true.
+       if(rcut(Xrange)<rcut(Hrange)) then
+          flag_x_range_long = .false.
+       end if
     end if
     ! set up all the data block by block for atoms overlapping any
     ! point on block and similar

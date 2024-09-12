@@ -53,6 +53,7 @@ module exx_module
   integer, parameter, private :: area = 13
 
   integer, allocatable, dimension(:), public :: matK_Xrange
+  logical :: flag_x_range_long
   !!***
   
 contains

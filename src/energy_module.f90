@@ -224,7 +224,7 @@ contains
        ! note that matKE is < phi_i | - grad^2 | phi_j >
        kinetic_energy = kinetic_energy + spin_factor * half * &
                         matrix_product_trace(matK(spin), matKE(spin_SF))
-       exx_energy = exx_energy - spin_factor * half * exx_alpha * &
+       if(flag_exx) exx_energy = exx_energy - spin_factor * half * exx_alpha * &
                     matrix_product_trace(matK_Xrange(spin), matX(spin))
     end do
 
@@ -543,7 +543,7 @@ contains
        band_energy    = band_energy    &
                         + spin_factor*matrix_product_trace(matK(spin), matH(spin))
        ! -alpha*Tr[K X]
-       exx_energy     = exx_energy     &
+       if(flag_exx) exx_energy     = exx_energy     &
                         - spin_factor*half*exx_alpha*matrix_product_trace(matK_Xrange(spin), matX(spin))
     end do
 

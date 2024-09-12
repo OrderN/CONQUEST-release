@@ -517,7 +517,7 @@ contains
     use density_module, ONLY: get_band_density
     use io_module, ONLY: write_eigenvalues, write_eigenvalues_format_ase
     use pao_format, ONLY: pao
-    use exx_module, ONLY: matK_Xrange
+    use exx_module, ONLY: matK_Xrange, flag_x_range_long
 
     implicit none
 
@@ -851,7 +851,7 @@ contains
                       flag_pol_buildS = .true.
                       polSloc => polS(:,:,:,spin)
                    end if
-                   if(flag_exx) then
+                   if(flag_exx.and.flag_x_range_long) then
                       call buildK(Xrange, matK_Xrange(spin), occ(:,kp,spin), &
                            kk(:,kp), wtk(kp), expH(:,:,spin))
                    else
@@ -907,8 +907,10 @@ contains
              end if ! End if (i <= N_kpoints_in_pg(ng)) then
           end do ! End do ng = 1, proc_groups
        end do ! End do i = 1, nkpoints_max
-       if(flag_exx) then
+       if(flag_exx.and.flag_x_range_long) then
           call matrix_sum(zero, matK(spin),one,matK_Xrange(spin))
+       else if(flag_exx.and.(.not.flag_x_range_long)) then
+          call matrix_sum(zero, matK_Xrange(spin),one,matK(spin))
        end if
     end do ! spin
     !------ output eigenvalues  --------
