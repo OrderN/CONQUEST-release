@@ -493,7 +493,7 @@ contains
          dscf_HOMO_limit, dscf_LUMO_limit, &
          flag_out_wf,wf_self_con, max_wf, paof, sf, atomf, &
          out_wf, flag_write_projected_DOS, &
-         flag_SpinDependentSF, flag_do_pol_calc, polS, &
+         flag_SpinDependentSF, flag_do_pol_calc, polS, flag_exx, &
          io_ase, write_ase, ase_file, i_pol_dir_end, ne_spin_in_cell
     use GenComms,        only: my_barrier, cq_abort, mtime, gsum, myid
     use ScalapackFormat, only: matrix_size, matrix_size_padH, proc_rows, proc_cols,     &
@@ -502,8 +502,8 @@ contains
          nkpoints_max, pgid, N_procs_in_pg,     &
          N_kpoints_in_pg
     use mult_module,     only: matH, matS, matK, matM12, SF_to_AtomF_transform, &
-         matrix_scale, matrix_product_trace, allocate_temp_matrix, free_temp_matrix
-    use matrix_data,     only: Hrange, Srange, aHa_range
+         matrix_scale, matrix_product_trace, allocate_temp_matrix, free_temp_matrix, matrix_sum
+    use matrix_data,     only: Hrange, Srange, aHa_range, Xrange
     use primary_module,  only: bundle
     use species_module,  only: species, nsf_species, species_label, n_species
     use memory_module,   only: type_dbl, type_int, type_cplx,         &
@@ -517,6 +517,7 @@ contains
     use density_module, ONLY: get_band_density
     use io_module, ONLY: write_eigenvalues, write_eigenvalues_format_ase
     use pao_format, ONLY: pao
+    use exx_module, ONLY: matK_Xrange
 
     implicit none
 
@@ -792,6 +793,7 @@ contains
     time0 = mtime()
     do spin = 1, nspin
        call matrix_scale(zero, matK(spin))
+       if(flag_exx) call matrix_scale(zero, matK_Xrange(spin))
        call matrix_scale(zero, matM12(spin))
     end do
     ! Second diagonalisation - get eigenvectors and build K
@@ -849,8 +851,13 @@ contains
                       flag_pol_buildS = .true.
                       polSloc => polS(:,:,:,spin)
                    end if
-                   call buildK(Hrange, matK(spin), occ(:,kp,spin), &
-                        kk(:,kp), wtk(kp), expH(:,:,spin))
+                   if(flag_exx) then
+                      call buildK(Xrange, matK_Xrange(spin), occ(:,kp,spin), &
+                           kk(:,kp), wtk(kp), expH(:,:,spin))
+                   else
+                      call buildK(Hrange, matK(spin), occ(:,kp,spin), &
+                           kk(:,kp), wtk(kp), expH(:,:,spin))
+                   end if
                    if(flag_do_pol_calc) then
                       flag_pol_buildS = .false.
                       nullify(polSloc)
@@ -900,6 +907,9 @@ contains
              end if ! End if (i <= N_kpoints_in_pg(ng)) then
           end do ! End do ng = 1, proc_groups
        end do ! End do i = 1, nkpoints_max
+       if(flag_exx) then
+          call matrix_sum(zero, matK(spin),one,matK_Xrange(spin))
+       end if
     end do ! spin
     !------ output eigenvalues  --------
     if(inode==ionode) call write_eigenvalues(evals,matrix_size,nkp,nspin,kk,wtk,Efermi)

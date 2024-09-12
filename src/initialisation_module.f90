@@ -333,15 +333,15 @@ contains
                                       iprint_gen, flag_perform_cDFT,   &
                                       nspin, min_layer,                &
                                       glob2node, flag_XLBOMD,          &
-                                      flag_neutral_atom, flag_diagonalisation
+                                      flag_neutral_atom, flag_diagonalisation, flag_exx
     use memory_module,          only: reg_alloc_mem, reg_dealloc_mem,  &
                                       type_dbl, type_int
     use group_module,           only: parts
     use cover_module,           only: BCS_parts, make_cs, make_iprim,  &
                                       send_ncover, D2_CS
-    use mult_module,            only: immi
+    use mult_module,            only: immi, allocate_temp_matrix
     use construct_module
-    use matrix_data,            only: rcut, max_range
+    use matrix_data,            only: rcut, max_range, Xrange
     use ion_electrostatic,      only: set_ewald, setup_screened_ion_interaction
     use atoms,                  only: distribute_atoms
     use dimens,                 only: n_grid_x, n_grid_y, n_grid_z,    &
@@ -384,7 +384,8 @@ contains
     use UpdateInfo,             ONLY: make_glob2node
     use XLBOMD_module,          ONLY: immi_XL
     use DiagModule,             only: init_blacs_pg, init_scalapack_format
-    
+    use exx_module, only: matK_Xrange
+
     implicit none
 
     ! Passed variables
@@ -394,19 +395,19 @@ contains
     ! Local variables
     complex(double_cplx), allocatable, &
          dimension(:) :: chdenr
-    integer           :: stat, lmax_tot
+    integer           :: stat, lmax_tot, spin
     real(double)      :: rcut_BCS  !TM 26/Jun/2003
     type(cq_timer)    :: backtrace_timer
     integer           :: backtrace_level
     character(len=7) :: subname = "setup: "
     character(len=120) :: prefix
 
-!****lat<$
+    !****lat<$
     if (       present(level) ) backtrace_level = level+1
     if ( .not. present(level) ) backtrace_level = -10
     call start_backtrace(t=backtrace_timer,who='set_up',&
          where=area,level=backtrace_level,echo=.true.)
-!****lat>$
+    !****lat>$
     prefix = return_prefix(subname, min_layer)
 
     ! Set organisation of blocks of grid-points.
@@ -498,6 +499,14 @@ contains
          write (io_lun,fmt='(4x,a)') trim(prefix)//'Completed immi()'
     if (flag_XLBOMD) call immi_XL(parts,bundle,BCS_parts,inode)
 
+    ! Temporary location
+    ! Create K matrix to range X
+    if(flag_exx) then
+       allocate(matK_Xrange(nspin))
+       do spin = 1,nspin
+          matK_Xrange(spin) =  allocate_temp_matrix(Xrange,0)
+       enddo
+    end if
     ! set up all the data block by block for atoms overlapping any
     ! point on block and similar
     !call set_blocks_from_old(                                       &

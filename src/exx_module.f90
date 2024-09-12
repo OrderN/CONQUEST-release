@@ -51,7 +51,8 @@ module exx_module
   
   ! Area identification
   integer, parameter, private :: area = 13
-  
+
+  integer, allocatable, dimension(:), public :: matK_Xrange
   !!***
   
 contains

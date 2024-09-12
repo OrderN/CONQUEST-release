@@ -129,7 +129,7 @@ contains
          file_exx_timers,     file_exx_memory,     &
          file_exx_debug,      file_eri_debug,      &
          file_eri_filter_debug
-
+    use exx_module, only: matK_Xrange
     use exx_types, only: exx_alloc, r_int, extent, &
          ewald_alpha, ewald_rho, ewald_pot,   &
          pulay_radius, p_omega, p_ngauss, p_gauss, w_gauss, &
@@ -353,7 +353,7 @@ contains
     invdir = 0
     !
     call start_timer(tmr_std_exx_comms)
-    call Mquest_start_send(mult(S_X_SX),mat_p(matK(  exxspin  ))%matrix,nreqs,myid,mult(S_X_SX)%prim%mx_ngonn,sends)
+    call Mquest_start_send(mult(S_X_SX),mat_p(matK_Xrange(  exxspin  ))%matrix,nreqs,myid,mult(S_X_SX)%prim%mx_ngonn,sends)
     call stop_timer(tmr_std_exx_comms,.true.)
     !
     ncover_yz=mult(S_X_SX)%gcs%ncovery*mult(S_X_SX)%gcs%ncoverz
@@ -387,7 +387,7 @@ contains
              !
              call start_timer(tmr_std_exx_comms)
              call prefetch(kpart,mult(S_X_SX)%ahalo,mult(S_X_SX)%comms,mult(S_X_SX)%bmat,icall, &
-                  n_cont,part_array,mult(S_X_SX)%bindex,b_rem,lenb_rem,mat_p(matK(  exxspin  ))%matrix,   &
+                  n_cont,part_array,mult(S_X_SX)%bindex,b_rem,lenb_rem,mat_p(matK_Xrange(  exxspin  ))%matrix,   &
                   myid,ilen2,mx_msg_per_part,mult(S_X_SX)%parts,mult(S_X_SX)%prim,mult(S_X_SX)%gcs,&
                   (recv_part(nnode)-1)*2)
              call stop_timer(tmr_std_exx_comms,.true.)
@@ -440,7 +440,7 @@ contains
           !
           call start_timer(tmr_std_exx_comms)
           call prefetch(kpart,mult(S_X_SX)%ahalo,mult(S_X_SX)%comms,mult(S_X_SX)%bmat,icall, &
-               n_cont,part_array,mult(S_X_SX)%bindex,b_rem,lenb_rem,mat_p(matK(  exxspin  ))%matrix,   & 
+               n_cont,part_array,mult(S_X_SX)%bindex,b_rem,lenb_rem,mat_p(matK_Xrange(  exxspin  ))%matrix,   & 
                myid,ilen2,mx_msg_per_part,mult(S_X_SX)%parts,mult(S_X_SX)%prim,mult(S_X_SX)%gcs,&
                (recv_part(nnode)-1)*2)
           call stop_timer(tmr_std_exx_comms,.true.)

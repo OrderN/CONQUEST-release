@@ -2334,7 +2334,7 @@ contains
        matrix_index(matUT(spin) ) = PArange
        matrix_index(matLS(spin) ) = LSrange
        matrix_index(matSL(spin) ) = SLrange
-       matrix_index(matX(spin)  ) = Hrange  ! Xrange
+       matrix_index(matX(spin)  ) = Xrange!Hrange  ! Xrange
        matrix_index(matSX(spin) ) = SXrange
     end do
     if (atomf.ne.sf) then

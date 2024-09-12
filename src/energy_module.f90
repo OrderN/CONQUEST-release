@@ -169,6 +169,7 @@ contains
     use pseudopotential_common, only: core_correction, &
                                       flag_neutral_atom_projector
     use density_module,         only: electron_number
+    use exx_module, only: matK_Xrange
     
 
     implicit none
@@ -224,7 +225,7 @@ contains
        kinetic_energy = kinetic_energy + spin_factor * half * &
                         matrix_product_trace(matK(spin), matKE(spin_SF))
        exx_energy = exx_energy - spin_factor * half * exx_alpha * &
-                    matrix_product_trace(matK(spin), matX(spin))
+                    matrix_product_trace(matK_Xrange(spin), matX(spin))
     end do
 
     ! Find exx energy
@@ -482,6 +483,7 @@ contains
                                       flag_neutral_atom_projector
     use species_module,         only: n_species
     use input_module,           only: io_close
+    use exx_module, only: matK_Xrange
     
     implicit none
 
@@ -542,7 +544,7 @@ contains
                         + spin_factor*matrix_product_trace(matK(spin), matH(spin))
        ! -alpha*Tr[K X]
        exx_energy     = exx_energy     &
-                        - spin_factor*half*exx_alpha*matrix_product_trace(matK(spin), matX(spin))
+                        - spin_factor*half*exx_alpha*matrix_product_trace(matK_Xrange(spin), matX(spin))
     end do
 
     ! Find total pure DFT energy
