@@ -167,7 +167,7 @@ contains
 
     ! Arrays for remote variables to point to
     integer, target :: part_array(3*mult(S_X_SX)%parts%mx_mem_grp+ &
-         5*mult(S_X_SX)%parts%mx_mem_grp*mult(S_X_SX)%bmat(  exxspin  )%mx_abs)
+         5*mult(S_X_SX)%parts%mx_mem_grp*mult(S_X_SX)%bmat(1)%mx_abs)
 
     integer, allocatable, dimension(:) :: recv_part
 
@@ -311,7 +311,7 @@ contains
     !
     if ( scheme == 3 ) then       
        !
-       if ( niter == 1 ) then
+       if ( niter == 1 .and. exxspin==1) then
           allocate( eris( mult(S_X_SX)%ahalo%np_in_halo ), STAT=stat)
           if(stat/=0) call cq_abort('Error allocating memory to eris/exx !',stat)
        end if
@@ -328,7 +328,7 @@ contains
     call start_timer(tmr_std_exx_allocat)
     if(iprint_mat>3.AND.myid==0) t0 = mtime()
     ! Allocate memory for the elements
-    allocate(ibpart_rem(mult(S_X_SX)%parts%mx_mem_grp*mult(S_X_SX)%bmat(  exxspin  )%mx_abs),STAT=stat)
+    allocate(ibpart_rem(mult(S_X_SX)%parts%mx_mem_grp*mult(S_X_SX)%bmat(1)%mx_abs),STAT=stat)
     if(stat/=0) call cq_abort('mat_mult: error allocating ibpart_rem')
     call stop_timer(tmr_std_exx_allocat,.true.)
     !
@@ -407,7 +407,7 @@ contains
              ibndimj_rem => part_array(offset+1:offset+ilen2)
              !
              if(offset+ilen2>3*mult(S_X_SX)%parts%mx_mem_grp+ &
-                  5*mult(S_X_SX)%parts%mx_mem_grp*mult(S_X_SX)%bmat(  exxspin  )%mx_abs) then
+                  5*mult(S_X_SX)%parts%mx_mem_grp*mult(S_X_SX)%bmat(1)%mx_abs) then
                 call cq_abort('mat_mult: error pointing to part_array ',kpart)
              end if
 
@@ -457,7 +457,7 @@ contains
           offset = offset+3*ilen2 ; ibndimj_rem => part_array(offset+1:offset+ilen2)
           !
           if(offset+ilen2>3*mult(S_X_SX)%parts%mx_mem_grp+ &
-               5*mult(S_X_SX)%parts%mx_mem_grp*mult(S_X_SX)%bmat(  exxspin  )%mx_abs) then
+               5*mult(S_X_SX)%parts%mx_mem_grp*mult(S_X_SX)%bmat(1)%mx_abs) then
              call cq_abort('Error pointing to part_array !',kpart)
           end if
           !
@@ -480,7 +480,7 @@ contains
                b_rem,  &
                mat_p(matX(  exxspin  ))%matrix,      &
                mult(S_X_SX)%ahalo,mult(S_X_SX)%chalo,mult(S_X_SX)%ltrans, &
-               mult(S_X_SX)%bmat(  exxspin  )%mx_abs,mult(S_X_SX)%parts%mx_mem_grp, &
+               mult(S_X_SX)%bmat(1)%mx_abs,mult(S_X_SX)%parts%mx_mem_grp, &
                lenb_rem, &
                mat_p(matX(  exxspin  ))%length)
 
@@ -493,13 +493,13 @@ contains
                b_rem,  &
                mat_p(matX(  exxspin  ))%matrix,      &
                mult(S_X_SX)%ahalo,mult(S_X_SX)%chalo,mult(S_X_SX)%ltrans, &
-               mult(S_X_SX)%bmat(  exxspin  )%mx_abs,mult(S_X_SX)%parts%mx_mem_grp, &
+               mult(S_X_SX)%bmat(1)%mx_abs,mult(S_X_SX)%parts%mx_mem_grp, &
                lenb_rem, &
                mat_p(matX(  exxspin  ))%length, backup_eris)
 
        else if (scheme == 3 ) then
 
-          if ( niter == 1 ) then
+          if ( niter == 1 .and. exxspin==1) then
              !
              get_exx = .false.
              !
@@ -513,7 +513,7 @@ contains
                   b_rem,  &
                   mat_p(matX(  exxspin  ))%matrix,      &
                   mult(S_X_SX)%ahalo,mult(S_X_SX)%chalo,mult(S_X_SX)%ltrans, &
-                  mult(S_X_SX)%bmat(  exxspin  )%mx_abs,mult(S_X_SX)%parts%mx_mem_grp, &
+                  mult(S_X_SX)%bmat(1)%mx_abs,mult(S_X_SX)%parts%mx_mem_grp, &
                   lenb_rem, &
                   mat_p(matX(  exxspin  ))%length, nb_eris, get_exx, .false. )
              
@@ -550,7 +550,7 @@ contains
                      b_rem,  &
                      mat_p(matX(  exxspin  ))%matrix,      &
                      mult(S_X_SX)%ahalo,mult(S_X_SX)%chalo,mult(S_X_SX)%ltrans, &
-                     mult(S_X_SX)%bmat(  exxspin  )%mx_abs,mult(S_X_SX)%parts%mx_mem_grp, &
+                     mult(S_X_SX)%bmat(1)%mx_abs,mult(S_X_SX)%parts%mx_mem_grp, &
                      lenb_rem, &
                      mat_p(matX(  exxspin  ))%length, nb_eris, get_exx, exx_filter )
              end if
@@ -567,7 +567,7 @@ contains
                 b_rem,  &
                 mat_p(matX(  exxspin  ))%matrix,      &
                 mult(S_X_SX)%ahalo,mult(S_X_SX)%chalo,mult(S_X_SX)%ltrans, &
-                mult(S_X_SX)%bmat(  exxspin  )%mx_abs,mult(S_X_SX)%parts%mx_mem_grp, &
+                mult(S_X_SX)%bmat(1)%mx_abs,mult(S_X_SX)%parts%mx_mem_grp, &
                 lenb_rem, &
                 mat_p(matX(  exxspin  ))%length, backup_eris)
              
@@ -583,7 +583,7 @@ contains
                   b_rem,  &
                   mat_p(matX(  exxspin  ))%matrix,      &
                   mult(S_X_SX)%ahalo,mult(S_X_SX)%chalo,mult(S_X_SX)%ltrans, &
-                  mult(S_X_SX)%bmat(  exxspin  )%mx_abs,mult(S_X_SX)%parts%mx_mem_grp, &
+                  mult(S_X_SX)%bmat(1)%mx_abs,mult(S_X_SX)%parts%mx_mem_grp, &
                   lenb_rem, &
                   mat_p(matX(  exxspin  ))%length, nb_eris, get_exx, .false. )
           end if
@@ -600,7 +600,7 @@ contains
                b_rem,  &
                mat_p(matX(  exxspin  ))%matrix,      &
                mult(S_X_SX)%ahalo,mult(S_X_SX)%chalo,mult(S_X_SX)%ltrans, &
-               mult(S_X_SX)%bmat(  exxspin  )%mx_abs,mult(S_X_SX)%parts%mx_mem_grp, &
+               mult(S_X_SX)%bmat(1)%mx_abs,mult(S_X_SX)%parts%mx_mem_grp, &
                lenb_rem, &
                mat_p(matX(  exxspin  ))%length, nb_eris, get_exx, .false. )
 
