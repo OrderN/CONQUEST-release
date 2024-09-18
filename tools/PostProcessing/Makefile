@@ -1,7 +1,24 @@
 TARGET = PostProcessCQ
 default: $(TARGET)
 .SUFFIXES: .f90
-include system.make
+#Include system-dependent variables
+ifneq ($(SYSTEM),)
+$(info System is $(SYSTEM))
+SYSTEM_PATH = ../../src/system/system.$(SYSTEM).make
+else
+SYSTEM_PATH=../../src/system/system.make
+endif
+ifneq ("$(wildcard $(SYSTEM_PATH))","")
+$(info Building using system file $(SYSTEM_PATH))
+include $(SYSTEM_PATH)
+else
+$(info Cannot find system file $(SYSTEM_PATH). Please make one,)
+$(info using system/system.example.make as an example, or choose)
+$(info an existing file from the system directory using make SYSTEM=label)
+$(info to select system/system.label.make)
+$(error Compilation aborted.)
+endif
+
 COMMENT = verstr.f90
 ECHOSTR = @echo
 
