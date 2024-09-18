@@ -503,7 +503,7 @@ contains
     use input_module, ONLY: io_assign, io_close, leqi
     use mesh, ONLY: alpha, beta, rr_squared, drdi
     use pseudo_atom_info, ONLY: val, allocate_val, local_and_vkb, allocate_vkb, hamann_version, &
-         deltaE_large_radius, hgh_data, kb_thresh
+         deltaE_large_radius, hgh_data, kb_thresh, input_file_length
     use pseudo_tm_info, ONLY: alloc_pseudo_info, pseudo
     use periodic_table, ONLY: pte, n_species
     use radial_xc, ONLY: flag_functional_type, init_xc, functional_lda_pz81, functional_gga_pbe96, &
@@ -521,7 +521,7 @@ contains
     integer, dimension(0:4) :: count_func
     integer, dimension(3,0:4) :: index_count_func
     character(len=2) :: char_in
-    character(len=80) :: line
+    character(len=80) :: line, a
     logical :: flag_core_done = .false.
     logical, dimension(3,0:3) :: flag_min
     real(double) :: dummy, dummy2, highest_energy, root_two, proj, rr_lp, pj, pjp, r_core, r_core_2, c_core
@@ -539,14 +539,16 @@ contains
     !
     count_func = 0
     index_count_func = 0
+    input_file_length = 0
     !
     ! Open file
     !
     call io_assign(lun)
     open(unit=lun, file=pseudo_file_name, status='old', iostat=ios)
-    if ( ios > 0 ) call cq_abort('Error opening pseudopotential file: '//pseudo_file_name)
+    if ( ios > 0 ) call cq_abort('Error opening HGH pseudopotential file: '//pseudo_file_name)
     pseudo(i_species)%filename = pseudo_file_name
-    read(lun,*) max_l, iexc
+    a = get_input_line(lun,ios)
+    read(a,*) max_l, iexc
     !
     ! Assign and initialise XC functional for species
     !
@@ -573,7 +575,8 @@ contains
     !
     ! Read in parameters for local potential
     !
-    read(lun,*) char_in,hgh_data(i_species)%Zion,hgh_data(i_species)%rloc,&
+    a = get_input_line(lun,ios)
+    read(a,*) char_in,hgh_data(i_species)%Zion,hgh_data(i_species)%rloc,&
          hgh_data(i_species)%c1,hgh_data(i_species)%c2,hgh_data(i_species)%c3,hgh_data(i_species)%c4
     ! Now identify element number
     pseudo(i_species)%zval = hgh_data(i_species)%Zion
@@ -599,17 +602,20 @@ contains
     hnl_store = zero
     do ell = 0,max_l
        ! Read number of projectors for this l
-       read(lun,*) max_nl_proj
+       a = get_input_line(lun,ios)
+       read(a,*) max_nl_proj
        if(max_nl_proj>0) then
           allocate(hnl(max_nl_proj,max_nl_proj))
           hnl = zero
           local_and_vkb%n_proj(ell) = max_nl_proj
           local_and_vkb%n_nl_proj = local_and_vkb%n_nl_proj + local_and_vkb%n_proj(ell)
           ! Read table of projectors
-          read(lun,*) hgh_data(i_species)%r(ell),(hnl(1,j),j=1,max_nl_proj)
+          a = get_input_line(lun,ios)
+          read(a,*) hgh_data(i_species)%r(ell),(hnl(1,j),j=1,max_nl_proj)
           if(max_nl_proj>1) then
              do i=2,max_nl_proj
-                read(lun,*) (hnl(i,j),j=i,max_nl_proj)
+                a = get_input_line(lun,ios)
+                read(a,*) (hnl(i,j),j=i,max_nl_proj)
              end do
              do i=1,max_nl_proj
                 do j=i+1,max_nl_proj
@@ -635,7 +641,8 @@ contains
           end if
           deallocate(hnl)
        else
-          read(lun,*) hgh_data(i_species)%r(ell)
+          a = get_input_line(lun,ios)
+          read(a,*) hgh_data(i_species)%r(ell)
           local_and_vkb%n_proj(ell) = max_nl_proj
           local_and_vkb%n_nl_proj = local_and_vkb%n_nl_proj + local_and_vkb%n_proj(ell)
           hgh_data(i_species)%h(:,ell) = zero
@@ -658,11 +665,13 @@ contains
     end do
     pseudo(i_species)%flag_pcc = .false.
     ! Identify n_shells and n, l, occupancy for valence electrons and set PS energy to zero
-    read(lun,*) n_shells
+    a = get_input_line(lun,ios)
+    read(a,*) n_shells
     call allocate_val(n_shells)
     n_occ = 0
     do i=1,n_shells
-       read(lun,*) val%n(i), val%l(i), val%occ(i), val%semicore(i)
+       a = get_input_line(lun,ios)
+       read(a,*) val%n(i), val%l(i), val%occ(i), val%semicore(i)
        val%en_ps(i) = zero
        if(val%occ(i)>RD_ERR) n_occ = n_occ + 1
        write(*,fmt='("n, l and occupancy: ",i1," ",i1,f6.2)') val%n(i), val%l(i), val%occ(i)
@@ -673,10 +682,11 @@ contains
     r_core = zero
     c_core = zero
     n_read = 0 ! Compatibility with CP2K files; not used
-    read(lun,*,iostat=ios) r_core, n_read, c_core
+    a = get_input_line(lun,ios)
     if(ios==0) then
        pseudo(i_species)%flag_pcc = .true.
        write(*,fmt='("This pseudopotential includes partial core corrections")')
+       read(a,*) r_core, n_read, c_core
     end if
     call io_close(lun)
     !
@@ -1012,7 +1022,7 @@ contains
     if ( ios > 0 ) call cq_abort('Error opening Hamann input file: '//pseudo_file_name)
     input_file_length = 0
     pseudo(i_species)%filename = pseudo_file_name
-    a = get_hamann_line(lun)
+    a = get_input_line(lun,ios)
     read(a,*) sym,z,nc,nv,iexc,file_format
     write(*,fmt='(/"Information about pseudopotential for species: ",a2/)') sym
     pseudo(i_species)%z = z
@@ -1030,7 +1040,7 @@ contains
     end if
     call init_xc
     write(*,fmt='("There are ",i2," core and ",i2," valence shells")') nc,nv
-    a = get_hamann_line(lun)
+    a = get_input_line(lun,ios)
     !
     ! Read n, l, filling for core
     !
@@ -1038,7 +1048,7 @@ contains
     do i_shell = 1, nc
        read(a,*) en,ell,fill
        zcore = zcore + fill
-       a = get_hamann_line(lun)
+       a = get_input_line(lun,ios)
     end do
     pseudo(i_species)%zcore = zcore
     ! Read n, l, filling for valence
@@ -1046,7 +1056,7 @@ contains
     do i_shell = 1, nv
        read(a,*) en,ell,fill
        zval = zval + fill
-       a = get_hamann_line(lun)
+       a = get_input_line(lun,ios)
     end do
     pseudo(i_species)%zval = zval
     write(*,fmt='("The atomic number is",f6.2,", with valence charge ",f5.2," (core electrons: ",f5.2,")")') z,zval,zcore
@@ -1059,26 +1069,26 @@ contains
     ! Projector radii etc
     !
     local_and_vkb%core_radius = zero
-    a = get_hamann_line(lun)
+    a = get_input_line(lun,ios)
     do ell = 0, pseudo(i_species)%lmax
        read(a,*) en, local_and_vkb%core_radius(ell)
        write(*,'("l=",i1," core radius ",f6.3," bohr")') ell, local_and_vkb%core_radius(ell)
-       a = get_hamann_line(lun)
+       a = get_input_line(lun,ios)
     end do
     !
     ! Local potential read above in final step of loop, so leave
     !
-    !a = get_hamann_line(lun)
+    !a = get_input_line(lun,ios)
     !
     ! Numbers of projectors
     !
     local_and_vkb%n_proj = 0
     local_and_vkb%n_nl_proj = 0
-    a = get_hamann_line(lun)
+    a = get_input_line(lun,ios)
     do ell = 0, pseudo(i_species)%lmax
        read(a,*) en,local_and_vkb%n_proj(en),fill
        local_and_vkb%n_nl_proj = local_and_vkb%n_nl_proj + local_and_vkb%n_proj(en)
-       a = get_hamann_line(lun)
+       a = get_input_line(lun,ios)
     end do
     write(*,fmt='("Total number of VKB projectors: ",i2)') local_and_vkb%n_nl_proj
     call alloc_pseudo_info(pseudo(i_species),local_and_vkb%n_nl_proj)
@@ -1104,34 +1114,40 @@ contains
        write(*,fmt='("This pseudopotential does not include partial core corrections"/)') 
     end if
     ! Last two categories: tests and grid size
-    a = get_hamann_line(lun)
-    a = get_hamann_line(lun)
+    a = get_input_line(lun,ios)
+    a = get_input_line(lun,ios)
     call io_close(lun)
   end subroutine read_hamann_input
   
   ! Check for comment markers
-  function get_hamann_line(lun)
+  function get_input_line(lun,ios)
 
     use pseudo_atom_info, ONLY: input_file_length, input_file
     implicit none
    
     integer :: lun
-    character(len=80) :: get_hamann_line
+    integer :: ios
+    character(len=80) :: get_input_line
 
     character(len=80) :: a
 
-    read(lun,'(a)') a
-    input_file_length = input_file_length+1
-    input_file(input_file_length) = a
-    get_hamann_line = adjustl(a)
-    do while(get_hamann_line(1:1).eq.'#')
-       read(lun,'(a)') a
+    ios=0
+    read(lun,'(a)',iostat=ios) a
+    if(ios==0) then
        input_file_length = input_file_length+1
        input_file(input_file_length) = a
-       get_hamann_line = adjustl(a)
-    end do
+       get_input_line = adjustl(a)
+       do while(get_input_line(1:1).eq.'#')
+          read(lun,'(a)') a
+          input_file_length = input_file_length+1
+          input_file(input_file_length) = a
+          get_input_line = adjustl(a)
+       end do
+    else
+       a = ' '
+    end if
     return
-  end function get_hamann_line
+  end function get_input_line
 
   ! Set up PAO basis in case of default, or check user-specified basis
   subroutine set_pao_initial(i_species)
