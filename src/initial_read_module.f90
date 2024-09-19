@@ -974,7 +974,7 @@ contains
     ! spin polarisation
     logical :: flag_spin_polarisation
     real(double) :: sum_elecN_spin
-    real(double) :: charge_tmp
+    real(double) :: charge_tmp, GridSpacing
 
     ! Set defaults
     vary_mu  = .true.
@@ -1159,7 +1159,12 @@ contains
     !
     !
     ! Default to 50 Ha cutoff for grid
-    GridCutoff = fdf_double('Grid.GridCutoff',50.0_double)
+    GridSpacing = fdf_double('Grid.GridSpacing',zero)
+    if(GridSpacing>zero) then
+       GridCutoff = half*(pi/GridSpacing)*(pi/GridSpacing)
+    else
+       GridCutoff = fdf_double('Grid.GridCutoff',50.0_double)
+    end if
     ! Grid points
     n_grid_x   = fdf_integer('Grid.PointsAlongX',0)
     n_grid_y   = fdf_integer('Grid.PointsAlongY',0)

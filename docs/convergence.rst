@@ -36,7 +36,13 @@ cutoff is set with the parameter:
   Grid.GridCutoff E
 
 where ``E`` is an energy in Hartrees.  The grid spacing can also be
-set manually, by specifying the number of grid points in each
+set manually (in Bohr radii):
+
+ ::
+
+  Grid.GridSpacing d
+
+Or it can be set by specifying the number of grid points in each
 direction:
 
  ::

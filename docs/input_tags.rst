@@ -395,6 +395,12 @@ Grid.GridCutoff (*real*)
 
     Default: 50 Ha.
 
+Grid.GridSpacing (*real*)
+    As an alternative, the grid spacing in Bohr radii can be set (the code will determine a number
+    of grid points that will be below this value)
+
+    Default: zero (value taken from Grid.GridCutoff above)
+    
 Go to :ref:`top <input_tags>`.
 
 .. _input_minE:
