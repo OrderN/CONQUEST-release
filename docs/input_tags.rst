@@ -668,7 +668,13 @@ Diag.GammaCentred (*boolean*)
     Selects Monkhorst-Pack mesh centred on the Gamma point
 
     *default*: F
-    
+
+Diag.dk (*real*)
+    Sets the number of k-points in the Monkhorst-Pack method so that the spacing
+    in reciprocal space is less than the specified value.
+
+    *default*: 0.0
+
 Diag.PaddingHmatrix (*boolean*)
     Setting this flag allows the Hamiltonian and overlap matrices to be 
     made larger than their physical size, so that ScaLAPACK block sizes can
