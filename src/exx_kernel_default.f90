@@ -12,7 +12,7 @@
 !!   exx_kernel_default
 !!
 !!  PURPOSE
-!!   Holds the routines to compute exact exchange matrix (matX)
+!!   Holds the routines to compute exact exchange matrix (matXatomf)
 !!   Parallelized version deriving from multiply_kernel_default
 !!
 !!  AUTHOR
@@ -106,7 +106,7 @@ contains
     !
     use matrix_data,    only: Hrange, Srange, Xrange, SXrange
     use mult_module,    only: S_X_SX, mat_p, mult 
-    use mult_module,    only: matX, matK, matrix_scale, matrix_trace
+    use mult_module,    only: matXatomf, matK, matrix_scale, matrix_trace
     use mult_module,    only: matrix_product_trace, matrix_product_trace_length 
     use mult_module,    only: return_matrix_value,  matrix_pos
     use mult_module,    only: store_matrix_value,   store_matrix_value_pos
@@ -321,7 +321,7 @@ contains
     !   
     !==============================================================================================================
     !
-    call matrix_scale(zero,matX(  exxspin  ))
+    call matrix_scale(zero,matXatomf(  exxspin  ))
     !
     call start_timer(tmr_std_exx_kernel)
     !
@@ -478,11 +478,11 @@ contains
           call m_kern_exx_cri( k_off,kpart,ib_nd_acc_rem,ibind_rem,nbnab_rem,&
                ibpart_rem,ibseq_rem,ibndimj_rem, & 
                b_rem,  &
-               mat_p(matX(  exxspin  ))%matrix,      &
+               mat_p(matXatomf(  exxspin  ))%matrix,      &
                mult(S_X_SX)%ahalo,mult(S_X_SX)%chalo,mult(S_X_SX)%ltrans, &
                mult(S_X_SX)%bmat(1)%mx_abs,mult(S_X_SX)%parts%mx_mem_grp, &
                lenb_rem, &
-               mat_p(matX(  exxspin  ))%length)
+               mat_p(matXatomf(  exxspin  ))%length)
 
        else if ( scheme == 2 ) then
           
@@ -491,11 +491,11 @@ contains
           call m_kern_exx_eri( k_off,kpart,ib_nd_acc_rem,ibind_rem,nbnab_rem,&
                ibpart_rem,ibseq_rem, & 
                b_rem,  &
-               mat_p(matX(  exxspin  ))%matrix,      &
+               mat_p(matXatomf(  exxspin  ))%matrix,      &
                mult(S_X_SX)%ahalo,mult(S_X_SX)%chalo,mult(S_X_SX)%ltrans, &
                mult(S_X_SX)%bmat(1)%mx_abs,mult(S_X_SX)%parts%mx_mem_grp, &
                lenb_rem, &
-               mat_p(matX(  exxspin  ))%length, backup_eris)
+               mat_p(matXatomf(  exxspin  ))%length, backup_eris)
 
        else if (scheme == 3 ) then
 
@@ -511,11 +511,11 @@ contains
              call m_kern_exx_dummy( k_off,kpart,ib_nd_acc_rem,ibind_rem,nbnab_rem,&
                   ibpart_rem,ibseq_rem, &
                   b_rem,  &
-                  mat_p(matX(  exxspin  ))%matrix,      &
+                  mat_p(matXatomf(  exxspin  ))%matrix,      &
                   mult(S_X_SX)%ahalo,mult(S_X_SX)%chalo,mult(S_X_SX)%ltrans, &
                   mult(S_X_SX)%bmat(1)%mx_abs,mult(S_X_SX)%parts%mx_mem_grp, &
                   lenb_rem, &
-                  mat_p(matX(  exxspin  ))%length, nb_eris, get_exx, .false. )
+                  mat_p(matXatomf(  exxspin  ))%length, nb_eris, get_exx, .false. )
              
              
              if (iprint_exx > 5) write(io_lun,*) 'Proc :', myid, &
@@ -548,11 +548,11 @@ contains
                 call m_kern_exx_dummy( k_off,kpart,ib_nd_acc_rem,ibind_rem,nbnab_rem,&
                      ibpart_rem,ibseq_rem, &
                      b_rem,  &
-                     mat_p(matX(  exxspin  ))%matrix,      &
+                     mat_p(matXatomf(  exxspin  ))%matrix,      &
                      mult(S_X_SX)%ahalo,mult(S_X_SX)%chalo,mult(S_X_SX)%ltrans, &
                      mult(S_X_SX)%bmat(1)%mx_abs,mult(S_X_SX)%parts%mx_mem_grp, &
                      lenb_rem, &
-                     mat_p(matX(  exxspin  ))%length, nb_eris, get_exx, exx_filter )
+                     mat_p(matXatomf(  exxspin  ))%length, nb_eris, get_exx, exx_filter )
              end if
              !
              !call my_barrier()
@@ -565,11 +565,11 @@ contains
              call m_kern_exx_eri( k_off,kpart,ib_nd_acc_rem,ibind_rem,nbnab_rem,&
                 ibpart_rem,ibseq_rem, & 
                 b_rem,  &
-                mat_p(matX(  exxspin  ))%matrix,      &
+                mat_p(matXatomf(  exxspin  ))%matrix,      &
                 mult(S_X_SX)%ahalo,mult(S_X_SX)%chalo,mult(S_X_SX)%ltrans, &
                 mult(S_X_SX)%bmat(1)%mx_abs,mult(S_X_SX)%parts%mx_mem_grp, &
                 lenb_rem, &
-                mat_p(matX(  exxspin  ))%length, backup_eris)
+                mat_p(matXatomf(  exxspin  ))%length, backup_eris)
              
           else
              !                          
@@ -581,11 +581,11 @@ contains
              call m_kern_exx_dummy( k_off,kpart,ib_nd_acc_rem,ibind_rem,nbnab_rem,&
                   ibpart_rem,ibseq_rem, &
                   b_rem,  &
-                  mat_p(matX(  exxspin  ))%matrix,      &
+                  mat_p(matXatomf(  exxspin  ))%matrix,      &
                   mult(S_X_SX)%ahalo,mult(S_X_SX)%chalo,mult(S_X_SX)%ltrans, &
                   mult(S_X_SX)%bmat(1)%mx_abs,mult(S_X_SX)%parts%mx_mem_grp, &
                   lenb_rem, &
-                  mat_p(matX(  exxspin  ))%length, nb_eris, get_exx, .false. )
+                  mat_p(matXatomf(  exxspin  ))%length, nb_eris, get_exx, .false. )
           end if
           
        else if ( scheme == -1 ) then
@@ -598,11 +598,11 @@ contains
           call m_kern_exx_dummy( k_off,kpart,ib_nd_acc_rem,ibind_rem,nbnab_rem,&
                ibpart_rem,ibseq_rem, &
                b_rem,  &
-               mat_p(matX(  exxspin  ))%matrix,      &
+               mat_p(matXatomf(  exxspin  ))%matrix,      &
                mult(S_X_SX)%ahalo,mult(S_X_SX)%chalo,mult(S_X_SX)%ltrans, &
                mult(S_X_SX)%bmat(1)%mx_abs,mult(S_X_SX)%parts%mx_mem_grp, &
                lenb_rem, &
-               mat_p(matX(  exxspin  ))%length, nb_eris, get_exx, .false. )
+               mat_p(matXatomf(  exxspin  ))%length, nb_eris, get_exx, .false. )
 
        end if
 
@@ -1299,8 +1299,6 @@ contains
     dv = grid_spacing**3
     count = 0
     should_allocate = exx_alloc .and. (.not. exx_gto)
-    should_allocate = .true.
-    !print*, should_allocate 
     !
 !!$
 !!$ ****[ k loop ]****
@@ -1366,10 +1364,12 @@ contains
                    call get_iprimdat(ia,kg,ni,i_in_prim,np,.true.,unit_exx_debug)          
                    !
                    if ( should_allocate ) call exx_mem_alloc(extent,ia%nsup,0,'phi_i_1d_buffer','alloc')
-                   phi_i(1:2*extent+1, 1:2*extent+1, 1:2*extent+1, 1:ia%nsup) => phi_i_1d_buffer
-                   !
-                   if (.not. exx_gto) call exx_phi_on_grid(inode,ia%ip,ia%spec,extent, &
-                                          ia%xyz,ia%nsup,phi_i,r_int,xyz_zero)
+                   if(.not.exx_gto) then
+                      phi_i(1:2*extent+1, 1:2*extent+1, 1:2*extent+1, 1:ia%nsup) => phi_i_1d_buffer
+                      !
+                      call exx_phi_on_grid(inode,ia%ip,ia%spec,extent, &
+                           ia%xyz,ia%nsup,phi_i,r_int,xyz_zero)
+                   end if
                    !
 !!$
 !!$ ****[ j loop ]****
@@ -1417,7 +1417,7 @@ contains
                             !$omp     private(nsf_jb,work_out_3d,work_in_3d,ewald_charge,Ome_kj_1d_buffer,Ome_kj,ncaddr,   &
                             !$omp             i_nt,j_nt,k_nt,l_nt)
                             !
-                            Ome_kj(1:2*extent+1, 1:2*extent+1, 1:2*extent+1) => Ome_kj_1d_buffer
+                            if(.not.exx_gto) Ome_kj(1:2*extent+1, 1:2*extent+1, 1:2*extent+1) => Ome_kj_1d_buffer
                             !$omp do schedule(dynamic)
                             jb_loop: do nsf_jb = 1, jb%nsup
                                !
