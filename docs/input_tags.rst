@@ -395,6 +395,12 @@ Grid.GridCutoff (*real*)
 
     Default: 50 Ha.
 
+Grid.GridSpacing (*real*)
+    As an alternative, the grid spacing in Bohr radii can be set (the code will determine a number
+    of grid points that will be below this value)
+
+    Default: zero (value taken from Grid.GridCutoff above)
+    
 Go to :ref:`top <input_tags>`.
 
 .. _input_minE:
@@ -662,7 +668,13 @@ Diag.GammaCentred (*boolean*)
     Selects Monkhorst-Pack mesh centred on the Gamma point
 
     *default*: F
-    
+
+Diag.dk (*real*)
+    Sets the number of k-points in the Monkhorst-Pack method so that the spacing
+    in reciprocal space is less than the specified value.
+
+    *default*: 0.0
+
 Diag.PaddingHmatrix (*boolean*)
     Setting this flag allows the Hamiltonian and overlap matrices to be 
     made larger than their physical size, so that ScaLAPACK block sizes can

@@ -30,7 +30,7 @@ Full documentation can be found in :ref:`input_tags`.
   * ``Diag.MPMesh``   T/F
   * ``Diag.MPMeshX`` (and ``Y`` and ``Z``) N
   * ``Diag.GammaCentred`` T/F
-* ``Grid.GridCutoff`` Energy in Ha (sets a grid spacing :math:`\delta x = \pi/\sqrt{2E}` for cutoff E in Ha)
+* ``Grid.GridCutoff`` Energy in Ha (sets a grid spacing :math:`\delta x = \pi/\sqrt{2E}` for cutoff E in Ha; this spacing can also be set manually using ``Grid.GridSpacing`` in Bohr)
 * ``AtomMove.NumSteps`` N
 * ``AtomMove.MaxForceTol`` in Ha/bohr
 * ``AtomMove.OptCell`` T/F (optimises simulation cell size)

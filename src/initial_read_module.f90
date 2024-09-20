@@ -974,7 +974,7 @@ contains
     ! spin polarisation
     logical :: flag_spin_polarisation
     real(double) :: sum_elecN_spin
-    real(double) :: charge_tmp
+    real(double) :: charge_tmp, GridSpacing
 
     ! Set defaults
     vary_mu  = .true.
@@ -1159,7 +1159,12 @@ contains
     !
     !
     ! Default to 50 Ha cutoff for grid
-    GridCutoff = fdf_double('Grid.GridCutoff',50.0_double)
+    GridSpacing = fdf_double('Grid.GridSpacing',zero)
+    if(GridSpacing>zero) then
+       GridCutoff = half*(pi/GridSpacing)*(pi/GridSpacing)
+    else
+       GridCutoff = fdf_double('Grid.GridCutoff',50.0_double)
+    end if
     ! Grid points
     n_grid_x   = fdf_integer('Grid.PointsAlongX',0)
     n_grid_y   = fdf_integer('Grid.PointsAlongY',0)
@@ -3011,7 +3016,7 @@ contains
     character(len=80) :: sub_name = "readDiagInfo"
     type(cq_timer) :: backtrace_timer
     integer        :: stat, i, j, k, nk_st, nkp_lines
-    real(double)   :: a, sum, dkx, dky, dkz
+    real(double)   :: a, sum, dkx, dky, dkz, dk
     integer        :: proc_per_group
     logical        :: ms_is_prime
     
@@ -3281,11 +3286,18 @@ contains
        ! Read Monkhorst-Pack mesh coefficients
        ! Default is Gamma point only 
        if(iprint_init>1.AND.inode==ionode) &
-            write(io_lun,fmt='(/8x,"Reading Monkhorst-Pack Kpoint mesh"//)')
+            write(io_lun,fmt='(/8x,"Using Monkhorst-Pack Kpoint mesh"//)')
        flag_gamma = fdf_boolean('Diag.GammaCentred',.false.)
-       mp(1) = fdf_integer('Diag.MPMeshX',1)
-       mp(2) = fdf_integer('Diag.MPMeshY',1)
-       mp(3) = fdf_integer('Diag.MPMeshZ',1) 
+       dk = fdf_double('Diag.dk',zero)
+       if(dk>zero) then
+          mp(1) = ceiling(two*pi/(dk*rcellx))
+          mp(2) = ceiling(two*pi/(dk*rcelly))
+          mp(3) = ceiling(two*pi/(dk*rcellz))
+       else
+          mp(1) = fdf_integer('Diag.MPMeshX',1)
+          mp(2) = fdf_integer('Diag.MPMeshY',1)
+          mp(3) = fdf_integer('Diag.MPMeshZ',1)
+       end if
        if(iprint_init>0.AND.inode==ionode) then
           if(flag_gamma) then
              write (io_lun,fmt='(/8x,a, i3," x ",i3," x ",i3," gamma-centred")') &
