@@ -3102,14 +3102,18 @@ contains
     ! padH or not  :temporary?   
     flag_padH = fdf_boolean('Diag.PaddingHmatrix',.true.)
 
-    if(fdf_defined('Diag.BlockSizeR')) then
+    if(flag_padH) then
+       ! default block size is 32 (we may change this value in the future)
+       block_size_r = fdf_integer('Diag.BlockSizeR',32)
+       block_size_c = fdf_integer('Diag.BlockSizeC',block_size_r)
+       if(block_size_c .ne. block_size_r) then
+          call cq_warn(sub_name,'PaddingHmatrix: block_size_c needs to be block_size_r')
+          block_size_c = block_size_r
+       endif
+    else  ! flag_padH is false
+     if(fdf_defined('Diag.BlockSizeR')) then
        block_size_r = fdf_integer('Diag.BlockSizeR',1)
        block_size_c = fdf_integer('Diag.BlockSizeC',1)
-       if(flag_padH) then
-          if(block_size_c .ne. block_size_r) &
-               call cq_abort('PaddingHmatrix: block_size_c needs to be block_size_r')
-          block_size_c = block_size_r
-       else
           a = real(matrix_size)/real(block_size_r)
           if(a - real(floor(a))>1e-8_double) &
                call cq_abort('block_size_r not a factor of matrix size ! ',&
@@ -3118,12 +3122,12 @@ contains
           if(a - real(floor(a))>1e-8_double) &
                call cq_abort('block_size_c not a factor of matrix size ! ',&
                matrix_size, block_size_c)
-       endif
-    else if (  ms_is_prime ) then
+     else if (  ms_is_prime ) then
        block_size_r = 1
        block_size_c = block_size_r
+       call cq_warn(sub_name,'Use of PaddingHmatrix is recommended.')
        call cq_warn(sub_name,'prime: set block_size_c = block_size_r = 1 ')
-    else
+     else   ! 
        done = .false.
        block_size_r = matrix_size/max(proc_rows,proc_cols)+1
        do while(.NOT.done) 
@@ -3139,7 +3143,9 @@ contains
           end if
        end if
        block_size_c = block_size_r
-    end if
+     end if
+    endif  ! flag_padH is True or False
+
     if(iprint_init>1.AND.inode==ionode) then
        write(io_lun,2) block_size_r, block_size_c
        write(io_lun,3) proc_rows, proc_cols
