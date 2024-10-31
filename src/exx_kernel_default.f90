@@ -108,8 +108,9 @@ contains
     use mult_module,    only: S_X_SX, mat_p, mult 
     use mult_module,    only: matXatomf, matK, matrix_scale, matrix_trace
     use mult_module,    only: matrix_product_trace, matrix_product_trace_length 
-    use mult_module,    only: return_matrix_value,  matrix_pos
+    use mult_module,    only: return_matrix_value,  matrix_pos, matrix_sum
     use mult_module,    only: store_matrix_value,   store_matrix_value_pos
+    use mult_module,    only: matrix_transpose, allocate_temp_matrix, free_temp_matrix, matX, S_trans
     use memory_module,  only: write_mem_use, reg_alloc_mem, reg_dealloc_mem, type_dbl, type_int
     use species_module, only: nsf_species
     !
@@ -180,7 +181,7 @@ contains
     integer      :: maxsuppfuncs, nb_eris
 
     type(cq_timer) :: backtrace_timer
-    integer        :: backtrace_level
+    integer        :: backtrace_level, mattmp
     !
     !==============================================================================================================
 
@@ -607,6 +608,11 @@ contains
        end if
 
     end do ! End of the kpart=1,ahalo%np_in_halo loop !
+    ! Symmetrise the matrix: note that this needs to be made compatiable with MSSF
+    mattmp = allocate_temp_matrix(Srange,S_trans)
+    call matrix_transpose(matX(exxspin),mattmp)
+    call matrix_sum(half,matXatomf(exxspin),half,mattmp)
+    call free_temp_matrix(mattmp)
     !
     !
     call start_timer(tmr_std_exx_dealloc)
@@ -1026,7 +1032,6 @@ contains
             ahalo%lab_hcell(kpart),'k',.true.,unit_exx_debug)
        !
        if ( exx_alloc ) call exx_mem_alloc(extent,kg%nsup,0,'phi_k','alloc')
-    
        call exx_phi_on_grid(inode,kg%global_num,kg%spec,extent, &
             xyz_zero,kg%nsup,phi_k,r_int,xyz_zero)             
        !
