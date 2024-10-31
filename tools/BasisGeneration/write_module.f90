@@ -14,6 +14,7 @@ contains
     use periodic_table, ONLY: atomic_mass, pte
     use radial_xc, ONLY: flag_functional_type, functional_lda_pz81, functional_gga_pbe96, functional_description
     use datestamp, ONLY: datestr, commentver
+    use read, ONLY: ps_format, hgh, oncvpsp
     
     implicit none
 
@@ -39,15 +40,21 @@ contains
          today(1:4), today(5:6), today(7:8), the_time(1:2), the_time(3:4)
     write(lun,fmt='("</Code_and_file_information>")')
     write(lun,fmt='("<Conquest_pseudopotential_info>")')
-    if(hamann_version>0) then
-       ma = (hamann_version/100)
-       hamann_version = hamann_version - ma*100
-       mi = (hamann_version/10)
-       hamann_version = hamann_version - mi*10
-       po = hamann_version
-       write(lun,fmt='(2x,"Hamann code version   : v",i1,".",i1,".",i1)') ma, mi, po
-    endif
-    write(lun,fmt='(2x,"Hamann input file name: ",a," (appended at end of file)")') trim(pseudo(i_species)%filename)
+    if(ps_format==oncvpsp) then
+       write(lun,fmt='(2x,"Pseudopotential type  : ONCVPSP")')
+       if(hamann_version>0) then
+          ma = (hamann_version/100)
+          hamann_version = hamann_version - ma*100
+          mi = (hamann_version/10)
+          hamann_version = hamann_version - mi*10
+          po = hamann_version
+          write(lun,fmt='(2x,"Hamann code version   : v",i1,".",i1,".",i1)') ma, mi, po
+       endif
+       write(lun,fmt='(2x,"Hamann input file name: ",a," (appended at end of file)")') trim(pseudo(i_species)%filename)
+    else if(ps_format==hgh) then
+       write(lun,fmt='(2x,"Pseudopotential type  : HGH")')
+       write(lun,fmt='(2x,"HGH input file name   : ",a," (appended at end of file)")') trim(pseudo(i_species)%filename)
+    end if
     write(lun,fmt='(2x,"Core radii (bohr)     :")',advance='no')
     do ell=0,pseudo(i_species)%lmax
        write(lun,fmt='(x,"l=",i1,f6.3)',advance='no') ell,local_and_vkb%core_radius(ell)

@@ -90,7 +90,11 @@ contains
 
     use datatypes
     use numbers
-    use mesh, ONLY: rr, nmesh
+    use mesh, ONLY: rr, nmesh, drdi_squared, rr_squared,drdi
+    use radial_xc, ONLY: get_vxc
+    use read, ONLY: ps_format, hgh, alpha_scf, max_scf_iters
+    use pseudo_tm_info, ONLY: pseudo
+    use GenComms, ONLY: cq_abort
     
     implicit none
 
@@ -99,33 +103,113 @@ contains
     real(double), dimension(nmesh) :: vha, vxc
 
     ! Local variables
-    integer :: i_shell, ell, en
-    real(double) :: radius_large, large_energy
-    real(double), allocatable, dimension(:) :: psi
+    integer :: i_shell, ell, en, i, iter, maxiter
+    real(double) :: radius_large, large_energy, resid, total_charge, check
+    real(double), allocatable, dimension(:) :: psi, newcharge
 
-    allocate(psi(nmesh))
+    allocate(psi(nmesh),newcharge(nmesh))
     psi = zero
-    
+    newcharge = zero
+    maxiter = max_scf_iters
+    iter = 0
     if(iprint>2) write(*,fmt='(/2x,"Finding unconfined energies for valence states")')
-    do i_shell = 1, val%n_occ
-       if(iprint>2) write(*,fmt='(2x,"n=",i2," l=",i2)') val%n(i_shell), val%l(i_shell)
-       radius_large = rr(nmesh)
-       ell = val%l(i_shell)
-       en = val%npao(i_shell)
-       large_energy = val%en_ps(i_shell)
-       call find_eigenstate_and_energy_vkb(i_species,en,ell,radius_large, psi,large_energy,vha,vxc)
-       val%en_pao(i_shell) = large_energy
-    end do
-    if(iprint>0) then
-       write(*,fmt='(/2x,"Unconfined valence state energies (Ha)")')
-       write(*,fmt='(2x,"  n  l         AE energy        PAO energy")')
+    resid = one
+    !
+    ! SCF iteration needed for HGH where we do not have an atomic density supplied
+    ! I have found that if we start from no charge density then it's better to allow
+    ! the charge to gradually change towards the correct ionic charge rather than
+    ! rescaling after the first iteration
+    !
+    do while(resid>1e-12_double.and.iter<maxiter)
+       iter = iter+1
+       newcharge = zero
        do i_shell = 1, val%n_occ
+          if(iprint>2) write(*,fmt='(2x,"n=",i2," l=",i2)') val%n(i_shell), val%l(i_shell)
+          radius_large = rr(nmesh)
           ell = val%l(i_shell)
-          en = val%n(i_shell)
-          write(*,fmt='(2x,2i3,2f18.10)') en, ell, val%en_ps(i_shell), &
-               val%en_pao(i_shell)
+          en = val%npao(i_shell)
+          large_energy = val%en_ps(i_shell)
+          if(ps_format==hgh) then
+             !if(resid<0.01_double) then
+             !   large_energy = val%en_ps(i_shell)
+             !else
+                large_energy = zero!half*val%en_ps(i_shell)
+             !end if
+          end if
+          !if(abs(large_energy)<RD_ERR.and.i_shell>1) large_energy = val%en_pao(i_shell-1)
+          call find_eigenstate_and_energy_vkb(i_species,en,ell,radius_large, psi,large_energy,vha,vxc)
+          val%en_pao(i_shell) = large_energy
+          ! Accumulate output charge
+          if(ell==0) then
+             newcharge = newcharge + val%occ(i_shell)*psi*psi
+          else if(ell==1) then
+             newcharge = newcharge + val%occ(i_shell)*psi*psi*rr*rr
+          else if(ell==2) then
+             newcharge = newcharge + val%occ(i_shell)*psi*psi*rr*rr*rr*rr
+          end if
        end do
+       ! Find residual
+       resid = zero
+       check = zero
+       do i=1,nmesh
+          resid = resid + drdi(i)*rr_squared(i)*(local_and_vkb%charge(i)-newcharge(i))**2
+          check = check + drdi(i)*rr_squared(i)*local_and_vkb%charge(i)
+       end do
+       ! Simple linear mixing
+       local_and_vkb%charge = alpha_scf*newcharge + (one-alpha_scf)*local_and_vkb%charge
+       ! We can use these lines to write out the charge for future solvers
+       !open(unit=70,file='charge_out.dat',position="append")
+       !do i=1,nmesh
+       !   write(70,*) rr(i), newcharge(i)
+       !end do
+       !close(70)
+       ! Integrate
+       total_charge = zero
+       check = zero
+       do i=1,nmesh
+          resid = resid + drdi(i)*rr_squared(i)*(local_and_vkb%charge(i)-newcharge(i))**2
+          total_charge = total_charge + drdi(i)*rr_squared(i)*newcharge(i)
+          check = check + drdi(i)*rr_squared(i)*local_and_vkb%charge(i)
+       end do
+       ! This rescales charge to have full valence value, but can be unstable
+       !if(abs(check-total_charge)>RD_ERR) local_and_vkb%charge = local_and_vkb%charge*total_charge/check
+       if(iprint>2) write(*,fmt='("Iteration ",i4," residual ",e14.6)') iter,resid
+       if(ps_format==hgh) then
+          do i_shell = 1, val%n_occ
+             val%en_ps(i_shell) = val%en_pao(i_shell)
+          end do
+       end if
+       call radial_hartree(nmesh,local_and_vkb%charge,vha)
+       if(pseudo(i_species)%flag_pcc) local_and_vkb%charge = local_and_vkb%charge + local_and_vkb%pcc
+       call get_vxc(nmesh,rr,local_and_vkb%charge,vxc)
+       if(pseudo(i_species)%flag_pcc) local_and_vkb%charge = local_and_vkb%charge - local_and_vkb%pcc
+    end do
+    if(iprint>=0) then
+       write(*,fmt='(/2x,"Unconfined valence state energies (Ha)")')
+       if(ps_format==hgh) then
+          write(*,fmt='(2x,"  n  l          PAO energy")')
+          do i_shell = 1, val%n_occ
+             ell = val%l(i_shell)
+             en = val%n(i_shell)
+             write(*,fmt='(2x,2i3,f18.10)') en, ell,val%en_pao(i_shell)
+          end do
+       else
+          write(*,fmt='(2x,"  n  l         AE energy        PAO energy")')
+          do i_shell = 1, val%n_occ
+             ell = val%l(i_shell)
+             en = val%n(i_shell)
+             write(*,fmt='(2x,2i3,2f18.10)') en, ell, val%en_ps(i_shell), &
+                  val%en_pao(i_shell)
+          end do
+       end if
     end if
+    if(iter>maxiter) call cq_abort("Exceeded iterations in SCF")
+    ! We can use these lines to write out the charge for future solvers
+    !open(unit=70,file='charge_out.dat')
+    !do i=1,nmesh
+    !   write(70,*) rr(i), newcharge(i)!local_and_vkb%charge(i)
+    !end do
+    !close(70)
     return
   end subroutine find_unconfined_valence_states
 
@@ -266,6 +350,10 @@ contains
                 end if
                 ! Accumulate atomic charge density
                 atomic_density = atomic_density + val%occ(i_shell)*psi*psi
+                !do i=1,nmesh
+                !   write(50+ell,*) rr(i),psi(i)*psi(i)*val%occ(i_shell)
+                !end do
+                !flush(50+ell)
              end if
              ! These lines orthogonalise to semi-core states where necessary
              ! They are left for completeness, but I found that they can cause
@@ -485,6 +573,7 @@ contains
     use mesh, ONLY: nmesh, rr, delta_r_reg, interpolate, make_mesh_reg, convert_r_to_i
     use pseudo_tm_info, ONLY: pseudo, rad_alloc
     use write, ONLY: write_pao_plot
+    use read, ONLY: ps_format, oncvpsp
 
     implicit none
 
@@ -507,9 +596,11 @@ contains
        do i=1,local_and_vkb%n_proj(ell)
           j = j+1
           ! Scale projector by r**(l+1)
+          !if(ps_format==oncvpsp) then
           do k=0,ell
              local_and_vkb%projector(:,i,ell) = local_and_vkb%projector(:,i,ell)/rr
           end do
+          !end if
           ! Find actual cutoff: two successive points with magnitude less than RD_ERR
           ! We may want to start this somewhere r=0.1 to avoid errors
           nrc = local_and_vkb%ngrid_vkb
@@ -603,6 +694,7 @@ contains
     use numbers
     use mesh, ONLY: nmesh, rr, delta_r_reg, convert_r_to_i
     use units, ONLY: HaToeV
+    use read, ONLY: ps_format, oncvpsp
     
     implicit none
 
@@ -620,13 +712,19 @@ contains
     allocate(large_cutoff(val%n_occ),small_cutoff(val%n_occ))
     large_cutoff = zero
     small_cutoff = zero
-    write(*,fmt='(/4x,"Default energy shifts")')
+    write(*,fmt='(/4x,"Energy shifts")')
     write(*,fmt='(4x,"  n  l   delta E (Ha) delta E (eV)")')
     ! Loop over valence states, find large/small cutoffs
     do i_shell = 1, val%n_occ !paos%n_shells-1 
-       if(iprint>3) write(*,*) '# Finding radius for ',paos%npao(i_shell), paos%l(i_shell)
-       call find_radius_from_energy(i_species,paos%npao(i_shell), paos%l(i_shell), &
-            large_cutoff(i_shell), val%en_ps(i_shell)+deltaE_large_radius, vha, vxc, .false.)
+       if(iprint>3) write(*,*) '# Finding radius for ',paos%npao(i_shell), paos%l(i_shell), &
+            val%en_ps(i_shell)+deltaE_large_radius
+       if(val%semicore(i_shell)==0.or.ps_format==oncvpsp) then
+          call find_radius_from_energy(i_species,paos%npao(i_shell), paos%l(i_shell), &
+               large_cutoff(i_shell), val%en_ps(i_shell)+deltaE_large_radius, vha, vxc, .false.)
+       else
+          call find_radius_from_energy(i_species,paos%npao(i_shell), paos%l(i_shell), &
+               large_cutoff(i_shell), val%en_ps(i_shell)+deltaE_large_radius_semicore_hgh, vha, vxc, .false.)
+       end if
        ! Round to grid step
        if(val%semicore(i_shell)==0) then
           write(*,fmt='(4x,2i3,2f13.8," (large radius)")') paos%n(i_shell), paos%l(i_shell), &
@@ -636,10 +734,16 @@ contains
           call find_radius_from_energy(i_species,paos%npao(i_shell), paos%l(i_shell), &
                small_cutoff(i_shell), val%en_ps(i_shell)+deltaE_small_radius, vha, vxc, .false.)
        else
-          write(*,fmt='(4x,2i3,2f13.8," (only radius)")') paos%n(i_shell), paos%l(i_shell), &
-               deltaE_large_radius, deltaE_large_radius*HaToeV
+          if(ps_format==oncvpsp) then
+             write(*,fmt='(4x,2i3,2f13.8," (only radius)")') paos%n(i_shell), paos%l(i_shell), &
+                  deltaE_large_radius, deltaE_large_radius*HaToeV
+          else
+             write(*,fmt='(4x,2i3,2f13.8," (only radius)")') paos%n(i_shell), paos%l(i_shell), &
+                  deltaE_large_radius_semicore_hgh, deltaE_large_radius_semicore_hgh*HaToeV
+          end if
           small_cutoff(i_shell) = large_cutoff(i_shell)
        end if
+       if(iprint>3) write(*,*) '# Radii: ',large_cutoff(i_shell),small_cutoff(i_shell)
     end do
     ! Create cutoffs based on defaults chosen by user
     if(paos%flag_cutoff==pao_cutoff_energies.OR.paos%flag_cutoff==pao_cutoff_default) then ! Same energy for all l/n shells
@@ -758,7 +862,7 @@ contains
     nmax = nmesh
     n_crossings = 0
     if(flag_use_semilocal) then
-       !write(*,*) '# Using semi-local potential'
+       write(*,*) '# Using semi-local potential'
        do i=1,nmesh
           potential(i) = local_and_vkb%semilocal_potential(i,ell) + vha(i) + vxc(i)
           g_temp = (drdi_squared(i)*(two*(energy - potential(i))-l_l_plus_one/rr_squared(i)) - alpha_sq_over_four)/twelve
@@ -801,6 +905,7 @@ contains
              end if
           end do
        end if
+       !write(*,*) '# Crossings, nodes: ',n_crossings, n_nodes
        if(n_crossings<n_nodes+1) call cq_abort("Failed to find confined state - please check input")
     end if
     ! Find radius by integrating outwards
@@ -809,6 +914,10 @@ contains
     Rc = rr(i) - psi(i)*(rr(i+1)-rr(i))/(psi(i+1)-psi(i))
     !write(*,*) 'ri, ri+1 and interp are: ',rr(i), rr(i+1),psi(i),psi(i+1), - psi(i)*(rr(i+1)-rr(i))/(psi(i+1)-psi(i))
     if(iprint>5) write(*,*) '# Found radius ',Rc
+    if(abs(Rc - rr(local_and_vkb%ngrid_vkb))<0.1_double) then ! Arbitrary but reasonable
+       write(*,fmt='(/"For l=",i1," Rpao is close to RKB: ",2f7.4)') ell,Rc,rr(local_and_vkb%ngrid_vkb)
+       write(*,fmt='("Consider increasing Rpao or decreasing RKB"/)')
+    end if
     deallocate(f,potential,psi)
     return
   end subroutine find_radius_from_energy
@@ -824,6 +933,7 @@ contains
     use GenComms, ONLY: cq_abort
     use mesh, ONLY: rr, rr_squared, nmesh, alpha, make_mesh, beta, drdi, drdi_squared, convert_r_to_i
     use pseudo_tm_info, ONLY: pseudo
+    use read, ONLY: e_step, max_solver_iters
     
     implicit none
 
@@ -833,7 +943,7 @@ contains
     real(double), OPTIONAL :: width, prefac
 
     ! Local variables
-    real(double) :: g_temp, dy_L, dy_R
+    real(double) :: g_temp, dy_L, dy_R, ipsi_in, ipsi_out
     real(double), dimension(:), allocatable :: f, potential
     integer :: classical_tp, i, n_crossings, n_nodes, n_loop, loop, nmax, n_kink, n_nodes_lower, n_nodes_upper, n_kink_vkb
     real(double) :: l_half_sq, dx_sq_over_twelve, fac, norm, d_energy, e_lower, e_upper, df_cusp, cusp_psi, tol
@@ -858,30 +968,30 @@ contains
     n_nodes = en - ell - 1 
     allocate(f(nmesh),potential(nmesh))
     if(abs(energy)<RD_ERR) then
-       e_lower = -zval!-zval*zval/real(en*en,double)
+       e_lower = -two*zval!-zval*zval/real(en*en,double)
     else if(energy<zero) then
        e_lower = energy*1.2_double
     else ! Unbound (polarisation) state
        e_lower = -half!zero
     end if
     ! Energy bounds - allow for unbound states
-    e_upper = five ! One failed to find the tightest PAO for O
+    e_upper = half!five ! One failed to find the tightest PAO for O
     do i=1,nmesh
        potential(i) = local_and_vkb%local(i) + vha(i) + vxc(i)  ! Half when using Siesta
        !g_temp = l_l_plus_one/(rr_squared(i)) + potential(i)
        !if(g_temp<e_lower) e_lower = g_temp
     end do
     ! Now set number of loops and maximum radius
-    n_loop = 100
+    n_loop = max_solver_iters
     call convert_r_to_i(Rc,nmax)
     nmax = nmax - 1
     ! NEW !
     Rc = rr(nmax)
     ! NEW !
     if(abs(energy)<RD_ERR) then
-       energy = half*(e_lower+e_upper)
+       energy = zero!half*(e_lower+e_upper)
     end if
-    tol = 1.0e-8_double
+    tol = 1.0e-6_double
     if(flag_confine) then
        delta = 0.01_double
        do i=1,nmax
@@ -907,11 +1017,17 @@ contains
        n_crossings = 0
        call integrate_vkb_outwards(i_species,n_kink,ell,psi,f,n_crossings,n_nodes) ! We want to integrate to max before final node
        n_kink_vkb = n_kink
+       if(iprint>4) write(*,fmt='(2x,"Kink is at ",f18.10," with ",i2," crossings")') rr(n_kink),n_crossings
        ! If we haven't found enough nodes, we need to try further
-       if(n_crossings/=n_nodes) then
+       !if(n_crossings/=n_nodes) then
+       if(n_crossings<n_nodes) then
           !write(*,*) 'Found ',n_crossings,' crossings so far; continuing ',n_kink_vkb
           n_kink = nmax-n_kink_vkb+1
           call numerov(n_kink_vkb-1,n_kink,nmax,psi,rr,f,1,n_crossings,n_nodes,xkap,0)
+          !if(n_kink<n_kink_vkb) then
+          !   write(*,*) 'Possible error source: ',n_kink_vkb,nmax
+          !   n_kink=nmax
+          !end if
           !write(*,*) 'Left numerov with kink, crossings: ',n_kink,n_crossings
        end if
        if(iprint>4) write(*,fmt='(2x,"Kink is at ",f18.10)') rr(n_kink)
@@ -921,16 +1037,30 @@ contains
        if(n_kink == nmax) then
           if(iprint>4) write(*,fmt='(2x,"No kink found - adjusting lower bound")')
           e_lower = energy
-          energy = half*(e_lower+e_upper)
+          if(e_upper-e_lower>e_step) then
+             energy = energy + e_step
+          else
+             energy = half*(e_lower+e_upper)
+          end if
           cycle
        end if
        if(n_crossings /= n_nodes) then
           if ( n_crossings > n_nodes ) then
              e_upper = energy
+             if(e_upper-e_lower>e_step) then
+                energy = energy - e_step
+             else
+                energy = half * ( e_upper + e_lower )
+             end if
           else
              e_lower = energy
+             if(e_upper-e_lower>e_step) then
+                energy = energy + e_step
+             else
+                energy = half * ( e_upper + e_lower )
+             end if
           end if
-          energy = half * ( e_upper + e_lower )
+          !energy = half * ( e_upper + e_lower )
           if(iprint>4) write(*,fmt='(2x,"Nodes found: ",i3," but required: ",i3)') n_crossings, n_nodes
           cycle
        end if       
@@ -947,7 +1077,7 @@ contains
        psi(n_kink:nmax) = psi(n_kink:nmax)*fac
        xin = psi(n_kink)*f(n_kink)- psi(n_kink+1)*f(n_kink+1)
        gin = psi(n_kink)
-       gsgin = psi(n_kink)*psi(n_kink)*drdi_squared(n_kink)       
+       gsgin = psi(n_kink)*psi(n_kink)*drdi_squared(n_kink)
        ! Remember that psi is y in numerov - don't forget factor of root(r)
        ! Normalise
        norm = zero
@@ -981,19 +1111,53 @@ contains
        if(iprint>5) write(*,fmt='(2x,"Energies (low, mid, high): ",3f18.10)') e_lower,energy,e_upper
        if(iprint>4) write(*,fmt='(2x,"Energy shift      : ",f18.10)') d_energy
        ! Alternate approach
-       cusp_psi = xin + xout
-       cusp_psi = cusp_psi + twelve*(one-f(n_kink))*gout
-       cusp_psi = cusp_psi*gout/(gsgin + gsgout)
-       d_energy = cusp_psi
+       !cusp_psi = xin + xout
+       !cusp_psi = cusp_psi + twelve*(one-f(n_kink))*gout
+       !cusp_psi = cusp_psi*gout/(gsgin + gsgout)
+       !d_energy = cusp_psi
        if(iprint>4) write(*,fmt='(2x,"Energy shift (alt): ",f18.10)') cusp_psi
        if(iprint>5) write(*,fmt='(2x,"Number of nodes: ",i4)') n_crossings
+       !! Integrate to kink in both directions - this is another estimate of the
+       !! energy change required but is rather approximate because of the method
+       !! used to calculate dpsi/dr
+       !ipsi_out = zero
+       !do i=1,n_kink
+       !   ipsi_out = ipsi_out + psi(i)*psi(i)*drdi_squared(i)
+       !end do
+       !ipsi_out = ipsi_out/(psi(n_kink)*psi(n_kink))
+       !ipsi_in = zero
+       !do i=n_kink,nmax
+       !   ipsi_in = ipsi_in + psi(i)*psi(i)*drdi_squared(i)
+       !end do
+       !ipsi_in = ipsi_in/(psi(n_kink)*psi(n_kink))
+       !!dy_L = (psi(n_kink)*sqrt(drdi(n_kink))/rr(n_kink)-psi(n_kink-1)*sqrt(drdi(n_kink-1))/rr(n_kink-1)) &
+       !!     /(rr(n_kink)-rr(n_kink-1))
+       !!dy_R = (psi(n_kink+1)*sqrt(drdi(n_kink+1))/rr(n_kink+1)-psi(n_kink)*sqrt(drdi(n_kink))/rr(n_kink)) &
+       !!     /(rr(n_kink+1)-rr(n_kink))
+       !dy_L = (psi(n_kink)*drdi(n_kink)-psi(n_kink-1)*drdi(n_kink-1)) &
+       !     /(rr(n_kink)-rr(n_kink-1))
+       !dy_R = (psi(n_kink+1)*drdi(n_kink+1)-psi(n_kink)*drdi(n_kink)) &
+       !     /(rr(n_kink+1)-rr(n_kink))
+       !d_energy = -(dy_L/psi(n_kink) - dy_R/psi(n_kink))/(ipsi_in + ipsi_out)
+       !write(*,*) 'New d_energy is ',d_energy
+       ! Write out psi here?
        if ( n_crossings /= n_nodes) then
           if ( n_crossings > n_nodes ) then
              e_upper = energy
+             if(e_upper-e_lower>e_step) then
+                energy = energy - e_step
+             else
+                energy = half * ( e_upper + e_lower )
+             end if
           else
              e_lower = energy
+             if(e_upper-e_lower>e_step) then
+                energy = energy + e_step
+             else
+                energy = half * ( e_upper + e_lower )
+             end if
           end if
-          energy = half * ( e_upper + e_lower )
+          !energy = half * ( e_upper + e_lower )
           cycle
        end if       
        if(d_energy>zero) then
@@ -1002,13 +1166,21 @@ contains
           e_upper = energy
        end if
        if(energy+d_energy<e_upper.AND.energy+d_energy>e_lower) then
-          energy = energy + d_energy
+          if(abs(d_energy)<e_step) then
+             energy = energy + d_energy
+          else
+             if(d_energy>zero) then
+                energy = energy + e_step
+             else
+                energy = energy - e_step
+             end if
+          end if
        else
           energy = half*(e_lower + e_upper)
        end if
        if(abs(d_energy)<tol) exit
     end do
-    if(loop>=100.AND.abs(d_energy)>tol) call cq_abort("Error: failed to find energy for n,l: ",en,ell)
+    if(loop>=n_loop.AND.abs(d_energy)>tol) call cq_abort("Error: failed to find energy for n,l: ",en,ell)
     if(iprint>2) write(*,fmt='(2x,"Final energy found: ",f11.6," Ha")') energy
     ! Rescale - remove factor of sqrt r
     do i=1,nmax
@@ -1138,7 +1310,7 @@ contains
 
     use datatypes
     use numbers
-    use mesh, ONLY: rr, nmesh, drdi, drdi_squared
+    use mesh, ONLY: rr, nmesh, drdi, drdi_squared, convert_r_to_i
     use pseudo_tm_info, ONLY: pseudo
     use GenComms, ONLY: cq_abort
     
@@ -1155,12 +1327,17 @@ contains
     real(double), allocatable, dimension(:) :: pot_vector, psi_h, s, integrand
     real(double), allocatable, dimension(:,:) :: pot_matrix, psi_inh
 
-    allocate(pot_matrix(local_and_vkb%n_proj(ell),local_and_vkb%n_proj(ell)),pot_vector(local_and_vkb%n_proj(ell)))
-    pot_matrix = zero
-    pot_vector = zero
-    allocate(psi_h(nmesh),psi_inh(nmesh,local_and_vkb%n_proj(ell)))
-    psi_h = zero
-    psi_inh = zero
+    !if(local_and_vkb%n_proj(ell)>0) then
+       allocate(pot_matrix(local_and_vkb%n_proj(ell),local_and_vkb%n_proj(ell)),pot_vector(local_and_vkb%n_proj(ell)))
+       pot_matrix = zero
+       pot_vector = zero
+       allocate(psi_h(nmesh),psi_inh(nmesh,local_and_vkb%n_proj(ell)))
+       psi_h = zero
+       psi_inh = zero
+    !else
+    !   allocate(psi_h(nmesh))
+    !   psi_h = zero
+    !end if
     if(ell == 0) then
        nproj_acc = 0
     else
@@ -1169,6 +1346,7 @@ contains
     ! Homogeneous - standard numerov - but only to projector radius
     psi_h = zero
     n_kink = local_and_vkb%ngrid_vkb
+    if(n_kink<5)     call convert_r_to_i(two,n_kink)
     if(iprint>5) write(*,fmt='("In integrate_vkb, outer limit is ",f18.10)') rr(n_kink)
     allocate(s(n_kink),integrand(n_kink))
     s = zero
@@ -1210,10 +1388,14 @@ contains
     end do
     !write(*,*) '# Pot mat and vec: ',pot_matrix, pot_vector
     ! Invert matrix
-    call dgesv(local_and_vkb%n_proj(ell), 1, pot_matrix, local_and_vkb%n_proj(ell), ipiv, &
-         pot_vector, local_and_vkb%n_proj(ell), info)
-    if(info/=0) call cq_abort("Error from dgesv called in integrate_vkb_outward: ",info)
-    if(iprint>6) write(*,fmt='("In integrate_vkb, coefficients are ",3f18.10)') pot_vector
+    if(local_and_vkb%n_proj(ell)>0) then
+       call dgesv(local_and_vkb%n_proj(ell), 1, pot_matrix, local_and_vkb%n_proj(ell), ipiv, &
+            pot_vector, local_and_vkb%n_proj(ell), info)
+       if(info/=0) call cq_abort("Error from dgesv called in integrate_vkb_outward: ",info)
+       if(iprint>6) write(*,fmt='("In integrate_vkb, coefficients are ",3f18.10)') pot_vector
+    else
+       pot_vector = zero
+    end if
     ! Construct total outward wavefunction
     psi(1:n_kink) = psi_h(1:n_kink)
     do i_proj=1,local_and_vkb%n_proj(ell)
@@ -1225,7 +1407,11 @@ contains
     do i=2,n_kink
        if(rr(i)>half.AND.psi(i)*psi(i-1)<zero) n_crossings = n_crossings+1
     end do
-    deallocate(pot_matrix, pot_vector, s, psi_h, psi_inh, integrand)
+    !if(local_and_vkb%n_proj(ell)>0) then
+       deallocate(pot_matrix, pot_vector, s, psi_h, psi_inh, integrand)
+    !else
+    !   deallocate(s, psi_h, integrand)
+    !end if
   end subroutine integrate_vkb_outwards
   
   subroutine find_polarisation(i_species,en,ell,Rc,psi_l,psi_pol,energy,vha,vxc,pf_sign)

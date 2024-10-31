@@ -457,6 +457,7 @@ contains
     !use angular_coeff_routines, ONLY: numerical_ol_gradient
     use matrix_data, ONLY: mat, halo
     use mult_module, ONLY: matrix_scale, store_matrix_value_pos, matrix_pos
+    use pseudo_tm_info, ONLY: pseudo
     
     implicit none
 
@@ -501,6 +502,8 @@ contains
                 neigh_global_part = BCS_parts%lab_cell(mat(part,range)%i_part(ist)) 
                 neigh_global_num  = id_glob(parts%icell_beg(neigh_global_part)+mat(part,range)%i_seq(ist)-1)
                 neigh_species = species_glob(neigh_global_num)
+                ! This avoids a problem when using only a local potential
+                if(flag==3.and.pseudo(neigh_species)%n_pjnl==0) cycle
                 ! Where to put the result - this will become matrix_pos
                 wheremat = matrix_pos(matA,iprim,halo(range)%i_halo(gcspart))
                 ! Now loop over support functions and PAOs and call routine

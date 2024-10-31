@@ -1007,7 +1007,7 @@ contains
     ! spin polarisation
     logical :: flag_spin_polarisation
     real(double) :: sum_elecN_spin
-    real(double) :: charge_tmp
+    real(double) :: charge_tmp, GridSpacing
 
     ! Set defaults
     vary_mu  = .true.
@@ -1192,7 +1192,12 @@ contains
     !
     !
     ! Default to 50 Ha cutoff for grid
-    GridCutoff = fdf_double('Grid.GridCutoff',50.0_double)
+    GridSpacing = fdf_double('Grid.GridSpacing',zero)
+    if(GridSpacing>zero) then
+       GridCutoff = half*(pi/GridSpacing)*(pi/GridSpacing)
+    else
+       GridCutoff = fdf_double('Grid.GridCutoff',50.0_double)
+    end if
     ! Grid points
     n_grid_x   = fdf_integer('Grid.PointsAlongX',0)
     n_grid_y   = fdf_integer('Grid.PointsAlongY',0)
@@ -3056,7 +3061,7 @@ contains
     character(len=80) :: sub_name = "readDiagInfo"
     type(cq_timer) :: backtrace_timer
     integer        :: stat, i, j, k, nk_st, nkp_lines
-    real(double)   :: a, sum, dkx, dky, dkz
+    real(double)   :: a, sum, dkx, dky, dkz, dk
     integer        :: proc_per_group
     logical        :: ms_is_prime
     
@@ -3142,14 +3147,18 @@ contains
     ! padH or not  :temporary?   
     flag_padH = fdf_boolean('Diag.PaddingHmatrix',.true.)
 
-    if(fdf_defined('Diag.BlockSizeR')) then
+    if(flag_padH) then
+       ! default block size is 32 (we may change this value in the future)
+       block_size_r = fdf_integer('Diag.BlockSizeR',32)
+       block_size_c = fdf_integer('Diag.BlockSizeC',block_size_r)
+       if(block_size_c .ne. block_size_r) then
+          call cq_warn(sub_name,'PaddingHmatrix: block_size_c needs to be block_size_r')
+          block_size_c = block_size_r
+       endif
+    else  ! flag_padH is false
+     if(fdf_defined('Diag.BlockSizeR')) then
        block_size_r = fdf_integer('Diag.BlockSizeR',1)
        block_size_c = fdf_integer('Diag.BlockSizeC',1)
-       if(flag_padH) then
-          if(block_size_c .ne. block_size_r) &
-               call cq_abort('PaddingHmatrix: block_size_c needs to be block_size_r')
-          block_size_c = block_size_r
-       else
           a = real(matrix_size)/real(block_size_r)
           if(a - real(floor(a))>1e-8_double) &
                call cq_abort('block_size_r not a factor of matrix size ! ',&
@@ -3158,12 +3167,12 @@ contains
           if(a - real(floor(a))>1e-8_double) &
                call cq_abort('block_size_c not a factor of matrix size ! ',&
                matrix_size, block_size_c)
-       endif
-    else if (  ms_is_prime ) then
+     else if (  ms_is_prime ) then
        block_size_r = 1
        block_size_c = block_size_r
+       call cq_warn(sub_name,'Use of PaddingHmatrix is recommended.')
        call cq_warn(sub_name,'prime: set block_size_c = block_size_r = 1 ')
-    else
+     else   ! 
        done = .false.
        block_size_r = matrix_size/max(proc_rows,proc_cols)+1
        do while(.NOT.done) 
@@ -3179,7 +3188,9 @@ contains
           end if
        end if
        block_size_c = block_size_r
-    end if
+     end if
+    endif  ! flag_padH is True or False
+
     if(iprint_init>1.AND.inode==ionode) then
        write(io_lun,2) block_size_r, block_size_c
        write(io_lun,3) proc_rows, proc_cols
@@ -3326,11 +3337,18 @@ contains
        ! Read Monkhorst-Pack mesh coefficients
        ! Default is Gamma point only 
        if(iprint_init>1.AND.inode==ionode) &
-            write(io_lun,fmt='(/8x,"Reading Monkhorst-Pack Kpoint mesh"//)')
+            write(io_lun,fmt='(/8x,"Using Monkhorst-Pack Kpoint mesh"//)')
        flag_gamma = fdf_boolean('Diag.GammaCentred',.false.)
-       mp(1) = fdf_integer('Diag.MPMeshX',1)
-       mp(2) = fdf_integer('Diag.MPMeshY',1)
-       mp(3) = fdf_integer('Diag.MPMeshZ',1) 
+       dk = fdf_double('Diag.dk',zero)
+       if(dk>zero) then
+          mp(1) = ceiling(two*pi/(dk*rcellx))
+          mp(2) = ceiling(two*pi/(dk*rcelly))
+          mp(3) = ceiling(two*pi/(dk*rcellz))
+       else
+          mp(1) = fdf_integer('Diag.MPMeshX',1)
+          mp(2) = fdf_integer('Diag.MPMeshY',1)
+          mp(3) = fdf_integer('Diag.MPMeshZ',1)
+       end if
        if(iprint_init>0.AND.inode==ionode) then
           if(flag_gamma) then
              write (io_lun,fmt='(/8x,a, i3," x ",i3," x ",i3," gamma-centred")') &
