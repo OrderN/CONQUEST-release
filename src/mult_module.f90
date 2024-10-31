@@ -2703,7 +2703,6 @@ contains
        if (matrix_index(B) < 1 .or. matrix_index(B) > mx_matrices) &
             call cq_abort("Matrix error in matrix_sum: ", &
                           matrix_index(B), B)
-       call scal(mat_p(A)%length, alpha, mat_p(A)%matrix, 1)
        call matrix_add(alpha, mat_p(A)%matrix, mat_p(A)%length,       &
                        mat(:,matrix_index(A)), beta, mat_p(B)%matrix, &
                        mat_p(B)%length, mat(:,matrix_index(B)),       &
