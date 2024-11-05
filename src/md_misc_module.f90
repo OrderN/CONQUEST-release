@@ -257,7 +257,7 @@ contains
   !!   2020/10/07 tsuyoshi
   !!    added deallocation of atom_vels
   !!  SOURCE
-  !!  
+  !!
   subroutine end_md(th, baro)
 
     use GenComms,         only: inode, ionode
@@ -313,7 +313,7 @@ contains
   !!  CREATION DATE
   !!   2018/04/23 11:49
   !!  SOURCE
-  !!  
+  !!
   subroutine integrate_pt(baro, thermo, mdl, velocity, second_call)
 
     use numbers
@@ -551,8 +551,10 @@ contains
   !!  MODIFIED
   !!   2021/10/19 Jianbo Lin
   !!    Added call for extended XYZ output (includes forces)
+  !!   2024/11/04 Augustin Lu
+  !!    Added stress in call for extended XYZ output
   !!  SOURCE
-  !!  
+  !!
   subroutine write_md_data(iter, thermo, baro, mdl, nequil, MDfreq, XSFfreq, XYZfreq)
 
     use GenComms,      only: inode, ionode
@@ -582,7 +584,7 @@ contains
         call write_xsf(md_trajectory_file, iter)
     end if
     if (flag_write_extxyz .and. mod(iter,XYZfreq) == 0) then
-         call write_extxyz('trajectory.xyz', mdl%dft_total_energy, mdl%atom_force)
+         call write_extxyz('trajectory.xyz', mdl%dft_total_energy, mdl%atom_force, mdl%stress)
     end if
     if (flag_heat_flux) call mdl%dump_heat_flux(md_heat_flux_file)
     if (mod(iter, MDfreq) == 0) then
