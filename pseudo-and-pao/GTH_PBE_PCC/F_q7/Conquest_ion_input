@@ -1,6 +1,5 @@
 General.NumberOfSpecies 1
 General.PSFormat hgh
-IO.PlotOutput T
 
 %block SpeciesLabels
 1  F
@@ -9,6 +8,5 @@ IO.PlotOutput T
 %block F
 Atom.PseudopotentialFile F.hgh
 Atom.ZetaForm com
+Atom.Cutoffs en
 %endblock
-
-

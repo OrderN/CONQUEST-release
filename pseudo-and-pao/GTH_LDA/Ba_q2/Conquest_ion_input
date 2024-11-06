@@ -1,7 +1,7 @@
 General.NumberOfSpecies 1
 General.PSFormat hgh
-General.SolverStep 0.01
-General.SCFMixing 0.3
+General.SolverStep 0.1
+General.SCFMixing 0.05
 
 %block SpeciesLabels
 1  Ba
@@ -13,6 +13,7 @@ Atom.ZetaForm com
 Atom.Perturbative_Polarised F
 Atom.PAO_N_Shells 3
 Atom.BasisBlock BaBlock
+Atom.Cutoffs ra
 %endblock
 
 # Specify the number of PAOs for each n,l pair and then their radii

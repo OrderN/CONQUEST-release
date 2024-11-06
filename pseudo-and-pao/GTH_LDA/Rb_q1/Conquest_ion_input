@@ -6,12 +6,15 @@ General.SolverStep 0.02
 1  Rb
 %endblock
 
+# NB It is important that the atom cutoffs are based on radii not
+# energies to fit with the specification block
 %block Rb
 Atom.PseudopotentialFile Rb.hgh
 Atom.ZetaForm com
 Atom.Perturbative_Polarised F
 Atom.PAO_N_Shells 3
 Atom.BasisBlock RbBlock
+Atom.Cutoffs ra
 %endblock
 
 # Specify the number of PAOs for each n,l pair and then their radii

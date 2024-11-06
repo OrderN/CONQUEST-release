@@ -1,16 +1,20 @@
 General.NumberOfSpecies 1
 General.PSFormat hgh
+IO.PlotOutput T
 
 %block SpeciesLabels
 1  Rb
 %endblock
 
+# NB It is important that the atom cutoffs are based on radii not
+# energies to fit with the specification block
 %block Rb
 Atom.PseudopotentialFile Rb.hgh
 Atom.ZetaForm com
 Atom.Perturbative_Polarised F
 Atom.PAO_N_Shells 5
 Atom.BasisBlock RbBlock
+Atom.Cutoffs ra
 %endblock
 
 # Specify the number of PAOs for each n,l pair and then their radii
@@ -24,8 +28,8 @@ Atom.BasisBlock RbBlock
 5 1 1
 4 2 1
 # Radii for PAOs (bohr)
-4.5
-5.5
+6.7
+8.6
 12.7 6.4
 12.7
 12.7

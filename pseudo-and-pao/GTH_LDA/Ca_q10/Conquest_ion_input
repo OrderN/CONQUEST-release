@@ -11,4 +11,5 @@ Atom.PseudopotentialFile Ca.hgh
 Atom.ZetaForm com
 Atom.Perturbative_Polarised F
 Atom.dE_small_radius 0.0100
+Atom.Cutoffs en
 %endblock

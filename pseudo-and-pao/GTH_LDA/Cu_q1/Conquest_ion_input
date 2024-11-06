@@ -11,4 +11,5 @@ Atom.PseudopotentialFile Cu.hgh
 Atom.ZetaForm com
 Atom.dE_small_radius 0.002
 Atom.dE_large_radius 0.0005
+Atom.Cutoffs en
 %endblock

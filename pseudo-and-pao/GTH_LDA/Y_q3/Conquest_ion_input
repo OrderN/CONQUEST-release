@@ -12,4 +12,5 @@ General.KBThresh 1e-7
 Atom.PseudopotentialFile Y.hgh
 Atom.ZetaForm com
 Atom.dE_small_radius 0.010
+Atom.Cutoffs en
 %endblock

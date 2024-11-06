@@ -8,4 +8,5 @@ General.PSFormat hgh
 %block Si
 Atom.PseudopotentialFile Si.hgh
 Atom.ZetaForm com
+Atom.Cutoffs en
 %endblock

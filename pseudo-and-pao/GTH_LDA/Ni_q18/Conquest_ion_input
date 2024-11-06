@@ -11,4 +11,5 @@ General.SCFMixing 0.2
 Atom.PseudopotentialFile Ni.hgh
 Atom.ZetaForm com
 Atom.Perturbative_Polarised F
+Atom.Cutoffs en
 %endblock

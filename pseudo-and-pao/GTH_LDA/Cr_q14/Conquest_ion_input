@@ -10,4 +10,5 @@ Atom.PseudopotentialFile Cr.hgh
 Atom.ZetaForm com
 Atom.Perturbative_Polarised F
 Atom.dE_large_radius_semicore_hgh 0.0001
+Atom.Cutoffs en
 %endblock
