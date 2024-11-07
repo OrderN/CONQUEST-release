@@ -11,6 +11,7 @@ Atom.ZetaForm com
 Atom.Perturbative_Polarised F
 Atom.PAO_N_Shells 5
 Atom.BasisBlock SrBlock
+Atom.Cutoffs ra
 %endblock
 
 # Specify the number of PAOs for each n,l pair and then their radii
@@ -26,7 +27,7 @@ Atom.BasisBlock SrBlock
 # Radii for PAOs (bohr)
 6.1
 7.5
-10.97  7.3
+10.97  5.8
 10.97
 10.97
 %endblock

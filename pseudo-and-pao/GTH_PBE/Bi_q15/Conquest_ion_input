@@ -9,4 +9,5 @@ General.KBThresh 1e-7
 %block Bi
 Atom.PseudopotentialFile Bi.hgh
 Atom.ZetaForm com
+Atom.Cutoffs en
 %endblock

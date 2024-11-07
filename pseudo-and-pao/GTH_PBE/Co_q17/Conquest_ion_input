@@ -10,4 +10,5 @@ General.SolverStep 0.2
 Atom.PseudopotentialFile Co.hgh
 Atom.ZetaForm com
 Atom.Perturbative_Polarised F
+Atom.Cutoffs en
 %endblock

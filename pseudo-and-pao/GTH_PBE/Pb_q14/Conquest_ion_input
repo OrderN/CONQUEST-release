@@ -9,5 +9,6 @@ General.KBThresh 1e-7
 %block Pb
 Atom.PseudopotentialFile Pb.hgh
 Atom.ZetaForm com
-Atom.dE_small_radius 0.02
+Atom.Cutoffs en
+Atom.Perturbative_Polarised F
 %endblock
