@@ -3015,7 +3015,7 @@ contains
     ! Local variables
     character(len=80) :: sub_name = "readDiagInfo"
     type(cq_timer) :: backtrace_timer
-    integer        :: stat, i, j, k, nk_st, nkp_lines
+    integer        :: stat, i, j, k, nk_st, nkp_lines, nblocks
     real(double)   :: a, sum, dkx, dky, dkz, dk
     integer        :: proc_per_group
     logical        :: ms_is_prime
@@ -3110,7 +3110,14 @@ contains
           call cq_warn(sub_name,'PaddingHmatrix: block_size_c needs to be block_size_r')
           block_size_c = block_size_r
        endif
-    else  ! flag_padH is false
+       nblocks = ceiling((real(matrix_size,double)-RD_ERR)/block_size_r)
+       if(nblocks < proc_rows .or. nblocks < proc_cols) then
+          call cq_warn(sub_name,'PaddingHmatrix is forced to be false')
+          flag_padH = .false.
+       endif
+    endif
+  
+    if(.not.flag_padH) then
      if(fdf_defined('Diag.BlockSizeR')) then
        block_size_r = fdf_integer('Diag.BlockSizeR',1)
        block_size_c = fdf_integer('Diag.BlockSizeC',1)
@@ -3144,7 +3151,7 @@ contains
        end if
        block_size_c = block_size_r
      end if
-    endif  ! flag_padH is True or False
+    endif  ! flag_padH is False
 
     if(iprint_init>1.AND.inode==ionode) then
        write(io_lun,2) block_size_r, block_size_c
