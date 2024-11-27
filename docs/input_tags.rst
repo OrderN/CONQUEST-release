@@ -52,11 +52,15 @@ General.FunctionalType (*integer*)
     GGA PBE + Zhang-Yang 98 (revPBE)           102     :cite:`e-Zhang:1998oq`
     GGA PBE + Hammer-Hansen-Norskov 99 (RPBE)  103     :cite:`e-Hammer1999`
     GGA WC                                     104     :cite:`e-Wu:2006cu`
+    hybrid PBE0   (25% of exact exchange)      201     :cite:`e-Perdew1996hyb`
     =========================================  ======= =======================
 
     At the moment, only LSDA Perdew-Wang 92 and the three GGA
     Perdew-Burke-Ernzerhof functional variants can be used in spin polarised calculations.
 
+    Only hybrid functionals with GGA PBE are allowed. Fraction of
+    exact exchange can be tuned.
+    
     Note that, if the code is compiled with LibXC, the full LibXC
     set of functionals is available, selected with a negative six
     digit number (-XXXCCC or -CCCXXX).
@@ -1346,6 +1350,39 @@ cDFT.AtomGroups (*block*)
 
 Go to :ref:`top <input_tags>`.
 
+.. _input_exx:
+
+Exact exchange (EXX)
+--------------------
+
+EXX.Alpha (*real*)
+    Fraction of exact exchange for the DF XC functional. As a result, a value
+    of 1 yields to full EXX with no GGA exchange.
+    
+    *default*: 0.25
+
+EXX.Scheme (*integer*)
+    Select the algorithm to compute EXX matrix elements based on local
+    numerical Poisson solver. Either the contraction reduction
+    integral (CRI) method or full/screened computation
+    of the electron repulsion integrals (ERIs) at each SCF step. For
+    the latter, possibility of storing the integrals computed at the
+    first SCF step is available.
+    
+    -  1 Direct SCF using the CRI algorithm
+    -  2 Direct SCF using explicit calculation of ERIs
+    -  3 Indirect SCF using explicit calculation of ERIs and storage
+
+    *default*: 1
+
+EXX.Grid (*string*)
+    Grid accuracy for numerical solution of local the Poisson equation.
+    Choose either ``coarse``, ``standard`` or ``fine``.
+
+    *default*: ``standard``
+
+Go to :ref:`top <input_tags>`.
+    
 .. _input_vdw:
 
 vdW-DF
