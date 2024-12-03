@@ -239,7 +239,7 @@ contains
                                       screened_ion_force, screened_ion_stress
     use pseudopotential_data,   only: non_local
     use GenComms,               only: my_barrier, inode, ionode,       &
-                                      cq_abort, gsum
+                                      cq_abort, gsum, cq_warn
     ! TM new pseudo
     use pseudopotential_common, only: pseudo_type, OLDPS, SIESTA,      &
                                       STATE, ABINIT, core_correction, flag_neutral_atom_projector
@@ -276,7 +276,7 @@ contains
     use io_module, only: atom_output_threshold, return_prefix
     use input_module,         only: leqi, io_close
     use io_module, only: atom_output_threshold, return_prefix
-    
+    use XC,                     only: flag_functional_type
     implicit none
 
     ! Passed variables
@@ -524,6 +524,12 @@ contains
     max_compt = 0
 
     ! print in Conquest output
+    if (inode == ionode .and. write_forces .and. (iprint_MD + min_layer>=0 .and. ni_in_cell<atom_output_threshold) &
+         .and. flag_functional_type == 201 ) then
+       call cq_warn('force','For hybrid PBE0 forces are not consistent!')
+       write (io_lun, fmt='(/4x,a)') 'WARNING: For hybrid PBE0 forces are not consistent!'
+    end if
+            
     if (inode == ionode .and. write_forces .and. (iprint_MD + min_layer>=0 .and. ni_in_cell<atom_output_threshold)) then
        write (io_lun, fmt='(/4x,a,a2,"/",a2,")")') &
              trim(prefix)//" Forces on atoms (",en_units(energy_units), d_units(dist_units)

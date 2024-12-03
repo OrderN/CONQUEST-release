@@ -59,7 +59,8 @@ General.FunctionalType (*integer*)
     Perdew-Burke-Ernzerhof functional variants can be used in spin polarised calculations.
 
     At the moment, only hybrid functionals with GGA PBE are allowed. Fraction of
-    exact exchange can be tuned.
+    exact exchange can be tuned. **Warning**: EXX contribution to forces are not
+    implemented yet. 
     
     Note that, if the code is compiled with LibXC, the full LibXC
     set of functionals is available, selected with a negative six
