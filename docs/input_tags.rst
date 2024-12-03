@@ -58,7 +58,7 @@ General.FunctionalType (*integer*)
     At the moment, only LSDA Perdew-Wang 92 and the three GGA
     Perdew-Burke-Ernzerhof functional variants can be used in spin polarised calculations.
 
-    Only hybrid functionals with GGA PBE are allowed. Fraction of
+    At the moment, only hybrid functionals with GGA PBE are allowed. Fraction of
     exact exchange can be tuned.
     
     Note that, if the code is compiled with LibXC, the full LibXC
@@ -1356,8 +1356,9 @@ Exact exchange (EXX)
 --------------------
 
 EXX.Alpha (*real*)
-    Fraction of exact exchange for the DF XC functional. As a result, a value
-    of 1 yields to full EXX with no GGA exchange.
+    Fraction of exact exchange for the density functional XC
+    functional. For example, a value of 1 yields to full EXX with
+    no GGA exchange.
     
     *default*: 0.25
 
@@ -1373,6 +1374,8 @@ EXX.Scheme (*integer*)
     -  2 Direct SCF using explicit calculation of ERIs
     -  3 Indirect SCF using explicit calculation of ERIs and storage
 
+    We recommand either 1 or 3.
+       
     *default*: 1
 
 EXX.Grid (*string*)
