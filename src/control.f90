@@ -139,6 +139,8 @@ contains
 !!    coordinates.
 !!   2022/09/16 16:51 dave
 !!    Added SQNM options for ion/cell optimisation (only partly complete)
+!!   2024/11/04 Augustin Lu
+!!    Added stress to write_extxyz call
 !!  SOURCE
 !!
   subroutine control_run(fixed_potential, vary_mu, total_energy)
@@ -147,7 +149,7 @@ contains
     use dimens,               only: r_core_squared, r_h
     use GenComms,             only: my_barrier, cq_abort, cq_warn
     use pseudopotential_data, only: set_pseudopotential
-    use force_module,         only: tot_force
+    use force_module,         only: tot_force, stress
     use minimise,             only: get_E_and_F
     use global_module,        only: runtype, flag_self_consistent, &
                                     flag_out_wf, flag_write_DOS, wf_self_con, &
@@ -188,7 +190,7 @@ contains
        endif
        call get_E_and_F(fixed_potential, vary_mu, total_energy,&
                         flag_ff, flag_wf, level=backtrace_level)
-       if (flag_write_extxyz) call write_extxyz('trajectory.xyz', total_energy, tot_force)
+       if (flag_write_extxyz) call write_extxyz('trajectory.xyz', total_energy, tot_force,stress)
        !
     else if ( leqi(runtype, 'cg')    ) then
        if (flag_opt_cell) then
@@ -320,7 +322,7 @@ contains
                              safemin2, cg_line_min, safe, adapt_backtrack, backtrack
     use GenComms,      only: gsum, myid, inode, ionode
     use GenBlas,       only: dot
-    use force_module,  only: tot_force
+    use force_module,  only: tot_force, stress
     use io_module,     only: write_atomic_positions, pdb_template, &
                              check_stop, write_xsf, write_extxyz, &
                              print_atomic_positions, return_prefix
@@ -496,7 +498,7 @@ contains
        end if
        call write_atomic_positions("UpdatedAtoms.dat", trim(pdb_template))
        if (flag_write_xsf) call write_xsf('trajectory.xsf', iter)
-       if (flag_write_extxyz .and. mod(iter,XYZfreq) == 0) call write_extxyz('trajectory.xyz', energy1, tot_force)
+       if (flag_write_extxyz .and. mod(iter,XYZfreq) == 0) call write_extxyz('trajectory.xyz', energy1, tot_force, stress)
        ! Analyse forces
        g0 = dot(length, tot_force, 1, tot_force, 1)
        call get_maxf(max)
@@ -1558,7 +1560,7 @@ contains
     use move_atoms,     only: updateL, updateLorK, updateSFcoeff
     use GenComms,       only: gsum, myid, inode, ionode, gcopy, my_barrier
     use GenBlas,        only: dot
-    use force_module,   only: tot_force
+    use force_module,   only: tot_force, stress
     use io_module,      only: write_atomic_positions, pdb_template, &
          check_stop, write_xsf, write_extxyz
     use memory_module,  only: reg_alloc_mem, reg_dealloc_mem, type_dbl
@@ -1718,7 +1720,7 @@ contains
        ! Add call to write_atomic_positions and write_xsf (2020/01/17: smujahed)
        call write_atomic_positions("UpdatedAtoms.dat", trim(pdb_template))
        if (flag_write_xsf) call write_xsf('trajectory.xsf', iter)
-       if (flag_write_extxyz .and. mod(iter,XYZfreq) == 0) call write_extxyz('trajectory.xyz', energy1, tot_force)
+       if (flag_write_extxyz .and. mod(iter,XYZfreq) == 0) call write_extxyz('trajectory.xyz', energy1, tot_force, stress)
        ! Build q
        do i=iter, iter_low, -1
           ! Indexing
@@ -1848,7 +1850,7 @@ contains
     use move_atoms,     only: single_step, backtrack_linemin
     use GenComms,       only: myid, inode, ionode
     use GenBlas,        only: dot, syev
-    use force_module,   only: tot_force
+    use force_module,   only: tot_force, stress
     use io_module,      only: write_atomic_positions, pdb_template, write_extxyz, &
                               check_stop, write_xsf, print_atomic_positions, return_prefix
     use memory_module,  only: reg_alloc_mem, reg_dealloc_mem, type_dbl
@@ -2028,7 +2030,7 @@ contains
        ! Add call to write_atomic_positions and write_xsf (2020/01/17: smujahed)
        call write_atomic_positions("UpdatedAtoms.dat", trim(pdb_template))
        if (flag_write_xsf) call write_xsf('trajectory.xsf', iter)
-       if (flag_write_extxyz .and. mod(iter,XYZfreq) == 0) call write_extxyz('trajectory.xyz', energy1, tot_force)
+       if (flag_write_extxyz .and. mod(iter,XYZfreq) == 0) call write_extxyz('trajectory.xyz', energy1, tot_force, stress)
        ! Build significant subspace
        Sij = zero
        omega = zero
@@ -2438,7 +2440,7 @@ contains
        ! Add call to write_atomic_positions and write_xsf (2020/01/17: smujahed)
        call write_atomic_positions("UpdatedAtoms.dat", trim(pdb_template))
        if (flag_write_xsf) call write_xsf('trajectory.xsf', iter)
-       if (flag_write_extxyz .and. mod(iter,XYZfreq) == 0) call write_extxyz('trajectory.xyz', energy1, tot_force)
+       if (flag_write_extxyz .and. mod(iter,XYZfreq) == 0) call write_extxyz('trajectory.xyz', energy1, tot_force, stress)
        ! Build significant subspace
        Sij = zero
        omega = zero
@@ -2888,7 +2890,7 @@ contains
        ! Add call to write_atomic_positions and write_xsf (2020/01/17: smujahed)
        call write_atomic_positions("UpdatedAtoms.dat", trim(pdb_template))
        if (flag_write_xsf) call write_xsf('trajectory.xsf', iter)
-       if (flag_write_extxyz .and. mod(iter,XYZfreq) == 0) call write_extxyz('trajectory.xyz', energy1, tot_force)
+       if (flag_write_extxyz .and. mod(iter,XYZfreq) == 0) call write_extxyz('trajectory.xyz', energy1, tot_force, stress)
        ! Build significant subspace
        Sij = zero
        omega = zero
@@ -3288,7 +3290,7 @@ contains
             rcellx, d_units(dist_units), rcelly, d_units(dist_units), rcellz, d_units(dist_units)
        end if
        call write_atomic_positions("UpdatedAtoms.dat", trim(pdb_template))
-       if (flag_write_extxyz .and. mod(iter,XYZfreq) == 0) call write_extxyz('trajectory.xyz', energy1, tot_force)
+       if (flag_write_extxyz .and. mod(iter,XYZfreq) == 0) call write_extxyz('trajectory.xyz', energy1, tot_force, stress)
        ! Analyse Stresses and energies
        dH = enthalpy1 - enthalpy0
        volume = rcellx*rcelly*rcellz
@@ -4356,7 +4358,7 @@ contains
        end if
       call write_atomic_positions("UpdatedAtoms.dat", trim(pdb_template))
       if (flag_write_xsf) call write_xsf('trajectory.xsf', iter)
-      if (flag_write_extxyz .and. mod(iter,XYZfreq) == 0) call write_extxyz('trajectory.xyz', energy1, tot_force)
+      if (flag_write_extxyz .and. mod(iter,XYZfreq) == 0) call write_extxyz('trajectory.xyz', energy1, tot_force, stress)
 
       ! Analyse forces and stress
       g0 = dot(length-3, tot_force, 1, tot_force, 1)

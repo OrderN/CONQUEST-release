@@ -2870,10 +2870,11 @@ second:   do
   !!  CREATION DATE
   !!   2021/10/18
   !!  MODIFICATION HISTORY
-  !!   
+  !!   2024/11/04 Augustin Lu
+  !!   Add stress tensor
   !!  SOURCE
   !!
-  subroutine write_extxyz(filename, energy0, atom_force)
+  subroutine write_extxyz(filename, energy0, atom_force, stress_tensor)
 
     use datatypes
     use timer_module
@@ -2889,6 +2890,7 @@ second:   do
     character(len=*)                      :: filename
     real(double)                          :: energy0
     real(double), dimension(3,ni_in_cell) :: atom_force
+    real(double), dimension(3,3)          :: stress_tensor
 
     ! Local variables
     integer                    :: lun, i, j, title_length
@@ -2896,7 +2898,9 @@ second:   do
     character(len=432)         :: comment
     character(len=45)          :: vec_a, vec_b, vec_c, energy_str
     character(len=80)          :: titles_xyz
-    real(double)               :: for_conv_loc, en_conv_loc, dist_conv_loc
+    character(len=135)         :: stress_str
+
+    real(double)               :: for_conv_loc, en_conv_loc, dist_conv_loc, volume
 
     if(inode==ionode) then
       if (iprint_init>2) write(io_lun, &
@@ -2930,6 +2934,21 @@ second:   do
       comment=TRIM(comment)//' Properties=species:S:1:pos:R:3:forces:R:3 potential_energy='
       write(energy_str,'(f0.8)') energy0 * en_conv_loc
       comment = TRIM(comment)//TRIM(energy_str)//' pbc="T T T" '
+
+      volume = r_super_x*r_super_y*r_super_z*BohrToAng**3
+
+      ! Convert each row to string
+      write(stress_str(1:45), '(3f15.8)') stress_tensor(1,1)*HaToeV/volume,&
+              stress_tensor(1,2)*HaToeV/volume,&
+              stress_tensor(1,3)*HaToeV/volume
+      write(stress_str(46:90), '(3f15.8)') stress_tensor(2,1)*HaToeV/volume,&
+              stress_tensor(2,2)*HaToeV/volume,&
+              stress_tensor(2,3)*HaToeV/volume
+      write(stress_str(91:135), '(3f15.8)') stress_tensor(3,1)*HaToeV/volume,&
+              stress_tensor(3,2)*HaToeV/volume,&
+              stress_tensor(3,3)*HaToeV/volume
+      comment = TRIM(comment)//' stress=" '//TRIM(stress_str)//'" '
+
       write(lun,'(a)') TRIM(comment)
 
       do i=1,ni_in_cell
