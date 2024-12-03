@@ -156,7 +156,8 @@ module exx_types
   logical :: exx_store_eris  ! store ERIs at first exx call
   !real(double) :: exx_cutoff ! cutoff for screening (experimental)
   real(double) :: exx_radius ! radius for integration
-  real(double) :: exx_hgrid  ! radius for integration
+  real(double) :: exx_hgrid  ! grid spacing for integration
+  character(len=20) :: exx_grid  ! grid spacing selection
 
   ! For debuging/testing
   logical :: exx_debug 

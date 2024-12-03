@@ -63,8 +63,8 @@ contains
     use exx_types, only: extent,ngrid,r_int,grid_spacing,volume,edge,screen
 
     use exx_types, only: exx_scheme, exx_mem, exx_screen, exx_alloc
-    use exx_types, only: exx_cartesian, exx_overlap, exx_radius, exx_screen_pao, exx_hgrid
-    use exx_types, only: exx_gto, exx_debug
+    use exx_types, only: exx_cartesian, exx_overlap, exx_radius, exx_screen_pao
+    use exx_types, only: exx_grid,  exx_hgrid, exx_gto, exx_debug
     use exx_types, only: tmr_std_exx_setup, exx_store_eris
 
     use atomic_density, only: atomic_density_table
@@ -122,7 +122,17 @@ contains
     !
     ! Setup grid spacing of EXX
     if ( exx_hgrid < very_small ) then
-       grid_spacing = gs_min
+       ! Select by input tag
+       if ( trim(exx_grid) == 'fine' ) then
+          grid_spacing = real(0.2d0,double)
+       else if ( trim(exx_grid) == 'standard' ) then
+          grid_spacing = real(0.4d0,double)
+       else if ( trim(exx_grid) == 'coarse' ) then
+          grid_spacing = real(0.6d0,double)
+       else
+          call cq_abort('EXX: unrecognised grid accuracy')
+       end if
+       
     else if ( exx_hgrid >= zero ) then
        grid_spacing = exx_hgrid       
     else

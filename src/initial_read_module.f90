@@ -945,7 +945,7 @@ contains
          RATTLE_tol,maxiterSHAKE,maxiterRATTLE, &
          const_range,n_bond
     use exx_types, only: exx_scheme, exx_mem, exx_overlap, exx_alloc,    &
-         exx_cartesian, exx_radius, exx_hgrid, exx_psolver, ewald_alpha, &
+         exx_cartesian, exx_radius, exx_grid, exx_hgrid, exx_psolver, ewald_alpha, &
          exx_debug, exx_pscheme, exx_filter, exx_filter_thr, exx_filter_extent, &
          exx_gto, exx_gto_poisson
     use multisiteSF_module, only: flag_MSSF_smear, MSSF_Smear_Type, &
@@ -2027,6 +2027,7 @@ contains
        !
        exx_gto        = fdf_boolean('EXX.GTO', .false.)
        exx_gto_poisson= fdf_boolean('EXX.GTOPoisson', .false.)
+       exx_grid   = fdf_string (20,'EXX.Grid','standard')
        exx_hgrid  = fdf_double ('EXX.GridSpacing',zero)
        exx_radius = fdf_double ('EXX.IntegRadius',zero)
        exx_scheme = fdf_integer('EXX.Scheme',       1 ) 
