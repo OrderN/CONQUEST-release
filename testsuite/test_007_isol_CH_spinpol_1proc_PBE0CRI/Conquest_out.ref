@@ -30,9 +30,9 @@
 
     Default k-point sampling of Gamma point only
 
-    This job was run on  2024/12/03 at 17:02 +0100
-    Code was compiled on 2024/12/03 at 14:46 +0100
-    Version comment: Git Branch: f-exx-opt; tag, hash: v1.3-256-gfe08b5ca
+    This job was run on  2024/12/03 at 18:59 +0100
+    Code was compiled on 2024/12/03 at 18:05 +0100
+    Version comment: Git Branch: f-exx-opt; tag, hash: v1.3-266-g018f6d62
 
     Job title: isolated CH with PBE0                                                           
     Job to be run: static calculation
@@ -55,24 +55,26 @@
 
     The calculation will be performed on     1 process
 
-    The calculation will be performed on     1 thread
+    The calculation will be performed on     2 threads
 
     Using the default matrix multiplication kernel
 
     The functional used will be hyb PBE0       
 
-    PulayMixSC: Reached SCF tolerance of  0.46530E-04 after      7 iterations
-      | Number of electrons (u/d)=         3.000003        2.000002
-      |* Harris-Foulkes energy   =        -6.193030183966469 Ha
+    PulayMixSC: Reached SCF tolerance of  0.57025E-03 after      4 iterations
+      | Number of electrons (u/d)=         3.000002        2.000002
+      |* Harris-Foulkes energy   =        -6.192977992070597 Ha
+
+    WARNING: For hybrid PBE0 forces are not consistent!
 
     force: Forces on atoms (Ha/a0)
     force:  Atom   X              Y              Z
-    force:     1   0.0000000000  -0.0000000000   0.1191612244
-    force:     2   0.0000000000   0.0000000000  -0.1206586929
+    force:     1   0.0000000000   0.0000000000   0.1280359876
+    force:     2   0.0000000000   0.0000000000  -0.1224210376
 
-    force: Maximum force :        0.12065869(Ha/a0) on atom         2 in z direction
-    force: Force Residual:        0.11991230 Ha/a0
-    force: Total stress:          0.00023111     0.00023129    -0.13944795 GPa
+    force: Maximum force :        0.12803599(Ha/a0) on atom         1 in z direction
+    force: Force Residual:        0.12525998 Ha/a0
+    force: Total stress:         -0.00069579    -0.00069579    -0.14086907 GPa
 
     BIBLIOGRAPHY: Please consider citing the following references in the conquest.bib file
 
@@ -84,6 +86,6 @@
 
     Warnings written to file Conquest_warnings; please check
 
-    Max total mem use is           1984.749 MB
+    Max total mem use is           1981.173 MB
 
-    Total run time was:              68.902 seconds
+    Total run time was:              48.339 seconds
