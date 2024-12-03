@@ -17,7 +17,7 @@ Basis.BasisSet PAOs
 
 ## Energy Minimisation
 minE.SelfConsistent T
-minE.SCTolerance    1.0e-4
+minE.SCTolerance    1.0e-3
 
 ## Spin Polarisation
 Spin.SpinPolarised T
