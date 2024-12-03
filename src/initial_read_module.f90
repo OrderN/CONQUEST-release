@@ -805,6 +805,8 @@ contains
   !!     Added ASE output file setup ; default is F
   !!   2022/12/14 10:01 dave and tsuyoshi
   !!     Update test for solution method (diagon vs ordern) following issue #47
+  !!   2024/12/03 lionel
+  !!     Added grid specification of EXX coarse/standard/fine
   !!  TODO
   !!  SOURCE
   !!
