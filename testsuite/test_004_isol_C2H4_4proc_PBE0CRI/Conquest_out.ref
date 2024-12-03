@@ -34,9 +34,9 @@
 
     Default k-point sampling of Gamma point only
 
-    This job was run on  2024/10/31 at 17:19 +0000
-    Code was compiled on 2024/10/31 at 17:04 +0000
-    Version comment: Git Branch: f-exx-opt; tag, hash: v1.3-252-g3569739a
+    This job was run on  2024/12/03 at 15:37 +0100
+    Code was compiled on 2024/12/03 at 14:46 +0100
+    Version comment: Git Branch: f-exx-opt; tag, hash: v1.3-256-gfe08b5ca
 
     Job title: isolated C2H4 with PBE0                                                         
     Job to be run: static calculation
@@ -54,10 +54,10 @@
     |   #  mass (au)  Charge (e)  SF Rad (a0)  NSF  Label  |
     --------------------------------------------------------
     |   1      1.008       1.000        7.030    1  H      |
-    |   2     12.011       4.000        6.576   13  C      |
+    |   2     12.011       4.000        6.576    9  C      |
     --------------------------------------------------------
 
-    The calculation will be performed on     1 process
+    The calculation will be performed on     4 processes
 
     The calculation will be performed on     1 thread
 
@@ -65,22 +65,22 @@
 
     The functional used will be hyb PBE0       
 
-    PulayMixSC: Reached SCF tolerance of  0.46847E-07 after     12 iterations
-      | Number of electrons      =        12.000010
-      |* Harris-Foulkes energy   =       -14.102208349756978 Ha
+    PulayMixSC: Reached SCF tolerance of  0.79157E-07 after     15 iterations
+      | Number of electrons      =        12.000013
+      |* Harris-Foulkes energy   =       -13.959870942283880 Ha
 
     force: Forces on atoms (Ha/a0)
     force:  Atom   X              Y              Z
-    force:     1   0.0000000000   0.0000000000  -0.0244406997
-    force:     2   0.0000000000   0.0000000000   0.0244406997
-    force:     3   0.0566520803   0.0000000000  -0.0371086847
-    force:     4   0.0566520803   0.0000000000   0.0371086847
-    force:     5  -0.0566520803   0.0000000000   0.0371086847
-    force:     6  -0.0566520803   0.0000000000  -0.0371086847
+    force:     1  -0.0000000000  -0.0000000000  -0.0093924506
+    force:     2   0.0000000000  -0.0000000000   0.0093924506
+    force:     3   0.0921431811   0.0000000000  -0.0532306082
+    force:     4   0.0921431811  -0.0000000000   0.0532306082
+    force:     5  -0.0921431811   0.0000000000   0.0532306082
+    force:     6  -0.0921431811   0.0000000000  -0.0532306082
 
-    force: Maximum force :        0.05665208(Ha/a0) on atom         3 in x direction
-    force: Force Residual:        0.05706830 Ha/a0
-    force: Total stress:         -1.01748212    -0.00139125    -1.01659503 GPa
+    force: Maximum force :        0.09214318(Ha/a0) on atom         5 in x direction
+    force: Force Residual:        0.08705543 Ha/a0
+    force: Total stress:         -1.65650483    -0.00122588    -1.29183090 GPa
 
     BIBLIOGRAPHY: Please consider citing the following references in the conquest.bib file
 
@@ -92,6 +92,6 @@
 
     Warnings written to file Conquest_warnings; please check
 
-    Max total mem use is            423.273 MB
+    Max total mem use is            147.712 MB
 
-    Total run time was:              28.596 seconds
+    Total run time was:              15.510 seconds

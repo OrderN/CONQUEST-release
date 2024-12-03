@@ -26,8 +26,9 @@ Grid.GridCutoff 90
 DM.SolutionMethod diagon
 
 ## EXX Parameters
+EXX.Scheme 3
 EXX.GridSpacing  0.6
-EXX.Scheme 1
+EXX.GTO    F
 
 ## Atomic Information
 %block ChemicalSpeciesLabel
