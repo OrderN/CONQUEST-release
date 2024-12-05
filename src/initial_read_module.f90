@@ -1596,6 +1596,11 @@ contains
     flag_variable_cell    = flag_opt_cell
     optcell_method        = fdf_integer('AtomMove.OptCellMethod', 1)
     cell_constraint_flag  = fdf_string(20,'AtomMove.OptCell.Constraint','none')
+    ! Warn user if applying constraints with OptCellMethod 3
+    if(optcell_method==3.and.(.not.leqi(cell_constraint_flag,'none'))) then
+       call cq_warn(sub_name,"Cell constraints NOT applied for OptCellMethod 3")
+       cell_constraint_flag = 'none'
+    end if
     cell_en_tol           = fdf_double('AtomMove.OptCell.EnTol',0.00001_double)
     ! It makes sense to use GPa here so I'm changing the default to 0.1GPa
     cell_stress_tol       = fdf_double('AtomMove.StressTolerance',0.1_double) !005_double)
