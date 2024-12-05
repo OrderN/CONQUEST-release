@@ -1362,7 +1362,7 @@ contains
     !maxnsf      = 0
     !max_rc = zero
     min_blip_sp = 1.0e8_double
-          flag_InitialAtomicSpin = .false.
+    flag_InitialAtomicSpin = .false.
     do i=1,n_species
        charge(i)         = zero
        charge_up(i)      = zero
@@ -1383,13 +1383,15 @@ contains
        !   do while(fdf_bline(bp,line)) ! While there are lines in the block
        if(fdf_block(species_label(i))) then
           !charge(i)        = fdf_double ('Atom.ValenceCharge',zero)
-          charge_up(i)     = fdf_double ('Atom.SpinNeUp',zero)
-          charge_dn(i)     = fdf_double ('Atom.SpinNeDn',zero)
-          sum_elecN_spin   = charge_up(i)+charge_dn(i)
-          if (abs(sum_elecN_spin)>RD_ERR) then
-             flag_InitialAtomicSpin = .true.
-             ! We will check that the sum of charge_up and charge_dn matches charge later
-          endif
+          if(flag_spin_polarisation) then
+             charge_up(i)     = fdf_double ('Atom.SpinNeUp',zero)
+             charge_dn(i)     = fdf_double ('Atom.SpinNeDn',zero)
+             sum_elecN_spin   = charge_up(i)+charge_dn(i)
+             if (abs(sum_elecN_spin)>RD_ERR) then
+                flag_InitialAtomicSpin = .true.
+                ! We will check that the sum of charge_up and charge_dn matches charge later
+             endif
+          end if
           nsf_species(i)   = fdf_integer('Atom.NumberOfSupports',0)
           RadiusSupport(i) = fdf_double ('Atom.SupportFunctionRange',zero)
           !RadiusAtomf(i)   = RadiusSupport(i) ! = r_pao for (atomf=paof) or r_sf for (atomf==sf)
