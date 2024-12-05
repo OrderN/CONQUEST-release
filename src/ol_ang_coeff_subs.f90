@@ -1080,7 +1080,7 @@ contains
     n1 = 0; n2 = 0; xj1 = zero; xj2 = zero;a=zero
     b = zero; c = zero; d = zero
     
-    n1 = aint(r/del_x)
+    n1 = floor(r/del_x)
     n2 = n1+1
     xj1 = n1*del_x
     xj2 = xj1+del_x
