@@ -2040,6 +2040,8 @@ contains
   !!    Associating NA-projector matrices
   !!   2018/11/13 17:30 nakata
   !!    Changed matS, matT, matTtran, matKE, matNL and matNA to be spin_SF dependent
+  !!   2024/09/11 14:00 lionel
+  !!    set trans_index(matX(spin)  ) = S_trans
   !!  SOURCE
   !!
   subroutine associate_matrices
@@ -2441,7 +2443,7 @@ contains
        trans_index(matUT(spin) ) = AP_trans
        trans_index(matLS(spin) ) = LS_trans
        trans_index(matSL(spin) ) = LS_trans
-       trans_index(matX(spin)  ) = 0 ! S_trans
+       trans_index(matX(spin)  ) = S_trans
        trans_index(matSX(spin) ) = 0
     end do
     if (atomf.ne.sf) then

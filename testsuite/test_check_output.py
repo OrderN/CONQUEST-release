@@ -89,3 +89,44 @@ class TestClass:
         path = os.path.join(testsuite_directory, "test_003_bulk_BTO_polarisation")
         res = results(path, key)
         np.testing.assert_allclose(res[0], res[1], rtol = precision(key), verbose = True)
+
+    @pytest.mark.parametrize("key",['Harris-Foulkes energy',
+                                    'Max force',
+                                    'Force residual',
+                                    'Total stress'])
+    def test_004(self, key, testsuite_directory):
+
+        path = os.path.join(testsuite_directory, "test_004_isol_C2H4_4proc_PBE0CRI")
+        res = results(path, key)
+        np.testing.assert_allclose(res[0], res[1], rtol = precision(key), verbose = True)
+
+    @pytest.mark.parametrize("key",['Harris-Foulkes energy',
+                                    'Max force',
+                                    'Force residual',
+                                    'Total stress'])
+    def test_005(self, key, testsuite_directory):
+
+        path = os.path.join(testsuite_directory, "test_005_isol_C2H4_4proc_PBE0GTO")
+        res = results(path, key)
+        np.testing.assert_allclose(res[0], res[1], rtol = precision(key), verbose = True)
+
+    @pytest.mark.parametrize("key",['Harris-Foulkes energy',
+                                    'Max force',
+                                    'Force residual',
+                                    'Total stress'])
+    def test_006(self, key, testsuite_directory):
+
+        path = os.path.join(testsuite_directory, "test_006_isol_C2H4_4proc_PBE0ERI")
+        res = results(path, key)
+        np.testing.assert_allclose(res[0], res[1], rtol = precision(key), verbose = True)
+
+    @pytest.mark.parametrize("key",['Harris-Foulkes energy',
+                                    'Max force',
+                                    'Force residual',
+                                    'Total stress'])
+    def test_007(self, key, testsuite_directory):
+
+        path = os.path.join(testsuite_directory, "test_007_isol_CH_spinpol_1proc_PBE0CRI")
+        res = results(path, key)
+        np.testing.assert_allclose(res[0], res[1], rtol = precision(key), verbose = True)
+

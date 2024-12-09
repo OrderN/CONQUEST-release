@@ -1,0 +1,120 @@
+    ________________________________________________________________________
+                                                                            
+                                    CONQUEST                                
+                                                                            
+                Concurrent Order N QUantum Electronic STructure             
+    ________________________________________________________________________
+                                                                            
+     Conquest lead developers:                                              
+      D.R.Bowler (UCL, NIMS), T.Miyazaki (NIMS), A.Nakata (NIMS),           
+      L. Truflandier (U. Bordeaux)                                          
+                                                                            
+     Developers:                                                            
+      M.Arita (NIMS), J.S.Baker (UCL), V.Brazdova (UCL), R.Choudhury (UCL), 
+      S.Y.Mujahed (UCL), J.T.Poulton (UCL), Z.Raza (NIMS), A.Sena (UCL),    
+      U.Terranova (UCL), L.Tong (UCL), A.Torralba (NIMS)                    
+                                                                            
+     Early development:                                                     
+      I.J.Bush (STFC), C.M.Goringe (Keele), E.H.Hernandez (Keele)           
+                                                                            
+     Original inspiration and project oversight:                            
+      M.J.Gillan (Keele, UCL)                                               
+    ________________________________________________________________________
+
+WARNING: Functional in input file differs to pseudopotential but proceeding:      201     101
+
+
+WARNING: Functional in input file differs to pseudopotential but proceeding:      201     101
+
+
+    Simulation cell dimensions:    22.6767 a0 x    22.6767 a0 x    22.6767 a0
+
+      Atomic coordinates (a0)
+         Atom         X         Y         Z  Species
+            1   11.3384   11.3384   10.0770        2
+            2   11.3384   11.3384   12.5997        2
+            3   13.1206   11.3384    9.0480        1
+            4   13.1206   11.3384   13.6287        1
+            5    9.5562   11.3384   13.6287        1
+            6    9.5562   11.3384    9.0480        1
+
+    Default k-point sampling of Gamma point only
+         All    1 Kpoints in fractional coordinates: 
+            1       0.000000       0.000000       0.000000       1.000
+
+    This calculation includes non-local pseudopotentials,
+    with a maximum core radius of      6.72726398
+
+    This job was run on  2024/02/13 at 11:02 +0100
+    Code was compiled on 2023/12/01 at 15:01 +0100
+    Version comment: Git Branch: f-exx-opt; tag, hash: v1.2-167-gddc9e439
+
+    Job title: isolated C2H4 with PBE0                                                         
+    Job to be run: static calculation
+
+    Ground state search:
+      Support functions represented with PAO basis
+      1:1 PAO to SF mapping
+      Non-spin-polarised electrons
+      Solving for the K matrix using diagonalisation 
+      Using Fermi-Dirac smearing
+
+    Integration grid size:    100 x  100 x  100
+
+    Integration grid spacing:  0.227 a0 x 0.227 a0 x 0.227 a0
+
+    Number of species:  2
+    --------------------------------------------------------
+    |   #  mass (au)  Charge (e)  SF Rad (a0)  NSF  Label  |
+    --------------------------------------------------------
+    |   1      1.008       1.000        7.030    5  H      |
+    |   2     12.011       4.000        6.576   13  C      |
+    --------------------------------------------------------
+          SCF tolerance:                 0.02000000
+          SCF iterations:                50
+
+    The calculation will be performed on     4 processes
+
+    The calculation will be performed on     1 thread
+
+    The functional used will be hyb PBE0       
+
+    set_atom_dens: In set_atomic_density, electrons :      12.000000000000
+    PulayMixSC: Starting Pulay mixing, A_up =  0.500 A_dn =  0.500
+    PulayMixSC: Spin non-polarised calculation.
+          Harris-Foulkes Energy            :       -13.136777326671156 Ha
+    PulayMixSC: Pulay iteration     1 residual:              0.14729E-01
+    PulayMixSC: reached SCF residual of  0.14729E-01 after      1 iterations
+      | Number of electrons      =        12.000000
+      |* Harris-Foulkes energy   =       -13.136777326671156 Ha
+      |* DFT total energy        =       -13.014081856667078 Ha
+
+    force: Forces on atoms (Ha/a0)
+    force:  Atom   X              Y              Z
+    force:     1   0.0000000000  -0.0000000000  -0.1030405190
+    force:     2   0.0000000000   0.0000000000   0.1030405190
+    force:     3   0.1598274352  -0.0000000000  -0.0940971289
+    force:     4   0.1598274352   0.0000000000   0.0940971289
+    force:     5  -0.1598274352   0.0000000000   0.0940971289
+    force:     6  -0.1598274352   0.0000000000  -0.0940971289
+
+    force: Maximum force :        0.15982744(Ha/a0) on atom         4 in x direction
+    force: Force Residual:        0.16270168 Ha/a0
+    force: Total stress:         -2.91337974    -0.21561294    -3.05409448 GPa
+    force: Average pressure:      2.06102905 GPa
+
+    get_E_and_F: Change in energy during last step of electronic optimisation: -0.13137E+02
+
+    BIBLIOGRAPHY: Please consider citing the following references in the conquest.bib file
+
+    CONQUEST:         Bowler2002pt, Miyazaki2004, Nakata2020
+    Basis:            Bowler2019
+    DM:               Bowler:2006xr
+    Pseudopotentials: Hamann2013, Bowler2019
+
+
+    Warnings written to file Conquest_warnings; please check
+
+    Max total mem use is           2041.578 MB
+
+    Total run time was:             215.211 seconds
