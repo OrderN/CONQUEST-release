@@ -692,8 +692,11 @@ Diag.PaddingHmatrix (*boolean*)
 
 Diag.BlockSizeR (*integer*)
     Block size for rows (See next).
+    From v1.4, the default value is 30 when Diag.PaddingHmatrix is true.
+    It is recommended to check the efficiency (CPU time) on your platform by changing this value.
+    Usually 20-30 is appropriate.
 
-    *default*: Determined automatically
+    *default*: 30 or Determined automatically (if Diag.PaddingHmatrix= true) 
 
 Diag.BlockSizeC (*integer*)
     R ... rows, C ... columns
