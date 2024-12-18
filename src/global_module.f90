@@ -341,7 +341,8 @@ module global_module
   logical      :: flag_exx      = .false. ! switch on/off EXX
   integer      :: exx_scf       = 0       ! method used during the SCF using hybrid functional or Hartree-Fock
   real(double) :: exx_alpha     = zero    ! mixing factor for hybrid Exc
-  
+  real(double) :: exx_cutoff    = 100.0_double ! cutoff for screening (experimental) 
+ 
   integer      :: exx_niter     = 1       ! for EXX control during SCF
   integer      :: exx_siter     = 1       ! for EXX control during SCF
   real(double) :: exx_pulay_r0  = zero    ! get the R0 pulay residual for control

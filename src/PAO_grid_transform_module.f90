@@ -96,6 +96,8 @@ contains
 !!   2023/08/23 11:20 tkoskela
 !!    Added OMP threading, merged single_PAO_to_grad and single_PAO_to_grid into
 !!    single subroutine PAO_or_gradPAO_to_grid
+!!   2023/11/15 11:20 lionel
+!!    Added optional argument sys to evaluate_pao interface
 !!  SOURCE
 !!
   subroutine PAO_or_gradPAO_to_grid(pao_fns, evaluate, direction)
@@ -143,11 +145,12 @@ contains
        ! Interface to return a value val given arguments
        ! direction,species,l,acz,m,x,y,z. Implemented by
        ! evaluate_pao() and pao_elem_derivative_2().
-       subroutine evaluate(direction,species,l,acz,m,x,y,z,val)
+       subroutine evaluate(direction,species,l,acz,m,x,y,z,val,sys)
          use datatypes, only: double
          integer, intent(in) :: species,l,acz,m
          integer, intent(in) :: direction
          real(kind=double), intent(in) :: x,y,z
+         logical, intent(in), optional :: sys 
          real(kind=double), intent(out) :: val
        end subroutine evaluate
     end interface
@@ -183,7 +186,7 @@ contains
 
     ! loop arround grid points in the domain, and for each
     ! point, get the PAO values
-
+    !
     ! Note: Using OpenMP in this loop requires some redesign because there is a loop
     !       carrier dependency in next_offset_position.
     blocks_loop: do iblock = 1, domain%groups_on_node ! primary set of blocks

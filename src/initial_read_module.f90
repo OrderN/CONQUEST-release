@@ -155,6 +155,10 @@ contains
   !!    Added bibliography
   !!   2019/11/18 tsuyoshi
   !!    Removed flag_MDold
+  !!   2020/12/28 18:34 Lionel
+  !!    Added EXX poisson solver and scheme for G=0`
+  !!   2021/01/14 16:50 Lionel
+  !!    EXX: added gto_file setup and read GTO info
   !!  SOURCE
   !!
   subroutine read_and_write(start, start_L, inode, ionode,          &
@@ -183,8 +187,15 @@ contains
          flag_Multisite,                  &
          flag_cdft_atom, flag_local_excitation, &
          flag_diagonalisation, flag_vary_basis, &
-         flag_MDcontinue, flag_SFcoeffReuse
-    use cdft_data, only: cDFT_NAtoms, &
+         flag_MDcontinue, flag_SFcoeffReuse,    &
+         flag_exx
+    use exx_types,     only: exx_gto, exx_gto_poisson
+    !use read_gto_info, only: read_gto
+    use read_gto_info, only: read_gto_new
+    !use gto_format,    only: gto
+    use gto_format_new,    only: gto
+    
+    use cdft_data, only: cDFT_NAtoms, & 
          cDFT_NumberAtomGroups, cDFT_AtomList
     use memory_module,          only: reg_alloc_mem, type_dbl
     use primary_module,         only: bundle, make_prim
@@ -192,8 +203,9 @@ contains
     use species_module,         only: n_species, species, charge,      &
          non_local_species,               &
          nsf_species, npao_species,       &
-         natomf_species, charge_up, charge_dn
-    use density_module, only: flag_InitialAtomicSpin
+         natomf_species, charge_up, charge_dn, &
+         gto_file
+    use density_module,         only: flag_InitialAtomicSpin
     use GenComms,               only: my_barrier, cq_abort, cq_warn
     use pseudopotential_data,   only: non_local, read_pseudopotential
     use pseudopotential_common, only: core_radius, pseudo_type, OLDPS, &
@@ -278,9 +290,25 @@ contains
        end do
     end if
     !if(iprint_init>4) write(io_lun,fmt='(10x,"Proc: ",i4," done pseudo")') inode
-
+    !
+    call my_barrier()
+    !
+    ! If EXX with GTO open and read species' GTO files
+    if ( flag_exx .and. (exx_gto .or. exx_gto_poisson) ) then
+       !
+       allocate(gto_file(n_species),STAT=stat)
+       if(stat /= 0) call cq_abort("Error allocating gto_file in read_and_write: ",n_species,stat)
+       allocate(gto(n_species),STAT=stat)       
+       if(stat /= 0) call cq_abort ("Error allocating gto in read_and_write",stat)
+       !
+       call read_gto_new(inode,ionode,n_species)
+       !call read_gto(inode,ionode,n_species)
+       !
+    end if
+    !
     ! Initialise group data for partitions and read in partitions and atoms
     call my_barrier()
+    !
     def = ' '
     atom_coord_file = fdf_string(80,'IO.Coordinates',def)
     if(leqi(def,atom_coord_file)) call cq_abort("No coordinate file specified: please set with IO.Coordinates")
@@ -532,7 +560,7 @@ contains
     ! Set up various lengths, volumes, reciprocals etc. for convenient use
     call set_dimensions(inode, ionode,HNL_fac, non_local, n_species, &
          non_local_species, core_radius)
-
+    ! 
     ! write out some information on the run
     if (inode == ionode) &
          call write_info(titles, mu, vary_mu, HNL_fac, numprocs)
@@ -769,10 +797,16 @@ contains
   !!    Keywords for equilibration
   !!   2020/01/07 tsuyoshi 
   !!     Default setting of MakeInitialChargeFromK has been changed
+  !!   2020/12/14 lionel
+  !!     EXX: added filtering option for EXX and cleaning
+  !!   2020/01/14 lionel
+  !!     EXX: added GTO option
   !!   2022/10/28 15:56 lionel
   !!     Added ASE output file setup ; default is F
   !!   2022/12/14 10:01 dave and tsuyoshi
   !!     Update test for solution method (diagon vs ordern) following issue #47
+  !!   2024/12/03 lionel
+  !!     Added grid specification of EXX coarse/standard/fine
   !!  TODO
   !!  SOURCE
   !!
@@ -825,7 +859,7 @@ contains
          flag_LmatrixReuse,flag_TmatrixReuse,flag_SkipEarlyDM,McWFreq, &
          restart_T,restart_X,flag_XLBOMD,flag_propagateX,              &
          flag_propagateL,flag_dissipation,integratorXL, flag_FixCOM,   &
-         flag_exx, exx_alpha, exx_scf, exx_scf_tol, exx_siter,         &
+         flag_exx, exx_alpha, exx_scf, exx_scf_tol, exx_siter, exx_cutoff, &
          flag_out_wf,max_wf,out_wf,wf_self_con, flag_fire_qMD, &
          flag_write_DOS, flag_write_projected_DOS, &
          E_wf_min, E_wf_max, flag_wf_range_Ef, &
@@ -841,7 +875,7 @@ contains
          RadiusSupport, RadiusAtomf, RadiusMS, RadiusLD, &
          NonLocalFactor, InvSRange,                      &
          min_blip_sp, flag_buffer_old, AtomMove_buffer,  &
-         r_dft_d2, r_exx
+         r_dft_d2, r_exx, r_exxs
     use block_module, only: in_block_x, in_block_y, in_block_z, &
          blocks_raster, blocks_hilbert
     use species_module, only: species_label, charge, mass, n_species,  &
@@ -912,10 +946,11 @@ contains
     use constraint_module,     only: flag_RigidBonds,constraints,SHAKE_tol, &
          RATTLE_tol,maxiterSHAKE,maxiterRATTLE, &
          const_range,n_bond
-    use exx_types, only: exx_scheme, exx_mem, exx_overlap, exx_alloc,       &
-         exx_cartesian, exx_radius, exx_hgrid, exx_psolver, &
-         exx_debug, exx_Kij, exx_Kkl, p_scheme
-    use multisiteSF_module, only: flag_MSSF_smear, MSSF_Smear_Type,                      &
+    use exx_types, only: exx_scheme, exx_mem, exx_overlap, exx_alloc,    &
+         exx_cartesian, exx_radius, exx_grid, exx_hgrid, exx_psolver, ewald_alpha, &
+         exx_debug, exx_pscheme, exx_filter, exx_filter_thr, exx_filter_extent, &
+         exx_gto, exx_gto_poisson
+    use multisiteSF_module, only: flag_MSSF_smear, MSSF_Smear_Type, &
          MSSF_Smear_center, MSSF_Smear_shift, MSSF_Smear_width, &
          flag_LFD_ReadTVEC, LFD_TVEC_read,                      &
          LFD_kT, LFD_ChemP, flag_LFD_useChemPsub,               &
@@ -974,7 +1009,7 @@ contains
     ! spin polarisation
     logical :: flag_spin_polarisation
     real(double) :: sum_elecN_spin
-    real(double) :: charge_tmp
+    real(double) :: charge_tmp, GridSpacing
 
     ! Set defaults
     vary_mu  = .true.
@@ -1159,7 +1194,12 @@ contains
     !
     !
     ! Default to 50 Ha cutoff for grid
-    GridCutoff = fdf_double('Grid.GridCutoff',50.0_double)
+    GridSpacing = fdf_double('Grid.GridSpacing',zero)
+    if(GridSpacing>zero) then
+       GridCutoff = half*(pi/GridSpacing)*(pi/GridSpacing)
+    else
+       GridCutoff = fdf_double('Grid.GridCutoff',50.0_double)
+    end if
     ! Grid points
     n_grid_x   = fdf_integer('Grid.PointsAlongX',0)
     n_grid_y   = fdf_integer('Grid.PointsAlongY',0)
@@ -1357,7 +1397,7 @@ contains
     !maxnsf      = 0
     !max_rc = zero
     min_blip_sp = 1.0e8_double
-          flag_InitialAtomicSpin = .false.
+    flag_InitialAtomicSpin = .false.
     do i=1,n_species
        charge(i)         = zero
        charge_up(i)      = zero
@@ -1378,13 +1418,15 @@ contains
        !   do while(fdf_bline(bp,line)) ! While there are lines in the block
        if(fdf_block(species_label(i))) then
           !charge(i)        = fdf_double ('Atom.ValenceCharge',zero)
-          charge_up(i)     = fdf_double ('Atom.SpinNeUp',zero)
-          charge_dn(i)     = fdf_double ('Atom.SpinNeDn',zero)
-          sum_elecN_spin   = charge_up(i)+charge_dn(i)
-          if (abs(sum_elecN_spin)>RD_ERR) then
-             flag_InitialAtomicSpin = .true.
-             ! We will check that the sum of charge_up and charge_dn matches charge later
-          endif
+          if(flag_spin_polarisation) then
+             charge_up(i)     = fdf_double ('Atom.SpinNeUp',zero)
+             charge_dn(i)     = fdf_double ('Atom.SpinNeDn',zero)
+             sum_elecN_spin   = charge_up(i)+charge_dn(i)
+             if (abs(sum_elecN_spin)>RD_ERR) then
+                flag_InitialAtomicSpin = .true.
+                ! We will check that the sum of charge_up and charge_dn matches charge later
+             endif
+          end if
           nsf_species(i)   = fdf_integer('Atom.NumberOfSupports',0)
           RadiusSupport(i) = fdf_double ('Atom.SupportFunctionRange',zero)
           !RadiusAtomf(i)   = RadiusSupport(i) ! = r_pao for (atomf=paof) or r_sf for (atomf==sf)
@@ -1589,6 +1631,11 @@ contains
     flag_variable_cell    = flag_opt_cell
     optcell_method        = fdf_integer('AtomMove.OptCellMethod', 1)
     cell_constraint_flag  = fdf_string(20,'AtomMove.OptCell.Constraint','none')
+    ! Warn user if applying constraints with OptCellMethod 3
+    if(optcell_method==3.and.(.not.leqi(cell_constraint_flag,'none'))) then
+       call cq_warn(sub_name,"Cell constraints NOT applied for OptCellMethod 3")
+       cell_constraint_flag = 'none'
+    end if
     cell_en_tol           = fdf_double('AtomMove.OptCell.EnTol',0.00001_double)
     ! It makes sense to use GPa here so I'm changing the default to 0.1GPa
     cell_stress_tol       = fdf_double('AtomMove.StressTolerance',0.1_double) !005_double)
@@ -1951,14 +1998,15 @@ contains
 !!$
     if ( flag_functional_type == functional_hyb_pbe0 ) then
        flag_exx = .true.
-       exx_siter = fdf_integer('EXX.StartAfterIter', 1 )
+       exx_siter = fdf_integer('EXX.StartAfterIter', 2 )
        exx_scf   = fdf_integer('EXX.MethodSCF',      0 )
-       r_exx     = fdf_double ('EXX.Krange'   ,   zero )
+       r_exx     = fdf_double ('EXX.Xrange'   ,   zero )
+       r_exxs    = fdf_double ('EXX.SXrange'   ,  zero )
        !
     else if ( flag_functional_type == functional_hartree_fock ) then
        flag_exx = .true.
        exx_scf  = fdf_integer('EXX.MethodSCF', 0)
-       r_exx    = fdf_double ('EXX.Krange', zero)
+       r_exx    = fdf_double ('EXX.Xrange', zero)
        !
     else
        ! don't touch we need it because matX is setup in set_dimensions 
@@ -1985,20 +2033,32 @@ contains
        end if
        ! To control accuracy during scf
        exx_scf_tol   = sc_tolerance
-       ! Grid spacing for PAO discretisation in EXX
+       !
+       exx_gto        = fdf_boolean('EXX.GTO', .false.)
+       exx_gto_poisson= fdf_boolean('EXX.GTOPoisson', .false.)
+       exx_grid   = fdf_string (20,'EXX.Grid','standard')
        exx_hgrid  = fdf_double ('EXX.GridSpacing',zero)
-       exx_radius = fdf_double ('EXX.IntegRadius',0.00_double) 
-       ! debug mode
-       exx_Kij       = .true.
-       exx_Kkl       = .true.
-       exx_cartesian = .true. 
-       exx_overlap   = .true. 
-       exx_alloc     = .false.
-       exx_psolver   = 'fftw'
-       p_scheme      = 'pulay'
-       exx_scheme    = 1
-       exx_mem       = 1
-       exx_debug     = .false.
+       exx_radius = fdf_double ('EXX.IntegRadius',zero)
+       exx_scheme = fdf_integer('EXX.Scheme',       1 ) 
+       exx_debug  = fdf_boolean('EXX.Debug',  .false. )
+       exx_overlap= fdf_boolean('EXX.Overlap',.true.  )
+       !
+       exx_filter = fdf_boolean('EXX.Filter', .false.  )
+       exx_filter_extent = fdf_integer('EXX.FilterGrid', 2 )
+       exx_filter_thr    = fdf_double('EXX.FilterThreshold',  1.0e-10_double )
+       exx_cutoff        = fdf_double('EXX.Cutoff',  100.0_double )
+       !
+       exx_cartesian  = fdf_boolean('EXX.PAOCartesian',     .true.)
+       exx_alloc      = fdf_boolean('EXX.DynamicAllocation',.true.)
+       exx_psolver    = fdf_string (20,'EXX.PoissonSolver', 'fftw')
+
+       if(exx_psolver == 'fftw') then
+          exx_pscheme   = fdf_string (20,'EXX.FFTWSolver','ewald')
+          if(exx_pscheme == 'ewald') then
+             ewald_alpha = fdf_double('EXX.FFTWEwaldAlpha',3.0_double)
+          end if          
+       end if
+       !exx_mem = 1
     end if
 !!$
 !!$
@@ -3010,8 +3070,8 @@ contains
     ! Local variables
     character(len=80) :: sub_name = "readDiagInfo"
     type(cq_timer) :: backtrace_timer
-    integer        :: stat, i, j, k, nk_st, nkp_lines
-    real(double)   :: a, sum, dkx, dky, dkz
+    integer        :: stat, i, j, k, nk_st, nkp_lines, nblocks
+    real(double)   :: a, sum, dkx, dky, dkz, dk
     integer        :: proc_per_group
     logical        :: ms_is_prime
     
@@ -3097,14 +3157,25 @@ contains
     ! padH or not  :temporary?   
     flag_padH = fdf_boolean('Diag.PaddingHmatrix',.true.)
 
-    if(fdf_defined('Diag.BlockSizeR')) then
+    if(flag_padH) then
+       ! default block size is 32 (we may change this value in the future)
+       block_size_r = fdf_integer('Diag.BlockSizeR',32)
+       block_size_c = fdf_integer('Diag.BlockSizeC',block_size_r)
+       if(block_size_c .ne. block_size_r) then
+          call cq_warn(sub_name,'PaddingHmatrix: block_size_c needs to be block_size_r')
+          block_size_c = block_size_r
+       endif
+       nblocks = ceiling((real(matrix_size,double)-RD_ERR)/block_size_r)
+       if(nblocks < proc_rows .or. nblocks < proc_cols) then
+          call cq_warn(sub_name,'PaddingHmatrix is forced to be false')
+          flag_padH = .false.
+       endif
+    endif
+  
+    if(.not.flag_padH) then
+     if(fdf_defined('Diag.BlockSizeR')) then
        block_size_r = fdf_integer('Diag.BlockSizeR',1)
        block_size_c = fdf_integer('Diag.BlockSizeC',1)
-       if(flag_padH) then
-          if(block_size_c .ne. block_size_r) &
-               call cq_abort('PaddingHmatrix: block_size_c needs to be block_size_r')
-          block_size_c = block_size_r
-       else
           a = real(matrix_size)/real(block_size_r)
           if(a - real(floor(a))>1e-8_double) &
                call cq_abort('block_size_r not a factor of matrix size ! ',&
@@ -3113,12 +3184,12 @@ contains
           if(a - real(floor(a))>1e-8_double) &
                call cq_abort('block_size_c not a factor of matrix size ! ',&
                matrix_size, block_size_c)
-       endif
-    else if (  ms_is_prime ) then
+     else if (  ms_is_prime ) then
        block_size_r = 1
        block_size_c = block_size_r
+       call cq_warn(sub_name,'Use of PaddingHmatrix is recommended.')
        call cq_warn(sub_name,'prime: set block_size_c = block_size_r = 1 ')
-    else
+     else   ! 
        done = .false.
        block_size_r = matrix_size/max(proc_rows,proc_cols)+1
        do while(.NOT.done) 
@@ -3134,7 +3205,9 @@ contains
           end if
        end if
        block_size_c = block_size_r
-    end if
+     end if
+    endif  ! flag_padH is False
+
     if(iprint_init>1.AND.inode==ionode) then
        write(io_lun,2) block_size_r, block_size_c
        write(io_lun,3) proc_rows, proc_cols
@@ -3261,7 +3334,7 @@ contains
              call fdf_endblock
              wtk = wtk/sum
           else ! Force gamma point dependence
-             if(inode==ionode) write(io_lun,fmt='(4x,"Default k-point sampling of Gamma point only")')
+             if(inode==ionode) write(io_lun,fmt='(/4x,"Default k-point sampling of Gamma point only")')
              nkp = 1
              kk(1,1) = zero
              kk(2,1) = zero
@@ -3281,11 +3354,18 @@ contains
        ! Read Monkhorst-Pack mesh coefficients
        ! Default is Gamma point only 
        if(iprint_init>1.AND.inode==ionode) &
-            write(io_lun,fmt='(/8x,"Reading Monkhorst-Pack Kpoint mesh"//)')
+            write(io_lun,fmt='(/8x,"Using Monkhorst-Pack Kpoint mesh"//)')
        flag_gamma = fdf_boolean('Diag.GammaCentred',.false.)
-       mp(1) = fdf_integer('Diag.MPMeshX',1)
-       mp(2) = fdf_integer('Diag.MPMeshY',1)
-       mp(3) = fdf_integer('Diag.MPMeshZ',1) 
+       dk = fdf_double('Diag.dk',zero)
+       if(dk>zero) then
+          mp(1) = ceiling(two*pi/(dk*rcellx))
+          mp(2) = ceiling(two*pi/(dk*rcelly))
+          mp(3) = ceiling(two*pi/(dk*rcellz))
+       else
+          mp(1) = fdf_integer('Diag.MPMeshX',1)
+          mp(2) = fdf_integer('Diag.MPMeshY',1)
+          mp(3) = fdf_integer('Diag.MPMeshZ',1)
+       end if
        if(iprint_init>0.AND.inode==ionode) then
           if(flag_gamma) then
              write (io_lun,fmt='(/8x,a, i3," x ",i3," x ",i3," gamma-centred")') &
@@ -3300,7 +3380,7 @@ contains
           else
              suffix = "  "
           end if
-          write (io_lun,fmt='(4x,"Using a MP mesh for k-points: ", i3," x ",i3," x ",i3,a2)') &
+          write (io_lun,fmt='(/4x,"Using a MP mesh for k-points: ", i3," x ",i3," x ",i3,a2)') &
                (mp(i), i=1,3), suffix
        end if
        if (mp(1) <= 0 .OR. mp(2) <= 0 .OR. mp(3) <= 0) &

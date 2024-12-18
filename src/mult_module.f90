@@ -1135,6 +1135,8 @@ contains
   !!    Deallocating NA projector matrices
   !!   2018/07/11 12:12 dave
   !!    Adding dissociate_matrices and deallocation of mat for empty bundle fix
+  !!   2024/06/12 18:00 nakata
+  !!    Adding end_ops for SXrange and Xrange
   !!  SOURCE
   !!
   subroutine fmmi(prim)
@@ -1381,6 +1383,8 @@ contains
     call end_ops(prim,TSrange,TSmatind)
     call end_ops(prim,THrange,THmatind)
     call end_ops(prim,TLrange,TLmatind)
+    call end_ops(prim,SXrange,SXmatind)
+    call end_ops(prim,Xrange,Xmatind)
     if (atomf.ne.sf) then
        call end_ops(prim,aSa_range,aSa_matind)
        call end_ops(prim,aHa_range,aHa_matind)
@@ -2036,6 +2040,8 @@ contains
   !!    Associating NA-projector matrices
   !!   2018/11/13 17:30 nakata
   !!    Changed matS, matT, matTtran, matKE, matNL and matNA to be spin_SF dependent
+  !!   2024/09/11 14:00 lionel
+  !!    set trans_index(matX(spin)  ) = S_trans
   !!  SOURCE
   !!
   subroutine associate_matrices
@@ -2437,7 +2443,7 @@ contains
        trans_index(matUT(spin) ) = AP_trans
        trans_index(matLS(spin) ) = LS_trans
        trans_index(matSL(spin) ) = LS_trans
-       trans_index(matX(spin)  ) = 0 ! S_trans
+       trans_index(matX(spin)  ) = S_trans
        trans_index(matSX(spin) ) = 0
     end do
     if (atomf.ne.sf) then
@@ -2699,7 +2705,6 @@ contains
        if (matrix_index(B) < 1 .or. matrix_index(B) > mx_matrices) &
             call cq_abort("Matrix error in matrix_sum: ", &
                           matrix_index(B), B)
-       call scal(mat_p(A)%length, alpha, mat_p(A)%matrix, 1)
        call matrix_add(alpha, mat_p(A)%matrix, mat_p(A)%length,       &
                        mat(:,matrix_index(A)), beta, mat_p(B)%matrix, &
                        mat_p(B)%length, mat(:,matrix_index(B)),       &
@@ -2761,6 +2766,8 @@ contains
   !!    Changed MPI_allreduce to gsum
   !!   2008/05/22 ast
   !!    Added timers
+  !!   2024/05/27 nakata
+  !!    bugfix: corrected sf to sf1 for loc to check overflow
   !!  SOURCE
   !!
   real(double) function matrix_trace(A)
@@ -2788,7 +2795,7 @@ contains
           do i = 1, bundle%nm_nodgroup(np) ! Loop over atoms in partition
              iprim = iprim + 1
              sf1 = mat(np,Ah)%ndimi(i)
-             loc = (sf - 1) * sf1 + sf - 1 + mat(np,Ah)%onsite(i)
+             loc = (sf1 - 1) * sf1 + sf1 - 1 + mat(np,Ah)%onsite(i)
              if (loc > mat_p(A)%length) &
                   call cq_abort("Overflow error in trace: ", &
                                 loc, mat_p(A)%length)

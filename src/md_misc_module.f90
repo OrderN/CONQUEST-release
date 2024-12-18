@@ -137,20 +137,24 @@ contains
        ! unified md checkpoint file easier - zamaan
        ion_velocity = zero
        if (flag_read_velocity) then
-          call read_velocity(ion_velocity, file_velocity)
+          !call read_velocity(ion_velocity, file_velocity)
+          call read_velocity(atom_vels, file_velocity)
+          do i=1,ni_in_cell
+            ion_velocity(1,i) = atom_vels(1,id_glob(i))
+            ion_velocity(2,i) = atom_vels(2,id_glob(i))
+            ion_velocity(3,i) = atom_vels(3,id_glob(i))
+          end do
        else
           if(temp_ion > RD_ERR) then
              call init_velocity(ni_in_cell, temp_ion, ion_velocity, ion_ke)
           end if
+          ! atom_vels : 2020/Jul/30 -> 2024/May/21
+          do i=1,ni_in_cell
+             atom_vels(1,id_glob(i)) = ion_velocity(1,i)
+             atom_vels(2,id_glob(i)) = ion_velocity(2,i)
+             atom_vels(3,id_glob(i)) = ion_velocity(3,i)
+          end do
        end if
-
-       ! atom_vels : 2020/Jul/30
-       do i=1,ni_in_cell
-          atom_vels(1,id_glob(i)) = ion_velocity(1,i)
-          atom_vels(2,id_glob(i)) = ion_velocity(2,i)
-          atom_vels(3,id_glob(i)) = ion_velocity(3,i)
-       end do
-
     end if
 
     if(leqi(md_thermo_type,'svr').AND.md_tau_T<zero) then
@@ -253,7 +257,7 @@ contains
   !!   2020/10/07 tsuyoshi
   !!    added deallocation of atom_vels
   !!  SOURCE
-  !!  
+  !!
   subroutine end_md(th, baro)
 
     use GenComms,         only: inode, ionode
@@ -309,7 +313,7 @@ contains
   !!  CREATION DATE
   !!   2018/04/23 11:49
   !!  SOURCE
-  !!  
+  !!
   subroutine integrate_pt(baro, thermo, mdl, velocity, second_call)
 
     use numbers
@@ -547,8 +551,10 @@ contains
   !!  MODIFIED
   !!   2021/10/19 Jianbo Lin
   !!    Added call for extended XYZ output (includes forces)
+  !!   2024/11/04 Augustin Lu
+  !!    Added stress in call for extended XYZ output
   !!  SOURCE
-  !!  
+  !!
   subroutine write_md_data(iter, thermo, baro, mdl, nequil, MDfreq, XSFfreq, XYZfreq)
 
     use GenComms,      only: inode, ionode
@@ -578,7 +584,7 @@ contains
         call write_xsf(md_trajectory_file, iter)
     end if
     if (flag_write_extxyz .and. mod(iter,XYZfreq) == 0) then
-         call write_extxyz('trajectory.xyz', mdl%dft_total_energy, mdl%atom_force)
+         call write_extxyz('trajectory.xyz', mdl%dft_total_energy, mdl%atom_force, mdl%stress)
     end if
     if (flag_heat_flux) call mdl%dump_heat_flux(md_heat_flux_file)
     if (mod(iter, MDfreq) == 0) then

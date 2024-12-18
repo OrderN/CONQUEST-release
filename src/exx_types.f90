@@ -55,16 +55,15 @@ module exx_types
   !  end type fftw1d
 
   ! PAOs on grid
-  real(double), dimension(:,:,:,:),     allocatable :: phi_i
-  real(double), dimension(:,:,:,:),     allocatable :: phi_j
-  real(double), dimension(:,:,:,:),     allocatable :: phi_k
-  real(double), dimension(:,:,:,:),     allocatable :: phi_l  
+  real(double), dimension(:,:,:,:),     allocatable         :: phi_i
+  real(double), dimension(:),           allocatable, target :: phi_i_1d_buffer
+  real(double), dimension(:,:,:,:),     allocatable         :: phi_j
+  real(double), dimension(:,:,:,:),     allocatable         :: phi_k
+  real(double), dimension(:,:,:,:),     allocatable         :: phi_l  
 
   ! Auxiliary densities and potentials
-  real(double), dimension(:,:,:,:,:),   allocatable :: rho_kj
-  real(double), dimension(:,:,:,:,:),   allocatable :: Ome_kj
-  real(double), dimension(:,:,:,:,:),   allocatable :: vhf_kj
-  real(double), dimension(:,:,:,:),     allocatable :: Phy_k
+  real(double), dimension(:),           allocatable, target :: Ome_kj_1d_buffer
+  real(double), dimension(:,:,:,:),     allocatable         :: Phy_k
 
   ! Work matrix
   real(double), dimension(:,:,:),       allocatable :: work_in_3d
@@ -72,8 +71,11 @@ module exx_types
 
   ! For the Poisson equation/FFTW in reciprocal space
   type(fftw3d)          :: fftwrho3d
+  type(fftw3d)          :: fftwrho3d_filter 
 
   complex(double), dimension(:,:,:),    allocatable :: reckernel_3d
+  complex(double), dimension(:,:,:),    allocatable :: reckernel_3d_filter
+
   real(double),    dimension(:,:,:),    allocatable :: ewald_rho
   real(double),    dimension(:,:,:),    allocatable :: ewald_pot
   real(double) :: ewald_charge
@@ -84,9 +86,12 @@ module exx_types
   real(double), dimension(:,:,:),       allocatable :: isf_pot_ion
   real(double), pointer   :: kernel(:)   
 
+  ! Filter ERIs
+   real(double) :: exx_filter_thr
+  
   ! Poisson solver settings
-  character(100), parameter :: p_scheme_default = 'v(G=0)=0'
-  character(100)            :: p_scheme
+  character(100), parameter :: exx_pscheme_default = 'v(G=0)=0'
+  character(100)            :: exx_pscheme
   character(100)            :: exx_psolver
   real(double)              :: p_cutoff
   real(double)              :: p_factor
@@ -104,9 +109,8 @@ module exx_types
   integer                   :: isf_order
 
   real(double)   :: edge, volume, screen
-
-  ! Grid settings
-  integer                 :: extent
+ ! Grid settings
+  integer                 :: extent, exx_filter_extent
   integer                 :: ngrid
   real(double)            :: r_int
   real(double)            :: grid_spacing
@@ -117,8 +121,8 @@ module exx_types
   type(cq_timer), save :: tmr_std_exx_write
   type(cq_timer), save :: tmr_std_exx_kernel
   type(cq_timer), save :: tmr_std_exx_fetch
-  type(cq_timer), save :: tmr_std_exx_fetch_K
   type(cq_timer), save :: tmr_std_exx_accumul
+  type(cq_timer), save :: tmr_std_exx_nsup
 
   type(cq_timer), save :: tmr_std_exx_matmult
   type(cq_timer), save :: tmr_std_exx_quadrat
@@ -129,37 +133,57 @@ module exx_types
   type(cq_timer), save :: tmr_std_exx_evalpao
   type(cq_timer), save :: tmr_std_exx_evalgto
   type(cq_timer), save :: tmr_std_exx_splitpao
+  type(cq_timer), save :: tmr_std_exx_barrier
+  type(cq_timer), save :: tmr_std_exx_comms
+
   real(double)         :: exx_total_time
+
+  
+  real(double) :: sum_eri_gto
   
   ! User settings
   integer :: exx_scheme      ! 4center ERIs or 3center reduction integrals
   integer :: exx_mem         ! reduced memory allocation 
-  logical :: exx_phil        ! on-the-fly or storage of phi_l
-  logical :: exx_phik        ! on-the-fly or storage of phi_k
   logical :: exx_overlap     ! compute overlap local boxes
   logical :: exx_alloc       ! on-the-fly or global memory allocation
-  logical :: exx_cartesian   ! cartesian or spherial representation for PAO
+  logical :: exx_cartesian   ! cartesian or spherical calculation for PAO on grid
   logical :: exx_screen      ! screening
   logical :: exx_screen_pao  ! method for screening
   logical :: exx_gto         ! testing
-  real(double) :: exx_cutoff ! cutoff for screening (experimental)
+  logical :: exx_gto_poisson ! testing
+
+  logical :: exx_filter
+  logical :: exx_store_eris  ! store ERIs at first exx call
+  !real(double) :: exx_cutoff ! cutoff for screening (experimental)
   real(double) :: exx_radius ! radius for integration
-  real(double) :: exx_hgrid  ! radius for integration
+  real(double) :: exx_hgrid  ! grid spacing for integration
+  character(len=20) :: exx_grid  ! grid spacing selection
 
   ! For debuging/testing
   logical :: exx_debug 
-  logical :: exx_Kij
-  logical :: exx_Kkl
 
   ! I/O
   integer :: unit_global_write 
   integer :: unit_matrix_write 
-  integer :: unit_output_write 
   integer :: unit_timers_write
   integer :: unit_memory_write 
-  integer :: unit_screen_write 
+  integer :: unit_screen_write
+  integer :: unit_exx_debug
+  integer :: unit_eri_debug
+  integer :: unit_eri_filter_debug
+  character(len=20) :: file_exx_debug, file_exx_memory, file_exx_timers
+  character(len=20) :: file_eri_debug, file_eri_filter_debug
   !=================================================================<<
 
+  type store_eris
+     integer :: part
+     real(double), dimension(:), allocatable :: store_eris
+     logical,      dimension(:), allocatable :: filter_eris     
+  end type store_eris
+
+  ! Electron repulsion integrals
+  type(store_eris), dimension(:), allocatable, target :: eris
+  
   type prim_atomic_data
      integer  :: pr
 
@@ -200,6 +224,11 @@ module exx_types
      real(double), dimension(3) :: xyz
      real(double) :: r
      real(double) :: d
+     !
+     integer, dimension(:), allocatable ::   l1
+     integer, dimension(:), allocatable :: acz1
+     integer, dimension(:), allocatable ::   m1
+          
   end type neigh_atomic_data
 
 end module exx_types

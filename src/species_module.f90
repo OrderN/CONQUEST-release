@@ -43,6 +43,8 @@
 !!    Added charge_up and charge_dn
 !!   2017/11/27 15:50 dave
 !!    Added NA projector count per species
+!!   2020/01/14 17:27 Lionel
+!!    Added gto_files
 !!  SOURCE
 !!
 module species_module
@@ -61,6 +63,7 @@ module species_module
   character(len=50), allocatable, dimension(:) :: ps_file
   character(len=40), allocatable, dimension(:) :: ch_file
   character(len=40), allocatable, dimension(:) :: phi_file
+  character(len=40), allocatable, dimension(:) :: gto_file
   !
   character(len=30), allocatable, dimension(:) :: species_label
   character(len=80), allocatable, dimension(:) :: species_file

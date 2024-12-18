@@ -1,4 +1,4 @@
-! -*- mode: F90; mode: font-lock -*-
+! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
 ! ------------------------------------------------------------------------------
 ! $Id$
 ! ------------------------------------------------------------------------------
@@ -34,6 +34,9 @@
 !!    Remove calculation of (-1)**m throughout (replace with test for m even/odd
 !!    and scaling factor of 1 or -1; also added numbers for module use.  Also
 !!    introduced a universal epsilon parameter for small angles
+!!   2021/02/14 17:30 lionel
+!!    Added function for the norm of the cartesian spherical harmonics (re_cart_norm)
+!!    Now re_cart_hrmnc depends on re_cart_norm
 !!  SOURCE
 !!
 
@@ -44,10 +47,16 @@ module angular_coeff_routines
   use bessel_integrals,       only: fact, doublefact!, lmax_fact
   use numbers,                only: zero, quarter, half, one, three_halves, two, &
        three, pi, eight, very_small
+  use GenComms,               only: cq_abort
   use timer_module,           only: start_timer, stop_timer
   use timer_stdclocks_module, only: tmr_std_allocation, tmr_std_basis
 
   implicit none
+
+  ! -------------------------------------------------------
+  ! RCS ident string for object file id
+  ! -------------------------------------------------------
+  character(len=80), private :: RCSid = "$Id$"
 
   ! Parameter to avoid small angle errors throughout code
   real(double), parameter :: epsilon = 1.0e-4_double 
@@ -807,8 +816,9 @@ contains
     r = mod_r
 
   end subroutine convert_basis
-  !!***
+!!***
 
+  
 !!****f* angular_coeff_routines/evaluate_pao *
 !!
 !!  NAME 
@@ -830,10 +840,12 @@ contains
 !!  MODIFICATION HISTORY
 !!   2019/08/16 15:57 dave
 !!    Replace spline_ol_intval_new2
+!!   2020/01/21 14:54 Lionel
+!!    Add optional possibility for NOT working in polar coord.
+!!    ie. stay in Cartesian ones (should be more efficient)   
 !!  SOURCE
 !!
-
-  subroutine evaluate_pao(i_vector,sp,l,nz,m,x,y,z,pao_val)
+  subroutine evaluate_pao(i_vector,sp,l,nz,m,x,y,z,pao_val,system)
 
     use datatypes
     use numbers
@@ -844,20 +856,32 @@ contains
     integer, intent(in) :: i_vector ! dummy argument, included to satisfy interface in PAO_grid_transform_module
     integer, intent(in) :: sp,l,nz,m
     real(double), intent(in) :: x,y,z
+    logical,      intent(in), optional :: system 
     real(double), intent(out) :: pao_val
+    !
     real(double) :: r,theta,phi,del_r,y_val,val
-    integer :: npts, j
     real(double) :: a, b, c, d, r1, r2, r3, r4, rr
+    integer :: npts, j
+    logical :: cartesian
     
-    !convert Cartesians into spherical polars
-    call convert_basis(x,y,z,r,theta,phi)
+    ! do we choose which coordinate system (sph is default)
+    if ( present(system) ) then
+       cartesian = system
+    else
+       cartesian = .false.
+    end if
+    !
+    !compute radius
+    r = sqrt(x*x+y*y+z*z) 
+    !
     !interpolate for required value of radial function
-    npts = pao(sp)%angmom(l)%zeta(nz)%length
+    npts  = pao(sp)%angmom(l)%zeta(nz)%length
     del_r = (pao(sp)%angmom(l)%zeta(nz)%cutoff/&
          &(pao(sp)%angmom(l)%zeta(nz)%length-1))
+    !
     j = floor(r/del_r) + 1
-    pao_val = zero
-    if(j+1<=npts) then
+    !
+    if( j+1 <= npts ) then
        rr = real(j,double)*del_r
        a = (rr - r)/del_r
        b = one - a
@@ -868,24 +892,42 @@ contains
        r3 = pao(sp)%angmom(l)%zeta(nz)%table2(j)
        r4 = pao(sp)%angmom(l)%zeta(nz)%table2(j+1)
        pao_val = a*r1 + b*r2 + c*r3 + d*r4
+    else
+       pao_val = zero
     end if
-    !now multiply by value of spherical harmonic
-    y_val = re_sph_hrmnc(l,m,theta,phi)
-    
-    pao_val = pao_val*y_val
-    ! Scale by r**l to remove Siesta normalisation
-    if(l==1) then ! p
-       pao_val = pao_val*r
-    else if(l==2) then ! d
-       pao_val = pao_val*r*r
-    else if(l==3) then ! f
-       pao_val = pao_val*r*r*r
-    else if(l>3) then
-       write(io_lun,*) '*** ERROR *** ! Angular momentum l>3 not implemented !'
+    !
+    if ( .not. cartesian ) then ! if want to work in Polar coordinates
+       !
+       !convert Cartesians into spherical polars
+       call convert_basis(x,y,z,r,theta,phi)
+       !
+       !now multiply by value of spherical harmonic
+       y_val = re_sph_hrmnc(l,m,theta,phi)
+       !
+       pao_val = pao_val * y_val
+       !
+       ! Scale by r**l to remove Siesta normalisation
+       if(l == 1) then ! p
+          pao_val = pao_val*r
+       else if(l == 2) then ! d
+          pao_val = pao_val*r*r
+       else if(l == 3) then ! f
+          pao_val = pao_val*r*r*r
+       else if(l >  3) then
+          write(io_lun,*) '*** ERROR *** ! Angular momentum l>3 not implemented !'
+       end if
+       !
+    else ! if want to stay in Cartesian
+       !
+       !multiply by value of Cartesian harmonic
+       y_val = re_cart_hrmnc(l,m,x,y,z)
+       !
+       pao_val = pao_val * y_val
+       !
     end if
   end subroutine evaluate_pao
-  !!***
-  
+!!***
+
 !!****f* angular_coeff_routines/pp_elem *
 !!
 !!  NAME 
@@ -957,10 +999,11 @@ contains
 !!  CREATION DATE
 !!   30/09/03
 !!  MODIFICATION HISTORY
-!!
+!!   2023/11/15 lionel
+!!    Added dummy argument to satisfy interface in PAO_grid_transform_module
 !!  SOURCE
 !!
-  subroutine pao_elem_derivative_2(i_vector,spec,l,nzeta,m,x_i,y_i,z_i,drvtv_val)
+  subroutine pao_elem_derivative_2(i_vector,spec,l,nzeta,m,x_i,y_i,z_i,drvtv_val,sys_dummy)
 
     use datatypes
     use numbers
@@ -970,6 +1013,7 @@ contains
     !RC 09/11/03 using (now debugged) routine pp_elem_derivative (see 
     ! above) as template for this sbrt pao_elem_derivative
     real(double), intent(in) :: x_i,y_i,z_i
+    logical,      intent(in), optional :: sys_dummy
     real(double), intent(out) :: drvtv_val
     integer, intent(in) :: i_vector, l, m, spec, nzeta
     integer :: n1,n2
@@ -2064,8 +2108,233 @@ contains
     call stop_timer(tmr_std_basis)
     return
   end subroutine set_prefac_real
+ !!***
+
+!!****f* angular_coeff_routines/re_cart_norm *
+!!
+!!  NAME 
+!!   re_sph_hrmnc
+!!  USAGE
+!!   re_cart_nom(l,m,norm)
+!!  PURPOSE
+!!   return the value of the cartesian spherical harmonic
+!!  INPUTS
+!!   l,m angular momenta
+!!  USES
+!!   datatypes
+!!  AUTHOR
+!!   L Truflandier
+!!  CREATION DATE
+!!   20/01/21
+!!  MODIFICATION HISTORY
+!!
+!!  SOURCE
+!!  
+  function re_cart_norm(l,m)
+    
+    use datatypes
+    use numbers
+    use GenComms,ONLY: cq_abort
+
+    implicit none
+    !
+    integer,      intent(in) :: l, m
+    !
+    real(double),  parameter :: a1g_norm  = sqrt(one/(four*pi))
+    real(double),  parameter :: t1u_norm  = sqrt(three/(four*pi))
+    real(double),  parameter :: t2g_norm  = sqrt(fifteen/(four*pi))
+    real(double),  parameter :: eg_a_norm = sqrt(fifteen/(sixteen*pi)) 
+    real(double),  parameter :: eg_b_norm = sqrt(five/(sixteen*pi))     
+    !
+    real(double),  parameter :: f0_norm = sqrt(seven/(sixteen*pi))
+    real(double),  parameter :: f1_norm = sqrt( 21.0_double/(sixteen*two*pi))
+    real(double),  parameter :: f2_norm = sqrt(105.0_double/(sixteen*pi)) 
+    real(double),  parameter :: f3_norm = sqrt( 35.0_double/(sixteen*two*pi)) 
+    !
+    real(double) :: norm, re_cart_norm 
+    !
+    if(l == 0) then !s-type function
+       !
+       norm = a1g_norm
+       !
+    else if(l == 1) then !p-type function
+       !
+       norm = t1u_norm
+       !
+    else if(l == 2) then !d-type function
+       !
+       select case( m )
+          
+       case( 2 ) ! d_{x2-y2}
+          norm = eg_a_norm !(x*x-y*y) 
+       case( 1 ) ! d_{xz}
+          norm = t2g_norm !(x*z)         
+       case( 0 ) ! d_{z2}
+          norm = eg_b_norm!(3*z*z-r*r)
+       case(-1 ) ! d_{yz}
+          norm = t2g_norm !(y*z)
+       case(-2 ) ! d_{xy}             
+          norm = t2g_norm !(x*y) 
+       case default
+          call cq_abort('re_cart_norm/problem with (l,m) =',l,m)
+       end select
+       !
+    else if(l == 3) then !f-type function
+       !
+       select case( m )
+       case( 3 ) ! f_{x3-xy2}
+          norm = f3_norm !*(x*x - 3*y*y)*x
+       case( 2 ) ! f_{zx2-zy2}
+          norm = f2_norm !*(x*x - y*y)*z
+       case( 1 ) ! f_{xz2}
+          norm = f1_norm !*(5*z*z - r*r)*x
+       case( 0 ) ! f_{z3}
+          norm = f0_norm !*(5*z*z - 3*r*r)*z
+       case(-1 ) ! f_{yz2}             
+          norm = f1_norm !(5*z*z - r*r)*y
+       case(-2 ) ! f_{xyz}             
+          norm = f2_norm !x*y*z
+       case(-3 ) ! f_{3yx2-y3}             
+          norm = f3_norm !(3*x*x - y*y)*y
+       case default
+          call cq_abort('re_cart_norm/problem with (l,m) =',l,m)
+       end select
+       !
+    else if( l > 3) then
+       call cq_abort('re_cart_norm/not implemented for l > 3')
+    else                               
+       call cq_abort('re_cart_norm/problem with l =',l)
+    end if
+
+    re_cart_norm = norm
+    
+  end function re_cart_norm
 !!***
 
+!!****f* angular_coeff_routines/re_cart_hrmnc *
+!!
+!!  NAME 
+!!   re_cart_hrmnc
+!!  USAGE
+!!   re_cart_hrmnc(l,m,x,y,z)
+!!  PURPOSE
+!!   calculates value of real Cartesian harmonic
+!!  INPUTS
+!!   l,m angular momenta
+!!   x,y,z Cartesian coordinates
+!!  USES
+!!   datatypes
+!!  AUTHOR
+!!   L Truflandier
+!!  CREATION DATE
+!!   20/01/21
+!!  MODIFICATION HISTORY
+!!
+!!  SOURCE
+!!
+  function re_cart_hrmnc(l,m,x,y,z)
+    
+    use datatypes
+    use numbers
+    
+    implicit none
+    !
+    !function to return the value of real Cartesian harmonic
+    !at given position (x,y,z)
+    !
+    integer,      intent(in) :: l, m
+    real(double), intent(in) :: x, y, z
+    !
+    real(double) :: r, re_cart_hrmnc, y_val
+    integer :: i
+    !
+    r = sqrt(x*x+y*y+z*z) ; y_val = zero
+    !
+    !
+    if(l == 0) then !s-type function
+       !
+       y_val = one
+       !
+    else if(l == 1) then !p-type function
+       !
+       r_p: if (r > zero) then
+          !
+          select case( m )
+          case( 1 ) !p_x
+             y_val = x
+          case( 0 ) !p_z
+             y_val = z 
+          case(-1 ) !p_y
+             y_val = y
+          case default
+             call cq_abort('re_cart_hrmnc/problem with (l,m) =',l,m)
+          end select
+          !
+       else
+          y_val = zero
+       end if r_p
+       !
+    else if(l == 2) then !d-type function
+       !
+       r_d: if (r > zero) then
+          !
+          select case( m )
+          case( 2 ) ! d_{x2-y2}
+             y_val =  (x*x-y*y)
+          case( 1 ) ! d_{xz}
+             y_val =  (x*z)         
+          case( 0 ) ! d_{z2}
+             y_val =  (3*z*z-r*r)
+          case(-1 ) ! d_{yz}
+             y_val =  (y*z)
+          case(-2 ) ! d_{xy}             
+             y_val = -(x*y) ! take care phase factor
+          case default
+             call cq_abort('re_cart_hrmnc/problem with (l,m) =',l,m)
+          end select
+          !
+       else
+          y_val = zero
+       end if r_d
+       !
+    else if(l == 3) then !f-type function
+       !
+       r_f: if (r > zero) then
+          !          
+          select case( m )
+          case( 3 ) ! f_{x3-xy2}
+             y_val = (x*x - 3*y*y)*x             
+          case( 2 ) ! f_{zx2-zy2}
+             y_val = (x*x - y*y)*z             
+          case( 1 ) ! f_{xz2}
+             y_val = (5*z*z - r*r)*x             
+          case( 0 ) ! f_{z3}
+             y_val = (5*z*z - 3*r*r)*z
+          case(-1 ) ! f_{yz2}             
+             y_val = (5*z*z - r*r)*y             
+          case(-2 ) ! f_{xyz}             
+             y_val = x*y*z
+          case(-3 ) ! f_{3yx2-y3}             
+             y_val = (3*x*x - y*y)*y
+          case default
+             call cq_abort('re_cart_hrmnc/problem with (l,m) =',l,m)
+          end select
+          !
+       else
+          y_val = zero
+       end if r_f
+       !
+    else if( l > 3) then
+       call cq_abort('re_cart_hrmnc/not implemented for l > 3')
+    else                               
+       call cq_abort('re_cart_hrmnc/problem with l =',l)
+    end if
+       
+    re_cart_hrmnc = y_val * re_cart_norm(l,m)
+    
+  end function re_cart_hrmnc
+!!***
+  
 !!****f* angular_coeff_routines/re_sph_hrmnc *
 !!
 !!  NAME 
