@@ -458,7 +458,7 @@ contains
     
     ! Local variables
     integer :: i_band, i_kp, i_spin, n_DOS_wid, n_band, n_min, n_max, i, i_atom,max_nsf, i_spec, &
-         i_l, nzeta, sf_offset, max_l, norbs, i_m, i_band_c
+         i_l, nzeta, sf_offset, max_l, norbs, i_m, i_band_c, i_z
     real(double) :: Ebin, dE_DOS, a, pf_DOS, spin_fac, coeff, check_electrons
     real(double), dimension(:,:,:), allocatable :: pDOS
     real(double), dimension(:,:,:,:), allocatable :: pDOS_l
@@ -554,24 +554,23 @@ contains
                    do i_atom = 1, n_atoms_pDOS
                       i_spec = species_glob(pDOS_atom_index(i_atom))
                       if(flag_l_resolved .and. flag_lm_resolved) then
-                         sf_offset = 0
+                         sf_offset = 1
                          do i_l = 0, pao(i_spec)%greatest_angmom
                             nzeta = pao(i_spec)%angmom(i_l)%n_zeta_in_angmom
-                            norbs = nzeta
-                            do i_m = -i_l,i_l
-                               coeff = zdotc(norbs, evec_coeff(sf_offset+1:sf_offset+norbs,pDOS_atom_index(i_atom), &
-                                    i_band_c,i_kp,i_spin),1, &
-                                    scaled_evec_coeff(sf_offset+1:sf_offset+norbs,pDOS_atom_index(i_atom), &
-                                    i_band_c,i_kp,i_spin),1)
-                               pDOS_lm(i_m,i_l,i_atom,i,i_spin) = &
-                                    pDOS_lm(i_m,i_l,i_atom,i,i_spin) + &
-                                    wtk(i_kp)*pf_DOS*exp(-half*a*a)*coeff
-                               pDOS(i_atom,i,i_spin) = pDOS(i_atom,i,i_spin) + &
-                                    wtk(i_kp)*pf_DOS*exp(-half*a*a)*coeff
-                               total_electrons_l(i_l,i_atom, i_spin) = &
-                                    total_electrons_l(i_l,i_atom, i_spin) + &
-                                    occ(i_band,i_kp)*wtk(i_kp)*pf_DOS*exp(-half*a*a)*coeff
-                               sf_offset = sf_offset + norbs
+                            do i_z = 1, nzeta
+                               do i_m = -i_l,i_l
+                                  coeff = conjg(evec_coeff(sf_offset,pDOS_atom_index(i_atom), i_band_c,i_kp,i_spin)) * &
+                                       scaled_evec_coeff(sf_offset,pDOS_atom_index(i_atom), i_band_c,i_kp,i_spin)
+                                  pDOS_lm(i_m,i_l,i_atom,i,i_spin) = &
+                                       pDOS_lm(i_m,i_l,i_atom,i,i_spin) + &
+                                       wtk(i_kp)*pf_DOS*exp(-half*a*a)*coeff
+                                  pDOS(i_atom,i,i_spin) = pDOS(i_atom,i,i_spin) + &
+                                       wtk(i_kp)*pf_DOS*exp(-half*a*a)*coeff
+                                  total_electrons_l(i_l,i_atom, i_spin) = &
+                                       total_electrons_l(i_l,i_atom, i_spin) + &
+                                       occ(i_band,i_kp)*wtk(i_kp)*pf_DOS*exp(-half*a*a)*coeff
+                                  sf_offset = sf_offset + 1
+                               end do
                             end do
                          end do
                       else if(flag_l_resolved) then

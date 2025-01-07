@@ -1052,9 +1052,20 @@ contains
                   if(leqi(trim_line(2:4),'ATM')) pseudo_type = 1 ! Siesta-type
                end if
             else if (leqi(trim_line(1:14),'<Conquest_pseu')) then
-               read(unit,'(a)') line ! Check this for Hamann
-               if(leqi(line(3:8),'Hamann')) pseudo_type = 3
-               if(leqi(line(3:10),'Hamann c')) read(unit,'(a)') line
+               read(unit,'(a)') line ! Check this for Hamann/HGH
+               if(leqi(line(3:5),'Pse')) then ! Newer format with pseudopotential type
+                  if(leqi(line(27:30),'ONCV')) then ! Hamann
+                     pseudo_type = 3
+                     read(unit,'(a)') line
+                     if(leqi(line(3:10),'Hamann c')) read(unit,'(a)') line
+                  else if(leqi(line(27:29),'HGH')) then ! GTH/HGH
+                     pseudo_type = 3
+                     read(unit,'(a)') line
+                  end if
+               else if(leqi(line(3:8),'Hamann')) then
+                  pseudo_type = 3
+                  if(leqi(line(3:10),'Hamann c')) read(unit,'(a)') line
+               end if
                read(unit,'(a)') line ! Core radii
                read(unit,'(a)') line ! Valence shells
                read(unit,'(a26,i7)') line, xc_func

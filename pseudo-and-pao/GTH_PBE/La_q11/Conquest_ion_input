@@ -1,0 +1,14 @@
+General.NumberOfSpecies 1
+General.PSFormat hgh
+
+%block SpeciesLabels
+1  La
+%endblock
+
+%block La
+Atom.PseudopotentialFile La.hgh
+Atom.ZetaForm com
+Atom.dE_small_radius 0.02
+Atom.Perturbative_Polarised F
+Atom.Cutoffs en
+%endblock

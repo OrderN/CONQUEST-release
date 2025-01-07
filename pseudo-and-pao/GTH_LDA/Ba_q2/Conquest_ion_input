@@ -1,0 +1,31 @@
+General.NumberOfSpecies 1
+General.PSFormat hgh
+General.SolverStep 0.1
+General.SCFMixing 0.05
+
+%block SpeciesLabels
+1  Ba
+%endblock
+
+%block Ba
+Atom.PseudopotentialFile Ba.hgh
+Atom.ZetaForm com
+Atom.Perturbative_Polarised F
+Atom.PAO_N_Shells 3
+Atom.BasisBlock BaBlock
+Atom.Cutoffs ra
+%endblock
+
+# Specify the number of PAOs for each n,l pair and then their radii
+# The radii below are based on default CONQUEST energies for the 
+# valence shells
+%block BaBlock
+# n, l, number of zetas
+6 0 2
+6 1 1
+5 2 1
+# Radii for PAOs (bohr)
+12.0 7.6
+12.0
+12.0
+%endblock

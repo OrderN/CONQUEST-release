@@ -75,10 +75,10 @@ contains
     ! Passed variables
     integer :: myid
     integer :: n_cont,ncover_yz,ncoverz
-    integer(integ) :: nbnab_rem(:)
-    integer(integ) :: ibind_rem(:)
-    integer(integ) :: ibpart_rem(:)
-    integer(integ) :: npxyz_rem(:)
+    integer(integ), intent(in) :: nbnab_rem(:)
+    integer(integ), intent(in) :: ibind_rem(:)
+    integer(integ), intent(in) :: npxyz_rem(:)
+    integer(integ), intent(out) :: ibpart_rem(:)
 
     ! Local variables
     integer :: noff,ierr,ni,k, len1, len2

@@ -101,6 +101,12 @@ arbitrary vector from the origin of the Brillouin zone, by specifying:
    Diag.MPShiftY 0.0
    Diag.MPShiftZ 0.0
 
+For the Monkhorst-Pack approach, instead of specifying the number of
+points in x, y and z explicitly, they can be set automatically by giving
+a spacing in reciprocal space: ``Diag.dk`` where units are inverse Bohr
+radii.  The number of points will be chosen so that :math:`2\pi/(a\times dk)`
+is less than the value specified.
+
 Alternatively, the points in reciprocal space can be specified
 explicitly by giving a number of points and their locations and weights:
 

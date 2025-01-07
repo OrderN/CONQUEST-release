@@ -109,10 +109,16 @@ contains
   !!    Changes to new XC interface
   !!   2019/12/26 tsuyoshi
   !!    Removed flag_no_atomic_densities
+  !!   2020/12/13 lionel
+  !!    Added EXX initialise and finalise
   !!   2022/06/09 08:35 dave
+<<<<<<< HEAD
   !!    Changed name of D2 set-up routine, added only to module use
   !!   2023/08/22 J.Lin
   !!    Added machine learning statements
+=======
+  !!    Changed name of D2 set-up routine, added only to module usep
+>>>>>>> origin/develop
   !!  SOURCE
   !!
   subroutine initialise(vary_mu, fixed_potential, mu, total_energy)
@@ -124,7 +130,12 @@ contains
                                  flag_only_dispersion, flag_neutral_atom, &
                                  flag_atomic_stress, flag_heat_flux, &
                                  flag_full_stress, area_moveatoms, &
+<<<<<<< HEAD
                                  atomic_stress, non_atomic_stress, flag_MLFF, min_layer
+=======
+                                 atomic_stress, non_atomic_stress, &
+                                 min_layer, flag_self_consistent
+>>>>>>> origin/develop
     use GenComms,          only: inode, ionode, my_barrier, end_comms, &
                                  cq_abort
     use initial_read,      only: read_and_write
@@ -135,7 +146,7 @@ contains
     use cover_module,      only: make_cs, D2_CS
     use dimens,            only: r_dft_d2
     use DFT_D2,            only: set_para_D2, dispersion_D2
-    use pseudo_tm_module,   only: make_neutral_atom
+    use pseudo_tm_module,  only: make_neutral_atom
     use angular_coeff_routines, only: set_fact
     use maxima_module,          only: lmax_ps, lmax_pao
     use XC, only: init_xc
