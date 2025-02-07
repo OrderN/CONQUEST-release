@@ -112,7 +112,7 @@ contains
   !!   2020/12/13 lionel
   !!    Added EXX initialise and finalise
   !!   2022/06/09 08:35 dave
-  !!    Changed name of D2 set-up routine, added only to module usep
+  !!    Changed name of D2 set-up routine, added only to module use
   !!  SOURCE
   !!
   subroutine initialise(vary_mu, fixed_potential, mu, total_energy)
@@ -124,8 +124,7 @@ contains
                                  flag_only_dispersion, flag_neutral_atom, &
                                  flag_atomic_stress, flag_heat_flux, &
                                  flag_full_stress, area_moveatoms, &
-                                 atomic_stress, non_atomic_stress, &
-                                 min_layer, flag_self_consistent
+                                 atomic_stress, non_atomic_stress, min_layer
     use GenComms,          only: inode, ionode, my_barrier, end_comms, &
                                  cq_abort
     use initial_read,      only: read_and_write
@@ -136,7 +135,7 @@ contains
     use cover_module,      only: make_cs, D2_CS
     use dimens,            only: r_dft_d2
     use DFT_D2,            only: set_para_D2, dispersion_D2
-    use pseudo_tm_module,  only: make_neutral_atom
+    use pseudo_tm_module,   only: make_neutral_atom
     use angular_coeff_routines, only: set_fact
     use maxima_module,          only: lmax_ps, lmax_pao
     use XC, only: init_xc
@@ -1098,7 +1097,7 @@ contains
     use logicals
     use mult_module,         only: LNV_matrix_multiply, matL, matphi, &
          matT, T_trans, L_trans, LS_trans,  &
-         SFcoeff_trans, matK,               &
+         SFcoeff_trans, matK, matKatomf,    &   ! 2024.05.20 nakata DFT+U
          matrix_scale, matSFcoeff, matSFcoeff_tran, matrix_transpose
     use SelfCon,             only: new_SC_potl
     use global_module,       only: iprint_init, flag_self_consistent, &
@@ -1111,7 +1110,7 @@ contains
          flag_dissipation,     &
          flag_propagateX, flag_propagateL, restart_X, &
          flag_out_wf, wf_self_con, &
-         flag_write_DOS, flag_neutral_atom, &
+         flag_write_DOS, flag_neutral_atom, flag_DFTplusU, & ! 2024.05.20 nakata DFT+U
          atomf, sf, flag_LFD, nspin_SF, flag_diagonalisation, &
          ne_in_cell, min_layer, flag_basis_set, PAOs
     use ion_electrostatic,   only: ewald, screened_ion_interaction
@@ -1155,7 +1154,7 @@ contains
     integer        :: nfile, symm
     real(double)   :: electrons_tot
     real(double), dimension(nspin) :: electrons, energy_tmp
-    integer        :: spin_SF
+    integer        :: spin, spin_SF   ! 2024.05.20 nakata DFT+U
     !H_trans is not prepared. If we need to symmetrise K, we need H_trans
     integer        :: H_trans = 1
 
@@ -1283,6 +1282,16 @@ contains
                write(io_lun, fmt='(4x,a)') trim(prefix)//' grabbed K  matrix'
           !DEBUG call Report_UpdateMatrix("Kmat")  
        end if
+!!! 2024.05.20 nakata DFT+U
+    else
+       ! When Kmatrix is not read, the effect of DFT-U will be zero in the first SCF step.
+       ! From the second step, matKatomf is used to construct DFT+U matrices
+       if (flag_DFTplusU) then
+          do spin = 1, nspin
+             call matrix_scale(zero,matKatomf(spin))
+          enddo
+       endif
+!!! nakata DFT+U end
     end if
     ! XL-BOMD
     if (restart_X) then

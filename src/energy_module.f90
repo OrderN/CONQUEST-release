@@ -46,6 +46,8 @@
 !!    Remove check_DFT
 !!   2022/06/09 12:29 dave
 !!    Moved disp_energy here from DFT-D2 module
+!!   2024/05/21 00:00 nakata
+!!    Added plusU_energy for DFT+U
 !!  SOURCE
 !!
 module energy
@@ -74,6 +76,7 @@ module energy
   real(double) ::  kinetic_energy
   real(double) ::     cdft_energy
   real(double) ::      exx_energy
+  real(double) ::    plusU_energy   ! 2024.05.20 nakata DFT+U
   real(double) ::        x_energy
   real(double) ::     disp_energy
   real(double) :: delta_E_hartree
@@ -147,6 +150,8 @@ contains
   !!   2021/07/28 10:55 dave
   !!    Change behaviour to print Harris etc always, and DFT only if
   !!    printDFT = T
+  !!   2024/05/21 00:00 nakata
+  !!    Added DFT+U energy if flag_DFTplusU = T
   !!  SOURCE
   !!
   subroutine get_energy(total_energy, printDFT, level)
@@ -155,7 +160,7 @@ contains
     use numbers
     use units
     use mult_module,            only: matrix_product_trace, matH,     &
-                                      matK, matKE, matNL, matX, matNA
+                                      matK, matKE, matNL, matX, matNA, matEplusU   ! 2024.05.20 nakata DFT+U
     use GenComms,               only: inode, ionode, cq_warn
     use global_module,          only: iprint_gen, nspin, spin_factor, &
                                       flag_SpinDependentSF,           &
@@ -165,7 +170,8 @@ contains
                                       flag_perform_cdft,              &
                                       flag_vdWDFT,                    &
                                       flag_exx, exx_alpha,            &
-                                      flag_neutral_atom, min_layer
+                                      flag_neutral_atom, min_layer,   &
+                                      flag_DFTplusU                       ! 2024.05.20 nakata DFT+U
     use pseudopotential_common, only: core_correction, &
                                       flag_neutral_atom_projector
     use density_module,         only: electron_number
@@ -211,6 +217,7 @@ contains
     kinetic_energy = zero
     if(flag_neutral_atom_projector) local_ps_energy     = zero
     exx_energy     = zero
+    plusU_energy   = zero   ! 2024.05.20 nakata DFT+U
     spin_SF = 1
     do spin = 1, nspin
        if (flag_SpinDependentSF) spin_SF = spin
@@ -225,6 +232,10 @@ contains
                         matrix_product_trace(matK(spin), matKE(spin_SF))
        exx_energy = exx_energy - spin_factor * half * exx_alpha * &
                     matrix_product_trace(matK(spin), matX(spin))
+!!! 2024.05.20 nakata DFT+U
+       if (flag_DFTplusU) plusU_energy = plusU_energy + spin_factor * &
+                                         matrix_product_trace(matK(spin), matEplusU(spin))   ! (P-PKP)K = K(P-KPKP) ?? correct?
+!!! nakata DFT+U
     end do
 
     ! Find exx energy
@@ -296,6 +307,11 @@ contains
                      en_conv*cdft_energy, en_units(energy_units)
 
              if (flag_dft_d2) write (io_lun,17) en_conv*disp_energy, en_units(energy_units)
+             !!! 2024.05.20 nakata DFT+U
+             if (flag_DFTplusU) write (io_lun,&
+                      '(10x,"plusU Energy, 2Tr[K(P-PKP)]      : ",f25.15," ",a2)')&
+                     en_conv*plusU_energy, en_units(energy_units)
+             !!! nakata DFT+U end
           end if
 
           if (abs(entropy) >= RD_ERR) then
@@ -356,6 +372,7 @@ contains
        end if
        if (flag_perform_cdft) total_energy2 = total_energy2 + cdft_energy
        if (flag_dft_d2)       total_energy2 = total_energy2 + disp_energy
+       if (flag_DFTplusU)     total_energy2 = total_energy2 + plusU_energy   ! 2024.05.20 nakata DFT+U
 
        if (inode == ionode .and. iprint_gen + min_layer>=2) then
           write(io_lun,13) en_conv*total_energy2, en_units(energy_units)
@@ -451,6 +468,8 @@ contains
   !!    nkp must to be passed to avoid circular dependency
   !!   2023/01/10 18:44 lionel
   !!    Secure ASE printing when using ordern
+  !!   2024/05/21 00:00 nakata
+  !!    Added DFT+U energy if flag_DFTplusU = T
   !!  SOURCE
   !!
   subroutine final_energy(nkp,level)
@@ -462,7 +481,7 @@ contains
     use mult_module,            only: matrix_product_trace, matH,     &
                                       matrix_product_trace_length,    &
                                       matrix_trace,                   &
-                                      matK, matKE, matNL, matX, matS, matNA
+                                      matK, matKE, matNL, matX, matS, matNA, matEplusU   ! 2024.05.20 nakata DFT+U
 
     use global_module,          only: iprint_gen, nspin, spin_factor, &
                                       flag_SpinDependentSF,           &
@@ -473,6 +492,7 @@ contains
                                       flag_vdWDFT,                    &
                                       flag_exx, exx_alpha,            &
                                       flag_neutral_atom, min_layer,   &
+                                      flag_DFTplusU,                  &   ! 2024.05.20 nakata DFT+U
                                       flag_fix_spin_population,       &
                                       io_ase, write_ase, ase_file,    &
                                       flag_diagonalisation
@@ -519,6 +539,7 @@ contains
     kinetic_energy      = zero
     if(flag_neutral_atom_projector) local_ps_energy     = zero
     exx_energy          = zero
+    plusU_energy        = zero   ! 2024.05.20 nakata DFT+U
     one_electron_energy = zero
     potential_energy    = zero
     total_energy1       = zero
@@ -543,6 +564,9 @@ contains
        ! -alpha*Tr[K X]
        exx_energy     = exx_energy     &
                         - spin_factor*half*exx_alpha*matrix_product_trace(matK(spin), matX(spin))
+       ! U/2*Tr[K (P-PKP)]   ! 2024.05.20 nakata DFT+U
+       plusU_energy   = plusU_energy     &
+                        - spin_factor*matrix_product_trace(matK(spin), matEplusU(spin))
     end do
 
     ! Find total pure DFT energy
@@ -655,6 +679,8 @@ contains
                write (io_lun,17) en_conv*disp_energy,en_units(energy_units)
           if (flag_perform_cdft) &          
                write (io_lun,18) en_conv*cdft_energy,en_units(energy_units)
+          if (flag_DFTplusU) & ! 2024.05.20 nakata DFT+U         
+               write (io_lun,181) en_conv*plusU_energy,en_units(energy_units)
           write (io_lun, 2)
        end if
     end if
@@ -715,7 +741,8 @@ contains
             local_ps_energy + &
             nl_energy       + &
             kinetic_energy  + &
-            screened_ion_interaction_energy
+            screened_ion_interaction_energy + &
+            plusU_energy                      ! 2024.05.20 nakata DFT+U
     else
        total_energy2 = hartree_energy_total_rho  + &
             xc_energy       + &     
@@ -724,7 +751,8 @@ contains
             nl_energy       + &
             kinetic_energy  + &
             core_correction + &
-            ion_interaction_energy     
+            ion_interaction_energy + &
+            plusU_energy             ! 2024.05.20 nakata DFT+U
     end if
     if (flag_perform_cdft) total_energy2 = total_energy2 + cdft_energy
     if (flag_dft_d2)       total_energy2 = total_energy2 + disp_energy
@@ -870,6 +898,7 @@ contains
 16  format(6x,'| GS Energy with kT -> 0   = ',f25.15,' ',a2)
 17  format(6x,'| Dispersion (DFT-D2)      = ',f25.15,' ',a2)
 18  format(6x,'| cDFT Energy as 2Tr[K.W]  = ',f25.15,' ',a2)
+181 format(6x,'| DFT+U Energy             = ',f25.15,' ',a2)   ! 2024.05.20 nakata DFT+U
 19  format(6x,'| Number of e- spin up     = ',f25.15)
 20  format(6x,'| Number of e- spin down   = ',f25.15)
 21  format(6x,'| Spin pol. as (up - down) = ',f25.15)

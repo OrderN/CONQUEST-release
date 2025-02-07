@@ -805,6 +805,8 @@ contains
   !!     Added ASE output file setup ; default is F
   !!   2022/12/14 10:01 dave and tsuyoshi
   !!     Update test for solution method (diagon vs ordern) following issue #47
+  !!   2024/05/22 14:40 nakata
+  !!     Added DFT+U related input and output 
   !!   2024/12/03 lionel
   !!     Added grid specification of EXX coarse/standard/fine
   !!  TODO
@@ -864,6 +866,7 @@ contains
          flag_write_DOS, flag_write_projected_DOS, &
          E_wf_min, E_wf_max, flag_wf_range_Ef, &
          mx_temp_matrices, flag_neutral_atom, flag_diagonalisation, &
+         flag_DFTplusU, & ! 2024.05.20 nakata DFT+U
          flag_SpinDependentSF, flag_Multisite, flag_LFD, flag_SFcoeffReuse, &
          flag_opt_cell, cell_constraint_flag, flag_variable_cell, &
          cell_en_tol, optcell_method, cell_stress_tol, &
@@ -871,8 +874,12 @@ contains
          flag_atomic_stress, flag_heat_flux, flag_DumpMatrices, flag_calc_pol, flag_do_pol_calc, &
          i_pol_dir, i_pol_dir_st, i_pol_dir_end
     use dimens, only: GridCutoff,    &
-         n_grid_x, n_grid_y, n_grid_z, r_c,         &
-         RadiusSupport, RadiusAtomf, RadiusMS, RadiusLD, &
+!!! 2024.05.20 nakata DFT+U
+!         n_grid_x, n_grid_y, n_grid_z, r_c,         &
+!         RadiusSupport, RadiusAtomf, RadiusMS, RadiusLD, &
+         n_grid_x, n_grid_y, n_grid_z, r_c, r_plusU, &
+         RadiusSupport, RadiusAtomf, RadiusMS, RadiusLD, RadiusPlusUproj, &
+!!! nakata DFT+U end
          NonLocalFactor, InvSRange,                      &
          min_blip_sp, flag_buffer_old, AtomMove_buffer,  &
          r_dft_d2, r_exx, r_exxs
@@ -881,7 +888,7 @@ contains
     use species_module, only: species_label, charge, mass, n_species,  &
          charge, charge_up, charge_dn,            &
          ps_file,     &
-         nsf_species, &
+         nsf_species, npao_species, &
          non_local_species, type_species,         &
          species_file, species_from_files
     use GenComms,   only: gcopy, my_barrier, cq_abort, inode, ionode, cq_warn
@@ -910,7 +917,7 @@ contains
          n_support_iterations, L_tolerance, &
          sc_tolerance, energy_tolerance,    &
          expected_reduction
-    use pao_format,          only: kcut, del_k
+    use pao_format
     use support_spec_format, only: flag_paos_atoms_in_cell,          &
          read_option, symmetry_breaking,   &
          support_pao_file, TestBasisGrads, &
@@ -928,7 +935,9 @@ contains
          flag_MatrixFile_BinaryFormat_Dump_END, atom_output_threshold, flag_coords_xyz
 
     use group_module,     only: part_method, HILBERT, PYTHON
-    use H_matrix_module,  only: flag_write_locps, flag_dump_locps
+    use H_matrix_module,  only: flag_write_locps, flag_dump_locps, &
+                                num_plusUproj, info_plusUproj, & ! 2024.05.20 nakata DFT+U
+                                flag_plusUproj_atom, w_plusUproj_pao, half_w_plusUproj_pao ! 2024.05.20 nakata DFT+U
     use pao_minimisation, only: InitStep_paomin
     use timer_module,     only: time_threshold,lun_tmr, TimingOn, &
          TimersWriteOut, BackTraceOn
@@ -1005,6 +1014,11 @@ contains
     character(len=5)  :: ps_type !To find which pseudo we use
     character(len=8)  :: tmp
     logical :: flag_ghost, find_species, test_ase
+!!! 2024.05.20 nakata DFT+U
+    integer           :: i_species, inum_plusUproj, prncpl, &
+                         n_plusUproj, l_plusUproj, z_plusUproj, plusUvalue, &
+                         max_npao, z_temp, ipao, i_ang, i_zeta, i_m
+!!! nakata DFT+U end
 
     ! spin polarisation
     logical :: flag_spin_polarisation
@@ -1320,6 +1334,9 @@ contains
     else
        flag_neutral_atom_projector = .false.
     end if
+!!! 2024.05.20 nakata DFT+U
+    flag_DFTplusU = fdf_boolean('DM.DFTplusU', .false.)
+!!! nakata DFT+U end
 !!$
 !!$
 !!$
@@ -1410,6 +1427,7 @@ contains
        RadiusLD(i)       = zero
        NonLocalFactor(i) = zero
        InvSRange(i)      = zero
+!       RadiusPlusUproj(i) = zero ! 2024.05.20 nakata DFT+U
        blip_info(i)%SupportGridSpacing = zero
        if(pseudo_type==SIESTA.OR.pseudo_type==ABINIT) non_local_species(i) = .true.
        ! This is new-style fdf_block
@@ -1874,6 +1892,81 @@ contains
           end do
        end if
     end if
+!!! 2024.05.20 nakata DFT+U
+!!$
+!!$
+!!$  DFT+U (DFT plus U)
+!!$
+!!$
+    if (flag_DFTplusU) then
+       ! cutoff for PK matrix (PKrange)
+       r_plusU = fdf_double('DM.PK_range_DFTplusU', one )   ! range for PK in DFT+U calculation ! 2024.05.20 nakata DFT+U
+
+       ! set w_plusUproj: U parameter values
+       max_npao = maxval(npao_species)
+       allocate(flag_plusUproj_atom(n_species))
+       allocate(w_plusUproj_pao(n_species,max_npao))
+       allocate(half_w_plusUproj_pao(n_species,max_npao))
+
+       flag_plusUproj_atom(:) =.false.
+       w_plusUproj_pao(:,:) = zero
+       half_w_plusUproj_pao(:,:) = zero
+
+       if (fdf_block('DFTplusU')) then
+          num_plusUproj = 1 + block_end - block_start
+          if(inode==ionode) write(io_lun,*) 'num_plusUproj =',num_plusUproj ! nakata 2024 debug
+          allocate(info_plusUproj(num_plusUproj,5))
+          do inum_plusUproj=1,num_plusUproj
+             z_plusUproj = 1
+             read(unit=input_array(block_start+inum_plusUproj-1),fmt=*) &
+                i_species, n_plusUproj, l_plusUproj, z_plusUproj, plusUvalue
+             info_plusUproj(inum_plusUproj,1) = i_species
+             info_plusUproj(inum_plusUproj,2) = n_plusUproj
+             info_plusUproj(inum_plusUproj,3) = l_plusUproj
+             info_plusUproj(inum_plusUproj,4) = z_plusUproj
+             info_plusUproj(inum_plusUproj,5) = plusUvalue
+
+             flag_plusUproj_atom(i_species) = .true.               
+
+             ipao = 0
+             do i_ang = 0, pao(i_species)%greatest_angmom
+               if(pao(i_species)%angmom(i_ang)%n_zeta_in_angmom>0) then
+                   if (i_ang.eq.l_plusUproj) then 
+                      ! set U parameters for PAO with (n_plusUproj,l_plusUproj,z_plusUproj)
+                      z_temp = 0
+                      do i_zeta = 1, pao(i_species)%angmom(i_ang)%n_zeta_in_angmom
+                         prncpl = pao(i_species)%angmom(i_ang)%prncpl(i_zeta)
+                         if (prncpl.ne.n_plusUproj) then
+                            ipao = ipao + 2*i_ang + 1
+                         else if (prncpl.eq.n_plusUproj) then
+                            z_temp = z_temp + 1
+                            if (z_temp.eq.z_plusUproj) then
+                               do i_m = -i_ang,i_ang
+                                  ipao = ipao + 1
+                                       w_plusUproj_pao(i_species,ipao) = plusUvalue
+                                  half_w_plusUproj_pao(i_species,ipao) = half * plusUvalue
+                               enddo ! m
+                            else
+                               ipao = ipao + 2*i_ang + 1
+                            endif
+                         endif
+                      enddo ! z
+                   else
+                      do i_zeta = 1, pao(i_species)%angmom(i_ang)%n_zeta_in_angmom
+                         ipao = ipao + 2*i_ang + 1
+                      enddo
+                   endif
+                endif
+             enddo ! anglar momentum
+             if (ipao.ne.npao_species(i_species)) &
+                call cq_abort("Error in counting PAOs when setting DFT+U parameters.")
+          enddo ! n_plusUproj
+          call fdf_endblock
+       else
+          call cq_abort("No DFTplusU parameter is given in the input file.")
+       endif
+    endif ! flag_DFTplusU
+!!! nakata DFT+U end
 !!$
 !!$
 !!$
@@ -2565,11 +2658,13 @@ contains
   !!    - Added charge_up and charge_dn
   !!   2019/06/06 18:00 nakata
   !!    - Added MSSF_nonminimal_species
+  !!   2024/05/28 17:00 nakata
+  !!    - Added RadiusPlusUproj for DFT+U
   !!  SOURCE
   !!
   subroutine allocate_species_vars
 
-    use dimens,             only: RadiusSupport, RadiusAtomf, RadiusMS, RadiusLD, &
+    use dimens,             only: RadiusSupport, RadiusAtomf, RadiusMS, RadiusLD, RadiusPlusUproj, & ! 2024.05.20 nakata DFT+U
          NonLocalFactor, InvSRange, atomicnum
     use memory_module,      only: reg_alloc_mem, type_dbl
     use species_module,     only: n_species, nsf_species, nlpf_species, npao_species, natomf_species, &
@@ -2659,6 +2754,11 @@ contains
     allocate(MSSF_nonminimal_species(n_species),STAT=stat)
     if(stat/=0) call cq_abort("Error allocating MSSF_nonminimal_species in allocate_species_vars: ", n_species,stat)
     call reg_alloc_mem(area_general,n_species,type_dbl)
+!!! 2024.05.20 nakata DFT+U
+!    allocate(RadiusPlusUproj(n_species),STAT=stat)
+!    if(stat/=0) call cq_abort("Error allocating RadiusPlusUproj, RadiusLD in allocate_species_vars: ",n_species,stat)
+!    call reg_alloc_mem(area_general,n_species,type_dbl)
+!!! nakata DFT+U end
     !
     call stop_timer(tmr_std_allocation)
 
@@ -2721,7 +2821,7 @@ contains
     use datatypes
     use units
     use dimens,               only: r_super_x, r_super_y, r_super_z,   &
-         n_grid_x, n_grid_y, n_grid_z, r_h, r_c, RadiusSupport
+         n_grid_x, n_grid_y, n_grid_z, r_h, r_c, RadiusSupport, r_plusU   ! 2024.05.20 nakata DFT+U
     use block_module,         only: in_block_x, in_block_y, in_block_z
     use species_module,       only: n_species, species_label, mass,    &
          charge,          &
@@ -2735,7 +2835,8 @@ contains
          flag_Multisite, flag_diagonalisation, flag_neutral_atom, temp_ion, &
          flag_self_consistent, flag_vary_basis, iprint_init, flag_pcc_global, &
          nspin, flag_SpinDependentSF, flag_fix_spin_population, ne_spin_in_cell, flag_XLBOMD,&
-         ase_file
+         ase_file, flag_DFTplusU   ! 2024.05.20 nakata DFT+U
+    use H_matrix_module,      only: num_plusUproj, info_plusUproj ! 2024.05.20 nakata DFT+U
     use SelfCon,              only: maxitersSC
     use GenComms,             only: cq_abort
     use minimise,             only: energy_tolerance, L_tolerance,     &
@@ -2961,6 +3062,25 @@ contains
     if(.NOT.flag_diagonalisation) &
          write(io_lun,fmt='(10x,"Density Matrix range  = ",f7.4,1x,a2)') &
          dist_conv*r_c, d_units(dist_units)
+
+!!! 2024.05.20 nakata DFT+U
+    if(flag_DFTplusU) then
+       write(io_lun,fmt='(10x,"DFT+U calculation will be performed")') 
+       write(io_lun,fmt='(10x,"DFT+U PK Matrix range  = ",f7.4,1x,a2)') &
+       dist_conv*r_plusU, d_units(dist_units)
+
+       write(io_lun,fmt='(/4x,"Number of DFT-U projectors: ",i2)') num_plusUproj
+
+       write(io_lun,fmt='(4x,a40)') '----------------------------------------'
+       write(io_lun,fmt='(4x,a40)') "|   species   n  l  zeta  U-value (Ha)  |"
+       write(io_lun,fmt='(4x,a40)') '----------------------------------------'
+       do n=1, num_plusUproj
+          write(io_lun,fmt='(4x,"|",i2,2x,a5,2x,i1,2x,i1,3x,i1,4x,f9.3,5x,"|")') &
+               info_plusUproj(n,1), species_label(info_plusUproj(n,1)), &
+               info_plusUproj(n,2), info_plusUproj(n,3), info_plusUproj(n,4), info_plusUproj(n,5)
+       end do
+    endif
+!!! nakata DFT+U end
 
     return
   end subroutine write_info

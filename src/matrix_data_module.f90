@@ -62,6 +62,8 @@
 !!    which are no longer used
 !!   2017/12/05 10:20 dave (with TM and NW (Mizuho))
 !!    Adding new matrix indices (aNA and NAa) for atom function - NA projectors
+!!   2024/05/22 14:40 nakata
+!!    Adding new matrix indices (PK, pUa, aUp, pUp and aUa) for atom function - DFT+U
 !!  SOURCE
 !!
 module matrix_data
@@ -73,7 +75,8 @@ module matrix_data
   save
 
   ! This will need to change if the above parameters are changed
-  integer, parameter :: mx_matrices = 32
+!  integer, parameter :: mx_matrices = 32    ! 2024.05.20 nakata DFT+U
+  integer, parameter :: mx_matrices = 37
 
   ! Store ALL indices in a large array
   type(matrix),      allocatable, dimension(:,:), target :: mat
@@ -88,6 +91,7 @@ module matrix_data
                                     aSs_matind, aHs_matind, sSa_matind, sHa_matind, &
                                     SFcoeff_matind, SFcoeffTr_matind, LD_matind
   integer, dimension(:), pointer :: aNAmatind, NAamatind
+  integer, dimension(:), pointer :: aUa_matind, PKmatind   !!! 2024.05.20 nakata DFT+U
 
   ! Parameters for the different matrix ranges
   integer, parameter :: Srange   = 1   ! STS,TST,TS.TS
@@ -126,6 +130,14 @@ module matrix_data
   ! Ranges for NA projectors set later also (dimens.module.f90)
   integer :: aNArange        ! 31
   integer :: NAarange        ! 32
+
+!!! 2024.05.20 nakata DFT+U
+  integer :: PKrange         ! 33
+  integer :: pUa_range       ! 34
+  integer :: aUp_range       ! 35
+  integer :: pUp_range       ! 36
+  integer :: aUa_range       ! 37
+!!! nakata DFT+U end
 
   integer :: max_range ! Indexes matrix with largest range
 

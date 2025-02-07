@@ -42,6 +42,8 @@
 !!    Commented out some tricks used in MD & structure optimisation
 !!   2016/09/16 16:00 nakata
 !!    Added variables for PAO-based matrices and multi-site SFs
+!!   2024/05/28 17:00 nakata
+!!    Added variables (r_plusU and RadiusPlusUproj) for DFT+U
 !!  SOURCE
 module dimens
 
@@ -55,7 +57,7 @@ module dimens
 
   real(double) :: r_super_x, r_super_y, r_super_z, volume
   real(double) :: r_super_x_squared, r_super_y_squared, r_super_z_squared
-  real(double) :: r_s, r_h, r_c, r_nl, r_core_squared, r_dft_d2, r_exx, r_exxs
+  real(double) :: r_s, r_h, r_c, r_nl, r_core_squared, r_dft_d2, r_exx, r_exxs, r_plusU ! 2024.05.20 nakata DFT+U1
   real(double) :: r_s_atomf, r_h_atomf, r_MS, r_LD
   real(double) :: grid_point_volume, one_over_grid_point_volume
   real(double) :: support_grid_volume
@@ -67,6 +69,7 @@ module dimens
 
   real(double), allocatable, dimension(:) :: RadiusSupport, RadiusAtomf, &
                                              RadiusMS, RadiusLD,         &
+                                             RadiusPlusUproj,            & ! 2024.05.20 nakata DFT+U
                                              NonLocalFactor, InvSRange
   integer, allocatable, dimension(:) :: atomicnum
 
@@ -161,6 +164,9 @@ contains
 !!    flag_MDold was removed.
 !!   2019/12/02 15:17 dave 
 !!    Added checks to round RadiusAtomf and RadiusSupport to safe value (including grid points)
+!!   2024/05/22 14:40 nakata
+!!    Introduced flag_DFTplusU 
+!!    Added r_plusU, r_plusUproj, PKrange, pUa_range, aUp_range, pUp_range and aUa_range for DFT+U
 !!   2024/07/18 14:18 lionel 
 !!    Check consistency of Xrange wrt r_exx read from input 
 !!  SOURCE
@@ -171,7 +177,8 @@ contains
     use numbers
     use matrix_data
     use GenComms,      only: cq_abort, cq_warn
-    use global_module, only: iprint_init, atomf, sf, flag_Multisite, flag_exx, flag_diagonalisation
+    use global_module, only: iprint_init, atomf, sf, flag_Multisite, flag_exx, flag_diagonalisation, &
+                             flag_DFTplusU   !!! 2024.05.20 nakata DFT+U
     use block_module,  only: in_block_x, in_block_y, in_block_z, n_pts_in_block
     use pseudopotential_common, only: pseudo_type, OLDPS, SIESTA, ABINIT, flag_neutral_atom_projector
 
@@ -187,7 +194,7 @@ contains
     character(len=80) :: sub_name = "set_dimensions"
     type(cq_timer) :: backtrace_timer
     integer        :: n, mx_matrices_tmp
-    real(double)   :: r_core, r_t, rcutmax, max_grid
+    real(double)   :: r_core, r_t, r_plusUproj, rcutmax, max_grid ! 2024.05.20 nakata DFT+U
 
 !****lat<$
     call start_backtrace(t=backtrace_timer,who='set_dimensions',where=9,level=2)
@@ -220,6 +227,21 @@ contains
        else
           mx_matrices_tmp = 19
        end if
+!!! 2024.05.20 nakata DFT+U
+       if(flag_DFTplusU) then
+          PKrange = mx_matrices_tmp + 1
+!          pUa_range = mx_matrices_tmp + 2
+!          aUp_range = mx_matrices_tmp + 3
+!          pUp_range = mx_matrices_tmp + 4
+!          aUa_range = mx_matrices_tmp + 5
+          pUa_range = aSa_range
+          aUp_range = aSa_range
+          pUp_range = aSa_range
+          aUa_range = aSa_range
+!          mx_matrices_tmp = mx_matrices_tmp + 5
+          mx_matrices_tmp = mx_matrices_tmp + 1
+       end if
+!!! nakata DFT+U end
     else
        aSa_range       = 20
        aHa_range       = 21
@@ -239,6 +261,21 @@ contains
        else
           mx_matrices_tmp = 30
        end if
+!!! 2024.05.20 nakata DFT+U
+       if(flag_DFTplusU) then
+          PKrange = mx_matrices_tmp + 1
+!          pUa_range = mx_matrices_tmp + 2
+!          aUp_range = mx_matrices_tmp + 3
+!          pUp_range = mx_matrices_tmp + 4
+!          aUa_range = mx_matrices_tmp + 5
+          pUa_range = aSa_range
+          aUp_range = aSa_range
+          pUp_range = aSa_range
+          aUa_range = aSa_range
+!          mx_matrices_tmp = mx_matrices_tmp + 5   ! = maximally 37
+          mx_matrices_tmp = mx_matrices_tmp + 1
+       end if
+!!! nakata DFT+U end
     endif
 
     !n_my_grid_points = n_pts_in_block * n_blocks    
@@ -262,6 +299,7 @@ contains
     r_h_atomf = zero
     r_MS      = zero
     r_LD      = zero
+    r_plusUproj = zero   ! 2024.05.20 nakata DFT+U
     do n=1, n_species
        ! Round the atom function radius to the nearest multiple of the largest grid spacing
        ! (add one to account for displacement relative to grid point)
@@ -274,6 +312,8 @@ contains
        r_h_atomf = max(r_h_atomf,RadiusAtomf(n))
        r_MS      = max(r_MS,RadiusMS(n))
        r_LD      = max(r_LD,RadiusLD(n))
+     ! r_plusUproj = max(r_plusUproj,RadiusPlusUproj(n))   ! 2024.05.20 nakata DFT+U
+       r_plusUproj = max(r_plusUproj,r_h_atomf)            ! assumed to be the same as PAO radius at present ! 2024.05.20 nakata DFT+U
     end do
     if(non_local.and.(inode==ionode).and.iprint_init>0) then
        write(io_lun,2) r_core
@@ -378,6 +418,21 @@ contains
        mat_name(aNArange) = "aNA"
        mat_name(NAarange) = "NAa"
     end if
+!!! 2024.05.20 nakata DFT+U
+!   Now all of pUa_range, pUp_range, aUp_range, aUp_range are set to be aSa_range
+    if (flag_DFTplusU) then 
+       rcut(PKrange)   = (r_plusU)
+!       rcut(pUa_range) = r_plusUproj + r_s_atomf   ! for W
+!       rcut(pUp_range) = r_plusUproj + r_plusUproj ! for O
+!       rcut(aUp_range) = rcut(pUa_range)           ! for V
+!       rcut(aUa_range) = rcut(aUa_range)           ! for P
+       mat_name(PKrange) = "PK"
+!       mat_name(pUa_range) = "pUa"
+!       mat_name(aUp_range) = "aUp"
+!       mat_name(pUp_range) = "pUp"
+!       mat_name(aUa_range) = "aUa"
+    end if
+!!! nakata DFT+U end
     rcutmax = zero
     do n=1,mx_matrices_tmp
        if(rcut(n)>rcutmax) then
