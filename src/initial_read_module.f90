@@ -185,6 +185,7 @@ contains
          atomf, sf, paof,                 &
          flag_SpinDependentSF, nspin_SF,  &
          flag_Multisite,                  &
+         flag_DFTplusU, & ! 2024.05.20 nakata DFT+U
          flag_cdft_atom, flag_local_excitation, &
          flag_diagonalisation, flag_vary_basis, &
          flag_MDcontinue, flag_SFcoeffReuse,    &
@@ -222,6 +223,9 @@ contains
     use md_control,             only: md_position_file
     use pao_format
     use XC,                     only: flag_functional_type, flag_different_functional
+    use H_matrix_module, only:  num_plusUproj, info_plusUproj, & ! 2024.05.20 nakata DFT+U
+                                flag_plusUproj_atom, w_plusUproj_pao, half_w_plusUproj_pao ! 2024.05.20 nakata DFT+U
+
 
     implicit none
 
@@ -248,6 +252,11 @@ contains
     ! for checking the sum of electrons of spin channels
     real(double) :: sum_elecN_spin
     real(double) :: charge_tmp
+
+    ! PlusU
+    integer           :: inum_plusUproj, &
+                         n_plusUproj, l_plusUproj, z_plusUproj, plusUvalue, &
+                         max_npao, z_temp, ipao, i_ang, i_zeta, i_m
 
     !****lat<$
     call start_backtrace(t=backtrace_timer,who='read_and_write',where=1,level=1)
@@ -499,6 +508,53 @@ contains
        else if(atomf==paof) then
           write(io_lun,fmt='(6x,"Primitive atom functions are the pseudo-atomic orbitals"/)')
        endif
+    end if
+    ! Find DFT+U projectors
+    if(flag_DFTplusU) then
+       ! set w_plusUproj: U parameter values
+       max_npao = maxval(npao_species)
+       allocate(w_plusUproj_pao(n_species,max_npao))
+       allocate(half_w_plusUproj_pao(n_species,max_npao))
+
+       flag_plusUproj_atom(:) =.false.
+       w_plusUproj_pao(:,:) = zero
+       half_w_plusUproj_pao(:,:) = zero
+
+       do inum_plusUproj=1,num_plusUproj
+          ipao = 0
+          i_species = info_plusUproj(inum_plusUproj,1)
+          do i_ang = 0, pao(i_species)%greatest_angmom
+             if(pao(i_species)%angmom(i_ang)%n_zeta_in_angmom>0) then
+                if (i_ang.eq.l_plusUproj) then 
+                   ! set U parameters for PAO with (n_plusUproj,l_plusUproj,z_plusUproj)
+                   z_temp = 0
+                   do i_zeta = 1, pao(i_species)%angmom(i_ang)%n_zeta_in_angmom
+                      prncpl = pao(i_species)%angmom(i_ang)%prncpl(i_zeta)
+                      if (prncpl.ne.n_plusUproj) then
+                         ipao = ipao + 2*i_ang + 1
+                      else if (prncpl.eq.n_plusUproj) then
+                         z_temp = z_temp + 1
+                         if (z_temp.eq.z_plusUproj) then
+                            do i_m = -i_ang,i_ang
+                               ipao = ipao + 1
+                               w_plusUproj_pao(i_species,ipao) = plusUvalue
+                               half_w_plusUproj_pao(i_species,ipao) = half * plusUvalue
+                            enddo ! m
+                         else
+                            ipao = ipao + 2*i_ang + 1
+                         endif
+                      endif
+                   enddo ! z
+                else
+                   do i_zeta = 1, pao(i_species)%angmom(i_ang)%n_zeta_in_angmom
+                      ipao = ipao + 2*i_ang + 1
+                   enddo
+                endif
+             endif
+          enddo ! anglar momentum
+          if (ipao.ne.npao_species(i_species)) &
+               call cq_abort("Error in counting PAOs when setting DFT+U parameters.")
+       enddo ! n_plusUproj
     end if
     !
     !
@@ -1902,20 +1958,11 @@ contains
        ! cutoff for PK matrix (PKrange)
        r_plusU = fdf_double('DM.PK_range_DFTplusU', one )   ! range for PK in DFT+U calculation ! 2024.05.20 nakata DFT+U
 
-       ! set w_plusUproj: U parameter values
-       max_npao = maxval(npao_species)
-       allocate(flag_plusUproj_atom(n_species))
-       allocate(w_plusUproj_pao(n_species,max_npao))
-       allocate(half_w_plusUproj_pao(n_species,max_npao))
-
-       flag_plusUproj_atom(:) =.false.
-       w_plusUproj_pao(:,:) = zero
-       half_w_plusUproj_pao(:,:) = zero
-
        if (fdf_block('DFTplusU')) then
           num_plusUproj = 1 + block_end - block_start
           if(inode==ionode) write(io_lun,*) 'num_plusUproj =',num_plusUproj ! nakata 2024 debug
           allocate(info_plusUproj(num_plusUproj,5))
+          allocate(flag_plusUproj_atom(n_species))
           do inum_plusUproj=1,num_plusUproj
              z_plusUproj = 1
              read(unit=input_array(block_start+inum_plusUproj-1),fmt=*) &
@@ -1928,38 +1975,38 @@ contains
 
              flag_plusUproj_atom(i_species) = .true.               
 
-             ipao = 0
-             do i_ang = 0, pao(i_species)%greatest_angmom
-               if(pao(i_species)%angmom(i_ang)%n_zeta_in_angmom>0) then
-                   if (i_ang.eq.l_plusUproj) then 
-                      ! set U parameters for PAO with (n_plusUproj,l_plusUproj,z_plusUproj)
-                      z_temp = 0
-                      do i_zeta = 1, pao(i_species)%angmom(i_ang)%n_zeta_in_angmom
-                         prncpl = pao(i_species)%angmom(i_ang)%prncpl(i_zeta)
-                         if (prncpl.ne.n_plusUproj) then
-                            ipao = ipao + 2*i_ang + 1
-                         else if (prncpl.eq.n_plusUproj) then
-                            z_temp = z_temp + 1
-                            if (z_temp.eq.z_plusUproj) then
-                               do i_m = -i_ang,i_ang
-                                  ipao = ipao + 1
-                                       w_plusUproj_pao(i_species,ipao) = plusUvalue
-                                  half_w_plusUproj_pao(i_species,ipao) = half * plusUvalue
-                               enddo ! m
-                            else
-                               ipao = ipao + 2*i_ang + 1
-                            endif
-                         endif
-                      enddo ! z
-                   else
-                      do i_zeta = 1, pao(i_species)%angmom(i_ang)%n_zeta_in_angmom
-                         ipao = ipao + 2*i_ang + 1
-                      enddo
-                   endif
-                endif
-             enddo ! anglar momentum
-             if (ipao.ne.npao_species(i_species)) &
-                call cq_abort("Error in counting PAOs when setting DFT+U parameters.")
+             !%%!ipao = 0
+             !%%!do i_ang = 0, pao(i_species)%greatest_angmom
+             !%%!  if(pao(i_species)%angmom(i_ang)%n_zeta_in_angmom>0) then
+             !%%!      if (i_ang.eq.l_plusUproj) then 
+             !%%!         ! set U parameters for PAO with (n_plusUproj,l_plusUproj,z_plusUproj)
+             !%%!         z_temp = 0
+             !%%!         do i_zeta = 1, pao(i_species)%angmom(i_ang)%n_zeta_in_angmom
+             !%%!            prncpl = pao(i_species)%angmom(i_ang)%prncpl(i_zeta)
+             !%%!            if (prncpl.ne.n_plusUproj) then
+             !%%!               ipao = ipao + 2*i_ang + 1
+             !%%!            else if (prncpl.eq.n_plusUproj) then
+             !%%!               z_temp = z_temp + 1
+             !%%!               if (z_temp.eq.z_plusUproj) then
+             !%%!                  do i_m = -i_ang,i_ang
+             !%%!                     ipao = ipao + 1
+             !%%!                          w_plusUproj_pao(i_species,ipao) = plusUvalue
+             !%%!                     half_w_plusUproj_pao(i_species,ipao) = half * plusUvalue
+             !%%!                  enddo ! m
+             !%%!               else
+             !%%!                  ipao = ipao + 2*i_ang + 1
+             !%%!               endif
+             !%%!            endif
+             !%%!         enddo ! z
+             !%%!      else
+             !%%!         do i_zeta = 1, pao(i_species)%angmom(i_ang)%n_zeta_in_angmom
+             !%%!            ipao = ipao + 2*i_ang + 1
+             !%%!         enddo
+             !%%!      endif
+             !%%!   endif
+             !%%!enddo ! anglar momentum
+             !%%!if (ipao.ne.npao_species(i_species)) &
+             !%%!   call cq_abort("Error in counting PAOs when setting DFT+U parameters.")
           enddo ! n_plusUproj
           call fdf_endblock
        else
@@ -3075,7 +3122,8 @@ contains
        write(io_lun,fmt='(4x,a40)') "|   species   n  l  zeta  U-value (Ha)  |"
        write(io_lun,fmt='(4x,a40)') '----------------------------------------'
        do n=1, num_plusUproj
-          write(io_lun,fmt='(4x,"|",i2,2x,a5,2x,i1,2x,i1,3x,i1,4x,f9.3,5x,"|")') &
+          !write(io_lun,fmt='(4x,"|",i2,2x,a5,2x,i1,2x,i1,3x,i1,4x,f9.3,5x,"|")') &
+          write(io_lun,fmt='(4x,"|",i2,2x,a5,2x,i1,2x,i1,3x,i1,4x,i4,5x,"|")') &
                info_plusUproj(n,1), species_label(info_plusUproj(n,1)), &
                info_plusUproj(n,2), info_plusUproj(n,3), info_plusUproj(n,4), info_plusUproj(n,5)
        end do
