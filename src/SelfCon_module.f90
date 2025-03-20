@@ -225,7 +225,6 @@ contains
     ! Build H matrix *with NL and KE*
     call get_H_matrix(.true., fixed_potential, electrons, density, &
                       maxngrid, backtrace_level)
-
     ! The H matrix build is already timed on its own, so I leave out
     ! of the SC preliminaries (open to discussion)
     call start_timer(tmr_l_tmp1,WITH_LEVEL)
@@ -1640,7 +1639,7 @@ contains
     use DMMin,             only: FindMinDM
     use global_module,     only: iprint_SC, atomf, flag_perform_cDFT, ne_in_cell, &
                                  nspin, spin_factor, flag_diagonalisation, flag_LFD, flag_Multisite, &
-                                 ne_spin_in_cell, nspin, flag_fix_spin_population
+                                 ne_spin_in_cell, nspin, flag_fix_spin_population, flag_first_diag
     use H_matrix_module,   only: get_H_matrix, get_output_energies
     use S_matrix_module,   only: get_S_matrix
     !use DiagModule,        only: diagon
@@ -1723,6 +1722,7 @@ contains
     ! Find Hartree, XC and local PS (i.e. NA) energies with output density
     call get_output_energies(rhoout, size)
     call get_energy(total_energy, .true., backtrace_level) ! Output DFT energy
+    if(flag_first_diag) flag_first_diag = .false.
 
 !****lat<$
     call stop_backtrace(t=backtrace_timer,who='get_new_rho',echo=.true.)
@@ -1819,7 +1819,6 @@ contains
        end do
     end do
     call gsum(charge, ni_in_cell, nspin)
-
     ! output
     if (inode == ionode) then
        ! write (*, *) 'Writing charge on individual atoms...'

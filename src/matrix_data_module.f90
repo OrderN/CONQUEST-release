@@ -76,7 +76,7 @@ module matrix_data
 
   ! This will need to change if the above parameters are changed
 !  integer, parameter :: mx_matrices = 32    ! 2024.05.20 nakata DFT+U
-  integer, parameter :: mx_matrices = 37
+  integer, parameter :: mx_matrices = 54 ! From 37...
 
   ! Store ALL indices in a large array
   type(matrix),      allocatable, dimension(:,:), target :: mat

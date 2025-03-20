@@ -1150,7 +1150,7 @@ contains
     ! Local variables
     type(cq_timer) :: backtrace_timer
     integer        :: backtrace_level
-    logical        :: reset_L, record, rebuild_KE_NL
+    logical        :: reset_L, record, rebuild_KE_NL, flag_orig_DFTU
     integer        :: nfile, symm
     real(double)   :: electrons_tot
     real(double), dimension(nspin) :: electrons, energy_tmp
@@ -1178,7 +1178,9 @@ contains
 
     !2020Jan07 tsuyoshi
     !index_MatrixFile is read from Conquest_input  (default is 0)
-     MDinit_step = 0
+    MDinit_step = 0
+    flag_orig_DFTU = flag_DFTplusU
+    flag_DFTplusU = .false.
 
     if (flag_MDcontinue.or. &
          restart_DM.or. &
@@ -1496,6 +1498,7 @@ contains
        stop
     end if
 
+    flag_DFTplusU = flag_orig_DFTU
     !****lat<$
     call stop_backtrace(t=backtrace_timer,who='initial_H',echo=.true.)
     !****lat>$

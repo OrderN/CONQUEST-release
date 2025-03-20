@@ -69,6 +69,7 @@
 !!
 module H_matrix_module
 
+  use datatypes
   use global_module,          only: io_lun
   use timer_module,           only: start_timer, stop_timer, stop_print_timer
   use timer_module,           only: start_backtrace, stop_backtrace
@@ -91,7 +92,8 @@ module H_matrix_module
   integer :: num_plusUproj
   integer, dimension(:,:), allocatable :: info_plusUproj
   logical, dimension(:),   allocatable :: flag_plusUproj_atom
-  real*8,  dimension(:,:), allocatable :: w_plusUproj_pao, half_w_plusUproj_pao
+  real(double), dimension(:), allocatable :: plusUvalue
+  real(double),  dimension(:,:), allocatable :: w_plusUproj_pao, half_w_plusUproj_pao
 !!! nakata DFT+U end
 !!***
 
@@ -227,7 +229,7 @@ contains
                                            IPRINT_TIME_THRES1,          &
                                            iprint_SC,                   &
                                            flag_perform_cDFT,           &
-                                           flag_DFTplusU,               &   ! 2024.05.20 nakata DFT+U
+                                           flag_DFTplusU, flag_first_diag, &   ! 2024.05.20 nakata DFT+U
                                            area_ops, nspin, nspin_SF,   &
                                            spin_factor, blips,          &
                                            flag_analytic_blip_int,      &
@@ -445,7 +447,7 @@ contains
        end if
 !****lat>$
 !!! 2024.5.20 nakata DFT+U
-       if(flag_DFTplusU) then
+       if(flag_DFTplusU.and.(.not.flag_first_diag)) then
           call get_plusU_matrix
 
           if (iprint_ops > 4) then
@@ -2050,7 +2052,6 @@ contains
     integer :: spin
     integer :: matW, matV, matOW, matPatomf, matPK, matPKP
 
-
     call start_timer(tmr_l_tmp1,WITH_LEVEL)
     if(iprint_ops + min_layer>=5.AND.myid==0) write(io_lun,'(6x,A)') ' We are in set_OW'
 
@@ -2226,7 +2227,7 @@ contains
              val_Satomf = return_matrix_value_pos(matSatomf,wheremat)
              ! We assume the projector functions are simply chosen from PAOs,
              ! so OW = W = <proj_i | pao_j>
-             val_W = val_Satomf 
+             val_W = val_Satomf
              call store_matrix_value_pos(matW, wheremat,val_W)
           enddo ! pao_j
        endif ! projetor or not

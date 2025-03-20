@@ -223,7 +223,7 @@ contains
     use md_control,             only: md_position_file
     use pao_format
     use XC,                     only: flag_functional_type, flag_different_functional
-    use H_matrix_module, only:  num_plusUproj, info_plusUproj, & ! 2024.05.20 nakata DFT+U
+    use H_matrix_module, only:  num_plusUproj, info_plusUproj, plusUvalue, & ! 2024.05.20 nakata DFT+U
                                 flag_plusUproj_atom, w_plusUproj_pao, half_w_plusUproj_pao ! 2024.05.20 nakata DFT+U
 
 
@@ -255,7 +255,7 @@ contains
 
     ! PlusU
     integer           :: inum_plusUproj, &
-                         n_plusUproj, l_plusUproj, z_plusUproj, plusUvalue, &
+                         n_plusUproj, l_plusUproj, z_plusUproj, &
                          max_npao, z_temp, ipao, i_ang, i_zeta, i_m
 
     !****lat<$
@@ -516,13 +516,17 @@ contains
        allocate(w_plusUproj_pao(n_species,max_npao))
        allocate(half_w_plusUproj_pao(n_species,max_npao))
 
-       flag_plusUproj_atom(:) =.false.
+       !flag_plusUproj_atom(:) =.false.
        w_plusUproj_pao(:,:) = zero
        half_w_plusUproj_pao(:,:) = zero
 
        do inum_plusUproj=1,num_plusUproj
           ipao = 0
           i_species = info_plusUproj(inum_plusUproj,1)
+          l_plusUproj = info_plusUproj(inum_plusUproj,3)
+          n_plusUproj = info_plusUproj(inum_plusUproj,2)
+          z_plusUproj = info_plusUproj(inum_plusUproj,4)
+          !plusUvalue = real(info_plusUproj(inum_plusUproj,5),double)
           do i_ang = 0, pao(i_species)%greatest_angmom
              if(pao(i_species)%angmom(i_ang)%n_zeta_in_angmom>0) then
                 if (i_ang.eq.l_plusUproj) then 
@@ -537,8 +541,8 @@ contains
                          if (z_temp.eq.z_plusUproj) then
                             do i_m = -i_ang,i_ang
                                ipao = ipao + 1
-                               w_plusUproj_pao(i_species,ipao) = plusUvalue
-                               half_w_plusUproj_pao(i_species,ipao) = half * plusUvalue
+                               w_plusUproj_pao(i_species,ipao) = plusUvalue(i_species)
+                               half_w_plusUproj_pao(i_species,ipao) = half * plusUvalue(i_species)
                             enddo ! m
                          else
                             ipao = ipao + 2*i_ang + 1
@@ -922,7 +926,7 @@ contains
          flag_write_DOS, flag_write_projected_DOS, &
          E_wf_min, E_wf_max, flag_wf_range_Ef, &
          mx_temp_matrices, flag_neutral_atom, flag_diagonalisation, &
-         flag_DFTplusU, & ! 2024.05.20 nakata DFT+U
+         flag_DFTplusU, flag_first_diag, & ! 2024.05.20 nakata DFT+U
          flag_SpinDependentSF, flag_Multisite, flag_LFD, flag_SFcoeffReuse, &
          flag_opt_cell, cell_constraint_flag, flag_variable_cell, &
          cell_en_tol, optcell_method, cell_stress_tol, &
@@ -992,7 +996,7 @@ contains
 
     use group_module,     only: part_method, HILBERT, PYTHON
     use H_matrix_module,  only: flag_write_locps, flag_dump_locps, &
-                                num_plusUproj, info_plusUproj, & ! 2024.05.20 nakata DFT+U
+                                num_plusUproj, info_plusUproj, plusUvalue, & ! 2024.05.20 nakata DFT+U
                                 flag_plusUproj_atom, w_plusUproj_pao, half_w_plusUproj_pao ! 2024.05.20 nakata DFT+U
     use pao_minimisation, only: InitStep_paomin
     use timer_module,     only: time_threshold,lun_tmr, TimingOn, &
@@ -1072,7 +1076,7 @@ contains
     logical :: flag_ghost, find_species, test_ase
 !!! 2024.05.20 nakata DFT+U
     integer           :: i_species, inum_plusUproj, prncpl, &
-                         n_plusUproj, l_plusUproj, z_plusUproj, plusUvalue, &
+                         n_plusUproj, l_plusUproj, z_plusUproj, & !plusUvalue, &
                          max_npao, z_temp, ipao, i_ang, i_zeta, i_m
 !!! nakata DFT+U end
 
@@ -1392,6 +1396,7 @@ contains
     end if
 !!! 2024.05.20 nakata DFT+U
     flag_DFTplusU = fdf_boolean('DM.DFTplusU', .false.)
+    if(flag_DFTplusU) flag_first_diag = .true.
 !!! nakata DFT+U end
 !!$
 !!$
@@ -1963,50 +1968,19 @@ contains
           if(inode==ionode) write(io_lun,*) 'num_plusUproj =',num_plusUproj ! nakata 2024 debug
           allocate(info_plusUproj(num_plusUproj,5))
           allocate(flag_plusUproj_atom(n_species))
+          allocate(plusUvalue(n_species))
+          plusUvalue = zero
+          flag_plusUproj_atom(:) = .false.
           do inum_plusUproj=1,num_plusUproj
              z_plusUproj = 1
              read(unit=input_array(block_start+inum_plusUproj-1),fmt=*) &
-                i_species, n_plusUproj, l_plusUproj, z_plusUproj, plusUvalue
+                i_species, n_plusUproj, l_plusUproj, z_plusUproj, plusUvalue(i_species)
              info_plusUproj(inum_plusUproj,1) = i_species
              info_plusUproj(inum_plusUproj,2) = n_plusUproj
              info_plusUproj(inum_plusUproj,3) = l_plusUproj
              info_plusUproj(inum_plusUproj,4) = z_plusUproj
-             info_plusUproj(inum_plusUproj,5) = plusUvalue
-
+             info_plusUproj(inum_plusUproj,5) = 0
              flag_plusUproj_atom(i_species) = .true.               
-
-             !%%!ipao = 0
-             !%%!do i_ang = 0, pao(i_species)%greatest_angmom
-             !%%!  if(pao(i_species)%angmom(i_ang)%n_zeta_in_angmom>0) then
-             !%%!      if (i_ang.eq.l_plusUproj) then 
-             !%%!         ! set U parameters for PAO with (n_plusUproj,l_plusUproj,z_plusUproj)
-             !%%!         z_temp = 0
-             !%%!         do i_zeta = 1, pao(i_species)%angmom(i_ang)%n_zeta_in_angmom
-             !%%!            prncpl = pao(i_species)%angmom(i_ang)%prncpl(i_zeta)
-             !%%!            if (prncpl.ne.n_plusUproj) then
-             !%%!               ipao = ipao + 2*i_ang + 1
-             !%%!            else if (prncpl.eq.n_plusUproj) then
-             !%%!               z_temp = z_temp + 1
-             !%%!               if (z_temp.eq.z_plusUproj) then
-             !%%!                  do i_m = -i_ang,i_ang
-             !%%!                     ipao = ipao + 1
-             !%%!                          w_plusUproj_pao(i_species,ipao) = plusUvalue
-             !%%!                     half_w_plusUproj_pao(i_species,ipao) = half * plusUvalue
-             !%%!                  enddo ! m
-             !%%!               else
-             !%%!                  ipao = ipao + 2*i_ang + 1
-             !%%!               endif
-             !%%!            endif
-             !%%!         enddo ! z
-             !%%!      else
-             !%%!         do i_zeta = 1, pao(i_species)%angmom(i_ang)%n_zeta_in_angmom
-             !%%!            ipao = ipao + 2*i_ang + 1
-             !%%!         enddo
-             !%%!      endif
-             !%%!   endif
-             !%%!enddo ! anglar momentum
-             !%%!if (ipao.ne.npao_species(i_species)) &
-             !%%!   call cq_abort("Error in counting PAOs when setting DFT+U parameters.")
           enddo ! n_plusUproj
           call fdf_endblock
        else
@@ -2883,7 +2857,7 @@ contains
          flag_self_consistent, flag_vary_basis, iprint_init, flag_pcc_global, &
          nspin, flag_SpinDependentSF, flag_fix_spin_population, ne_spin_in_cell, flag_XLBOMD,&
          ase_file, flag_DFTplusU   ! 2024.05.20 nakata DFT+U
-    use H_matrix_module,      only: num_plusUproj, info_plusUproj ! 2024.05.20 nakata DFT+U
+    use H_matrix_module,      only: num_plusUproj, info_plusUproj, plusUvalue ! 2024.05.20 nakata DFT+U
     use SelfCon,              only: maxitersSC
     use GenComms,             only: cq_abort
     use minimise,             only: energy_tolerance, L_tolerance,     &
@@ -3123,9 +3097,9 @@ contains
        write(io_lun,fmt='(4x,a40)') '----------------------------------------'
        do n=1, num_plusUproj
           !write(io_lun,fmt='(4x,"|",i2,2x,a5,2x,i1,2x,i1,3x,i1,4x,f9.3,5x,"|")') &
-          write(io_lun,fmt='(4x,"|",i2,2x,a5,2x,i1,2x,i1,3x,i1,4x,i4,5x,"|")') &
+          write(io_lun,fmt='(4x,"|",i2,2x,a5,4x,i1,2x,i1,2x,i1,4x,f5.3,5x,"|")') &
                info_plusUproj(n,1), species_label(info_plusUproj(n,1)), &
-               info_plusUproj(n,2), info_plusUproj(n,3), info_plusUproj(n,4), info_plusUproj(n,5)
+               info_plusUproj(n,2), info_plusUproj(n,3), info_plusUproj(n,4), plusUvalue(info_plusUproj(n,1))!info_plusUproj(n,5)
        end do
     endif
 !!! nakata DFT+U end

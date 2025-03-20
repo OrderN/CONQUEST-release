@@ -565,7 +565,7 @@ contains
        exx_energy     = exx_energy     &
                         - spin_factor*half*exx_alpha*matrix_product_trace(matK(spin), matX(spin))
        ! U/2*Tr[K (P-PKP)]   ! 2024.05.20 nakata DFT+U
-       plusU_energy   = plusU_energy     &
+       if(flag_DFTplusU) plusU_energy   = plusU_energy     &
                         - spin_factor*matrix_product_trace(matK(spin), matEplusU(spin))
     end do
 

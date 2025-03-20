@@ -427,7 +427,7 @@ module global_module
   integer, dimension(3) :: i_pol_dir ! Either n,0,0 or 1,2,3
 
   ! DFT+U
-  logical :: flag_DFTplusU
+  logical :: flag_DFTplusU, flag_first_diag
 
 end module global_module
 !!***

@@ -1209,7 +1209,11 @@ contains
           mult(P_K_PK)%parts   => parts
           mult(P_K_PK)%prim    => prim
           mult(P_K_PK)%gcs     => gcs
-          call mult_ini(mult(P_K_PK), aHa_matind, myid-1, prim%n_prim, parts)
+          if (atomf.ne.sf) then
+             call mult_ini(mult(P_K_PK), aHa_matind, myid-1, prim%n_prim, parts)
+          else
+             call mult_ini(mult(P_K_PK), Hmatind, myid-1, prim%n_prim, parts)
+          end if
        else
           mult(P_K_PK)%mult_type = 2
           mult(P_K_PK)%amat    => mat(1:prim%groups_on_node,PKrange)
@@ -1222,7 +1226,11 @@ contains
           mult(P_K_PK)%parts   => parts
           mult(P_K_PK)%prim    => prim
           mult(P_K_PK)%gcs     => gcs
-          call mult_ini(mult(P_K_PK), aHa_matind, myid-1, prim%n_prim, parts)
+          if (atomf.ne.sf) then
+             call mult_ini(mult(P_K_PK), aHa_matind, myid-1, prim%n_prim, parts)
+          else
+             call mult_ini(mult(P_K_PK), Hmatind, myid-1, prim%n_prim, parts)
+          end if
        endif
        ra = rcut(PKrange)
        rc = rcut(aHa_range)
@@ -1238,7 +1246,12 @@ contains
           mult(PK_P_PKP)%parts   => parts
           mult(PK_P_PKP)%prim    => prim
           mult(PK_P_PKP)%gcs     => gcs
-          call mult_ini(mult(PK_P_PKP), aUa_matind, myid-1, prim%n_prim, parts)
+          !call mult_ini(mult(PK_P_PKP), aUa_matind, myid-1, prim%n_prim, parts)
+          if (atomf.ne.sf) then
+             call mult_ini(mult(PK_P_PKP), aSa_matind, myid-1, prim%n_prim, parts)
+          else
+             call mult_ini(mult(PK_P_PKP), Smatind, myid-1, prim%n_prim, parts)
+          end if
        else
           mult(PK_P_PKP)%mult_type = 2
           mult(PK_P_PKP)%amat    => mat(1:prim%groups_on_node,aHa_range)
@@ -1251,7 +1264,12 @@ contains
           mult(PK_P_PKP)%parts   => parts
           mult(PK_P_PKP)%prim    => prim
           mult(PK_P_PKP)%gcs     => gcs
-          call mult_ini(mult(PK_P_PKP), aUa_matind, myid-1, prim%n_prim, parts)
+          if (atomf.ne.sf) then
+             call mult_ini(mult(PK_P_PKP), aSa_matind, myid-1, prim%n_prim, parts)
+          else
+             call mult_ini(mult(PK_P_PKP), Smatind, myid-1, prim%n_prim, parts)
+          end if
+          !call mult_ini(mult(PK_P_PKP), aUa_matind, myid-1, prim%n_prim, parts)
        endif
     endif
 !!! nakata DFT+U end
