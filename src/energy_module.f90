@@ -77,6 +77,7 @@ module energy
   real(double) ::     cdft_energy
   real(double) ::      exx_energy
   real(double) ::    plusU_energy   ! 2024.05.20 nakata DFT+U
+  real(double) :: delta_E_plusU     ! 2025/03/27 dave
   real(double) ::        x_energy
   real(double) ::     disp_energy
   real(double) :: delta_E_hartree
@@ -259,6 +260,7 @@ contains
        total_energy = band_energy  + delta_E_hartree + delta_E_xc + &
             ion_interaction_energy + core_correction
     end if
+    if (flag_DFTplusU) total_energy = total_energy + delta_E_plusU
     ! Add contribution from constrained (cDFT)
     if (flag_perform_cdft) total_energy = total_energy + cdft_energy
 
@@ -566,7 +568,7 @@ contains
                         - spin_factor*half*exx_alpha*matrix_product_trace(matK(spin), matX(spin))
        ! U/2*Tr[K (P-PKP)]   ! 2024.05.20 nakata DFT+U
        if(flag_DFTplusU) plusU_energy   = plusU_energy     &
-                        - spin_factor*matrix_product_trace(matK(spin), matEplusU(spin))
+                        + spin_factor*matrix_product_trace(matK(spin), matEplusU(spin))
     end do
 
     ! Find total pure DFT energy
@@ -585,6 +587,7 @@ contains
             ion_interaction_energy    + &
             core_correction
     end if
+    if (flag_DFTplusU) total_energy1 = total_energy1 + delta_E_plusU
 
     ! Add contribution from constrained (cDFT)
     if (flag_perform_cdft) total_energy1 = total_energy1 + cdft_energy

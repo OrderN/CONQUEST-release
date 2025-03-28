@@ -448,7 +448,8 @@ contains
 !****lat>$
 !!! 2024.5.20 nakata DFT+U
        if(flag_DFTplusU.and.(.not.flag_first_diag)) then
-          call get_plusU_matrix
+          ! For KE, NL and PU matrices we only need rebuild when updating atom functions
+          call get_plusU_matrix(rebuild_KE_NL)
 
           if (iprint_ops > 4) then
              if (nspin == 1) then
@@ -2024,7 +2025,7 @@ contains
 !!
 !!  SOURCE
 !!
-  subroutine get_plusU_matrix
+  subroutine get_plusU_matrix(flag_rebuild)
     
     use datatypes
     use numbers
@@ -2036,21 +2037,28 @@ contains
     use cover_module,   ONLY: BCS_parts
     use matrix_data,    ONLY: mat, halo, aSa_range, aHa_range, PKrange, &
                               pUa_range, aUp_range, pUp_range, aUa_range
-    use mult_module,    ONLY: mult, allocate_temp_matrix, free_temp_matrix, &
+    use mult_module,    ONLY: mult, mat_p, allocate_temp_matrix, free_temp_matrix, matrix_pos, return_matrix_value_pos, store_matrix_value_pos, &
                               matrix_product, matrix_scale, matrix_transpose, matrix_sum, &
-                              matKatomf, matHplusUatomf, matEplusUatomf, &
-                              aUa_trans, PK_trans, pOp_pWa_pOWa, aVp_pOWa_aPa, P_K_PK, PK_P_PKP
+                              matKatomf, matHplusUatomf, matEplusUatomf, matHatomf, matSatomf,&
+                              aUa_trans, PK_trans, pOp_pWa_pOWa, aVp_pOWa_aPa, P_K_PK, PK_P_PKP, matrix_trace, matrix_product_trace
+    use species_module, ONLY: npao_species
     use timer_module
+    use pao_format
+    use energy, ONLY: delta_E_plusU
     
     implicit none
+
+    ! Passed variables
+    logical :: flag_rebuild  ! To be used later if we decide to keep P and PU (and V and W?)
 
     ! Local variables
     integer :: part, memb, neigh, ist, atom_num, atom_spec, iprim
     integer :: gcspart, neigh_global_part, neigh_global_num, neigh_species
-    real(double) :: dx, dy, dz, r2
+    real(double) :: dx, dy, dz, r2, trace, fac, val_Satomf
     type(cq_timer) :: tmr_l_tmp1   
-    integer :: spin
-    integer :: matW, matV, matOW, matPatomf, matPK, matPKP
+    integer :: spin, ipao, loc, npao_i, jpao, npao_j, pao_i, pao_j, wheremat
+    integer :: matW, matV, matOW, matPatomf, matPU, matPK, matPKP, matUW
+    integer :: iU, l1, nacz1, m1
 
     call start_timer(tmr_l_tmp1,WITH_LEVEL)
     if(iprint_ops + min_layer>=5.AND.myid==0) write(io_lun,'(6x,A)') ' We are in set_OW'
@@ -2058,25 +2066,22 @@ contains
     ! prepare matrices
     matW = allocate_temp_matrix(pUa_range, aUa_trans, atomf, atomf)
     matV = allocate_temp_matrix(aUp_range, aUa_trans, atomf, atomf)
-    ! assume OW = W
-!    matO  = allocate_temp_matrix(pUp_range, 0)
-!    matOW = allocate_temp_matrix(pUa_range, 0)
-    matOW = matW
+    matUW = allocate_temp_matrix(pUa_range, 0) ! This is UW
+!    matOW = matW
 !
     matPatomf = allocate_temp_matrix(aUa_range, aUa_trans, atomf, atomf)
+    matPU = allocate_temp_matrix(aUa_range, aUa_trans, atomf, atomf)
     matPK     = allocate_temp_matrix(PKrange, PK_trans, atomf, atomf)
     ! PKPrange = aHa_range
     matPKP    = allocate_temp_matrix(aHa_range, 0)
-!    matTemp   = allocate_temp_matrix(aHa_range, 0)
-!
     if(iprint_ops + min_layer>=5.AND.myid==0) write(io_lun,'(6x,i5,A)') myid, ' Zeroing matW, V and OW'
     call matrix_scale(zero,matW)
     call matrix_scale(zero,matV)
-!    call matrix_scale(zero,matOW)
+    call matrix_scale(zero,matUW)
     call matrix_scale(zero,matPatomf)
     if(iprint_ops + min_layer>=5.AND.myid==0) write(io_lun,'(6x,A)') ' Done Zeroing'
 
-    ! make W and OW
+    ! make W and UW
     iprim = 0
     do part = 1,bundle%groups_on_node ! Loop over primary set partitions
        if(iprint_ops + min_layer>=6.AND.myid==0) write(io_lun,fmt='(6x,"Processor, partition: ",2i7)') myid,part
@@ -2089,6 +2094,7 @@ contains
              if(iprint_ops + min_layer>=6.AND.myid==0) write(io_lun,'(6x,"Processor, atom, spec: ",3i7)') myid,memb,atom_spec
              ! If iprim is a DFT+U projector atom
              if(flag_plusUproj_atom(atom_spec)) then
+                npao_i = npao_species(atom_spec)
                 do neigh = 1, mat(part,aSa_range)%n_nab(memb) ! Loop over neighbours of atom
                    ist = mat(part,aSa_range)%i_acc(memb)+neigh-1
                    ! Build the distances between atoms - needed for phases 
@@ -2098,28 +2104,36 @@ contains
                    neigh_global_num  = id_glob(parts%icell_beg(neigh_global_part)+mat(part,aSa_range)%i_seq(ist)-1)
                    neigh_species = species_glob(neigh_global_num)
                    ! Now loop over PAOs
-                   call loop_W(iprim,halo(aSa_range)%i_halo(gcspart),atom_spec,neigh_species,matW)
-                   !! At present,
-                   !! projector functions are assumed to be one of the PAOs of projector atoms, so OW = W.
-                   !! Then skip the calculations of O
-                   !call loop_O_onsite
+                   npao_j = npao_species(neigh_species)
+                   ! Loop over PAOs on i
+                   do pao_i = 1, npao_i
+                      fac = half_w_plusUproj_pao(atom_spec,pao_i)
+                      if (abs(fac)>RD_ERR) then   ! if pao_i is one of the U projectors of atom_i
+                         ! Loop over PAOs on j 
+                         do pao_j = 1, npao_j
+                            wheremat = matrix_pos(matSatomf,iprim,halo(aSa_range)%i_halo(gcspart),pao_i,pao_j)
+                            val_Satomf = return_matrix_value_pos(matSatomf,wheremat)
+                            ! We assume the projector functions are simply chosen from PAOs,
+                            ! so OW = W = <proj_i | pao_j>
+                            call store_matrix_value_pos(matW, wheremat,val_Satomf)
+                            call store_matrix_value_pos(matUW, wheremat,val_Satomf*fac)
+                         enddo ! pao_j
+                      end if
+                   enddo ! pao_i
+                   !call loop_W(iprim,halo(aSa_range)%i_halo(gcspart),atom_spec,neigh_species,matW,matUW)
                 end do ! neigh
              endif ! projector
           end do ! memb
        end if ! nm_nodgroup > 0
     end do ! part
 
-    ! make OW
-    ! call make_OW
-    !   OR
-    ! OW = matrix_product(matO, matV, matOW, mult(pOp_pWa_pOWa))
-    ! for now, matOW = matW
-
     ! make V = transpose of W
     call matrix_transpose(matW, matV)
 
-    ! make P(atomf,atomf) = V(atomf,proj) * OW(proj,atomf)
-    call matrix_product(matV, matOW, matPatomf, mult(aVp_pOWa_aPa))
+    ! make P(atomf,atomf) = V(atomf,proj) * OW(proj,atomf) and PU = V.UW
+    call matrix_product(matV, matW, matPatomf, mult(aVp_pOWa_aPa))
+    ! Create PU, which is V.UW (include U here to allow different U for different atoms)
+    call matrix_product(matV, matUW, matPU, mult(aVp_pOWa_aPa))
 
     ! Later P will be changed from PAO-basis to SF-basis
     !if (flag_do_SFtransform) then
@@ -2129,44 +2143,31 @@ contains
     !endif
 
     ! H(DFT+U) = U/2 * (P-2PKP)
-
+    delta_E_plusU = zero
     do spin = 1, nspin
-       if (iprint_ops > 4 .and. nspin == 2) then
-          if (inode == ionode) write (io_lun, '(1x,"For spin = ",i1," :")') spin
-       end if
        call matrix_scale(zero,matPK)
        call matrix_scale(zero,matPKP)
 
-       !!! K should be in atomf-basis
-       call matrix_product(matPatomf, matKatomf(spin), matPK, mult(P_K_PK))
+       ! Working in atomf basis, create (U/2).PKP
+       call matrix_product(matPU, matKatomf(spin), matPK, mult(P_K_PK))
        call matrix_product(matPK, matPatomf, matPKP, mult(PK_P_PKP))
 
        ! E(DFT+U) = U/2 * (PK-PKPK), 
-       ! construct (P-PKP) here, and another K will be multiplied later in sub:get_energy
-       call matrix_scale(zero,matEplusUatomf(spin))
-!       call matrix_scale(zero,matTemp)
-!       call matrix_sum(zero, matTemp,  one, matP)
-!       call matrix_sum(one,  matTemp, -one, matPKP)
-!       call multiply_U(matTemp,matEplusU_atomf(spin),aUa_range)
-       call matrix_sum_multiply_U(1,matPatomf,matPKP,matEplusUatomf(spin),aHa_range)
+       call matrix_sum(zero, matEplusUatomf(spin), one , matPU)
+       call matrix_sum(one,  matEplusUatomf(spin), -one, matPKP)
        ! H(DFT+U) = U/2 * (P-2PKP)
-       call matrix_scale(zero,matHplusUatomf(spin))
-!       call matrix_scale(zero,matTemp)
-!       call matrix_sum(zero, matTemp,  one, matPatomf)
-!       call matrix_sum(one,  matTemp, -two, matPKP(ss))
-!       call multiply_U(matTemp,matHplusUatomf(spin),aUa_range)
-       call matrix_sum_multiply_U(2,matEplusUatomf(spin),matPKP,matHplusUatomf(spin),aHa_range)
-
-       ! OR
-       ! construct U
-       ! call matrix_product(matU, matHtemp(spin), matHplusU(spin), mult(???))
-       !
+       call matrix_sum(zero, matHplusUatomf(spin), one , matPU)
+       call matrix_sum(one,  matHplusUatomf(spin), -two, matPKP)
+       ! Double counting term
+       trace = matrix_product_trace(matPKP,matKatomf(spin))
+       delta_E_plusU = delta_E_plusU + trace
     enddo
 
     call free_temp_matrix(matPKP)
     call free_temp_matrix(matPK)
+    call free_temp_matrix(matPU)
     call free_temp_matrix(matPatomf)
-!    call free_temp_matrix(matOW)
+    call free_temp_matrix(matUW)
     call free_temp_matrix(matV)
     call free_temp_matrix(matW)
 
@@ -2198,29 +2199,29 @@ contains
 !!
 !!  SOURCE
 !!
-  subroutine loop_W(iprim, j_in_halo, atom_spec, neigh_species, matW)
+  subroutine loop_W(iprim, j_in_halo, atom_spec, neigh_species, matW, matUW)
 
     use numbers
-    use mult_module,    ONLY: matSatomf, return_matrix_value_pos, store_matrix_value_pos, matrix_pos
+    use mult_module,    ONLY: matSatomf, return_matrix_value_pos, store_matrix_value_pos, matrix_pos, matKatomf
     use pao_format
     use species_module, ONLY: npao_species
 
     implicit none
 
     ! Passed variables
-    integer, intent(in) ::  iprim, j_in_halo, atom_spec, neigh_species, matW
+    integer, intent(in) ::  iprim, j_in_halo, atom_spec, neigh_species, matW, matUW
     ! Local variables
     integer :: wheremat
-    real(double) :: val_Satomf, val_W
+    real(double) :: val_Satomf, val_W, fac
     integer :: npao_i, npao_j, pao_i, pao_j
 
 
     npao_i = npao_species(atom_spec)
     npao_j = npao_species(neigh_species)
-
     ! Loop over PAOs on i
     do pao_i = 1, npao_i
-       if (w_plusUproj_pao(atom_spec,pao_i).ne.zero) then   ! if pao_i is one of the U projectors of atom_i
+       fac = half_w_plusUproj_pao(atom_spec,pao_i)
+       if (abs(fac)>RD_ERR) then   ! if pao_i is one of the U projectors of atom_i
           ! Loop over PAOs on j 
           do pao_j = 1, npao_j
              wheremat = matrix_pos(matSatomf,iprim,j_in_halo,pao_i,pao_j)
@@ -2229,10 +2230,10 @@ contains
              ! so OW = W = <proj_i | pao_j>
              val_W = val_Satomf
              call store_matrix_value_pos(matW, wheremat,val_W)
+             call store_matrix_value_pos(matUW, wheremat,val_W*fac)
           enddo ! pao_j
        endif ! projetor or not
     enddo ! pao_i
-!
   return
   end subroutine loop_W
 !!***
@@ -2366,7 +2367,7 @@ contains
     integer :: calctype, matA, matB, matC, aCa_range
 
     ! Local variables
-    integer :: iprim, part, memb, atom_num, atom_spec, npao_i, loc, ipao
+    integer :: iprim, part, memb, atom_num, atom_spec, npao_i, loc, ipao, jpao
     real(double) :: val
 
 
@@ -2392,9 +2393,12 @@ contains
                    !if (loc > mat_p(matC)%length) &
                    !   call cq_abort("Overflow error in trace: ", loc, mat_p(matC)%length)
                    do ipao = 1, npao_i
-                      loc = (ipao - 1) * npao_i + ipao - 1 + mat(part,aCa_range)%onsite(memb)   ! position of diagonal element
-                      val = mat_p(matA)%matrix(loc) - mat_p(matB)%matrix(loc)                   ! P-PKP
-                      mat_p(matC)%matrix(loc) = half_w_plusUproj_pao(atom_spec,ipao) * val      ! U/2*(P-PKP)
+                      do jpao = 1,npao_i
+                         !loc = (ipao - 1) * npao_i + ipao - 1 + mat(part,aCa_range)%onsite(memb)   ! position of diagonal element
+                         loc = (ipao - 1) * npao_i + jpao - 1 + mat(part,aCa_range)%onsite(memb) 
+                         val = mat_p(matA)%matrix(loc) - mat_p(matB)%matrix(loc)                   ! P-PKP
+                         mat_p(matC)%matrix(loc) = half_w_plusUproj_pao(atom_spec,ipao) * val      ! U/2*(P-PKP)
+                      end do
                    end do  ! ipao
                 endif  ! flag_plusUproj_atom
              enddo  ! memb
@@ -2412,13 +2416,13 @@ contains
                 ! considering U only for diagonal elements
                 if(flag_plusUproj_atom(atom_spec)) then
                    npao_i  = mat(part,aCa_range)%ndimi(memb)   ! number of PAOs of i
-                   loc = (npao_i - 1) * npao_i + npao_i - 1 + mat(part,aCa_range)%onsite(memb)
-                   !if (loc > mat_p(matC)%length) &
-                   !   call cq_abort("Overflow error in trace: ", loc, mat_p(matC)%length)
                    do ipao = 1, npao_i
-                      loc = (ipao - 1) * npao_i + ipao - 1 + mat(part,aCa_range)%onsite(memb)
-                      mat_p(matC)%matrix(loc) = mat_p(matA)%matrix(loc) &                                  !  U/2(P-PKP)
-                                               -half_w_plusUproj_pao(atom_spec,ipao) * mat_p(matB)%matrix(loc) ! -U/2(PKP)
+                      do jpao = 1,npao_i
+                         !loc = (ipao - 1) * npao_i + ipao - 1 + mat(part,aCa_range)%onsite(memb)
+                         loc = (ipao - 1) * npao_i + jpao - 1 + mat(part,aCa_range)%onsite(memb)
+                         mat_p(matC)%matrix(loc) = mat_p(matA)%matrix(loc) &                                  !  U/2(P-PKP)
+                              -half_w_plusUproj_pao(atom_spec,ipao) * mat_p(matB)%matrix(loc) ! -U/2(PKP)
+                      end do
                    end do  ! ipao
                 endif  ! flag_plusUproj_atom
              enddo  ! memb
