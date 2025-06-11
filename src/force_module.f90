@@ -104,7 +104,7 @@ module force_module
   real(double), dimension(3,3), target :: stress
   real(double), dimension(3,3) :: SP_stress, KE_stress, NL_stress, &
                                   PP_stress, GPV_stress, XC_stress, &
-                                  nonSCF_stress, pcc_stress, NA_stress
+                                  nonSCF_stress, pcc_stress, NA_stress, PlusU_stress
 
   ! How much we mix input and output densities for the calculations of XC_GGA_stress
   ! during non-SCF simulations (defaults to half for averaging)
@@ -256,7 +256,7 @@ contains
                                       area_moveatoms, flag_pcc_global, &
                                       flag_perform_cdft, flag_dft_d2,  &
                                       nspin, spin_factor, &
-                                      flag_analytic_blip_int, &
+                                      flag_analytic_blip_int, flag_DFTplusU, &
                                       flag_neutral_atom, flag_stress, &
                                       rcellx, rcelly, rcellz, flag_mix_L_SC_min, &
                                       flag_atomic_stress, non_atomic_stress, &
@@ -303,7 +303,7 @@ contains
                                                  HF_NL_force,     &
                                                  KE_force,        &
                                                  nonSC_force,     &
-                                                 pcc_force, NA_force
+                                                 pcc_force, NA_force, PlusU_force
     real(double), dimension(:),   allocatable :: density_out_tot
     real(double), dimension(:,:), allocatable :: density_out
     character(len=1), dimension(3) :: comptstr = (/"x", "y", "z"/)
@@ -346,6 +346,13 @@ contains
        call reg_alloc_mem(area_moveatoms, 3 * ni_in_cell, type_dbl)
        cdft_force = zero
     end if
+    if(flag_DFTplusU) then
+       allocate(PlusU_force(3,ni_in_cell), STAT=stat)
+       if (stat /= 0) &
+            call cq_abort("Error allocating PlusU_force: ", ni_in_cell)
+       call reg_alloc_mem(area_moveatoms, 3 * ni_in_cell, type_dbl)
+       PlusU_force = zero
+    end if
     if(iprint_MD + min_layer>3) then
        allocate(s_pulay_for(3,ni_in_cell),phi_pulay_for(3,ni_in_cell))
        s_pulay_for = zero
@@ -381,6 +388,7 @@ contains
     pcc_stress = zero
     nonSCF_stress = zero
     if(flag_neutral_atom_projector) NA_stress = zero
+    PlusU_stress = zero
     ! Probably wrong to call this GPV; it's really a jacobian term, from the change in the
     ! integration volume element for grid-based integrals
     ! Different definitions for non-SCF and SCF
@@ -521,6 +529,7 @@ contains
     call stop_print_timer(tmr_l_tmp1, "kinetic energy force", &
                           IPRINT_TIME_THRES2)
     if(flag_neutral_atom_projector) call get_HNA_force(NA_force)
+    if(flag_DFTplusU) call get_DFT_plus_U_force(PlusU_force, ni_in_cell)
     max_force = zero
     max_atom  = 0
     max_compt = 0
@@ -607,6 +616,8 @@ contains
                tot_force(j,i) = tot_force(j,i) + disp_force(j,i)
           if(flag_neutral_atom_projector) &
                tot_force(j,i) = tot_force(j,i) + NA_force(j,i)
+          if(flag_DFTplusU) &
+               tot_force(j,i) = tot_force(j,i) + PlusU_force(j,i)
           ! Zero force on fixed atoms
           if (.not. flag_move_atom(j,i)) then
              tot_force(j,i) = zero
@@ -633,6 +644,9 @@ contains
                 write (io_lun, fmt='(4x,a,3f15.10)') trim(prefix)//"  S pulay    : ", &
                      (for_conv*s_pulay_for(j,i),j=1,3)
              end if
+             if(flag_DFTplusU) &
+                  write (io_lun, fmt='(4x,a,3f15.10)') trim(prefix)//" Force DFT+U  : ", &
+                  (for_conv*PlusU_force(j,i),j=1,3)
              write(io_lun, 104) trim(prefix),(for_conv *    KE_force(j,i), j = 1, 3)
              if(flag_neutral_atom) then
                 write(io_lun, 106) trim(prefix),(for_conv * screened_ion_force(j,i), j = 1, 3)
@@ -700,7 +714,7 @@ contains
                 if (flag_neutral_atom_projector) then
                    stress(dir1,dir2) = stress(dir1,dir2) + NA_stress(dir1,dir2)
                 end if
-                
+                if(flag_DFTplusU) stress(dir1,dir2) = stress(dir1,dir2) + PlusU_stress(dir1,dir2)
              end do
           end do
        else
@@ -713,6 +727,7 @@ contains
                      Hartree_stress(dir1,dir2) + loc_HF_stress(dir1,dir2) + &
                      loc_G_stress(dir1,dir2) + pcc_stress(dir1,dir2) + &
                      nonSCF_stress(dir1,dir2)
+                if(flag_DFTplusU) stress(dir1,dir2) = stress(dir1,dir2) + PlusU_stress(dir1,dir2)
                 if (flag_atomic_stress) then
                    ! non-atomic ion_interaction_stress added in
                    ! ion_electrostatic_module - zamaan
@@ -773,6 +788,7 @@ contains
        call print_stress(trim(prefix)//" K.E. stress:      ", KE_stress, 3)
        call print_stress(trim(prefix)//" S-Pulay stress:   ", SP_stress, 3)
        call print_stress(trim(prefix)//" Phi-Pulay stress: ", PP_stress, 3)
+       if(flag_DFTplusU) call print_stress(trim(prefix)//" DFT+U stress:     ", PlusU_stress, 3)
        call print_stress(trim(prefix)//" Local stress:     ", loc_HF_stress, 3)
        call print_stress(trim(prefix)//" Local G stress:   ", loc_G_stress, 3)
        call print_stress(trim(prefix)//" Non-local stress: ", NL_stress, 3)
@@ -2422,6 +2438,367 @@ contains
   end subroutine get_HF_non_local_force
   !!***
 
+  subroutine get_DFT_plus_U_force(DFT_plus_U_force, n_atoms)
+
+    use datatypes
+    use numbers
+    use matrix_data,                 only: mat, halo, aSa_range, aHa_range, PKrange, &
+         pUa_range, aUp_range, pUp_range, aUa_range
+    use mult_module,                 only: mult, mat_p, allocate_temp_matrix, free_temp_matrix, matrix_pos, &
+         return_matrix_value_pos, store_matrix_value_pos, return_matrix_value, store_matrix_value, &
+         matrix_product, matrix_scale, matrix_transpose, matrix_sum, &
+         matKatomf, matHplusUatomf, matEplusUatomf, matHatomf, matSatomf,&
+         aUa_trans, PK_trans, pOp_pWa_pOWa, aVp_pOWa_aPa, P_K_PK, PK_P_PKP, matrix_trace, matrix_product_trace
+    use species_module,              only: npao_species
+    use GenComms,                    only: gsum, cq_abort, inode,      &
+                                           ionode, myid
+    use global_module,               only: iprint_MD, flag_basis_set,  &
+                                           blips, PAOs, atomf,   &
+                                           nspin, spin_factor,         &
+                                           id_glob, species_glob,      &
+                                           flag_analytic_blip_int,     &
+                                           ni_in_cell, flag_full_stress, &
+                                           flag_stress, flag_atomic_stress, &
+                                           area_moveatoms
+    use H_matrix_module,             only: flag_plusUproj_atom, half_w_plusUproj_pao
+    ! TEMP
+    use build_PAO_matrices,          only: assemble_deriv_2
+    use group_module,                only: parts
+    use primary_module,              only: bundle
+    use cover_module,                only: BCS_parts
+
+    implicit none
+
+    ! Passed variables
+    integer :: n_atoms
+    real(double), dimension(3,n_atoms) :: DFT_plus_U_force
+
+    ! Local variables
+
+    integer :: matV, matW, matUW, matPatomf, matPK, matKP, matKPa, matKPK, mat_tmp, matPKP
+    integer, dimension(nspin) :: matKb, matVK, matWK ! Stores K - 2KPK
+    integer, dimension(3) :: matdV, matdW, matdUW
+    integer, dimension(3,3) :: matdVr, matdWr
+    integer      :: dir1, dir2, k, l, stat, dpseudofns, np, nn, i, i1, i2, &
+         spec, this_nsf, this_nlpf, ni, spin, atom_num, atom_spec, memb, neigh, &
+         npao_i, npao_j, pao_i, pao_j, part
+    integer      :: iprim, gcspart, ist, nab, neigh_global_num,        &
+                    neigh_global_part, neigh_species, wheremat, isf, jsf
+    real(double) :: dx, dy, dz, thisdAP, fac, val_Satomf
+    real(double), dimension(3,3) :: PlusU_stress
+    real(double), dimension(:,:,:), allocatable :: NL_P_atomic, NL_HF_atomic
+    real(double), dimension(3) :: r_str
+    type(cq_timer) :: backtrace_timer
+
+    call start_backtrace(t=backtrace_timer,who='get_DFT_plus_U_force',where=7,level=3,echo=.true.)
+
+    ! Make P
+    matW = allocate_temp_matrix(pUa_range, aUa_trans, atomf, atomf)
+    matV = allocate_temp_matrix(aUp_range, aUa_trans, atomf, atomf)
+    matUW = allocate_temp_matrix(pUa_range, 0) ! This is UW
+    matPatomf = allocate_temp_matrix(aUa_range, aUa_trans, atomf, atomf)
+    matPK     = allocate_temp_matrix(PKrange, PK_trans, atomf, atomf)
+    matKPK    = matPK ! Label only
+    matPKP    = allocate_temp_matrix(aHa_range, 0)    
+    matKP     = allocate_temp_matrix(PKrange, PK_trans, atomf, atomf)
+    matKPa    = allocate_temp_matrix(aUa_range, aUa_trans, atomf, atomf)
+    do spin = 1, nspin
+       matKb(spin) = allocate_temp_matrix(aHa_range, 0, atomf, atomf)
+       matWK(spin) = allocate_temp_matrix(pUa_range, aUa_trans, atomf, atomf)
+       matVK(spin) = allocate_temp_matrix(aUp_range, aUa_trans, atomf, atomf)
+    end do
+    call matrix_scale(zero,matW)
+    call matrix_scale(zero,matV)
+    call matrix_scale(zero,matUW)
+    call matrix_scale(zero,matPatomf)
+    ! make W and UW
+    iprim = 0
+    do part = 1,bundle%groups_on_node ! Loop over primary set partitions
+       if(bundle%nm_nodgroup(part)>0) then ! If there are atoms in partition
+          do memb = 1,bundle%nm_nodgroup(part) ! Loop over atoms
+             atom_num = bundle%nm_nodbeg(part)+memb-1
+             iprim=iprim+1
+             ! Atomic species
+             atom_spec = bundle%species(atom_num)
+             ! If iprim is a DFT+U projector atom
+             if(flag_plusUproj_atom(atom_spec)) then
+                npao_i = npao_species(atom_spec)
+                do neigh = 1, mat(part,aSa_range)%n_nab(memb) ! Loop over neighbours of atom
+                   ist = mat(part,aSa_range)%i_acc(memb)+neigh-1
+                   ! Build the distances between atoms - needed for phases 
+                   gcspart = BCS_parts%icover_ibeg(mat(part,aSa_range)%i_part(ist))+mat(part,aSa_range)%i_seq(ist)-1
+                   ! We need to know the species of neighbour
+                   neigh_global_part = BCS_parts%lab_cell(mat(part,aSa_range)%i_part(ist)) 
+                   neigh_global_num  = id_glob(parts%icell_beg(neigh_global_part)+mat(part,aSa_range)%i_seq(ist)-1)
+                   neigh_species = species_glob(neigh_global_num)
+                   ! Now loop over PAOs
+                   npao_j = npao_species(neigh_species)
+                   ! Loop over PAOs on i
+                   do pao_i = 1, npao_i
+                      fac = half_w_plusUproj_pao(atom_spec,pao_i)
+                      if (abs(fac)>RD_ERR) then   ! if pao_i is one of the U projectors of atom_i
+                         ! Loop over PAOs on j 
+                         do pao_j = 1, npao_j
+                            wheremat = matrix_pos(matSatomf,iprim,halo(aSa_range)%i_halo(gcspart),pao_i,pao_j)
+                            val_Satomf = return_matrix_value_pos(matSatomf,wheremat)
+                            ! We assume the projector functions are simply chosen from PAOs,
+                            ! so OW = W = <proj_i | pao_j>
+                            call store_matrix_value_pos(matW, wheremat,val_Satomf)
+                            call store_matrix_value_pos(matUW, wheremat,val_Satomf*fac)
+                         enddo ! pao_j
+                      end if
+                   enddo ! pao_i
+                end do ! neigh
+             endif ! projector
+          end do ! memb
+       end if ! nm_nodgroup > 0
+    end do ! part
+
+    ! make V = transpose of W
+    call matrix_transpose(matW, matV)
+
+    ! make P(atomf,atomf) = V(atomf,proj) * OW(proj,atomf) and K - 2KPK
+    call matrix_product(matV, matW, matPatomf, mult(aVp_pOWa_aPa))
+    do spin = 1, nspin
+       call matrix_scale(zero,matPK)
+       call matrix_product(matPatomf, matKatomf(spin), matPK, mult(P_K_PK))
+       call matrix_transpose(matPK, matKP)
+       ! Test
+       !call matrix_product(matPK, matPatomf, matPKP, mult(PK_P_PKP))
+       !write(*,*) 'Trace of PKP.K: ',matrix_product_trace(matPKP,matKatomf(spin))
+       ! We will use PK in a moment
+       call matrix_scale(zero,matPK)
+       ! KPa is KP to range P
+       call matrix_sum(zero,matKPa,one,matKP)
+       ! KP.K calculated to range PK
+       call matrix_product(matKPa,matKatomf(spin), matKPK, mult(P_K_PK))
+       ! Now build K - 2KPK
+       call matrix_sum(zero,matKb(spin),one,matKatomf(spin))
+       call matrix_sum(one,matKb(spin),-two,matKPK)
+       !write(*,*) 'Trace of PKP.K: ',matrix_product_trace(matPKP,matKb(spin))
+    end do
+    ! Assemble dV.UW + V.dUW (both Pulay terms)
+    ! Allocate matrices
+    mat_tmp = allocate_temp_matrix(aSa_range, 0, atomf, atomf)
+    do k = 1, 3
+       matdW(k) = allocate_temp_matrix(pUa_range, aUa_trans, atomf, atomf)
+       matdV(k) = allocate_temp_matrix(aUp_range, aUa_trans, atomf, atomf)
+       matdUW(k) = allocate_temp_matrix(pUa_range, 0) ! This is UW
+       if (flag_stress) then
+          !if (flag_full_stress) then
+          !   do l = 1,3
+          !      matdAPr(k,l) = &
+          !           allocate_temp_matrix(APrange, AP_trans, atomf, nlpf)
+          !      matdPAr(k,l) = &
+          !           allocate_temp_matrix(PArange, AP_trans, nlpf, atomf)
+          !   end do
+          !else
+             matdWr(k,k) = allocate_temp_matrix(pUa_range, aUa_trans, atomf, atomf)
+             matdVr(k,k) = allocate_temp_matrix(aUp_range, aUa_trans, atomf, atomf)
+          !end if
+       end if
+    end do
+    !if (flag_atomic_stress) then
+    !  allocate(NL_HF_atomic(3,3,ni_in_cell), STAT=stat)
+    !  if (stat /= 0) &
+    !    call cq_abort("Error allocating NL atomic stress: ", ni_in_cell)
+    !  allocate(NL_P_atomic(3,3,ni_in_cell), STAT=stat)
+    !  if (stat /= 0) &
+    !    call cq_abort("Error allocating NL atomic stress: ", ni_in_cell)
+    !  call reg_alloc_mem(area_moveatoms, 2*3*3*ni_in_cell, type_dbl)
+    !end if
+    DFT_plus_U_force = zero
+    PlusU_stress = zero
+
+    ! First of all, find U (= (K - 2KPK).AP)
+    do spin = 1, nspin
+       ! W to P range (even though they are the same...)
+       call matrix_sum(zero,matPatomf,one,matW)
+       ! Scale W.(K - 2KPK)
+       call matrix_product(matPatomf, matKb(spin), matPK, mult(P_K_PK))
+       ! Restrict range to V
+       call matrix_sum(zero,matVK(spin),one,matPK) ! Range V
+       call matrix_scale(minus_two * spin_factor, matVK(spin))
+       ! Transpose
+       call matrix_transpose(matVK(spin), matWK(spin))
+    end do
+
+    ! to save memory we do each direction in turn...
+    do dir1 = 1, 3
+       call matrix_scale(zero, matdW(dir1))
+       call matrix_scale(zero, matdUW(dir1))
+       call matrix_scale(zero, matdV(dir1))
+       if (flag_stress) then
+          !if (flag_full_stress) then
+          !   do dir2 = 1, 3
+          !      call matrix_scale(zero, matdAPr(dir1,dir2))
+          !      call matrix_scale(zero, matdPAr(dir1,dir2))
+          !   end do
+          !else
+             call matrix_scale(zero, matdWr(dir1,dir1))
+             call matrix_scale(zero, matdVr(dir1,dir1))
+          !end if
+       end if
+       ! Get dS and store in mat_tmp
+       call assemble_deriv_2(dir1, aSa_range, mat_tmp, 1)
+       ! Build dW and dUW
+       iprim = 0
+       do part = 1,bundle%groups_on_node ! Loop over primary set partitions
+          if(bundle%nm_nodgroup(part)>0) then ! If there are atoms in partition
+             do memb = 1,bundle%nm_nodgroup(part) ! Loop over atoms
+                atom_num = bundle%nm_nodbeg(part)+memb-1
+                iprim=iprim+1
+                ! Atomic species
+                atom_spec = bundle%species(atom_num)
+                ! If iprim is a DFT+U projector atom
+                if(flag_plusUproj_atom(atom_spec)) then
+                   npao_i = npao_species(atom_spec)
+                   do neigh = 1, mat(part,aSa_range)%n_nab(memb) ! Loop over neighbours of atom
+                      ist = mat(part,aSa_range)%i_acc(memb)+neigh-1
+                      ! Build the distances between atoms - needed for phases 
+                      gcspart = BCS_parts%icover_ibeg(mat(part,aSa_range)%i_part(ist))+mat(part,aSa_range)%i_seq(ist)-1
+                      ! We need to know the species of neighbour
+                      neigh_global_part = BCS_parts%lab_cell(mat(part,aSa_range)%i_part(ist)) 
+                      neigh_global_num  = id_glob(parts%icell_beg(neigh_global_part)+mat(part,aSa_range)%i_seq(ist)-1)
+                      neigh_species = species_glob(neigh_global_num)
+                      ! Now loop over PAOs
+                      npao_j = npao_species(neigh_species)
+                      ! Loop over PAOs on i
+                      do pao_i = 1, npao_i
+                         fac = half_w_plusUproj_pao(atom_spec,pao_i)
+                         if (abs(fac)>RD_ERR) then   ! if pao_i is one of the U projectors of atom_i
+                            ! Loop over PAOs on j 
+                            do pao_j = 1, npao_j
+                               ! Get location using Satomf indexing
+                               wheremat = matrix_pos(matSatomf,iprim,halo(aSa_range)%i_halo(gcspart),pao_i,pao_j)
+                               ! Now find value of dS
+                               val_Satomf = return_matrix_value_pos(mat_tmp,wheremat)
+                               ! We assume the projector functions are simply chosen from PAOs,
+                               ! so OW = W = <proj_i | pao_j>
+                               call store_matrix_value_pos(matdW(dir1), wheremat,val_Satomf)
+                               call store_matrix_value_pos(matdUW(dir1), wheremat,val_Satomf*fac)
+                            enddo ! pao_j
+                         end if
+                      enddo ! pao_i
+                   end do ! neigh
+                endif ! projector
+             end do ! memb
+          end if ! nm_nodgroup > 0
+       end do ! part
+       call matrix_scale(-one, matdW(dir1))
+       call matrix_scale(-one, matdUW(dir1))
+
+       ! make V = transpose of W
+       call matrix_transpose(matdW(dir1), matdV(dir1))
+       call matrix_scale(-one, matdV(dir1))
+
+       ! Now scale dAP and dPA by R_{ji} for stress
+       ! 2014/08/06 11:45 Shereif
+       iprim = 0
+       do np = 1, bundle%groups_on_node
+          if (bundle%nm_nodgroup(np) > 0) then
+             do ni = 1, bundle%nm_nodgroup(np)
+                iprim = iprim + 1
+                do nab = 1, mat(np,aSa_range)%n_nab(ni)
+                   ist = mat(np,aSa_range)%i_acc(ni) + nab - 1
+                   gcspart = BCS_parts%icover_ibeg(mat(np,aSa_range)%i_part(ist)) + mat(np,aSa_range)%i_seq(ist) - 1
+                   r_str(1)=BCS_parts%xcover(gcspart)-bundle%xprim(iprim)
+                   r_str(2)=BCS_parts%ycover(gcspart)-bundle%yprim(iprim)
+                   r_str(3)=BCS_parts%zcover(gcspart)-bundle%zprim(iprim)
+                   do isf = 1, mat(np,aSa_range)%ndimj(ist)
+                      do jsf = 1, mat(np,aSa_range)%ndimi(ni)
+                         thisdAP = return_matrix_value(matdW(dir1), np, ni, iprim, nab, jsf, isf)
+                         val_Satomf = return_matrix_value(mat_tmp, np, ni, iprim, nab, jsf, isf)
+                         if (flag_stress) then
+                            !if (flag_full_stress) then
+                            !   do dir2=1,3
+                            !      call store_matrix_value(matdWr(dir1,dir2), np, ni, iprim, nab, jsf, isf, r_str(dir2)*thisdAP)
+                            !   end do
+                            !else
+                               call store_matrix_value(matdWr(dir1,dir1), np, ni, iprim, nab, jsf, isf, r_str(dir1)*thisdAP)
+                            !end if
+                         end if
+                      end do
+                   end do
+                end do
+             end do
+          end if
+       end do
+       if (flag_stress) then
+          !if (flag_full_stress) then
+          !   do dir2=1,3
+          !      call matrix_transpose(matdWr(dir1,dir2), matdVr(dir1,dir2))
+          !   end do
+          !else
+             call matrix_transpose(matdWr(dir1,dir1), matdVr(dir1,dir1))
+          !end if
+       end if
+       !call matrix_scale(-one, matdPAr(direction))
+    end do ! dir1
+    
+    do k = 1, 3
+       do spin = 1, nspin
+          ! Note that matrix_diagonal accumulates HF_NL_force(k,:)
+          call matrix_diagonal(matdV(k), matVK(spin), DFT_plus_U_force(k,:), aUp_range, inode)
+          call matrix_diagonal(matdW(k), matWK(spin), DFT_plus_U_force(k,:), pUa_range, inode)
+          if (flag_stress) then
+             !if (flag_full_stress) then
+             !   do l = 1, 3
+             !      if (flag_atomic_stress) then
+             !         call matrix_diagonal_stress(matdAPr(k,l), matU(spin), &
+             !              NL_P_stress(k,l), APrange, inode,atomic_stress(k,l,:))
+             !      else
+             !         call matrix_diagonal_stress(matdAPr(k,l), matU(spin), &
+             !              NL_P_stress(k,l), APrange, inode)
+             !      end if
+             !   end do
+             !else
+             call matrix_diagonal_stress(matdVr(k,k), matVK(spin), PlusU_stress(k,k), aUp_range, inode)
+             call matrix_diagonal_stress(matdWr(k,k), matWK(spin), PlusU_stress(k,k), pUa_range, inode)
+             !end if
+          end if
+       end do ! spin
+    end do ! k
+
+    call gsum(DFT_plus_U_force, 3, n_atoms)
+    do k = 3, 1, -1
+       if (flag_stress) then
+          !if (flag_full_stress) then
+          !   do l = 3, 1, -1
+          !      call free_temp_matrix(matdPAr(k,l))
+          !      call free_temp_matrix(matdAPr(k,l))
+          !   end do
+          !else
+             call free_temp_matrix(matdVr(k,k))
+             call free_temp_matrix(matdWr(k,k))
+          !end if
+       end if
+       call free_temp_matrix(matdUW(k))
+       call free_temp_matrix(matdV(k))
+       call free_temp_matrix(matdW(k))
+    end do
+    call free_temp_matrix(mat_tmp)
+    do spin = nspin,1,-1
+       call free_temp_matrix(matVK(spin))
+       call free_temp_matrix(matWK(spin))
+       call free_temp_matrix(matKb(spin))
+    end do
+    call free_temp_matrix(matKPa)
+    call free_temp_matrix(matKP)
+    call free_temp_matrix(matPKP)
+    call free_temp_matrix(matPK)
+    call free_temp_matrix(matPatomf)
+    call free_temp_matrix(matUW)
+    call free_temp_matrix(matV)
+    call free_temp_matrix(matW)
+    
+
+    call stop_backtrace(t=backtrace_timer,who='get_HF_non_local_force',echo=.true.)
+
+    return
+  end subroutine get_DFT_plus_U_force
+  !!***
+  
   ! -----------------------------------------------------------
   ! Subroutine get_KE_force
   ! -----------------------------------------------------------
