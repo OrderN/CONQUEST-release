@@ -2475,7 +2475,7 @@ contains
 
     ! Local variables
 
-    integer :: matV, matW, matUW, matPatomf, matPK, matKP, matKPa, matKPK, mat_tmp, matPKP
+    integer :: matV, matW, matUW, matPatomf, matPK, matKP, matKPa, matKPK, mat_tmp, matPKP, matPatomf2
     integer, dimension(nspin) :: matKb, matVK, matWK ! Stores K - 2KPK
     integer, dimension(3) :: matdV, matdW, matdUW
     integer, dimension(3,3) :: matdVr, matdWr
@@ -2497,6 +2497,7 @@ contains
     matV = allocate_temp_matrix(aUp_range, aUa_trans, atomf, atomf)
     matUW = allocate_temp_matrix(pUa_range, 0) ! This is UW
     matPatomf = allocate_temp_matrix(aUa_range, aUa_trans, atomf, atomf)
+    matPatomf2 = allocate_temp_matrix(aUa_range, aUa_trans, atomf, atomf)
     matPK     = allocate_temp_matrix(PKrange, PK_trans, atomf, atomf)
     matKPK    = matPK ! Label only
     matPKP    = allocate_temp_matrix(aHa_range, 0)    
@@ -2613,7 +2614,7 @@ contains
     ! First of all, find U (= (K - 2KPK).AP)
     do spin = 1, nspin
        ! W to P range (even though they are the same...)
-       call matrix_sum(zero,matPatomf,one,matW)
+       call matrix_sum(zero,matPatomf,one,matV)
        ! Scale W.(K - 2KPK)
        call matrix_product(matPatomf, matKb(spin), matPK, mult(P_K_PK))
        ! Restrict range to V
@@ -2737,10 +2738,15 @@ contains
     end do ! dir1
     
     do k = 1, 3
+       ! make dP
+       call matrix_product(matdV(k), matUW, matPatomf, mult(aVp_pOWa_aPa))
+       call matrix_product(matV, matdUW(k), matPatomf2, mult(aVp_pOWa_aPa))
        do spin = 1, nspin
           ! Note that matrix_diagonal accumulates HF_NL_force(k,:)
-          call matrix_diagonal(matdV(k), matVK(spin), DFT_plus_U_force(k,:), aUp_range, inode)
-          call matrix_diagonal(matdW(k), matWK(spin), DFT_plus_U_force(k,:), pUa_range, inode)
+          !call matrix_diagonal(matdV(k), matWK(spin), DFT_plus_U_force(k,:), aUp_range, inode)
+          !call matrix_diagonal(matdW(k), matVK(spin), DFT_plus_U_force(k,:), pUa_range, inode)
+          call matrix_diagonal(matPatomf, matKb(spin), DFT_plus_U_force(k,:), aHa_range, inode)
+          call matrix_diagonal(matPatomf2, matKb(spin), DFT_plus_U_force(k,:), aHa_range, inode)
           if (flag_stress) then
              !if (flag_full_stress) then
              !   do l = 1, 3
@@ -2787,6 +2793,7 @@ contains
     call free_temp_matrix(matKP)
     call free_temp_matrix(matPKP)
     call free_temp_matrix(matPK)
+    call free_temp_matrix(matPatomf2)
     call free_temp_matrix(matPatomf)
     call free_temp_matrix(matUW)
     call free_temp_matrix(matV)
