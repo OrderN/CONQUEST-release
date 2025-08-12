@@ -677,7 +677,9 @@ contains
     use block_module,                only: n_blocks, n_pts_in_block
     use primary_module,              only: domain
     use set_blipgrid_module,         only: naba_atoms_of_blocks
-    use density_module,              only: density_pcc, density_atom
+    use density_module,              only: density_pcc, density_atom, &
+         flag_surface_dipole_correction, get_surface_dipole, get_average_potential, &
+         flag_output_average_potential
     use GenComms,                    only: gsum, inode, ionode, cq_abort
     use energy,                      only: hartree_energy_total_rho,  &
                                            xc_energy,       &
@@ -846,6 +848,11 @@ contains
     end if
     call gsum(delta_E_xc)
     delta_E_xc = delta_E_xc * grid_point_volume
+    if(flag_surface_dipole_correction) then
+       call get_surface_dipole(h_potential, rho_tot, size)
+    else if (flag_output_average_potential) then
+       call get_average_potential(h_potential, rho_tot, size)
+    end if
     !
     !
     ! Make total potential
@@ -2057,7 +2064,7 @@ contains
     real(double) :: dx, dy, dz, r2, trace, fac, val_Satomf
     type(cq_timer) :: tmr_l_tmp1   
     integer :: spin, ipao, loc, npao_i, jpao, npao_j, pao_i, pao_j, wheremat
-    integer :: matW, matV, matOW, matPatomf, matPU, matPK, matPKP, matUW
+    integer :: matW, matV, matOW, matPatomf, matPU, matPK, matPKP, matUW, matPatomf2, matPKP2
     integer :: iU, l1, nacz1, m1
 
     call start_timer(tmr_l_tmp1,WITH_LEVEL)
@@ -2070,15 +2077,16 @@ contains
 !    matOW = matW
 !
     matPatomf = allocate_temp_matrix(aUa_range, aUa_trans, atomf, atomf)
+    matPatomf2 = allocate_temp_matrix(aUa_range, aUa_trans, atomf, atomf)
     matPU = allocate_temp_matrix(aUa_range, aUa_trans, atomf, atomf)
     matPK     = allocate_temp_matrix(PKrange, PK_trans, atomf, atomf)
     ! PKPrange = aHa_range
     matPKP    = allocate_temp_matrix(aHa_range, 0)
+    matPKP2    = allocate_temp_matrix(aUa_range, aUa_trans, atomf, atomf)
     if(iprint_ops + min_layer>=5.AND.myid==0) write(io_lun,'(6x,i5,A)') myid, ' Zeroing matW, V and OW'
     call matrix_scale(zero,matW)
     call matrix_scale(zero,matV)
     call matrix_scale(zero,matUW)
-    call matrix_scale(zero,matPatomf)
     if(iprint_ops + min_layer>=5.AND.myid==0) write(io_lun,'(6x,A)') ' Done Zeroing'
 
     ! make W and UW
@@ -2120,7 +2128,6 @@ contains
                          enddo ! pao_j
                       end if
                    enddo ! pao_i
-                   !call loop_W(iprim,halo(aSa_range)%i_halo(gcspart),atom_spec,neigh_species,matW,matUW)
                 end do ! neigh
              endif ! projector
           end do ! memb
@@ -2145,14 +2152,15 @@ contains
     ! H(DFT+U) = U/2 * (P-2PKP)
     delta_E_plusU = zero
     do spin = 1, nspin
-       call matrix_scale(zero,matPK)
-       call matrix_scale(zero,matPKP)
-
        ! Working in atomf basis, create (U/2).PKP
        call matrix_product(matPU, matKatomf(spin), matPK, mult(P_K_PK))
        call matrix_product(matPK, matPatomf, matPKP, mult(PK_P_PKP))
+       ! Symmetrise PKP (PKP2 transposes, but PKP doesn't at the moment)
+       call matrix_sum(zero,matPKP2,one,matPKP)
+       call matrix_transpose(matPKP2,matPatomf2)
+       call matrix_sum(half,matPKP,half,matPatomf2) ! PKP now symmetric
 
-       ! E(DFT+U) = U/2 * (PK-PKPK), 
+       ! E(DFT+U) = Tr[U/2 * (PK-PKPK)] = Tr[K.matEplusU]
        call matrix_sum(zero, matEplusUatomf(spin), one , matPU)
        call matrix_sum(one,  matEplusUatomf(spin), -one, matPKP)
        ! H(DFT+U) = U/2 * (P-2PKP)
@@ -2162,10 +2170,11 @@ contains
        trace = matrix_product_trace(matPKP,matKatomf(spin))
        delta_E_plusU = delta_E_plusU + trace
     enddo
-
+    call free_temp_matrix(matPKP2)
     call free_temp_matrix(matPKP)
     call free_temp_matrix(matPK)
     call free_temp_matrix(matPU)
+    call free_temp_matrix(matPatomf2)
     call free_temp_matrix(matPatomf)
     call free_temp_matrix(matUW)
     call free_temp_matrix(matV)

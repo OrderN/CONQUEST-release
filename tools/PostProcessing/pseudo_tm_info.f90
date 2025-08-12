@@ -151,6 +151,9 @@ contains
   !!    Add IF with pseudo_type for calling init_rad when ghost atoms are used
   !!   2019/12/09 20:16 dave
   !!    Changes to read valence charge from pseudopotential file and test spin-polarised charge
+  !!   2025/02/04 17:00 nakata
+  !!    nsf_species is set to npao_species anyway, even when MSSFs are used,
+  !!    because evec_coeff was changed to be in the (pao, wf) format from the (sf, wf) format.
   !!  SOURCE
   !!
   subroutine setup_pseudo_info
@@ -206,8 +209,9 @@ contains
           call read_ion_ascii_tmp(pseudo(ispecies),pao(ispecies))
 
           npao_species(ispecies) = pao(ispecies)%count
-          ! Set NSF if not set by user
-          if(nsf_species(ispecies)==0) nsf_species(ispecies) = pao(ispecies)%count
+          ! Set NSF to NPAO anyway (even if NSF is set by user for MSSFs)
+          ! because eigenvectors (ProcessWF and ProcessSijWF) output by CQ are always in PAO basis
+          nsf_species(ispecies) = pao(ispecies)%count
           maxnsf = max(maxnsf,nsf_species(ispecies))
           ! Find radius for atom functions
           do l=0,pao(ispecies)%greatest_angmom

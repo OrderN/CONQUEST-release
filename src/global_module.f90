@@ -429,5 +429,8 @@ module global_module
   ! DFT+U
   logical :: flag_DFTplusU, flag_first_diag
 
+  ! Density matrix Lagrange multiplier for correct electron number (needed for forces and stress)
+  real(double), dimension(2) :: mu_DMM ! Allow for spin
+
 end module global_module
 !!***

@@ -1284,16 +1284,6 @@ contains
                write(io_lun, fmt='(4x,a)') trim(prefix)//' grabbed K  matrix'
           !DEBUG call Report_UpdateMatrix("Kmat")  
        end if
-!!! 2024.05.20 nakata DFT+U
-    else
-       ! When Kmatrix is not read, the effect of DFT-U will be zero in the first SCF step.
-       ! From the second step, matKatomf is used to construct DFT+U matrices
-       if (flag_DFTplusU) then
-          do spin = 1, nspin
-             call matrix_scale(zero,matKatomf(spin))
-          enddo
-       endif
-!!! nakata DFT+U end
     end if
     ! XL-BOMD
     if (restart_X) then
@@ -1486,9 +1476,10 @@ contains
 !!$
 !!$
 !!$
+    flag_DFTplusU = flag_orig_DFTU
     ! Do we want to just test the forces ?
     if (flag_test_forces) then
-       call new_SC_potl(record, sc_tolerance, reset_L, &
+       call new_SC_potl(.false., sc_tolerance, reset_L, &
             fixed_potential, vary_mu, n_L_iterations,  &
             L_tolerance, total_energy, backtrace_level)
        call test_forces(fixed_potential, vary_mu, n_L_iterations, &
@@ -1498,7 +1489,6 @@ contains
        stop
     end if
 
-    flag_DFTplusU = flag_orig_DFTU
     !****lat<$
     call stop_backtrace(t=backtrace_timer,who='initial_H',echo=.true.)
     !****lat>$

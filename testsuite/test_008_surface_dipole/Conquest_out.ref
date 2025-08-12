@@ -21,79 +21,74 @@
       M.J.Gillan (Keele, UCL)                                               
     ________________________________________________________________________
 
-    Simulation cell dimensions:    10.3600 a0 x    10.3600 a0 x    10.3600 a0
+    Simulation cell dimensions:     5.6692 a0 x     5.6692 a0 x    15.0000 a0
 
       Atomic coordinates (a0)
          Atom         X         Y         Z  Species
-            1    0.0104    0.0207    0.0311        1
-            2    5.1800    5.1800    0.0000        1
-            3    5.1800    0.0000    5.1800        1
-            4    0.0000    5.1800    5.1800        1
-            5    2.5900    2.5900    2.5900        1
-            6    7.7700    7.7700    2.5900        1
-            7    2.5900    7.7700    7.7700        1
-            8    7.7700    2.5900    7.7700        1
+            1    1.8308    1.8308    7.5000        1
+            2    0.3822    1.8308    8.6422        2
+            3    3.2795    1.8308    8.6422        2
 
-    This job was run on  2025/03/21 at 14:30 +0000
-    Code was compiled on 2025/03/20 at 16:02 +0000
-    Version comment: Git Branch: bugfix-correct-force-stress; tag, hash: v1.4-39-g049ac20c
+    Using a MP mesh for k-points:   1 x   1 x   1  
 
-    Job title:                                                                                 
+    This job was run on  2025/02/20 at 13:42 +0000
+    Code was compiled on 2025/02/20 at 12:08 +0000
+    Version comment: Git Branch: f-dipole-correction; tag, hash: v1.4-25-g3c4d9ed3
+
+    Job title: Water layer                                                                     
     Job to be run: static calculation
 
     Ground state search:
       Support functions represented with PAO basis
       1:1 PAO to SF mapping
       Non-spin-polarised electrons
-      Solving for the K matrix using order N with LNV
+      Solving for the K matrix using diagonalisation 
 
-    Integration grid spacing:  0.288 a0 x 0.288 a0 x 0.288 a0
+    Integration grid spacing:  0.177 a0 x 0.177 a0 x 0.208 a0
 
-    Number of species:  1
+    Number of species:  2
     --------------------------------------------------------
     |   #  mass (au)  Charge (e)  SF Rad (a0)  NSF  Label  |
     --------------------------------------------------------
-    |   1     28.086       4.000        7.482    4  Si     |
+    |   1     15.999       6.000        5.208   13  O      |
+    |   2      1.000       1.000        7.083    5  H      |
     --------------------------------------------------------
+
+          Applying surface dipole correction along axis  3
+          No location for discontinuity specified! It will be placed at point of lowest density
 
     The calculation will be performed on     1 process
 
     The calculation will be performed on     1 thread
 
     Using the default matrix multiplication kernel
-          Density Matrix range  = 16.0000 a0
 
     The functional used will be GGA PBE96      
 
-
-    lateDM: reached residual of     0.693388E-07 after  29 iterations
-
-      | Number of electrons      =        32.000031
-      |* Harris-Foulkes energy   =       -33.569389505626887 Ha
+    PulayMixSC: Reached SCF tolerance of  0.70718E-08 after     38 iterations
+      | Number of electrons      =         8.000023
+      |* Harris-Foulkes energy   =       -17.605528555144605 Ha
 
     force: Forces on atoms (Ha/a0)
     force:  Atom   X              Y              Z
-    force:     1  -0.0021132141  -0.0039395925  -0.0059091849
-    force:     2   0.0000893280   0.0001876750  -0.0004909937
-    force:     3   0.0000887525  -0.0003253930   0.0002828883
-    force:     4  -0.0001578731   0.0001849757   0.0002817526
-    force:     5   0.0025536669   0.0026340003   0.0027161702
-    force:     6   0.0001055402   0.0001928153   0.0002577064
-    force:     7  -0.0014596011   0.0017440213   0.0018365365
-    force:     8   0.0008896896  -0.0006100493   0.0010697559
+    force:     1   0.0011188320   0.0027838808   0.0222433569
+    force:     2   0.0320789140  -0.0000300833  -0.0110191074
+    force:     3  -0.0324725568  -0.0000525327  -0.0110801308
 
-    force: Maximum force :        0.00590918(Ha/a0) on atom         1 in z direction
-    force: Force Residual:        0.00330389 Ha/a0
-    force: Total stress:         -6.71161888    -6.71375049    -6.71725660 GPa
+    force: Maximum force :        0.03247256(Ha/a0) on atom         3 in x direction
+    force: Force Residual:        0.03072179 Ha/a0
+    force: Total stress:        -10.90868275   -10.46662884     1.37716200 GPa
 
     BIBLIOGRAPHY: Please consider citing the following references in the conquest.bib file
 
     CONQUEST:         Bowler2002pt, Miyazaki2004, Nakata2020
     Basis:            Bowler2019
-    DM:               Bowler:1999if, Bowler2001, Bowler2010
+    DM:               Bowler:2006xr
     Pseudopotentials: Hamann2013, Bowler2019
     XC functional:    Perdew1996
 
-    Max total mem use is            105.403 MB
+    Warnings written to file Conquest_warnings; please check
 
-    Total run time was:              51.565 seconds
+    Max total mem use is            149.170 MB
+
+    Total run time was:               7.117 seconds

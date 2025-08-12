@@ -130,3 +130,12 @@ class TestClass:
         res = results(path, key)
         np.testing.assert_allclose(res[0], res[1], rtol = precision(key), verbose = True)
 
+    @pytest.mark.parametrize("key", ['Harris-Foulkes energy',
+                                     'Max force',
+                                     'Force residual',
+                                     'Total stress'])
+    def test_008(self, key, testsuite_directory):
+
+        path = os.path.join(testsuite_directory, "test_008_surface_dipole")
+        res = results(path, key)
+        np.testing.assert_allclose(res[0], res[1], rtol = precision(key), verbose = True)

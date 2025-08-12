@@ -169,6 +169,8 @@ contains
 !!    Added r_plusU, r_plusUproj, PKrange, pUa_range, aUp_range, pUp_range and aUa_range for DFT+U
 !!   2024/07/18 14:18 lionel 
 !!    Check consistency of Xrange wrt r_exx read from input 
+!!   2025/02/03 14:00 nakata 
+!!    Added aSs_in_sSs_range for pDOS with MSSFs
 !!  SOURCE
 !!
   subroutine set_dimensions(inode, ionode,HNL_fac,non_local, n_species, non_local_species, core_radius)
@@ -257,7 +259,7 @@ contains
        if(flag_neutral_atom_projector) then
           aNArange        = 31
           NAarange        = 32
-          mx_matrices_tmp = mx_matrices ! = 30
+          mx_matrices_tmp = 32
        else
           mx_matrices_tmp = 30
        end if
@@ -276,6 +278,9 @@ contains
           mx_matrices_tmp = mx_matrices_tmp + 1
        end if
 !!! nakata DFT+U end
+       aSs_in_sSs_range = mx_matrices_tmp + 1
+       mx_matrices_tmp = mx_matrices_tmp + 1
+       if (mx_matrices_tmp > mx_matrices) call cq_abort('ERROR : mx_matrices_tmp is larger than mx_matrices',mx_matrices_tmp)
     endif
 
     !n_my_grid_points = n_pts_in_block * n_blocks    
@@ -411,6 +416,7 @@ contains
           rcut(SFcoeffTr_range) = 0.001_double
        endif
        if (abs(r_LD)<very_small) rcut(LD_range) = 0.001_double
+       rcut(aSs_in_sSs_range) = rcut(Srange)
     endif
     if(flag_neutral_atom_projector) then
        rcut(aNArange)   = r_s_atomf + r_h_atomf
@@ -473,6 +479,7 @@ contains
        mat_name(SFcoeff_range)   = "MS"
        mat_name(SFcoeffTr_range) = "MSt"
        mat_name(LD_range)        = "LD"
+       mat_name(aSs_in_sSs_range) = "aSs_in_sSs"
     endif
     if(inode==ionode.AND.iprint_init>1) then
        do n=1,mx_matrices_tmp

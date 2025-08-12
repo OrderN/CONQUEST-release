@@ -44,6 +44,8 @@
 !!    stores the value of hartree_energy_drho made from the input charge density when we have check_DFT T
 !!   2021/07/30 12:15 dave
 !!    Remove check_DFT
+!!   2022/05/19 14:25 dave
+!!    Add surface dipole correction
 !!   2022/06/09 12:29 dave
 !!    Moved disp_energy here from DFT-D2 module
 !!   2024/05/21 00:00 nakata
@@ -153,6 +155,8 @@ contains
   !!    printDFT = T
   !!   2024/05/21 00:00 nakata
   !!    Added DFT+U energy if flag_DFTplusU = T
+  !!   2022/05/19 14:25 dave
+  !!    Add surface dipole correction energy terms
   !!  SOURCE
   !!
   subroutine get_energy(total_energy, printDFT, level)
@@ -175,7 +179,8 @@ contains
                                       flag_DFTplusU                       ! 2024.05.20 nakata DFT+U
     use pseudopotential_common, only: core_correction, &
                                       flag_neutral_atom_projector
-    use density_module,         only: electron_number
+    use density_module,         only: electron_number, flag_surface_dipole_correction, &
+         surface_dipole_energy_elec, surface_dipole_energy_ion, flag_dipole_internal
     
 
     implicit none
@@ -270,6 +275,18 @@ contains
     ! Add contribution from exact-exchange (EXX)
     !if (flag_exx)          total_energy = total_energy + exx_energy
 
+    ! For Harris-Foulkes, we need dipole correction energy of rho_i - rho_e
+    if(flag_surface_dipole_correction) then
+       ! Bengtsson Eq. 13
+       if(flag_dipole_internal) then
+          total_energy = total_energy + &
+               half*(surface_dipole_energy_ion-surface_dipole_energy_elec)
+       else ! Neugebauer & Scheffler Eq. 9
+          total_energy = total_energy + &
+               surface_dipole_energy_ion ! Electronic comes from Tr[KH]
+       end if
+    end if
+
     ! Write out data
     if (inode == ionode) then
        if(print_Harris) then
@@ -314,6 +331,16 @@ contains
                       '(10x,"plusU Energy, 2Tr[K(P-PKP)]      : ",f25.15," ",a2)')&
                      en_conv*plusU_energy, en_units(energy_units)
              !!! nakata DFT+U end
+             if (flag_surface_dipole_correction) then
+                if(flag_dipole_internal) then
+                   write(io_lun,'(10x,"Surface Dipole Correction Energy : ",f25.15," ",a2)') en_conv * &
+                        half*(surface_dipole_energy_ion+surface_dipole_energy_elec), &
+                        en_units(energy_units)
+                else
+                   write(io_lun,'(10x,"Surface Dipole Correction Energy : ",f25.15," ",a2)') en_conv * &
+                        surface_dipole_energy_ion, en_units(energy_units)
+                end if
+             end if
           end if
 
           if (abs(entropy) >= RD_ERR) then
@@ -376,6 +403,16 @@ contains
        if (flag_dft_d2)       total_energy2 = total_energy2 + disp_energy
        if (flag_DFTplusU)     total_energy2 = total_energy2 + plusU_energy   ! 2024.05.20 nakata DFT+U
 
+       ! For DFT, we need dipole correction energy of rho_i + rho_e
+       if(flag_surface_dipole_correction) then
+          if(flag_dipole_internal) then
+             total_energy2 = total_energy2 + &
+                  half*(surface_dipole_energy_ion+surface_dipole_energy_elec)
+          else
+             total_energy2 = total_energy2 + &
+                  surface_dipole_energy_ion+surface_dipole_energy_elec
+          end if
+       end if
        if (inode == ionode .and. iprint_gen + min_layer>=2) then
           write(io_lun,13) en_conv*total_energy2, en_units(energy_units)
        end if
@@ -468,6 +505,8 @@ contains
   !!   2021/10/28 17:13 lionel
   !!    Added 'DFT total energy' printing in ASE output
   !!    nkp must to be passed to avoid circular dependency
+  !!   2022/05/19 14:32 dave
+  !!    Add surface dipole correction energy
   !!   2023/01/10 18:44 lionel
   !!    Secure ASE printing when using ordern
   !!   2024/05/21 00:00 nakata
@@ -492,25 +531,25 @@ contains
                                       flag_self_consistent,           &
                                       flag_perform_cdft,              &
                                       flag_vdWDFT,                    &
-                                      flag_exx, exx_alpha,            &
+                                      flag_exx, exx_alpha, flag_neutral_atom,            &
                                       flag_neutral_atom, min_layer,   &
                                       flag_DFTplusU,                  &   ! 2024.05.20 nakata DFT+U
                                       flag_fix_spin_population,       &
                                       io_ase, write_ase, ase_file,    &
                                       flag_diagonalisation
-
-    use density_module,         only: electron_number
+    use density_module,         only: electron_number, flag_surface_dipole_correction, &
+         surface_dipole_energy_elec, surface_dipole_energy_ion, flag_dipole_internal
     use pseudopotential_common, only: core_correction, &
-                                      flag_neutral_atom_projector
+         flag_neutral_atom_projector
     use species_module,         only: n_species
     use input_module,           only: io_close
-    
+
     implicit none
 
     ! Passed variables
     integer, optional   :: level
     integer, intent(in) :: nkp
-    
+
     ! Local variables
     character(len=80) :: sub_name = "final_energy"
     integer        :: spin, spin_SF
@@ -528,12 +567,12 @@ contains
     integer :: i, stat, counter
     character(len=80) :: tmp
 
-!****lat<$
+    !****lat<$
     if (       present(level) ) backtrace_level = level+1
     if ( .not. present(level) ) backtrace_level = -10
     call start_backtrace(t=backtrace_timer,who='final_energy',&
          where=area,level=backtrace_level,echo=.true.)
-!****lat>$
+    !****lat>$
 
     ! Initialise energies
     nl_energy           = zero
@@ -554,18 +593,18 @@ contains
        if (flag_SpinDependentSF) spin_SF = spin
        ! 2*Tr[K NL]
        nl_energy      = nl_energy      &
-                        + spin_factor*matrix_product_trace(matK(spin), matNL(spin_SF))
+            + spin_factor*matrix_product_trace(matK(spin), matNL(spin_SF))
        if(flag_neutral_atom_projector) local_ps_energy = local_ps_energy      &
-                        + spin_factor*matrix_product_trace(matK(spin), matNA(spin_SF))
+            + spin_factor*matrix_product_trace(matK(spin), matNA(spin_SF))
        ! 2*Tr[K KE] with KE = - < grad**2 >
        kinetic_energy = kinetic_energy &
-                        + spin_factor*half*matrix_product_trace(matK(spin), matKE(spin_SF))
+            + spin_factor*half*matrix_product_trace(matK(spin), matKE(spin_SF))
        ! 2*Tr[K H]
        band_energy    = band_energy    &
-                        + spin_factor*matrix_product_trace(matK(spin), matH(spin))
+            + spin_factor*matrix_product_trace(matK(spin), matH(spin))
        ! -alpha*Tr[K X]
        exx_energy     = exx_energy     &
-                        - spin_factor*half*exx_alpha*matrix_product_trace(matK(spin), matX(spin))
+            - spin_factor*half*exx_alpha*matrix_product_trace(matK(spin), matX(spin))
        ! U/2*Tr[K (P-PKP)]   ! 2024.05.20 nakata DFT+U
        if(flag_DFTplusU) plusU_energy   = plusU_energy     &
                         + spin_factor*matrix_product_trace(matK(spin), matEplusU(spin))
@@ -595,6 +634,16 @@ contains
     ! Add contribution from dispersion (DFT-D2)
     if (flag_dft_d2)       total_energy1 = total_energy1 + disp_energy
 
+    ! For Harris-Foulkes, we need dipole correction energy of rho_i - rho_e
+    if(flag_surface_dipole_correction) then
+       if(flag_dipole_internal) then
+          total_energy1 = total_energy1 + &
+               half*(surface_dipole_energy_ion-surface_dipole_energy_elec)
+       else
+          total_energy1 = total_energy1 + &
+               surface_dipole_energy_ion
+       end if
+    end if
     !Write out data
     !...
     !
@@ -684,17 +733,26 @@ contains
                write (io_lun,18) en_conv*cdft_energy,en_units(energy_units)
           if (flag_DFTplusU) & ! 2024.05.20 nakata DFT+U         
                write (io_lun,181) en_conv*plusU_energy,en_units(energy_units)
+          if (flag_surface_dipole_correction) then
+             if(flag_dipole_internal) then
+                write(io_lun,'(6x,"|  Surface Dipole Energy   = ",f25.15," ",a2)') en_conv * &
+                     half*(surface_dipole_energy_ion+surface_dipole_energy_elec),en_units(energy_units)
+             else
+                write(io_lun,'(6x,"|  Surface Dipole Energy   = ",f25.15," ",a2)') en_conv * &
+                     surface_dipole_energy_ion, en_units(energy_units)
+             end if
+          end if
           write (io_lun, 2)
        end if
     end if
-    
+
     if ( inode == ionode ) then
        !
        if (abs(entropy) >= RD_ERR) then
-          
+
           !if (iprint_gen >= 0) &
           !     write(io_lun,10) en_conv*total_energy1, en_units(energy_units)
-       
+
           if (flag_check_Diag) then
              !
              select case (SmearingType)
@@ -735,7 +793,7 @@ contains
           !     &contribution is negligible)")')
        end if
     end if
-    
+
     ! Check on validity of band energy
     if(flag_neutral_atom) then
        total_energy2 = hartree_energy_drho  + &
@@ -759,6 +817,15 @@ contains
     end if
     if (flag_perform_cdft) total_energy2 = total_energy2 + cdft_energy
     if (flag_dft_d2)       total_energy2 = total_energy2 + disp_energy
+    if(flag_surface_dipole_correction) then
+       if(flag_dipole_internal) then
+          total_energy2 = total_energy2 + &
+               half*(surface_dipole_energy_ion+surface_dipole_energy_elec)
+       else
+          total_energy2 = total_energy2 + &
+               surface_dipole_energy_ion+surface_dipole_energy_elec
+       end if
+    end if
 
     ! One-electron energy
     one_electron_energy = local_ps_energy + &

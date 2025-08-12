@@ -71,6 +71,10 @@
 !!    Removed flag_no_atomic_densities
 !!   2020/01/03 09:32 dave
 !!    Moved flag_DumpChargeDensity from H_matrix_module
+!!   2022/05/18 13:31 dave
+!!    Adding in routines for dipole correction in slabs with surface charges
+!!    from L. Bengtsson PRB 59, 12301 (1999) and J. Neugebauer and M. Scheffler,
+!!    PRB 46, 16067 (1992)
 !!  SOURCE
 module density_module
 
@@ -101,6 +105,10 @@ module density_module
   real(double), allocatable, dimension(:,:) :: bwgrid
   ! total atomcharge, second dim is spin
   real(double), allocatable, dimension(:,:) :: atomcharge
+  ! Used to calculate average potential in one direction (surface dipole)
+  real(double), dimension(:), allocatable :: density_average ! Average density in x/y/z
+  real(double), dimension(:), allocatable :: planar_average, dipole_potential
+  integer :: n_grid_norm ! Size of arrays
 
   logical :: weights_set = .false.
   real(double), dimension(95) :: atrad
@@ -126,6 +134,20 @@ module density_module
 
   ! Dump charge density or not (this should also be used for dumping hilbert_make_blk.dat etc.)
   logical :: flag_DumpChargeDensity
+
+  ! Surface dipole correction
+  logical :: flag_surface_dipole_correction
+  ! Write out average potential (with or without correction)
+  logical :: flag_output_average_potential
+  ! True selects Bengtsson (internal potential)
+  logical :: flag_dipole_internal
+  integer :: surface_normal                 ! x=1, y=2, z=3 to select arrays
+  real(double) :: discontinuity_location         ! User parameter
+  real(double) :: surface_dipole_density
+  real(double) :: surface_dipole_energy_elec     ! Eq 13 in Bengtsson
+  real(double) :: surface_dipole_energy_ion      ! Eq 13 in Bengtsson
+  real(double) :: dipole_correction_location                   ! Where is the correction ? z_m in Bengtsson
+
 !!***
 
 contains
@@ -879,99 +901,359 @@ contains
   !!***
 
   ! -----------------------------------------------------------
-  ! Subroutine get_band_density
+  ! Subroutine get_surface_dipole
   ! -----------------------------------------------------------
 
-  !!****f* density_module/get_band_density *
+  !!****f* density_module/get_surface_dipole *
   !!
-  !!  NAME
-  !!   get_band_density
+  !!  NAME 
+  !!   get_surface_dipole
   !!  USAGE
-  !!
+  !!   
   !!  PURPOSE
-  !!   Gets electronic density for one band on grid (closely follows
-  !!   get_electronic_density, above)
+  !!   Calculate surface dipole correction following PRB 46 16067 (1992)
+  !!   and PRB 59 12,301 (1999)
   !!  INPUTS
-  !!
-  !!
+  !!   
+  !!   
   !!  USES
-  !!
+  !!   
   !!  AUTHOR
   !!   D. R. Bowler
   !!  CREATION DATE
-  !!   2015/06/05
+  !!   2018/05/24
   !!  MODIFICATION HISTORY
-  !!   2016/07/15 18:30 nakata
-  !!    Renamed sf_H_sf_rem -> atomf_H_atomf_rem
-  !!   2016/07/20 16:30 nakata
-  !!    Renamed naba_atm -> naba_atoms_of_blocks
-  !!   2016/08/01 17:30 nakata
-  !!    Introduced atomf instead of sf
-  !!   2016/08/09 14:00 nakata
-  !!    Renamed support -> atom_fns
-  !!   2016/09/15 18:00 nakata
-  !!    Renamed matBand -> matBand_atomfns
+  !!   2022/05/18 13:52 dave
+  !!    Added to density_module
   !!  SOURCE
   !!
-  subroutine get_band_density(denout, spin, atom_fns, atom_fns_K, matBand_atomfns, size)
+  subroutine get_surface_dipole(h_potential, rho_tot, size)
 
     use datatypes
     use numbers
-    use GenBlas,                     only: scal, rsum
-    use dimens,                      only: n_my_grid_points, grid_point_volume
-    use block_module,                only: n_pts_in_block
-    use set_bucket_module,           only: rem_bucket, atomf_H_atomf_rem
-    use calc_matrix_elements_module, only: act_on_vectors_new
+    use global_module,               only: ni_in_cell, x_atom_cell, y_atom_cell, z_atom_cell
+    use dimens,                      only: grid_point_volume, n_grid_x, n_grid_y, n_grid_z, &
+         r_super_x, r_super_y, r_super_z, x_grid, y_grid, z_grid
+    use block_module,                only: n_pts_in_block, in_block_x,in_block_y,in_block_z
     use primary_module,              only: domain
-    use set_blipgrid_module,         only: naba_atoms_of_blocks
-    use GenComms,                    only: gsum, inode, ionode
-    use global_module,               only: iprint_SC, atomf, ni_in_cell
-    use functions_on_grid,           only: gridfunctions, fn_on_grid
+    use GenComms,                    only: gsum, inode, ionode, cq_warn
+    use pseudopotential_common,      only: pseudopotential
+    use grid_index,                  only: grid_point_x, grid_point_y, grid_point_z
+    use species_module,              only: species, charge
+    use io_module,                   only: io_assign, io_close
 
     implicit none
 
     ! Passed variables
-
-    integer :: size, spin, matBand_atomfns
-    integer :: atom_fns, atom_fns_K
-    real(double), dimension(size) :: denout
+    integer :: size
+    real(double), dimension(size) :: h_potential, rho_tot
 
     ! Local variables
-    integer :: blk, i_count_alpha, n, n_i, n_point
-    real(double) :: electrons
+    integer :: m, n, nb, point, ptx, pty, ptz, min_dens_loc, zero_start, zero_end
+    integer :: n_grid_plane, atom, gridpos, lun
+    integer, dimension(:), pointer :: grid_point_norm
+    real(double) :: r_super_norm, r_super_area, grid_spacing_norm
+    real(double) :: min_dens, beta, shift, locpot, dcl_frac
+    real(double), dimension(:), pointer :: atom_cell_norm
 
-    if (inode == ionode .and. iprint_SC >= 2) &
-         write (io_lun,fmt='(2x,"Entering get_band_density")')
-
-    gridfunctions(atom_fns_K)%griddata = zero
-    call act_on_vectors_new(inode-1, rem_bucket(atomf_H_atomf_rem), &
-         matBand_atomfns, atom_fns_K, atom_fns)
-    denout(:) = zero
-    i_count_alpha = 0
-    do blk = 1, domain%groups_on_node
-       n_point = (blk - 1) * n_pts_in_block
-       i_count_alpha = (naba_atoms_of_blocks(atomf)%ibegin_blk_orb(blk)-1) * n_pts_in_block
-       if (naba_atoms_of_blocks(atomf)%no_of_atom(blk) > 0) then   !TM 30/Jun/2003
-          do n_i = 1, naba_atoms_of_blocks(atomf)%no_of_orb(blk)*n_pts_in_block, n_pts_in_block
-             do n=1, n_pts_in_block
-                denout(n_point+n) =                                       &
-                     denout(n_point+n) +                                  &
-                     gridfunctions(atom_fns_K)%griddata(i_count_alpha+n_i+n-1) * &
-                     gridfunctions(atom_fns)%griddata(i_count_alpha+n_i+n-1)
+    ! Set up appropriate parameters in direction of surface normal
+    select case(surface_normal)
+    case(1) ! X
+       n_grid_norm  = n_grid_x
+       n_grid_plane = n_grid_y * n_grid_z
+       r_super_norm = r_super_x
+       r_super_area = r_super_y * r_super_z
+       grid_spacing_norm = x_grid*r_super_x
+       grid_point_norm => grid_point_x
+       atom_cell_norm  => x_atom_cell
+    case(2) ! Y
+       n_grid_norm = n_grid_y
+       n_grid_plane = n_grid_x * n_grid_z
+       r_super_norm = r_super_y
+       r_super_area = r_super_x * r_super_z
+       grid_spacing_norm = y_grid*r_super_y
+       grid_point_norm => grid_point_y
+       atom_cell_norm  => y_atom_cell
+    case(3) ! Z
+       n_grid_norm = n_grid_z
+       n_grid_plane = n_grid_y * n_grid_x
+       r_super_norm = r_super_z
+       r_super_area = r_super_y * r_super_x
+       grid_spacing_norm = z_grid*r_super_z
+       grid_point_norm => grid_point_z
+       atom_cell_norm  => z_atom_cell
+    end select
+    ! Allocate
+    if(.not.allocated(density_average)) allocate(density_average(n_grid_norm))
+    if(.not.allocated(planar_average)) allocate(planar_average(n_grid_norm))
+    if(.not.allocated(dipole_potential)) allocate(dipole_potential(n_grid_norm))
+    density_average = zero
+    planar_average = zero
+    dipole_potential = zero
+    ! Calculate average density along surface normal
+    m = 0
+    do nb = 1, domain%groups_on_node
+       point = 0
+       do ptz = 1, in_block_z
+          do pty = 1, in_block_y
+             do ptx = 1, in_block_x
+                point = point+1
+                density_average(grid_point_norm(m+point)) = &
+                     density_average(grid_point_norm(m+point)) + rho_tot(m+point)
              end do
           end do
-       end if !(naba_atoms_of_blocks(atomf)%no_of_atom(blk) > 0)   !TM 30/Jun/2003
-    end do ! blk
-    electrons = grid_point_volume * rsum(n_my_grid_points, denout(:), 1)
-    call gsum(electrons)
-
-    if (inode == ionode .and. iprint_SC > 1) &
-         write (io_lun, '(2x,"Electrons: ",f25.15)') &
-         electrons
-    call stop_timer(tmr_std_chargescf)
-
+       end do
+       m = m + n_pts_in_block
+    end do ! nb
+    call gsum(density_average,n_grid_norm)
+    density_average = density_average/real(n_grid_plane,double)
+    ! Find the mid-vacuum point: this should be set by the user, otherwise
+    ! default to the point of lowest average density
+    if(discontinuity_location<zero) then
+       min_dens = 1e30_double
+       do point=1,n_grid_norm
+          if(abs(density_average(point))<min_dens) then
+             min_dens_loc = point
+             min_dens = abs(density_average(point))
+          end if
+       end do
+       dipole_correction_location = real(min_dens_loc-1,double)*grid_spacing_norm
+       ! Location of dipole correction in fractional coordinates
+       dcl_frac = real(min_dens_loc-1,double)/real(n_grid_norm,double)
+       if(inode==ionode.AND.iprint_SC>2) &
+            write(io_lun,fmt='(4x,"Placing discontinuity at z=",f12.5,&
+            &" a0 where density is ",f12.5)') dipole_correction_location, min_dens
+    else
+       ! discontinuity stored as fractional
+       min_dens_loc = 1 + floor(discontinuity_location*n_grid_norm)
+       dipole_correction_location = real(min_dens_loc-1,double)*grid_spacing_norm
+       ! Location of dipole correction in fractional coordinates
+       dcl_frac = real(min_dens_loc-1,double)/real(n_grid_norm,double)
+       min_dens = abs(density_average(min_dens_loc))
+       if(min_dens>1e-5 .and. inode==ionode) &
+            call cq_warn("get_surface_dipole",&
+            "Possibly large density at discontinuity point: ",min_dens)
+    end if
+    ! Calculate surface dipole density  (m in Bengtsson)
+    surface_dipole_density = zero
+    do point=min_dens_loc,n_grid_norm
+       surface_dipole_density = surface_dipole_density + &
+            density_average(point)*real(point-1,double) ! Apply grid point spacing outside
+    end do
+    do point=1,min_dens_loc-1
+       surface_dipole_density = surface_dipole_density + &
+            density_average(point)*real(point-1 + n_grid_norm,double)
+    end do
+    ! Apply grid-point spacing twice: once for integral, once to convert point to x
+    surface_dipole_density = surface_dipole_density * grid_spacing_norm * grid_spacing_norm
+    ! Add ionic contribution - for now do for all atoms but could do just on partition and sum
+    do atom = 1, ni_in_cell
+       if(atom_cell_norm(atom)>dipole_correction_location) then
+          surface_dipole_density = surface_dipole_density - &
+               atom_cell_norm(atom)*charge(species(atom))/r_super_area
+       else
+          surface_dipole_density = surface_dipole_density - &
+               (atom_cell_norm(atom)+r_super_norm)*charge(species(atom))/r_super_area
+       end if
+    end do
+    ! Calculate dipole correction potential
+    do point = 1,n_grid_norm
+       beta = real(point-1,double)/real(n_grid_norm,double)
+       ! Discontinuity location; in Bengtsson Eq.7 this is 0.5
+       shift = dcl_frac + half ! one
+       if((min_dens_loc - point)>0) shift = dcl_frac - half ! zero
+       ! Neugebauer & Scheffler Eq. 14 and Bengtsson Eq. 7 adapted
+       dipole_potential(point) = fourpi*surface_dipole_density*(beta - shift)
+    end do
+    surface_dipole_energy_elec = zero
+    surface_dipole_energy_ion  = zero
+    ! Apply the dipole correction and calculate electronic energy
+    m = 0
+    do nb = 1, domain%groups_on_node
+       point = 0
+       do ptz = 1, in_block_z
+          do pty = 1, in_block_y
+             do ptx = 1, in_block_x
+                point = point+1
+                gridpos = grid_point_norm(m+point)
+                locpot = dipole_potential(gridpos)
+                h_potential(m+point) = h_potential(m+point) + locpot
+                surface_dipole_energy_elec = &
+                     surface_dipole_energy_elec + rho_tot(m+point)*locpot
+                planar_average(gridpos) = planar_average(gridpos) + &
+                     pseudopotential(m+point) + h_potential(m+point)
+             end do
+          end do
+       end do
+       m = m + n_pts_in_block
+    end do
+    ! Complete planar average
+    call gsum(planar_average,n_grid_norm)
+    planar_average = planar_average/real(n_grid_plane,double)
+    ! Complete surface dipole energy (electronic)
+    surface_dipole_energy_elec = surface_dipole_energy_elec*grid_point_volume
+    call gsum(surface_dipole_energy_elec)
+    ! Ionic contribution to energy
+    do atom = 1, ni_in_cell
+       beta = atom_cell_norm(atom)/r_super_norm
+       shift = dcl_frac + half ! one
+       if((dipole_correction_location - atom_cell_norm(atom))>0) &
+            shift = dcl_frac - half ! zero
+       surface_dipole_energy_ion = surface_dipole_energy_ion - &
+            charge(species(atom))* fourpi*surface_dipole_density*(beta - shift)
+    end do
+    if(inode==ionode.AND.iprint_SC>3) &
+         write(io_lun,fmt='(8x,"Dipole energy for electrons and ions: ",2f12.5)') &
+         surface_dipole_energy_elec, surface_dipole_energy_ion
     return
-  end subroutine get_band_density
+  end subroutine get_surface_dipole
+  !!***
+
+  ! -----------------------------------------------------------
+  ! Subroutine get_average_potential
+  ! -----------------------------------------------------------
+
+  !!****f* density_module/get_average_potential *
+  !!
+  !!  NAME 
+  !!   get_average_potential
+  !!  USAGE
+  !!   
+  !!  PURPOSE
+  !!   Calculate average potential (if we're not applying dipole correction)
+  !!  INPUTS
+  !!   
+  !!   
+  !!  USES
+  !!   
+  !!  AUTHOR
+  !!   D. R. Bowler
+  !!  CREATION DATE
+  !!   2025/02/12
+  !!  MODIFICATION HISTORY
+  !!
+  !!  SOURCE
+  !!
+  subroutine get_average_potential(h_potential, rho_tot, size)
+
+    use numbers
+    use block_module,                only: n_pts_in_block, in_block_x,in_block_y,in_block_z
+    use primary_module,              only: domain
+    use GenComms,                    only: gsum
+    use pseudopotential_common,      only: pseudopotential
+    use grid_index,                  only: grid_point_x, grid_point_y, grid_point_z
+    use dimens,                      only: n_grid_x, n_grid_y, n_grid_z
+
+    implicit none
+
+    ! Passed variables
+    integer :: size
+    real(double), dimension(size) :: h_potential, rho_tot
+
+    ! Local variables
+    integer :: lun, n_grid_plane, gridpos
+    integer :: m, n, nb, point, ptx, pty, ptz
+    integer, dimension(:), pointer :: grid_point_norm
+
+    select case(surface_normal)
+    case(1) ! X
+       n_grid_norm  = n_grid_x
+       n_grid_plane = n_grid_y * n_grid_z
+       grid_point_norm => grid_point_x
+    case(2) ! Y
+       n_grid_norm = n_grid_y
+       n_grid_plane = n_grid_x * n_grid_z
+       grid_point_norm => grid_point_y
+    case(3) ! Z
+       n_grid_norm = n_grid_z
+       n_grid_plane = n_grid_y * n_grid_x
+       grid_point_norm => grid_point_z
+    end select
+    if(.not.allocated(density_average)) allocate(density_average(n_grid_norm))
+    if(.not.allocated(planar_average)) allocate(planar_average(n_grid_norm))
+    density_average = zero
+    planar_average = zero
+    m = 0
+    do nb = 1, domain%groups_on_node
+       point = 0
+       do ptz = 1, in_block_z
+          do pty = 1, in_block_y
+             do ptx = 1, in_block_x
+                point = point+1
+                gridpos = grid_point_norm(m+point)
+                planar_average(gridpos) = planar_average(gridpos) + &
+                     pseudopotential(m+point) + h_potential(m+point)
+                density_average(gridpos) = &
+                     density_average(gridpos) + rho_tot(m+point)
+             end do
+          end do
+       end do
+       m = m + n_pts_in_block
+    end do
+    call gsum(planar_average,n_grid_norm)
+    planar_average = planar_average/real(n_grid_plane,double)
+    call gsum(density_average,n_grid_norm)
+    density_average = density_average/real(n_grid_plane,double)
+    return
+  end subroutine get_average_potential
+  !!***
+
+  ! -----------------------------------------------------------
+  ! Subroutine write_average_potential
+  ! -----------------------------------------------------------
+
+  !!****f* density_module/write_average_potential *
+  !!
+  !!  NAME 
+  !!   write_average_potential
+  !!  USAGE
+  !!   
+  !!  PURPOSE
+  !!   Write average potential
+  !!  INPUTS
+  !!   
+  !!   
+  !!  USES
+  !!   
+  !!  AUTHOR
+  !!   D. R. Bowler
+  !!  CREATION DATE
+  !!   2025/02/12
+  !!  MODIFICATION HISTORY
+  !!
+  !!  SOURCE
+  !!
+  subroutine write_average_potential
+
+    use GenComms,                    only: inode, ionode
+    use io_module,                   only: io_assign, io_close
+
+    implicit none
+
+    ! Local variables
+    integer :: lun, n
+
+    if((inode==ionode)) then
+       call io_assign(lun)
+       open(lun,file="AveragedPotential.dat")
+       if(flag_surface_dipole_correction) then
+          write(lun,fmt='("# Pt       Potential       Density      V_dipole")')
+          do n=1,n_grid_norm
+             write(lun,fmt='(i6,3e14.5)') n,planar_average(n), density_average(n), dipole_potential(n)
+          end do
+       else
+          write(lun,fmt='("# Pt       Potential       Density")')
+          do n=1,n_grid_norm
+             write(lun,fmt='(i6,3e14.5)') n,planar_average(n), density_average(n)
+          end do
+       end if
+       call io_close(lun)
+    end if
+    deallocate(planar_average)
+    deallocate(density_average)
+    if(flag_surface_dipole_correction) deallocate(dipole_potential)
+    return
+  end subroutine write_average_potential
   !!***
 
   ! -----------------------------------------------------------

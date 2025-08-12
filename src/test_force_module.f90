@@ -115,7 +115,7 @@ contains
                                       id_glob_inv, flag_perform_cDFT,  &
                                       flag_self_consistent,            &
                                       ni_in_cell,                      &
-                                      nspin, spin_factor, flag_pcc_global
+                                      nspin, spin_factor, flag_pcc_global, flag_DFTplusU
     use GenComms,               only: myid, inode, ionode, cq_abort
     use energy,                 only: get_energy
     use pseudopotential_common, only: core_correction, pseudopotential
@@ -397,6 +397,31 @@ contains
           call test_PCC(fixed_potential, vary_mu, n_L_iterations, &
                           L_tolerance, tolerance, total_energy,     &
                           expected_reduction)
+          if (flag_test_all_forces) then
+             call update_H(fixed_potential)
+             if (flag_self_consistent) then
+                ! Vary only DM and charge density
+                reset_L = .true.
+                call new_SC_potl(.true., tolerance, reset_L,  &
+                                 fixed_potential, vary_mu,    &
+                                 n_L_iterations, L_tolerance, &
+                                 total_energy)
+             else ! Ab initio TB: vary only DM
+                call get_H_matrix(.true., fixed_potential, electrons, &
+                                  density, maxngrid)
+                call FindMinDM(n_L_iterations, vary_mu, L_tolerance, &
+                               reset_L, .false.)
+                call get_energy(total_energy)
+             end if
+          end if
+       end if
+    end if
+    ! DFT+U
+    if (flag_test_all_forces .or. flag_which_force == 11) then
+       if (flag_DFTplusU) then
+          if (inode == ionode) &
+               write(io_lun,*) '*** DFT+U ***'
+          call test_DFTplusU
           if (flag_test_all_forces) then
              call update_H(fixed_potential)
              if (flag_self_consistent) then
@@ -2593,6 +2618,151 @@ contains
     return
   end subroutine test_PCC
   !!***
+
+  !!****f* test_force_module/test_DFTplusU *
+  !!
+  !!  NAME 
+  !!   test_DFTplusU
+  !!  USAGE
+  !! 
+  !!  PURPOSE
+  !!   Tests the DFT+U force
+  !!
+  !!   We fix K, update S, rebuild the +U part of
+  !!   the Hamiltonian and the forces
+  !!  INPUTS
+  !! 
+  !! 
+  !!  USES
+  !! 
+  !!  AUTHOR
+  !!   D.R.Bowler
+  !!  CREATION DATE
+  !!   2025/08/12 13:42 dave
+  !!  MODIFICATION HISTORY
+  !!
+  !!  SOURCE
+  !!
+  subroutine test_DFTplusU
+
+    use datatypes
+    use numbers, ONLY: zero
+    use move_atoms,                 only: primary_update, &
+                                          cover_update, &
+                                          update_atom_coord
+    use group_module,               only: parts
+    use cover_module,               only: BCS_parts, DCS_parts, ion_ion_CS
+    use primary_module,             only: bundle
+    use global_module,              only: iprint_MD, x_atom_cell, &
+                                          y_atom_cell, z_atom_cell, &
+                                          id_glob_inv, ni_in_cell
+    use energy,                     only: get_energy, plusU_energy
+    use force_module,               only: get_DFT_plus_U_force
+    use GenComms,                   only: myid, inode, ionode, cq_abort
+    use H_matrix_module,            only: get_plusU_matrix, get_H_matrix
+    use S_matrix_module,            only: get_S_matrix
+    use memory_module,              only: reg_alloc_mem, reg_dealloc_mem, type_dbl
+
+    implicit none
+
+    ! Passed variables
+
+    ! Local variables
+    integer :: stat
+    real(double) ::  E0, F0, E1, F1, analytic_force, numerical_force, total_energy
+    real(double), dimension(:,:), allocatable :: DFTplusU_force
+
+    allocate(DFTplusU_force(3,ni_in_cell), STAT=stat)
+    if (stat /= 0) &
+         call cq_abort("test_DFTplusU: Error alloc mem: ", ni_in_cell)
+    call reg_alloc_mem(area_moveatoms, 3*ni_in_cell, type_dbl)
+
+    ! Find force
+    call get_plusU_matrix(.true.)
+    call get_energy(total_energy)
+    DFTplusU_force = zero
+    call get_DFT_plus_U_force(DFTplusU_force, ni_in_cell)
+    ! Store local energy
+    E0 = plusU_energy
+    ! Find out direction and atom for displacement
+    if (inode == ionode) &
+         write (io_lun,fmt='(2x,"Moving atom ",i5," in direction ",&
+                             &i2," by ",f10.6," bohr")')&
+               TF_atom_moved, TF_direction,TF_delta
+    F0 = DFTplusU_force(TF_direction,TF_atom_moved)
+    if (inode == ionode) &
+         write (io_lun,fmt='(2x,"Initial energy: ",f20.12,/,2x,&
+                            &"Initial DFT+U force : ",f20.12)') E0, F0
+    ! Move the specified atom 
+    if (TF_direction == 1) then
+       x_atom_cell(id_glob_inv(TF_atom_moved)) = &
+            x_atom_cell(id_glob_inv(TF_atom_moved)) + TF_delta
+    else if (TF_direction == 2) then
+       y_atom_cell(id_glob_inv(TF_atom_moved)) = &
+            y_atom_cell(id_glob_inv(TF_atom_moved)) + TF_delta
+    else if (TF_direction == 3) then
+       z_atom_cell(id_glob_inv(TF_atom_moved)) = &
+            z_atom_cell(id_glob_inv(TF_atom_moved)) + TF_delta
+    end if
+    call update_atom_coord
+    ! Update positions and indices
+    call primary_update(x_atom_cell, y_atom_cell, z_atom_cell, bundle,&
+                        parts, myid)
+    call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, &
+                      BCS_parts, parts)
+    call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, &
+                      DCS_parts, parts)
+    call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, ion_ion_CS, parts)
+    ! Note that we've held K fixed but rebuild S (which is what +U depends on)
+    call get_S_matrix(inode, ionode)
+    call get_plusU_matrix(.true.)
+    call get_energy(total_energy)
+    ! Find force
+    DFTplusU_force = zero
+    call get_DFT_plus_U_force(DFTplusU_force, ni_in_cell)
+    E1 = plusU_energy
+    F1 = DFTplusU_force(TF_direction,TF_atom_moved)
+    if (inode == ionode) &
+         write(io_lun,fmt='(2x,"Final energy: ",f20.12,/,2x,&
+                            &"Final DFT+U force: ",f20.12)') E1, F1
+    numerical_force = -(E1 - E0) / TF_delta
+    analytic_force = 0.5_double * (F1 + F0)
+    if (inode == ionode) &
+         write (io_lun,fmt='(2x,"Numerical Force: ",f20.12,/,2x,&
+                             &"Analytic Force : ",f20.12)') &
+               numerical_force, analytic_force
+    if (inode == ionode) &
+         write (io_lun,fmt='(2x,"Force error: ",e20.12)') &
+               numerical_force - analytic_force
+    ! Move the specified atom back
+    if (TF_direction == 1) then
+       x_atom_cell(id_glob_inv(TF_atom_moved)) = &
+            x_atom_cell(id_glob_inv(TF_atom_moved)) - TF_delta
+    else if (TF_direction == 2) then
+       y_atom_cell(id_glob_inv(TF_atom_moved)) = &
+            y_atom_cell(id_glob_inv(TF_atom_moved)) - TF_delta
+    else if (TF_direction == 3) then
+       z_atom_cell(id_glob_inv(TF_atom_moved)) = &
+            z_atom_cell(id_glob_inv(TF_atom_moved)) - TF_delta
+    end if
+    call update_atom_coord
+    ! Update positions and indices
+    call primary_update(x_atom_cell, y_atom_cell, z_atom_cell, bundle,&
+                        parts, myid)
+    call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, &
+                      BCS_parts, parts)
+    call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, &
+                      DCS_parts, parts)
+    call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, ion_ion_CS, parts)
+
+    deallocate(DFTplusU_force, STAT=stat)
+    if (stat /= 0) call cq_abort("test_PhiPulay_local: Error dealloc mem")
+    call reg_dealloc_mem(area_moveatoms, 3*ni_in_cell, type_dbl)
+
+    return
+  end subroutine test_DFTplusU
+  !!***
+
 
   !!****f* test_force_module/test_cdft *
   !!

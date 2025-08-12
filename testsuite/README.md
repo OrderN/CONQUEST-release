@@ -1,10 +1,15 @@
 # CONQUEST test suite.
 
-This directory currently contains three end-to-end tests
+This directory currently contains eight end-to-end tests
 
-  - `test_001_bulk_Si_1proc_Diag`
-  - `test_002_bulk_Si_1proc_OrderN`
-  - `test_003_bulk_BTO_polarisation`
+  - `test_001_bulk_Si_1proc_Diag` (tests ground state with diagonalisation)
+  - `test_002_bulk_Si_1proc_OrderN` (tests ground state with linear scaling)
+  - `test_003_bulk_BTO_polarisation` (tests polarisation (Resta))
+  - `test_004_isol_C2H4_4proc_PBE0CRI` (tests EXX)
+  - `test_005_isol_C2H4_4proc_PBE0GTO` (tests EXX)
+  - `test_006_isol_C2H4_4proc_PBE0ERI` (tests EXX)
+  - `test_007_isol_CH_spinpol_1proc_PBE0CRI` (tests EXX)
+  - `test_008_surface_dipole` (tests surface dipole implementation)
 
 for Conquest, and a simple python pytest script for checking the correctness of the outputs.
 

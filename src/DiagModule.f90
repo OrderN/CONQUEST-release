@@ -276,6 +276,7 @@ module DiagModule
   ! These two flags are used to perform specific calculations in buildK
   ! (projected DOS and Resta polarisation respectively)
   logical :: flag_pDOS_buildK = .false.
+  logical :: flag_WFatomf_buildK = .false.
   logical :: flag_pol_buildS = .false.
 
   !logical :: diagon ! Do we diagonalise or use O(N) ?
@@ -477,6 +478,8 @@ contains
   !!   2023/03/15 08:37 dave
   !!    Removed pDOS output (now done in post-processing) and added calls
   !!    for wavefunction coefficients scaled by overlap matrix (for pDOS)
+  !!   2025/02/13 17:30 dave and nakata
+  !!    Introduced expH_atomf and flag_WFatomf_buildK for pDOS with MSSFs
   !!  SOURCE
   !!
   subroutine FindEvals(electrons)
@@ -501,11 +504,12 @@ contains
          block_size_c, pg_kpoints, proc_groups, &
          nkpoints_max, pgid, N_procs_in_pg,     &
          N_kpoints_in_pg
-    use mult_module,     only: matH, matS, matK, matM12, SF_to_AtomF_transform, &
-         matrix_scale, matrix_product_trace, allocate_temp_matrix, free_temp_matrix
-    use matrix_data,     only: Hrange, Srange, aHa_range
+    use mult_module,     only: matH, matS, matK, matM12, &
+         matrix_scale, matrix_product, matrix_product_trace, matrix_sum, allocate_temp_matrix, free_temp_matrix, &
+         matSFcoeff_tran, mult, aSa_sCaTr_aSs, matSatomf
+    use matrix_data,     only: Hrange, Srange, aHa_range, aSs_range, aSs_in_sSs_range
     use primary_module,  only: bundle
-    use species_module,  only: species, nsf_species, species_label, n_species
+    use species_module,  only: species, nsf_species, natomf_species, species_label, n_species
     use memory_module,   only: type_dbl, type_int, type_cplx,         &
          reg_alloc_mem, reg_dealloc_mem
     use energy,          only: entropy
@@ -514,7 +518,6 @@ contains
     use functions_on_grid,           only: atomfns, &
          allocate_temp_fn_on_grid,    &
          free_temp_fn_on_grid
-    use density_module, ONLY: get_band_density
     use io_module, ONLY: write_eigenvalues, write_eigenvalues_format_ase
     use pao_format, ONLY: pao
     use ELPA_module, ONLY: flag_use_elpa, init_ELPA, end_ELPA
@@ -530,13 +533,14 @@ contains
          bandE_total, coeff, setA, setB, Eband
     real(double), dimension(nspin) :: locc, bandE, entropy_local
     real(double), external         :: dlamch
-    complex(double_cplx), dimension(:,:), allocatable :: scaledEig
+    complex(double_cplx), dimension(:,:), allocatable :: scaledEig, expH_atomf
     complex(double_cplx), dimension(:,:,:), allocatable :: expH
     complex(double_cplx) :: c_n_alpha2, c_n_setA2, c_n_setB2
-    integer :: info, stat, il, iu, i, j, m, mz, prim_size, ng, wf_no, &
+    integer :: info, stat, il, iu, i, j, m, mz, prim_size, prim_size_atomf, ng, wf_no, &
          kp, spin, spin_SF, iacc, iprim, l, band, cdft_group, atom_fns_K, &
          n_band_min, n_band_max
     integer :: iatom_spec, Nangmom ! number of orbital angular momentum to be dumped (ex. (s,p,d)=3)
+    integer :: matStmp, matStmp0, matSFcoeffTran_tmp
 
     logical :: flag_keepexcite
 
@@ -548,6 +552,10 @@ contains
     prim_size = 0
     do i = 1, bundle%n_prim
        prim_size = prim_size + nsf_species(bundle%species(i))
+    end do
+    prim_size_atomf = 0
+    do i = 1, bundle%n_prim
+       prim_size_atomf = prim_size_atomf + natomf_species(bundle%species(i))
     end do
 
     ! Initialise - start BLACS, sort out matrices, allocate memory
@@ -601,12 +609,22 @@ contains
     if (stat /= 0) &
          call cq_abort('FindEvals: failed to alloc expH', stat)
     call reg_alloc_mem(area_DM, matrix_size * prim_size * nspin, type_cplx)
-    if(wf_self_con .and. flag_write_projected_DOS) then
-       allocate(scaledEig(matrix_size,prim_size), STAT=stat)
-       if (stat /= 0) &
-            call cq_abort('FindEvals: failed to alloc scaledEig', stat)
-       call reg_alloc_mem(area_DM, matrix_size * prim_size * nspin, type_cplx)
-       scaledEig = zero
+    if(wf_self_con) then
+       if (flag_write_projected_DOS) then
+          allocate(scaledEig(matrix_size,prim_size_atomf), STAT=stat)
+          if (stat /= 0) &
+               call cq_abort('FindEvals: failed to alloc scaledEig', stat)
+          call reg_alloc_mem(area_DM, matrix_size * prim_size_atomf * nspin, type_cplx)
+          scaledEig = zero
+       end if
+       if(atomf.ne.sf) then
+          ! expH_atomf: eigenvectors in PAO basis
+          allocate(expH_atomf(matrix_size,prim_size_atomf), STAT=stat)
+          if (stat /= 0) &
+               call cq_abort('FindEvals: failed to alloc expH_atomf', stat)
+          call reg_alloc_mem(area_DM, matrix_size * prim_size_atomf, type_cplx)
+          expH_atomf = zero
+       end if
     end if
     !call gcopy(Efermi)
     !call gcopy(occ,matrix_size,nkp)
@@ -801,6 +819,7 @@ contains
     ! Second diagonalisation - get eigenvectors and build K
     entropy = zero
     flag_pDOS_buildK = .false.
+    flag_WFatomf_buildK = .false.
     spin_SF = 1
     pol_S_size = maxval(ne_spin_in_cell) ! Size for polarisation matrix
     do spin = 1, nspin
@@ -827,26 +846,66 @@ contains
                      Hrange, matK(spin)
                 ! Output wavefunction coefficients
                 if(wf_self_con .and. (flag_out_wf .or. flag_write_projected_DOS)) then
-                   if(i==1) then
-                      call write_wavefn_coeffs(evals(:,kp,spin),expH(:,:,spin),spin,firstcall=1)
-                   else
-                      call write_wavefn_coeffs(evals(:,kp,spin),expH(:,:,spin),spin)
-                   end if
+                   if (atomf.ne.sf) expH_atomf = zero
                    if(flag_write_projected_DOS) then
                       scaledEig = zero
                       flag_pDOS_buildK = .true.
-                      call buildK(Hrange, matK(spin), occ(:,kp,spin), &
-                           kk(:,kp), wtk(kp), expH(:,:,spin),scaledEig,matS(spin_SF))
+                      if (atomf.ne.sf) then
+                         flag_WFatomf_buildK = .true.
+                         matStmp0 = allocate_temp_matrix(aSs_range,0,atomf,sf)
+                         call matrix_product(matSatomf, matSFcoeff_tran(spin_SF), matStmp0, mult(aSa_sCaTr_aSs))
+                         ! change matSFcoeff_tran and matStmp from aSs_range to sSs_range
+                         matStmp = allocate_temp_matrix(aSs_in_sSs_range,0,atomf,sf)
+                         call matrix_sum(zero,matStmp,one,matStmp0)
+                         matSFcoeffTran_tmp = allocate_temp_matrix(aSs_in_sSs_range,0,atomf,sf)
+                         call matrix_sum(zero,matSFcoeffTran_tmp,one,matSFcoeff_tran(spin_SF))
+                         call buildK(Hrange, matK(spin), occ(:,kp,spin), &
+                              kk(:,kp), wtk(kp), expH(:,:,spin), &
+                              scaledEig, matStmp, &
+                              Eig_atomf=expH_atomf, matSFcoeffTran=matSFcoeffTran_tmp)
+                         call free_temp_matrix(matSFcoeffTran_tmp)
+                         call free_temp_matrix(matStmp)
+                         call free_temp_matrix(matStmp0)
+                         flag_WFatomf_buildK = .false.
+                      else
+                         call buildK(Hrange, matK(spin), occ(:,kp,spin), &
+                              kk(:,kp), wtk(kp), expH(:,:,spin), &
+                              scaledEig, matS(spin_SF))
+                      endif
                       flag_pDOS_buildK = .false.
                       if(i==1) then
                          call write_wavefn_coeffs(evals(:,kp,spin),scaledEig,spin,tag="Sij",firstcall=1)
                       else
                          call write_wavefn_coeffs(evals(:,kp,spin),scaledEig,spin,tag="Sij")
                       end if
+                   else if (atomf.ne.sf) then
+                      flag_WFatomf_buildK = .true.
+                      ! change matSFcoeff_tran from aSs_range to sSs_range
+                      matSFcoeffTran_tmp = allocate_temp_matrix(aSs_in_sSs_range,0,atomf,sf)
+                      call matrix_sum(zero,matSFcoeffTran_tmp,one,matSFcoeff_tran(spin_SF))
+                      call buildK(Hrange, matK(spin), occ(:,kp,spin), &
+                           kk(:,kp), wtk(kp), expH(:,:,spin), &
+                           Eig_atomf=expH_atomf, matSFcoeffTran=matSFcoeffTran_tmp)
+                      call free_temp_matrix(matSFcoeffTran_tmp)
+                      flag_WFatomf_buildK = .false.
                    else
                       call buildK(Hrange, matK(spin), occ(:,kp,spin), &
                            kk(:,kp), wtk(kp), expH(:,:,spin))
                    end if
+                   ! write WFs
+                   if (atomf.ne.sf) then ! MSSFs
+                      if(i==1) then
+                         call write_wavefn_coeffs(evals(:,kp,spin),expH_atomf,spin,firstcall=1)
+                      else
+                         call write_wavefn_coeffs(evals(:,kp,spin),expH_atomf,spin)
+                      end if
+                   else   ! primitive PAOs
+                      if(i==1) then
+                         call write_wavefn_coeffs(evals(:,kp,spin),expH(:,:,spin),spin,firstcall=1)
+                      else
+                         call write_wavefn_coeffs(evals(:,kp,spin),expH(:,:,spin),spin)
+                      end if
+                   endif
                 else
                    if(flag_do_pol_calc) then
                       ! Set up polarisation calculation for this spin channel
@@ -972,6 +1031,11 @@ contains
        deallocate(scaledEig, STAT=stat)
        if (stat /= 0) call cq_abort('FindEvals: failed to deallocacte scaledEig', stat)
        call reg_dealloc_mem(area_DM, matrix_size * prim_size, type_cplx)
+    end if
+    if(wf_self_con .and. (atomf.ne.sf)) then
+       deallocate(expH_atomf, STAT=stat)
+       if (stat /= 0) call cq_abort('FindEvals: failed to deallocacte expH_atomf', stat)
+       call reg_dealloc_mem(area_DM, matrix_size * prim_size_atomf, type_cplx)
     end if
     ! global
     call endDiag
@@ -3261,9 +3325,11 @@ contains
   !!    Add possibility to calculate S_{ij}.c^n_j for pDOS calculation post-processing
   !!   2023/06/08 15:38 dave
   !!    Introduce flag_pol_build_S to select polarisation calculation
+  !!   2025/02/13 17:30 dave and nakata
+  !!    Introduce flag_WFatomf_buildK and Eig_atomf for pDOS with MSSFs
   !!  SOURCE
   !!
-  subroutine buildK(range, matA, occs, kps, weight, localEig, overlapEig, matSij)
+  subroutine buildK(range, matA, occs, kps, weight, localEig, overlapEig, matSij, Eig_atomf, matSFcoeffTran)
 
     !use maxima_module, only: mx_nponn, mx_at_prim
     use numbers
@@ -3278,13 +3344,14 @@ contains
     use global_module,   only: numprocs, iprint_DM, id_glob,         &
          ni_in_cell, x_atom_cell, y_atom_cell, &
          z_atom_cell, max_wf, min_layer, flag_do_pol_calc, mat_polX_re, mat_polX_im, &
-         i_pol_dir_st, i_pol_dir_end, wf_self_con, flag_write_projected_DOS, ne_spin_in_cell
+         i_pol_dir_st, i_pol_dir_end, wf_self_con, flag_write_projected_DOS, ne_spin_in_cell, &
+         sf, atomf
     use mpi
     use GenBlas,         only: dot
     use GenComms,        only: myid
     use mult_module,     only: store_matrix_value_pos, matrix_pos, matK, return_matrix_value_pos
     use matrix_data,     only: mat, halo
-    use species_module,  only: nsf_species
+    use species_module,  only: nsf_species, natomf_species
 
     implicit none
 
@@ -3297,6 +3364,9 @@ contains
     ! For pDOS
     complex(double_cplx), optional, dimension(:,:) :: overlapEig
     integer, optional :: matSij
+    ! For WFs with MSSFs
+    complex(double_cplx), optional, dimension(:,:) :: Eig_atomf
+    integer, optional :: matSFcoeffTran
 
     ! Local variables
     type(Krecv_data), dimension(:), allocatable :: recv_info
@@ -3309,14 +3379,14 @@ contains
     integer :: len, send_size, recv_size, send_proc, recv_proc, nsf1, &
          sendtag, recvtag
     integer :: req1, req2, ierr, atom, inter, prim, wheremat, row_sup,&
-         col_sup
+         col_sup, col_atomf
     integer, dimension(:,:), allocatable :: ints, atom_list, &
          send_prim, send_info, send_orbs, send_off
     integer, dimension(:), allocatable :: current_loc_atoms, &
          LocalAtom, num_send, norb_send, send_FSC, recv_to_FSC, &
-         mapchunk, prim_orbs
+         mapchunk, prim_orbs, prim_orbs_atomf
     integer, dimension(MPI_STATUS_SIZE) :: mpi_stat
-    real(double) :: phase, rfac, ifac, rcc, icc, rsum, exp_X_value_real, exp_X_value_imag, Siajb
+    real(double) :: phase, rfac, ifac, rcc, icc, rsum, exp_X_value_real, exp_X_value_imag, Siajb, SFcoeffTran_iajb
     complex(double_cplx) :: zsum, exp_X_value
     complex(double_cplx), dimension(:,:), allocatable :: RecvBuffer, &
          SendBuffer
@@ -3417,7 +3487,7 @@ contains
          write(io_lun,fmt='(10x,i6,a,3i6)') myid,' Maxima: ',maxloc, maxint, maxsend
     ! Allocate recv_info
     allocate(send_info(numprocs,maxsend),send_orbs(numprocs,maxsend),send_off(numprocs,maxsend), &
-         prim_orbs(bundle%mx_iprim),STAT=stat)
+         prim_orbs(bundle%mx_iprim),prim_orbs_atomf(bundle%mx_iprim),STAT=stat)
     if(stat/=0) call cq_abort('buildK: Error allocating send_info !',stat)
     send_info = 0
     send_orbs = 0
@@ -3427,6 +3497,12 @@ contains
     do j=1,bundle%n_prim
        prim_orbs(j) = orb_count
        orb_count = orb_count + nsf_species(bundle%species(j))
+    end do
+    prim_orbs_atomf = 0
+    orb_count = 0
+    do j=1,bundle%n_prim
+       prim_orbs_atomf(j) = orb_count
+       orb_count = orb_count + natomf_species(bundle%species(j))
     end do
     allocate(recv_info(numprocs),STAT=stat)
     if(stat/=0) call cq_abort('buildK: Error allocating recv_info !',stat)
@@ -3511,6 +3587,7 @@ contains
        end if
     end do
     if(wf_self_con .and. flag_write_projected_DOS) len = matrix_size
+    if(wf_self_con .and. flag_WFatomf_buildK) len = matrix_size
     len_occ = len
     if(iprint_DM+min_layer>3.AND.myid==0) &
          write(io_lun,fmt='(10x,a,2i6)') 'buildK: Stage three len:',len, matA
@@ -3594,7 +3671,7 @@ contains
           end do
           if(iprint_DM + min_layer>=4.AND.myid==0) &
                write(io_lun,fmt='(10x,a)') 'filling buffer'
-          if(.not.(wf_self_con .and. flag_write_projected_DOS)) then
+          if(.not.(flag_pDOS_buildK .or. flag_WFatomf_buildK)) then
              do j=1,len_occ ! This is a loop over eigenstates
                 RecvBuffer(j,1:recv_info(recv_proc+1)%orbs) = RecvBuffer(j,1:recv_info(recv_proc+1)%orbs)*occ_correction*occs(j)
              end do
@@ -3645,20 +3722,34 @@ contains
                                  polSloc(1:pol_S_size,1:pol_S_size,dir),pol_S_size)
                          end do
                       end if
-                      ! projected DOS
-                      if(flag_pDOS_buildK .and. wf_self_con .and. flag_write_projected_DOS) then
-                         whereMat = matrix_pos(matSij, prim, jatom, col_sup, row_sup)
-                         Siajb = return_matrix_value_pos(matSij,whereMat)
-                         ! 1:len_occ gives bands; we want c_jb^n * S_iajb
-                         overlapEig(1:len_occ,prim_orbs(prim)+col_sup) = &
-                              overlapEig(1:len_occ,prim_orbs(prim)+col_sup) + &
-                              Siajb*RecvBuffer(1:len_occ,orb_count+row_sup)*cmplx(rfac,ifac,double_cplx)
-                      end if
                       ! Build K or M3
                       whereMat = matrix_pos(matA, prim, jatom, col_sup, row_sup)
                       zsum = dot(len_occ,localEig(1:len_occ,prim_orbs(prim)+col_sup),1,RecvBuffer(1:len_occ,orb_count+row_sup),1)
                       call store_matrix_value_pos(matA,whereMat,real(zsum*cmplx(rfac,ifac,double_cplx),double))
                    end do ! col_sup=nsf
+                   ! projected DOS in atomf basis
+                   if(wf_self_con) then
+                      do col_atomf = 1,natomf_species(bundle%species(prim))
+                         ! c (WF coefficients) in PAO basis
+                         if (flag_WFatomf_buildK .and. (atomf.ne.sf)) then
+                            whereMat = matrix_pos(matSFcoeffTran, prim, jatom, col_atomf, row_sup)
+                            SFcoeffTran_iajb = return_matrix_value_pos(matSFcoeffTran,whereMat)
+                            ! 1:len_occ gives bands; we want c_ia(pao)^n = c_jb^n(sf) * SFcoeffTran_iajb(pao,sf)
+                            Eig_atomf(1:len_occ,prim_orbs_atomf(prim)+col_atomf) = &
+                                 Eig_atomf(1:len_occ,prim_orbs_atomf(prim)+col_atomf) + &
+                                 SFcoeffTran_iajb*RecvBuffer(1:len_occ,orb_count+row_sup)*cmplx(rfac,ifac,double_cplx)
+                         endif
+                         ! c*S for pDOS
+                         if (flag_pDOS_buildK .and.  flag_write_projected_DOS) then
+                            whereMat = matrix_pos(matSij, prim, jatom, col_atomf, row_sup)
+                            Siajb = return_matrix_value_pos(matSij,whereMat)
+                            ! 1:len_occ gives bands; we want d_ia^n = c_jb^n(sf) * S_iajb(pao,sf)
+                            overlapEig(1:len_occ,prim_orbs_atomf(prim)+col_atomf) = &
+                                 overlapEig(1:len_occ,prim_orbs_atomf(prim)+col_atomf) + &
+                                 Siajb*RecvBuffer(1:len_occ,orb_count+row_sup)*cmplx(rfac,ifac,double_cplx)
+                         endif
+                      end do ! col_atomf=natomf
+                   end if ! wf_self_con (projected DOS)
                 end do ! row_sup=nsf
              end do ! inter=recv_info%ints
              ! Careful - we only want to increment after ALL interactions done
@@ -3691,7 +3782,7 @@ contains
             recv_info(i)%dx,recv_info(i)%dy,recv_info(i)%dz,STAT=stat)
        if(stat/=0) call cq_abort('buildK: Error deallocating recvinfo !',i,stat)
     end do
-    deallocate(prim_orbs,send_off,send_orbs,send_info,STAT=stat)
+    deallocate(prim_orbs_atomf,prim_orbs,send_off,send_orbs,send_info,STAT=stat)
     if(stat/=0) call cq_abort('buildK: Error allocating send_info !',stat)
     deallocate(recv_info,STAT=stat)
     if(stat/=0) call cq_abort('buildK: Error allocating recv_info !',stat)
@@ -4009,6 +4100,10 @@ contains
   !!    Added support for writing out specific bands
   !!   2023/05/10 08:24 dave
   !!    Reworked for post-processing requirements and added binary output option
+  !!   2025/02/03 17:30 nakata
+  !!    Changed nsf_species to natomf_species
+  !!    to write out WFs in PAO-basis rather than SF-basis.
+  !!    WFs with PAO-basis is treatable in PostProcess for both PAOs and MSSFs.
   !!  SOURCE
   !!
   subroutine write_wavefn_coeffs(eval, evec, spin, tag, firstcall)
@@ -4071,10 +4166,10 @@ contains
              acc = 0
              do atom=1,bundle%n_prim
                 write(lun) bundle%ig_prim(atom)
-                do isf1 = 1,nsf_species(bundle%species(atom))
+                do isf1 = 1,natomf_species(bundle%species(atom))
                    write(lun) evec(wf_no,acc+isf1)
                 end do
-                acc = acc + nsf_species(bundle%species(atom))
+                acc = acc + natomf_species(bundle%species(atom))
              end do
           end do ! iwf
        else
@@ -4084,10 +4179,10 @@ contains
                 acc = 0
                 do atom=1,bundle%n_prim
                    write(lun) bundle%ig_prim(atom)
-                   do isf1 = 1,nsf_species(bundle%species(atom))
+                   do isf1 = 1,natomf_species(bundle%species(atom))
                       write(lun) evec(iwf,acc+isf1)
                    end do
-                   acc = acc + nsf_species(bundle%species(atom))
+                   acc = acc + natomf_species(bundle%species(atom))
                 end do
              end if
           end do ! iwf
@@ -4106,10 +4201,10 @@ contains
              acc = 0
              do atom=1,bundle%n_prim
                 write(lun,*) bundle%ig_prim(atom)
-                do isf1 = 1,nsf_species(bundle%species(atom))
+                do isf1 = 1,natomf_species(bundle%species(atom))
                    write(lun,*) evec(wf_no,acc+isf1)
                 end do
-                acc = acc + nsf_species(bundle%species(atom))
+                acc = acc + natomf_species(bundle%species(atom))
              end do
           end do ! iwf
        else
@@ -4119,10 +4214,10 @@ contains
                 acc = 0
                 do atom=1,bundle%n_prim
                    write(lun,*) bundle%ig_prim(atom)
-                   do isf1 = 1,nsf_species(bundle%species(atom))
+                   do isf1 = 1,natomf_species(bundle%species(atom))
                       write(lun,*) evec(iwf,acc+isf1)
                    end do
-                   acc = acc + nsf_species(bundle%species(atom))
+                   acc = acc + natomf_species(bundle%species(atom))
                 end do
              end if
           end do ! iwf

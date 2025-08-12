@@ -158,6 +158,7 @@ contains
     use store_matrix,         only: dump_pos_and_matrices
     use io_module,            only: write_extxyz
     use md_control,           only: flag_write_extxyz
+    use density_module,       only: flag_output_average_potential, write_average_potential
 
     implicit none
 
@@ -247,7 +248,7 @@ contains
 !****lat<$
     call stop_backtrace(t=backtrace_timer,who='control_run',echo=.true.)
 !****lat>$
-
+    if(flag_output_average_potential) call write_average_potential
     ! Added if, otherwise step numbering is broken on MD restart - zamaan
     if (.not. leqi(runtype, 'md')) call dump_pos_and_matrices
     return

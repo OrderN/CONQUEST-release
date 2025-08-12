@@ -410,6 +410,34 @@ beyond the valence electrons.
 
 Go to :ref:`top <groundstate>`.
 
+.. _gs_surf_dip:
+
+Surface dipole correction
+-------------------------
+
+If your simulation involves a slab calculation, then unless the slab is
+perfectly symmetrical there can be a dipole moment which gives an unphysical
+field across the periodic cell even for a neutral system.  A correction can be applied, following the
+method outlined in :cite:`g-Neugebauer1992,g-Bengtsson1999` (where we use the energy from the
+Bengtsson paper, which is correct).  This method *only* works for slab
+calculations, and calculates a dipole correction potential, placing the
+necessary discontinuity in the vacuum.  The user can specify the location
+of the discontinuity (in *fractional* coordinates), or the code will place it at the point where the
+planar averaged density is a minimum (which is a good way to find the
+centre of the vacuum).
+
+::
+
+   SC.SurfaceDipoleCorrection T/F
+   SC.SurfaceNormal x, y, or z
+   SC.DiscontinuityLocation (*real*)
+
+It is also possible to write out the planar-averaged potential and charge density
+(averaged in the plane perpendicular to the surface normal) using the parameter
+``SC.OutputAveragePotential T/F``.  This generates the file ``AveragedPotential.dat``.
+
+Go to :ref:`top <groundstate>`.
+
 .. _gs_spin:
 
 Spin polarisation

@@ -827,7 +827,7 @@ contains
                                  flag_mix_L_SC_min,                    &
                                  flag_fix_spin_population, nspin,      &
                                  spin_factor, flag_dump_L,             &
-                                 flag_SpinDependentSF, min_layer
+                                 flag_SpinDependentSF, min_layer, mu_DMM
     use timer_module,      only: cq_timer,start_timer,                 &
                                  stop_print_timer, WITH_LEVEL
     use io_module,         only: dump_matrix, return_prefix
@@ -877,6 +877,7 @@ contains
     if (ndone > n_L_iterations) &
          call cq_abort('lateDM: too many L iterations', ndone, n_L_iterations)
 
+    mu_DMM = zero
     do spin = 1, nspin
        do i = 1, maxpulayDMM
           mat_Lstore(i,spin) = allocate_temp_matrix(Lrange,0)
@@ -888,7 +889,6 @@ contains
        matSphi(spin) = allocate_temp_matrix(Lrange,0)
        mat_temp(spin) = allocate_temp_matrix(TLrange,0)
     end do
-
     ! Update the charge density if flag is set
     min_layer = min_layer - 1
     if (flag_mix_L_SC_min) then
@@ -931,6 +931,7 @@ contains
           call matrix_product(mat_temp(spin), matT(spin_SF), matSphi(spin), mult(TL_T_L))
           e_dot_n(spin) = matrix_product_trace(matSM3(spin), matphi(spin))
           n_dot_n(spin) = matrix_product_trace(matSphi(spin), matphi(spin))
+          mu_DMM(spin) = e_dot_n(spin) / n_dot_n(spin)
           if (inode == ionode .and. iprint_DM + min_layer >= 3) then
              write(io_lun, '(4x,a,i1,") ",f16.6)') &
                   trim(prefix)//" e.n (spin=", spin, e_dot_n(spin)
@@ -1057,6 +1058,7 @@ contains
                                  mult(TL_T_L))
              e_dot_n(spin) = matrix_product_trace(matSM3(spin), matphi(spin))
              n_dot_n(spin) = matrix_product_trace(matSphi(spin), matphi(spin))
+             mu_DMM(spin) = e_dot_n(spin) / n_dot_n(spin)
           end do
           if (flag_fix_spin_population) then
              do spin = 1, nspin
@@ -1185,6 +1187,7 @@ contains
                                  matSphi(spin), mult(TL_T_L))
              e_dot_n(spin) = matrix_product_trace(matSM3(spin), matphi(spin))
              n_dot_n(spin) = matrix_product_trace(matSphi(spin), matphi(spin))
+             mu_DMM(spin) = e_dot_n(spin) / n_dot_n(spin)
           end do
           if (flag_fix_spin_population) then
              do spin = 1, nspin

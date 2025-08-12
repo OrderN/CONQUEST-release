@@ -284,6 +284,8 @@ contains
   !!    Removed dSrange, dHrange, PAOPrange and PAOP_PS_H which are no longer used
   !!   2017/12/05 10:24 dave with TM and NW (Mizuho)
   !!    Adding initialisation for NA projector matrices
+  !!   2025/02/06 15:00 nakata
+  !!    Added aSs_in_sSs_range
   !!  SOURCE
   !!
   subroutine immi(parts, prim, gcs, myid, partial)
@@ -522,6 +524,11 @@ contains
        call matrix_ini(parts, prim, gcs, mat(1:prim%groups_on_node,SFcoeffTr_range), &
                        SFcoeffTr_matind, rcut(SFcoeffTr_range), myid-1,              &
                        halo(SFcoeffTr_range), ltrans(SFcoeffTr_range))
+       mat(1:prim%groups_on_node,aSs_in_sSs_range)%sf1_type = atomf
+       mat(1:prim%groups_on_node,aSs_in_sSs_range)%sf2_type = sf
+       call matrix_ini(parts, prim, gcs, mat(1:prim%groups_on_node,aSs_in_sSs_range), &
+                       aSs_in_sSs_matind, rcut(aSs_in_sSs_range), myid-1,              &
+                       halo(aSs_in_sSs_range), ltrans(aSs_in_sSs_range))
        if (flag_LFD) then
           mat(1:prim%groups_on_node,LD_range)%sf1_type = atomf
           mat(1:prim%groups_on_node,LD_range)%sf2_type = atomf
@@ -1609,6 +1616,7 @@ contains
        call end_ops(prim,SFcoeff_range,SFcoeff_matind,SFcoeff_trans)
        call end_ops(prim,SFcoeffTr_range,SFcoeffTr_matind)
        if (flag_LFD) call end_ops(prim,LD_range,LD_matind)
+       call end_ops(prim,aSs_in_sSs_range,aSs_in_sSs_matind)
     endif
     if( flag_neutral_atom_projector ) then
        call end_ops(prim,aNArange, aNAmatind,aNA_trans)

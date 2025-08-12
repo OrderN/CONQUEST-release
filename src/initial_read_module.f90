@@ -861,6 +861,8 @@ contains
   !!     EXX: added filtering option for EXX and cleaning
   !!   2020/01/14 lionel
   !!     EXX: added GTO option
+  !!   2022/05/19 11:54 dave
+  !!     Add input parameters for surface dipole correction
   !!   2022/10/28 15:56 lionel
   !!     Added ASE output file setup ; default is F
   !!   2022/12/14 10:01 dave and tsuyoshi
@@ -869,6 +871,8 @@ contains
   !!     Added DFT+U related input and output 
   !!   2024/12/03 lionel
   !!     Added grid specification of EXX coarse/standard/fine
+  !!   2025/02/03 nakata
+  !!     Set flag_out_wf = .true. expricitly when flag_write_projected_DOS is .true.
   !!  TODO
   !!  SOURCE
   !!
@@ -966,6 +970,8 @@ contains
          atomch_output, flag_Kerker, flag_wdmetric, minitersSC, &
          flag_newresidual, flag_newresid_abs, n_dumpSCF
     use density_module, only: flag_InitialAtomicSpin, flag_DumpChargeDensity
+    use density_module, only: flag_surface_dipole_correction, surface_normal, &
+         flag_output_average_potential, discontinuity_location, flag_dipole_internal
     use S_matrix_module, only: InvSTolerance, InvSMaxSteps,&
          InvSDeltaOmegaTolerance
     use blip,          only: blip_info, init_blip_flag, alpha, beta
@@ -1764,6 +1770,25 @@ contains
     ! number of electrons. If the error of electron number (per total electron number) 
     ! is larger than the following value, we use atomic charge density. (in update_H)
     threshold_resetCD     = fdf_double('SC.Threshold.Reset',0.1_double)
+    ! Surface dipole correction parameters
+    flag_surface_dipole_correction = fdf_boolean('SC.SurfaceDipoleCorrection',.false.)
+    flag_output_average_potential  = fdf_boolean('SC.OutputAveragePotential',.false.)
+    if(flag_surface_dipole_correction) discontinuity_location = fdf_double('SC.DiscontinuityLocation',-one)
+    if(discontinuity_location>one) call cq_abort("Discontinuity location must be fractional: ",&
+         discontinuity_location)
+    tmp = fdf_string(1,'SC.SurfaceNormal','z')
+    if(leqi(tmp,'x')) then
+       surface_normal = 1
+    else if(leqi(tmp,'y')) then
+       surface_normal = 2
+    else if(leqi(tmp,'z')) then
+       surface_normal = 3
+    else
+       call cq_abort('Unrecognised surface normal direction specified: '//tmp)
+    end if
+    ! Bengtsson PRB 59 12301 1999 is default
+    flag_dipole_internal = fdf_boolean('SC.SurfaceDipoleInternal',.true.)
+    ! Line minimisation
     tmp = fdf_string(4,'AtomMove.CGLineMin','safe')
     if(leqi(tmp,'safe')) then
        cg_line_min = safe
@@ -1844,6 +1869,7 @@ contains
        if(flag_diagonalisation) then
           flag_write_projected_DOS = fdf_boolean('IO.write_proj_DOS',.false.)
           if(flag_write_projected_DOS) then
+             flag_out_wf = .true.
              E_wf_min = fdf_double('IO.min_wf_E',-BIG)
              E_wf_max = fdf_double('IO.max_wf_E',BIG)
           end if
@@ -2084,9 +2110,9 @@ contains
     flag_test_all_forces    = fdf_boolean('AtomMove.TestAllForces',.true. )
     if(.NOT.flag_test_all_forces) then ! Test one force component
        flag_which_force = fdf_integer('AtomMove.TestSpecificForce',1)
-       if(flag_which_force>10.OR.flag_which_force<0.AND.inode==ionode) then
+       if(flag_which_force>11.OR.flag_which_force<0.AND.inode==ionode) then
           call cq_warn(sub_name,&
-               "AtomMove.TestSpecificForce must lie between 1 and 10 (setting to 1): ",&
+               "AtomMove.TestSpecificForce must lie between 1 and 11 (setting to 1): ",&
                flag_which_force)
           flag_which_force = 1
        end if
@@ -2865,6 +2891,8 @@ contains
          n_support_iterations,              &
          n_L_iterations
     use datestamp,            only: datestr, commentver
+    use density_module,       only: flag_surface_dipole_correction, surface_normal, &
+         discontinuity_location
     use pseudopotential_common, only: flag_neutral_atom_projector, maxL_neutral_atom_projector, &
          numN_neutral_atom_projector, pseudo_type, OLDPS, SIESTA, ABINIT
     use input_module,         only: leqi, chrcap
@@ -3061,7 +3089,16 @@ contains
                maxval(numN_neutral_atom_projector),maxL_neutral_atom_projector
        end if
     end if
-
+    if(flag_surface_dipole_correction) then
+       write(io_lun,fmt='(/10x,"Applying surface dipole correction along axis ",i2)') surface_normal
+       if(discontinuity_location<zero) then
+          write(io_lun,fmt='(10x,"No location for discontinuity specified! &
+               &It will be placed at point of lowest density")')
+       else
+          write(io_lun,fmt='(10x,"User-specified location for discontinuity: ",f12.5)') &
+               discontinuity_location
+       end if
+    end if
     if (.not.vary_mu) then
        write(io_lun,*) '          mu is constant'
        write(io_lun,fmt="(/10x,'The Chemical Potential mu is :',f7.4)") mu

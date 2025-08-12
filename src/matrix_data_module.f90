@@ -64,6 +64,9 @@
 !!    Adding new matrix indices (aNA and NAa) for atom function - NA projectors
 !!   2024/05/22 14:40 nakata
 !!    Adding new matrix indices (PK, pUa, aUp, pUp and aUa) for atom function - DFT+U
+!!   2025/02/06 14:30 nakata
+!!    aSs_in_sSs_range and aSs_in_sSs_matind were added
+!!    and mx_matrices was changed from 32 to 33 for pDOS with MSSFs
 !!  SOURCE
 !!
 module matrix_data
@@ -89,7 +92,8 @@ module matrix_data
        SLSmatind, Tmatind, TTrmatind, TSmatind, THmatind, TLmatind, Xmatind, SXmatind
   integer, dimension(:), pointer :: aSa_matind, aHa_matind, STr_matind, HTr_matind, &
                                     aSs_matind, aHs_matind, sSa_matind, sHa_matind, &
-                                    SFcoeff_matind, SFcoeffTr_matind, LD_matind
+                                    SFcoeff_matind, SFcoeffTr_matind, LD_matind, &
+                                    aSs_in_sSs_matind
   integer, dimension(:), pointer :: aNAmatind, NAamatind
   integer, dimension(:), pointer :: aUa_matind, PKmatind   !!! 2024.05.20 nakata DFT+U
 
@@ -130,6 +134,7 @@ module matrix_data
   ! Ranges for NA projectors set later also (dimens.module.f90)
   integer :: aNArange        ! 31
   integer :: NAarange        ! 32
+  integer :: aSs_in_sSs_range   ! 33 for S(atomf,sf) but with the range of Srange (= r_sf + r_sf, not r_atomf + r_sf)
 
 !!! 2024.05.20 nakata DFT+U
   integer :: PKrange         ! 33

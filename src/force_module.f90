@@ -260,11 +260,16 @@ contains
                                       flag_neutral_atom, flag_stress, &
                                       rcellx, rcelly, rcellz, flag_mix_L_SC_min, &
                                       flag_atomic_stress, non_atomic_stress, &
-                                      flag_heat_flux, cell_constraint_flag, min_layer
+                                      flag_heat_flux, cell_constraint_flag, &
+                                      atom_coord, species_glob, min_layer, &
+                                      flag_heat_flux, cell_constraint_flag
     use density_module,         only: get_electronic_density, density, &
-                                      build_Becke_weight_forces
+         build_Becke_weight_forces, &
+         flag_surface_dipole_correction, &
+         surface_dipole_density, surface_normal, surface_dipole_energy_elec, &
+         surface_dipole_energy_ion
     use functions_on_grid,      only: atomfns, H_on_atomfns
-    use dimens,                 only: n_my_grid_points
+    use dimens,                 only: n_my_grid_points, r_super_x, r_super_y, r_super_z
     use matrix_data,            only: Hrange
     use mult_module,            only: matK, matKatomf, SF_to_AtomF_transform
     use maxima_module,          only: maxngrid
@@ -275,6 +280,7 @@ contains
                                        delta_E_xc, xc_energy, hartree_energy_drho
     use hartree_module, only: Hartree_stress
     use XC, ONLY: XC_GGA_stress
+    use species_module, only: charge
     use io_module, only: atom_output_threshold, return_prefix
     use input_module,         only: leqi, io_close
     use io_module, only: atom_output_threshold, return_prefix
@@ -290,7 +296,8 @@ contains
     ! Local variables
     integer        :: i, j, ii, stat, max_atom, max_compt, ispin, &
                       direction, dir1, dir2, counter
-    real(double)   :: max_force, volume, scale, g0, scaleC
+    real(double), dimension(3) :: dipole_correction_force
+    real(double)   :: max_force, volume, scale, g0, scaleC, r_super_norm
     type(cq_timer) :: tmr_l_tmp1
     type(cq_timer) :: backtrace_timer
     integer        :: backtrace_level
@@ -403,6 +410,9 @@ contains
          else
             GPV_stress(dir1,dir1) = (hartree_energy_total_rho + &
               local_ps_energy - core_correction) ! core contains 1/V term
+         end if
+         if(flag_surface_dipole_correction) then
+            GPV_stress(dir1,dir1) = GPV_stress(dir1,dir1) + surface_dipole_energy_elec
          end if
          ! XC_GGA_stress is zero for LDA
          if(flag_self_consistent .or. flag_mix_L_SC_min) then
@@ -586,12 +596,33 @@ contains
        write (io_ase, fmt='(4x,a)') &
             trim(prefix)//"  Atom   X              Y              Z"             
     end if
+    select case(surface_normal)
+    case(1) ! X
+       r_super_norm = r_super_x
+    case(2) ! Y
+       r_super_norm = r_super_y
+    case(3) ! Z
+       r_super_norm = r_super_z
+    end select
     !
     ! END %%%% ASE printing %%%%
     !    
     ! Calculate forces and write out
     g0 = zero
     do i = 1, ni_in_cell
+       if(flag_surface_dipole_correction) then
+          dipole_correction_force = zero
+          dipole_correction_force(surface_normal) = charge(species_glob(i)) * fourpi * &
+               surface_dipole_density / r_super_norm
+          ! Mathematically, we need something like this term for the stress, except
+          ! that I don't think that stress can be defined sensibly when there is a vacuum
+          ! gap as there should be along the surface normal! I have left this here for
+          ! information, but I don't think that it should be included.  DRB 2022/06/06
+          !
+          !dipole_correction_stress(surface_normal) = &
+          !     dipole_correction_stress(surface_normal) + &
+          !     atom_coord(surface_normal,i) * dipole_correction_force(surface_normal)
+       end if
        do j = 1, 3
           ! Force components that are always needed
           tot_force(j,i) = HF_force(j,i) + HF_NL_force(j,i) + &
@@ -618,6 +649,8 @@ contains
                tot_force(j,i) = tot_force(j,i) + NA_force(j,i)
           if(flag_DFTplusU) &
                tot_force(j,i) = tot_force(j,i) + PlusU_force(j,i)
+          if(flag_surface_dipole_correction) &
+               tot_force(j,i) = tot_force(j,i) + dipole_correction_force(j)
           ! Zero force on fixed atoms
           if (.not. flag_move_atom(j,i)) then
              tot_force(j,i) = zero
@@ -653,6 +686,9 @@ contains
              else
                 write(io_lun, 106) trim(prefix),(for_conv * ion_interaction_force(j,i), j = 1, 3)
              end if
+             if(flag_surface_dipole_correction) &
+                  write(io_lun, fmt='(4x,a,3f15.10)') trim(prefix)//" Force dipole : ", &
+                  (for_conv * dipole_correction_force(j), j = 1, 3)
              if (flag_pcc_global) write(io_lun, 108) trim(prefix),(for_conv *   pcc_force(j,i), j = 1, 3)
              if (flag_dft_d2) write (io_lun, 109) trim(prefix),(for_conv * disp_force(j,i), j = 1, 3)
              if (flag_perform_cdft) write (io_lun, fmt='(4x,a,3f15.10)') &
@@ -812,7 +848,7 @@ contains
        if(inode==ionode.AND.iprint_MD + min_layer>=1) &
             write(io_lun,'(4x,a,f15.8,a4/)') trim(prefix)//" Average pressure: ", &
             third*scale*(stress(1,1) + stress(2,2) + stress(3,3))," GPa"
-       if (flag_atomic_stress .and. iprint_MD + min_layer > 2) call check_atomic_stress
+       if (flag_atomic_stress .and. iprint_MD + min_layer > 2) call check_atomic_stress(prefix)
     end if
     
     call my_barrier()
@@ -966,6 +1002,8 @@ contains
   !!    Added calculations for off-diagonal elements of PP_stress and SP_stress
   !!   2019/05/08 zamaan
   !!    Added atomic stress contributions
+  !!   2025/03/20 16:07 dave
+  !!    Added electron number gradient contribution to S-Pulay force and stress
   !!  SOURCE
   !!
   subroutine pulay_force(p_force, KE_force, fixed_potential, vary_mu,  &
@@ -979,7 +1017,7 @@ contains
     use matrix_module,               only: matrix, matrix_halo
     use matrix_data,                 only: mat, halo, blip_trans, Srange, aSa_range
     use mult_module,                 only: LNV_matrix_multiply,      &
-                                           matM12,                   &
+                                           matM12, matM4,            &
                                            allocate_temp_matrix,     &
                                            free_temp_matrix,         &
                                            return_matrix_value,      &
@@ -987,7 +1025,7 @@ contains
                                            scale_matrix_value,       &
                                            matKatomf,                &
                                            return_matrix_block_pos,  &
-                                           matrix_scale,             &
+                                           matrix_scale, matrix_sum, &
                                            SF_to_AtomF_transform
     use global_module,               only: iprint_MD, WhichPulay,    &
                                            BothPulay, PhiPulay,      &
@@ -999,7 +1037,7 @@ contains
                                            id_glob, species_glob,    &
                                            flag_diagonalisation,     &
                                            flag_full_stress, flag_stress, &
-                                           flag_atomic_stress, min_layer
+                                           flag_atomic_stress, min_layer, mu_DMM
     use set_bucket_module,           only: rem_bucket, atomf_atomf_rem
     use blip_grid_transform_module,  only: blip_to_support_new,      &
                                            blip_to_grad_new
@@ -1142,8 +1180,12 @@ contains
     ! If we're diagonalising, we've already build data_M12
     if (.not. flag_diagonalisation) then
        call LNV_matrix_multiply(electrons, energy_tmp, dontK, doM1,   &
-                                doM2, dontM3, dontM4, dontphi, dontE, &
-                                mat_M12=matM12)
+                                doM2, dontM3, doM4, dontphi, dontE, &
+                                mat_M12=matM12, mat_M4=matM4)
+       ! Electron number gradient contribution to S-Pulay force and stress
+       do spin=1,nspin
+          call matrix_sum(one,matM12(spin),-half*mu_DMM(spin),matM4(spin))
+       end do
     end if
     t1 = mtime()
     t0 = t1
@@ -2113,7 +2155,6 @@ contains
                     neigh_global_part, neigh_species, wheremat, isf, jsf
     real(double) :: dx, dy, dz, thisdAP
     real(double), dimension(3,3) :: NL_P_stress, NL_HF_stress
-    real(double), dimension(:,:,:), allocatable :: NL_P_atomic, NL_HF_atomic
     real(double), dimension(3) :: r_str
     type(cq_timer) :: backtrace_timer
 
@@ -2138,15 +2179,6 @@ contains
     end do
     if (flag_basis_set == blips .and. (.not. flag_analytic_blip_int)) then
        dpseudofns = allocate_temp_fn_on_grid(nlpf)
-    end if
-    if (flag_atomic_stress) then
-      allocate(NL_HF_atomic(3,3,ni_in_cell), STAT=stat)
-      if (stat /= 0) &
-        call cq_abort("Error allocating NL atomic stress: ", ni_in_cell)
-      allocate(NL_P_atomic(3,3,ni_in_cell), STAT=stat)
-      if (stat /= 0) &
-        call cq_abort("Error allocating NL atomic stress: ", ni_in_cell)
-      call reg_alloc_mem(area_moveatoms, 2*3*3*ni_in_cell, type_dbl)
     end if
     HF_NL_force = zero
     NL_P_stress = zero
@@ -2346,21 +2378,21 @@ contains
           do spin = 1, nspin
              ! Note that matrix_diagonal accumulates HF_NL_force(k,:)
              call matrix_diagonal(matdAP(k), matU(spin), &
-                                  HF_NL_force(k,:), APrange, inode)
+                                  HF_NL_force(k,:), APrange)
              if (flag_stress) then
                if (flag_full_stress) then
                  do l = 1, 3
                    if (flag_atomic_stress) then
                      call matrix_diagonal_stress(matdAPr(k,l), matU(spin), &
-                          NL_P_stress(k,l), APrange, inode,atomic_stress(k,l,:))
+                          NL_P_stress(k,l), APrange,atomic_stress(k,l,:))
                    else
                      call matrix_diagonal_stress(matdAPr(k,l), matU(spin), &
-                          NL_P_stress(k,l), APrange, inode)
+                          NL_P_stress(k,l), APrange)
                    end if
                  end do
                else
                  call matrix_diagonal_stress(matdAPr(k,k), matU(spin), &
-                                      NL_P_stress(k,k), APrange, inode)
+                                      NL_P_stress(k,k), APrange)
                end if
              end if
           end do ! spin
@@ -2372,21 +2404,21 @@ contains
           do spin = 1, nspin
              ! Note that matrix_diagonal accumulates HF_NL_force(k,:)
              call matrix_diagonal(matdPA(k), matUT(spin), &
-                                  HF_NL_force(k,:), PArange,inode)
+                                  HF_NL_force(k,:), PArange)
              if (flag_stress) then
                if (flag_full_stress) then
                  do l = 1, 3
                    if (flag_atomic_stress) then
                      call matrix_diagonal_stress(matdPAr(k,l), matUT(spin), &
-                          NL_HF_stress(k,l), PArange,inode,atomic_stress(k,l,:))
+                          NL_HF_stress(k,l), PArange,atomic_stress(k,l,:))
                    else
                      call matrix_diagonal_stress(matdPAr(k,l), matUT(spin), &
-                          NL_HF_stress(k,l), PArange, inode)
+                          NL_HF_stress(k,l), PArange)
                    end if
                  end do
                else
                  call matrix_diagonal_stress(matdPAr(k,k), matUT(spin), &
-                      NL_HF_stress(k,k), PArange, inode)
+                      NL_HF_stress(k,k), PArange)
                end if
              end if
           end do ! spin
@@ -2394,12 +2426,6 @@ contains
     end if
 
     call gsum(HF_NL_force, 3, n_atoms)
-    if (flag_atomic_stress) then
-      deallocate(NL_HF_atomic, NL_P_atomic, STAT=stat)
-      if (stat /= 0) &
-        call cq_abort("Error deallocating NL atomic stress: ", ni_in_cell)
-      call reg_dealloc_mem(area_moveatoms, 2*3*3*ni_in_cell, type_dbl)
-    end if
     if (flag_stress) then
        do k=1,3
           if (flag_full_stress) then
@@ -2475,44 +2501,37 @@ contains
 
     ! Local variables
 
-    integer :: matV, matW, matUW, matPatomf, matPK, matKP, matKPa, matKPK, mat_tmp, matPKP, matPatomf2
+    integer :: matV, matW, matPatomf, matPK, matKP, matKPK, mat_tmp, matPatomf2
     integer, dimension(nspin) :: matKb, matVK, matWK ! Stores K - 2KPK
-    integer, dimension(3) :: matdV, matdW, matdUW
+    integer, dimension(3) :: matdUV, matdUW
     integer, dimension(3,3) :: matdVr, matdWr
-    integer      :: dir1, dir2, k, l, stat, dpseudofns, np, nn, i, i1, i2, &
-         spec, this_nsf, this_nlpf, ni, spin, atom_num, atom_spec, memb, neigh, &
-         npao_i, npao_j, pao_i, pao_j, part
+    integer      :: dir1, dir2, k, l, stat, np, nn, i, i1, i2, &
+         spec, this_nsf_nlpf, ni, spin, atom_num, atom_spec, memb, neigh, &
+         npao_i, npao_j, pao_i, pao_j, part, atom
     integer      :: iprim, gcspart, ist, nab, neigh_global_num,        &
                     neigh_global_part, neigh_species, wheremat, isf, jsf
-    real(double) :: dx, dy, dz, thisdAP, fac, val_Satomf
-    real(double), dimension(3,3) :: PlusU_stress
-    real(double), dimension(:,:,:), allocatable :: NL_P_atomic, NL_HF_atomic
+    real(double) :: dx, dy, dz, fac, val_Satomf
     real(double), dimension(3) :: r_str
     type(cq_timer) :: backtrace_timer
 
     call start_backtrace(t=backtrace_timer,who='get_DFT_plus_U_force',where=7,level=3,echo=.true.)
 
-    ! Make P
-    matW = allocate_temp_matrix(pUa_range, aUa_trans, atomf, atomf)
-    matV = allocate_temp_matrix(aUp_range, aUa_trans, atomf, atomf)
-    matUW = allocate_temp_matrix(pUa_range, 0) ! This is UW
-    matPatomf = allocate_temp_matrix(aUa_range, aUa_trans, atomf, atomf)
-    matPatomf2 = allocate_temp_matrix(aUa_range, aUa_trans, atomf, atomf)
-    matPK     = allocate_temp_matrix(PKrange, PK_trans, atomf, atomf)
-    matKPK    = matPK ! Label only
-    matPKP    = allocate_temp_matrix(aHa_range, 0)    
-    matKP     = allocate_temp_matrix(PKrange, PK_trans, atomf, atomf)
-    matKPa    = allocate_temp_matrix(aUa_range, aUa_trans, atomf, atomf)
+    ! Allocate matrices
     do spin = 1, nspin
        matKb(spin) = allocate_temp_matrix(aHa_range, 0, atomf, atomf)
        matWK(spin) = allocate_temp_matrix(pUa_range, aUa_trans, atomf, atomf)
        matVK(spin) = allocate_temp_matrix(aUp_range, aUa_trans, atomf, atomf)
     end do
+    matW = allocate_temp_matrix(pUa_range, aUa_trans, atomf, atomf)
+    matV = allocate_temp_matrix(aUp_range, aUa_trans, atomf, atomf)
+    matPatomf = allocate_temp_matrix(aUa_range, aUa_trans, atomf, atomf)
+    matPatomf2 = allocate_temp_matrix(aUa_range, aUa_trans, atomf, atomf)
+    matPK     = allocate_temp_matrix(PKrange, PK_trans, atomf, atomf)
+    matKPK    = allocate_temp_matrix(aHa_range, aUa_trans,atomf,atomf)
+    matKP     = allocate_temp_matrix(PKrange, PK_trans, atomf, atomf)
     call matrix_scale(zero,matW)
     call matrix_scale(zero,matV)
-    call matrix_scale(zero,matUW)
-    call matrix_scale(zero,matPatomf)
-    ! make W and UW
+    ! make W and V
     iprim = 0
     do part = 1,bundle%groups_on_node ! Loop over primary set partitions
        if(bundle%nm_nodgroup(part)>0) then ! If there are atoms in partition
@@ -2545,7 +2564,6 @@ contains
                             ! We assume the projector functions are simply chosen from PAOs,
                             ! so OW = W = <proj_i | pao_j>
                             call store_matrix_value_pos(matW, wheremat,val_Satomf)
-                            call store_matrix_value_pos(matUW, wheremat,val_Satomf*fac)
                          enddo ! pao_j
                       end if
                    enddo ! pao_i
@@ -2559,86 +2577,71 @@ contains
     call matrix_transpose(matW, matV)
 
     ! make P(atomf,atomf) = V(atomf,proj) * OW(proj,atomf) and K - 2KPK
+    ! Once we have (K-2KPK) make W(K-2KPK) and (K-2KPK)V
     call matrix_product(matV, matW, matPatomf, mult(aVp_pOWa_aPa))
     do spin = 1, nspin
-       call matrix_scale(zero,matPK)
+       ! PK then transposed to give KP
        call matrix_product(matPatomf, matKatomf(spin), matPK, mult(P_K_PK))
        call matrix_transpose(matPK, matKP)
-       ! Test
-       !call matrix_product(matPK, matPatomf, matPKP, mult(PK_P_PKP))
-       !write(*,*) 'Trace of PKP.K: ',matrix_product_trace(matPKP,matKatomf(spin))
-       ! We will use PK in a moment
-       call matrix_scale(zero,matPK)
-       ! KPa is KP to range P
-       call matrix_sum(zero,matKPa,one,matKP)
-       ! KP.K calculated to range PK
-       call matrix_product(matKPa,matKatomf(spin), matKPK, mult(P_K_PK))
-       ! Now build K - 2KPK
+       ! KP.K calculated to range P
+       call matrix_sum(zero,matPatomf2,one,matKatomf(spin))
+       call matrix_product(matKP,matPatomf2, matKPK, mult(PK_P_PKP))
+       ! Ensure KPK is symmetric
+       call matrix_transpose(matKPK,matPatomf2)
+       call matrix_sum(half,matKPK,half,matPatomf2)
+       ! Now build K - 2KPK and store in matKb
        call matrix_sum(zero,matKb(spin),one,matKatomf(spin))
        call matrix_sum(one,matKb(spin),-two,matKPK)
-       !write(*,*) 'Trace of PKP.K: ',matrix_product_trace(matPKP,matKb(spin))
+       ! Scale W.(K - 2KPK) not happy about ranges
+       call matrix_product(matW, matKb(spin), matWK(spin), mult(aVp_pOWa_aPa))
+       ! Scale
+       call matrix_scale(minus_two * spin_factor, matWK(spin))
+       ! Transpose to make (K - 2KPK).V
+       call matrix_transpose(matWK(spin), matVK(spin))
     end do
+    ! And free up matrices
+    call free_temp_matrix(matKP)
+    call free_temp_matrix(matKPK)
+    call free_temp_matrix(matPK)
+    call free_temp_matrix(matPatomf2)
+    call free_temp_matrix(matPatomf)
+    call free_temp_matrix(matV)
+    call free_temp_matrix(matW)
     ! Assemble dV.UW + V.dUW (both Pulay terms)
     ! Allocate matrices
     mat_tmp = allocate_temp_matrix(aSa_range, 0, atomf, atomf)
     do k = 1, 3
-       matdW(k) = allocate_temp_matrix(pUa_range, aUa_trans, atomf, atomf)
-       matdV(k) = allocate_temp_matrix(aUp_range, aUa_trans, atomf, atomf)
-       matdUW(k) = allocate_temp_matrix(pUa_range, 0) ! This is UW
+       matdUV(k) = allocate_temp_matrix(aUp_range, aUa_trans, atomf, atomf)
+       matdUW(k) = allocate_temp_matrix(pUa_range, aUa_trans, atomf, atomf)
        if (flag_stress) then
-          !if (flag_full_stress) then
-          !   do l = 1,3
-          !      matdAPr(k,l) = &
-          !           allocate_temp_matrix(APrange, AP_trans, atomf, nlpf)
-          !      matdPAr(k,l) = &
-          !           allocate_temp_matrix(PArange, AP_trans, nlpf, atomf)
-          !   end do
-          !else
+          if (flag_full_stress) then
+             do l = 1,3
+                matdWr(k,l) = allocate_temp_matrix(pUa_range, aUa_trans, atomf, atomf)
+                matdVr(k,l) = allocate_temp_matrix(aUp_range, aUa_trans, atomf, atomf)
+             end do
+          else
              matdWr(k,k) = allocate_temp_matrix(pUa_range, aUa_trans, atomf, atomf)
              matdVr(k,k) = allocate_temp_matrix(aUp_range, aUa_trans, atomf, atomf)
-          !end if
+          end if
        end if
     end do
-    !if (flag_atomic_stress) then
-    !  allocate(NL_HF_atomic(3,3,ni_in_cell), STAT=stat)
-    !  if (stat /= 0) &
-    !    call cq_abort("Error allocating NL atomic stress: ", ni_in_cell)
-    !  allocate(NL_P_atomic(3,3,ni_in_cell), STAT=stat)
-    !  if (stat /= 0) &
-    !    call cq_abort("Error allocating NL atomic stress: ", ni_in_cell)
-    !  call reg_alloc_mem(area_moveatoms, 2*3*3*ni_in_cell, type_dbl)
-    !end if
     DFT_plus_U_force = zero
     PlusU_stress = zero
 
-    ! First of all, find U (= (K - 2KPK).AP)
-    do spin = 1, nspin
-       ! W to P range (even though they are the same...)
-       call matrix_sum(zero,matPatomf,one,matV)
-       ! Scale W.(K - 2KPK)
-       call matrix_product(matPatomf, matKb(spin), matPK, mult(P_K_PK))
-       ! Restrict range to V
-       call matrix_sum(zero,matVK(spin),one,matPK) ! Range V
-       call matrix_scale(minus_two * spin_factor, matVK(spin))
-       ! Transpose
-       call matrix_transpose(matVK(spin), matWK(spin))
-    end do
-
-    ! to save memory we do each direction in turn...
+    ! Create dUW and dUV and equivalent matrices for stress
     do dir1 = 1, 3
-       call matrix_scale(zero, matdW(dir1))
        call matrix_scale(zero, matdUW(dir1))
-       call matrix_scale(zero, matdV(dir1))
+       call matrix_scale(zero, matdUV(dir1))
        if (flag_stress) then
-          !if (flag_full_stress) then
-          !   do dir2 = 1, 3
-          !      call matrix_scale(zero, matdAPr(dir1,dir2))
-          !      call matrix_scale(zero, matdPAr(dir1,dir2))
-          !   end do
-          !else
+          if (flag_full_stress) then
+             do dir2 = 1, 3
+                call matrix_scale(zero, matdWr(dir1,dir2))
+                call matrix_scale(zero, matdVr(dir1,dir2))
+             end do
+          else
              call matrix_scale(zero, matdWr(dir1,dir1))
              call matrix_scale(zero, matdVr(dir1,dir1))
-          !end if
+          end if
        end if
        ! Get dS and store in mat_tmp
        call assemble_deriv_2(dir1, aSa_range, mat_tmp, 1)
@@ -2658,6 +2661,9 @@ contains
                       ist = mat(part,aSa_range)%i_acc(memb)+neigh-1
                       ! Build the distances between atoms - needed for phases 
                       gcspart = BCS_parts%icover_ibeg(mat(part,aSa_range)%i_part(ist))+mat(part,aSa_range)%i_seq(ist)-1
+                      r_str(1)=BCS_parts%xcover(gcspart)-bundle%xprim(iprim)
+                      r_str(2)=BCS_parts%ycover(gcspart)-bundle%yprim(iprim)
+                      r_str(3)=BCS_parts%zcover(gcspart)-bundle%zprim(iprim)
                       ! We need to know the species of neighbour
                       neigh_global_part = BCS_parts%lab_cell(mat(part,aSa_range)%i_part(ist)) 
                       neigh_global_num  = id_glob(parts%icell_beg(neigh_global_part)+mat(part,aSa_range)%i_seq(ist)-1)
@@ -2676,8 +2682,16 @@ contains
                                val_Satomf = return_matrix_value_pos(mat_tmp,wheremat)
                                ! We assume the projector functions are simply chosen from PAOs,
                                ! so OW = W = <proj_i | pao_j>
-                               call store_matrix_value_pos(matdW(dir1), wheremat,val_Satomf)
                                call store_matrix_value_pos(matdUW(dir1), wheremat,val_Satomf*fac)
+                               if (flag_stress) then
+                                  if (flag_full_stress) then
+                                     do dir2=1,3
+                                        call store_matrix_value_pos(matdWr(dir1,dir2), wheremat, r_str(dir2)*val_Satomf*fac)
+                                     end do
+                                  else
+                                     call store_matrix_value_pos(matdWr(dir1,dir1), wheremat,r_str(dir1)*val_Satomf*fac)
+                                  end if
+                               end if
                             enddo ! pao_j
                          end if
                       enddo ! pao_i
@@ -2686,102 +2700,70 @@ contains
              end do ! memb
           end if ! nm_nodgroup > 0
        end do ! part
-       call matrix_scale(-one, matdW(dir1))
        call matrix_scale(-one, matdUW(dir1))
 
        ! make V = transpose of W
-       call matrix_transpose(matdW(dir1), matdV(dir1))
-       call matrix_scale(-one, matdV(dir1))
+       call matrix_transpose(matdUW(dir1), matdUV(dir1))
+       call matrix_scale(-one, matdUV(dir1))
 
-       ! Now scale dAP and dPA by R_{ji} for stress
-       ! 2014/08/06 11:45 Shereif
-       iprim = 0
-       do np = 1, bundle%groups_on_node
-          if (bundle%nm_nodgroup(np) > 0) then
-             do ni = 1, bundle%nm_nodgroup(np)
-                iprim = iprim + 1
-                do nab = 1, mat(np,aSa_range)%n_nab(ni)
-                   ist = mat(np,aSa_range)%i_acc(ni) + nab - 1
-                   gcspart = BCS_parts%icover_ibeg(mat(np,aSa_range)%i_part(ist)) + mat(np,aSa_range)%i_seq(ist) - 1
-                   r_str(1)=BCS_parts%xcover(gcspart)-bundle%xprim(iprim)
-                   r_str(2)=BCS_parts%ycover(gcspart)-bundle%yprim(iprim)
-                   r_str(3)=BCS_parts%zcover(gcspart)-bundle%zprim(iprim)
-                   do isf = 1, mat(np,aSa_range)%ndimj(ist)
-                      do jsf = 1, mat(np,aSa_range)%ndimi(ni)
-                         thisdAP = return_matrix_value(matdW(dir1), np, ni, iprim, nab, jsf, isf)
-                         val_Satomf = return_matrix_value(mat_tmp, np, ni, iprim, nab, jsf, isf)
-                         if (flag_stress) then
-                            !if (flag_full_stress) then
-                            !   do dir2=1,3
-                            !      call store_matrix_value(matdWr(dir1,dir2), np, ni, iprim, nab, jsf, isf, r_str(dir2)*thisdAP)
-                            !   end do
-                            !else
-                               call store_matrix_value(matdWr(dir1,dir1), np, ni, iprim, nab, jsf, isf, r_str(dir1)*thisdAP)
-                            !end if
-                         end if
-                      end do
-                   end do
-                end do
-             end do
-          end if
-       end do
        if (flag_stress) then
-          !if (flag_full_stress) then
-          !   do dir2=1,3
-          !      call matrix_transpose(matdWr(dir1,dir2), matdVr(dir1,dir2))
-          !   end do
-          !else
+          call matrix_scale(-one, matdWr(dir1,dir1))
+          if (flag_full_stress) then
+             do dir2=1,3
+                call matrix_transpose(matdWr(dir1,dir2), matdVr(dir1,dir2))
+             end do
+          else
              call matrix_transpose(matdWr(dir1,dir1), matdVr(dir1,dir1))
-          !end if
+             !call matrix_scale(-one, matdVr(dir1,dir1))
+          end if
        end if
-       !call matrix_scale(-one, matdPAr(direction))
     end do ! dir1
     
     do k = 1, 3
-       ! make dP
-       call matrix_product(matdV(k), matUW, matPatomf, mult(aVp_pOWa_aPa))
-       call matrix_product(matV, matdUW(k), matPatomf2, mult(aVp_pOWa_aPa))
        do spin = 1, nspin
-          ! Note that matrix_diagonal accumulates HF_NL_force(k,:)
-          !call matrix_diagonal(matdV(k), matWK(spin), DFT_plus_U_force(k,:), aUp_range, inode)
-          !call matrix_diagonal(matdW(k), matVK(spin), DFT_plus_U_force(k,:), pUa_range, inode)
-          call matrix_diagonal(matPatomf, matKb(spin), DFT_plus_U_force(k,:), aHa_range, inode)
-          call matrix_diagonal(matPatomf2, matKb(spin), DFT_plus_U_force(k,:), aHa_range, inode)
+          ! Form forces: we want dUV.WK and dUW.KV to make the force but we use WK with dUW 
+          ! (and VK with dUV) because matrix_diagonal effectively imposes a transpose
+          call matrix_diagonal(matWK(spin),matdUW(k),DFT_plus_U_force(k,:),aUp_range)
+          call matrix_diagonal(matVK(spin),matdUV(k),DFT_plus_U_force(k,:),pUa_range)
           if (flag_stress) then
-             !if (flag_full_stress) then
-             !   do l = 1, 3
-             !      if (flag_atomic_stress) then
-             !         call matrix_diagonal_stress(matdAPr(k,l), matU(spin), &
-             !              NL_P_stress(k,l), APrange, inode,atomic_stress(k,l,:))
-             !      else
-             !         call matrix_diagonal_stress(matdAPr(k,l), matU(spin), &
-             !              NL_P_stress(k,l), APrange, inode)
-             !      end if
-             !   end do
-             !else
-             call matrix_diagonal_stress(matdVr(k,k), matVK(spin), PlusU_stress(k,k), aUp_range, inode)
-             call matrix_diagonal_stress(matdWr(k,k), matWK(spin), PlusU_stress(k,k), pUa_range, inode)
-             !end if
+             if (flag_full_stress) then
+                do l = 1, 3
+                   if (flag_atomic_stress) then
+                      call matrix_diagonal_stress(matVK(spin), matdVr(k,l), PlusU_stress(k,l), &
+                           aUp_range,atomic_stress(k,l,:))
+                      call matrix_diagonal_stress(matWK(spin), matdWr(k,l), PlusU_stress(k,l), &
+                           pUa_range,atomic_stress(k,l,:))
+                   else
+                      call matrix_diagonal_stress(matVK(spin), matdVr(k,l), PlusU_stress(k,l), aUp_range)
+                      call matrix_diagonal_stress(matWK(spin), matdWr(k,l), PlusU_stress(k,l), pUa_range)
+                   end if
+                end do
+             else
+                call matrix_diagonal_stress(matVK(spin), matdVr(k,k), PlusU_stress(k,k), aUp_range)
+                call matrix_diagonal_stress(matWK(spin), matdWr(k,k), PlusU_stress(k,k), pUa_range)
+             end if
           end if
        end do ! spin
     end do ! k
 
     call gsum(DFT_plus_U_force, 3, n_atoms)
+    call gsum(PlusU_stress,3,3)
+    ! Same factor of half in NL stress; why?
+    PlusU_stress = half*PlusU_stress
     do k = 3, 1, -1
        if (flag_stress) then
-          !if (flag_full_stress) then
-          !   do l = 3, 1, -1
-          !      call free_temp_matrix(matdPAr(k,l))
-          !      call free_temp_matrix(matdAPr(k,l))
-          !   end do
-          !else
+          if (flag_full_stress) then
+             do l = 3, 1, -1
+                call free_temp_matrix(matdVr(k,l))
+                call free_temp_matrix(matdWr(k,l))
+             end do
+          else
              call free_temp_matrix(matdVr(k,k))
              call free_temp_matrix(matdWr(k,k))
-          !end if
+          end if
        end if
        call free_temp_matrix(matdUW(k))
-       call free_temp_matrix(matdV(k))
-       call free_temp_matrix(matdW(k))
+       call free_temp_matrix(matdUV(k))
     end do
     call free_temp_matrix(mat_tmp)
     do spin = nspin,1,-1
@@ -2789,18 +2771,9 @@ contains
        call free_temp_matrix(matWK(spin))
        call free_temp_matrix(matKb(spin))
     end do
-    call free_temp_matrix(matKPa)
-    call free_temp_matrix(matKP)
-    call free_temp_matrix(matPKP)
-    call free_temp_matrix(matPK)
-    call free_temp_matrix(matPatomf2)
-    call free_temp_matrix(matPatomf)
-    call free_temp_matrix(matUW)
-    call free_temp_matrix(matV)
-    call free_temp_matrix(matW)
     
 
-    call stop_backtrace(t=backtrace_timer,who='get_HF_non_local_force',echo=.true.)
+    call stop_backtrace(t=backtrace_timer,who='get_DFT_plus_U_force',echo=.true.)
 
     return
   end subroutine get_DFT_plus_U_force
@@ -3352,22 +3325,20 @@ contains
       !if (what_force == Pulay .OR. what_force == HF_and_Pulay) then
         do k = 1, 3
           ! Note that matrix_diagonal accumulates HF_NA_force(k,:)
-          call matrix_diagonal(matdaNA(k), matU_NA, &
-            NA_force(k,:), aNArange, inode)
+          call matrix_diagonal(matdaNA(k), matU_NA, NA_force(k,:), aNArange)
           if (flag_stress) then
             if (flag_full_stress) then
               do l = 1, 3
                 if (flag_atomic_stress) then
                   call matrix_diagonal_stress(matdaNAr(k,l), matU_NA, &
-                    NA_P_stress(k,l), aNArange, inode, atomic_stress(k,l,:))
+                    NA_P_stress(k,l), aNArange, atomic_stress(k,l,:))
                 else
                   call matrix_diagonal_stress(matdaNAr(k,l), matU_NA, &
-                    NA_P_stress(k,l), aNArange, inode)
+                    NA_P_stress(k,l), aNArange)
                 end if
               end do
             else
-              call matrix_diagonal_stress(matdaNAr(k,k), matU_NA, &
-                NA_P_stress(k,k), aNArange, inode)
+              call matrix_diagonal_stress(matdaNAr(k,k), matU_NA, NA_P_stress(k,k), aNArange)
             end if
           end if
         end do ! k
@@ -3377,22 +3348,20 @@ contains
       !if (what_force == HF .or. what_force == HF_and_Pulay) then
         do k = 1, 3
           ! Note that matrix_diagonal accumulates HF_NA_force(k,:)
-          call matrix_diagonal(matdNAa(k), matUT_NA, &
-            NA_force(k,:), NAarange,inode)
+          call matrix_diagonal(matdNAa(k), matUT_NA, NA_force(k,:), NAarange)
           if (flag_stress) then
             if (flag_full_stress) then
               do l = 1, 3
                 if (flag_atomic_stress) then
                   call matrix_diagonal_stress(matdNAar(k,l), matUT_NA, &
-                    NA_HF_stress(k,l), NAarange,inode, atomic_stress(k,l,:))
+                    NA_HF_stress(k,l), NAarange, atomic_stress(k,l,:))
                 else
                   call matrix_diagonal_stress(matdNAar(k,l), matUT_NA, &
-                    NA_HF_stress(k,l), NAarange,inode)
+                    NA_HF_stress(k,l), NAarange)
                 end if
               end do
             else
-              call matrix_diagonal_stress(matdNAar(k,k), matUT_NA, &
-                NA_HF_stress(k,k), NAarange,inode)
+              call matrix_diagonal_stress(matdNAar(k,k), matUT_NA, NA_HF_stress(k,k), NAarange)
             end if
           end if
         end do ! k
@@ -3612,7 +3581,7 @@ contains
 !!    Added ROBODoc header and included in force_module
 !!  SOURCE
 !!
-  subroutine matrix_diagonal(matA, matB, diagonal, range, inode)
+  subroutine matrix_diagonal(matA, matB, diagonal, range)
 
     use datatypes
     use primary_module, only : bundle
@@ -3627,7 +3596,7 @@ contains
     ! Shared variables
     real(double) :: diagonal( :)
 
-    integer :: range, inode,matA,matB
+    integer :: range,matA,matB
 
     ! Local variables
     integer :: iprim, np, i, j, atom,element, n1,n2, ist, gcspart
@@ -3676,7 +3645,7 @@ contains
 !!
 !!  SOURCE
 !!
-  subroutine matrix_diagonal_stress(matA, matB, stress, range, inode, diagonal)
+  subroutine matrix_diagonal_stress(matA, matB, stress, range, diagonal)
 
     use datatypes
     use primary_module, only : bundle
@@ -3691,7 +3660,7 @@ contains
     ! Shared variables
     real(double) :: stress
     real(double), dimension(:), optional :: diagonal
-    integer :: range, inode, matA, matB
+    integer :: range, matA, matB
 
     ! Local variables
     integer :: iprim, np, i, j, element, n1, n2, ist, gcspart, atom
@@ -4821,8 +4790,8 @@ subroutine print_stress(label, str_mat, print_level,print_ase)
   integer, intent(in)                       :: print_level
 
   ! local variables
-  character(20) :: fmt = '(4x,a,3f15.8,a4)'
-  character(20) :: blank = ''
+  character(20) :: fmt = '(4x,a,3f18.8,a4)'
+  character(25) :: blank = ''
   real(double)  :: volume, scale
   integer       :: i, counter, stat
   
@@ -4901,13 +4870,14 @@ end subroutine print_stress
 !!  
 !!  SOURCE
 !!  
-subroutine check_atomic_stress
+subroutine check_atomic_stress(prefix)
 
   use GenComms,       only: inode, ionode
   use global_module,  only: iprint_MD, flag_full_stress, atomic_stress, &
                             non_atomic_stress
 
   ! Passed variables
+  character(*) :: prefix
 
   ! local variables
   real(double), dimension(3,3) :: total_atomic, total
@@ -4925,9 +4895,9 @@ subroutine check_atomic_stress
     write(io_lun,'(2x,a)') &
       "Checking sum of atomic and non-atomic contributions to stress:"
   end if
-  call print_stress("Atomic total:     ", total_atomic, 3)
-  call print_stress("Non-atomic total: ", non_atomic_stress, 3)
-  call print_stress("Total:            ", total, 3)
+  call print_stress(trim(prefix)//" Atomic total:     ", total_atomic, 3)
+  call print_stress(trim(prefix)//" Non-atomic total: ", non_atomic_stress, 3)
+  call print_stress(trim(prefix)//" Total:            ", total, 3)
 
 end subroutine check_atomic_stress
 !!*****

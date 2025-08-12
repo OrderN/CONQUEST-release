@@ -118,15 +118,12 @@ contains
        i_job = 2
     else if(leqi(job,'ban')) then
        i_job = 3
-       if(flag_Multisite) call cq_abort("Not yet compatible with multi-site support functions")
     else if(leqi(job,'ter').or.leqi(job,'th')) then
        i_job = 4
-       if(flag_Multisite) call cq_abort("Not yet compatible with multi-site support functions")
        ! Allow user to specify output filename
        root_file = fdf_string(50,'Process.RootFile','STM')
     else if(leqi(job,'stm')) then
        i_job = 5
-       if(flag_Multisite) call cq_abort("Not yet compatible with multi-site support functions")
        ! Allow user to specify output filename
        root_file = fdf_string(50,'Process.RootFile','STM')
     else if(leqi(job,'dos')) then
@@ -235,23 +232,25 @@ contains
        E_procwf_max = fdf_double('Process.max_wf_E',E_wf_max)
        ! Is the range relative to Ef (T) or absolute (F)
        flag_procwf_range_Ef = fdf_boolean('Process.WFRangeRelative',.true.)
-       if(abs(E_procwf_max-E_procwf_min)>1e-8_double) then
-          flag_proc_range = .true.
-       else
-          n_bands_process = fdf_integer('Process.noWF',0)
-          if(n_bands_process>0) then
-             allocate(band_proc_no(n_bands_process))
-             if (fdf_block('WaveFunctionsProcess')) then
-                if(1+block_end-block_start<n_bands_process) then
-                   write(*,*) "Too few wf no in WaveFunctionsOut: ",1+block_end-block_start,n_bands_process
-                   stop
-                end if
-                do i=1,n_bands_process
-                   read(unit=input_array(block_start+i-1),fmt=*) band_proc_no(i)
-                end do
-                call fdf_endblock
+       n_bands_process = fdf_integer('Process.noWF',0)
+       if(n_bands_process>0) then
+          allocate(band_proc_no(n_bands_process))
+          if (fdf_block('WaveFunctionsProcess')) then
+             if(1+block_end-block_start<n_bands_process) then
+                write(*,*) "Too few wf no in WaveFunctionsOut: ",1+block_end-block_start,n_bands_process
+                stop
              end if
-             flag_proc_range = .false.
+             do i=1,n_bands_process
+                read(unit=input_array(block_start+i-1),fmt=*) band_proc_no(i)
+             end do
+             call fdf_endblock
+          end if
+          flag_proc_range = .false.
+       else
+          if(abs(E_procwf_max-E_procwf_min)>1e-8_double) then
+             flag_proc_range = .true.
+          else
+             call cq_abort("Need either a range or a number of bands")
           end if
        end if
     end if ! i_job == 3 or 4 or 5
