@@ -180,6 +180,11 @@ module global_module
   integer, allocatable, dimension(:) :: id_glob_inv  ! gives global number for a CC atom
   integer, dimension(:), allocatable, target :: species_glob ! gives species 
   integer :: numprocs               ! number of processors
+  ! for non-orthorhombic calculations: 2025/Nov/10 TM
+  real(double), dimension (:,:) :: cell_vector(3,3)
+  real(double), dimension (:,:) :: inv_cell_vector(3,3)
+  !  rcellx, rcelly, rcellz will be replaced by cell_length(3) defined in dimens
+
   real(double), target :: rcellx,rcelly,rcellz  ! cell side lengths
   real(double), allocatable, dimension(:), target :: x_atom_cell ! position of atom in sim cell (CC)
   real(double), allocatable, dimension(:), target :: y_atom_cell

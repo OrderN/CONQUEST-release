@@ -50,8 +50,13 @@ module dimens
   use timer_module,  only: start_timer,     stop_timer, cq_timer
   use timer_module,  only: start_backtrace, stop_backtrace
 
+  use lattice_module, only: cell_length
+
   implicit none
   save
+
+  ! 2025/Nov/6 TM  instead of using r_super_x, _y, _z, we will use cell_length(1:3)
+  !real(double) :: cell_length(3)
 
   real(double) :: r_super_x, r_super_y, r_super_z, volume
   real(double) :: r_super_x_squared, r_super_y_squared, r_super_z_squared

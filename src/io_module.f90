@@ -81,7 +81,7 @@
 module io_module
 
   use datatypes,              only: double
-  use numbers,                only: zero
+  use numbers,                only: zero, two, third
   use global_module,          only: io_lun
   use GenComms,               only: cq_abort, gcopy
   use timer_module,           only: start_timer,     stop_timer,    cq_timer
@@ -181,6 +181,9 @@ contains
 
     use datatypes
     use dimens,         only: r_super_x, r_super_y, r_super_z
+    !use dimens,         only: cell_length
+    use lattice_module, only: cell_length, set_cell_parameters, get_pos_frac, get_pos_cart, volume
+    use global_module,  only: cell_vector, inv_cell_vector
     use global_module,  only: x_atom_cell, y_atom_cell, z_atom_cell, &
                               ni_in_cell, numprocs,                  &
                               flag_fractional_atomic_coords, rcellx, &
@@ -203,13 +206,16 @@ contains
     integer        :: lun, i, spec, stat, n_wrong_coords
     logical        :: movex, movey, movez
     real(double)   :: x, y, z
-    real(double), dimension(3) :: cell
+    !real(double), dimension(3) :: cell
+    real(double), dimension(3) :: pos_frac
+    real(double)   :: shift_in_frac
 
     ! Local variables for reading pdb files
     integer      :: ios, j
     integer      :: num_move_atom
     real(double) :: num_move_atom_real
     real(double), dimension(3) :: angle
+    real(double) :: cos1,cos2,cos3
     character(len=80) :: pdb_line
     character(len=2)  :: atom_name
 
@@ -388,10 +394,32 @@ second:   do
                 end if
              case ('CRYST1')
                 read (pdb_line,'(6x,3f9.3,3f7.2,15x)') &
-                     r_super_x, r_super_y, r_super_z, angle
-                r_super_x = AngToBohr * r_super_x
-                r_super_y = AngToBohr * r_super_y
-                r_super_z = AngToBohr * r_super_z
+                     cell_length(1), cell_length(2), cell_length(3), angle
+                     !r_super_x, r_super_y, r_super_z, angle
+                cell_length(1:3) = AngToBohr * cell_length(1:3)
+                !r_super_x = AngToBohr * r_super_x
+                !r_super_y = AngToBohr * r_super_y
+                !r_super_z = AngToBohr * r_super_z
+
+               ! generates the non-orthorhombic cell vector (2025/Nov/11 TM)
+                 !first axis
+                  cell_vector(1,1) = cell_length(1)
+                  cell_vector(2,1) = zero
+                  cell_vector(3,1) = zero
+                 !second axis
+                  cell_vector(1,2) = cell_length(2) * cos(angle(3))
+                  cell_vector(2,2) = cell_length(2) * sin(angle(3))
+                  cell_vector(3,2) = zero
+                 !third axis
+                  cos1=cos(angle(1)); cos2=cos(angle(2)); cos3=cos(angle(3))
+                  cell_vector(1,3) = cell_length(3) * cos(angle(2))
+                  cell_vector(2,3) = cell_length(3) * (cos1-cos2*cos3)/sin(angle(3))
+                  cell_vector(3,3) = cell_length(3) / sin(angle(3)) * &
+                                      sqrt(one-cos1**2-cos2**2-cos3**2+two*cos1*cos2*cos3)
+
+                 call set_cell_parameters
+                 shift_in_frac = shift_in_bohr/(volume**third)
+
                 ! The following write statement is also in
                 ! initial_read_module, but I think it's better to have
                 ! it (also) here, because then the cell size will be
@@ -402,48 +430,64 @@ second:   do
              end select
           end do second
           ! Wrap coordinates
-          cell(1) = r_super_x
-          cell(2) = r_super_y
-          cell(3) = r_super_z
+          !cell(1) = r_super_x
+          !cell(2) = r_super_y
+          !cell(3) = r_super_z
           do i = 1, ni_in_cell
-             do j = 1, 3
-                ! Introduce shift_in_bohr: (small shift for fractional coordinates may 
-                ! cause a problem for very large systems.)
-                !
-                ! Originally, 'if'-statement in the next line was active, but since we need 
-                ! a common and strict rule to treat the atoms on the boundary of the unit cell, 
-                ! we need to do this wrapping with shift_in_bohr for all cases. 
-                !
-                ! Thus, I have commented out the next line.   23/Jul/2014 TM 
-                !  (coordinate of the atoms on the boundary of the unit cell must be 0.000*** not 0.999***.)
-                !
-                !if ((atom_coord(j,i) < zero) .or. (atom_coord(j,i) > cell(j))) &
-                   atom_coord(j,i) = &
-                      atom_coord(j,i) - floor((atom_coord(j,i)+shift_in_bohr)/cell(j)) * cell(j)
-             end do
+            !non-orthorhombic case
+              call get_pos_frac(atom_coord(1:3,i),pos_frac)
+              pos_frac(1:3) = pos_frac(1:3)-floor(pos_frac(1:3)+shift_in_frac)
+              call get_pos_cart(pos_frac,atom_coord(1:3,i))
+ 
+            !OLD: orthorhombic case
+            ! do j = 1, 3
+            !    ! Introduce shift_in_bohr: (small shift for fractional coordinates may 
+            !    ! cause a problem for very large systems.)
+            !    !
+            !    ! Originally, 'if'-statement in the next line was active, but since we need 
+            !    ! a common and strict rule to treat the atoms on the boundary of the unit cell, 
+            !    ! we need to do this wrapping with shift_in_bohr for all cases. 
+            !    !
+            !    ! Thus, I have commented out the next line.   23/Jul/2014 TM 
+            !    !  (coordinate of the atoms on the boundary of the unit cell must be 0.000*** not 0.999***.)
+            !    !
+            !    !if ((atom_coord(j,i) < zero) .or. (atom_coord(j,i) > cell(j))) &
+            !       atom_coord(j,i) = &
+            !          atom_coord(j,i) - floor((atom_coord(j,i)+shift_in_bohr)/cell(j)) * cell(j)
+            ! end do
           end do
           call io_close(lun)
        else ! Read normal coordinate file
           if(iprint_init>2) write(io_lun,'(10x,a40,a20)') 'Entering read_atomic_positions; reading ', filename
           call io_assign(lun)
           open(unit=lun,file=filename,status='old')
-          ! Read supercell vector - for now it must be orthorhombic so
-          ! we use x and y as dummy variables
-          read(lun,*) r_super_x, x, y
-          if(abs(x)>RD_ERR.OR.abs(y)>RD_ERR) call cq_warn('read_atomic_positions', &
-               'Non-orthorhombic simulation cells are not supported by CONQUEST')
-          read(lun,*) x,r_super_y, y
-          if(abs(x)>RD_ERR.OR.abs(y)>RD_ERR) call cq_warn('read_atomic_positions', &
-               'Non-orthorhombic simulation cells are not supported by CONQUEST')
-          read(lun,*) x,y,r_super_z
-          if(abs(x)>RD_ERR.OR.abs(y)>RD_ERR) call cq_warn('read_atomic_positions', &
-               'Non-orthorhombic simulation cells are not supported by CONQUEST')
+          ! general case: 2025/Nov/10  TM
+          read(lun,*) cell_vector(1,1),cell_vector(2,1), cell_vector(3,1)  ! a-vector
+          read(lun,*) cell_vector(1,2),cell_vector(2,2), cell_vector(3,2)  ! b-vector
+          read(lun,*) cell_vector(1,3),cell_vector(2,3), cell_vector(3,3)  ! c-vector
+          call set_cell_parameters
+
+          ! OLD: orthorhombic case
+          !! Read supercell vector - for now it must be orthorhombic so
+          !! we use x and y as dummy variables
+          !read(lun,*) r_super_x, x, y
+          !if(abs(x)>RD_ERR.OR.abs(y)>RD_ERR) call cq_warn('read_atomic_positions', &
+          !     'Non-orthorhombic simulation cells are not supported by CONQUEST')
+          !read(lun,*) x,r_super_y, y
+          !if(abs(x)>RD_ERR.OR.abs(y)>RD_ERR) call cq_warn('read_atomic_positions', &
+          !     'Non-orthorhombic simulation cells are not supported by CONQUEST')
+          !read(lun,*) x,y,r_super_z
+          !if(abs(x)>RD_ERR.OR.abs(y)>RD_ERR) call cq_warn('read_atomic_positions', &
+          !     'Non-orthorhombic simulation cells are not supported by CONQUEST')
           read(lun,*) ni_in_cell
+
          !2010.06.25 TM (Angstrom Units in coords file, but not pdb)
+         !2025.11.10 TM non-orthorhombic case
           if(dist_units == ang) then
-            r_super_x = r_super_x*AngToBohr
-            r_super_y = r_super_y*AngToBohr
-            r_super_z = r_super_z*AngToBohr
+           cell_vector(:,:) = cell_vector(:,:)*AngToBohr
+            !r_super_x = r_super_x*AngToBohr
+            !r_super_y = r_super_y*AngToBohr
+            !r_super_z = r_super_z*AngToBohr
           endif
          !2010.06.25 TM (Angstrom Units in coords file, but not pdb)
 
@@ -464,9 +508,12 @@ second:   do
                                &in input file: ", species_glob(i), n_species)
              end if
              if(flag_fractional_atomic_coords) then
-                atom_coord(1,i) = x*r_super_x
-                atom_coord(2,i) = y*r_super_y
-                atom_coord(3,i) = z*r_super_z
+                pos_frac(1)=x; pos_frac(2)=y; pos_frac(3)=z
+                call get_pos_cart(pos_frac,atom_coord(1:3,i))
+
+                !atom_coord(1,i) = x*r_super_x
+                !atom_coord(2,i) = y*r_super_y
+                !atom_coord(3,i) = z*r_super_z
                 ! Simple check for Cartesian coordinates
                 if(abs(x)>two .and. abs(y)>two .and. abs(z)>two) n_wrong_coords = n_wrong_coords + 1
              else
@@ -481,24 +528,32 @@ second:   do
                 if(abs(x)<one .and. abs(y)<one .and. abs(z)<one) n_wrong_coords = n_wrong_coords + 1
              end if
              ! Wrap coordinates
-             cell(1) = r_super_x
-             cell(2) = r_super_y
-             cell(3) = r_super_z
-             do j = 1, 3
-                ! Introduce shift_in_bohr: (small shift for fractional coordinates may
-                ! cause a problem for very large systems.)
-                !
-                ! Originally, 'if'-statement in the next line was active, but since we need
-                ! a common and strict rule to treat the atoms on the boundary of the unit cell, 
-                ! we need to do this wrapping with shift_in_bohr for all cases. 
-                !
-                ! Thus, I have commented out the next line.   23/Jul/2014 TM   
-                !  (coordinate of the atoms on the boundary of the unit cell must be 0.000*** not 0.999***.)
-                !
-                !if ((atom_coord(j,i) < zero) .or. (atom_coord(j,i) > cell(j))) &
-                   atom_coord(j,i) = &
-                      atom_coord(j,i) - floor((atom_coord(j,i)+shift_in_bohr)/cell(j)) * cell(j)
-             end do
+             !cell(1) = r_super_x
+             !cell(2) = r_super_y
+             !cell(3) = r_super_z
+
+            !non-orthorhombic case
+                 shift_in_frac = shift_in_bohr/(volume**third)
+              call get_pos_frac(atom_coord(1:3,i),pos_frac)
+              pos_frac(1:3) = pos_frac(1:3)-floor(pos_frac(1:3)+shift_in_frac)
+              call get_pos_cart(pos_frac,atom_coord(1:3,i))
+ 
+            !OLD: orthorhombic case
+            ! do j = 1, 3
+            !    ! Introduce shift_in_bohr: (small shift for fractional coordinates may
+            !    ! cause a problem for very large systems.)
+            !    !
+            !    ! Originally, 'if'-statement in the next line was active, but since we need
+            !    ! a common and strict rule to treat the atoms on the boundary of the unit cell, 
+            !    ! we need to do this wrapping with shift_in_bohr for all cases. 
+            !    !
+            !    ! Thus, I have commented out the next line.   23/Jul/2014 TM   
+            !    !  (coordinate of the atoms on the boundary of the unit cell must be 0.000*** not 0.999***.)
+            !    !
+            !    !if ((atom_coord(j,i) < zero) .or. (atom_coord(j,i) > cell(j))) &
+            !       atom_coord(j,i) = &
+            !          atom_coord(j,i) - floor((atom_coord(j,i)+shift_in_bohr)/cell(j)) * cell(j)
+            ! end do
              flag_move_atom(1,i) = movex
              flag_move_atom(2,i) = movey
              flag_move_atom(3,i) = movez
@@ -527,9 +582,17 @@ second:   do
              x_atom_cell(ni_in_cell), y_atom_cell(ni_in_cell),&
              z_atom_cell(ni_in_cell),species(ni_in_cell),STAT=stat)
     if(stat/=0) call cq_abort("Failure to allocate coordinates(2): ",ni_in_cell)
-    call gcopy(r_super_x)
-    call gcopy(r_super_y)
-    call gcopy(r_super_z)
+   !general cell
+    call gcopy(cell_vector,3,3)
+    call gcopy(inv_cell_vector,3,3)
+    call gcopy(cell_length,3)
+    call gcopy(volume)
+   !old
+    r_super_x = cell_length(1); r_super_y = cell_length(2); r_super_z=cell_length(3)
+    !call gcopy(r_super_x)
+    !call gcopy(r_super_y)
+    !call gcopy(r_super_z)
+
     call gcopy(species_glob,ni_in_cell)
     call gcopy(atom_coord, 3, ni_in_cell)
     call gcopy(flag_move_atom, 3, ni_in_cell)

@@ -1873,8 +1873,6 @@ contains
     use GenComms, ONLY: ionode
     use global_module, ONLY:  ni_in_cell, atom_coord, shift_in_bohr
 
-    use dimens,        only: r_super_x, r_super_y, r_super_z
-
 
     implicit none
 
