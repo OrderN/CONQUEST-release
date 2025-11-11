@@ -181,7 +181,6 @@ contains
 
     use datatypes
     use dimens,         only: r_super_x, r_super_y, r_super_z
-    !use dimens,         only: cell_length
     use lattice_module, only: cell_length, set_cell_parameters, get_pos_frac, get_pos_cart, volume
     use global_module,  only: cell_vector, inv_cell_vector
     use global_module,  only: x_atom_cell, y_atom_cell, z_atom_cell, &
@@ -196,7 +195,7 @@ contains
     use memory_module,  only: reg_alloc_mem, type_dbl, type_int
     use units,          only: AngToBohr
     use units,          only: dist_units, ang
-    use numbers,        only: RD_ERR, zero, one, two
+    use numbers,        only: RD_ERR, zero, one, two, pi
 
     ! Passed variables
     character(len=*) :: filename
@@ -395,11 +394,9 @@ second:   do
              case ('CRYST1')
                 read (pdb_line,'(6x,3f9.3,3f7.2,15x)') &
                      cell_length(1), cell_length(2), cell_length(3), angle
-                     !r_super_x, r_super_y, r_super_z, angle
                 cell_length(1:3) = AngToBohr * cell_length(1:3)
-                !r_super_x = AngToBohr * r_super_x
-                !r_super_y = AngToBohr * r_super_y
-                !r_super_z = AngToBohr * r_super_z
+                ! I assume angle should be given in degree
+                angle(1:3) = angle(1:3)*(pi/180.0_double)
 
                ! generates the non-orthorhombic cell vector (2025/Nov/11 TM)
                  !first axis
@@ -430,11 +427,8 @@ second:   do
              end select
           end do second
           ! Wrap coordinates
-          !cell(1) = r_super_x
-          !cell(2) = r_super_y
-          !cell(3) = r_super_z
           do i = 1, ni_in_cell
-            !non-orthorhombic case
+            !for general cases including non-orthorhombic cells
               call get_pos_frac(atom_coord(1:3,i),pos_frac)
               pos_frac(1:3) = pos_frac(1:3)-floor(pos_frac(1:3)+shift_in_frac)
               call get_pos_cart(pos_frac,atom_coord(1:3,i))
@@ -482,12 +476,9 @@ second:   do
           read(lun,*) ni_in_cell
 
          !2010.06.25 TM (Angstrom Units in coords file, but not pdb)
-         !2025.11.10 TM non-orthorhombic case
+         !2025.11.10 TM for general cells including non-orthorhombic case
           if(dist_units == ang) then
            cell_vector(:,:) = cell_vector(:,:)*AngToBohr
-            !r_super_x = r_super_x*AngToBohr
-            !r_super_y = r_super_y*AngToBohr
-            !r_super_z = r_super_z*AngToBohr
           endif
          !2010.06.25 TM (Angstrom Units in coords file, but not pdb)
 
@@ -511,10 +502,7 @@ second:   do
                 pos_frac(1)=x; pos_frac(2)=y; pos_frac(3)=z
                 call get_pos_cart(pos_frac,atom_coord(1:3,i))
 
-                !atom_coord(1,i) = x*r_super_x
-                !atom_coord(2,i) = y*r_super_y
-                !atom_coord(3,i) = z*r_super_z
-                ! Simple check for Cartesian coordinates
+                ! Simple check for fractional coordinates
                 if(abs(x)>two .and. abs(y)>two .and. abs(z)>two) n_wrong_coords = n_wrong_coords + 1
              else
                 atom_coord(1,i) = x
@@ -524,15 +512,12 @@ second:   do
                 ! 2019/04/04 14:16 dave
                 ! Moved here so that distances are corrected *before* wrapping below
                 if(dist_units == ang) atom_coord(:,i)=atom_coord(:,i)*AngToBohr
-                ! Simple check for fractional coordinates
+                ! Simple check for cartesian coordinates
                 if(abs(x)<one .and. abs(y)<one .and. abs(z)<one) n_wrong_coords = n_wrong_coords + 1
              end if
-             ! Wrap coordinates
-             !cell(1) = r_super_x
-             !cell(2) = r_super_y
-             !cell(3) = r_super_z
 
-            !non-orthorhombic case
+            ! Wrap coordinates
+            !  for general cells including non-orthorhombic case
                  shift_in_frac = shift_in_bohr/(volume**third)
               call get_pos_frac(atom_coord(1:3,i),pos_frac)
               pos_frac(1:3) = pos_frac(1:3)-floor(pos_frac(1:3)+shift_in_frac)
@@ -571,6 +556,7 @@ second:   do
        ! Check for sensible number of processes
        if(ni_in_cell<numprocs) call cq_abort("We must have at least one atom per process: ",ni_in_cell,numprocs)
     end if
+    r_super_x = cell_length(1); r_super_y = cell_length(2); r_super_z=cell_length(3)
     if((iprint_init>0) .or. (iprint_init==0.AND.ni_in_cell<atom_output_threshold)) &
          call print_atomic_positions
     call gcopy(ni_in_cell)
@@ -582,6 +568,7 @@ second:   do
              x_atom_cell(ni_in_cell), y_atom_cell(ni_in_cell),&
              z_atom_cell(ni_in_cell),species(ni_in_cell),STAT=stat)
     if(stat/=0) call cq_abort("Failure to allocate coordinates(2): ",ni_in_cell)
+
    !general cell
     call gcopy(cell_vector,3,3)
     call gcopy(inv_cell_vector,3,3)

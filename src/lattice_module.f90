@@ -22,16 +22,20 @@
 module lattice_module
 
   use datatypes
-  use global_module, only: cell_vector, inv_cell_vector
+  use global_module, only: cell_vector, inv_cell_vector,io_lun
+  use GenComms, only: myid
   implicit none
   real(double) :: cell_length(1:3)
   real(double) :: volume
 
 contains
  subroutine set_cell_parameters
+  use numbers, only: zero, pi
+  use units, only: BohrToAng
   use mat33, only: inver3, deter3
   implicit none
-  real(double):: bc1,bc2,bc3
+  real(double):: prod, alpha, beta, gamma
+  real(double):: RadToDeg
   integer :: ii
  
   !cell length
@@ -39,9 +43,39 @@ contains
    cell_length(ii) = cell_vector(1,ii)**2 + cell_vector(2,ii)**2 + cell_vector(3,ii)**2
    cell_length(ii) = sqrt(cell_length(ii))
   enddo 
+ 
+  !angles
+   !alpha
+    prod = zero
+    do ii=1,3
+     prod = prod + cell_vector(ii,2)*cell_vector(ii,3)
+    enddo
+    alpha = acos(prod/(cell_length(2)*cell_length(3)))
+   !beta 
+    prod = zero
+    do ii=1,3
+     prod = prod + cell_vector(ii,3)*cell_vector(ii,1)
+    enddo
+    beta = acos(prod/(cell_length(3)*cell_length(1)))
+   !gamma
+    prod = zero
+    do ii=1,3
+     prod = prod + cell_vector(ii,1)*cell_vector(ii,2)
+    enddo
+    gamma = acos(prod/(cell_length(1)*cell_length(2)))
+  
+    RadToDeg= 180.0_double/pi
 
   !volume 
    volume = deter3(cell_vector)
+
+  !print out
+    if(myid.eq.0) then
+     write(io_lun,fmt='(10x,"Sim. Cell. length (angstrom) : ",3f15.5)') cell_length(1:3)*BohrToAng
+     write(io_lun,fmt='(10x,"Sim. Cell. angle (degree)    : ",3f15.5)') &
+       alpha*RadToDeg,beta*RadToDeg,gamma*RadToDeg
+     write(io_lun,fmt='(10x,"Sim. Cell. volume (a.u.^3)   : ",f15.5)') volume
+    endif
 
   !inv_cell_vector
    call inver3(cell_vector, inv_cell_vector)
