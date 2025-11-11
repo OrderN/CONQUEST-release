@@ -25,7 +25,7 @@ module lattice_module
   use global_module, only: cell_vector, inv_cell_vector,io_lun
   use GenComms, only: myid
   implicit none
-  real(double) :: cell_length(1:3)
+  real(double) :: cell_length(1:3), angle(1:3)
   real(double) :: volume
 
 contains
@@ -63,8 +63,9 @@ contains
      prod = prod + cell_vector(ii,1)*cell_vector(ii,2)
     enddo
     gamma = acos(prod/(cell_length(1)*cell_length(2)))
-  
+
     RadToDeg= 180.0_double/pi
+    angle(1) =alpha*RadToDeg; angle(2) = beta*RadToDeg; angle(3)=gamma*RadToDeg
 
   !volume 
    volume = deter3(cell_vector)
@@ -72,8 +73,7 @@ contains
   !print out
     if(myid.eq.0) then
      write(io_lun,fmt='(10x,"Sim. Cell. length (angstrom) : ",3f15.5)') cell_length(1:3)*BohrToAng
-     write(io_lun,fmt='(10x,"Sim. Cell. angle (degree)    : ",3f15.5)') &
-       alpha*RadToDeg,beta*RadToDeg,gamma*RadToDeg
+     write(io_lun,fmt='(10x,"Sim. Cell. angle  (degree)   : ",3f15.5)') angle(1:3)
      write(io_lun,fmt='(10x,"Sim. Cell. volume (a.u.^3)   : ",f15.5)') volume
     endif
 

@@ -345,6 +345,8 @@ contains
     use species_module, ONLY : charge, species
     use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl
 
+    use lattice_module, only: cell_length
+    use global_module, only: cell_vector, inv_cell_vector
 
     implicit none
 
@@ -367,9 +369,14 @@ contains
     real(double), dimension(3,3) :: real_cell_vec, recip_cell_vec, &
          part_cell_vec, part_cell_dual
 
+    real(double) :: diff
+    integer :: ii,jj
+
     if(inode == ionode.AND.iprint_gen>1) &
-         write(io_lun,fmt='(/8x," edge lengths of orthorhombic supercell:", &
-         &3f12.6," a.u.")') r_super_x, r_super_y, r_super_z
+         !old write(io_lun,fmt='(/8x," edge lengths of orthorhombic supercell:", &
+         !old &3f12.6," a.u.")') r_super_x, r_super_y, r_super_z
+         write(io_lun,fmt='(/8x," edge lengths of simulation cell:", &
+         &3f12.6," a.u.")') cell_length(1:3)
 
     ! ------------ setting primitive translation vectors of cell ------------
     !   At time of writing, Conquest is restricted to orthorhombic
@@ -381,15 +388,24 @@ contains
     !   vectors. Here, real_cell_vec(n,i) and recip_cell_vec(n,i) are
     !   the Cartesian components (labelled by i) of the real- and
     !   reciprocal-space vectors (labelled by n).
-    real_cell_vec(1,1) = r_super_x
-    real_cell_vec(1,2) = zero
-    real_cell_vec(1,3) = zero
-    real_cell_vec(2,1) = zero
-    real_cell_vec(2,2) = r_super_y
-    real_cell_vec(2,3) = zero
-    real_cell_vec(3,1) = zero
-    real_cell_vec(3,2) = zero
-    real_cell_vec(3,3) = r_super_z
+
+    ! 2025/Nov/11 
+    ! we now consider the genral case including non-orthorhombic cells
+    !  as far as I have checked, the definition of row and columns should be the same
+    !  between real_cell_vec and cell_vector
+      real_cell_vec(:,:) = cell_vector(:,:) 
+
+    !real_cell_vec(1,1) = r_super_x
+    !real_cell_vec(1,2) = zero
+    !real_cell_vec(1,3) = zero
+    !real_cell_vec(2,1) = zero
+    !real_cell_vec(2,2) = r_super_y
+    !real_cell_vec(2,3) = zero
+    !real_cell_vec(3,1) = zero
+    !real_cell_vec(3,2) = zero
+    !real_cell_vec(3,3) = r_super_z
+
+
     if(inode == ionode.AND.iprint_gen>1) then
        write(io_lun,fmt='(/8x," set_ewald: cartesian components &
             &of real-cell primitive translations vectors:"/)')
@@ -474,6 +490,17 @@ contains
          real_cell_vec(2,1) - real_cell_vec(1,1)*real_cell_vec(2,3))
     recip_cell_vec(3,3) = vol_prefac * (real_cell_vec(1,1) * &
          real_cell_vec(2,2) - real_cell_vec(1,2)*real_cell_vec(2,1))
+
+    ! here we can check the consistency between recip_cell_vec and inv_cell_vec
+    ! 2025/Nov/12 T. Miyazaki
+      diff = zero
+      do ii = 1,3
+       do jj = 1,3
+        diff = diff + (recip_cell_vec(jj,ii)-two*pi*inv_cell_vector(jj,ii))**2
+       enddo
+      enddo
+     if(diff > very_small) call cq_abort &
+      ("ERROR! : set_ewald, check the consistency between cell_vector and ewald_cell")
 
     if(inode==ionode.AND.iprint_gen>1) then
        write(unit=io_lun,fmt='(/8x," cartesian components of &

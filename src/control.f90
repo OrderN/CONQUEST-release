@@ -1569,8 +1569,9 @@ contains
     use store_matrix,   only: dump_pos_and_matrices
     use mult_module, ONLY: matK, S_trans, matrix_scale, matL, L_trans
     use matrix_data, ONLY: Hrange, Lrange
-    use dimens,        only: r_super_x, r_super_y, r_super_z
+    !use dimens,        only: r_super_x, r_super_y, r_super_z
     use md_control,    only: flag_write_xsf, flag_write_extxyz
+    use lattice_module, only: get_pos_frac, get_pos_cart
 
     implicit none
 
@@ -1591,6 +1592,9 @@ contains
          i_first, i_last, &
          nfile, symm, iter_low, iter_high, this_iter
     logical      :: done
+
+    ! for general cells including non-orthorhombic ones
+    real(double) :: pos_frac(3), shift_lattice(3), pos_shift(3)
 
     step = MDtimestep
     allocate(posnStore(3,ni_in_cell,LBFGS_history), &
@@ -1703,19 +1707,29 @@ contains
        do i=1,ni_in_cell
           jj = id_glob(i)
           posnStore (1,jj,npmod) = x_atom_cell(i) - posnStore (1,jj,npmod)
-          if(abs(posnStore(1,jj,npmod)/r_super_x)>0.7_double) posnStore(1,jj,npmod) &
-               = posnStore(1,jj,npmod) &
-               - nint(posnStore(1,jj,npmod)/r_super_x)*r_super_x
           posnStore (2,jj,npmod) = y_atom_cell(i) - posnStore (2,jj,npmod)
-          if(abs(posnStore(2,jj,npmod)/r_super_y)>0.7_double) posnStore(2,jj,npmod) &
-               = posnStore(2,jj,npmod) &
-               - nint(posnStore(2,jj,npmod)/r_super_y)*r_super_y
           posnStore (3,jj,npmod) = z_atom_cell(i) - posnStore (3,jj,npmod)
-          if(abs(posnStore(3,jj,npmod)/r_super_z)>0.7_double) posnStore(3,jj,npmod) &
-               = posnStore(3,jj,npmod) &
-               - nint(posnStore(3,jj,npmod)/r_super_z)*r_super_z
           forceStore(:,jj,npmod) = -tot_force(:,jj) - forceStore(:,jj,npmod)
-          ! New search direction
+
+          call get_pos_frac(posnStore(:,jj,npmod),pos_frac)
+           shift_lattice(:) = zero
+           if(abs(pos_frac(1)) > 0.7_double) shift_lattice(1) = nint(pos_frac(1))
+           if(abs(pos_frac(2)) > 0.7_double) shift_lattice(2) = nint(pos_frac(2))
+           if(abs(pos_frac(3)) > 0.7_double) shift_lattice(3) = nint(pos_frac(3))
+          call get_pos_cart(shift_lattice, pos_shift)
+          posnStore (:,jj,npmod) = posnStore(:,jj,npmod)-pos_shift(:)
+          
+         !!old case (with the assumption of orthorhombic)
+         ! if(abs(posnStore(1,jj,npmod)/r_super_x)>0.7_double) posnStore(1,jj,npmod) &
+         !      = posnStore(1,jj,npmod) &
+         !      - nint(posnStore(1,jj,npmod)/r_super_x)*r_super_x
+         ! if(abs(posnStore(2,jj,npmod)/r_super_y)>0.7_double) posnStore(2,jj,npmod) &
+         !      = posnStore(2,jj,npmod) &
+         !      - nint(posnStore(2,jj,npmod)/r_super_y)*r_super_y
+         ! if(abs(posnStore(3,jj,npmod)/r_super_z)>0.7_double) posnStore(3,jj,npmod) &
+         !      = posnStore(3,jj,npmod) &
+         !      - nint(posnStore(3,jj,npmod)/r_super_z)*r_super_z
+         ! ! New search direction
        end do
        cg_new = -tot_force ! The L-BFGS is in terms of grad E
        ! Add call to write_atomic_positions and write_xsf (2020/01/17: smujahed)
@@ -1856,8 +1870,10 @@ contains
                               check_stop, write_xsf, print_atomic_positions, return_prefix
     use memory_module,  only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use store_matrix,   only: dump_pos_and_matrices
-    use dimens,        only: r_super_x, r_super_y, r_super_z
+    !use dimens,        only: r_super_x, r_super_y, r_super_z
     use md_control,    only: flag_write_xsf, flag_write_extxyz
+    use lattice_module, only: get_pos_frac, get_pos_cart
+
 
     implicit none
 
@@ -1878,6 +1894,9 @@ contains
          i_first, i_last, n_store, n_dim, info, n_hist, &
          nfile, symm, iter_loc, iter_high, this_iter
     logical      :: done
+
+    ! for general cells including non-orthorhombic ones
+    real(double) :: pos_frac(3), shift_lattice(3), pos_shift(3)
 
     character(len=12) :: subname = "sqnm: "
     character(len=120) :: prefix, prefixGO
@@ -1997,19 +2016,30 @@ contains
        do i=1,ni_in_cell
           jj = id_glob(i)
           posnStore (1,jj,npmod) = x_atom_cell(i) - posnStore (1,jj,npmod)
-          if(abs(posnStore(1,jj,npmod)/r_super_x)>0.7_double) posnStore(1,jj,npmod) &
-               = posnStore(1,jj,npmod) &
-               - nint(posnStore(1,jj,npmod)/r_super_x)*r_super_x
           posnStore (2,jj,npmod) = y_atom_cell(i) - posnStore (2,jj,npmod)
-          if(abs(posnStore(2,jj,npmod)/r_super_y)>0.7_double) posnStore(2,jj,npmod) &
-               = posnStore(2,jj,npmod) &
-               - nint(posnStore(2,jj,npmod)/r_super_y)*r_super_y
           posnStore (3,jj,npmod) = z_atom_cell(i) - posnStore (3,jj,npmod)
-          if(abs(posnStore(3,jj,npmod)/r_super_z)>0.7_double) posnStore(3,jj,npmod) &
-               = posnStore(3,jj,npmod) &
-               - nint(posnStore(3,jj,npmod)/r_super_z)*r_super_z
           forceStore(:,jj,npmod) = -tot_force(:,jj) - forceStore(:,jj,npmod)
           ! New search direction
+
+          !for general cells including non-orthorhombic ones
+          call get_pos_frac(posnStore(:,jj,npmod),pos_frac)
+           shift_lattice(:) = zero
+           if(abs(pos_frac(1)) > 0.7_double) shift_lattice(1) = nint(pos_frac(1))
+           if(abs(pos_frac(2)) > 0.7_double) shift_lattice(2) = nint(pos_frac(2))
+           if(abs(pos_frac(3)) > 0.7_double) shift_lattice(3) = nint(pos_frac(3))
+          call get_pos_cart(shift_lattice, pos_shift)
+          posnStore (:,jj,npmod) = posnStore(:,jj,npmod)-pos_shift(:)
+
+          !!OLD : assuming only orthorhombic cells
+          !if(abs(posnStore(1,jj,npmod)/r_super_x)>0.7_double) posnStore(1,jj,npmod) &
+          !     = posnStore(1,jj,npmod) &
+          !     - nint(posnStore(1,jj,npmod)/r_super_x)*r_super_x
+          !if(abs(posnStore(2,jj,npmod)/r_super_y)>0.7_double) posnStore(2,jj,npmod) &
+          !     = posnStore(2,jj,npmod) &
+          !     - nint(posnStore(2,jj,npmod)/r_super_y)*r_super_y
+          !if(abs(posnStore(3,jj,npmod)/r_super_z)>0.7_double) posnStore(3,jj,npmod) &
+          !     = posnStore(3,jj,npmod) &
+          !     - nint(posnStore(3,jj,npmod)/r_super_z)*r_super_z
        end do
        n_store = min(iter_loc,LBFGS_history) ! Number of stored states
        if(inode==ionode.AND.iprint_MD + min_layer > 2) &

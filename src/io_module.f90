@@ -650,6 +650,7 @@ second:   do
     use GenComms,       only: inode, ionode, cq_abort
     use units,          only: BohrToAng
     use timer_module
+    use lattice_module, only: cell_length, angle
 
     ! Passed variables
     character(len=*) :: filename, pdb_temp
@@ -708,12 +709,14 @@ second:   do
                 write (lun,'(a)') pdb_line
               endif
             case ('CRYST1')
-              coords(1) = BohrToAng * r_super_x
-              coords(2) = BohrToAng * r_super_y
-              coords(3) = BohrToAng * r_super_z
               ! Once we get to non-orthorhombic cells the line below has to be updated
-              write (lun,'(a6,3f9.3,3f7.2,a)') pdb_line(1:6), coords(:), &
-                    90.0, 90.0, 90.0, pdb_line(56:80)
+              !coords(1) = BohrToAng * r_super_x
+              !coords(2) = BohrToAng * r_super_y
+              !coords(3) = BohrToAng * r_super_z
+              !write (lun,'(a6,3f9.3,3f7.2,a)') pdb_line(1:6), coords(:), &
+              !      90.0, 90.0, 90.0, pdb_line(56:80)
+              write (lun,'(a6,3f9.3,3f7.2,a)') pdb_line(1:6), cell_length(1:3)*BohrToAng, &
+                    angle(1:3), pdb_line(56:80)
             case default
               write (lun,'(a)') pdb_line
             end select
