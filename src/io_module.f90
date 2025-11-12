@@ -639,7 +639,7 @@ second:   do
 
     use datatypes
     use numbers,        only: zero
-    use dimens,         only: r_super_x, r_super_y, r_super_z
+    !use dimens,         only: r_super_x, r_super_y, r_super_z
     use global_module,  only: x_atom_cell, y_atom_cell, z_atom_cell,   &
                               ni_in_cell,                              &
                               flag_fractional_atomic_coords, rcellx,   &
@@ -650,7 +650,8 @@ second:   do
     use GenComms,       only: inode, ionode, cq_abort
     use units,          only: BohrToAng
     use timer_module
-    use lattice_module, only: cell_length, angle
+    use global_module, only: cell_vector
+    use lattice_module, only: cell_length, angle, get_pos_frac
 
     ! Passed variables
     character(len=*) :: filename, pdb_temp
@@ -663,6 +664,7 @@ second:   do
     character(len=2)           :: atom_name
     real(double), dimension(3) :: coords
     type(cq_timer)             :: tmr_l_tmp1
+    real(double), dimension(3) :: pos_frac
 
     if(inode==ionode) then
        call start_timer(tmr_l_tmp1,WITH_LEVEL)
@@ -733,15 +735,21 @@ second:   do
              open(unit=lun,file=filename)
           end if
           ! Read supercell vector - for now it must be orthorhombic so we use x and y as dummy variables
-          write(lun,fmt='(3f25.17)') r_super_x, zero, zero
-          write(lun,fmt='(3f25.17)') zero, r_super_y, zero
-          write(lun,fmt='(3f25.17)') zero, zero, r_super_z
+          !write(lun,fmt='(3f25.17)') r_super_x, zero, zero
+          !write(lun,fmt='(3f25.17)') zero, r_super_y, zero
+          !write(lun,fmt='(3f25.17)') zero, zero, r_super_z
+         !general case including non-orthorhombic cells
+          write(lun,fmt='(3f25.17)') cell_vector(1,1), cell_vector(2,1), cell_vector(3,1)
+          write(lun,fmt='(3f25.17)') cell_vector(1,2), cell_vector(2,2), cell_vector(3,2)
+          write(lun,fmt='(3f25.17)') cell_vector(1,3), cell_vector(2,3), cell_vector(3,3)
           write(lun,fmt='(i8)') ni_in_cell
           do i=1,ni_in_cell
              if(flag_fractional_atomic_coords) then
-                write(lun,fmt='(3f25.17,i6,3L3)') atom_coord(1,i)/r_super_x,atom_coord(2,i)/r_super_y,&
-                     atom_coord(3,i)/r_super_z, species_glob(i),flag_move_atom(1,i),flag_move_atom(2,i), &
-                     flag_move_atom(3,i)
+                call get_pos_frac(atom_coord(1:3,i),pos_frac)
+                write(lun,fmt='(3f25.17,i6,3L3)') pos_frac(1:3), species_glob(i),flag_move_atom(1:3,i)
+                !old write(lun,fmt='(3f25.17,i6,3L3)') atom_coord(1,i)/r_super_x,atom_coord(2,i)/r_super_y,&
+                !old      atom_coord(3,i)/r_super_z, species_glob(i),flag_move_atom(1,i),flag_move_atom(2,i), &
+                !old      flag_move_atom(3,i)
              else
                 write(lun,fmt='(3f25.17,i6,3L3)') atom_coord(1,i),atom_coord(2,i),atom_coord(3,i), &
                      species_glob(i),flag_move_atom(1,i),flag_move_atom(2,i), &
