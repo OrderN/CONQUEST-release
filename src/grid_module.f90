@@ -47,13 +47,13 @@ contains
   !dcell_grid 
    dcell_grid (1) = dcell_block(1)/nx_in_block
    dcell_grid (2) = dcell_block(2)/ny_in_block
-   dcell_grid (3) = dcell_block(3)/ny_in_block
+   dcell_grid (3) = dcell_block(3)/nz_in_block
 
   !grid_point_volume
     ngridx = blocks%ngcellx * nx_in_block
     ngridy = blocks%ngcelly * ny_in_block
     ngridz = blocks%ngcellz * nz_in_block
-    !to 
+    !to avoid the overflow of (ngridx*ngridy*ngridz)...
    grid_point_volume = volume/ngridx/ngridy/ngridz
 
   return
