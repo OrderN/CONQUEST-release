@@ -685,9 +685,11 @@ contains
     if (n_dim_auto > 0) then
        do ii = 1, 3
           if (FSC%is_folded(ii)) then
-             r_occupied_cell(ii) = FSC%dims(ii) - FSC%gap(2,ii) + FSC%gap(1,ii)
+             !old r_occupied_cell(ii) = FSC%dims(ii) - FSC%gap(2,ii) + FSC%gap(1,ii)
+             r_occupied_cell(ii) = (one - (FSC%gap(2,ii) + FSC%gap(1,ii)))*FSC%dims(ii)
           else
-             r_occupied_cell(ii) = FSC%r_atoms_max(ii) - FSC%r_atoms_min(ii)
+             !old r_occupied_cell(ii) = FSC%r_atoms_max(ii) - FSC%r_atoms_min(ii)
+             r_occupied_cell(ii) = (FSC%r_atoms_max(ii) - FSC%r_atoms_min(ii))*FSC%dims(ii)
           end if
        end do
        v_part = (real(max_natoms_part,double) / real(ni_in_cell,double)) * &
@@ -954,6 +956,8 @@ contains
           if ((r_gap_block_min >= FSC%r_atoms_min(ii)) .and. &
                (r_gap_block_max <= FSC%r_atoms_max(ii))) then
              ! the gap is in the middle of the cell
+             write(*,*) ' block_min etc. ',r_gap_block_min, FSC%r_atoms_min(ii)
+             write(*,*) ' block_max etc. ',r_gap_block_max, FSC%r_atoms_max(ii)
              FSC%is_folded(ii) = .true.
              limits(1) = FSC%r_atoms_min(ii)
              limits(2) = r_gap_block_min
@@ -1445,7 +1449,7 @@ contains
           write (io_lun, "(10x,a,2f10.6)")  &
                "System extent in z (a0): ", &
                !old FSC%r_atoms_min(3), FSC%r_atoms_max(3)
-               FSC%r_atoms_min(3)*FSC%dims(3), FSC%r_atoms_max(3)**FSC%dims(3)
+               FSC%r_atoms_min(3)*FSC%dims(3), FSC%r_atoms_max(3)*FSC%dims(3)
           write (io_lun, "(10x,a,f10.6)")   &
                "Largest gap in x   (a0): ", &
                !old FSC%gap(2,1) - FSC%gap(1,1)
