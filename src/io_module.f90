@@ -196,6 +196,7 @@ contains
     use units,          only: AngToBohr
     use units,          only: dist_units, ang
     use numbers,        only: RD_ERR, zero, one, two, pi
+    use global_module,  only: shift_in_frac
 
     ! Passed variables
     character(len=*) :: filename
@@ -207,7 +208,6 @@ contains
     real(double)   :: x, y, z
     !real(double), dimension(3) :: cell
     real(double), dimension(3) :: pos_frac
-    real(double)   :: shift_in_frac
 
     ! Local variables for reading pdb files
     integer      :: ios, j
@@ -415,7 +415,6 @@ second:   do
                                       sqrt(one-cos1**2-cos2**2-cos3**2+two*cos1*cos2*cos3)
 
                  call set_cell_parameters
-                 shift_in_frac = shift_in_bohr/(volume**third)
 
                 ! The following write statement is also in
                 ! initial_read_module, but I think it's better to have
@@ -518,7 +517,6 @@ second:   do
 
             ! Wrap coordinates
             !  for general cells including non-orthorhombic case
-                 shift_in_frac = shift_in_bohr/(volume**third)
               call get_pos_frac(atom_coord(1:3,i),pos_frac)
               pos_frac(1:3) = pos_frac(1:3)-floor(pos_frac(1:3)+shift_in_frac)
               call get_pos_cart(pos_frac,atom_coord(1:3,i))

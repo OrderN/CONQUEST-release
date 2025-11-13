@@ -379,6 +379,7 @@ module global_module
   integer :: MDinit_step  
   !ORI real(double),parameter   :: shift_in_bohr = 1.0E-03_double
   real(double),parameter   :: shift_in_bohr = 1.0E-06_double
+  real(double)             :: shift_in_frac 
   ! Table showing atoms (global) in nodes
   integer,allocatable :: glob2node(:)        ! size: ni_in_cell
   ! Displacement of atoms from a previous step

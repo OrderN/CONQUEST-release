@@ -84,6 +84,7 @@ module density_module
   use timer_module,           only: start_backtrace, stop_backtrace
   use timer_stdclocks_module, only: tmr_std_chargescf
 
+  use grid_module, only: dcell_block, dcell_grid, set_grid_parameters
   implicit none
   save
 
@@ -240,7 +241,7 @@ contains
     use set_blipgrid_module, only: naba_atoms_of_blocks
     use GenComms,            only: my_barrier, cq_abort, inode, ionode, gsum
     use atomic_density,      only: atomic_density_table
-    use dimens,              only: n_my_grid_points, grid_point_volume
+    use dimens,              only: n_my_grid_points
     use GenBlas,             only: rsum, scal
     use timer_module,        only: WITH_LEVEL
     use maxima_module,  only: maxngrid
@@ -248,6 +249,8 @@ contains
     use memory_module,          only: reg_alloc_mem, reg_dealloc_mem,  &
          type_dbl
     use io_module, only: return_prefix
+    use grid_module, only: dcell_block, dcell_grid, grid_point_volume
+    use lattice_module, only: get_pos_cart
 
     implicit none
 
@@ -261,6 +264,8 @@ contains
     integer :: ix, iy, iz, j, iblock, ipoint, igrid
     integer :: no_of_ib_ia, offset_position
     integer :: position, iatom, icheck, spin
+
+    real(double) :: frac_block(3), cart_block(3), frac_grid(3), cart_grid(3)
 
     real(double) :: dcellx_block, dcelly_block, dcellz_block
     real(double) :: dcellx_grid, dcelly_grid, dcellz_grid
@@ -307,12 +312,13 @@ contains
     end if
 
     ! determine the block and grid spacing
-    dcellx_block = rcellx / blocks%ngcellx
-    dcelly_block = rcelly / blocks%ngcelly
-    dcellz_block = rcellz / blocks%ngcellz
-    dcellx_grid = dcellx_block / nx_in_block
-    dcelly_grid = dcelly_block / ny_in_block
-    dcellz_grid = dcellz_block / nz_in_block
+     call set_grid_parameters
+    !dcellx_block = rcellx / blocks%ngcellx
+    !dcelly_block = rcelly / blocks%ngcelly
+    !dcellz_block = rcellz / blocks%ngcellz
+    !dcellx_grid = dcellx_block / nx_in_block
+    !dcelly_grid = dcelly_block / ny_in_block
+    !dcellz_grid = dcellz_block / nz_in_block
 
     ! loop around grid points in this domain, and for each
     ! point, get contributions to the charge density from atoms which are
@@ -323,9 +329,18 @@ contains
     do iblock = 1, domain%groups_on_node ! loop over blocks of grid points
        !write(io_lun,*) 'Block ',iblock
        ! determine the position of this block
-       xblock = (domain%idisp_primx(iblock) + domain%nx_origin - 1) * dcellx_block
-       yblock = (domain%idisp_primy(iblock) + domain%ny_origin - 1) * dcelly_block
-       zblock = (domain%idisp_primz(iblock) + domain%nz_origin - 1) * dcellz_block
+
+       frac_block(1) = (domain%idisp_primx(iblock) + domain%nx_origin - 1) 
+       frac_block(2) = (domain%idisp_primy(iblock) + domain%ny_origin - 1) 
+       frac_block(3) = (domain%idisp_primz(iblock) + domain%nz_origin - 1) 
+       frac_block(:) = frac_block(:) * dcell_block(:)
+       
+       call get_pos_cart(frac_block, cart_block)
+
+       !old xblock = (domain%idisp_primx(iblock) + domain%nx_origin - 1) * dcellx_block
+       !old yblock = (domain%idisp_primy(iblock) + domain%ny_origin - 1) * dcelly_block
+       !old zblock = (domain%idisp_primz(iblock) + domain%nz_origin - 1) * dcellz_block
+
        ! if there are neighbour partitions
        if (naba_atoms_of_blocks(dens)%no_of_part(iblock) > 0) then
           iatom = 0
@@ -382,22 +397,33 @@ contains
                 ipoint = 0
                 ! loop over the grid points in the current block
                 do iz = 1, nz_in_block
+                         frac_grid(3)=iz-1
                    do iy = 1, ny_in_block
+                         frac_grid(2)=iy-1
                       do ix = 1, nx_in_block
+                         frac_grid(1)=ix-1
+
                          ipoint = ipoint + 1
                          igrid = n_pts_in_block * (iblock - 1) + ipoint
                          ! position= offset_position + ipoint
                          if (igrid > n_my_grid_points) &
                               call cq_abort('set_density: igrid error ', &
                                             igrid, n_my_grid_points)
-                         dx = dcellx_grid * (ix - 1)
-                         dy = dcelly_grid * (iy - 1)
-                         dz = dcellz_grid * (iz - 1)
+
+                         frac_grid(:) = frac_grid(:) * dcell_grid(:)
+                         call get_pos_cart(frac_grid, cart_grid)
+                         !old dx = dcellx_grid * (ix - 1)
+                         !old dy = dcelly_grid * (iy - 1)
+                         !old dz = dcellz_grid * (iz - 1)
+
                          ! determine separation between the current
                          ! grid point and atom
-                         rx = xblock + dx - xatom
-                         ry = yblock + dy - yatom
-                         rz = zblock + dz - zatom
+                         rx = cart_block(1) + cart_grid(1) - xatom
+                         ry = cart_block(2) + cart_grid(2) - yatom
+                         rz = cart_block(3) + cart_grid(3) - zatom
+                         !old rx = xblock + dx - xatom
+                         !old ry = yblock + dy - yatom
+                         !old rz = zblock + dz - zatom
                          rsq = rx * rx + ry * ry + rz * rz
                          if (rsq < loc_cutoff * loc_cutoff) then
                             r_from_i = sqrt(rsq)

@@ -22,7 +22,7 @@
 module lattice_module
 
   use datatypes
-  use global_module, only: cell_vector, inv_cell_vector,io_lun
+  use global_module, only: cell_vector, inv_cell_vector,io_lun, shift_in_frac, shift_in_bohr
   use GenComms, only: myid
   implicit none
   real(double) :: cell_length(1:3), angle(1:3)
@@ -36,6 +36,7 @@ contains
   implicit none
   real(double):: prod, alpha, beta, gamma
   real(double):: RadToDeg
+  real(double):: cell_length_max
   integer :: ii
  
   !cell length
@@ -43,7 +44,10 @@ contains
    cell_length(ii) = cell_vector(1,ii)**2 + cell_vector(2,ii)**2 + cell_vector(3,ii)**2
    cell_length(ii) = sqrt(cell_length(ii))
   enddo 
- 
+  ! shift_in_frac in global_module
+   cell_length_max = max(max(cell_length(1),cell_length(2)),cell_length(3))
+   shift_in_frac = shift_in_bohr/cell_length_max
+
   !angles
    !alpha
     prod = zero
