@@ -525,7 +525,11 @@ contains
           ! Assign atoms in cell to partitions and count
           loop_atoms_refine: do ia = 1, ni_in_cell
              ! get the partition x,y,z indices for the partition containing the atoms
+             
+             ! for general cells including non-orthorhombic cells, we need to consider with
+             ! fractional coordinates
              ipart_xyz(1:3) = floor((atom_coord(1:3,ia)+shift_in_bohr) / r_part(1:3) )
+             !old ipart_xyz(1:3) = floor((atom_coord(1:3,ia)+shift_in_bohr) / r_part(1:3) )
              ! get the corresponding Hilbert curve index corresponding to the partition
              call Hilbert3D_CoordsToInt(ipart_xyz, ihilbert)
              ! accumulate the atoms count
@@ -844,10 +848,11 @@ contains
 
     use datatypes
     use numbers
-    use dimens,        only: r_super_x, r_super_y, r_super_z
-    use global_module, only: atom_coord, ni_in_cell, area_init, shift_in_bohr
+    !use dimens,        only: r_super_x, r_super_y, r_super_z
+    use global_module, only: atom_coord, ni_in_cell, area_init, shift_in_bohr, shift_in_frac
     use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_int
     use GenComms,      only: cq_abort
+    use lattice_module, only: cell_length, get_pos_frac
 
     implicit none
 
@@ -865,14 +870,22 @@ contains
     real(double) :: tmp_min, tmp_max
     real(double) :: min_r_block
 
+    real(double) :: pos_frac(3)
+
     ! get cell dimensions
-    FSC%dims(1) = r_super_x
-    FSC%dims(2) = r_super_y
-    FSC%dims(3) = r_super_z
+
+    ! change for non-orthorhombic cases
+    
+    FSC%dims(:) = cell_length(:)
+    !old FSC%dims(1) = r_super_x
+    !old FSC%dims(2) = r_super_y
+    !old FSC%dims(3) = r_super_z
+
     ! find the mimimum r_block
-    r_block(1) = r_super_x / real(min_n_slices, double)
-    r_block(2) = r_super_y / real(min_n_slices, double)
-    r_block(3) = r_super_z / real(min_n_slices, double)
+    r_block(:) = cell_length(:) / real(min_n_slices, double)
+    !old r_block(1) = r_super_x / real(min_n_slices, double)
+    !old r_block(2) = r_super_y / real(min_n_slices, double)
+    !old r_block(3) = r_super_z / real(min_n_slices, double)
     min_r_block = r_block(1)
     dim_min_r_block = 1
     do ii = 2, 3
@@ -886,12 +899,16 @@ contains
        min_r_block = average_atomic_diameter
     end if
     ! recalculate the r_blocks based on the minimum value
-    n_blocks(1) = nint(r_super_x / min_r_block)
-    n_blocks(2) = nint(r_super_y / min_r_block)
-    n_blocks(3) = nint(r_super_z / min_r_block)
-    r_block(1) = r_super_x / real(n_blocks(1), double)
-    r_block(2) = r_super_y / real(n_blocks(2), double)
-    r_block(3) = r_super_z / real(n_blocks(3), double)
+
+    ! change for non-orthorhombic cases
+    n_blocks(:) = nint(cell_length(:) / min_r_block)
+    !old n_blocks(1) = nint(r_super_x / min_r_block)
+    !old n_blocks(2) = nint(r_super_y / min_r_block)
+    !old n_blocks(3) = nint(r_super_z / min_r_block)
+    r_block(:) = cell_length(1:3) / real(n_blocks(1:3), double)
+    !old r_block(1) = r_super_x / real(n_blocks(1), double)
+    !old r_block(2) = r_super_y / real(n_blocks(2), double)
+    !old r_block(3) = r_super_z / real(n_blocks(3), double)
     n_blocks_total = n_blocks(1) * n_blocks(2) * n_blocks(3)
     allocate(n_atoms_block(n_blocks_total), STAT=stat)
     if (stat /= 0) then
@@ -902,8 +919,11 @@ contains
     n_atoms_block = 0.0_double
     ! calculate the number of atoms in each block
     do iatom = 1, ni_in_cell
-       !ORI i_block_xyz(1:3) = floor(atom_coord(1:3,iatom) / r_block(1:3) + RD_ERR)
-       i_block_xyz(1:3) = floor((atom_coord(1:3,iatom)+shift_in_bohr) / r_block(1:3) ) 
+       !2025/Nov/13 TM: non-orthorhombic case
+       !old i_block_xyz(1:3) = floor(atom_coord(1:3,iatom) / r_block(1:3) + RD_ERR)
+       !old i_block_xyz(1:3) = floor((atom_coord(1:3,iatom)+shift_in_bohr) / r_block(1:3) ) 
+       call get_pos_frac(atom_coord(1:3,iatom),pos_frac)
+       i_block_xyz(1:3) = floor((pos_frac(1:3)+shift_in_frac) / real(n_blocks(1:3),double))
        icc = i_block_xyz(1) * n_blocks(2) * n_blocks(3) + &
              i_block_xyz(2) * n_blocks(3) + &
              i_block_xyz(3) + 1
@@ -918,13 +938,19 @@ contains
        ! get extent of atoms
        call get_extent(ii, atom_coord, FSC%r_atoms_min(ii), &
                        FSC%r_atoms_max(ii))
+       !2025/Nov/13 TM: Now.. FSC%r_atoms_min or max is in fractional coordinates, not in cartesian 
        call check_gap(ii, n_blocks, n_atoms_block, &
                       gap_block_min, gap_block_max)
        ! if gaps are found
        if ((gap_block_min > 0) .and. (gap_block_max > 0)) then
           ! get gap extent, remember block_gap counts from 1
-          r_gap_block_min = (gap_block_min - 1) * r_block(ii)
-          r_gap_block_max = (gap_block_max - 1) * r_block(ii)
+
+          ! 2025/Nov/13 TM: NOC(non-orthorhombic cell)
+          !old r_gap_block_min = (gap_block_min - 1) * r_block(ii)
+          !old r_gap_block_max = (gap_block_max - 1) * r_block(ii)
+          r_gap_block_min = (gap_block_min - 1) / real(n_blocks(ii),double)
+          r_gap_block_max = (gap_block_max - 1) / real(n_blocks(ii),double)
+
           if ((r_gap_block_min >= FSC%r_atoms_min(ii)) .and. &
                (r_gap_block_max <= FSC%r_atoms_max(ii))) then
              ! the gap is in the middle of the cell
@@ -935,8 +961,11 @@ contains
              limits(1) = r_gap_block_max
              limits(2) = FSC%r_atoms_max(ii)
              call get_extent(ii, atom_coord, FSC%gap(2,ii), tmp_max, limits)
+
+             ! 2025/Nov/13 TM: NOC
              ! check if no pbc in this direction
-             if ((FSC%gap(2,ii) - FSC%gap(1,ii)) / FSC%dims(ii) > no_pbc) then
+             !old if ((FSC%gap(2,ii) - FSC%gap(1,ii)) / FSC%dims(ii) > no_pbc) then
+             if (FSC%gap(2,ii) - FSC%gap(1,ii) > no_pbc) then
                 FSC%system_type = FSC%system_type - 1
                 FSC%has_pbc(ii) = .false.
              end if
@@ -947,7 +976,10 @@ contains
              !if ((FSC%r_atoms_max(ii) - FSC%r_atoms_min(ii)) / FSC%dims(ii) <= &
              !    no_pbc) then
              ! DRB 2016/08/05 New criterion based on gap size
-             if(one - (FSC%r_atoms_max(ii) - FSC%r_atoms_min(ii))>gap_threshold) then
+       
+             ! 2025/Nov/13 TM: NOC
+             !old if(one - (FSC%r_atoms_max(ii) - FSC%r_atoms_min(ii))>gap_threshold) then
+             if(one - (FSC%r_atoms_max(ii) - FSC%r_atoms_min(ii))*FSC%dims(ii) >gap_threshold) then
                 FSC%system_type = FSC%system_type - 1
                 FSC%has_pbc(ii) = .false.
              end if
@@ -995,13 +1027,18 @@ contains
   ! CREATION DATE
   !   2013/03/31
   ! MODIFICATION HISTORY
+  !   2025/11/13 TM: changed for non-orghonal cells
   ! SOURCE
   !
   subroutine get_extent(dir, atom_coords, extent_min, extent_max, limits)
     ! from atom_coords, get the minimum and maximum coordinates along
     ! direction dir, and within the given limits(1) and limits(2)
 
+    ! 2025/Nov/13 TM
+    ! we need to work with fractional coordinates for non-orthogonal cells
+
     use datatypes
+    use lattice_module, only: get_pos_frac
 
     implicit none
 
@@ -1015,28 +1052,50 @@ contains
     integer :: ii
     integer :: n_atoms
 
+    real(double) :: pos_frac(3)
+
     n_atoms    = size(atom_coords, 2)
     extent_min = huge(1.0_double)
     extent_max = 0.0_double
     if (present(limits)) then
        do ii = 1, n_atoms
-          if ((atom_coords(dir,ii) > extent_max) .and. &
-              (atom_coords(dir,ii) <= limits(2))) then
-             extent_max = atom_coords(dir,ii)
+         call get_pos_frac(atom_coords(:,ii), pos_frac)
+         
+          if ((pos_frac(dir) > extent_max) .and. &
+              (pos_frac(dir) <= limits(2))) then
+             extent_max = pos_frac(dir)
           end if
-          if ((atom_coords(dir,ii) < extent_min) .and. &
-              (atom_coords(dir,ii) >= limits(1))) then
-             extent_min = atom_coords(dir,ii)
+          if ((pos_frac(dir) < extent_min) .and. &
+              (pos_frac(dir) >= limits(1))) then
+             extent_min = pos_frac(dir)
           end if
+
+         !old
+         ! if ((atom_coords(dir,ii) > extent_max) .and. &
+         !     (atom_coords(dir,ii) <= limits(2))) then
+         !    extent_max = atom_coords(dir,ii)
+         ! end if
+         ! if ((atom_coords(dir,ii) < extent_min) .and. &
+         !     (atom_coords(dir,ii) >= limits(1))) then
+         !    extent_min = atom_coords(dir,ii)
+         ! end if
        end do
     else
        do ii = 1, n_atoms
-          if (atom_coords(dir,ii) > extent_max) then
-             extent_max = atom_coords(dir,ii)
+         call get_pos_frac(atom_coords(1:3,ii), pos_frac)
+          if (pos_frac(dir) > extent_max) then
+             extent_max = pos_frac(dir)
           end if
-          if (atom_coords(dir,ii) < extent_min) then
-             extent_min = atom_coords(dir,ii)
+          if (pos_frac(dir) < extent_min) then
+             extent_min = pos_frac(dir)
           end if
+         !old
+          !if (atom_coords(dir,ii) > extent_max) then
+          !   extent_max = atom_coords(dir,ii)
+          !end if
+          !if (atom_coords(dir,ii) < extent_min) then
+          !   extent_min = atom_coords(dir,ii)
+          !end if
        end do
     end if
     ! in the case where extend is tiny, avoid rounding errors
@@ -1377,22 +1436,28 @@ contains
                FSC%dims(1), FSC%dims(2), FSC%dims(3)
           write (io_lun, "(10x,a,2f10.6)")  &
                "System extent in x (a0): ", &
-               FSC%r_atoms_min(1), FSC%r_atoms_max(1)
+               !old FSC%r_atoms_min(1), FSC%r_atoms_max(1)
+               FSC%r_atoms_min(1)*FSC%dims(1), FSC%r_atoms_max(1)*FSC%dims(1)
           write (io_lun, "(10x,a,2f10.6)")  &
                "System extent in y (a0): ", &
-               FSC%r_atoms_min(2), FSC%r_atoms_max(2)
+               !old FSC%r_atoms_min(2), FSC%r_atoms_max(2)
+               FSC%r_atoms_min(2)*FSC%dims(2), FSC%r_atoms_max(2)*FSC%dims(2)
           write (io_lun, "(10x,a,2f10.6)")  &
                "System extent in z (a0): ", &
-               FSC%r_atoms_min(3), FSC%r_atoms_max(3)
+               !old FSC%r_atoms_min(3), FSC%r_atoms_max(3)
+               FSC%r_atoms_min(3)*FSC%dims(3), FSC%r_atoms_max(3)**FSC%dims(3)
           write (io_lun, "(10x,a,f10.6)")   &
                "Largest gap in x   (a0): ", &
-               FSC%gap(2,1) - FSC%gap(1,1)
+               !old FSC%gap(2,1) - FSC%gap(1,1)
+               (FSC%gap(2,1) - FSC%gap(1,1))*FSC%dims(1)
           write (io_lun, "(10x,a,f10.6)")   &
                "Largest gap in y   (a0): ", &
-               FSC%gap(2,2) - FSC%gap(1,2)
+               !old FSC%gap(2,2) - FSC%gap(1,2)
+               (FSC%gap(2,2) - FSC%gap(1,2))*FSC%dims(2)
           write (io_lun, "(10x,a,f10.6)")   &
                "Largest gap in z   (a0): ", &
-               FSC%gap(2,3) - FSC%gap(1,3)
+               !old FSC%gap(2,3) - FSC%gap(1,3)
+               (FSC%gap(2,3) - FSC%gap(1,3))*FSC%dims(3)
           write (io_lun, "(10x,a,3l3)")     &
                "Partitioning method treating system is folded in (x,y,z): ", &
                FSC%is_folded(1), FSC%is_folded(2), FSC%is_folded(3)
