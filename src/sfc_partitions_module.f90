@@ -904,6 +904,7 @@ contains
 
     ! change for non-orthorhombic cases
     n_blocks(:) = nint(cell_length(:) / min_r_block)
+    write(*,*) ' n_blocks = ',n_blocks(1:3)
     !old n_blocks(1) = nint(r_super_x / min_r_block)
     !old n_blocks(2) = nint(r_super_y / min_r_block)
     !old n_blocks(3) = nint(r_super_z / min_r_block)
@@ -918,18 +919,20 @@ contains
                      n_blocks_total)
     end if
     call reg_alloc_mem(area_init, n_blocks_total, type_int)
-    n_atoms_block = 0.0_double
+    n_atoms_block = 0
     ! calculate the number of atoms in each block
     do iatom = 1, ni_in_cell
        !2025/Nov/13 TM: non-orthorhombic case
        !old i_block_xyz(1:3) = floor(atom_coord(1:3,iatom) / r_block(1:3) + RD_ERR)
        !old i_block_xyz(1:3) = floor((atom_coord(1:3,iatom)+shift_in_bohr) / r_block(1:3) ) 
        call get_pos_frac(atom_coord(1:3,iatom),pos_frac)
-       i_block_xyz(1:3) = floor((pos_frac(1:3)+shift_in_frac) / real(n_blocks(1:3),double))
+       i_block_xyz(1:3) = floor((pos_frac(1:3)+shift_in_frac) * real(n_blocks(1:3),double))
        icc = i_block_xyz(1) * n_blocks(2) * n_blocks(3) + &
              i_block_xyz(2) * n_blocks(3) + &
              i_block_xyz(3) + 1
        n_atoms_block(icc) = n_atoms_block(icc) + 1
+       write(*,901) iatom, atom_coord(1:3,iatom), pos_frac(1:3), i_block_xyz(1:3), icc, n_atoms_block(icc)
+       901 format(' *** iatom, atom_coord, pos_frac, i_block_xyz, icc, n_atoms_block(icc) = ',2x,i3,2x,3f10.5,2x,3f10.5,2x,3i3,2x,i4,2x,i4)
     end do
     ! check for gaps and determine system type
     FSC%system_type = 3
