@@ -944,6 +944,7 @@ contains
        call check_gap(ii, n_blocks, n_atoms_block, &
                       gap_block_min, gap_block_max)
        ! if gaps are found
+             write(*,*) ' gap_block_min & max =',gap_block_min, gap_block_max
        if ((gap_block_min > 0) .and. (gap_block_max > 0)) then
           ! get gap extent, remember block_gap counts from 1
 
@@ -953,11 +954,12 @@ contains
           r_gap_block_min = (gap_block_min - 1) / real(n_blocks(ii),double)
           r_gap_block_max = (gap_block_max - 1) / real(n_blocks(ii),double)
 
+             write(*,*) ' block_min etc. ',r_gap_block_min, FSC%r_atoms_min(ii)
+             write(*,*) ' block_max etc. ',r_gap_block_max, FSC%r_atoms_max(ii)
+
           if ((r_gap_block_min >= FSC%r_atoms_min(ii)) .and. &
                (r_gap_block_max <= FSC%r_atoms_max(ii))) then
              ! the gap is in the middle of the cell
-             write(*,*) ' block_min etc. ',r_gap_block_min, FSC%r_atoms_min(ii)
-             write(*,*) ' block_max etc. ',r_gap_block_max, FSC%r_atoms_max(ii)
              FSC%is_folded(ii) = .true.
              limits(1) = FSC%r_atoms_min(ii)
              limits(2) = r_gap_block_min
