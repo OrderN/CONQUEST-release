@@ -940,11 +940,13 @@ contains
          TimersWriteOut, BackTraceOn
     use input_module, only: load_input, input_array, block_start, &
          block_end, fdf_boolean, fdf_integer, fdf_double, fdf_string, &
-         fdf_block, fdf_defined, leqi, io_assign, fdf_endblock
+         fdf_block, fdf_defined, leqi, io_assign, fdf_endblock, io_close
     use cdft_data, only: cDFT_Type, cDFT_MaxIterations, cDFT_NAtoms, &
          cDFT_Target, cDFT_Tolerance,                &
          cDFT_NumberAtomGroups, cDFT_AtomList,       &
-         cDFT_BlockLabel
+         cDFT_BlockLabel, cDFT_AtomIndexFile, cDFT_block_line, &
+         cDFT_dash_pos, cDFT_num_start, cDFT_num_end, &
+         cDFT_current_atom_idx, cDFT_k, io_cDFT
     use sfc_partitions_module, only: n_parts_user, average_atomic_diameter, gap_threshold
     use XLBOMD_module,         only: XLInitFreq,kappa
     use mult_module,           only: maxiter_Dissipation, InitAtomicDistance_max, &
@@ -1838,9 +1840,38 @@ contains
        do i=1,cDFT_NumberAtomGroups
           if(fdf_block(cDFT_BlockLabel(i))) then
              allocate(cDFT_AtomList(i)%Numbers(cDFT_NAtoms(i)))
-             do j=1,cDFT_NAtoms(i)
-                read(unit=input_array(block_start+j-1),fmt=*) cDFT_AtomList(i)%Numbers(j)
-             enddo
+             cDFT_AtomIndexFile=fdf_string(80,'cDFT.AtomIndexFile',def)
+             if(leqi(def,cDFT_AtomIndexFile)) &
+                call cq_abort("Must define cDFT.AtomIndexFile.")
+             call io_assign(io_cDFT)
+             open(unit=io_cDFT,file=cDFT_AtomIndexFile,iostat=stat,status='old')
+             if(stat/=0) &
+                call cq_abort("Failed to open cDFT.AtomIndexFile: " // &
+                               trim(cDFT_AtomIndexFile), stat)
+             cDFT_current_atom_idx=0
+             do
+                read(unit=io_cDFT,fmt='(A)',iostat=stat) cDFT_block_line
+                if(stat<0) exit
+                if(stat>0) cycle
+                if (trim(cDFT_block_line)=='' .or. cDFT_block_line(1:1)=='#') cycle
+                cDFT_dash_pos=index(cDFT_block_line,'-')
+                if(cDFT_dash_pos==0) then
+                   read(unit=cDFT_block_line,fmt=*) cDFT_num_start
+                   cDFT_num_end=cDFT_num_start
+                else
+                   read(unit=cDFT_block_line(:cDFT_dash_pos-1),fmt=*) cDFT_num_start
+                   read(unit=cDFT_block_line(cDFT_dash_pos+1:),fmt=*) cDFT_num_end
+                end if
+                do cDFT_k=cDFT_num_start, cDFT_num_end
+                   cDFT_current_atom_idx=cDFT_current_atom_idx+1
+                   if (cDFT_current_atom_idx>cDFT_NAtoms(i)) &
+                      call cq_abort('The defined atom indexes are too much.')
+                   cDFT_AtomList(i)%Numbers(cDFT_current_atom_idx)=cDFT_k
+                end do
+             end do
+             call io_close(io_cDFT)
+             if (cDFT_current_atom_idx<cDFT_NAtoms(i)) &
+                call cq_abort('The defined atom indexes are not enough.')
           else
              call cq_abort('cDFT block not defined: '//cDFT_BlockLabel(i))
           end if
@@ -1890,9 +1921,38 @@ contains
           do i=1,cDFT_NumberAtomGroups
              if(fdf_block(cDFT_BlockLabel(i))) then
                 allocate(cDFT_AtomList(i)%Numbers(cDFT_NAtoms(i)))
-                do j=1,cDFT_NAtoms(i)
-                   read(unit=input_array(block_start+j-1),fmt=*) cDFT_AtomList(i)%Numbers(j)
-                enddo
+                cDFT_AtomIndexFile=fdf_string(80,'cDFT.AtomIndexFile',def)
+                if(leqi(def,cDFT_AtomIndexFile)) &
+                   call cq_abort("Must define cDFT.AtomIndexFile.")
+                call io_assign(io_cDFT)
+                open(unit=io_cDFT,file=cDFT_AtomIndexFile,iostat=stat,status='old')
+                if(stat/=0) &
+                   call cq_abort("Failed to open cDFT.AtomIndexFile: " // &
+                                  trim(cDFT_AtomIndexFile), stat)
+                cDFT_current_atom_idx=0
+                do
+                   read(unit=io_cDFT,fmt='(A)',iostat=stat) cDFT_block_line
+                   if(stat<0) exit
+                   if(stat>0) cycle
+                   if (trim(cDFT_block_line)=='' .or. cDFT_block_line(1:1)=='#') cycle
+                      cDFT_dash_pos=index(cDFT_block_line,'-')
+                   if(cDFT_dash_pos==0) then
+                      read(unit=cDFT_block_line,fmt=*) cDFT_num_start
+                      cDFT_num_end=cDFT_num_start
+                   else
+                      read(unit=cDFT_block_line(:cDFT_dash_pos-1),fmt=*) cDFT_num_start
+                      read(unit=cDFT_block_line(cDFT_dash_pos+1:),fmt=*) cDFT_num_end
+                   end if
+                   do cDFT_k=cDFT_num_start,cDFT_num_end
+                      cDFT_current_atom_idx=cDFT_current_atom_idx+1
+                      if (cDFT_current_atom_idx>cDFT_NAtoms(i)) &
+                         call cq_abort('The defined atom indexes are too much.')
+                      cDFT_AtomList(i)%Numbers(cDFT_current_atom_idx)=cDFT_k
+                   end do
+                end do
+                call io_close(io_cDFT)
+                if (cDFT_current_atom_idx<cDFT_NAtoms(i)) &
+                   call cq_abort('The defined atom indexes are not enough.')
              else
                 call cq_abort('cDFT block not defined: '//cDFT_BlockLabel(i))
              end if
