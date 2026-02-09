@@ -1,0 +1,22 @@
+atommove.typeofrun               static 
+dm.solutionmethod                diagon
+general.numberofspecies          2
+grid.gridcutoff                  80.000000
+io.coordinates                   struct.in
+io.fractionalatomiccoords        True
+io.iprint                        1
+io.title                         Cl4Na4
+io.writeouttoasefile             True
+mine.sctolerance                 1.000000e-06
+mine.selfconsistent              True
+sc.maxiters                      50
+
+diag.mpmesh                      True
+diag.mpmeshx                     2
+diag.mpmeshy                     2
+diag.mpmeshz                     2
+
+%block ChemicalSpeciesLabel
+ 1   22.990 Na
+ 2   35.450 Cl
+%endblock ChemicalSpeciesLabel
