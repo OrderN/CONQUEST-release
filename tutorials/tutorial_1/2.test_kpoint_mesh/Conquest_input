@@ -1,0 +1,28 @@
+general.maxtime                  3600
+atommove.appendcoords            True
+atommove.reusedm                 True
+atommove.typeofrun               static
+atommove.OutputFreq              1
+
+basis.basisset                   PAOs
+dm.solutionmethod                diagon
+general.functionaltype           101
+general.numberofspecies          1
+general.pseudopotentialtype      Hamann
+io.coordinates                   coords.dat 
+io.fractionalatomiccoords        True
+io.iprint                        2
+io.title                         Si8
+io.writeouttoasefile             True
+mine.sctolerance                 1.000e-06
+mine.selfconsistent              True
+SC.KerkerPreCondition            True
+sc.maxiters                      50
+spin.spinpolarised               False
+diag.smearingType                1
+diag.kt                          1.000000e-06
+
+%block ChemicalSpeciesLabel
+ 1   28.085 Si
+%endblock ChemicalSpeciesLabel
+
