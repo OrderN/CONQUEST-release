@@ -69,7 +69,7 @@ if (testfolder):
     plt.savefig("energy_vs_kpoints.png", dpi=300)
     plt.show()
 
-# Plot CPU Time vs K-points
+    # Plot CPU Time vs K-points
     plt.figure(figsize=(6,4))
     plt.plot(x_indices, cpu_times_sorted, marker='s', color='orange', linestyle='-')
     plt.xticks(x_indices, kpoints_labels_sorted)
