@@ -1,0 +1,23 @@
+general.maxtime                  3600
+atommove.typeofrun               static
+
+basis.basisset                   PAOs
+dm.solutionmethod                diagon
+general.functionaltype           101
+general.numberofspecies          1
+general.pseudopotentialtype      Hamann
+io.coordinates                   coords.dat
+io.fractionalatomiccoords        True
+io.iprint                        2
+io.title                         Si8
+io.writeouttoasefile             True
+mine.sctolerance                 1.000e-06
+mine.selfconsistent              True
+sc.maxiters                      50
+grid.gridcutoff                  80
+
+diag.mpmesh                      True
+diag.mpmeshx                     2 
+diag.mpmeshy                     2
+diag.mpmeshz                     2
+
