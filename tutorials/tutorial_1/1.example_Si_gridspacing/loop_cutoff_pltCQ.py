@@ -9,7 +9,7 @@ energies = []
 cpu_times = []
 
 # basename for directory
-base = 'gc'
+base = 'gs'
 
 testfolder = False
 # Loop over all folders starting with "E_"

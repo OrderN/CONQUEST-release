@@ -13,6 +13,9 @@ ions=("Cu.ion")
 # List of temperature values in Ha
 values=(0.0001 0.0005 0.001 0.01)
 
+# Start timer
+start_time="$(date -u +%s.%N)"
+
 # Loop over each k-point triplet
 for sigma in "${values[@]}"; do
     folder="$(printf "mp_%.4f" "$sigma")"
@@ -35,3 +38,9 @@ for sigma in "${values[@]}"; do
     cd ..
 done
 
+# End timer
+end_time="$(date -u +%s.%N)"
+
+# Print elapsed time
+elapsed="$(bc <<<"$end_time-$start_time")"
+printf "total of %.3f seconds elapsed\n" "$elapsed"

@@ -10,6 +10,9 @@ echo "Conquest cmd: $CQCMD"
 # List of kpoints
 values=(1 2 4 6)
 
+# Start timer
+start_time="$(date -u +%s.%N)"
+
 # Loop over each k-points triplet 
 for kp in "${values[@]}"; do
     folder="kp_${kp}x${kp}x${kp}"
@@ -33,3 +36,9 @@ for kp in "${values[@]}"; do
     cd ..
 done
 
+# End timer
+end_time="$(date -u +%s.%N)"
+
+# Print elapsed time
+elapsed="$(bc <<<"$end_time-$start_time")"
+printf "total of %.3f seconds elapsed\n" "$elapsed"

@@ -7,11 +7,14 @@ CQCMD="$CQMPI $CQNUM $CQROOT/Conquest"
 echo "Conquest cmd: $CQCMD"
 
 # Reference lattice constant (in angstroms)
-a0_ang=5.4437
+a0_ang=3.5856
 ang_to_bohr=1.88973
 
 # Scaling factors: from -5% to +7% around a0
 scales=(0.95 0.98 1.00 1.02 1.05 1.07)
+
+# Start timer
+start_time="$(date -u +%s.%N)"
 
 for s in "${scales[@]}"; do
     # Compute new lattice constant
@@ -25,7 +28,7 @@ for s in "${scales[@]}"; do
     fi
 
     # Copy required input files into the folder
-    cp Si.ion Conquest_input "$folder/"
+    cp C.ion Conquest_input "$folder/"
     cd $folder
 
     # Generate the input structure file with updated lattice constant
@@ -49,3 +52,11 @@ EOF
     echo "done" 
     cd ..
 done
+
+# End timer
+end_time="$(date -u +%s.%N)"
+
+# Print elapsed time
+elapsed="$(bc <<<"$end_time-$start_time")"
+printf "total of %.3f seconds elapsed\n" "$elapsed"
+

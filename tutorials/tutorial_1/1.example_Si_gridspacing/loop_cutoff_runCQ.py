@@ -2,6 +2,7 @@
 import os
 import shutil
 import subprocess
+import time
 
 os.environ['OMP_NUM_THREADS'] = '1'
 
@@ -14,31 +15,38 @@ CQNUM='2'
 # CQ command
 CQCMD=CQMPI+' '+CQNUM+' '+CQROOT+'/Conquest'
 # Ion files
-ions = ['Cu.ion']
-# Loop over each temperature in Ha 
-values = [0.0001, 0.0005, 0.001, 0.01]
+ions = ['Si.ion']
+# List of cutoff energy values in Ha
+values=[50, 75, 100, 120, 150]
 # basename
-base = 'fd'
+base = 'gs'
+# Start timer
+start = time.time()
 
-print('Conquest cmd',CQCMD)
+print('Conquest cmd:',CQCMD)
 # Loop over each cutoff energy value
 for val in values:
-    dirname=str(f"{val:.4f}")
+    dirname=str(val).rjust(3,'0')
     path=base+'_'+dirname
     if not os.path.isdir(path):
         os.makedirs(path)
+        #print('directory %s created'%path)
                 
     shutil.copy2('./coords.dat',path)
-    shutil.copy2('./Cu.ion',path)        
+    shutil.copy2('./Si.ion',path)        
     shutil.copy2('./Conquest_input',path)
 
     os.chdir(path)    
     with open('Conquest_input','a') as f:
-        f.write('\n\ndiag.smearingtype 0')
-        f.write('\ndiag.kt '+str(val))
-         
+        f.write('\n\ngrid.gridcutoff '+str(val))
+        
     print('Conquest is running in', path,'...')
     subprocess.run(CQCMD+'> Conquest_out', shell=True)
     
     os.chdir('./../')
-    
+
+# End timer
+end = time.time()
+
+# Print elapsed time
+print('total of %.3f seconds elapsed'%(end -start))   

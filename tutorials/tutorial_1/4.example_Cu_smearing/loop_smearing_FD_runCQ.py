@@ -2,6 +2,7 @@
 import os
 import shutil
 import subprocess
+import time
 
 os.environ['OMP_NUM_THREADS'] = '1'
 
@@ -18,7 +19,9 @@ ions = ['Cu.ion']
 # Loop over each temperature in Ha 
 values = [0.0001, 0.0005, 0.001, 0.01]
 # basename
-base = 'mp'
+base = 'fd'
+# Start timer
+start = time.time()
 
 print('Conquest cmd',CQCMD)
 # Loop over each cutoff energy value
@@ -34,12 +37,16 @@ for val in values:
 
     os.chdir(path)    
     with open('Conquest_input','a') as f:
-        f.write('\n\ndiag.smearingtype 1')
-        f.write('\ndiag.mporder        3')
+        f.write('\n\ndiag.smearingtype 0')
         f.write('\ndiag.kt '+str(val))
          
     print('Conquest is running in', path,'...')
     subprocess.run(CQCMD+'> Conquest_out', shell=True)
     
     os.chdir('./../')
-    
+
+# End timer
+end = time.time()
+
+# Print elapsed time
+print('total of %.3f seconds elapsed'%(end -start)) 

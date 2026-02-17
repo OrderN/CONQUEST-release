@@ -10,6 +10,9 @@ echo "Conquest cmd: $CQCMD"
 # List of basis sets
 bases=("SZ" "SZP" "DZP" "TZTP")
 
+# Start timer
+start_time="$(date -u +%s.%N)"
+
 # Loop over each basis set
 for basis in "${bases[@]}"; do
     folder="bs_$basis"
@@ -33,3 +36,9 @@ for basis in "${bases[@]}"; do
     cd ..
 done
 
+# End timer
+end_time="$(date -u +%s.%N)"
+
+# Print elapsed time
+elapsed="$(bc <<<"$end_time-$start_time")"
+printf "total of %.3f seconds elapsed\n" "$elapsed"

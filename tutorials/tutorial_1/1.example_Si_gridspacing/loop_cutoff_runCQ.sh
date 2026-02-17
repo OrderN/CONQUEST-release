@@ -10,6 +10,9 @@ echo "Conquest cmd: $CQCMD"
 # List of cutoff energy values in Ha
 values=(50 75 100 120 150)
 
+# Start timer
+start_time="$(date -u +%s.%N)"
+
 # Loop over each cutoff energy value
 for val in "${values[@]}"; do
     folder=$(printf "gs_%03d" "$val")
@@ -29,3 +32,10 @@ for val in "${values[@]}"; do
     echo "done" 
     cd ..
 done
+
+# End timer
+end_time="$(date -u +%s.%N)"
+
+# Print elapsed time
+elapsed="$(bc <<<"$end_time-$start_time")"
+printf "total of %.3f seconds elapsed\n" "$elapsed"
