@@ -11,7 +11,6 @@ dm.solutionmethod                diagon
 general.functionaltype           101
 general.numberofspecies          1
 general.pseudopotentialtype      Hamann
-grid.gridcutoff                  110.00
 io.coordinates                   coords.dat 
 io.fractionalatomiccoords        True
 io.iprint                        2
