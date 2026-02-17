@@ -18,7 +18,7 @@ print('Conquest cmd:',CQCMD)
 base = 'a'
 
 # Reference lattice constant (in angstroms)
-a0_ang=5.4437
+a0_ang=3.5856
 ang_to_bohr=1.88973
 
 # Scaling factors: from -5% to +7% around a0
@@ -28,9 +28,9 @@ for s in scales:
     a_bohr = a0_ang*ang_to_bohr*s
     a_ang  = a0_ang*s
     cell = [
-    str(f"{a_bohr:8.6f}") +' '+str(0.0000000)        +' '+str(0.0000000)+'\n',
-    str(0.0000000)        +' '+str(f"{a_bohr:8.6f}") +' '+str(0.0000000)+'\n',
-    str(0.0000000)        +' '+str(0.0000000)        +' '+str(f"{a_bohr:8.6f}") +'\n',
+    str(f"{a_bohr:8.6f}") +' '+str(f"{0:8.6f}")      +' '+str(f"{0:8.6f}")+'\n',
+    str(f"{0:8.6f}")      +' '+str(f"{a_bohr:8.6f}") +' '+str(f"{0:8.6f}")+'\n',
+    str(f"{0:8.6f}")      +' '+str(f"{0:8.6f}")      +' '+str(f"{a_bohr:8.6f}") +'\n',
     ]
 
     dirname=str(f"{a_ang:4.3f}")
@@ -40,7 +40,7 @@ for s in scales:
                 
     shutil.copy2('./coords.dat',path)
     shutil.copy2('./Conquest_input',path)
-    shutil.copy2('./Si.ion',path)
+    shutil.copy2('./C.ion',path)
 
     os.chdir(path)    
     with open('coords.dat', 'r') as f:
