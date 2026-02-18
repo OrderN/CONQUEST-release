@@ -1,6 +1,6 @@
 general.maxtime                  3600
 
-atommove.typeofrun               cg 
+atommove.typeofrun               sqnm 
 atommove.maxforcetol             0.001
 atommove.optcell                 False
 atommove.writexsf                True
