@@ -26,3 +26,4 @@ ax2.tick_params(axis='y', labelcolor=color2)
 ax2.yaxis.set_major_formatter(FormatStrFormatter('%.4f'))
 
 fig.savefig('tmp.png', dpi=300,transparent=True)
+plt.show()

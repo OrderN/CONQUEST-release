@@ -14,7 +14,7 @@ $CQCMD
 ./optpos_extCQ.sh
 
 # Plot data using a python script
-./optpos_pltCQ.py
+python optpos_pltCQ.py
 
 # Clean around but keep Conquest_out and trajectory.xsf
 ./optpos_clnCQ.sh
