@@ -1,0 +1,42 @@
+# ===== User settings =====
+set cpk_scale 1.0            ;# overall CPK size
+set cpk_bond  0.3            ;# bond radius
+set cpk_sphere_res 12        ;# sphere resolution
+set cpk_cyl_res    12        ;# cylinder resolution
+
+# Unit cell drawing style
+set box_color "black"        ;# try: black, white, red, blue, etc.
+set box_width 2              ;# line width
+
+# ===== Load XSF movie =====
+
+# ===== Display tweaks (optional) =====
+display projection orthographic
+#axes location Off
+color Display Background black 
+
+# ===== Representation: CPK =====
+# Remove the default rep(s)
+set m [molinfo top]
+for {set r [expr {[molinfo $m get numreps]-1}]} {$r >= 0} {incr r -1} {
+    mol delrep $r $m
+}
+
+mol selection "all"
+mol representation "CPK $cpk_scale $cpk_bond $cpk_sphere_res $cpk_cyl_res"
+mol color Name
+mol material Opaque
+mol addrep $m
+
+# ===== Show unit cell =====
+# VMD usually reads the lattice vectors from XSF into the unit cell.
+# We'll draw a periodic box using pbctools.
+package require pbctools
+pbc get
+pbc box -color yellow -width 1
+
+# ===== Quality settings (optional) =====
+# smoother spheres/cylinders in display (not export renderers)
+display rendermode GLSL
+
+puts "Loaded $xsf_file with [molinfo $m get numframes] frame(s). CPK + unit cell box set."

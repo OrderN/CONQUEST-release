@@ -1,0 +1,40 @@
+general.maxtime                  3600
+
+atommove.typeofrun               cg 
+atommove.enthalpytolerance       1.00e-6
+atommove.stresstolerance         0.1
+atommove.maxforcetol             0.001
+
+atommove.optcell                 True 
+atommove.optcellmethod           2
+atommove.writexsf                True
+atommove.appendcoords            True
+atommove.reusedm                 True
+atommove.outputfreq              1
+atommove.numsteps                100
+
+basis.basisset                   PAOs
+dm.solutionmethod                diagon
+general.functionaltype           101
+general.numberofspecies          3
+general.pseudopotentialtype      Hamann
+io.coordinates                   coords.dat
+io.fractionalatomiccoords        True
+io.iprint                        2
+io.title                         SiC
+io.writeouttoasefile             True
+mine.sctolerance                 1.000e-07
+mine.selfconsistent              True
+sc.maxiters                      50
+grid.gridcutoff                  80
+
+diag.mpmesh                      True
+diag.mpmeshx                     2
+diag.mpmeshy                     2
+diag.mpmeshz                     1
+
+%block ChemicalSpeciesLabel
+ 1   10.810 B
+ 2   12.011 C
+ 3   14.007 N 
+%endblock ChemicalSpeciesLabel
