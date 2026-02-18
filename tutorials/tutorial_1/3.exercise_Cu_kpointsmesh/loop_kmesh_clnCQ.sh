@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # List of kpoints
-values=(1 2 4 6)
+values=(2 4 6 8)
 
 rm_files=("Conquest_out_ase" 
 "Conquest_warnings"
