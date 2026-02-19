@@ -38,6 +38,6 @@ grid.gridcutoff                  80
 diag.paddinghmatrix              True
 
 %block ChemicalSpeciesLabel
- 1    1.008 H
- 2   15.999 O       
+ 1    1.008 H_SZP
+ 2   15.999 O_SZP      
 %endblock ChemicalSpeciesLabel

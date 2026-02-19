@@ -1,0 +1,11 @@
+md_analysis.py needs:
+* md_frame.py
+* md_tools.py
+and
+* input.log
+* Conquest_input
+* coordinate file
+
+TODO:
+- NVT play with NHC vs SVR and other parameters
+- NPT
