@@ -1,0 +1,38 @@
+general.maxtime                  36000
+
+atommove.typeofrun               md 
+atommove.restartrun              True 
+atommove.fixcentreofmass         True 
+atommove.maxforcetol             0.0005
+
+md.ensemble                      nve
+
+atommove.timestep                1.00
+atommove.numsteps                200
+atommove.readvelocity            True 
+atommove.reusedm                 False
+
+atommove.writexsf                True
+atommove.appendcoords            True
+atommove.outputfreq              1
+
+basis.basisset                   PAOs
+dm.solutionmethod                diagon
+general.functionaltype           101
+general.numberofspecies          2
+general.pseudopotentialtype      Hamann
+io.coordinates                   H2O.in 
+io.fractionalatomiccoords        True
+io.iprint                        2
+io.title                         H2O molecule MD 
+io.writeouttoasefile             True
+mine.sctolerance                 1.000e-07
+mine.selfconsistent              True
+sc.maxiters                      50
+grid.gridcutoff                  80
+diag.paddinghmatrix              True
+
+%block ChemicalSpeciesLabel
+ 1    1.008 H_SZP
+ 2   15.999 O_SZP   
+%endblock ChemicalSpeciesLabel

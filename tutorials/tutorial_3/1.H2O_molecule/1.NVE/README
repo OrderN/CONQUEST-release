@@ -1,0 +1,10 @@
+For Conquest to restart MD we need from previous run:
+* InfoGlobal.i00
+* Kmatrix (if AtomMove.ReuseDM )
+* md.checkpoint (velocities and more for NVT/NPT)
+* md.position 
+
+or/and ?
+ 
+* coord_next.dat
+* velocity.dat
