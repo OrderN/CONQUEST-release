@@ -8,3 +8,6 @@ or/and ?
  
 * coord_next.dat
 * velocity.dat
+
+TODO
+* cure md_analysis.py for md.stats header
