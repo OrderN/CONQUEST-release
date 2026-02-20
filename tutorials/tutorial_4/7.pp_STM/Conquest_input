@@ -1,0 +1,35 @@
+IO.WriteOutToFile T
+Process.Job ter
+STM.BiasVoltage -2.0
+#Process.min_DOS_E -0.6
+#Process.max_DOS_E  0.2
+
+AtomMove.TypeOfRun static
+
+minE.SelfConsistent T
+IO.DumpChargeDensity T
+General.title TestMD
+
+IO.Iprint 1
+IO.Coordinates coords.dat
+IO.outputWF T
+IO.WFRangeRelative T
+IO.min_wf_E -0.15
+IO.max_wf_E  0.15
+Grid.GridCutoff 100
+
+DM.L_range 1.0
+Diag.MPMesh   T
+Diag.MPMeshX  2
+Diag.MPMeshY  2
+Diag.MPMeshZ  1
+
+minE.SCtolerance 1.0e-6
+
+General.NumberOfSpecies  2
+General.PseudopotentialType hamann
+
+%block ChemicalSpeciesLabel
+ 1 12.01 Si
+ 2 12.01 H
+%endblock
