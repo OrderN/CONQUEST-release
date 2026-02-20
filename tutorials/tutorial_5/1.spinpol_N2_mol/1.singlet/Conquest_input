@@ -1,0 +1,37 @@
+IO.Title   N2
+IO.Coordinates   coord_N2.in
+IO.FractionalAtomicCoords F
+IO.Iprint 2
+
+## General Parameters
+General.NumberOfSpecies 1
+
+## Moving Atoms
+AtomMove.TypeOfRun static
+
+## Spin
+#Spin.SpinPolarised F
+
+## Basis Sets
+Basis.BasisSet PAOs
+
+## Energy Minimisation
+minE.SelfConsistent T
+minE.SCTolerance 1.0e-6
+
+##Integration Grid
+Grid.GridCutoff 100
+
+## Finding Density Matrix
+DM.SolutionMethod diagon
+Diag.kT   0.002
+Diag.MPMesh T
+Diag.MPMeshX 1
+Diag.MPMeshY 1
+Diag.MPMeshZ 1
+
+## Atomic Information
+%block ChemicalSpeciesLabel
+1   14.01  N
+%endblock ChemicalSpeciesLabel
+
