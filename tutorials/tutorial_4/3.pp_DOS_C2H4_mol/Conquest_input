@@ -1,0 +1,40 @@
+IO.Title    C2H4
+IO.Coordinates    coords.dat
+IO.Iprint 1 
+IO.FractionalAtomicCoords F
+IO.WriteOutToFile T
+IO.DumpChargeDensity T
+IO.outputWF T
+IO.min_wf_E -0.7
+IO.max_wf_E -0.1
+
+Process.Job dos
+Process.min_DOS_E         -0.700000000
+Process.max_DOS_E         -0.100000000
+# Sigma can be set automatically based on energy range and n_DOS
+#Process.sigma_DOS          0.1000000
+#Process.n_DOS              10001
+
+
+## General Parameters
+General.NumberOfSpecies 2
+
+AtomMove.TypeOfRun static
+
+## Basis Sets
+Basis.BasisSet PAOs
+
+## Energy Minimisation
+minE.SelfConsistent T
+minE.SCTolerance 1.0e-6
+
+##Integration Grid
+Grid.GridCutoff 100
+
+## Finding Density Matrix 
+DM.SolutionMethod diagon 
+
+%block ChemicalSpeciesLabel
+1 12.0107 C
+2 1.00    H
+%endblock ChemicalSpeciesLabel
