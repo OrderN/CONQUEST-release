@@ -16,17 +16,17 @@ CQNUM='2'
 CQCMD=CQMPI+' '+CQNUM+' '+CQROOT+'/Conquest'
 # Ion files
 ions = ['Si.ion']
-# List of cutoff energy values in Ha
-values=[50, 75, 100, 120, 150]
+# List of MSSF range in Bohr 
+values=[1.0, 5.0, 8.0, 11.0, 14.0]
 # basename
-base = 'gs'
+base = 'msr'
 # Start timer
 start = time.time()
 
 print('Conquest cmd:',CQCMD)
 # Loop over each cutoff energy value
 for val in values:
-    dirname=str(val).rjust(3,'0')
+    dirname=str("{:0>4.1f}".format(val))
     path=base+'_'+dirname
     if not os.path.isdir(path):
         os.makedirs(path)
@@ -38,7 +38,11 @@ for val in values:
 
     os.chdir(path)    
     with open('Conquest_input','a') as f:
-        f.write('\n\ngrid.gridcutoff '+str(val))
+        f.write('\n\n%block Si') 
+        f.write('\nAtom.NumberOfSupports 4')
+        f.write('\nAtom.MultisiteRange '+str(val))
+        f.write('\nAtom.LFDRange '+str(val))
+        f.write('\n%endblock')
         
     print('Conquest is running in', path,'...')
     subprocess.run(CQCMD+'> Conquest_out', shell=True)
