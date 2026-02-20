@@ -1,0 +1,29 @@
+IO.WriteOutToFile T
+
+Process.Job coo
+Process.CoordFormat xsf
+
+AtomMove.TypeOfRun static
+
+minE.SelfConsistent T
+IO.Iprint 2
+General.title TestMD
+
+IO.Coordinates coords.dat
+Grid.GridCutoff 100
+
+DM.L_range 1.0
+DM.SolutionMethod diagon
+Diag.MPMesh   T
+Diag.MPMeshX  2 
+Diag.MPMeshY  2 
+Diag.MPMeshZ  2 
+
+minE.SCtolerance 1.0e-6
+
+General.NumberOfSpecies  1
+General.PseudopotentialType hamann
+
+%block ChemicalSpeciesLabel
+ 1 12.01 Si
+%endblock
