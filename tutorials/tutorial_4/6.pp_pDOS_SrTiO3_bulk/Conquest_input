@@ -1,0 +1,41 @@
+IO.WriteOutToFile T
+Process.Job pdos
+#Process.min_DOS_E         -0.700000000
+#Process.max_DOS_E         -0.100000000
+#Process.sigma_DOS          0.001000000
+#Process.n_DOS           10001
+Process.min_DOS_E -0.35
+Process.max_DOS_E  0.35
+Process.WFRangeRelative T
+#Process.n_DOS 10001
+Process.pDOS_l_resolved T
+#Process.pDOS_lm_resolved T
+
+AtomMove.TypeOfRun static
+
+minE.SelfConsistent T
+IO.Iprint 1
+IO.writeDOS T
+IO.write_proj_DOS T
+General.title TestMD
+
+IO.Coordinates coords.dat
+Grid.GridCutoff 100
+
+DM.L_range 1.0
+DM.SolutionMethod diagon
+Diag.MPMesh   T
+Diag.MPMeshX  5
+Diag.MPMeshY  5
+Diag.MPMeshZ  5
+
+minE.SCtolerance 1.0e-6
+
+General.NumberOfSpecies  3
+General.PseudopotentialType hamann
+
+%block ChemicalSpeciesLabel
+ 1 12.01 Sr
+ 2 12.01 Ti
+ 3 12.01 O
+%endblock
