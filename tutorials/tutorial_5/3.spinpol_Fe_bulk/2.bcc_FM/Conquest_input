@@ -1,0 +1,47 @@
+Process.Job dos
+Process.min_DOS_E         -0.8
+Process.max_DOS_E          0.2
+Process.n_DOS              4001
+Process.sigma_DOS          0.005
+
+IO.Title    Bulk Fe diagon SCF calculation
+IO.Coordinates    coord_Fe-bcc_exptl.in
+IO.FractionalAtomicCoords T
+IO.Iprint 2
+
+## General Parameters
+General.NumberOfSpecies 1
+
+## Moving Atoms
+AtomMove.TypeOfRun static
+
+## Spin
+Spin.SpinPolarised T
+Spin.FixSpin  F
+Spin.Magn   4.0
+
+## Basis Sets
+Basis.BasisSet PAOs
+
+## Energy Minimisation
+minE.SelfConsistent T
+minE.SCTolerance 1.0e-6
+SC.LinearMixingFactor 0.2
+SC.MaxIters  100
+
+##Integration Grid
+Grid.GridCutoff 200
+
+## Finding Density Matrix
+DM.SolutionMethod diagon
+Diag.kT   0.002
+Diag.MPMesh T
+Diag.MPMeshX 6
+Diag.MPMeshY 6
+Diag.MPMeshZ 6
+
+## Atomic Information
+%block ChemicalSpeciesLabel
+1       55.845          Fe
+%endblock ChemicalSpeciesLabel
+
