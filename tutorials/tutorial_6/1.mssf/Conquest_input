@@ -1,0 +1,38 @@
+###
+CONQUEST input file for MSSF
+###
+
+IO.Title    bulk Si
+IO.Coordinates    coords.dat
+IO.FractionalAtomicCoords T
+IO.Iprint 2
+
+## General Parameters
+General.NumberOfSpecies 1
+
+## Moving Atoms
+AtomMove.TypeOfRun static
+
+## Basis Sets
+Basis.BasisSet PAOs
+Basis.MultisiteSF T
+
+## Finding Density Matrix
+DM.SolutionMethod diagon
+Diag.kT   0.002
+Diag.MPMesh T
+Diag.MPMeshX 6
+Diag.MPMeshY 6
+Diag.MPMeshZ 6
+
+## Energy Minimisation
+minE.SelfConsistent T
+minE.LTolerance 1.0-5
+
+##Integration Grid
+Grid.GridCutoff 100
+
+%block ChemicalSpeciesLabel
+ 1  28.09  Si
+%endblock
+
