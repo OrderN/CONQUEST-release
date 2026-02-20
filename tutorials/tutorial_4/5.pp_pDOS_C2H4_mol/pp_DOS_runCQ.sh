@@ -15,7 +15,7 @@ echo "PostProcessing cmd: $CQPPCMD"
 $CQCMD
 
 # Just run PostProcessing 
-$CQPPCMD > pp_output
+$CQPPCMD > Conquest_pp_out 
 
 # Launch xmgrace
 #xmgrace -nxy DOS.dat
