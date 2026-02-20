@@ -1,0 +1,511 @@
+    ________________________________________________________________________
+                                                                            
+                                    CONQUEST                                
+                                                                            
+                Concurrent Order N QUantum Electronic STructure             
+    ________________________________________________________________________
+                                                                            
+     Conquest lead developers:                                              
+      D.R.Bowler (UCL, NIMS), T.Miyazaki (NIMS), A.Nakata (NIMS),           
+      L. Truflandier (U. Bordeaux)                                          
+                                                                            
+     Developers:                                                            
+      M.Arita (NIMS), J.S.Baker (UCL), V.Brazdova (UCL), R.Choudhury (UCL), 
+      S.Y.Mujahed (UCL), J.T.Poulton (UCL), Z.Raza (NIMS), A.Sena (UCL),    
+      U.Terranova (UCL), L.Tong (UCL), A.Torralba (NIMS)                    
+                                                                            
+     Early development:                                                     
+      I.J.Bush (STFC), C.M.Goringe (Keele), E.H.Hernandez (Keele)           
+                                                                            
+     Original inspiration and project oversight:                            
+      M.J.Gillan (Keele, UCL)                                               
+    ________________________________________________________________________
+
+          Reading ion files
+
+          symbol = Si
+          label = Si                  
+          z =     14.00000
+          zval_int, zval =      4.00000
+          mass =      28.0900000000000    
+          self_energy =      0.00000000000000    
+          lmax_basis, n_orbnl =    2   5
+          lmax_projs, n_pjnl =    2   6
+          XC functional code =      101
+          PSEUDO_TM: i, l,n, ekb =   0  1    5.1689652486000002
+          PSEUDO_TM: i, l,n, ekb =   0  2    0.8298826886000000
+          PSEUDO_TM: i, l,n, ekb =   1  1    2.5712822869999998
+          PSEUDO_TM: i, l,n, ekb =   1  2    0.5783069879000000
+          PSEUDO_TM: i, l,n, ekb =   2  1   -2.4273105545000000
+          PSEUDO_TM: i, l,n, ekb =   2  2   -0.4880968052000000
+          symbol = C 
+          label = C                   
+          z =      6.00000
+          zval_int, zval =      4.00000
+          mass =      12.0100000000000    
+          self_energy =      0.00000000000000    
+          lmax_basis, n_orbnl =    2   5
+          lmax_projs, n_pjnl =    1   4
+          XC functional code =      101
+          PSEUDO_TM: i, l,n, ekb =   0  1    6.4815481566999997
+          PSEUDO_TM: i, l,n, ekb =   0  2    0.3855036449000000
+          PSEUDO_TM: i, l,n, ekb =   1  1   -4.1999614092000002
+          PSEUDO_TM: i, l,n, ekb =   1  2   -0.8775166599000001
+
+    Simulation cell dimensions:     8.2000 a0 x     8.2000 a0 x     8.2000 a0
+
+    Simulation cell volume:       551.3680 a0**3
+
+      Atomic coordinates (a0)
+         Atom         X         Y         Z  Species
+            1    6.1500    6.1500    2.0500        1
+            2    0.0000    4.1000    4.1000        2
+            3    6.1500    2.0500    6.1500        1
+            4    0.0000    0.0000    0.0000        2
+            5    2.0500    6.1500    6.1500        1
+            6    4.1000    4.1000    0.0000        2
+            7    2.0500    2.0500    2.0500        1
+            8    4.1000    0.0000    4.1000        2
+        Number of processor groups for k-point parallelisation:     1
+        Block size (row, col):    32   32
+        Proc grid (row, col):     1    2
+
+        Using Monkhorst-Pack Kpoint mesh
+
+
+
+         Monkhorst-Pack mesh:   2 x   2 x   2
+         Number of k-points:    8
+         Monkhorst-Pack mesh shift:     0.000000   0.000000   0.000000
+         All    8 Kpoints in fractional coordinates: 
+            1      -0.250000      -0.250000      -0.250000       1.000
+            2      -0.250000      -0.250000       0.250000       1.000
+            3      -0.250000       0.250000      -0.250000       1.000
+            4      -0.250000       0.250000       0.250000       1.000
+            5       0.250000      -0.250000      -0.250000       1.000
+            6       0.250000      -0.250000       0.250000       1.000
+            7       0.250000       0.250000      -0.250000       1.000
+            8       0.250000       0.250000       0.250000       1.000
+
+           4 symmetry inequivalent Kpoints in fractional coordinates: 
+            1       0.250000      -0.250000      -0.250000       0.250
+            2       0.250000      -0.250000       0.250000       0.250
+            3       0.250000       0.250000      -0.250000       0.250
+            4       0.250000       0.250000       0.250000       0.250
+          Value of kT used for smearing:   0.001000Ha
+          Partitioning method:  1
+          Partitioning using Hilbert curves
+          ---------------------------------
+
+          checking if total number of partitions >= number of procs...           PASS
+          checking if number of occupied partitions >= number of procs...           PASS
+          checking if total N atoms in partitions == N atoms in cell...           PASS
+          checking if total N support fns in partitions == N sf in cell...           PASS
+          checking if atoms are correctly assigned to partitions...           PASS
+
+          Detected system type: bulk
+
+
+    This calculation includes non-local pseudopotentials,
+    with a maximum core radius of      7.12043063
+        Matrix S   has range     15.03333333
+        Matrix L   has range      1.00000000
+        Matrix H   has range     15.03333333
+        Matrix AP  has range     14.63709730
+        Matrix LS  has range     16.03333333
+        Matrix LH  has range     16.03333333
+        Matrix LSL has range     17.03333333
+        Matrix SLS has range     31.06666667
+        Matrix T   has range     14.24086127
+        Matrix TS  has range     29.27419460
+        Matrix TH  has range     29.27419460
+        Matrix TL  has range     15.24086127
+        Matrix PA  has range     14.63709730
+        Matrix LT  has range      1.00000000
+        Matrix SL  has range     16.03333333
+        Matrix TT  has range     14.24086127
+        Matrix HL  has range     16.03333333
+        Matrix X   has range      2.00000000
+        Matrix SX  has range      2.00000000
+
+    This job was run on  2026/02/18 at 16:52 +0100
+    Code was compiled on 2026/02/13 at 03:49 -0800
+    Version comment: Git Branch: tutorials; tag, hash: v1.4-56-g807f81e9
+
+    Job title: SiC                                                                             
+    Job to be run: CG cell relaxation
+
+    Ground state search:
+      Support functions represented with PAO basis
+      1:1 PAO to SF mapping
+      Non-spin-polarised electrons
+      Solving for the K matrix using diagonalisation 
+      Using Fermi-Dirac smearing
+
+    Integration grid size:     36 x   36 x   36
+    Integration grid blocks:    4 x    4 x    4
+
+    Integration grid spacing:  0.228 a0 x 0.228 a0 x 0.228 a0
+
+    Number of species:  2
+    --------------------------------------------------------
+    |   #  mass (au)  Charge (e)  SF Rad (a0)  NSF  Label  |
+    --------------------------------------------------------
+    |   1     28.085       4.000        7.517   13  Si     |
+    |   2     12.011       4.000        6.606   13  C      |
+    --------------------------------------------------------
+          SCF tolerance:                 0.00000010
+          SCF iterations:                50
+    Hamann (ONCVPSP) pseudopotential will be used. 
+
+    The calculation will be performed on     2 processes
+
+    The calculation will be performed on     1 thread
+
+    Using the default matrix multiplication kernel
+
+    The functional used will be GGA PBE96      
+
+
+           radial cut-off to be used is taken to be max PAO cut-off radius for this species:    7.120431
+
+           greatest ang. mom. for making density from PAOs:  2
+
+           radial cut-off to be used is taken to be max PAO cut-off radius for this species:    6.247137
+
+           greatest ang. mom. for making density from PAOs:  2
+    Minimum blocs/proc is      324. Maximum blocs/proc is      405
+    set_atom_dens: In set_atomic_density, electrons :      32.000000000000
+ matrix_size & matrix_size_padH =          104         128
+
+    Screened ion int: energy:     -25.270597672027 Ha
+
+
+    cell_cg_run: starting relaxation with safemin line minimisation
+    cell_cg_run: tolerance:   0.0500 GPa Maximum steps:  100
+      PulayMixSC: Starting Pulay mixing, A_up =  0.500 A_dn =  0.500
+      PulayMixSC: Spin non-polarised calculation.
+          Harris-Foulkes Energy            :       -41.266931646491997 Ha
+      PulayMixSC: Pulay iteration     1 residual:              0.11433E-01
+          Harris-Foulkes Energy            :       -41.014553053661679 Ha
+      PulayMixSC: Pulay iteration     2 residual:              0.34073E-02
+          Harris-Foulkes Energy            :       -41.006527160822628 Ha
+      PulayMixSC: Pulay iteration     3 residual:              0.13609E-02
+          Harris-Foulkes Energy            :       -41.006329387594782 Ha
+      PulayMixSC: Pulay iteration     4 residual:              0.57334E-04
+          Harris-Foulkes Energy            :       -41.006323733951966 Ha
+      PulayMixSC: Pulay iteration     5 residual:              0.22830E-04
+          Harris-Foulkes Energy            :       -41.006323314863586 Ha
+      PulayMixSC: Pulay iteration     6 residual:              0.15494E-05
+          Harris-Foulkes Energy            :       -41.006323311791320 Ha
+      PulayMixSC: Pulay iteration     7 residual:              0.35487E-06
+          Harris-Foulkes Energy            :       -41.006323311724771 Ha
+      PulayMixSC: Pulay iteration     8 residual:              0.74046E-08
+      PulayMixSC: Reached SCF tolerance of  0.74046E-08 after      8 iterations
+      | Number of electrons      =        32.000065
+      |* Harris-Foulkes energy   =       -41.006323311724771 Ha
+      |* DFT total energy        =       -41.006323311724110 Ha
+
+      force: Forces on atoms (Ha/a0)
+      force:  Atom   X              Y              Z
+      force:     1   0.0000000000   0.0000000000   0.0000000000
+      force:     2   0.0000000000  -0.0000000000  -0.0000000000
+      force:     3  -0.0000000000  -0.0000000000   0.0000000000
+      force:     4  -0.0000000000   0.0000000000   0.0000000000
+      force:     5  -0.0000000000   0.0000000000  -0.0000000000
+      force:     6  -0.0000000000   0.0000000000   0.0000000000
+      force:     7   0.0000000000   0.0000000000   0.0000000000
+      force:     8  -0.0000000000  -0.0000000000   0.0000000000
+
+      force: Maximum force :        0.00000000(Ha/a0) on atom         6 in z direction
+      force: Force Residual:        0.00000000 Ha/a0
+      force: Total stress:         -9.41480737    -9.41480737    -9.41480737 GPa
+      force: Average pressure:      9.41480737 GPa
+
+      get_E_and_F: Change in energy during last step of electronic optimisation:  0.66549E-10
+
+    GeomOpt - Iter:    0 MaxStr:   9.41480737 GPa H:     -41.00632331 Ha dH:   0.00000000Ha
+
+
+      safemin_cell: seeking bracketing triplet of points
+
+      PulayMixSC: Starting Pulay mixing, A_up =  0.500 A_dn =  0.500
+      PulayMixSC: Spin non-polarised calculation.
+          Harris-Foulkes Energy            :       -41.009957064385830 Ha
+      PulayMixSC: Pulay iteration     1 residual:              0.32886E-03
+          Harris-Foulkes Energy            :       -41.009751340299644 Ha
+      PulayMixSC: Pulay iteration     2 residual:              0.73669E-04
+          Harris-Foulkes Energy            :       -41.009744955975044 Ha
+      PulayMixSC: Pulay iteration     3 residual:              0.18958E-04
+          Harris-Foulkes Energy            :       -41.009745168731818 Ha
+      PulayMixSC: Pulay iteration     4 residual:              0.19409E-06
+          Harris-Foulkes Energy            :       -41.009745168849840 Ha
+      PulayMixSC: Pulay iteration     5 residual:              0.42102E-07
+      PulayMixSC: Reached SCF tolerance of  0.42102E-07 after      5 iterations
+      | Number of electrons      =        32.000018
+      |* Harris-Foulkes energy   =       -41.009745168849840 Ha
+      |* DFT total energy        =       -41.009745168849754 Ha
+      get_E_and_F: Change in energy during last step of electronic optimisation: -0.11802E-09
+      PulayMixSC: Starting Pulay mixing, A_up =  0.500 A_dn =  0.500
+      PulayMixSC: Spin non-polarised calculation.
+          Harris-Foulkes Energy            :       -41.008612540061208 Ha
+      PulayMixSC: Pulay iteration     1 residual:              0.18841E-03
+          Harris-Foulkes Energy            :       -41.008544930425344 Ha
+      PulayMixSC: Pulay iteration     2 residual:              0.43905E-04
+          Harris-Foulkes Energy            :       -41.008542416738763 Ha
+      PulayMixSC: Pulay iteration     3 residual:              0.99535E-05
+          Harris-Foulkes Energy            :       -41.008542470123786 Ha
+      PulayMixSC: Pulay iteration     4 residual:              0.12655E-06
+          Harris-Foulkes Energy            :       -41.008542470188488 Ha
+      PulayMixSC: Pulay iteration     5 residual:              0.20550E-07
+      PulayMixSC: Reached SCF tolerance of  0.20550E-07 after      5 iterations
+      | Number of electrons      =        31.999988
+      |* Harris-Foulkes energy   =       -41.008542470188488 Ha
+      |* DFT total energy        =       -41.008542470189305 Ha
+      get_E_and_F: Change in energy during last step of electronic optimisation: -0.64702E-10
+
+      safemin_cell: Interpolating minimum
+
+      PulayMixSC: Starting Pulay mixing, A_up =  0.500 A_dn =  0.500
+      PulayMixSC: Spin non-polarised calculation.
+          Harris-Foulkes Energy            :       -41.009877939646202 Ha
+      PulayMixSC: Pulay iteration     1 residual:              0.22044E-03
+          Harris-Foulkes Energy            :       -41.009784850766358 Ha
+      PulayMixSC: Pulay iteration     2 residual:              0.48399E-04
+          Harris-Foulkes Energy            :       -41.009781948834501 Ha
+      PulayMixSC: Pulay iteration     3 residual:              0.11658E-04
+          Harris-Foulkes Energy            :       -41.009782010790651 Ha
+      PulayMixSC: Pulay iteration     4 residual:              0.17559E-06
+          Harris-Foulkes Energy            :       -41.009782010632115 Ha
+      PulayMixSC: Pulay iteration     5 residual:              0.23014E-07
+      PulayMixSC: Reached SCF tolerance of  0.23014E-07 after      5 iterations
+      | Number of electrons      =        32.000022
+      |* Harris-Foulkes energy   =       -41.009782010632115 Ha
+      |* DFT total energy        =       -41.009782010641288 Ha
+
+      force: Forces on atoms (Ha/a0)
+      force:  Atom   X              Y              Z
+      force:     1   0.0000000000  -0.0000000000   0.0000000000
+      force:     2  -0.0000000000   0.0000000000   0.0000000000
+      force:     3  -0.0000000000   0.0000000000  -0.0000000000
+      force:     4  -0.0000000000  -0.0000000000   0.0000000000
+      force:     5   0.0000000000  -0.0000000000  -0.0000000000
+      force:     6   0.0000000000  -0.0000000000  -0.0000000000
+      force:     7   0.0000000000   0.0000000000   0.0000000000
+      force:     8   0.0000000000   0.0000000000  -0.0000000000
+
+      force: Maximum force :        0.00000000(Ha/a0) on atom         6 in z direction
+      force: Force Residual:        0.00000000 Ha/a0
+      force: Total stress:          0.46882501     0.46882501     0.46882501 GPa
+      force: Average pressure:     -0.46882501 GPa
+
+      get_E_and_F: Change in energy during last step of electronic optimisation:  0.15854E-09
+      safemin_cell: exit after    3 iterations with enthalpy      -41.0097820106 Ha
+
+    cell_cg_run: simulation cell dimensions: 
+           8.31615 a0 x      8.31615 a0 x      8.31615 a0
+
+    GeomOpt - Iter:    1 MaxStr:   0.46882501 GPa H:     -41.00978201 Ha dH:  -0.00345870Ha
+
+    Maximum stress:                0.46882501 GPa
+    Stress tolerance:              0.05000000 GPa
+    Change in stress:              8.55698889 GPa
+    Enthalpy change:              -0.00345870 Ha
+    Enthalpy tolerance:            0.00000100 Ha
+
+      safemin_cell: seeking bracketing triplet of points
+
+      PulayMixSC: Starting Pulay mixing, A_up =  0.500 A_dn =  0.500
+      PulayMixSC: Spin non-polarised calculation.
+          Harris-Foulkes Energy            :       -41.009792940598729 Ha
+      PulayMixSC: Pulay iteration     1 residual:              0.13666E-04
+          Harris-Foulkes Energy            :       -41.009792580761207 Ha
+      PulayMixSC: Pulay iteration     2 residual:              0.29962E-05
+          Harris-Foulkes Energy            :       -41.009792570011626 Ha
+      PulayMixSC: Pulay iteration     3 residual:              0.73773E-06
+          Harris-Foulkes Energy            :       -41.009792570131289 Ha
+      PulayMixSC: Pulay iteration     4 residual:              0.12371E-07
+      PulayMixSC: Reached SCF tolerance of  0.12371E-07 after      4 iterations
+      | Number of electrons      =        32.000024
+      |* Harris-Foulkes energy   =       -41.009792570131289 Ha
+      |* DFT total energy        =       -41.009792570121178 Ha
+      get_E_and_F: Change in energy during last step of electronic optimisation: -0.11966E-09
+      PulayMixSC: Starting Pulay mixing, A_up =  0.500 A_dn =  0.500
+      PulayMixSC: Spin non-polarised calculation.
+          Harris-Foulkes Energy            :       -41.009794582474314 Ha
+      PulayMixSC: Pulay iteration     1 residual:              0.68268E-05
+          Harris-Foulkes Energy            :       -41.009794492078399 Ha
+      PulayMixSC: Pulay iteration     2 residual:              0.14936E-05
+          Harris-Foulkes Energy            :       -41.009794489467431 Ha
+      PulayMixSC: Pulay iteration     3 residual:              0.36804E-06
+          Harris-Foulkes Energy            :       -41.009794489465236 Ha
+      PulayMixSC: Pulay iteration     4 residual:              0.57030E-08
+      PulayMixSC: Reached SCF tolerance of  0.57030E-08 after      4 iterations
+      | Number of electrons      =        32.000027
+      |* Harris-Foulkes energy   =       -41.009794489465236 Ha
+      |* DFT total energy        =       -41.009794489461086 Ha
+      get_E_and_F: Change in energy during last step of electronic optimisation:  0.21956E-11
+      PulayMixSC: Starting Pulay mixing, A_up =  0.500 A_dn =  0.500
+      PulayMixSC: Spin non-polarised calculation.
+          Harris-Foulkes Energy            :       -41.009793087514304 Ha
+      PulayMixSC: Pulay iteration     1 residual:              0.10204E-04
+          Harris-Foulkes Energy            :       -41.009792886493422 Ha
+      PulayMixSC: Pulay iteration     2 residual:              0.22256E-05
+          Harris-Foulkes Energy            :       -41.009792880648213 Ha
+      PulayMixSC: Pulay iteration     3 residual:              0.55150E-06
+          Harris-Foulkes Energy            :       -41.009792880696352 Ha
+      PulayMixSC: Pulay iteration     4 residual:              0.85218E-08
+      PulayMixSC: Reached SCF tolerance of  0.85218E-08 after      4 iterations
+      | Number of electrons      =        32.000033
+      |* Harris-Foulkes energy   =       -41.009792880696352 Ha
+      |* DFT total energy        =       -41.009792880689993 Ha
+      get_E_and_F: Change in energy during last step of electronic optimisation: -0.48139E-10
+
+      safemin_cell: Interpolating minimum
+
+      PulayMixSC: Starting Pulay mixing, A_up =  0.500 A_dn =  0.500
+      PulayMixSC: Spin non-polarised calculation.
+          Harris-Foulkes Energy            :       -41.009794747691970 Ha
+      PulayMixSC: Pulay iteration     1 residual:              0.80218E-05
+          Harris-Foulkes Energy            :       -41.009794626287579 Ha
+      PulayMixSC: Pulay iteration     2 residual:              0.17508E-05
+          Harris-Foulkes Energy            :       -41.009794622470480 Ha
+      PulayMixSC: Pulay iteration     3 residual:              0.43582E-06
+          Harris-Foulkes Energy            :       -41.009794622677305 Ha
+      PulayMixSC: Pulay iteration     4 residual:              0.82196E-08
+      PulayMixSC: Reached SCF tolerance of  0.82196E-08 after      4 iterations
+      | Number of electrons      =        32.000028
+      |* Harris-Foulkes energy   =       -41.009794622677305 Ha
+      |* DFT total energy        =       -41.009794622683543 Ha
+
+      force: Forces on atoms (Ha/a0)
+      force:  Atom   X              Y              Z
+      force:     1  -0.0000000000  -0.0000000000   0.0000000000
+      force:     2   0.0000000000   0.0000000000   0.0000000000
+      force:     3  -0.0000000000   0.0000000000  -0.0000000000
+      force:     4   0.0000000000   0.0000000000  -0.0000000000
+      force:     5   0.0000000000  -0.0000000000  -0.0000000000
+      force:     6  -0.0000000000  -0.0000000000  -0.0000000000
+      force:     7  -0.0000000000   0.0000000000  -0.0000000000
+      force:     8   0.0000000000  -0.0000000000   0.0000000000
+
+      force: Maximum force :        0.00000000(Ha/a0) on atom         4 in z direction
+      force: Force Residual:        0.00000000 Ha/a0
+      force: Total stress:          0.00548339     0.00548339     0.00548339 GPa
+      force: Average pressure:     -0.00548339 GPa
+
+      get_E_and_F: Change in energy during last step of electronic optimisation: -0.20682E-09
+      safemin_cell: exit after    4 iterations with enthalpy      -41.0097946227 Ha
+
+    cell_cg_run: simulation cell dimensions: 
+           8.30868 a0 x      8.30868 a0 x      8.30868 a0
+
+    GeomOpt - Iter:    2 MaxStr:   0.00548339 GPa H:     -41.00979462 Ha dH:  -0.00001261Ha
+
+    Maximum stress:                0.00548339 GPa
+    Stress tolerance:              0.05000000 GPa
+    Change in stress:              0.46460730 GPa
+    Enthalpy change:              -0.00001261 Ha
+    Enthalpy tolerance:            0.00000100 Ha
+
+      safemin_cell: seeking bracketing triplet of points
+
+      PulayMixSC: Starting Pulay mixing, A_up =  0.500 A_dn =  0.500
+      PulayMixSC: Spin non-polarised calculation.
+          Harris-Foulkes Energy            :       -41.009794624689398 Ha
+      PulayMixSC: Pulay iteration     1 residual:              0.25263E-06
+          Harris-Foulkes Energy            :       -41.009794624529718 Ha
+      PulayMixSC: Pulay iteration     2 residual:              0.58346E-07
+      PulayMixSC: Reached SCF tolerance of  0.58346E-07 after      2 iterations
+      | Number of electrons      =        32.000014
+      |* Harris-Foulkes energy   =       -41.009794624529718 Ha
+      |* DFT total energy        =       -41.009794624540746 Ha
+      get_E_and_F: Change in energy during last step of electronic optimisation:  0.15968E-09
+      PulayMixSC: Starting Pulay mixing, A_up =  0.500 A_dn =  0.500
+      PulayMixSC: Spin non-polarised calculation.
+          Harris-Foulkes Energy            :       -41.009794624857989 Ha
+      PulayMixSC: Pulay iteration     1 residual:              0.21634E-06
+          Harris-Foulkes Energy            :       -41.009794624741389 Ha
+      PulayMixSC: Pulay iteration     2 residual:              0.47637E-07
+      PulayMixSC: Reached SCF tolerance of  0.47637E-07 after      2 iterations
+      | Number of electrons      =        32.000014
+      |* Harris-Foulkes energy   =       -41.009794624741389 Ha
+      |* DFT total energy        =       -41.009794624755855 Ha
+      get_E_and_F: Change in energy during last step of electronic optimisation:  0.11660E-09
+      PulayMixSC: Starting Pulay mixing, A_up =  0.500 A_dn =  0.500
+      PulayMixSC: Spin non-polarised calculation.
+          Harris-Foulkes Energy            :       -41.009794624331562 Ha
+      PulayMixSC: Pulay iteration     1 residual:              0.25587E-06
+          Harris-Foulkes Energy            :       -41.009794624171271 Ha
+      PulayMixSC: Pulay iteration     2 residual:              0.56341E-07
+      PulayMixSC: Reached SCF tolerance of  0.56341E-07 after      2 iterations
+      | Number of electrons      =        32.000014
+      |* Harris-Foulkes energy   =       -41.009794624171271 Ha
+      |* DFT total energy        =       -41.009794624184494 Ha
+      get_E_and_F: Change in energy during last step of electronic optimisation:  0.16029E-09
+
+      safemin_cell: Interpolating minimum
+
+      safemin_cell: Interpolation failed:   0.6113    -41.0097946245  0.9170    -41.0097946247  1.3755    -41.0097946242
+      PulayMixSC: Starting Pulay mixing, A_up =  0.500 A_dn =  0.500
+      PulayMixSC: Spin non-polarised calculation.
+          Harris-Foulkes Energy            :       -41.009794624723241 Ha
+      PulayMixSC: Pulay iteration     1 residual:              0.44817E-07
+      PulayMixSC: reached SCF residual of  0.44817E-07 after      1 iterations
+      | Number of electrons      =        32.000000
+      |* Harris-Foulkes energy   =       -41.009794624723241 Ha
+      |* DFT total energy        =       -41.009794624752715 Ha
+
+      force: Forces on atoms (Ha/a0)
+      force:  Atom   X              Y              Z
+      force:     1   0.0000000000   0.0000000000   0.0000000000
+      force:     2   0.0000000000   0.0000000000  -0.0000000000
+      force:     3   0.0000000000  -0.0000000000  -0.0000000000
+      force:     4   0.0000000000   0.0000000000  -0.0000000000
+      force:     5  -0.0000000000   0.0000000000   0.0000000000
+      force:     6   0.0000000000  -0.0000000000  -0.0000000000
+      force:     7  -0.0000000000  -0.0000000000  -0.0000000000
+      force:     8  -0.0000000000  -0.0000000000  -0.0000000000
+
+      force: Maximum force :        0.00000000(Ha/a0) on atom         6 in x direction
+      force: Force Residual:        0.00000000 Ha/a0
+      force: Total stress:         -0.00171260    -0.00171260    -0.00171260 GPa
+      force: Average pressure:      0.00171260 GPa
+
+      get_E_and_F: Change in energy during last step of electronic optimisation: -0.41010E+02
+
+WARNING: Electronic structure dE is similar to atom movement dE; increase tolerance    -41.009794624723     -0.000000002046
+
+      safemin_cell: exit after    4 iterations with enthalpy      -41.0097946247 Ha
+
+    cell_cg_run: simulation cell dimensions: 
+           8.30858 a0 x      8.30858 a0 x      8.30858 a0
+
+    GeomOpt - Iter:    3 MaxStr:   0.00171260 GPa H:     -41.00979462 Ha dH:  -0.00000000Ha
+
+    Maximum stress:                0.00171260 GPa
+    Stress tolerance:              0.05000000 GPa
+    Change in stress:              0.00377098 GPa
+    Enthalpy change:              -0.00000000 Ha
+    Enthalpy tolerance:            0.00000100 Ha
+
+    GeomOpt converged in    3 iterations
+    cell_cg_run:Enthalpy change below threshold:         -0.00000000 Ha
+    cell_cg_run:Maximum stress below threshold:           0.00171260 GPa
+
+    cell_cg_run: final simulation box dimensions are: 
+             8.30858 a0 x      8.30858 a0 x      8.30858 a0
+
+    BIBLIOGRAPHY: Please consider citing the following references in the conquest.bib file
+
+    CONQUEST:         Bowler2002pt, Miyazaki2004, Nakata2020
+    Basis:            Bowler2019
+    DM:               Bowler:2006xr
+    Pseudopotentials: Hamann2013, Bowler2019
+    XC functional:    Perdew1996
+
+    Warnings written to file Conquest_warnings; please check
+
+    Max total mem use is            271.509 MB
+
+    Total run time was:              37.051 seconds

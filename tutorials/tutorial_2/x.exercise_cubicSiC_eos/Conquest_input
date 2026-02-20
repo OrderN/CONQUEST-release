@@ -1,0 +1,26 @@
+general.maxtime                  3600
+
+basis.basisset                   PAOs
+dm.solutionmethod                diagon
+general.functionaltype           101
+general.numberofspecies          2
+general.pseudopotentialtype      Hamann
+io.coordinates                   coords.dat
+io.fractionalatomiccoords        True
+io.iprint                        2
+io.title                         SiC
+io.writeouttoasefile             True
+mine.sctolerance                 1.000e-07
+mine.selfconsistent              True
+sc.maxiters                      50
+grid.gridcutoff                  80
+
+diag.mpmesh                      True
+diag.mpmeshx                     2
+diag.mpmeshy                     2
+diag.mpmeshz                     2
+
+%block ChemicalSpeciesLabel
+ 1   28.085 Si
+ 2   12.011 C
+%endblock ChemicalSpeciesLabel
