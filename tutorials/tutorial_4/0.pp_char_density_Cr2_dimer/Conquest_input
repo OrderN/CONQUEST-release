@@ -1,0 +1,35 @@
+Process.Job chg
+
+minE.SCTolerance 1e-6
+AtomMove.TypeOfRun static
+minE.SelfConsistent T
+IO.AtomChargeOutput T
+IO.Coordinates coords.dat
+IO.Iprint 2
+IO.DumpChargeDensity T
+Grid.GridCutoff 100
+Diag.MPMesh   T
+Diag.MPMeshX  1
+Diag.MPMeshY  1
+Diag.MPMeshZ  1
+
+SC.KerkerPreCondition F
+SC.LinearMixingFactor 0.3
+SC.MaxIters 300
+Spin.SpinPolarised T
+
+General.NumberOfSpecies  2
+%block ChemicalSpeciesLabel
+ 1 28.086 CrU
+ 2 28.086 CrD
+%endblock
+
+%block CrU
+Atom.SpinNeUp 8
+Atom.SpinNeDn 6
+%endblock
+
+%block CrD
+Atom.SpinNeUp 6
+Atom.SpinNeDn 8
+%endblock
