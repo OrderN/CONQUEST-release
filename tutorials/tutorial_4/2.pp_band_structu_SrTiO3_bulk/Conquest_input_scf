@@ -1,0 +1,49 @@
+IO.WriteOutToFile F
+IO.OutputFile Si_bulk_10.26_K222_60GP_TidyDiag.1
+Process.Job bst
+Process.min_DOS_E -7
+Process.max_DOS_E  10
+
+AtomMove.TypeOfRun static
+
+# First do SCF calculation with reasonable k-mesh
+minE.SelfConsistent T
+IO.DumpChargeDensity T
+Diag.MPMesh   T
+Diag.MPMeshX  5
+Diag.MPMeshY  5
+Diag.MPMeshZ  5
+# Then load charge and fix (non-SCF) to find bands
+#minE.SelfConsistent F
+#General.LoadRho T
+#Diag.KspaceLines T
+#Diag.NumKptLines 3
+#Diag.NumKpts 41
+#%block Diag.KpointLines
+#0.0 0.0 0.0
+#0.5 0.0 0.0
+#0.5 0.0 0.0
+#0.5 0.5 0.0
+#0.5 0.5 0.0
+#0.0 0.0 0.0
+#%endblock
+
+IO.Iprint 1
+General.title TestMD
+
+IO.Coordinates coords.dat
+Grid.GridCutoff 100
+
+DM.L_range 1.0
+DM.SolutionMethod diagon
+
+minE.SCtolerance 1.0e-6
+
+General.NumberOfSpecies  3
+General.PseudopotentialType hamann
+
+%block ChemicalSpeciesLabel
+ 1 12.01 Sr
+ 2 12.01 Ti
+ 3 12.01 O
+%endblock
