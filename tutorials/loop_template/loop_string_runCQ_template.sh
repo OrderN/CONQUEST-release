@@ -1,14 +1,14 @@
 #!/bin/bash
 
 # Set env variables
-source ../../environment_variables.sh
+source ../environment_variables.sh
 
 # Setup Conquest command
 CQCMD="$CQMPI $CQNUM $CQROOT/Conquest"
 echo "Conquest cmd: $CQCMD"
 
 # List of files to copy
-files=("Si.ion" "coords.dat" "Conquest_input")
+files=("Si.ion" "coords.dat" "Conquest_template")
 
 # List of cutoff energy values in Ha
 values=(50 75 100 120 150)
@@ -33,6 +33,7 @@ for val in "${values[@]}"; do
     cd $folder
 
     # Generate Conquest_input file with current cutoff value
+    cp Conquest_template Conquest_input
     echo $string $val >> Conquest_input 
 
     # Run Conquest in the folder

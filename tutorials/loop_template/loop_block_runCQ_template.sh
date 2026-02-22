@@ -8,7 +8,7 @@ CQCMD="$CQMPI $CQNUM $CQROOT/Conquest"
 echo "Conquest cmd: $CQCMD"
 
 # List of files to copy including the block
-files=("Si.ion" "coords.dat" "Conquest_input" "block.txt")
+files=("Si.ion" "coords.dat" "Conquest_template" "block.txt")
 
 # List of kpoints
 values=(1 2 4 6)
@@ -26,10 +26,11 @@ for val in "${values[@]}"; do
        mkdir -p $folder
     fi
     # Copy required input files into the folder
-    cp "${files[@]}" $folder
+cp "${files[@]}" $folder
     cd $folder
 
-    # Generate Conquest_input file with current block 
+    # Generate Conquest_input file with current block
+    cp Conquest_template Conquest_input 
     while IFS= read -r line; do
        eval "echo \"$line\"" >> Conquest_input
     done < block.txt
