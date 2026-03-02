@@ -464,6 +464,11 @@ contains
     real(double), dimension(:,:), allocatable :: occ
     real(double), dimension(:,:), allocatable :: total_electrons
     real(double), dimension(:,:,:), allocatable :: total_electrons_l
+    real(double) :: A1(3, 3), A2(5, 5), A1inv(3, 3), A2inv(5, 5)
+    real(double) :: C1(3, 3), C2(5, 5)
+    real(double) :: U1(3, 3), U2(5, 5), U1d(3, 3), U2d(5, 5), tempmat(5,5)
+    real(double) :: rod(3, 3)
+
     character(len=25) :: filename,fmt_dos
     complex(double_cplx),external :: zdotc
 
@@ -499,6 +504,20 @@ contains
     deallocate(evec_coeff)
     ! Read eigenvector coefficients
     call read_psi_coeffs("Process")
+    ! Call rotation subroutine if desired
+    call initialise_A_mat(A1, A2)
+    ! For testing purposes, fix rotation angle as z-axis
+    call construct_rodrigues((/real(double) :: 0.0, 0.0, 1.0/), twopi /4, rod)
+
+   ! Construct all C^l matrices from rodrigues
+   call construct_C1(rod, C1)
+   call construct_C2(rod, C2)
+   ! compute U^l
+   call construct_Ul(1, A1, C1, U1)
+   call construct_Ul(2, A2, C2, U2)
+   U1d = transpose(U1) ! UU^T = I
+   U2d = transpose(U2) ! UU^T = I
+    call rotate_coefficients(U2d)
     allocate(occ(n_bands_total,nkp))
     ! Set up storage based on pDOS per atom, or l/lm resolved per atom
     if(flag_lm_resolved) then
@@ -723,6 +742,215 @@ contains
     return
   end subroutine process_pdos
 
+  subroutine initialise_A_mat(A1, A2)
+   use datatypes
+      implicit none
+      real(double), intent(out) :: A1(3, 3), A2(5, 5)
+
+      A1 = 0.0
+      A2 = 0.0
+      !A3 = 0.0
+      ! A1, FOR p-orbitals, l = 1
+      A1(1, 3) = 1.0
+      A1(2, 1) = 1.0
+      A1(3, 2) = 1.0
+      ! d-orbitals, l = 2
+      A2(1, 2) = 1.0
+      A2(2, 4) = 1.0
+      A2(3, 1) = 1.0
+      A2(4, 5) = 2.0
+      A2(5, 3) = 2.0
+      ! f-orbitals, l = 3
+      ! A3(1, 5) = 1
+      ! A3(2, 3) = 1
+      ! A3(3, 4) = 0.5*sqrt(6.0)
+      ! A3(4, 2) = 0.05*sqrt(10.0)
+      ! A3(5, 1) = 0.2*sqrt(15.0)
+      ! A3(6, 7) = 0.2*sqrt(15.0)
+      ! A3(7, 6) = 0.05*sqrt(10.0)
+   end subroutine initialise_A_mat
+
+   subroutine calculate_axis_angle(pos1, pos2, target_axis, angle)
+      use datatypes
+      implicit none
+      ! We want the bond between 2 atoms to be the axis to align to
+      ! Tehcnically there are 2 choices of "z", so just assume the axis vector goes from pos1 to pos2
+      ! then compute cross_prod x z to get the axis to rotate about
+      real(double), intent(in) :: pos1(3), pos2(3)
+      real(double), intent(out) :: target_axis(3), angle
+      real(double) :: pos_diff(3), cross_prod(3), dot_prod
+      pos_diff = pos2 - pos1
+      ! Default to aligning z-axis
+      call cross_product(cross_prod, pos_diff, (/real(double) :: 0.0, 0.0, 1.0/))
+      dot_prod = dot_product(pos_diff, (/real(double) :: 0.0, 0.0, 1.0/))
+      target_axis = cross_prod/norm2(cross_prod)
+      angle = acos(dot_prod/norm2(pos_diff))
+   end subroutine calculate_axis_angle
+   subroutine cross_product(result, vec1, vec2)
+      use datatypes
+      implicit none
+      ! computes vec1 cross vec2
+      real(double), intent(out) :: result(3)
+      real(double), intent(in) :: vec1(3), vec2(3)
+      result(1) = vec1(2)*vec2(3) - vec1(3)*vec2(2)
+      result(2) = vec1(3)*vec2(1) - vec1(1)*vec2(3)
+      result(3) = vec1(1)*vec2(2) - vec1(2)*vec2(1)
+   end subroutine
+   subroutine construct_rodrigues(axis, angle, matrix)
+      use datatypes
+      implicit none
+! We will compute the rodrigues matrix, specifically R^T(axis, -angle)
+      real(double), intent(in) :: axis(3), angle
+      real(double), intent(out) :: matrix(1, 9)
+      real(double) :: K(3, 3), KT(3, 3), identity(3, 3), temp(3, 3)
+      identity = 0.0
+      identity(1, 1) = 1.0
+      identity(2, 2) = 1.0
+      identity(3, 3) = 1.0
+      ! Define K
+      K = 0.0
+      K(1, 2) = -axis(3)
+      K(1, 3) = axis(2)
+      K(2, 1) = axis(3)
+      K(2, 3) = -axis(1)
+      K(3, 1) = -axis(2)
+      K(3, 2) = axis(1)
+
+      KT = transpose(K)
+      ! Rodrigues rotation matrix but with -angle
+      temp = identity - (sin(angle)*KT) + (1 - cos(angle))*matmul(KT, KT)
+      matrix = reshape(temp, shape=shape(matrix), order=(/2, 1/)) !!!! is this right???
+   end subroutine construct_rodrigues
+
+   subroutine construct_C1(rod, C1)
+      use datatypes
+      implicit none
+      real(double), intent(in) :: rod(1, 9)
+      real(double), intent(out) :: C1(3, 3)
+      real(double) :: r(9)
+      integer :: i
+      do i = 1, size(r)
+         r(i) = rod(1, i)
+      end do
+      C1(1, 1) = r(1)
+      C1(1, 2) = r(2)
+      C1(1, 3) = r(3)
+      C1(2, 1) = r(4)
+      C1(2, 2) = r(5)
+      C1(2, 3) = r(6)
+      C1(3, 1) = r(7)
+      C1(3, 2) = r(8)
+      C1(3, 3) = r(9)
+   end subroutine construct_C1
+   subroutine construct_C2(rod, C2)
+      use datatypes
+      implicit none
+      real(double), intent(in) :: rod(1, 9)
+      real(double), intent(out) :: C2(5, 5)
+      real(double) :: r(9)
+      integer :: i
+      do i = 1, size(r)
+         r(i) = rod(1, i)
+      end do
+      C2(1, 1) = r(6)*r(8) + r(5)*r(9)
+      C2(1, 2) = r(6)*r(7) + r(4)*r(9)
+      C2(1, 3) = r(5)*r(7) + r(4)*r(8)
+      C2(1, 4) = r(6)*r(9)*0.5
+      C2(1, 5) = r(4)*r(7) + r(6)*r(9)*0.5
+! Row 2
+      C2(2, 1) = r(3)*r(8) + r(2)*r(9)
+      C2(2, 2) = r(3)*r(7) + r(1)*r(9)
+      C2(2, 3) = r(2)*r(7) + r(1)*r(8)
+      C2(2, 4) = r(3)*r(9)*0.5
+      C2(2, 5) = r(1)*r(7) + r(3)*r(9)*0.5
+! Row 3
+      C2(3, 1) = r(3)*r(5) + r(2)*r(6)
+      C2(3, 2) = r(3)*r(4) + r(1)*r(6)
+      C2(3, 3) = r(2)*r(4) + r(1)*r(5)
+      C2(3, 4) = r(3)*r(6)*0.5
+      C2(3, 5) = r(1)*r(4) + r(3)*r(6)*0.5
+
+! Row 4
+      C2(4, 1) = 2*(r(2)*r(3) - r(5)*r(6))
+      C2(4, 2) = 2*(r(1)*r(3) - r(4)*r(6))
+      C2(4, 3) = 2*(r(1)*r(2) - r(4)*r(5))
+      C2(4, 4) = 0.5*(r(3)*r(3) - r(6)*r(6))
+      C2(4, 5) = r(1)*r(1) - r(4)*r(4) + C2(4, 4)
+
+! Row 5
+      C2(5, 1) = (4*r(8)*r(9)) - 2*(r(2)*r(3) + r(5)*r(6))
+      C2(5, 2) = (4*r(7)*r(9)) - 2*(r(1)*r(3) + r(4)*r(6))
+      C2(5, 3) = (4*r(7)*r(8)) - 2*(r(1)*r(2) + r(4)*r(5))
+      C2(5, 4) = r(9)*r(9) - 0.5*(r(3)*r(3) + r(6)*r(6))
+      C2(5, 5) = C2(5, 4) - r(1)*r(1) - r(4)*r(4) + 2*r(7)*r(7)
+   end subroutine construct_C2
+   function inv(A) result(Ainv)
+      use datatypes
+      real(double), dimension(:, :), intent(in) :: A
+      real(double), dimension(size(A, 1), size(A, 2)) :: Ainv
+
+      real(double), dimension(size(A, 1)) :: work  ! work array for LAPACK
+      integer, dimension(size(A, 1)) :: ipiv   ! pivot indices
+      integer :: n, info
+
+      ! External procedures defined in LAPACK
+      external DGETRF
+      external DGETRI
+
+      ! Store A in Ainv to prevent it from being overwritten by LAPACK
+      Ainv = A
+      n = size(A, 1)
+
+      ! DGETRF computes an LU factorization of a general M-by-N matrix A
+      ! using partial pivoting with row interchanges.
+      call DGETRF(n, n, Ainv, n, ipiv, info)
+
+      if (info /= 0) then
+         stop 'Matrix is numerically singular!'
+      end if
+
+      ! DGETRI computes the inverse of a matrix using the LU factorization
+      ! computed by DGETRF.
+      call DGETRI(n, Ainv, n, ipiv, work, n, info)
+
+      if (info /= 0) then
+         stop 'Matrix inversion failed!'
+      end if
+   end function inv
+
+   subroutine construct_Ul(angmom, Al, Cl, Ul)
+      use datatypes
+      implicit none
+! U has dimensions(2l +1, 2l+1)
+      integer, intent(in) :: angmom
+      real(double), intent(in) ::   Al(2*angmom + 1, 2*angmom + 1), Cl(2*angmom + 1, 2*angmom + 1)
+      real(double), intent(out) :: Ul(2*angmom + 1, 2*angmom + 1)
+      real(double) :: Al_inv(2*angmom + 1, 2*angmom + 1)
+      Al_inv = inv(Al)
+      Ul = matmul(Al_inv, matmul(Cl, Al))
+   end subroutine construct_Ul
+   subroutine rotate_coefficients(Ul)
+   use datatypes
+    use numbers, ONLY: zero, RD_ERR, twopi, half, one, two, four, six
+    use local, ONLY: eigenvalues, n_bands_total, nkp, wtk, efermi, &
+         band_full_to_active, n_atoms_pDOS, pDOS_atom_index, evec_coeff, scaled_evec_coeff
+    use read, ONLY: read_eigenvalues, read_psi_coeffs, read_nprocs_from_blocks
+    use global_module, ONLY: nspin, n_DOS, E_DOS_min, E_DOS_max, sigma_DOS, ni_in_cell, species_glob
+    use units, ONLY: HaToeV
+    use species_module, ONLY: nsf_species, npao_species
+    use pao_format, ONLY: pao
+
+    implicit none
+    
+    ! Local variables
+    integer :: i_band, i_kp, i_spin, n_DOS_wid, n_band, n_min, n_max, i, i_atom,max_nsf, i_spec, &
+         i_l, nzeta, sf_offset, max_l, norbs, i_m, i_band_c, i_z
+    real(double) :: Ebin, dE_DOS, a, pf_DOS, spin_fac, coeff, check_electrons
+    ! Use the input wavefunction and scaled wavefunction arrays
+    !real(double), intent(inout) :: evec_coeff(:,:,:,:,:), scaled_evec_coeff(:,:,:,:,:)
+    real(double), intent(in) :: Ul(:,:)
+    
+   end subroutine rotate_coefficients
   subroutine process_band_structure
 
     use datatypes
