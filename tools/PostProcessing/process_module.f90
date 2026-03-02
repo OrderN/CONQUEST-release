@@ -505,6 +505,7 @@ contains
     ! Read eigenvector coefficients
     call read_psi_coeffs("Process")
     ! Call rotation subroutine if desired
+    allocate(occ(n_bands_total,nkp))
     call initialise_A_mat(A1, A2)
     ! For testing purposes, fix rotation angle as z-axis
     call construct_rodrigues((/real(double) :: 0.0, 0.0, 1.0/), twopi /4, rod)
@@ -517,8 +518,7 @@ contains
    call construct_Ul(2, A2, C2, U2)
    U1d = transpose(U1) ! UU^T = I
    U2d = transpose(U2) ! UU^T = I
-    call rotate_coefficients(U2d)
-    allocate(occ(n_bands_total,nkp))
+   call rotate_coefficients(U1d, U2d)
     ! Set up storage based on pDOS per atom, or l/lm resolved per atom
     if(flag_lm_resolved) then
        allocate(pDOS_lm(-max_l:max_l,0:max_l,n_atoms_pDOS,n_DOS,nspin))
@@ -929,28 +929,54 @@ contains
       Al_inv = inv(Al)
       Ul = matmul(Al_inv, matmul(Cl, Al))
    end subroutine construct_Ul
-   subroutine rotate_coefficients(Ul)
+   subroutine rotate_coefficients(U1, U2)
    use datatypes
-    use numbers, ONLY: zero, RD_ERR, twopi, half, one, two, four, six
-    use local, ONLY: eigenvalues, n_bands_total, nkp, wtk, efermi, &
-         band_full_to_active, n_atoms_pDOS, pDOS_atom_index, evec_coeff, scaled_evec_coeff
-    use read, ONLY: read_eigenvalues, read_psi_coeffs, read_nprocs_from_blocks
-    use global_module, ONLY: nspin, n_DOS, E_DOS_min, E_DOS_max, sigma_DOS, ni_in_cell, species_glob
-    use units, ONLY: HaToeV
-    use species_module, ONLY: nsf_species, npao_species
-    use pao_format, ONLY: pao
+   use local, ONLY: n_bands_total, nkp, n_atoms_pDOS, evec_coeff, scaled_evec_coeff, &
+   n_atoms_pDOS, pDOS_atom_index
+   use global_module, ONLY: nspin, species_glob
+   use pao_format,    ONLY: pao
 
-    implicit none
-    
-    ! Local variables
-    integer :: i_band, i_kp, i_spin, n_DOS_wid, n_band, n_min, n_max, i, i_atom,max_nsf, i_spec, &
-         i_l, nzeta, sf_offset, max_l, norbs, i_m, i_band_c, i_z
-    real(double) :: Ebin, dE_DOS, a, pf_DOS, spin_fac, coeff, check_electrons
-    ! Use the input wavefunction and scaled wavefunction arrays
-    !real(double), intent(inout) :: evec_coeff(:,:,:,:,:), scaled_evec_coeff(:,:,:,:,:)
-    real(double), intent(in) :: Ul(:,:)
-    
+   implicit none
+
+   real(double), intent(in) :: U1(3, 3)   ! rotation matrix for l=1
+   real(double), intent(in) :: U2(5, 5)   ! rotation matrix for l=2
+
+   ! Local variables
+   integer :: i_atom, i_spec, i_band, i_kp, i_spin
+   integer :: i_l, i_z, nzeta, norbs, sf_offset
+
+   do i_spin = 1, nspin
+      do i_kp = 1, nkp
+         do i_band = 1, n_bands_total
+            do i_atom = 1, n_atoms_pDOS
+               i_spec = species_glob(pDOS_atom_index(i_atom))
+               sf_offset = 1
+               do i_l = 0, pao(i_spec)%greatest_angmom
+                  nzeta = pao(i_spec)%angmom(i_l)%n_zeta_in_angmom
+                  norbs = 2*i_l + 1
+                  do i_z = 1, nzeta
+                  !evec_coeff(sf_offset,pDOS_atom_index(i_atom), i_band_c,i_kp,i_spin)
+                     select case(i_l)
+                     case(1)
+                        evec_coeff(sf_offset:sf_offset+norbs-1, pDOS_atom_index(i_atom), i_band, i_kp, i_spin) = &
+                           matmul(U1, evec_coeff(sf_offset:sf_offset+norbs-1, i_atom, i_band, i_kp, i_spin))
+                        scaled_evec_coeff(sf_offset:sf_offset+norbs-1, pDOS_atom_index(i_atom), i_band, i_kp, i_spin) = &
+                           matmul(U1, scaled_evec_coeff(sf_offset:sf_offset+norbs-1, i_atom, i_band, i_kp, i_spin))
+                     case(2)
+                        evec_coeff(sf_offset:sf_offset+norbs-1, pDOS_atom_index(i_atom), i_band, i_kp, i_spin) = &
+                           matmul(U2, evec_coeff(sf_offset:sf_offset+norbs-1, i_atom, i_band, i_kp, i_spin))
+                        scaled_evec_coeff(sf_offset:sf_offset+norbs-1, pDOS_atom_index(i_atom), i_band, i_kp, i_spin) = &
+                           matmul(U2, scaled_evec_coeff(sf_offset:sf_offset+norbs-1, i_atom, i_band, i_kp, i_spin))
+                     end select
+                     sf_offset = sf_offset + norbs
+                  end do ! i_z
+               end do ! i_l
+            end do ! i_atom
+         end do ! i_band
+      end do ! i_kp
+   end do ! i_spin
    end subroutine rotate_coefficients
+
   subroutine process_band_structure
 
     use datatypes
