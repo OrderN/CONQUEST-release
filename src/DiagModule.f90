@@ -2555,18 +2555,19 @@ contains
           ! in each spin channel
           ne(spin) = int(electrons(spin))
           if (ne(spin) < 1) ne(spin) = 1
+          ! EIG AT ONE KPOINT?
           Ef(spin) = eig(ne(spin),1,spin)
 
           ! occupy for a single spin channel
           call occupy(occ, eig, Ef, thisElec, nbands, nkp, spin=spin)
           ! Find two values than bracket true Ef
-          incEf(spin) = one
+          incEf(spin) = one ! +/- literal 1 either side
 
           if (thisElec(spin) < electrons(spin)) then ! found a lower bound
 
              if (iprint_DM + min_layer >= 4 .and. (inode == ionode)) &
                   write (io_lun, 4) myid, Ef(spin)
-             lowEf(spin) = Ef(spin)
+             lowEf(spin) = Ef(spin) ! sets fermi level as this value matching number of electrons
              lowElec(spin) = thisElec(spin)
              highEf(spin) = lowEf(spin) + incEf(spin)
              ibrkt = 1
