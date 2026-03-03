@@ -445,7 +445,7 @@ contains
     use numbers, ONLY: zero, RD_ERR, twopi, half, one, two, four, six
     use local, ONLY: eigenvalues, n_bands_total, nkp, wtk, efermi, flag_total_iDOS, &
          evec_coeff, scaled_evec_coeff, flag_procwf_range_Ef, flag_l_resolved, flag_lm_resolved, &
-         band_full_to_active, n_atoms_pDOS, pDOS_atom_index
+         flag_rotate_pdos, band_full_to_active, n_atoms_pDOS, pDOS_atom_index
     use read, ONLY: read_eigenvalues, read_psi_coeffs, read_nprocs_from_blocks
     use global_module, ONLY: nspin, n_DOS, E_DOS_min, E_DOS_max, sigma_DOS, ni_in_cell, species_glob
     use units, ONLY: HaToeV
@@ -506,19 +506,23 @@ contains
     call read_psi_coeffs("Process")
     ! Call rotation subroutine if desired
     allocate(occ(n_bands_total,nkp))
-    call initialise_A_mat(A1, A2)
-    ! For testing purposes, fix rotation angle as z-axis
-    call construct_rodrigues((/real(double) :: 0.0, 0.0, 1.0/), twopi /4, rod)
+    if (flag_rotate_pdos) then
+      write(*,fmt='(2x, "Initialising A matrices")')
+      call initialise_A_mat(A1, A2)
+      ! For testing purposes, fix rotation angle as z-axis
+      call construct_rodrigues((/real(double) :: 0.0, 0.0, 1.0/), twopi /4, rod)
 
-   ! Construct all C^l matrices from rodrigues
-   call construct_C1(rod, C1)
-   call construct_C2(rod, C2)
-   ! compute U^l
-   call construct_Ul(1, A1, C1, U1)
-   call construct_Ul(2, A2, C2, U2)
-   U1d = transpose(U1) ! UU^T = I
-   U2d = transpose(U2) ! UU^T = I
-   call rotate_coefficients(U1d, U2d)
+      ! Construct all C^l matrices from rodrigues
+      call construct_C1(rod, C1)
+      call construct_C2(rod, C2)
+      ! compute U^l
+      call construct_Ul(1, A1, C1, U1)
+      call construct_Ul(2, A2, C2, U2)
+      U1d = transpose(U1) ! UU^T = I
+      U2d = transpose(U2) ! UU^T = I
+      write(*,fmt='(2x,"Rotating wavefunction coefficients")')
+      call rotate_coefficients(U1d, U2d)
+    end if 
     ! Set up storage based on pDOS per atom, or l/lm resolved per atom
     if(flag_lm_resolved) then
        allocate(pDOS_lm(-max_l:max_l,0:max_l,n_atoms_pDOS,n_DOS,nspin))
@@ -951,7 +955,7 @@ contains
          do i_band = 1, n_bands_total
             i_band_c = band_full_to_active(i_band)
             do i_atom = 1, n_atoms_pDOS
-               g_atom = DOS_atom_index(i_atom)
+               g_atom = pDOS_atom_index(i_atom)
                i_spec = species_glob(g_atom)
                sf_offset = 1
                do i_l = 0, pao(i_spec)%greatest_angmom

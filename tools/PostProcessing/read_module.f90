@@ -303,6 +303,7 @@ contains
        flag_wf_range = .true.
        flag_l_resolved = fdf_boolean('Process.pDOS_l_resolved',.false.)
        flag_lm_resolved = fdf_boolean('Process.pDOS_lm_resolved',.false.)
+       flag_rotate_pdos = fdf_boolean('Process.RotatePDOS',.false.)
        if(flag_lm_resolved .and. (.not.flag_l_resolved)) flag_l_resolved = .true.
        ! How many atoms?
        n_atoms_pDOS = fdf_integer('Process.n_atoms_pDOS',0)
