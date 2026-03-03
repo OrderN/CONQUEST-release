@@ -807,18 +807,21 @@ contains
       real(double), intent(in) :: axis(3), angle
       real(double), intent(out) :: matrix(1, 9)
       real(double) :: K(3, 3), KT(3, 3), identity(3, 3), temp(3, 3)
+      real(double) :: norm_axis(3)
       identity = 0.0
       identity(1, 1) = 1.0
       identity(2, 2) = 1.0
       identity(3, 3) = 1.0
+      !Normalise axis to unit vector 
+      norm_axis = axis / norm2(axis) 
       ! Define K
       K = 0.0
-      K(1, 2) = -axis(3)
-      K(1, 3) = axis(2)
-      K(2, 1) = axis(3)
-      K(2, 3) = -axis(1)
-      K(3, 1) = -axis(2)
-      K(3, 2) = axis(1)
+      K(1, 2) = -norm_axis(3)
+      K(1, 3) = norm_axis(2)
+      K(2, 1) = norm_axis(3)
+      K(2, 3) = -norm_axis(1)
+      K(3, 1) = -norm_axis(2)
+      K(3, 2) = norm_axis(1)
 
       KT = transpose(K)
       ! Rodrigues rotation matrix but with -angle
@@ -958,6 +961,7 @@ contains
                g_atom = pDOS_atom_index(i_atom)
                i_spec = species_glob(g_atom)
                sf_offset = 1
+               ! Include l = 0 to correctly calculate offset
                do i_l = 0, pao(i_spec)%greatest_angmom
                   nzeta = pao(i_spec)%angmom(i_l)%n_zeta_in_angmom
                   norbs = 2*i_l + 1
