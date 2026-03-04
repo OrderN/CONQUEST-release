@@ -773,7 +773,53 @@ contains
       ! A3(6, 7) = 0.2*sqrt(15.0)
       ! A3(7, 6) = 0.05*sqrt(10.0)
    end subroutine initialise_A_mat
+   subroutine calculate_axis_angle_rot(w1, w2, w3, axis, angle)
+      use datatypes
+      implicit none
+      EXTERNAL         DGEEV
 
+      ! Allow the user to define new coordinate system
+      ! Rotate from simulation axes (standard Cartesian) to local axes
+      real(double), intent(in) ::  w1(3), w2(3), w2(3)
+      real(double), intent(out) :: axis(3), angle
+      real(double) :: pos_diff(3), cross_prod(3), dot_prod
+      real(double) :: basis_matrix(3,3)
+      ! Local variables
+      integer :: i, j, N, LDA, LDVL, LDVR,LWMAX, INFO, LDWORK
+      real(double) ::  A(N,N), WR(N),   WI(N),   VL(LDVL,N), VR(LDVR,N), WORK(4*N),
+      real(double), parameter :: tol = 1e-10
+      N = maxval(size(basis_matrix))
+      LDA = N
+      LDVL = N
+      ! Define change of basis matrix;
+      ! Columns of new basis in terms of old basis
+      do j = 1
+         basis_matrix(j,1) = w1(j)
+         basis_matrix(j,2) = w2(j)
+         basis_matrix(j,3) = w3(j)
+      end do
+      ! Make copy because DGEEV destroys matrix
+      A = basis_matrix
+      call DGEEV("N", "V", N, A, LDA, WR, WI, VL, LDVL, VR, LDVR,
+           WORK, LDWORK, INFO)
+      if (INFO .neq. 0) then
+         stop 'DGEEV, Eigenvalues of basis change matrix could not be found!'
+      end if
+      ! Require eigenvector with eigenvalue 1, no complex, to find axis
+      do i = 1, N
+      if (abs(WR(i) - 1.0d0) < TOL .and. abs(WI(i)) < TOL) then
+         axis  = VR(:, i)   ! Column i of VR is the i-th right eigenvector
+         write(*,'(A,I0,A,F12.8,A,F12.8,A)') &
+         '  Eigenvalue ', i, ' = (', WR(i), ', ', WI(i), 'i)'
+         write(*,'(A,3F12.8)') '  Eigenvector = ', axis
+         exit
+      end if
+   end do
+
+   ! Calculate rotation angle using trace in radians
+   ! Must check sign is correct later on
+   angle = acos(0.5 * (trace(basis_matrix) - 1))
+   end subroutine calculate_axis_angle_rot
    subroutine calculate_axis_angle(pos1, pos2, target_axis, angle)
       use datatypes
       implicit none
