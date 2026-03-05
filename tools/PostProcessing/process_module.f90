@@ -780,29 +780,36 @@ contains
 
       ! Allow the user to define new coordinate system
       ! Rotate from simulation axes (standard Cartesian) to local axes
-      real(double), intent(in) ::  w1(3), w2(3), w2(3)
+      real(double), intent(in) ::  w1(3), w2(3), w3(3)
       real(double), intent(out) :: axis(3), angle
       real(double) :: pos_diff(3), cross_prod(3), dot_prod
       real(double) :: basis_matrix(3,3)
       ! Local variables
-      integer :: i, j, N, LDA, LDVL, LDVR,LWMAX, INFO, LDWORK
-      real(double) ::  A(N,N), WR(N),   WI(N),   VL(LDVL,N), VR(LDVR,N), WORK(4*N),
+      integer :: i, j, N, LDA, LDVL, LDVR, INFO, LDWORK
+      real(double), allocatable::  A(:,:), WR(:),   WI(:),   VL(:,:), VR(:,:), WORK(:), tra
       real(double), parameter :: tol = 1e-10
-      N = maxval(size(basis_matrix))
+      N = 3
       LDA = N
       LDVL = N
+      LDVR = N
+      allocate(A(N,N))
+      allocate(WR(N))
+      allocate(WI(N))
+      allocate(VL(LDVL, N))
+      allocate(VR(LDVR, N))
+      allocate(WORK(4*N))
       ! Define change of basis matrix;
       ! Columns of new basis in terms of old basis
-      do j = 1
+      do j = 1, 3
          basis_matrix(j,1) = w1(j)
          basis_matrix(j,2) = w2(j)
          basis_matrix(j,3) = w3(j)
       end do
       ! Make copy because DGEEV destroys matrix
       A = basis_matrix
-      call DGEEV("N", "V", N, A, LDA, WR, WI, VL, LDVL, VR, LDVR,
+      call DGEEV("N", "V", N, A, LDA, WR, WI, VL, LDVL, VR, LDVR, &
            WORK, LDWORK, INFO)
-      if (INFO .neq. 0) then
+      if (INFO /= 0) then
          stop 'DGEEV, Eigenvalues of basis change matrix could not be found!'
       end if
       ! Require eigenvector with eigenvalue 1, no complex, to find axis
@@ -818,7 +825,8 @@ contains
 
    ! Calculate rotation angle using trace in radians
    ! Must check sign is correct later on
-   angle = acos(0.5 * (trace(basis_matrix) - 1))
+   tra = basis_matrix(1,1) + basis_matrix(2,2) + basis_matrix(3,3)
+   angle = acos(0.5 * (tra - 1))
    end subroutine calculate_axis_angle_rot
    subroutine calculate_axis_angle(pos1, pos2, target_axis, angle)
       use datatypes

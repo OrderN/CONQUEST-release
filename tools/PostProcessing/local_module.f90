@@ -40,6 +40,7 @@ module local
   logical :: flag_rotate_pdos
   logical :: flag_outputWF_real
   character(len=80) :: charge_stub
+  real(double) :: pdos_ax(3), pdos_ay(3), pdos_az(3) ! axes to rotate pDOS into
 
   integer :: i_job ! Job type
   integer :: coord_format ! Output format: xyz (1) or cell (2)
