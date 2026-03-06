@@ -122,7 +122,6 @@ contains
     integer :: i_band, i_pao, j_pao
     real(double), parameter :: band_integral_tol = 1e-3_double
     real(double) :: max_band_integral_deviation, integral_deviation
-
     ! Create arrays needed by Conquest PAO routines
     call set_fact(8)
     call set_prefac(9)
@@ -445,7 +444,8 @@ contains
     use numbers, ONLY: zero, RD_ERR, twopi, half, one, two, four, six
     use local, ONLY: eigenvalues, n_bands_total, nkp, wtk, efermi, flag_total_iDOS, &
          evec_coeff, scaled_evec_coeff, flag_procwf_range_Ef, flag_l_resolved, flag_lm_resolved, &
-         flag_rotate_pdos, band_full_to_active, n_atoms_pDOS, pDOS_atom_index
+         flag_rotate_pdos, band_full_to_active, n_atoms_pDOS, pDOS_atom_index, &
+         pdos_ax, pdos_ay, pdos_az
     use read, ONLY: read_eigenvalues, read_psi_coeffs, read_nprocs_from_blocks
     use global_module, ONLY: nspin, n_DOS, E_DOS_min, E_DOS_max, sigma_DOS, ni_in_cell, species_glob
     use units, ONLY: HaToeV
@@ -468,6 +468,8 @@ contains
     real(double) :: C1(3, 3), C2(5, 5)
     real(double) :: U1(3, 3), U2(5, 5), U1d(3, 3), U2d(5, 5), tempmat(5,5)
     real(double) :: rod(3, 3)
+    real(double) :: det, angle, axis(3)
+
 
     character(len=25) :: filename,fmt_dos
     complex(double_cplx),external :: zdotc
@@ -509,8 +511,24 @@ contains
     if (flag_rotate_pdos) then
       write(*,fmt='(2x, "Initialising A matrices")')
       call initialise_A_mat(A1, A2)
-      ! For testing purposes, fix rotation angle as z-axis
-      call construct_rodrigues((/real(double) :: 0.0, 0.0, 1.0/), twopi /4, rod)
+      ! ! Receive user input axes, calculate axis from eigenvector
+      ! pdos_ax = (/real(double) :: 0.5, 1.0, 0.0/)
+      ! pdos_ay = (/real(double) :: -1.0, 1.0, 0.0/)
+      ! pdos_az = (/real(double) :: 0.0, 0.0, 1.0/)
+
+      ! Normalise vectors, then check they form an orthonormal basis
+      pdos_ax = pdos_ax / norm2(pdos_ax)
+      pdos_ay = pdos_ay / norm2(pdos_ay)
+      pdos_az = pdos_az / norm2(pdos_az)
+      if (dot_product(pdos_ax, pdos_ay) /= 0) &
+         stop "pDOS_ax vector was not orthogonal to pDOS_ay"
+      if (dot_product(pdos_az, pdos_ay) /=  0) &
+          stop "pDOS_az vector was not orthogonal to pDOS_ay"
+      if (dot_product(pdos_az, pdos_ax) /=  0) &
+          stop "pDOS_az vector was not orthogonal to pDOS_ax"
+      call calculate_axis_angle_rot(pdos_ax, pdos_ay, pdos_az, axis, angle)
+      ! Make Rodrigues
+      call construct_rodrigues(axis, angle, rod)
 
       ! Construct all C^l matrices from rodrigues
       call construct_C1(rod, C1)
@@ -776,14 +794,14 @@ contains
    subroutine calculate_axis_angle_rot(w1, w2, w3, axis, angle)
       use datatypes
       implicit none
-      EXTERNAL         DGEEV
+      EXTERNAL         DGEEV, determinant
 
       ! Allow the user to define new coordinate system
       ! Rotate from simulation axes (standard Cartesian) to local axes
       real(double), intent(in) ::  w1(3), w2(3), w3(3)
       real(double), intent(out) :: axis(3), angle
-      real(double) :: pos_diff(3), cross_prod(3), dot_prod
-      real(double) :: basis_matrix(3,3)
+      real(double) :: pos_diff(3), cross_prod(3), det
+      real(double) :: basis_matrix(3,3), temp(3,3)
       ! Local variables
       integer :: i, j, N, LDA, LDVL, LDVR, INFO, LDWORK
       real(double), allocatable::  A(:,:), WR(:),   WI(:),   VL(:,:), VR(:,:), WORK(:), tra
@@ -797,28 +815,35 @@ contains
       allocate(WI(N))
       allocate(VL(LDVL, N))
       allocate(VR(LDVR, N))
-      allocate(WORK(4*N))
+      allocate(WORK(5*N))
+      LDWORK = 5*N
       ! Define change of basis matrix;
       ! Columns of new basis in terms of old basis
-      do j = 1, 3
-         basis_matrix(j,1) = w1(j)
-         basis_matrix(j,2) = w2(j)
-         basis_matrix(j,3) = w3(j)
-      end do
+      basis_matrix(:,1) = w1
+      basis_matrix(:,2) = w2
+      basis_matrix(:,3) = w3
       ! Make copy because DGEEV destroys matrix
       A = basis_matrix
+      ! If determinant flips sign, orientation of the coordinate system has changed
+      det = A(1,1)*(A(2,2)*A(3,3) - A(2,3)*A(3,2)) &
+      - A(1,2)*(A(2,1)*A(3,3) - A(2,3)*A(3,1)) &
+      + A(1,3)*(A(2,1)*A(3,2) - A(2,2)*A(3,1))
+
+      if (det + 1.00 < TOL) &
+         stop "ERROR: determinant of change-of-basis matrix is -1"
       call DGEEV("N", "V", N, A, LDA, WR, WI, VL, LDVL, VR, LDVR, &
            WORK, LDWORK, INFO)
       if (INFO /= 0) then
+         write(*, fmt='(A,I0)') 'DGEEV INFO = ', INFO
          stop 'DGEEV, Eigenvalues of basis change matrix could not be found!'
       end if
       ! Require eigenvector with eigenvalue 1, no complex, to find axis
       do i = 1, N
-      if (abs(WR(i) - 1.0d0) < TOL .and. abs(WI(i)) < TOL) then
+      if (abs(WR(i) - 1.00000) < TOL .and. abs(WI(i)) < TOL) then
          axis  = VR(:, i)   ! Column i of VR is the i-th right eigenvector
-         write(*,'(A,I0,A,F12.8,A,F12.8,A)') &
-         '  Eigenvalue ', i, ' = (', WR(i), ', ', WI(i), 'i)'
-         write(*,'(A,3F12.8)') '  Eigenvector = ', axis
+         ! write(*,'(A,I0,A,F12.8,A,F12.8,A)') &
+         ! '  Eigenvalue ', i, ' = (', WR(i), ', ', WI(i), 'i)'
+         ! write(*,'(A,3F12.8)') '  Eigenvector = ', axis
          exit
       end if
    end do

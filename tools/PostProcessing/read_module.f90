@@ -333,13 +333,13 @@ contains
                   call cq_abort("Too few vectors in pDOS_axes: ",&
                   1+block_end-block_start,3)
          ! Expect exactly 3 lines -> 3 reads
-         read (unit=input_array(block_start),fmt=*) &
-                     pdos_ax(1),pdos_ax(2),pdos_ax(3)
-         read (unit=input_array(block_start+1),fmt=*) &
-                     pdos_ay(1),pdos_ay(2),pdos_ay(3)
-         read (unit=input_array(block_start+2),fmt=*) &
-                     pdos_az(1),pdos_az(2),pdos_az(3)
-         
+         read (unit=input_array(block_start),fmt=*) pdos_ax
+         read (unit=input_array(block_start+1),fmt=*) pdos_ay
+         read (unit=input_array(block_start+2),fmt=*) pdos_az
+         write(*, fmt="(F10.3,F10.3,F10.3)") pdos_ax(1), pdos_ax(2), pdos_ax(3)
+         write(*, fmt="(F10.3,F10.3,F10.3)") pdos_ay(1), pdos_ay(2), pdos_ay(3)
+         write(*, fmt="(F10.3,F10.3,F10.3)") pdos_az(1), pdos_az(2), pdos_az(3)
+
        end if
     end if
     ! Now read PS files for atomic information
