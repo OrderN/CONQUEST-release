@@ -1,0 +1,383 @@
+    ________________________________________________________________________
+                                                                            
+                                    CONQUEST                                
+                                                                            
+                Concurrent Order N QUantum Electronic STructure             
+    ________________________________________________________________________
+                                                                            
+     Conquest lead developers:                                              
+      D.R.Bowler (UCL, NIMS), T.Miyazaki (NIMS), A.Nakata (NIMS),           
+      L. Truflandier (U. Bordeaux)                                          
+                                                                            
+     Developers:                                                            
+      M.Arita (NIMS), J.S.Baker (UCL), V.Brazdova (UCL), R.Choudhury (UCL), 
+      S.Y.Mujahed (UCL), J.T.Poulton (UCL), Z.Raza (NIMS), A.Sena (UCL),    
+      U.Terranova (UCL), L.Tong (UCL), A.Torralba (NIMS)                    
+                                                                            
+     Early development:                                                     
+      I.J.Bush (STFC), C.M.Goringe (Keele), E.H.Hernandez (Keele)           
+                                                                            
+     Original inspiration and project oversight:                            
+      M.J.Gillan (Keele, UCL)                                               
+    ________________________________________________________________________
+
+          Reading ion files
+
+          symbol = Ge
+          label = Ge                  
+          z =     32.00000
+          zval_int, zval =     14.00000
+          mass =      72.6100000000000    
+          self_energy =      0.00000000000000    
+          lmax_basis, n_orbnl =    2   6
+          lmax_projs, n_pjnl =    2   6
+          XC functional code =      101
+          PSEUDO_TM: i, l,n, ekb =   0  1    6.3627631832000002
+          PSEUDO_TM: i, l,n, ekb =   0  2    0.5887043841000000
+          PSEUDO_TM: i, l,n, ekb =   1  1    3.8176609927000000
+          PSEUDO_TM: i, l,n, ekb =   1  2    0.7339947704999999
+          PSEUDO_TM: i, l,n, ekb =   2  1   -9.3086812072999994
+          PSEUDO_TM: i, l,n, ekb =   2  2   -3.5974925376000000
+
+    Simulation cell dimensions:    21.8218 a0 x    21.8218 a0 x    21.8218 a0
+
+    Simulation cell volume:     10391.2896 a0**3
+
+      Atomic coordinates (a0)
+         Atom         X         Y         Z  Species
+            1    0.0000    0.0000    0.0000        1
+            2    0.0000    5.4554    5.4554        1
+            3    5.4554    5.4554    0.0000        1
+            4    5.4554    0.0000    5.4554        1
+            5    8.1832    2.7277    8.1832        1
+            6    2.7277    2.7277    2.7277        1
+            7    2.7277    8.1832    8.1832        1
+            8    8.1832    8.1832    2.7277        1
+            9    0.0000    0.0000   10.9109        1
+           10    0.0000    5.4554   16.3663        1
+           11    5.4554    5.4554   10.9109        1
+           12    5.4554    0.0000   16.3663        1
+           13    8.1832    2.7277   19.0940        1
+           14    2.7277    2.7277   13.6386        1
+           15    2.7277    8.1832   19.0940        1
+           16    8.1832    8.1832   13.6386        1
+           17    0.0000   10.9109    0.0000        1
+           18    0.0000   16.3663    5.4554        1
+           19    5.4554   16.3663    0.0000        1
+           20    5.4554   10.9109    5.4554        1
+           21    8.1832   13.6386    8.1832        1
+           22    2.7277   13.6386    2.7277        1
+           23    2.7277   19.0940    8.1832        1
+           24    8.1832   19.0940    2.7277        1
+           25    0.0000   10.9109   10.9109        1
+           26    0.0000   16.3663   16.3663        1
+           27    5.4554   16.3663   10.9109        1
+           28    5.4554   10.9109   16.3663        1
+           29    8.1832   13.6386   19.0940        1
+           30    2.7277   13.6386   13.6386        1
+           31    2.7277   19.0940   19.0940        1
+           32    8.1832   19.0940   13.6386        1
+           33   10.9109    0.0000    0.0000        1
+           34   10.9109    5.4554    5.4554        1
+           35   16.3663    5.4554    0.0000        1
+           36   16.3663    0.0000    5.4554        1
+           37   19.0940    2.7277    8.1832        1
+           38   13.6386    2.7277    2.7277        1
+           39   13.6386    8.1832    8.1832        1
+           40   19.0940    8.1832    2.7277        1
+           41   10.9109    0.0000   10.9109        1
+           42   10.9109    5.4554   16.3663        1
+           43   16.3663    5.4554   10.9109        1
+           44   16.3663    0.0000   16.3663        1
+           45   19.0940    2.7277   19.0940        1
+           46   13.6386    2.7277   13.6386        1
+           47   13.6386    8.1832   19.0940        1
+           48   19.0940    8.1832   13.6386        1
+           49   10.9109   10.9109    0.0000        1
+           50   10.9109   16.3663    5.4554        1
+           51   16.3663   16.3663    0.0000        1
+           52   16.3663   10.9109    5.4554        1
+           53   19.0940   13.6386    8.1832        1
+           54   13.6386   13.6386    2.7277        1
+           55   13.6386   19.0940    8.1832        1
+           56   19.0940   19.0940    2.7277        1
+           57   10.9109   10.9109   10.9109        1
+           58   10.9109   16.3663   16.3663        1
+           59   16.3663   16.3663   10.9109        1
+           60   16.3663   10.9109   16.3663        1
+           61   19.0940   13.6386   19.0940        1
+           62   13.6386   13.6386   13.6386        1
+           63   13.6386   19.0940   19.0940        1
+           64   19.0940   19.0940   13.6386        1
+        Number of processor groups for k-point parallelisation:     1
+        Block size (row, col):    32   32
+        Proc grid (row, col):     1    4
+
+        Using Monkhorst-Pack Kpoint mesh
+
+
+
+         Monkhorst-Pack mesh:   3 x   3 x   3
+         Number of k-points:   27
+         Monkhorst-Pack mesh shift:     0.000000   0.000000   0.000000
+          14 symmetry inequivalent Kpoints
+          Value of kT used for smearing:   0.001000Ha
+          Partitioning method:  1
+          Partitioning using Hilbert curves
+          ---------------------------------
+
+          checking if total number of partitions >= number of procs...           PASS
+          checking if number of occupied partitions >= number of procs...           PASS
+          checking if total N atoms in partitions == N atoms in cell...           PASS
+          checking if total N support fns in partitions == N sf in cell...           PASS
+          checking if atoms are correctly assigned to partitions...           PASS
+
+          Detected system type: bulk
+
+
+    This calculation includes non-local pseudopotentials,
+    with a maximum core radius of      7.09479220
+        Matrix S   has range     14.54784138
+        Matrix L   has range      1.00000000
+        Matrix H   has range     14.54784138
+        Matrix AP  has range     14.36871289
+        Matrix LS  has range     15.54784138
+        Matrix LH  has range     15.54784138
+        Matrix LSL has range     16.54784138
+        Matrix SLS has range     30.09568276
+        Matrix T   has range     14.18958441
+        Matrix TS  has range     28.73742579
+        Matrix TH  has range     28.73742579
+        Matrix TL  has range     15.18958441
+        Matrix PA  has range     14.36871289
+        Matrix LT  has range      1.00000000
+        Matrix SL  has range     15.54784138
+        Matrix TT  has range     14.18958441
+        Matrix HL  has range     15.54784138
+        Matrix X   has range      2.00000000
+        Matrix SX  has range      2.00000000
+
+    This job was run on  2026/03/06 at 15:37 -0000
+    Code was compiled on 2026/03/06 at 13:31 +0000
+    Version comment: Git Branch: master; tag, hash: v1.5
+
+    Job title: Bulk Ge 64 atoms static                                                         
+    Job to be run: static calculation
+
+    Ground state search:
+      Support functions represented with PAO basis
+      1:1 PAO to SF mapping
+      Non-spin-polarised electrons
+      Solving for the K matrix using diagonalisation 
+      Using Fermi-Dirac smearing
+
+    Integration grid size:    144 x  144 x  144
+    Integration grid blocks:    4 x    4 x    4
+
+    Integration grid spacing:  0.152 a0 x 0.152 a0 x 0.152 a0
+
+    Number of species:  1
+    --------------------------------------------------------
+    |   #  mass (au)  Charge (e)  SF Rad (a0)  NSF  Label  |
+    --------------------------------------------------------
+    |   1     28.085      14.000        7.274   18  Ge_DZP_|
+    --------------------------------------------------------
+          SCF tolerance:                 0.00000000
+          SCF iterations:                50
+    Hamann (ONCVPSP) pseudopotential will be used. 
+
+    The calculation will be performed on     4 processes
+
+    Using the default matrix multiplication kernel
+
+    The functional used will be GGA PBE96      
+
+
+           radial cut-off to be used is taken to be max PAO cut-off radius for this species:    7.094792
+
+           greatest ang. mom. for making density from PAOs:  2
+    Minimum blocs/proc is    11664. Maximum blocs/proc is    11664
+    set_atom_dens: In set_atomic_density, electrons :     896.000000000000
+ matrix_size & matrix_size_padH =         1152        1152
+
+    Screened ion int: energy:   -4489.457051203146 Ha
+
+    new_SC_potl: Starting.  Tolerance:  0.10000E-08
+
+    PulayMixSC: Starting Pulay mixing, A_up =  0.500 A_dn =  0.500
+    PulayMixSC: Spin non-polarised calculation.
+Found 2 GPUs
+MPI rank 2 uses GPU #0
+MPI rank 3 uses GPU #1
+MPI rank 0 uses GPU #0
+MPI rank 1 uses GPU #1
+          Harris-Foulkes Energy            :     -5715.824087423508900 Ha
+          GroundState Energy (E-(1/2)TS)   :     -5715.824253719169974 Ha
+          Free Energy (E-TS)               :     -5715.824420014830139 Ha
+          DFT Total Energy                 :     -5715.667792110716618 Ha
+          Total number of electrons        :       896.000000000020236
+    PulayMixSC: Pulay iteration     1 residual:              0.38408E-03
+Found 2 GPUs
+MPI rank 0 uses GPU #0
+MPI rank 1 uses GPU #1
+MPI rank 2 uses GPU #0
+MPI rank 3 uses GPU #1
+          Harris-Foulkes Energy            :     -5715.719295528948351 Ha
+          GroundState Energy (E-(1/2)TS)   :     -5715.719468091764611 Ha
+          Free Energy (E-TS)               :     -5715.719640654579962 Ha
+          DFT Total Energy                 :     -5715.695900795692069 Ha
+          Total number of electrons        :       896.000532796507741
+    PulayMixSC: Pulay iteration     2 residual:              0.16544E-03
+Found 2 GPUs
+MPI rank 0 uses GPU #0
+MPI rank 1 uses GPU #1
+MPI rank 3 uses GPU #1
+MPI rank 2 uses GPU #0
+          Harris-Foulkes Energy            :     -5715.700233104486870 Ha
+          GroundState Energy (E-(1/2)TS)   :     -5715.700408468052046 Ha
+          Free Energy (E-TS)               :     -5715.700583831618133 Ha
+          DFT Total Energy                 :     -5715.700057503180687 Ha
+          Total number of electrons        :       896.000980479913324
+    PulayMixSC: Pulay iteration     3 residual:              0.20755E-04
+Found 2 GPUs
+MPI rank 0 uses GPU #0
+MPI rank 1 uses GPU #1
+MPI rank 2 uses GPU #0
+MPI rank 3 uses GPU #1
+          Harris-Foulkes Energy            :     -5715.700123542956135 Ha
+          GroundState Energy (E-(1/2)TS)   :     -5715.700298973487406 Ha
+          Free Energy (E-TS)               :     -5715.700474404018678 Ha
+          DFT Total Energy                 :     -5715.700120143685126 Ha
+          Total number of electrons        :       896.001049190284334
+    PulayMixSC: Pulay iteration     4 residual:              0.20350E-05
+Found 2 GPUs
+MPI rank 0 uses GPU #0
+MPI rank 1 uses GPU #1
+MPI rank 2 uses GPU #0
+MPI rank 3 uses GPU #1
+          Harris-Foulkes Energy            :     -5715.700120825265003 Ha
+          GroundState Energy (E-(1/2)TS)   :     -5715.700296201111087 Ha
+          Free Energy (E-TS)               :     -5715.700471576957170 Ha
+          DFT Total Energy                 :     -5715.700120753460396 Ha
+          Total number of electrons        :       896.001056982940554
+    PulayMixSC: Pulay iteration     5 residual:              0.36626E-06
+Found 2 GPUs
+MPI rank 0 uses GPU #0
+MPI rank 1 uses GPU #1
+MPI rank 2 uses GPU #0
+MPI rank 3 uses GPU #1
+          Harris-Foulkes Energy            :     -5715.700120731578863 Ha
+          GroundState Energy (E-(1/2)TS)   :     -5715.700296108499970 Ha
+          Free Energy (E-TS)               :     -5715.700471485420167 Ha
+          DFT Total Energy                 :     -5715.700120733127733 Ha
+          Total number of electrons        :       896.001055193596471
+    PulayMixSC: Pulay iteration     6 residual:              0.18010E-07
+Found 2 GPUs
+MPI rank 0 uses GPU #0
+MPI rank 1 uses GPU #1
+MPI rank 2 uses GPU #0
+MPI rank 3 uses GPU #1
+          Harris-Foulkes Energy            :     -5715.700120797827367 Ha
+          GroundState Energy (E-(1/2)TS)   :     -5715.700296174543837 Ha
+          Free Energy (E-TS)               :     -5715.700471551260307 Ha
+          DFT Total Energy                 :     -5715.700120797815543 Ha
+          Total number of electrons        :       896.001053925410361
+    PulayMixSC: Pulay iteration     7 residual:              0.27798E-09
+    PulayMixSC: Reached SCF tolerance of  0.27798E-09 after      7 iterations
+      | Number of electrons      =       896.001054
+      |* band energy as 2Tr[K.H] =      -776.110466905608973 Ha
+      |  screened ion-ion energy =     -4489.457051203145966 Ha
+      |  Ha correction           =        15.117296073684207 Ha
+      |  XC correction           =      -465.249898977228497 Ha
+      | GS Energy as E-(1/2)TS   =     -5715.700296174543837 Ha
+      | Free Energy as E-TS      =     -5715.700471551260307 Ha
+      |* Harris-Foulkes energy   =     -5715.700120797827367 Ha
+      |* DFT total energy        =     -5715.700120797815543 Ha
+      |  estimated accuracy      =        -0.000000000011823 Ha
+
+    force: Forces on atoms (Ha/a0)
+    force:  Atom   X              Y              Z
+    force:     1   0.0000000000  -0.0000000000  -0.0000000000
+    force:     2   0.0000000000  -0.0000000000   0.0000000000
+    force:     3  -0.0000000000  -0.0000000000  -0.0000000000
+    force:     4  -0.0000000000  -0.0000000000   0.0000000000
+    force:     5  -0.0000000000  -0.0000000000   0.0000000000
+    force:     6  -0.0000000000  -0.0000000000  -0.0000000000
+    force:     7  -0.0000000000   0.0000000000   0.0000000000
+    force:     8  -0.0000000000   0.0000000000  -0.0000000000
+    force:     9   0.0000000000  -0.0000000000   0.0000000000
+    force:    10   0.0000000000  -0.0000000000  -0.0000000000
+    force:    11  -0.0000000000  -0.0000000000   0.0000000000
+    force:    12  -0.0000000000  -0.0000000000  -0.0000000000
+    force:    13  -0.0000000000  -0.0000000000  -0.0000000000
+    force:    14  -0.0000000000  -0.0000000000   0.0000000000
+    force:    15  -0.0000000000   0.0000000000  -0.0000000000
+    force:    16  -0.0000000000   0.0000000000   0.0000000000
+    force:    17   0.0000000000   0.0000000000  -0.0000000000
+    force:    18   0.0000000000   0.0000000000   0.0000000000
+    force:    19  -0.0000000000   0.0000000000  -0.0000000000
+    force:    20  -0.0000000000   0.0000000000   0.0000000000
+    force:    21  -0.0000000000   0.0000000000   0.0000000000
+    force:    22  -0.0000000000   0.0000000000  -0.0000000000
+    force:    23  -0.0000000000  -0.0000000000   0.0000000000
+    force:    24  -0.0000000000   0.0000000000  -0.0000000000
+    force:    25   0.0000000000   0.0000000000   0.0000000000
+    force:    26   0.0000000000   0.0000000000  -0.0000000000
+    force:    27  -0.0000000000   0.0000000000   0.0000000000
+    force:    28  -0.0000000000   0.0000000000  -0.0000000000
+    force:    29  -0.0000000000   0.0000000000  -0.0000000000
+    force:    30  -0.0000000000   0.0000000000   0.0000000000
+    force:    31  -0.0000000000   0.0000000000  -0.0000000000
+    force:    32  -0.0000000000  -0.0000000000   0.0000000000
+    force:    33  -0.0000000000  -0.0000000000  -0.0000000000
+    force:    34  -0.0000000000  -0.0000000000   0.0000000000
+    force:    35   0.0000000000  -0.0000000000  -0.0000000000
+    force:    36   0.0000000000  -0.0000000000   0.0000000000
+    force:    37   0.0000000000  -0.0000000000   0.0000000000
+    force:    38  -0.0000000000  -0.0000000000  -0.0000000000
+    force:    39   0.0000000000   0.0000000000   0.0000000000
+    force:    40   0.0000000000   0.0000000000  -0.0000000000
+    force:    41  -0.0000000000  -0.0000000000   0.0000000000
+    force:    42  -0.0000000000  -0.0000000000  -0.0000000000
+    force:    43   0.0000000000  -0.0000000000   0.0000000000
+    force:    44   0.0000000000  -0.0000000000  -0.0000000000
+    force:    45   0.0000000000  -0.0000000000  -0.0000000000
+    force:    46   0.0000000000  -0.0000000000   0.0000000000
+    force:    47  -0.0000000000   0.0000000000  -0.0000000000
+    force:    48   0.0000000000   0.0000000000   0.0000000000
+    force:    49  -0.0000000000   0.0000000000  -0.0000000000
+    force:    50  -0.0000000000   0.0000000000   0.0000000000
+    force:    51   0.0000000000   0.0000000000  -0.0000000000
+    force:    52   0.0000000000   0.0000000000   0.0000000000
+    force:    53   0.0000000000   0.0000000000   0.0000000000
+    force:    54   0.0000000000   0.0000000000  -0.0000000000
+    force:    55   0.0000000000  -0.0000000000   0.0000000000
+    force:    56   0.0000000000  -0.0000000000  -0.0000000000
+    force:    57  -0.0000000000   0.0000000000   0.0000000000
+    force:    58  -0.0000000000   0.0000000000  -0.0000000000
+    force:    59   0.0000000000   0.0000000000   0.0000000000
+    force:    60   0.0000000000   0.0000000000  -0.0000000000
+    force:    61   0.0000000000   0.0000000000  -0.0000000000
+    force:    62   0.0000000000   0.0000000000   0.0000000000
+    force:    63   0.0000000000  -0.0000000000  -0.0000000000
+    force:    64   0.0000000000  -0.0000000000   0.0000000000
+
+    force: Maximum force :        0.00000000(Ha/a0) on atom        11 in z direction
+    force: Force Residual:        0.00000000 Ha/a0
+    force: Total stress:          0.01613931     0.01613931     0.01613931 GPa
+    force: Average pressure:     -0.01613931 GPa
+
+    force: Finished force
+    get_E_and_F: Change in energy during last step of electronic optimisation: -0.66249E-07
+
+    BIBLIOGRAPHY: Please consider citing the following references in the conquest.bib file
+
+    CONQUEST:         Bowler2002pt, Miyazaki2004, Nakata2020
+    Basis:            Bowler2019
+    DM:               Bowler:2006xr
+    Pseudopotentials: Hamann2013, Bowler2019
+    XC functional:    Perdew1996
+
+    Max total mem use is           1270.623 MB
+
+    Total run time was:             192.887 seconds

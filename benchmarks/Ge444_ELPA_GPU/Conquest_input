@@ -1,0 +1,36 @@
+# Input/Output
+IO.Title Bulk Ge 512 atoms static
+IO.Coordinates Ge444.in
+IO.WriteOutToFile F
+IO.Iprint 2
+
+# General Parameters
+General.NumberOfSpecies 1
+
+minE.SCTolerance 1e-9
+
+%block ChemicalSpeciesLabel
+1  28.0850   Ge_DZP_PBE
+%endblock
+
+# Moving Atoms
+AtomMove.TypeOfRun static
+#AtomMove.TypeOfRun cg
+#AtomMove.OptCell T
+#General.LoadDM            T
+#SC.MakeInitialChargeFromK T
+
+Grid.GridCutoff 200
+
+# Finding the density matrix
+DM.SolutionMethod diagon
+
+# k-points
+#Diag.GammaCentred T
+Diag.MPMesh T
+Diag.MPMeshX 3
+Diag.MPMeshY 3
+Diag.MPMeshZ 3
+#Diag.GammaCentred T
+Diag.UseELPA T
+Diag.ELPA_GPU T
