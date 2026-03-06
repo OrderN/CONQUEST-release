@@ -336,10 +336,7 @@ contains
          read (unit=input_array(block_start),fmt=*) pdos_ax
          read (unit=input_array(block_start+1),fmt=*) pdos_ay
          read (unit=input_array(block_start+2),fmt=*) pdos_az
-         write(*, fmt="(F10.3,F10.3,F10.3)") pdos_ax(1), pdos_ax(2), pdos_ax(3)
-         write(*, fmt="(F10.3,F10.3,F10.3)") pdos_ay(1), pdos_ay(2), pdos_ay(3)
-         write(*, fmt="(F10.3,F10.3,F10.3)") pdos_az(1), pdos_az(2), pdos_az(3)
-
+         call fdf_endblock
        end if
     end if
     ! Now read PS files for atomic information

@@ -512,7 +512,7 @@ contains
       write(*,fmt='(2x, "Initialising A matrices")')
       call initialise_A_mat(A1, A2)
       ! ! Receive user input axes, calculate axis from eigenvector
-      ! pdos_ax = (/real(double) :: 0.5, 1.0, 0.0/)
+      ! pdos_ax = (/real(double) :: 1.0, 1.0, 0.0/)
       ! pdos_ay = (/real(double) :: -1.0, 1.0, 0.0/)
       ! pdos_az = (/real(double) :: 0.0, 0.0, 1.0/)
 
