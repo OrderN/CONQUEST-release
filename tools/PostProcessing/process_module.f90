@@ -468,7 +468,7 @@ contains
     real(double) :: C1(3, 3), C2(5, 5)
     real(double) :: U1(3, 3), U2(5, 5), U1d(3, 3), U2d(5, 5), tempmat(5,5)
     real(double) :: rod(3, 3)
-    real(double) :: det, angle, axis(3)
+    real(double) :: det, angle, axis(3), tol
 
 
     character(len=25) :: filename,fmt_dos
@@ -520,11 +520,15 @@ contains
       pdos_ax = pdos_ax / norm2(pdos_ax)
       pdos_ay = pdos_ay / norm2(pdos_ay)
       pdos_az = pdos_az / norm2(pdos_az)
-      if (dot_product(pdos_ax, pdos_ay) /= 0) &
+      print *,"ax,ay",  dot_product(pdos_ax, pdos_ay)
+      print *, "az, ay", dot_product(pdos_az, pdos_ay)
+      print *, "az, ax", dot_product(pdos_az, pdos_ax)
+      tol = 1e-10
+      if (abs(dot_product(pdos_ax, pdos_ay)) >  tol) &
          stop "pDOS_ax vector was not orthogonal to pDOS_ay"
-      if (dot_product(pdos_az, pdos_ay) /=  0) &
+      if (abs(dot_product(pdos_az, pdos_ay)) > tol) &
           stop "pDOS_az vector was not orthogonal to pDOS_ay"
-      if (dot_product(pdos_az, pdos_ax) /=  0) &
+      if (abs(dot_product(pdos_az, pdos_ax)) > tol) &
           stop "pDOS_az vector was not orthogonal to pDOS_ax"
       call calculate_axis_angle_rot(pdos_ax, pdos_ay, pdos_az, axis, angle)
       ! Make Rodrigues
@@ -538,6 +542,7 @@ contains
       call construct_Ul(2, A2, C2, U2)
       U1d = transpose(U1) ! UU^T = I
       U2d = transpose(U2) ! UU^T = I
+      print *, matmul(U1, U1d)
       write(*,fmt='(2x,"Rotating wavefunction coefficients")')
       call rotate_coefficients(U1d, U2d)
     end if 
@@ -794,14 +799,14 @@ contains
    subroutine calculate_axis_angle_rot(w1, w2, w3, axis, angle)
       use datatypes
       implicit none
-      EXTERNAL         DGEEV, determinant
+      EXTERNAL         DGEEV
 
       ! Allow the user to define new coordinate system
       ! Rotate from simulation axes (standard Cartesian) to local axes
       real(double), intent(in) ::  w1(3), w2(3), w3(3)
       real(double), intent(out) :: axis(3), angle
-      real(double) :: pos_diff(3), cross_prod(3), det
-      real(double) :: basis_matrix(3,3), temp(3,3)
+      real(double) :: pos_diff(3), cross_prod(3), det, sin_angle, cos_angle
+      real(double) :: basis_matrix(3,3), temp(3,3), antisym_axis(3,3)
       ! Local variables
       integer :: i, j, N, LDA, LDVL, LDVR, INFO, LDWORK
       real(double), allocatable::  A(:,:), WR(:),   WI(:),   VL(:,:), VR(:,:), WORK(:), tra
@@ -829,8 +834,8 @@ contains
       - A(1,2)*(A(2,1)*A(3,3) - A(2,3)*A(3,1)) &
       + A(1,3)*(A(2,1)*A(3,2) - A(2,2)*A(3,1))
 
-      if (det + 1.00 < TOL) &
-         stop "ERROR: determinant of change-of-basis matrix is -1"
+      if (det < 0.00000) &
+         stop "ERROR: determinant of change-of-basis matrix is negative"
       call DGEEV("N", "V", N, A, LDA, WR, WI, VL, LDVL, VR, LDVR, &
            WORK, LDWORK, INFO)
       if (INFO /= 0) then
@@ -841,17 +846,32 @@ contains
       do i = 1, N
       if (abs(WR(i) - 1.00000) < TOL .and. abs(WI(i)) < TOL) then
          axis  = VR(:, i)   ! Column i of VR is the i-th right eigenvector
-         ! write(*,'(A,I0,A,F12.8,A,F12.8,A)') &
-         ! '  Eigenvalue ', i, ' = (', WR(i), ', ', WI(i), 'i)'
-         ! write(*,'(A,3F12.8)') '  Eigenvector = ', axis
+         write(*,'(A,I0,A,F12.8,A,F12.8,A)') &
+         '  Eigenvalue ', i, ' = (', WR(i), ', ', WI(i), 'i)'
+         write(*,'(A,3F12.8)') '  Eigenvector = ', axis
          exit
       end if
    end do
 
    ! Calculate rotation angle using trace in radians
+   ! Since only using acos gives -theta, theta, use atan2 to get correct signed angle
+   ! by constructing sin theta as well
    ! Must check sign is correct later on
    tra = basis_matrix(1,1) + basis_matrix(2,2) + basis_matrix(3,3)
-   angle = acos(0.5 * (tra - 1))
+   
+   antisym_axis = 0.0
+   cos_angle = 0.5 * (tra - 1)
+      antisym_axis(1, 2) = -axis(3)
+      antisym_axis(1, 3) = axis(2)
+      antisym_axis(2, 1) = axis(3)
+      antisym_axis(2, 3) = -axis(1)
+      antisym_axis(3, 1) = -axis(2)
+      antisym_axis(3, 2) = axis(1)
+   temp = matmul(antisym_axis, basis_matrix)
+   sin_angle = -0.5 *(temp(1,1) + temp(2,2) + temp(3,3))
+   ! Now angle in -[pi, pi] -> need to check how it affects Rodrigues
+   angle = datan2(sin_angle, cos_angle)
+   print *, angle * 57.295779513
    end subroutine calculate_axis_angle_rot
    subroutine calculate_axis_angle(pos1, pos2, target_axis, angle)
       use datatypes
@@ -1039,7 +1059,7 @@ contains
             do i_atom = 1, n_atoms_pDOS
                g_atom = pDOS_atom_index(i_atom)
                i_spec = species_glob(g_atom)
-               sf_offset = 1
+               sf_offset = 0
                ! Include l = 0 to correctly calculate offset
                do i_l = 0, pao(i_spec)%greatest_angmom
                   nzeta = pao(i_spec)%angmom(i_l)%n_zeta_in_angmom
@@ -1048,15 +1068,17 @@ contains
                   !evec_coeff(sf_offset,pDOS_atom_index(i_atom), i_band_c,i_kp,i_spin)
                      select case(i_l)
                      case(1)
-                        evec_coeff(sf_offset:sf_offset+norbs-1, g_atom, i_band_c, i_kp, i_spin) = &
-                           matmul(U1, evec_coeff(sf_offset:sf_offset+norbs-1, g_atom, i_band_c, i_kp, i_spin))
-                        scaled_evec_coeff(sf_offset:sf_offset+norbs-1, g_atom, i_band_c, i_kp, i_spin) = &
-                           matmul(U1, scaled_evec_coeff(sf_offset:sf_offset+norbs-1, g_atom, i_band_c, i_kp, i_spin))
+                        evec_coeff(sf_offset+1:sf_offset+norbs, g_atom, i_band_c, i_kp, i_spin) = &
+                           matmul(U1, evec_coeff(sf_offset+1:sf_offset+norbs, g_atom, i_band_c, i_kp, i_spin))
+                        scaled_evec_coeff(sf_offset+1:sf_offset+norbs, g_atom, i_band_c, i_kp, i_spin) = &
+                           matmul(U1, scaled_evec_coeff(sf_offset+1:sf_offset+norbs, g_atom, i_band_c, i_kp, i_spin))
                      case(2)
-                        evec_coeff(sf_offset:sf_offset+norbs-1, g_atom, i_band_c, i_kp, i_spin) = &
-                           matmul(U2, evec_coeff(sf_offset:sf_offset+norbs-1, g_atom, i_band_c, i_kp, i_spin))
-                        scaled_evec_coeff(sf_offset:sf_offset+norbs-1, g_atom, i_band_c, i_kp, i_spin) = &
-                           matmul(U2, scaled_evec_coeff(sf_offset:sf_offset+norbs-1, g_atom, i_band_c, i_kp, i_spin))
+                          print *, sf_offset
+           
+                        evec_coeff(sf_offset+1:sf_offset+norbs, g_atom, i_band_c, i_kp, i_spin) = &
+                           matmul(U2, evec_coeff(sf_offset+1:sf_offset+norbs, g_atom, i_band_c, i_kp, i_spin))
+                        scaled_evec_coeff(sf_offset+1:sf_offset+norbs, g_atom, i_band_c, i_kp, i_spin) = &
+                           matmul(U2, scaled_evec_coeff(sf_offset+1:sf_offset+norbs, g_atom, i_band_c, i_kp, i_spin))
                      end select
                      sf_offset = sf_offset + norbs
                   end do ! i_z
