@@ -441,7 +441,7 @@ contains
   subroutine process_pdos
 
     use datatypes
-    use numbers, ONLY: zero, RD_ERR, twopi, half, one, two, four, six
+    use numbers, ONLY: zero, RD_ERR, pi, twopi, half, one, two, four, six
     use local, ONLY: eigenvalues, n_bands_total, nkp, wtk, efermi, flag_total_iDOS, &
          evec_coeff, scaled_evec_coeff, flag_procwf_range_Ef, flag_l_resolved, flag_lm_resolved, &
          flag_rotate_pdos, band_full_to_active, n_atoms_pDOS, pDOS_atom_index, &
@@ -530,19 +530,33 @@ contains
           stop "pDOS_az vector was not orthogonal to pDOS_ay"
       if (abs(dot_product(pdos_az, pdos_ax)) > tol) &
           stop "pDOS_az vector was not orthogonal to pDOS_ax"
-      call calculate_axis_angle_rot(pdos_ax, pdos_ay, pdos_az, axis, angle)
+      !call calculate_axis_angle_rot(pdos_ax, pdos_ay, pdos_az, axis, angle)
       ! Make Rodrigues
+      axis = (/real(double) :: 1.0, 0.0, 0.0/)
+      angle = -pi/2
       call construct_rodrigues(axis, angle, rod)
 
       ! Construct all C^l matrices from rodrigues
       call construct_C1(rod, C1)
       call construct_C2(rod, C2)
       ! compute U^l
+      !C2(5,5) = -1.12
+      print *, "C1", C1
+      print *, "C2", C2
       call construct_Ul(1, A1, C1, U1)
       call construct_Ul(2, A2, C2, U2)
+      !U1d = transpose(U1) ! UU^T = I
       U1d = transpose(U1) ! UU^T = I
       U2d = transpose(U2) ! UU^T = I
-      print *, matmul(U1, U1d)
+      !U2d(3,3) = -1.0
+      print *, "U1 * U1d: ", matmul(U1, U1d)
+      print *,"U2 * U2d: ",  matmul(U2, U2d)
+      print *, "CAA^TC^T ", matmul(C2, matmul(A2, matmul(transpose(A2), transpose(C2))))
+      print *, "AA^T ", matmul(A2, transpose(A2))
+      print *, "A2^-1 ", inv(A2)
+      print *, "U2", U2
+      print *, "U1", U1
+      !print *, "C2A2", matmul(C2, A2) 
       write(*,fmt='(2x,"Rotating wavefunction coefficients")')
       call rotate_coefficients(U1d, U2d)
     end if 
@@ -773,7 +787,6 @@ contains
    use datatypes
       implicit none
       real(double), intent(out) :: A1(3, 3), A2(5, 5)
-
       A1 = 0.0
       A2 = 0.0
       !A3 = 0.0
@@ -786,7 +799,7 @@ contains
       A2(2, 4) = 1.0
       A2(3, 1) = 1.0
       A2(4, 5) = 2.0
-      A2(5, 3) = 2.0
+      A2(5, 3) = 2.0*sqrt(3.0_double)
       ! f-orbitals, l = 3
       ! A3(1, 5) = 1
       ! A3(2, 3) = 1
@@ -852,6 +865,9 @@ contains
          exit
       end if
    end do
+   print *, "right eigenv", VR
+   print *, "right eigenvalues + imag", WR(1), WI(1)
+          print *, "right eigenvalues + imag", WR(2), WI(2)
 
    ! Calculate rotation angle using trace in radians
    ! Since only using acos gives -theta, theta, use atan2 to get correct signed angle
@@ -904,9 +920,10 @@ contains
       implicit none
 ! We will compute the rodrigues matrix, specifically R^T(axis, -angle)
       real(double), intent(in) :: axis(3), angle
-      real(double), intent(out) :: matrix(1, 9)
+      real(double), intent(out) :: matrix(9)
       real(double) :: K(3, 3), KT(3, 3), identity(3, 3), temp(3, 3)
       real(double) :: norm_axis(3)
+      K = 0.0
       identity = 0.0
       identity(1, 1) = 1.0
       identity(2, 2) = 1.0
@@ -914,7 +931,6 @@ contains
       !Normalise axis to unit vector 
       norm_axis = axis / norm2(axis) 
       ! Define K
-      K = 0.0
       K(1, 2) = -norm_axis(3)
       K(1, 3) = norm_axis(2)
       K(2, 1) = norm_axis(3)
@@ -924,39 +940,45 @@ contains
 
       KT = transpose(K)
       ! Rodrigues rotation matrix but with -angle
+      ! Checked that this rotation is the necessary one?
       temp = identity - (sin(angle)*KT) + (1 - cos(angle))*matmul(KT, KT)
-      matrix = reshape(temp, shape=shape(matrix), order=(/2, 1/)) !!!! is this right???
+      ! print *, temp
+      ! print *, temp(2,1)
+      matrix = reshape(transpose(temp), shape=(/9/)) !!!! is this right???
+      print *, "RT: ", matrix
+      print *, "det(R) (should be 1):", &
+      matrix(1)*(matrix(5)*matrix(9)-matrix(6)*matrix(8)) - &
+      matrix(2)*(matrix(4)*matrix(9)-matrix(6)*matrix(7)) + &
+      matrix(3)*(matrix(4)*matrix(8)-matrix(5)*matrix(7))
+      
    end subroutine construct_rodrigues
 
    subroutine construct_C1(rod, C1)
       use datatypes
       implicit none
-      real(double), intent(in) :: rod(1, 9)
+      real(double), intent(in) :: rod(9)
       real(double), intent(out) :: C1(3, 3)
       real(double) :: r(9)
       integer :: i
-      do i = 1, size(r)
-         r(i) = rod(1, i)
-      end do
-      C1(1, 1) = r(1)
-      C1(1, 2) = r(2)
-      C1(1, 3) = r(3)
-      C1(2, 1) = r(4)
-      C1(2, 2) = r(5)
-      C1(2, 3) = r(6)
-      C1(3, 1) = r(7)
-      C1(3, 2) = r(8)
-      C1(3, 3) = r(9)
+      C1(1, 1) = rod(1)
+      C1(1, 2) = rod(2)
+      C1(1, 3) = rod(3)
+      C1(2, 1) = rod(4)
+      C1(2, 2) = rod(5)
+      C1(2, 3) = rod(6)
+      C1(3, 1) = rod(7)
+      C1(3, 2) = rod(8)
+      C1(3, 3) = rod(9)
    end subroutine construct_C1
    subroutine construct_C2(rod, C2)
       use datatypes
       implicit none
-      real(double), intent(in) :: rod(1, 9)
+      real(double), intent(in) :: rod(9)
       real(double), intent(out) :: C2(5, 5)
       real(double) :: r(9)
       integer :: i
       do i = 1, size(r)
-         r(i) = rod(1, i)
+         r(i) = rod(i)
       end do
       C2(1, 1) = r(6)*r(8) + r(5)*r(9)
       C2(1, 2) = r(6)*r(7) + r(4)*r(9)
@@ -980,16 +1002,16 @@ contains
       C2(4, 1) = 2*(r(2)*r(3) - r(5)*r(6))
       C2(4, 2) = 2*(r(1)*r(3) - r(4)*r(6))
       C2(4, 3) = 2*(r(1)*r(2) - r(4)*r(5))
-      C2(4, 4) = 0.5*(r(3)*r(3) - r(6)*r(6))
-      C2(4, 5) = r(1)*r(1) - r(4)*r(4) + C2(4, 4)
+      C2(4, 5) = 0.5*(r(3)*r(3) - r(6)*r(6))
+      C2(4, 4) = r(1)*r(1) - r(4)*r(4) + 0.5*(r(3)*r(3) - r(6)*r(6))
 
 ! Row 5
       C2(5, 1) = (4*r(8)*r(9)) - 2*(r(2)*r(3) + r(5)*r(6))
       C2(5, 2) = (4*r(7)*r(9)) - 2*(r(1)*r(3) + r(4)*r(6))
       C2(5, 3) = (4*r(7)*r(8)) - 2*(r(1)*r(2) + r(4)*r(5))
-      C2(5, 4) = r(9)*r(9) - 0.5*(r(3)*r(3) + r(6)*r(6))
-      C2(5, 5) = C2(5, 4) - r(1)*r(1) - r(4)*r(4) + 2*r(7)*r(7)
-   end subroutine construct_C2
+      C2(5, 5) = r(9)*r(9) - 0.5*(r(3)*r(3) + r(6)*r(6))
+      C2(5, 4) = C2(5, 5) - r(1)*r(1) - r(4)*r(4) + 2*r(7)*r(7)
+end subroutine construct_C2
    function inv(A) result(Ainv)
       use datatypes
       real(double), dimension(:, :), intent(in) :: A
@@ -1034,6 +1056,7 @@ contains
       real(double) :: Al_inv(2*angmom + 1, 2*angmom + 1)
       Al_inv = inv(Al)
       Ul = matmul(Al_inv, matmul(Cl, Al))
+      
    end subroutine construct_Ul
    
    subroutine rotate_coefficients(U1, U2)
@@ -1068,13 +1091,14 @@ contains
                   !evec_coeff(sf_offset,pDOS_atom_index(i_atom), i_band_c,i_kp,i_spin)
                      select case(i_l)
                      case(1)
+                        ! print *, sf_offset
                         evec_coeff(sf_offset+1:sf_offset+norbs, g_atom, i_band_c, i_kp, i_spin) = &
                            matmul(U1, evec_coeff(sf_offset+1:sf_offset+norbs, g_atom, i_band_c, i_kp, i_spin))
                         scaled_evec_coeff(sf_offset+1:sf_offset+norbs, g_atom, i_band_c, i_kp, i_spin) = &
                            matmul(U1, scaled_evec_coeff(sf_offset+1:sf_offset+norbs, g_atom, i_band_c, i_kp, i_spin))
                      case(2)
-                          print *, sf_offset
-           
+                         !print *, sf_offset
+                       
                         evec_coeff(sf_offset+1:sf_offset+norbs, g_atom, i_band_c, i_kp, i_spin) = &
                            matmul(U2, evec_coeff(sf_offset+1:sf_offset+norbs, g_atom, i_band_c, i_kp, i_spin))
                         scaled_evec_coeff(sf_offset+1:sf_offset+norbs, g_atom, i_band_c, i_kp, i_spin) = &
