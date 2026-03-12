@@ -512,17 +512,10 @@ contains
       write(*,fmt='(2x, "Initialising A matrices")')
       call initialise_A_mat(A1, A2)
       ! ! Receive user input axes, calculate axis from eigenvector
-      ! pdos_ax = (/real(double) :: 1.0, 1.0, 0.0/)
-      ! pdos_ay = (/real(double) :: -1.0, 1.0, 0.0/)
-      ! pdos_az = (/real(double) :: 0.0, 0.0, 1.0/)
-
       ! Normalise vectors, then check they form an orthonormal basis
       pdos_ax = pdos_ax / norm2(pdos_ax)
       pdos_ay = pdos_ay / norm2(pdos_ay)
       pdos_az = pdos_az / norm2(pdos_az)
-      print *,"ax,ay",  dot_product(pdos_ax, pdos_ay)
-      print *, "az, ay", dot_product(pdos_az, pdos_ay)
-      print *, "az, ax", dot_product(pdos_az, pdos_ax)
       tol = 1e-10
       if (abs(dot_product(pdos_ax, pdos_ay)) >  tol) &
          stop "pDOS_ax vector was not orthogonal to pDOS_ay"
@@ -530,33 +523,22 @@ contains
           stop "pDOS_az vector was not orthogonal to pDOS_ay"
       if (abs(dot_product(pdos_az, pdos_ax)) > tol) &
           stop "pDOS_az vector was not orthogonal to pDOS_ax"
-      !call calculate_axis_angle_rot(pdos_ax, pdos_ay, pdos_az, axis, angle)
+      call calculate_axis_angle_rot(pdos_ax, pdos_ay, pdos_az, axis, angle)
       ! Make Rodrigues
-      axis = (/real(double) :: 1.0, 0.0, 0.0/)
-      angle = -pi/2
+      !axis = (/real(double) :: 1.0, 1.0, 1.0/)
+      !angle = pi * 0.437547648
       call construct_rodrigues(axis, angle, rod)
 
       ! Construct all C^l matrices from rodrigues
       call construct_C1(rod, C1)
       call construct_C2(rod, C2)
       ! compute U^l
-      !C2(5,5) = -1.12
       print *, "C1", C1
       print *, "C2", C2
       call construct_Ul(1, A1, C1, U1)
       call construct_Ul(2, A2, C2, U2)
-      !U1d = transpose(U1) ! UU^T = I
       U1d = transpose(U1) ! UU^T = I
       U2d = transpose(U2) ! UU^T = I
-      !U2d(3,3) = -1.0
-      print *, "U1 * U1d: ", matmul(U1, U1d)
-      print *,"U2 * U2d: ",  matmul(U2, U2d)
-      print *, "CAA^TC^T ", matmul(C2, matmul(A2, matmul(transpose(A2), transpose(C2))))
-      print *, "AA^T ", matmul(A2, transpose(A2))
-      print *, "A2^-1 ", inv(A2)
-      print *, "U2", U2
-      print *, "U1", U1
-      !print *, "C2A2", matmul(C2, A2) 
       write(*,fmt='(2x,"Rotating wavefunction coefficients")')
       call rotate_coefficients(U1d, U2d)
     end if 
@@ -847,7 +829,7 @@ contains
       - A(1,2)*(A(2,1)*A(3,3) - A(2,3)*A(3,1)) &
       + A(1,3)*(A(2,1)*A(3,2) - A(2,2)*A(3,1))
 
-      if (det < 0.00000) &
+      if (det  - 1.000 > tol) &
          stop "ERROR: determinant of change-of-basis matrix is negative"
       call DGEEV("N", "V", N, A, LDA, WR, WI, VL, LDVL, VR, LDVR, &
            WORK, LDWORK, INFO)
@@ -857,18 +839,14 @@ contains
       end if
       ! Require eigenvector with eigenvalue 1, no complex, to find axis
       do i = 1, N
-      if (abs(WR(i) - 1.00000) < TOL .and. abs(WI(i)) < TOL) then
+      if (abs(WR(i) - 1.00000) < tol .and. abs(WI(i)) < tol) then
          axis  = VR(:, i)   ! Column i of VR is the i-th right eigenvector
-         write(*,'(A,I0,A,F12.8,A,F12.8,A)') &
-         '  Eigenvalue ', i, ' = (', WR(i), ', ', WI(i), 'i)'
-         write(*,'(A,3F12.8)') '  Eigenvector = ', axis
+         ! write(*,'(A,I0,A,F12.8,A,F12.8,A)') &
+         ! '  Eigenvalue ', i, ' = (', WR(i), ', ', WI(i), 'i)'
+         ! write(*,'(A,3F12.8)') '  Eigenvector = ', axis
          exit
       end if
    end do
-   print *, "right eigenv", VR
-   print *, "right eigenvalues + imag", WR(1), WI(1)
-          print *, "right eigenvalues + imag", WR(2), WI(2)
-
    ! Calculate rotation angle using trace in radians
    ! Since only using acos gives -theta, theta, use atan2 to get correct signed angle
    ! by constructing sin theta as well
@@ -877,17 +855,17 @@ contains
    
    antisym_axis = 0.0
    cos_angle = 0.5 * (tra - 1)
-      antisym_axis(1, 2) = -axis(3)
-      antisym_axis(1, 3) = axis(2)
-      antisym_axis(2, 1) = axis(3)
-      antisym_axis(2, 3) = -axis(1)
-      antisym_axis(3, 1) = -axis(2)
-      antisym_axis(3, 2) = axis(1)
+   antisym_axis(1, 2) = -axis(3)
+   antisym_axis(1, 3) = axis(2)
+   antisym_axis(2, 1) = axis(3)
+   antisym_axis(2, 3) = -axis(1)
+   antisym_axis(3, 1) = -axis(2)
+   antisym_axis(3, 2) = axis(1)
    temp = matmul(antisym_axis, basis_matrix)
    sin_angle = -0.5 *(temp(1,1) + temp(2,2) + temp(3,3))
    ! Now angle in -[pi, pi] -> need to check how it affects Rodrigues
    angle = datan2(sin_angle, cos_angle)
-   print *, angle * 57.295779513
+   !print *, angle * 57.295779513
    end subroutine calculate_axis_angle_rot
    subroutine calculate_axis_angle(pos1, pos2, target_axis, angle)
       use datatypes
@@ -940,17 +918,8 @@ contains
 
       KT = transpose(K)
       ! Rodrigues rotation matrix but with -angle
-      ! Checked that this rotation is the necessary one?
       temp = identity - (sin(angle)*KT) + (1 - cos(angle))*matmul(KT, KT)
-      ! print *, temp
-      ! print *, temp(2,1)
-      matrix = reshape(transpose(temp), shape=(/9/)) !!!! is this right???
-      print *, "RT: ", matrix
-      print *, "det(R) (should be 1):", &
-      matrix(1)*(matrix(5)*matrix(9)-matrix(6)*matrix(8)) - &
-      matrix(2)*(matrix(4)*matrix(9)-matrix(6)*matrix(7)) + &
-      matrix(3)*(matrix(4)*matrix(8)-matrix(5)*matrix(7))
-      
+      matrix = reshape(transpose(temp), shape=(/9/))
    end subroutine construct_rodrigues
 
    subroutine construct_C1(rod, C1)
@@ -958,7 +927,6 @@ contains
       implicit none
       real(double), intent(in) :: rod(9)
       real(double), intent(out) :: C1(3, 3)
-      real(double) :: r(9)
       integer :: i
       C1(1, 1) = rod(1)
       C1(1, 2) = rod(2)
@@ -983,20 +951,20 @@ contains
       C2(1, 1) = r(6)*r(8) + r(5)*r(9)
       C2(1, 2) = r(6)*r(7) + r(4)*r(9)
       C2(1, 3) = r(5)*r(7) + r(4)*r(8)
-      C2(1, 4) = r(6)*r(9)*0.5
-      C2(1, 5) = r(4)*r(7) + r(6)*r(9)*0.5
+      C2(1, 5) = r(6)*r(9)*0.5
+      C2(1, 4) = r(4)*r(7) + r(6)*r(9)*0.5
 ! Row 2
       C2(2, 1) = r(3)*r(8) + r(2)*r(9)
       C2(2, 2) = r(3)*r(7) + r(1)*r(9)
       C2(2, 3) = r(2)*r(7) + r(1)*r(8)
-      C2(2, 4) = r(3)*r(9)*0.5
-      C2(2, 5) = r(1)*r(7) + r(3)*r(9)*0.5
+      C2(2, 5) = r(3)*r(9)*0.5
+      C2(2, 4) = r(1)*r(7) + r(3)*r(9)*0.5
 ! Row 3
       C2(3, 1) = r(3)*r(5) + r(2)*r(6)
       C2(3, 2) = r(3)*r(4) + r(1)*r(6)
       C2(3, 3) = r(2)*r(4) + r(1)*r(5)
-      C2(3, 4) = r(3)*r(6)*0.5
-      C2(3, 5) = r(1)*r(4) + r(3)*r(6)*0.5
+      C2(3, 5) = r(3)*r(6)*0.5
+      C2(3, 4) = r(1)*r(4) + r(3)*r(6)*0.5
 
 ! Row 4
       C2(4, 1) = 2*(r(2)*r(3) - r(5)*r(6))
@@ -1091,14 +1059,11 @@ end subroutine construct_C2
                   !evec_coeff(sf_offset,pDOS_atom_index(i_atom), i_band_c,i_kp,i_spin)
                      select case(i_l)
                      case(1)
-                        ! print *, sf_offset
                         evec_coeff(sf_offset+1:sf_offset+norbs, g_atom, i_band_c, i_kp, i_spin) = &
                            matmul(U1, evec_coeff(sf_offset+1:sf_offset+norbs, g_atom, i_band_c, i_kp, i_spin))
                         scaled_evec_coeff(sf_offset+1:sf_offset+norbs, g_atom, i_band_c, i_kp, i_spin) = &
                            matmul(U1, scaled_evec_coeff(sf_offset+1:sf_offset+norbs, g_atom, i_band_c, i_kp, i_spin))
                      case(2)
-                         !print *, sf_offset
-                       
                         evec_coeff(sf_offset+1:sf_offset+norbs, g_atom, i_band_c, i_kp, i_spin) = &
                            matmul(U2, evec_coeff(sf_offset+1:sf_offset+norbs, g_atom, i_band_c, i_kp, i_spin))
                         scaled_evec_coeff(sf_offset+1:sf_offset+norbs, g_atom, i_band_c, i_kp, i_spin) = &
