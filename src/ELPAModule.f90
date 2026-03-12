@@ -1,6 +1,7 @@
 module ELPA_module
 
   use datatypes
+  use global_module, only: io_lun
   use mpi
 !!$   use omp
   use elpa
@@ -119,13 +120,14 @@ contains
 !!$      call elp%set( "omp_threads", omp_get_max_threads(), info )
 
     if(flag_elpa_GPU) then
-       call elp%set("nvidia-gpu",1,info)
+       call elp%set("amd-gpu",1,info)
        call elp%set("solver",ELPA_SOLVER_1STAGE,info)
        info = elp%setup_gpu()
     else
        info = elp%setup()
     end if
     if( info /= ELPA_OK )  call cq_abort("something wrong in ELPA !")
+    write (io_lun, *) "ELPA initialised correctly"
   end subroutine init_ELPA
 
   subroutine end_ELPA( info )
