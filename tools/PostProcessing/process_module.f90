@@ -513,7 +513,7 @@ contains
       ! ! Receive user input axes, calculate axis from eigenvector
       ! Normalise vectors, then check they form an orthonormal basis
       call get_pdos_axes
-      call calculate_axis_angle_rot(pdos_ax, pdos_ay, pdos_az, axis, angle)
+      call calculate_axis_angle(pdos_ax, pdos_ay, pdos_az, axis, angle)
       ! Make Rodrigues
       !axis = (/real(double) :: 1.0, 1.0, 1.0/)
       !angle = pi * 0.437547648
@@ -758,27 +758,15 @@ contains
    use local, ONLY: pdos_ax, pdos_ay, pdos_az
    use dimens, ONLY: r_super_x, r_super_y, r_super_z
    implicit none
-   real(double) :: temp(3)
+
    real(double), parameter :: tol = 1e-10
 
    ! Normalise new x-axis correctly
-   temp(1) = pdos_ax(1) * r_super_x 
-   temp(2) = pdos_ax(2) * r_super_y 
-   temp(3) = pdos_ax(3) * r_super_z 
-   pdos_ax = temp / norm2(temp)
+   pdos_ax = pdos_ax / norm2(pdos_ax)
    ! Normalise new y-axis correctly
-   temp(1) = pdos_ay(1) * r_super_x 
-   temp(2) = pdos_ay(2) * r_super_y 
-   temp(3) = pdos_ay(3) * r_super_z 
-   pdos_ay = temp / norm2(temp)
+   pdos_ay = pdos_ay / norm2(pdos_ay)
    ! Normalise new y-axis correctly
-   temp(1) = pdos_az(1) * r_super_x 
-   temp(2) = pdos_az(2) * r_super_y 
-   temp(3) = pdos_az(3) * r_super_z 
-   pdos_az = temp / norm2(temp)
-   print *, pdos_ax
-   print *, pdos_ay
-   print *, pdos_az
+   pdos_az = pdos_az / norm2(pdos_az)
    if (abs(dot_product(pdos_ax, pdos_ay)) > tol) &
       stop "pDOS_ax vector was not orthogonal to pDOS_ay"
    if (abs(dot_product(pdos_az, pdos_ay)) > tol) &
@@ -813,10 +801,10 @@ contains
       ! A3(6, 7) = 0.2*sqrt(15.0)
       ! A3(7, 6) = 0.05*sqrt(10.0)
    end subroutine initialise_A_mat
-   subroutine calculate_axis_angle_rot(w1, w2, w3, axis, angle)
+   subroutine calculate_axis_angle(w1, w2, w3, axis, angle)
       use datatypes
       implicit none
-      EXTERNAL         DGEEV
+      external DGEEV
 
       ! Allow the user to define new coordinate system
       ! Rotate from simulation axes (standard Cartesian) to local axes
@@ -888,33 +876,7 @@ contains
    ! Now angle in -[pi, pi] -> need to check how it affects Rodrigues
    angle = datan2(sin_angle, cos_angle)
    !print *, angle * 57.295779513
-   end subroutine calculate_axis_angle_rot
-   subroutine calculate_axis_angle(pos1, pos2, target_axis, angle)
-      use datatypes
-      implicit none
-      ! We want the bond between 2 atoms to be the axis to align to
-      ! Tehcnically there are 2 choices of "z", so just assume the axis vector goes from pos1 to pos2
-      ! then compute cross_prod x z to get the axis to rotate about
-      real(double), intent(in) :: pos1(3), pos2(3)
-      real(double), intent(out) :: target_axis(3), angle
-      real(double) :: pos_diff(3), cross_prod(3), dot_prod
-      pos_diff = pos2 - pos1
-      ! Default to aligning z-axis
-      call cross_product(cross_prod, pos_diff, (/real(double) :: 0.0, 0.0, 1.0/))
-      dot_prod = dot_product(pos_diff, (/real(double) :: 0.0, 0.0, 1.0/))
-      target_axis = cross_prod/norm2(cross_prod)
-      angle = acos(dot_prod/norm2(pos_diff))
    end subroutine calculate_axis_angle
-   subroutine cross_product(result, vec1, vec2)
-      use datatypes
-      implicit none
-      ! computes vec1 cross vec2
-      real(double), intent(out) :: result(3)
-      real(double), intent(in) :: vec1(3), vec2(3)
-      result(1) = vec1(2)*vec2(3) - vec1(3)*vec2(2)
-      result(2) = vec1(3)*vec2(1) - vec1(1)*vec2(3)
-      result(3) = vec1(1)*vec2(2) - vec1(2)*vec2(1)
-   end subroutine
    subroutine construct_rodrigues(axis, angle, matrix)
       use datatypes
       implicit none
