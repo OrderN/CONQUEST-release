@@ -417,7 +417,7 @@ contains
     implicit none
     !
     type(neigh_atomic_data), intent(inout) :: hl
-    type(neigh_atomic_data), intent(inout) :: kl
+    type(neigh_atomic_data), intent(in) :: kl
     integer,          intent(in)           :: ind
     integer,          intent(in)           :: part_cover
     integer,          intent(in)           :: part
@@ -518,7 +518,7 @@ contains
     implicit none
     !
     type(prim_atomic_data), intent(inout) :: ia
-    type(neigh_atomic_data),intent(inout) :: hl
+    type(neigh_atomic_data),intent(in) :: hl
     integer, intent(in)                   :: ind
     integer, intent(in)                   :: iprim
     integer, intent(in)                   :: part

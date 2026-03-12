@@ -224,10 +224,6 @@ module exx_types
      real(double), dimension(3) :: xyz
      real(double) :: r
      real(double) :: d
-     !
-     integer, dimension(:), allocatable ::   l1
-     integer, dimension(:), allocatable :: acz1
-     integer, dimension(:), allocatable ::   m1
           
   end type neigh_atomic_data
 
