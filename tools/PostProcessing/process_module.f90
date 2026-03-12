@@ -465,10 +465,9 @@ contains
     real(double), dimension(:,:), allocatable :: total_electrons
     real(double), dimension(:,:,:), allocatable :: total_electrons_l
     real(double) :: A1(3, 3), A2(5, 5), A1inv(3, 3), A2inv(5, 5)
+    real(double) :: U1(3, 3), U2(5, 5), U1d(3, 3), U2d(5, 5)
     real(double) :: C1(3, 3), C2(5, 5)
-    real(double) :: U1(3, 3), U2(5, 5), U1d(3, 3), U2d(5, 5), tempmat(5,5)
-    real(double) :: rod(3, 3)
-    real(double) :: det, angle, axis(3), tol
+    real(double) :: rod(3, 3), angle, axis(3)
 
 
     character(len=25) :: filename,fmt_dos
@@ -513,16 +512,7 @@ contains
       call initialise_A_mat(A1, A2)
       ! ! Receive user input axes, calculate axis from eigenvector
       ! Normalise vectors, then check they form an orthonormal basis
-      pdos_ax = pdos_ax / norm2(pdos_ax)
-      pdos_ay = pdos_ay / norm2(pdos_ay)
-      pdos_az = pdos_az / norm2(pdos_az)
-      tol = 1e-10
-      if (abs(dot_product(pdos_ax, pdos_ay)) >  tol) &
-         stop "pDOS_ax vector was not orthogonal to pDOS_ay"
-      if (abs(dot_product(pdos_az, pdos_ay)) > tol) &
-          stop "pDOS_az vector was not orthogonal to pDOS_ay"
-      if (abs(dot_product(pdos_az, pdos_ax)) > tol) &
-          stop "pDOS_az vector was not orthogonal to pDOS_ax"
+      call get_pdos_axes
       call calculate_axis_angle_rot(pdos_ax, pdos_ay, pdos_az, axis, angle)
       ! Make Rodrigues
       !axis = (/real(double) :: 1.0, 1.0, 1.0/)
@@ -533,8 +523,6 @@ contains
       call construct_C1(rod, C1)
       call construct_C2(rod, C2)
       ! compute U^l
-      print *, "C1", C1
-      print *, "C2", C2
       call construct_Ul(1, A1, C1, U1)
       call construct_Ul(2, A2, C2, U2)
       U1d = transpose(U1) ! UU^T = I
@@ -764,6 +752,40 @@ contains
     end do
     return
   end subroutine process_pdos
+
+  subroutine get_pdos_axes
+   use datatypes
+   use local, ONLY: pdos_ax, pdos_ay, pdos_az
+   use dimens, ONLY: r_super_x, r_super_y, r_super_z
+   implicit none
+   real(double) :: temp(3)
+   real(double), parameter :: tol = 1e-10
+
+   ! Normalise new x-axis correctly
+   temp(1) = pdos_ax(1) * r_super_x 
+   temp(2) = pdos_ax(2) * r_super_y 
+   temp(3) = pdos_ax(3) * r_super_z 
+   pdos_ax = temp / norm2(temp)
+   ! Normalise new y-axis correctly
+   temp(1) = pdos_ay(1) * r_super_x 
+   temp(2) = pdos_ay(2) * r_super_y 
+   temp(3) = pdos_ay(3) * r_super_z 
+   pdos_ay = temp / norm2(temp)
+   ! Normalise new y-axis correctly
+   temp(1) = pdos_az(1) * r_super_x 
+   temp(2) = pdos_az(2) * r_super_y 
+   temp(3) = pdos_az(3) * r_super_z 
+   pdos_az = temp / norm2(temp)
+   print *, pdos_ax
+   print *, pdos_ay
+   print *, pdos_az
+   if (abs(dot_product(pdos_ax, pdos_ay)) > tol) &
+      stop "pDOS_ax vector was not orthogonal to pDOS_ay"
+   if (abs(dot_product(pdos_az, pdos_ay)) > tol) &
+       stop "pDOS_az vector was not orthogonal to pDOS_ay"
+   if (abs(dot_product(pdos_az, pdos_ax)) > tol) &
+       stop "pDOS_az vector was not orthogonal to pDOS_ax"
+  end subroutine
 
   subroutine initialise_A_mat(A1, A2)
    use datatypes
