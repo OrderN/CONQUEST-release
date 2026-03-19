@@ -505,18 +505,13 @@ contains
     deallocate(evec_coeff)
     ! Read eigenvector coefficients
     call read_psi_coeffs("Process")
-    ! Call rotation subroutine if desired
     allocate(occ(n_bands_total,nkp))
+    
+    ! Call rotation subroutine if desired
     if (flag_rotate_pdos) then
-      write(*,fmt='(2x, "Initialising A matrices")')
       call initialise_A_mat(A1, A2)
-      ! ! Receive user input axes, calculate axis from eigenvector
-      ! Normalise vectors, then check they form an orthonormal basis
       call get_pdos_axes
       call calculate_axis_angle(pdos_ax, pdos_ay, pdos_az, axis, angle)
-      ! Make Rodrigues
-      !axis = (/real(double) :: 1.0, 1.0, 1.0/)
-      !angle = pi * 0.437547648
       call construct_rodrigues(axis, angle, rod)
 
       ! Construct all C^l matrices from rodrigues
@@ -527,9 +522,6 @@ contains
       call construct_Ul(2, A2, C2, U2)
       U1d = transpose(U1) ! UU^T = I
       U2d = transpose(U2) ! UU^T = I
-      !print *, "U1U1T:", matmul(U1, U1d)
-      !print *, "U1U1T:", matmul(U2, U2d)
-      print *, U2
       write(*,fmt='(2x,"Rotating wavefunction coefficients")')
       call rotate_coefficients(U1d, U2d)
     end if 
@@ -837,7 +829,6 @@ contains
       basis_matrix(:,1) = w1
       basis_matrix(:,2) = w2
       basis_matrix(:,3) = w3
-      print *, "basis mat", basis_matrix
       ! Make copy because DGEEV destroys matrix
       A = basis_matrix
       ! If determinant flips sign, orientation of the coordinate system has changed
@@ -846,7 +837,7 @@ contains
       + A(1,3)*(A(2,1)*A(3,2) - A(2,2)*A(3,1))
 
       if (det  - 1.000 > tol) &
-         stop "ERROR: determinant of change-of-basis matrix is negative"
+         stop "ERROR: determinant of change-of-basis matrix is negative. Please adjust new coordinate vectors to form a right-handed basis."
       call DGEEV("N", "V", N, A, LDA, WR, WI, VL, LDVL, VR, LDVR, &
            WORK, LDWORK, INFO)
       if (INFO /= 0) then
@@ -857,41 +848,32 @@ contains
       do i = 1, N
       if (abs(WR(i) - 1.00000) < tol .and. abs(WI(i)) < tol) then
          axis  = VR(:, i)   ! Column i of VR is the i-th right eigenvector
-         ! write(*,'(A,I0,A,F12.8,A,F12.8,A)') &
-         ! '  Eigenvalue ', i, ' = (', WR(i), ', ', WI(i), 'i)'
-         ! write(*,'(A,3F12.8)') '  Eigenvector = ', axis
          exit
       end if
    end do
-   ! Calculate rotation angle using trace in radians
-   ! Since only using acos gives -theta, theta, use atan2 to get correct signed angle
-   ! by constructing sin theta as well
-   ! Must check sign is correct later on
    tra = basis_matrix(1,1) + basis_matrix(2,2) + basis_matrix(3,3)
    antisym_axis = 0.0
    axis = axis / norm2(axis)
    
-   print *, "axis", axis
-   cos_angle = 0.5 * (tra - 1)
+   cos_angle = (tra - 1.0)
    antisym_axis(1, 2) = -axis(3)
    antisym_axis(1, 3) = axis(2)
    antisym_axis(2, 1) = axis(3)
    antisym_axis(2, 3) = -axis(1)
    antisym_axis(3, 1) = -axis(2)
    antisym_axis(3, 2) = axis(1)
+
    temp = matmul(antisym_axis, basis_matrix)
-   sin_angle = -0.5 *(temp(1,1) + temp(2,2) + temp(3,3))
-   ! Now angle in -[pi, pi] -> need to check how it affects Rodrigues
-   print *, "sin(), cos()", sin_angle, cos_angle
+   sin_angle = -(temp(1,1) + temp(2,2) + temp(3,3))
+   if (abs(sin_angle) < tol .and. abs(cos_angle) < tol) &
+           stop "ValueError: Both arguments to datan2 are zero." 
    angle = datan2(sin_angle, cos_angle)
-   if (sin_angle < tol .and. cos_angle < tol) &
-           stop "Undefine rotation angle from data2"
+ 
    ! Angle can be 0, which means its either +/- 90 degrees
    if (abs(angle) < tol) then
-        if (sin_angle < tol) angle = -pi/2
-        if (sin_angle >= tol) angle = pi/2 
+        if (abs(sin_angle) < tol) angle = -pi/2
+        if (abs(sin_angle) >= tol) angle = pi/2 
    end if 
-   print *, "angle", angle * 57.295779513
    end subroutine calculate_axis_angle
    subroutine construct_rodrigues(axis, angle, matrix)
       use datatypes
@@ -920,7 +902,6 @@ contains
       ! Rodrigues rotation matrix but with -angle
       temp = identity - (sin(angle)*KT) + (1 - cos(angle))*matmul(KT, KT)
       matrix = reshape(transpose(temp), shape=(/9/))
-      print *, "Rod", matrix
    end subroutine construct_rodrigues
 
    subroutine construct_C1(rod, C1)
