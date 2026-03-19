@@ -527,6 +527,9 @@ contains
       call construct_Ul(2, A2, C2, U2)
       U1d = transpose(U1) ! UU^T = I
       U2d = transpose(U2) ! UU^T = I
+      !print *, "U1U1T:", matmul(U1, U1d)
+      !print *, "U1U1T:", matmul(U2, U2d)
+      print *, U2
       write(*,fmt='(2x,"Rotating wavefunction coefficients")')
       call rotate_coefficients(U1d, U2d)
     end if 
@@ -773,9 +776,10 @@ contains
        stop "pDOS_az vector was not orthogonal to pDOS_ay"
    if (abs(dot_product(pdos_az, pdos_ax)) > tol) &
        stop "pDOS_az vector was not orthogonal to pDOS_ax"
+
   end subroutine
 
-  subroutine initialise_A_mat(A1, A2)
+    subroutine initialise_A_mat(A1, A2)
    use datatypes
       implicit none
       real(double), intent(out) :: A1(3, 3), A2(5, 5)
@@ -803,6 +807,7 @@ contains
    end subroutine initialise_A_mat
    subroutine calculate_axis_angle(w1, w2, w3, axis, angle)
       use datatypes
+      use numbers, ONLY: pi
       implicit none
       external DGEEV
 
@@ -832,6 +837,7 @@ contains
       basis_matrix(:,1) = w1
       basis_matrix(:,2) = w2
       basis_matrix(:,3) = w3
+      print *, "basis mat", basis_matrix
       ! Make copy because DGEEV destroys matrix
       A = basis_matrix
       ! If determinant flips sign, orientation of the coordinate system has changed
@@ -862,8 +868,10 @@ contains
    ! by constructing sin theta as well
    ! Must check sign is correct later on
    tra = basis_matrix(1,1) + basis_matrix(2,2) + basis_matrix(3,3)
-   
    antisym_axis = 0.0
+   axis = axis / norm2(axis)
+   
+   print *, "axis", axis
    cos_angle = 0.5 * (tra - 1)
    antisym_axis(1, 2) = -axis(3)
    antisym_axis(1, 3) = axis(2)
@@ -874,8 +882,16 @@ contains
    temp = matmul(antisym_axis, basis_matrix)
    sin_angle = -0.5 *(temp(1,1) + temp(2,2) + temp(3,3))
    ! Now angle in -[pi, pi] -> need to check how it affects Rodrigues
+   print *, "sin(), cos()", sin_angle, cos_angle
    angle = datan2(sin_angle, cos_angle)
-   !print *, angle * 57.295779513
+   if (sin_angle < tol .and. cos_angle < tol) &
+           stop "Undefine rotation angle from data2"
+   ! Angle can be 0, which means its either +/- 90 degrees
+   if (abs(angle) < tol) then
+        if (sin_angle < tol) angle = -pi/2
+        if (sin_angle >= tol) angle = pi/2 
+   end if 
+   print *, "angle", angle * 57.295779513
    end subroutine calculate_axis_angle
    subroutine construct_rodrigues(axis, angle, matrix)
       use datatypes
@@ -904,6 +920,7 @@ contains
       ! Rodrigues rotation matrix but with -angle
       temp = identity - (sin(angle)*KT) + (1 - cos(angle))*matmul(KT, KT)
       matrix = reshape(transpose(temp), shape=(/9/))
+      print *, "Rod", matrix
    end subroutine construct_rodrigues
 
    subroutine construct_C1(rod, C1)
@@ -929,7 +946,7 @@ contains
       real(double), intent(out) :: C2(5, 5)
       real(double) :: r(9)
       integer :: i
-      do i = 1, size(r)
+      do i = 1, size(rod)
          r(i) = rod(i)
       end do
       C2(1, 1) = r(6)*r(8) + r(5)*r(9)
