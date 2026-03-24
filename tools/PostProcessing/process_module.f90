@@ -836,8 +836,8 @@ contains
       - A(1,2)*(A(2,1)*A(3,3) - A(2,3)*A(3,1)) &
       + A(1,3)*(A(2,1)*A(3,2) - A(2,2)*A(3,1))
 
-      if (det  - 1.000 > tol) &
-         stop "ERROR: determinant of change-of-basis matrix is negative. Please adjust new coordinate vectors to form a right-handed basis."
+      if (det < 1.0 - tol .and. det > 1.0 + tol) &
+         stop "ERROR: determinant of change-of-basis matrix is not 1. Please adjust new coordinate vectors to form a right-handed basis."
       call DGEEV("N", "V", N, A, LDA, WR, WI, VL, LDVL, VR, LDVR, &
            WORK, LDWORK, INFO)
       if (INFO /= 0) then
@@ -848,13 +848,13 @@ contains
       do i = 1, N
       if (abs(WR(i) - 1.00000) < tol .and. abs(WI(i)) < tol) then
          axis  = VR(:, i)   ! Column i of VR is the i-th right eigenvector
+         print *, axis
          exit
       end if
    end do
    tra = basis_matrix(1,1) + basis_matrix(2,2) + basis_matrix(3,3)
    antisym_axis = 0.0
    axis = axis / norm2(axis)
-   
    cos_angle = (tra - 1.0)
    antisym_axis(1, 2) = -axis(3)
    antisym_axis(1, 3) = axis(2)
@@ -866,9 +866,10 @@ contains
    temp = matmul(antisym_axis, basis_matrix)
    sin_angle = -(temp(1,1) + temp(2,2) + temp(3,3))
    if (abs(sin_angle) < tol .and. abs(cos_angle) < tol) &
-           stop "ValueError: Both arguments to datan2 are zero." 
+           stop "ValueError: Both arguments to datan2 are zero."
    angle = datan2(sin_angle, cos_angle)
- 
+   if (angle /= angle) &
+           stop "ERROR: rotation angle was undefined. Please check vectors in pDOSAxes block."
    ! Angle can be 0, which means its either +/- 90 degrees
    if (abs(angle) < tol) then
         if (abs(sin_angle) < tol) angle = -pi/2
