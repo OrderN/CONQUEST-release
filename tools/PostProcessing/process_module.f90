@@ -444,8 +444,8 @@ contains
     use numbers, ONLY: zero, RD_ERR, pi, twopi, half, one, two, four, six
     use local, ONLY: eigenvalues, n_bands_total, nkp, wtk, efermi, flag_total_iDOS, &
          evec_coeff, scaled_evec_coeff, flag_procwf_range_Ef, flag_l_resolved, flag_lm_resolved, &
-         flag_rotate_pdos, band_full_to_active, n_atoms_pDOS, pDOS_atom_index, &
-         pdos_ax, pdos_ay, pdos_az
+         flag_rotate_pdos, flag_rotate_pdos_mode, band_full_to_active, n_atoms_pDOS, pDOS_atom_index, &
+         pdos_ax, pdos_ay, pdos_az, euler_alpha, euler_beta, euler_gamma
     use read, ONLY: read_eigenvalues, read_psi_coeffs, read_nprocs_from_blocks
     use global_module, ONLY: nspin, n_DOS, E_DOS_min, E_DOS_max, sigma_DOS, ni_in_cell, species_glob
     use units, ONLY: HaToeV
@@ -510,8 +510,13 @@ contains
     ! Call rotation subroutine if desired
     if (flag_rotate_pdos) then
       call initialise_A_mat(A1, A2)
-      call get_pdos_axes
-      call calculate_axis_angle(pdos_ax, pdos_ay, pdos_az, axis, angle)
+      ! Determine whether to use Axis-angle == 0 or Euler  == 1first 
+      if (flag_rotate_pdos_mode == 0) then 
+         call get_pdos_axes
+         call calculate_axis_angle(pdos_ax, pdos_ay, pdos_az, axis, angle)
+      else if (flag_rotate_pdos_mode == 1) then
+         call euler_to_axis_angle(axis, angle)
+      end if
       call construct_rodrigues(axis, angle, rod)
 
       ! Construct all C^l matrices from rodrigues
@@ -771,8 +776,8 @@ contains
 
   end subroutine
 
-    subroutine initialise_A_mat(A1, A2)
-   use datatypes
+   subroutine initialise_A_mat(A1, A2)
+      use datatypes
       implicit none
       real(double), intent(out) :: A1(3, 3), A2(5, 5)
       A1 = 0.0
@@ -797,6 +802,96 @@ contains
       ! A3(6, 7) = 0.2*sqrt(15.0)
       ! A3(7, 6) = 0.05*sqrt(10.0)
    end subroutine initialise_A_mat
+   subroutine antisym_matrix(vector, matrix)
+      use datatypes
+      implicit none
+      real(double), intent(in) :: vector(3)
+      real(double), intent(out) :: matrix(3,3)
+      matrix = 0.0
+      matrix(1, 2) = -vector(3)
+      matrix(1, 3) = vector(2)
+      matrix(2, 1) = vector(3)
+      matrix(2, 3) = -vector(1)
+      matrix(3, 1) = -vector(2)
+      matrix(3, 2) = vector(1)
+   end subroutine
+   subroutine euler_to_axis_angle(axis, angle)
+      use datatypes
+      use numbers, ONLY: pi
+      use local, ONLY: euler_alpha, euler_beta, euler_gamma
+      use GenComms, ONLY: cq_abort
+
+      implicit none
+      ! This subroutine converts Euler angles into axis-angle for use
+      ! with the Rodrigues matrix and pDOS rotation 
+      real(double), intent(out) :: axis(3), angle
+      real(double) :: R(3,3)
+      real(double) :: cp, sp, ct, st, cps, sps
+      real(double) :: tra, s, inv_s, norm
+      real(double) :: nx, ny, nz
+      real(double), parameter :: eps = 1.0d-10 
+
+      ! Make ZYZ rotation matrix, Wigner's convention
+      ! R = Rz(alpha) * Ry(beta) * Rz(psi)
+      cp = cos(euler_alpha)
+      sp = sin(euler_alpha)
+      ct = cos(euler_beta)
+      st = sin(euler_beta)
+      cps = cos(euler_gamma)
+      sps = sin(euler_gamma)
+
+      R(1,1) = cp*ct*cps - sp*sps
+      R(1,2) = -cp*ct*sps - sp*cps
+      R(1,3) = cp*st
+      R(2,1) = sp*ct*cps + cp*sps
+      R(2,2) = -sp*ct*sps + cp*cps
+      R(2,3) = sp*st
+      R(3,1) = -st*cps
+      R(3,2) = st*sps
+      R(3,3) = ct
+
+      tra = R(1,1) + R(2,2) + R(3,3)
+      angle = acos((tra - 1.0) / 2.0)
+
+      if (angle < eps) then
+         call cq_abort("Cannot perform a rotation of 0 degrees.")
+      else if (abs(angle - pi) < eps) then
+         ! The skew-symmetric formula 1/(2 sin beta) (R - R^T) singular
+         ! Use Rodrigues:  R + I = 2 n*n^T  so  n_i = sqrt((R_ii + 1) / 2).
+         ! sqrt gives magnitude, need to determine sign from largest off-diagonal product
+         nx = sqrt(0.5*(R(1,1) + 1.0))
+         ny = sqrt(0.5*(R(2,2) + 1.0))
+         nz = sqrt(0.5*(R(3,3) + 1.0))
+
+         ! Choose the largest component as positive reference, fix other signs.
+         if (nx >= ny .and. nx >= nz) then
+               ! nx is largest
+               if (R(1,2) < 0.0 - eps) ny = -ny
+               if (R(1,3) < 0.0 - eps) nz = -nz
+         else if (ny >= nx .and. ny >= nz) then
+               ! ny is largest
+               if (R(1,2) < 0.0 - eps) nx = -nx
+               if (R(2,3) < 0.0 - eps) nz = -nz
+         else
+               ! nz is largest
+               if (R(1,3) < 0.0 - eps) nx = -nx
+               if (R(2,3) < 0.0 - eps) ny = -ny
+         end if
+
+         axis(1) = nx
+         axis(2) = ny
+         axis(3) = nz
+
+      else
+         ! n = (0.5 / (sin angle)) * (R - R^T)
+         inv_s = 0.5 / sin(angle)
+
+         axis(1) = (R(3,2) - R(2,3)) * inv_s
+         axis(2) = (R(1,3) - R(3,1)) * inv_s
+         axis(3) = (R(2,1) - R(1,2)) * inv_s
+
+      end if
+   end subroutine euler_to_axis_angle
    subroutine calculate_axis_angle(w1, w2, w3, axis, angle)
       use datatypes
       use numbers, ONLY: pi
@@ -859,13 +954,7 @@ contains
       antisym_axis = 0.0
       axis = axis / norm2(axis)
       cos_angle = (tra - 1.0)
-      antisym_axis(1, 2) = -axis(3)
-      antisym_axis(1, 3) = axis(2)
-      antisym_axis(2, 1) = axis(3)
-      antisym_axis(2, 3) = -axis(1)
-      antisym_axis(3, 1) = -axis(2)
-      antisym_axis(3, 2) = axis(1)
-
+      call antisym_matrix(axis, antisym_axis)
       temp = matmul(antisym_axis, basis_matrix)
       sin_angle = -(temp(1,1) + temp(2,2) + temp(3,3))
       if (abs(sin_angle) < tol .and. abs(cos_angle) < tol) &
@@ -895,12 +984,7 @@ contains
       !Normalise axis to unit vector 
       norm_axis = axis / norm2(axis) 
       ! Define K
-      K(1, 2) = -norm_axis(3)
-      K(1, 3) = norm_axis(2)
-      K(2, 1) = norm_axis(3)
-      K(2, 3) = -norm_axis(1)
-      K(3, 1) = -norm_axis(2)
-      K(3, 2) = norm_axis(1)
+      call antisym_matrix(norm_axis, K)
 
       KT = transpose(K)
       ! Rodrigues rotation matrix but with -angle
@@ -924,16 +1008,12 @@ contains
       C1(3, 2) = rod(8)
       C1(3, 3) = rod(9)
    end subroutine construct_C1
-   subroutine construct_C2(rod, C2)
+   subroutine construct_C2(r, C2)
       use datatypes
       implicit none
-      real(double), intent(in) :: rod(9)
+      real(double), intent(in) :: r(9)
       real(double), intent(out) :: C2(5, 5)
-      real(double) :: r(9)
-      integer :: i
-      do i = 1, size(rod)
-         r(i) = rod(i)
-      end do
+
       C2(1, 1) = r(6)*r(8) + r(5)*r(9)
       C2(1, 2) = r(6)*r(7) + r(4)*r(9)
       C2(1, 3) = r(5)*r(7) + r(4)*r(8)

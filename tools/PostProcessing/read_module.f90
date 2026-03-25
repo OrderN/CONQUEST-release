@@ -304,6 +304,8 @@ contains
        flag_l_resolved = fdf_boolean('Process.pDOS_l_resolved',.false.)
        flag_lm_resolved = fdf_boolean('Process.pDOS_lm_resolved',.false.)
        flag_rotate_pdos = fdf_boolean('Process.RotatePDOS',.false.)
+       flag_rotate_pdos_mode = fdf_integer('Process.RotatePDOSMode',0)
+       flag_rotate_pdos_units = fdf_string(7, 'Process.RotatePDOSAngle',"rad") ! deg or rad
        if(flag_lm_resolved .and. (.not.flag_l_resolved)) flag_l_resolved = .true.
        ! How many atoms?
        n_atoms_pDOS = fdf_integer('Process.n_atoms_pDOS',0)
@@ -327,18 +329,36 @@ contains
              call cq_abort("Specified n_atoms_pDOS but no pDOS_atoms block")
           end if
        end if
-       ! 
-       if(fdf_block('pDOSAxes') .and. flag_rotate_pDOS) then
-          if(1+block_end-block_start<3) & 
-                  call cq_abort("Too few vectors in pDOS_axes: ",&
+       ! pDOS rotation
+       if (flag_rotate_pDOS) then
+         if(fdf_block('pDOSAxes') .and. flag_rotate_pdos_mode == 0) then
+            if(1+block_end-block_start<3) & 
+                     call cq_abort("Too few vectors in pDOS_axes: ",&
+                     1+block_end-block_start,3)
+            ! Expect exactly 3 vectors -> 3 reads
+            read (unit=input_array(block_start),fmt=*) pdos_ax
+            read (unit=input_array(block_start+1),fmt=*) pdos_ay
+            read (unit=input_array(block_start+2),fmt=*) pdos_az
+            call fdf_endblock
+         else if (fdf_block('pDOSEuler') .and. flag_rotate_pdos_mode == 1) then
+            if(1+block_end-block_start<3) & 
+                  call cq_abort("Too few Euler angles provided: ",&
                   1+block_end-block_start,3)
-         ! Expect exactly 3 lines -> 3 reads
-         read (unit=input_array(block_start),fmt=*) pdos_ax
-         read (unit=input_array(block_start+1),fmt=*) pdos_ay
-         read (unit=input_array(block_start+2),fmt=*) pdos_az
-         call fdf_endblock
-       end if
-    end if
+         ! Expect 3 values
+            read (unit=input_array(block_start),fmt=*) euler_alpha
+            read (unit=input_array(block_start+1),fmt=*) euler_beta
+            read (unit=input_array(block_start+2),fmt=*) euler_gamma
+            if (flag_rotate_pdos_units == "deg") then
+               euler_alpha = euler_alpha * (pi / 180.0)
+               euler_beta = euler_beta * (pi / 180.0)
+               euler_gamma = euler_gamma * (pi / 180.0)
+            end if
+            call fdf_endblock
+         else
+            call cq_abort("Unknown rotation input: ", flag_rotate_pdos_mode)
+         end if ! pDOS mode
+       end if ! if rotate PDOS
+    end if ! i_job
     ! Now read PS files for atomic information
     call allocate_species_vars
     ps_type = fdf_string(5,'General.PseudopotentialType','haman') 

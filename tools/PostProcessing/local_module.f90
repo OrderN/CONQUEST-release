@@ -38,9 +38,12 @@ module local
   logical :: flag_only_charge, flag_by_kpoint, flag_wf_range, flag_proc_range, flag_procwf_range_Ef
   logical :: flag_total_iDOS, flag_write_forces, flag_write_spin_moments, flag_l_resolved, flag_lm_resolved
   logical :: flag_rotate_pdos
+  integer :: flag_rotate_pdos_mode
+  character(len=80) :: flag_rotate_pdos_units
   logical :: flag_outputWF_real
   character(len=80) :: charge_stub
   real(double) :: pdos_ax(3), pdos_ay(3), pdos_az(3) ! axes to rotate pDOS into
+  real(double) :: euler_alpha, euler_beta, euler_gamma ! Euler angles to rotate pDOS by
 
   integer :: i_job ! Job type
   integer :: coord_format ! Output format: xyz (1) or cell (2)
