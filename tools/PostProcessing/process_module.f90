@@ -753,7 +753,7 @@ contains
    use local, ONLY: pdos_ax, pdos_ay, pdos_az
    use dimens, ONLY: r_super_x, r_super_y, r_super_z
    implicit none
-
+   ! This subroutine checks for sufficient orthogonality
    real(double), parameter :: tol = 1e-10
 
    ! Normalise new x-axis correctly
@@ -800,6 +800,8 @@ contains
    subroutine calculate_axis_angle(w1, w2, w3, axis, angle)
       use datatypes
       use numbers, ONLY: pi
+      use GenComms, ONLY: cq_abort
+
       implicit none
       external DGEEV
 
@@ -846,35 +848,36 @@ contains
       end if
       ! Require eigenvector with eigenvalue 1, no complex, to find axis
       do i = 1, N
-      if (abs(WR(i) - 1.00000) < tol .and. abs(WI(i)) < tol) then
-         axis  = VR(:, i)   ! Column i of VR is the i-th right eigenvector
-         print *, axis
-         exit
-      end if
-   end do
-   tra = basis_matrix(1,1) + basis_matrix(2,2) + basis_matrix(3,3)
-   antisym_axis = 0.0
-   axis = axis / norm2(axis)
-   cos_angle = (tra - 1.0)
-   antisym_axis(1, 2) = -axis(3)
-   antisym_axis(1, 3) = axis(2)
-   antisym_axis(2, 1) = axis(3)
-   antisym_axis(2, 3) = -axis(1)
-   antisym_axis(3, 1) = -axis(2)
-   antisym_axis(3, 2) = axis(1)
+         if (abs(WR(i) - 1.00000) < tol .and. abs(WI(i)) < tol) then
+            axis  = VR(:, i)   ! Column i of VR is the i-th right eigenvector
+            exit
+         end if
+      end do
+      if (axis(1) /= axis(1) .or. axis(2) /= axis(2) .or. axis(3) /= axis(3)) &
+         call cq_abort("Rotation axis had NaN values. Please check input vectors or Euler angles.")
+      tra = basis_matrix(1,1) + basis_matrix(2,2) + basis_matrix(3,3)
+      antisym_axis = 0.0
+      axis = axis / norm2(axis)
+      cos_angle = (tra - 1.0)
+      antisym_axis(1, 2) = -axis(3)
+      antisym_axis(1, 3) = axis(2)
+      antisym_axis(2, 1) = axis(3)
+      antisym_axis(2, 3) = -axis(1)
+      antisym_axis(3, 1) = -axis(2)
+      antisym_axis(3, 2) = axis(1)
 
-   temp = matmul(antisym_axis, basis_matrix)
-   sin_angle = -(temp(1,1) + temp(2,2) + temp(3,3))
-   if (abs(sin_angle) < tol .and. abs(cos_angle) < tol) &
-           stop "ValueError: Both arguments to datan2 are zero."
-   angle = datan2(sin_angle, cos_angle)
-   if (angle /= angle) &
-           stop "ERROR: rotation angle was undefined. Please check vectors in pDOSAxes block."
-   ! Angle can be 0, which means its either +/- 90 degrees
-   if (abs(angle) < tol) then
-        if (abs(sin_angle) < tol) angle = -pi/2
-        if (abs(sin_angle) >= tol) angle = pi/2 
-   end if 
+      temp = matmul(antisym_axis, basis_matrix)
+      sin_angle = -(temp(1,1) + temp(2,2) + temp(3,3))
+      if (abs(sin_angle) < tol .and. abs(cos_angle) < tol) &
+            call cq_abort("ValueError: Both arguments to datan2 are zero.")
+      angle = datan2(sin_angle, cos_angle)
+      if (angle /= angle) &
+            call cq_abort("ERROR: rotation angle was undefined. Please check vectors or Euler angles.")
+      ! Angle can be 0, which means its either +/- 90 degrees
+      if (abs(angle) < tol) then
+         if (abs(sin_angle) < tol) angle = -pi/2
+         if (abs(sin_angle) >= tol) angle = pi/2 
+      end if 
    end subroutine calculate_axis_angle
    subroutine construct_rodrigues(axis, angle, matrix)
       use datatypes
@@ -962,9 +965,12 @@ contains
       C2(5, 3) = (4*r(7)*r(8)) - 2*(r(1)*r(2) + r(4)*r(5))
       C2(5, 5) = r(9)*r(9) - 0.5*(r(3)*r(3) + r(6)*r(6))
       C2(5, 4) = C2(5, 5) - r(1)*r(1) - r(4)*r(4) + 2*r(7)*r(7)
-end subroutine construct_C2
+   end subroutine construct_C2
    function inv(A) result(Ainv)
       use datatypes
+      use GenComms, ONLY: cq_abort
+      implicit none
+
       real(double), dimension(:, :), intent(in) :: A
       real(double), dimension(size(A, 1), size(A, 2)) :: Ainv
 
@@ -972,35 +978,31 @@ end subroutine construct_C2
       integer, dimension(size(A, 1)) :: ipiv   ! pivot indices
       integer :: n, info
 
-      ! External procedures defined in LAPACK
       external DGETRF
       external DGETRI
 
-      ! Store A in Ainv to prevent it from being overwritten by LAPACK
       Ainv = A
       n = size(A, 1)
 
       ! DGETRF computes an LU factorization of a general M-by-N matrix A
-      ! using partial pivoting with row interchanges.
       call DGETRF(n, n, Ainv, n, ipiv, info)
 
       if (info /= 0) then
-         stop 'Matrix is numerically singular!'
+         call cq_abort("Matrix is numerically singular!")
       end if
 
-      ! DGETRI computes the inverse of a matrix using the LU factorization
-      ! computed by DGETRF.
+      ! DGETRI computes the inverse using the LU factorization by DGETRF.
       call DGETRI(n, Ainv, n, ipiv, work, n, info)
 
       if (info /= 0) then
-         stop 'Matrix inversion failed!'
+         call cq_abort("Matrix inversion failed!")
       end if
    end function inv
 
    subroutine construct_Ul(angmom, Al, Cl, Ul)
       use datatypes
       implicit none
-! U has dimensions(2l +1, 2l+1)
+
       integer, intent(in) :: angmom
       real(double), intent(in) ::   Al(2*angmom + 1, 2*angmom + 1), Cl(2*angmom + 1, 2*angmom + 1)
       real(double), intent(out) :: Ul(2*angmom + 1, 2*angmom + 1)
@@ -1011,54 +1013,55 @@ end subroutine construct_C2
    end subroutine construct_Ul
    
    subroutine rotate_coefficients(U1, U2)
-   use datatypes
-   use local, ONLY: n_bands_total, nkp, n_atoms_pDOS, evec_coeff, scaled_evec_coeff, &
-   n_atoms_pDOS, pDOS_atom_index, band_full_to_active
-   use global_module, ONLY: nspin, species_glob
-   use pao_format,    ONLY: pao
+      use datatypes
+      use local, ONLY: n_bands_total, nkp, n_atoms_pDOS, evec_coeff, scaled_evec_coeff, &
+      n_atoms_pDOS, pDOS_atom_index, band_full_to_active
+      use global_module, ONLY: nspin, species_glob
+      use pao_format,    ONLY: pao
+      use GenComms, ONLY: cq_abort
 
-   implicit none
+      implicit none
 
-   real(double), intent(in) :: U1(3, 3)   ! rotation matrix for l=1
-   real(double), intent(in) :: U2(5, 5)   ! rotation matrix for l=2
+      real(double), intent(in) :: U1(3, 3)   ! rotation matrix for l=1
+      real(double), intent(in) :: U2(5, 5)   ! rotation matrix for l=2
 
-   ! Local variables
-   integer :: i_atom, i_spec, i_band, i_kp, i_spin, i_band_c, g_atom
-   integer :: i_l, i_z, nzeta, norbs, sf_offset
+      ! Local variables
+      integer :: i_atom, i_spec, i_band, i_kp, i_spin, i_band_c, g_atom
+      integer :: i_l, i_z, nzeta, norbs, sf_offset
 
-   do i_spin = 1, nspin
-      do i_kp = 1, nkp
-         do i_band = 1, n_bands_total
-            i_band_c = band_full_to_active(i_band)
-            do i_atom = 1, n_atoms_pDOS
-               g_atom = pDOS_atom_index(i_atom)
-               i_spec = species_glob(g_atom)
-               sf_offset = 0
-               ! Include l = 0 to correctly calculate offset
-               do i_l = 0, pao(i_spec)%greatest_angmom
-                  nzeta = pao(i_spec)%angmom(i_l)%n_zeta_in_angmom
-                  norbs = 2*i_l + 1
-                  do i_z = 1, nzeta
-                  !evec_coeff(sf_offset,pDOS_atom_index(i_atom), i_band_c,i_kp,i_spin)
-                     select case(i_l)
-                     case(1)
-                        evec_coeff(sf_offset+1:sf_offset+norbs, g_atom, i_band_c, i_kp, i_spin) = &
-                           matmul(U1, evec_coeff(sf_offset+1:sf_offset+norbs, g_atom, i_band_c, i_kp, i_spin))
-                        scaled_evec_coeff(sf_offset+1:sf_offset+norbs, g_atom, i_band_c, i_kp, i_spin) = &
-                           matmul(U1, scaled_evec_coeff(sf_offset+1:sf_offset+norbs, g_atom, i_band_c, i_kp, i_spin))
-                     case(2)
-                        evec_coeff(sf_offset+1:sf_offset+norbs, g_atom, i_band_c, i_kp, i_spin) = &
-                           matmul(U2, evec_coeff(sf_offset+1:sf_offset+norbs, g_atom, i_band_c, i_kp, i_spin))
-                        scaled_evec_coeff(sf_offset+1:sf_offset+norbs, g_atom, i_band_c, i_kp, i_spin) = &
-                           matmul(U2, scaled_evec_coeff(sf_offset+1:sf_offset+norbs, g_atom, i_band_c, i_kp, i_spin))
-                     end select
-                     sf_offset = sf_offset + norbs
-                  end do ! i_z
-               end do ! i_l
-            end do ! i_atom
-         end do ! i_band
-      end do ! i_kp
-   end do ! i_spin
+      do i_spin = 1, nspin
+         do i_kp = 1, nkp
+            do i_band = 1, n_bands_total
+               i_band_c = band_full_to_active(i_band)
+               do i_atom = 1, n_atoms_pDOS
+                  g_atom = pDOS_atom_index(i_atom)
+                  i_spec = species_glob(g_atom)
+                  sf_offset = 0
+                  ! Include l = 0 to correctly calculate offset
+                  do i_l = 0, pao(i_spec)%greatest_angmom
+                     nzeta = pao(i_spec)%angmom(i_l)%n_zeta_in_angmom
+                     norbs = 2*i_l + 1
+                     do i_z = 1, nzeta
+                     !evec_coeff(sf_offset,pDOS_atom_index(i_atom), i_band_c,i_kp,i_spin)
+                        select case(i_l)
+                        case(1)
+                           evec_coeff(sf_offset+1:sf_offset+norbs, g_atom, i_band_c, i_kp, i_spin) = &
+                              matmul(U1, evec_coeff(sf_offset+1:sf_offset+norbs, g_atom, i_band_c, i_kp, i_spin))
+                           scaled_evec_coeff(sf_offset+1:sf_offset+norbs, g_atom, i_band_c, i_kp, i_spin) = &
+                              matmul(U1, scaled_evec_coeff(sf_offset+1:sf_offset+norbs, g_atom, i_band_c, i_kp, i_spin))
+                        case(2)
+                           evec_coeff(sf_offset+1:sf_offset+norbs, g_atom, i_band_c, i_kp, i_spin) = &
+                              matmul(U2, evec_coeff(sf_offset+1:sf_offset+norbs, g_atom, i_band_c, i_kp, i_spin))
+                           scaled_evec_coeff(sf_offset+1:sf_offset+norbs, g_atom, i_band_c, i_kp, i_spin) = &
+                              matmul(U2, scaled_evec_coeff(sf_offset+1:sf_offset+norbs, g_atom, i_band_c, i_kp, i_spin))
+                        end select
+                        sf_offset = sf_offset + norbs
+                     end do ! i_z
+                  end do ! i_l
+               end do ! i_atom
+            end do ! i_band
+         end do ! i_kp
+      end do ! i_spin
    end subroutine rotate_coefficients
 
   subroutine process_band_structure
