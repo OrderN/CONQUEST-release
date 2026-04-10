@@ -466,8 +466,8 @@ contains
     real(double), dimension(:,:,:), allocatable :: total_electrons_l
     real(double) :: A1(3, 3), A2(5, 5), A1inv(3, 3), A2inv(5, 5)
     real(double) :: U1(3, 3), U2(5, 5), U1d(3, 3), U2d(5, 5)
-    real(double) :: C1(3, 3), C2(5, 5)
-    real(double) :: rod(3, 3), angle, axis(3)
+    real(double) :: C1(3, 3), C2(5, 5), euler_matrix(3,3)
+    real(double) :: rod(9), angle, axis(3)
 
 
     character(len=25) :: filename,fmt_dos
@@ -515,21 +515,25 @@ contains
          call get_pdos_axes
          call calculate_axis_angle(pdos_ax, pdos_ay, pdos_az, axis, angle)
       else if (flag_rotate_pdos_mode == 1) then
-         call euler_to_axis_angle(axis, angle)
+         call euler_to_axis_angle(axis, angle, euler_matrix)
       end if
-      call construct_rodrigues(axis, angle, rod)
-
+      call construct_rodrigues(axis, angle, rod)      
+      
       ! Construct all C^l matrices from rodrigues
       call construct_C1(rod, C1)
       call construct_C2(rod, C2)
+
       ! compute U^l
       call construct_Ul(1, A1, C1, U1)
       call construct_Ul(2, A2, C2, U2)
       U1d = transpose(U1) ! UU^T = I
       U2d = transpose(U2) ! UU^T = I
       write(*,fmt='(2x,"Rotating wavefunction coefficients")')
+      if (flag_rotate_pdos_mode == 0) & 
+         write(*,fmt='(2x,"Using user input axes")')
+      if (flag_rotate_pdos_mode == 1) & 
+         write(*,fmt='(2x,"Using user input Euler angles in extrinsic zyz convention")')
       call rotate_coefficients(U1d, U2d)
-    end if 
     ! Set up storage based on pDOS per atom, or l/lm resolved per atom
     if(flag_lm_resolved) then
        allocate(pDOS_lm(-max_l:max_l,0:max_l,n_atoms_pDOS,n_DOS,nspin))
@@ -787,6 +791,9 @@ contains
       A1(1, 3) = 1.0
       A1(2, 1) = 1.0
       A1(3, 2) = 1.0
+      ! A1(1, 1) = 1.0
+      ! A1(2, 2) = 1.0
+      ! A1(3, 3) = 1.0
       ! d-orbitals, l = 2
       A2(1, 2) = 1.0
       A2(2, 4) = 1.0
@@ -815,7 +822,7 @@ contains
       matrix(3, 1) = -vector(2)
       matrix(3, 2) = vector(1)
    end subroutine
-   subroutine euler_to_axis_angle(axis, angle)
+   subroutine euler_to_axis_angle(axis, angle, R)
       use datatypes
       use numbers, ONLY: pi
       use local, ONLY: euler_alpha, euler_beta, euler_gamma
@@ -825,30 +832,30 @@ contains
       ! This subroutine converts Euler angles into axis-angle for use
       ! with the Rodrigues matrix and pDOS rotation 
       real(double), intent(out) :: axis(3), angle
-      real(double) :: R(3,3)
-      real(double) :: cp, sp, ct, st, cps, sps
+      real(double), intent(out):: R(3,3)
+      real(double) :: ca, sa, cb, sb, cg, sg
       real(double) :: tra, s, inv_s, norm
       real(double) :: nx, ny, nz
       real(double), parameter :: eps = 1.0d-10 
 
       ! Make ZYZ rotation matrix, Wigner's convention
       ! R = Rz(alpha) * Ry(beta) * Rz(psi)
-      cp = cos(euler_alpha)
-      sp = sin(euler_alpha)
-      ct = cos(euler_beta)
-      st = sin(euler_beta)
-      cps = cos(euler_gamma)
-      sps = sin(euler_gamma)
+      ca = cos(euler_alpha)
+      sa = sin(euler_alpha)
+      cb = cos(euler_beta)
+      sb = sin(euler_beta)
+      cg = cos(euler_gamma)
+      sg = sin(euler_gamma)
 
-      R(1,1) = cp*ct*cps - sp*sps
-      R(1,2) = -cp*ct*sps - sp*cps
-      R(1,3) = cp*st
-      R(2,1) = sp*ct*cps + cp*sps
-      R(2,2) = -sp*ct*sps + cp*cps
-      R(2,3) = sp*st
-      R(3,1) = -st*cps
-      R(3,2) = st*sps
-      R(3,3) = ct
+      R(1,1) = ca*cb*cg - sa*sg
+      R(1,2) = ca*sb
+      R(1,3) = -cg*sa - ca*cb*sg
+      R(2,1) = -cg*sb
+      R(2,2) = -cb
+      R(2,3) = sb*sg
+      R(3,1) = cb*cg*sa + ca*sg
+      R(3,2) = sa*sb
+      R(3,3) = ca*cg - cb*sa*sg
 
       tra = R(1,1) + R(2,2) + R(3,3)
       angle = acos((tra - 1.0) / 2.0)
@@ -912,8 +919,8 @@ contains
       real(double), parameter :: tol = 1e-10
       N = 3
       LDA = N
-      LDVL = N
-      LDVR = N
+      LDVL = LDA
+      LDVR = LDA
       allocate(A(N,N))
       allocate(WR(N))
       allocate(WI(N))
@@ -923,9 +930,9 @@ contains
       LDWORK = 5*N
       ! Define change of basis matrix;
       ! Columns of new basis in terms of old basis
-      basis_matrix(:,1) = w1
-      basis_matrix(:,2) = w2
-      basis_matrix(:,3) = w3
+      basis_matrix(:,1) = w1 / norm2(w1)
+      basis_matrix(:,2) = w2 / norm2(w2)
+      basis_matrix(:,3) = w3 / norm2(w3)
       ! Make copy because DGEEV destroys matrix
       A = basis_matrix
       ! If determinant flips sign, orientation of the coordinate system has changed
@@ -933,8 +940,8 @@ contains
       - A(1,2)*(A(2,1)*A(3,3) - A(2,3)*A(3,1)) &
       + A(1,3)*(A(2,1)*A(3,2) - A(2,2)*A(3,1))
 
-      if (det < 1.0 - tol .and. det > 1.0 + tol) &
-         stop "ERROR: determinant of change-of-basis matrix is not 1. Please adjust new coordinate vectors to form a right-handed basis."
+      if (det < 1.0 - tol .or. det > 1.0 + tol) &
+         stop "ERROR: determinant of change-of-basis matrix is not +1. Please adjust new coordinate vectors to form a right-handed basis."
       call DGEEV("N", "V", N, A, LDA, WR, WI, VL, LDVL, VR, LDVR, &
            WORK, LDWORK, INFO)
       if (INFO /= 0) then
@@ -950,23 +957,21 @@ contains
       end do
       if (axis(1) /= axis(1) .or. axis(2) /= axis(2) .or. axis(3) /= axis(3)) &
          call cq_abort("Rotation axis had NaN values. Please check input vectors or Euler angles.")
+      if (abs(axis(1)) < tol .and. abs(axis(2)) < tol .and. abs(axis(3)) < tol) &
+         call cq_abort("Rotation axis was (0,0,0). Cannot perform rotation.")
       tra = basis_matrix(1,1) + basis_matrix(2,2) + basis_matrix(3,3)
       antisym_axis = 0.0
       axis = axis / norm2(axis)
-      cos_angle = (tra - 1.0)
+      cos_angle = (tra - 1.0) / 2.0
       call antisym_matrix(axis, antisym_axis)
       temp = matmul(antisym_axis, basis_matrix)
-      sin_angle = -(temp(1,1) + temp(2,2) + temp(3,3))
+      sin_angle = -(temp(1,1) + temp(2,2) + temp(3,3)) / 2.0
       if (abs(sin_angle) < tol .and. abs(cos_angle) < tol) &
             call cq_abort("ValueError: Both arguments to datan2 are zero.")
       angle = datan2(sin_angle, cos_angle)
       if (angle /= angle) &
             call cq_abort("ERROR: rotation angle was undefined. Please check vectors or Euler angles.")
-      ! Angle can be 0, which means its either +/- 90 degrees
-      if (abs(angle) < tol) then
-         if (abs(sin_angle) < tol) angle = -pi/2
-         if (abs(sin_angle) >= tol) angle = pi/2 
-      end if 
+      if (angle < 0.0) angle = angle + 2.0 * pi
    end subroutine calculate_axis_angle
    subroutine construct_rodrigues(axis, angle, matrix)
       use datatypes
@@ -1006,7 +1011,7 @@ contains
       C1(2, 3) = rod(6)
       C1(3, 1) = rod(7)
       C1(3, 2) = rod(8)
-      C1(3, 3) = rod(9)
+      C1(3, 3) = rod(9)   
    end subroutine construct_C1
    subroutine construct_C2(r, C2)
       use datatypes
