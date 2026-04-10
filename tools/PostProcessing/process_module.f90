@@ -466,7 +466,7 @@ contains
     real(double), dimension(:,:,:), allocatable :: total_electrons_l
     real(double) :: A1(3, 3), A2(5, 5), A1inv(3, 3), A2inv(5, 5)
     real(double) :: U1(3, 3), U2(5, 5), U1d(3, 3), U2d(5, 5)
-    real(double) :: C1(3, 3), C2(5, 5), euler_matrix(3,3)
+    real(double) :: C1(3, 3), C2(5, 5), E1(3,3), E2(5,5)
     real(double) :: rod(9), angle, axis(3)
 
 
@@ -509,31 +509,32 @@ contains
     
     ! Call rotation subroutine if desired
     if (flag_rotate_pdos) then
-      call initialise_A_mat(A1, A2)
       ! Determine whether to use Axis-angle == 0 or Euler  == 1first 
-      if (flag_rotate_pdos_mode == 0) then 
+      write(*,fmt='(2x,"Rotating wavefunction coefficients")')
+      if (flag_rotate_pdos_mode == 0) then
+         call initialise_A_mat(A1, A2)
+         write(*,fmt='(2x,"Using user input axes")')
          call get_pdos_axes
          call calculate_axis_angle(pdos_ax, pdos_ay, pdos_az, axis, angle)
-      else if (flag_rotate_pdos_mode == 1) then
-         call euler_to_axis_angle(axis, angle, euler_matrix)
-      end if
-      call construct_rodrigues(axis, angle, rod)      
-      
-      ! Construct all C^l matrices from rodrigues
-      call construct_C1(rod, C1)
-      call construct_C2(rod, C2)
+         call construct_rodrigues(axis, angle, rod)      
+         ! Construct all C^l matrices from rodrigues
+         call construct_C1(rod, C1)
+         call construct_C2(rod, C2)
+         call construct_Ul(1, A1, C1, U1)
+         call construct_Ul(2, A2, C2, U2)
+               ! compute U^l
+         U1d = transpose(U1) ! UU^T = I
+         U2d = transpose(U2) ! UU^T = I
+         call rotate_coefficients(U1d, U2d)
 
-      ! compute U^l
-      call construct_Ul(1, A1, C1, U1)
-      call construct_Ul(2, A2, C2, U2)
-      U1d = transpose(U1) ! UU^T = I
-      U2d = transpose(U2) ! UU^T = I
-      write(*,fmt='(2x,"Rotating wavefunction coefficients")')
-      if (flag_rotate_pdos_mode == 0) & 
-         write(*,fmt='(2x,"Using user input axes")')
-      if (flag_rotate_pdos_mode == 1) & 
-         write(*,fmt='(2x,"Using user input Euler angles in extrinsic zyz convention")')
-      call rotate_coefficients(U1d, U2d)
+      else if (flag_rotate_pdos_mode == 1) then
+         write(*,fmt='(2x,"Using Euler angles in extrinsic zyz convention")')
+         ! call euler_to_axis_angle(axis, angle, euler_matrix)
+         call construct_EulerMatrices(E1, E2)
+         call rotate_coefficients(E1, E2)
+      end if ! pdos rotation mode
+   end if  ! rotate pdos
+            
     ! Set up storage based on pDOS per atom, or l/lm resolved per atom
     if(flag_lm_resolved) then
        allocate(pDOS_lm(-max_l:max_l,0:max_l,n_atoms_pDOS,n_DOS,nspin))
@@ -761,6 +762,7 @@ contains
    use datatypes
    use local, ONLY: pdos_ax, pdos_ay, pdos_az
    use dimens, ONLY: r_super_x, r_super_y, r_super_z
+   use GenComms, ONLY: cq_abort
    implicit none
    ! This subroutine checks for sufficient orthogonality
    real(double), parameter :: tol = 1e-10
@@ -772,11 +774,11 @@ contains
    ! Normalise new y-axis correctly
    pdos_az = pdos_az / norm2(pdos_az)
    if (abs(dot_product(pdos_ax, pdos_ay)) > tol) &
-      stop "pDOS_ax vector was not orthogonal to pDOS_ay"
+      call cq_abort("pDOS_ax vector was not orthogonal to pDOS_ay")
    if (abs(dot_product(pdos_az, pdos_ay)) > tol) &
-       stop "pDOS_az vector was not orthogonal to pDOS_ay"
+       call cq_abort("pDOS_az vector was not orthogonal to pDOS_ay")
    if (abs(dot_product(pdos_az, pdos_ax)) > tol) &
-       stop "pDOS_az vector was not orthogonal to pDOS_ax"
+       call cq_abort("pDOS_az vector was not orthogonal to pDOS_ax")
 
   end subroutine
 
@@ -791,9 +793,6 @@ contains
       A1(1, 3) = 1.0
       A1(2, 1) = 1.0
       A1(3, 2) = 1.0
-      ! A1(1, 1) = 1.0
-      ! A1(2, 2) = 1.0
-      ! A1(3, 3) = 1.0
       ! d-orbitals, l = 2
       A2(1, 2) = 1.0
       A2(2, 4) = 1.0
@@ -822,24 +821,19 @@ contains
       matrix(3, 1) = -vector(2)
       matrix(3, 2) = vector(1)
    end subroutine
-   subroutine euler_to_axis_angle(axis, angle, R)
+   subroutine construct_EulerMatrices(E1, E2)
       use datatypes
       use numbers, ONLY: pi
       use local, ONLY: euler_alpha, euler_beta, euler_gamma
       use GenComms, ONLY: cq_abort
 
       implicit none
-      ! This subroutine converts Euler angles into axis-angle for use
-      ! with the Rodrigues matrix and pDOS rotation 
-      real(double), intent(out) :: axis(3), angle
-      real(double), intent(out):: R(3,3)
-      real(double) :: ca, sa, cb, sb, cg, sg
-      real(double) :: tra, s, inv_s, norm
-      real(double) :: nx, ny, nz
-      real(double), parameter :: eps = 1.0d-10 
 
-      ! Make ZYZ rotation matrix, Wigner's convention
-      ! R = Rz(alpha) * Ry(beta) * Rz(psi)
+      real(double), intent(out) :: E1(3,3), E2(5,5)
+      real(double) :: ca, sa, cb, sb, cg, sg
+      E1 = 0.0
+      E2 = 0.0
+
       ca = cos(euler_alpha)
       sa = sin(euler_alpha)
       cb = cos(euler_beta)
@@ -847,58 +841,22 @@ contains
       cg = cos(euler_gamma)
       sg = sin(euler_gamma)
 
-      R(1,1) = ca*cb*cg - sa*sg
-      R(1,2) = ca*sb
-      R(1,3) = -cg*sa - ca*cb*sg
-      R(2,1) = -cg*sb
-      R(2,2) = -cb
-      R(2,3) = sb*sg
-      R(3,1) = cb*cg*sa + ca*sg
-      R(3,2) = sa*sb
-      R(3,3) = ca*cg - cb*sa*sg
+      ! Rotation of l = 1 coefficients
+      E1(1,1) = ca*cb*cg - sa*sg
+      E1(1,2) = ca*sb
+      E1(1,3) = -cg*sa - ca*cb*sg
+      E1(2,1) = -cg*sb
+      E1(2,2) = -cb
+      E1(2,3) = sb*sg
+      E1(3,1) = cb*cg*sa + ca*sg
+      E1(3,2) = sa*sb
+      E1(3,3) = ca*cg - cb*sa*sg
+      
+      ! Rotation of l = 2 coefficients
+      ! TODO:
 
-      tra = R(1,1) + R(2,2) + R(3,3)
-      angle = acos((tra - 1.0) / 2.0)
-
-      if (angle < eps) then
-         call cq_abort("Cannot perform a rotation of 0 degrees.")
-      else if (abs(angle - pi) < eps) then
-         ! The skew-symmetric formula 1/(2 sin beta) (R - R^T) singular
-         ! Use Rodrigues:  R + I = 2 n*n^T  so  n_i = sqrt((R_ii + 1) / 2).
-         ! sqrt gives magnitude, need to determine sign from largest off-diagonal product
-         nx = sqrt(0.5*(R(1,1) + 1.0))
-         ny = sqrt(0.5*(R(2,2) + 1.0))
-         nz = sqrt(0.5*(R(3,3) + 1.0))
-
-         ! Choose the largest component as positive reference, fix other signs.
-         if (nx >= ny .and. nx >= nz) then
-               ! nx is largest
-               if (R(1,2) < 0.0 - eps) ny = -ny
-               if (R(1,3) < 0.0 - eps) nz = -nz
-         else if (ny >= nx .and. ny >= nz) then
-               ! ny is largest
-               if (R(1,2) < 0.0 - eps) nx = -nx
-               if (R(2,3) < 0.0 - eps) nz = -nz
-         else
-               ! nz is largest
-               if (R(1,3) < 0.0 - eps) nx = -nx
-               if (R(2,3) < 0.0 - eps) ny = -ny
-         end if
-
-         axis(1) = nx
-         axis(2) = ny
-         axis(3) = nz
-
-      else
-         ! n = (0.5 / (sin angle)) * (R - R^T)
-         inv_s = 0.5 / sin(angle)
-
-         axis(1) = (R(3,2) - R(2,3)) * inv_s
-         axis(2) = (R(1,3) - R(3,1)) * inv_s
-         axis(3) = (R(2,1) - R(1,2)) * inv_s
-
-      end if
-   end subroutine euler_to_axis_angle
+   end subroutine construct_EulerMatrices
+   
    subroutine calculate_axis_angle(w1, w2, w3, axis, angle)
       use datatypes
       use numbers, ONLY: pi
@@ -941,12 +899,12 @@ contains
       + A(1,3)*(A(2,1)*A(3,2) - A(2,2)*A(3,1))
 
       if (det < 1.0 - tol .or. det > 1.0 + tol) &
-         stop "ERROR: determinant of change-of-basis matrix is not +1. Please adjust new coordinate vectors to form a right-handed basis."
+         call cq_abort("ERROR: determinant of change-of-basis matrix is not +1. Please adjust new coordinate vectors to form a right-handed basis.")
       call DGEEV("N", "V", N, A, LDA, WR, WI, VL, LDVL, VR, LDVR, &
            WORK, LDWORK, INFO)
       if (INFO /= 0) then
          write(*, fmt='(A,I0)') 'DGEEV INFO = ', INFO
-         stop 'DGEEV, Eigenvalues of basis change matrix could not be found!'
+         call cq_abort('DGEEV, Eigenvalues of basis change matrix could not be found!')
       end if
       ! Require eigenvector with eigenvalue 1, no complex, to find axis
       do i = 1, N
