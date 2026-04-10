@@ -305,7 +305,7 @@ contains
        flag_lm_resolved = fdf_boolean('Process.pDOS_lm_resolved',.false.)
        flag_rotate_pdos = fdf_boolean('Process.RotatePDOS',.false.)
        flag_rotate_pdos_mode = fdf_integer('Process.RotatePDOSMode',0)
-       flag_rotate_pdos_units = fdf_string(7, 'Process.RotatePDOSAngle',"rad") ! deg or rad
+       flag_rotate_pdos_units = fdf_string(7, 'Process.RotatePDOSAngle',"deg") ! deg or rad
        if(flag_lm_resolved .and. (.not.flag_l_resolved)) flag_l_resolved = .true.
        ! How many atoms?
        n_atoms_pDOS = fdf_integer('Process.n_atoms_pDOS',0)
