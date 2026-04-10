@@ -319,6 +319,7 @@ in the block ``pDOS_atoms``:
 CONQUEST, by default, projects the orbitals along the simulation cell axes. Sometimes it is convenient to be able to project onto an atom's local environment defined by, e.g. bonds, to facilitate chemical analysis. CONQUEST supports rotating the wavefunction coefficients either by inputting the basis of the final coordinate system, or Euler angles in the extrinsic :math:`zyz` convention.
 
 ::
+   
    Process.RotatePDOS T (default: F)
    Process.RotatePDOSMode 0 (default: 0)
    %block pDOSAxes 
@@ -328,6 +329,7 @@ CONQUEST, by default, projects the orbitals along the simulation cell axes. Some
 The above snippet says to use the user-input axes defined in the ``pDOSAxes`` block. The first line defines the new :math:`x` direction, then :math:`y` and :math:`z`. The code will abort if the vectors provided do not form a right-handed coordinate system, or if the vectors are not orthogonal. If Euler angles are desired, set ``Process.RotatePDOSMode 1`` and in ``Conquest_input`` use the following lines:
 
 ::
+
    Process.RotatePDOS T (default: F)
    Process.RotatePDOSMode 1 (default: 0)
    Process.RotatePDOSAngle deg (default: deg, optional: rad)
