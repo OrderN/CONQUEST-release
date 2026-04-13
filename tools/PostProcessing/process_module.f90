@@ -831,6 +831,22 @@ contains
 
       real(double), intent(out) :: E1(3,3), E2(5,5)
       real(double) :: ca, sa, cb, sb, cg, sg, c2a, s2a, c2b, s2b, c2g, s2g
+
+      real(double) :: Q1(3,3), Q2(5,5)
+      !Q matrices are change-of-basis
+      Q1 = 0.0
+      Q2 = 0.0
+
+      Q1(1,3) = 1.0
+      Q1(2,2) = 1.0
+      Q1(3,1) = 1.0
+
+      Q2(1,5) = 1.0
+      Q2(2,4) = 1.0
+      Q2(3,3) = 1.0
+      Q2(4,2) = 1.0
+      Q2(5,1) = 1.0
+
       E1 = 0.0
       E2 = 0.0
 
@@ -860,10 +876,39 @@ contains
       E1(3,3) = ca*cg - cb*sa*sg
       
       ! Rotation of l = 2 coefficients
-      ! TODO:
-      ! E2(5,5) = 0.25*c2a*c2g*(3.0+c2b) - s2a*cb*s2g
-      ! E2(5,4) = 0.25*c2a*c2g*(3.0+c2b) - s2a*cb*s2g
+      E2(5,5) = 0.25*c2a*c2g*(3.0+c2b) - s2a*cb*s2g
+      E2(5,4) = 0.5*c2a*s2b*cg - s2a*sb*sg
+      E2(5,3) = 0.5*sqrt(3.0)*c2a*sb*sb
+      E2(5,2) = -sb*(c2a*cb*sg + s2a*cg)
+      E2(5,1) = -cb*s2a*c2g -0.25*c2a*(3.0+c2b)*s2g
 
+      E2(4,5) = sa*sb*s2g - 0.5*ca*c2g*s2b
+      E2(4,4) = ca*c2b*cg - sa*cb*sg
+      E2(4,3) = sqrt(3.0)*ca*sb*cb
+      E2(4,2) = -cb*sa*cg -ca*c2b*sg
+      E2(4,1) = sb*(ca*cb*s2g + c2g*sa)
+
+      E2(3,5) = 0.5*sqrt(3.0)*sb*sb*c2g
+      E2(3,4) = -sqrt(3.0)*sa*cb*cg
+      E2(3,3) = 0.25*(3.0*c2b+1.0)
+      E2(3,2) = sqrt(3.0)*sb*cb*sg
+      E2(3,1) = -sqrt(3.0)*sb*sb*sg*cg
+
+      E2(2,5) =-sb*(sa*cb*c2g + ca*s2g)
+      E2(2,4) = sa*c2b*cg + ca*cb*sg
+      E2(2,3) = sqrt(3.0)*sa*sb*cb
+      E2(2,2) = ca*cb*cg - sa*c2b*sg
+      E2(2,1) = sb*(sa*cb*s2g - ca*c2g)
+
+      E2(1,5) = 0.25*s2a*(c2b + 3.0)*c2g + c2a*cb*s2g
+      E2(1,4) = sb*(s2a*cb*cg + c2a*sg)
+      E2(1,3) = sqrt(3.0)*sa*sb*sb*ca
+      E2(1,2) = sb*(c2a*cg - 2*sa*ca*cb*sg)
+      E2(1,1) = c2a*cb*c2g - sa*ca*(3.0 + c2a)*sg*cg
+      
+      ! Require change of basis to correct orbital convention
+      E1 = matmul(inv(Q1), matmul(E1, Q1))
+      E2 = matmul(inv(Q2), matmul(E2, Q2))
    end subroutine construct_EulerMatrices
    
    subroutine calculate_axis_angle(w1, w2, w3, axis, angle)
