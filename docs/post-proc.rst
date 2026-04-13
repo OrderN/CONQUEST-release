@@ -316,17 +316,19 @@ in the block ``pDOS_atoms``:
    12
    %endblock
 
-CONQUEST, by default, projects the orbitals along the simulation cell axes. Sometimes it is convenient to be able to project onto an atom's local environment defined by, e.g. bonds, to facilitate chemical analysis. CONQUEST supports rotating the wavefunction coefficients either by inputting the basis of the final coordinate system, or Euler angles in the extrinsic :math:`zyz` convention.
+CONQUEST, by default, projects the orbitals along the simulation cell axes. Sometimes it is convenient to be able to project onto an atom's local environment defined by, e.g. bonds, to facilitate chemical analysis. CONQUEST supports rotating the wavefunction coefficients either by inputting the basis of the final coordinate system, using the algorithm implemented by Maintz *et al* and Romanowski *et al* [:cite:`pp-maintz2016`, :cite:`pp-romanowski2008`] or active Euler angles in the extrinsic :math:`zyz` convention.
 
 ::
    
    Process.RotatePDOS T (default: F)
    Process.RotatePDOSMode 0 (default: 0)
    %block pDOSAxes 
-   3 lines, each a three-dimensional direction vector
+   x1 x2 x3
+   y1 y2 y3
+   z1 z2 z3
    %endblock
 
-The above snippet says to use the user-input axes defined in the ``pDOSAxes`` block. The first line defines the new :math:`x` direction, then :math:`y` and :math:`z`. The code will abort if the vectors provided do not form a right-handed coordinate system, or if the vectors are not orthogonal. If Euler angles are desired, set ``Process.RotatePDOSMode 1`` and in ``Conquest_input`` use the following lines:
+The above snippet says to use the user-input axes defined in the ``pDOSAxes`` block. The first line defines the new :math:`x` direction along vectpr :math:`(x_1, x_2, x_3)`, then :math:`y` along :math:`(y_1, y_2, y_3)` and :math:`z` along :math:`(z_1, z_2, z_3)`. The code will abort if the vectors provided do not form a right-handed coordinate system, or if the vectors are not orthogonal. If Euler angles are desired, set ``Process.RotatePDOSMode 1`` and in ``Conquest_input`` use the following lines:
 
 ::
 
@@ -334,7 +336,9 @@ The above snippet says to use the user-input axes defined in the ``pDOSAxes`` bl
    Process.RotatePDOSMode 1 (default: 0)
    Process.RotatePDOSAngle deg (default: deg, optional: rad)
    %block pDOSEuler 
-   3 entries, each an angle
+   <alpha>
+   <beta>
+   <gamma>
    %endblock
 
 The default angle units is in degrees: ``Process.RotatePDOSAngle deg``. In the extrinsic :math:`zyz` convention, 3 consecutive rotations happen about a fixed set of coordinates, i.e. the CONQUEST cell simulation axes (as CONQUEST only supports orthorhombic cells), first about the :math:`z`-axis by :math:`\alpha` , then :math:`y`-axis by :math:`\beta` and then about :math:`z`-axis by :math:`\gamma` in a right-handed sense (i.e., looking down any of the axes towards the origin will mean the positive direction of rotation is anticlockwise).
@@ -383,6 +387,13 @@ value ``n`` for index, ``x``, ``y`` or ``z`` for a single direction in k-space,
 or ``a`` to give all k-point coordinates) will allow you to control this.  Limits
 on the energies to select the bands produced can be set
 with ``Process.min_DOS_E`` and ``Process.max_DOS_E``.
+
+.. bibliography:: references.bib
+    :cited:
+    :labelprefix: PP
+    :keyprefix: pp-
+    :style: unsrt
+
 
 Go to :ref:`top <post-proc>`.
 
