@@ -1226,19 +1226,16 @@ contains
 
       if (find_neighbours(2) == 0) then
          allocate(nghbr_atoms(4))
-         do j = 1, 4
-            min_idx = minloc(temp, 1)
-            nghbr_atoms(j) = min_idx
-            temp(min_idx) = huge(1.0)
-         end do
       else if (find_neighbours(2) == 1) then
          allocate(nghbr_atoms(6))
-         do j = 1, 6
-            min_idx = minloc(temp, 1)
-            nghbr_atoms(j) = min_idx
-            temp(min_idx) = huge(1.0)
-         end do
+      else 
+         call cq_abort("Did not correctly allocate nghbr_atoms array")
       end if
+      do j = 1, size(nghbr_atoms)
+         min_idx = minloc(temp, 1)
+         nghbr_atoms(j) = min_idx
+         temp(min_idx) = huge(1.0)
+      end do
    end subroutine
 
    subroutine axes_from_nn(atomno, nghbr_atoms)
