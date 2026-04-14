@@ -1123,12 +1123,14 @@ contains
       real(double), intent(in) :: U2(5, 5)   ! rotation matrix for l=2
 
       ! Local variables
-      integer :: i_atom, i_spec, i_band, i_kp, i_spin, g_atom
+      integer :: i_atom, i_spec, i_band, i_band_c, i_kp, i_spin, g_atom
       integer :: i_l, i_z, nzeta, norbs, sf_offset
 
       do i_spin = 1, nspin
          do i_kp = 1, nkp
             do i_band = 1, n_bands_total
+               i_band_c = band_full_to_active(i_band)
+               if(i_band_c == 0) continue
                do i_atom = 1, n_atoms_pDOS
                   g_atom = pDOS_atom_index(i_atom)
                   i_spec = species_glob(g_atom)
@@ -1138,18 +1140,17 @@ contains
                      nzeta = pao(i_spec)%angmom(i_l)%n_zeta_in_angmom
                      norbs = 2*i_l + 1
                      do i_z = 1, nzeta
-                     !evec_coeff(sf_offset,pDOS_atom_index(i_atom), i_band_c,i_kp,i_spin)
                         select case(i_l)
                         case(1)
-                           evec_coeff(sf_offset+1:sf_offset+norbs, g_atom, i_band, i_kp, i_spin) = &
-                              matmul(U1, evec_coeff(sf_offset+1:sf_offset+norbs, g_atom, i_band, i_kp, i_spin))
-                           scaled_evec_coeff(sf_offset+1:sf_offset+norbs, g_atom, i_band, i_kp, i_spin) = &
-                              matmul(U1, scaled_evec_coeff(sf_offset+1:sf_offset+norbs, g_atom, i_band, i_kp, i_spin))
+                           evec_coeff(sf_offset+1:sf_offset+norbs, g_atom, i_band_c, i_kp, i_spin) = &
+                              matmul(U1, evec_coeff(sf_offset+1:sf_offset+norbs, g_atom, i_band_c, i_kp, i_spin))
+                           scaled_evec_coeff(sf_offset+1:sf_offset+norbs, g_atom, i_band_c, i_kp, i_spin) = &
+                              matmul(U1, scaled_evec_coeff(sf_offset+1:sf_offset+norbs, g_atom, i_band_c, i_kp, i_spin))
                         case(2)
-                           evec_coeff(sf_offset+1:sf_offset+norbs, g_atom, i_band, i_kp, i_spin) = &
-                              matmul(U2, evec_coeff(sf_offset+1:sf_offset+norbs, g_atom, i_band, i_kp, i_spin))
-                           scaled_evec_coeff(sf_offset+1:sf_offset+norbs, g_atom, i_band, i_kp, i_spin) = &
-                              matmul(U2, scaled_evec_coeff(sf_offset+1:sf_offset+norbs, g_atom, i_band, i_kp, i_spin))
+                           evec_coeff(sf_offset+1:sf_offset+norbs, g_atom, i_band_c, i_kp, i_spin) = &
+                              matmul(U2, evec_coeff(sf_offset+1:sf_offset+norbs, g_atom, i_band_c, i_kp, i_spin))
+                           scaled_evec_coeff(sf_offset+1:sf_offset+norbs, g_atom, i_band_c, i_kp, i_spin) = &
+                              matmul(U2, scaled_evec_coeff(sf_offset+1:sf_offset+norbs, g_atom, i_band_c, i_kp, i_spin))
                         end select
                         sf_offset = sf_offset + norbs
                      end do ! i_z
