@@ -6,7 +6,7 @@ module process
 
   ! Maximum possible number of spin components for simplicity
   real(double), dimension(4) :: range_offset
-  
+
 contains
 
   subroutine assign_blocks
@@ -14,7 +14,7 @@ contains
     use datatypes
     use local, ONLY: block_store, nprocs, block_size_x, block_size_y, block_size_z, &
          stm_z_min, stm_z_max, stm_x_min, stm_x_max, stm_y_min, stm_y_max
-    
+
     implicit none
 
     integer :: proc, iblock, ig1, ind_group, block_x, block_y, block_z, nblock
@@ -36,7 +36,7 @@ contains
           ! Now LHS of block and RHS of area
           rbx = block_size_x*real(block_store(proc)%nx(iblock)-1,double)
           rby = block_size_y*real(block_store(proc)%ny(iblock)-1,double)
-          rbz = block_size_z*real(block_store(proc)%nz(iblock)-1,double) 
+          rbz = block_size_z*real(block_store(proc)%nz(iblock)-1,double)
           if(rbx<=stm_x_max.AND.rby<=stm_y_max.AND.rbz<=stm_z_max) &
                block_store(proc)%active(iblock) = block_store(proc)%active(iblock) + 1
           !write(*,*) 'RHS: ',rbx,rby,rbz
@@ -80,7 +80,7 @@ contains
           if(ispin==1) ci = TRIM(charge_stub)//"_up"
           if(ispin==2) ci = TRIM(charge_stub)//"_dn"
        end if
-       do proc = 1, nprocs 
+       do proc = 1, nprocs
           call get_file_name(ci,nprocs,proc,filename)
           ! Open file
           open(unit=17,file=filename)
@@ -302,7 +302,7 @@ contains
     use units, ONLY: HaToeV
 
     implicit none
-    
+
     ! Local variables
     integer :: i_band, i_kp, i_spin, n_DOS_wid, n_band, n_min, n_max, i
     real(double) :: Ebin, dE_DOS, a, pf_DOS, spin_fac, peak_width
@@ -445,7 +445,7 @@ contains
     use local, ONLY: eigenvalues, n_bands_total, nkp, wtk, efermi, flag_total_iDOS, &
          evec_coeff, scaled_evec_coeff, flag_procwf_range_Ef, flag_l_resolved, flag_lm_resolved, &
          flag_rotate_pdos, flag_rotate_pdos_mode, band_full_to_active, n_atoms_pDOS, pDOS_atom_index, &
-         pdos_ax, pdos_ay, pdos_az, euler_alpha, euler_beta, euler_gamma
+         pdos_ax, pdos_ay, pdos_az, euler_alpha, euler_beta, euler_gamma, find_neighbours
     use read, ONLY: read_eigenvalues, read_psi_coeffs, read_nprocs_from_blocks
     use global_module, ONLY: nspin, n_DOS, E_DOS_min, E_DOS_max, sigma_DOS, ni_in_cell, species_glob
     use units, ONLY: HaToeV
@@ -453,11 +453,13 @@ contains
     use pao_format, ONLY: pao
 
     implicit none
-    
+
     ! Local variables
     integer :: i_band, i_kp, i_spin, n_DOS_wid, n_band, n_min, n_max, i, i_atom,max_nsf, i_spec, &
          i_l, nzeta, sf_offset, max_l, norbs, i_m, i_band_c, i_z
     real(double) :: Ebin, dE_DOS, a, pf_DOS, spin_fac, coeff, check_electrons, peak_width
+   integer, dimension(:), allocatable :: nghbr_atoms
+    real(double) :: Ebin, dE_DOS, a, pf_DOS, spin_fac, coeff, check_electrons
     real(double), dimension(:,:,:), allocatable :: pDOS
     real(double), dimension(:,:,:,:), allocatable :: pDOS_l
     real(double), dimension(:,:,:,:,:), allocatable :: pDOS_lm
@@ -506,17 +508,17 @@ contains
     ! Read eigenvector coefficients
     call read_psi_coeffs("Process")
     allocate(occ(n_bands_total,nkp))
-    
+
     ! Call rotation subroutine if desired
     if (flag_rotate_pdos) then
-      ! Determine whether to use Axis-angle == 0 or Euler  == 1first 
+      ! Determine whether to use Axis-angle == 0 or Euler  == 1first
       write(*,fmt='(2x,"Rotating wavefunction coefficients")')
+      call initialise_A_mat(A1, A2)
       if (flag_rotate_pdos_mode == 0) then
-         call initialise_A_mat(A1, A2)
          write(*,fmt='(2x,"Using user input axes")')
          call get_pdos_axes
          call calculate_axis_angle(pdos_ax, pdos_ay, pdos_az, axis, angle)
-         call construct_rodrigues(axis, angle, rod)      
+         call construct_rodrigues(axis, angle, rod)
          ! Construct all C^l matrices from rodrigues
          call construct_C1(rod, C1)
          call construct_C2(rod, C2)
@@ -532,9 +534,24 @@ contains
          ! call euler_to_axis_angle(axis, angle, euler_matrix)
          call construct_EulerMatrices(E1, E2)
          call rotate_coefficients(E1, E2)
+      else if (flag_rotate_pdos_mode == 2) then
+         write(*,fmt='(2x,"Using user input atom number and local geometry")')
+         call nearest_neighbours(find_neighbours(1), nghbr_atoms)
+         call axes_from_nn(find_neighbours(1), nghbr_atoms)
+         call calculate_axis_angle(pdos_ax, pdos_ay, pdos_az, axis, angle)
+         call construct_rodrigues(axis, angle, rod)
+         ! Construct all C^l matrices from rodrigues
+         call construct_C1(rod, C1)
+         call construct_C2(rod, C2)
+         call construct_Ul(1, A1, C1, U1)
+         call construct_Ul(2, A2, C2, U2)
+               ! compute U^l
+         U1d = transpose(U1) ! UU^T = I
+         U2d = transpose(U2) ! UU^T = I
+         call rotate_coefficients(U1d, U2d)
       end if ! pdos rotation mode
    end if  ! rotate pdos
-            
+
     ! Set up storage based on pDOS per atom, or l/lm resolved per atom
     if(flag_lm_resolved) then
        allocate(pDOS_lm(-max_l:max_l,0:max_l,n_atoms_pDOS,n_DOS,nspin))
@@ -874,7 +891,7 @@ contains
       E1(3,1) = cb*cg*sa + ca*sg
       E1(3,2) = sa*sb
       E1(3,3) = ca*cg - cb*sa*sg
-      
+
       ! Rotation of l = 2 coefficients
       E2(5,5) = 0.25*c2a*c2g*(3.0+c2b) - s2a*cb*s2g
       E2(5,4) = 0.5*c2a*s2b*cg - s2a*sb*sg
@@ -905,12 +922,12 @@ contains
       E2(1,3) = sqrt(3.0)*sa*sb*sb*ca
       E2(1,2) = sb*(c2a*cg - 2*sa*ca*cb*sg)
       E2(1,1) = c2a*cb*c2g - sa*ca*(3.0 + c2a)*sg*cg
-      
+
       ! Require change of basis to correct orbital convention
       E1 = matmul(inv(Q1), matmul(E1, Q1))
       E2 = matmul(inv(Q2), matmul(E2, Q2))
    end subroutine construct_EulerMatrices
-   
+
    subroutine calculate_axis_angle(w1, w2, w3, axis, angle)
       use datatypes
       use numbers, ONLY: pi
@@ -923,7 +940,7 @@ contains
       ! Rotate from simulation axes (standard Cartesian) to local axes
       real(double), intent(in) ::  w1(3), w2(3), w3(3)
       real(double), intent(out) :: axis(3), angle
-      real(double) :: pos_diff(3), cross_prod(3), det, sin_angle, cos_angle
+      real(double) :: pos_diff(3), det, sin_angle, cos_angle
       real(double) :: basis_matrix(3,3), temp(3,3), antisym_axis(3,3)
       ! Local variables
       integer :: i, j, N, LDA, LDVL, LDVR, INFO, LDWORK
@@ -998,8 +1015,8 @@ contains
       identity(1, 1) = 1.0
       identity(2, 2) = 1.0
       identity(3, 3) = 1.0
-      !Normalise axis to unit vector 
-      norm_axis = axis / norm2(axis) 
+      !Normalise axis to unit vector
+      norm_axis = axis / norm2(axis)
       ! Define K
       call antisym_matrix(norm_axis, K)
 
@@ -1023,7 +1040,7 @@ contains
       C1(2, 3) = rod(6)
       C1(3, 1) = rod(7)
       C1(3, 2) = rod(8)
-      C1(3, 3) = rod(9)   
+      C1(3, 3) = rod(9)
    end subroutine construct_C1
    subroutine construct_C2(r, C2)
       use datatypes
@@ -1106,13 +1123,13 @@ contains
       real(double) :: Al_inv(2*angmom + 1, 2*angmom + 1)
       Al_inv = inv(Al)
       Ul = matmul(Al_inv, matmul(Cl, Al))
-      
+
    end subroutine construct_Ul
-   
+
    subroutine rotate_coefficients(U1, U2)
       use datatypes
       use local, ONLY: n_bands_total, nkp, n_atoms_pDOS, evec_coeff, scaled_evec_coeff, &
-      n_atoms_pDOS, pDOS_atom_index, band_full_to_active
+      pDOS_atom_index, band_full_to_active
       use global_module, ONLY: nspin, species_glob
       use pao_format,    ONLY: pao
       use GenComms, ONLY: cq_abort
@@ -1130,7 +1147,7 @@ contains
          do i_kp = 1, nkp
             do i_band = 1, n_bands_total
                i_band_c = band_full_to_active(i_band)
-               if(i_band_c == 0) continue
+               if(i_band_c > 0) then
                do i_atom = 1, n_atoms_pDOS
                   g_atom = pDOS_atom_index(i_atom)
                   i_spec = species_glob(g_atom)
@@ -1156,11 +1173,162 @@ contains
                      end do ! i_z
                   end do ! i_l
                end do ! i_atom
+            end if ! if band is active
             end do ! i_band
          end do ! i_kp
       end do ! i_spin
    end subroutine rotate_coefficients
 
+   subroutine nearest_neighbours(atomno, nghbr_atoms)
+      use datatypes
+      use dimens, ONLY: r_super_x, r_super_y, r_super_z
+      use local, ONLY: find_neighbours
+      use global_module, ONLY: ni_in_cell, atom_coord, species_glob
+      use GenComms, ONLY: cq_abort
+
+      implicit none
+
+      integer, intent(in) :: atomno
+      integer, intent(out), dimension(:), allocatable :: nghbr_atoms
+
+      ! Local variables
+      real(double), parameter :: err = 1e-5
+      real(double) :: distances(1:ni_in_cell), temp(1:ni_in_cell)
+      real(double) ::cx, cy, cz, dist, dx, dy, dz
+      integer :: i, j, min_idx
+
+      cx = atom_coord(1, atomno)
+      cy = atom_coord(2, atomno)
+      cz = atom_coord(3, atomno)
+      ! ACCOUNT FOR PERIODICITY
+      do i = 1, ni_in_cell
+
+         if (i == atomno) then
+            distances(i) = huge(1.0d0)
+            cycle
+         end if
+
+         dx = atom_coord(1,i) - cx
+         dy = atom_coord(2,i) - cy
+         dz = atom_coord(3,i) - cz
+
+         dx = dx - r_super_x * nint(dx / r_super_x)
+         dy = dy - r_super_y * nint(dy / r_super_y)
+         dz = dz - r_super_y * nint(dz / r_super_z)
+
+         dist = dx*dx + dy*dy + dz*dz
+
+         distances(i) = dist
+      end do
+      temp = distances
+      ! Eliminate zeros - self-distance
+      where (abs(temp) < err) temp = huge(1.0)
+
+      if (find_neighbours(2) == 0) then
+         allocate(nghbr_atoms(4))
+         do j = 1, 4
+            min_idx = minloc(temp, 1)
+            nghbr_atoms(j) = min_idx
+            temp(min_idx) = huge(1.0)
+         end do
+      else if (find_neighbours(2) == 1) then
+         allocate(nghbr_atoms(6))
+         do j = 1, 6
+            min_idx = minloc(temp, 1)
+            nghbr_atoms(j) = min_idx
+            temp(min_idx) = huge(1.0)
+         end do
+      end if
+   end subroutine
+
+   subroutine axes_from_nn(atomno, nghbr_atoms)
+      use datatypes
+      use local, ONLY: find_neighbours, pdos_ax, pdos_ay, pdos_az
+      use global_module, ONLY: ni_in_cell, atom_coord, species_glob
+      use GenComms, ONLY: cq_abort
+      implicit none
+      ! This subroutine will use computed nearest_neighbours
+      ! and specified local geometry to construct  a new set of local
+      ! axes to rotate the pDOS into
+      !
+      ! For square-planar geometry:
+      !  Longest bond is chosen as x_hat.
+      !  Bonds which are closest to orthogonality are
+      !     projected onto a plane defined by x_hat
+      !  y_hat is chosen from the projected direction
+      !     which has the minimal difference to its unprojected bond
+      !  z_hat is computed as the cross-product from these 2 directions, and thus
+      !     point perpendicular to the planar geometry
+      ! For octahedra: choose z_hat as longest or shortest bond
+      !  Use this direction to define a plane - project the 4 atoms onto it
+      !  Call y_hat the bond which is the closest to the plane
+      ! Find x_hat by x_hat = z cross y
+      integer, intent(in) :: atomno
+      integer, dimension(:), intent(in) :: nghbr_atoms
+
+      real(double) ::atomno_pos(3), plane_normal(3), proj_vector(3), cos_angle
+      real(double), allocatable :: bond(:,:), dots(:)
+      real(double), allocatable :: bond_lengths(:)
+      integer :: i, ibond_max_len, idx_direction
+      allocate(bond(3, size(nghbr_atoms)))
+      allocate(bond_lengths(size(nghbr_atoms)))
+      atomno_pos = (/atom_coord(1, atomno), atom_coord(2, atomno), atom_coord(3, atomno)/)
+      do i = 1, size(nghbr_atoms)
+         bond(1, i) = atom_coord(1, nghbr_atoms(i)) - atomno_pos(1)
+         bond(2, i) = atom_coord(2, nghbr_atoms(i)) - atomno_pos(2)
+         bond(3, i) = atom_coord(3, nghbr_atoms(i)) - atomno_pos(3)
+         bond_lengths(i) = dot_product(bond(:, i), bond(:, i))
+         ! if (abs(bond_lengths(i)) < 1e-10)
+         bond(:, i) = bond(:, i) / bond_lengths(i) ! normalise to unit length
+      end do
+      print *, "bonds", bond
+      allocate(dots(size(bond_lengths)))
+
+      ibond_max_len = maxloc(bond_lengths,1) ! gets neighbour with maximum bond length
+      idx_direction = minloc(abs(dots), 1) ! select index of closest to perpendicular bond
+      dots = matmul(transpose(bond), bond(:, ibond_max_len))  ! dot prod with chosen normal
+      call project_onto_plane(bond(:, ibond_max_len),bond(:, idx_direction), proj_vector)
+      if (find_neighbours(2) == 0) then
+         ! cos is monotonically decreasing between [0, pi/2]
+         ! Use this new bond to find y_hat by projection onto the plane
+         pdos_ax = bond(:, ibond_max_len)
+         pdos_ay = proj_vector
+         pdos_az = cross_product(pdos_ax, pdos_ay)
+      else if (find_neighbours(2) == 1) then
+         pdos_az = bond(:, ibond_max_len)
+         pdos_ay = proj_vector
+         pdos_ax = cross_product(pdos_ay, pdos_az)
+
+      end if
+      pdos_ax = pdos_ax / norm2(pdos_ax)
+      pdos_ay = pdos_ay / norm2(pdos_ay)
+      pdos_az = pdos_az / norm2(pdos_az)
+      print *, "pdos_ax", pdos_ax
+         print *, "pdos_ay", pdos_ay
+         print *, "pdos_az", pdos_az
+   end subroutine axes_from_nn
+   function cross_product(a, b) result(cross)
+      use datatypes
+      implicit none
+      real(double), dimension(3), intent(in) :: a, b
+      real(double), dimension(3) :: cross
+
+      cross(1) = a(2) * b(3) - a(3) * b(2)
+      cross(2) = a(3) * b(1) - a(1) * b(3)
+      cross(3) = a(1) * b(2) - a(2) * b(1)
+   end function cross_product
+
+   subroutine project_onto_plane(plane_normal, vector, proj_vector)
+      use datatypes
+      implicit none
+      real(double), intent(in) :: plane_normal(3), vector(3)
+      real(double), intent(out) :: proj_vector(3)
+      real(double) :: norm_plane_normal(3)
+      ! Subroutine to project vector onto plane defined by plane_normal vector
+      norm_plane_normal = plane_normal / norm2(plane_normal)
+
+      proj_vector = vector - ((dot_product(vector, norm_plane_normal))*norm_plane_normal)
+   end subroutine project_onto_plane
   subroutine process_band_structure
 
     use datatypes
@@ -1172,7 +1340,7 @@ contains
     use units, ONLY: HaToeV
 
     implicit none
-    
+
     ! Local variables
     integer :: i_band, i_kp, i_spin, n_DOS_wid, n_band, n_min, n_max, i
     real(double) :: Ebin, dE_DOS, a, pf_DOS, spin_fac, dE
@@ -1306,7 +1474,7 @@ contains
     real(double) :: a, b, c, d, r1, r2, r3, r4, rr, kr, krx, kry, krz
     real(double), dimension(3) :: dsph_rl, dg
     complex(double_cplx) :: phase, phase_shift
-    
+
     psi = zero
     dpsi = zero
     ! Grid spacing
@@ -1319,11 +1487,11 @@ contains
        if(atom_coord(3, i_atom) + RadiusAtomf(i_spec) >= stm_z_min) then ! Is the atom in STM region?
           kr = kx(i_kp)*atom_coord(1, i_atom) + ky(i_kp)*atom_coord(2, i_atom) + kz(i_kp)*atom_coord(3, i_atom)
           ! Find grid limits
-          minx = floor( (atom_coord(1, i_atom) - RadiusAtomf(i_spec))/dg(1) )    
+          minx = floor( (atom_coord(1, i_atom) - RadiusAtomf(i_spec))/dg(1) )
           maxx = floor( (atom_coord(1, i_atom) + RadiusAtomf(i_spec))/dg(1) ) + 1
-          miny = floor( (atom_coord(2, i_atom) - RadiusAtomf(i_spec))/dg(2) )    
+          miny = floor( (atom_coord(2, i_atom) - RadiusAtomf(i_spec))/dg(2) )
           maxy = floor( (atom_coord(2, i_atom) + RadiusAtomf(i_spec))/dg(2) ) + 1
-          minz = floor( (atom_coord(3, i_atom) - RadiusAtomf(i_spec))/dg(3) )    
+          minz = floor( (atom_coord(3, i_atom) - RadiusAtomf(i_spec))/dg(3) )
           maxz = floor( (atom_coord(3, i_atom) + RadiusAtomf(i_spec))/dg(3) ) + 1
           if(i_job==4.or.i_job==5) then ! STM not band density, so no z periodicity
              if(stm_z_min>zero) then
@@ -1436,7 +1604,7 @@ contains
     real(double) :: a, b, c, d, r1, r2, r3, r4, rr, kr, krx, kry, krz
     real(double), dimension(3) :: dsph_rl, dg
     complex(double_cplx) :: phase, phase_shift
-    
+
     psi = zero
     ! Grid spacing
     dg(1) = grid_x!/BohrToAng
@@ -1449,11 +1617,11 @@ contains
           kr = kx(i_kp)*atom_coord(1, i_atom) + ky(i_kp)*atom_coord(2, i_atom) + kz(i_kp)*atom_coord(3, i_atom)
           !phase = cmplx(cos(kr),sin(kr))
           ! Find grid limits
-          minx = floor( (atom_coord(1, i_atom) - RadiusAtomf(i_spec))/dg(1) )    
+          minx = floor( (atom_coord(1, i_atom) - RadiusAtomf(i_spec))/dg(1) )
           maxx = floor( (atom_coord(1, i_atom) + RadiusAtomf(i_spec))/dg(1) ) + 1
-          miny = floor( (atom_coord(2, i_atom) - RadiusAtomf(i_spec))/dg(2) )    
+          miny = floor( (atom_coord(2, i_atom) - RadiusAtomf(i_spec))/dg(2) )
           maxy = floor( (atom_coord(2, i_atom) + RadiusAtomf(i_spec))/dg(2) ) + 1
-          minz = floor( (atom_coord(3, i_atom) - RadiusAtomf(i_spec))/dg(3) )    
+          minz = floor( (atom_coord(3, i_atom) - RadiusAtomf(i_spec))/dg(3) )
           maxz = floor( (atom_coord(3, i_atom) + RadiusAtomf(i_spec))/dg(3) ) + 1
           ! Account for STM limits
           if(i_job==4.or.i_job==5) then ! STM not band density
@@ -1533,7 +1701,7 @@ contains
     use numbers
     use local, ONLY: block_store, nxmin, nymin, nzmin, current, nptsx, nptsy, nptsz
     use block_module, only: n_pts_in_block, in_block_x,in_block_y,in_block_z
-    
+
     implicit none
 
     ! Passed

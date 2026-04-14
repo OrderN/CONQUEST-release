@@ -354,9 +354,16 @@ contains
                euler_gamma = euler_gamma * (pi / 180.0)
             end if
             call fdf_endblock
+         else if(fdf_block('pDOSNeighbours') .and. flag_rotate_pdos_mode == 2) then 
+               read (unit=input_array(block_start),fmt=*) find_neighbours
+               if (find_neighbours(2) < 0 .or. find_neighbours(2) > 2) &
+                  call cq_abort("Invalid parameter for local geometry in pDOSNeighbours: ",&
+                     1+block_end-block_start,2)
+               call fdf_endblock
          else
             call cq_abort("Unknown rotation input: ", flag_rotate_pdos_mode)
          end if ! pDOS mode
+
        end if ! if rotate PDOS
     end if ! i_job
     ! Now read PS files for atomic information
