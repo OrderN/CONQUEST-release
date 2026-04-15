@@ -445,7 +445,7 @@ contains
     use local, ONLY: eigenvalues, n_bands_total, nkp, wtk, efermi, flag_total_iDOS, &
          evec_coeff, scaled_evec_coeff, flag_procwf_range_Ef, flag_l_resolved, flag_lm_resolved, &
          flag_rotate_pdos, flag_rotate_pdos_mode, band_full_to_active, n_atoms_pDOS, pDOS_atom_index, &
-         pdos_ax, pdos_ay, pdos_az, euler_alpha, euler_beta, euler_gamma, find_neighbours
+         pdos_ax, pdos_ay, pdos_az, euler_alpha, euler_beta, euler_gamma, find_neighbours, flag_rotate_pdos_natoms
     use read, ONLY: read_eigenvalues, read_psi_coeffs, read_nprocs_from_blocks
     use global_module, ONLY: nspin, n_DOS, E_DOS_min, E_DOS_max, sigma_DOS, ni_in_cell, species_glob
     use units, ONLY: HaToeV
@@ -459,7 +459,7 @@ contains
          i_l, nzeta, sf_offset, max_l, norbs, i_m, i_band_c, i_z
     real(double) :: Ebin, dE_DOS, a, pf_DOS, spin_fac, coeff, check_electrons, peak_width
    integer, dimension(:), allocatable :: nghbr_atoms
-    real(double) :: Ebin, dE_DOS, a, pf_DOS, spin_fac, coeff, check_electrons
+    real(double), dimension(:,:), allocatable :: bond ! For pDOS rotation
     real(double), dimension(:,:,:), allocatable :: pDOS
     real(double), dimension(:,:,:,:), allocatable :: pDOS_l
     real(double), dimension(:,:,:,:,:), allocatable :: pDOS_lm
@@ -535,20 +535,22 @@ contains
          call construct_EulerMatrices(E1, E2)
          call rotate_coefficients(E1, E2)
       else if (flag_rotate_pdos_mode == 2) then
-         write(*,fmt='(2x,"Using user input atom number and local geometry")')
-         call nearest_neighbours(find_neighbours(1), nghbr_atoms)
-         call axes_from_nn(find_neighbours(1), nghbr_atoms)
-         call calculate_axis_angle(pdos_ax, pdos_ay, pdos_az, axis, angle)
-         call construct_rodrigues(axis, angle, rod)
-         ! Construct all C^l matrices from rodrigues
-         call construct_C1(rod, C1)
-         call construct_C2(rod, C2)
-         call construct_Ul(1, A1, C1, U1)
-         call construct_Ul(2, A2, C2, U2)
-               ! compute U^l
-         U1d = transpose(U1) ! UU^T = I
-         U2d = transpose(U2) ! UU^T = I
-         call rotate_coefficients(U1d, U2d)
+         write(*,fmt='(2x,"Using user input atom numbers and local geometry")')
+         do i = 1, flag_rotate_pdos_natoms
+            call nearest_neighbours(find_neighbours(1, i), bond)
+            call axes_from_nn(find_neighbours(1, i), bond)
+            call calculate_axis_angle(pdos_ax, pdos_ay, pdos_az, axis, angle)
+            call construct_rodrigues(axis, angle, rod)
+            ! Construct all C^l matrices from rodrigues
+            call construct_C1(rod, C1)
+            call construct_C2(rod, C2)
+            call construct_Ul(1, A1, C1, U1)
+            call construct_Ul(2, A2, C2, U2)
+                  ! compute U^l
+            U1d = transpose(U1) ! UU^T = I
+            U2d = transpose(U2) ! UU^T = I
+            call rotate_coefficients(U1d, U2d)
+         end do
       end if ! pdos rotation mode
    end if  ! rotate pdos
 
@@ -1179,7 +1181,38 @@ contains
       end do ! i_spin
    end subroutine rotate_coefficients
 
-   subroutine nearest_neighbours(atomno, nghbr_atoms)
+   ! -----------------------------------------------------------------------------
+   ! Subroutine nearest_neighbours
+   ! -----------------------------------------------------------------------------
+
+   !!****f* ProcModule/nearest_neighbours *
+   !!
+   !!  NAME
+   !!   nearest_neighbours - Find nearest neighbours and their bond vectors
+   !!  USAGE
+   !!   nearest_neighbours(atomno, nghbr_atoms, bonds)
+   !!  PURPOSE
+   !!   Evaluates the nearest neighbours using periodic boundary conditions
+   !!    and returns their bond vectors
+   !!
+   !!   I'm assuming (for the sake of argument) that if both the energy and
+   !!   the smearing (kT) are zero then we get an occupation of 0.5 - this is
+   !!   certainly the limit if E and kT are equal and heading to zero, or if
+   !!   E is smaller than kT and both head for zero.
+   !!  INPUTS
+   !!   integer, intent(in) :: atomno - atom to find neighbours of
+   !!   integer, intent(out), dimension(:), allocatable :: nghbr_atoms - array to hold neighbours
+   !!  USES
+   !!   datatypes, dimens, local, gloval, GenComms
+   !!  AUTHOR
+   !!   C. Xu
+   !!  CREATION DATE
+   !!   15/04/2026
+   !!  MODIFICATION HISTORY
+   !!
+   !!  SOURCE
+   !!
+   subroutine nearest_neighbours(atomno, bond)
       use datatypes
       use dimens, ONLY: r_super_x, r_super_y, r_super_z
       use local, ONLY: find_neighbours
@@ -1189,13 +1222,15 @@ contains
       implicit none
 
       integer, intent(in) :: atomno
-      integer, intent(out), dimension(:), allocatable :: nghbr_atoms
+      real(double), intent(out), allocatable :: bond(:,:)
+
 
       ! Local variables
+      integer, dimension(:), allocatable :: nghbr_atoms
       real(double), parameter :: err = 1e-5
       real(double) :: distances(1:ni_in_cell), temp(1:ni_in_cell)
-      real(double) ::cx, cy, cz, dist, dx, dy, dz
-      integer :: i, j, min_idx
+      real(double) ::cx, cy, cz, dist, dx, dy, dz, atomno_pos(3)
+      integer :: i, j, min_idx, ibond_max_len, idx_direction
 
       cx = atom_coord(1, atomno)
       cy = atom_coord(2, atomno)
@@ -1214,7 +1249,7 @@ contains
 
          dx = dx - r_super_x * nint(dx / r_super_x)
          dy = dy - r_super_y * nint(dy / r_super_y)
-         dz = dz - r_super_y * nint(dz / r_super_z)
+         dz = dz - r_super_z * nint(dz / r_super_z)
 
          dist = dx*dx + dy*dy + dz*dz
 
@@ -1223,25 +1258,80 @@ contains
       temp = distances
       ! Eliminate zeros - self-distance
       where (abs(temp) < err) temp = huge(1.0)
-
-      if (find_neighbours(2) == 0) then
+      select case (find_neighbours(2, findloc(find_neighbours(1,:), atomno, dim=1)))
+      case (0)
          allocate(nghbr_atoms(4))
-      else if (find_neighbours(2) == 1) then
+      case (1)
          allocate(nghbr_atoms(6))
-      else 
+      case default
          call cq_abort("Did not correctly allocate nghbr_atoms array")
-      end if
+      end select
       do j = 1, size(nghbr_atoms)
          min_idx = minloc(temp, 1)
          nghbr_atoms(j) = min_idx
          temp(min_idx) = huge(1.0)
       end do
-   end subroutine
+            print *, "nghbr arr", nghbr_atoms
 
-   subroutine axes_from_nn(atomno, nghbr_atoms)
+      allocate(bond(3, size(nghbr_atoms)))
+      atomno_pos = (/atom_coord(1, atomno), atom_coord(2, atomno), atom_coord(3, atomno)/)
+      do i = 1, size(nghbr_atoms)
+         bond(1, i) = atom_coord(1, nghbr_atoms(i)) - atomno_pos(1)
+         bond(2, i) = atom_coord(2, nghbr_atoms(i)) - atomno_pos(2)
+         bond(3, i) = atom_coord(3, nghbr_atoms(i)) - atomno_pos(3)
+
+         bond(1, i) = bond(1, i) - r_super_x * nint(bond(1, i) / r_super_x)
+         bond(2, i) = bond(2, i) - r_super_y * nint(bond(2, i) / r_super_y)
+         bond(3, i) = bond(3, i) - r_super_z * nint(bond(3, i) / r_super_z)
+
+         print *, "bond i_unnorm", bond(:, i)
+      end do
+
+   end subroutine
+   ! -----------------------------------------------------------------------------
+   ! Subroutine axes_from_nn
+   ! -----------------------------------------------------------------------------
+
+   !!****f* ProcModule/axes_from_nn *
+   !!
+   !!  NAME
+   !!   axes_from_nn - Gets rotation axes from bond vectors
+   !!  USAGE
+   !!   axes_from_nn(atomno, bond)
+   !!  PURPOSE
+   !! This subroutine will use computed nearest_neighbours
+   !!  and specified local geometry to construct  a new set of local
+   !!  axes to rotate the pDOS into
+   !!
+   !!  For square-planar geometry:
+   !!   Longest bond is chosen as x_hat.
+   !!   Bonds which are closest to orthogonality are
+   !!      projected onto a plane defined by x_hat
+   !!   y_hat is chosen from the projected direction
+   !!      which has the minimal difference to its unprojected bond
+   !!   z_hat is computed as the cross-product from these 2 directions, and thus
+   !!      point perpendicular to the planar geometry
+   !!  For octahedra: choose z_hat as longest or shortest bond
+   !!   Use this direction to define a plane - project the 4 atoms onto it
+   !!   Call y_hat the bond which is the closest to the plane
+   !!  Find x_hat by x_hat = z cross y
+   !!  INPUTS
+   !!   integer, intent(in) :: atomno - atom to find neighbours of
+   !!   real(double), intent(in) :: bond(:,:) - array to hold bond vectors
+   !!  USES
+   !!   datatypes, local, global, GenComms
+   !!  AUTHOR
+   !!   C. Xu
+   !!  CREATION DATE
+   !!   15/04/2026
+   !!  MODIFICATION HISTORY
+   !!
+   !!  SOURCE
+   !!
+   subroutine axes_from_nn(atomno, bond)
       use datatypes
       use local, ONLY: find_neighbours, pdos_ax, pdos_ay, pdos_az
-      use global_module, ONLY: ni_in_cell, atom_coord, species_glob
+      use global_module, ONLY: ni_in_cell, atom_coord
       use GenComms, ONLY: cq_abort
       implicit none
       ! This subroutine will use computed nearest_neighbours
@@ -1261,39 +1351,38 @@ contains
       !  Call y_hat the bond which is the closest to the plane
       ! Find x_hat by x_hat = z cross y
       integer, intent(in) :: atomno
-      integer, dimension(:), intent(in) :: nghbr_atoms
-
+      real(double), intent(in) :: bond(:,:)
+      ! Local variables
       real(double) ::atomno_pos(3), plane_normal(3), proj_vector(3), cos_angle
-      real(double), allocatable :: bond(:,:), dots(:)
-      real(double), allocatable :: bond_lengths(:)
+      real(double), allocatable :: dots(:), bond_lengths(:), norm_bond(:,:)
       integer :: i, ibond_max_len, idx_direction
-      allocate(bond(3, size(nghbr_atoms)))
-      allocate(bond_lengths(size(nghbr_atoms)))
-      atomno_pos = (/atom_coord(1, atomno), atom_coord(2, atomno), atom_coord(3, atomno)/)
-      do i = 1, size(nghbr_atoms)
-         bond(1, i) = atom_coord(1, nghbr_atoms(i)) - atomno_pos(1)
-         bond(2, i) = atom_coord(2, nghbr_atoms(i)) - atomno_pos(2)
-         bond(3, i) = atom_coord(3, nghbr_atoms(i)) - atomno_pos(3)
+
+      allocate(dots(size(bond(1,:))))
+      allocate(norm_bond(3, size(bond(1,:))))
+      allocate(bond_lengths(size(bond(1,:))))
+      do i = 1, size(bond_lengths)
          bond_lengths(i) = dot_product(bond(:, i), bond(:, i))
-         ! if (abs(bond_lengths(i)) < 1e-10)
-         bond(:, i) = bond(:, i) / bond_lengths(i) ! normalise to unit length
+         if (bond_lengths(i) > 1e-10) then
+              norm_bond(:, i) = bond(:, i) / bond_lengths(i)
+          else
+              call cq_abort("Zero-length bond")
+          end if
       end do
       print *, "bonds", bond
       allocate(dots(size(bond_lengths)))
 
       ibond_max_len = maxloc(bond_lengths,1) ! gets neighbour with maximum bond length
-      idx_direction = minloc(abs(dots), 1) ! select index of closest to perpendicular bond
       dots = matmul(transpose(bond), bond(:, ibond_max_len))  ! dot prod with chosen normal
+      idx_direction = minloc(abs(dots), 1) ! select index of closest to perpendicular bond
       call project_onto_plane(bond(:, ibond_max_len),bond(:, idx_direction), proj_vector)
-      if (find_neighbours(2) == 0) then
-         ! cos is monotonically decreasing between [0, pi/2]
-         ! Use this new bond to find y_hat by projection onto the plane
-         pdos_ax = bond(:, ibond_max_len)
-         pdos_ay = proj_vector
+      select case (find_neighbours(2, findloc(find_neighbours(1,:), atomno, dim=1)))
+      case (0)
+         pdos_ay = bond(:, ibond_max_len)
+         pdos_ax = proj_vector
          pdos_az = cross_product(pdos_ax, pdos_ay)
-      else if (find_neighbours(2) == 1) then
-         pdos_az = bond(:, ibond_max_len)
+      case (1)
          pdos_ay = proj_vector
+         pdos_az = bond(:, ibond_max_len)
          pdos_ax = cross_product(pdos_ay, pdos_az)
 
       end if

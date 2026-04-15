@@ -305,6 +305,7 @@ contains
        flag_lm_resolved = fdf_boolean('Process.pDOS_lm_resolved',.false.)
        flag_rotate_pdos = fdf_boolean('Process.RotatePDOS',.false.)
        flag_rotate_pdos_mode = fdf_integer('Process.RotatePDOSMode',0)
+       flag_rotate_pdos_natoms = fdf_integer('Process.RotatePDOS.NumAtoms',0)
        flag_rotate_pdos_units = fdf_string(7, 'Process.RotatePDOSAngle',"deg") ! deg or rad
        if(flag_lm_resolved .and. (.not.flag_l_resolved)) flag_l_resolved = .true.
        ! How many atoms?
@@ -355,11 +356,17 @@ contains
             end if
             call fdf_endblock
          else if(fdf_block('pDOSNeighbours') .and. flag_rotate_pdos_mode == 2) then 
-               read (unit=input_array(block_start),fmt=*) find_neighbours
-               if (find_neighbours(2) < 0 .or. find_neighbours(2) > 2) &
-                  call cq_abort("Invalid parameter for local geometry in pDOSNeighbours: ",&
+            if (flag_rotate_pdos_natoms == 0) &
+               call cq_abort("Atoms to rotate about was 0")
+            allocate(find_neighbours(2, flag_rotate_pdos_natoms))
+            do i=1,flag_rotate_pdos_natoms
+               read (unit=input_array(block_start+i-1),fmt=*) &
+                     find_neighbours(1,i), find_neighbours(2,i)
+               if (find_neighbours(2,i) < 0 .or. find_neighbours(2,i) > 2) &
+                  call cq_abort("Local geometry flag in block pDOSNeighbours was not 0 or 1: ",&
                      1+block_end-block_start,2)
-               call fdf_endblock
+             end do
+            call fdf_endblock
          else
             call cq_abort("Unknown rotation input: ", flag_rotate_pdos_mode)
          end if ! pDOS mode
