@@ -45,6 +45,7 @@ module local
   real(double) :: pdos_ax(3), pdos_ay(3), pdos_az(3) ! axes to rotate pDOS into
   real(double) :: euler_alpha, euler_beta, euler_gamma ! Euler angles to rotate pDOS by
   integer, dimension(:,:), allocatable :: find_neighbours !atom number, local geometry 0 (4-bond planar) or 1 (octahedral)
+  integer, dimension(:), allocatable :: nghbr_arr ! holds nearest neighbour atoms
   integer :: i_job ! Job type
   integer :: coord_format ! Output format: xyz (1) or cell (2)
 

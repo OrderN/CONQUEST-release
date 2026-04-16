@@ -445,7 +445,7 @@ contains
     use local, ONLY: eigenvalues, n_bands_total, nkp, wtk, efermi, flag_total_iDOS, &
          evec_coeff, scaled_evec_coeff, flag_procwf_range_Ef, flag_l_resolved, flag_lm_resolved, &
          flag_rotate_pdos, flag_rotate_pdos_mode, band_full_to_active, n_atoms_pDOS, pDOS_atom_index, &
-         pdos_ax, pdos_ay, pdos_az, euler_alpha, euler_beta, euler_gamma, find_neighbours, flag_rotate_pdos_natoms
+         pdos_ax, pdos_ay, pdos_az, euler_alpha, euler_beta, euler_gamma, find_neighbours, flag_rotate_pdos_natoms, nghbr_arr
     use read, ONLY: read_eigenvalues, read_psi_coeffs, read_nprocs_from_blocks
     use global_module, ONLY: nspin, n_DOS, E_DOS_min, E_DOS_max, sigma_DOS, ni_in_cell, species_glob
     use units, ONLY: HaToeV
@@ -538,6 +538,8 @@ contains
          write(*,fmt='(2x,"Using user input atom numbers and local geometry")')
          do i = 1, flag_rotate_pdos_natoms
             call nearest_neighbours(find_neighbours(1, i), bond)
+            write(*, fmt='(/2x,"Located neighours of atom ", I0, ": ", *(I0,1x))') &
+                    find_neighbours(1,i), nghbr_arr
             call axes_from_nn(find_neighbours(1, i), bond)
             call calculate_axis_angle(pdos_ax, pdos_ay, pdos_az, axis, angle)
             call construct_rodrigues(axis, angle, rod)
@@ -1190,7 +1192,7 @@ contains
    !!  NAME
    !!   nearest_neighbours - Find nearest neighbours and their bond vectors
    !!  USAGE
-   !!   nearest_neighbours(atomno, nghbr_atoms, bonds)
+   !!   nearest_neighbours(atomno, nghbr_arr, bonds)
    !!  PURPOSE
    !!   Evaluates the nearest neighbours using periodic boundary conditions
    !!    and returns their bond vectors
@@ -1201,7 +1203,7 @@ contains
    !!   E is smaller than kT and both head for zero.
    !!  INPUTS
    !!   integer, intent(in) :: atomno - atom to find neighbours of
-   !!   integer, intent(out), dimension(:), allocatable :: nghbr_atoms - array to hold neighbours
+   !!   integer, intent(out), dimension(:), allocatable :: nghbr_arr - array to hold neighbours
    !!  USES
    !!   datatypes, dimens, local, gloval, GenComms
    !!  AUTHOR
@@ -1215,7 +1217,7 @@ contains
    subroutine nearest_neighbours(atomno, bond)
       use datatypes
       use dimens, ONLY: r_super_x, r_super_y, r_super_z
-      use local, ONLY: find_neighbours
+      use local, ONLY: find_neighbours, nghbr_arr
       use global_module, ONLY: ni_in_cell, atom_coord, species_glob
       use GenComms, ONLY: cq_abort
 
@@ -1226,7 +1228,6 @@ contains
 
 
       ! Local variables
-      integer, dimension(:), allocatable :: nghbr_atoms
       real(double), parameter :: err = 1e-5
       real(double) :: distances(1:ni_in_cell), temp(1:ni_in_cell)
       real(double) ::cx, cy, cz, dist, dx, dy, dz, atomno_pos(3)
@@ -1260,31 +1261,30 @@ contains
       where (abs(temp) < err) temp = huge(1.0)
       select case (find_neighbours(2, findloc(find_neighbours(1,:), atomno, dim=1)))
       case (0)
-         allocate(nghbr_atoms(4))
+         allocate(nghbr_arr(4))
       case (1)
-         allocate(nghbr_atoms(6))
+         allocate(nghbr_arr(6))
       case default
-         call cq_abort("Did not correctly allocate nghbr_atoms array")
+         call cq_abort("Did not correctly allocate nghbr_arr array")
       end select
-      do j = 1, size(nghbr_atoms)
+      do j = 1, size(nghbr_arr)
          min_idx = minloc(temp, 1)
-         nghbr_atoms(j) = min_idx
+         nghbr_arr(j) = min_idx
          temp(min_idx) = huge(1.0)
       end do
-            print *, "nghbr arr", nghbr_atoms
 
-      allocate(bond(3, size(nghbr_atoms)))
+
+      allocate(bond(3, size(nghbr_arr)))
       atomno_pos = (/atom_coord(1, atomno), atom_coord(2, atomno), atom_coord(3, atomno)/)
-      do i = 1, size(nghbr_atoms)
-         bond(1, i) = atom_coord(1, nghbr_atoms(i)) - atomno_pos(1)
-         bond(2, i) = atom_coord(2, nghbr_atoms(i)) - atomno_pos(2)
-         bond(3, i) = atom_coord(3, nghbr_atoms(i)) - atomno_pos(3)
+      do i = 1, size(nghbr_arr)
+         bond(1, i) = atom_coord(1, nghbr_arr(i)) - atomno_pos(1)
+         bond(2, i) = atom_coord(2, nghbr_arr(i)) - atomno_pos(2)
+         bond(3, i) = atom_coord(3, nghbr_arr(i)) - atomno_pos(3)
 
          bond(1, i) = bond(1, i) - r_super_x * nint(bond(1, i) / r_super_x)
          bond(2, i) = bond(2, i) - r_super_y * nint(bond(2, i) / r_super_y)
          bond(3, i) = bond(3, i) - r_super_z * nint(bond(3, i) / r_super_z)
 
-         print *, "bond i_unnorm", bond(:, i)
       end do
 
    end subroutine
@@ -1330,7 +1330,7 @@ contains
    !!
    subroutine axes_from_nn(atomno, bond)
       use datatypes
-      use local, ONLY: find_neighbours, pdos_ax, pdos_ay, pdos_az
+      use local, ONLY: find_neighbours, nghbr_arr, pdos_ax, pdos_ay, pdos_az
       use global_module, ONLY: ni_in_cell, atom_coord
       use GenComms, ONLY: cq_abort
       implicit none
@@ -1355,7 +1355,7 @@ contains
       ! Local variables
       real(double) ::atomno_pos(3), plane_normal(3), proj_vector(3), cos_angle
       real(double), allocatable :: dots(:), bond_lengths(:), norm_bond(:,:)
-      integer :: i, ibond_max_len, idx_direction
+      integer :: i, ibond_principal, idx_direction, minormax
 
       allocate(dots(size(bond(1,:))))
       allocate(norm_bond(3, size(bond(1,:))))
@@ -1368,30 +1368,37 @@ contains
               call cq_abort("Zero-length bond")
           end if
       end do
-      print *, "bonds", bond
-      allocate(dots(size(bond_lengths)))
 
-      ibond_max_len = maxloc(bond_lengths,1) ! gets neighbour with maximum bond length
-      dots = matmul(transpose(bond), bond(:, ibond_max_len))  ! dot prod with chosen normal
+       minormax = find_neighbours(3, findloc(find_neighbours(1,:), atomno, dim=1))
+      if (minormax < 0) then
+
+        ibond_principal = minloc(bond_lengths,1) ! gets neighbour with min bond length
+      else if (minormax .eq. 0) then
+        ibond_principal = maxloc(bond_lengths,1) ! gets neighbour with maximum bond length
+       else
+        ibond_principal = findloc(nghbr_arr, minormax, dim=1)
+      end if
+      !ibond_max_len = maxloc(bond_lengths,1) ! gets neighbour with maximum bond length
+      dots = matmul(transpose(bond), bond(:, ibond_principal))  ! dot prod with chosen normal
       idx_direction = minloc(abs(dots), 1) ! select index of closest to perpendicular bond
-      call project_onto_plane(bond(:, ibond_max_len),bond(:, idx_direction), proj_vector)
+      call project_onto_plane(bond(:, ibond_principal),bond(:, idx_direction), proj_vector)
       select case (find_neighbours(2, findloc(find_neighbours(1,:), atomno, dim=1)))
       case (0)
-         pdos_ay = bond(:, ibond_max_len)
+         pdos_ay = bond(:, ibond_principal)
          pdos_ax = proj_vector
          pdos_az = cross_product(pdos_ax, pdos_ay)
       case (1)
          pdos_ay = proj_vector
-         pdos_az = bond(:, ibond_max_len)
+         pdos_az = bond(:, ibond_principal)
          pdos_ax = cross_product(pdos_ay, pdos_az)
 
       end if
       pdos_ax = pdos_ax / norm2(pdos_ax)
       pdos_ay = pdos_ay / norm2(pdos_ay)
       pdos_az = pdos_az / norm2(pdos_az)
-      print *, "pdos_ax", pdos_ax
-         print *, "pdos_ay", pdos_ay
-         print *, "pdos_az", pdos_az
+      print *, "x: ", pdos_ax
+      print *, "y: ", pdos_ay
+      print *, "z: ", pdos_az
    end subroutine axes_from_nn
    function cross_product(a, b) result(cross)
       use datatypes
