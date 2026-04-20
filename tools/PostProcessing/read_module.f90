@@ -358,13 +358,17 @@ contains
          else if(fdf_block('pDOSNeighbours') .and. flag_rotate_pdos_mode == 2) then 
             if (flag_rotate_pdos_natoms == 0) &
                call cq_abort("Atoms to rotate about was 0")
-            allocate(find_neighbours(3, flag_rotate_pdos_natoms))
+            allocate(find_neighbours(4, flag_rotate_pdos_natoms))
             do i=1,flag_rotate_pdos_natoms
                read (unit=input_array(block_start+i-1),fmt=*) &
-                     find_neighbours(1,i), find_neighbours(2,i), find_neighbours(3,i)
+                     find_neighbours(1,i), find_neighbours(2,i), find_neighbours(3,i), &
+                     find_neighbours(4,i)
                if (find_neighbours(2,i) < 0 .or. find_neighbours(2,i) > 2) &
                   call cq_abort("Local geometry flag in block pDOSNeighbours was not 0 or 1: ",&
                      1+block_end-block_start,2)
+               if (find_neighbours(4,i) < 0) &
+                  call cq_abort("Input for second axis must be 0 or atom of neighbour",&
+                     1+block_end-block_start,3)
 
              end do
             call fdf_endblock

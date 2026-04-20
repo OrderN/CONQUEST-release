@@ -541,6 +541,12 @@ contains
             write(*, fmt='(/2x,"Located neighours of atom ", I0, ": ", *(I0,1x))') &
                     find_neighbours(1,i), nghbr_arr
             call axes_from_nn(find_neighbours(1, i), bond)
+            write(*, fmt='(/2x,"New local axes for atom ", I0, ": ", *(I0,1x))') &
+                    find_neighbours(1,i)
+            write(*, fmt='(/4x,"x: ",3(f10.5,1X))') pdos_ax
+            write(*, fmt='(/4x,"y: ",3(f10.5,1X))') pdos_ay
+            write(*, fmt='(/4x,"z: ",3(f10.5,1X))') pdos_az
+            call get_pdos_axes
             call calculate_axis_angle(pdos_ax, pdos_ay, pdos_az, axis, angle)
             call construct_rodrigues(axis, angle, rod)
             ! Construct all C^l matrices from rodrigues
@@ -782,11 +788,11 @@ contains
   subroutine get_pdos_axes
    use datatypes
    use local, ONLY: pdos_ax, pdos_ay, pdos_az
-   use dimens, ONLY: r_super_x, r_super_y, r_super_z
    use GenComms, ONLY: cq_abort
    implicit none
    ! This subroutine checks for sufficient orthogonality
    real(double), parameter :: tol = 1e-10
+   character(256) :: err_str
 
    ! Normalise new x-axis correctly
    pdos_ax = pdos_ax / norm2(pdos_ax)
@@ -795,11 +801,11 @@ contains
    ! Normalise new y-axis correctly
    pdos_az = pdos_az / norm2(pdos_az)
    if (abs(dot_product(pdos_ax, pdos_ay)) > tol) &
-      call cq_abort("pDOS_ax vector was not orthogonal to pDOS_ay")
+      call cq_abort("pDOS_ax vector was not orthogonal to pDOS_ay. Check input axes or atom neighbours.")
    if (abs(dot_product(pdos_az, pdos_ay)) > tol) &
-       call cq_abort("pDOS_az vector was not orthogonal to pDOS_ay")
+       call cq_abort("pDOS_az vector was not orthogonal to pDOS_ay. Check input axes or atom neighbours.")
    if (abs(dot_product(pdos_az, pdos_ax)) > tol) &
-       call cq_abort("pDOS_az vector was not orthogonal to pDOS_ax")
+       call cq_abort("pDOS_az vector was not orthogonal to pDOS_ax. Check input axes or atom neighbours.")
 
   end subroutine
 
@@ -1325,7 +1331,7 @@ contains
    !!  CREATION DATE
    !!   15/04/2026
    !!  MODIFICATION HISTORY
-   !!
+   !!   20/04/2026 C. Xu - allow user to specify neighbour as secondary direction
    !!  SOURCE
    !!
    subroutine axes_from_nn(atomno, bond)
@@ -1355,7 +1361,7 @@ contains
       ! Local variables
       real(double) ::atomno_pos(3), plane_normal(3), proj_vector(3), cos_angle
       real(double), allocatable :: dots(:), bond_lengths(:), norm_bond(:,:)
-      integer :: i, ibond_principal, idx_direction, minormax
+      integer :: i, ibond_principal, ibond_sec, idx_direction, minormax, find_atomno
 
       allocate(dots(size(bond(1,:))))
       allocate(norm_bond(3, size(bond(1,:))))
@@ -1368,21 +1374,28 @@ contains
               call cq_abort("Zero-length bond")
           end if
       end do
-
-       minormax = find_neighbours(3, findloc(find_neighbours(1,:), atomno, dim=1))
+      find_atomno = findloc(find_neighbours(1,:), atomno, dim=1)
+      minormax = find_neighbours(3, find_atomno)
       if (minormax < 0) then
-
         ibond_principal = minloc(bond_lengths,1) ! gets neighbour with min bond length
       else if (minormax .eq. 0) then
         ibond_principal = maxloc(bond_lengths,1) ! gets neighbour with maximum bond length
        else
         ibond_principal = findloc(nghbr_arr, minormax, dim=1)
       end if
-      !ibond_max_len = maxloc(bond_lengths,1) ! gets neighbour with maximum bond length
+      if (find_neighbours(4, find_atomno) == 0) then
+      ! If 0, we choose second direction by closest projection
       dots = matmul(transpose(bond), bond(:, ibond_principal))  ! dot prod with chosen normal
       idx_direction = minloc(abs(dots), 1) ! select index of closest to perpendicular bond
       call project_onto_plane(bond(:, ibond_principal),bond(:, idx_direction), proj_vector)
-      select case (find_neighbours(2, findloc(find_neighbours(1,:), atomno, dim=1)))
+      else
+         ! This entry > 0 -> corresponds to neighbour
+         ibond_sec = findloc(nghbr_arr, find_neighbours(4, find_atomno), dim=1)
+         call project_onto_plane(bond(:, ibond_principal),bond(:, ibond_sec), proj_vector)
+   end if ! choice of 2nd direction
+   if ( find_neighbours(1, find_atomno) == find_neighbours(4, find_atomno)) &
+            call cq_abort("Cannot have the principal neighbour also as the second direction")
+      select case (find_neighbours(2, find_atomno))
       case (0)
          pdos_ay = bond(:, ibond_principal)
          pdos_ax = proj_vector
@@ -1396,9 +1409,6 @@ contains
       pdos_ax = pdos_ax / norm2(pdos_ax)
       pdos_ay = pdos_ay / norm2(pdos_ay)
       pdos_az = pdos_az / norm2(pdos_az)
-      print *, "x: ", pdos_ax
-      print *, "y: ", pdos_ay
-      print *, "z: ", pdos_az
    end subroutine axes_from_nn
    function cross_product(a, b) result(cross)
       use datatypes
