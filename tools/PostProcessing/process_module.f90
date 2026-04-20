@@ -1383,14 +1383,16 @@ contains
        else
         ibond_principal = findloc(nghbr_arr, minormax, dim=1)
       end if
-      if (find_neighbours(4, find_atomno) == 0) then
-      ! If 0, we choose second direction by closest projection
       dots = matmul(transpose(bond), bond(:, ibond_principal))  ! dot prod with chosen normal
       idx_direction = minloc(abs(dots), 1) ! select index of closest to perpendicular bond
+      if (find_neighbours(4, find_atomno) == 0) then
+      ! If 0, we choose second direction by closest projection
       call project_onto_plane(bond(:, ibond_principal),bond(:, idx_direction), proj_vector)
       else
          ! This entry > 0 -> corresponds to neighbour
          ibond_sec = findloc(nghbr_arr, find_neighbours(4, find_atomno), dim=1)
+         if (abs(dots(ibond_sec)) > 0.5) &
+         print *, "WARNING: Chosen neighbour appears to not be very perpendicular to  principal."
          call project_onto_plane(bond(:, ibond_principal),bond(:, ibond_sec), proj_vector)
    end if ! choice of 2nd direction
    if ( find_neighbours(1, find_atomno) == find_neighbours(4, find_atomno)) &
