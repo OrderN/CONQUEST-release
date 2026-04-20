@@ -343,6 +343,24 @@ The above snippet says to use the user-input axes defined in the ``pDOSAxes`` bl
 
 The default angle units is in degrees: ``Process.RotatePDOSAngle deg``. In the extrinsic :math:`zyz` convention, 3 consecutive rotations happen about a fixed set of coordinates, i.e. the CONQUEST cell simulation axes (as CONQUEST only supports orthorhombic cells), first about the :math:`z`-axis by :math:`\alpha` , then :math:`y`-axis by :math:`\beta` and then about :math:`z`-axis by :math:`\gamma` in a right-handed sense (i.e., looking down any of the axes towards the origin will mean the positive direction of rotation is anticlockwise).
 
+Finally, calculation of the new axes is possible depending on local geometries.
+
+::
+
+   Process.RotatePDOS T (default: F)
+   Process.RotatePDOSMode 2 (default: 0)
+   Process.RotatePDOS.NumAtoms 1 (required)
+   %block pDOSNeighbours 
+   A B C D
+   %endblock pDOSNeighbours
+
+where ``A``, ``B``, ``C``, ``D`` are integers with different conditions:
+
+* ``A``: the atom number to perform the rotation for
+* ``B``: if it is ``0``, assume square planar geometry, if ``1`` assume octahedral
+* ``C``: if ``-1``, set the principal direction along the shortest bond. If ``0``, set along the longest bond. If a positive integer, it is interpreted as an atom number which must be a neighbour of the atom specified in ``A``. All runs will output the atom neighbours, so setting this to ``0`` or ``1`` as a first run is recommended unless the neighbours are known beforehand
+* ``D``: if ``0``, the second direction is chosen by the bond which changes the least under projection to the plane defined by the bond vector calculated from ``C``. If it is a positive integer, then it is interpreted as an atom number which must be a neighbour of the atom specified in ``A``
+
 Go to :ref:`top <post-proc>`.
 
 .. _pp_band_str
