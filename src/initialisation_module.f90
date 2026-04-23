@@ -319,6 +319,8 @@ contains
   !!    Adding check for maximum angular momentum for Bessel functions
   !!   2022/06/09 08:36 dave
   !!    Change name of D2 set-up routine
+  !!   2026/04/23 16:20 nakata
+  !!    Removed call for build_Becke_charges for initial atomcharge
   !!  SOURCE
   !!
   subroutine set_up(find_chdens,level)
@@ -360,7 +362,6 @@ contains
     use density_module,         only: set_atomic_density, density,            &
                                       density_scale, atomcharge,       &
                                       build_Becke_weights,             &
-                                      build_Becke_charges,             &
                                       set_density_pcc, density_pcc,    &
                                       density_atom
     use block_module,           only: n_pts_in_block,     &
@@ -625,7 +626,7 @@ contains
                           ni_in_cell, stat)
       call reg_alloc_mem(area_init, nspin * ni_in_cell, type_dbl)
       call build_Becke_weights
-      call build_Becke_charges(atomcharge, density, maxngrid)
+      !call build_Becke_charges(atomcharge, density, maxngrid) # calculate becke charge for atomcharge
    end if
    if (inode == ionode .and. iprint_init > 2) &
         write (io_lun,fmt='(4x,a)') trim(prefix)//'Done init_pseudo '
