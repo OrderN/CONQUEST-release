@@ -445,7 +445,8 @@ contains
     use local, ONLY: eigenvalues, n_bands_total, nkp, wtk, efermi, flag_total_iDOS, &
          evec_coeff, scaled_evec_coeff, flag_procwf_range_Ef, flag_l_resolved, flag_lm_resolved, &
          flag_rotate_pdos, flag_rotate_pdos_mode, band_full_to_active, n_atoms_pDOS, pDOS_atom_index, &
-         pdos_ax, pdos_ay, pdos_az, euler_alpha, euler_beta, euler_gamma, find_neighbours, flag_rotate_pdos_natoms, nghbr_arr
+         pdos_ax, pdos_ay, pdos_az, euler_alpha, euler_beta, euler_gamma, find_neighbours, rotate_pdos_natoms, &
+         nghbr_arr, U1, U2
     use read, ONLY: read_eigenvalues, read_psi_coeffs, read_nprocs_from_blocks
     use global_module, ONLY: nspin, n_DOS, E_DOS_min, E_DOS_max, sigma_DOS, ni_in_cell, species_glob
     use units, ONLY: HaToeV
@@ -455,7 +456,7 @@ contains
     implicit none
 
     ! Local variables
-    integer :: i_band, i_kp, i_spin, n_DOS_wid, n_band, n_min, n_max, i, i_atom,max_nsf, i_spec, &
+    integer :: i_band, i_kp, i_spin, n_DOS_wid, n_band, n_min, n_max, i, j, i_atom,max_nsf, i_spec, &
          i_l, nzeta, sf_offset, max_l, norbs, i_m, i_band_c, i_z
     real(double) :: Ebin, dE_DOS, a, pf_DOS, spin_fac, coeff, check_electrons, peak_width
    integer, dimension(:), allocatable :: nghbr_atoms
@@ -467,7 +468,7 @@ contains
     real(double), dimension(:,:), allocatable :: total_electrons
     real(double), dimension(:,:,:), allocatable :: total_electrons_l
     real(double) :: A1(3, 3), A2(5, 5), A1inv(3, 3), A2inv(5, 5)
-    real(double) :: U1(3, 3), U2(5, 5), U1d(3, 3), U2d(5, 5)
+   !  real(double), dimension(:,:,:), allocatable :: U1d, U2d
     real(double) :: C1(3, 3), C2(5, 5), E1(3,3), E2(5,5)
     real(double) :: rod(9), angle, axis(3)
 
@@ -514,34 +515,42 @@ contains
       ! Determine whether to use Axis-angle == 0 or Euler  == 1first
       write(*,fmt='(2x,"Rotating wavefunction coefficients")')
       call initialise_A_mat(A1, A2)
+      if (allocated(U1))  deallocate(U1)
+      if (allocated(U2))  deallocate(U2)
       if (flag_rotate_pdos_mode == 0) then
          write(*,fmt='(2x,"Using user input axes")')
+         allocate(U1(3,3,1))
+         allocate(U2(5,5,1))
+
          call get_pdos_axes
          call calculate_axis_angle(pdos_ax, pdos_ay, pdos_az, axis, angle)
          call construct_rodrigues(axis, angle, rod)
          ! Construct all C^l matrices from rodrigues
          call construct_C1(rod, C1)
          call construct_C2(rod, C2)
-         call construct_Ul(1, A1, C1, U1)
-         call construct_Ul(2, A2, C2, U2)
-               ! compute U^l
-         U1d = transpose(U1) ! UU^T = I
-         U2d = transpose(U2) ! UU^T = I
-         call rotate_coefficients(U1d, U2d)
-
+         call construct_Ul(1, A1, C1, U1(:,:,1))
+         call construct_Ul(2, A2, C2, U2(:,:,1))
+         call rotate_coefficients
       else if (flag_rotate_pdos_mode == 1) then
          write(*,fmt='(2x,"Using Euler angles in extrinsic zyz convention")')
-         ! call euler_to_axis_angle(axis, angle, euler_matrix)
          call construct_EulerMatrices(E1, E2)
-         call rotate_coefficients(E1, E2)
+         allocate(U1(3,3,1))
+         allocate(U2(5,5,1))
+         U1(:,:,1) = E1
+         U2(:,:,1) = E2
+         call rotate_coefficients
       else if (flag_rotate_pdos_mode == 2) then
          write(*,fmt='(2x,"Using user input atom numbers and local geometry")')
-         do i = 1, flag_rotate_pdos_natoms
+         allocate(U1(3,3,rotate_pdos_natoms))
+         allocate(U2(5,5,rotate_pdos_natoms))
+
+         do i = 1, rotate_pdos_natoms
+            print *, i
             call nearest_neighbours(find_neighbours(1, i), bond)
             write(*, fmt='(/2x,"Located neighours of atom ", I0, ": ", *(I0,1x))') &
                     find_neighbours(1,i), nghbr_arr
             call axes_from_nn(find_neighbours(1, i), bond)
-            write(*, fmt='(/2x,"New local axes for atom ", I0, ": ", *(I0,1x))') &
+            write(*, fmt='(/2x,"New local axes for atom ", I0, ": ")') &
                     find_neighbours(1,i)
             write(*, fmt='(/4x,"x: ",3(f10.5,1X))') pdos_ax
             write(*, fmt='(/4x,"y: ",3(f10.5,1X))') pdos_ay
@@ -552,16 +561,14 @@ contains
             ! Construct all C^l matrices from rodrigues
             call construct_C1(rod, C1)
             call construct_C2(rod, C2)
-            call construct_Ul(1, A1, C1, U1)
-            call construct_Ul(2, A2, C2, U2)
-                  ! compute U^l
-            U1d = transpose(U1) ! UU^T = I
-            U2d = transpose(U2) ! UU^T = I
-            call rotate_coefficients(U1d, U2d)
+            call construct_Ul(1, A1, C1, U1(:,:,i))
+            call construct_Ul(2, A2, C2, U2(:,:,i))
          end do
+         call rotate_coefficients
       end if ! pdos rotation mode
    end if  ! rotate pdos
-
+   deallocate(U1)
+   deallocate(U2)
     ! Set up storage based on pDOS per atom, or l/lm resolved per atom
     if(flag_lm_resolved) then
        allocate(pDOS_lm(-max_l:max_l,0:max_l,n_atoms_pDOS,n_DOS,nspin))
@@ -1129,7 +1136,7 @@ contains
 
       integer, intent(in) :: angmom
       real(double), intent(in) ::   Al(2*angmom + 1, 2*angmom + 1), Cl(2*angmom + 1, 2*angmom + 1)
-      real(double), intent(out) :: Ul(2*angmom + 1, 2*angmom + 1)
+      real(double), intent(out) :: Ul(:,:)
       real(double) :: Al_inv(2*angmom + 1, 2*angmom + 1)
       Al_inv = inv(Al)
       Ul = matmul(Al_inv, matmul(Cl, Al))
@@ -1139,27 +1146,32 @@ contains
    subroutine rotate_coefficients(U1, U2)
       use datatypes
       use local, ONLY: n_bands_total, nkp, n_atoms_pDOS, evec_coeff, scaled_evec_coeff, &
-      pDOS_atom_index, band_full_to_active
+      pDOS_atom_index, band_full_to_active, rotate_pdos_natoms, find_neighbours, &
+      flag_rotate_pdos_mode, U1, U2
       use global_module, ONLY: nspin, species_glob
       use pao_format,    ONLY: pao
       use GenComms, ONLY: cq_abort
 
       implicit none
-
-      real(double), intent(in) :: U1(3, 3)   ! rotation matrix for l=1
-      real(double), intent(in) :: U2(5, 5)   ! rotation matrix for l=2
-
+      ! real(double), intent(in):: U1(:,:,:), U2(:,:,:)
       ! Local variables
-      integer :: i_atom, i_spec, i_band, i_band_c, i_kp, i_spin, g_atom
+      integer :: i_atom, i_spec, i_band, i_band_c, i_kp, i_spin, g_atom, j
       integer :: i_l, i_z, nzeta, norbs, sf_offset
-
+      if (flag_rotate_pdos_mode /= 1) then
+         do j = 1, rotate_pdos_natoms
+            U1(:,:,j) = transpose(U1(:,:,j))
+            U2(:,:,j) = transpose(U2(:,:,j))
+         end do
+      end if
       do i_spin = 1, nspin
          do i_kp = 1, nkp
             do i_band = 1, n_bands_total
                i_band_c = band_full_to_active(i_band)
                if(i_band_c > 0) then
-               do i_atom = 1, n_atoms_pDOS
-                  g_atom = pDOS_atom_index(i_atom)
+               do i_atom = 1, rotate_pdos_natoms
+                  ! g_atom = pDOS_atom_index(i_atom)
+                  ! Get global atom number from input
+                  g_atom = find_neighbours(1,i_atom)
                   i_spec = species_glob(g_atom)
                   sf_offset = 0
                   ! Include l = 0 to correctly calculate offset
@@ -1170,14 +1182,14 @@ contains
                         select case(i_l)
                         case(1)
                            evec_coeff(sf_offset+1:sf_offset+norbs, g_atom, i_band_c, i_kp, i_spin) = &
-                              matmul(U1, evec_coeff(sf_offset+1:sf_offset+norbs, g_atom, i_band_c, i_kp, i_spin))
+                              matmul(U1(:,:,i_atom), evec_coeff(sf_offset+1:sf_offset+norbs, g_atom, i_band_c, i_kp, i_spin))
                            scaled_evec_coeff(sf_offset+1:sf_offset+norbs, g_atom, i_band_c, i_kp, i_spin) = &
-                              matmul(U1, scaled_evec_coeff(sf_offset+1:sf_offset+norbs, g_atom, i_band_c, i_kp, i_spin))
+                              matmul(U1(:,:,i_atom), scaled_evec_coeff(sf_offset+1:sf_offset+norbs, g_atom, i_band_c, i_kp, i_spin))
                         case(2)
                            evec_coeff(sf_offset+1:sf_offset+norbs, g_atom, i_band_c, i_kp, i_spin) = &
-                              matmul(U2, evec_coeff(sf_offset+1:sf_offset+norbs, g_atom, i_band_c, i_kp, i_spin))
+                              matmul(U2(:,:,i_atom), evec_coeff(sf_offset+1:sf_offset+norbs, g_atom, i_band_c, i_kp, i_spin))
                            scaled_evec_coeff(sf_offset+1:sf_offset+norbs, g_atom, i_band_c, i_kp, i_spin) = &
-                              matmul(U2, scaled_evec_coeff(sf_offset+1:sf_offset+norbs, g_atom, i_band_c, i_kp, i_spin))
+                              matmul(U2(:,:,i_atom), scaled_evec_coeff(sf_offset+1:sf_offset+norbs, g_atom, i_band_c, i_kp, i_spin))
                         end select
                         sf_offset = sf_offset + norbs
                      end do ! i_z
@@ -1267,9 +1279,9 @@ contains
       where (abs(temp) < err) temp = huge(1.0)
       select case (find_neighbours(2, findloc(find_neighbours(1,:), atomno, dim=1)))
       case (0)
-         allocate(nghbr_arr(4))
+         if (.not. allocated(nghbr_arr)) allocate(nghbr_arr(4))
       case (1)
-         allocate(nghbr_arr(6))
+         if (.not. allocated(nghbr_arr)) allocate(nghbr_arr(6))
       case default
          call cq_abort("Did not correctly allocate nghbr_arr array")
       end select
@@ -1279,8 +1291,8 @@ contains
          temp(min_idx) = huge(1.0)
       end do
 
+      if (.not. allocated(bond)) allocate(bond(3, size(nghbr_arr)))
 
-      allocate(bond(3, size(nghbr_arr)))
       atomno_pos = (/atom_coord(1, atomno), atom_coord(2, atomno), atom_coord(3, atomno)/)
       do i = 1, size(nghbr_arr)
          bond(1, i) = atom_coord(1, nghbr_arr(i)) - atomno_pos(1)
@@ -1392,7 +1404,7 @@ contains
          ! This entry > 0 -> corresponds to neighbour
          ibond_sec = findloc(nghbr_arr, find_neighbours(4, find_atomno), dim=1)
          if (abs(dots(ibond_sec)) > 0.5) &
-         print *, "WARNING: Chosen neighbour appears to not be very perpendicular to  principal."
+         print *, "WARNING: Chosen secondary neighbour appears to not be very perpendicular to  principal."
          call project_onto_plane(bond(:, ibond_principal),bond(:, ibond_sec), proj_vector)
    end if ! choice of 2nd direction
    if ( find_neighbours(1, find_atomno) == find_neighbours(4, find_atomno)) &
