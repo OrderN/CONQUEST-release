@@ -316,8 +316,25 @@ in the block ``pDOS_atoms``:
    12
    %endblock
 
+Go to :ref:`top <post-proc>`.
+
+
+Rotated pDOS
+------------
+
 CONQUEST, by default, projects the orbitals along the simulation cell axes. Sometimes it is convenient to be able to project onto an atom's local environment defined by, e.g. bonds, to facilitate chemical analysis. CONQUEST supports rotating the wavefunction coefficients either by inputting the basis of the final coordinate system, using the algorithm implemented by Maintz *et al* and Romanowski *et al* [:cite:`pp-maintz2016`, :cite:`pp-romanowski2008`] or active Euler angles in the extrinsic :math:`zyz` convention.
 
+There are 3 operating modes that are possible:
+
+#. Supply a set of axes to apply to a set of (or all) atoms
+#. Supply 3 Euler angles to apply to a set of (or all) atoms
+#. Supply specific atoms and information about their neighbours to construct local axes for each atom
+
+In the future, modes 1 and 2 will be extended to support supplying axes and Euler angles for specific atoms too. 
+
+To enable any form of pDOS rotation, the flag ``Process.RotatePDOS T`` must be set in ``Conquest_input``. It defaults to ``F``, which will use the standard projection into the simulation cell axes.
+
+To use mode 1, have the following snippet in ``Conquest_input``:
 ::
    
    Process.RotatePDOS T (default: F)
@@ -327,8 +344,15 @@ CONQUEST, by default, projects the orbitals along the simulation cell axes. Some
    y1 y2 y3
    z1 z2 z3
    %endblock
+   Process.n_atoms_pDOS 2
+   %block pDOS_atoms
+   1
+   12
+   %endblock
 
-The above snippet says to use the user-input axes defined in the ``pDOSAxes`` block. The first line defines the new :math:`x` direction along vectpr :math:`(x_1, x_2, x_3)`, then :math:`y` along :math:`(y_1, y_2, y_3)` and :math:`z` along :math:`(z_1, z_2, z_3)`. The code will abort if the vectors provided do not form a right-handed coordinate system, or if the vectors are not orthogonal. If Euler angles are desired, set ``Process.RotatePDOSMode 1`` and in ``Conquest_input`` use the following lines:
+The above snippet says to use the user-input axes defined in the ``pDOSAxes`` block. The first line defines the new :math:`x` direction along vector :math:`(x_1, x_2, x_3)`, then :math:`y` along :math:`(y_1, y_2, y_3)` and :math:`z` along :math:`(z_1, z_2, z_3)`. The ``pDOS_atoms`` block states which atoms will have the rotation applied to, as well as what is written out to disk. The code will abort if the vectors provided do not form a right-handed coordinate system, or if the vectors are not orthogonal. It is recommended to supply the directions as vectors of integers - the code will take care of normalisation.
+
+If Euler angles are desired, set ``Process.RotatePDOSMode 1`` and in ``Conquest_input`` use the following lines:
 
 ::
 
@@ -339,27 +363,35 @@ The above snippet says to use the user-input axes defined in the ``pDOSAxes`` bl
    <alpha>
    <beta>
    <gamma>
-   %endblock
+   %endblock pDOSEuler
+   Process.n_atoms_pDOS 2
+   %block pDOS_atoms
+   1
+   12
+   %endblock pDOS_atoms
+
 
 The default angle units is in degrees: ``Process.RotatePDOSAngle deg``. In the extrinsic :math:`zyz` convention, 3 consecutive rotations happen about a fixed set of coordinates, i.e. the CONQUEST cell simulation axes (as CONQUEST only supports orthorhombic cells), first about the :math:`z`-axis by :math:`\alpha` , then :math:`y`-axis by :math:`\beta` and then about :math:`z`-axis by :math:`\gamma` in a right-handed sense (i.e., looking down any of the axes towards the origin will mean the positive direction of rotation is anticlockwise).
 
-Finally, calculation of the new axes is possible depending on local geometries.
+Finally, calculation of local axes is possible depending on local geometries.
 
 ::
 
    Process.RotatePDOS T (default: F)
    Process.RotatePDOSMode 2 (default: 0)
-   Process.RotatePDOS.NumAtoms 1 (required)
+   Process.RotatePDOS.NumAtoms int (required)
    %block pDOSNeighbours 
-   A B C D
+   A B C D  !n entries, same number as in Process.RotatePDOS.NumAtoms
    %endblock pDOSNeighbours
 
 where ``A``, ``B``, ``C``, ``D`` are integers with different conditions:
 
 * ``A``: the atom number to perform the rotation for
-* ``B``: if it is ``0``, assume square planar geometry, if ``1`` assume octahedral
-* ``C``: if ``-1``, set the principal direction along the shortest bond. If ``0``, set along the longest bond. If a positive integer, it is interpreted as an atom number which must be a neighbour of the atom specified in ``A``. All runs will output the atom neighbours, so setting this to ``0`` or ``1`` as a first run is recommended unless the neighbours are known beforehand
+* ``B``: if it is ``0``, assume square planar geometry, if ``1`` assume octahedral. This controls nearest-neighbour searching
+* ``C``: if ``-1``, set the principal direction along the shortest bond. If ``0``, set along the longest bond. If it is a positive integer, it is interpreted as an atom number which must be a neighbour of the atom specified in ``A``. All runs will output the atom neighbours, so setting this to ``0`` or ``-1`` as a first run is recommended unless the neighbours are known beforehand
 * ``D``: if ``0``, the second direction is chosen by the bond which changes the least under projection to the plane defined by the bond vector calculated from ``C``. If it is a positive integer, then it is interpreted as an atom number which must be a neighbour of the atom specified in ``A``
+
+In this final case, setting the block ``pDOS_atoms`` is optional since only the specified atoms will be rotated whilst the rest will be in the simulation cell axes.
 
 Go to :ref:`top <post-proc>`.
 
