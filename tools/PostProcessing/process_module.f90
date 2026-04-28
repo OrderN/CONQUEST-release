@@ -519,8 +519,8 @@ contains
       if (allocated(U2))  deallocate(U2)
       if (flag_rotate_pdos_mode == 0) then
          write(*,fmt='(2x,"Using user input axes")')
-         allocate(U1(3,3,1))
-         allocate(U2(5,5,1))
+         allocate(U1(3,3,n_atoms_pDOS))
+         allocate(U2(5,5,n_atoms_pDOS))
 
          call get_pdos_axes
          call calculate_axis_angle(pdos_ax, pdos_ay, pdos_az, axis, angle)
@@ -528,17 +528,19 @@ contains
          ! Construct all C^l matrices from rodrigues
          call construct_C1(rod, C1)
          call construct_C2(rod, C2)
-         call construct_Ul(1, A1, C1, U1(:,:,1))
-         call construct_Ul(2, A2, C2, U2(:,:,1))
-         call rotate_coefficients
+         do i = 1, n_atoms_pDOS
+            call construct_Ul(1, A1, C1, U1(:,:,i))
+            call construct_Ul(2, A2, C2, U2(:,:,i))
+         end do
       else if (flag_rotate_pdos_mode == 1) then
          write(*,fmt='(2x,"Using Euler angles in extrinsic zyz convention")')
-         call construct_EulerMatrices(E1, E2)
-         allocate(U1(3,3,1))
-         allocate(U2(5,5,1))
-         U1(:,:,1) = E1
-         U2(:,:,1) = E2
-         call rotate_coefficients
+         do i = 1, n_atoms_pDOS
+            call construct_EulerMatrices(E1, E2)
+            allocate(U1(3,3,n_atoms_pDOS))
+            allocate(U2(5,5,n_atoms_pDOS))
+            U1(:,:,i) = E1
+            U2(:,:,i) = E2
+         end do
       else if (flag_rotate_pdos_mode == 2) then
          write(*,fmt='(2x,"Using user input atom numbers and local geometry")')
          allocate(U1(3,3,rotate_pdos_natoms))
@@ -564,8 +566,8 @@ contains
             call construct_Ul(1, A1, C1, U1(:,:,i))
             call construct_Ul(2, A2, C2, U2(:,:,i))
          end do
-         call rotate_coefficients
       end if ! pdos rotation mode
+      call rotate_coefficients
    end if  ! rotate pdos
    deallocate(U1)
    deallocate(U2)
@@ -602,6 +604,10 @@ contains
     do i_spin = 1, nspin
        occ = zero
        call occupy(occ,eigenvalues,efermi,i_spin)
+       if(flag_procwf_range_Ef) then
+          E_DOS_min = E_DOS_min + efermi(i_spin)
+          E_DOS_max = E_DOS_max + efermi(i_spin)
+       end if
        do i_kp = 1, nkp
           do i_band=1,n_bands_total ! All bands
              if(eigenvalues(i_band, i_kp, i_spin)>E_DOS_min + range_offset(i_spin) .and. &
@@ -1156,11 +1162,41 @@ contains
       ! real(double), intent(in):: U1(:,:,:), U2(:,:,:)
       ! Local variables
       integer :: i_atom, i_spec, i_band, i_band_c, i_kp, i_spin, g_atom, j
-      integer :: i_l, i_z, nzeta, norbs, sf_offset
+      integer :: i_l, i_z, nzeta, norbs, sf_offset, rotate_counter
+      integer, dimension(:), allocatable :: g_atom_lookup
+
+      ! If it's not Euler matrices, transpose is required
       if (flag_rotate_pdos_mode /= 1) then
-         do j = 1, rotate_pdos_natoms
+         rotate_counter = n_atoms_pDOS
+
+      end if
+      !  Define the lookups correctly for each mode
+      if (flag_rotate_pdos_mode == 2) then
+         rotate_counter = rotate_pdos_natoms
+         do j = 1, rotate_counter
             U1(:,:,j) = transpose(U1(:,:,j))
             U2(:,:,j) = transpose(U2(:,:,j))
+         end do
+      end if
+         if (.not. allocated(g_atom_lookup)) allocate(g_atom_lookup(rotate_counter))
+         do i_atom = 1, rotate_counter
+            g_atom_lookup(i_atom) = pDOS_atom_index(i_atom)
+         end do
+      else if (flag_rotate_pdos_mode == 1) then
+         rotate_counter = n_atoms_pDOS
+         if (.not. allocated(g_atom_lookup)) allocate(g_atom_lookup(rotate_counter))
+         do i_atom = 1, rotate_counter
+            g_atom_lookup(i_atom) = find_neighbours(1, i_atom)
+         end do
+      else
+         rotate_counter = n_atoms_pDOS
+         do j = 1, rotate_counter
+            U1(:,:,j) = transpose(U1(:,:,j))
+            U2(:,:,j) = transpose(U2(:,:,j))
+         end do
+         if (.not. allocated(g_atom_lookup)) allocate(g_atom_lookup(rotate_counter))
+         do i_atom = 1, rotate_counter
+            g_atom_lookup(i_atom) = pDOS_atom_index(i_atom)
          end do
       end if
       do i_spin = 1, nspin
@@ -1168,10 +1204,9 @@ contains
             do i_band = 1, n_bands_total
                i_band_c = band_full_to_active(i_band)
                if(i_band_c > 0) then
-               do i_atom = 1, rotate_pdos_natoms
-                  ! g_atom = pDOS_atom_index(i_atom)
+               do i_atom = 1, rotate_counter
                   ! Get global atom number from input
-                  g_atom = find_neighbours(1,i_atom)
+                  g_atom = g_atom_lookup(i_atom)
                   i_spec = species_glob(g_atom)
                   sf_offset = 0
                   ! Include l = 0 to correctly calculate offset
@@ -1199,6 +1234,7 @@ contains
             end do ! i_band
          end do ! i_kp
       end do ! i_spin
+      deallocate(g_atom_lookup)
    end subroutine rotate_coefficients
 
    ! -----------------------------------------------------------------------------
