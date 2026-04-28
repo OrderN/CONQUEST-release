@@ -19,7 +19,7 @@ Diag.MPMeshX  2
 Diag.MPMeshY  2 
 Diag.MPMeshZ  2 
 
-minE.SCtolerance 1.0e-6
+minE.SCtolerance 1.0e-8
 
 General.NumberOfSpecies  1
 General.PseudopotentialType hamann
