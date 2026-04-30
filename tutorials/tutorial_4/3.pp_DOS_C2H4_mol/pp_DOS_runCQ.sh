@@ -12,10 +12,10 @@ CQPPCMD="$CQROOT/PostProcessCQ"
 echo "PostProcessing cmd: $CQPPCMD"
 
 # Just run Conquest
-$CQCMD
+$CQCMD > Conquest_out_dos
 
 # Just run PostProcessing 
-$CQPPCMD > Conquest_pp_out 
+$CQPPCMD > Conquest_out_pp
 
 # Launch xmgrace
 #xmgrace -nxy DOS.dat

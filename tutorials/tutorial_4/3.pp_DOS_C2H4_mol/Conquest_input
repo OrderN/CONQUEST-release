@@ -1,19 +1,15 @@
+Process.Job dos
+#Process.min_DOS_E         -0.700000000
+#Process.max_DOS_E         -0.100000000
+# Sigma can be set automatically based on energy range and n_DOS
+#Process.sigma_DOS          0.0020000
+Process.n_DOS              10001
+
 IO.Title    C2H4
 IO.Coordinates    coords.dat
 IO.Iprint 1 
 IO.FractionalAtomicCoords F
-IO.WriteOutToFile T
-IO.DumpChargeDensity T
-IO.outputWF T
-IO.min_wf_E -0.7
-IO.max_wf_E -0.1
-
-Process.Job dos
-Process.min_DOS_E         -0.700000000
-Process.max_DOS_E         -0.100000000
-# Sigma can be set automatically based on energy range and n_DOS
-#Process.sigma_DOS          0.1000000
-#Process.n_DOS              10001
+IO.WriteOutToFile F
 
 
 ## General Parameters

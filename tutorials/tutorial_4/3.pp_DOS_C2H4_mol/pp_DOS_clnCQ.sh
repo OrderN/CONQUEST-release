@@ -15,7 +15,8 @@ rm_files=("Conquest_out_ase"
 "AtomCharge.dat"
 "*cube"
 "*WF*"
-"pp_output")
+"Conquest_out_dos"
+"Conquest_out_pp")
 
 for f in "${rm_files[@]}"; do
    rm -f -- $f 
