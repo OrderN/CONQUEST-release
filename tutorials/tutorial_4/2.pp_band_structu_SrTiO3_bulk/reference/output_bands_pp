@@ -1,0 +1,26 @@
+
+CONQUEST charge density conversion and STM image simulation
+
+D. R. Bowler (UCL) and A. Nakata (NIMS)
+
+    This job was run on 2026/04/20 at 08:42
+
+
+    Code compiled on: Fri 27 Feb 2026 13:37:13 GMT
+          Version comment: 
+      Git Branch: master; tag, hash: v1.5
+
+
+  No range specified for bands output; assuming all bands
+  Creating band structure
+
+
+  Processing eigenvalues to write band structure
+    Reading k-points from eigenvalues file, not setting from input file
+    Fermi level:     -0.29439 Ha   (=    -8.011 eV)
+  Reading bands between   -0.100E+13Ha and    0.100E+13Ha
+  Bands     1 to    72 were written out by CONQUEST
+  Band structure lower limit set by user:     -0.37000 Ha
+  Band structure upper limit set by user:      0.37000 Ha
+  Writing band structure files
+    X-axis will be k-point index
