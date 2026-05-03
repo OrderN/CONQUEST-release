@@ -445,7 +445,7 @@ contains
     use local, ONLY: eigenvalues, n_bands_total, nkp, wtk, efermi, flag_total_iDOS, &
          evec_coeff, scaled_evec_coeff, flag_procwf_range_Ef, flag_l_resolved, flag_lm_resolved, &
          flag_rotate_pdos, flag_rotate_pdos_mode, band_full_to_active, n_atoms_pDOS, pDOS_atom_index, &
-         pdos_ax, pdos_ay, pdos_az, euler_alpha, euler_beta, euler_gamma, find_neighbours, rotate_pdos_natoms, &
+         pdos_ax, pdos_ay, pdos_az, rotate_pdos_atoms_euler, euler_angles, find_neighbours, rotate_pdos_natoms, &
          nghbr_arr, U1, U2
     use read, ONLY: read_eigenvalues, read_psi_coeffs, read_nprocs_from_blocks
     use global_module, ONLY: nspin, n_DOS, E_DOS_min, E_DOS_max, sigma_DOS, ni_in_cell, species_glob
@@ -521,8 +521,17 @@ contains
          write(*,fmt='(2x,"Using user input axes")')
          allocate(U1(3,3,n_atoms_pDOS))
          allocate(U2(5,5,n_atoms_pDOS))
-
          call get_pdos_axes
+
+         if(n_atoms_pDOS==0) then ! All atoms
+            write(*, fmt='(/2x,"New local axes for all atoms in unit cell:")')
+         else if (n_atoms_pDOS >= 1) then
+               write(*, fmt='(/2x,"New local axes for specified atoms: ", *(I0,1x))') &
+               rotate_pdos_atoms_euler
+         end if
+         write(*, fmt='(/4x,"x: ",3(f10.5,1X))') pdos_ax
+         write(*, fmt='(/4x,"y: ",3(f10.5,1X))') pdos_ay
+         write(*, fmt='(/4x,"z: ",3(f10.5,1X))') pdos_az
          call calculate_axis_angle(pdos_ax, pdos_ay, pdos_az, axis, angle)
          call construct_rodrigues(axis, angle, rod)
          ! Construct all C^l matrices from rodrigues
@@ -533,11 +542,11 @@ contains
             call construct_Ul(2, A2, C2, U2(:,:,i))
          end do
       else if (flag_rotate_pdos_mode == 1) then
-         write(*,fmt='(2x,"Using Euler angles in extrinsic zyz convention")')
-         do i = 1, n_atoms_pDOS
-            call construct_EulerMatrices(E1, E2)
-            allocate(U1(3,3,n_atoms_pDOS))
-            allocate(U2(5,5,n_atoms_pDOS))
+         write(*,fmt='(2x,"Using active Euler angles in extrinsic zyz convention")')
+         allocate(U1(3,3,rotate_pdos_natoms))
+         allocate(U2(5,5,rotate_pdos_natoms))
+         do i = 1, rotate_pdos_natoms
+            call construct_EulerMatrices(E1, E2, i)
             U1(:,:,i) = E1
             U2(:,:,i) = E2
          end do
@@ -547,7 +556,6 @@ contains
          allocate(U2(5,5,rotate_pdos_natoms))
 
          do i = 1, rotate_pdos_natoms
-            print *, i
             call nearest_neighbours(find_neighbours(1, i), bond)
             write(*, fmt='(/2x,"Located neighours of atom ", I0, ": ", *(I0,1x))') &
                     find_neighbours(1,i), nghbr_arr
@@ -805,7 +813,6 @@ contains
    implicit none
    ! This subroutine checks for sufficient orthogonality
    real(double), parameter :: tol = 1e-10
-   character(256) :: err_str
 
    ! Normalise new x-axis correctly
    pdos_ax = pdos_ax / norm2(pdos_ax)
@@ -828,7 +835,6 @@ contains
       real(double), intent(out) :: A1(3, 3), A2(5, 5)
       A1 = 0.0
       A2 = 0.0
-      !A3 = 0.0
       ! A1, FOR p-orbitals, l = 1
       A1(1, 3) = 1.0
       A1(2, 1) = 1.0
@@ -838,15 +844,8 @@ contains
       A2(2, 4) = 1.0
       A2(3, 1) = 1.0
       A2(4, 5) = 2.0
-      A2(5, 3) = 2.0*sqrt(3.0_double)
-      ! f-orbitals, l = 3
-      ! A3(1, 5) = 1
-      ! A3(2, 3) = 1
-      ! A3(3, 4) = 0.5*sqrt(6.0)
-      ! A3(4, 2) = 0.05*sqrt(10.0)
-      ! A3(5, 1) = 0.2*sqrt(15.0)
-      ! A3(6, 7) = 0.2*sqrt(15.0)
-      ! A3(7, 6) = 0.05*sqrt(10.0)
+      A2(5, 3) = 2.0*sqrt(3.0)
+
    end subroutine initialise_A_mat
    subroutine antisym_matrix(vector, matrix)
       use datatypes
@@ -861,19 +860,23 @@ contains
       matrix(3, 1) = -vector(2)
       matrix(3, 2) = vector(1)
    end subroutine
-   subroutine construct_EulerMatrices(E1, E2)
+   subroutine construct_EulerMatrices(E1, E2, atom_index)
       use datatypes
       use numbers, ONLY: pi
-      use local, ONLY: euler_alpha, euler_beta, euler_gamma
+      use local, ONLY: euler_angles
       use GenComms, ONLY: cq_abort
 
       implicit none
-
+      integer, intent(in) :: atom_index
       real(double), intent(out) :: E1(3,3), E2(5,5)
       real(double) :: ca, sa, cb, sb, cg, sg, c2a, s2a, c2b, s2b, c2g, s2g
-
+      real(double) :: euler_alpha, euler_beta, euler_gamma
       real(double) :: Q1(3,3), Q2(5,5)
-      !Q matrices are change-of-basis
+
+      euler_alpha =  euler_angles(1,atom_index)
+      euler_beta =  euler_angles(2,atom_index)
+      euler_gamma =  euler_angles(3,atom_index)
+      !Q matrices are change-of-basis for the orbital convention
       Q1 = 0.0
       Q2 = 0.0
 
@@ -1153,7 +1156,7 @@ contains
       use datatypes
       use local, ONLY: n_bands_total, nkp, n_atoms_pDOS, evec_coeff, scaled_evec_coeff, &
       pDOS_atom_index, band_full_to_active, rotate_pdos_natoms, find_neighbours, &
-      flag_rotate_pdos_mode, U1, U2
+      flag_rotate_pdos_mode, rotate_pdos_atoms_euler, U1, U2
       use global_module, ONLY: nspin, species_glob
       use pao_format,    ONLY: pao
       use GenComms, ONLY: cq_abort
@@ -1166,10 +1169,12 @@ contains
       integer, dimension(:), allocatable :: g_atom_lookup
 
       ! If it's not Euler matrices, transpose is required
-      if (flag_rotate_pdos_mode /= 1) then
+      if (flag_rotate_pdos_mode == 0) then
          rotate_counter = n_atoms_pDOS
-
+      else
+         rotate_counter = rotate_pdos_natoms
       end if
+      if (.not. allocated(g_atom_lookup)) allocate(g_atom_lookup(rotate_counter))
       !  Define the lookups correctly for each mode
       if (flag_rotate_pdos_mode == 2) then
          rotate_counter = rotate_pdos_natoms
@@ -1177,16 +1182,14 @@ contains
             U1(:,:,j) = transpose(U1(:,:,j))
             U2(:,:,j) = transpose(U2(:,:,j))
          end do
-      end if
-         if (.not. allocated(g_atom_lookup)) allocate(g_atom_lookup(rotate_counter))
-         do i_atom = 1, rotate_counter
-            g_atom_lookup(i_atom) = pDOS_atom_index(i_atom)
-         end do
-      else if (flag_rotate_pdos_mode == 1) then
-         rotate_counter = n_atoms_pDOS
          if (.not. allocated(g_atom_lookup)) allocate(g_atom_lookup(rotate_counter))
          do i_atom = 1, rotate_counter
             g_atom_lookup(i_atom) = find_neighbours(1, i_atom)
+         end do
+      else if (flag_rotate_pdos_mode == 1) then
+         rotate_counter = rotate_pdos_natoms
+         do i_atom = 1, rotate_counter
+            g_atom_lookup(i_atom) = rotate_pdos_atoms_euler(i_atom)
          end do
       else
          rotate_counter = n_atoms_pDOS
@@ -1194,7 +1197,6 @@ contains
             U1(:,:,j) = transpose(U1(:,:,j))
             U2(:,:,j) = transpose(U2(:,:,j))
          end do
-         if (.not. allocated(g_atom_lookup)) allocate(g_atom_lookup(rotate_counter))
          do i_atom = 1, rotate_counter
             g_atom_lookup(i_atom) = pDOS_atom_index(i_atom)
          end do

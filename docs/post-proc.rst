@@ -330,7 +330,7 @@ There are 3 operating modes that are possible:
 #. Supply 3 Euler angles to apply to a set of (or all) atoms
 #. Supply specific atoms and information about their neighbours to construct local axes for each atom
 
-In the future, modes 1 and 2 will be extended to support supplying axes and Euler angles for specific atoms too. 
+In the future, mode 1 will be extended to support supplying individual sets of axes per atom. 
 
 To enable any form of pDOS rotation, the flag ``Process.RotatePDOS T`` must be set in ``Conquest_input``. It defaults to ``F``, which will use the standard projection into the simulation cell axes.
 
@@ -358,20 +358,14 @@ If Euler angles are desired, set ``Process.RotatePDOSMode 1`` and in ``Conquest_
 
    Process.RotatePDOS T (default: F)
    Process.RotatePDOSMode 1 (default: 0)
+   Process.RotatePDOS.NumAtoms int (required)
    Process.RotatePDOSAngle deg (default: deg, optional: rad)
    %block pDOSEuler 
-   <alpha>
-   <beta>
-   <gamma>
+   A alpha beta gamma !n entries, equal to Process.RotatePDOS.NumAtoms
    %endblock pDOSEuler
-   Process.n_atoms_pDOS 2
-   %block pDOS_atoms
-   1
-   12
-   %endblock pDOS_atoms
 
 
-The default angle units is in degrees: ``Process.RotatePDOSAngle deg``. In the extrinsic :math:`zyz` convention, 3 consecutive rotations happen about a fixed set of coordinates, i.e. the CONQUEST cell simulation axes (as CONQUEST only supports orthorhombic cells), first about the :math:`z`-axis by :math:`\alpha` , then :math:`y`-axis by :math:`\beta` and then about :math:`z`-axis by :math:`\gamma` in a right-handed sense (i.e., looking down any of the axes towards the origin will mean the positive direction of rotation is anticlockwise).
+Here, ``A``: the atom number to assign the Euler angles to. The default angle units is in degrees: ``Process.RotatePDOSAngle deg`` and units cannot be mixed. In the extrinsic :math:`zyz` convention, 3 consecutive rotations happen about a fixed set of coordinates, i.e. the CONQUEST cell simulation axes (as CONQUEST only supports orthorhombic cells), first about the :math:`z`-axis by :math:`\alpha` , then :math:`y`-axis by :math:`\beta` and then about :math:`z`-axis by :math:`\gamma` in a right-handed sense (i.e., looking down any of the axes towards the origin will mean the positive direction of rotation is anticlockwise).
 
 Finally, calculation of local axes is possible depending on local geometries.
 

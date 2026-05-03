@@ -342,18 +342,18 @@ contains
             read (unit=input_array(block_start+2),fmt=*) pdos_az
             call fdf_endblock
          else if (fdf_block('pDOSEuler') .and. flag_rotate_pdos_mode == 1) then
-            if(1+block_end-block_start<3) & 
-                  call cq_abort("Too few Euler angles provided: ",&
-                  1+block_end-block_start,3)
-         ! Expect 3 values
-            read (unit=input_array(block_start),fmt=*) euler_alpha
-            read (unit=input_array(block_start+1),fmt=*) euler_beta
-            read (unit=input_array(block_start+2),fmt=*) euler_gamma
-            if (flag_rotate_pdos_units == "deg") then
-               euler_alpha = euler_alpha * (pi / 180.0)
-               euler_beta = euler_beta * (pi / 180.0)
-               euler_gamma = euler_gamma * (pi / 180.0)
-            end if
+            if(1+block_end-block_start<rotate_pdos_natoms) & 
+                  call cq_abort("Too few atoms provided in pDOSEuler block: ",&
+                  1+block_end-block_start,rotate_pdos_natoms)
+         ! In each line, expect an integer followed by 3 floats
+            allocate(euler_angles(3, rotate_pdos_natoms))
+            allocate(rotate_pdos_atoms_euler(rotate_pdos_natoms))
+            do i = 1, rotate_pdos_natoms
+               read (unit=input_array(block_start+i-1),fmt=*) rotate_pdos_atoms_euler(i), euler_angles(:,i) 
+            end do
+             if (flag_rotate_pdos_units == "deg") then
+                  euler_angles = euler_angles * (pi / 180.0)
+               end if
             call fdf_endblock
          else if(fdf_block('pDOSNeighbours') .and. flag_rotate_pdos_mode == 2) then 
             if (rotate_pdos_natoms  .lt. 1) &
