@@ -1,23 +1,16 @@
-# This is a system-specific makefile for the AMD aac6 machine used during the
-# hackathon in 11-13 March 2026
+# This is an example system-specific makefile. You will need to adjust
+# it for the actual system you are running on.
 
-# Before compiling:
-# module load rocm (default is currently 7.2.0) or rocm/afar-22.2.0
-# If the latter, you need to then
-# export OMPI_FC=amdflang
-# module load fftw petsc
-# Don't use the system elpa, but the one manually rebuilt with the patches. See report.
-#
 # Set compilers
 FC=mpif90
 
 # OpenMP flags
 # Set this to "OMPFLAGS= " if compiling without openmp
 # Set this to "OMPFLAGS= -fopenmp" if compiling with openmp
-OMPFLAGS=-fopenmp --offload-arch=gfx942 -fopenmp-force-usm
+OMPFLAGS=
 # Set this to "OMP_DUMMY = DUMMY" if compiling without openmp
 # Set this to "OMP_DUMMY = " if compiling with openmp
-OMP_DUMMY = 
+OMP_DUMMY = DUMMY
 
 # Set BLAS and LAPACK libraries
 # MacOS X
@@ -30,8 +23,7 @@ BLAS= -llapack -lblas
 # If using Cray-libsci, use -llibsci_cray_mpi instead.
 #SCALAPACK =
 #SCALAPACK = -lscalapack
-#SCALAPACK=-L/shared/apps/ubuntu/rocmplus-afar-22.2.0/petsc/petsc/lib/ -lscalapack-openmpi
-SCALAPACK=-L/shared/apps/ubuntu/rocmplus-7.2.0/petsc/petsc/lib/ -lscalapack-openmpi
+SCALAPACK=-L/shared/apps/ubuntu/rocmplus-7.2.0/petsc/petsc/lib/ -lscalapack
 
 # LibXC: choose between LibXC compatibility below or Conquest XC library
 
@@ -40,12 +32,17 @@ XC_LIBRARY = CQ
 XC_LIB =
 XC_COMPFLAGS =
 
+# LibXC compatibility
+# Choose LibXC version: v4 (deprecated) or v5/6/7 (v5, v6 and v7 have the same interface)
+#XC_LIBRARY = LibXC_v4
+#XC_LIBRARY = LibXC_v5
+#XC_LIB = -lxcf90 -lxc
+#XC_LIB = -lxcf03 -lxc
+#XC_COMPFLAGS = -I/shared/apps/ubuntu/libxc/include/
+
 # Set FFT library
 #FFT_LIB=-lfftw3
-#FFT_LIB=-L/shared/apps/ubuntu/rocmplus-7.2.0/fftw-v3.3.10/lib -lfftw3
-#FFT_LIB=-L/shared/apps/ubuntu/rocmplus-afar-22.2.0/fftw-v3.3.10/lib -lfftw3 -L/shared/apps/ubuntu/opt/rocm-afar-22.2.0/lib -lhipfft
-FFT_LIB=-L/shared/prerelease/home/dirac-cch/ilchristidi/install_hipfort/lib -lhipfort-amdgcn  -L/shared/apps/ubuntu/opt/rocm-7.2.0/lib -lhipfftw
-FFT_INC=-I/shared/prerelease/home/dirac-cch/ilchristidi/install_hipfort/include/hipfort/amdgcn
+FFT_LIB=-L/shared/apps/ubuntu/rocmplus-7.2.0/fftw-v3.3.10/lib -lfftw3
 FFT_OBJ=fft_fftw3.o
 
 # Set ELPA library
@@ -60,10 +57,10 @@ LIBS= $(FFT_LIB) $(ELPA_LIB) $(XC_LIB) $(SCALAPACK) $(BLAS)
 
 # Compilation flags
 # NB for gcc10 you need to add -fallow-argument-mismatch
-COMPFLAGS= -O3 $(OMPFLAGS) $(XC_COMPFLAGS) $(ELPA_INC) $(FFT_INC)
+COMPFLAGS= -O3 $(OMPFLAGS) $(XC_COMPFLAGS) $(ELPA_INC)
 
 # Linking flags
-LINKFLAGS= -L/usr/local/lib $(OMPFLAGS) -lflang_rt.runtime #hostdevice #runtime
+LINKFLAGS= -L/usr/local/lib $(OMPFLAGS)
 
 # Matrix multiplication kernel type
 MULT_KERN = default
