@@ -1,0 +1,19 @@
+AtomMove.TypeOfRun static
+IO.Coordinates coords.dat
+IO.Iprint 2
+Grid.GridCutoff  80
+
+General.DifferentFunctional  T
+General.FunctionalType       201
+General.NumberOfSpecies      3
+
+EXX.GridSpacing  0.6
+EXX.Scheme 3
+
+Diag.MPMesh   F
+
+%block ChemicalSpeciesLabel
+ 1    1.008 H
+ 2   12.011 C
+ 3   15.999 O
+%endblock ChemicalSpeciesLabel
