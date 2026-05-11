@@ -49,6 +49,10 @@ module GenBlas
      module procedure threedot
      module procedure onezdot
   end interface
+
+  interface dotGPU
+     module procedure threedotGPU
+  end interface
 !!***
 
 !!****f* GenBlas/vdot *
@@ -434,6 +438,17 @@ contains
 
     threedot = ddot(len,a,stride_a,b,stride_b)
   end function threedot
+!!***
+
+  real(double) function threedotGPU(a,b)
+
+    implicit none
+    !$omp declare target
+
+    real(double) :: a(:,:,:),b(:,:,:)
+
+    threedotGPU = dot_product(reshape(a, [size(a)]), reshape(b, [size(b)]))
+  end function threedotGPU
 !!***
 
 !!****f* GenBlas/onezdot *

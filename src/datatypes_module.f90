@@ -30,6 +30,8 @@
 !!
 module datatypes
 
+  use, intrinsic :: iso_c_binding
+  
   ! This picks a the most memory efficient integer kind
   ! that can hold number from -10**6 to 10**6. This
   ! will typically be a 32 bit integer.
@@ -37,7 +39,7 @@ module datatypes
 
   ! The default types.
   integer, parameter :: double      = selected_real_kind( 6, 70 )
-  integer, parameter :: double_cplx = selected_real_kind( 6, 70 )
+  integer, parameter :: double_cplx = c_double_complex
   integer, parameter :: integ       = selected_int_kind ( 9     )
   integer, parameter :: wide        = selected_int_kind ( 15    ) 
 

@@ -6,21 +6,30 @@
 module fft_interface_module
 
   use datatypes
+  use hipfort_hipfftw
+  use, intrinsic :: iso_c_binding
 
   implicit none
 
-  integer, parameter   :: FFTW_FORWARD  = -1
-  integer, parameter   :: FFTW_BACKWARD = +1
+!!$  integer, parameter   :: FFTW_FORWARD  = -1
+!!$  integer, parameter   :: FFTW_BACKWARD = +1
   integer, parameter   :: FFTW_REDFT00  = 3
   integer, parameter   :: FFTW_RODFT00  = 7
-  integer, parameter   :: FFTW_ESTIMATE = 64 
+!!$  integer, parameter   :: FFTW_ESTIMATE = 64 
 
-  integer(wide), save :: planx_for, planx_rev
-  integer(wide), save :: plany_for, plany_rev
-  integer(wide), save :: planz_for, planz_rev
-  integer(wide), save :: plan3_for, plan3_rev
-  integer(wide), save :: cos_plan_for, cos_plan_rev
-  integer(wide), save :: sin_plan
+!!$  integer(wide), save :: planx_for, planx_rev
+!!$  integer(wide), save :: plany_for, plany_rev
+!!$  integer(wide), save :: planz_for, planz_rev
+!!$  integer(wide), save :: plan3_for, plan3_rev
+!!$  integer(wide), save :: cos_plan_for, cos_plan_rev
+!!$  integer(wide), save :: sin_plan
+  
+  integer(c_int64_t), save :: planx_for, planx_rev
+  integer(c_int64_t), save :: plany_for, plany_rev
+  integer(c_int64_t), save :: planz_for, planz_rev
+  integer(c_int64_t), save :: plan3_for, plan3_rev
+  integer(c_int64_t), save :: cos_plan_for, cos_plan_rev
+  integer(c_int64_t), save :: sin_plan
 
 contains
 
@@ -30,7 +39,7 @@ contains
     implicit none
 
     integer,intent(in)   :: len
-    complex(double_cplx) :: dummy
+    complex(double_cplx) :: dummy(1)
 
     ! for forward
     call dfftw_plan_dft_1d( planx_for, &
@@ -73,7 +82,7 @@ contains
     implicit none
 
     integer,intent(in)   :: len
-    complex(double_cplx) :: dummy
+    complex(double_cplx) :: dummy(1)
 
     ! for forward
     call dfftw_plan_dft_1d( plany_for, &
@@ -116,7 +125,7 @@ contains
     implicit none
 
     integer,intent(in)   :: len
-    complex(double_cplx) :: dummy
+    complex(double_cplx) :: dummy(1)
 
     ! for forward
     call dfftw_plan_dft_1d( planz_for, &
@@ -160,7 +169,7 @@ contains
     implicit none
 
     integer, intent(in)  :: nsize
-    complex(double_cplx) :: dummy
+    complex(double_cplx) :: dummy(1,1,1)
 
     ! for forward
     call dfftw_plan_dft_3d( plan3_for, &
@@ -176,6 +185,7 @@ contains
     use datatypes
 
     implicit none
+    !$omp declare target
 
     integer :: nsize, isign
     complex(double_cplx), intent(inout) :: cdata(nsize,nsize,nsize)
@@ -209,7 +219,7 @@ contains
     implicit none
 
     integer,intent(in)   :: len
-    real(double) :: dummy
+    real(double) :: dummy(1)
 
     ! for forward
     call dfftw_plan_r2r_1d( cos_plan_for, len, dummy, dummy, FFTW_REDFT00, FFTW_ESTIMATE )
@@ -258,7 +268,7 @@ contains
     implicit none
 
     integer,intent(in)   :: len
-    real(double) :: dummy
+    real(double) :: dummy(1)
 
     ! for forward & reverse
     call dfftw_plan_r2r_1d( sin_plan, len, dummy, dummy, FFTW_RODFT00, FFTW_ESTIMATE )

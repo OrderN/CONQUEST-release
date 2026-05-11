@@ -180,6 +180,7 @@ contains
     !use Poisson_Solver, only: PSolver
     
     implicit none
+    !$omp declare target
 
     ! << Input variables >>
     integer,      intent(in) :: inode
@@ -246,8 +247,10 @@ contains
        potential = real(fftwrho_arrayin) / fftwnorm**2
 
     case('isf')       
-       !
-       call cq_abort('EXX with ISF Poisson solver disabled')
+       ! Commenting this out for now, to run on device. In the future, instead of
+       ! aborting here, return with an error code, and the caller (hopefully on
+       ! the host) calls the cq_abort
+       !call cq_abort('EXX with ISF Poisson solver disabled') 
        !
        !isf_rho     = rho
        !isf_pot_ion = zero
@@ -268,6 +271,7 @@ contains
     use numbers,   ONLY: zero
 
     implicit none
+    !$omp declare target
 
     integer                   :: extent
     real(double), dimension(2*extent+1,2*extent+1,2*extent+1), &

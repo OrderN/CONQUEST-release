@@ -783,8 +783,7 @@ contains
        use exx_types, only: phi_j, phi_k, ewald_rho, p_gauss, w_gauss, reckernel_3d, ewald_pot, &
             pulay_radius, p_ngauss, r_int, p_omega, exx_psolver, exx_pscheme, extent, store_eris
 
-       use GenBlas, only: dot
-       
+       use GenBlas, only: dotGPU
        use numbers, only: zero
  
        implicit none
@@ -823,7 +822,8 @@ contains
        do nsf3 = 1, ia_nsup
           !
           ! Can we instead always store directly into store_eris_ptr(nsf2, nsf3)?
-          exx_mat_elem = dot((2*extent+1)**3, phi_i(:,:,:,nsf3), 1, Ome_kj, 1) * dv * multiplier
+          exx_mat_elem = dotGPU(phi_i(:,:,:,nsf3), Ome_kj) * dv * multiplier
+          !exx_mat_elem = dot_product(reshape(phi_i(:,:,:,nsf3),[size(phi_i(:,:,:,nsf3))]),Ome_kj) * dv * multiplier
           !
           if ( backup_eris ) then
              !
@@ -1143,25 +1143,38 @@ contains
                    ! Begin the parallel region here as earlier allocations make it difficult to do before now. 
                    ! However, this should be possible in future work. 
                    !
-                   !$omp parallel default(none) reduction(+: c)            &
-                   !$omp     shared(kg,jb,Phy_k,ncbeg,ia,phi_i,extent,dv) &
-                   !$omp     private(nsf_kg,nsf_jb,work_out_3d,work_in_3d,ewald_charge,Ome_kj_1d_buffer, &
-                   !$omp             Ome_kj,ncaddr)
+                   ! shared variables: kg(neigh_atomic_data) filled at k loop (ln1031), size known 
+                   ! jb(neigh_atomic_data) filled at j loop (ln1123), size known
+                   ! Phy_k(allocatable) filled at l loop (ln1079), size known at k loop (ln1034)
+                   ! ncbeg(int) filled at j loop (ln1118)
+                   !
+                   !
+!!$                   !$omp parallel default(none) reduction(+: c)            &
+!!$                   !$omp     shared(kg,jb,Phy_k,ncbeg,ia,phi_i,extent,dv) &
+!!$                   !$omp     private(nsf_kg,nsf_jb,work_out_3d,work_in_3d,ewald_charge,Ome_kj_1d_buffer, &
+!!$                   !$omp             Ome_kj,ncaddr)
+
                    Ome_kj(1:2*extent+1, 1:2*extent+1, 1:2*extent+1) => Ome_kj_1d_buffer
-                   !$omp do schedule(dynamic) collapse(2)
+                   !$omp target data map (to:extent,kg%nsup,jb%nsup,ncbeg,ia%nsup,Phy_k,phi_i,dv,Ome_kj) map (from:ewald_charge,work_out_3d,work_in_3d)
+!!$                   !$omp do schedule(dynamic) collapse(2)
+                   !$omp target teams distribute parallel do collapse(2) reduction(+: c)
                    do nsf_kg = 1, kg%nsup
                       do nsf_jb = 1, jb%nsup
                          !
                          ncaddr = ncbeg + ia%nsup * (nsf_jb - 1)
-                         !
-                         call cri_eri_inner_calculation(Phy_k, phi_i, Ome_kj, nsf_kg, nsf_jb, nsf_kg, dv, &
-                                       1.0d0, ncaddr, ia%nsup, ewald_charge, work_out_3d, work_in_3d, c,  &
-                                       .false.)
+                         ! This is the kernel. Un-comment to call it.
+                         !call cri_eri_inner_calculation(Phy_k, phi_i, Ome_kj, nsf_kg, nsf_jb, nsf_kg, dv, &
+                         !             1.0d0, ncaddr, ia%nsup, ewald_charge, work_out_3d, work_in_3d, c,  &
+                         !            .false.)
                          !
                       end do ! nsf_ld = 1, jb%nsup
                    end do ! nsf_kg = 1, kg%nsup
-                   !$omp end do
-                   !$omp end parallel
+                   !$omp end target teams distribute parallel do
+                   !$omp end target data
+!!$                   !$omp end do
+!!$                   !$omp end parallel
+
+                   
                    !
                    call stop_timer(tmr_std_exx_nsup,.true.)
                    !
