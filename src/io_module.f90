@@ -180,7 +180,7 @@ contains
   subroutine read_atomic_positions(filename)
 
     use datatypes
-    use dimens,         only: r_super_x, r_super_y, r_super_z, volume
+    use dimens,         only: r_super_x, r_super_y, r_super_z
     use lattice_module, only: cell_length, set_cell_parameters, get_pos_frac, get_pos_cart, volume
     use global_module,  only: cell_vector, inv_cell_vector
     use global_module,  only: x_atom_cell, y_atom_cell, z_atom_cell, &
