@@ -185,7 +185,7 @@ for the block size of the matrix, specify the following two variables.
   Diag.BlockSizeC       20
 
 Note that these two numbers should be the same when padding 
-(and when using ELPA which will be introduced to CONQUEST soon).
+(and when using ELPA as described below).
 We suggest that an appropriate value is between 20 and 200, but 
 this should be tested. 
 
@@ -196,6 +196,26 @@ like to remove it, set the following variable.
 
   Diag.PaddingHmatrix              F 
 
+
+Go to :ref:`top <groundstate>`
+
+.. _gs_diag_elpa:
+
+Using ELPA
+~~~~~~~~~~
+
+`ELPA <https://elpa.mpcdf.mpg.de/>`_ is an alternative to ScaLAPACK for
+diagonalisation which can show better parallelisation, and allows use of
+GPU cards for acceleration (though the GPU implementation in CONQUEST is
+at a very early stage).  To enable ELPA and GPUs, set the following tags:
+
+ ::
+
+  Diag.UseELPA T
+  Diag.ELPA_GPU T
+
+Some care is needed in the balance between MPI processes and number of GPUs
+on the compute nodes: careful testing is important.
 
 Go to :ref:`top <groundstate>`.
 

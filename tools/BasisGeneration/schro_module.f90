@@ -146,6 +146,8 @@ contains
              newcharge = newcharge + val%occ(i_shell)*psi*psi*rr*rr
           else if(ell==2) then
              newcharge = newcharge + val%occ(i_shell)*psi*psi*rr*rr*rr*rr
+          else                                                          
+             newcharge = newcharge + val%occ(i_shell)*psi*psi*rr**(2*ell) 
           end if
        end do
        ! Find residual

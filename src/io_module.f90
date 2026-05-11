@@ -180,7 +180,7 @@ contains
   subroutine read_atomic_positions(filename)
 
     use datatypes
-    use dimens,         only: r_super_x, r_super_y, r_super_z
+    use dimens,         only: r_super_x, r_super_y, r_super_z, volume
     use lattice_module, only: cell_length, set_cell_parameters, get_pos_frac, get_pos_cart, volume
     use global_module,  only: cell_vector, inv_cell_vector
     use global_module,  only: x_atom_cell, y_atom_cell, z_atom_cell, &
@@ -555,6 +555,7 @@ second:   do
        if(ni_in_cell<numprocs) call cq_abort("We must have at least one atom per process: ",ni_in_cell,numprocs)
     end if
     r_super_x = cell_length(1); r_super_y = cell_length(2); r_super_z=cell_length(3)
+    volume = r_super_x*r_super_y*r_super_z   !!!! TM 2026May11
     if((iprint_init>0) .or. (iprint_init==0.AND.ni_in_cell<atom_output_threshold)) &
          call print_atomic_positions
     call gcopy(ni_in_cell)
@@ -584,6 +585,7 @@ second:   do
     rcellx = r_super_x
     rcelly = r_super_y
     rcellz = r_super_z
+    volume = r_super_x*r_super_y*r_super_z
     allocate(atom_coord_diff(3,ni_in_cell), STAT=stat)
     if (stat.NE.0) call cq_abort('Error allocating atom_coord_diff: ', 3, ni_in_cell)
     allocate(id_glob_old(ni_in_cell),id_glob_inv_old(ni_in_cell), STAT=stat)
@@ -3334,7 +3336,7 @@ second:   do
   subroutine print_atomic_positions
 
     use global_module, only: atom_coord, iprint_MD, ni_in_cell, species_glob
-    use dimens,         only: r_super_x, r_super_y, r_super_z, atomicnum
+    use dimens,         only: r_super_x, r_super_y, r_super_z, atomicnum, volume
     use GenComms, only: inode, ionode
     use units, only: dist_conv, d_units, dist_units, BohrToAng, bohr
     use periodic_table, only: pte
@@ -3348,6 +3350,8 @@ second:   do
        write(io_lun,fmt='(/4x,"Simulation cell dimensions: ",f10.4,a3," x ",f10.4,a3," x ",f10.4,a3)') &
             r_super_x*dist_conv, d_units(dist_units), r_super_y*dist_conv, d_units(dist_units), &
             r_super_z*dist_conv, d_units(dist_units)
+       write(io_lun,fmt='(/4x,"Simulation cell volume:     ",f10.4,a3,a3)') &
+            volume*dist_conv*dist_conv*dist_conv, d_units(dist_units),'**3'
        if(flag_coords_xyz) then
           write(io_lun,fmt='(6x,"           X         Y         Z")')
           if(dist_units==bohr) then

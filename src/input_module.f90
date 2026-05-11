@@ -19,6 +19,8 @@
 !!  MODIFICATION HISTORY
 !!   2008/09/03 10:43 dave
 !!    Possible bug fix: add datatypes as module wide for typing of fdf_double
+!!   2026/02/06 19:30 nakata
+!!    Changed the maximum length of a line to be read from Conquest_input from 132 to 256
 !!  SOURCE
 !!  
 module input_module
@@ -33,11 +35,11 @@ module input_module
   save
   ! Input array
   integer :: input_lines
-  character(len=132), dimension(:), allocatable :: input_array
+  character(len=256), dimension(:), allocatable :: input_array 
 
   ! Parsing
   integer :: current_line, ntokens
-  character(len=132) :: line
+  character(len=256) :: line
   integer, dimension(100) :: first, last
 
   ! Control
@@ -83,6 +85,8 @@ contains
 !!    - Bug fix in closing a file
 !!   2015/06/08 lat
 !!    - Added experimental backtrace
+!!   2026/02/06 19:30 nakata
+!!    - Changed the maximum length of a line to be read from Conquest_input from 132 to 256
 !!  SOURCE
 !!  
   subroutine load_input
@@ -92,7 +96,7 @@ contains
     implicit none
 
     type(cq_timer)     :: backtrace_timer
-    character(len=132) :: line
+    character(len=256) :: line
     character(len=10)  :: slabel
     real(double)       :: r
     logical            :: good_line, done
@@ -164,7 +168,7 @@ contains
        call io_close(lun)
     end if
     do i=1,input_lines
-       call gcopy(input_array(i),132)
+       call gcopy(input_array(i),256)
     end do
     current_line = 0
     if(inode==ionode) then

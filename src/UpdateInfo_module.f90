@@ -1300,6 +1300,8 @@ contains
   !!    Changing MPI tag to conform to standard
   !!   2019/11/14 tsuyoshi
   !!    Added InfoGlob in dummy arguments, and removed glob2node_old
+  !!   2026/02/10 10:45 dave
+  !!    Bug fix: changed nreq to single integer (used in block receive)
   !!  SOURCE
   !!
   subroutine alloc_recv_array(InfoGlob,irecv_array,irecv2_array,recv_array, &
@@ -1334,7 +1336,7 @@ contains
     logical :: flag_find_old
     ! -- process 2. -- !
     integer :: ind_nnd,ibeg,isize,inode_send
-    integer :: tag,ierr,nreq(MPI_STATUS_SIZE)
+    integer :: tag,ierr,nreq
     integer, allocatable :: isort_node(:),irecv_array(:)
     ! -- process 3. -- !
     integer :: iprim_remote,isize1,isize2,ia,nalpha,nj,njbeta,iglob_local
@@ -1477,7 +1479,7 @@ contains
           !! /----- DEBUG ------ !!
 
           call MPI_recv(irecv_array(ibeg),isize,MPI_INTEGER,inode_send-1,tag, &
-               MPI_COMM_WORLD,nreq(nnd),ierr)
+               MPI_COMM_WORLD,nreq,ierr)
           if (ierr.NE.MPI_SUCCESS) call cq_abort('Error receiving irecv_array: ', nnd, ierr)
        enddo
     endif
