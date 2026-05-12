@@ -686,7 +686,8 @@ contains
        do ii = 1, 3
           if (FSC%is_folded(ii)) then
              !old r_occupied_cell(ii) = FSC%dims(ii) - FSC%gap(2,ii) + FSC%gap(1,ii)
-             r_occupied_cell(ii) = (one - (FSC%gap(2,ii) + FSC%gap(1,ii)))*FSC%dims(ii)
+             ! ?? r_occupied_cell(ii) = (one - (FSC%gap(2,ii) + FSC%gap(1,ii)))*FSC%dims(ii)
+             r_occupied_cell(ii) = (one - (FSC%gap(2,ii) - FSC%gap(1,ii)))*FSC%dims(ii)
           else
              !old r_occupied_cell(ii) = FSC%r_atoms_max(ii) - FSC%r_atoms_min(ii)
              r_occupied_cell(ii) = (FSC%r_atoms_max(ii) - FSC%r_atoms_min(ii))*FSC%dims(ii)
@@ -962,6 +963,7 @@ contains
 
           if ((r_gap_block_min >= FSC%r_atoms_min(ii)) .and. &
                (r_gap_block_max <= FSC%r_atoms_max(ii))) then
+           write(*,*) ' GAP IN THE MIDDLE ? '
              ! the gap is in the middle of the cell
              FSC%is_folded(ii) = .true.
              limits(1) = FSC%r_atoms_min(ii)
@@ -979,6 +981,7 @@ contains
                 FSC%has_pbc(ii) = .false.
              end if
           else
+           write(*,*) ' GAP IN THE TOP ? '
              ! the gap is either on top or underneath the atoms
              ! check if no pbc in this direction
              ! DRB 2016/08/05 Original criterion based on occupied fraction 

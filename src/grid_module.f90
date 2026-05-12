@@ -32,6 +32,7 @@ module grid_module
 
 contains
  subroutine set_grid_parameters
+  use numbers, only: one
   use group_module, only:blocks
   use block_module, only:nx_in_block, ny_in_block, nz_in_block
   use lattice_module, only: cell_length, volume
@@ -39,9 +40,12 @@ contains
   integer :: ii, ngridx, ngridy, ngridz
  
   !dcell_block
-   dcell_block (1) = cell_length(1)/blocks%ngcellx
-   dcell_block (2) = cell_length(2)/blocks%ngcelly
-   dcell_block (3) = cell_length(3)/blocks%ngcellz
+   !bug dcell_block (1) = cell_length(1)/blocks%ngcellx
+   !bug dcell_block (2) = cell_length(2)/blocks%ngcelly
+   !bug dcell_block (3) = cell_length(3)/blocks%ngcellz
+   dcell_block (1) = one/blocks%ngcellx
+   dcell_block (2) = one/blocks%ngcelly
+   dcell_block (3) = one/blocks%ngcellz
    ! xblock, yblock, zblock should be defined with frac_block(1:3)
 
   !dcell_grid 

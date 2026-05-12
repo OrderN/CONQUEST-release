@@ -330,11 +330,11 @@ contains
        !write(io_lun,*) 'Block ',iblock
        ! determine the position of this block
 
-       frac_block(1) = (domain%idisp_primx(iblock) + domain%nx_origin - 1) 
-       frac_block(2) = (domain%idisp_primy(iblock) + domain%ny_origin - 1) 
-       frac_block(3) = (domain%idisp_primz(iblock) + domain%nz_origin - 1) 
-       frac_block(:) = frac_block(:) * dcell_block(:)
-       
+       frac_block(1) = domain%idisp_primx(iblock) + domain%nx_origin - 1 
+       frac_block(2) = domain%idisp_primy(iblock) + domain%ny_origin - 1 
+       frac_block(3) = domain%idisp_primz(iblock) + domain%nz_origin - 1 
+       frac_block(:) = frac_block(:) * dcell_block(:) 
+
        call get_pos_cart(frac_block, cart_block)
 
        !old xblock = (domain%idisp_primx(iblock) + domain%nx_origin - 1) * dcellx_block
@@ -397,10 +397,10 @@ contains
                 ipoint = 0
                 ! loop over the grid points in the current block
                 do iz = 1, nz_in_block
-                         frac_grid(3)=iz-1
                    do iy = 1, ny_in_block
-                         frac_grid(2)=iy-1
                       do ix = 1, nx_in_block
+                         frac_grid(3)=iz-1
+                         frac_grid(2)=iy-1
                          frac_grid(1)=ix-1
 
                          ipoint = ipoint + 1
