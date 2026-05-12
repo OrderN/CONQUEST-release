@@ -576,9 +576,9 @@ contains
          end do
       end if ! pdos rotation mode
       call rotate_coefficients
-   end if  ! rotate pdos
    deallocate(U1)
    deallocate(U2)
+   end if  ! rotate pdos
     ! Set up storage based on pDOS per atom, or l/lm resolved per atom
     if(flag_lm_resolved) then
        allocate(pDOS_lm(-max_l:max_l,0:max_l,n_atoms_pDOS,n_DOS,nspin))
@@ -1248,7 +1248,7 @@ contains
    !!  NAME
    !!   nearest_neighbours - Find nearest neighbours and their bond vectors
    !!  USAGE
-   !!   nearest_neighbours(atomno, nghbr_arr, bonds)
+   !!   nearest_neighbours(atomno, bond)
    !!  PURPOSE
    !!   Evaluates the nearest neighbours using periodic boundary conditions
    !!    and returns their bond vectors
@@ -1258,16 +1258,17 @@ contains
    !!   certainly the limit if E and kT are equal and heading to zero, or if
    !!   E is smaller than kT and both head for zero.
    !!  INPUTS
-   !!   integer, intent(in) :: atomno - atom to find neighbours of
-   !!   integer, intent(out), dimension(:), allocatable :: nghbr_arr - array to hold neighbours
+   !!   integer, intent(in) :: atomno !atom to find neighbours of
+   !!   real(double), intent(out), allocatable :: bond(:,:) ! array to hold bond
+   !!       information regarding an atom
    !!  USES
-   !!   datatypes, dimens, local, gloval, GenComms
+   !!   datatypes, dimens, local, global, GenComms
    !!  AUTHOR
    !!   C. Xu
    !!  CREATION DATE
    !!   15/04/2026
    !!  MODIFICATION HISTORY
-   !!
+   !!    12/05/2026 - C. Xu: correct de/allocation behaviour. Edit desc
    !!  SOURCE
    !!
    subroutine nearest_neighbours(atomno, bond)
@@ -1288,6 +1289,10 @@ contains
       real(double) :: distances(1:ni_in_cell), temp(1:ni_in_cell)
       real(double) ::cx, cy, cz, dist, dx, dy, dz, atomno_pos(3)
       integer :: i, j, min_idx, ibond_max_len, idx_direction
+      ! Reset allocatables as this subroutine is called in a loop
+      ! and populated with new data every time
+      if (allocated(nghbr_arr)) deallocate(nghbr_arr)
+      if (allocated(bond)) deallocate(bond)
 
       cx = atom_coord(1, atomno)
       cy = atom_coord(2, atomno)
@@ -1317,9 +1322,9 @@ contains
       where (abs(temp) < err) temp = huge(1.0)
       select case (find_neighbours(2, findloc(find_neighbours(1,:), atomno, dim=1)))
       case (0)
-         if (.not. allocated(nghbr_arr)) allocate(nghbr_arr(4))
+         allocate(nghbr_arr(4))
       case (1)
-         if (.not. allocated(nghbr_arr)) allocate(nghbr_arr(6))
+         allocate(nghbr_arr(6))
       case default
          call cq_abort("Did not correctly allocate nghbr_arr array")
       end select
@@ -1329,7 +1334,7 @@ contains
          temp(min_idx) = huge(1.0)
       end do
 
-      if (.not. allocated(bond)) allocate(bond(3, size(nghbr_arr)))
+      allocate(bond(3, size(nghbr_arr)))
 
       atomno_pos = (/atom_coord(1, atomno), atom_coord(2, atomno), atom_coord(3, atomno)/)
       do i = 1, size(nghbr_arr)
