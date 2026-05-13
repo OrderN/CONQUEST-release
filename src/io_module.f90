@@ -182,7 +182,7 @@ contains
     use datatypes
     use dimens,         only: r_super_x, r_super_y, r_super_z
     use lattice_module, only: cell_length, set_cell_parameters, get_pos_frac, get_pos_cart, volume
-    use global_module,  only: cell_vector, inv_cell_vector
+    use global_module,  only: cell_vector, inv_cell_vector,shift_in_frac
     use global_module,  only: x_atom_cell, y_atom_cell, z_atom_cell, &
                               ni_in_cell, numprocs,                  &
                               flag_fractional_atomic_coords, rcellx, &
@@ -573,6 +573,7 @@ second:   do
     call gcopy(inv_cell_vector,3,3)
     call gcopy(cell_length,3)
     call gcopy(volume)
+    call gcopy(shift_in_frac)
    !old
     r_super_x = cell_length(1); r_super_y = cell_length(2); r_super_z=cell_length(3)
     !call gcopy(r_super_x)

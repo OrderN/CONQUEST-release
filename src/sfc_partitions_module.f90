@@ -482,11 +482,12 @@ contains
     use numbers
     use GenComms,       only: cq_abort, inode, ionode
     use global_module,  only: atom_coord, ni_in_cell, species_glob, &
-                              area_init, shift_in_bohr, io_lun, global_maxatomspart
+                              area_init, shift_in_bohr, shift_in_frac, io_lun, global_maxatomspart 
     use species_module, only: nsf_species
     use Hilbert3D,      only: Hilbert3D_Initialise, Hilbert3D_IntTOCoords, &
                               Hilbert3D_CoordsToInt
     use memory_module,  only: reg_alloc_mem, reg_dealloc_mem, type_int
+    use lattice_module, only: cell_length, get_pos_frac
 
     implicit none
 
@@ -498,6 +499,8 @@ contains
     integer,      dimension(3) :: ipart_xyz, nParts
     integer                    :: n_parts_total
     logical                    :: refine
+
+    real(double), dimension(3) :: pos_frac
 
     
 
@@ -521,15 +524,18 @@ contains
           end do
           call Hilbert3D_Initialise(n_divs(1), n_divs(2), n_divs(3))
           ! get dimensions of each partition cell
-          r_part(1:3) = FSC%dims(1:3) / real(n_parts(1:3),double)
+          r_part(1:3) = FSC%dims(1:3) / real(n_parts(1:3),double)  ! it is now along each cell vector
+
           ! Assign atoms in cell to partitions and count
           loop_atoms_refine: do ia = 1, ni_in_cell
              ! get the partition x,y,z indices for the partition containing the atoms
              
              ! for general cells including non-orthorhombic cells, we need to consider with
              ! fractional coordinates
-             ipart_xyz(1:3) = floor((atom_coord(1:3,ia)+shift_in_bohr) / r_part(1:3) )
-             !old ipart_xyz(1:3) = floor((atom_coord(1:3,ia)+shift_in_bohr) / r_part(1:3) )
+             call get_pos_frac(atom_coord(1:3,ia),pos_frac(1:3))
+             ipart_xyz(1:3) = floor((pos_frac(1:3)+shift_in_frac) * real(n_parts(1:3),double))
+              !old ipart_xyz(1:3) = floor((atom_coord(1:3,ia)+shift_in_bohr) / r_part(1:3) )
+
              ! get the corresponding Hilbert curve index corresponding to the partition
              call Hilbert3D_CoordsToInt(ipart_xyz, ihilbert)
              ! accumulate the atoms count
@@ -537,6 +543,7 @@ contains
              ! check whether the partitioning needs to be refined
              if ((parts(ihilbert)%n_atoms > max_natoms_part) .and. &
                   (minval(r_part) > 1.0_double)) then
+
                 refine = .true.
                 ii = refine_direction(r_part, n_dim_auto, dim_nparts_auto)
                 n_divs(ii) = n_divs(ii) + 1
@@ -567,7 +574,11 @@ contains
     parts(:)%n_atoms = 0
     loop_atoms_check: do ia = 1, ni_in_cell
        ! Assign to partition
-       ipart_xyz(1:3) = floor((atom_coord(1:3,ia)+shift_in_bohr) / r_part(1:3) )
+       ! for non-orthorhombic cell
+        call get_pos_frac(atom_coord(1:3,ia),pos_frac(1:3))
+        ipart_xyz(1:3) = floor((pos_frac(1:3)+shift_in_frac) * real(n_parts(1:3),double))
+         !OLD ipart_xyz(1:3) = floor((atom_coord(1:3,ia)+shift_in_bohr) / r_part(1:3) )
+  
        call Hilbert3D_CoordsToInt(ipart_xyz, ihilbert)
        ! accumulate the atoms count
        parts(ihilbert)%n_atoms = parts(ihilbert)%n_atoms + 1
@@ -583,7 +594,10 @@ contains
     parts(:)%n_atoms = 0
     loop_atoms_assign: do ia = 1, ni_in_cell
        ! Assign to partition
-       ipart_xyz(1:3) = floor((atom_coord(1:3,ia)+shift_in_bohr) / r_part(1:3) )
+       ! for non-orthorhombic cell
+        call get_pos_frac(atom_coord(1:3,ia),pos_frac(1:3))
+        ipart_xyz(1:3) = floor((pos_frac(1:3)+shift_in_frac) * real(n_parts(1:3),double))
+         !OLD ipart_xyz(1:3) = floor((atom_coord(1:3,ia)+shift_in_bohr) / r_part(1:3) )
        call Hilbert3D_CoordsToInt(ipart_xyz, ihilbert)
        ! accumulate the atoms count
        parts(ihilbert)%n_atoms = parts(ihilbert)%n_atoms + 1
@@ -924,7 +938,6 @@ contains
     ! calculate the number of atoms in each block
     do iatom = 1, ni_in_cell
        !2025/Nov/13 TM: non-orthorhombic case
-       !old i_block_xyz(1:3) = floor(atom_coord(1:3,iatom) / r_block(1:3) + RD_ERR)
        !old i_block_xyz(1:3) = floor((atom_coord(1:3,iatom)+shift_in_bohr) / r_block(1:3) ) 
        call get_pos_frac(atom_coord(1:3,iatom),pos_frac)
        i_block_xyz(1:3) = floor((pos_frac(1:3)+shift_in_frac) * real(n_blocks(1:3),double))
@@ -981,7 +994,7 @@ contains
                 FSC%has_pbc(ii) = .false.
              end if
           else
-           write(*,*) ' GAP IN THE TOP ? '
+           write(*,*) ' GAP IN THE TOP or BOTTOM ? '
              ! the gap is either on top or underneath the atoms
              ! check if no pbc in this direction
              ! DRB 2016/08/05 Original criterion based on occupied fraction 
