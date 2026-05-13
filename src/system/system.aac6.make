@@ -2,7 +2,7 @@
 # hackathon in 11-13 March 2026
 #
 # First load the following modules
-# $ module load rocm/7.2.0 fftw/3.3.10 openmpi/5.0.10-ucc1.6.0-ucx1.19.1-xpmem-2.7.4 petsc/3.24.1
+# $ module load rocm/7.2.0 fftw/3.3.10 openmpi/5.0.10-ucc1.6.0-ucx1.19.1-xpmem-2.7.4 petsc/3.24.1 elpa/master-c7234ec
 
 # export OMPI_FC=amdflang
 # Set compilers
