@@ -24,6 +24,8 @@ MULT_KERN = default
 DIAG_DUMMY = 
 
 #Include system-dependent variables
+ifneq ($(MAKECMDGOALS),clean)
+
 ifneq ($(SYSTEM),)
 $(info System is $(SYSTEM))
 SYSTEM_PATH = system/system.$(SYSTEM).make
@@ -53,6 +55,7 @@ include setgrid_new.obj
 include pao2blip.obj
 include pseudo_tm.obj
 include exx.obj 
+endif
 
 #List of all object files
 NODE_OBJECTS = main.o datatypes_module.o numbers_module.o datestamp.o                   \
