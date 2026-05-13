@@ -8,7 +8,8 @@ FC=mpif90
 # OpenMP flags
 # Set this to "OMPFLAGS= " if compiling without openmp
 # Set this to "OMPFLAGS= -fopenmp" if compiling with openmp
-OMPFLAGS=-fopenmp --offload-arch=gfx942
+# OMPFLAGS=-fopenmp --offload-arch=gfx942
+OMPFLAGS=-fopenmp 
 # Set this to "OMP_DUMMY = DUMMY" if compiling without openmp
 # Set this to "OMP_DUMMY = " if compiling with openmp
 OMP_DUMMY = 
@@ -23,9 +24,9 @@ BLAS= -llapack -lblas
 # If using OpenMPI, use -lscalapack-openmpi instead.
 # If using Cray-libsci, use -llibsci_cray_mpi instead.
 #SCALAPACK =
-#SCALAPACK = -lscalapack
-SCALAPACK=-L/shared/apps/ubuntu/rocmplus-afar-22.2.0/petsc/petsc/lib/ -lscalapack-openmpi
-#SCALAPACK=-L/shared/apps/ubuntu/rocmplus-7.2.0/petsc/petsc/lib/ -lscalapack
+# SCALAPACK = -lscalapack
+# SCALAPACK=-L/shared/apps/ubuntu/rocmplus-afar-22.2.0/petsc/petsc/lib/ -lscalapack-openmpi
+SCALAPACK=-L/shared/apps/ubuntu/opt/rocmplus-7.2.0/petsc-v3.24.1/petsc/lib -lscalapack
 
 # LibXC: choose between LibXC compatibility below or Conquest XC library
 
@@ -43,14 +44,14 @@ XC_COMPFLAGS =
 #XC_COMPFLAGS = -I/shared/apps/ubuntu/libxc/include/
 
 # Set FFT library
-#FFT_LIB=-lfftw3
-#FFT_LIB=-L/shared/apps/ubuntu/rocmplus-7.2.0/fftw-v3.3.10/lib -lfftw3
-FFT_LIB=-L/shared/apps/ubuntu/rocmplus-afar-22.2.0/fftw-v3.3.10/lib -lfftw3
+FFT_LIB=-lfftw3
+FFT_LIB=-L/shared/apps/ubuntu/opt/rocmplus-7.2.0/fftw-v3.3.10/lib -lfftw3
+# FFT_LIB=-L/shared/apps/ubuntu/rocmplus-afar-22.2.0/fftw-v3.3.10/lib -lfftw3
 FFT_OBJ=fft_fftw3.o
 
 # Set ELPA library
-#ELPA_LIB = -L/shared/apps/ubuntu/rocmplus-7.2.0/elpa/lib -lelpa
-#ELPA_INC = -I/shared/apps/ubuntu/rocmplus-7.2.0/elpa/include/elpa-2025.06.001/modules/
+# ELPA_LIB = -L/shared/apps/ubuntu/opt/rocmplus-7.2.0/elpa-vmaster-c7234ec/lib -lelpa
+# ELPA_INC = -I/shared/apps/ubuntu/opt/rocmplus-7.2.0/elpa-vmaster-c7234ec/include/elpa-2026.02.001/modules/
 ELPA_LIB = 
 ELPA_INC = 
 #ELPA_LIB = -L/**/lib -lelpa
@@ -63,7 +64,8 @@ LIBS= $(FFT_LIB) $(ELPA_LIB) $(XC_LIB) $(SCALAPACK) $(BLAS)
 COMPFLAGS= -O3 $(OMPFLAGS) $(XC_COMPFLAGS) $(ELPA_INC)
 
 # Linking flags
-LINKFLAGS= -L/usr/local/lib $(OMPFLAGS) -lflang_rt.hostdevice #runtime
+# LINKFLAGS= -L/usr/local/lib $(OMPFLAGS) -lflang_rt.hostdevice #runtime
+LINKFLAGS= -L/usr/local/lib $(OMPFLAGS)
 
 # Matrix multiplication kernel type
 MULT_KERN = default
