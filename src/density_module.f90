@@ -2443,6 +2443,9 @@ contains
     use block_module,  only: nx_in_block, ny_in_block, nz_in_block!, &
     ! n_pts_in_block
 
+    use grid_module, only: dcell_block, dcell_grid, grid_point_volume
+    use lattice_module, only: get_pos_cart
+
     implicit none
 
     ! Passed
@@ -2460,13 +2463,20 @@ contains
     integer      :: ipoint, iz, iy, ix, at
     real(double) :: r2, r_from_i, rx, ry, rz, x, y, z, rcut2
 
-    dcellx_block=rcellx/blocks%ngcellx
-    dcelly_block=rcelly/blocks%ngcelly
-    dcellz_block=rcellz/blocks%ngcellz
+    real(double) :: frac_block(3), cart_block(3), frac_grid(3), cart_grid(3)
 
-    dcellx_grid=dcellx_block/nx_in_block
-    dcelly_grid=dcelly_block/ny_in_block
-    dcellz_grid=dcellz_block/nz_in_block
+! For Non-orthorhombic cells
+    ! determine the block and grid spacing
+     call set_grid_parameters
+
+    !old dcellx_block=rcellx/blocks%ngcellx
+    !old dcelly_block=rcelly/blocks%ngcelly
+    !old dcellz_block=rcellz/blocks%ngcellz
+
+    !old dcellx_grid=dcellx_block/nx_in_block
+    !old dcelly_grid=dcelly_block/ny_in_block
+    !old dcellz_grid=dcellz_block/nz_in_block
+
 
     ! Add loop to find R_in (shortest atom-atom distance)
     ipoint=0
@@ -2476,9 +2486,17 @@ contains
           do ix=1,nx_in_block
              ipoint=ipoint+1
 
-             dx=dcellx_grid*(ix-1)
-             dy=dcelly_grid*(iy-1)
-             dz=dcellz_grid*(iz-1)
+             !old dx=dcellx_grid*(ix-1)
+             !old dy=dcelly_grid*(iy-1)
+             !old dz=dcellz_grid*(iz-1)
+
+             frac_grid(3)=iz-1
+             frac_grid(2)=iy-1
+             frac_grid(1)=ix-1
+             frac_grid(:) = frac_grid(:) * dcell_grid(:)
+              call get_pos_cart(frac_grid, cart_grid)
+              dx=cart_grid(1);dy=cart_grid(2);dz=cart_grid(3)
+
              do at = 1,natoms
                 rcut2 = rcut(at)* rcut(at)
                 rx=xblock+dx-xatom(at)
