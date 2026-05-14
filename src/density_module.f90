@@ -567,7 +567,7 @@ contains
     use set_blipgrid_module, only: naba_atoms_of_blocks
     use GenComms,            only: my_barrier, cq_abort, inode, ionode, gsum
     use pseudo_tm_info,      only: pseudo
-    use dimens,              only: n_my_grid_points, grid_point_volume
+    use dimens,              only: n_my_grid_points
     use GenBlas,             only: rsum, scal
     use timer_module
     use io_module, only: return_prefix
@@ -845,7 +845,8 @@ contains
     use GenBlas,                     only: scal, rsum
     use mult_module,                 only: matK, matKatomf, SF_to_AtomF_transform
     use matrix_data,                 only: Hrange
-    use dimens,                      only: n_my_grid_points, grid_point_volume
+    use dimens,                      only: n_my_grid_points
+    use grid_module,                 only: grid_point_volume
     use block_module,                only: n_pts_in_block
     use set_bucket_module,           only: rem_bucket, atomf_H_atomf_rem
     use calc_matrix_elements_module, only: act_on_vectors_new
@@ -989,8 +990,9 @@ contains
     use datatypes
     use numbers
     use global_module,               only: ni_in_cell, x_atom_cell, y_atom_cell, z_atom_cell
-    use dimens,                      only: grid_point_volume, n_grid_x, n_grid_y, n_grid_z, &
+    use dimens,                      only: n_grid_x, n_grid_y, n_grid_z, &
          r_super_x, r_super_y, r_super_z, x_grid, y_grid, z_grid
+    use grid_module,                 only: grid_point_volume
     use block_module,                only: n_pts_in_block, in_block_x,in_block_y,in_block_z
     use primary_module,              only: domain
     use GenComms,                    only: gsum, inode, ionode, cq_warn
@@ -2080,9 +2082,11 @@ contains
     use primary_module,      only: domain
     use set_blipgrid_module, only: naba_atoms_of_blocks
     use cover_module,        only: DCS_parts
-    use dimens,              only: grid_point_volume
+!    use dimens,              only: grid_point_volume
+    use grid_module,         only: grid_point_volume
     use block_module,        only: n_pts_in_block
     use group_module,        only: parts
+
 
     implicit none
 
@@ -2547,9 +2551,11 @@ contains
     use datatypes
     use numbers
     use global_module, only: nspin
-    use dimens,        only: grid_point_volume, n_my_grid_points
+    !use dimens,        only: grid_point_volume, n_my_grid_points
+    use dimens,        only: n_my_grid_points
     use GenComms,      only: gsum
     use GenBlas,       only: rsum
+    use grid_module, only: grid_point_volume
     implicit none
     ! passed parameters
     real(double), dimension(nspin), intent(out) :: electrons
