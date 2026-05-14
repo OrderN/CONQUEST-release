@@ -4,7 +4,8 @@ module exx_poisson
   use datatypes,           only: double, double_cplx
   !use exx_types,           only: fftwrho3d, exx_debug
   use fft_interface_module,only: fft3_exec_wrapper, fft3_init_wrapper
-  
+  use hipfft_interface_module, only: hipfft3_exec_wrapper, hipfft3_init_wrapper
+
 contains
   !
   !
@@ -17,7 +18,7 @@ contains
 
     implicit none
 
-    ! << Passed variables >>    
+    ! << Passed variables >>
     character(*), intent(in) :: scheme
     integer,      intent(in) :: extent
     integer,      intent(in) :: inode
@@ -27,12 +28,12 @@ contains
     real(double), intent(in) :: omega
 
     integer,      intent(in) :: n_gauss
-    real(double), optional, intent(in) :: p_gauss(n_gauss)    
-    real(double), optional, intent(in) :: w_gauss(n_gauss)    
+    real(double), optional, intent(in) :: p_gauss(n_gauss)
+    real(double), optional, intent(in) :: w_gauss(n_gauss)
 
     complex(double), dimension(2*extent+1,2*extent+1,2*extent+1), intent(out) :: reckernel
 
-    
+
     ! << Local variables >>
     real(double),dimension(3) :: G
     real(double)              :: charge_G
@@ -40,16 +41,16 @@ contains
     real(double), parameter   :: magic_number = 0.1864d0 ! 32/43 = nombre magic !
 
     real(double)              :: r_G, r_A, v_G, v_R, sphere, fftwnorm, tmp, alpha
-    real(double)              :: rho_zero, Gkernel, Gkernel_zero, arg, factor, delta    
+    real(double)              :: rho_zero, Gkernel, Gkernel_zero, arg, factor, delta
     real(double)              :: max_, min_
 
     integer                   :: gauss
-    integer                   :: nx, ny, nz, ngrid   
-    integer                   ::  x,  y,  z    
+    integer                   :: nx, ny, nz, ngrid
+    integer                   ::  x,  y,  z
     integer                   ::  i,  j,  k
 
     ngrid     = 2*extent+1
-    fftwnorm  = sqrt(real(ngrid**3,double)) 
+    fftwnorm  = sqrt(real(ngrid**3,double))
 
     r_A    = real(2,double)*r_int
     r_G    = zero
@@ -61,7 +62,7 @@ contains
 
     reckernel = zero
 
-    poisson_scheme: select case(scheme)       
+    poisson_scheme: select case(scheme)
     case('default')
        delta  = zero
     case('ewald')
@@ -80,27 +81,27 @@ contains
        x = nx + extent + 1
        if (nx <= 0) then
           G(1) = twopi*( real(nx+extent+delta,double))/r_A
-       else 
+       else
           G(1) = twopi*(-real(extent-nx+(one-delta),double))/r_A
        end if
 
        grid_y_loop: do ny = -extent, extent
-          y  = ny + extent + 1 
-          if (ny <= 0) then                         
+          y  = ny + extent + 1
+          if (ny <= 0) then
              G(2) = twopi*( real(ny+extent+delta,double))/r_A
           else
              G(2) = twopi*(-real(extent-ny+(one-delta),double))/r_A
           end if
 
-          grid_z_loop: do nz = -extent, extent             
-             z  = nz + extent + 1             
+          grid_z_loop: do nz = -extent, extent
+             z  = nz + extent + 1
              if (nz <= 0) then
-                G(3) = twopi*( real(nz+extent+delta,double))/r_A 
-             else                
+                G(3) = twopi*( real(nz+extent+delta,double))/r_A
+             else
                 G(3) = twopi*(-real(extent-nz+(one-delta),double))/r_A
              end if
 
-             r_G = sqrt(dot_product(G,G))                         
+             r_G = sqrt(dot_product(G,G))
 
              !if (scheme == 'yukawa') then
              !   if (r_G > 0.1d0) then
@@ -108,27 +109,27 @@ contains
              !   end if
              !end if
 
-             if (r_G == zero) then                
+             if (r_G == zero) then
 
                 !write(*,*) x, y, z
                 poisson_zero: select case(scheme)
                 case('default')
-                   reckernel(x,y,z) = cmplx(0,0,double_cplx)          
+                   reckernel(x,y,z) = cmplx(0,0,double_cplx)
                 case('ewald')
-                   reckernel(x,y,z) = cmplx(0,0,double_cplx)          
+                   reckernel(x,y,z) = cmplx(0,0,double_cplx)
                 case('pulay')
-                   reckernel(x,y,z) = cmplx(cutoff**2/two,0,double_cplx)     
+                   reckernel(x,y,z) = cmplx(cutoff**2/two,0,double_cplx)
                 case('yukawa')
-                   reckernel(x,y,z) = cmplx(0,0,double_cplx) 
+                   reckernel(x,y,z) = cmplx(0,0,double_cplx)
                 case('gauss')
                    Gkernel_zero = zero
                    do gauss = 1, n_gauss
                       Gkernel_zero = Gkernel_zero + &
                            w_gauss(gauss)*sqrt_pi/(four*p_gauss(gauss)**three_halves)
                    end do
-                   reckernel(x,y,z) = cmplx(Gkernel_zero,double_cplx)          
-                case default 
-                   reckernel(x,y,z) = cmplx(zero,zero,double_cplx)          
+                   reckernel(x,y,z) = cmplx(Gkernel_zero,double_cplx)
+                case default
+                   reckernel(x,y,z) = cmplx(zero,zero,double_cplx)
                 end select poisson_zero
              else
                 poisson_xyz: select case(scheme)
@@ -145,7 +146,7 @@ contains
                    arg     = zero
                    factor  = zero
 
-                   do gauss = 1, n_gauss                      
+                   do gauss = 1, n_gauss
                       factor  = w_gauss(gauss)*sqrt(pi)/(four*p_gauss(gauss)**three_halves)
                       arg     = -(r_G/(two*sqrt(p_gauss(gauss))))**two
                       Gkernel = Gkernel + factor*exp(arg)
@@ -171,38 +172,38 @@ contains
   !
   subroutine exx_v_on_grid(inode,extent,rho,potential,r_int,poisson,scheme,&
        alpha,omega,n_gauss,p_gauss,w_gauss,reckernel)
-    
+
     use numbers,   ONLY: zero, one, fourpi
     use exx_types, ONLY: fftw3d                       ! FFTW
-    use exx_types, ONLY: kernel, isf_rho, isf_pot_ion ! ISF  
+    use exx_types, ONLY: kernel, isf_rho, isf_pot_ion ! ISF
     use exx_types, ONLY: pulay_radius, ewald_rho, ewald_pot, ewald_charge
     use exx_types, ONLY: tmr_std_exx_poisson
     !use Poisson_Solver, only: PSolver
-    
+
     implicit none
 
     ! << Input variables >>
     integer,      intent(in) :: inode
-    integer,      intent(in) :: extent 
+    integer,      intent(in) :: extent
     real(double), intent(in) :: r_int
-    character(*), intent(in) :: poisson    
+    character(*), intent(in) :: poisson
 
     real(double), dimension(2*extent+1,2*extent+1,2*extent+1), &
          intent(in) :: rho
     complex(double), dimension(2*extent+1,2*extent+1,2*extent+1),&
          intent(in) :: reckernel
-    
+
     character(*), intent(in) :: scheme
     real(double), intent(in) :: alpha
-    real(double), intent(in) :: omega        
+    real(double), intent(in) :: omega
     integer,      intent(in) :: n_gauss
     real(double), dimension(n_gauss) :: p_gauss, w_gauss
-    
+
     ! << Output variables >>
     real(double), dimension(2*extent+1,2*extent+1,2*extent+1), &
          intent(out) :: potential
-    
-    ! << Local variables >>    
+
+    ! << Local variables >>
     integer       :: ng, i, j, k
     real(double)  :: fftwnorm, normr
     real(double)  :: grid_spacing
@@ -219,33 +220,48 @@ contains
     real(double), dimension(:,:,:), allocatable :: dum_pot_ion, dum_rho
 
     ng           = 2*extent+1
-    fftwnorm     = sqrt(real(ng**3,double))   
+    fftwnorm     = sqrt(real(ng**3,double))
     grid_spacing = r_int/real(extent,double)
 
-    !call start_timer(tmr_std_exx_poisson)    
+    !call start_timer(tmr_std_exx_poisson)
 
     potential = zero
 
     select case(poisson)
 
-    case('fftw')       
+    case('fftw')
 
-       ! setup[rho(r)] 
+       ! setup[rho(r)]
        fftwrho_arrayin  = cmplx(rho,zero,double_cplx)
 
-       ! FFT_F[rho(r)] => rho(G)      
+       ! FFT_F[rho(r)] => rho(G)
        call fft3_exec_wrapper( fftwrho_arrayin, ng , +1 )
 
        ! scale[rho_(G)] = 4pi*rho(G)/|G|^2
        fftwrho_arrayin = fourpi*fftwrho_arrayin*reckernel
-       
+
        ! FFT_B[4pi*rho(G)/|G|^2] = V(r')
        call fft3_exec_wrapper( fftwrho_arrayin, ng , -1 )
-       
+
        ! Normalization
        potential = real(fftwrho_arrayin) / fftwnorm**2
+    case('hipfft')
 
-    case('isf')       
+       ! setup[rho(r)]
+       fftwrho_arrayin  = cmplx(rho,zero,double_cplx)
+
+       ! FFT_F[rho(r)] => rho(G)
+       call hipfft3_exec_wrapper( fftwrho_arrayin, ng , +1 )
+
+       ! scale[rho_(G)] = 4pi*rho(G)/|G|^2
+       fftwrho_arrayin = fourpi*fftwrho_arrayin*reckernel
+
+       ! FFT_B[4pi*rho(G)/|G|^2] = V(r')
+       call hipfft3_exec_wrapper( fftwrho_arrayin, ng , -1 )
+
+       ! Normalization
+       potential = real(fftwrho_arrayin) / fftwnorm**2
+    case('isf')
        !
        call cq_abort('EXX with ISF Poisson solver disabled')
        !
@@ -253,12 +269,12 @@ contains
        !isf_pot_ion = zero
        !
        !call PSolver('F','G',0,1,ng,ng,ng,0,grid_spacing,grid_spacing,grid_spacing, &
-       !     isf_rho,kernel,isf_pot_ion,isf_eh,isf_exc,isf_vxc,zero,.false.,1)       
+       !     isf_rho,kernel,isf_pot_ion,isf_eh,isf_exc,isf_vxc,zero,.false.,1)
        !potential = isf_rho
        !
     end select
 
-    !call stop_timer(tmr_std_exx_poisson,accumulate)    
+    !call stop_timer(tmr_std_exx_poisson,accumulate)
 
     return
   end subroutine exx_v_on_grid
@@ -275,27 +291,27 @@ contains
     real(double), intent(in)  :: dv
     real(double), intent(out) :: charge
     integer                   :: i, j, k
-    
+
     charge = zero
-    
+
     do i = 1, 2*extent+1
        do j = 1, 2*extent+1
-          do k = 1, 2*extent+1                                    
+          do k = 1, 2*extent+1
              charge = charge + rho(k,j,i)*dv
           end do
        end do
     end do
-    
+
     return
   end subroutine exx_ewald_charge
 
   subroutine exx_ewald_rho(gauss,extent,alpha,r_int)
-    
+
     use numbers,         ONLY: zero, one, two, three_halves
     use numbers,         ONLY: twopi, pi, three_halves
 
     implicit none
-    
+
     integer,      intent(in)    :: extent
     real(double), intent(inout) :: alpha
     real(double), intent(in)    :: r_int
@@ -307,23 +323,23 @@ contains
     real(double)             :: r(3)
 
     integer                  :: i, j, k
-    
-    grid_spacing = r_int/real(extent,double)     
+
+    grid_spacing = r_int/real(extent,double)
     factor       = (alpha/pi)**three_halves
     !factor   = one
     dv           = grid_spacing**3
 
     gauss    = zero
     gnorm    = zero
-    do i = -extent, extent      
+    do i = -extent, extent
        r(1) = real(i,double)*grid_spacing
        do j = -extent, extent
           r(2) = real(j,double)*grid_spacing
           do k = -extent, extent
              r(3) = real(k,double)*grid_spacing
-             
+
              gauss(extent+k+1,extent+i+1,extent+j+1) = &
-                  exp(-dot_product(r,r)*alpha)             
+                  exp(-dot_product(r,r)*alpha)
              gnorm = &
                   gnorm + gauss(extent+k+1,extent+j+1,extent+i+1)*dv
 
@@ -336,9 +352,9 @@ contains
 
     return
   end subroutine exx_ewald_rho
-  
+
   subroutine exx_ewald_pot(potential,extent,alpha,r_int)
-    
+
     use numbers,         ONLY: zero, one, two, twopi, pi
     use functions,      ONLY: erfc_cq
 
@@ -354,26 +370,26 @@ contains
     real(double)             :: grid_spacing, r(3)
 
     integer                  :: i, j, k
-    
-    grid_spacing = r_int/real(extent,double)     
-    dv           = grid_spacing**3   
+
+    grid_spacing = r_int/real(extent,double)
+    dv           = grid_spacing**3
 
     potential    = zero
-    do i = -extent, extent      
+    do i = -extent, extent
        r(1) = real(i,double)*grid_spacing
-       do j = -extent, extent      
+       do j = -extent, extent
           r(2) = real(j,double)*grid_spacing
-          do k = -extent, extent      
+          do k = -extent, extent
              r(3) = real(k,double)*grid_spacing
-             
+
              if (i == 0 .and. j == 0 .and. k==0) then
                 potential(extent+k+1,extent+j+1,extent+i+1) = two*sqrt(alpha/pi)
              else
                 arg    = sqrt(dot_product(r,r))*sqrt(alpha)
                 factor = one/sqrt(dot_product(r,r))
-                potential(extent+k+1,extent+j+1,extent+i+1) = (one - erfc_cq(arg))*factor             
+                potential(extent+k+1,extent+j+1,extent+i+1) = (one - erfc_cq(arg))*factor
              end if
-             
+
           end do
        end do
     end do
@@ -386,7 +402,7 @@ contains
 !!$subroutine createBeylkin(p_gauss,w_gauss,r_int)
 !!$
 !!$    use numbers, ONLY: zero, one, two, twopi, pi
-!!$    
+!!$
 !!$    implicit none
 !!$
 !!$    ! << Passed variables >>
@@ -395,7 +411,7 @@ contains
 !!$    ! << Local variables >>
 !!$    integer, parameter :: n_gauss = 89
 !!$    real(double)       :: ur_gauss,dr_gauss,acc_gauss
-!!$    real(double)       :: norm, vol, factor1, factor2 
+!!$    real(double)       :: norm, vol, factor1, factor2
 !!$    real(double)       :: p_gauss(n_gauss)
 !!$    real(double)       :: w_gauss(n_gauss)
 !!$
@@ -407,10 +423,10 @@ contains
 !!$
 !!$    factor1 = one/norm
 !!$    factor2 = one/vol
-!!$        
+!!$
 !!$    call gequad(n_gauss,p_gauss,w_gauss,ur_gauss,dr_gauss,acc_gauss)
-!!$        
+!!$
 !!$    return
 !!$  end subroutine createBeylkin
-  
+
 end module exx_poisson
