@@ -3337,11 +3337,12 @@ second:   do
   subroutine print_atomic_positions
 
     use global_module, only: atom_coord, iprint_MD, ni_in_cell, species_glob
-    use dimens,         only: r_super_x, r_super_y, r_super_z, atomicnum, volume
+    use dimens,         only: r_super_x, r_super_y, r_super_z, atomicnum
     use GenComms, only: inode, ionode
     use units, only: dist_conv, d_units, dist_units, BohrToAng, bohr
     use periodic_table, only: pte
     use pseudo_tm_info, only: pseudo
+    use lattice_module, only: volume
 
     implicit none
 

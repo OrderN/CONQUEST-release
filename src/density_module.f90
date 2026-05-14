@@ -1364,13 +1364,15 @@ contains
     use group_module,        only: blocks, parts
     use dimens,              only: RadiusAtomf, atomicnum
 
-    implicit none
+    use grid_module, only: dcell_block, dcell_grid, grid_point_volume
+    use lattice_module, only: get_pos_cart
 
+    implicit none
     ! Local variables
     integer      :: blk, no_of_ib_ia, n, n_i, ipos, jpos, stat, at,   &
                     atomi, atomj, point
     integer      :: ipart, jpart, ind_part, ia, ii, icover, ig_atom,  &
-                    iatom, iblock, the_species
+                    iatom, the_species
     real(double) :: sum, mu, sij, sji, Rij
     real(double) :: dcellx_block, dcelly_block, dcellz_block
     real(double) :: xblock, yblock, zblock, aij, chi, uij, nu
@@ -1380,6 +1382,9 @@ contains
                                                  rcut, rad
     real(double), dimension(:,:), allocatable :: r_store, x_store,    &
                                                  y_store, z_store
+
+    real(double) :: frac_block(3), cart_block(3), frac_grid(3), cart_grid(3)
+
 
     call start_timer(tmr_std_chargescf)
     if(inode==ionode.AND.iprint_SC>=2) &
@@ -1397,15 +1402,30 @@ contains
     allocate(bw(no_of_ib_ia),STAT=stat)
     bw = -one
     no_of_ib_ia=0
-    dcellx_block=rcellx/blocks%ngcellx
-    dcelly_block=rcelly/blocks%ngcelly
-    dcellz_block=rcellz/blocks%ngcellz
+
+! Non-orthorhombic cell : TM (2026Mar15)
+!   defines dcell_block(:)
+    call set_grid_parameters
+    
+!old    dcellx_block=rcellx/blocks%ngcellx
+!old    dcelly_block=rcelly/blocks%ngcelly
+!old    dcellz_block=rcellz/blocks%ngcellz
+
     ! atomcharge = zero   ! LT: seems to be redundant 2011/06/18
     if(flag_perform_cdft) bwgrid = zero
     do blk=1, domain%groups_on_node
-       xblock=(domain%idisp_primx(blk)+domain%nx_origin-1)*dcellx_block
-       yblock=(domain%idisp_primy(blk)+domain%ny_origin-1)*dcelly_block
-       zblock=(domain%idisp_primz(blk)+domain%nz_origin-1)*dcellz_block
+
+       frac_block(1) = domain%idisp_primx(blk) + domain%nx_origin - 1
+       frac_block(2) = domain%idisp_primy(blk) + domain%ny_origin - 1
+       frac_block(3) = domain%idisp_primz(blk) + domain%nz_origin - 1
+       frac_block(:) = frac_block(:) * dcell_block(:) 
+       call get_pos_cart(frac_block, cart_block)
+         xblock=cart_block(1); yblock=cart_block(2); zblock=cart_block(3)
+
+       !old xblock=(domain%idisp_primx(blk)+domain%nx_origin-1)*dcellx_block
+       !old yblock=(domain%idisp_primy(blk)+domain%ny_origin-1)*dcelly_block
+       !old zblock=(domain%idisp_primz(blk)+domain%nz_origin-1)*dcellz_block
+
        if(naba_atoms_of_blocks(atomf)%no_of_atom(blk) > 0) then
           allocate(xatom(naba_atoms_of_blocks(atomf)%no_of_atom(blk)),                   &
                    yatom(naba_atoms_of_blocks(atomf)%no_of_atom(blk)),                   &
@@ -1600,10 +1620,12 @@ contains
                                    nspin, spin_factor
     use cover_module,        only: DCS_parts
     use group_module,        only: blocks, parts
-    use dimens,              only: RadiusAtomf, grid_point_volume,    &
-                                   atomicnum
+    use dimens,              only: RadiusAtomf, atomicnum
     use cdft_data,           only: cDFT_Type, cDFT_Fix_Charge,        &
                                    cDFT_Fix_ChargeDifference, cDFT_Vc
+
+    use grid_module, only: dcell_block, dcell_grid, grid_point_volume
+    use lattice_module, only: get_pos_cart
 
     implicit none
 
@@ -1613,7 +1635,7 @@ contains
     integer      :: blk, no_of_ib_ia, n, n_i, ipos, jpos, stat, at,    &
                     atomi, atomj, point
     integer      :: ipart, jpart, ind_part, ia, ii, icover, ig_atom,   &
-                    iatom, iblock, the_species, gi, spin
+                    iatom, the_species, gi, spin
     real(double) :: sum, mu, sij, sji, Rij, dwjbydix, dwjbydiy,        &
                     dwjbydiz, elec_here
     real(double) :: dmux, dmuy, dmuz, tij, tji, sum1x, sum2x, sum1y,   &
@@ -1629,6 +1651,7 @@ contains
                                                  y_store, z_store
     real(double), dimension(:),   allocatable :: sum0x, sum0y, sum0z
 
+    real(double) :: frac_block(3), cart_block(3), frac_grid(3), cart_grid(3)
 
 
     call start_timer(tmr_std_chargescf)
@@ -1636,14 +1659,28 @@ contains
     if (inode == ionode .AND. iprint_SC >= 2)&
          write(io_lun, fmt='(2x,"Entering build_Becke_weight_forces")')
     no_of_ib_ia = 0
-    dcellx_block = rcellx / blocks%ngcellx
-    dcelly_block = rcelly / blocks%ngcelly
-    dcellz_block = rcellz / blocks%ngcellz
+
+! Non-orthorhombic cell : TM (2026Mar15)
+!   defines dcell_block(:)
+    call set_grid_parameters
+                
+    !old dcellx_block = rcellx / blocks%ngcellx
+    !old dcelly_block = rcelly / blocks%ngcelly
+    !old dcellz_block = rcellz / blocks%ngcellz
+
     ! atomcharge = zero       ! LT seems redundant 2011/06/18
     do blk=1, domain%groups_on_node
-       xblock = (domain%idisp_primx(blk) + domain%nx_origin-1) * dcellx_block
-       yblock = (domain%idisp_primy(blk) + domain%ny_origin-1) * dcelly_block
-       zblock = (domain%idisp_primz(blk) + domain%nz_origin-1) * dcellz_block
+       frac_block(1) = domain%idisp_primx(blk) + domain%nx_origin - 1
+       frac_block(2) = domain%idisp_primy(blk) + domain%ny_origin - 1
+       frac_block(3) = domain%idisp_primz(blk) + domain%nz_origin - 1
+       frac_block(:) = frac_block(:) * dcell_block(:)
+       call get_pos_cart(frac_block, cart_block)
+         xblock=cart_block(1); yblock=cart_block(2); zblock=cart_block(3)
+
+       !old xblock = (domain%idisp_primx(blk) + domain%nx_origin-1) * dcellx_block
+       !old yblock = (domain%idisp_primy(blk) + domain%ny_origin-1) * dcelly_block
+       !old zblock = (domain%idisp_primz(blk) + domain%nz_origin-1) * dcellz_block
+
        if (naba_atoms_of_blocks(atomf)%no_of_atom(blk) > 0) then
           allocate(xatom(naba_atoms_of_blocks(atomf)%no_of_atom(blk)),                   &
                    yatom(naba_atoms_of_blocks(atomf)%no_of_atom(blk)),                   &
