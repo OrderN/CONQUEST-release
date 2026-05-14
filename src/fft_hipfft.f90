@@ -29,7 +29,7 @@ contains
     complex(double_cplx), intent(inout) :: cdata_h(nsize,nsize,nsize)
 
     integer :: ierr
-    complex(double_cplx), pointer :: cdata_d(:,:,:)
+    complex(double_cplx), pointer, contiguous :: cdata_d(:,:,:)
     !type(c_ptr) :: cdata_d_ptr
 
     ierr = hipMalloc(cdata_d, [nsize,nsize,nsize])
