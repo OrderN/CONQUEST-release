@@ -40,9 +40,6 @@ contains
   integer :: ii, ngridx, ngridy, ngridz
  
   !dcell_block
-   !bug dcell_block (1) = cell_length(1)/blocks%ngcellx
-   !bug dcell_block (2) = cell_length(2)/blocks%ngcelly
-   !bug dcell_block (3) = cell_length(3)/blocks%ngcellz
    dcell_block (1) = one/blocks%ngcellx
    dcell_block (2) = one/blocks%ngcelly
    dcell_block (3) = one/blocks%ngcellz
