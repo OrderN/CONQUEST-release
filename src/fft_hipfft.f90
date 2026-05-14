@@ -4,7 +4,7 @@
 ! 2019/05/29 16:54 dave
 !  Added real-to-real (i.e. cosine and sine) transforms
 module hipfft_interface_module
-  use iso_c_binding, only : c_ptr, c_loc
+  use iso_c_binding, only : c_ptr, c_loc, c_sizeof
   implicit none
 
   type(c_ptr), save :: plan
@@ -34,8 +34,8 @@ contains
 
     allocate(cdata_d(nsize, nsize, nsize))
     
-    ierr = hipMalloc(cdata_d, size=[nsize,nsize,nsize])
-    ierr = hipMemcpy(cdata_d, cdata_h, [nsize,nsize,nsize], hipMemcpyHostToDevice)
+    ierr = hipMalloc(cdata_d, [nsize,nsize,nsize])
+    ierr = hipMemcpy(cdata_d, cdata_h, size(cdata_d), hipMemcpyHostToDevice)
 
     cdata_d_ptr = c_loc(cdata_d(1,1,1))
 
@@ -45,7 +45,7 @@ contains
       ierr = hipfftexecc2c_(plan, cdata_d_ptr, cdata_d_ptr, HIPFFT_BACKWARD)
     end if
 
-    ierr = hipMemcpy(cdata_d, cdata_h, [nsize,nsize,nsize], hipMemcpyDeviceToHost)
+    ierr = hipMemcpy(cdata_d, cdata_h, size(cdata_d), hipMemcpyDeviceToHost)
 
   end subroutine hipfft3_exec_wrapper
 
