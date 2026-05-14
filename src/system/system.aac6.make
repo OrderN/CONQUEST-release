@@ -50,11 +50,11 @@ XC_COMPFLAGS =
 FFT_LIB=-lfftw3
 FFT_LIB=-L/shared/apps/ubuntu/opt/rocmplus-7.2.0/fftw-v3.3.10/lib -lfftw3
 # FFT_LIB=-L/shared/apps/ubuntu/rocmplus-afar-22.2.0/fftw-v3.3.10/lib -lfftw3
-FFT_OBJ=fft_fftw3.o
+FFT_OBJ=fft_fftw3.o fft_hipfft.o
 
 # Set ELPA library
-# ELPA_LIB = -L/shared/apps/ubuntu/opt/rocmplus-7.2.0/elpa-vmaster-c7234ec/lib -lelpa
-# ELPA_INC = -I/shared/apps/ubuntu/opt/rocmplus-7.2.0/elpa-vmaster-c7234ec/include/elpa-2026.02.001/modules/
+#ELPA_LIB = -L/shared/apps/ubuntu/opt/rocmplus-7.2.0/elpa-vmaster-c7234ec/lib -lelpa
+#ELPA_INC = -I/shared/apps/ubuntu/opt/rocmplus-7.2.0/elpa-vmaster-c7234ec/include/elpa-2026.02.001/modules/
 ELPA_LIB = 
 ELPA_INC = 
 #ELPA_LIB = -L/**/lib -lelpa
@@ -64,11 +64,11 @@ LIBS= $(FFT_LIB) $(ELPA_LIB) $(XC_LIB) $(SCALAPACK) $(BLAS)
 
 # Compilation flags
 # NB for gcc10 you need to add -fallow-argument-mismatch
-COMPFLAGS= -O3 $(OMPFLAGS) $(XC_COMPFLAGS) $(ELPA_INC)
+COMPFLAGS= -O3 -g $(OMPFLAGS) $(XC_COMPFLAGS) $(ELPA_INC) -I${ROCM_PATH}/include/hipfort/amdgcn
 
 # Linking flags
 # LINKFLAGS= -L/usr/local/lib $(OMPFLAGS) -lflang_rt.hostdevice #runtime
-LINKFLAGS= -L/usr/local/lib $(OMPFLAGS)
+LINKFLAGS= -L/usr/local/lib $(OMPFLAGS)  -L${ROCM_PATH}/lib -lhipfort-amdgcn  -lamdhip64 -lhipfft
 
 # Matrix multiplication kernel type
 MULT_KERN = default
