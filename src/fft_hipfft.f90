@@ -12,17 +12,17 @@ module hipfft_interface_module
 contains
 
   subroutine hipfft3_init_wrapper( nsize )
-    use hipfort_hipfft, only : hipfftplan3d_, HIPFFT_C2C
+    use hipfort_hipfft, only : hipfftplan3d, HIPFFT_Z2Z
 
     integer, intent(in)  :: nsize
     integer :: ierr
 
-    ierr = hipfftplan3d_(plan, nsize, nsize, nsize, HIPFFT_C2C)
+    ierr = hipfftplan3d(plan, nsize, nsize, nsize, HIPFFT_Z2Z)
   end subroutine hipfft3_init_wrapper
 
   subroutine hipfft3_exec_wrapper( cdata_h, nsize, isign )
     use hipfort, only : hipMalloc, hipMemcpy, hipMemcpyHostToDevice, hipMemcpyDeviceToHost
-    use hipfort_hipfft, only : hipfftexecc2c_, HIPFFT_BACKWARD, HIPFFT_FORWARD
+    use hipfort_hipfft, only : hipfftexecz2z, HIPFFT_BACKWARD, HIPFFT_FORWARD
     use datatypes, only : double_cplx
 
     integer :: nsize, isign
@@ -30,22 +30,20 @@ contains
 
     integer :: ierr
     complex(double_cplx), pointer :: cdata_d(:,:,:)
-    type(c_ptr) :: cdata_d_ptr
+    !type(c_ptr) :: cdata_d_ptr
 
-    allocate(cdata_d(nsize, nsize, nsize))
-    
     ierr = hipMalloc(cdata_d, [nsize,nsize,nsize])
-    ierr = hipMemcpy(cdata_d, cdata_h, size(cdata_d), hipMemcpyHostToDevice)
+    ierr = hipMemcpy(cdata_d, cdata_h, nsize*nsize*nsize, hipMemcpyHostToDevice)
 
-    cdata_d_ptr = c_loc(cdata_d(1,1,1))
+    !cdata_d_ptr = c_loc(cdata_d(1,1,1))
 
     if( (-1)*isign == -1 ) then ! forward
-      ierr = hipfftexecc2c_(plan, cdata_d_ptr, cdata_d_ptr, HIPFFT_FORWARD)
+      ierr = hipfftexecz2z(plan, cdata_d, cdata_d, HIPFFT_FORWARD)
     else if( (-1)*isign == +1 ) then ! reverse
-      ierr = hipfftexecc2c_(plan, cdata_d_ptr, cdata_d_ptr, HIPFFT_BACKWARD)
+      ierr = hipfftexecz2z(plan, cdata_d, cdata_d, HIPFFT_BACKWARD)
     end if
 
-    ierr = hipMemcpy(cdata_d, cdata_h, size(cdata_d), hipMemcpyDeviceToHost)
+    ierr = hipMemcpy(cdata_h, cdata_d, nsize*nsize*nsize, hipMemcpyDeviceToHost)
 
   end subroutine hipfft3_exec_wrapper
 
