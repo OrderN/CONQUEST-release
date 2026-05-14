@@ -41,6 +41,9 @@ contains
     else if( (-1)*isign == +1 ) then ! reverse
       call hipfftexecc2c_(plan, cdata_d_ptr, cdata_d_ptr, HIPFFT_BACKWARD)
     end if
+
+    ierr = hipMemcpy(cdata_d, cdata_h, [nsize,nsize,nsize], hipMemcpyDeviceToHost)
+
   end subroutine hipfft3_exec_wrapper
 
   subroutine hipfft3_dest_wrapper( )
