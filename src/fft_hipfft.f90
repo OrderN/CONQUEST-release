@@ -21,7 +21,7 @@ contains
   end subroutine hipfft3_init_wrapper
 
   subroutine hipfft3_exec_wrapper( cdata_h, nsize, isign )
-    use hipfort, only : hipMalloc, hipMemcpy, hipMemcpyHostToDevice
+    use hipfort, only : hipMalloc, hipMemcpy, hipMemcpyHostToDevice, hipMemcpyDeviceToHost
     use hipfort_hipfft, only : hipfftexecc2c_, HIPFFT_BACKWARD, HIPFFT_FORWARD
     use datatypes, only : double_cplx
 
@@ -29,18 +29,20 @@ contains
     complex(double_cplx), intent(inout) :: cdata_h(nsize,nsize,nsize)
 
     integer :: ierr
-    complex(double_cplx), pointer :: cdata_d(nsize,nsize,nsize)
+    complex(double_cplx), pointer :: cdata_d(:,:,:)
     type(c_ptr) :: cdata_d_ptr
 
+    allocate(cdata_d(nsize, nsize, nsize))
+    
     ierr = hipMalloc(cdata_d, size=[nsize,nsize,nsize])
     ierr = hipMemcpy(cdata_d, cdata_h, [nsize,nsize,nsize], hipMemcpyHostToDevice)
 
     cdata_d_ptr = c_loc(cdata_d(1,1,1))
 
     if( (-1)*isign == -1 ) then ! forward
-      call hipfftexecc2c_(plan, cdata_d_ptr, cdata_d_ptr, HIPFFT_FORWARD)
+      ierr = hipfftexecc2c_(plan, cdata_d_ptr, cdata_d_ptr, HIPFFT_FORWARD)
     else if( (-1)*isign == +1 ) then ! reverse
-      call hipfftexecc2c_(plan, cdata_d_ptr, cdata_d_ptr, HIPFFT_BACKWARD)
+      ierr = hipfftexecc2c_(plan, cdata_d_ptr, cdata_d_ptr, HIPFFT_BACKWARD)
     end if
 
     ierr = hipMemcpy(cdata_d, cdata_h, [nsize,nsize,nsize], hipMemcpyDeviceToHost)
@@ -48,6 +50,7 @@ contains
   end subroutine hipfft3_exec_wrapper
 
   subroutine hipfft3_dest_wrapper( )
+    use hipfort_hipfft, only : hipfftdestroy_
     integer :: ierr
     ierr = hipfftdestroy_(plan)
   end subroutine hipfft3_dest_wrapper
