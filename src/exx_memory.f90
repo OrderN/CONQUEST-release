@@ -41,6 +41,7 @@ module exx_memory
   use GenComms,                  ONLY: cq_abort
 
   use fft_interface_module,      ONLY: fft3_init_wrapper
+  use hipfft_interface_module, ONLY: hipfft3_init_wrapper
   !**<lat>** don't touch
   !use fftw_module
   !use fft_interface_module,      ONLY: fft3_dest_wrapper
@@ -255,6 +256,7 @@ contains
           !     fftwrho3d%arrayin,fftwrho3d%arrayout,FFTW_BACKWARD,FFTW_ESTIMATE)          
           !
           call fft3_init_wrapper( 2*extent+1  )
+          call hipfft3_init_wrapper( 2*extent+1 )
           !
           fftwrho3d%arrayin  = cmplx(zero,zero,double_cplx)
           fftwrho3d%arrayout = cmplx(zero,zero,double_cplx)
