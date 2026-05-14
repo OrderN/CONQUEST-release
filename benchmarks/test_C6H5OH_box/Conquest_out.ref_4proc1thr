@@ -1,0 +1,308 @@
+    ________________________________________________________________________
+                                                                            
+                                    CONQUEST                                
+                                                                            
+                Concurrent Order N QUantum Electronic STructure             
+    ________________________________________________________________________
+                                                                            
+     Conquest lead developers:                                              
+      D.R.Bowler (UCL, NIMS), T.Miyazaki (NIMS), A.Nakata (NIMS),           
+      L. Truflandier (U. Bordeaux)                                          
+                                                                            
+     Developers:                                                            
+      M.Arita (NIMS), J.S.Baker (UCL), V.Brazdova (UCL), R.Choudhury (UCL), 
+      S.Y.Mujahed (UCL), J.T.Poulton (UCL), Z.Raza (NIMS), A.Sena (UCL),    
+      U.Terranova (UCL), L.Tong (UCL), A.Torralba (NIMS)                    
+                                                                            
+     Early development:                                                     
+      I.J.Bush (STFC), C.M.Goringe (Keele), E.H.Hernandez (Keele)           
+                                                                            
+     Original inspiration and project oversight:                            
+      M.J.Gillan (Keele, UCL)                                               
+    ________________________________________________________________________
+
+          Reading ion files
+
+          symbol = H 
+          label = H                   
+          z =      1.00000
+          zval_int, zval =      1.00000
+          mass =      1.01000000000000    
+          self_energy =      0.00000000000000    
+          lmax_basis, n_orbnl =    1   2
+          lmax_projs, n_pjnl =    1   3
+          XC functional code =      101
+          PSEUDO_TM: i, l,n, ekb =   0  1   -1.7011234742000001
+          PSEUDO_TM: i, l,n, ekb =   0  2   -0.5344839179999999
+          PSEUDO_TM: i, l,n, ekb =   1  1   -0.5033211149000000
+          symbol = C 
+          label = C                   
+          z =      6.00000
+          zval_int, zval =      4.00000
+          mass =      12.0100000000000    
+          self_energy =      0.00000000000000    
+          lmax_basis, n_orbnl =    1   2
+          lmax_projs, n_pjnl =    1   4
+          XC functional code =      101
+          PSEUDO_TM: i, l,n, ekb =   0  1    6.4815481566999997
+          PSEUDO_TM: i, l,n, ekb =   0  2    0.3855036449000000
+          PSEUDO_TM: i, l,n, ekb =   1  1   -4.1999614092000002
+          PSEUDO_TM: i, l,n, ekb =   1  2   -0.8775166599000001
+          symbol = O 
+          label = O                   
+          z =      8.00000
+          zval_int, zval =      6.00000
+          mass =      16.0000000000000    
+          self_energy =      0.00000000000000    
+          lmax_basis, n_orbnl =    1   2
+          lmax_projs, n_pjnl =    2   5
+          XC functional code =      101
+          PSEUDO_TM: i, l,n, ekb =   0  1    6.0567354738999999
+          PSEUDO_TM: i, l,n, ekb =   0  2    0.8240240975999999
+          PSEUDO_TM: i, l,n, ekb =   1  1   -4.7171295599000000
+          PSEUDO_TM: i, l,n, ekb =   1  2   -1.1492706850000001
+          PSEUDO_TM: i, l,n, ekb =   2  1   -1.3319549945000000
+
+WARNING: Functional in input file differs to pseudopotential but proceeding:      201     101
+
+
+WARNING: Functional in input file differs to pseudopotential but proceeding:      201     101
+
+
+WARNING: Functional in input file differs to pseudopotential but proceeding:      201     101
+
+
+    Simulation cell dimensions:    18.8973 a0 x    18.8973 a0 x    18.8973 a0
+
+    Simulation cell volume:      6748.3342 a0**3
+
+      Atomic coordinates (a0)
+         Atom         X         Y         Z  Species
+            1    7.3377    9.4607    8.0846        2
+            2    7.3654    9.4695   10.8098        2
+            3    9.7154    9.4702   12.1377        2
+            4   12.0659    9.4683   10.8007        2
+            5   12.0417    9.4702    8.0981        2
+            6    9.6999    9.4694    6.7310        2
+            7    5.4779    9.4673   11.8955        1
+            8    9.7054    9.4685   14.3144        1
+            9   13.9488    9.4677   11.8908        1
+           10   13.9289    9.4682    7.0082        1
+           11    9.7173    9.4672    4.5568        1
+           12    4.9734    9.4306    6.8851        3
+           13    5.4623    9.4351    4.9889        1
+        Number of processor groups for k-point parallelisation:     1
+
+WARNING: PaddingHmatrix is forced to be false
+
+        Block size (row, col):    13   13
+        Proc grid (row, col):     1    4
+        Number of Kpoints:    1
+
+    Default k-point sampling of Gamma point only
+         All    1 Kpoints in fractional coordinates: 
+            1       0.000000       0.000000       0.000000       1.000
+          Value of kT used for smearing:   0.001000Ha
+          Partitioning method:  1
+          Partitioning using Hilbert curves
+          ---------------------------------
+
+          checking if total number of partitions >= number of procs...           PASS
+          checking if number of occupied partitions >= number of procs...           PASS
+          checking if total N atoms in partitions == N atoms in cell...           PASS
+          checking if total N support fns in partitions == N sf in cell...           PASS
+          checking if atoms are correctly assigned to partitions...           PASS
+
+          Detected system type: bulk
+
+
+    This calculation includes non-local pseudopotentials,
+    with a maximum core radius of      6.72726398
+        Matrix S   has range     14.17294575
+        Matrix L   has range      1.00000000
+        Matrix H   has range     14.17294575
+        Matrix AP  has range     13.81373685
+        Matrix LS  has range     15.17294575
+        Matrix LH  has range     15.17294575
+        Matrix LSL has range     16.17294575
+        Matrix SLS has range     29.34589150
+        Matrix T   has range     13.45452796
+        Matrix TS  has range     27.62747371
+        Matrix TH  has range     27.62747371
+        Matrix TL  has range     14.45452796
+        Matrix PA  has range     13.81373685
+        Matrix LT  has range      1.00000000
+        Matrix SL  has range     15.17294575
+        Matrix TT  has range     13.45452796
+        Matrix HL  has range     15.17294575
+        Matrix X   has range     14.17294575
+        Matrix SX  has range     14.17294575
+
+    This job was run on  2026/03/12 at 18:41 +0100
+    Code was compiled on 2026/02/21 at 17:06 +0100
+    Version comment: Git Branch: develop; tag, hash: v1.4-59-gefaea41d
+
+    Job title:                                                                                 
+    Job to be run: static calculation
+
+    Ground state search:
+      Support functions represented with PAO basis
+      1:1 PAO to SF mapping
+      Non-spin-polarised electrons
+      Solving for the K matrix using diagonalisation 
+      Using Fermi-Dirac smearing
+
+    Integration grid size:     80 x   80 x   80
+    Integration grid blocks:    4 x    4 x    4
+
+    Integration grid spacing:  0.236 a0 x 0.236 a0 x 0.236 a0
+
+    Number of species:  3
+    --------------------------------------------------------
+    |   #  mass (au)  Charge (e)  SF Rad (a0)  NSF  Label  |
+    --------------------------------------------------------
+    |   1      1.008       1.000        7.086    4  H      |
+    |   2     12.011       4.000        6.614    4  C      |
+    |   3     15.999       6.000        5.197    4  O      |
+    --------------------------------------------------------
+          SCF tolerance:                 0.00000100
+          SCF iterations:                50
+    Hamann (ONCVPSP) pseudopotential will be used. 
+
+    The calculation will be performed on     4 processes
+
+    The calculation will be performed on     1 thread
+
+    Using the default matrix multiplication kernel
+
+    The functional used will be hyb PBE0       
+
+
+           radial cut-off to be used is taken to be max PAO cut-off radius for this species:    6.727264
+
+           greatest ang. mom. for making density from PAOs:  1
+
+           radial cut-off to be used is taken to be max PAO cut-off radius for this species:    6.247137
+
+           greatest ang. mom. for making density from PAOs:  1
+
+           radial cut-off to be used is taken to be max PAO cut-off radius for this species:    4.914330
+
+           greatest ang. mom. for making density from PAOs:  1
+    Minimum blocs/proc is     1375. Maximum blocs/proc is     2250
+    set_atom_dens: In set_atomic_density, electrons :      36.000000000000
+ matrix_size & matrix_size_padH =           52          52
+
+    Screened ion int: energy:     -37.082248954818 Ha
+
+    new_SC_potl: Starting.  Tolerance:  0.10000E-05
+
+    PulayMixSC: Starting Pulay mixing, A_up =  0.500 A_dn =  0.500
+    PulayMixSC: Spin non-polarised calculation.
+          Harris-Foulkes Energy            :       -51.526357178087096 Ha
+          (TS=0 as O(N) or entropic contribution is negligible)
+          DFT Total Energy                 :       -51.448243956252078 Ha
+          Total number of electrons        :        35.999999999999886
+    PulayMixSC: Pulay iteration     1 residual:              0.51720E-02
+          Harris-Foulkes Energy            :       -54.904646075666115 Ha
+          (TS=0 as O(N) or entropic contribution is negligible)
+          DFT Total Energy                 :       -54.877105796035337 Ha
+          Total number of electrons        :        36.000006706730318
+    PulayMixSC: Pulay iteration     2 residual:              0.29697E-02
+          Harris-Foulkes Energy            :       -54.906784878676746 Ha
+          (TS=0 as O(N) or entropic contribution is negligible)
+          DFT Total Energy                 :       -54.901071951034304 Ha
+          Total number of electrons        :        36.000009706163752
+    PulayMixSC: Pulay iteration     3 residual:              0.13393E-02
+          Harris-Foulkes Energy            :       -54.893432197968458 Ha
+          (TS=0 as O(N) or entropic contribution is negligible)
+          DFT Total Energy                 :       -54.891444464325424 Ha
+          Total number of electrons        :        36.000011441165782
+    PulayMixSC: Pulay iteration     4 residual:              0.55351E-03
+          Harris-Foulkes Energy            :       -54.892448518907315 Ha
+          (TS=0 as O(N) or entropic contribution is negligible)
+          DFT Total Energy                 :       -54.892360266737718 Ha
+          Total number of electrons        :        36.000011688819285
+    PulayMixSC: Pulay iteration     5 residual:              0.12150E-03
+          Harris-Foulkes Energy            :       -54.895582525317359 Ha
+          (TS=0 as O(N) or entropic contribution is negligible)
+          DFT Total Energy                 :       -54.895507173219379 Ha
+          Total number of electrons        :        36.000011763783036
+    PulayMixSC: Pulay iteration     6 residual:              0.10484E-03
+          Harris-Foulkes Energy            :       -54.896059951502146 Ha
+          (TS=0 as O(N) or entropic contribution is negligible)
+          DFT Total Energy                 :       -54.896058484795986 Ha
+          Total number of electrons        :        36.000011790243008
+    PulayMixSC: Pulay iteration     7 residual:              0.17248E-04
+          Harris-Foulkes Energy            :       -54.895509180610745 Ha
+          (TS=0 as O(N) or entropic contribution is negligible)
+          DFT Total Energy                 :       -54.895508219845148 Ha
+          Total number of electrons        :        36.000011804757307
+    PulayMixSC: Pulay iteration     8 residual:              0.11405E-04
+          Harris-Foulkes Energy            :       -54.895448986614788 Ha
+          (TS=0 as O(N) or entropic contribution is negligible)
+          DFT Total Energy                 :       -54.895448981280005 Ha
+          Total number of electrons        :        36.000011809811255
+    PulayMixSC: Pulay iteration     9 residual:              0.10737E-05
+          Harris-Foulkes Energy            :       -54.895495280492902 Ha
+          (TS=0 as O(N) or entropic contribution is negligible)
+          DFT Total Energy                 :       -54.895495269993418 Ha
+          Total number of electrons        :        36.000011812223718
+    PulayMixSC: Pulay iteration    10 residual:              0.12280E-05
+          Harris-Foulkes Energy            :       -54.895506247760743 Ha
+          (TS=0 as O(N) or entropic contribution is negligible)
+          DFT Total Energy                 :       -54.895506247623160 Ha
+          Total number of electrons        :        36.000011813326793
+    PulayMixSC: Pulay iteration    11 residual:              0.18844E-06
+    PulayMixSC: Reached SCF tolerance of  0.18844E-06 after     11 iterations
+      | Number of electrons      =        36.000012
+      |* band energy as 2Tr[K.H] =       -18.452706898186818 Ha
+      |  screened ion-ion energy =       -37.082248954817921 Ha
+      |  Ha correction           =        -0.965143418365650 Ha
+      |  XC correction           =         1.604594337435910 Ha
+      |* Harris-Foulkes energy   =       -54.895506247760743 Ha
+      |* DFT total energy        =       -54.895506247623160 Ha
+      |  estimated accuracy      =        -0.000000000137582 Ha
+
+WARNING: For hybrid PBE0 forces are not consistent!
+
+
+    WARNING: For hybrid PBE0 forces are not consistent!
+
+    force: Forces on atoms (Ha/a0)
+    force:  Atom   X              Y              Z
+    force:     1   0.0150533133   0.0002984055   0.0067112519
+    force:     2  -0.0321391458   0.0001594973   0.0243558520
+    force:     3   0.0001305042   0.0001684479   0.0391790739
+    force:     4   0.0358507799  -0.0000312049   0.0209058181
+    force:     5   0.0316971920   0.0001832703  -0.0221409198
+    force:     6   0.0040556177   0.0001159213  -0.0368940357
+    force:     7  -0.0215838626  -0.0002056988   0.0115776161
+    force:     8  -0.0006647437  -0.0000461610   0.0251296345
+    force:     9   0.0221822477  -0.0001713151   0.0119663830
+    force:    10   0.0218835858  -0.0001050424  -0.0127688493
+    force:    11  -0.0021033201  -0.0001708407  -0.0282016741
+    force:    12  -0.1038080750   0.0003515434   0.0228252165
+    force:    13   0.0287664846   0.0002295475  -0.0657386963
+
+    force: Maximum force :        0.10380808(Ha/a0) on atom        12 in x direction
+    force: Force Residual:        0.04622947 Ha/a0
+    force: Total stress:         -3.65141687    -0.00925120    -3.79189269 GPa
+    force: Average pressure:      2.48418692 GPa
+
+    force: Finished force
+    get_E_and_F: Change in energy during last step of electronic optimisation: -0.10967E-04
+
+    BIBLIOGRAPHY: Please consider citing the following references in the conquest.bib file
+
+    CONQUEST:         Bowler2002pt, Miyazaki2004, Nakata2020
+    Basis:            Bowler2019
+    DM:               Bowler:2006xr
+    Pseudopotentials: Hamann2013, Bowler2019
+
+
+    Warnings written to file Conquest_warnings; please check
+
+    Max total mem use is            102.400 MB
+
+    Total run time was:             384.804 seconds
