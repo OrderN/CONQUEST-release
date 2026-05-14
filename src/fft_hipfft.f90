@@ -12,7 +12,7 @@ module hipfft_interface_module
 contains
 
   subroutine hipfft3_init_wrapper( nsize )
-    use hipfort_hifft, only : hipfftplan3d_, HIPFFT_C2C
+    use hipfort_hipfft, only : hipfftplan3d_, HIPFFT_C2C
 
     integer, intent(in)  :: nsize
 
@@ -21,7 +21,7 @@ contains
 
   subroutine hipfft3_exec_wrapper( cdata_h, nsize, isign )
     use hipfort, only : hipMalloc, hipMemcpy, hipMemcpyHostToDevice
-    use hipfort_hifft, only : hipfftexecc2c_, HIPFFT_BACKWARD, HIPFFT_FORWARD
+    use hipfort_hipfft, only : hipfftexecc2c_, HIPFFT_BACKWARD, HIPFFT_FORWARD
     use datatypes, only : double_cplx
 
     integer :: nsize, isign
