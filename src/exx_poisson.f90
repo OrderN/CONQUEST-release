@@ -218,6 +218,7 @@ contains
 
     ! ... Dummy variables >>
     real(double), dimension(:,:,:), allocatable :: dum_pot_ion, dum_rho
+    real(double) :: potential_multiplier
     integer :: ig, jg, kg
 
     ng           = 2*extent+1
@@ -251,28 +252,44 @@ contains
        ! setup[rho(r)]
        fftwrho_arrayin  = cmplx(rho,zero,double_cplx)
 
-       ! FFT_F[rho(r)] => rho(G)
-       call hipfft3_exec_wrapper( fftwrho_arrayin, ng , +1 )
+       potential_multiplier = 1.0_double / fftwnorm**2
 
-      ! Offload pointwise scale to GPU
-      ! scale[rho_(G)] = 4pi*rho(G)/|G|^2
-      !$omp target teams distribute parallel do collapse(3) &
-      !$omp& map(to: reckernel(1:ng,1:ng,1:ng))           &
-      !$omp& map(tofrom: fftwrho_arrayin(1:ng,1:ng,1:ng))
-      do ig = 1, ng
-         do jg = 1, ng
-            do kg = 1, ng
-               fftwrho_arrayin(ig,jg,kg) = fourpi * fftwrho_arrayin(ig,jg,kg) * reckernel(ig,jg,kg)
+       !$omp target data &
+       !$omp map(to: reckernel(1:ng,1:ng,1:ng)) &
+       !$omp map(tofrom: fftwrho_arrayin(1:ng,1:ng,1:ng)) &
+       !$omp map(from: potential(1:ng,1:ng,1:ng))
+
+         ! FFT_F[rho(r)] => rho(G)
+         call hipfft3_exec_wrapper( fftwrho_arrayin, ng , +1 )
+
+         ! Offload pointwise scale to GPU
+         ! scale[rho_(G)] = 4pi*rho(G)/|G|^2
+         !$omp target teams distribute parallel do collapse(3)
+         do ig = 1, ng
+            do jg = 1, ng
+               do kg = 1, ng
+                  fftwrho_arrayin(ig,jg,kg) = fourpi * fftwrho_arrayin(ig,jg,kg) * reckernel(ig,jg,kg)
+               end do
             end do
          end do
-      end do
-      !$omp end target teams distribute parallel do
+         !$omp end target teams distribute parallel do
 
-       ! FFT_B[4pi*rho(G)/|G|^2] = V(r')
-       call hipfft3_exec_wrapper( fftwrho_arrayin, ng , -1 )
+         ! FFT_B[4pi*rho(G)/|G|^2] = V(r')
+         call hipfft3_exec_wrapper( fftwrho_arrayin, ng , -1 )
 
-       ! Normalization
-       potential = real(fftwrho_arrayin) / fftwnorm**2
+         ! Normalization
+         !$omp target teams distribute parallel do collapse(3)
+         do ig = 1, ng
+            do jg = 1, ng
+               do kg = 1, ng
+                  potential(ig,jg,kg) = real(fftwrho_arrayin(ig,jg,kg)) * potential_multiplier
+               end do
+            end do
+         end do
+         !$omp end target teams distribute parallel do
+         
+       !$omp end target data
+
     case('isf')
        !
        call cq_abort('EXX with ISF Poisson solver disabled')

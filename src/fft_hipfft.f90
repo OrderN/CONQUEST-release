@@ -31,24 +31,22 @@ contains
     integer :: ierr
     complex(double_cplx), pointer, contiguous :: cdata_d_ptr(:,:,:)
 
-    !$omp target data map(tofrom: cdata(1:nsize, 1:nsize, 1:nsize))
-      !$omp target data use_device_addr(cdata(1:nsize, 1:nsize, 1:nsize))
-        ! Create pointer to device data to pass to execute kernels
-        cdata_d_ptr => cdata
-        
-        ! Execute kernel
-        if( (-1)*isign == -1 ) then ! forward
-          ierr = hipfftexecz2z(plan, cdata_d_ptr, cdata_d_ptr, HIPFFT_FORWARD)
-        else if( (-1)*isign == +1 ) then ! reverse
-          ierr = hipfftexecz2z(plan, cdata_d_ptr, cdata_d_ptr, HIPFFT_BACKWARD)
-        end if
-        if (ierr /= HIPFFT_SUCCESS) stop "hipfftexecz2z failed"
+    !$omp target data use_device_addr(cdata(1:nsize, 1:nsize, 1:nsize))
+      ! Create pointer to device data to pass to execute kernels
+      cdata_d_ptr => cdata
+      
+      ! Execute kernel
+      if( (-1)*isign == -1 ) then ! forward
+        ierr = hipfftexecz2z(plan, cdata_d_ptr, cdata_d_ptr, HIPFFT_FORWARD)
+      else if( (-1)*isign == +1 ) then ! reverse
+        ierr = hipfftexecz2z(plan, cdata_d_ptr, cdata_d_ptr, HIPFFT_BACKWARD)
+      end if
+      if (ierr /= HIPFFT_SUCCESS) stop "hipfftexecz2z failed"
 
-        ! Execute kernels run asychronously, therefore we must synchronise here
-        ierr = hipDeviceSynchronize_()
-        if (ierr /= HIPFFT_SUCCESS) stop "hipDeviceSynchronize_ failed"
+      ! Execute kernels run asychronously, therefore we must synchronise here
+      ierr = hipDeviceSynchronize_()
+      if (ierr /= HIPFFT_SUCCESS) stop "hipDeviceSynchronize_ failed"
     !$omp end target data
-  !$omp end target data
 
   end subroutine hipfft3_exec_wrapper
 
