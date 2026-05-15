@@ -218,6 +218,7 @@ contains
 
     ! ... Dummy variables >>
     real(double), dimension(:,:,:), allocatable :: dum_pot_ion, dum_rho
+    integer :: ig, jg, kg
 
     ng           = 2*extent+1
     fftwnorm     = sqrt(real(ng**3,double))
@@ -253,8 +254,19 @@ contains
        ! FFT_F[rho(r)] => rho(G)
        call hipfft3_exec_wrapper( fftwrho_arrayin, ng , +1 )
 
-       ! scale[rho_(G)] = 4pi*rho(G)/|G|^2
-       fftwrho_arrayin = fourpi*fftwrho_arrayin*reckernel
+      ! Offload pointwise scale to GPU
+      ! scale[rho_(G)] = 4pi*rho(G)/|G|^2
+      !$omp target teams distribute parallel do collapse(3) &
+      !$omp& map(to: reckernel(1:ng,1:ng,1:ng))           &
+      !$omp& map(tofrom: fftwrho_arrayin(1:ng,1:ng,1:ng))
+      do ig = 1, ng
+         do jg = 1, ng
+            do kg = 1, ng
+               fftwrho_arrayin(ig,jg,kg) = fourpi * fftwrho_arrayin(ig,jg,kg) * reckernel(ig,jg,kg)
+            end do
+         end do
+      end do
+      !$omp end target teams distribute parallel do
 
        ! FFT_B[4pi*rho(G)/|G|^2] = V(r')
        call hipfft3_exec_wrapper( fftwrho_arrayin, ng , -1 )
