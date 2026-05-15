@@ -277,18 +277,10 @@ contains
          ! FFT_B[4pi*rho(G)/|G|^2] = V(r')
          call hipfft3_exec_wrapper( fftwrho_arrayin, ng , -1 )
 
+         !$omp end target data
+
          ! Normalization
-         !$omp target teams distribute parallel do collapse(3)
-         do ig = 1, ng
-            do jg = 1, ng
-               do kg = 1, ng
-                  potential(ig,jg,kg) = real(fftwrho_arrayin(ig,jg,kg)) * potential_multiplier
-               end do
-            end do
-         end do
-         !$omp end target teams distribute parallel do
-         
-       !$omp end target data
+         potential = real(fftwrho_arrayin) * potential_multiplier
 
     case('isf')
        !
