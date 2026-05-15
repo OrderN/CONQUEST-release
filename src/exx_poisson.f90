@@ -218,7 +218,6 @@ contains
 
     ! ... Dummy variables >>
     real(double), dimension(:,:,:), allocatable :: dum_pot_ion, dum_rho
-    real(double) :: potential_multiplier
     integer :: ig, jg, kg
 
     ng           = 2*extent+1
@@ -252,8 +251,6 @@ contains
        ! setup[rho(r)]
        fftwrho_arrayin  = cmplx(rho,zero,double_cplx)
 
-       potential_multiplier = 1.0_double / fftwnorm**2
-
        !$omp target data &
        !$omp map(to: reckernel(1:ng,1:ng,1:ng)) &
        !$omp map(tofrom: fftwrho_arrayin(1:ng,1:ng,1:ng)) &
@@ -280,7 +277,7 @@ contains
          !$omp end target data
 
          ! Normalization
-         potential = real(fftwrho_arrayin) * potential_multiplier
+         potential = real(fftwrho_arrayin) / fftwnorm**2
 
     case('isf')
        !
