@@ -265,9 +265,9 @@ contains
          ! Offload pointwise scale to GPU
          ! scale[rho_(G)] = 4pi*rho(G)/|G|^2
          !$omp target teams distribute parallel do collapse(3)
-         do ig = 1, ng
+         do kg = 1, ng
             do jg = 1, ng
-               do kg = 1, ng
+               do ig = 1, ng
                   fftwrho_arrayin(ig,jg,kg) = fourpi * fftwrho_arrayin(ig,jg,kg) * reckernel(ig,jg,kg)
                end do
             end do
