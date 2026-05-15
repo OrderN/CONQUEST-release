@@ -11,8 +11,8 @@ FC=mpif90
 # OpenMP flags
 # Set this to "OMPFLAGS= " if compiling without openmp
 # Set this to "OMPFLAGS= -fopenmp" if compiling with openmp
-# OMPFLAGS=-fopenmp --offload-arch=gfx942
-OMPFLAGS=-fopenmp 
+OMPFLAGS=-fopenmp --offload-arch=gfx942
+# OMPFLAGS=-fopenmp 
 # Set this to "OMP_DUMMY = DUMMY" if compiling without openmp
 # Set this to "OMP_DUMMY = " if compiling with openmp
 OMP_DUMMY = 
