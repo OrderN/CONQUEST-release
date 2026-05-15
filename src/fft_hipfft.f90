@@ -20,30 +20,35 @@ contains
     ierr = hipfftplan3d(plan, nsize, nsize, nsize, HIPFFT_Z2Z)
   end subroutine hipfft3_init_wrapper
 
-  subroutine hipfft3_exec_wrapper( cdata_h, nsize, isign )
+  subroutine hipfft3_exec_wrapper( cdata, nsize, isign )
     use hipfort, only : hipMalloc, hipMemcpy, hipMemcpyHostToDevice, hipMemcpyDeviceToHost
-    use hipfort_hipfft, only : hipfftexecz2z, HIPFFT_BACKWARD, HIPFFT_FORWARD
+    use hipfort_hipfft, only : hipfftexecz2z, HIPFFT_BACKWARD, HIPFFT_FORWARD, HIPFFT_SUCCESS
     use datatypes, only : double_cplx
 
     integer :: nsize, isign
-    complex(double_cplx), intent(inout) :: cdata_h(nsize,nsize,nsize)
+    complex(double_cplx), intent(inout) :: cdata(nsize,nsize,nsize)
 
     integer :: ierr
-    complex(double_cplx), pointer, contiguous :: cdata_d(:,:,:)
-    !type(c_ptr) :: cdata_d_ptr
+    complex(double_cplx), pointer, contiguous :: cdata_d_ptr(:,:,:)
 
-    ierr = hipMalloc(cdata_d, [nsize,nsize,nsize])
-    ierr = hipMemcpy(cdata_d, cdata_h, nsize*nsize*nsize, hipMemcpyHostToDevice)
+    !$omp target data map(tofrom: cdata(1:nsize, 1:nsize, 1:nsize))
+      !$omp target data use_device_addr(cdata(1:nsize, 1:nsize, 1:nsize))
+        ! Create pointer to device data to pass to execute kernels
+        cdata_d_ptr => cdata
+        
+        ! Execute kernel
+        if( (-1)*isign == -1 ) then ! forward
+          ierr = hipfftexecz2z(plan, cdata_d_ptr, cdata_d_ptr, HIPFFT_FORWARD)
+        else if( (-1)*isign == +1 ) then ! reverse
+          ierr = hipfftexecz2z(plan, cdata_d_ptr, cdata_d_ptr, HIPFFT_BACKWARD)
+        end if
+        if (ierr /= HIPFFT_SUCCESS) stop "hipfftexecz2z failed"
 
-    !cdata_d_ptr = c_loc(cdata_d(1,1,1))
-
-    if( (-1)*isign == -1 ) then ! forward
-      ierr = hipfftexecz2z(plan, cdata_d, cdata_d, HIPFFT_FORWARD)
-    else if( (-1)*isign == +1 ) then ! reverse
-      ierr = hipfftexecz2z(plan, cdata_d, cdata_d, HIPFFT_BACKWARD)
-    end if
-
-    ierr = hipMemcpy(cdata_h, cdata_d, nsize*nsize*nsize, hipMemcpyDeviceToHost)
+        ! Execute kernels run asychronously, therefore we must synchronise here
+        ierr = hipDeviceSynchronize_()
+        if (ierr /= HIPFFT_SUCCESS) stop "hipDeviceSynchronize_ failed"
+    !$omp end target data
+  !$omp end target data
 
   end subroutine hipfft3_exec_wrapper
 
