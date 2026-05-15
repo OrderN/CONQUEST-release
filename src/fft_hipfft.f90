@@ -21,12 +21,12 @@ contains
   end subroutine hipfft3_init_wrapper
 
   subroutine hipfft3_exec_wrapper( cdata, nsize, isign )
-    use hipfort, only : hipMalloc, hipMemcpy, hipMemcpyHostToDevice, hipMemcpyDeviceToHost
+    use hipfort, only : hipMalloc, hipMemcpy, hipMemcpyHostToDevice, hipMemcpyDeviceToHost, hipDeviceSynchronize_
     use hipfort_hipfft, only : hipfftexecz2z, HIPFFT_BACKWARD, HIPFFT_FORWARD, HIPFFT_SUCCESS
     use datatypes, only : double_cplx
 
     integer :: nsize, isign
-    complex(double_cplx), intent(inout) :: cdata(nsize,nsize,nsize)
+    complex(double_cplx), intent(inout), target :: cdata(nsize,nsize,nsize)
 
     integer :: ierr
     complex(double_cplx), pointer, contiguous :: cdata_d_ptr(:,:,:)
