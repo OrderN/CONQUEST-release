@@ -554,8 +554,13 @@ second:   do
        ! Check for sensible number of processes
        if(ni_in_cell<numprocs) call cq_abort("We must have at least one atom per process: ",ni_in_cell,numprocs)
     end if
+
+  ! (for all process)
+  ! TM May15,2026 
     r_super_x = cell_length(1); r_super_y = cell_length(2); r_super_z=cell_length(3)
-    volume = r_super_x*r_super_y*r_super_z   !!!! TM 2026May11
+    !volume should be sett by calling set_cell_parameters
+    !volume = r_super_x*r_super_y*r_super_z   !!!! TM 2026May11
+  ! TM May15,2026
     if((iprint_init>0) .or. (iprint_init==0.AND.ni_in_cell<atom_output_threshold)) &
          call print_atomic_positions
     call gcopy(ni_in_cell)
@@ -583,10 +588,12 @@ second:   do
     call gcopy(species_glob,ni_in_cell)
     call gcopy(atom_coord, 3, ni_in_cell)
     call gcopy(flag_move_atom, 3, ni_in_cell)
-    rcellx = r_super_x
-    rcelly = r_super_y
-    rcellz = r_super_z
-    volume = r_super_x*r_super_y*r_super_z
+
+    rcellx = cell_length(1)
+    rcelly = cell_length(2)
+    rcellz = cell_length(3)
+    !volume = r_super_x*r_super_y*r_super_z ! volume should have been already set. (2026 May15 TM)
+
     allocate(atom_coord_diff(3,ni_in_cell), STAT=stat)
     if (stat.NE.0) call cq_abort('Error allocating atom_coord_diff: ', 3, ni_in_cell)
     allocate(id_glob_old(ni_in_cell),id_glob_inv_old(ni_in_cell), STAT=stat)
@@ -2947,6 +2954,7 @@ second:   do
     use species_module, only: species_label
     use GenComms,       only: inode, ionode, cq_abort
     use units,          only: BohrToAng, HaToeV
+    use lattice_module, only: volume, cell_vector
 
     ! Passed variables
     character(len=*)                      :: filename
@@ -2962,7 +2970,8 @@ second:   do
     character(len=80)          :: titles_xyz
     character(len=135)         :: stress_str
 
-    real(double)               :: for_conv_loc, en_conv_loc, dist_conv_loc, volume
+    !real(double)               :: for_conv_loc, en_conv_loc, dist_conv_loc, volume
+    real(double)               :: for_conv_loc, en_conv_loc, dist_conv_loc
 
     if(inode==ionode) then
       if (iprint_init>2) write(io_lun, &
@@ -2989,15 +2998,18 @@ second:   do
       comment = 'config_type='//TRIM(titles_xyz)
 
       ! Add information about lattice and energy
-      write(vec_a,fmt='(3f15.8)') r_super_x*BohrToAng, zero, zero
-      write(vec_b,fmt='(3f15.8)') zero, r_super_y*BohrToAng, zero
-      write(vec_c,fmt='(3f15.8)') zero, zero, r_super_z*BohrToAng
+      !old write(vec_a,fmt='(3f15.8)') r_super_x*BohrToAng, zero, zero
+      !old write(vec_b,fmt='(3f15.8)') zero, r_super_y*BohrToAng, zero
+      !old write(vec_c,fmt='(3f15.8)') zero, zero, r_super_z*BohrToAng
+      write(vec_a,fmt='(3f15.8)') cell_vector(1,1)*BohrToAng,cell_vector(2,1)*BohrToAng,cell_vector(3,1)*BohrToAng
+      write(vec_b,fmt='(3f15.8)') cell_vector(1,2)*BohrToAng,cell_vector(2,2)*BohrToAng,cell_vector(3,2)*BohrToAng
+      write(vec_c,fmt='(3f15.8)') cell_vector(1,3)*BohrToAng,cell_vector(2,3)*BohrToAng,cell_vector(3,3)*BohrToAng
       comment=TRIM(comment)//' Lattice="'//ADJUSTL(vec_a)//ADJUSTL(vec_b)//TRIM(ADJUSTL(vec_c))//'" '
       comment=TRIM(comment)//' Properties=species:S:1:pos:R:3:forces:R:3 potential_energy='
       write(energy_str,'(f0.8)') energy0 * en_conv_loc
       comment = TRIM(comment)//TRIM(energy_str)//' pbc="T T T" '
 
-      volume = r_super_x*r_super_y*r_super_z*BohrToAng**3
+      !volume = r_super_x*r_super_y*r_super_z*BohrToAng**3
 
       ! Convert each row to string
       write(stress_str(1:45), '(3f15.8)') stress_tensor(1,1)*HaToeV/volume,&
