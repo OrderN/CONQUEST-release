@@ -527,6 +527,8 @@ contains
 !!   2022/12/21 16:52 dave
 !!    Extending to allow calculation of exp(i.2pi.x/L) as well as x
 !!    New argument flag_func selects x, cos(2pi.x/L) or sin(2pi.x/L) with 0, 1 or 2
+!!   2026/05/18 tsuyoshi
+!!    Changed for Non-orthorhombic cells
 !!  SOURCE
 !!  
   subroutine get_r_on_atomfns(direction,flag_func,inputgf,gridfunc1,gridfunc2,gridfunc3)
@@ -546,6 +548,9 @@ contains
     use GenComms,                    only: cq_abort
     use species_module,              only: natomf_species
     use PAO_grid_transform_module,   only: check_block
+! for NOC
+    use grid_module, only: dcell_block, dcell_grid, set_grid_parameters
+    use lattice_module, only:angle, cell_length, get_pos_cart
 
     implicit none
 
@@ -572,6 +577,11 @@ contains
     real(double), allocatable :: r_store(:)
     integer :: offset_position, ip, npoint, stat
     real(double) :: x, y, z, rcut
+! for NOC
+    real(double) :: frac_block(3), cart_block(3), frac_grid(3), cart_grid(3)
+    real(double), parameter :: angle90=90.0_double
+    real(double) :: diff
+
     
     ! Test for direction=0 and all three grid functions
     if(direction==0.AND.(.NOT.PRESENT(gridfunc2).OR..NOT.PRESENT(gridfunc3))) then
@@ -581,15 +591,35 @@ contains
          r_store(n_pts_in_block), STAT=stat)
     if(stat /= 0) call cq_abort(' Error allocating store in get_r_on_atomfns: ',n_pts_in_block)
 
-    dcellx_block=rcellx/blocks%ngcellx; dcellx_grid=dcellx_block/nx_in_block
-    dcelly_block=rcelly/blocks%ngcelly; dcelly_grid=dcelly_block/ny_in_block
-    dcellz_block=rcellz/blocks%ngcellz; dcellz_grid=dcellz_block/nz_in_block
+! for NOC  
+    if(flag_func == 1 .or. flag_func == 2) then   ! calculation of polarisation 
+      diff=(angle(1)-angle90)**2+(angle(2)-angle90)**2+(angle(3)-angle90)**2
+      diff=sqrt(diff)
+     if(diff .gt. very_small) &
+      call cq_abort("Calculation of Polarisation for non-orthorhombic case is not implmented yet")
+    endif
+
+    call set_grid_parameters
+    !old dcellx_block=rcellx/blocks%ngcellx; dcellx_grid=dcellx_block/nx_in_block
+    !old dcelly_block=rcelly/blocks%ngcelly; dcelly_grid=dcelly_block/ny_in_block
+    !old dcellz_block=rcellz/blocks%ngcellz; dcellz_grid=dcellz_block/nz_in_block
+
     no_of_ib_ia = 0
     do iblock = 1, domain%groups_on_node
        if (iblock*n_pts_in_block > n_my_grid_points) call cq_abort('get_nonSC_force: igrid error ', igrid,n_my_grid_points)
-       xblock = (domain%idisp_primx(iblock) + domain%nx_origin - 1) * dcellx_block
-       yblock = (domain%idisp_primy(iblock) + domain%ny_origin - 1) * dcelly_block
-       zblock = (domain%idisp_primz(iblock) + domain%nz_origin - 1) * dcellz_block
+     ! for NOC
+       frac_block(1) = domain%idisp_primx(iblock) + domain%nx_origin - 1
+       frac_block(2) = domain%idisp_primy(iblock) + domain%ny_origin - 1
+       frac_block(3) = domain%idisp_primz(iblock) + domain%nz_origin - 1
+       frac_block(:) = frac_block(:) * dcell_block(:)
+
+       call get_pos_cart(frac_block, cart_block)
+       xblock=cart_block(1);yblock=cart_block(2);zblock=cart_block(3)
+
+       !old xblock = (domain%idisp_primx(iblock) + domain%nx_origin - 1) * dcellx_block
+       !old yblock = (domain%idisp_primy(iblock) + domain%ny_origin - 1) * dcelly_block
+       !old zblock = (domain%idisp_primz(iblock) + domain%nz_origin - 1) * dcellz_block
+
        if (naba_atoms_of_blocks(atomf)%no_of_part(iblock) > 0) then ! if there are naba atoms
           iatom = 0
           do ipart = 1, naba_atoms_of_blocks(atomf)%no_of_part(iblock)
@@ -625,19 +655,32 @@ contains
                       x = x_store(ip)
                       y = y_store(ip)
                       z = z_store(ip)
+                    
+                      !for NOC
+                      ! at present, I don't know whether   
+                      !
+
                       if(direction==0) then
                          if(flag_func==0) then
                             rx = x
                             ry = y
                             rz = z
                          else if(flag_func==1) then
-                            rx = cos(twopi*(x + atom_coord(1,ig_atom))/r_super_x)
-                            ry = cos(twopi*(y + atom_coord(2,ig_atom))/r_super_y)
-                            rz = cos(twopi*(z + atom_coord(3,ig_atom))/r_super_z)
+                            ! the following lines can be correct only in orthorhombic case
+                            rx = cos(twopi*(x + atom_coord(1,ig_atom))/cell_length(1))
+                            ry = cos(twopi*(y + atom_coord(2,ig_atom))/cell_length(2))
+                            rz = cos(twopi*(z + atom_coord(3,ig_atom))/cell_length(3))
+                            !ori rx = cos(twopi*(x + atom_coord(1,ig_atom))/r_super_x)
+                            !ori ry = cos(twopi*(y + atom_coord(2,ig_atom))/r_super_y)
+                            !ori rz = cos(twopi*(z + atom_coord(3,ig_atom))/r_super_z)
                          else if(flag_func==2) then
-                            rx = sin(twopi*(x + atom_coord(1,ig_atom))/r_super_x)
-                            ry = sin(twopi*(y + atom_coord(2,ig_atom))/r_super_y)
-                            rz = sin(twopi*(z + atom_coord(3,ig_atom))/r_super_z)
+                            ! the following lines can be correct only in orthorhombic case
+                            rx = sin(twopi*(x + atom_coord(1,ig_atom))/cell_length(1))
+                            ry = sin(twopi*(y + atom_coord(2,ig_atom))/cell_length(2))
+                            rz = sin(twopi*(z + atom_coord(3,ig_atom))/cell_length(3))
+                            !ori rx = sin(twopi*(x + atom_coord(1,ig_atom))/r_super_x)
+                            !ori ry = sin(twopi*(y + atom_coord(2,ig_atom))/r_super_y)
+                            !ori rz = sin(twopi*(z + atom_coord(3,ig_atom))/r_super_z)
                          end if
                          do nsf1=1,this_nsf
                             sfni = gridfunctions(inputgf)%griddata(position+(nsf1-1)*n_pts_in_block)
@@ -650,25 +693,31 @@ contains
                             if(flag_func==0) then
                                rx = x
                             else if(flag_func==1) then
-                               rx = cos(twopi*(x + atom_coord(1,ig_atom))/r_super_x)
+                               rx = cos(twopi*(x + atom_coord(1,ig_atom))/cell_length(1))
+                               !ori rx = cos(twopi*(x + atom_coord(1,ig_atom))/r_super_x)
                             else if(flag_func==2) then
-                               rx = sin(twopi*(x + atom_coord(1,ig_atom))/r_super_x)
+                               rx = sin(twopi*(x + atom_coord(1,ig_atom))/cell_length(1))
+                               !ori rx = sin(twopi*(x + atom_coord(1,ig_atom))/r_super_x)
                             end if
                          else if(direction==2) then
                             if(flag_func==0) then
                                rx = y
                             else if(flag_func==1) then
-                               rx = cos(twopi*(y + atom_coord(2,ig_atom))/r_super_y)
+                               rx = cos(twopi*(y + atom_coord(2,ig_atom))/cell_length(2))
+                               !ori rx = cos(twopi*(y + atom_coord(2,ig_atom))/r_super_y)
                             else if(flag_func==2) then
-                               rx = sin(twopi*(y + atom_coord(2,ig_atom))/r_super_y)
+                               rx = sin(twopi*(y + atom_coord(2,ig_atom))/cell_length(2))
+                               !ori rx = sin(twopi*(y + atom_coord(2,ig_atom))/r_super_y)
                             end if
                          else if(direction==3) then
                             if(flag_func==0) then
                                rx = z
                             else if(flag_func==1) then
-                               rx = cos(twopi*(z + atom_coord(3,ig_atom))/r_super_z)
+                               rx = cos(twopi*(z + atom_coord(3,ig_atom))/cell_length(3))
+                               !ori rx = cos(twopi*(z + atom_coord(3,ig_atom))/r_super_z)
                             else if(flag_func==2) then
-                               rx = sin(twopi*(z + atom_coord(3,ig_atom))/r_super_z)
+                               rx = sin(twopi*(z + atom_coord(3,ig_atom))/cell_length(3))
+                               !ori rx = sin(twopi*(z + atom_coord(3,ig_atom))/r_super_z)
                             end if
                          end if
                          do nsf1=1,this_nsf
