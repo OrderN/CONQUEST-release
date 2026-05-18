@@ -208,6 +208,9 @@ contains
     use functions_on_grid, only: gridfunctions, pseudofns
     use dimens, only: n_my_grid_points
     use maxima_module, only: maxngrid
+    ! for non-orthorhombic cell  2026May18 TM
+    use grid_module, only: dcell_block, dcell_grid, set_grid_parameters
+    use lattice_module, only: get_pos_cart
 
     implicit none
 
@@ -228,6 +231,9 @@ contains
 
     real(double) :: coulomb_potential(blocks%mx_ngonn*n_pts_in_block) !automatic array
     real(double) :: coulomb_energy
+
+!NOC 2026 May18 TM
+    real(double) :: frac_block(3), cart_block(3), frac_grid(3), cart_grid(3)
     ! --  Start of subroutine  ---
 
     call start_timer(tmr_std_allocation)
@@ -241,10 +247,13 @@ contains
        gridfunctions(pseudofns)%griddata = zero
     end if
 
-
-    dcellx_block=rcellx/blocks%ngcellx; dcellx_grid=dcellx_block/nx_in_block
-    dcelly_block=rcelly/blocks%ngcelly; dcelly_grid=dcelly_block/ny_in_block
-    dcellz_block=rcellz/blocks%ngcellz; dcellz_grid=dcellz_block/nz_in_block
+    ! Non-orthorhombic cell : TM (2026Mar18)
+    !   defines dcell_block(:) AND dcell_grid(:).
+    !     note that this will be shared in OMP
+        call set_grid_parameters
+    !old dcellx_block=rcellx/blocks%ngcellx; dcellx_grid=dcellx_block/nx_in_block
+    !old dcelly_block=rcelly/blocks%ngcelly; dcelly_grid=dcelly_block/ny_in_block
+    !old dcellz_block=rcellz/blocks%ngcellz; dcellz_grid=dcellz_block/nz_in_block
 
     ! loop arround grid points in this domain, and for each
     ! point, get contributions to the short-range
@@ -256,9 +265,18 @@ contains
     no_of_ib_ia = 0
 
     do iblock = 1, domain%groups_on_node ! primary set of blocks
-       xblock=(domain%idisp_primx(iblock)+domain%nx_origin-1)*dcellx_block
-       yblock=(domain%idisp_primy(iblock)+domain%ny_origin-1)*dcelly_block
-       zblock=(domain%idisp_primz(iblock)+domain%nz_origin-1)*dcellz_block
+      !For NOC
+       frac_block(1) = domain%idisp_primx(iblock) + domain%nx_origin - 1
+       frac_block(2) = domain%idisp_primy(iblock) + domain%ny_origin - 1
+       frac_block(3) = domain%idisp_primz(iblock) + domain%nz_origin - 1
+       frac_block(:) = frac_block(:) * dcell_block(:)
+       call get_pos_cart(frac_block, cart_block)
+         xblock=cart_block(1); yblock=cart_block(2); zblock=cart_block(3)
+
+       !old xblock=(domain%idisp_primx(iblock)+domain%nx_origin-1)*dcellx_block
+       !old yblock=(domain%idisp_primy(iblock)+domain%ny_origin-1)*dcelly_block
+       !old zblock=(domain%idisp_primz(iblock)+domain%nz_origin-1)*dcellz_block
+
        if(naba_atoms_of_blocks(nlpf)%no_of_part(iblock) > 0) then ! if there are naba atoms
           iatom=0
           do ipart=1,naba_atoms_of_blocks(nlpf)%no_of_part(iblock)
@@ -355,12 +373,25 @@ contains
                                call cq_abort('set_ps: igrid error ', &
                                     igrid, n_my_grid_points)
                             endif
-                            dx=dcellx_grid*(ix-1)
-                            dy=dcelly_grid*(iy-1)
-                            dz=dcellz_grid*(iz-1)
+
+                            frac_grid(3)=iz-1
+                            frac_grid(2)=iy-1
+                            frac_grid(1)=ix-1
+                            frac_grid(:) = frac_grid(:) * dcell_grid(:)
+                             call get_pos_cart(frac_grid, cart_grid)
+                             dx=cart_grid(1);dy=cart_grid(2);dz=cart_grid(3)
+
                             rx=xblock+dx-xatom
                             ry=yblock+dy-yatom
                             rz=zblock+dz-zatom
+
+                            !old dx=dcellx_grid*(ix-1)
+                            !old dy=dcelly_grid*(iy-1)
+                            !old dz=dcellz_grid*(iz-1)
+                            !old rx=xblock+dx-xatom
+                            !old ry=yblock+dy-yatom
+                            !old rz=zblock+dz-zatom
+
                             r2 = rx * rx + ry * ry + rz * rz
                             ! if within non-local cutoff, make the non-local
                             ! projections and store them in 'pseudofunctions'
@@ -547,6 +578,10 @@ contains
     use dimens,              only: n_my_grid_points
     use GenComms,            only: my_barrier, cq_abort, inode,ionode
 
+    ! for non-orthorhombic cell  2026May18 TM
+    use grid_module, only: dcell_block, dcell_grid, set_grid_parameters
+    use lattice_module, only: get_pos_cart
+
     implicit none
     ! dummy arguments
     integer,intent(in) :: direction
@@ -566,13 +601,20 @@ contains
     integer :: no_of_ib_ia, no_of_mcomp,offset_position, the_ncf
     integer :: position,iatom,icheck
     real(double) :: alpha,beta,gamma,delta
+!NOC 2026 May15 TM
+    real(double) :: frac_block(3), cart_block(3), frac_grid(3), cart_grid(3)
 
     call start_timer(tmr_std_pseudopot)
     gridfunctions(dpseudofns)%griddata = zero
 
-    dcellx_block=rcellx/blocks%ngcellx; dcellx_grid=dcellx_block/nx_in_block
-    dcelly_block=rcelly/blocks%ngcelly; dcelly_grid=dcelly_block/ny_in_block
-    dcellz_block=rcellz/blocks%ngcellz; dcellz_grid=dcellz_block/nz_in_block
+    ! Non-orthorhombic cell : TM (2026Mar18)
+    !   defines dcell_block(:) AND dcell_grid(:).
+    !     note that this will be shared in OMP
+        call set_grid_parameters
+
+    !old dcellx_block=rcellx/blocks%ngcellx; dcellx_grid=dcellx_block/nx_in_block
+    !old dcelly_block=rcelly/blocks%ngcelly; dcelly_grid=dcelly_block/ny_in_block
+    !old dcellz_block=rcellz/blocks%ngcellz; dcellz_grid=dcellz_block/nz_in_block
 
     ! loop arround grid points in this domain, and for each
     ! point, get contributions to the short-range
@@ -580,10 +622,19 @@ contains
     ! within the cutoff distance to that grid point
     call my_barrier()
     no_of_ib_ia = 0
+
     do iblock = 1, domain%groups_on_node ! primary set of blocks
-       xblock=(domain%idisp_primx(iblock)+domain%nx_origin-1)*dcellx_block
-       yblock=(domain%idisp_primy(iblock)+domain%ny_origin-1)*dcelly_block
-       zblock=(domain%idisp_primz(iblock)+domain%nz_origin-1)*dcellz_block
+       !NOC  2026May18 TM
+        !old xblock = ( domain%idisp_primx(iblock) + domain%nx_origin - 1 ) * dcellx_block
+        !old yblock = ( domain%idisp_primy(iblock) + domain%ny_origin - 1 ) * dcelly_block
+        !old zblock = ( domain%idisp_primz(iblock) + domain%nz_origin - 1 ) * dcellz_block
+       frac_block(1) = domain%idisp_primx(iblock) + domain%nx_origin - 1
+       frac_block(2) = domain%idisp_primy(iblock) + domain%ny_origin - 1
+       frac_block(3) = domain%idisp_primz(iblock) + domain%nz_origin - 1
+       frac_block(:) = frac_block(:) * dcell_block(:)
+       call get_pos_cart(frac_block, cart_block)
+         xblock=cart_block(1); yblock=cart_block(2); zblock=cart_block(3)
+
        if(naba_atoms_of_blocks(nlpf)%no_of_part(iblock) > 0) then ! if there are naba atoms
           iatom=0
           do ipart=1,naba_atoms_of_blocks(nlpf)%no_of_part(iblock)
@@ -666,12 +717,26 @@ contains
                                   call cq_abort('pseudo_derivs: grid error ', &
                                        igrid, n_my_grid_points)
                                endif
-                               dx=dcellx_grid*(ix-1)
-                               dy=dcelly_grid*(iy-1)
-                               dz=dcellz_grid*(iz-1)
+
+                              !For NOC
+                               frac_grid(3)=iz-1
+                               frac_grid(2)=iy-1
+                               frac_grid(1)=ix-1
+                               frac_grid(:) = frac_grid(:) * dcell_grid(:)
+                                call get_pos_cart(frac_grid, cart_grid)
+                                dx=cart_grid(1);dy=cart_grid(2);dz=cart_grid(3)
+    
                                rx=xblock+dx-xatom
                                ry=yblock+dy-yatom
                                rz=zblock+dz-zatom
+
+                               !old dx=dcellx_grid*(ix-1)
+                               !old dy=dcelly_grid*(iy-1)
+                               !old dz=dcellz_grid*(iz-1)
+                               !old rx=xblock+dx-xatom
+                               !old ry=yblock+dy-yatom
+                               !old rz=zblock+dz-zatom
+    
                                r2 = rx * rx + ry * ry + rz * rz
                                ! if we are within the non-local cutoff, build
                                ! the derivatives of the non-local projectors
