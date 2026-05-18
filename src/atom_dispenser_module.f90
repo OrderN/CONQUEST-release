@@ -19,12 +19,13 @@ module atom_dispenser
   use datatypes
   use group_module, ONLY: parts
   use global_module, ONLY: flag_fractional_atomic_coords,rcellx,rcelly,rcellz, &
-                           flag_MDdebug,shift_in_bohr,Iprint_MD
+                           flag_MDdebug,shift_in_bohr,Iprint_MD, shift_in_frac
   use GenComms, ONLY: cq_abort
 
   implicit none
 
-  logical, parameter :: flag_ortho = .true.
+  !logical, parameter :: flag_ortho = .true.
+  logical, parameter :: flag_ortho = .false.
 
 !!***
 
@@ -53,6 +54,7 @@ contains
   !!  CREATION DATE
   !!   2013/08/21
   !!  MODIFICATION
+  !!   2026/05/15 TM  : non-orthorhombic
   !!
   !!  SOURCE
   !!
@@ -68,6 +70,7 @@ contains
     use global_module, ONLY: numprocs
     use cover_module, ONLY: BCS_parts
     use dimens, ONLY: r_super_x,r_super_y,r_super_z
+    use lattice_module, only: get_pos_cart, get_pos_frac
 
     implicit none
 
@@ -86,6 +89,8 @@ contains
     integer :: lun, stat, ind_part2
     character(13) :: file_name
 
+    real(double) :: pos_frac(3), pos_cart(3)
+
     !! ----------- DEBUG ----------- !!
     ! NOTE: This file will be sizable.
     if (flag_MDdebug) then
@@ -97,34 +102,38 @@ contains
 
     ! Firstly, we need to shift the atoms by eps before deciding the 
     ! partition and updating parts.
-!   if (flag_fractional_atomic_coords) then
-!     eps = 1.0E-08     ! May be changed later.
-!   else
-!     !eps = 1.0E-03    ! May be changed later.
-!     eps = 1.0E-04     ! May be changed later.
-!   endif
-    !TM  Eps should be considered with Cartesian (bohr) units
-    eps = shift_in_bohr
-    x_eps = x + eps
-    y_eps = y + eps
-    z_eps = z + eps
+
     if (flag_ortho) then ! if the system is orthorhombic.
+      ! Firstly, we need to shift the atoms by eps before deciding the 
+      ! partition and updating parts.
+      !TM  Eps should be considered with Cartesian (bohr) units
+      eps = shift_in_bohr
+      x_eps = x + eps
+      y_eps = y + eps
+      z_eps = z + eps
+
       ! Calculate the partition lengths.
       plen_x = rcellx/real(parts%ngcellx,double)
       plen_y = rcelly/real(parts%ngcelly,double)
       plen_z = rcellz/real(parts%ngcellz,double)
-      !x_eps = x_eps - floor(x_eps)
-      !y_eps = y_eps - floor(y_eps)
-      !z_eps = z_eps - floor(z_eps)
       px = floor(x_eps/plen_x) + 1
       py = floor(y_eps/plen_y) + 1
       pz = floor(z_eps/plen_z) + 1
+
     else ! if NOT orthorhombic.
-      call cq_abort('ERROR in atom2part: flag_ortho ')
-      ! You need to consider alpha, beta and gamma, but leave it for now.
-      plen_x = rcellx/real(parts%ngcellx,double)
-      plen_y = rcelly/real(parts%ngcelly,double)
-      plen_z = rcellz/real(parts%ngcellz,double)
+     !2026May26 TM
+      eps = shift_in_frac
+      pos_cart(1)= x; pos_cart(2)=y; pos_cart(3)=z
+      call get_pos_frac(pos_cart,pos_frac)
+      plen_x = one/real(parts%ngcellx,double)
+      plen_y = one/real(parts%ngcelly,double)
+      plen_z = one/real(parts%ngcellz,double)
+      x_eps = pos_frac(1)+ eps
+      y_eps = pos_frac(2)+ eps
+      z_eps = pos_frac(3)+ eps
+      px = floor(x_eps/plen_x) + 1
+      py = floor(y_eps/plen_y) + 1
+      pz = floor(z_eps/plen_z) + 1
     endif
 
     ! DB
@@ -174,6 +183,7 @@ contains
   !!  CREATION DATE
   !!    2013/07/01
   !!  MODIFICATION
+  !!   2026/05/15 TM  : non-orthorhombic
   !!
   !!  SOURCE
   !!
@@ -188,6 +198,7 @@ contains
     ! DB
     use input_module, ONLY: io_assign,io_close
     use global_module, ONLY: io_lun,id_glob,numprocs
+    use lattice_module, ONLY: get_pos_frac, get_pos_cart
 
     implicit none
 
@@ -205,6 +216,8 @@ contains
     ! DB
     integer :: lun,stat
     character(20) :: file_name
+
+    real(double) :: pos_frac(3), pos_cart(3)
 
     if (inode.EQ.ionode .AND. Iprint_MD + min_layer > 3) &
       write (io_lun,fmt='(10x,a)') "Entering allatom2part."
@@ -290,7 +303,54 @@ contains
           write (lun,*) "px,py,pz, ind_part:", px,py,pz,ind_part(n_atom) !DB
       enddo  !(n_atom, ni_in_cell)	
     else
-      call cq_abort('Error: flag_ortho ')
+      !2026/05/15 TM  : non-orthorhombic
+      ! Calculate the partition lengths
+      eps=shift_in_frac
+      plen_x = one/real(parts%ngcellx,double)
+      plen_y = one/real(parts%ngcelly,double)
+      plen_z = one/real(parts%ngcellz,double)
+      if (flag_MDdebug .AND. inode.EQ.ionode) &
+        write (lun,*) "plen_x,y,z:", plen_x,plen_y,plen_z !DB
+      ! Get the partition (sim-cell gp (CC)) to which each atom belongs.
+      flag_px=.false. ; flag_py=.false. ; flag_pz=.false.
+      do n_atom = 1, ni_in_cell
+        ! Wrap coordinates.
+        ! NOTE: We cannot use xyz_atom_cell since they depend on parts labelling.
+         pos_cart(:)=atom_coord(:,n_atom)
+         call get_pos_frac(pos_cart,pos_frac)
+         pos_frac(:)=pos_frac(:)-floor(pos_frac(:)+eps)*one
+         call get_pos_cart(pos_frac,pos_cart)
+         atom_coord(:,n_atom)=pos_cart(:)
+        
+        x_eps = pos_frac(1)+eps
+        y_eps = pos_frac(2)+eps
+        z_eps = pos_frac(3)+eps
+
+        px = floor(x_eps/plen_x) + 1
+        py = floor(y_eps/plen_y) + 1
+        pz = floor(z_eps/plen_z) + 1
+        flag_px = .true. ; flag_py = .true. ; flag_pz = .true.
+        if(px <= 0 .or. px > parts%ngcellx) then
+          flag_px = .false.
+          write(io_lun,*) ' ERROR : flag_px , px = ',px,' x_eps, plen_x, cellx = ', x_eps, plen_x, cellx
+        endif
+        if(py <= 0 .or. py > parts%ngcelly) then
+          flag_py = .false.
+          write(io_lun,*) ' ERROR : flag_py , py = ',py,' y_eps, plen_y, celly = ', y_eps, plen_y, celly
+        endif
+        if(pz <= 0 .or. pz > parts%ngcellz) then
+          flag_pz = .false.
+          write(io_lun,*) ' ERROR : flag_pz , pz = ',pz,' z_eps, plen_z, cellz = ', z_eps, plen_z, cellz
+        endif
+        if(.not.flag_px .or. .not.flag_py .or. .not.flag_pz) then
+          write(io_lun,*) ' flag_px, flag_py, flag_pz = ',flag_px, flag_py, flag_pz
+          call cq_abort(' ERROR : flag_pxyz ',n_atom)
+        endif
+        ! Get the partition in sim-cell (CC).
+        ind_part(n_atom) = (px-1)*(parts%ngcelly*parts%ngcellz) + (py-1)*parts%ngcellz + pz
+        if (flag_MDdebug .AND. inode.EQ.ionode) &
+          write (lun,*) "px,py,pz, ind_part:", px,py,pz,ind_part(n_atom) !DB
+      enddo  !(n_atom, ni_in_cell)	
     endif  !(flag_ortho)
     if ((.NOT. flag_px) .OR. (.NOT. flag_py) .OR. (.NOT. flag_pz)) &
       call cq_abort('Error: Fail in finding partitions: allatom2part')
