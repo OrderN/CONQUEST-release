@@ -190,20 +190,29 @@ following parameters can be set:
 
 ::
 
-   Process.min_DOS_E real    (Ha, default lowest eigenvalue)
-   Process.max_DOS_E real    (Ha, default highest eigenvalue)
-   Process.sigma_DOS real    (Ha, default 0.001)
-   Process.n_DOS     integer (default 1001)
+   Process.min_DOS_E       real    (Ha, default lowest eigenvalue)
+   Process.max_DOS_E       real    (Ha, default highest eigenvalue)
+   Process.WFRangeRelative T/F
+   Process.sigma_DOS       real    (Ha, default 0.001)
+   Process.n_DOS           integer (default 1001)
 
 The limits for the DOS are set by the first two parameters (note that
-CONQUEST will output all eigenvalues, so the limits on these are set
-by the eigenspectrum).  The broadening applied to each state is set by
+CONQUEST will output all eigenvalues).  These limits can be given as
+absolute energies, or relative to the Fermi level, depending on whether
+``WFRangeRelative`` is set to ``F`` or ``T`` respectively.
+The broadening applied to each state is set by
 ``sigma_DOS``, while the number of bins is set by ``n_DOS``.  The
 integrated DOS is also calculated; the user can choose whether this
 is the total integrated DOS (i.e. from the lowest eigenvalue,
 regardless of the lower limit for DOS) or just the local integrated
 DOS (i.e. over the interval specified for the DOS) by setting
 ``Process.TotalIntegratedDOS`` to ``T`` or ``F``, respectively.
+
+If the user does not specify limits on the DOS, then the range will
+be expanded slightly so that the broadened peaks fit completely within
+the DOS range.  This behaviour can be controlled with an additional
+parameter ``Process.ExpandRange T/F`` (the default behaviour is false
+if the user sets any limits, otherwise true).
 
 We recommend that, for accurate DOS, CONQUEST should be run
 non-self-consistently with a very high k-point density, after reading
@@ -292,8 +301,8 @@ also be specified:
    Process.max_DOS_E  0.35
    Process.WFRangeRelative T
 
-where the final tag sets the minimum and maximum values relative to
-the Fermi level.
+where the final tag specifies that the limits on the DOS are given
+relative to the Fermi level.
 
 If you only want to produce pDOS for a few atoms, then you can set
 the  variable ``Process.n_atoms_pDOS`` and list the atoms you want

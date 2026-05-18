@@ -152,7 +152,7 @@ contains
     use force_module,         only: tot_force, stress
     use minimise,             only: get_E_and_F
     use global_module,        only: runtype, flag_self_consistent, &
-                                    flag_out_wf, flag_write_DOS, wf_self_con, &
+                                    flag_out_wf, flag_write_projected_DOS, wf_self_con, &
                                     flag_opt_cell, optcell_method, min_layer, flag_DM_converged
     use input_module,         only: leqi
     use store_matrix,         only: dump_pos_and_matrices
@@ -180,12 +180,10 @@ contains
 !****lat>$
     flag_DM_converged = .false.
     if ( leqi(runtype,'static') ) then
-       !if(.NOT.flag_self_consistent.AND.(flag_out_wf.OR.flag_write_DOS)) return
        flag_ff = .true.
        flag_wf = .true.
-       if (flag_out_wf.OR.flag_write_DOS) then
+       if (flag_out_wf.OR.flag_write_projected_DOS) then
           ! This is done within get_E_and_F
-          !wf_self_con=.true.
           flag_ff = .false.
           flag_wf = .false.
        endif

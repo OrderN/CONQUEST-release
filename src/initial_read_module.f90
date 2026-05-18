@@ -865,7 +865,7 @@ contains
          flag_propagateL,flag_dissipation,integratorXL, flag_FixCOM,   &
          flag_exx, exx_alpha, exx_scf, exx_scf_tol, exx_siter, exx_cutoff, &
          flag_out_wf,max_wf,out_wf,wf_self_con, flag_fire_qMD, &
-         flag_write_DOS, flag_write_projected_DOS, &
+         flag_write_projected_DOS, &
          E_wf_min, E_wf_max, flag_wf_range_Ef, &
          mx_temp_matrices, flag_neutral_atom, flag_diagonalisation, &
          flag_SpinDependentSF, flag_Multisite, flag_LFD, flag_SFcoeffReuse, &
@@ -1784,25 +1784,17 @@ contains
           call cq_abort("Won't output WFs for Order(N) or non-static runs")
        end if
     end if
-    ! DOS output
-    flag_write_DOS = fdf_boolean('IO.writeDOS',.false.)
-    if(flag_write_DOS) then
+    ! pDOS output
+    flag_write_projected_DOS = fdf_boolean('IO.write_proj_DOS',.false.)
+    if(flag_write_projected_DOS) then
        if(flag_diagonalisation) then
-          flag_write_projected_DOS = fdf_boolean('IO.write_proj_DOS',.false.)
-          if(flag_write_projected_DOS) then
-             flag_out_wf = .true.
-             E_wf_min = fdf_double('IO.min_wf_E',-BIG)
-             E_wf_max = fdf_double('IO.max_wf_E',BIG)
-          end if
-          ! Possibly needed to decide if MSSF needs dealing with
-          !flag_pDOS_angmom = fdf_boolean('IO.PDOS_Angmom',.false.)
-          !if (flag_pDOS_angmom .and. flag_basis_set==blips) then
-          !   flag_pDOS_angmom = .false.
-          !   if(inode==ionode) write(io_lun,'(2x,"Setting IO.PDOS_Angmom F as using blips")')
-          !endif
+          flag_out_wf = .true.
+          E_wf_min = fdf_double('IO.min_wf_E',-BIG)
+          E_wf_max = fdf_double('IO.max_wf_E',BIG)
+          flag_wf_range_Ef = fdf_boolean('IO.WFRangeRelative',.true.)
        else
-          flag_write_DOS = .false.
-          if(inode==ionode) write(io_lun,'(2x,"Setting IO.writeDOS F as solving O(N)")')
+          flag_write_projected_DOS = .false.
+          if(inode==ionode) write(io_lun,'(2x,"Setting IO.write_proj_DOS F as solving O(N)")')
        end if
     end if
 !!$
