@@ -452,6 +452,8 @@ contains
 !!    Added if loop for NA projectors to avoid making pseudopotential on grid
 !!   2018/11/16 tsuyoshi
 !!    Debug for ghost atoms
+!!   2026/05/18 tsuyoshi
+!!    Modified for non-orthorhombic cells
 !!  SOURCE
 !!
   subroutine set_tm_pseudo
@@ -480,6 +482,9 @@ contains
     use maxima_module, only: maxngrid
     use timer_module, only: cq_timer, start_timer, stop_print_timer, WITH_LEVEL
     use pseudopotential_common, only: flag_neutral_atom_projector
+    !For NOC
+    use grid_module, only: set_grid_parameters, dcell_block, dcell_grid, grid_point_volume
+    use lattice_module, only: get_pos_cart
     
     implicit none 
     !local
@@ -501,6 +506,8 @@ contains
     real(double) :: r1, r2, r3, r4, core_charge, gauss_charge
     real(double) :: val
     real(double),allocatable :: chlocal_density(:), coulomb_potential(:)
+    !For NOC
+    real(double) ::  frac_block(3), cart_block(3)
 
     logical :: local_charge = .false.
 
@@ -536,10 +543,11 @@ contains
        gridfunctions(pseudofns)%griddata = zero
     end if
 
-
-    dcellx_block=rcellx/blocks%ngcellx
-    dcelly_block=rcelly/blocks%ngcelly
-    dcellz_block=rcellz/blocks%ngcellz
+    !For NOC
+      call set_grid_parameters
+    !old dcellx_block=rcellx/blocks%ngcellx
+    !old dcelly_block=rcelly/blocks%ngcelly
+    !old dcellz_block=rcellz/blocks%ngcellz
 
     !  This subroutine assumes Troullier-Martin's pseudopotential.
     ! For Siesta-styly, the local part of the pseudopotentials is made by the
@@ -560,9 +568,19 @@ contains
     ! whose distances from the grid point are within the cutoff. 
     the_species = 1
     do iblock = 1, domain%groups_on_node ! primary set of blocks
-       xblock=(domain%idisp_primx(iblock)+domain%nx_origin-1)*dcellx_block
-       yblock=(domain%idisp_primy(iblock)+domain%ny_origin-1)*dcelly_block
-       zblock=(domain%idisp_primz(iblock)+domain%nz_origin-1)*dcellz_block
+      !For NOC
+       frac_block(1) = domain%idisp_primx(iblock) + domain%nx_origin - 1
+       frac_block(2) = domain%idisp_primy(iblock) + domain%ny_origin - 1
+       frac_block(3) = domain%idisp_primz(iblock) + domain%nz_origin - 1
+       frac_block(:) = frac_block(:) * dcell_block(:) 
+  
+       call get_pos_cart(frac_block, cart_block)
+        xblock=cart_block(1);yblock=cart_block(2);zblock=cart_block(3)
+
+       !old xblock=(domain%idisp_primx(iblock)+domain%nx_origin-1)*dcellx_block
+       !old yblock=(domain%idisp_primy(iblock)+domain%ny_origin-1)*dcelly_block
+       !old zblock=(domain%idisp_primz(iblock)+domain%nz_origin-1)*dcellz_block
+
        if(.NOT.flag_neutral_atom_projector) then
        if(naba_atoms_of_blocks(pseudo_neighbour)%no_of_part(iblock) > 0) then ! if there are naba atoms
           iatom=0
@@ -970,7 +988,7 @@ contains
 
     use datatypes
     use numbers
-    use dimens, only: grid_point_volume, n_my_grid_points
+    use dimens, only: n_my_grid_points
     use global_module, only: rcellx,rcelly,rcellz,id_glob, iprint_pseudo, &
          species_glob, nlpf,ni_in_cell, flag_neutral_atom, dens, &
          flag_full_stress, flag_stress, flag_atomic_stress, atomic_stress, min_layer
@@ -988,6 +1006,9 @@ contains
     use atomic_density, only: atomic_density_table ! for Neutral atom potential
     use pseudopotential_common, only: flag_neutral_atom_projector
     use io_module, only: return_prefix
+    !For NOC
+    use grid_module, only: dcell_block, dcell_grid, grid_point_volume, set_grid_parameters
+    use lattice_module, only: get_pos_cart
 
     implicit none   
 
@@ -1016,6 +1037,8 @@ contains
     integer ::  iatom, stat, ip, npoint, nl
     real(double) :: rcut, temp(3,3)
     type(cq_timer) :: backtrace_timer
+    !For NOC
+    real(double) ::  frac_block(3), cart_block(3)
 
     ! allocatable
     real(double),allocatable, dimension(:) :: h_potential, drho_tot
@@ -1035,10 +1058,12 @@ contains
     HF_force = zero
     loc_HF_stress = zero
     loc_G_stress = zero
-
-    dcellx_block=rcellx/blocks%ngcellx
-    dcelly_block=rcelly/blocks%ngcelly
-    dcellz_block=rcellz/blocks%ngcellz
+ 
+    !For NOC       
+      call set_grid_parameters
+    !old dcellx_block=rcellx/blocks%ngcellx
+    !old dcelly_block=rcelly/blocks%ngcelly
+    !old dcellz_block=rcellz/blocks%ngcellz
 
     ! get Hartree potential
     call start_timer(tmr_std_allocation)
@@ -1075,9 +1100,19 @@ contains
 
     ! now loop over grid points and accumulate HF part of the force
     do iblock = 1, domain%groups_on_node ! primary set of blocks
-       xblock=(domain%idisp_primx(iblock)+domain%nx_origin-1)*dcellx_block
-       yblock=(domain%idisp_primy(iblock)+domain%ny_origin-1)*dcelly_block
-       zblock=(domain%idisp_primz(iblock)+domain%nz_origin-1)*dcellz_block
+      !For NOC
+       frac_block(1) = domain%idisp_primx(iblock) + domain%nx_origin - 1
+       frac_block(2) = domain%idisp_primy(iblock) + domain%ny_origin - 1
+       frac_block(3) = domain%idisp_primz(iblock) + domain%nz_origin - 1
+       frac_block(:) = frac_block(:) * dcell_block(:) 
+  
+       call get_pos_cart(frac_block, cart_block)
+        xblock=cart_block(1);yblock=cart_block(2);zblock=cart_block(3)
+
+       !old xblock=(domain%idisp_primx(iblock)+domain%nx_origin-1)*dcellx_block
+       !old yblock=(domain%idisp_primy(iblock)+domain%ny_origin-1)*dcelly_block
+       !old zblock=(domain%idisp_primz(iblock)+domain%nz_origin-1)*dcellz_block
+
        if(naba_atoms_of_blocks(pseudo_neighbour)%no_of_part(iblock) > 0) then ! if there are naba atoms
           iatom=0
           do ipart=1,naba_atoms_of_blocks(pseudo_neighbour)%no_of_part(iblock)
@@ -1467,6 +1502,9 @@ contains
     use GenComms, only: my_barrier, cq_abort
     use angular_coeff_routines, only : pp_gradient
     use functions_on_grid, only: gridfunctions, fn_on_grid
+    !For NOC          
+    use grid_module, only: dcell_block, dcell_grid, grid_point_volume, set_grid_parameters
+    use lattice_module, only: get_pos_cart
 
     implicit none 
 
@@ -1491,6 +1529,8 @@ contains
     real(double) :: rcut, rl, rl1
     real(double) :: nl_potential_derivative_new, val, nl_potential_new
     integer :: m, i
+    !For NOC
+    real(double) ::  frac_block(3), cart_block(3)
 
     ! --  Start of subroutine  ---
     !  This subroutine calculates the derivatives of 
@@ -1501,16 +1541,28 @@ contains
     call start_timer(tmr_std_pseudopot)
     gridfunctions(dpseudofns)%griddata = zero
 
-    dcellx_block=rcellx/blocks%ngcellx
-    dcelly_block=rcelly/blocks%ngcelly
-    dcellz_block=rcellz/blocks%ngcellz
+    !For NOC
+      call set_grid_parameters
+    !old dcellx_block=rcellx/blocks%ngcellx
+    !old dcelly_block=rcelly/blocks%ngcelly
+    !old dcellz_block=rcellz/blocks%ngcellz
 
     no_of_ib_ia = 0
 
     do iblock = 1, domain%groups_on_node ! primary set of blocks
-       xblock=(domain%idisp_primx(iblock)+domain%nx_origin-1)*dcellx_block
-       yblock=(domain%idisp_primy(iblock)+domain%ny_origin-1)*dcelly_block
-       zblock=(domain%idisp_primz(iblock)+domain%nz_origin-1)*dcellz_block
+      !For NOC
+       frac_block(1) = domain%idisp_primx(iblock) + domain%nx_origin - 1
+       frac_block(2) = domain%idisp_primy(iblock) + domain%ny_origin - 1
+       frac_block(3) = domain%idisp_primz(iblock) + domain%nz_origin - 1
+       frac_block(:) = frac_block(:) * dcell_block(:) 
+    
+       call get_pos_cart(frac_block, cart_block)
+        xblock=cart_block(1);yblock=cart_block(2);zblock=cart_block(3)
+
+       !ORI xblock=(domain%idisp_primx(iblock)+domain%nx_origin-1)*dcellx_block
+       !ORI yblock=(domain%idisp_primy(iblock)+domain%ny_origin-1)*dcelly_block
+       !ORI zblock=(domain%idisp_primz(iblock)+domain%nz_origin-1)*dcellz_block
+
        if(naba_atoms_of_blocks(nlpf)%no_of_part(iblock) > 0) then ! if there are naba atoms
           iatom=0
           do ipart=1,naba_atoms_of_blocks(nlpf)%no_of_part(iblock)
@@ -3133,6 +3185,10 @@ contains
     use block_module,  only: nx_in_block,ny_in_block,nz_in_block, &
          n_pts_in_block
 
+! for NOC  : we assume that dcell_grid is already defined
+! 
+    use grid_module, only: dcell_grid
+    use lattice_module, only: get_pos_cart
 
     implicit none
     !Passed 
@@ -3149,12 +3205,22 @@ contains
     real(double):: dx, dy, dz
     integer :: ipoint, iz, iy, ix
     real(double) ::  r2, r_from_i, rx, ry, rz, x, y, z, rcut2
-
+    !For NOC
+    real(double) ::  frac_grid(3), cart_grid(3)  !these are local variables
 
     rcut2 = rcut* rcut
-    dcellx_block=rcellx/blocks%ngcellx; dcellx_grid=dcellx_block/nx_in_block
-    dcelly_block=rcelly/blocks%ngcelly; dcelly_grid=dcelly_block/ny_in_block
-    dcellz_block=rcellz/blocks%ngcellz; dcellz_grid=dcellz_block/nz_in_block
+
+ ! NOC case
+ !  note that the following variables, dcellx_block, dcellx_grid are defined locally here,
+ !  and thus private ones, in the threaded parallel case.
+ !   (since check_block is called from
+ !
+ !  instead of these variables, we use dcell_grid(1:3) and dcell_block(1:3),
+ !   which are shared variables in the threaded parallel do-loop.
+
+ !old   dcellx_block=rcellx/blocks%ngcellx; dcellx_grid=dcellx_block/nx_in_block
+ !old   dcelly_block=rcelly/blocks%ngcelly; dcelly_grid=dcelly_block/ny_in_block
+ !old   dcellz_block=rcellz/blocks%ngcellz; dcellz_grid=dcellz_block/nz_in_block
 
     ipoint=0
     npoint=0
@@ -3163,9 +3229,16 @@ contains
           do ix=1,nx_in_block
              ipoint=ipoint+1
 
-             dx=dcellx_grid*(ix-1)
-             dy=dcelly_grid*(iy-1)
-             dz=dcellz_grid*(iz-1)
+             !old dx=dcellx_grid*(ix-1)
+             !old dy=dcelly_grid*(iy-1)
+             !old dz=dcellz_grid*(iz-1)
+
+             frac_grid(3)=iz-1
+             frac_grid(2)=iy-1
+             frac_grid(1)=ix-1
+             frac_grid(:) = frac_grid(:) * dcell_grid(:)
+              call get_pos_cart(frac_grid, cart_grid)
+              dx=cart_grid(1);dy=cart_grid(2);dz=cart_grid(3)
 
              rx=xblock+dx-xatom
              ry=yblock+dy-yatom

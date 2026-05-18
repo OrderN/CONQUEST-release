@@ -535,7 +535,8 @@ contains
 
     use datatypes
     use numbers
-    use global_module,               only: rcellx,rcelly,rcellz, atomf, species_glob, &
+    !ori use global_module,               only: rcellx,rcelly,rcellz, atomf, species_glob, &
+    use global_module,               only: atomf, species_glob, &
          ni_in_cell, id_glob, atom_coord
     use cover_module,                only: DCS_parts
     use block_module,                only: nx_in_block,ny_in_block,nz_in_block, &
@@ -544,7 +545,8 @@ contains
     use primary_module,              only: domain
     use set_blipgrid_module,         only: naba_atoms_of_blocks
     use functions_on_grid,           only: gridfunctions, fn_on_grid
-    use dimens,                      only: n_my_grid_points, r_h, r_super_x, r_super_y, r_super_z
+    !ori use dimens,                      only: n_my_grid_points, r_h, r_super_x, r_super_y, r_super_z
+    use dimens,                      only: n_my_grid_points, r_h
     use GenComms,                    only: cq_abort
     use species_module,              only: natomf_species
     use PAO_grid_transform_module,   only: check_block
