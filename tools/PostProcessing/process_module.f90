@@ -1438,7 +1438,7 @@ contains
        else
         ibond_principal = findloc(nghbr_arr, minormax, dim=1)
       end if
-      dots = matmul(transpose(bond), bond(:, ibond_principal))  ! dot prod with chosen normal
+      dots = matmul(transpose(norm_bond), norm_bond(:, ibond_principal))  ! dot prod with chosen normal
       idx_direction = minloc(abs(dots), 1) ! select index of closest to perpendicular bond
       if (find_neighbours(4, find_atomno) == 0) then
       ! If 0, we choose second direction by closest projection
