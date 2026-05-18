@@ -98,6 +98,8 @@ contains
 !!    single subroutine PAO_or_gradPAO_to_grid
 !!   2023/11/15 11:20 lionel
 !!    Added optional argument sys to evaluate_pao interface
+!!   2026/05/18  TM 
+!!    Modified for non-orthorhombic cells
 !!  SOURCE
 !!
   subroutine PAO_or_gradPAO_to_grid(pao_fns, evaluate, direction)
@@ -119,6 +121,10 @@ contains
     use functions_on_grid, ONLY: gridfunctions, fn_on_grid
     use pao_format
 
+    ! for non-orthorhombic cell  2026May18 TM
+    use grid_module, only: dcell_block, dcell_grid, set_grid_parameters
+    use lattice_module, only: get_pos_cart
+
     implicit none
     integer, intent(in) :: pao_fns
     integer, intent(in) :: direction
@@ -131,7 +137,7 @@ contains
     integer :: my_species ! Temporary variables to reduce indirect accesses
     integer :: npoint ! outputs of check_block
     integer :: count1 ! incremented counter, maps from (l1, acz, m1) to linear index of gridfunctions%griddata
-    real(double):: dcellx_block,dcelly_block,dcellz_block ! grid dimensions, should be moved
+    !old real(double):: dcellx_block,dcelly_block,dcellz_block ! grid dimensions, should be moved
     real(double) :: x,y,z ! Temporary variables to reduce indirect accesses
     real(double) :: rcut ! Input to check_block
     real(double) :: val ! output, written into gridfunctions%griddata
@@ -140,6 +146,8 @@ contains
     integer, allocatable, dimension(:) :: ip_store ! outputs of check_block
     integer, allocatable, dimension(:,:,:) :: offset_position ! precomputed offsets
     real(double), allocatable, dimension(:) :: x_store, y_store, z_store, r_store ! outputs of check_block
+!NOC 2026 May15 TM
+    real(double) :: frac_block(3), cart_block(3), frac_grid(3), cart_grid(3)             
 
     interface
        ! Interface to return a value val given arguments
@@ -173,9 +181,14 @@ contains
     ! No need to compute these here, since they are derived from globals
     ! Store with rcellx, rcelly, rcellz?
     ! Reduces code duplication
-    dcellx_block=rcellx/blocks%ngcellx
-    dcelly_block=rcelly/blocks%ngcelly
-    dcellz_block=rcellz/blocks%ngcellz
+
+    ! Non-orthorhombic cell : TM (2026Mar18)
+    !   defines dcell_block(:) AND dcell_grid(:).
+    !     note that this will be shared in OMP
+        call set_grid_parameters
+    !old dcellx_block=rcellx/blocks%ngcellx
+    !old dcelly_block=rcelly/blocks%ngcelly
+    !old dcellz_block=rcellz/blocks%ngcellz
 
     call my_barrier()
 
@@ -208,15 +221,26 @@ contains
     !$omp parallel do default(none) &
     !$omp             schedule(dynamic) &
     !$omp             shared(domain, naba_atoms_of_blocks, offset_position, pao_fns, atomf, &
-    !$omp                    dcellx_block, dcelly_block, dcellz_block, dcs_parts, &
+!NOC    !$omp                    dcellx_block, dcelly_block, dcellz_block, dcs_parts, &
+    !$omp                    dcell_block, dcell_grid, dcs_parts, &  
     !$omp                    rcut, n_pts_in_block, pao, gridfunctions, direction) &
     !$omp             private(ia, ipart, iblock, l1, acz, m1, count1, x, y, z, val, position, &
     !$omp                     npoint, r_store, ip_store, x_store, y_store, z_store, my_species, &
+!NOC
+    !$omp                     frac_block, cart_block, &
     !$omp                     xblock, yblock, zblock, iatom, xatom, yatom, zatom, naba_part_label, ind_part, icover)
     blocks_loop_omp: do iblock = 1, domain%groups_on_node ! primary set of blocks
-       xblock = ( domain%idisp_primx(iblock) + domain%nx_origin - 1 ) * dcellx_block
-       yblock = ( domain%idisp_primy(iblock) + domain%ny_origin - 1 ) * dcelly_block
-       zblock = ( domain%idisp_primz(iblock) + domain%nz_origin - 1 ) * dcellz_block
+       !NOC  2026May18 TM
+        !old xblock = ( domain%idisp_primx(iblock) + domain%nx_origin - 1 ) * dcellx_block
+        !old yblock = ( domain%idisp_primy(iblock) + domain%ny_origin - 1 ) * dcelly_block
+        !old zblock = ( domain%idisp_primz(iblock) + domain%nz_origin - 1 ) * dcellz_block
+       frac_block(1) = domain%idisp_primx(iblock) + domain%nx_origin - 1
+       frac_block(2) = domain%idisp_primy(iblock) + domain%ny_origin - 1
+       frac_block(3) = domain%idisp_primz(iblock) + domain%nz_origin - 1
+       frac_block(:) = frac_block(:) * dcell_block(:)
+       call get_pos_cart(frac_block, cart_block)
+         xblock=cart_block(1); yblock=cart_block(2); zblock=cart_block(3)
+
        iatom = 0
        parts_loop_omp: do ipart=1,naba_atoms_of_blocks(atomf)%no_of_part(iblock)
           naba_part_label = naba_atoms_of_blocks(atomf)%list_part(ipart,iblock)
@@ -301,6 +325,9 @@ contains
 !!  CREATION DATE
 !!   Jul. 2002
 !!  MODIFICATION HISTORY
+!!   2026/05/18  TM 
+!!    Modified for non-orthorhombic cells (NOC)
+!!   
 !!
 !!  SOURCE
 !!
@@ -314,6 +341,12 @@ contains
     use block_module,  ONLY: nx_in_block,ny_in_block,nz_in_block!, &
 !         n_pts_in_block
 
+! for NOC  : note that check_block is called in threaded do-loops and 
+!            the variables defined here are "shared" ones, 
+!            if they are not defined here. 
+    use grid_module, only: dcell_grid
+    use lattice_module, only: get_pos_cart
+
 
     implicit none
     !Passed
@@ -326,21 +359,32 @@ contains
     real(double),intent(out) :: y_store(blocksize)
     real(double),intent(out) :: z_store(blocksize)
     !Local
-    real(double):: dcellx_block,dcelly_block,dcellz_block
-    real(double):: dcellx_grid, dcelly_grid, dcellz_grid
+    !old real(double):: dcellx_block,dcelly_block,dcellz_block
+    !old real(double):: dcellx_grid, dcelly_grid, dcellz_grid
     real(double):: dx, dy, dz
     integer :: ipoint, iz, iy, ix
     real(double) ::  r2, r_from_i, rx, ry, rz, x, y, z, rcut2
 
+    real(double) ::  frac_grid(3), cart_grid(3)  !these are private variables 
 
     rcut2 = rcut* rcut
-    dcellx_block=rcellx/blocks%ngcellx
-    dcelly_block=rcelly/blocks%ngcelly
-    dcellz_block=rcellz/blocks%ngcellz
 
-    dcellx_grid=dcellx_block/nx_in_block
-    dcelly_grid=dcelly_block/ny_in_block
-    dcellz_grid=dcellz_block/nz_in_block
+ ! NOC case
+ !  note that the following variables, dcellx_block, dcellx_grid are defined locally here,
+ !  and thus private ones, in the threaded parallel case. 
+ !   (since check_block is called from 
+ ! 
+ !  instead of these variables, we use dcell_grid(1:3) and dcell_block(1:3),
+ !   which are shared variables in the threaded parallel do-loop.
+
+    !old dcellx_block=rcellx/blocks%ngcellx
+    !old dcelly_block=rcelly/blocks%ngcelly
+    !old dcellz_block=rcellz/blocks%ngcellz
+
+    !old dcellx_grid=dcellx_block/nx_in_block
+    !old dcelly_grid=dcelly_block/ny_in_block
+    !old dcellz_grid=dcellz_block/nz_in_block
+    !   -> they should be already defined.
 
     ipoint=0
     npoint=0
@@ -349,13 +393,22 @@ contains
           do ix=1,nx_in_block
              ipoint=ipoint+1
 
-             dx=dcellx_grid*(ix-1)
-             dy=dcelly_grid*(iy-1)
-             dz=dcellz_grid*(iz-1)
+             !old dx=dcellx_grid*(ix-1)
+             !old dy=dcelly_grid*(iy-1)
+             !old dz=dcellz_grid*(iz-1)
+
+             frac_grid(3)=iz-1
+             frac_grid(2)=iy-1
+             frac_grid(1)=ix-1
+             frac_grid(:) = frac_grid(:) * dcell_grid(:)
+              call get_pos_cart(frac_grid, cart_grid)
+              dx=cart_grid(1);dy=cart_grid(2);dz=cart_grid(3)
 
              rx=xblock+dx-xatom
              ry=yblock+dy-yatom
              rz=zblock+dz-zatom
+
+
              r2 = rx * rx + ry * ry + rz * rz
 
              if(r2 < rcut2) then
