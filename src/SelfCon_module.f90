@@ -922,7 +922,9 @@ contains
     use numbers
     use PosTan
     use GenBlas
-    use dimens,         only: n_my_grid_points, grid_point_volume
+    !old use dimens,         only: n_my_grid_points, grid_point_volume
+    use dimens,         only: n_my_grid_points
+    use grid_module,    only: grid_point_volume
     use GenComms,       only: gsum, cq_abort, inode, ionode, my_barrier
     use io_module,      only: dump_charge, return_prefix
     use hartree_module, only: kerker, kerker_and_wdmetric, wdmetric

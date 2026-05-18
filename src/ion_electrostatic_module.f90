@@ -393,7 +393,13 @@ contains
     ! we now consider the genral case including non-orthorhombic cells
     !  as far as I have checked, the definition of row and columns should be the same
     !  between real_cell_vec and cell_vector
-      real_cell_vec(:,:) = cell_vector(:,:) 
+    ! 2026/05/19  (I am not completely sure, but..)
+     do jj=1,3
+      do ii=1,3
+       !real_cell_vec(ii,jj) = cell_vector(jj,ii)
+       real_cell_vec(ii,jj) = cell_vector(ii,jj)
+      enddo
+     enddo
 
     !real_cell_vec(1,1) = r_super_x
     !real_cell_vec(1,2) = zero
@@ -496,11 +502,13 @@ contains
       diff = zero
       do ii = 1,3
        do jj = 1,3
-        diff = diff + (recip_cell_vec(jj,ii)-two*pi*inv_cell_vector(jj,ii))**2
+        !write(*,*) " ii,jj,recip, inv = ",ii,jj,recip_cell_vec(jj,ii), two*pi*inv_cell_vector(jj,ii)
+        !diff = diff + (recip_cell_vec(jj,ii)-two*pi*inv_cell_vector(jj,ii))**2
+        diff = diff + (recip_cell_vec(jj,ii)-two*pi*inv_cell_vector(ii,jj))**2
        enddo
       enddo
      if(diff > very_small) call cq_abort &
-      ("ERROR! : set_ewald, check the consistency between cell_vector and ewald_cell")
+      ("ERROR! : set_ewald, check the consistency between cell_vector and ewald_cell",diff)
 
     if(inode==ionode.AND.iprint_gen>1) then
        write(unit=io_lun,fmt='(/8x," cartesian components of &

@@ -95,8 +95,10 @@ contains
 
     use datatypes
     use numbers    
-    use dimens,        only: grid_point_volume, &
-                             one_over_grid_point_volume, n_grid_z
+    !old use dimens,        only: grid_point_volume, &
+    !old                         one_over_grid_point_volume, n_grid_z
+    use dimens,        only: n_grid_z
+    use grid_module,   only: grid_point_volume, one_over_grid_point_volume
     use fft_module,    only: fft3, hartree_factor, z_columns_node, i0, recip_vector
     use GenComms,      only: gsum,  inode, cq_abort
     use global_module, only: area_SC, flag_full_stress, flag_stress
@@ -237,8 +239,10 @@ contains
 
     use datatypes
     use numbers    
-    use dimens,        only: grid_point_volume, &
-                             one_over_grid_point_volume, n_grid_z
+    !old use dimens,        only: grid_point_volume, &
+    !old                          one_over_grid_point_volume, n_grid_z
+    use dimens,        only: n_grid_z
+    use grid_module,   only: grid_point_volume, one_over_grid_point_volume
     use fft_module,    only: fft3, hartree_factor, z_columns_node, i0, recip_vector
     use GenComms,      only: gsum,  inode, cq_abort
     use global_module, only: area_SC, flag_full_stress, flag_stress
@@ -292,8 +296,10 @@ contains
   subroutine kerker_obsolete(resid,size,q0)
 
     use datatypes
-    use dimens,        only: grid_point_volume,                        &
-                             one_over_grid_point_volume, n_grid_z
+    !old use dimens,        only: grid_point_volume,                        &
+    !old                          one_over_grid_point_volume, n_grid_z
+    use dimens,        only: n_grid_z
+    use grid_module,   only: grid_point_volume, one_over_grid_point_volume
     use numbers
     use fft_module,    only: fft3, hartree_factor, z_columns_node, i0, &
                              kerker_list, size_kl
@@ -399,8 +405,10 @@ contains
   subroutine kerker(resid, size, q0)
     
     use datatypes
-    use dimens,        only: grid_point_volume,                        &
-                             one_over_grid_point_volume, n_grid_z
+    !old use dimens,        only: grid_point_volume,                        &
+    !old                          one_over_grid_point_volume, n_grid_z
+    use dimens,        only: n_grid_z
+    use grid_module,   only: grid_point_volume, one_over_grid_point_volume
     use numbers,       only: RD_ERR, zero, one
     use fft_module,    only: fft3, hartree_factor, z_columns_node, i0, &
                              kerker_list, size_kl
@@ -489,8 +497,10 @@ contains
   subroutine wdmetric(resid, resid_cov, size, q1)
     
     use datatypes
-    use dimens,        only: grid_point_volume,                        &
-                             one_over_grid_point_volume, n_grid_z
+    !old use dimens,        only: grid_point_volume,                        &
+    !old                          one_over_grid_point_volume, n_grid_z
+    use dimens,        only: n_grid_z
+    use grid_module,   only: grid_point_volume, one_over_grid_point_volume
     use numbers,       only: RD_ERR, zero, one
     use fft_module,    only: fft3, hartree_factor, z_columns_node, i0, &
                              kerker_list, size_kl
@@ -585,8 +595,10 @@ contains
   subroutine kerker_and_wdmetric(resid, resid_cov, size, q0, q1)
     
     use datatypes
-    use dimens,        only: grid_point_volume,                        &
-                             one_over_grid_point_volume, n_grid_z
+    !old use dimens,        only: grid_point_volume,                        &
+    !old                          one_over_grid_point_volume, n_grid_z
+    use dimens,        only: n_grid_z
+    use grid_module,   only: grid_point_volume, one_over_grid_point_volume
     use numbers,       only: RD_ERR, zero, one
     use fft_module,    only: fft3, hartree_factor, z_columns_node, i0, &
                              kerker_list, size_kl

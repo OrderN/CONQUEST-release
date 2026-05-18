@@ -625,8 +625,8 @@ contains
                                            flag_neutral_atom, min_layer
     use XC,                          only: get_xc_potential
     use GenBlas,                     only: copy, axpy, dot, rsum
-    use dimens,                      only: grid_point_volume,          &
-                                           n_my_grid_points, n_grid_z
+    !old use dimens,                      only: grid_point_volume,          &
+    use dimens,                      only: n_my_grid_points, n_grid_z
     use block_module,                only: n_blocks, n_pts_in_block
     use primary_module,              only: domain
     use set_blipgrid_module,         only: naba_atoms_of_blocks
@@ -654,6 +654,8 @@ contains
     use fft_module,                  only: fft3, hartree_factor,       &
                                            z_columns_node, i0
     use io_module,                   only: dump_locps, return_prefix
+
+    use grid_module, only: grid_point_volume
 
     implicit none
 
@@ -1795,8 +1797,10 @@ contains
                                       reg_dealloc_mem, type_dbl
     use GenComms,               only: cq_abort, gsum, inode, ionode
     use pseudopotential_common, only: pseudopotential, flag_neutral_atom_projector
-    use dimens,                 only: grid_point_volume, n_my_grid_points
+    !old use dimens,                 only: grid_point_volume, n_my_grid_points
+    use dimens,                 only: n_my_grid_points
     use GenBlas,                only: dot
+    use grid_module, only: grid_point_volume
 
     implicit none
 

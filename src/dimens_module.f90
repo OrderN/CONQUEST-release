@@ -50,7 +50,8 @@ module dimens
   use timer_module,  only: start_timer,     stop_timer, cq_timer
   use timer_module,  only: start_backtrace, stop_backtrace
 
-  use lattice_module, only: cell_length
+  use lattice_module, only: cell_length, volume
+  use grid_module, only: grid_point_volume, one_over_grid_point_volume
 
   implicit none
   save
@@ -58,11 +59,11 @@ module dimens
   ! 2025/Nov/6 TM  instead of using r_super_x, _y, _z, we will use cell_length(1:3)
   !real(double) :: cell_length(3)
 
-  real(double) :: r_super_x, r_super_y, r_super_z, volume
+  real(double) :: r_super_x, r_super_y, r_super_z
   real(double) :: r_super_x_squared, r_super_y_squared, r_super_z_squared
   real(double) :: r_s, r_h, r_c, r_nl, r_core_squared, r_dft_d2, r_exx, r_exxs
   real(double) :: r_s_atomf, r_h_atomf, r_MS, r_LD
-  real(double) :: grid_point_volume, one_over_grid_point_volume
+  !old real(double) :: grid_point_volume, one_over_grid_point_volume
   real(double) :: support_grid_volume
   real(double) :: GridCutoff, min_blip_sp
   real(double) :: AtomMove_buffer ! Buffer around primary sets and covering sets
@@ -204,9 +205,9 @@ contains
     r_super_x_squared = r_super_x * r_super_x
     r_super_y_squared = r_super_y * r_super_y
     r_super_z_squared = r_super_z * r_super_z
-    volume = r_super_x * r_super_y * r_super_z
-    grid_point_volume = volume/(n_grid_x*n_grid_y*n_grid_z)
-    one_over_grid_point_volume = one / grid_point_volume
+    !old volume = r_super_x * r_super_y * r_super_z
+    !old grid_point_volume = volume/(n_grid_x*n_grid_y*n_grid_z)
+    !old one_over_grid_point_volume = one / grid_point_volume
     !support_grid_volume = support_grid_spacing**3
     x_grid = one / real( n_grid_x, double)
     y_grid = one / real( n_grid_y, double)

@@ -283,7 +283,8 @@ contains
       use numbers
       use mpi
       use bucket_module,     only: local_bucket,remote_bucket
-      use dimens,            only: grid_point_volume
+      !old use dimens,            only: grid_point_volume
+      use grid_module,       only: grid_point_volume
       use comm_array_module, only: send_array, recv_array
       use mult_module,       only: matrix_scale, store_matrix_block_pos, &
                                    store_matrix_value_pos, matrix_pos,   &

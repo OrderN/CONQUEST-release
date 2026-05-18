@@ -29,6 +29,7 @@ module grid_module
   real(double) :: dcell_block(3)
   real(double) :: dcell_grid(3)
   real(double) :: grid_point_volume
+  real(double) :: one_over_grid_point_volume
 
 contains
  subroutine set_grid_parameters
@@ -56,6 +57,7 @@ contains
     ngridz = blocks%ngcellz * nz_in_block
     !to avoid the overflow of (ngridx*ngridy*ngridz)...
    grid_point_volume = volume/ngridx/ngridy/ngridz
+   one_over_grid_point_volume = one/grid_point_volume
 
   return
  end subroutine set_grid_parameters
