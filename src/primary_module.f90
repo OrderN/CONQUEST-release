@@ -130,7 +130,7 @@ contains
     logical :: members
 
 !NOC 2026 May19 TM
-    real(double) :: frac_add(3), cart_add(3), dcell_grid(3)
+    real(double) :: frac_add(3), cart_add(3), dcell_group(3)
     !old real(double) :: dcellx,dcelly,dcellz,xadd,yadd,zadd
 
 !****lat<$
@@ -192,9 +192,9 @@ contains
     ! --- analyse atoms numbers and positions in primary cell -------------
 
 !NOC 2026 May19 TM
-    dcell_grid(1)=cell_length(1)/real(groups%ngcellx,double)
-    dcell_grid(2)=cell_length(2)/real(groups%ngcelly,double)
-    dcell_grid(3)=cell_length(3)/real(groups%ngcellz,double)
+    dcell_group(1)=one/real(groups%ngcellx,double)
+    dcell_group(2)=one/real(groups%ngcelly,double)
+    dcell_group(3)=one/real(groups%ngcellz,double)
     !old dcellx=rcellx/real(groups%ngcellx,double)
     !old dcelly=rcelly/real(groups%ngcelly,double)
     !old dcellz=rcellz/real(groups%ngcellz,double)
@@ -215,10 +215,15 @@ contains
        frac_add(1)=real(nx1-nx,double)
        frac_add(2)=real(ny1-ny,double)
        frac_add(3)=real(nz1-nz,double)
+       frac_add(:)=frac_add(:)*dcell_group(:)
        call get_pos_cart(frac_add, cart_add)
        xadd=cart_add(1)
        yadd=cart_add(2)
        zadd=cart_add(3)
+       !old xadd=real(nx1-nx,double)*dcellx
+       !old yadd=real(ny1-ny,double)*dcelly
+       !old zadd=real(nz1-nz,double)*dcellz
+
 
        prim%nm_nodgroup(ng)=groups%nm_group(ind_group)
        if(prim%nm_nodgroup(ng).gt.0) then

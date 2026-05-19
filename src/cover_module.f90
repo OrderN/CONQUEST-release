@@ -183,7 +183,7 @@ contains
 
 !NOC 2026 May19 TM
     !old real(double) :: dcellx,dcelly,dcellz,xadd,yadd,zadd
-    real(double) :: frac_add(3), cart_add(3), dcell_grid(3)
+    real(double) :: frac_add(3), cart_add(3), dcell_group(3)
     real(double) :: xadd,yadd,zadd
 
     call start_timer(tmr_std_indexing)
@@ -214,9 +214,9 @@ contains
     ! Conversion factors from unit cell lengths->groups
 
 !NOC 2026 May19 TM
-    dcell_grid(1)=cell_length(1)/real(groups%ngcellx,double)
-    dcell_grid(2)=cell_length(2)/real(groups%ngcelly,double)
-    dcell_grid(3)=cell_length(3)/real(groups%ngcellz,double)
+    dcell_group(1)=one/real(groups%ngcellx,double)
+    dcell_group(2)=one/real(groups%ngcelly,double)
+    dcell_group(3)=one/real(groups%ngcellz,double)
     !old dcellx=rcellx/real(groups%ngcellx,double)
     !old dcelly=rcelly/real(groups%ngcelly,double)
     !old dcellz=rcellz/real(groups%ngcellz,double)
@@ -324,7 +324,7 @@ contains
        frac_add(1)=real(nx_o+nsx-nqx,double)
        frac_add(2)=real(ny_o+nsy-nqy,double)
        frac_add(3)=real(nz_o+nsz-nqz,double)
-       frac_add(:)=frac_add(:)*dcell_grid(:)
+       frac_add(:)=frac_add(:)*dcell_group(:)
        call get_pos_cart(frac_add, cart_add)
        xadd=cart_add(1)
        yadd=cart_add(2)
@@ -402,7 +402,7 @@ contains
            frac_add(1)=real(nx_o+nsx-nqx,double)
            frac_add(2)=real(ny_o+nsy-nqy,double)
            frac_add(3)=real(nz_o+nsz-nqz,double)
-           frac_add(:)=frac_add(:)*dcell_grid(:)
+           frac_add(:)=frac_add(:)*dcell_group(:)
           call get_pos_cart(frac_add, cart_add)
            xadd=cart_add(1)
            yadd=cart_add(2) 
