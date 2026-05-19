@@ -129,6 +129,8 @@ contains
 !!    Renamed rcut_supp -> rcut_atomf
 !!   2019/11/29 13:49 dave
 !!    Changed warning for core/atomf to be less sensitive
+!!   2026/05/19 tsuyoshi
+!!    modified for non-orthorhombic cells (NOC)
 !!  SOURCE
 !!
   subroutine set_blipgrid(myid,rcut_atomf,rcut_proj)
@@ -145,6 +147,11 @@ contains
     use species_module, ONLY: n_species
     !use pseudopotential_common
     use dimens, ONLY: n_grid_x, n_grid_y, n_grid_z, r_super_x, r_super_y, r_super_z
+    !use dimens, ONLY: n_grid_x, n_grid_y, n_grid_z
+
+    ! for non-orthorhombic cells(NOC)  2026May19 TM
+    use lattice_module, only: get_pos_cart, cell_length
+    use grid_module, ONLY: set_grid_parameters, dcell_grid
     
     implicit none
     integer,intent(in)      ::myid
@@ -155,6 +162,8 @@ contains
     integer :: max_recv_node_BtoG, max_send_node, max_sent_pairs, max_recv_call
     integer :: thisextent,i, spec
     logical :: warn
+  
+    real(double) :: rcell_grid(3)
 
     call start_timer(tmr_std_indexing)
     ! Find maxima and allocate derived types
@@ -195,11 +204,23 @@ contains
     call get_naba_BCSblk(rcut_atomf,naba_blocks_of_atoms,comm_naba_blocks_of_atoms)
     ! Calculate likely extents
     do spec = 1,n_species
-       xextent = int((rcut_atomf(spec)*n_grid_x/r_super_x)+0.5)
-       yextent = int((rcut_atomf(spec)*n_grid_y/r_super_y)+0.5)
-       zextent = int((rcut_atomf(spec)*n_grid_z/r_super_z)+0.5)
+
+    !NOC : Warning!!!  (2026May19 tsuyoshi)
+    ! blip-grid should be orthogonal regular grid and the relationship with the integration grid
+    ! in the case of non-orthogonal cells (NOC) needs to be considered carefully in the future.
+       call set_grid_parameters ! can be omitted
+       rcell_grid(:) = cell_length(:)*dcell_grid(:)  ! dcell_grid is in fractional unit
+       xextent = int((rcut_atomf(spec)/rcell_grid(1))+0.5)
+       yextent = int((rcut_atomf(spec)/rcell_grid(2))+0.5)
+       zextent = int((rcut_atomf(spec)/rcell_grid(3))+0.5)
+       !old xextent = int((rcut_atomf(spec)*n_grid_x/r_super_x)+0.5)
+       !old yextent = int((rcut_atomf(spec)*n_grid_y/r_super_y)+0.5)
+       !old zextent = int((rcut_atomf(spec)*n_grid_z/r_super_z)+0.5)
+    !NOC : Warning!!!  (TM)
+
        blip_info(spec)%Extent = MAX(xextent,MAX(yextent,zextent))
     end do
+
     do iprim=1,bundle%n_prim
     !do iprim=1,bundle%mx_iprim
        thisextent = 0
@@ -297,12 +318,14 @@ contains
 !!    Added cq_abort
 !!   2016/07/06 17:30 nakata
 !!    Renamed comm_in_BG -> comm_in_BtoG and comBG -> comm_naba_blocks_of_atoms
+!!   2026/05/19 tsuyoshi
+!!    modified for non-orthorhombic cells (NOC)
 !!  SOURCE
 !!
   subroutine get_naba_BCSblk(rcut,naba_blk,comm_naba_blocks_of_atoms)
 
     use datatypes
-    use numbers,        ONLY: very_small, pi,three,four, RD_ERR
+    use numbers,        ONLY: very_small, pi,three,four, RD_ERR, one
     use group_module,   ONLY: blocks,parts
     use primary_module, ONLY: bundle
     use cover_module,   ONLY: BCS_blocks,DCS_parts
@@ -310,6 +333,9 @@ contains
     use block_module,   ONLY: nx_in_block,ny_in_block,nz_in_block
     use GenComms, ONLY: cq_abort, myid
     use species_module, ONLY: n_species
+    ! for non-orthorhombic cell  2026May18 TM
+    use grid_module, only: dcell_block, dcell_grid, set_grid_parameters
+    use lattice_module, only: get_pos_cart, get_pos_frac
 
     implicit none
 
@@ -334,6 +360,11 @@ contains
     real(double) :: tmp(bundle%n_prim)
     logical :: flag_new
 
+!NOC 2026 May19 TM
+    real(double) :: frac_block(3), cart_block(3), frac_grid(3), cart_grid(3)
+    real(double) :: frac_min(3), cart_min(3), frac_max(3), cart_max(3), frac_vec(3), cart_vec(3)
+    real(double) :: dcell_part(3)
+
     do ni = 1,n_species
        rcutsq(ni)=rcut(ni)*rcut(ni)
     end do
@@ -345,13 +376,21 @@ contains
     ncoverz=BCS_blocks%ncoverz
     ncoveryz=BCS_blocks%ncovery*BCS_blocks%ncoverz
 
-    dcellx_part=rcellx/parts%ngcellx ; dcellx_block=rcellx/blocks%ngcellx
-    dcelly_part=rcelly/parts%ngcelly ; dcelly_block=rcelly/blocks%ngcelly
-    dcellz_part=rcellz/parts%ngcellz ; dcellz_block=rcellz/blocks%ngcellz
+!NOC 2026 May19 TM
+    ! note that dcell_part(), dcell_block(), dcell_grid() are all in fractional 
+    call set_grid_parameters
+    dcell_part(1)=one/parts%ngcellx
+    dcell_part(2)=one/parts%ngcelly
+    dcell_part(3)=one/parts%ngcellz
 
-    dcellx_grid=dcellx_block/nx_in_block
-    dcelly_grid=dcelly_block/ny_in_block
-    dcellz_grid=dcellz_block/nz_in_block
+    !old
+    !old dcellx_part=rcellx/parts%ngcellx ; dcellx_block=rcellx/blocks%ngcellx
+    !old dcelly_part=rcelly/parts%ngcelly ; dcelly_block=rcelly/blocks%ngcelly
+    !old dcellz_part=rcellz/parts%ngcellz ; dcellz_block=rcellz/blocks%ngcellz
+
+    !old dcellx_grid=dcellx_block/nx_in_block
+    !old dcelly_grid=dcelly_block/ny_in_block
+    !old dcellz_grid=dcellz_block/nz_in_block
 
     !- CHECK BCS_blocks ---
     !  write(io_lun,*) ' ng_cover of BCS_blocks ',&
@@ -378,9 +417,16 @@ contains
                np,parts%i_cc2seq(ind_part)
 
           !l.h.s. corner of the partition
-          xmin_p= dcellx_part*(nx-1)
-          ymin_p= dcelly_part*(ny-1)
-          zmin_p= dcellz_part*(nz-1)
+          !NOC
+          frac_min(1)= dcell_part(1)*real(nx-1,double)
+          frac_min(2)= dcell_part(2)*real(ny-1,double)
+          frac_min(3)= dcell_part(3)*real(nz-1,double)
+          call get_pos_cart(frac_min, cart_min)
+          xmin_p=cart_min(1);ymin_p=cart_min(2);zmin_p=cart_min(3)
+          !old
+          !old xmin_p= dcellx_part*(nx-1)
+          !old ymin_p= dcelly_part*(ny-1)
+          !old zmin_p= dcellz_part*(nz-1)
 
           ierror=0
           do ni=1,bundle%nm_nodgroup(np)  ! number of atoms in the partition
@@ -403,12 +449,24 @@ contains
 
                 !(xmin,ymin,zmin) is the l.h.s. corner of the block
                 !   -dcellx_grid etc. is added 4/8/2000 T M
-                xmin= dcellx_block*(nx-1)
-                xmax= xmin+ dcellx_block -dcellx_grid
-                ymin= dcelly_block*(ny-1)
-                ymax= ymin+ dcelly_block -dcelly_grid
-                zmin= dcellz_block*(nz-1)
-                zmax= zmin+ dcellz_block -dcellz_grid
+
+               !NOC
+                frac_min(1)= dcell_block(1)*real(nx-1,double)
+                frac_min(2)= dcell_block(2)*real(ny-1,double)
+                frac_min(3)= dcell_block(3)*real(nz-1,double)
+                frac_max(:)= frac_min(:) + dcell_block(:) - dcell_grid(:)
+               call get_pos_cart(frac_min, cart_min)
+               call get_pos_cart(frac_max, cart_max)
+                xmin=cart_min(1);ymin=cart_min(2);zmin=cart_min(3)
+                xmax=cart_max(1);ymax=cart_max(2);zmax=cart_max(3)
+
+               !old
+               !old  xmin= dcellx_block*(nx-1)
+               !old  xmax= xmin+ dcellx_block -dcellx_grid
+               !old  ymin= dcelly_block*(ny-1)
+               !old  ymax= ymin+ dcelly_block -dcelly_grid
+               !old  zmin= dcellz_block*(nz-1)
+               !old  zmax= zmin+ dcellz_block -dcellz_grid
 
                 call distsq_blk_atom&
                      (xatom,yatom,zatom,xmin,xmax,ymin,ymax,zmin,zmax,distsq)
@@ -469,9 +527,20 @@ contains
                       ierror=ierror+1
                    endif
 
-                   nx=anint((xmin-xmin_p+very_small)/dcellx_part)
-                   ny=anint((ymin-ymin_p+very_small)/dcelly_part)
-                   nz=anint((zmin-zmin_p+very_small)/dcellz_part)
+                  !NOC
+                    cart_vec(1) = xmin-xmin_p+very_small
+                    cart_vec(2) = ymin-ymin_p+very_small
+                    cart_vec(3) = zmin-zmin_p+very_small
+                    call get_pos_frac(cart_vec,frac_vec)
+                    frac_vec(:)=frac_vec(:)/dcell_part(:)
+                    nx=anint(frac_vec(1))
+                    ny=anint(frac_vec(2))
+                    nz=anint(frac_vec(3))
+                   !old
+                   !old nx=anint((xmin-xmin_p+very_small)/dcellx_part)
+                   !old ny=anint((ymin-ymin_p+very_small)/dcelly_part)
+                   !old nz=anint((zmin-zmin_p+very_small)/dcellz_part)
+
                    nx=nx+ncoverx_add
                    ny=ny+ncovery_add
                    nz=nz+ncoverz_add
