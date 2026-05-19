@@ -140,6 +140,8 @@ contains
     use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_int,&
          type_dbl
     use functions, ONLY: heapsort_integer_index
+    ! for non-orthorhombic cell  2026May19 TM
+    use lattice_module, only: get_pos_cart, cell_length
 
     implicit none
 
@@ -177,8 +179,12 @@ contains
     integer :: minz,ngcz,ng_in_min,ind,nqx,nqy,nqz,ind_qart,ino,ind_cover
     integer :: nrx,nry,nrz,nsx,nsy,nsz,ni,nnd,stat
     integer :: nm_in_cover
-    real(double) :: dcellx,dcelly,dcellz,xadd,yadd,zadd
     logical :: members
+
+!NOC 2026 May19 TM
+    !old real(double) :: dcellx,dcelly,dcellz,xadd,yadd,zadd
+    real(double) :: frac_add(3), cart_add(3), dcell_grid(3)
+    real(double) :: xadd,yadd,zadd
 
     call start_timer(tmr_std_indexing)
     ! This determines whether or not we find information about all 
@@ -206,9 +212,15 @@ contains
     !        set%ng_cover,set%mx_gcover)
     !endif
     ! Conversion factors from unit cell lengths->groups
-    dcellx=rcellx/real(groups%ngcellx,double)
-    dcelly=rcelly/real(groups%ngcelly,double)
-    dcellz=rcellz/real(groups%ngcellz,double)
+
+!NOC 2026 May19 TM
+    dcell_grid(1)=cell_length(1)/real(groups%ngcellx,double)
+    dcell_grid(2)=cell_length(2)/real(groups%ngcelly,double)
+    dcell_grid(3)=cell_length(3)/real(groups%ngcellz,double)
+    !old dcellx=rcellx/real(groups%ngcellx,double)
+    !old dcelly=rcelly/real(groups%ngcelly,double)
+    !old dcellz=rcellz/real(groups%ngcellz,double)
+
     ! Fully explained in notes mentioned above
     nmodx=((groups%ngcellx+set%nspanlx-1)/groups%ngcellx)*groups%ngcellx
     nmody=((groups%ngcelly+set%nspanly-1)/groups%ngcelly)*groups%ngcelly
@@ -307,9 +319,20 @@ contains
        nqx=1+mod(nx_o+nsx+nmodx-1,groups%ngcellx)
        nqy=1+mod(ny_o+nsy+nmody-1,groups%ngcelly)
        nqz=1+mod(nz_o+nsz+nmodz-1,groups%ngcellz)
-       xadd=(nx_o+nsx-nqx)*dcellx
-       yadd=(ny_o+nsy-nqy)*dcelly
-       zadd=(nz_o+nsz-nqz)*dcellz
+
+!NOC 2026 May19 TM
+       frac_add(1)=real(nx_o+nsx-nqx,double)
+       frac_add(2)=real(ny_o+nsy-nqy,double)
+       frac_add(3)=real(nz_o+nsz-nqz,double)
+       frac_add(:)=frac_add(:)*dcell_grid(:)
+       call get_pos_cart(frac_add, cart_add)
+       xadd=cart_add(1)
+       yadd=cart_add(2)
+       zadd=cart_add(3)
+       !old xadd=(nx_o+nsx-nqx)*dcellx
+       !old yadd=(ny_o+nsy-nqy)*dcelly
+       !old zadd=(nz_o+nsz-nqz)*dcellz
+
        ind_qart=(nqx-1)*groups%ngcelly*groups%ngcellz+&
             (nqy-1)*groups%ngcellz+nqz
        set%lab_cell(ind_cover)=ind_qart
@@ -375,9 +398,19 @@ contains
           nqx=1+mod(nx_o+nsx+nmodx-1,groups%ngcellx)
           nqy=1+mod(ny_o+nsy+nmody-1,groups%ngcelly)
           nqz=1+mod(nz_o+nsz+nmodz-1,groups%ngcellz)
-          xadd=(nx_o+nsx-nqx)*dcellx
-          yadd=(ny_o+nsy-nqy)*dcelly
-          zadd=(nz_o+nsz-nqz)*dcellz
+!NOC 2026 May19 TM
+           frac_add(1)=real(nx_o+nsx-nqx,double)
+           frac_add(2)=real(ny_o+nsy-nqy,double)
+           frac_add(3)=real(nz_o+nsz-nqz,double)
+           frac_add(:)=frac_add(:)*dcell_grid(:)
+          call get_pos_cart(frac_add, cart_add)
+           xadd=cart_add(1)
+           yadd=cart_add(2) 
+           zadd=cart_add(3)
+          !old xadd=(nx_o+nsx-nqx)*dcellx
+          !old yadd=(ny_o+nsy-nqy)*dcelly
+          !old zadd=(nz_o+nsz-nqz)*dcellz
+
           ind_qart= set%lab_cell(ind_cover)
           if(groups%nm_group(ind_qart)>0) then
              set%n_ing_cover(ind_cover)=groups%nm_group(ind_qart)

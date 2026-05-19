@@ -92,6 +92,8 @@ contains
 !!    Added important bug fix from Tsuyoshi (zero iprim_seq only if members)
 !!   22/01/2014 lat
 !!    Added important iprim_part setup in make_prime/(de)allocate_primary_set
+!!   19/05/2026 tsuyoshi
+!!    for Non-orthrhombic cells
 !!  SOURCE
 !!
   subroutine make_prim(groups,prim,myid,m_id_glob, &
@@ -100,6 +102,9 @@ contains
     ! Module usage  
     use global_module
     use basic_types
+
+    ! for non-orthorhombic cell  2026May19 TM
+    use lattice_module, only: get_pos_cart, cell_length
 
     implicit none
 
@@ -121,10 +126,12 @@ contains
     integer :: iprojz(groups%mx_gedge)
     integer :: irc,ierr,ind_group0,nx,ny,nz,ng,ind_group,nx1,ny1,nz1,ni
     integer :: nnd
-    real(double) :: dcellx,dcelly,dcellz
     real(double) :: xadd,yadd,zadd
     logical :: members
 
+!NOC 2026 May19 TM
+    real(double) :: frac_add(3), cart_add(3), dcell_grid(3)
+    !old real(double) :: dcellx,dcelly,dcellz,xadd,yadd,zadd
 
 !****lat<$
     call start_backtrace(t=backtrace_timer,who='make_prim',where=9,level=2)
@@ -183,9 +190,15 @@ contains
             groups%ngcellz)-prim%nleftz
     enddo
     ! --- analyse atoms numbers and positions in primary cell -------------
-    dcellx=rcellx/groups%ngcellx
-    dcelly=rcelly/groups%ngcelly
-    dcellz=rcellz/groups%ngcellz
+
+!NOC 2026 May19 TM
+    dcell_grid(1)=cell_length(1)/real(groups%ngcellx,double)
+    dcell_grid(2)=cell_length(2)/real(groups%ngcelly,double)
+    dcell_grid(3)=cell_length(3)/real(groups%ngcellz,double)
+    !old dcellx=rcellx/real(groups%ngcellx,double)
+    !old dcelly=rcelly/real(groups%ngcelly,double)
+    !old dcellz=rcellz/real(groups%ngcellz,double)
+
     if(members) prim%iprim_seq = 0
     prim%n_prim=0
     prim%nm_nodbeg(1)=1
@@ -197,9 +210,16 @@ contains
        nx1=prim%nx_origin+prim%idisp_primx(ng)
        ny1=prim%ny_origin+prim%idisp_primy(ng)
        nz1=prim%nz_origin+prim%idisp_primz(ng)
-       xadd=real(nx1-nx,double)*dcellx
-       yadd=real(ny1-ny,double)*dcelly
-       zadd=real(nz1-nz,double)*dcellz
+
+!NOC 2026 May19 TM
+       frac_add(1)=real(nx1-nx,double)
+       frac_add(2)=real(ny1-ny,double)
+       frac_add(3)=real(nz1-nz,double)
+       call get_pos_cart(frac_add, cart_add)
+       xadd=cart_add(1)
+       yadd=cart_add(2)
+       zadd=cart_add(3)
+
        prim%nm_nodgroup(ng)=groups%nm_group(ind_group)
        if(prim%nm_nodgroup(ng).gt.0) then
           do ni=1,prim%nm_nodgroup(ng)
