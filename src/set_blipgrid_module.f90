@@ -615,7 +615,7 @@ contains
   subroutine get_naba_BCSblk_max(rcut,max_naba_blocks_of_atoms, max_recv_node_BtoG)
 
     use datatypes
-    use numbers,        ONLY: very_small, pi,three,four, RD_ERR
+    use numbers,        ONLY: very_small, pi,three,four, RD_ERR, one
     use group_module,   ONLY: blocks,parts
     use primary_module, ONLY: bundle
     use cover_module,   ONLY: BCS_blocks,DCS_parts
@@ -623,6 +623,10 @@ contains
     use block_module,   ONLY: nx_in_block,ny_in_block,nz_in_block
     use GenComms, ONLY: cq_abort
     use species_module, ONLY: n_species
+
+    ! for non-orthorhombic cell  2026May18 TM
+    use grid_module, only: dcell_block, dcell_grid, set_grid_parameters
+    use lattice_module, only: get_pos_cart, get_pos_frac
 
     implicit none
 
@@ -643,6 +647,11 @@ contains
     integer, dimension(numprocs) :: list_recv_node
     logical :: flag_new
 
+!NOC 2026 May19 TM
+    real(double) :: frac_block(3), cart_block(3), frac_grid(3), cart_grid(3)
+    real(double) :: frac_min(3), cart_min(3), frac_max(3), cart_max(3), frac_vec(3), cart_vec(3)
+    !real(double) :: dcell_part(3)
+
     do ii=1,n_species
        rcutsq(ii)=rcut(ii)*rcut(ii)
     end do
@@ -652,13 +661,22 @@ contains
     ncoverz=BCS_blocks%ncoverz
     ncoveryz=BCS_blocks%ncovery*BCS_blocks%ncoverz
 
-    dcellx_part=rcellx/parts%ngcellx ; dcellx_block=rcellx/blocks%ngcellx
-    dcelly_part=rcelly/parts%ngcelly ; dcelly_block=rcelly/blocks%ngcelly
-    dcellz_part=rcellz/parts%ngcellz ; dcellz_block=rcellz/blocks%ngcellz
+!NOC 2026 May19 TM
+    ! note that dcell_part(), dcell_block(), dcell_grid() are all in fractional
+    call set_grid_parameters
 
-    dcellx_grid=dcellx_block/nx_in_block
-    dcelly_grid=dcelly_block/ny_in_block
-    dcellz_grid=dcellz_block/nz_in_block
+    !dcell_part is not needed in this subroutine
+    !dcell_part(1)=one/parts%ngcellx
+    !dcell_part(2)=one/parts%ngcelly
+    !dcell_part(3)=one/parts%ngcellz
+          
+    !old dcellx_part=rcellx/parts%ngcellx ; dcellx_block=rcellx/blocks%ngcellx
+    !old dcelly_part=rcelly/parts%ngcelly ; dcelly_block=rcelly/blocks%ngcelly
+    !old dcellz_part=rcellz/parts%ngcellz ; dcellz_block=rcellz/blocks%ngcellz
+
+    !old dcellx_grid=dcellx_block/nx_in_block
+    !old dcelly_grid=dcelly_block/ny_in_block
+    !old dcellz_grid=dcellz_block/nz_in_block
 
     do np=1,bundle%groups_on_node  ! primary partitions in bundle
        if(bundle%nm_nodgroup(np) > 0) then  ! Are there atoms?
@@ -687,12 +705,24 @@ contains
 
                 !(xmin,ymin,zmin) is the l.h.s. corner of the block
                 !   -dcellx_grid etc. is added 4/8/2000 T M
-                xmin= dcellx_block*(nx-1)
-                xmax= xmin+ dcellx_block -dcellx_grid
-                ymin= dcelly_block*(ny-1)
-                ymax= ymin+ dcelly_block -dcelly_grid
-                zmin= dcellz_block*(nz-1)
-                zmax= zmin+ dcellz_block -dcellz_grid
+               !NOC
+                frac_min(1)= dcell_block(1)*real(nx-1,double)
+                frac_min(2)= dcell_block(2)*real(ny-1,double)
+                frac_min(3)= dcell_block(3)*real(nz-1,double)
+                frac_max(:)= frac_min(:) + dcell_block(:) - dcell_grid(:)
+               call get_pos_cart(frac_min, cart_min)
+               call get_pos_cart(frac_max, cart_max)
+                xmin=cart_min(1);ymin=cart_min(2);zmin=cart_min(3)
+                xmax=cart_max(1);ymax=cart_max(2);zmax=cart_max(3)
+
+               !old
+               !old xmin= dcellx_block*(nx-1)
+               !old xmax= xmin+ dcellx_block -dcellx_grid
+               !old ymin= dcelly_block*(ny-1)
+               !old ymax= ymin+ dcelly_block -dcelly_grid
+               !old zmin= dcellz_block*(nz-1)
+               !old zmax= zmin+ dcellz_block -dcellz_grid
+
                 call distsq_blk_atom&
                      (xatom,yatom,zatom,xmin,xmax,ymin,ymax,zmin,zmax,distsq)
                 if(distsq < rcutsq(spec)-RD_ERR) then  ! If it is a neighbour block,...
@@ -837,6 +867,9 @@ contains
     use cover_module,   ONLY: DCS_parts
     use block_module,   ONLY: nx_in_block,ny_in_block,nz_in_block
     use GenComms, ONLY: cq_abort
+    ! for non-orthorhombic cell  2026May19 TM
+    use grid_module, only: dcell_block, dcell_grid, set_grid_parameters
+    use lattice_module, only: get_pos_cart, get_pos_frac
 
     implicit none
 
@@ -852,17 +885,26 @@ contains
     integer      :: ind_part, iorb_alp_i_iblk, iorb_alp_i, norb, spec
     integer      :: irc,ierr
 
+!NOC 2026 May19 TM
+    real(double) :: frac_min(3), cart_min(3), frac_max(3), cart_max(3), frac_vec(3), cart_vec(3)
+
     ! halo_set%naba_atm => naba_set
     do ia = 1,n_species
        rcutsq(ia)=rcut(ia)*rcut(ia)
     end do
-    dcellx_block=rcellx/blocks%ngcellx
-    dcelly_block=rcelly/blocks%ngcelly
-    dcellz_block=rcellz/blocks%ngcellz
 
-    dcellx_grid=dcellx_block/nx_in_block
-    dcelly_grid=dcelly_block/ny_in_block
-    dcellz_grid=dcellz_block/nz_in_block
+!NOC 2026 May19 TM
+    ! note that dcell_part(), dcell_block(), dcell_grid() are all in fractional
+    call set_grid_parameters
+
+    !old
+    !old dcellx_block=rcellx/blocks%ngcellx
+    !old dcelly_block=rcelly/blocks%ngcelly
+    !old dcellz_block=rcellz/blocks%ngcellz
+
+    !old dcellx_grid=dcellx_block/nx_in_block
+    !old dcelly_grid=dcelly_block/ny_in_block
+    !old dcellz_grid=dcellz_block/nz_in_block
 
     naba_set%no_of_part=0
     naba_set%no_of_atom=0 
@@ -882,12 +924,22 @@ contains
 
     do iprim_blk=1,domain%groups_on_node  ! primary blocks of domain
        !(xmin,ymin,zmin) is the l.h.s. corner of the block
-       xmin=(domain%idisp_primx(iprim_blk)+domain%nx_origin-1)*dcellx_block
-       ymin=(domain%idisp_primy(iprim_blk)+domain%ny_origin-1)*dcelly_block
-       zmin=(domain%idisp_primz(iprim_blk)+domain%nz_origin-1)*dcellz_block
-       xmax= xmin+dcellx_block-dcellx_grid
-       ymax= ymin+dcelly_block-dcelly_grid
-       zmax= zmin+dcellz_block-dcellz_grid
+        frac_min(1)=(domain%idisp_primx(iprim_blk)+domain%nx_origin-1)*dcell_block(1)
+        frac_min(2)=(domain%idisp_primy(iprim_blk)+domain%ny_origin-1)*dcell_block(2)
+        frac_min(3)=(domain%idisp_primz(iprim_blk)+domain%nz_origin-1)*dcell_block(3)
+        frac_max(:)= frac_min(:) + dcell_block(:) - dcell_grid(:)
+       call get_pos_cart(frac_min, cart_min)
+       call get_pos_cart(frac_max, cart_max)
+        xmin=cart_min(1);ymin=cart_min(2);zmin=cart_min(3)
+        xmax=cart_max(1);ymax=cart_max(2);zmax=cart_max(3)
+
+       !old
+       !old xmin=(domain%idisp_primx(iprim_blk)+domain%nx_origin-1)*dcellx_block
+       !old ymin=(domain%idisp_primy(iprim_blk)+domain%ny_origin-1)*dcelly_block
+       !old zmin=(domain%idisp_primz(iprim_blk)+domain%nz_origin-1)*dcellz_block
+       !old xmax= xmin+dcellx_block-dcellx_grid
+       !old ymax= ymin+dcelly_block-dcelly_grid
+       !old zmax= zmin+dcellz_block-dcellz_grid
 
        ia=0                  ! counter of naba atoms for each prim block
        icover=0              ! counter of covering atoms
@@ -1092,6 +1144,9 @@ contains
     use cover_module,   ONLY: DCS_parts
     use block_module,   ONLY: nx_in_block,ny_in_block,nz_in_block
     use GenComms, ONLY: cq_abort
+    ! for non-orthorhombic cell  2026May19 TM
+    use grid_module, only: dcell_block, dcell_grid, set_grid_parameters
+    use lattice_module, only: get_pos_cart, get_pos_frac
 
     implicit none
 
@@ -1111,6 +1166,9 @@ contains
     integer, allocatable, dimension(:) :: ihalo
     logical :: atoms
 
+!NOC 2026 May19 TM
+    real(double) :: frac_min(3), cart_min(3), frac_max(3), cart_max(3), frac_vec(3), cart_vec(3)
+
     do ia=1,n_species
        rcutsq(ia)=rcut(ia)*rcut(ia)
     end do
@@ -1118,13 +1176,19 @@ contains
     allocate(ihalo(DCS_parts%mx_mcover),STAT=ierr)
     if(ierr/=0) call cq_abort("Error allocating icover in getDCSprtmax: ",DCS_parts%mx_mcover,ierr)
     call stop_timer(tmr_std_allocation)
-    dcellx_block=rcellx/blocks%ngcellx
-    dcelly_block=rcelly/blocks%ngcelly
-    dcellz_block=rcellz/blocks%ngcellz
 
-    dcellx_grid=dcellx_block/nx_in_block
-    dcelly_grid=dcelly_block/ny_in_block
-    dcellz_grid=dcellz_block/nz_in_block
+!NOC 2026 May19 TM
+    ! note that dcell_part(), dcell_block(), dcell_grid() are all in fractional
+    call set_grid_parameters
+
+    !old
+    !old dcellx_block=rcellx/blocks%ngcellx
+    !old dcelly_block=rcelly/blocks%ngcelly
+    !old dcellz_block=rcellz/blocks%ngcellz
+
+    !old dcellx_grid=dcellx_block/nx_in_block
+    !old dcelly_grid=dcelly_block/ny_in_block
+    !old dcellz_grid=dcellz_block/nz_in_block
 
     iorb_alp_i_iblk = 0
     !TM VARNSF : END
@@ -1134,12 +1198,21 @@ contains
     ihalo = 0
     do iprim_blk=1,domain%groups_on_node  ! primary blocks of domain
        !(xmin,ymin,zmin) is the l.h.s. corner of the block
-       xmin=(domain%idisp_primx(iprim_blk)+domain%nx_origin-1)*dcellx_block
-       ymin=(domain%idisp_primy(iprim_blk)+domain%ny_origin-1)*dcelly_block
-       zmin=(domain%idisp_primz(iprim_blk)+domain%nz_origin-1)*dcellz_block
-       xmax= xmin+dcellx_block-dcellx_grid
-       ymax= ymin+dcelly_block-dcelly_grid
-       zmax= zmin+dcellz_block-dcellz_grid
+        frac_min(1)=(domain%idisp_primx(iprim_blk)+domain%nx_origin-1)*dcell_block(1)
+        frac_min(2)=(domain%idisp_primy(iprim_blk)+domain%ny_origin-1)*dcell_block(2)
+        frac_min(3)=(domain%idisp_primz(iprim_blk)+domain%nz_origin-1)*dcell_block(3)
+        frac_max(:)= frac_min(:) + dcell_block(:) - dcell_grid(:)
+       call get_pos_cart(frac_min, cart_min)
+       call get_pos_cart(frac_max, cart_max)
+        xmin=cart_min(1);ymin=cart_min(2);zmin=cart_min(3)
+        xmax=cart_max(1);ymax=cart_max(2);zmax=cart_max(3)
+    
+       !old xmin=(domain%idisp_primx(iprim_blk)+domain%nx_origin-1)*dcellx_block
+       !old ymin=(domain%idisp_primy(iprim_blk)+domain%ny_origin-1)*dcelly_block
+       !old zmin=(domain%idisp_primz(iprim_blk)+domain%nz_origin-1)*dcellz_block
+       !old xmax= xmin+dcellx_block-dcellx_grid
+       !old ymax= ymin+dcelly_block-dcelly_grid
+       !old zmax= zmin+dcellz_block-dcellz_grid
 
        ia=0                  ! counter of naba atoms for each prim block
        icover=0              ! counter of covering atoms
@@ -1812,7 +1885,7 @@ contains
   subroutine make_table(mynode,nnd_rem,npair,isend,iprim)
 
     use datatypes
-    use numbers,       ONLY:very_small
+    use numbers,       ONLY:very_small, one
     use global_module, ONLY:rcellx,rcelly,rcellz,x_atom_cell,y_atom_cell,z_atom_cell
     use group_module,  ONLY:parts,blocks
     use primary_module,ONLY:domain,bundle
@@ -1820,6 +1893,10 @@ contains
     use global_module, ONLY: id_glob
     use atoms, ONLY: atoms_on_node, atom_number_on_node, node_doing_atom
     use GenComms, ONLY: cq_abort
+
+    ! for non-orthorhombic cell  2026May18 TM
+    use grid_module, only: dcell_block, dcell_grid, set_grid_parameters
+    use lattice_module, only: get_pos_cart, get_pos_frac
 
     implicit none
 
@@ -1841,6 +1918,11 @@ contains
     integer :: ix,iy,iz
     integer :: irc,ierr
 
+!NOC 2026 May19 TM  
+    real(double) :: frac_block(3), cart_block(3), frac_grid(3), cart_grid(3)
+    real(double) :: frac_min(3), cart_min(3), frac_max(3), cart_max(3), frac_vec(3), cart_vec(3)
+    real(double) :: dcell_part(3)
+
     ncoverx_add=DCS_parts%ncoverx
     ncovery_add=DCS_parts%ncovery
     ncoverz_add=DCS_parts%ncoverz
@@ -1848,9 +1930,17 @@ contains
     ncoverz=2*DCS_parts%ncoverz+1
     ncoveryz=(2*DCS_parts%ncovery+1)*ncoverz
 
-    dcellx_part=rcellx/parts%ngcellx ; dcellx_block=rcellx/blocks%ngcellx
-    dcelly_part=rcelly/parts%ngcelly ; dcelly_block=rcelly/blocks%ngcelly
-    dcellz_part=rcellz/parts%ngcellz ; dcellz_block=rcellz/blocks%ngcellz
+!NOC 2026 May19 TM
+    ! note that dcell_part(), dcell_block(), dcell_grid() are all in fractional
+    call set_grid_parameters
+    dcell_part(1)=one/parts%ngcellx
+    dcell_part(2)=one/parts%ngcelly
+    dcell_part(3)=one/parts%ngcellz
+
+    !old
+    !old dcellx_part=rcellx/parts%ngcellx ; dcellx_block=rcellx/blocks%ngcellx
+    !old dcelly_part=rcelly/parts%ngcelly ; dcelly_block=rcelly/blocks%ngcelly
+    !old dcellz_part=rcellz/parts%ngcellz ; dcellz_block=rcellz/blocks%ngcellz
 
     if(npair < 1) call cq_abort('npair in make_table <1 ?? : npair = ',nnd_rem,iprim)
     do ipair=1,npair
@@ -1859,9 +1949,16 @@ contains
        ifind_block=blocks%i_cc2seq(ind_block)
        if(ifind_block <= 0 .or. ifind_block > domain%groups_on_node) &
             call cq_abort('No block found in make_table: ',ipair,ifind_block)
-       xmin=(domain%idisp_primx(ifind_block)+domain%nx_origin-1)*dcellx_block
-       ymin=(domain%idisp_primy(ifind_block)+domain%ny_origin-1)*dcelly_block
-       zmin=(domain%idisp_primz(ifind_block)+domain%nz_origin-1)*dcellz_block 
+       !NOC
+       frac_min(1)=(domain%idisp_primx(ifind_block)+domain%nx_origin-1)*dcell_block(1)
+       frac_min(2)=(domain%idisp_primy(ifind_block)+domain%ny_origin-1)*dcell_block(2)
+       frac_min(3)=(domain%idisp_primz(ifind_block)+domain%nz_origin-1)*dcell_block(3) 
+       call get_pos_cart(frac_min, cart_min)
+       xmin=cart_min(1);ymin=cart_min(2);zmin=cart_min(3)
+       !old
+       !old xmin=(domain%idisp_primx(ifind_block)+domain%nx_origin-1)*dcellx_block
+       !old ymin=(domain%idisp_primy(ifind_block)+domain%ny_origin-1)*dcelly_block
+       !old zmin=(domain%idisp_primz(ifind_block)+domain%nz_origin-1)*dcellz_block 
        ifind_part=0 
 
        do ipart=1,naba_atoms_of_blocks(atomf)%no_of_part(ifind_block) !Loop over naba parts
@@ -1870,9 +1967,18 @@ contains
           nxp= ind_qart/(DCS_parts%ncovery*DCS_parts%ncoverz)
           nyp= (ind_qart-nxp*DCS_parts%ncovery*DCS_parts%ncoverz)/DCS_parts%ncoverz
           nzp= ind_qart-nxp*DCS_parts%ncovery*DCS_parts%ncoverz-nyp*DCS_parts%ncoverz
-          xmin_p= (nxp+DCS_parts%nx_origin-DCS_parts%nspanlx-1)*dcellx_part
-          ymin_p= (nyp+DCS_parts%ny_origin-DCS_parts%nspanly-1)*dcelly_part
-          zmin_p= (nzp+DCS_parts%nz_origin-DCS_parts%nspanlz-1)*dcellz_part
+
+         !NOC
+          frac_min(1)= real(nxp+DCS_parts%nx_origin-DCS_parts%nspanlx-1,double)*dcell_part(1)
+          frac_min(2)= real(nyp+DCS_parts%ny_origin-DCS_parts%nspanly-1,double)*dcell_part(2)
+          frac_min(3)= real(nzp+DCS_parts%nz_origin-DCS_parts%nspanlz-1,double)*dcell_part(3)
+          call get_pos_cart(frac_min, cart_min)
+          xmin_p=cart_min(1);ymin_p=cart_min(2);zmin_p=cart_min(3)
+          !old
+          !old xmin_p= (nxp+DCS_parts%nx_origin-DCS_parts%nspanlx-1)*dcellx_part
+          !old ymin_p= (nyp+DCS_parts%ny_origin-DCS_parts%nspanly-1)*dcelly_part
+          !old zmin_p= (nzp+DCS_parts%nz_origin-DCS_parts%nspanlz-1)*dcellz_part
+  !!!TMTMTMTMT
 
           ! We must check carefully whether the following scheme 
           ! to calculate the offsets is consistent with the one used in
@@ -1880,9 +1986,19 @@ contains
           ! 'get_naba_BCSblk'.
           !  especially which (part or block) coordinates will be added by very_small.
 
-          nx=anint((xmin-xmin_p+very_small)/dcellx_part)
-          ny=anint((ymin-ymin_p+very_small)/dcelly_part)
-          nz=anint((zmin-zmin_p+very_small)/dcellz_part)
+          !NOC
+           cart_vec(1) = xmin-xmin_p+very_small
+           cart_vec(2) = ymin-ymin_p+very_small
+           cart_vec(3) = zmin-zmin_p+very_small
+           call get_pos_frac(cart_vec,frac_vec)
+           frac_vec(:)=frac_vec(:)/dcell_part(:)
+           nx=anint(frac_vec(1))
+           ny=anint(frac_vec(2))
+           nz=anint(frac_vec(3))
+
+          !old nx=anint((xmin-xmin_p+very_small)/dcellx_part)
+          !old ny=anint((ymin-ymin_p+very_small)/dcelly_part)
+          !old nz=anint((zmin-zmin_p+very_small)/dcellz_part)
 
           nx=nx+DCS_parts%ncoverx
           ny=ny+DCS_parts%ncovery
