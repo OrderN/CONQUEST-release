@@ -512,22 +512,22 @@ contains
 
     ! Call rotation subroutine if desired
     if (flag_rotate_pdos) then
-      ! Determine whether to use Axis-angle == 0 or Euler  == 1first
       write(*,fmt='(2x,"Rotating wavefunction coefficients")')
       call initialise_A_mat(A1, A2)
       if (allocated(U1))  deallocate(U1)
       if (allocated(U2))  deallocate(U2)
+      ! Using axes
       if (flag_rotate_pdos_mode == 0) then
          write(*,fmt='(2x,"Using user input axes")')
          allocate(U1(3,3,n_atoms_pDOS))
          allocate(U2(5,5,n_atoms_pDOS))
          call get_pdos_axes
 
-         if(n_atoms_pDOS==0) then ! All atoms
+         if(n_atoms_pDOS==ni_in_cell) then ! All atoms
             write(*, fmt='(/2x,"New local axes for all atoms in unit cell:")')
-         else if (n_atoms_pDOS >= 1) then
-               write(*, fmt='(/2x,"New local axes for specified atoms: ", *(I0,1x))') &
-               rotate_pdos_atoms_euler
+         else
+            write(*, fmt='(/2x,"New local axes for specified atoms: ", *(I0,1x))') &
+               pDOS_atom_index
          end if
          write(*, fmt='(/4x,"x: ",3(f10.5,1X))') pdos_ax
          write(*, fmt='(/4x,"y: ",3(f10.5,1X))') pdos_ay
@@ -540,7 +540,7 @@ contains
          do i = 1, n_atoms_pDOS
             call construct_Ul(1, A1, C1, U1(:,:,i))
             call construct_Ul(2, A2, C2, U2(:,:,i))
-         end do
+          end do
       else if (flag_rotate_pdos_mode == 1) then
          write(*,fmt='(2x,"Using active Euler angles in extrinsic zyz convention")')
          allocate(U1(3,3,rotate_pdos_natoms))
@@ -818,15 +818,14 @@ contains
    pdos_ax = pdos_ax / norm2(pdos_ax)
    ! Normalise new y-axis correctly
    pdos_ay = pdos_ay / norm2(pdos_ay)
-   ! Normalise new y-axis correctly
+   ! Normalise new z-axis correctly
    pdos_az = pdos_az / norm2(pdos_az)
    if (abs(dot_product(pdos_ax, pdos_ay)) > tol) &
-      call cq_abort("pDOS_ax vector was not orthogonal to pDOS_ay. Check input axes or atom neighbours.")
+      call cq_abort("get_pdos_axes: pDOS_ax vector was not orthogonal to pDOS_ay.")
    if (abs(dot_product(pdos_az, pdos_ay)) > tol) &
-       call cq_abort("pDOS_az vector was not orthogonal to pDOS_ay. Check input axes or atom neighbours.")
+       call cq_abort("get_pdos_axes: pDOS_az vector was not orthogonal to pDOS_ay.")
    if (abs(dot_product(pdos_az, pdos_ax)) > tol) &
-       call cq_abort("pDOS_az vector was not orthogonal to pDOS_ax. Check input axes or atom neighbours.")
-
+       call cq_abort("get_pdos_axes: pDOS_az vector was not orthogonal to pDOS_ax.")
   end subroutine
 
    subroutine initialise_A_mat(A1, A2)
@@ -996,12 +995,12 @@ contains
       + A(1,3)*(A(2,1)*A(3,2) - A(2,2)*A(3,1))
 
       if (det < 1.0 - tol .or. det > 1.0 + tol) &
-         call cq_abort("ERROR: determinant of change-of-basis matrix is not +1. Please adjust new coordinate vectors to form a right-handed basis.")
+         call cq_abort("calculate_axis_angle: determinant is not +1. Make sure input axes form a right-handed basis.")
       call DGEEV("N", "V", N, A, LDA, WR, WI, VL, LDVL, VR, LDVR, &
            WORK, LDWORK, INFO)
       if (INFO /= 0) then
          write(*, fmt='(A,I0)') 'DGEEV INFO = ', INFO
-         call cq_abort('DGEEV, Eigenvalues of basis change matrix could not be found!')
+         call cq_abort('calculate_axis_angle: DGEEV, Eigenvalues of basis change matrix could not be found!')
       end if
       ! Require eigenvector with eigenvalue 1, no complex, to find axis
       do i = 1, N
@@ -1011,9 +1010,9 @@ contains
          end if
       end do
       if (axis(1) /= axis(1) .or. axis(2) /= axis(2) .or. axis(3) /= axis(3)) &
-         call cq_abort("Rotation axis had NaN values. Please check input vectors or Euler angles.")
+         call cq_abort("calculate_axis_angle: NaN in rotation axis.")
       if (abs(axis(1)) < tol .and. abs(axis(2)) < tol .and. abs(axis(3)) < tol) &
-         call cq_abort("Rotation axis was (0,0,0). Cannot perform rotation.")
+         call cq_abort("calculate_axis_angle: Rotation axis was (0,0,0). Cannot perform rotation.")
       tra = basis_matrix(1,1) + basis_matrix(2,2) + basis_matrix(3,3)
       antisym_axis = 0.0
       axis = axis / norm2(axis)
@@ -1022,11 +1021,11 @@ contains
       temp = matmul(antisym_axis, basis_matrix)
       sin_angle = -(temp(1,1) + temp(2,2) + temp(3,3)) / 2.0
       if (abs(sin_angle) < tol .and. abs(cos_angle) < tol) &
-            call cq_abort("ValueError: Both arguments to datan2 are zero.")
+            call cq_abort("calculate_axis_angle: Both arguments to datan2 are zero.")
       angle = datan2(sin_angle, cos_angle)
       if (angle /= angle) &
-            call cq_abort("ERROR: rotation angle was undefined. Please check vectors or Euler angles.")
-      if (angle < 0.0) angle = angle + 2.0 * pi
+            call cq_abort("calculate_axis_angle: NaN rotation angle.")
+      !if (angle < 0.0) angle = angle + 2.0 * pi
    end subroutine calculate_axis_angle
    subroutine construct_rodrigues(axis, angle, matrix)
       use datatypes
@@ -1128,14 +1127,14 @@ contains
       call DGETRF(n, n, Ainv, n, ipiv, info)
 
       if (info /= 0) then
-         call cq_abort("Matrix is numerically singular!")
+         call cq_abort("inv: Matrix is numerically singular!")
       end if
 
       ! DGETRI computes the inverse using the LU factorization by DGETRF.
       call DGETRI(n, Ainv, n, ipiv, work, n, info)
 
       if (info /= 0) then
-         call cq_abort("Matrix inversion failed!")
+         call cq_abort("inv: Matrix inversion failed!")
       end if
    end function inv
 
@@ -1167,8 +1166,7 @@ contains
       integer :: i_atom, i_spec, i_band, i_band_c, i_kp, i_spin, g_atom, j
       integer :: i_l, i_z, nzeta, norbs, sf_offset, rotate_counter
       integer, dimension(:), allocatable :: g_atom_lookup
-
-      ! If it's not Euler matrices, transpose is required
+      ! Currently input axes depends on n_atoms_pDOS
       if (flag_rotate_pdos_mode == 0) then
          rotate_counter = n_atoms_pDOS
       else
@@ -1176,6 +1174,7 @@ contains
       end if
       if (.not. allocated(g_atom_lookup)) allocate(g_atom_lookup(rotate_counter))
       !  Define the lookups correctly for each mode
+      ! If it's not Euler matrices, transpose is required
       if (flag_rotate_pdos_mode == 2) then
          rotate_counter = rotate_pdos_natoms
          do j = 1, rotate_counter
@@ -1197,6 +1196,7 @@ contains
             U1(:,:,j) = transpose(U1(:,:,j))
             U2(:,:,j) = transpose(U2(:,:,j))
          end do
+
          do i_atom = 1, rotate_counter
             g_atom_lookup(i_atom) = pDOS_atom_index(i_atom)
          end do
