@@ -2,7 +2,7 @@ minE.SCTolerance 1e-6
 IO.AtomChargeOutput T
 AtomMove.TypeOfRun static
 minE.SelfConsistent T
-IO.Coordinates ionpos.dat
+IO.Coordinates bccFe.in
 IO.Iprint 1
 Grid.GridCutoff 100
 Diag.MPMesh   T
@@ -15,7 +15,7 @@ Diag.MPOrder 5
 Diag.kT 0.010
 
 SC.KerkerPreCondition T
-SC.LinearMixingFactor 0.1
+SC.LinearMixingFactor 0.6
 SC.MaxIters 300
 Spin.SpinPolarised T
 Spin.FixSpin F
