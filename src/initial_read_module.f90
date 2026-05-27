@@ -3214,6 +3214,8 @@ contains
   !!    Moved printing to capture default gamma point behaviour
   !!   2023/07/20 12:00 tsuyoshi
   !!    Implementing 1st version of Padding H and S matrices
+  !!   2026/02/04 12:10 dave
+  !!    Tweak k-point output
   !!  SOURCE
   !!
   subroutine readDiagInfo
@@ -3640,7 +3642,7 @@ contains
           end do
        end do
        ! Write out fractional k-points
-       if(iprint_init>1.AND.inode==ionode) then
+       if((iprint_init>2.or.(iprint_init>1.AND.nkp_tmp<20)).AND.inode==ionode) then
           write(io_lun,7) nkp_tmp
           do i=1,nkp_tmp
              write(io_lun,fmt='(8x,i5,3f15.6,f12.3)')&
@@ -3696,7 +3698,7 @@ contains
        deallocate(kk_tmp,wtk_tmp,STAT=stat)
        if(stat/=0) &
             call cq_abort('FindEvals: couldnt deallocate kpoints', nkp_tmp)
-       if(iprint_init>1.AND.inode==ionode) then
+       if((iprint_init>2.or.(iprint_init>1.AND.nkp_tmp<20)).AND.inode==ionode) then
           !
           write(io_lun,*)
           write(io_lun,10) nkp
@@ -3704,6 +3706,8 @@ contains
              write (io_lun,fmt='(8x,i5,3f15.6,f12.3)') &
                   i,kk(1,i),kk(2,i),kk(3,i),wtk(i)
           end do
+       else if(iprint_init>1.AND.inode==ionode) then
+          write(io_lun,fmt='(8x,i4,a)') nkp, ' symmetry inequivalent Kpoints'
        end if
        
        do i = 1, nkp

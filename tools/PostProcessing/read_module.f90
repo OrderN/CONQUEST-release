@@ -272,7 +272,7 @@ contains
     ! Add flag for window relative to Fermi level
     E_DOS_min = fdf_double('Process.min_DOS_E',E_wf_min)
     E_DOS_max = fdf_double('Process.max_DOS_E',E_wf_max)
-    sigma_DOS = fdf_double('Process.sigma_DOS',zero) ! Adjust to minimum of 4*energy spacing
+    sigma_DOS = fdf_double('Process.sigma_DOS',0.001_double) ! Better than adaptive
     n_DOS = fdf_integer('Process.n_DOS',1001)
     flag_total_iDOS = fdf_boolean('Process.TotalIntegratedDOS',.false.)
     if(i_job==7) then
@@ -478,7 +478,7 @@ contains
        write(*,fmt='(4x,"Fermi level: ",f12.5," Ha   (=",f10.3," eV)")') efermi(1), efermi(1)*HaToeV
     else
        read(17,fmt='(a6,2f18.10)') str,efermi(1), efermi(2)
-       write(*,fmt='(4x,"Fermi levels: ",2f12.5," Ha   (=",2f10.3" eV)")') efermi, efermi*HaToeV
+       write(*,fmt='(4x,"Fermi levels: ",2f12.5," Ha   (=",2f10.3," eV)")') efermi, efermi*HaToeV
     end if
     read(17,*) str
     ! Allocate memory

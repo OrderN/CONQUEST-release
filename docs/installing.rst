@@ -112,7 +112,7 @@ and load the ``Conquest`` executable to ``PATH`` with
 
 The build can be customized by adding options to the
 `Spack spec <https://spack.readthedocs.io/en/latest/basic_usage.html#specs-dependencies>`_ ``conquest``.
-The CONQUEST package includes variants for OpenMP support and different matrix multiplication kernels; more details can be found in the `Spack CONQUEST package <https://spack.readthedocs.io/en/latest/package_list.html#conquest>`_.
+The CONQUEST package includes variants for OpenMP support and different matrix multiplication kernels; more details can be found in the `Spack CONQUEST package <https://packages.spack.io/package.html?name=conquest>`_.
 
 Installing on Ubuntu
 -----------

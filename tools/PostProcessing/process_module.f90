@@ -339,8 +339,8 @@ contains
        if(six*sigma_DOS < dE_DOS) write(*,fmt='(4x,"Sigma is much less than bin size: this may cause errors")')
     end if
     ! Adjust limits to allow full peak to be seen
-    E_DOS_min = E_DOS_min - four*sigma_DOS
-    E_DOS_max = E_DOS_max + four*sigma_DOS
+    E_DOS_min = E_DOS_min + four*sigma_DOS
+    E_DOS_max = E_DOS_max - four*sigma_DOS
     ! Recalculate dE_DOS now that we've broadened it
     dE_DOS = (E_DOS_max - E_DOS_min)/real(n_DOS-1,double)
     write(*,fmt='(2x,"Dividing DOS into ",i5," bins of width ",f12.6," Ha")') n_DOS, dE_DOS

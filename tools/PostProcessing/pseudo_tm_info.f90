@@ -631,6 +631,8 @@ contains
   !!    Bug fix: set semicore when numprocs>1
   !!   2020/01/22 16:59 dave
   !!    Bug fix: change header to read Hamann code version line if present
+  !!   2025/07/03 17:00 nakata
+  !!    Bug fix: change header to read Pseudopotential type line if present
   !!  SOURCE
   !!
   subroutine read_ion_ascii_tmp(ps_info,pao_info)
@@ -1027,8 +1029,19 @@ contains
                end if
             else if (leqi(trim_line(1:14),'<Conquest_pseu')) then
                read(unit,'(a)') line ! Check this for Hamann
-               if(leqi(line(3:8),'Hamann')) pseudo_type = 3
-               if(leqi(line(3:10),'Hamann c')) read(unit,'(a)') line
+               if(leqi(line(3:5),'Pse')) then ! Newer format with pseudopotential type
+                  if(leqi(line(27:30),'ONCV')) then ! Hamann
+                     pseudo_type = 3
+                     read(unit,'(a)') line
+                     if(leqi(line(3:10),'Hamann c')) read(unit,'(a)') line
+                  else if(leqi(line(27:29),'HGH')) then ! GTH/HGH
+                     pseudo_type = 3
+                     read(unit,'(a)') line
+                  end if
+               else if(leqi(line(3:8),'Hamann')) then
+                  pseudo_type = 3
+                  if(leqi(line(3:10),'Hamann c')) read(unit,'(a)') line
+               end if
                read(unit,'(a)') line ! Core radii
                read(unit,'(a)') line ! Valence shells
                read(unit,'(a26,i7)') line, xc_func
