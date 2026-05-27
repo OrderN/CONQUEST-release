@@ -1,6 +1,11 @@
 module process
 
+  use datatypes
+
   implicit none
+
+  ! Maximum possible number of spin components for simplicity
+  real(double), dimension(4) :: range_offset
   
 contains
 
@@ -290,7 +295,8 @@ contains
 
     use datatypes
     use numbers, ONLY: zero, RD_ERR, twopi, half, one, two, four, six
-    use local, ONLY: eigenvalues, n_bands_total, nkp, wtk, efermi, flag_total_iDOS, flag_procwf_range_Ef
+    use local, ONLY: eigenvalues, n_bands_total, nkp, wtk, efermi, &
+         flag_total_iDOS, flag_procwf_range_Ef, flag_expand_range
     use read, ONLY: read_eigenvalues, read_psi_coeffs
     use global_module, ONLY: nspin, n_DOS, E_DOS_min, E_DOS_max, sigma_DOS
     use units, ONLY: HaToeV
@@ -299,7 +305,7 @@ contains
     
     ! Local variables
     integer :: i_band, i_kp, i_spin, n_DOS_wid, n_band, n_min, n_max, i
-    real(double) :: Ebin, dE_DOS, a, pf_DOS, spin_fac
+    real(double) :: Ebin, dE_DOS, a, pf_DOS, spin_fac, peak_width
     real(double), dimension(nspin) :: total_electrons, iDOS_low
     real(double), dimension(:,:), allocatable :: total_DOS, iDOS
     real(double), dimension(:,:), allocatable :: occ
@@ -315,77 +321,68 @@ contains
     allocate(total_DOS(n_DOS,nspin),iDOS(n_DOS,nspin),occ(n_bands_total,nkp))
     total_DOS = zero
     iDOS = zero
-    ! Set limits on DOS output
+    ! Define peak width
+    peak_width = six*sigma_DOS
+    ! Offset for the energy range used for DOS display
+    range_offset = zero
+    do i_spin = 1, nspin
+       if(flag_procwf_range_Ef) range_offset(i_spin) = efermi(i_spin)
+    end do
+    ! Set limits and broaden energy range if needed
     if(abs(E_DOS_min)<RD_ERR) then
        E_DOS_min = minval(eigenvalues(1,:,:))
-       write(*,fmt='(2x,"DOS lower limit set automatically: ",f12.5," Ha")') E_DOS_min
+       if(flag_expand_range) E_DOS_min = E_DOS_min - peak_width
     else
-       write(*,fmt='(2x,"DOS lower limit set by user: ",f12.5," Ha")') E_DOS_min
+       if(flag_expand_range) E_DOS_min = E_DOS_min - peak_width
     end if
     if(abs(E_DOS_max)<RD_ERR) then
        E_DOS_max = maxval(eigenvalues(n_bands_total,:,:))
-       write(*,fmt='(2x,"DOS upper limit set automatically: ",f12.5," Ha")') E_DOS_max
+       if(flag_expand_range) E_DOS_max = E_DOS_max + peak_width
     else
-       write(*,fmt='(2x,"DOS upper limit set by user: ",f12.5," Ha")') E_DOS_max
+       if(flag_expand_range) E_DOS_max = E_DOS_max + peak_width
     end if
     ! Spacing, width, prefactor
     dE_DOS = (E_DOS_max - E_DOS_min)/real(n_DOS-1,double)
-    ! Set sigma automatically
-    if(abs(sigma_DOS)<RD_ERR) then
-       sigma_DOS = four*dE_DOS
-       write(*,fmt='(2x,"Sigma set automatically: ",f12.6," Ha")') sigma_DOS
-    else
-       write(*,fmt='(2x,"Sigma set by user: ",f12.6," Ha")') sigma_DOS
-       if(six*sigma_DOS < dE_DOS) write(*,fmt='(4x,"Sigma is much less than bin size: this may cause errors")')
-    end if
-    ! Adjust limits to allow full peak to be seen
-    E_DOS_min = E_DOS_min + four*sigma_DOS
-    E_DOS_max = E_DOS_max - four*sigma_DOS
-    ! Recalculate dE_DOS now that we've broadened it
-    dE_DOS = (E_DOS_max - E_DOS_min)/real(n_DOS-1,double)
     write(*,fmt='(2x,"Dividing DOS into ",i5," bins of width ",f12.6," Ha")') n_DOS, dE_DOS
-    n_DOS_wid = floor(six*sigma_DOS/dE_DOS) ! How many bins either side of state we consider
+    write(*,fmt='(2x,"Sigma is: ",f12.6," Ha")') sigma_DOS
+    if(peak_width < dE_DOS) write(*,fmt='(4x,"Sigma is much less than bin size: this may cause errors")')
+    n_DOS_wid = floor(peak_width/dE_DOS) ! How many bins either side of state we consider
     pf_DOS = one/(sigma_DOS*sqrt(twopi))
     total_electrons = zero
     iDOS_low = zero ! Integral of DOS to lowest energy bound
     ! Accumulate DOS over bands and k-points for each spin
     do i_spin = 1, nspin
-       if(flag_procwf_range_Ef) then
-          E_DOS_min = E_DOS_min + efermi(i_spin)
-          E_DOS_max = E_DOS_max + efermi(i_spin)
-       end if
+       write(*,fmt='(2x,"DOS lower limit: ",f12.5," Ha")') E_DOS_min + range_offset(i_spin)
+       write(*,fmt='(2x,"DOS upper limit: ",f12.5," Ha")') E_DOS_max + range_offset(i_spin)
+       write(*,fmt='(2x,"Fermi level:     ",f12.5," Ha")') efermi(i_spin)
        occ = zero
        call occupy(occ,eigenvalues,efermi,i_spin)
        do i_kp = 1, nkp
           do i_band=1,n_bands_total ! All bands
-             if(eigenvalues(i_band, i_kp, i_spin)>=E_DOS_min .and. &
-                  eigenvalues(i_band, i_kp, i_spin)<=E_DOS_max) then
-                n_band = floor((eigenvalues(i_band, i_kp, i_spin) - E_DOS_min)/dE_DOS) + 1
+             if(eigenvalues(i_band, i_kp, i_spin)>=E_DOS_min + range_offset(i_spin) .and. &
+                  eigenvalues(i_band, i_kp, i_spin)<=E_DOS_max + range_offset(i_spin)) then
+                n_band = floor((eigenvalues(i_band, i_kp, i_spin) - (E_DOS_min + range_offset(i_spin)))/dE_DOS) + 1
                 n_min = n_band - n_DOS_wid
                 if(n_min<1) n_min = 1
                 n_max = n_band + n_DOS_wid
                 if(n_max>n_DOS) n_max = n_DOS
                 do i = n_min, n_max
-                   Ebin = real(i-1,double)*dE_DOS + E_DOS_min
+                   Ebin = real(i-1,double)*dE_DOS + E_DOS_min + range_offset(i_spin)
                    a = (Ebin-eigenvalues(i_band, i_kp, i_spin))/sigma_DOS
                    total_DOS(i,i_spin) = total_DOS(i,i_spin) + wtk(i_kp)*pf_DOS*exp(-half*a*a)
                    total_electrons(i_spin) = total_electrons(i_spin) + occ(i_band,i_kp)*wtk(i_kp)*pf_DOS*exp(-half*a*a)
                    iDOS(i,i_spin) = iDOS(i,i_spin) + wtk(i_kp)*pf_DOS*exp(-half*a*a)
                 end do
-             else if(eigenvalues(i_band, i_kp, i_spin)<E_DOS_min) then
+             else if(eigenvalues(i_band, i_kp, i_spin)<E_DOS_min + range_offset(i_spin)) then
                 iDOS_low(i_spin) = iDOS_low(i_spin) + wtk(i_kp)
              end if
           end do
        end do
        ! Now integrate DOS
-       write(*,*) 'iDOS_low is ',iDOS_low
+       !write(*,*) 'iDOS_low is ',iDOS_low
        do i = 2, n_DOS
           iDOS(i,i_spin) = iDOS(i,i_spin) + iDOS(i-1,i_spin)
        end do
-       if(flag_procwf_range_Ef) then
-          E_DOS_min = E_DOS_min - efermi(i_spin)
-          E_DOS_max = E_DOS_max - efermi(i_spin)
-       end if
     end do
     ! Include spin factor
     iDOS = iDOS*dE_DOS*spin_fac
@@ -396,18 +393,19 @@ contains
     end if
     total_electrons = total_electrons*dE_DOS*spin_fac
     total_DOS = total_DOS*spin_fac
+    write(*,fmt='(2x,"Integration of DOS in terms of absolute energies")')
     if(nspin==1) then
        write(*,fmt='(2x,"DOS between ",f11.3," Ha and Ef integrates to ",f12.3," electrons")') &
-            E_DOS_min, total_electrons(1)
+            E_DOS_min + range_offset(1), total_electrons(1)
        write(*,fmt='(2x,"DOS between ",f11.3," Ha and ",f11.3," Ha integrates to ",f12.3," electrons")') &
-            E_DOS_min, E_DOS_max,dE_DOS*sum(total_DOS(:,1))
+            E_DOS_min + range_offset(1), E_DOS_max + range_offset(1),dE_DOS*sum(total_DOS(:,1))
     else
        write(*,fmt='(2x,"Spin Up DOS integrated to Ef gives ",f12.3," electrons")') total_electrons(1)
        write(*,fmt='(2x,"Spin Dn DOS integrated to Ef gives ",f12.3," electrons")') total_electrons(2)
        write(*,fmt='(2x,"Spin Up DOS between ",f11.3," Ha and ",f11.3," Ha integrates to ",f12.3," electrons")') &
-            E_DOS_min, E_DOS_max,dE_DOS*sum(total_DOS(:,1))
+            E_DOS_min + range_offset(1), E_DOS_max + range_offset(1),dE_DOS*sum(total_DOS(:,1))
        write(*,fmt='(2x,"Spin Up DOS between ",f11.3," Ha and ",f11.3," Ha integrates to ",f12.3," electrons")') &
-            E_DOS_min, E_DOS_max,dE_DOS*sum(total_DOS(:,2))
+            E_DOS_min + range_offset(2), E_DOS_max + range_offset(2),dE_DOS*sum(total_DOS(:,2))
     end if
     ! Since we write out DOS against eV we need this conversion to get the integral right
     total_DOS = total_DOS/HaToeV
@@ -422,17 +420,10 @@ contains
        else
           write(17,fmt='("#  Energy (eV)     DOS (/eV)    Local iDOS")')
        end if
-       if(flag_procwf_range_Ef) then
-          do i=1, n_DOS
-             write(17,fmt='(3f14.5)') HaToeV*(E_DOS_min + dE_DOS*real(i-1,double)), &
-                  total_DOS(i,i_spin), iDOS(i,i_spin)
-          end do
-       else
-          do i=1, n_DOS
-             write(17,fmt='(3f14.5)') HaToeV*(E_DOS_min + dE_DOS*real(i-1,double)-efermi(i_spin)), &
-                  total_DOS(i,i_spin), iDOS(i,i_spin)
-          end do
-       end if
+       do i=1, n_DOS
+          write(17,fmt='(3f14.5)') HaToeV*(E_DOS_min + range_offset(i_spin) - efermi(i_spin) + dE_DOS*real(i-1,double)), &
+               total_DOS(i,i_spin), iDOS(i,i_spin)
+       end do
        write(17,fmt='("&")')
     end do
     close(unit=17)
@@ -459,7 +450,7 @@ contains
     ! Local variables
     integer :: i_band, i_kp, i_spin, n_DOS_wid, n_band, n_min, n_max, i, i_atom,max_nsf, i_spec, &
          i_l, nzeta, sf_offset, max_l, norbs, i_m, i_band_c, i_z
-    real(double) :: Ebin, dE_DOS, a, pf_DOS, spin_fac, coeff, check_electrons
+    real(double) :: Ebin, dE_DOS, a, pf_DOS, spin_fac, coeff, check_electrons, peak_width
     real(double), dimension(:,:,:), allocatable :: pDOS
     real(double), dimension(:,:,:,:), allocatable :: pDOS_l
     real(double), dimension(:,:,:,:,:), allocatable :: pDOS_lm
@@ -527,29 +518,26 @@ contains
     end if
     ! E_DOS_min and max and sigma_DOS already set in process_dos
     ! Spacing, width, prefactor
+    peak_width = six*sigma_DOS
     dE_DOS = (E_DOS_max - E_DOS_min)/real(n_DOS-1,double)
-    n_DOS_wid = floor(six*sigma_DOS/dE_DOS) ! How many bins either side of state we consider
+    n_DOS_wid = floor(peak_width/dE_DOS) ! How many bins either side of state we consider
     pf_DOS = one/(sigma_DOS*sqrt(twopi))
     ! Accumulate DOS over bands and k-points for each spin
     do i_spin = 1, nspin
        occ = zero
        call occupy(occ,eigenvalues,efermi,i_spin)
-       if(flag_procwf_range_Ef) then
-          E_DOS_min = E_DOS_min + efermi(i_spin)
-          E_DOS_max = E_DOS_max + efermi(i_spin)
-       end if
        do i_kp = 1, nkp
           do i_band=1,n_bands_total ! All bands
-             if(eigenvalues(i_band, i_kp, i_spin)>E_DOS_min .and. &
-                  eigenvalues(i_band, i_kp, i_spin)<E_DOS_max) then
+             if(eigenvalues(i_band, i_kp, i_spin)>E_DOS_min + range_offset(i_spin) .and. &
+                  eigenvalues(i_band, i_kp, i_spin)<E_DOS_max + range_offset(i_spin)) then
                 i_band_c = band_full_to_active(i_band)
-                n_band = floor((eigenvalues(i_band, i_kp, i_spin) - E_DOS_min)/dE_DOS) + 1
+                n_band = floor((eigenvalues(i_band, i_kp, i_spin) - (E_DOS_min + range_offset(i_spin)))/dE_DOS) + 1
                 n_min = n_band - n_DOS_wid
                 if(n_min<1) n_min = 1
                 n_max = n_band + n_DOS_wid
                 if(n_max>n_DOS) n_max = n_DOS
                 do i = n_min, n_max
-                   Ebin = real(i-1,double)*dE_DOS + E_DOS_min
+                   Ebin = real(i-1,double)*dE_DOS + E_DOS_min + range_offset(i_spin)
                    a = (Ebin-eigenvalues(i_band, i_kp, i_spin))/sigma_DOS
                    do i_atom = 1, n_atoms_pDOS
                       i_spec = species_glob(pDOS_atom_index(i_atom))
@@ -603,10 +591,6 @@ contains
              end if
           end do
        end do
-       if(flag_procwf_range_Ef) then
-          E_DOS_min = E_DOS_min - efermi(i_spin)
-          E_DOS_max = E_DOS_max - efermi(i_spin)
-       end if
     end do ! do i_spin = 1, n_spin
     ! Include spin factor and convert Ha to eV
     if(flag_l_resolved .and. flag_lm_resolved) then
@@ -621,9 +605,11 @@ contains
        pDOS = pDOS*spin_fac/HaToeV
        total_electrons = total_electrons*dE_DOS*spin_fac
     end if
+    write(*,fmt='(2x,"Integration of DOS in terms of absolute energies")')
     if(nspin==1) then
-       write(*,fmt='(2x,"Results of integrating pDOS between ",f11.3," and ",f11.3," Ha (electrons per atom).")') &
-            E_DOS_min, E_DOS_max
+       !write(*,fmt='(2x,"Results of integrating pDOS between ",f11.3," and ",f11.3," Ha (electrons per atom).")') &
+       write(*,fmt='(2x,"Results of integrating pDOS between ",f11.3," and Ef (electrons per atom).")') &
+            E_DOS_min + range_offset(1)
        if(flag_l_resolved) then ! l and l-m
           write(*,fmt='(4x,"   Atom       Total        l=0        l=1        l=2")')
           write(fmt_DOS,*) max_l + 2 ! Number of columns
@@ -653,8 +639,8 @@ contains
        end if
     else
        if(flag_l_resolved) then
-          write(*,fmt='(2x,"Results of integrating pDOS between ",f11.3," and ",f11.3," Ha (electrons per atom).")') &
-               E_DOS_min, E_DOS_max
+          write(*,fmt='(2x,"Results of integrating pDOS between ",f11.3," and Ef (electrons per atom).")') &
+               E_DOS_min + range_offset(1)
           write(*,fmt='(4x,"   Atom     Spin Up        l=0        l=1        l=2  Spin Down        l=0        l=1        l=2")')
           write(fmt_DOS,*) 2*(max_l + 2) ! Number of columns
           fmt_DOS = '(4x,i7,x,'//trim(adjustl(fmt_DOS))//'f11.3)'
@@ -677,8 +663,8 @@ contains
              fmt_DOS = '('//trim(adjustl(fmt_DOS))//'f12.5)'
           end if
        else
-          write(*,fmt='(2x,"Results of integrating pDOS between ",f11.3," and ",f11.3," Ha (electrons per atom).")') &
-               E_DOS_min, E_DOS_max
+          write(*,fmt='(2x,"Results of integrating pDOS between ",f11.3," and Ef (electrons per atom).")') &
+               E_DOS_min + range_offset(1)
           write(*,fmt='(4x,"   Atom     Spin Up  Spin Down")')
           do i_atom = 1, n_atoms_pDOS
              write(*,fmt='(4x,i7,x,2f11.3)') pDOS_atom_index(i_atom), total_electrons(i_atom,1), total_electrons(i_atom,2)
@@ -702,50 +688,26 @@ contains
           write(17,fmt='("# Spin ",I1)') i_spin
           write(17,fmt='("# Original Fermi-level: ",f12.5," eV")') HaToeV*efermi(i_spin)
           write(17,fmt='("# DOS shifted relative to Fermi-level")')
-          if(flag_procwf_range_Ef) then
-             if(flag_l_resolved .and. flag_lm_resolved) then
-                write(17,fmt='("# Energy(eV)   pDOS(/eV)")')
-                write(17,fmt='("#                  Total         l=0         l=1                                 l=2")')
-                do i=1, n_DOS
-                   write(17,fmt=fmt_dos) HaToeV*(E_DOS_min + dE_DOS*real(i-1,double)), pDOS(i_atom,i,i_spin), &
-                        ((pDOS_lm(i_m,i_l,i_atom,i,i_spin),i_m=-i_l,i_l),i_l=0,pao(i_spec)%greatest_angmom)
-                end do
-             else if(flag_l_resolved) then
-                write(17,fmt='("# Energy(eV)   pDOS(/eV)")')
-                write(17,fmt='("#                  Total         l=0         l=1         l=2")')
-                do i=1, n_DOS
-                   write(17,fmt=fmt_dos) HaToeV*(E_DOS_min + dE_DOS*real(i-1,double)), pDOS(i_atom,i,i_spin), &
-                        pDOS_l(0:pao(i_spec)%greatest_angmom,i_atom,i,i_spin)
-                end do
-             else
-                write(17,fmt='("# Energy(eV)   pDOS(/eV)")')
-                do i=1, n_DOS
-                   write(17,fmt='(2f12.5)') HaToeV*(E_DOS_min + dE_DOS*real(i-1,double)), &
-                        pDOS(i_atom,i,i_spin)
-                end do
-             end if
+          if(flag_l_resolved .and. flag_lm_resolved) then
+             write(17,fmt='("# Energy(eV)   pDOS(/eV)")')
+             write(17,fmt='("#                  Total         l=0         l=1                                 l=2")')
+             do i=1, n_DOS
+                write(17,fmt=fmt_dos) HaToeV*(E_DOS_min + range_offset(i_spin) - efermi(i_spin) + dE_DOS*real(i-1,double)), pDOS(i_atom,i,i_spin), &
+                     ((pDOS_lm(i_m,i_l,i_atom,i,i_spin),i_m=-i_l,i_l),i_l=0,pao(i_spec)%greatest_angmom)
+             end do
+          else if(flag_l_resolved) then
+             write(17,fmt='("# Energy(eV)   pDOS(/eV)")')
+             write(17,fmt='("#                  Total         l=0         l=1         l=2")')
+             do i=1, n_DOS
+                write(17,fmt=fmt_dos) HaToeV*(E_DOS_min + range_offset(i_spin) - efermi(i_spin) + dE_DOS*real(i-1,double)), pDOS(i_atom,i,i_spin), &
+                     pDOS_l(0:pao(i_spec)%greatest_angmom,i_atom,i,i_spin)
+             end do
           else
-             if(flag_l_resolved .and. flag_lm_resolved) then
-                write(17,fmt='("# Energy(eV)   pDOS(/eV)")')
-                write(17,fmt='("#                  Total         l=0         l=1                                 l=2")')
-                do i=1, n_DOS
-                   write(17,fmt=fmt_dos) HaToeV*(E_DOS_min + dE_DOS*real(i-1,double)-efermi(i_spin)), pDOS(i_atom,i,i_spin), &
-                        ((pDOS_lm(i_m,i_l,i_atom,i,i_spin),i_m=-i_l,i_l),i_l=0,pao(i_spec)%greatest_angmom)
-                end do
-             else if(flag_l_resolved) then
-                write(17,fmt='("# Energy(eV)   pDOS(/eV)")')
-                write(17,fmt='("#                  Total         l=0         l=1         l=2")')
-                do i=1, n_DOS
-                   write(17,fmt=fmt_dos) HaToeV*(E_DOS_min + dE_DOS*real(i-1,double)-efermi(i_spin)), pDOS(i_atom,i,i_spin), &
-                        pDOS_l(0:pao(i_spec)%greatest_angmom,i_atom,i,i_spin)
-                end do
-             else
-                write(17,fmt='("# Energy(eV)   pDOS(/eV)")')
-                do i=1, n_DOS
-                   write(17,fmt='(2f12.5)') HaToeV*(E_DOS_min + dE_DOS*real(i-1,double)-efermi(i_spin)), &
-                        pDOS(i_atom,i,i_spin)
-                end do
-             end if
+             write(17,fmt='("# Energy(eV)   pDOS(/eV)")')
+             do i=1, n_DOS
+                write(17,fmt='(2f12.5)') HaToeV*(E_DOS_min + range_offset(i_spin) - efermi(i_spin) + dE_DOS*real(i-1,double)), &
+                     pDOS(i_atom,i,i_spin)
+             end do
           end if
           write(17,fmt='("&")')
        end do

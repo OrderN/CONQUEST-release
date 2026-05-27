@@ -231,7 +231,7 @@ contains
        E_procwf_min = fdf_double('Process.min_wf_E',E_wf_min)
        E_procwf_max = fdf_double('Process.max_wf_E',E_wf_max)
        ! Is the range relative to Ef (T) or absolute (F)
-       flag_procwf_range_Ef = fdf_boolean('Process.WFRangeRelative',.true.)
+       flag_procwf_range_Ef = fdf_boolean('Process.WFRangeRelative',flag_wf_range_Ef)
        n_bands_process = fdf_integer('Process.noWF',0)
        if(n_bands_process>0) then
           allocate(band_proc_no(n_bands_process))
@@ -269,12 +269,29 @@ contains
     flag_outputWF_real = .false.
     if (leqi(job,'ban')) flag_outputWF_real = fdf_boolean('Process.outputWF_real',.false.)
     ! DOS
-    ! Add flag for window relative to Fermi level
-    E_DOS_min = fdf_double('Process.min_DOS_E',E_wf_min)
-    E_DOS_max = fdf_double('Process.max_DOS_E',E_wf_max)
-    sigma_DOS = fdf_double('Process.sigma_DOS',0.001_double) ! Better than adaptive
-    n_DOS = fdf_integer('Process.n_DOS',1001)
-    flag_total_iDOS = fdf_boolean('Process.TotalIntegratedDOS',.false.)
+    flag_wf_range_Ef = fdf_boolean('IO.WFRangeRelative',.true.)
+    flag_procwf_range_Ef = fdf_boolean('Process.WFRangeRelative',flag_wf_range_Ef)
+    if(i_job==6.or.i_job==7) then
+       ! Add flag for window relative to Fermi level
+       E_DOS_min = fdf_double('Process.min_DOS_E',E_wf_min)
+       E_DOS_max = fdf_double('Process.max_DOS_E',E_wf_max)
+       ! ExpandRange allows for the broadening of peaks in energy range
+       ! If user did not set limits, default to expanding range
+       if(((abs(E_DOS_min-E_wf_min)>1e-8_double).or.(abs(E_DOS_max-E_wf_max)>1e-8_double)).or. &
+            (abs(E_wf_min)>1e-8_double.or.abs(E_wf_max)>1e-8_double)) then ! At least one set
+          flag_expand_range = fdf_boolean('Process.ExpandRange',.false.)
+          flag_wf_range_Ef = fdf_boolean('IO.WFRangeRelative',.true.)
+          flag_procwf_range_Ef = fdf_boolean('Process.WFRangeRelative',flag_wf_range_Ef)
+       else ! Defaults used
+          flag_expand_range = fdf_boolean('Process.ExpandRange',.true.)
+          ! If the limits are set automatically then don't treat limits as relative
+          flag_wf_range_Ef = fdf_boolean('IO.WFRangeRelative',.false.)
+          flag_procwf_range_Ef = fdf_boolean('Process.WFRangeRelative',flag_wf_range_Ef)
+       end if
+       sigma_DOS = fdf_double('Process.sigma_DOS',0.001_double) ! Better than adaptive
+       n_DOS = fdf_integer('Process.n_DOS',1001)
+       flag_total_iDOS = fdf_boolean('Process.TotalIntegratedDOS',.false.)
+    end if
     if(i_job==7) then
        ! If no limits specified, cover whole range
        if(abs(E_wf_max-E_wf_min)<1e-8_double) then
@@ -282,8 +299,6 @@ contains
           E_wf_max =  BIG
        end if
        flag_wf_range = .true.
-       flag_wf_range_Ef = fdf_boolean('IO.WFRangeRelative',.true.)
-       flag_procwf_range_Ef = fdf_boolean('Process.WFRangeRelative',.false.)
        flag_l_resolved = fdf_boolean('Process.pDOS_l_resolved',.false.)
        flag_lm_resolved = fdf_boolean('Process.pDOS_lm_resolved',.false.)
        if(flag_lm_resolved .and. (.not.flag_l_resolved)) flag_l_resolved = .true.

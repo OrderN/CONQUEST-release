@@ -5,8 +5,9 @@ LINKFLAGS=-fopenmp -L/usr/lib -L/usr/lib/x86_64-linux-gnu
 # Set BLAS and LAPACK libraries
 BLAS= -llapack -lblas
 # LibXC compatibility (LibXC below) or Conquest XC library
-XC_LIBRARY = LibXC_v5
+#XC_LIBRARY = LibXC_v4
 #XC_LIB = -lxcf90 -lxc
+XC_LIBRARY = LibXC_v5
 XC_LIB = -lxcf03 -lxc
 XC_COMPFLAGS = -I/usr/include
 # Set FFT library

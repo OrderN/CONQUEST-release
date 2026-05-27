@@ -133,6 +133,8 @@ contains
   !!    Add call to new_SC_potl when doing MSSF/LFD without optimisation
   !!   2022/12/13 16:46 dave and tsuyoshi
   !!    Move output of wavefunctions and potential to be after final energy and force call
+  !!   2026/04/23 16:35 nakata
+  !!    Add call to build_becke_charges after converging SCF
   !!  SOURCE
   !!
   subroutine get_E_and_F(fixed_potential, vary_mu, total_energy, &
@@ -152,7 +154,7 @@ contains
                                  flag_multisite, iprint_minE,          &
                                  io_lun, flag_out_wf, wf_self_con, flag_write_projected_DOS, &
                                  flag_diagonalisation, nspin, flag_LFD, min_layer, &
-                                 flag_DM_converged, write_ase, flag_calc_pol
+                                 flag_DM_converged, write_ase, flag_calc_pol, flag_Becke_weights
     use energy,            only: get_energy, xc_energy, final_energy
     use GenComms,          only: cq_abort, inode, ionode, cq_warn
     use blip_minimisation, only: vary_support, dE_blip
@@ -160,7 +162,7 @@ contains
     use timer_module
     use input_module,      only: leqi
     use vdWDFT_module,     only: vdWXC_energy, vdWXC_energy_slow
-    use density_module,    only: density
+    use density_module,    only: density, atomcharge, build_Becke_charges
     use multisiteSF_module,only: flag_LFD_nonSCF, flag_mix_LFD_SCF
     use units
     use io_module,         only: return_prefix
@@ -378,6 +380,7 @@ contains
     if (flag_calc_pol) call get_polarisation()
     !
     if (atomch_output) call get_atomic_charge()
+    if (flag_Becke_weights) call build_Becke_charges(atomcharge, density, maxngrid)
 
     if (find_forces) then
        ! Start timing the force calculation

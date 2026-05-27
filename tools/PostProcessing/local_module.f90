@@ -56,4 +56,5 @@ module local
   integer :: flag_smear_type, iMethfessel_Paxton
   integer :: n_atoms_pDOS
   integer, dimension(:), allocatable :: pDOS_atom_index
+  logical :: flag_expand_range
 end module local

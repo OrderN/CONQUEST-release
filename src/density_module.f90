@@ -778,6 +778,8 @@ contains
   !!    Introduced matKatomf
   !!   2016/10/28 17:30 nakata
   !!    Introduce matK -> matKatomf transformations
+  !!   2026/04/23 16:20 nakata
+  !!    Removed call for build_Becke_charges for the density updated in each SCF step
   !!  SOURCE
   !!
   subroutine get_electronic_density(denout, electrons, atom_fns, &
@@ -881,9 +883,6 @@ contains
             write (io_lun, '(4x,a,i1,a,f25.15)') &
                   trim(prefix)//" Electrons (spin=",spin, "): ", electrons(spin)
     end do ! spin
-
-    if (flag_Becke_weights) &
-         call build_Becke_charges(atomcharge, denout, size)
 
     ! atom_fns_K is using the same memory as h_on_atomfns, (in other
     ! words we are using h_on_atomfns as temorary storage), so lets be
@@ -1974,6 +1973,8 @@ contains
   !!    Renamed naba_atm -> naba_atoms_of_blocks
   !!   2016/08/01 17:30 nakata
   !!    Introduced atomf instead of sf
+  !!   2026/04/23 16:20 nakata
+  !!    Changed to write out in BeckeCharge.dat
   !!  SOURCE
   !!
   subroutine build_Becke_charges(atomch, chden, size)
@@ -1989,6 +1990,7 @@ contains
     use dimens,              only: grid_point_volume
     use block_module,        only: n_pts_in_block
     use group_module,        only: parts
+    use io_module,           only: io_assign
 
     implicit none
 
@@ -1998,10 +2000,13 @@ contains
     real(double), dimension(:,:) :: chden
 
     ! Local variables
-    integer :: blk, no_of_ib_ia, at, point, ipos, spin
+    integer :: blk, no_of_ib_ia, at, point, ipos, spin, chun
     integer :: ipart, jpart, ind_part, ia, ii, icover, ig_atom, iatom, &
                iblock, the_species
     logical :: do_spin_down
+
+    if(inode==ionode.AND.iprint_SC>=2) &
+         write(io_lun,fmt='(2x,"Entering build_Becke_charges")')
 
     atomch = zero
     no_of_ib_ia = 0
@@ -2038,19 +2043,19 @@ contains
     do spin = 1, nspin
        atomch(:,spin) = atomch(:,spin) * grid_point_volume
        call gsum(atomch(:,spin), ni_in_cell)
+    enddo
+    do spin = 1, nspin
        ! print out the atom charge density information
-       if (inode == ionode .and. iprint_SC > 2) then
+       if (inode == ionode) then
+          call io_assign(chun)
+          open(unit = chun, file='BeckeCharge.dat')
           if (nspin == 1) then
              do blk = 1, ni_in_cell
-                write (io_lun, &
-                       fmt='(2x,"Atom ",i4," Becke charge ",f20.12)') &
-                       blk, spin_factor*atomch(blk,spin)
+                write (chun, fmt='(f15.10)') spin_factor*atomch(blk,1)
              end do
           else
              do blk = 1, ni_in_cell
-                write (io_lun, &
-                       fmt='(2x,"Atom ",i4," Becke charge (spin=",i1,") ",f20.12)') &
-                       blk, spin, atomch(blk,spin)
+                write (chun, fmt='(3f15.10)') atomch(blk,1)+atomch(blk,2), atomch(blk,1), atomch(blk,2)
              end do
           end if
        end if

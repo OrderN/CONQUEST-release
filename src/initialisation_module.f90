@@ -318,6 +318,8 @@ contains
   !!    Adding check for maximum angular momentum for Bessel functions
   !!   2022/06/09 08:36 dave
   !!    Change name of D2 set-up routine
+  !!   2026/04/23 16:20 nakata
+  !!    Removed call for build_Becke_charges for initial atomcharge
   !!  SOURCE
   !!
   subroutine set_up(find_chdens,level)
@@ -359,7 +361,6 @@ contains
     use density_module,         only: set_atomic_density, density,            &
                                       density_scale, atomcharge,       &
                                       build_Becke_weights,             &
-                                      build_Becke_charges,             &
                                       set_density_pcc, density_pcc,    &
                                       density_atom
     use block_module,           only: n_pts_in_block,     &
@@ -625,7 +626,7 @@ contains
                           ni_in_cell, stat)
       call reg_alloc_mem(area_init, nspin * ni_in_cell, type_dbl)
       call build_Becke_weights
-      call build_Becke_charges(atomcharge, density, maxngrid)
+      !call build_Becke_charges(atomcharge, density, maxngrid) # calculate becke charge for atomcharge
    end if
    if (inode == ionode .and. iprint_init > 2) &
         write (io_lun,fmt='(4x,a)') trim(prefix)//'Done init_pseudo '
@@ -1402,77 +1403,6 @@ contains
        call get_H_matrix(rebuild_KE_NL, fixed_potential, electrons, &
             density, maxngrid, level=backtrace_level)
     endif
-!    if ( flag_self_consistent ) then ! Vary only DM and charge density
-!       !
-!       if ( restart_DM ) then
-!          record  = .true.
-!          reset_L = .false.
-!          call new_SC_potl(record, sc_tolerance, reset_L, &
-!               fixed_potential, vary_mu, n_L_iterations,  &
-!               L_tolerance, total_energy, backtrace_level)
-!          !
-!       else
-!          if (flag_LFD .and. .not.read_option) then
-!             ! Hpao was already made in sub:initial_SFcoeff
-!             rebuild_KE_NL = .false. 
-!             call get_H_matrix(rebuild_KE_NL, fixed_potential, electrons, &
-!                  density, maxngrid, level=backtrace_level, build_AtomF_matrix=.false.)
-!          else
-!             rebuild_KE_NL = .true. 
-!             call get_H_matrix(rebuild_KE_NL, fixed_potential, electrons, &
-!                  density, maxngrid, level=backtrace_level)
-!          endif
-!          !
-!          electrons_tot = spin_factor * sum(electrons)
-!          !
-!          record  = .false.
-!          reset_L = .true.                
-!          call FindMinDM(n_L_iterations, vary_mu, L_tolerance, &
-!               reset_L, record, backtrace_level)
-!          !
-!          record  = .true.             
-!          reset_L = .false.
-!          call new_SC_potl(record, sc_tolerance, reset_L, &
-!               fixed_potential, vary_mu, n_L_iterations,  &
-!               L_tolerance, total_energy, backtrace_level)
-!          !
-!       end if
-!       !
-!    else ! Ab initio TB: vary only DM
-!
-!       rebuild_KE_NL = .true.
-!       !build_X = .false
-!       if (flag_LFD .and. .not.read_option) then
-!          ! Hpao was already made in sub:initial_SFcoeff
-!          rebuild_KE_NL = .false.
-!          call get_H_matrix(rebuild_KE_NL, fixed_potential, electrons, &
-!               density, maxngrid, level=backtrace_level, build_AtomF_matrix=.false.)
-!       else
-!          rebuild_KE_NL = .true.
-!          call get_H_matrix(rebuild_KE_NL, fixed_potential, electrons, &
-!               density, maxngrid, level=backtrace_level)
-!       endif
-!       electrons_tot = spin_factor * sum(electrons)
-!       if (flag_out_wf.OR.flag_write_DOS) then
-!          wf_self_con=.true.
-!       endif
-!
-!       if ( .not. restart_DM ) then
-!          record  = .false.   
-!          reset_L = .true.
-!          call FindMinDM(n_L_iterations, vary_mu, L_tolerance, &
-!               reset_L, record, backtrace_level)
-!       else
-!          record  = .false.
-!          reset_L = .false.
-!          call FindMinDM(n_L_iterations, vary_mu, L_tolerance, &
-!               reset_L, record, backtrace_level)
-!       end if
-!       if (flag_out_wf.OR.flag_write_DOS) then
-!          wf_self_con=.false.
-!       endif
-!       call get_energy(total_energy=total_energy,level=backtrace_level)
-!    end if
 !!$
 !!$
 !!$
