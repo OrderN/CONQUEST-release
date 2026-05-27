@@ -520,44 +520,43 @@ contains
        w_plusUproj_pao(:,:) = zero
        half_w_plusUproj_pao(:,:) = zero
 
-       do inum_plusUproj=1,num_plusUproj
+       do i_species = 1, n_species
           ipao = 0
-          i_species = info_plusUproj(inum_plusUproj,1)
-          l_plusUproj = info_plusUproj(inum_plusUproj,3)
-          n_plusUproj = info_plusUproj(inum_plusUproj,2)
-          z_plusUproj = info_plusUproj(inum_plusUproj,4)
-          !plusUvalue = real(info_plusUproj(inum_plusUproj,5),double)
-          do i_ang = 0, pao(i_species)%greatest_angmom
-             if(pao(i_species)%angmom(i_ang)%n_zeta_in_angmom>0) then
-                if (i_ang.eq.l_plusUproj) then 
-                   ! set U parameters for PAO with (n_plusUproj,l_plusUproj,z_plusUproj)
-                   z_temp = 0
-                   do i_zeta = 1, pao(i_species)%angmom(i_ang)%n_zeta_in_angmom
-                      prncpl = pao(i_species)%angmom(i_ang)%prncpl(i_zeta)
-                      if (prncpl.ne.n_plusUproj) then
-                         ipao = ipao + 2*i_ang + 1
-                      else if (prncpl.eq.n_plusUproj) then
-                         z_temp = z_temp + 1
-                         if (z_temp.eq.z_plusUproj) then
-                            do i_m = -i_ang,i_ang
-                               ipao = ipao + 1
-                               w_plusUproj_pao(i_species,ipao) = plusUvalue(i_species)
-                               half_w_plusUproj_pao(i_species,ipao) = half * plusUvalue(i_species)
-                            enddo ! m
-                         else
+          n_plusUproj = info_plusUproj(i_species,1)
+          l_plusUproj = info_plusUproj(i_species,2)
+          z_plusUproj = info_plusUproj(i_species,3)
+          if(flag_plusUproj_atom(i_species)) then
+             do i_ang = 0, pao(i_species)%greatest_angmom
+                if(pao(i_species)%angmom(i_ang)%n_zeta_in_angmom>0) then
+                   if (i_ang.eq.l_plusUproj) then 
+                      ! set U parameters for PAO with (n_plusUproj,l_plusUproj,z_plusUproj)
+                      z_temp = 0
+                      do i_zeta = 1, pao(i_species)%angmom(i_ang)%n_zeta_in_angmom
+                         prncpl = pao(i_species)%angmom(i_ang)%prncpl(i_zeta)
+                         if (prncpl/=n_plusUproj) then
                             ipao = ipao + 2*i_ang + 1
+                         else if (prncpl==n_plusUproj) then
+                            z_temp = z_temp + 1
+                            ! This line below selects one zeta
+                            if (z_temp==z_plusUproj) then
+                               do i_m = -i_ang,i_ang
+                                  ipao = ipao + 1
+                                  w_plusUproj_pao(i_species,ipao) = plusUvalue(i_species)
+                                  half_w_plusUproj_pao(i_species,ipao) = half * plusUvalue(i_species)
+                               enddo ! m
+                            else
+                               ipao = ipao + 2*i_ang + 1
+                            endif
                          endif
-                      endif
-                   enddo ! z
-                else
-                   do i_zeta = 1, pao(i_species)%angmom(i_ang)%n_zeta_in_angmom
-                      ipao = ipao + 2*i_ang + 1
-                   enddo
+                      enddo ! z
+                   else
+                      ipao = ipao + pao(i_species)%angmom(i_ang)%n_zeta_in_angmom*(2*i_ang + 1)
+                   endif
                 endif
-             endif
-          enddo ! anglar momentum
-          if (ipao.ne.npao_species(i_species)) &
-               call cq_abort("Error in counting PAOs when setting DFT+U parameters.")
+             enddo ! anglar momentum
+             if (ipao.ne.npao_species(i_species)) &
+                  call cq_abort("Error in counting PAOs when setting DFT+U parameters.")
+          end if ! flag_plusUproj
        enddo ! n_plusUproj
     end if
     !
@@ -938,12 +937,8 @@ contains
          flag_atomic_stress, flag_heat_flux, flag_DumpMatrices, flag_calc_pol, flag_do_pol_calc, &
          i_pol_dir, i_pol_dir_st, i_pol_dir_end
     use dimens, only: GridCutoff,    &
-!!! 2024.05.20 nakata DFT+U
-!         n_grid_x, n_grid_y, n_grid_z, r_c,         &
-!         RadiusSupport, RadiusAtomf, RadiusMS, RadiusLD, &
-         n_grid_x, n_grid_y, n_grid_z, r_c, r_plusU, &
-         RadiusSupport, RadiusAtomf, RadiusMS, RadiusLD, RadiusPlusUproj, &
-!!! nakata DFT+U end
+         n_grid_x, n_grid_y, n_grid_z, r_c,         &
+         RadiusSupport, RadiusAtomf, RadiusMS, RadiusLD, &
          NonLocalFactor, InvSRange,                      &
          min_blip_sp, flag_buffer_old, AtomMove_buffer,  &
          r_dft_d2, r_exx, r_exxs
@@ -1403,6 +1398,11 @@ contains
 !!! 2024.05.20 nakata DFT+U
     flag_DFTplusU = fdf_boolean('DM.DFTplusU', .false.)
     if(flag_DFTplusU) flag_first_diag = .true.
+    if(flag_DFTplusU.and.flag_basis_set == blips) then
+       call cq_warn(sub_name,"DFT+U not available with blips: turning off DFT+U")
+       flag_DFTplusU = .false.
+    end if
+    
 !!! nakata DFT+U end
 !!$
 !!$
@@ -1872,6 +1872,7 @@ contains
              flag_out_wf = .true.
              E_wf_min = fdf_double('IO.min_wf_E',-BIG)
              E_wf_max = fdf_double('IO.max_wf_E',BIG)
+             flag_wf_range_Ef = fdf_boolean('IO.WFRangeRelative',.true.)
           end if
           ! Possibly needed to decide if MSSF needs dealing with
           !flag_pDOS_angmom = fdf_boolean('IO.PDOS_Angmom',.false.)
@@ -1986,13 +1987,11 @@ contains
 !!$
 !!$
     if (flag_DFTplusU) then
-       ! cutoff for PK matrix (PKrange)
-       r_plusU = fdf_double('DM.PK_range_DFTplusU', one )   ! range for PK in DFT+U calculation ! 2024.05.20 nakata DFT+U
-
        if (fdf_block('DFTplusU')) then
           num_plusUproj = 1 + block_end - block_start
-          if(inode==ionode) write(io_lun,*) 'num_plusUproj =',num_plusUproj ! nakata 2024 debug
-          allocate(info_plusUproj(num_plusUproj,5))
+          !if(inode==ionode) write(io_lun,*) 'num_plusUproj =',num_plusUproj ! nakata 2024 debug
+          !allocate(info_plusUproj(num_plusUproj,5))
+          allocate(info_plusUproj(n_species,3))
           allocate(flag_plusUproj_atom(n_species))
           allocate(plusUvalue(n_species))
           plusUvalue = zero
@@ -2001,11 +2000,9 @@ contains
              z_plusUproj = 1
              read(unit=input_array(block_start+inum_plusUproj-1),fmt=*) &
                 i_species, n_plusUproj, l_plusUproj, z_plusUproj, plusUvalue(i_species)
-             info_plusUproj(inum_plusUproj,1) = i_species
-             info_plusUproj(inum_plusUproj,2) = n_plusUproj
-             info_plusUproj(inum_plusUproj,3) = l_plusUproj
-             info_plusUproj(inum_plusUproj,4) = z_plusUproj
-             info_plusUproj(inum_plusUproj,5) = 0
+             info_plusUproj(i_species,1) = n_plusUproj
+             info_plusUproj(i_species,2) = l_plusUproj
+             info_plusUproj(i_species,3) = z_plusUproj
              flag_plusUproj_atom(i_species) = .true.               
           enddo ! n_plusUproj
           call fdf_endblock
@@ -2370,7 +2367,9 @@ contains
        flag_read_velocity = fdf_boolean('AtomMove.ReadVelocity',.false.)
        restart_DM         = fdf_boolean('General.LoadDM', .false.)
        if(restart_DM) then                                             
-          find_chdens    = fdf_boolean('SC.MakeInitialChargeFromK',.true.) 
+          find_chdens    = fdf_boolean('SC.MakeInitialChargeFromK',.true.)
+          ! Allow DFT+U Hamiltonian with DM we have just loaded
+          if(flag_DFTplusU) flag_first_diag = .false.
        else
           find_chdens    = fdf_boolean('SC.MakeInitialChargeFromK',.false.)
        endif
@@ -2711,7 +2710,7 @@ contains
   !!
   subroutine allocate_species_vars
 
-    use dimens,             only: RadiusSupport, RadiusAtomf, RadiusMS, RadiusLD, RadiusPlusUproj, & ! 2024.05.20 nakata DFT+U
+    use dimens,             only: RadiusSupport, RadiusAtomf, RadiusMS, RadiusLD, &
          NonLocalFactor, InvSRange, atomicnum
     use memory_module,      only: reg_alloc_mem, type_dbl
     use species_module,     only: n_species, nsf_species, nlpf_species, npao_species, natomf_species, &
@@ -2801,11 +2800,6 @@ contains
     allocate(MSSF_nonminimal_species(n_species),STAT=stat)
     if(stat/=0) call cq_abort("Error allocating MSSF_nonminimal_species in allocate_species_vars: ", n_species,stat)
     call reg_alloc_mem(area_general,n_species,type_dbl)
-!!! 2024.05.20 nakata DFT+U
-!    allocate(RadiusPlusUproj(n_species),STAT=stat)
-!    if(stat/=0) call cq_abort("Error allocating RadiusPlusUproj, RadiusLD in allocate_species_vars: ",n_species,stat)
-!    call reg_alloc_mem(area_general,n_species,type_dbl)
-!!! nakata DFT+U end
     !
     call stop_timer(tmr_std_allocation)
 
@@ -2868,7 +2862,7 @@ contains
     use datatypes
     use units
     use dimens,               only: r_super_x, r_super_y, r_super_z,   &
-         n_grid_x, n_grid_y, n_grid_z, r_h, r_c, RadiusSupport, r_plusU   ! 2024.05.20 nakata DFT+U
+         n_grid_x, n_grid_y, n_grid_z, r_h, r_c, RadiusSupport
     use block_module,         only: in_block_x, in_block_y, in_block_z
     use species_module,       only: n_species, species_label, mass,    &
          charge,          &
@@ -2883,7 +2877,7 @@ contains
          flag_self_consistent, flag_vary_basis, iprint_init, flag_pcc_global, &
          nspin, flag_SpinDependentSF, flag_fix_spin_population, ne_spin_in_cell, flag_XLBOMD,&
          ase_file, flag_DFTplusU   ! 2024.05.20 nakata DFT+U
-    use H_matrix_module,      only: num_plusUproj, info_plusUproj, plusUvalue ! 2024.05.20 nakata DFT+U
+    use H_matrix_module,      only: num_plusUproj, info_plusUproj, plusUvalue, flag_plusUproj_atom
     use SelfCon,              only: maxitersSC
     use GenComms,             only: cq_abort
     use minimise,             only: energy_tolerance, L_tolerance,     &
@@ -3124,20 +3118,20 @@ contains
 !!! 2024.05.20 nakata DFT+U
     if(flag_DFTplusU) then
        write(io_lun,fmt='(10x,"DFT+U calculation will be performed")') 
-       write(io_lun,fmt='(10x,"DFT+U PK Matrix range  = ",f7.4,1x,a2)') &
-       dist_conv*r_plusU, d_units(dist_units)
 
        write(io_lun,fmt='(/4x,"Number of DFT-U projectors: ",i2)') num_plusUproj
 
-       write(io_lun,fmt='(4x,a40)') '----------------------------------------'
-       write(io_lun,fmt='(4x,a40)') "|   species   n  l  zeta  U-value (Ha)  |"
-       write(io_lun,fmt='(4x,a40)') '----------------------------------------'
-       do n=1, num_plusUproj
-          !write(io_lun,fmt='(4x,"|",i2,2x,a5,2x,i1,2x,i1,3x,i1,4x,f9.3,5x,"|")') &
-          write(io_lun,fmt='(4x,"|",i2,2x,a5,4x,i1,2x,i1,2x,i1,4x,f5.3,5x,"|")') &
-               info_plusUproj(n,1), species_label(info_plusUproj(n,1)), &
-               info_plusUproj(n,2), info_plusUproj(n,3), info_plusUproj(n,4), plusUvalue(info_plusUproj(n,1))!info_plusUproj(n,5)
+       write(io_lun,fmt='(4x,a)') '---------------------------------'
+       write(io_lun,fmt='(4x,a)') '| species     n  l  zeta U (Ha) |'
+       write(io_lun,fmt='(4x,a)') '---------------------------------'
+       do n=1, n_species
+          if(flag_plusUproj_atom(n)) then
+             write(io_lun,fmt='(4x,"|",i2,2x,a5,4x,i1,2x,i1,2x,i1,4x,f5.3,2x,"|")') &
+                  n, species_label(n), &
+                  info_plusUproj(n,1), info_plusUproj(n,2), info_plusUproj(n,3), plusUvalue(n)
+          end if
        end do
+       write(io_lun,fmt='(4x,a)') '---------------------------------'
     endif
 !!! nakata DFT+U end
 

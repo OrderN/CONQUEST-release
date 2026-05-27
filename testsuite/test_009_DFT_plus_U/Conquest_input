@@ -1,0 +1,38 @@
+minE.SCTolerance 1e-6
+IO.AtomChargeOutput T
+AtomMove.TypeOfRun static
+minE.SelfConsistent T
+IO.Coordinates ionpos.dat
+IO.Iprint 1
+Grid.GridCutoff 100
+Diag.MPMesh   T
+Diag.GammaCentred T
+Diag.MPMeshX  3
+Diag.MPMeshY  3
+Diag.MPMeshZ  3
+Diag.SmearingType 1
+Diag.MPOrder 5
+Diag.kT 0.010
+
+SC.KerkerPreCondition T
+SC.LinearMixingFactor 0.1
+SC.MaxIters 300
+Spin.SpinPolarised T
+Spin.FixSpin F
+
+DM.DFTplusU T
+
+# Spec, n, l, zeta, U
+%block DFTplusU
+1 3 2 1 0.0772
+%endblock
+
+General.NumberOfSpecies  1
+%block ChemicalSpeciesLabel
+ 1 28.086 Fe
+%endblock
+
+%block Fe
+Atom.SpinNeUp 9
+Atom.SpinNeDn 7
+%endblock

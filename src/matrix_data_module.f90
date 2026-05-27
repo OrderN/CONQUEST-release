@@ -95,7 +95,6 @@ module matrix_data
                                     SFcoeff_matind, SFcoeffTr_matind, LD_matind, &
                                     aSs_in_sSs_matind
   integer, dimension(:), pointer :: aNAmatind, NAamatind
-  integer, dimension(:), pointer :: aUa_matind, PKmatind   !!! 2024.05.20 nakata DFT+U
 
   ! Parameters for the different matrix ranges
   integer, parameter :: Srange   = 1   ! STS,TST,TS.TS
@@ -135,14 +134,6 @@ module matrix_data
   integer :: aNArange        ! 31
   integer :: NAarange        ! 32
   integer :: aSs_in_sSs_range   ! 33 for S(atomf,sf) but with the range of Srange (= r_sf + r_sf, not r_atomf + r_sf)
-
-!!! 2024.05.20 nakata DFT+U
-  integer :: PKrange         ! 33
-  integer :: pUa_range       ! 34
-  integer :: aUp_range       ! 35
-  integer :: pUp_range       ! 36
-  integer :: aUa_range       ! 37
-!!! nakata DFT+U end
 
   integer :: max_range ! Indexes matrix with largest range
 

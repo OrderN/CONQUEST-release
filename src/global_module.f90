@@ -428,6 +428,7 @@ module global_module
 
   ! DFT+U
   logical :: flag_DFTplusU, flag_first_diag
+  real(double), dimension(:,:,:,:), allocatable :: occ_mat ! Occupation matrix by primary atom
 
   ! Density matrix Lagrange multiplier for correct electron number (needed for forces and stress)
   real(double), dimension(2) :: mu_DMM ! Allow for spin

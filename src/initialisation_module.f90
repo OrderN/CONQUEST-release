@@ -332,7 +332,7 @@ contains
                                       iprint_gen, flag_perform_cDFT,   &
                                       nspin, min_layer,                &
                                       glob2node, flag_XLBOMD,          &
-                                      flag_neutral_atom, flag_diagonalisation
+                                      flag_neutral_atom, flag_diagonalisation, occ_mat
     use memory_module,          only: reg_alloc_mem, reg_dealloc_mem,  &
                                       type_dbl, type_int
     use group_module,           only: parts
@@ -488,6 +488,7 @@ contains
     if (inode == ionode .and. iprint_init > 2) &
          write (io_lun,fmt='(4x,a)') trim(prefix)//'Made covering set for matrix multiplications'
 
+    allocate(occ_mat(7,7,bundle%n_prim,nspin))
     ! Create all of the indexing required to perform matrix multiplications
     ! at a later point. This routine also identifies all the density
     ! matrix range interactions and hamiltonian range interactions

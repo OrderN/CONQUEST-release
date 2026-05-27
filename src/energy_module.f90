@@ -165,7 +165,7 @@ contains
     use numbers
     use units
     use mult_module,            only: matrix_product_trace, matH,     &
-                                      matK, matKE, matNL, matX, matNA, matEplusU   ! 2024.05.20 nakata DFT+U
+                                      matK, matKE, matNL, matX, matNA
     use GenComms,               only: inode, ionode, cq_warn
     use global_module,          only: iprint_gen, nspin, spin_factor, &
                                       flag_SpinDependentSF,           &
@@ -223,7 +223,6 @@ contains
     kinetic_energy = zero
     if(flag_neutral_atom_projector) local_ps_energy     = zero
     exx_energy     = zero
-    plusU_energy   = zero   ! 2024.05.20 nakata DFT+U
     spin_SF = 1
     do spin = 1, nspin
        if (flag_SpinDependentSF) spin_SF = spin
@@ -238,10 +237,6 @@ contains
                         matrix_product_trace(matK(spin), matKE(spin_SF))
        exx_energy = exx_energy - spin_factor * half * exx_alpha * &
                     matrix_product_trace(matK(spin), matX(spin))
-!!! 2024.05.20 nakata DFT+U
-       if (flag_DFTplusU) plusU_energy = plusU_energy + spin_factor * &
-                                         matrix_product_trace(matK(spin), matEplusU(spin))   ! (P-PKP)K = K(P-KPKP) ?? correct?
-!!! nakata DFT+U
     end do
 
     ! Find exx energy
@@ -328,7 +323,7 @@ contains
              if (flag_dft_d2) write (io_lun,17) en_conv*disp_energy, en_units(energy_units)
              !!! 2024.05.20 nakata DFT+U
              if (flag_DFTplusU) write (io_lun,&
-                      '(10x,"plusU Energy, 2Tr[K(P-PKP)]      : ",f25.15," ",a2)')&
+                      '(10x,"plusU Energy, 2Tr[0.5U(n - n^2)] : ",f25.15," ",a2)')&
                      en_conv*plusU_energy, en_units(energy_units)
              !!! nakata DFT+U end
              if (flag_surface_dipole_correction) then
@@ -522,7 +517,7 @@ contains
     use mult_module,            only: matrix_product_trace, matH,     &
                                       matrix_product_trace_length,    &
                                       matrix_trace,                   &
-                                      matK, matKE, matNL, matX, matS, matNA, matEplusU   ! 2024.05.20 nakata DFT+U
+                                      matK, matKE, matNL, matX, matS, matNA
 
     use global_module,          only: iprint_gen, nspin, spin_factor, &
                                       flag_SpinDependentSF,           &
@@ -580,7 +575,6 @@ contains
     kinetic_energy      = zero
     if(flag_neutral_atom_projector) local_ps_energy     = zero
     exx_energy          = zero
-    plusU_energy        = zero   ! 2024.05.20 nakata DFT+U
     one_electron_energy = zero
     potential_energy    = zero
     total_energy1       = zero
@@ -605,9 +599,6 @@ contains
        ! -alpha*Tr[K X]
        exx_energy     = exx_energy     &
             - spin_factor*half*exx_alpha*matrix_product_trace(matK(spin), matX(spin))
-       ! U/2*Tr[K (P-PKP)]   ! 2024.05.20 nakata DFT+U
-       if(flag_DFTplusU) plusU_energy   = plusU_energy     &
-                        + spin_factor*matrix_product_trace(matK(spin), matEplusU(spin))
     end do
 
     ! Find total pure DFT energy
