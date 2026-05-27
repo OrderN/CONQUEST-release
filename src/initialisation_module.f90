@@ -1112,7 +1112,7 @@ contains
          flag_dissipation,     &
          flag_propagateX, flag_propagateL, restart_X, &
          flag_out_wf, wf_self_con, &
-         flag_write_DOS, flag_neutral_atom, flag_DFTplusU, & ! 2024.05.20 nakata DFT+U
+         flag_neutral_atom, flag_DFTplusU, & ! 2024.05.20 nakata DFT+U
          atomf, sf, flag_LFD, nspin_SF, flag_diagonalisation, &
          ne_in_cell, min_layer, flag_basis_set, PAOs
     use ion_electrostatic,   only: ewald, screened_ion_interaction
