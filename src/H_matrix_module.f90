@@ -2047,7 +2047,7 @@ contains
     ! Local variables
     integer :: part, memb, neigh, ist, atom_num, atom_spec, iprim
     integer :: gcspart, neigh_global_part, neigh_global_num, neigh_species
-    real(double) :: dx, dy, dz, r2, trace, fac, val_Satomf, energy_plus_U
+    real(double) :: dx, dy, dz, r2, trace, fac, val_Satomf
     type(cq_timer) :: tmr_l_tmp1   
     integer :: spin, ipao, loc, npao_i, jpao, npao_j, pao_i, pao_j, pao_k, wheremat
     integer :: matW, matV, matnUP, matUP, matUW

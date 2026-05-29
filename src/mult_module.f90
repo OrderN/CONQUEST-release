@@ -1387,6 +1387,72 @@ contains
        if(atomf.ne.sf) deallocate(aSa_pairind)
     endif
 !!! nakata DFT+U end
+    ! Comms
+    call deallocate_comms_data(mult(aHa_AP_AP)%comms)
+    call deallocate_comms_data(mult(L_S_LS)%comms)
+    call deallocate_comms_data(mult(L_H_LH)%comms)
+    call deallocate_comms_data(mult(T_S_TS)%comms)
+    !call deallocate_comms_data(mult(S_TS_S)%comms)
+    !call deallocate_comms_data(mult(S_LS_L)%comms)
+    call deallocate_comms_data(mult(SL_S_SLS)%comms)
+    call deallocate_comms_data(mult(LH_L_SLS)%comms)
+    call deallocate_comms_data(mult(LS_L_LSL)%comms)
+    call deallocate_comms_data(mult(HL_S_LSL)%comms)
+    call deallocate_comms_data(mult(HLS_LS_L)%comms)
+    !call deallocate_comms_data(mult(LSL_SL_L)%comms)
+    call deallocate_comms_data(mult(SLS_LS_L)%comms)
+    call deallocate_comms_data(mult(LHL_SL_S)%comms)
+    call deallocate_comms_data(mult(LSL_SL_H)%comms)
+    call deallocate_comms_data(mult(AP_PA_aHa)%comms)
+    call deallocate_comms_data(mult(TS_T_T)%comms)
+    call deallocate_comms_data(mult(TH_T_L)%comms)
+    call deallocate_comms_data(mult(T_H_TH)%comms)
+    call deallocate_comms_data(mult(T_L_TL)%comms)
+    call deallocate_comms_data(mult(TL_T_L)%comms)
+    if (atomf.ne.sf) then
+       call deallocate_comms_data(mult(aSa_sCaTr_aSs)%comms)
+       call deallocate_comms_data(mult(sCa_aSs_sSs)%comms)
+       call deallocate_comms_data(mult(aHa_sCaTr_aHs)%comms)
+       call deallocate_comms_data(mult(sCa_aHs_sHs)%comms)
+       call deallocate_comms_data(mult(sCaTr_sSs_aSs)%comms)
+       call deallocate_comms_data(mult(aSs_sCa_aSa)%comms)
+       call deallocate_comms_data(mult(sCaTr_sHs_aHs)%comms)
+       call deallocate_comms_data(mult(aHs_sCa_aHa)%comms)
+       call deallocate_comms_data(mult(sSs_sSa_sCa)%comms)
+       call deallocate_comms_data(mult(sHs_sHa_sCa)%comms)
+       if (flag_LFD) then
+          call deallocate_comms_data(mult(aLa_aSa_aLSa)%comms)
+          call deallocate_comms_data(mult(aLa_aHa_aLHa)%comms)
+       endif
+    endif
+    if( flag_neutral_atom_projector ) then
+       call deallocate_comms_data(mult(aNA_NAa_aHa)%comms)
+       call deallocate_comms_data(mult(aHa_aNA_aNA)%comms)
+    end if
+!!! 2024.05.20 nakata DFT+U
+    if (flag_DFTplusU) then
+       call deallocate_comms_data(mult(S_S_S)%comms)
+    endif
+!!! nakata DFT+U end
+    do i=1,mx_trans
+       do j = 1,gtrans(i)%n_rem_node!maxnabaprocs+1
+          !if(associated(pairs(j,i)%submat)) deallocate(pairs(j,i)%submat)
+          deallocate(pairs(j,i)%submat)
+       end do
+    end do
+    deallocate(pairs)
+    deallocate(Spairind, Lpairind, APpairind, LSpairind, LHpairind, &
+               LSLpairind, Tpairind)
+    if (atomf.ne.sf) deallocate(aSs_pairind, aHs_pairind, SFcoeff_pairind)
+    if(flag_neutral_atom_projector) then
+       deallocate(aNApairind)
+       if(atomf.ne.sf) deallocate(aNAapairind)
+    end if
+!!! 2024.05.20 nakata DFT+U
+    if (flag_DFTplusU) then
+       if(atomf.ne.sf) deallocate(aSa_pairind)
+    endif
+!!! nakata DFT+U end
     call dissociate_matrices
     ! Matrices
     call end_ops(prim,Srange,Smatind,S_trans)
@@ -1409,7 +1475,11 @@ contains
     call end_ops(prim,SXrange,SXmatind)
     call end_ops(prim,Xrange,Xmatind)
     if (atomf.ne.sf) then
-       call end_ops(prim,aSa_range,aSa_matind)
+       if(flag_DFTplusU) then
+          call end_ops(prim,aSa_range,aSa_matind,aSa_trans)
+       else
+          call end_ops(prim,aSa_range,aSa_matind)
+       end if
        call end_ops(prim,aHa_range,aHa_matind)
        call end_ops(prim,STr_range,STr_matind)
        call end_ops(prim,HTr_range,HTr_matind)
