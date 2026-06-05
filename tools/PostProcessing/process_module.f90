@@ -805,13 +805,35 @@ contains
     end do
     return
   end subroutine process_pdos
+   ! -----------------------------------------------------------------------------
+   ! Subroutine get_pdos_axes
+   ! -----------------------------------------------------------------------------
 
+   !!****f* ProcModule/get_pdos_axes *
+   !!
+   !!  NAME
+   !!   get_pdos_axes - Create and normalise local rotation axes
+   !!  USAGE
+   !!   get_pdos_axes
+   !!  PURPOSE
+   !!   Create and normalise local rotation axes. Checks for mutual orthogonality.
+   !!  INPUTS
+   !!    NONE
+   !!  USES
+   !!   datatypes, local, GenComms
+   !!  AUTHOR
+   !!   C. Xu
+   !!  CREATION DATE
+   !!   05/03/2026
+   !!  MODIFICATION HISTORY
+   !!    03/2026 - C. Xu: Orthogonality check
+   !!  SOURCE
+   !!
   subroutine get_pdos_axes
    use datatypes
    use local, ONLY: pdos_ax, pdos_ay, pdos_az
    use GenComms, ONLY: cq_abort
    implicit none
-   ! This subroutine checks for sufficient orthogonality
    real(double), parameter :: tol = 1e-10
 
    ! Normalise new x-axis correctly
@@ -844,8 +866,8 @@ contains
       A2(3, 1) = 1.0
       A2(4, 5) = 2.0
       A2(5, 3) = 2.0*sqrt(3.0)
-
    end subroutine initialise_A_mat
+
    subroutine antisym_matrix(vector, matrix)
       use datatypes
       implicit none
@@ -859,6 +881,31 @@ contains
       matrix(3, 1) = -vector(2)
       matrix(3, 2) = vector(1)
    end subroutine
+   ! -----------------------------------------------------------------------------
+   ! Subroutine get_pdos_axes
+   ! -----------------------------------------------------------------------------
+
+   !!****f* ProcModule/construct_EulerMatrices *
+   !!
+   !!  NAME
+   !!   construct_EulerMatrices
+   !!  USAGE
+   !!   construct_EulerMatrices(E1, E2, atom_index)
+   !!  PURPOSE
+   !!   Create rotation matrices using Euler angle input: right-handed,
+   !!   active Euler angles about intrinsic (fixed) cell axes.
+   !!  INPUTS
+   !!    integer, intent(in) :: atom_index - atom to perform rotation for
+   !!  USES
+   !!   datatypes, numbers, local, GenComms
+   !!  AUTHOR
+   !!   C. Xu
+   !!  CREATION DATE
+   !!   10/04/2026
+   !!  MODIFICATION HISTORY
+   !!    13/04/2026 - C. Xu: Add Euler matrix for d-orbitals
+   !!  SOURCE
+   !!    Credits to R. Johnson for the mathematical expressions
    subroutine construct_EulerMatrices(E1, E2, atom_index)
       use datatypes
       use numbers, ONLY: pi
@@ -1025,7 +1072,7 @@ contains
       angle = datan2(sin_angle, cos_angle)
       if (angle /= angle) &
             call cq_abort("calculate_axis_angle: NaN rotation angle.")
-      !if (angle < 0.0) angle = angle + 2.0 * pi
+      if (angle < 0.0) angle = angle + 2.0 * pi
    end subroutine calculate_axis_angle
    subroutine construct_rodrigues(axis, angle, matrix)
       use datatypes
@@ -1176,7 +1223,6 @@ contains
       !  Define the lookups correctly for each mode
       ! If it's not Euler matrices, transpose is required
       if (flag_rotate_pdos_mode == 2) then
-         rotate_counter = rotate_pdos_natoms
          do j = 1, rotate_counter
             U1(:,:,j) = transpose(U1(:,:,j))
             U2(:,:,j) = transpose(U2(:,:,j))
@@ -1186,12 +1232,10 @@ contains
             g_atom_lookup(i_atom) = find_neighbours(1, i_atom)
          end do
       else if (flag_rotate_pdos_mode == 1) then
-         rotate_counter = rotate_pdos_natoms
          do i_atom = 1, rotate_counter
             g_atom_lookup(i_atom) = rotate_pdos_atoms_euler(i_atom)
          end do
       else
-         rotate_counter = n_atoms_pDOS
          do j = 1, rotate_counter
             U1(:,:,j) = transpose(U1(:,:,j))
             U2(:,:,j) = transpose(U2(:,:,j))
@@ -1253,10 +1297,6 @@ contains
    !!   Evaluates the nearest neighbours using periodic boundary conditions
    !!    and returns their bond vectors
    !!
-   !!   I'm assuming (for the sake of argument) that if both the energy and
-   !!   the smearing (kT) are zero then we get an occupation of 0.5 - this is
-   !!   certainly the limit if E and kT are equal and heading to zero, or if
-   !!   E is smaller than kT and both head for zero.
    !!  INPUTS
    !!   integer, intent(in) :: atomno !atom to find neighbours of
    !!   real(double), intent(out), allocatable :: bond(:,:) ! array to hold bond
@@ -1326,7 +1366,7 @@ contains
       case (1)
          allocate(nghbr_arr(6))
       case default
-         call cq_abort("Did not correctly allocate nghbr_arr array")
+         call cq_abort("nearest_neighbours: Did not correctly allocate nghbr_arr.")
       end select
       do j = 1, size(nghbr_arr)
          min_idx = minloc(temp, 1)
@@ -1426,7 +1466,7 @@ contains
          if (bond_lengths(i) > 1e-10) then
               norm_bond(:, i) = bond(:, i) / bond_lengths(i)
           else
-              call cq_abort("Zero-length bond")
+              call cq_abort("axes_from_nn: Zero-length bond")
           end if
       end do
       find_atomno = findloc(find_neighbours(1,:), atomno, dim=1)
@@ -1438,6 +1478,8 @@ contains
        else
         ibond_principal = findloc(nghbr_arr, minormax, dim=1)
       end if
+      if (ibond_principal == 0) &
+            call cq_abort('axes_from_nn: principal neighbour not found for atom ', find_atomno)
       dots = matmul(transpose(norm_bond), norm_bond(:, ibond_principal))  ! dot prod with chosen normal
       idx_direction = minloc(abs(dots), 1) ! select index of closest to perpendicular bond
       if (find_neighbours(4, find_atomno) == 0) then
@@ -1446,12 +1488,16 @@ contains
       else
          ! This entry > 0 -> corresponds to neighbour
          ibond_sec = findloc(nghbr_arr, find_neighbours(4, find_atomno), dim=1)
+         ! Handle when input neighbour is not found
+         if (ibond_sec == 0) &
+            call cq_abort('axes_from_nn: second neighbour not found for atom ', find_atomno)
+
          if (abs(dots(ibond_sec)) > 0.5) &
-         print *, "WARNING: Chosen secondary neighbour appears to not be very perpendicular to  principal."
+            print *, "WARNING: Chosen secondary neighbour appears to not be very perpendicular to  principal."
          call project_onto_plane(bond(:, ibond_principal),bond(:, ibond_sec), proj_vector)
    end if ! choice of 2nd direction
    if ( find_neighbours(1, find_atomno) == find_neighbours(4, find_atomno)) &
-            call cq_abort("Cannot have the principal neighbour also as the second direction")
+            call cq_abort("axes_from_nn: cannot have the principal neighbour also as the second direction")
       select case (find_neighbours(2, find_atomno))
       case (0)
          pdos_ay = bond(:, ibond_principal)
