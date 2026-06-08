@@ -882,7 +882,7 @@ contains
       matrix(3, 2) = vector(1)
    end subroutine
    ! -----------------------------------------------------------------------------
-   ! Subroutine get_pdos_axes
+   ! Subroutine construct_EulerMatrices
    ! -----------------------------------------------------------------------------
 
    !!****f* ProcModule/construct_EulerMatrices *
@@ -999,7 +999,38 @@ contains
       E1 = matmul(inv(Q1), matmul(E1, Q1))
       E2 = matmul(inv(Q2), matmul(E2, Q2))
    end subroutine construct_EulerMatrices
+   ! -----------------------------------------------------------------------------
+   ! Subroutine calculate_axis_angle
+   ! -----------------------------------------------------------------------------
 
+   !!****f* ProcModule/calculate_axis_angle *
+   !!
+   !!  NAME
+   !!   calculate_axis_angle
+   !!  USAGE
+   !!   call calculate_axis_angle(w1, w2, w3, axis, angle)
+   !!  PURPOSE
+   !!   Given a set of 3 orthonormal vectors, calculate the axis of rotation and angle needed to go from the simulation
+   !!   cell axes to this basis (order matters).
+   !!   This subroutine forms the basis change matrix and finds its normalised eigenvector with real eigenvalue one
+   !!  INPUTS
+   !!    None
+   !!  USES
+   !!   datatypes, local, global, pao_format, GenComms
+   !!  AUTHOR
+   !!   C. Xu
+   !!  CREATION DATE
+   !!   02/03/2026
+   !!  MODIFICATION HISTORY
+   !!    04/03/2026 - C. Xu: use LAPACK to find rotation axis
+   !!    05/03/2026 - C. Xu: Correct use of lapack and rotation angle
+   !!    09/03/2026 - C. Xu: use atan2 for rotation angle
+   !!    19/03/2026 - C. Xu: initial attempt to fix 90 degree rotation
+   !!    24/03/2026 - C. Xu: add error checking
+   !!    10/04/2026 - C. Xu: fixes to determinant check, negative angles and euler matrix
+   !!    26/05/2026, 08/06 - C. Xu: comments and clearer error messages
+   !!  SOURCE
+   !!
    subroutine calculate_axis_angle(w1, w2, w3, axis, angle)
       use datatypes
       use numbers, ONLY: pi
@@ -1087,7 +1118,6 @@ contains
       identity(1, 1) = 1.0
       identity(2, 2) = 1.0
       identity(3, 3) = 1.0
-      !Normalise axis to unit vector
       norm_axis = axis / norm2(axis)
       ! Define K
       call antisym_matrix(norm_axis, K)
@@ -1197,8 +1227,37 @@ contains
       Ul = matmul(Al_inv, matmul(Cl, Al))
 
    end subroutine construct_Ul
+   ! -----------------------------------------------------------------------------
+   ! Subroutine rotate_coefficients
+   ! -----------------------------------------------------------------------------
 
-   subroutine rotate_coefficients(U1, U2)
+   !!****f* ProcModule/rotate_coefficients *
+   !!
+   !!  NAME
+   !!   rotate_coefficients
+   !!  USAGE
+   !!   call rotate_coefficients
+   !!  PURPOSE
+   !!   Apply rotation matrices to wavefunction coefficients. Formally, for each l, each 2l + 1 coefficients
+   !!   corresponding to a (m, zeta) are multiplied by the corresponding U^{(l)} rotation matrix.
+   !!   As different rotation modes use different arrays and lookups, these are taken care of at the start of the
+   !!   subroutine
+   !!   The loop over all values is pasted and modified from process_pdos.
+   !!  INPUTS
+   !!    None
+   !!  USES
+   !!   datatypes, local, global, pao_format, GenComms
+   !!  AUTHOR
+   !!   C. Xu
+   !!  CREATION DATE
+   !!   02/03/2026
+   !!  MODIFICATION HISTORY
+   !!    14/04/2026 - C. Xu: loop over active bands only
+   !!    03/05/2026 - C. Xu: correct g_atom_lookup
+   !!    12/05/2026 - C. Xu: correct de/allocation behaviour. Edit desc
+   !!  SOURCE
+   !!
+   subroutine rotate_coefficients
       use datatypes
       use local, ONLY: n_bands_total, nkp, n_atoms_pDOS, evec_coeff, scaled_evec_coeff, &
       pDOS_atom_index, band_full_to_active, rotate_pdos_natoms, find_neighbours, &
@@ -1208,7 +1267,6 @@ contains
       use GenComms, ONLY: cq_abort
 
       implicit none
-      ! real(double), intent(in):: U1(:,:,:), U2(:,:,:)
       ! Local variables
       integer :: i_atom, i_spec, i_band, i_band_c, i_kp, i_spin, g_atom, j
       integer :: i_l, i_z, nzeta, norbs, sf_offset, rotate_counter
@@ -1415,7 +1473,7 @@ contains
    !!  For octahedra: choose z_hat as longest or shortest bond
    !!   Use this direction to define a plane - project the 4 atoms onto it
    !!   Call y_hat the bond which is the closest to the plane
-   !!  Find x_hat by x_hat = z cross y
+   !!    Find x_hat = z cross y
    !!  INPUTS
    !!   integer, intent(in) :: atomno - atom to find neighbours of
    !!   real(double), intent(in) :: bond(:,:) - array to hold bond vectors
@@ -1493,7 +1551,7 @@ contains
             call cq_abort('axes_from_nn: second neighbour not found for atom ', find_atomno)
 
          if (abs(dots(ibond_sec)) > 0.5) &
-            print *, "WARNING: Chosen secondary neighbour appears to not be very perpendicular to  principal."
+            print *, "WARNING: Chosen secondary neighbour appears to not be very perpendicular to principal."
          call project_onto_plane(bond(:, ibond_principal),bond(:, ibond_sec), proj_vector)
    end if ! choice of 2nd direction
    if ( find_neighbours(1, find_atomno) == find_neighbours(4, find_atomno)) &
