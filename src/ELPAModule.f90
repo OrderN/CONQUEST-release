@@ -10,6 +10,7 @@ module ELPA_module
 
   logical :: flag_elpa_dummy = .false. ! A marker to show ELPA in compilation
   logical :: flag_use_elpa = .false.  ! whether we use ELPA or not
+  logical :: flag_elpa_GPU = .false.  ! Should ELPA use GPUs?
   character(len=16) :: elpa_solver = "ELPA1" ! ELPA1 or ELPA2
   character(len=16) :: elpa_kernel = "GENERIC"
   integer :: elpa_API = 20241105
@@ -18,7 +19,7 @@ module ELPA_module
   class(elpa_t), pointer :: elp
 
   private
-  public :: flag_use_elpa, elpa_solver, elpa_kernel, elpa_API, flag_elpa_dummy
+  public :: flag_use_elpa, elpa_solver, elpa_kernel, elpa_API, flag_elpa_dummy, flag_elpa_GPU
   public :: init_ELPA, end_ELPA, ELPA_zhegv
 
 contains
@@ -82,6 +83,7 @@ contains
     call elp%set( "blacs_context", context, info )
     if( info /= ELPA_OK ) call cq_abort("ELPA_Init: Could not set parameter blacs_cotext")
 
+    if(flag_elpa_GPU) info = elp%setup()
     select case( elpa_solver )
     case("ELPA1")
        call elp%set( "solver", ELPA_SOLVER_1STAGE, info ) ! ELPA1
@@ -116,7 +118,13 @@ contains
 
 !!$      call elp%set( "omp_threads", omp_get_max_threads(), info )
 
-    info = elp%setup()
+    if(flag_elpa_GPU) then
+       call elp%set("nvidia-gpu",1,info)
+       call elp%set("solver",ELPA_SOLVER_1STAGE,info)
+       info = elp%setup_gpu()
+    else
+       info = elp%setup()
+    end if
     if( info /= ELPA_OK )  call cq_abort("something wrong in ELPA !")
   end subroutine init_ELPA
 

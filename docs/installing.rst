@@ -43,8 +43,10 @@ a working MPI installation including a Fortran90 compiler (often
   can be obtained from `the netlib repository <http://www.netlib.org/scalapack/>`_ if
   you need to compile it)
 
-Additionally, Conquest can use LibXC if it is available (v4.x or
-later).
+Additionally, Conquest can use `ELPA <https://elpa.mpcdf.mpg.de/index.html>`_ as an
+alternative to ScaLAPACK (with GPU implementations also available).
+It will also use `LibXC <https://libxc.gitlab.io/>`_ if it is
+available (v4.x or later) :cite:`i-Lehtola:2018le`.
 
 The library locations are set in the ``system.make`` file in the ``src/system``
 directory, along with other parameters needed for compilation.  The default file
@@ -223,5 +225,13 @@ Compile CONQUEST
 
     dos2unix ./makedeps       # For Windows Subsystem for Linux (WSL), there may be some incompatibilities thus file conversion is recommended.
     make                      # Or make -j`nproc` for parallel compilation using all available cores
+
 Go to :ref:`top <install>`
 
+.. bibliography:: references.bib
+    :cited:
+    :labelprefix: I
+    :keyprefix: i-
+    :style: unsrt
+
+Go to :ref:`top <install>`

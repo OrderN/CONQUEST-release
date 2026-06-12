@@ -7,13 +7,14 @@ module ELPA_module
 
   logical :: flag_elpa_dummy = .true. ! A marker to show no ELPA in compilation
   logical :: flag_use_elpa = .false.  ! This should be false for ELPAModuleDummy
+  logical :: flag_elpa_GPU = .false.  ! Should ELPA use GPUs?
   character(len=16) :: elpa_solver = "ELPA1" ! ELPA1 or ELPA2
   character(len=16) :: elpa_kernel = "GENERIC"
   integer :: elpa_API = 20241105
   integer :: merow, mecol
 
   private
-  public :: flag_use_elpa, elpa_solver, elpa_kernel, elpa_API, flag_elpa_dummy
+  public :: flag_use_elpa, elpa_solver, elpa_kernel, elpa_API, flag_elpa_dummy, flag_elpa_GPU
   public :: init_ELPA, end_ELPA, ELPA_zhegv
 
 contains

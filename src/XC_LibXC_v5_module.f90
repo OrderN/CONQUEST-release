@@ -126,9 +126,9 @@ contains
        call xc_f03_version(vmajor, vminor, vmicro)
        if(inode==ionode.AND.iprint_ops>0) then
           if(vmajor>2) then
-             write(io_lun,'(4x,"LibXC version: ",I2,".",I2,".",I2)') vmajor, vminor, vmicro
+             write(io_lun,'(4x,"Using LibXC version: ",I2,".",I2,".",I2)') vmajor, vminor, vmicro
           else
-             write(io_lun,'(4x,"LibXC version: ",I2,".",I2)') vmajor, vminor
+             write(io_lun,'(4x,"Using LibXC version: ",I2,".",I2)') vmajor, vminor
           end if
        end if
        ! Identify the functional
@@ -313,15 +313,18 @@ contains
     implicit none
 
     integer :: i, j
-    character(len=120) :: ref
+    character(len=200) :: ref
 
+    call xc_f03_reference(ref)
+    write(io_lun,fmt='(/4x,"LibXC reference:  ",a)') ref
     write(io_lun,fmt='(4x,"XC references from LibXC:")')
     do j=1,n_xc_terms
        i = 0
        ref = xc_f03_func_reference_get_ref(xc_f03_func_info_get_references(xc_info(j),i))
+       write(io_lun,fmt='(6x,a)') trim(ref)
        do while(i >= 0)
-          write(io_lun, '(6x,a)') trim(ref)
           ref = xc_f03_func_reference_get_ref(xc_f03_func_info_get_references(xc_info(j),i))
+          write(io_lun, '(6x,a)') trim(ref)
        end do
     end do
     return
