@@ -148,6 +148,12 @@ jobs:
         mpirun -np ${{matrix.np}} ../../bin/Conquest
         cat Conquest_out
 
+    - name: Run test 009
+      working-directory: ${{github.workspace}}/testsuite/test_009_DFT_plus_U
+      run: |
+        mpirun -np ${{matrix.np}} ../../bin/Conquest
+        cat Conquest_out
+
     - name: Check test results
       working-directory: ${{github.workspace}}/testsuite
       run: pytest test_check_output.py
