@@ -180,7 +180,6 @@ module mult_module
   integer :: aNAa_trans    ! 12
   integer :: aSa_trans     ! 13    !!! 2024.05.20 nakata DFT+U
 
-!  integer(integ), parameter :: mx_trans = 12
   integer(integ), parameter :: mx_trans = 13   !!!  DFT+U
 
   type(pair_data), allocatable, dimension(:,:) :: pairs
@@ -588,7 +587,7 @@ contains
           call trans_ini(parts, prim, gcs, mat(1:prim%groups_on_node,aSa_range),     &
                myid-1, halo(aSa_range), halo(aSa_range), ltrans(aSa_range),    &
                gtrans(aSa_trans), pairs(:,aSa_trans), aSa_pairind)
-       else      
+       else
           aSa_trans = S_trans
        endif
     endif

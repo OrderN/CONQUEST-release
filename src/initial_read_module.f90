@@ -1867,13 +1867,10 @@ contains
     flag_write_projected_DOS = fdf_boolean('IO.write_proj_DOS',.false.)
     if(flag_write_projected_DOS) then
        if(flag_diagonalisation) then
-          flag_write_projected_DOS = fdf_boolean('IO.write_proj_DOS',.false.)
-          if(flag_write_projected_DOS) then
-             flag_out_wf = .true.
-             E_wf_min = fdf_double('IO.min_wf_E',-BIG)
-             E_wf_max = fdf_double('IO.max_wf_E',BIG)
-             flag_wf_range_Ef = fdf_boolean('IO.WFRangeRelative',.true.)
-          end if
+          flag_out_wf = .true.
+          E_wf_min = fdf_double('IO.min_wf_E',-BIG)
+          E_wf_max = fdf_double('IO.max_wf_E',BIG)
+          flag_wf_range_Ef = fdf_boolean('IO.WFRangeRelative',.true.)
        else
           flag_write_projected_DOS = .false.
           if(inode==ionode) write(io_lun,'(2x,"Setting IO.write_proj_DOS F as solving O(N)")')
@@ -1998,7 +1995,7 @@ contains
              info_plusUproj(i_species,1) = n_plusUproj
              info_plusUproj(i_species,2) = l_plusUproj
              info_plusUproj(i_species,3) = z_plusUproj
-             flag_plusUproj_atom(i_species) = .true.               
+             flag_plusUproj_atom(i_species) = .true.
           enddo ! n_plusUproj
           call fdf_endblock
        else

@@ -62,8 +62,6 @@
 !!    which are no longer used
 !!   2017/12/05 10:20 dave (with TM and NW (Mizuho))
 !!    Adding new matrix indices (aNA and NAa) for atom function - NA projectors
-!!   2024/05/22 14:40 nakata
-!!    Adding new matrix indices (PK, pUa, aUp, pUp and aUa) for atom function - DFT+U
 !!   2025/02/06 14:30 nakata
 !!    aSs_in_sSs_range and aSs_in_sSs_matind were added
 !!    and mx_matrices was changed from 32 to 33 for pDOS with MSSFs
@@ -78,8 +76,7 @@ module matrix_data
   save
 
   ! This will need to change if the above parameters are changed
-!  integer, parameter :: mx_matrices = 32    ! 2024.05.20 nakata DFT+U
-  integer, parameter :: mx_matrices = 54 ! From 37...
+  integer, parameter :: mx_matrices = 33
 
   ! Store ALL indices in a large array
   type(matrix),      allocatable, dimension(:,:), target :: mat
