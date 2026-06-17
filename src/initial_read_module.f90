@@ -929,7 +929,7 @@ contains
          flag_write_projected_DOS, &
          E_wf_min, E_wf_max, flag_wf_range_Ef, &
          mx_temp_matrices, flag_neutral_atom, flag_diagonalisation, &
-         flag_DFTplusU, flag_first_diag, & ! 2024.05.20 nakata DFT+U
+         flag_DFTplusU, flag_first_diag, flag_write_occ_mat, & 
          flag_SpinDependentSF, flag_Multisite, flag_LFD, flag_SFcoeffReuse, &
          flag_opt_cell, cell_constraint_flag, flag_variable_cell, &
          cell_en_tol, optcell_method, cell_stress_tol, &
@@ -1981,6 +1981,7 @@ contains
 !!$
 !!$
     if (flag_DFTplusU) then
+       flag_write_occ_mat = fdf_boolean('DM.WriteOccMat',.true.)
        if (fdf_block('DFTplusU')) then
           num_plusUproj = 1 + block_end - block_start
           !if(inode==ionode) write(io_lun,*) 'num_plusUproj =',num_plusUproj ! nakata 2024 debug

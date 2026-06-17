@@ -35,9 +35,9 @@
     This calculation includes non-local pseudopotentials,
     with a maximum core radius of      8.62850983
 
-    This job was run on  2026/05/27 at 12:51 +0100
-    Code was compiled on 2026/05/27 at 11:29 +0100
-    Version comment: Git Branch: f-DFT-plus-U; tag, hash: v1.5-20-gd5fff5c7
+    This job was run on  2026/06/17 at 13:52 +0100
+    Code was compiled on 2026/06/17 at 13:51 +0100
+    Version comment: Git Branch: f-DFT-plus-U; tag, hash: v1.5-22-g3e7fc96e
 
     Job title:                                                                                 
     Job to be run: static calculation
@@ -565,21 +565,35 @@
           Free Energy (E-TS)               :      -250.564716790769410 Ha
     PulayMixSC: Pulay iteration    29 residual:              0.85697E-06
     PulayMixSC: Reached SCF tolerance of  0.85697E-06 after     29 iterations
+    Occupation matrix
+    Atom:       1        Spin 1                                      Spin 2
+         0.974  -0.000   0.000  -0.000   0.000       0.470  -0.000  -0.000  -0.000   0.000
+        -0.000   0.972  -0.000   0.000  -0.000      -0.000   0.550  -0.000   0.000   0.000
+         0.000  -0.000   0.981  -0.000  -0.000      -0.000  -0.000   0.343  -0.000  -0.000
+        -0.000   0.000  -0.000   0.974   0.000      -0.000   0.000  -0.000   0.470  -0.000
+         0.000  -0.000  -0.000   0.000   0.982       0.000   0.000  -0.000  -0.000   0.343
+    Atom:       2        Spin 1                                      Spin 2
+         0.974   0.000  -0.000  -0.000   0.000       0.470  -0.000  -0.000  -0.000   0.000
+         0.000   0.972  -0.000   0.000  -0.000      -0.000   0.550  -0.000   0.000   0.000
+        -0.000  -0.000   0.981  -0.000  -0.000      -0.000  -0.000   0.343  -0.000  -0.000
+         0.000   0.000  -0.000   0.974   0.000      -0.000   0.000  -0.000   0.470   0.000
+         0.000  -0.000  -0.000   0.000   0.982       0.000   0.000  -0.000   0.000   0.343
+          plusU Energy, 2Tr[0.5U(n - n^2)] :         0.101114620388248 Ha
       | Number of electrons (u/d)=        18.703646       13.296378
       | GS Energy with kT -> 0   =      -250.564714635621499 Ha
       | Free Energy as E-TS      =      -250.564716790769410 Ha
       |* Harris-Foulkes energy   =      -250.564701704734119 Ha
-      |* DFT total energy        =      -250.564701772704609 Ha
+      |* DFT total energy        =      -250.564701708200147 Ha
 
     force: Forces on atoms (Ha/a0)
     force:  Atom   X              Y              Z
-    force:     1  -0.0021500525  -0.0000000000  -0.0000000000
-    force:     2   0.0028072180  -0.0000000000  -0.0000000000
+    force:     1  -0.0021500528  -0.0000000000  -0.0000000000
+    force:     2   0.0028072182  -0.0000000000  -0.0000000000
 
     force: Maximum force :        0.00280722(Ha/a0) on atom         2 in x direction
     force: Force Residual:        0.00250032 Ha/a0
-    force: Total stress:           -13.14995536      -17.85694703      -17.85694703 GPa
-    force: Average pressure:     16.28794981 GPa
+    force: Total stress:           -13.14995272      -17.85694357      -17.85694357 GPa
+    force: Average pressure:     16.28794662 GPa
 
     get_E_and_F: Change in energy during last step of electronic optimisation: -0.10795E-06
 
@@ -593,4 +607,4 @@
 
     Max total mem use is           1138.987 MB
 
-    Total run time was:             202.557 seconds
+    Total run time was:             225.800 seconds

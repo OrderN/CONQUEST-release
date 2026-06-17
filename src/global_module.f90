@@ -427,8 +427,9 @@ module global_module
   integer, dimension(3) :: i_pol_dir ! Either n,0,0 or 1,2,3
 
   ! DFT+U
-  logical :: flag_DFTplusU, flag_first_diag
-  real(double), dimension(:,:,:,:), allocatable :: occ_mat ! Occupation matrix by primary atom
+  logical :: flag_DFTplusU, flag_first_diag, flag_write_occ_mat
+  real(double), dimension(:,:,:,:), allocatable :: occ_mat ! Occupation matrix (m,m,primary atom, spin)
+  real(double), dimension(:,:,:,:), allocatable :: occ_mat_glob ! Occupation matrix (m,m,global atom, spin)
 
   ! Density matrix Lagrange multiplier for correct electron number (needed for forces and stress)
   real(double), dimension(2) :: mu_DMM ! Allow for spin

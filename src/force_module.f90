@@ -2598,10 +2598,8 @@ contains
                             do pao_j = 1, npao_j
                                ! Get location using Satomf indexing
                                wheremat = matrix_pos(matSatomf,iprim,halo(aSa_range)%i_halo(gcspart),pao_i,pao_j)
-                               ! Now find value of dS
+                               ! Now find value of dS and scale by U
                                val_Satomf = return_matrix_value_pos(mat_tmp,wheremat)
-                               ! We assume the projector functions are simply chosen from PAOs,
-                               ! so OW = W = <proj_i | pao_j>
                                call store_matrix_value_pos(matdUW(dir1), wheremat,val_Satomf*fac)
                                if (flag_stress) then
                                   if (flag_full_stress) then
