@@ -2115,7 +2115,8 @@ contains
                                         do m2 = 1, m_U
                                            wheremat = matrix_pos(matSatomf,iprim,halo(aSa_range)%i_halo(gcspart),pao_i+m2,pao_j)
                                            do spin=1,nspin
-                                              call store_matrix_value_pos(matnUW(spin), wheremat,val_Satomf*fac*occ_mat(m1,m2,iprim,spin))
+                                              call store_matrix_value_pos(matnUW(spin), wheremat, &
+                                                   val_Satomf*fac*occ_mat(m1,m2,iprim,spin))
                                            end do
                                         end do
                                      end do ! pao_j
