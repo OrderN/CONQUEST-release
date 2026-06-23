@@ -692,15 +692,15 @@ contains
              write(17,fmt='("# Energy(eV)   pDOS(/eV)")')
              write(17,fmt='("#                  Total         l=0         l=1                                 l=2")')
              do i=1, n_DOS
-                write(17,fmt=fmt_dos) HaToeV*(E_DOS_min + range_offset(i_spin) - efermi(i_spin) + dE_DOS*real(i-1,double)), pDOS(i_atom,i,i_spin), &
-                     ((pDOS_lm(i_m,i_l,i_atom,i,i_spin),i_m=-i_l,i_l),i_l=0,pao(i_spec)%greatest_angmom)
+                write(17,fmt=fmt_dos) HaToeV*(E_DOS_min + range_offset(i_spin) - efermi(i_spin) + dE_DOS*real(i-1,double)), &
+                     pDOS(i_atom,i,i_spin), ((pDOS_lm(i_m,i_l,i_atom,i,i_spin),i_m=-i_l,i_l),i_l=0,pao(i_spec)%greatest_angmom)
              end do
           else if(flag_l_resolved) then
              write(17,fmt='("# Energy(eV)   pDOS(/eV)")')
              write(17,fmt='("#                  Total         l=0         l=1         l=2")')
              do i=1, n_DOS
-                write(17,fmt=fmt_dos) HaToeV*(E_DOS_min + range_offset(i_spin) - efermi(i_spin) + dE_DOS*real(i-1,double)), pDOS(i_atom,i,i_spin), &
-                     pDOS_l(0:pao(i_spec)%greatest_angmom,i_atom,i,i_spin)
+                write(17,fmt=fmt_dos) HaToeV*(E_DOS_min + range_offset(i_spin) - efermi(i_spin) + dE_DOS*real(i-1,double)), &
+                     pDOS(i_atom,i,i_spin), pDOS_l(0:pao(i_spec)%greatest_angmom,i_atom,i,i_spin)
              end do
           else
              write(17,fmt='("# Energy(eV)   pDOS(/eV)")')
@@ -772,8 +772,12 @@ contains
        dE = zero
        if(flag_procwf_range_Ef) dE = -efermi(i_spin)
        write(17,fmt='("# Spin ",I1)') i_spin
-       write(17,fmt='("# Original Fermi-level: ",f12.5," eV")') HaToeV*efermi(i_spin)
-       write(17,fmt='("# Bands shifted relative to Fermi-level")')
+       if(flag_procwf_range_Ef) then
+          write(17,fmt='("# Original Fermi-level: ",f12.5," eV")') HaToeV*efermi(i_spin)
+          write(17,fmt='("# Bands shifted relative to Fermi-level")')
+       else
+          write(17,fmt='("# Fermi-level: ",f12.5," eV")') HaToeV*efermi(i_spin)
+       end if
        do i_band=1,n_bands_total ! All bands
           if(minval(eigenvalues(i_band, :, i_spin))+dE>=E_DOS_min .and. &
                maxval(eigenvalues(i_band, :, i_spin))+dE<=E_DOS_max) then
