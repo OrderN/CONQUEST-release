@@ -444,7 +444,7 @@ contains
     use numbers, ONLY: zero, RD_ERR, pi, twopi, half, one, two, four, six
     use local, ONLY: eigenvalues, n_bands_total, nkp, wtk, efermi, flag_total_iDOS, &
          evec_coeff, scaled_evec_coeff, flag_procwf_range_Ef, flag_l_resolved, flag_lm_resolved, &
-         flag_rotate_pdos, flag_rotate_pdos_mode, band_full_to_active, n_atoms_pDOS, pDOS_atom_index, &
+         flag_rotate_pdos, flag_rotate_pdos_mode,flag_rotate_pdos_debug,  band_full_to_active, n_atoms_pDOS, pDOS_atom_index, &
          pdos_ax, pdos_ay, pdos_az, rotate_pdos_atoms_euler, euler_angles, find_neighbours, rotate_pdos_natoms, &
          nghbr_arr, U1, U2
     use read, ONLY: read_eigenvalues, read_psi_coeffs, read_nprocs_from_blocks
@@ -468,7 +468,6 @@ contains
     real(double), dimension(:,:), allocatable :: total_electrons
     real(double), dimension(:,:,:), allocatable :: total_electrons_l
     real(double) :: A1(3, 3), A2(5, 5), A1inv(3, 3), A2inv(5, 5)
-   !  real(double), dimension(:,:,:), allocatable :: U1d, U2d
     real(double) :: C1(3, 3), C2(5, 5), E1(3,3), E2(5,5)
     real(double) :: rod(9), angle, axis(3)
 
@@ -514,6 +513,22 @@ contains
     if (flag_rotate_pdos) then
       write(*,fmt='(2x,"Rotating wavefunction coefficients")')
       call initialise_A_mat(A1, A2)
+      if (flag_rotate_pdos_debug) then
+         write(*, fmt='(/2x,"ROTATION DEBUG OUTPUT: MODE ", (I0,1x))') &
+            flag_rotate_pdos_mode
+
+         write(*, fmt='(/2x,"ROTATION DEBUG OUTPUT: A^(l) MATRICES")')
+         write(*, fmt='(/4x, "A1: ")')
+         do j = 1, 3
+            write(*, fmt='(/4x,3(f10.5,1X))') A1(j, :)
+         end do
+         write(*, fmt='(/4x, "A2: ")')
+         do j = 1, 5
+            write(*, fmt='(/4x,5(f10.5,1X))') A2(j, :)
+         end do
+         write(*, fmt='(/4x, "For l = 1, basis is [|y>, |z>, |x>]")')
+         write(*, fmt='(/4x, "For l = 2, basis is [|xy>, |yz>, |3z^2 - r^2>, |xz>, |x^2 - y^2>]")')
+      end if
       if (allocated(U1))  deallocate(U1)
       if (allocated(U2))  deallocate(U2)
       ! Using axes
@@ -540,7 +555,10 @@ contains
          do i = 1, n_atoms_pDOS
             call construct_Ul(1, A1, C1, U1(:,:,i))
             call construct_Ul(2, A2, C2, U2(:,:,i))
+            U1(:,:,i) = transpose(U1(:,:,i))
+            U2(:,:,i) = transpose(U2(:,:,i))
           end do
+
       else if (flag_rotate_pdos_mode == 1) then
          write(*,fmt='(2x,"Using active Euler angles in extrinsic zyz convention")')
          allocate(U1(3,3,rotate_pdos_natoms))
@@ -549,6 +567,16 @@ contains
             call construct_EulerMatrices(E1, E2, i)
             U1(:,:,i) = E1
             U2(:,:,i) = E2
+            if (flag_rotate_pdos_debug) then
+               write(*, fmt='(/4x, "U1: ")')
+               do j = 1, 3
+                  write(*, fmt='(/6x,3(f10.5,1X))') U1(j,:,i)
+               end do
+               write(*, fmt='(/4x, "U2: ")')
+               do j = 1, 5
+                  write(*, fmt='(/6x,5(f10.5,1X))') U2(j,:,i)
+               end do
+            end if ! end rotation debug mode
          end do
       else if (flag_rotate_pdos_mode == 2) then
          write(*,fmt='(2x,"Using user input atom numbers and local geometry")')
@@ -573,6 +601,29 @@ contains
             call construct_C2(rod, C2)
             call construct_Ul(1, A1, C1, U1(:,:,i))
             call construct_Ul(2, A2, C2, U2(:,:,i))
+            U1(:,:,i) = transpose(U1(:,:,i))
+            U2(:,:,i) = transpose(U2(:,:,i))
+            if (flag_rotate_pdos_debug) then
+               write(*, fmt='(/4x,"Rotation angle (rad/deg) [0, 2pi]: ",2(f10.5,1X))') &
+                  angle, angle * 180/pi
+               write(*, fmt='(/4x,"Rotation axis: ", 3(f10.5,1X))') axis
+               write(*, fmt='(/4x, "C1: ")')
+               do j = 1, 3
+                  write(*, fmt='(/6x,3(f10.5,1X))') C1(j,:)
+               end do
+               write(*, fmt='(/4x, "C2: ")')
+               do j = 1, 5
+                  write(*, fmt='(/6x,5(f10.5,1X))') C2(j, :)
+               end do
+               write(*, fmt='(/4x, "U1: ")')
+               do j = 1, 3
+                  write(*, fmt='(/6x,3(f10.5,1X))') U1(j,:,i)
+               end do
+               write(*, fmt='(/4x, "U2: ")')
+               do j = 1, 5
+                  write(*, fmt='(/6x,5(f10.5,1X))') U2(j,:,i)
+               end do
+            end if ! end rotation debug mode
          end do
       end if ! pdos rotation mode
       call rotate_coefficients
@@ -1013,6 +1064,9 @@ contains
    !!   Given a set of 3 orthonormal vectors, calculate the axis of rotation and angle needed to go from the simulation
    !!   cell axes to this basis (order matters).
    !!   This subroutine forms the basis change matrix and finds its normalised eigenvector with real eigenvalue one
+   !!   This eigenvector is the rotation axis. The rotation angle is computed as the angle satisfying
+   !!   cos \theta = (Tr(R) - 1) /2; sin\theta = -Tr(K_n R) / 2, \Theta = datan2(sin, cos) and shifted to the interval
+   !!    [0, 2pi]
    !!  INPUTS
    !!    None
    !!  USES
@@ -1033,9 +1087,9 @@ contains
    !!
    subroutine calculate_axis_angle(w1, w2, w3, axis, angle)
       use datatypes
-      use numbers, ONLY: pi
+      use numbers, ONLY: pi, one
       use GenComms, ONLY: cq_abort
-
+      use local, ONLY: flag_rotate_pdos_debug
       implicit none
       external DGEEV
 
@@ -1082,7 +1136,7 @@ contains
       end if
       ! Require eigenvector with eigenvalue 1, no complex, to find axis
       do i = 1, N
-         if (abs(WR(i) - 1.00000) < tol .and. abs(WI(i)) < tol) then
+         if (abs(WR(i) - one) < tol .and. abs(WI(i)) < tol) then
             axis  = VR(:, i)   ! Column i of VR is the i-th right eigenvector
             exit
          end if
@@ -1103,6 +1157,8 @@ contains
       angle = datan2(sin_angle, cos_angle)
       if (angle /= angle) &
             call cq_abort("calculate_axis_angle: NaN rotation angle.")
+      if (flag_rotate_pdos_debug) &
+               print *, '  Rotation angle in [-pi, pi]: ', angle, angle * 180/pi
       if (angle < 0.0) angle = angle + 2.0 * pi
    end subroutine calculate_axis_angle
    subroutine construct_rodrigues(axis, angle, matrix)
@@ -1281,11 +1337,6 @@ contains
       !  Define the lookups correctly for each mode
       ! If it's not Euler matrices, transpose is required
       if (flag_rotate_pdos_mode == 2) then
-         do j = 1, rotate_counter
-            U1(:,:,j) = transpose(U1(:,:,j))
-            U2(:,:,j) = transpose(U2(:,:,j))
-         end do
-         if (.not. allocated(g_atom_lookup)) allocate(g_atom_lookup(rotate_counter))
          do i_atom = 1, rotate_counter
             g_atom_lookup(i_atom) = find_neighbours(1, i_atom)
          end do
@@ -1294,11 +1345,6 @@ contains
             g_atom_lookup(i_atom) = rotate_pdos_atoms_euler(i_atom)
          end do
       else
-         do j = 1, rotate_counter
-            U1(:,:,j) = transpose(U1(:,:,j))
-            U2(:,:,j) = transpose(U2(:,:,j))
-         end do
-
          do i_atom = 1, rotate_counter
             g_atom_lookup(i_atom) = pDOS_atom_index(i_atom)
          end do

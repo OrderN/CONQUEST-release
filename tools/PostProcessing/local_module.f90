@@ -37,7 +37,7 @@ module local
   integer :: flag_proc_band_str
   logical :: flag_only_charge, flag_by_kpoint, flag_wf_range, flag_proc_range, flag_procwf_range_Ef
   logical :: flag_total_iDOS, flag_write_forces, flag_write_spin_moments, flag_l_resolved, flag_lm_resolved
-  logical :: flag_rotate_pdos
+  logical :: flag_rotate_pdos, flag_rotate_pdos_debug
   integer :: flag_rotate_pdos_mode, rotate_pdos_natoms
   character(len=80) :: flag_rotate_pdos_units
   logical :: flag_outputWF_real

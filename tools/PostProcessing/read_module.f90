@@ -304,6 +304,7 @@ contains
        flag_l_resolved = fdf_boolean('Process.pDOS_l_resolved',.false.)
        flag_lm_resolved = fdf_boolean('Process.pDOS_lm_resolved',.false.)
        flag_rotate_pdos = fdf_boolean('Process.RotatePDOS',.false.)
+       flag_rotate_pdos_debug = fdf_boolean('Process.RotatePDOSDebug',.false.)
        flag_rotate_pdos_mode = fdf_integer('Process.RotatePDOSMode',0)
        rotate_pdos_natoms = fdf_integer('Process.RotatePDOS.NumAtoms',1)
        flag_rotate_pdos_units = fdf_string(7, 'Process.RotatePDOSAngle',"deg") ! deg or rad
