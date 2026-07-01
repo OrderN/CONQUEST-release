@@ -2015,7 +2015,7 @@ contains
     use datatypes
     use numbers
     use global_module,  ONLY: nspin, id_glob, species_glob, atomf, occ_mat, &
-                              iprint_ops, min_layer, IPRINT_TIME_THRES2
+                              iprint_ops, min_layer, IPRINT_TIME_THRES2, spin_factor
     use GenComms,       ONLY: cq_abort, myid, inode, ionode, gsum
     use group_module,   ONLY: parts
     use primary_module, ONLY: bundle
@@ -2151,7 +2151,7 @@ contains
        call matrix_sum(zero, matHplusUatomf(spin), one , matUP)
        call matrix_sum(one,  matHplusUatomf(spin), -two, matnUP)
        ! Double counting term
-       trace = matrix_product_trace(matKatomf(spin),matnUP)
+       trace = spin_factor*matrix_product_trace(matKatomf(spin),matnUP)
        delta_E_plusU = delta_E_plusU + trace ! Includes gsum
     enddo ! spin
     call free_temp_matrix(matnUP)
@@ -2200,7 +2200,7 @@ contains
 
     use datatypes
     use numbers
-    use global_module,  ONLY: nspin, occ_mat, occ_mat_glob, flag_write_occ_mat, &
+    use global_module,  ONLY: nspin, spin_factor, occ_mat, occ_mat_glob, flag_write_occ_mat, &
          atomf, iprint_ops, min_layer, flag_first_diag, ni_in_cell, id_glob, species_glob
     use energy, ONLY: plusU_energy
     use GenComms,       ONLY: cq_abort, myid, inode, ionode, gsum
@@ -2292,6 +2292,7 @@ contains
        end if ! nm_nodgroup > 0
     end do ! part
     call gsum(plusU_energy)
+    plusU_energy = plusU_energy*spin_factor
     ! Write out matrix
     if(flag_write_occ_mat) then
        ! Collect occupation matrix from all processes
