@@ -340,9 +340,9 @@ To use mode 1, have the following snippet in ``Conquest_input``:
    Process.RotatePDOS T (default: F)
    Process.RotatePDOSMode 0 (default: 0)
    %block pDOSAxes 
-   x1 x2 x3
-   y1 y2 y3
-   z1 z2 z3
+   x1 y1 z1 ! new x
+   x2 y2 z2 ! new y
+   x3 y3 z3 ! new z
    %endblock
    Process.n_atoms_pDOS 2
    %block pDOS_atoms
@@ -356,8 +356,8 @@ If Euler angles are desired, set ``Process.RotatePDOSMode 1`` and in ``Conquest_
 
 ::
 
-   Process.RotatePDOS T (default: F)
-   Process.RotatePDOSMode 1 (default: 0)
+   Process.RotatePDOS T
+   Process.RotatePDOSMode 1
    Process.RotatePDOS.NumAtoms int (required)
    Process.RotatePDOSAngle deg (default: deg, optional: rad)
    %block pDOSEuler 
@@ -371,8 +371,8 @@ Finally, calculation of local axes is possible depending on local geometries.
 
 ::
 
-   Process.RotatePDOS T (default: F)
-   Process.RotatePDOSMode 2 (default: 0)
+   Process.RotatePDOS T
+   Process.RotatePDOSMode 2
    Process.RotatePDOS.NumAtoms int (required)
    %block pDOSNeighbours 
    A B C D  !n entries, same number as in Process.RotatePDOS.NumAtoms
@@ -385,7 +385,9 @@ where ``A``, ``B``, ``C``, ``D`` are integers with different conditions:
 * ``C``: if ``-1``, set the principal direction along the shortest bond. If ``0``, set along the longest bond. If it is a positive integer, it is interpreted as an atom number which must be a neighbour of the atom specified in ``A``. All runs will output the atom neighbours, so setting this to ``0`` or ``-1`` as a first run is recommended unless the neighbours are known beforehand
 * ``D``: if ``0``, the second direction is chosen by the bond which changes the least under projection to the plane defined by the bond vector calculated from ``C``. If it is a positive integer, then it is interpreted as an atom number which must be a neighbour of the atom specified in ``A``
 
-In this final case, setting the block ``pDOS_atoms`` is optional since only the specified atoms will be rotated whilst the rest will be in the simulation cell axes.
+For both modes 1 and 2, setting the block ``pDOS_atoms`` is optional since only the specified atoms will be rotated whilst the rest will be in the simulation cell axes.
+
+For users interested in verbose output, set ``Process.RotatePDOSDebug T`` (default False) in ``Conquest_input`` which will output detailed information about rotation matrices and orbital weights.
 
 Go to :ref:`top <post-proc>`.
 

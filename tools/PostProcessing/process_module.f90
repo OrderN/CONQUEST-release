@@ -456,7 +456,7 @@ contains
     implicit none
 
     ! Local variables
-    integer :: i_band, i_kp, i_spin, n_DOS_wid, n_band, n_min, n_max, i, j, i_atom,max_nsf, i_spec, &
+    integer :: i_band, i_kp, i_spin, n_DOS_wid, n_band, n_min, n_max, i, j, k, i_atom,max_nsf, i_spec, &
          i_l, nzeta, sf_offset, max_l, norbs, i_m, i_band_c, i_z
     real(double) :: Ebin, dE_DOS, a, pf_DOS, spin_fac, coeff, check_electrons, peak_width
    integer, dimension(:), allocatable :: nghbr_atoms
@@ -470,6 +470,13 @@ contains
     real(double) :: A1(3, 3), A2(5, 5), A1inv(3, 3), A2inv(5, 5)
     real(double) :: C1(3, 3), C2(5, 5), E1(3,3), E2(5,5)
     real(double) :: rod(9), angle, axis(3)
+    real(double) :: pdos_weight
+    character(len=20) :: pdos_weight_str
+    character(len=500) :: line
+    character(len=30), parameter :: d_orb(5) = (/ "|xy>", "|yz>", &
+        "|3z^2-r^2>", "|xz>", "|x^2-y^2>"/)
+   character(len=30), parameter :: p_orb(3) = (/ "|y>", "|z>","|x>"/)
+
 
 
     character(len=25) :: filename,fmt_dos
@@ -509,7 +516,7 @@ contains
     call read_psi_coeffs("Process")
     allocate(occ(n_bands_total,nkp))
 
-    ! Call rotation subroutine if desired
+    ! Call pDOS rotation subroutines if desired. Also includes debug output
     if (flag_rotate_pdos) then
       write(*,fmt='(2x,"Rotating wavefunction coefficients")')
       call initialise_A_mat(A1, A2)
@@ -526,8 +533,8 @@ contains
          do j = 1, 5
             write(*, fmt='(/4x,5(f10.5,1X))') A2(j, :)
          end do
-         write(*, fmt='(/4x, "For l = 1, basis is [|y>, |z>, |x>]")')
-         write(*, fmt='(/4x, "For l = 2, basis is [|xy>, |yz>, |3z^2 - r^2>, |xz>, |x^2 - y^2>]")')
+         write(*, fmt='(/4x, "For l = 1, orbital basis is [|y>, |z>, |x>]")')
+         write(*, fmt='(/4x, "For l = 2, orbital basis is [|xy>, |yz>, |3z^2-r^2>, |xz>, |x^2-y^2>]")')
       end if
       if (allocated(U1))  deallocate(U1)
       if (allocated(U2))  deallocate(U2)
@@ -544,9 +551,9 @@ contains
             write(*, fmt='(/2x,"New local axes for specified atoms: ", *(I0,1x))') &
                pDOS_atom_index
          end if
-         write(*, fmt='(/4x,"x: ",3(f10.5,1X))') pdos_ax
-         write(*, fmt='(/4x,"y: ",3(f10.5,1X))') pdos_ay
-         write(*, fmt='(/4x,"z: ",3(f10.5,1X))') pdos_az
+         write(*, fmt='(/4x,"x: ",3(f10.5,1X))', advance="no") pdos_ax
+         write(*, fmt='(/4x,"y: ",3(f10.5,1X))', advance="no") pdos_ay
+         write(*, fmt='(/4x,"z: ",3(f10.5,1X))', advance="no") pdos_az
          call calculate_axis_angle(pdos_ax, pdos_ay, pdos_az, axis, angle)
          call construct_rodrigues(axis, angle, rod)
          ! Construct all C^l matrices from rodrigues
@@ -557,25 +564,118 @@ contains
             call construct_Ul(2, A2, C2, U2(:,:,i))
             U1(:,:,i) = transpose(U1(:,:,i))
             U2(:,:,i) = transpose(U2(:,:,i))
+            if (flag_rotate_pdos_debug) then
+               write(*, fmt='(/4x,"Rotation angle (rad/deg) [0, 2pi]: ",2(f10.5,1X))') &
+                  angle, angle * 180/pi
+               write(*, fmt='(/4x,"Rotation axis: ", 3(f10.5,1X))') axis
+               write(*, fmt='(/4x, "C1: ")')
+               do j = 1, 3
+                  write(*, fmt='(/6x,3(f10.5,1X))',  advance='no') C1(j,:)
+               end do
+               write(*, fmt='(/4x, "C2: ")')
+               do j = 1, 5
+                  write(*, fmt='(/6x,5(f10.5,1X))',  advance='no') C2(j, :)
+               end do
+               write(*, fmt='(/4x, "U1: ")')
+               do j = 1, 3
+                  write(*, fmt='(/6x,3(f10.5,1X))',  advance='no') U1(j,:,i)
+               end do
+               write(*, fmt='(/4x, "p-orbital weight decomposition")')
+               pdos_weight_str = ""
+               do k = 1, 3
+                  line = "Rotated " // trim(p_orb(k)) // " = "
+                  do j = 1, 3
+                     pdos_weight = U1(k,j,i)*U1(k,j,i)
+                     write(pdos_weight_str, '(F10.5)') pdos_weight
+                     if (j == 1) then
+                        line = trim(line) // trim(adjustl(pdos_weight_str)) // &
+                              trim(p_orb(j))
+                     else
+                        line = trim(line) // " + " // trim(adjustl(pdos_weight_str)) // &
+                              trim(p_orb(j))
+                     end if
+                  end do
+                  write(*, '(/6x,(A))') trim(line)
+               end do ! end printing l = 1 orbital weights
+               write(*, fmt='(/4x, "U2: ")')
+               do j = 1, 5
+                  write(*, fmt='(/6x,5(f10.5,1X))', advance='no') U2(j,:,i)
+               end do
+               write(*, fmt='(/4x, "d-orbital weight decomposition")')
+               do k = 1, 5
+                  line = "Rotated " // trim(d_orb(k)) // " = "
+                  do j = 1, 5
+                     pdos_weight = U2(k,j,i)*U2(k,j,i)
+                     write(pdos_weight_str, '(F10.5)') pdos_weight
+                     if (j == 1) then
+                        line = trim(line) // trim(adjustl(pdos_weight_str)) // trim(d_orb(j))
+                     else
+                        line = trim(line) // " + " // trim(adjustl(pdos_weight_str)) // trim(d_orb(j))
+                     end if
+                  end do
+                  write(*, '(/6x,(A))') trim(line)
+               end do ! end printing l = 2 orbital weights
+            end if ! end rotation debug output
           end do
 
       else if (flag_rotate_pdos_mode == 1) then
-         write(*,fmt='(2x,"Using active Euler angles in extrinsic zyz convention")')
+         write(*,fmt='(2x,"Using extrinsic Euler angles in active zyz convention")')
          allocate(U1(3,3,rotate_pdos_natoms))
          allocate(U2(5,5,rotate_pdos_natoms))
          do i = 1, rotate_pdos_natoms
+            write(*, fmt='(/2x,"New local axes for specified atoms: ", *(I0,1x))') &
+               rotate_pdos_atoms_euler(i)
             call construct_EulerMatrices(E1, E2, i)
             U1(:,:,i) = E1
             U2(:,:,i) = E2
+            ! We only explicitly construct wavefunction rotation matrices
+            ! However can extrapolate new local axes using E1 since orbital basis is {y,z,x}
+            write(*, fmt='(/4x,"x: ",3(f10.5,1X))', advance="no") &
+               E1(3,3), E1(3,1), E1(3,2)
+            write(*, fmt='(/4x,"y: ",3(f10.5,1X))', advance="no") &
+               E1(1,3), E1(1,1), E1(1,2)
+            write(*, fmt='(/4x,"z: ",3(f10.5,1X))', advance="no") &
+               E1(2,3), E1(2,1), E1(2,2)
             if (flag_rotate_pdos_debug) then
                write(*, fmt='(/4x, "U1: ")')
                do j = 1, 3
-                  write(*, fmt='(/6x,3(f10.5,1X))') U1(j,:,i)
+                  write(*, fmt='(/6x,3(f10.5,1X))',  advance='no') U1(j,:,i)
                end do
+                write(*, fmt='(/4x, "p-orbital weight decomposition")')
+               pdos_weight_str = ""
+               do k = 1, 3
+                  line = "Rotated " // trim(p_orb(k)) // " = "
+                  do j = 1, 3
+                     pdos_weight = U1(k,j,i)*U1(k,j,i)
+                     write(pdos_weight_str, '(f10.5)') pdos_weight
+                     if (j == 1) then
+                        line = trim(line) // trim(adjustl(pdos_weight_str)) // &
+                              trim(p_orb(j))
+                     else
+                        line = trim(line) // " + " // trim(adjustl(pdos_weight_str)) // &
+                              trim(p_orb(j))
+                     end if
+                  end do
+                  write(*, '(/6x,(A))') trim(line)
+               end do ! end printing l = 1 orbital weights
                write(*, fmt='(/4x, "U2: ")')
                do j = 1, 5
-                  write(*, fmt='(/6x,5(f10.5,1X))') U2(j,:,i)
+                  write(*, fmt='(/6x,5(f10.5,1X))', advance='no') U2(j,:,i)
                end do
+               write(*, fmt='(/4x, "d-orbital weight decomposition")')
+               do k = 1, 5
+                  line = "Rotated " // trim(d_orb(k)) // " = "
+                  do j = 1, 5
+                     pdos_weight = U2(k,j,i)*U2(k,j,i)
+                     write(pdos_weight_str, '(F10.5)') pdos_weight
+                     if (j == 1) then
+                        line = trim(line) // trim(adjustl(pdos_weight_str)) // trim(d_orb(j))
+                     else
+                        line = trim(line) // " + " // trim(adjustl(pdos_weight_str)) // trim(d_orb(j))
+                     end if
+                  end do
+                  write(*, '(/6x,(A))') trim(line)
+               end do ! end printing l = 2 orbital weights
             end if ! end rotation debug mode
          end do
       else if (flag_rotate_pdos_mode == 2) then
@@ -590,9 +690,9 @@ contains
             call axes_from_nn(find_neighbours(1, i), bond)
             write(*, fmt='(/2x,"New local axes for atom ", I0, ": ")') &
                     find_neighbours(1,i)
-            write(*, fmt='(/4x,"x: ",3(f10.5,1X))') pdos_ax
-            write(*, fmt='(/4x,"y: ",3(f10.5,1X))') pdos_ay
-            write(*, fmt='(/4x,"z: ",3(f10.5,1X))') pdos_az
+            write(*, fmt='(/4x,"x: ",3(f10.5,1X))', advance="no") pdos_ax
+            write(*, fmt='(/4x,"y: ",3(f10.5,1X))', advance="no") pdos_ay
+            write(*, fmt='(/4x,"z: ",3(f10.5,1X))', advance="no") pdos_az
             call get_pdos_axes
             call calculate_axis_angle(pdos_ax, pdos_ay, pdos_az, axis, angle)
             call construct_rodrigues(axis, angle, rod)
@@ -609,27 +709,58 @@ contains
                write(*, fmt='(/4x,"Rotation axis: ", 3(f10.5,1X))') axis
                write(*, fmt='(/4x, "C1: ")')
                do j = 1, 3
-                  write(*, fmt='(/6x,3(f10.5,1X))') C1(j,:)
+                  write(*, fmt='(/6x,3(f10.5,1X))',  advance='no') C1(j,:)
                end do
                write(*, fmt='(/4x, "C2: ")')
                do j = 1, 5
-                  write(*, fmt='(/6x,5(f10.5,1X))') C2(j, :)
+                  write(*, fmt='(/6x,5(f10.5,1X))',  advance='no') C2(j, :)
                end do
                write(*, fmt='(/4x, "U1: ")')
                do j = 1, 3
-                  write(*, fmt='(/6x,3(f10.5,1X))') U1(j,:,i)
+                  write(*, fmt='(/6x,3(f10.5,1X))',  advance='no') U1(j,:,i)
                end do
+               write(*, fmt='(/4x, "p-orbital weight decomposition")')
+               pdos_weight_str = ""
+               do k = 1, 3
+                  line = "Rotated " // trim(p_orb(k)) // " = "
+                  do j = 1, 3
+                     pdos_weight = U1(k,j,i)*U1(k,j,i)
+                     write(pdos_weight_str, '(F10.5)') pdos_weight
+                     if (j == 1) then
+                        line = trim(line) // trim(adjustl(pdos_weight_str)) // &
+                              trim(p_orb(j))
+                     else
+                        line = trim(line) // " + " // trim(adjustl(pdos_weight_str)) // &
+                              trim(p_orb(j))
+                     end if
+                  end do
+                  write(*, '(/6x,(A))') trim(line)
+               end do ! end printing l = 1 orbital weights
                write(*, fmt='(/4x, "U2: ")')
                do j = 1, 5
-                  write(*, fmt='(/6x,5(f10.5,1X))') U2(j,:,i)
+                  write(*, fmt='(/6x,5(f10.5,1X))', advance='no') U2(j,:,i)
                end do
-            end if ! end rotation debug mode
+               write(*, fmt='(/4x, "d-orbital weight decomposition")')
+               do k = 1, 5
+                  line = "Rotated " // trim(d_orb(k)) // " = "
+                  do j = 1, 5
+                     pdos_weight = U2(k,j,i)*U2(k,j,i)
+                     write(pdos_weight_str, '(f10.5)') pdos_weight
+                     if (j == 1) then
+                        line = trim(line) // trim(adjustl(pdos_weight_str)) // trim(d_orb(j))
+                     else
+                        line = trim(line) // " + " // trim(adjustl(pdos_weight_str)) // trim(d_orb(j))
+                     end if
+                  end do
+                  write(*, '(/6x,(A))') trim(line)
+               end do ! end printing l = 2 orbital weights
+            end if ! end rotation debug output
          end do
       end if ! pdos rotation mode
       call rotate_coefficients
-   deallocate(U1)
-   deallocate(U2)
-   end if  ! rotate pdos
+      deallocate(U1)
+      deallocate(U2)
+    end if  ! rotate pdos
     ! Set up storage based on pDOS per atom, or l/lm resolved per atom
     if(flag_lm_resolved) then
        allocate(pDOS_lm(-max_l:max_l,0:max_l,n_atoms_pDOS,n_DOS,nspin))
@@ -1005,50 +1136,121 @@ contains
       s2g = sin(2.0 * euler_gamma)
 
       ! Rotation of l = 1 coefficients
-      E1(1,1) = ca*cb*cg - sa*sg
-      E1(1,2) = ca*sb
-      E1(1,3) = -cg*sa - ca*cb*sg
-      E1(2,1) = -cg*sb
-      E1(2,2) = -cb
-      E1(2,3) = sb*sg
-      E1(3,1) = cb*cg*sa + ca*sg
-      E1(3,2) = sa*sb
-      E1(3,3) = ca*cg - cb*sa*sg
+      ! E1(1,1) = ca*cb*cg - sa*sg
+      ! E1(1,2) = ca*sb
+      ! E1(1,3) = -cg*sa - ca*cb*sg
+      ! E1(2,1) = -cg*sb
+      ! E1(2,2) = cb
+      ! E1(2,3) = sb*sg
+      ! E1(3,1) = cb*cg*sa + ca*sg
+      ! E1(3,2) = sa*sb
+      ! E1(3,3) = ca*cg - cb*sa*sg
+      E1(3,3) = ca*cb*cg - sa*sg
+      E1(3,2) = ca*sb
+      E1(3,1) = -cg*sa - ca*cb*sg
+      E1(2,3) = -cg*sb
+      E1(2,2) = cb
+      E1(2,1) = sb*sg
+      E1(1,3) = cb*cg*sa + ca*sg
+      E1(1,2) = sa*sb
+      E1(1,1) = ca*cg - cb*sa*sg
 
       ! Rotation of l = 2 coefficients
-      E2(5,5) = 0.25*c2a*c2g*(3.0+c2b) - s2a*cb*s2g
-      E2(5,4) = 0.5*c2a*s2b*cg - s2a*sb*sg
-      E2(5,3) = 0.5*sqrt(3.0)*c2a*sb*sb
-      E2(5,2) = -sb*(c2a*cb*sg + s2a*cg)
-      E2(5,1) = -cb*s2a*c2g -0.25*c2a*(3.0+c2b)*s2g
+      ! E2(5,5) = 0.25*c2a*c2g*(3.0+c2b) - s2a*cb*s2g
+      ! E2(5,4) = 0.5*c2a*s2b*cg - s2a*sb*sg
+      ! E2(5,3) = 0.5*sqrt(3.0)*c2a*sb*sb
+      ! E2(5,2) = -sb*(c2a*cb*sg + s2a*cg)
+      ! E2(5,1) = -cb*s2a*c2g -0.25*c2a*(3.0+c2b)*s2g
 
-      E2(4,5) = sa*sb*s2g - 0.5*ca*c2g*s2b
-      E2(4,4) = ca*c2b*cg - sa*cb*sg
-      E2(4,3) = sqrt(3.0)*ca*sb*cb
-      E2(4,2) = -cb*sa*cg -ca*c2b*sg
-      E2(4,1) = sb*(ca*cb*s2g + c2g*sa)
+      ! E2(4,5) = sa*sb*s2g - 0.5*ca*c2g*s2b
+      ! E2(4,4) = ca*c2b*cg - sa*cb*sg
+      ! E2(4,3) = sqrt(3.0)*ca*sb*cb
+      ! E2(4,2) = -cb*sa*cg -ca*c2b*sg
+      ! E2(4,1) = sb*(ca*cb*s2g + c2g*sa)
 
-      E2(3,5) = 0.5*sqrt(3.0)*sb*sb*c2g
-      E2(3,4) = -sqrt(3.0)*sa*cb*cg
+      ! E2(3,5) = 0.5*sqrt(3.0)*sb*sb*c2g
+      ! E2(3,4) = -sqrt(3.0)*sa*cb*cg
+      ! E2(3,3) = 0.25*(3.0*c2b+1.0)
+      ! E2(3,2) = sqrt(3.0)*sb*cb*sg
+      ! E2(3,1) = -sqrt(3.0)*sb*sb*sg*cg
+
+      ! E2(2,5) = -sb*(sa*cb*c2g + ca*s2g)
+      ! E2(2,4) = sa*c2b*cg + ca*cb*sg
+      ! E2(2,3) = sqrt(3.0)*sa*sb*cb
+      ! E2(2,2) = ca*cb*cg - sa*c2b*sg
+      ! E2(2,1) = sb*(sa*cb*s2g - ca*c2g)
+
+      ! E2(1,5) = 0.25*s2a*(c2b + 3.0)*c2g + c2a*cb*s2g
+      ! E2(1,4) = sb*(s2a*cb*cg + c2a*sg)
+      ! E2(1,3) = sqrt(3.0)*sa*sb*sb*ca
+      ! E2(1,2) = sb*(c2a*cg - 2*sa*ca*cb*sg)
+      ! E2(1,1) = c2a*cb*c2g - sa*ca*(3.0 + c2b)*sg*cg
+
+
+      ! NEWW V2
+      E2(1,1) = 0.25*c2a*c2g*(3.0+c2b) - s2a*cb*s2g
+      E2(1,2) = 0.5*c2a*s2b*cg - s2a*sb*sg
+      E2(1,3) = 0.5*sqrt(3.0)*c2a*sb*sb
+      E2(1,4) = -sb*(c2a*cb*sg + s2a*cg)
+      E2(1,5) = -cb*s2a*c2g -0.25*c2a*(3.0+c2b)*s2g
+
+      E2(2,1) = sa*sb*s2g - 0.5*ca*c2g*s2b
+      E2(2,2) = ca*c2b*cg - sa*cb*sg
+      E2(2,3) = sqrt(3.0)*ca*sb*cb
+      E2(2,4) = -cb*sa*cg -ca*c2b*sg
+      E2(2,5) = sb*(ca*cb*s2g + c2g*sa)
+
+      E2(3,1) = 0.5*sqrt(3.0)*sb*sb*c2g
+      E2(3,2) = -sqrt(3.0)*sa*cb*cg
       E2(3,3) = 0.25*(3.0*c2b+1.0)
-      E2(3,2) = sqrt(3.0)*sb*cb*sg
-      E2(3,1) = -sqrt(3.0)*sb*sb*sg*cg
+      E2(3,4) = sqrt(3.0)*sb*cb*sg
+      E2(3,5) = -sqrt(3.0)*sb*sb*sg*cg
 
-      E2(2,5) =-sb*(sa*cb*c2g + ca*s2g)
-      E2(2,4) = sa*c2b*cg + ca*cb*sg
-      E2(2,3) = sqrt(3.0)*sa*sb*cb
-      E2(2,2) = ca*cb*cg - sa*c2b*sg
-      E2(2,1) = sb*(sa*cb*s2g - ca*c2g)
+      E2(4,1) = -sb*(sa*cb*c2g + ca*s2g)
+      E2(4,2) = sa*c2b*cg + ca*cb*sg
+      E2(4,3) = sqrt(3.0)*sa*sb*cb
+      E2(4,4) = ca*cb*cg - sa*c2b*sg
+      E2(4,5) = sb*(sa*cb*s2g - ca*c2g)
 
-      E2(1,5) = 0.25*s2a*(c2b + 3.0)*c2g + c2a*cb*s2g
-      E2(1,4) = sb*(s2a*cb*cg + c2a*sg)
-      E2(1,3) = sqrt(3.0)*sa*sb*sb*ca
-      E2(1,2) = sb*(c2a*cg - 2*sa*ca*cb*sg)
-      E2(1,1) = c2a*cb*c2g - sa*ca*(3.0 + c2a)*sg*cg
+      E2(5,1) = 0.25*s2a*(c2b + 3.0)*c2g + c2a*cb*s2g
+      E2(5,2) = sb*(s2a*cb*cg + c2a*sg)
+      E2(5,3) = sqrt(3.0)*sa*sb*sb*ca
+      E2(5,4) = sb*(c2a*cg - 2*sa*ca*cb*sg)
+      E2(5,5) = c2a*cb*c2g - sa*ca*(3.0 + c2b)*sg*cg
+      ! NEWWWW V1
+      ! E2(1,1) = 0.25*c2a*c2g*(3.0+c2b) - s2a*cb*s2g
+      ! E2(1,2) = 0.5*c2a*s2b*cg - s2a*sb*sg
+      ! E2(1,3) = 0.5*sqrt(3.0)*c2a*sb*sb
+      ! E2(1,4) = -sb*(c2a*cb*sg + s2a*cg)
+      ! E2(1,5) = -cb*s2a*c2g -0.25*c2a*(3.0+c2b)*s2g
 
+      ! E2(2,1) = sa*sb*s2g - 0.5*ca*c2g*s2b
+      ! E2(2,2) = ca*c2b*cg - sa*cb*sg
+      ! E2(2,3) = sqrt(3.0)*ca*sb*cb
+      ! E2(2,4) = -cb*sa*cg -ca*c2b*sg
+      ! E2(2,5) = sb*(ca*cb*s2g + c2g*sa)
+
+      ! E2(3,1) = 0.5*sqrt(3.0)*sb*sb*c2g
+      ! E2(3,2) = -sqrt(3.0)*sa*cb*cg
+      ! E2(3,3) = 0.25*(3.0*c2b+1.0)
+      ! E2(3,4) = sqrt(3.0)*sb*cb*sg
+      ! E2(3,5) = -sqrt(3.0)*sb*sb*sg*cg
+
+      ! E2(4,1) = -sb*(sa*cb*c2g + ca*s2g)
+      ! E2(4,2) = sa*c2b*cg + ca*cb*sg
+      ! E2(4,3) = sqrt(3.0)*sa*sb*cb
+      ! E2(4,4) = ca*cb*cg - sa*c2b*sg
+      ! E2(4,5) = sb*(sa*cb*s2g - ca*c2g)
+
+      ! E2(5,1) = 0.25*s2a*(c2b + 3.0)*c2g + c2a*cb*s2g
+      ! E2(5,2) = sb*(s2a*cb*cg + c2a*sg)
+      ! E2(5,3) = sqrt(3.0)*sa*sb*sb*ca
+      ! E2(5,4) = sb*(c2a*cg - 2*sa*ca*cb*sg)
+      ! E2(5,5) = c2a*cb*c2g - sa*ca*(3.0 + c2b)*sg*cg
       ! Require change of basis to correct orbital convention
-      E1 = matmul(inv(Q1), matmul(E1, Q1))
+      !E1 = matmul(inv(Q1), matmul(E1, Q1))
       E2 = matmul(inv(Q2), matmul(E2, Q2))
+      !E2 = transpose(E2)
    end subroutine construct_EulerMatrices
    ! -----------------------------------------------------------------------------
    ! Subroutine calculate_axis_angle
@@ -1097,12 +1299,13 @@ contains
       ! Rotate from simulation axes (standard Cartesian) to local axes
       real(double), intent(in) ::  w1(3), w2(3), w3(3)
       real(double), intent(out) :: axis(3), angle
-      real(double) :: pos_diff(3), det, sin_angle, cos_angle
+      real(double) :: pos_diff(3), det, sin_angle, cos_angle, angle2
       real(double) :: basis_matrix(3,3), temp(3,3), antisym_axis(3,3)
       ! Local variables
       integer :: i, j, N, LDA, LDVL, LDVR, INFO, LDWORK
       real(double), allocatable::  A(:,:), WR(:),   WI(:),   VL(:,:), VR(:,:), WORK(:), tra
       real(double), parameter :: tol = 1e-10
+      real(double) :: real_eigenvalue,imag_eigenvalue
       N = 3
       LDA = N
       LDVL = LDA
@@ -1141,6 +1344,38 @@ contains
             exit
          end if
       end do
+      if (flag_rotate_pdos_debug) then
+         real_eigenvalue = 0.0
+         imag_eigenvalue = 0.0
+         write(*, '(/2x, "Eigenvalues/Eigenvectors of change of base matrix: ")')
+         do j = 1, N
+            ! Print eigenvalue
+            if (WI(j) == 0.0d0) then
+               write(*,'(/4x, A,I3,A,F12.6)') 'Eigenvalue ', j, ': ', WR(j)
+            else
+               write(*,'(/4x, A,I3,A,F12.6,SP,F12.6,A)') 'Eigenvalue ', j, ': ', WR(j), WI(j), 'i'
+            end if
+            write(*,'(/6x, A)') '  Eigenvector:'
+            do i = 1, N
+               if (WI(j) == 0.0d0) then
+                     write(*,'(/7x, A,I3,A,F12.6)') '    component ', i, ': ', VR(i,j)
+               else if (WI(j) > 0.0d0) then
+                     ! First complex conjugate pair: v = VR(:,j) + i*VR(:,j+1)
+                     write(*,'(/7x, A,I3,A,F12.6,SP,F12.6,A)') '    component ', i, ': ', VR(i,j), VR(i,j+1), 'i'
+               else
+                     ! Second complex conjugate pair: v = VR(:,j-1) - i*VR(:,j)
+                     write(*,'(/7x, A,I3,A,F12.6,SP,F12.6,A)') '    component ', i, ': ', VR(i,j-1), -VR(i,j), 'i'
+               end if
+            end do
+         end do
+         real_eigenvalue = WR(1) + WR(2)
+         imag_eigenvalue = WI(1) - WI(2)
+         angle2 = acos(real_eigenvalue / 2)
+         print *, angle2
+         angle2 = asin(imag_eigenvalue / 2)
+         print *, angle2
+      end if ! End debug: print all eigenvalues/vectors
+      ! print *, acos()
       if (axis(1) /= axis(1) .or. axis(2) /= axis(2) .or. axis(3) /= axis(3)) &
          call cq_abort("calculate_axis_angle: NaN in rotation axis.")
       if (abs(axis(1)) < tol .and. abs(axis(2)) < tol .and. abs(axis(3)) < tol) &
@@ -1148,18 +1383,24 @@ contains
       tra = basis_matrix(1,1) + basis_matrix(2,2) + basis_matrix(3,3)
       antisym_axis = 0.0
       axis = axis / norm2(axis)
-      cos_angle = (tra - 1.0) / 2.0
+      cos_angle = (tra - 1.0)
       call antisym_matrix(axis, antisym_axis)
       temp = matmul(antisym_axis, basis_matrix)
-      sin_angle = -(temp(1,1) + temp(2,2) + temp(3,3)) / 2.0
+      sin_angle = -(temp(1,1) + temp(2,2) + temp(3,3))
       if (abs(sin_angle) < tol .and. abs(cos_angle) < tol) &
             call cq_abort("calculate_axis_angle: Both arguments to datan2 are zero.")
       angle = datan2(sin_angle, cos_angle)
+      !print *, "TESTING ANGLE = ACOS ONLY"
+      !angle = acos(cos_angle) ! |theta| <= pi
       if (angle /= angle) &
             call cq_abort("calculate_axis_angle: NaN rotation angle.")
       if (flag_rotate_pdos_debug) &
                print *, '  Rotation angle in [-pi, pi]: ', angle, angle * 180/pi
-      if (angle < 0.0) angle = angle + 2.0 * pi
+      if (angle < 0.0) then
+         ! angle = angle + 2.0 * pi
+         angle = -angle
+         axis = -axis !R(n, theta) = R(-n, -theta)
+      end if
    end subroutine calculate_axis_angle
    subroutine construct_rodrigues(axis, angle, matrix)
       use datatypes
@@ -1324,7 +1565,7 @@ contains
 
       implicit none
       ! Local variables
-      integer :: i_atom, i_spec, i_band, i_band_c, i_kp, i_spin, g_atom, j
+      integer :: i_atom, i_spec, i_band, i_band_c, i_kp, i_spin, g_atom
       integer :: i_l, i_z, nzeta, norbs, sf_offset, rotate_counter
       integer, dimension(:), allocatable :: g_atom_lookup
       ! Currently input axes depends on n_atoms_pDOS
@@ -1335,12 +1576,13 @@ contains
       end if
       if (.not. allocated(g_atom_lookup)) allocate(g_atom_lookup(rotate_counter))
       !  Define the lookups correctly for each mode
-      ! If it's not Euler matrices, transpose is required
       if (flag_rotate_pdos_mode == 2) then
          do i_atom = 1, rotate_counter
+            ! Atom counter should be the order the user input pDOSNeighbours block
             g_atom_lookup(i_atom) = find_neighbours(1, i_atom)
          end do
       else if (flag_rotate_pdos_mode == 1) then
+         ! Atom counter should be the order the user input pDOSEuler block
          do i_atom = 1, rotate_counter
             g_atom_lookup(i_atom) = rotate_pdos_atoms_euler(i_atom)
          end do

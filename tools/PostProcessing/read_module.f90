@@ -354,7 +354,7 @@ contains
             end do
              if (flag_rotate_pdos_units == "deg") then
                   euler_angles = euler_angles * (pi / 180.0)
-               end if
+            end if
             call fdf_endblock
          else if(fdf_block('pDOSNeighbours') .and. flag_rotate_pdos_mode == 2) then 
             if (rotate_pdos_natoms  .lt. 1) &
@@ -367,13 +367,12 @@ contains
                if (find_neighbours(2,i) < 0 .or. find_neighbours(2,i) > 2) &
                   call cq_abort("Local geometry flag in block pDOSNeighbours was not 0 or 1: ",&
                      1+block_end-block_start,2)
-               if (find_neighbours(3,i) < -1) &
-                  call cq_abort("Input for principal axis must be -1 (shortest bond), 0 (longest bond) or neighbour",&
+               if (find_neighbours(3,i) < -1 .or. find_neighbours(3,i) > ni_in_cell) &
+                  call cq_abort("Input for principal axis must be -1 (shortest bond), 0 (longest bond) or neighbour in cell",&
                      1+block_end-block_start,3)
-               if (find_neighbours(4,i) < 0) &
-                  call cq_abort("Input for second axis must be 0 or neighbour",&
+               if (find_neighbours(4,i) < 0 .or. find_neighbours(4,i) > ni_in_cell) &
+                  call cq_abort("Input for second axis must be 0 or neighbour in cell",&
                      1+block_end-block_start,4)
-
              end do
             call fdf_endblock
          else
