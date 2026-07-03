@@ -811,6 +811,8 @@ contains
   !!     Added grid specification of EXX coarse/standard/fine
   !!   2025/02/03 nakata
   !!     Set flag_out_wf = .true. expricitly when flag_write_projected_DOS is .true.
+  !!   2026/07/03 09:47 dave
+  !!     Turn off WF and/or pDOS output except for static, diagonalisation runs
   !!  TODO
   !!  SOURCE
   !!
@@ -1777,24 +1779,25 @@ contains
              if(flag_wf_range_Ef.AND.abs(E_wf_min)<very_small.AND.abs(E_wf_max)<very_small) then
                 flag_out_wf = .false.
                 flag_wf_range_Ef = .false.
-                if(inode==ionode) write(io_lun,'(2x,"Setting IO.outputWF F as no bands range given")')
+                call cq_warn(sub_name,"Setting IO.outputWF F as no bands range given")
              end if
           end if
        else
-          call cq_abort("Won't output WFs for Order(N) or non-static runs")
+          call cq_warn(sub_name,"Cannot output WFs for O(N) or non-static runs; setting IO.outputWF F")
+          flag_out_wf = .false.
        end if
     end if
     ! pDOS output
     flag_write_projected_DOS = fdf_boolean('IO.write_proj_DOS',.false.)
     if(flag_write_projected_DOS) then
-       if(flag_diagonalisation) then
+       if(flag_diagonalisation .and. leqi(runtype,'static')) then
           flag_out_wf = .true.
           E_wf_min = fdf_double('IO.min_wf_E',-BIG)
           E_wf_max = fdf_double('IO.max_wf_E',BIG)
           flag_wf_range_Ef = fdf_boolean('IO.WFRangeRelative',.true.)
        else
+          call cq_warn(sub_name,"Cannot output pDOS for O(N) or non-static runs; setting IO.write_proj_DOS F")
           flag_write_projected_DOS = .false.
-          if(inode==ionode) write(io_lun,'(2x,"Setting IO.write_proj_DOS F as solving O(N)")')
        end if
     end if
 !!$
