@@ -185,6 +185,7 @@ contains
          atomf, sf, paof,                 &
          flag_SpinDependentSF, nspin_SF,  &
          flag_Multisite,                  &
+         flag_DFTplusU, & ! 2024.05.20 nakata DFT+U
          flag_cdft_atom, flag_local_excitation, &
          flag_diagonalisation, flag_vary_basis, &
          flag_MDcontinue, flag_SFcoeffReuse,    &
@@ -222,6 +223,9 @@ contains
     use md_control,             only: md_position_file
     use pao_format
     use XC,                     only: flag_functional_type, flag_different_functional
+    use H_matrix_module, only:  num_plusUproj, info_plusUproj, plusUvalue, & ! 2024.05.20 nakata DFT+U
+                                flag_plusUproj_atom, w_plusUproj_pao, half_w_plusUproj_pao ! 2024.05.20 nakata DFT+U
+
 
     implicit none
 
@@ -248,6 +252,11 @@ contains
     ! for checking the sum of electrons of spin channels
     real(double) :: sum_elecN_spin
     real(double) :: charge_tmp
+
+    ! PlusU
+    integer           :: inum_plusUproj, &
+                         n_plusUproj, l_plusUproj, z_plusUproj, &
+                         max_npao, z_temp, ipao, i_ang, i_zeta, i_m
 
     !****lat<$
     call start_backtrace(t=backtrace_timer,who='read_and_write',where=1,level=1)
@@ -499,6 +508,56 @@ contains
        else if(atomf==paof) then
           write(io_lun,fmt='(6x,"Primitive atom functions are the pseudo-atomic orbitals"/)')
        endif
+    end if
+    ! Find DFT+U projectors
+    if(flag_DFTplusU) then
+       ! set w_plusUproj: U parameter values
+       max_npao = maxval(npao_species)
+       allocate(w_plusUproj_pao(n_species,max_npao))
+       allocate(half_w_plusUproj_pao(n_species,max_npao))
+
+       !flag_plusUproj_atom(:) =.false.
+       w_plusUproj_pao(:,:) = zero
+       half_w_plusUproj_pao(:,:) = zero
+
+       do i_species = 1, n_species
+          ipao = 0
+          n_plusUproj = info_plusUproj(i_species,1)
+          l_plusUproj = info_plusUproj(i_species,2)
+          z_plusUproj = info_plusUproj(i_species,3)
+          if(flag_plusUproj_atom(i_species)) then
+             do i_ang = 0, pao(i_species)%greatest_angmom
+                if(pao(i_species)%angmom(i_ang)%n_zeta_in_angmom>0) then
+                   if (i_ang.eq.l_plusUproj) then 
+                      ! set U parameters for PAO with (n_plusUproj,l_plusUproj,z_plusUproj)
+                      z_temp = 0
+                      do i_zeta = 1, pao(i_species)%angmom(i_ang)%n_zeta_in_angmom
+                         prncpl = pao(i_species)%angmom(i_ang)%prncpl(i_zeta)
+                         if (prncpl/=n_plusUproj) then
+                            ipao = ipao + 2*i_ang + 1
+                         else if (prncpl==n_plusUproj) then
+                            z_temp = z_temp + 1
+                            ! This line below selects one zeta
+                            if (z_temp==z_plusUproj) then
+                               do i_m = -i_ang,i_ang
+                                  ipao = ipao + 1
+                                  w_plusUproj_pao(i_species,ipao) = plusUvalue(i_species)
+                                  half_w_plusUproj_pao(i_species,ipao) = half * plusUvalue(i_species)
+                               enddo ! m
+                            else
+                               ipao = ipao + 2*i_ang + 1
+                            endif
+                         endif
+                      enddo ! z
+                   else
+                      ipao = ipao + pao(i_species)%angmom(i_ang)%n_zeta_in_angmom*(2*i_ang + 1)
+                   endif
+                endif
+             enddo ! anglar momentum
+             if (ipao.ne.npao_species(i_species)) &
+                  call cq_abort("Error in counting PAOs when setting DFT+U parameters.")
+          end if ! flag_plusUproj
+       enddo ! n_plusUproj
     end if
     !
     !
@@ -807,6 +866,8 @@ contains
   !!     Added ASE output file setup ; default is F
   !!   2022/12/14 10:01 dave and tsuyoshi
   !!     Update test for solution method (diagon vs ordern) following issue #47
+  !!   2024/05/22 14:40 nakata
+  !!     Added DFT+U related input and output 
   !!   2024/12/03 lionel
   !!     Added grid specification of EXX coarse/standard/fine
   !!   2025/02/03 nakata
@@ -870,6 +931,7 @@ contains
          flag_write_projected_DOS, &
          E_wf_min, E_wf_max, flag_wf_range_Ef, &
          mx_temp_matrices, flag_neutral_atom, flag_diagonalisation, &
+         flag_DFTplusU, flag_first_diag, flag_write_occ_mat, & 
          flag_SpinDependentSF, flag_Multisite, flag_LFD, flag_SFcoeffReuse, &
          flag_opt_cell, cell_constraint_flag, flag_variable_cell, &
          cell_en_tol, optcell_method, cell_stress_tol, &
@@ -887,7 +949,7 @@ contains
     use species_module, only: species_label, charge, mass, n_species,  &
          charge, charge_up, charge_dn,            &
          ps_file,     &
-         nsf_species, &
+         nsf_species, npao_species, &
          non_local_species, type_species,         &
          species_file, species_from_files
     use GenComms,   only: gcopy, my_barrier, cq_abort, inode, ionode, cq_warn
@@ -918,7 +980,7 @@ contains
          n_support_iterations, L_tolerance, &
          sc_tolerance, energy_tolerance,    &
          expected_reduction
-    use pao_format,          only: kcut, del_k
+    use pao_format
     use support_spec_format, only: flag_paos_atoms_in_cell,          &
          read_option, symmetry_breaking,   &
          support_pao_file, TestBasisGrads, &
@@ -936,7 +998,9 @@ contains
          flag_MatrixFile_BinaryFormat_Dump_END, atom_output_threshold, flag_coords_xyz
 
     use group_module,     only: part_method, HILBERT, PYTHON
-    use H_matrix_module,  only: flag_write_locps, flag_dump_locps
+    use H_matrix_module,  only: flag_write_locps, flag_dump_locps, &
+                                num_plusUproj, info_plusUproj, plusUvalue, & ! 2024.05.20 nakata DFT+U
+                                flag_plusUproj_atom, w_plusUproj_pao, half_w_plusUproj_pao ! 2024.05.20 nakata DFT+U
     use pao_minimisation, only: InitStep_paomin
     use timer_module,     only: time_threshold,lun_tmr, TimingOn, &
          TimersWriteOut, BackTraceOn
@@ -1013,6 +1077,11 @@ contains
     character(len=5)  :: ps_type !To find which pseudo we use
     character(len=8)  :: tmp
     logical :: flag_ghost, find_species, test_ase
+!!! 2024.05.20 nakata DFT+U
+    integer           :: i_species, inum_plusUproj, prncpl, &
+                         n_plusUproj, l_plusUproj, z_plusUproj, & !plusUvalue, &
+                         max_npao, z_temp, ipao, i_ang, i_zeta, i_m
+!!! nakata DFT+U end
 
     ! spin polarisation
     logical :: flag_spin_polarisation
@@ -1328,6 +1397,15 @@ contains
     else
        flag_neutral_atom_projector = .false.
     end if
+!!! 2024.05.20 nakata DFT+U
+    flag_DFTplusU = fdf_boolean('DM.DFTplusU', .false.)
+    if(flag_DFTplusU) flag_first_diag = .true.
+    if(flag_DFTplusU.and.flag_basis_set == blips) then
+       call cq_warn(sub_name,"DFT+U not available with blips: turning off DFT+U")
+       flag_DFTplusU = .false.
+    end if
+    
+!!! nakata DFT+U end
 !!$
 !!$
 !!$
@@ -1418,6 +1496,7 @@ contains
        RadiusLD(i)       = zero
        NonLocalFactor(i) = zero
        InvSRange(i)      = zero
+!       RadiusPlusUproj(i) = zero ! 2024.05.20 nakata DFT+U
        blip_info(i)%SupportGridSpacing = zero
        if(pseudo_type==SIESTA.OR.pseudo_type==ABINIT) non_local_species(i) = .true.
        ! This is new-style fdf_block
@@ -1895,6 +1974,38 @@ contains
           end do
        end if
     end if
+!!! 2024.05.20 nakata DFT+U
+!!$
+!!$
+!!$  DFT+U (DFT plus U)
+!!$
+!!$
+    if (flag_DFTplusU) then
+       flag_write_occ_mat = fdf_boolean('DM.WriteOccMat',.true.)
+       if (fdf_block('DFTplusU')) then
+          num_plusUproj = 1 + block_end - block_start
+          !if(inode==ionode) write(io_lun,*) 'num_plusUproj =',num_plusUproj ! nakata 2024 debug
+          !allocate(info_plusUproj(num_plusUproj,5))
+          allocate(info_plusUproj(n_species,3))
+          allocate(flag_plusUproj_atom(n_species))
+          allocate(plusUvalue(n_species))
+          plusUvalue = zero
+          flag_plusUproj_atom(:) = .false.
+          do inum_plusUproj=1,num_plusUproj
+             z_plusUproj = 1
+             read(unit=input_array(block_start+inum_plusUproj-1),fmt=*) &
+                i_species, n_plusUproj, l_plusUproj, z_plusUproj, plusUvalue(i_species)
+             info_plusUproj(i_species,1) = n_plusUproj
+             info_plusUproj(i_species,2) = l_plusUproj
+             info_plusUproj(i_species,3) = z_plusUproj
+             flag_plusUproj_atom(i_species) = .true.
+          enddo ! n_plusUproj
+          call fdf_endblock
+       else
+          call cq_abort("No DFTplusU parameter is given in the input file.")
+       endif
+    endif ! flag_DFTplusU
+!!! nakata DFT+U end
 !!$
 !!$
 !!$
@@ -1991,9 +2102,9 @@ contains
     flag_test_all_forces    = fdf_boolean('AtomMove.TestAllForces',.true. )
     if(.NOT.flag_test_all_forces) then ! Test one force component
        flag_which_force = fdf_integer('AtomMove.TestSpecificForce',1)
-       if(flag_which_force>10.OR.flag_which_force<0.AND.inode==ionode) then
+       if(flag_which_force>11.OR.flag_which_force<0.AND.inode==ionode) then
           call cq_warn(sub_name,&
-               "AtomMove.TestSpecificForce must lie between 1 and 10 (setting to 1): ",&
+               "AtomMove.TestSpecificForce must lie between 1 and 11 (setting to 1): ",&
                flag_which_force)
           flag_which_force = 1
        end if
@@ -2251,7 +2362,9 @@ contains
        flag_read_velocity = fdf_boolean('AtomMove.ReadVelocity',.false.)
        restart_DM         = fdf_boolean('General.LoadDM', .false.)
        if(restart_DM) then                                             
-          find_chdens    = fdf_boolean('SC.MakeInitialChargeFromK',.true.) 
+          find_chdens    = fdf_boolean('SC.MakeInitialChargeFromK',.true.)
+          ! Allow DFT+U Hamiltonian with DM we have just loaded
+          if(flag_DFTplusU) flag_first_diag = .false.
        else
           find_chdens    = fdf_boolean('SC.MakeInitialChargeFromK',.false.)
        endif
@@ -2586,6 +2699,8 @@ contains
   !!    - Added charge_up and charge_dn
   !!   2019/06/06 18:00 nakata
   !!    - Added MSSF_nonminimal_species
+  !!   2024/05/28 17:00 nakata
+  !!    - Added RadiusPlusUproj for DFT+U
   !!  SOURCE
   !!
   subroutine allocate_species_vars
@@ -2756,7 +2871,8 @@ contains
          flag_Multisite, flag_diagonalisation, flag_neutral_atom, temp_ion, &
          flag_self_consistent, flag_vary_basis, iprint_init, flag_pcc_global, &
          nspin, flag_SpinDependentSF, flag_fix_spin_population, ne_spin_in_cell, flag_XLBOMD,&
-         ase_file
+         ase_file, flag_DFTplusU   ! 2024.05.20 nakata DFT+U
+    use H_matrix_module,      only: num_plusUproj, info_plusUproj, plusUvalue, flag_plusUproj_atom
     use SelfCon,              only: maxitersSC
     use GenComms,             only: cq_abort
     use minimise,             only: energy_tolerance, L_tolerance,     &
@@ -2993,6 +3109,26 @@ contains
     if(.NOT.flag_diagonalisation) &
          write(io_lun,fmt='(10x,"Density Matrix range  = ",f7.4,1x,a2)') &
          dist_conv*r_c, d_units(dist_units)
+
+!!! 2024.05.20 nakata DFT+U
+    if(flag_DFTplusU) then
+       write(io_lun,fmt='(10x,"DFT+U calculation will be performed")') 
+
+       write(io_lun,fmt='(/4x,"Number of DFT-U projectors: ",i2)') num_plusUproj
+
+       write(io_lun,fmt='(4x,a)') '---------------------------------'
+       write(io_lun,fmt='(4x,a)') '| species     n  l  zeta U (Ha) |'
+       write(io_lun,fmt='(4x,a)') '---------------------------------'
+       do n=1, n_species
+          if(flag_plusUproj_atom(n)) then
+             write(io_lun,fmt='(4x,"|",i2,2x,a5,4x,i1,2x,i1,2x,i1,4x,f5.3,2x,"|")') &
+                  n, species_label(n), &
+                  info_plusUproj(n,1), info_plusUproj(n,2), info_plusUproj(n,3), plusUvalue(n)
+          end if
+       end do
+       write(io_lun,fmt='(4x,a)') '---------------------------------'
+    endif
+!!! nakata DFT+U end
 
     return
   end subroutine write_info

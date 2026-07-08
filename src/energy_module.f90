@@ -48,6 +48,8 @@
 !!    Add surface dipole correction
 !!   2022/06/09 12:29 dave
 !!    Moved disp_energy here from DFT-D2 module
+!!   2024/05/21 00:00 nakata
+!!    Added plusU_energy for DFT+U
 !!  SOURCE
 !!
 module energy
@@ -76,6 +78,8 @@ module energy
   real(double) ::  kinetic_energy
   real(double) ::     cdft_energy
   real(double) ::      exx_energy
+  real(double) ::    plusU_energy   ! 2024.05.20 nakata DFT+U
+  real(double) :: delta_E_plusU     ! 2025/03/27 dave
   real(double) ::        x_energy
   real(double) ::     disp_energy
   real(double) :: delta_E_hartree
@@ -149,6 +153,8 @@ contains
   !!   2021/07/28 10:55 dave
   !!    Change behaviour to print Harris etc always, and DFT only if
   !!    printDFT = T
+  !!   2024/05/21 00:00 nakata
+  !!    Added DFT+U energy if flag_DFTplusU = T
   !!   2022/05/19 14:25 dave
   !!    Add surface dipole correction energy terms
   !!  SOURCE
@@ -169,7 +175,8 @@ contains
                                       flag_perform_cdft,              &
                                       flag_vdWDFT,                    &
                                       flag_exx, exx_alpha,            &
-                                      flag_neutral_atom, min_layer
+                                      flag_neutral_atom, min_layer,   &
+                                      flag_DFTplusU                       ! 2024.05.20 nakata DFT+U
     use pseudopotential_common, only: core_correction, &
                                       flag_neutral_atom_projector
     use density_module,         only: electron_number, flag_surface_dipole_correction, &
@@ -253,6 +260,7 @@ contains
        total_energy = band_energy  + delta_E_hartree + delta_E_xc + &
             ion_interaction_energy + core_correction
     end if
+    if (flag_DFTplusU) total_energy = total_energy + delta_E_plusU
     ! Add contribution from constrained (cDFT)
     if (flag_perform_cdft) total_energy = total_energy + cdft_energy
 
@@ -313,6 +321,11 @@ contains
                      en_conv*cdft_energy, en_units(energy_units)
 
              if (flag_dft_d2) write (io_lun,17) en_conv*disp_energy, en_units(energy_units)
+             !!! 2024.05.20 nakata DFT+U
+             if (flag_DFTplusU) write (io_lun,&
+                      '(10x,"plusU Energy, 2Tr[0.5U(n - n^2)] : ",f25.15," ",a2)')&
+                     en_conv*plusU_energy, en_units(energy_units)
+             !!! nakata DFT+U end
              if (flag_surface_dipole_correction) then
                 if(flag_dipole_internal) then
                    write(io_lun,'(10x,"Surface Dipole Correction Energy : ",f25.15," ",a2)') en_conv * &
@@ -383,6 +396,8 @@ contains
        end if
        if (flag_perform_cdft) total_energy2 = total_energy2 + cdft_energy
        if (flag_dft_d2)       total_energy2 = total_energy2 + disp_energy
+       if (flag_DFTplusU)     total_energy2 = total_energy2 + plusU_energy   ! 2024.05.20 nakata DFT+U
+
        ! For DFT, we need dipole correction energy of rho_i + rho_e
        if(flag_surface_dipole_correction) then
           if(flag_dipole_internal) then
@@ -489,6 +504,8 @@ contains
   !!    Add surface dipole correction energy
   !!   2023/01/10 18:44 lionel
   !!    Secure ASE printing when using ordern
+  !!   2024/05/21 00:00 nakata
+  !!    Added DFT+U energy if flag_DFTplusU = T
   !!  SOURCE
   !!
   subroutine final_energy(nkp,level)
@@ -511,6 +528,7 @@ contains
                                       flag_vdWDFT,                    &
                                       flag_exx, exx_alpha, flag_neutral_atom,            &
                                       flag_neutral_atom, min_layer,   &
+                                      flag_DFTplusU,                  &   ! 2024.05.20 nakata DFT+U
                                       flag_fix_spin_population,       &
                                       io_ase, write_ase, ase_file,    &
                                       flag_diagonalisation
@@ -599,6 +617,7 @@ contains
             ion_interaction_energy    + &
             core_correction
     end if
+    if (flag_DFTplusU) total_energy1 = total_energy1 + delta_E_plusU
 
     ! Add contribution from constrained (cDFT)
     if (flag_perform_cdft) total_energy1 = total_energy1 + cdft_energy
@@ -703,6 +722,8 @@ contains
                write (io_lun,17) en_conv*disp_energy,en_units(energy_units)
           if (flag_perform_cdft) &          
                write (io_lun,18) en_conv*cdft_energy,en_units(energy_units)
+          if (flag_DFTplusU) & ! 2024.05.20 nakata DFT+U         
+               write (io_lun,181) en_conv*plusU_energy,en_units(energy_units)
           if (flag_surface_dipole_correction) then
              if(flag_dipole_internal) then
                 write(io_lun,'(6x,"|  Surface Dipole Energy   = ",f25.15," ",a2)') en_conv * &
@@ -772,7 +793,8 @@ contains
             local_ps_energy + &
             nl_energy       + &
             kinetic_energy  + &
-            screened_ion_interaction_energy
+            screened_ion_interaction_energy + &
+            plusU_energy                      ! 2024.05.20 nakata DFT+U
     else
        total_energy2 = hartree_energy_total_rho  + &
             xc_energy       + &     
@@ -781,7 +803,8 @@ contains
             nl_energy       + &
             kinetic_energy  + &
             core_correction + &
-            ion_interaction_energy     
+            ion_interaction_energy + &
+            plusU_energy             ! 2024.05.20 nakata DFT+U
     end if
     if (flag_perform_cdft) total_energy2 = total_energy2 + cdft_energy
     if (flag_dft_d2)       total_energy2 = total_energy2 + disp_energy
@@ -936,6 +959,7 @@ contains
 16  format(6x,'| GS Energy with kT -> 0   = ',f25.15,' ',a2)
 17  format(6x,'| Dispersion (DFT-D2)      = ',f25.15,' ',a2)
 18  format(6x,'| cDFT Energy as 2Tr[K.W]  = ',f25.15,' ',a2)
+181 format(6x,'| DFT+U Energy             = ',f25.15,' ',a2)   ! 2024.05.20 nakata DFT+U
 19  format(6x,'| Number of e- spin up     = ',f25.15)
 20  format(6x,'| Number of e- spin down   = ',f25.15)
 21  format(6x,'| Spin pol. as (up - down) = ',f25.15)

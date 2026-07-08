@@ -159,6 +159,8 @@
 !!    Added ASE output unit
 !!   2023/01/12 17:11 dave
 !!    Variables for polarisation calculation
+!!   2024/05/29 17:40 nakata
+!!    Added DFT+U flag
 !!  SOURCE
 !!
 module global_module
@@ -424,7 +426,13 @@ module global_module
   integer :: i_pol_dir_st, i_pol_dir_end ! Either 1,1 or 1,3
   integer, dimension(3) :: i_pol_dir ! Either n,0,0 or 1,2,3
 
+  ! DFT+U
+  logical :: flag_DFTplusU, flag_first_diag, flag_write_occ_mat
+  real(double), dimension(:,:,:,:), allocatable :: occ_mat ! Occupation matrix (m,m,primary atom, spin)
+  real(double), dimension(:,:,:,:), allocatable :: occ_mat_glob ! Occupation matrix (m,m,global atom, spin)
+
   ! Density matrix Lagrange multiplier for correct electron number (needed for forces and stress)
   real(double), dimension(2) :: mu_DMM ! Allow for spin
+
 end module global_module
 !!***

@@ -112,7 +112,7 @@ contains
   !!   2020/12/13 lionel
   !!    Added EXX initialise and finalise
   !!   2022/06/09 08:35 dave
-  !!    Changed name of D2 set-up routine, added only to module usep
+  !!    Changed name of D2 set-up routine, added only to module use
   !!  SOURCE
   !!
   subroutine initialise(vary_mu, fixed_potential, mu, total_energy)
@@ -124,8 +124,7 @@ contains
                                  flag_only_dispersion, flag_neutral_atom, &
                                  flag_atomic_stress, flag_heat_flux, &
                                  flag_full_stress, area_moveatoms, &
-                                 atomic_stress, non_atomic_stress, &
-                                 min_layer, flag_self_consistent
+                                 atomic_stress, non_atomic_stress, min_layer
     use GenComms,          only: inode, ionode, my_barrier, end_comms, &
                                  cq_abort
     use initial_read,      only: read_and_write
@@ -136,7 +135,7 @@ contains
     use cover_module,      only: make_cs, D2_CS
     use dimens,            only: r_dft_d2
     use DFT_D2,            only: set_para_D2, dispersion_D2
-    use pseudo_tm_module,  only: make_neutral_atom
+    use pseudo_tm_module,   only: make_neutral_atom
     use angular_coeff_routines, only: set_fact
     use maxima_module,          only: lmax_ps, lmax_pao
     use XC, only: init_xc
@@ -335,7 +334,8 @@ contains
                                       iprint_gen, flag_perform_cDFT,   &
                                       nspin, min_layer,                &
                                       glob2node, flag_XLBOMD,          &
-                                      flag_neutral_atom, flag_diagonalisation
+                                      flag_neutral_atom, flag_diagonalisation, &
+                                      flag_write_occ_mat, occ_mat, occ_mat_glob
     use memory_module,          only: reg_alloc_mem, reg_dealloc_mem,  &
                                       type_dbl, type_int
     use group_module,           only: parts
@@ -490,6 +490,8 @@ contains
     if (inode == ionode .and. iprint_init > 2) &
          write (io_lun,fmt='(4x,a)') trim(prefix)//'Made covering set for matrix multiplications'
 
+    allocate(occ_mat(7,7,bundle%n_prim,nspin))
+    if(flag_write_occ_mat) allocate(occ_mat_glob(7,7,ni_in_cell,nspin))
     ! Create all of the indexing required to perform matrix multiplications
     ! at a later point. This routine also identifies all the density
     ! matrix range interactions and hamiltonian range interactions
@@ -1099,7 +1101,7 @@ contains
     use logicals
     use mult_module,         only: LNV_matrix_multiply, matL, matphi, &
          matT, T_trans, L_trans, LS_trans,  &
-         SFcoeff_trans, matK,               &
+         SFcoeff_trans, matK, matKatomf,    &   ! 2024.05.20 nakata DFT+U
          matrix_scale, matSFcoeff, matSFcoeff_tran, matrix_transpose
     use SelfCon,             only: new_SC_potl
     use global_module,       only: iprint_init, flag_self_consistent, &
@@ -1111,7 +1113,8 @@ contains
          MDinit_step,ni_in_cell,            &
          flag_dissipation,     &
          flag_propagateX, flag_propagateL, restart_X, &
-         flag_neutral_atom, &
+         flag_out_wf, wf_self_con, &
+         flag_neutral_atom, flag_DFTplusU, & ! 2024.05.20 nakata DFT+U
          atomf, sf, flag_LFD, nspin_SF, flag_diagonalisation, &
          ne_in_cell, min_layer, flag_basis_set, PAOs
     use ion_electrostatic,   only: ewald, screened_ion_interaction
@@ -1151,11 +1154,11 @@ contains
     ! Local variables
     type(cq_timer) :: backtrace_timer
     integer        :: backtrace_level
-    logical        :: reset_L, record, rebuild_KE_NL
+    logical        :: reset_L, record, rebuild_KE_NL, flag_orig_DFTU
     integer        :: nfile, symm
     real(double)   :: electrons_tot
     real(double), dimension(nspin) :: electrons, energy_tmp
-    integer        :: spin_SF
+    integer        :: spin, spin_SF   ! 2024.05.20 nakata DFT+U
     !H_trans is not prepared. If we need to symmetrise K, we need H_trans
     integer        :: H_trans = 1
 
@@ -1179,7 +1182,9 @@ contains
 
     !2020Jan07 tsuyoshi
     !index_MatrixFile is read from Conquest_input  (default is 0)
-     MDinit_step = 0
+    MDinit_step = 0
+    flag_orig_DFTU = flag_DFTplusU
+    flag_DFTplusU = .false.
 
     if (flag_MDcontinue.or. &
          restart_DM.or. &
@@ -1404,9 +1409,10 @@ contains
 !!$
 !!$
 !!$
+    flag_DFTplusU = flag_orig_DFTU
     ! Do we want to just test the forces ?
     if (flag_test_forces) then
-       call new_SC_potl(record, sc_tolerance, reset_L, &
+       call new_SC_potl(.false., sc_tolerance, reset_L, &
             fixed_potential, vary_mu, n_L_iterations,  &
             L_tolerance, total_energy, backtrace_level)
        call test_forces(fixed_potential, vary_mu, n_L_iterations, &

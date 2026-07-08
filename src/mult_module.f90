@@ -156,10 +156,12 @@ module mult_module
   integer :: sHs_sHa_sCa    ! 32, type 2             , H(sf   ,sf   )   * H(sf   ,atomf)   = C(sf   ,atomf)
   integer :: aLa_aSa_aLSa   ! 33, type 1, for LFD    , L(atomf,atomf)   * S(atomf,atomf)   = Local S(atomf,atomf)
   integer :: aLa_aHa_aLHa   ! 34, type 1, for LFD    , L(atomf,atomf)   * H(atomf,atomf)   = Local H(atomf,atomf)
-  integer :: aNA_NAa_aHa ! type 1 for building H: H(atomf, napf) * H(napf, atomf) = H(atomf, atomf)
-  integer :: aHa_aNA_aNA ! type 2 for gradients: aHa_NA_NA
+  integer :: aNA_NAa_aHa    ! type 1 for building H: H(atomf, napf) * H(napf, atomf) = H(atomf, atomf)
+  integer :: aHa_aNA_aNA    ! type 2 for gradients: aHa_NA_NA
+!!! DFT+U
+  integer :: S_S_S          ! 37  type1              , S_K_S or S_S_S
 
-  integer(integ), parameter :: mx_mults  = 36
+  integer(integ), parameter :: mx_mults  = 37
 
   type(matrix_mult) :: mult(mx_mults)
 
@@ -176,15 +178,17 @@ module mult_module
   integer :: SFcoeff_trans ! 10
   integer :: aNA_trans     ! 11
   integer :: aNAa_trans    ! 12
+  integer :: aSa_trans     ! 13    !!! 2024.05.20 nakata DFT+U
 
-  integer(integ), parameter :: mx_trans = 12
+  integer(integ), parameter :: mx_trans = 13   !!!  DFT+U
 
   type(pair_data), allocatable, dimension(:,:) :: pairs
   integer, dimension(:), pointer :: Spairind, Lpairind, Tpairind, &
                                     APpairind, LSpairind, LHpairind, &
                                     LSLpairind, &
                                     aSs_pairind, aHs_pairind, SFcoeff_pairind, &
-                                    aNApairind, aNAapairind
+                                    aNApairind, aNAapairind, & ! 2024.05.20 nakata DFT+U
+                                    aSa_pairind
 
   type(matrix_trans), dimension(mx_matrices), target :: ltrans
   type(trans_remote) :: gtrans(mx_trans)
@@ -200,14 +204,16 @@ module mult_module
   ! spin dependent matrices
   integer, allocatable, dimension(:), public :: &
        matH, matL, matLS, matSL, matK, matphi, matM12, matM4, matU, &
-       matUT, matX, matSX
+       matUT, matX, matSX, &
+       matHplusU
   ! spin independent atomf-based matrices
   integer, public :: &
        matSatomf, matKEatomf, matNLatomf, matNAatomf
   ! spin dependent atomf-based matrices
   integer, allocatable, dimension(:), public :: &
        matHatomf, matKatomf, matXatomf, &
-       matSFcoeff, matSFcoeff_tran, matdSFcoeff, matdSFcoeff_e
+       matSFcoeff, matSFcoeff_tran, matdSFcoeff, matdSFcoeff_e, &
+       matHplusUatomf
 
   ! matrices related to XLBOMD (for DMM, at present)
    integer, allocatable, dimension(:), public :: matXL, matXLvel    ! (nspin)
@@ -280,7 +286,7 @@ contains
     use maxima_module,       only: maxpartsproc, maxnabaprocs
     use GenComms,            only: my_barrier, cq_abort
     use matrix_comms_module, only: find_neighbour_procs
-    use global_module,       only: area_matrices, mx_temp_matrices, flag_LFD
+    use global_module,       only: area_matrices, mx_temp_matrices, flag_LFD, flag_DFTplusU ! 2024.05.20 nakata DFT+U
     use memory_module,       only: reg_alloc_mem, type_int
     use pseudopotential_common, ONLY: flag_neutral_atom_projector
 
@@ -347,20 +353,29 @@ contains
           aLa_aHa_aLHa  = 34
           aNA_NAa_aHa = 35
           aHa_aNA_aNA = 36
+!!! DFT+U
+          S_S_S = 37
        else
           aNA_NAa_aHa = 33
           aHa_aNA_aNA = 34
+!!! DFT+U
+          S_S_S = 35
        endif
        aSs_trans     = 8
        aHs_trans     = 9
        SFcoeff_trans = 10
        aNA_trans = 11
        aNAa_trans = 12
+       aSa_trans = 13
     else
        aNA_NAa_aHa = 23
        aHa_aNA_aNA = 24
+!!! DFT+U
+       S_S_S = 25
        aNA_trans = 8
        aNAa_trans = S_trans
+!!! DFT+U
+       aSa_trans = S_trans
     endif
 
     mat%sf1_type = sf
@@ -566,6 +581,16 @@ contains
        !aNAapairind = Spairind
        aNAa_trans = S_trans
     end if
+!!! DFT+U
+    if (flag_DFTplusU) then
+       if (atomf.ne.sf) then
+          call trans_ini(parts, prim, gcs, mat(1:prim%groups_on_node,aSa_range),     &
+               myid-1, halo(aSa_range), halo(aSa_range), ltrans(aSa_range),    &
+               gtrans(aSa_trans), pairs(:,aSa_trans), aSa_pairind)
+       else
+          aSa_trans = S_trans
+       endif
+    endif
 
     ! Now initialise the matrix multiplications
     ! Somewhere, we need to set mult_type 1/2 - probably here !
@@ -1102,9 +1127,46 @@ contains
        mult(aHa_aNA_aNA)%gcs     => gcs
        call mult_ini(mult(aHa_aNA_aNA), NAamatind, myid-1, prim%n_prim, parts)
     end if
-    !end if
-    ! call stop_timer(tmr_std_matrices)
-
+!!! DFT+U
+    if (flag_DFTplusU) then
+       ra = rcut(aSa_range)
+       rc = rcut(aSa_range)
+       if (rc >= ra) then
+          mult(S_S_S)%mult_type = 1
+          mult(S_S_S)%amat    => mat(1:prim%groups_on_node,aSa_range)
+          mult(S_S_S)%bmat    => mat(1:prim%groups_on_node,aSa_range)
+          mult(S_S_S)%cmat    => mat(1:prim%groups_on_node,aSa_range)
+          mult(S_S_S)%ahalo   => halo(aSa_range)
+          mult(S_S_S)%chalo   => halo(aSa_range)
+          mult(S_S_S)%ltrans  => ltrans(aSa_range)
+          !mult(S_S_S)%bindex => aHa_matind
+          mult(S_S_S)%parts   => parts
+          mult(S_S_S)%prim    => prim
+          mult(S_S_S)%gcs     => gcs
+          if (atomf.ne.sf) then
+             call mult_ini(mult(S_S_S), aSa_matind, myid-1, prim%n_prim, parts)
+          else
+             call mult_ini(mult(S_S_S), Smatind, myid-1, prim%n_prim, parts)
+          end if
+       else
+          mult(S_S_S)%mult_type = 2
+          mult(S_S_S)%amat    => mat(1:prim%groups_on_node,aSa_range)
+          mult(S_S_S)%bmat    => mat(1:prim%groups_on_node,aSa_range)
+          mult(S_S_S)%cmat    => mat(1:prim%groups_on_node,aSa_range)
+          mult(S_S_S)%ahalo   => halo(aSa_range)
+          mult(S_S_S)%chalo   => halo(aSa_range)
+          mult(S_S_S)%ltrans  => ltrans(aSa_range)
+          !mult(S_S_S)%bindex => aHa_matind
+          mult(S_S_S)%parts   => parts
+          mult(S_S_S)%prim    => prim
+          mult(S_S_S)%gcs     => gcs
+          if (atomf.ne.sf) then
+             call mult_ini(mult(S_S_S), aSa_matind, myid-1, prim%n_prim, parts)
+          else
+             call mult_ini(mult(S_S_S), Smatind, myid-1, prim%n_prim, parts)
+          end if
+       endif
+    endif ! DFT+U
     return
   end subroutine immi
   !!***
@@ -1149,7 +1211,7 @@ contains
   subroutine fmmi(prim)
 
     use basic_types
-    use global_module, only: iprint_mat, flag_LFD
+    use global_module, only: iprint_mat, flag_LFD, flag_DFTplusU   ! 2024.05.20 nakata DFT+U
     use matrix_module, only: deallocate_comms_data
     use matrix_data
     use maxima_module, only: maxnabaprocs
@@ -1315,6 +1377,15 @@ contains
             mult(aHa_aNA_aNA)%bindex,mult(aHa_aNA_aNA)%parts,mult(aHa_aNA_aNA)%prim,            &
             mult(aHa_aNA_aNA)%gcs)
     end if
+!!! 2024.05.20 nakata DFT+U
+    if (flag_DFTplusU) then
+       nullify(mult(S_S_S)%amat,mult(S_S_S)%bmat,mult(S_S_S)%cmat,       &
+            mult(S_S_S)%ahalo,mult(S_S_S)%chalo,mult(S_S_S)%ltrans,      &
+            mult(S_S_S)%bindex,mult(S_S_S)%parts,mult(S_S_S)%prim,       &
+            mult(S_S_S)%gcs)
+       if(atomf.ne.sf) deallocate(aSa_pairind)
+    endif
+!!! nakata DFT+U end
     ! Comms
     call deallocate_comms_data(mult(aHa_AP_AP)%comms)
     call deallocate_comms_data(mult(L_S_LS)%comms)
@@ -1357,6 +1428,11 @@ contains
        call deallocate_comms_data(mult(aNA_NAa_aHa)%comms)
        call deallocate_comms_data(mult(aHa_aNA_aNA)%comms)
     end if
+!!! 2024.05.20 nakata DFT+U
+    if (flag_DFTplusU) then
+       call deallocate_comms_data(mult(S_S_S)%comms)
+    endif
+!!! nakata DFT+U end
     do i=1,mx_trans
        do j = 1,gtrans(i)%n_rem_node!maxnabaprocs+1
           !if(associated(pairs(j,i)%submat)) deallocate(pairs(j,i)%submat)
@@ -1371,6 +1447,11 @@ contains
        deallocate(aNApairind)
        if(atomf.ne.sf) deallocate(aNAapairind)
     end if
+!!! 2024.05.20 nakata DFT+U
+    if (flag_DFTplusU) then
+       if(atomf.ne.sf) deallocate(aSa_pairind)
+    endif
+!!! nakata DFT+U end
     call dissociate_matrices
     ! Matrices
     call end_ops(prim,Srange,Smatind,S_trans)
@@ -1393,7 +1474,11 @@ contains
     call end_ops(prim,SXrange,SXmatind)
     call end_ops(prim,Xrange,Xmatind)
     if (atomf.ne.sf) then
-       call end_ops(prim,aSa_range,aSa_matind)
+       if(flag_DFTplusU) then
+          call end_ops(prim,aSa_range,aSa_matind,aSa_trans)
+       else
+          call end_ops(prim,aSa_range,aSa_matind)
+       end if
        call end_ops(prim,aHa_range,aHa_matind)
        call end_ops(prim,STr_range,STr_matind)
        call end_ops(prim,HTr_range,HTr_matind)
@@ -2048,6 +2133,8 @@ contains
   !!    Associating NA-projector matrices
   !!   2018/11/13 17:30 nakata
   !!    Changed matS, matT, matTtran, matKE, matNL and matNA to be spin_SF dependent
+  !!   2024/05/20 20:00 nakata
+  !!    Added lines for DFT+U
   !!   2024/09/11 14:00 lionel
   !!    set trans_index(matX(spin)  ) = S_trans
   !!  SOURCE
@@ -2060,7 +2147,7 @@ contains
                              Xrange, SXrange, aSa_range, aHa_range,   &
                              SFcoeff_range, SFcoeffTr_range,          &
                              mat, aNArange, NAarange
-    use global_module, only: area_matrices, iprint_mat, nspin, nspin_SF
+    use global_module, only: area_matrices, iprint_mat, nspin, nspin_SF, flag_DFTplusU ! 2024.05.20 nakata DFT+U
     use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use GenComms,      only: inode, ionode
 !%%!    use matrix_data, only: data_S, data_H, data_L, data_T, data_Ttran, &
@@ -2078,12 +2165,14 @@ contains
     if (.not. allocated_tags) then
        allocate(matH(nspin), matL(nspin),   matLS(nspin),  matSL(nspin), &
                 matK(nspin), matphi(nspin), matM12(nspin), matM4(nspin), &
-                matU(nspin), matUT(nspin),  matX(nspin),   matSX(nspin), STAT=stat)
+                matU(nspin), matUT(nspin),  matX(nspin),   matSX(nspin), &
+                STAT=stat)  ! 2024.05.20 nakata DFT+U
        if (stat /= 0) &
             call cq_abort('associate_matrices: failed to allocate spin &
                            &depdendent matrix tags', nspin, stat)
        ! For atomf-based calculations
-       allocate(matHatomf(nspin), matKatomf(nspin), matXatomf(nspin), STAT=stat)
+       allocate(matHatomf(nspin), matKatomf(nspin), matXatomf(nspin), &
+                matHplusUatomf(nspin), STAT=stat) ! 2024.05.20 nakata DFT+U
        if (stat /= 0) &
             call cq_abort('associate_matrices: failed to allocate spin &
                            &depdendent ATOMF matrix tags', nspin, stat)
@@ -2206,6 +2295,17 @@ contains
           matNAatomf  = current_matrix
        end if
     end if
+!!! 2024.05.20 nakata DFT+U
+    if (flag_DFTplusU) then
+          matHplusUatomf(1) = current_matrix + 1
+          current_matrix = current_matrix + 1
+          if (nspin == 2) then
+             matHplusUatomf(2) = current_matrix + 1
+             current_matrix = current_matrix + 1
+          endif
+       !endif
+    endif
+!!! nakata DFT+U end
 
 !%%!! Now associate pointers with correct arrays
 !%%!    mat_p(matS  )%matrix => data_S
@@ -2277,6 +2377,14 @@ contains
           mat_p(matNAatomf   )%sf1_type = atomf
        end if
     end if
+!!! 2024.05.20 nakata DFT+U
+    if (flag_DFTplusU) then
+       do spin = 1, nspin
+          mat_p(matHplusUatomf(spin))%sf1_type = atomf
+       enddo
+    endif
+!!! nakata DFT+U end
+
     ! Type for f2
     mat_p(matAP   )%sf2_type = nlpf
     mat_p(matPA   )%sf2_type = atomf
@@ -2327,6 +2435,13 @@ contains
           mat_p(matNAatomf   )%sf2_type = atomf
        end if
     end if
+!!! 2024.05.20 nakata DFT+U
+    if (flag_DFTplusU) then
+       do spin = 1, nspin
+          mat_p(matHplusUatomf(spin))%sf2_type = atomf
+       enddo
+    endif
+!!! nakata DFT+U end
     ! Set up index translation for ranges
     matrix_index(matAP   ) = APrange
     matrix_index(matPA   ) = PArange
@@ -2377,6 +2492,13 @@ contains
           matrix_index(matNAatomf) = aHa_range
        end if
     end if
+!!! 2024.05.20 nakata DFT+U
+    if (flag_DFTplusU) then
+       do spin = 1, nspin
+          matrix_index(matHplusUatomf(spin)) = aHa_range
+       enddo
+    endif
+!!! nakata DFT+U end
     ! Real lengths
     ! Length
 !%%!    mat_p(matS  )%length = nsf*nsf*mx_at_prim*mx_snab
@@ -2480,6 +2602,13 @@ contains
           trans_index(matNAatomf) = aNAa_trans
        end if
     end if
+!!! 2024.05.20 nakata DFT+U
+    if (flag_DFTplusU) then
+       do spin = 1, nspin
+          trans_index(matHplusUatomf(spin)) = 0
+       enddo
+    endif
+!!! nakata DFT+U end
 
     return
   end subroutine associate_matrices

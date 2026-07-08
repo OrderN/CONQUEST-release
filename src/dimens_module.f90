@@ -189,7 +189,7 @@ contains
     character(len=80) :: sub_name = "set_dimensions"
     type(cq_timer) :: backtrace_timer
     integer        :: n, mx_matrices_tmp
-    real(double)   :: r_core, r_t, rcutmax, max_grid
+    real(double)   :: r_core, r_t, rcutmax, max_grid ! 2024.05.20 nakata DFT+U
 
 !****lat<$
     call start_backtrace(t=backtrace_timer,who='set_dimensions',where=9,level=2)

@@ -69,6 +69,7 @@
 !!
 module H_matrix_module
 
+  use datatypes
   use global_module,          only: io_lun
   use timer_module,           only: start_timer, stop_timer, stop_print_timer
   use timer_module,           only: start_backtrace, stop_backtrace
@@ -86,6 +87,14 @@ module H_matrix_module
   integer, parameter :: max_locps_type = 5
   logical :: flag_dump_locps(max_locps_type)
 
+!!! 2024.05.29 nakata DFT+U
+  ! DFT+U 
+  integer :: num_plusUproj
+  integer, dimension(:,:), allocatable :: info_plusUproj
+  logical, dimension(:),   allocatable :: flag_plusUproj_atom
+  real(double), dimension(:), allocatable :: plusUvalue
+  real(double),  dimension(:,:), allocatable :: w_plusUproj_pao, half_w_plusUproj_pao
+!!! nakata DFT+U end
 !!***
 
 contains
@@ -186,7 +195,8 @@ contains
   !!   Add matK, matX dump
   !!  2021/07/19 15:46 dave
   !!   Removed writing out of charge density
-  
+  !!  2024/05/20 18:30 nakata
+  !!   Added matHplusUatomf, matEplusUatomf, matEplusU and get_plusU_matrix for DFT+U 
   !! SOURCE
   !!
   subroutine get_H_matrix(rebuild_KE_NL, fixed_potential, electrons, &
@@ -201,6 +211,7 @@ contains
                                            matS, matX, matNAatomf, matNA, &
                                            matNLatomf, matKEatomf,      &
                                            matHatomf, matXatomf,        &
+                                           matHplusUatomf, &
                                            AtomF_to_SF_transform, &
                                            allocate_temp_matrix, free_temp_matrix, &
                                            S_trans, matrix_product_trace
@@ -217,6 +228,7 @@ contains
                                            IPRINT_TIME_THRES1,          &
                                            iprint_SC,                   &
                                            flag_perform_cDFT,           &
+                                           flag_DFTplusU, flag_first_diag, &   ! 2024.05.20 nakata DFT+U
                                            area_ops, nspin, nspin_SF,   &
                                            spin_factor, blips,          &
                                            flag_analytic_blip_int,      &
@@ -433,6 +445,26 @@ contains
           !
        end if
 !****lat>$
+!!! 2024.5.20 nakata DFT+U
+       if(flag_DFTplusU.and.(.not.flag_first_diag)) then
+          ! For KE, NL and PU matrices we only need rebuild when updating atom functions
+          call get_plusU_matrix(rebuild_KE_NL)
+
+          if (iprint_ops > 4) then
+             if (nspin == 1) then
+                call dump_matrix("NHplusU_atomf", matHplusUatomf(1), inode)
+             else
+                call dump_matrix("NHplusU_up_atomf", matHplusUatomf(1), inode)
+                call dump_matrix("NHplusU_dn_atomf", matHplusUatomf(2), inode)
+             end if
+          end if
+
+          ! add H(DFT+U) to Hatomf
+          do spin = 1, nspin
+             call matrix_sum(one, matHatomf(spin), one, matHplusUatomf(spin))
+          enddo
+       end if
+!!! nakata DFT+U end
     endif ! flag_build_Hatomf
 
     ! For PAO-based contracted SFs, atomic functions are PAOs
@@ -1945,4 +1977,350 @@ contains
   end subroutine matrix_scale_diag
   !!***
 
+!!****f* H_matrix_module/get_plusU_matrix *
+!!
+!!  NAME 
+!!   get_plusU_matrix
+!! 
+!!  PURPOSE
+!!
+!!   Getting matHplusUatomf
+!!
+!!      matHplusUatomf: H(DFT+U) = U/2 * (P-2nP)
+!!
+!!      P = V * W
+!!      W = < proj(i,m)  |  pao(j,n) >
+!!      V = transpose of W
+!!      n = occupation matrix  
+!!
+!!      At present, projector functions are assumed to be one of the PAOs of projector atoms
+!!
+!!   This subroutine is called in sub:get_H_matrix in H_matrix_module.f90.
+!!
+!!  INPUTS
+!! 
+!!  USES
+!! 
+!!  AUTHOR
+!!   A.Nakata
+!!  CREATION DATE
+!!   2023/05/01
+!!  MODIFICATION HISTORY
+!!   2026/06/16 dave
+!!    Reworking to use Conquest implementation of DFT+U  
+!!  SOURCE
+!!
+  subroutine get_plusU_matrix(flag_rebuild)
+    
+    use datatypes
+    use numbers
+    use global_module,  ONLY: nspin, id_glob, species_glob, atomf, occ_mat, &
+                              iprint_ops, min_layer, IPRINT_TIME_THRES2, spin_factor
+    use GenComms,       ONLY: cq_abort, myid, inode, ionode, gsum
+    use group_module,   ONLY: parts
+    use primary_module, ONLY: bundle
+    use cover_module,   ONLY: BCS_parts
+    use matrix_data,    ONLY: mat, halo, aSa_range, aHa_range
+    use mult_module,    ONLY: mult, allocate_temp_matrix, free_temp_matrix, matrix_pos, &
+                              return_matrix_value_pos, store_matrix_value_pos, &
+                              matrix_product, matrix_scale, matrix_transpose, matrix_sum, &
+                              matKatomf, matHplusUatomf, matSatomf,&
+                              aSa_trans, S_S_S, matrix_product_trace
+    use species_module, ONLY: npao_species
+    use timer_module
+    use pao_format, ONLY: pao
+    use energy, ONLY: delta_E_plusU, plusU_energy
+    use units
+
+    implicit none
+
+    ! Passed variables
+    logical :: flag_rebuild  ! To be used later if we decide to keep P and PU (and V and W?)
+
+    ! Local variables
+    integer :: part, memb, neigh, ist, atom_num, atom_spec, iprim
+    integer :: gcspart, neigh_global_part, neigh_global_num, neigh_species
+    real(double) :: dx, dy, dz, r2, trace, fac, val_Satomf
+    type(cq_timer) :: tmr_l_tmp1   
+    integer :: spin, ipao, loc, npao_i, jpao, npao_j, pao_i, pao_j, pao_k, wheremat
+    integer :: matW, matV, matnUP, matUP, matUW
+    integer, dimension(2) :: matnUW, matSKS
+    integer :: iU, l1, nacz1, m1, n_U, l_U, z_U, m_U, m2, i_ang, i_zeta, z_temp, prncpl
+
+    call start_timer(tmr_l_tmp1,WITH_LEVEL)
+    delta_E_plusU = zero
+    ! Get occupation matrix
+    call get_occ_matrix()
+    ! Allocate matrices
+    matW = allocate_temp_matrix(aSa_range, aSa_trans, atomf, atomf)
+    matV = allocate_temp_matrix(aSa_range, aSa_trans, atomf, atomf)
+    matUW = allocate_temp_matrix(aSa_range, aSa_trans, atomf, atomf)
+    do spin=1,nspin
+       matnUW(spin) = allocate_temp_matrix(aSa_range, aSa_trans, atomf, atomf)
+    end do
+    matUP = allocate_temp_matrix(aSa_range, aSa_trans, atomf, atomf)
+    call matrix_scale(zero,matW)
+    call matrix_scale(zero,matV)
+    call matrix_scale(zero,matUW)
+    do spin=1,nspin
+       call matrix_scale(zero,matnUW(spin))
+    end do
+    ! make W and UW
+    iprim = 0
+    do part = 1,bundle%groups_on_node ! Loop over primary set partitions
+       if(bundle%nm_nodgroup(part)>0) then ! If there are atoms in partition
+          do memb = 1,bundle%nm_nodgroup(part) ! Loop over atoms
+             atom_num = bundle%nm_nodbeg(part)+memb-1
+             iprim=iprim+1
+             ! Atomic species
+             atom_spec = bundle%species(atom_num)
+             ! If iprim is a DFT+U projector atom
+             if(flag_plusUproj_atom(atom_spec)) then
+                ! Calculate occupation matrix
+                n_U = info_plusUproj(atom_spec,1)
+                l_U = info_plusUproj(atom_spec,2)
+                z_U = info_plusUproj(atom_spec,3)
+                m_U = 2*l_U + 1
+                ! Build W, UW and nUW
+                npao_i = npao_species(atom_spec)
+                do neigh = 1, mat(part,aSa_range)%n_nab(memb) ! Loop over neighbours of atom
+                   ist = mat(part,aSa_range)%i_acc(memb)+neigh-1
+                   ! Build the distances between atoms - needed for phases 
+                   gcspart = BCS_parts%icover_ibeg(mat(part,aSa_range)%i_part(ist))+mat(part,aSa_range)%i_seq(ist)-1
+                   ! We need to know the species of neighbour
+                   neigh_global_part = BCS_parts%lab_cell(mat(part,aSa_range)%i_part(ist)) 
+                   neigh_global_num  = id_glob(parts%icell_beg(neigh_global_part)+mat(part,aSa_range)%i_seq(ist)-1)
+                   neigh_species = species_glob(neigh_global_num)
+                   ! Now loop over PAOs
+                   npao_j = npao_species(neigh_species)
+                   ! Loop over PAOs on i
+                   pao_i=0
+                   do i_ang= 0, pao(atom_spec)%greatest_angmom ! l 
+                      if(i_ang==l_U) then
+                         z_temp = 0 ! Number of zeta functions for this n,l combination
+                         do i_zeta = 1, pao(atom_spec)%angmom(i_ang)%n_zeta_in_angmom
+                            prncpl = pao(atom_spec)%angmom(i_ang)%prncpl(i_zeta)
+                            if (prncpl/=n_U) then
+                               pao_i = pao_i + 2*i_ang + 1
+                            else if (prncpl==n_U) then
+                               z_temp = z_temp + 1
+                               if(z_temp==z_U) then
+                                  fac = half_w_plusUproj_pao(atom_spec,pao_i+1)
+                                  do m1 = 1, m_U
+                                     do pao_j = 1, npao_j
+                                        wheremat = matrix_pos(matSatomf,iprim,halo(aSa_range)%i_halo(gcspart),pao_i+m1,pao_j)
+                                        val_Satomf = return_matrix_value_pos(matSatomf,wheremat)
+                                        call store_matrix_value_pos(matW, wheremat,val_Satomf)
+                                        call store_matrix_value_pos(matUW, wheremat,val_Satomf*fac)
+                                        do m2 = 1, m_U
+                                           wheremat = matrix_pos(matSatomf,iprim,halo(aSa_range)%i_halo(gcspart),pao_i+m2,pao_j)
+                                           do spin=1,nspin
+                                              call store_matrix_value_pos(matnUW(spin), wheremat, &
+                                                   val_Satomf*fac*occ_mat(m1,m2,iprim,spin))
+                                           end do
+                                        end do
+                                     end do ! pao_j
+                                  end do
+                               end if ! z_temp
+                               pao_i = pao_i + 2*i_ang + 1
+                            end if ! prncpl
+                         enddo ! i_zeta
+                      else
+                         do i_zeta = 1, pao(atom_spec)%angmom(i_ang)%n_zeta_in_angmom
+                            pao_i = pao_i + 2*i_ang + 1
+                         end do
+                      end if
+                   enddo ! i_ang
+                end do ! neigh
+             endif ! projector
+          end do ! memb
+       end if ! nm_nodgroup > 0
+    end do ! part
+    ! make V = transpose of W
+    call matrix_transpose(matW, matV)
+
+    ! Create PU, which is V.UW (include U here to allow different U for different atoms)
+    call matrix_product(matV, matUW, matUP, mult(S_S_S))!S_S_S
+    matnUP = allocate_temp_matrix(aHa_range, aSa_trans, atomf, atomf)
+    ! Make nUP
+    do spin=1,nspin
+       ! Probably we need to zero rows of PK before doing this for safety
+       call matrix_product(matV, matnUW(spin), matnUP, mult(S_S_S))!S_S_S
+
+       ! H(DFT+U) = U/2 * (P-2nP)
+       call matrix_sum(zero, matHplusUatomf(spin), one , matUP)
+       call matrix_sum(one,  matHplusUatomf(spin), -two, matnUP)
+       ! Double counting term
+       trace = spin_factor*matrix_product_trace(matKatomf(spin),matnUP)
+       delta_E_plusU = delta_E_plusU + trace ! Includes gsum
+    enddo ! spin
+    call free_temp_matrix(matnUP)
+    !call gsum(plusU_energy)
+    !if (iprint_ops + min_layer >=1 .and. myid==0) write (io_lun,&
+    !     '(10x,"plusU Energy, 2Tr[0.5U(n - n^2)] : ",f25.15," ",a2)')&
+    !     en_conv*plusU_energy, en_units(energy_units)
+    call free_temp_matrix(matUP)
+    do spin=nspin,1,-1
+       call free_temp_matrix(matnUW(spin))
+    end do
+    call free_temp_matrix(matUW)
+    call free_temp_matrix(matV)
+    call free_temp_matrix(matW)
+
+    call stop_print_timer(tmr_l_tmp1,"get_plusU_matrix",IPRINT_TIME_THRES2)
+!
+  return
+  end subroutine get_plusU_matrix
+!!***
+
+!!****f* H_matrix_module/get_occ_matrix *
+!!
+!!  NAME 
+!!   get_occ_matrix
+!! 
+!!  PURPOSE
+!!
+!!   Calculates the occupation matrix for sites where U will be applied
+!!
+!!   Projector functions are assumed to be one of the PAOs of projector atoms
+!!
+!!  INPUTS
+!! 
+!!  USES
+!! 
+!!  AUTHOR
+!!   D.R.Bowler
+!!  CREATION DATE
+!!   2026/06/15
+!!  MODIFICATION HISTORY
+!!
+!!  SOURCE
+!!
+  subroutine get_occ_matrix
+
+    use datatypes
+    use numbers
+    use global_module,  ONLY: nspin, spin_factor, occ_mat, occ_mat_glob, flag_write_occ_mat, &
+         atomf, iprint_ops, min_layer, flag_first_diag, ni_in_cell, id_glob, species_glob
+    use energy, ONLY: plusU_energy
+    use GenComms,       ONLY: cq_abort, myid, inode, ionode, gsum
+    use primary_module, ONLY: bundle
+    use matrix_data,    ONLY: aSa_range
+    use mult_module,    ONLY: mult, allocate_temp_matrix, free_temp_matrix, &
+         return_matrix_value, matrix_product, matKatomf, matSatomf, aSa_trans, S_S_S
+    use pao_format, ONLY: pao
+    use species_module, ONLY: species
+    use units
+
+    implicit none
+
+    integer :: matSK, spin, iprim, part, memb, atom_num, atom_spec, n_U, l_U, z_U, m_U
+    integer :: pao_i, i_ang, z_temp, i_zeta, prncpl, m1, m2, i_atom, glob_atom
+    integer, dimension(2) :: matSKS
+    real(double) :: val_Satomf
+
+    matSK = allocate_temp_matrix(aSa_range, aSa_trans, atomf, atomf)
+    do spin=1,nspin
+       matSKS(spin) = allocate_temp_matrix(aSa_range, aSa_trans, atomf, atomf)
+    end do
+    plusU_energy = zero
+    occ_mat = zero
+    if(flag_write_occ_mat) occ_mat_glob = zero
+    ! Find SKS for both spin components
+    do spin=1,nspin
+       call matrix_product(matSatomf,matKatomf(spin),matSK,mult(S_S_S)) ! S_S_S
+       call matrix_product(matSK, matSatomf, matSKS(spin), mult(S_S_S)) ! SKS is now in P
+    end do
+    ! Make occupancy matrix
+    iprim = 0
+    do part = 1,bundle%groups_on_node ! Loop over primary set partitions
+       if(bundle%nm_nodgroup(part)>0) then ! If there are atoms in partition
+          do memb = 1,bundle%nm_nodgroup(part) ! Loop over atoms
+             atom_num = bundle%nm_nodbeg(part)+memb-1
+             iprim=iprim+1
+             ! Atomic species
+             atom_spec = bundle%species(atom_num)
+             ! If iprim is a DFT+U projector atom
+             if(flag_plusUproj_atom(atom_spec)) then
+                ! Calculate occupation matrix
+                n_U = info_plusUproj(atom_spec,1)
+                l_U = info_plusUproj(atom_spec,2)
+                z_U = info_plusUproj(atom_spec,3)
+                m_U = 2*l_U + 1
+                pao_i  = 0
+                do i_ang= 0, pao(atom_spec)%greatest_angmom ! l 
+                   if(i_ang==l_U) then
+                      z_temp = 0 ! Number of zeta functions for this n,l combination
+                      do i_zeta = 1, pao(atom_spec)%angmom(i_ang)%n_zeta_in_angmom
+                         prncpl = pao(atom_spec)%angmom(i_ang)%prncpl(i_zeta)
+                         if (prncpl/=n_U) then
+                            pao_i = pao_i + 2*i_ang + 1
+                         else if (prncpl==n_U) then
+                            z_temp = z_temp + 1
+                            if(z_temp==z_U) then
+                               do m1 = 1, m_U
+                                  do m2 = 1, m_U
+                                     do spin=1,nspin
+                                        val_Satomf = return_matrix_value(matSKS(spin),part,memb,iprim,1,pao_i+m2,pao_i+m1,1)
+                                        occ_mat(m2,m1,iprim,spin) = val_Satomf
+                                        if(flag_write_occ_mat) occ_mat_glob(m2,m1,bundle%ig_prim(iprim),spin) = val_Satomf
+                                     end do
+                                  end do
+                               end do
+                            end if ! z_temp
+                            pao_i = pao_i + 2*i_ang + 1
+                         end if ! prncpl
+                      end do ! i_zeta
+                   else
+                      do i_zeta = 1, pao(atom_spec)%angmom(i_ang)%n_zeta_in_angmom
+                         pao_i = pao_i + 2*i_ang + 1
+                      end do
+                   end if ! i_ang = l_U
+                end do ! i_ang
+                ! Find energy (occupation matrix output in get_occ_mat
+                do m1 = 1,m_U
+                   do spin=1,nspin
+                      plusU_energy = plusU_energy + half*plusUvalue(atom_spec)*occ_mat(m1,m1,iprim,spin)
+                      do m2 = 1, m_U
+                         plusU_energy = plusU_energy - half*plusUvalue(atom_spec)* &
+                              occ_mat(m1,m2,iprim,spin)*occ_mat(m2,m1,iprim,spin)
+                      end do
+                   end do
+                end do
+             endif ! projector
+          end do ! memb
+       end if ! nm_nodgroup > 0
+    end do ! part
+    call gsum(plusU_energy)
+    plusU_energy = plusU_energy*spin_factor
+    ! Write out matrix
+    if(flag_write_occ_mat) then
+       ! Collect occupation matrix from all processes
+       call gsum(occ_mat_glob,7,7,ni_in_cell,nspin)
+       ! Output only on I/O process
+       if(myid==0) then
+          write(io_lun,fmt='(4x,"Occupation matrix")')
+          do i_atom = 1, ni_in_cell
+             atom_spec = species_glob(i_atom)
+             if(flag_plusUproj_atom(atom_spec)) then
+                if(nspin==1) write(io_lun,fmt='(4x,"Atom: ",i7,8x,"Spin 1")') i_atom
+                if(nspin==2) write(io_lun,fmt='(4x,"Atom: ",i7,8x,"Spin 1",38x,"Spin 2")') i_atom
+                m_U = 2*info_plusUproj(atom_spec,2) + 1
+                do m1 = 1,m_U
+                   write(io_lun,fmt='(6x,5f8.3,4x,5f8.3)') occ_mat_glob(1:m_U,m1,i_atom,1:nspin)
+                end do
+             end if
+          end do ! i_atom = ni_in_cell
+       end if
+    end if ! write_occ_mat
+    if (iprint_ops + min_layer >=1 .and. myid==0) write (io_lun,&
+         '(10x,"plusU Energy, 2Tr[0.5U(n - n^2)] : ",f25.15," ",a2)')&
+         en_conv*plusU_energy, en_units(energy_units)
+    do spin=nspin,1,-1
+       call free_temp_matrix(matSKS(spin))
+    end do
+    call free_temp_matrix(matSK)
+    return
+  end subroutine get_occ_matrix
+!!***
 end module H_matrix_module
