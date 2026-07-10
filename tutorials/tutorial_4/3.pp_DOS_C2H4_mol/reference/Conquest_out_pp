@@ -3,12 +3,12 @@ CONQUEST charge density conversion and STM image simulation
 
 D. R. Bowler (UCL) and A. Nakata (NIMS)
 
-    This job was run on 2026/04/30 at 08:40
+    This job was run on 2026/07/09 at 17:06
 
 
-    Code compiled on: Fri 27 Feb 2026 13:37:13 GMT
+    Code compiled on: Thu 9 Jul 2026 17:03:26 BST
           Version comment: 
-      Git Branch: master; tag, hash: v1.5
+      Git Branch: develop; tag, hash: v1.5-31-g62d6fb0f
 
 
   Creating density of states (DOS)
@@ -17,10 +17,11 @@ D. R. Bowler (UCL) and A. Nakata (NIMS)
   Calculating density of states (DOS)
     Fermi level:     -0.12713 Ha   (=    -3.459 eV)
   Active bands: 
-  DOS lower limit set automatically:     -0.69381 Ha
-  DOS upper limit set automatically:      3.65048 Ha
-  Sigma set by user:     0.001000 Ha
-  Dividing DOS into 10001 bins of width     0.000434 Ha
- iDOS_low is    1.0000000000000000     
-  DOS between      -0.690 Ha and Ef integrates to       10.000 electrons
-  DOS between      -0.690 Ha and       3.646 Ha integrates to       88.000 electrons
+  Dividing DOS into 10001 bins of width     0.000436 Ha
+  Sigma is:     0.001000 Ha
+  DOS lower limit:     -0.69981 Ha
+  DOS upper limit:      3.65648 Ha
+  Fermi level:         -0.12713 Ha
+  Integration of DOS in terms of absolute energies
+  DOS between      -0.700 Ha and Ef integrates to       12.000 electrons
+  DOS between      -0.700 Ha and       3.656 Ha integrates to       92.000 electrons

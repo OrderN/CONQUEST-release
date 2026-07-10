@@ -41,9 +41,9 @@
     This calculation includes non-local pseudopotentials,
     with a maximum core radius of      6.72726398
 
-    This job was run on  2026/04/30 at 08:39 +0100
-    Code was compiled on 2026/02/27 at 13:35 +0000
-    Version comment: Git Branch: master; tag, hash: v1.5
+    This job was run on  2026/07/09 at 16:59 +0100
+    Code was compiled on 2026/07/08 at 16:39 +0100
+    Version comment: Git Branch: develop; tag, hash: v1.5-31-g62d6fb0f
 
     Job title: C2H4                                                                            
     Job to be run: static calculation
@@ -112,7 +112,7 @@
 
     force: Maximum force :        0.00022949(Ha/a0) on atom         3 in x direction
     force: Force Residual:        0.00020633 Ha/a0
-    force: Total stress:         -0.00789830    -0.26919371    -0.00028413 GPa
+    force: Total stress:            -0.00789830       -0.26919371       -0.00028413 GPa
     force: Average pressure:      0.09245871 GPa
 
     get_E_and_F: Change in energy during last step of electronic optimisation:  0.10753E-09
@@ -127,4 +127,4 @@
 
     Max total mem use is            442.726 MB
 
-    Total run time was:               6.072 seconds
+    Total run time was:               6.628 seconds

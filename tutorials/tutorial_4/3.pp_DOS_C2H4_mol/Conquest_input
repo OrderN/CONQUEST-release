@@ -1,7 +1,8 @@
 Process.Job dos
+# Set Limits on DOS energy (in Ha)
 #Process.min_DOS_E         -0.700000000
 #Process.max_DOS_E         -0.100000000
-# Sigma can be set automatically based on energy range and n_DOS
+# Broadening applied to eigenstates (default 0.001Ha)
 #Process.sigma_DOS          0.0020000
 Process.n_DOS              10001
 
@@ -10,7 +11,6 @@ IO.Coordinates    coords.dat
 IO.Iprint 1 
 IO.FractionalAtomicCoords F
 IO.WriteOutToFile F
-
 
 ## General Parameters
 General.NumberOfSpecies 2
