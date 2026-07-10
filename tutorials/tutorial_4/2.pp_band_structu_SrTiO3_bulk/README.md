@@ -8,4 +8,4 @@ should be copied to Conquest_input in turn before each run.  Once the
 second Conquest calculation has been performed, the post-processing
 calculation reorders the eigenvalues.dat file into BandStructure.dat
 so that bands can be plotted.  The reference band structure was plotted
-using Grace.
+using the Jupyter notebook but we also provide a Grace file to do this.
