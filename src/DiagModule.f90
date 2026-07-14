@@ -260,9 +260,11 @@ module DiagModule
   type(DistributeData) :: DistribH, DistribS
 
   ! Fermi Energy
-  real(double), dimension(2) :: Efermi
+  real(double), dimension(2) :: Efermi, vbm, cbm, gap_d
+  integer, dimension(2) :: vbm_k, cbm_k, gap_k
   integer, dimension(2) :: band_ef
-
+  logical :: flag_integer_occ
+  
   ! K-point data - here so that reading of k-points can take place in
   ! different routine to FindEvals
   integer :: nkp
@@ -316,6 +318,7 @@ module DiagModule
   ! that Methfessel-Paxton approximation may casue the bracket search
   ! algorithm to fail.)
   integer :: max_brkt_iterations
+  real(double), parameter :: tolElec = 1.0e-8_double
   
 contains
 
@@ -602,7 +605,38 @@ contains
     end if
     ! Find Fermi level, given the eigenvalues at all k-points (in w)
     ! if (me < proc_rows*proc_cols) then
+    vbm = -BIG
+    cbm = BIG
+    vbm_k = 0
+    cbm_k = 0
+    gap_k = 0
+    gap_d = BIG
     call findFermi(electrons, evals, matrix_size, nkp, Efermi, occ)
+    ! Test for gap
+    if(flag_smear_type==0.or.flag_integer_occ) then
+       if((cbm(1)-vbm(1))>two*kT.and.(cbm(nspin)-vbm(nspin)>two*kT)) then
+          if(inode==ionode) then
+             do spin=1,nspin
+                write(io_lun,fmt='(4x,"Spin ",i1," gap found.  VBM=",f12.5,"Ha CBM=",f12.5,"Ha Gap ",f12.5,"Ha")') &
+                     spin,vbm(spin),cbm(spin),cbm(spin)-vbm(spin)
+                if(vbm_k(spin)==cbm_k(spin)) then
+                   write(io_lun,fmt='(4x,"Direct gap found at ",3f8.4)') kk(:,gap_k(spin))
+                else
+                   write(io_lun,fmt='(4x,"Indirect gap found; smallest direct gap is ",f12.5," Ha at ",3f6.2)') &
+                        gap_d(spin),kk(:,gap_k(spin))
+                   write(io_lun,fmt='(4x,"VBM is at ",3f8.4)') kk(:,vbm_k(spin))
+                   write(io_lun,fmt='(4x,"CBM is at ",3f8.4)') kk(:,cbm_k(spin))
+                end if
+             end do
+          end if
+          ! Adjust Fermi level to lie at mid-gap and revisit occupancies
+          do spin=1,nspin
+             Efermi(spin) = half*(cbm(spin)+vbm(spin))
+             locc(spin) = electrons(spin)
+          end do
+          call occupy(occ, evals, Efermi, locc, matrix_size, nkp)
+       end if
+    end if
     ! Allocate space to expand eigenvectors into (i.e. when reversing
     ! ScaLAPACK distribution)
     allocate(expH(matrix_size,prim_size,nspin), STAT=stat)
@@ -2362,10 +2396,36 @@ contains
 
     ! local variables
     real(double)            :: electrons_total
-    real(double), parameter :: tolElec = 1.0e-6_double
     real(double) :: locals_occ, localt_occ
-    integer :: ikp, i, ispin
+    integer :: ikp, i, spin, ne
 
+    ! For integer occupancies
+    if(flag_integer_occ) then
+       occ = zero
+       gap_d = BIG
+       do spin=1,nspin
+          ne = int(electrons(spin))
+          electrons_total = zero
+          vbm(spin) = maxval(eig(ne,:,spin))
+          cbm(spin) = minval(eig(ne+1,:,spin))
+          vbm_k(spin) = maxloc(eig(ne,:,spin),dim=1)
+          cbm_k(spin) = minloc(eig(ne+1,:,spin),dim=1)
+          do ikp=1,nkp
+             occ(1:ne,ikp,spin) = wtk(ikp)
+             if(eig(ne+1,ikp,spin) - eig(ne,ikp,spin)<gap_d(spin)) then
+                gap_d(spin) = eig(ne+1,ikp,spin) - eig(ne,ikp,spin)
+                gap_k(spin) = ikp
+             end if
+             !gap_d(spin) = min(gap_d(spin),eig(ne+1,ikp,spin) - eig(ne,ikp,spin))
+          end do
+          ! This is a sign that the system is not suited for integer occupancies
+          if(cbm(spin)<vbm(spin)) then
+             call cq_warn("findFermi"," System may not have integer occupancies: vbm and cbm are ",vbm(spin),cbm(spin))
+          end if
+          Ef(spin) = half*(vbm(spin) + cbm(spin))
+       end do
+       return
+    end if ! Integer occupations
     if (nspin == 2) then
        electrons_total = electrons(1) + electrons(2)
     else
@@ -2446,7 +2506,6 @@ contains
     integer,      dimension(nspin) :: ne
     real(double) :: electrons_total, gaussian_width
     integer      :: counter, ibrkt, lband, lkp, iband, ikp, spin
-    real(double), parameter :: tolElec = 1.0e-6_double
 
     if (nspin == 2) then
        electrons_total = electrons(1) + electrons(2)
@@ -2718,7 +2777,6 @@ contains
     real(double), dimension(nspin) :: lowEf, highEf, incEf
     real(double) :: gaussian_width, thisElec, lowElec, highElec
     integer      :: counter, ne, ibrkt, lband, lkp, iband, ikp, spin, lspin
-    real(double), parameter :: tolElec = 1.0e-6_double
 
     ! Finding the correct bracket trapping Ef
     select case (flag_smear_type)
@@ -2977,6 +3035,7 @@ contains
     ! local variables
     integer :: ikp, iband, ss
     integer :: ss_start, ss_end
+    real(double) :: locc
 
     if (nspin == 2 .and. present(spin)) then
        ss_start = spin
@@ -2988,16 +3047,52 @@ contains
 
     electrons = zero
     labspin: do ss = ss_start, ss_end
+       vbm(ss) = -BIG
+       cbm(ss) = BIG
+       gap_d(ss) = BIG
        kp: do ikp = 1, nkp
           band: do iband = 1, nbands
              select case (flag_smear_type)
              case (0) ! Fermi smearing
+                locc = fermi(ebands(iband,ikp,ss) - Ef(ss), kT)
                 occu(iband,ikp,ss) = &
-                     wtk(ikp) * fermi(ebands(iband,ikp,ss) - Ef(ss), kT)
+                     wtk(ikp) * locc
+                     !wtk(ikp) * fermi(ebands(iband,ikp,ss) - Ef(ss), kT)
+                if(locc>half) then
+                   if(vbm(ss)<ebands(iband,ikp,ss)) then
+                      vbm_k(ss) = ikp
+                      vbm(ss) = ebands(iband,ikp,ss)
+                   end if
+                else if(locc<half) then
+                   if(cbm(ss)>ebands(iband,ikp,ss)) then
+                      cbm_k(ss) = ikp
+                      cbm(ss) = ebands(iband,ikp,ss)
+                      if(ebands(iband,ikp,ss) - ebands(iband-1,ikp,ss)<gap_d(ss)) then
+                         gap_d(ss) = ebands(iband,ikp,ss) - ebands(iband-1,ikp,ss)
+                         gap_k(ss) = ikp
+                      end if
+                      !gap_d(ss) = min(gap_d(ss),ebands(iband,ikp,ss)-ebands(iband-1,ikp,ss))
+                   end if
+                end if
              case (1) ! Methfessel Paxton smearing
+                locc = MP_step(ebands(iband,ikp,ss) - Ef(ss), iMethfessel_Paxton, kT)
                 occu(iband,ikp,ss) = &
-                     wtk(ikp) * MP_step(ebands(iband,ikp,ss) - Ef(ss), &
-                     iMethfessel_Paxton, kT)
+                     wtk(ikp) * locc
+                     !wtk(ikp) * MP_step(ebands(iband,ikp,ss) - Ef(ss), &
+                     !iMethfessel_Paxton, kT)
+                ! It really doesn't make sense to look for vbm and cbm with MP but this is how
+                !if(locc>half) then
+                !   if(vbm(ss)<ebands(iband,ikp,ss)) then
+                !      vbm_k(ss) = ikp
+                !      vbm(ss) = ebands(iband,ikp,ss)
+                !   end if
+                !else if(locc<half) then
+                !   if(cbm(ss)>ebands(iband,ikp,ss)) then
+                !      cbm_k(ss) = ikp
+                !      cbm(ss) = ebands(iband,ikp,ss)
+                !      gap_d(ss) = min(gap_d(ss),ebands(iband,ikp,ss)-ebands(iband-1,ikp,ss))
+                !   end if
+                !end if
              case default
                 call cq_abort ("FindEvals: Smearing flag not recognised",&
                      flag_smear_type)

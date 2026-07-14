@@ -806,7 +806,7 @@ contains
        scal_prod_sym(n) = scal_prod(m)/coeff(n)
     end do
     if((inode == ionode).and.(iprint_basis >= 4)) then
-       write(unit=io_lun,fmt='(/6x" symmetric scalar product:"/)')
+       write(unit=io_lun,fmt='(/6x," symmetric scalar product:"/)')
        do n = 1, n_star_in_sphere
           write(unit=io_lun,fmt='(6x,3x,i5,3x,e15.6)') n, scal_prod_sym(n)
        end do

@@ -3228,7 +3228,7 @@ contains
     use DiagModule,      only: nkp, kk, wtk, kT, maxefermi,          &
          flag_smear_type, iMethfessel_Paxton,  &
          max_brkt_iterations, gaussian_height, &
-         finess, NElec_less
+         finess, NElec_less, flag_integer_occ
     use energy,          only: SmearingType, MPOrder
     use memory_module,   only: reg_alloc_mem, reg_dealloc_mem,       &
          type_dbl
@@ -3263,6 +3263,7 @@ contains
 
     ! Read Control Flags associated to diagonalisation method
     maxefermi = fdf_integer('Diag.MaxEfIter',50)
+    flag_integer_occ = fdf_boolean('Diag.IntegerOccs',.false.)
     kT = fdf_double('Diag.kT',0.001_double)
     ! Method to approximate step function for occupation number
     flag_smear_type = fdf_integer('Diag.SmearingType',0)
