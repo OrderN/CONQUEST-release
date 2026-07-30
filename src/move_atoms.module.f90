@@ -3661,7 +3661,10 @@ contains
                                       flag_SFcoeffReuse, flag_diagonalisation, &
                                       ne_spin_in_cell,                 &
                                       ne_in_cell, spin_factor,         &
-                                      ni_in_cell, area_moveatoms
+                                      ni_in_cell, area_moveatoms, &
+                                      flag_write_occ_mat, occ_mat, &
+                                      flag_DFTplusU
+    use primary_module,         only: bundle
     use density_module,         only: set_atomic_density,              &
                                       density, set_density_pcc,        &
                                       get_electronic_density
@@ -3685,6 +3688,11 @@ contains
     integer :: spin_SF, spin, stat
 
     call start_timer(tmr_l_tmp1,WITH_LEVEL)
+    ! Update DFT+U occupation matrix
+    if(flag_DFTplusU) then
+       deallocate(occ_mat)
+       allocate(occ_mat(7,7,bundle%n_prim,nspin))
+    end if
     ! (0) Pseudopotentials: choose correct form
     select case (pseudo_type)
     case (OLDPS)
