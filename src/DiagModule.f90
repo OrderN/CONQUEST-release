@@ -263,7 +263,7 @@ module DiagModule
   real(double), dimension(2) :: Efermi, vbm, cbm, gap_d
   integer, dimension(2) :: vbm_k, cbm_k, gap_k
   integer, dimension(2) :: band_ef
-  logical :: flag_integer_occ
+  logical :: flag_integer_occ, flag_gap
   
   ! K-point data - here so that reading of k-points can take place in
   ! different routine to FindEvals
@@ -611,31 +611,17 @@ contains
     cbm_k = 0
     gap_k = 0
     gap_d = BIG
+    flag_gap = .false.
     call findFermi(electrons, evals, matrix_size, nkp, Efermi, occ)
     ! Test for gap
-    if(flag_smear_type==0.or.flag_integer_occ) then
-       if((cbm(1)-vbm(1))>two*kT.and.(cbm(nspin)-vbm(nspin)>two*kT)) then
-          if(inode==ionode) then
-             do spin=1,nspin
-                write(io_lun,fmt='(4x,"Spin ",i1," gap found.  VBM=",f12.5,"Ha CBM=",f12.5,"Ha Gap ",f12.5,"Ha")') &
-                     spin,vbm(spin),cbm(spin),cbm(spin)-vbm(spin)
-                if(vbm_k(spin)==cbm_k(spin)) then
-                   write(io_lun,fmt='(4x,"Direct gap found at ",3f8.4)') kk(:,gap_k(spin))
-                else
-                   write(io_lun,fmt='(4x,"Indirect gap found; smallest direct gap is ",f12.5," Ha at ",3f6.2)') &
-                        gap_d(spin),kk(:,gap_k(spin))
-                   write(io_lun,fmt='(4x,"VBM is at ",3f8.4)') kk(:,vbm_k(spin))
-                   write(io_lun,fmt='(4x,"CBM is at ",3f8.4)') kk(:,cbm_k(spin))
-                end if
-             end do
-          end if
-          ! Adjust Fermi level to lie at mid-gap and revisit occupancies
-          do spin=1,nspin
-             Efermi(spin) = half*(cbm(spin)+vbm(spin))
-             locc(spin) = electrons(spin)
-          end do
-          call occupy(occ, evals, Efermi, locc, matrix_size, nkp)
-       end if
+    if((flag_smear_type==0.or.flag_integer_occ).and.flag_gap) then
+       if(inode==ionode.and.iprint_DM + min_layer >= 2) call write_gaps
+       ! Adjust Fermi level to lie at mid-gap and revisit occupancies
+       do spin=1,nspin
+          Efermi(spin) = half*(cbm(spin)+vbm(spin))
+          locc(spin) = electrons(spin)
+       end do
+       call occupy(occ, evals, Efermi, locc, matrix_size, nkp)
     end if
     ! Allocate space to expand eigenvectors into (i.e. when reversing
     ! ScaLAPACK distribution)
@@ -2424,6 +2410,7 @@ contains
           end if
           Ef(spin) = half*(vbm(spin) + cbm(spin))
        end do
+       if((cbm(1)-vbm(1))>two*kT.and.(cbm(nspin)-vbm(nspin)>two*kT)) flag_gap = .true.
        return
     end if ! Integer occupations
     if (nspin == 2) then
@@ -2452,6 +2439,7 @@ contains
           end do
        end do
     end if
+    if((cbm(1)-vbm(1))>two*kT.and.(cbm(nspin)-vbm(nspin)>two*kT)) flag_gap = .true.
     return
   end subroutine findFermi
   !!*****
@@ -3071,16 +3059,12 @@ contains
                          gap_d(ss) = ebands(iband,ikp,ss) - ebands(iband-1,ikp,ss)
                          gap_k(ss) = ikp
                       end if
-                      !gap_d(ss) = min(gap_d(ss),ebands(iband,ikp,ss)-ebands(iband-1,ikp,ss))
                    end if
                 end if
              case (1) ! Methfessel Paxton smearing
                 locc = MP_step(ebands(iband,ikp,ss) - Ef(ss), iMethfessel_Paxton, kT)
-                occu(iband,ikp,ss) = &
-                     wtk(ikp) * locc
-                     !wtk(ikp) * MP_step(ebands(iband,ikp,ss) - Ef(ss), &
-                     !iMethfessel_Paxton, kT)
-                ! It really doesn't make sense to look for vbm and cbm with MP but this is how
+                occu(iband,ikp,ss) = wtk(ikp) * locc
+                ! It really doesn't make sense to look for vbm and cbm with MP but this is how we could
                 !if(locc>half) then
                 !   if(vbm(ss)<ebands(iband,ikp,ss)) then
                 !      vbm_k(ss) = ikp
@@ -3129,6 +3113,67 @@ contains
   end subroutine occupy
   !!***
 
+
+  ! -----------------------------------------------------------------------------
+  ! Subroutine write_gaps
+  ! -----------------------------------------------------------------------------
+
+  !!****f* DiagModule/write_gaps *
+  !!
+  !!  NAME
+  !!   write_gaps
+  !!  USAGE
+  !!   write_gaps
+  !!  PURPOSE
+  !!   Writes out gaps (when there is one)
+  !!
+  !!  INPUTS
+  !!
+  !!  USES
+  !!   units, global
+  !!  AUTHOR
+  !!   D.R.Bowler
+  !!  CREATION DATE
+  !!   31/07/2026
+  !!  MODIFICATION HISTORY
+  !!
+  !!  SOURCE
+  subroutine write_gaps
+
+    use units
+    use global_module,   only: nspin
+
+    implicit none
+
+    integer :: spin
+
+    if((flag_smear_type==0.or.flag_integer_occ).and.flag_gap.and.myid==0) then
+       do spin=1,nspin
+          if(nspin>1) then
+             write(io_lun,fmt='(4x,"Spin ",i1," gap found.  VBM=",f12.5," ",a2," CBM=", &
+                  f12.5," ",a2," Gap ",f12.5," ",a2)') &
+                  spin,en_conv*vbm(spin),en_units(energy_units), &
+                  en_conv*cbm(spin),en_units(energy_units),&
+                  en_conv*(cbm(spin)-vbm(spin)),en_units(energy_units)
+          else
+             write(io_lun,fmt='(4x,"Gap found.  VBM=",f12.5," ",a2," CBM=",f12.5," ",a2," Gap ",f12.5," ",a2)') &
+                  en_conv*vbm(spin),en_units(energy_units),&
+                  en_conv*cbm(spin),en_units(energy_units),&
+                  en_conv*(cbm(spin)-vbm(spin)),en_units(energy_units)
+          end if
+          if(vbm_k(spin)==cbm_k(spin)) then
+             write(io_lun,fmt='(4x,"Direct gap found at ",3f8.4," (1/a0)")') kk(:,gap_k(spin))
+          else
+             write(io_lun,fmt='(4x,"Indirect gap found; smallest direct gap is ",f12.5," ",a2," at ",3f6.2," (1/a0)")') &
+                  en_conv*gap_d(spin),en_units(energy_units),kk(:,gap_k(spin))
+             write(io_lun,fmt='(4x,"VBM is at ",3f8.4," (1/a0)")') kk(:,vbm_k(spin))
+             write(io_lun,fmt='(4x,"CBM is at ",3f8.4," (1/a0)")') kk(:,cbm_k(spin))
+          end if
+       end do
+    end if
+    return
+  end subroutine write_gaps
+  !!***
 
   ! -----------------------------------------------------------------------------
   ! Function fermi

@@ -733,6 +733,11 @@ Diag.kT (*real*)
 
     *default*: 0.001
 
+Diag.IntegerOccs (*logical*)
+    Specifies integer occupation of eigenstates (overrides ``Diag.SmearingType``)
+
+    *default*: False
+
 Diag.MPOrder (*integer*)
     Order of Bessel function approximation to delta-function used in Methfessel-Paxton smearing
 

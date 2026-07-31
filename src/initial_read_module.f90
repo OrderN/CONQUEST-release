@@ -3761,7 +3761,7 @@ contains
 3   format(8x,'Proc grid (row, col): ',2i5)
 4   format(/8x,'***WARNING***',/,2x,&
          'No Kpoints block found - defaulting to Gamma point')
-51  format(/8x,i4,' symmetry inequivalent Kpoints in Cartesian form (1/A): ')
+51  format(/8x,i4,' symmetry inequivalent Kpoints in Cartesian form (1/a0): ')
 7   format(8x,' All ',i4,' Kpoints in fractional coordinates: ')
 9   format(/8x,'***WARNING***',/,8x,&
          'Specified Kpoint mesh shift in fractional coords >= 1.0.')

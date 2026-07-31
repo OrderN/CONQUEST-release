@@ -144,10 +144,18 @@ Go to :ref:`top <groundstate>`.
 Electronic occupation smearing
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The occupation numbers of the eigenstates are slightly smeared near
+By default, the occupation numbers of the eigenstates are slightly smeared near
 the Fermi level, following common practice.  The default smearing type
-is Fermi-Dirac smearing with a temperature (in Hartrees) set with the
-flag ``Diag.kT`` which defaults to 0.001Ha.
+is Fermi-Dirac smearing (``Diag.SmearingType 0``) with a temperature (in Hartrees) set with the
+flag ``Diag.kT`` which defaults to 0.001Ha.  If you know that you have an insulator with a
+finite gap, you can force integer occupancies with the flag:
+
+ ::
+
+  Diag.IntegerOccs T
+
+This is false by default, and will lead to significant problems if the system is metallic
+at any point during the self-consistent ground state search, so should be considered carefully.
 
 The Methfessel-Paxton approach :cite:`g-Methfessel:1989ny` to occupations allows much higher
 smearing temperatures with minimal effect on the free energy (and
