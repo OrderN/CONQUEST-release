@@ -493,7 +493,11 @@ contains
 
     if(flag_DFTplusU) then
        allocate(occ_mat(7,7,bundle%n_prim,nspin))
-       if(flag_write_occ_mat) allocate(occ_mat_glob(7,7,ni_in_cell,nspin))
+       occ_mat = zero
+       if(flag_write_occ_mat) then
+          allocate(occ_mat_glob(7,7,ni_in_cell,nspin))
+          occ_mat_glob = zero
+       end if
     end if
     ! Create all of the indexing required to perform matrix multiplications
     ! at a later point. This routine also identifies all the density
