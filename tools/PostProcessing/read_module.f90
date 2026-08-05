@@ -11,13 +11,14 @@ contains
   subroutine read_input
 
     use global_module, ONLY: flag_assign_blocks, flag_fractional_atomic_coords, nspin, &
-         flag_wf_range_Ef, E_DOS_min, E_DOS_max, sigma_DOS, n_DOS, ni_in_cell
+         flag_wf_range_Ef, E_DOS_min, E_DOS_max, sigma_DOS, n_DOS, ni_in_cell, flag_fix_spin_population
     use local
     use input_module
     use numbers
     use io_module, ONLY: pdb_format, pdb_template, read_atomic_positions, flag_MatrixFile_BinaryFormat
     use dimens, ONLY: r_super_x, r_super_y, r_super_z, GridCutoff
-    use species_module, ONLY: n_species, species_label, species_file, mass, type_species, charge, nsf_species
+    use species_module, ONLY: n_species, species_label, species_file, mass, type_species, charge, nsf_species,&
+         species_from_files
     use units, ONLY: HaToeV, dist_units, dist_conv, ang, bohr, BohrToAng
     use block_module, only: n_pts_in_block, in_block_x,in_block_y,in_block_z, blocks_raster, blocks_hilbert
     use pseudo_tm_info, only: setup_pseudo_info
@@ -51,6 +52,7 @@ contains
     flag_spin_polarisation   = fdf_boolean('Spin.SpinPolarised', .false.)
     nspin = 1
     if(flag_spin_polarisation) nspin = 2
+    flag_fix_spin_population = fdf_boolean('Spin.FixSpin',.false.)
     ! Grid spacing
     n_grid_x   = fdf_integer('Grid.PointsAlongX',0)
     n_grid_y   = fdf_integer('Grid.PointsAlongY',0)
@@ -335,14 +337,23 @@ contains
     else
        pseudo_type = OLDPS
     endif
+    species_from_files = fdf_boolean('General.PAOFromFiles',.false.)
     if(fdf_block('ChemicalSpeciesLabel')) then
        if(1+block_end-block_start<n_species) & 
             call cq_abort("Too few species in ChemicalSpeciesLabel: ",&
             1+block_end-block_start,n_species)
        do i=1,n_species
-          read (unit=input_array(block_start+i-1),fmt=*) &
-               j, mass(j),       &
-               species_label(j)
+          ! **<lat>** Added the optional filename
+          if ( species_from_files ) then
+             read (unit=input_array(block_start+i-1),fmt=*) &
+                  j, mass(j),       &
+                  species_label(j), &
+                  species_file(j)
+          else
+             read (unit=input_array(block_start+i-1),fmt=*) &
+                  j, mass(j),       &
+                  species_label(j)
+          end if
           type_species(j)=j
        end do
        call fdf_endblock

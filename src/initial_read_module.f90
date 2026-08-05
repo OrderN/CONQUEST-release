@@ -2987,6 +2987,8 @@ contains
        write(io_lun,fmt='(6x,"Solving for the K matrix using ",a16)') 'diagonalisation '
        if(iprint_init>0) then
           select case (flag_smear_type)
+          case(-1)
+             write(io_lun,'(6x,"Using integer occupancies")')
           case (0)
              write(io_lun,'(6x,"Using Fermi-Dirac smearing")')
           case (1)
@@ -3219,7 +3221,8 @@ contains
     use functions,       only: is_prime
     use global_module,   only: iprint_init, rcellx, rcelly, rcellz,  &
          area_general, ni_in_cell, numprocs,   &
-         species_glob, io_lun, io_ase, ase_file, write_ase, flag_calc_pol
+         species_glob, io_lun, io_ase, ase_file, write_ase, flag_calc_pol, &
+         flag_fix_spin_population, nspin
     use numbers,         only: zero, one, two, pi, RD_ERR, half
     use GenComms,        only: cq_abort, cq_warn, gcopy
     use input_module
@@ -3263,10 +3266,15 @@ contains
 
     ! Read Control Flags associated to diagonalisation method
     maxefermi = fdf_integer('Diag.MaxEfIter',50)
-    flag_integer_occ = fdf_boolean('Diag.IntegerOccs',.false.)
     kT = fdf_double('Diag.kT',0.001_double)
     ! Method to approximate step function for occupation number
     flag_smear_type = fdf_integer('Diag.SmearingType',0)
+    flag_integer_occ = fdf_boolean('Diag.IntegerOccs',.false.)
+    if(flag_integer_occ) then
+       if(nspin>1.and.(.not.flag_fix_spin_population)) &
+            call cq_abort("Cannot have free spin population with integer occupancies")
+       flag_smear_type = -1
+    end if
     SmearingType = flag_smear_type
     iMethfessel_Paxton = fdf_integer('Diag.MPOrder',0)
     MPOrder = iMethfessel_Paxton

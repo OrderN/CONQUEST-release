@@ -263,7 +263,8 @@ module DiagModule
   real(double), dimension(2) :: Efermi, vbm, cbm, gap_d
   integer, dimension(2) :: vbm_k, cbm_k, gap_k
   integer, dimension(2) :: band_ef
-  logical :: flag_integer_occ, flag_gap
+  logical :: flag_integer_occ
+  logical, dimension(2) :: flag_gap
   
   ! K-point data - here so that reading of k-points can take place in
   ! different routine to FindEvals
@@ -614,14 +615,35 @@ contains
     flag_gap = .false.
     call findFermi(electrons, evals, matrix_size, nkp, Efermi, occ)
     ! Test for gap
-    if((flag_smear_type==0.or.flag_integer_occ).and.flag_gap) then
+    if(flag_smear_type==0) then
+       if(flag_fix_spin_population) then ! Separate fermi levels
+          do spin=1,nspin
+             if(flag_gap(spin)) then
+                Efermi(spin) = half*(cbm(spin)+vbm(spin))
+                locc(spin) = electrons(spin)
+                if(inode==ionode.and.iprint_DM + min_layer >= 2) call write_gaps(spin_ch=spin)
+                call occupy(occ, evals, Efermi, locc, matrix_size, nkp, spin=spin)
+                if(inode==ionode.and.iprint_DM + min_layer >= 2) &
+                     write(io_lun,'(4x, "Adjusted Fermi level for spin ", i2, " is ", f12.5)') &
+                     spin,Efermi(spin)
+             end if
+          end do
+       else
+          if(flag_gap(1) .or. flag_gap(2)) then ! Fermi levels should be same
+             if(inode==ionode.and.iprint_DM + min_layer >= 2) call write_gaps
+             ! Adjust Fermi level to lie at mid-gap and revisit occupancies
+             do spin=1,nspin
+                Efermi(spin) = half*(minval(cbm)+maxval(vbm))
+                locc(spin) = electrons(spin)
+                if(inode==ionode.and.iprint_DM + min_layer >= 2) &
+                     write(io_lun,'(4x, "Adjusted Fermi level for spin ", i2, " is ", f12.5)') &
+                     spin,Efermi(spin)
+             end do
+             call occupy(occ, evals, Efermi, locc, matrix_size, nkp)
+          end if
+       end if
+    else if(flag_integer_occ) then ! There has to be a gap!
        if(inode==ionode.and.iprint_DM + min_layer >= 2) call write_gaps
-       ! Adjust Fermi level to lie at mid-gap and revisit occupancies
-       do spin=1,nspin
-          Efermi(spin) = half*(cbm(spin)+vbm(spin))
-          locc(spin) = electrons(spin)
-       end do
-       call occupy(occ, evals, Efermi, locc, matrix_size, nkp)
     end if
     ! Allocate space to expand eigenvectors into (i.e. when reversing
     ! ScaLAPACK distribution)
@@ -948,6 +970,8 @@ contains
                 do j = 1, matrix_size
                    ! Calculate entropic contribution to electronic energy
                    select case (flag_smear_type)
+                   case (-1) ! Integer occupancies
+                      entropy = zero
                    case (0) ! Fermi smearing
                       if (occ(j,kp,spin) > RD_ERR .and. &
                            (wtk(kp) - occ(j,kp,spin)) > RD_ERR) then
@@ -2420,8 +2444,12 @@ contains
     end if
     if (flag_fix_spin_population .or. nspin == 1) then
        call findFermi_fixspin(electrons, eig, nbands, nkp, Ef, occ)
+       do spin=1,nspin
+          if((cbm(spin)-vbm(spin))>two*kT) flag_gap(spin) = .true.
+       end do
     else
        call findFermi_varspin(electrons_total, eig, nbands, nkp, Ef, occ)
+       if((cbm(1)-vbm(1))>two*kT.and.(cbm(nspin)-vbm(nspin)>two*kT)) flag_gap = .true.
     end if
     if(flag_DeltaSCF.AND.flag_excite) then
        if(nspin==1) then
@@ -2439,7 +2467,6 @@ contains
           end do
        end do
     end if
-    if((cbm(1)-vbm(1))>two*kT.and.(cbm(nspin)-vbm(nspin)>two*kT)) flag_gap = .true.
     return
   end subroutine findFermi
   !!*****
@@ -3021,7 +3048,7 @@ contains
     integer,      optional,         intent(in)  :: spin
 
     ! local variables
-    integer :: ikp, iband, ss
+    integer :: ikp, iband, ss, ne
     integer :: ss_start, ss_end
     real(double) :: locc
 
@@ -3032,7 +3059,16 @@ contains
        ss_start = 1
        ss_end = nspin
     end if
-
+    if(flag_integer_occ) then
+       do ss=ss_start,ss_end
+          occ(:,:,ss) = zero
+          ne = int(electrons(ss))
+          do ikp=1,nkp
+             occ(1:ne,ikp,ss) = wtk(ikp)
+          end do
+       end do
+       return
+    end if
     electrons = zero
     labspin: do ss = ss_start, ss_end
        vbm(ss) = -BIG
@@ -3141,36 +3177,49 @@ contains
   !!  MODIFICATION HISTORY
   !!
   !!  SOURCE
-  subroutine write_gaps
+  subroutine write_gaps(spin_ch)
 
     use units
     use global_module,   only: nspin
 
     implicit none
 
-    integer :: spin
+    ! Passed variables
+    integer, optional :: spin_ch
 
-    if((flag_smear_type==0.or.flag_integer_occ).and.flag_gap.and.myid==0) then
-       do spin=1,nspin
-          if(nspin>1) then
-             write(io_lun,fmt='(4x,"Spin ",i1," gap found.  VBM=",f12.5," ",a2," CBM=", &
-                  f12.5," ",a2," Gap ",f12.5," ",a2)') &
-                  spin,en_conv*vbm(spin),en_units(energy_units), &
-                  en_conv*cbm(spin),en_units(energy_units),&
-                  en_conv*(cbm(spin)-vbm(spin)),en_units(energy_units)
-          else
-             write(io_lun,fmt='(4x,"Gap found.  VBM=",f12.5," ",a2," CBM=",f12.5," ",a2," Gap ",f12.5," ",a2)') &
-                  en_conv*vbm(spin),en_units(energy_units),&
-                  en_conv*cbm(spin),en_units(energy_units),&
-                  en_conv*(cbm(spin)-vbm(spin)),en_units(energy_units)
-          end if
-          if(vbm_k(spin)==cbm_k(spin)) then
-             write(io_lun,fmt='(4x,"Direct gap found at ",3f8.4," (1/a0)")') kk(:,gap_k(spin))
-          else
-             write(io_lun,fmt='(4x,"Indirect gap found; smallest direct gap is ",f12.5," ",a2," at ",3f6.2," (1/a0)")') &
-                  en_conv*gap_d(spin),en_units(energy_units),kk(:,gap_k(spin))
-             write(io_lun,fmt='(4x,"VBM is at ",3f8.4," (1/a0)")') kk(:,vbm_k(spin))
-             write(io_lun,fmt='(4x,"CBM is at ",3f8.4," (1/a0)")') kk(:,cbm_k(spin))
+    ! Local variables
+    integer :: spin, spin_st, spin_end
+
+    if(present(spin_ch)) then
+       spin_st = spin_ch
+       spin_end = spin_ch
+    else
+       spin_st = 1
+       spin_end = nspin
+    end if
+    if((flag_smear_type==0.or.flag_integer_occ).and.myid==0) then
+       do spin=spin_st,spin_end
+          if(flag_gap(spin)) then
+             if(nspin>1) then!spin_end-spin_st>0) then
+                write(io_lun,fmt='(4x,"Spin ",i1," gap found.  VBM=",f12.5," ",a2," CBM=", &
+                     f12.5," ",a2," Gap ",f12.5," ",a2)') &
+                     spin,en_conv*vbm(spin),en_units(energy_units), &
+                     en_conv*cbm(spin),en_units(energy_units),&
+                     en_conv*(cbm(spin)-vbm(spin)),en_units(energy_units)
+             else
+                write(io_lun,fmt='(4x,"Gap found.  VBM=",f12.5," ",a2," CBM=",f12.5," ",a2," Gap ",f12.5," ",a2)') &
+                     en_conv*vbm(spin),en_units(energy_units),&
+                     en_conv*cbm(spin),en_units(energy_units),&
+                     en_conv*(cbm(spin)-vbm(spin)),en_units(energy_units)
+             end if
+             if(vbm_k(spin)==cbm_k(spin)) then
+                write(io_lun,fmt='(4x,"Direct gap found at ",3f8.4," (1/a0)")') kk(:,gap_k(spin))
+             else
+                write(io_lun,fmt='(4x,"Indirect gap found; smallest direct gap is ",f12.5," ",a2," at ",3f6.2," (1/a0)")') &
+                     en_conv*gap_d(spin),en_units(energy_units),kk(:,gap_k(spin))
+                write(io_lun,fmt='(4x,"VBM is at ",3f8.4," (1/a0)")') kk(:,vbm_k(spin))
+                write(io_lun,fmt='(4x,"CBM is at ",3f8.4," (1/a0)")') kk(:,cbm_k(spin))
+             end if
           end if
        end do
     end if
