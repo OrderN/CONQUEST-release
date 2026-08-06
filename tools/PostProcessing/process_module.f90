@@ -473,8 +473,8 @@ contains
     real(double) :: pdos_weight
     character(len=20) :: pdos_weight_str
     character(len=500) :: line
-    character(len=30), parameter :: d_orb(5) = (/ "|xy>", "|yz>", &
-        "|3z^2-r^2>", "|xz>", "|x^2-y^2>"/)
+    character(len=30), parameter :: d_orb(5) = (/ "|xy>      ", "|yz>      ", &
+        "|3z^2-r^2>", "|xz>      ", "|x^2-y^2> "/)
    character(len=30), parameter :: p_orb(3) = (/ "|y>", "|z>","|x>"/)
 
 
@@ -964,15 +964,17 @@ contains
              write(17,fmt='("# Energy(eV)   pDOS(/eV)")')
              write(17,fmt='("#                  Total         l=0         l=1                                 l=2")')
              do i=1, n_DOS
-                write(17,fmt=fmt_dos) HaToeV*(E_DOS_min + range_offset(i_spin) - efermi(i_spin) + dE_DOS*real(i-1,double)), &
-                     pDOS(i_atom,i,i_spin), ((pDOS_lm(i_m,i_l,i_atom,i,i_spin),i_m=-i_l,i_l),i_l=0,pao(i_spec)%greatest_angmom)
+                write(17,fmt=fmt_dos) HaToeV*(E_DOS_min + range_offset(i_spin) - efermi(i_spin) + &
+                     dE_DOS*real(i-1,double)), pDOS(i_atom,i,i_spin), &
+                     ((pDOS_lm(i_m,i_l,i_atom,i,i_spin),i_m=-i_l,i_l),i_l=0,pao(i_spec)%greatest_angmom)
              end do
           else if(flag_l_resolved) then
              write(17,fmt='("# Energy(eV)   pDOS(/eV)")')
              write(17,fmt='("#                  Total         l=0         l=1         l=2")')
              do i=1, n_DOS
-                write(17,fmt=fmt_dos) HaToeV*(E_DOS_min + range_offset(i_spin) - efermi(i_spin) + dE_DOS*real(i-1,double)), &
-                     pDOS(i_atom,i,i_spin), pDOS_l(0:pao(i_spec)%greatest_angmom,i_atom,i,i_spin)
+                write(17,fmt=fmt_dos) HaToeV*(E_DOS_min + range_offset(i_spin) - efermi(i_spin) + &
+                     dE_DOS*real(i-1,double)), pDOS(i_atom,i,i_spin), &
+                     pDOS_l(0:pao(i_spec)%greatest_angmom,i_atom,i,i_spin)
              end do
           else
              write(17,fmt='("# Energy(eV)   pDOS(/eV)")')
