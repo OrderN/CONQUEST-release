@@ -156,6 +156,9 @@ finite gap, you can force integer occupancies with the flag:
 
 This is false by default, and will lead to significant problems if the system is metallic
 at any point during the self-consistent ground state search, so should be considered carefully.
+In both of these cases, if there is gap in the band structure, it is written out along with
+the location in the Brillouin zone where it is found (though this result will depend very
+sensitively on the k-point sampling used).
 
 The Methfessel-Paxton approach :cite:`g-Methfessel:1989ny` to occupations allows much higher
 smearing temperatures with minimal effect on the free energy (and
