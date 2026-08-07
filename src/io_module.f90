@@ -3287,11 +3287,11 @@ second:   do
 
     integer :: i
 
-    if(inode==ionode) then
-       write(io_lun,fmt='(/4x,"Simulation cell dimensions: ",f10.4,a3," x ",f10.4,a3," x ",f10.4,a3)') &
+  if(inode==ionode) then
+       write(io_lun,fmt='(/4x,"Simulation cell dimensions: ",f18.4,1x,a2," x ",f18.4,1x,a2," x ",f18.4,1x,a2)') &
             r_super_x*dist_conv, d_units(dist_units), r_super_y*dist_conv, d_units(dist_units), &
             r_super_z*dist_conv, d_units(dist_units)
-       write(io_lun,fmt='(/4x,"Simulation cell volume:     ",f10.4,a3,a3)') &
+       write(io_lun,fmt='(/4x,"Simulation cell volume:     ",f18.6,1x,a2,a3)') &
             volume*dist_conv*dist_conv*dist_conv, d_units(dist_units),'**3'
        if(flag_coords_xyz) then
           write(io_lun,fmt='(6x,"           X         Y         Z")')

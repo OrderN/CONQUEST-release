@@ -2582,7 +2582,8 @@ contains
                iter, max_stress*volume, enthalpy1, en_conv*dH
           if (iprint_MD > 1) then
              write(io_lun,'(4x,"Maximum stress         ",e14.6," Ha/Bohr**3")') max_stress
-             write(io_lun,'(4x,"Simulation cell volume ",e14.6," Bohr**3")') volume
+             write(io_lun,'(4x,"Simulation cell volume ",f18.6,1x,a2,a3)') &
+                  volume*dist_conv**3, d_units(dist_units), '**3'
              write(io_lun,'(4x,"Maximum stress         ",f14.6," GPa")') &
                   max_stress*HaBohr3ToGPa
              write(io_lun,'(4x,"Stress tolerance:      ",f14.6," GPa")') &
@@ -4059,7 +4060,8 @@ contains
           write(io_lun,'(4x,"Force tolerance:       ",f19.8)') MDcgtol
           write(io_lun,'(4x,"Maximum stress         ",e14.6," Ha/Bohr**3")') &
             max_stress
-          write(io_lun,'(4x,"Simulation cell volume ",e14.6," Bohr**3")') volume
+          write(io_lun,'(4x,"Simulation cell volume ",f18.6,1x,a2,a3)') &
+            volume*dist_conv**3, d_units(dist_units), '**3'
           write(io_lun,'(4x,"Maximum stress         ",f14.6," GPa")') &
                max_stress*HaBohr3ToGPa
           write(io_lun,'(4x,"Stress tolerance: ",f14.6," GPa")') &
