@@ -343,7 +343,7 @@ contains
     use numbers
     use primary_module, ONLY : bundle
     use species_module, ONLY : charge, species
-    use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl
+    use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl, type_int
 
 
     implicit none
@@ -366,6 +366,24 @@ contains
     real(double), dimension(3) :: abs_sep, rel_sep
     real(double), dimension(3,3) :: real_cell_vec, recip_cell_vec, &
          part_cell_vec, part_cell_dual
+
+    ! Release cell-dependent caches before rebuilding the Ewald setup.
+    if(allocated(ewald_g_vector_x)) then
+       call reg_dealloc_mem(area_general,4*size(ewald_g_vector_x),type_dbl)
+       deallocate(ewald_g_vector_x,ewald_g_vector_y,ewald_g_vector_z,&
+            ewald_g_factor,STAT=stat)
+       if(stat/=0) call cq_abort("set_ewald: error releasing reciprocal cache",stat)
+    end if
+    if(allocated(partition_neighbour_list)) then
+       call reg_dealloc_mem(area_general,size(partition_neighbour_list),type_int)
+       deallocate(partition_neighbour_list,STAT=stat)
+       if(stat/=0) call cq_abort("set_ewald: error releasing neighbour cache",stat)
+    end if
+    if(allocated(ion_interaction_force)) then
+       call reg_dealloc_mem(area_general,size(ion_interaction_force),type_dbl)
+       deallocate(ion_interaction_force,STAT=stat)
+       if(stat/=0) call cq_abort("set_ewald: error releasing force cache",stat)
+    end if
 
     if(inode == ionode.AND.iprint_gen>1) &
          write(io_lun,fmt='(/8x," edge lengths of orthorhombic supercell:", &
@@ -774,7 +792,7 @@ contains
          call cq_abort("set_ewald: error allocating partition_neighbour_list ", &
          bundle%groups_on_node,n_partition_neighbours)
     call reg_alloc_mem(area_general,bundle%groups_on_node*&
-         n_partition_neighbours,type_dbl)
+         n_partition_neighbours,type_int)
 
     do ip = 1, bundle%groups_on_node
 
