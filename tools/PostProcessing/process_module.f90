@@ -470,16 +470,14 @@ contains
     real(double), dimension(:,:), allocatable :: occ
     real(double), dimension(:,:), allocatable :: total_electrons
     real(double), dimension(:,:,:), allocatable :: total_electrons_l
-    real(double) :: A1(3, 3), A2(5, 5), A1inv(3, 3), A2inv(5, 5)
-    real(double) :: C1(3, 3), C2(5, 5), E1(3,3), E2(5,5)
-    real(double) :: rod(9), angle, axis(3)
-    real(double) :: pdos_weight
+    real(double) :: A1(3, 3), A2(5, 5), C1(3, 3), C2(5, 5), E1(3,3), E2(5,5),Qxyz(3,3)
+    real(double) :: rod(9), angle, axis(3), temp_matrix(3,3)
+    real(double) :: pdos_weight, identity3(3,3), identity5(5,5)
     character(len=20) :: pdos_weight_str
     character(len=500) :: line
-    character(len=30), parameter :: d_orb(5) = (/ "|xy>      ", "|yz>      ", &
-        "|3z^2-r^2>", "|xz>      ", "|x^2-y^2> "/)
-   character(len=30), parameter :: p_orb(3) = (/ "|y>", "|z>","|x>"/)
-
+    character(len=30), parameter :: d_orb(5) = (/ "|xy>", "|yz>", &
+        "|3z^2-r^2>", "|xz>", "|x^2-y^2>"/)
+    character(len=30), parameter :: p_orb(3) = (/ "|y>", "|z>","|x>"/)
 
 
     character(len=25) :: filename,fmt_dos
@@ -581,7 +579,8 @@ contains
                write(*, fmt='(/4x,"Rotation angle (rad/deg) [0, 2pi]: ",2(f10.5,1X))') &
                   angle, angle * 180/pi
                write(*, fmt='(/4x,"Rotation axis: ", 3(f10.5,1X))') axis
-               write(*, fmt='(/2x,"Equivalent Euler angles. Using `Process.RotatePDOSMode 1` should give the same result.")')
+               write(*, fmt= &
+               '(/2x,"Equivalent Euler angles. Using `Process.RotatePDOSMode 1`should give the same result.")')
                write(*, fmt='(/4x,"alpha: ", (f10.5,1X))', advance="no") &
                   180/pi*(datan2(axis(3)*tan(angle / 2),1.0) + datan2(axis(2), axis(1)) - (pi/2))
                write(*, fmt='(/4x,"beta: ", (f10.5,1X))',  advance="no") &
