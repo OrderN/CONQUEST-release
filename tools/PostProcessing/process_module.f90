@@ -7,6 +7,7 @@ module process
   ! Maximum possible number of spin components for simplicity
   real(double), dimension(4) :: range_offset
 
+
 contains
 
   subroutine assign_blocks
@@ -14,6 +15,7 @@ contains
     use datatypes
     use local, ONLY: block_store, nprocs, block_size_x, block_size_y, block_size_z, &
          stm_z_min, stm_z_max, stm_x_min, stm_x_max, stm_y_min, stm_y_max
+
 
     implicit none
 
@@ -80,6 +82,7 @@ contains
           if(ispin==1) ci = TRIM(charge_stub)//"_up"
           if(ispin==2) ci = TRIM(charge_stub)//"_dn"
        end if
+       do proc = 1, nprocs
        do proc = 1, nprocs
           call get_file_name(ci,nprocs,proc,filename)
           ! Open file
@@ -539,6 +542,14 @@ contains
       if (allocated(U1))  deallocate(U1)
       if (allocated(U2))  deallocate(U2)
       ! Using axes
+      identity3 = 0.0
+      do i = 1, size(identity3(:,1))
+         identity3(i,i) = 1.0
+      end do
+      identity5 = 0.0
+      do i = 1, size(identity5(:,1))
+         identity5(i,i) = 1.0
+      end do
       if (flag_rotate_pdos_mode == 0) then
          write(*,fmt='(2x,"Using user input axes")')
          allocate(U1(3,3,n_atoms_pDOS))
@@ -564,10 +575,19 @@ contains
             call construct_Ul(2, A2, C2, U2(:,:,i))
             U1(:,:,i) = transpose(U1(:,:,i))
             U2(:,:,i) = transpose(U2(:,:,i))
+
             if (flag_rotate_pdos_debug) then
+
                write(*, fmt='(/4x,"Rotation angle (rad/deg) [0, 2pi]: ",2(f10.5,1X))') &
                   angle, angle * 180/pi
                write(*, fmt='(/4x,"Rotation axis: ", 3(f10.5,1X))') axis
+               write(*, fmt='(/2x,"Equivalent Euler angles. Using `Process.RotatePDOSMode 1` should give the same result.")')
+               write(*, fmt='(/4x,"alpha: ", (f10.5,1X))', advance="no") &
+                  180/pi*(datan2(axis(3)*tan(angle / 2),1.0) + datan2(axis(2), axis(1)) - (pi/2))
+               write(*, fmt='(/4x,"beta: ", (f10.5,1X))',  advance="no") &
+                  180/pi*2*asin(sin(acos(axis(3))) * sin(angle / 2))
+               write(*, fmt='(/4x,"gamma: ", (f10.5,1X))',  advance="no") &
+                  180/pi*(datan2(axis(3)*tan(angle / 2),1.0) - datan2(axis(2), axis(1)) + (pi/2))
                write(*, fmt='(/4x, "C1: ")')
                do j = 1, 3
                   write(*, fmt='(/6x,3(f10.5,1X))',  advance='no') C1(j,:)
@@ -597,6 +617,12 @@ contains
                   end do
                   write(*, '(/6x,(A))') trim(line)
                end do ! end printing l = 1 orbital weights
+
+               if(all(abs(matmul(U1(:,:,i), transpose(U1(:,:,i))) - identity3) < 1e-7)) then
+                  write(*, '(/2x, A)', advance='no') 'U1 matrix is orthogonal: PASS'
+               else
+                  write(*, '(/2x, A)', advance='no') 'U1 matrix is orthogonal: FAIL'
+               endif
                write(*, fmt='(/4x, "U2: ")')
                do j = 1, 5
                   write(*, fmt='(/6x,5(f10.5,1X))', advance='no') U2(j,:,i)
@@ -615,6 +641,11 @@ contains
                   end do
                   write(*, '(/6x,(A))') trim(line)
                end do ! end printing l = 2 orbital weights
+               if(all(abs(matmul(U2(:,:,i), transpose(U2(:,:,i))) - identity5) < 1e-7)) then
+                  write(*, '(/2x, A)', advance='no') 'U2 matrix is orthogonal: PASS'
+               else
+                  write(*, '(/2x, A)', advance='no') 'U2 matrix is orthogonal: FAIL'
+               endif
             end if ! end rotation debug output
           end do
 
@@ -622,6 +653,10 @@ contains
          write(*,fmt='(2x,"Using extrinsic Euler angles in active zyz convention")')
          allocate(U1(3,3,rotate_pdos_natoms))
          allocate(U2(5,5,rotate_pdos_natoms))
+         Qxyz = 0.0
+         Qxyz(1,2) = 1.0
+         Qxyz(2,3) = 1.0
+         Qxyz(3,1) = 1.0
          do i = 1, rotate_pdos_natoms
             write(*, fmt='(/2x,"New local axes for specified atoms: ", *(I0,1x))') &
                rotate_pdos_atoms_euler(i)
@@ -630,13 +665,26 @@ contains
             U2(:,:,i) = E2
             ! We only explicitly construct wavefunction rotation matrices
             ! However can extrapolate new local axes using E1 since orbital basis is {y,z,x}
+            write(*, fmt='(/4x,"Image of x,y,z under this active rotation, in standard basis x,y,z")', advance="no")
             write(*, fmt='(/4x,"x: ",3(f10.5,1X))', advance="no") &
-               E1(3,3), E1(3,1), E1(3,2)
+            E1(3,3), E1(1,3), E1(2,3)
             write(*, fmt='(/4x,"y: ",3(f10.5,1X))', advance="no") &
-               E1(1,3), E1(1,1), E1(1,2)
+            E1(3,1), E1(1,1), E1(2,1)
             write(*, fmt='(/4x,"z: ",3(f10.5,1X))', advance="no") &
-               E1(2,3), E1(2,1), E1(2,2)
+            E1(3,2), E1(1,2), E1(2,2)
+            temp_matrix = matmul(inv(Qxyz), matmul(E1, Qxyz))
+            temp_matrix = inv(temp_matrix)
+             write(*, fmt='(/4x,"Equivalent basis transformation (inverse of active coordinates)")', advance="no")
+             write(*, fmt='(/4x,"x: ",3(f10.5,1X))', advance="no") &
+               temp_matrix(:,1)
+            write(*, fmt='(/4x,"y: ",3(f10.5,1X))', advance="no") &
+               temp_matrix(:,2)
+            write(*, fmt='(/4x,"z: ",3(f10.5,1X))', advance="no") &
+               temp_matrix(:,3)
             if (flag_rotate_pdos_debug) then
+               write(*, fmt='(/4x, "alpha(z) beta(y) gamma(z): ",3(f10.5,1X))') &
+                  euler_angles(1,i), euler_angles(2,i),euler_angles(3,i)
+
                write(*, fmt='(/4x, "U1: ")')
                do j = 1, 3
                   write(*, fmt='(/6x,3(f10.5,1X))',  advance='no') U1(j,:,i)
@@ -657,7 +705,14 @@ contains
                      end if
                   end do
                   write(*, '(/6x,(A))') trim(line)
+
                end do ! end printing l = 1 orbital weights
+               print *, inv(E1)
+               if(all(abs(matmul(U1(:,:,i), transpose(U1(:,:,i))) - identity3) < 1e-7)) then
+                  write(*, '(/2x, A)', advance='no') 'U1 matrix is orthogonal: PASS'
+               else
+                  write(*, '(/2x, A)', advance='no') 'U1 matrix is orthogonal: FAIL'
+               endif
                write(*, fmt='(/4x, "U2: ")')
                do j = 1, 5
                   write(*, fmt='(/6x,5(f10.5,1X))', advance='no') U2(j,:,i)
@@ -676,6 +731,11 @@ contains
                   end do
                   write(*, '(/6x,(A))') trim(line)
                end do ! end printing l = 2 orbital weights
+               if(all(abs(matmul(U2(:,:,i), transpose(U2(:,:,i))) - identity5) < 1e-7)) then
+                  write(*, '(/2x, A)', advance='no') 'U2 matrix is orthogonal: PASS'
+               else
+                  write(*, '(/2x, A)', advance='no') 'U2 matrix is orthogonal: FAIL'
+               endif
             end if ! end rotation debug mode
          end do
       else if (flag_rotate_pdos_mode == 2) then
@@ -703,6 +763,9 @@ contains
             call construct_Ul(2, A2, C2, U2(:,:,i))
             U1(:,:,i) = transpose(U1(:,:,i))
             U2(:,:,i) = transpose(U2(:,:,i))
+            print *, datan2(pdos_az(2), pdos_az(1)) * 180 / pi
+            print *, datan2(sqrt(1.0 - pdos_az(3)*pdos_az(3)) ,pdos_az(3))* 180 / pi
+            print *, datan2(pdos_ay(3),-pdos_ax(3))* 180 / pi
             if (flag_rotate_pdos_debug) then
                write(*, fmt='(/4x,"Rotation angle (rad/deg) [0, 2pi]: ",2(f10.5,1X))') &
                   angle, angle * 180/pi
@@ -736,6 +799,11 @@ contains
                   end do
                   write(*, '(/6x,(A))') trim(line)
                end do ! end printing l = 1 orbital weights
+               if(all(abs(matmul(U1(:,:,i), transpose(U1(:,:,i))) - identity3) < 1e-7)) then
+                  write(*, '(/2x, A)', advance='no') 'U1 matrix is orthogonal: PASS'
+               else
+                  write(*, '(/2x, A)', advance='no') 'U1 matrix is orthogonal: FAIL'
+               endif
                write(*, fmt='(/4x, "U2: ")')
                do j = 1, 5
                   write(*, fmt='(/6x,5(f10.5,1X))', advance='no') U2(j,:,i)
@@ -754,6 +822,11 @@ contains
                   end do
                   write(*, '(/6x,(A))') trim(line)
                end do ! end printing l = 2 orbital weights
+               if(all(abs(matmul(U2(:,:,i), transpose(U2(:,:,i))) - identity5) < 1e-7)) then
+                  write(*, '(/2x, A)', advance='no') 'U2 matrix is orthogonal: PASS'
+               else
+                  write(*, '(/2x, A)', advance='no') 'U2 matrix is orthogonal: FAIL'
+               endif
             end if ! end rotation debug output
          end do
       end if ! pdos rotation mode
@@ -1065,6 +1138,7 @@ contains
       matrix(3, 1) = -vector(2)
       matrix(3, 2) = vector(1)
    end subroutine
+
    ! -----------------------------------------------------------------------------
    ! Subroutine construct_EulerMatrices
    ! -----------------------------------------------------------------------------
@@ -1088,12 +1162,15 @@ contains
    !!   10/04/2026
    !!  MODIFICATION HISTORY
    !!    13/04/2026 - C. Xu: Add Euler matrix for d-orbitals
+   !!    20/07/2026 - C. Xu: Add output matrices in debugging mode
+   !!    30/07/2026 - C. Xu: Correct E2(3,2): alpha -> beta
    !!  SOURCE
    !!    Credits to R. Johnson for the mathematical expressions
+   !!    Also see: Quantum Theory of Angular Momentum
    subroutine construct_EulerMatrices(E1, E2, atom_index)
       use datatypes
       use numbers, ONLY: pi
-      use local, ONLY: euler_angles
+      use local, ONLY: euler_angles, flag_rotate_pdos_debug
       use GenComms, ONLY: cq_abort
 
       implicit none
@@ -1101,8 +1178,8 @@ contains
       real(double), intent(out) :: E1(3,3), E2(5,5)
       real(double) :: ca, sa, cb, sb, cg, sg, c2a, s2a, c2b, s2b, c2g, s2g
       real(double) :: euler_alpha, euler_beta, euler_gamma
-      real(double) :: Q1(3,3), Q2(5,5)
-
+      real(double) :: Q1(3,3), Q2(5,5), identity3(3,3), identity5(5,5)
+      integer :: i
       euler_alpha =  euler_angles(1,atom_index)
       euler_beta =  euler_angles(2,atom_index)
       euler_gamma =  euler_angles(3,atom_index)
@@ -1147,46 +1224,15 @@ contains
       ! E1(3,1) = cb*cg*sa + ca*sg
       ! E1(3,2) = sa*sb
       ! E1(3,3) = ca*cg - cb*sa*sg
-      E1(3,3) = ca*cb*cg - sa*sg
-      E1(3,2) = ca*sb
-      E1(3,1) = -cg*sa - ca*cb*sg
-      E1(2,3) = -cg*sb
+      E1(1,1) = ca*cb*cg - sa*sg
+      E1(1,2) = ca*sb
+      E1(1,3) = -cg*sa - ca*cb*sg
+      E1(2,1) = -cg*sb
       E1(2,2) = cb
-      E1(2,1) = sb*sg
-      E1(1,3) = cb*cg*sa + ca*sg
-      E1(1,2) = sa*sb
-      E1(1,1) = ca*cg - cb*sa*sg
-
-      ! Rotation of l = 2 coefficients
-      ! E2(5,5) = 0.25*c2a*c2g*(3.0+c2b) - s2a*cb*s2g
-      ! E2(5,4) = 0.5*c2a*s2b*cg - s2a*sb*sg
-      ! E2(5,3) = 0.5*sqrt(3.0)*c2a*sb*sb
-      ! E2(5,2) = -sb*(c2a*cb*sg + s2a*cg)
-      ! E2(5,1) = -cb*s2a*c2g -0.25*c2a*(3.0+c2b)*s2g
-
-      ! E2(4,5) = sa*sb*s2g - 0.5*ca*c2g*s2b
-      ! E2(4,4) = ca*c2b*cg - sa*cb*sg
-      ! E2(4,3) = sqrt(3.0)*ca*sb*cb
-      ! E2(4,2) = -cb*sa*cg -ca*c2b*sg
-      ! E2(4,1) = sb*(ca*cb*s2g + c2g*sa)
-
-      ! E2(3,5) = 0.5*sqrt(3.0)*sb*sb*c2g
-      ! E2(3,4) = -sqrt(3.0)*sa*cb*cg
-      ! E2(3,3) = 0.25*(3.0*c2b+1.0)
-      ! E2(3,2) = sqrt(3.0)*sb*cb*sg
-      ! E2(3,1) = -sqrt(3.0)*sb*sb*sg*cg
-
-      ! E2(2,5) = -sb*(sa*cb*c2g + ca*s2g)
-      ! E2(2,4) = sa*c2b*cg + ca*cb*sg
-      ! E2(2,3) = sqrt(3.0)*sa*sb*cb
-      ! E2(2,2) = ca*cb*cg - sa*c2b*sg
-      ! E2(2,1) = sb*(sa*cb*s2g - ca*c2g)
-
-      ! E2(1,5) = 0.25*s2a*(c2b + 3.0)*c2g + c2a*cb*s2g
-      ! E2(1,4) = sb*(s2a*cb*cg + c2a*sg)
-      ! E2(1,3) = sqrt(3.0)*sa*sb*sb*ca
-      ! E2(1,2) = sb*(c2a*cg - 2*sa*ca*cb*sg)
-      ! E2(1,1) = c2a*cb*c2g - sa*ca*(3.0 + c2b)*sg*cg
+      E1(2,3) = sb*sg
+      E1(3,1) = cb*cg*sa + ca*sg
+      E1(3,2) = sa*sb
+      E1(3,3) = ca*cg - cb*sa*sg
 
 
       ! NEWW V2
@@ -1195,7 +1241,6 @@ contains
       E2(1,3) = 0.5*sqrt(3.0)*c2a*sb*sb
       E2(1,4) = -sb*(c2a*cb*sg + s2a*cg)
       E2(1,5) = -cb*s2a*c2g -0.25*c2a*(3.0+c2b)*s2g
-
       E2(2,1) = sa*sb*s2g - 0.5*ca*c2g*s2b
       E2(2,2) = ca*c2b*cg - sa*cb*sg
       E2(2,3) = sqrt(3.0)*ca*sb*cb
@@ -1203,7 +1248,7 @@ contains
       E2(2,5) = sb*(ca*cb*s2g + c2g*sa)
 
       E2(3,1) = 0.5*sqrt(3.0)*sb*sb*c2g
-      E2(3,2) = -sqrt(3.0)*sa*cb*cg
+      E2(3,2) = -sqrt(3.0)*sb*cb*cg
       E2(3,3) = 0.25*(3.0*c2b+1.0)
       E2(3,4) = sqrt(3.0)*sb*cb*sg
       E2(3,5) = -sqrt(3.0)*sb*sb*sg*cg
@@ -1219,40 +1264,39 @@ contains
       E2(5,3) = sqrt(3.0)*sa*sb*sb*ca
       E2(5,4) = sb*(c2a*cg - 2*sa*ca*cb*sg)
       E2(5,5) = c2a*cb*c2g - sa*ca*(3.0 + c2b)*sg*cg
-      ! NEWWWW V1
-      ! E2(1,1) = 0.25*c2a*c2g*(3.0+c2b) - s2a*cb*s2g
-      ! E2(1,2) = 0.5*c2a*s2b*cg - s2a*sb*sg
-      ! E2(1,3) = 0.5*sqrt(3.0)*c2a*sb*sb
-      ! E2(1,4) = -sb*(c2a*cb*sg + s2a*cg)
-      ! E2(1,5) = -cb*s2a*c2g -0.25*c2a*(3.0+c2b)*s2g
 
-      ! E2(2,1) = sa*sb*s2g - 0.5*ca*c2g*s2b
-      ! E2(2,2) = ca*c2b*cg - sa*cb*sg
-      ! E2(2,3) = sqrt(3.0)*ca*sb*cb
-      ! E2(2,4) = -cb*sa*cg -ca*c2b*sg
-      ! E2(2,5) = sb*(ca*cb*s2g + c2g*sa)
-
-      ! E2(3,1) = 0.5*sqrt(3.0)*sb*sb*c2g
-      ! E2(3,2) = -sqrt(3.0)*sa*cb*cg
-      ! E2(3,3) = 0.25*(3.0*c2b+1.0)
-      ! E2(3,4) = sqrt(3.0)*sb*cb*sg
-      ! E2(3,5) = -sqrt(3.0)*sb*sb*sg*cg
-
-      ! E2(4,1) = -sb*(sa*cb*c2g + ca*s2g)
-      ! E2(4,2) = sa*c2b*cg + ca*cb*sg
-      ! E2(4,3) = sqrt(3.0)*sa*sb*cb
-      ! E2(4,4) = ca*cb*cg - sa*c2b*sg
-      ! E2(4,5) = sb*(sa*cb*s2g - ca*c2g)
-
-      ! E2(5,1) = 0.25*s2a*(c2b + 3.0)*c2g + c2a*cb*s2g
-      ! E2(5,2) = sb*(s2a*cb*cg + c2a*sg)
-      ! E2(5,3) = sqrt(3.0)*sa*sb*sb*ca
-      ! E2(5,4) = sb*(c2a*cg - 2*sa*ca*cb*sg)
-      ! E2(5,5) = c2a*cb*c2g - sa*ca*(3.0 + c2b)*sg*cg
+      ! Print out matrices before basis conversion
+      if (flag_rotate_pdos_debug) then
+         write(*, fmt='(/4x, "E2 (in old basis): ")')
+         do i = 1, 5
+            write(*, fmt='(/6x,5(f10.5,1X))', advance='no') E2(i,:)
+         end do
+      end if
       ! Require change of basis to correct orbital convention
-      !E1 = matmul(inv(Q1), matmul(E1, Q1))
+      E1 = matmul(inv(Q1), matmul(E1, Q1))
       E2 = matmul(inv(Q2), matmul(E2, Q2))
-      !E2 = transpose(E2)
+
+      if (flag_rotate_pdos_debug) then
+         identity3 = 0.0
+         identity5 = 0.0
+         do i = 1,3
+            identity3(i,i) = 1.0
+         end do
+         do i = 1,5
+            identity5(i,i) = 1.0
+         end do
+
+         if(all(abs(matmul(E1, transpose(E1)) - identity3) < 1e-7)) then
+            write(*, '(/2x, "E1 matrix is orthogonal: PASS")', advance='no')
+         else
+            write(*, '(/2x, "E1 matrix is orthogonal: FAIL")', advance='no')
+         endif
+         if(all(abs(matmul(E2, transpose(E2)) - identity5) < 1e-7)) then
+            write(*, '(/2x, "E2 matrix is orthogonal: PASS")', advance='no')
+         else
+            write(*, '(/2x, "E2 matrix is orthogonal: FAIL")', advance='no')
+         endif
+      end if
    end subroutine construct_EulerMatrices
    ! -----------------------------------------------------------------------------
    ! Subroutine calculate_axis_angle
@@ -1370,12 +1414,6 @@ contains
                end if
             end do
          end do
-         real_eigenvalue = WR(1) + WR(2)
-         imag_eigenvalue = WI(1) - WI(2)
-         angle2 = acos(real_eigenvalue / 2)
-         print *, angle2
-         angle2 = asin(imag_eigenvalue / 2)
-         print *, angle2
       end if ! End debug: print all eigenvalues/vectors
       ! print *, acos()
       if (axis(1) /= axis(1) .or. axis(2) /= axis(2) .or. axis(3) /= axis(3)) &
@@ -1423,15 +1461,17 @@ contains
 
       KT = transpose(K)
       ! Rodrigues rotation matrix but with -angle
-      temp = identity - (sin(angle)*KT) + (1 - cos(angle))*matmul(KT, KT)
+      temp = identity + (sin(angle)*KT) + (1 - cos(angle))*matmul(KT, KT)
       matrix = reshape(transpose(temp), shape=(/9/))
    end subroutine construct_rodrigues
 
    subroutine construct_C1(rod, C1)
       use datatypes
+      use local, ONLY: flag_rotate_pdos_debug
       implicit none
       real(double), intent(in) :: rod(9)
       real(double), intent(out) :: C1(3, 3)
+      real(double) :: identity(3,3)
       integer :: i
       C1(1, 1) = rod(1)
       C1(1, 2) = rod(2)
@@ -1442,12 +1482,25 @@ contains
       C1(3, 1) = rod(7)
       C1(3, 2) = rod(8)
       C1(3, 3) = rod(9)
+      if (flag_rotate_pdos_debug) then
+         identity = 0.0
+         identity(1, 1) = 1.0
+         identity(2, 2) = 1.0
+         identity(3, 3) = 1.0
+         if(all(abs(matmul(C1, transpose(C1)) - identity) < 1e-8)) then
+            write(*, '(/2x, "C1 matrix is orthogonal: PASS")', advance='no')
+         else
+            write(*, '(/2x, "C1 matrix is orthogonal: FAIL")', advance='no')
+         endif
+      end if
    end subroutine construct_C1
    subroutine construct_C2(r, C2)
       use datatypes
+      use local, ONLY: flag_rotate_pdos_debug
       implicit none
       real(double), intent(in) :: r(9)
       real(double), intent(out) :: C2(5, 5)
+      real(double) :: identity(5,5)
 
       C2(1, 1) = r(6)*r(8) + r(5)*r(9)
       C2(1, 2) = r(6)*r(7) + r(4)*r(9)
@@ -1480,6 +1533,19 @@ contains
       C2(5, 3) = (4*r(7)*r(8)) - 2*(r(1)*r(2) + r(4)*r(5))
       C2(5, 5) = r(9)*r(9) - 0.5*(r(3)*r(3) + r(6)*r(6))
       C2(5, 4) = C2(5, 5) - r(1)*r(1) - r(4)*r(4) + 2*r(7)*r(7)
+      if (flag_rotate_pdos_debug) then
+         identity = 0.0
+         identity(1, 1) = 1.0
+         identity(2, 2) = 1.0
+         identity(3, 3) = 1.0
+         identity(4, 4) = 1.0
+         identity(5, 5) = 1.0
+         if(all(abs(matmul(C2, transpose(C2)) - identity) < 1e-8))  then
+            write(*, '(/2x, "C2 matrix is orthogonal: PASS")', advance='yes')
+         else
+            write(*, '(/2x, "C2 matrix is orthogonal: FAIL")', advance='yes')
+         endif
+      end if
    end subroutine construct_C2
    function inv(A) result(Ainv)
       use datatypes
@@ -1579,19 +1645,13 @@ contains
       if (.not. allocated(g_atom_lookup)) allocate(g_atom_lookup(rotate_counter))
       !  Define the lookups correctly for each mode
       if (flag_rotate_pdos_mode == 2) then
-         do i_atom = 1, rotate_counter
-            ! Atom counter should be the order the user input pDOSNeighbours block
-            g_atom_lookup(i_atom) = find_neighbours(1, i_atom)
-         end do
+         ! Atom counter should be the order the user input pDOSNeighbours block
+            g_atom_lookup = find_neighbours(1, :)
       else if (flag_rotate_pdos_mode == 1) then
          ! Atom counter should be the order the user input pDOSEuler block
-         do i_atom = 1, rotate_counter
-            g_atom_lookup(i_atom) = rotate_pdos_atoms_euler(i_atom)
-         end do
+            g_atom_lookup = rotate_pdos_atoms_euler
       else
-         do i_atom = 1, rotate_counter
-            g_atom_lookup(i_atom) = pDOS_atom_index(i_atom)
-         end do
+            g_atom_lookup = pDOS_atom_index
       end if
       do i_spin = 1, nspin
          do i_kp = 1, nkp
@@ -1672,12 +1732,15 @@ contains
       real(double), intent(out), allocatable :: bond(:,:)
 
 
+
+
       ! Local variables
       real(double), parameter :: err = 1e-5
       real(double) :: distances(1:ni_in_cell), temp(1:ni_in_cell)
       real(double) ::cx, cy, cz, dist, dx, dy, dz, atomno_pos(3)
       integer :: i, j, min_idx, ibond_max_len, idx_direction
       ! Reset allocatables as this subroutine is called in a loop
+      ! and populated with new data every time
       ! and populated with new data every time
       if (allocated(nghbr_arr)) deallocate(nghbr_arr)
       if (allocated(bond)) deallocate(bond)
@@ -1736,6 +1799,7 @@ contains
 
       end do
 
+
    end subroutine
    ! -----------------------------------------------------------------------------
    ! Subroutine axes_from_nn
@@ -1749,8 +1813,11 @@ contains
    !!   axes_from_nn(atomno, bond)
    !!  PURPOSE
    !! This subroutine will use computed nearest_neighbours
+   !! This subroutine will use computed nearest_neighbours
    !!  and specified local geometry to construct  a new set of local
    !!  axes to rotate the pDOS into
+   !!
+   !!  For square-planar geometry:
    !!
    !!  For square-planar geometry:
    !!   Longest bond is chosen as x_hat.
@@ -1758,6 +1825,7 @@ contains
    !!      projected onto a plane defined by x_hat
    !!   y_hat is chosen from the projected direction
    !!      which has the minimal difference to its unprojected bond
+   !!   z_hat is computed as the cross-product from these 2 directions, and thus
    !!   z_hat is computed as the cross-product from these 2 directions, and thus
    !!      point perpendicular to the planar geometry
    !!  For octahedra: choose z_hat as longest or shortest bond
@@ -1810,29 +1878,33 @@ contains
       allocate(norm_bond(3, size(bond(1,:))))
       allocate(bond_lengths(size(bond(1,:))))
       do i = 1, size(bond_lengths)
-         bond_lengths(i) = dot_product(bond(:, i), bond(:, i))
+         bond_lengths(i) = sqrt(dot_product(bond(:, i), bond(:, i)))
          if (bond_lengths(i) > 1e-10) then
               norm_bond(:, i) = bond(:, i) / bond_lengths(i)
           else
               call cq_abort("axes_from_nn: Zero-length bond")
           end if
       end do
+      ! find_atomno: index of user supplied central atom, atomno
       find_atomno = findloc(find_neighbours(1,:), atomno, dim=1)
       minormax = find_neighbours(3, find_atomno)
       if (minormax < 0) then
         ibond_principal = minloc(bond_lengths,1) ! gets neighbour with min bond length
       else if (minormax .eq. 0) then
-        ibond_principal = maxloc(bond_lengths,1) ! gets neighbour with maximum bond length
-       else
-        ibond_principal = findloc(nghbr_arr, minormax, dim=1)
+         ibond_principal = maxloc(bond_lengths,1) ! gets neighbour with maximum bond length
+      else
+         ibond_principal = findloc(nghbr_arr, minormax, dim=1)
       end if
       if (ibond_principal == 0) &
-            call cq_abort('axes_from_nn: principal neighbour not found for atom ', find_atomno)
+      call cq_abort('axes_from_nn: principal neighbour not found for atom ', find_atomno)
+
+      write(*,fmt='(/2x,"Principal neighbour found: atom ", (I0,1x))') nghbr_arr(ibond_principal)
       dots = matmul(transpose(norm_bond), norm_bond(:, ibond_principal))  ! dot prod with chosen normal
-      idx_direction = minloc(abs(dots), 1) ! select index of closest to perpendicular bond
+      ! select index of closest to perpendicular bond - there may be two
+      idx_direction = minloc(abs(dots), 1)
       if (find_neighbours(4, find_atomno) == 0) then
-      ! If 0, we choose second direction by closest projection
-      call project_onto_plane(bond(:, ibond_principal),bond(:, idx_direction), proj_vector)
+         ! If 0, we choose second direction by closest projection
+         call project_onto_plane(bond(:, ibond_principal),bond(:, idx_direction), proj_vector)
       else
          ! This entry > 0 -> corresponds to neighbour
          ibond_sec = findloc(nghbr_arr, find_neighbours(4, find_atomno), dim=1)
@@ -1842,18 +1914,20 @@ contains
 
          if (abs(dots(ibond_sec)) > 0.5) &
             print *, "WARNING: Chosen secondary neighbour appears to not be very perpendicular to principal."
+         write(*,fmt='(/2x,"Secondary neighbour found: atom ", (I0,1x))') nghbr_arr(ibond_sec)
+
          call project_onto_plane(bond(:, ibond_principal),bond(:, ibond_sec), proj_vector)
    end if ! choice of 2nd direction
    if ( find_neighbours(1, find_atomno) == find_neighbours(4, find_atomno)) &
             call cq_abort("axes_from_nn: cannot have the principal neighbour also as the second direction")
       select case (find_neighbours(2, find_atomno))
       case (0)
-         pdos_ay = bond(:, ibond_principal)
-         pdos_ax = proj_vector
+         pdos_ax = norm_bond(:, ibond_principal)
+         pdos_ay = proj_vector
          pdos_az = cross_product(pdos_ax, pdos_ay)
       case (1)
          pdos_ay = proj_vector
-         pdos_az = bond(:, ibond_principal)
+         pdos_az = norm_bond(:, ibond_principal)
          pdos_ax = cross_product(pdos_ay, pdos_az)
 
       end if
