@@ -521,7 +521,7 @@ contains
     if (flag_rotate_pdos) then
       write(*,fmt='(2x,"Rotating wavefunction coefficients")')
       call initialise_A_mat(A1, A2)
-      if (flag_rotate_pdos_debug) then
+      if (flag_rotate_pdos_debug .and. flag_rotate_pdos_mode /= 1) then
          write(*, fmt='(/2x,"ROTATION DEBUG OUTPUT: MODE ", (I0,1x))') &
             flag_rotate_pdos_mode
 
@@ -706,7 +706,6 @@ contains
                   write(*, '(/6x,(A))') trim(line)
 
                end do ! end printing l = 1 orbital weights
-               print *, inv(E1)
                if(all(abs(matmul(U1(:,:,i), transpose(U1(:,:,i))) - identity3) < 1e-7)) then
                   write(*, '(/2x, A)', advance='no') 'U1 matrix is orthogonal: PASS'
                else
@@ -762,13 +761,18 @@ contains
             call construct_Ul(2, A2, C2, U2(:,:,i))
             U1(:,:,i) = transpose(U1(:,:,i))
             U2(:,:,i) = transpose(U2(:,:,i))
-            print *, datan2(pdos_az(2), pdos_az(1)) * 180 / pi
-            print *, datan2(sqrt(1.0 - pdos_az(3)*pdos_az(3)) ,pdos_az(3))* 180 / pi
-            print *, datan2(pdos_ay(3),-pdos_ax(3))* 180 / pi
             if (flag_rotate_pdos_debug) then
                write(*, fmt='(/4x,"Rotation angle (rad/deg) [0, 2pi]: ",2(f10.5,1X))') &
                   angle, angle * 180/pi
                write(*, fmt='(/4x,"Rotation axis: ", 3(f10.5,1X))') axis
+                write(*, fmt= &
+               '(/2x,"Equivalent Euler angles. Using `Process.RotatePDOSMode 1`should give the same result.")')
+               write(*, fmt='(/4x,"alpha: ", (f10.5,1X))', advance="no") &
+                  180/pi*(datan2(axis(3)*tan(angle / 2),1.0) + datan2(axis(2), axis(1)) - (pi/2))
+               write(*, fmt='(/4x,"beta: ", (f10.5,1X))',  advance="no") &
+                  180/pi*2*asin(sin(acos(axis(3))) * sin(angle / 2))
+               write(*, fmt='(/4x,"gamma: ", (f10.5,1X))',  advance="no") &
+                  180/pi*(datan2(axis(3)*tan(angle / 2),1.0) - datan2(axis(2), axis(1)) + (pi/2))
                write(*, fmt='(/4x, "C1: ")')
                do j = 1, 3
                   write(*, fmt='(/6x,3(f10.5,1X))',  advance='no') C1(j,:)
@@ -1265,7 +1269,12 @@ contains
       E2(5,5) = c2a*cb*c2g - sa*ca*(3.0 + c2b)*sg*cg
 
       ! Print out matrices before basis conversion
+      ! This basis is in descending order of m
       if (flag_rotate_pdos_debug) then
+         write(*, fmt='(/4x, "E1 (in old basis): ")')
+         do i = 1, 3
+            write(*, fmt='(/6x,3(f10.5,1X))', advance='no') E1(i,:)
+         end do
          write(*, fmt='(/4x, "E2 (in old basis): ")')
          do i = 1, 5
             write(*, fmt='(/6x,5(f10.5,1X))', advance='no') E2(i,:)
@@ -1368,6 +1377,7 @@ contains
       basis_matrix(:,2) = w2 / norm2(w2)
       basis_matrix(:,3) = w3 / norm2(w3)
       ! Make copy because DGEEV destroys matrix
+      basis_matrix = transpose(basis_matrix)
       A = basis_matrix
       ! If determinant flips sign, orientation of the coordinate system has changed
       det = A(1,1)*(A(2,2)*A(3,3) - A(2,3)*A(3,2)) &
@@ -1436,9 +1446,9 @@ contains
       if (flag_rotate_pdos_debug) &
                print *, '  Rotation angle in [-pi, pi]: ', angle, angle * 180/pi
       if (angle < 0.0) then
-         ! angle = angle + 2.0 * pi
-         angle = -angle
-         axis = -axis !R(n, theta) = R(-n, -theta)
+         angle = angle + 2.0 * pi
+         ! angle = -angle
+         ! axis = -axis !R(n, theta) = R(-n, -theta)
       end if
    end subroutine calculate_axis_angle
    subroutine construct_rodrigues(axis, angle, matrix)
@@ -1461,6 +1471,7 @@ contains
       KT = transpose(K)
       ! Rodrigues rotation matrix but with -angle
       temp = identity + (sin(angle)*KT) + (1 - cos(angle))*matmul(KT, KT)
+      ! Check the transpose with a simple utility
       matrix = reshape(transpose(temp), shape=(/9/))
    end subroutine construct_rodrigues
 

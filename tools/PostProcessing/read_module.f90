@@ -4,7 +4,7 @@ module read
   implicit none
 
   character(len=80) :: block_file
-  
+
 contains
 
   ! Read Conquest_input file for parameters from simulation, output parameters and coordinates
@@ -24,7 +24,7 @@ contains
     use pseudo_tm_info, only: setup_pseudo_info
     use GenComms,       only: cq_abort
     use pseudopotential_common, only: pseudo_type, ABINIT, OLDPS, SIESTA
-    
+
     implicit none
 
     character(len=80) :: input_string, proc_coords, tmp
@@ -56,7 +56,7 @@ contains
     ! Grid spacing
     n_grid_x   = fdf_integer('Grid.PointsAlongX',0)
     n_grid_y   = fdf_integer('Grid.PointsAlongY',0)
-    n_grid_z   = fdf_integer('Grid.PointsAlongZ',0)    
+    n_grid_z   = fdf_integer('Grid.PointsAlongZ',0)
     if(n_grid_x>0.AND.n_grid_y>0.AND.n_grid_z>0) then
        dk = pi/min(n_grid_x, n_grid_y, n_grid_z)
        GridCutoff = half*dk*dk
@@ -150,7 +150,7 @@ contains
           flag_proc_band_str = 4
        end if
     end if
-    ! 
+    !
     charge_stub = fdf_string(80,'Process.ChargeStub','chden')
     ! STM parameters
     ! NB Bias will be in volts
@@ -320,7 +320,7 @@ contains
        else
           allocate(pDOS_atom_index(n_atoms_pDOS))
           if(fdf_block('pDOS_atoms')) then
-             if(1+block_end-block_start<n_atoms_pDOS) & 
+             if(1+block_end-block_start<n_atoms_pDOS) &
                   call cq_abort("Too few atoms in pDOS_atoms: ",&
                   1+block_end-block_start,n_atoms_pDOS)
              do i=1,n_atoms_pDOS
@@ -334,7 +334,7 @@ contains
        ! pDOS rotation
        if (flag_rotate_pDOS) then
          if(fdf_block('pDOSAxes') .and. flag_rotate_pdos_mode == 0) then
-            if(1+block_end-block_start<3) & 
+            if(1+block_end-block_start<3) &
                      call cq_abort("Too few vectors in pDOS_axes: ",&
                      1+block_end-block_start,3)
             ! Expect exactly 3 vectors -> 3 reads
@@ -343,20 +343,25 @@ contains
             read (unit=input_array(block_start+2),fmt=*) pdos_az
             call fdf_endblock
          else if (fdf_block('pDOSEuler') .and. flag_rotate_pdos_mode == 1) then
-            if(1+block_end-block_start<rotate_pdos_natoms) & 
+            if(1+block_end-block_start<rotate_pdos_natoms) &
                   call cq_abort("Too few atoms provided in pDOSEuler block: ",&
                   1+block_end-block_start,rotate_pdos_natoms)
          ! In each line, expect an integer followed by 3 floats
             allocate(euler_angles(3, rotate_pdos_natoms))
             allocate(rotate_pdos_atoms_euler(rotate_pdos_natoms))
             do i = 1, rotate_pdos_natoms
-               read (unit=input_array(block_start+i-1),fmt=*) rotate_pdos_atoms_euler(i), euler_angles(:,i) 
+               read (unit=input_array(block_start+i-1),fmt=*) rotate_pdos_atoms_euler(i), euler_angles(:,i)
             end do
              if (flag_rotate_pdos_units == "deg") then
                   euler_angles = euler_angles * (pi / 180.0)
             end if
+            ! Wrap Euler angles in appropriate intervals to avoid unexpected behaviour
+            euler_angles(1,:) = modulo(euler_angles(1,:), 2.0*pi)   ! alpha: [0, 2pi]
+            euler_angles(2,:) = modulo(euler_angles(2,:), pi)         ! beta: [0, pi]
+            euler_angles(3,:) = modulo(euler_angles(3,:), 2.0*pi)   ! gamma: [0, 2pi]
+            write(*,fmt='(/2x, "Euler angles have been wrapped; alpha, gamma in [0, 2pi] and beta in [0,pi]")')
             call fdf_endblock
-         else if(fdf_block('pDOSNeighbours') .and. flag_rotate_pdos_mode == 2) then 
+         else if(fdf_block('pDOSNeighbours') .and. flag_rotate_pdos_mode == 2) then
             if (rotate_pdos_natoms  .lt. 1) &
                call cq_abort("Atoms to rotate about was not at least 1")
             allocate(find_neighbours(4, rotate_pdos_natoms))
@@ -383,7 +388,7 @@ contains
     end if ! i_job
     ! Now read PS files for atomic information
     call allocate_species_vars
-    ps_type = fdf_string(5,'General.PseudopotentialType','haman') 
+    ps_type = fdf_string(5,'General.PseudopotentialType','haman')
     if(leqi(ps_type,'siest')) then
        pseudo_type = SIESTA
     else if(leqi(ps_type,'plato').OR.leqi(ps_type,'haman')) then
@@ -393,7 +398,7 @@ contains
     endif
     species_from_files = fdf_boolean('General.PAOFromFiles',.false.)
     if(fdf_block('ChemicalSpeciesLabel')) then
-       if(1+block_end-block_start<n_species) & 
+       if(1+block_end-block_start<n_species) &
             call cq_abort("Too few species in ChemicalSpeciesLabel: ",&
             1+block_end-block_start,n_species)
        do i=1,n_species
@@ -435,7 +440,7 @@ contains
     use dimens, ONLY: r_super_x, r_super_y, r_super_z, volume
     use block_module, only: n_pts_in_block, in_block_x,in_block_y,in_block_z
     !use units, ONLY: BohrToAng
-    
+
     implicit none
 
     integer :: proc, idum, idum2, iblock, blocks_on_proc, ind_group
@@ -505,7 +510,7 @@ contains
 
     use datatypes
     use local, ONLY: nprocs
-    
+
     implicit none
 
     integer :: proc, idum, idum2, iblock, blocks_on_proc, ind_group, nblockx,nblocky,nblockz
@@ -519,7 +524,7 @@ contains
     close(unit=17)
     return
   end subroutine read_nprocs_from_blocks
-  
+
   subroutine read_eigenvalues
 
     use datatypes
@@ -530,7 +535,7 @@ contains
          band_full_to_active, i_job
     use units, ONLY: HaToeV
     use global_module, only: flag_wf_range_Ef, nspin
-    
+
     implicit none
 
     ! Local variables
@@ -540,7 +545,7 @@ contains
     integer, dimension(:), allocatable :: active_bands
     real(double), dimension(:,:),allocatable :: tmp_evals ! Read and store
     character(len=80) :: str, str2
-    
+
     open(unit=17,file='eigenvalues.dat')
     read(17,*) str,n_evals,str2,idum
     n_bands_total = n_evals
@@ -710,7 +715,7 @@ contains
        end do ! i_spin = nspin
     end if ! Binary format
   end subroutine read_psi_coeffs
- 
+
   subroutine allocate_species_vars
 
     use numbers
@@ -751,5 +756,5 @@ contains
     if(stat/=0) call cq_abort("Error allocating species_file in allocate_species_vars: ",            n_species,stat)
     return
   end subroutine allocate_species_vars
-  
+
 end module read
