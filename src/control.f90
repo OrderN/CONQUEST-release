@@ -2243,6 +2243,8 @@ contains
   !!  MODIFICATION HISTORY
   !!   2022/08/17 15:18 dave
   !!    Introduced scaling to improve conditioning in arxiv/2206.07339
+  !!   2026/08/13 Augustin Lu
+  !!    Set a wider format and user-selected units for simulation cell volume output.
   !!  SOURCE
   !!
   subroutine cell_sqnm(fixed_potential, vary_mu, total_energy)
@@ -2583,7 +2585,7 @@ contains
           if (iprint_MD > 1) then
              write(io_lun,'(4x,"Maximum stress         ",e14.6," Ha/Bohr**3")') max_stress
              write(io_lun,'(4x,"Simulation cell volume ",f18.6,1x,a2,a3)') &
-                  volume*dist_conv**3, d_units(dist_units), '**3'
+                  volume * dist_conv**3, d_units(dist_units), '**3'
              write(io_lun,'(4x,"Maximum stress         ",f14.6," GPa")') &
                   max_stress*HaBohr3ToGPa
              write(io_lun,'(4x,"Stress tolerance:      ",f14.6," GPa")') &
@@ -3765,6 +3767,8 @@ contains
   ! alternating full ionic and full cell optimisation (full_cg_run_double_loop)
   ! and full ionic with single line minimisation cell optimisation (this routine)
   ! Use cell optimisation method 4 for this
+  ! 2026/08/13 Augustin Lu
+  !  Set a wider format and user-selected units for simulation cell volume output.
   subroutine full_cg_run_double_loop_alt(fixed_potential, vary_mu, total_energy)
 
     ! Module usage
@@ -4061,7 +4065,7 @@ contains
           write(io_lun,'(4x,"Maximum stress         ",e14.6," Ha/Bohr**3")') &
             max_stress
           write(io_lun,'(4x,"Simulation cell volume ",f18.6,1x,a2,a3)') &
-            volume*dist_conv**3, d_units(dist_units), '**3'
+            volume * dist_conv**3, d_units(dist_units), '**3'
           write(io_lun,'(4x,"Maximum stress         ",f14.6," GPa")') &
                max_stress*HaBohr3ToGPa
           write(io_lun,'(4x,"Stress tolerance: ",f14.6," GPa")') &

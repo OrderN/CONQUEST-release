@@ -874,6 +874,8 @@ contains
   !!     Set flag_out_wf = .true. expricitly when flag_write_projected_DOS is .true.
   !!   2026/07/03 09:47 dave
   !!     Turn off WF and/or pDOS output except for static, diagonalisation runs
+  !!   2026/08/13 Augustin Lu
+  !!     Remove the obsolete IO.AtomCoordsXYZ input option.
   !!  TODO
   !!  SOURCE
   !!
@@ -995,7 +997,7 @@ contains
          pdb_output, banner, get_file_name, time_max, &
          flag_MatrixFile_RankFromZero, flag_MatrixFile_BinaryFormat, &
          flag_MatrixFile_BinaryFormat_Grab, flag_MatrixFile_BinaryFormat_Dump, &
-         flag_MatrixFile_BinaryFormat_Dump_END, atom_output_threshold, flag_coords_xyz
+         flag_MatrixFile_BinaryFormat_Dump_END, atom_output_threshold
 
     use group_module,     only: part_method, HILBERT, PYTHON
     use H_matrix_module,  only: flag_write_locps, flag_dump_locps, &
@@ -1253,7 +1255,6 @@ contains
        InitAtomicDistance_min = fdf_double('IO.InitAtomicDistance_min',  0.5_double)
     end if
     atom_output_threshold = fdf_integer('IO.AtomOutputThreshold',200)
-    flag_coords_xyz = fdf_boolean('IO.AtomCoordsXYZ',.false.)
     call my_barrier()
     !
     !
