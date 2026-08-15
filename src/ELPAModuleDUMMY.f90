@@ -15,7 +15,7 @@ module ELPA_module
 
   private
   public :: flag_use_elpa, elpa_solver, elpa_kernel, elpa_api_version, flag_elpa_dummy, flag_elpa_GPU
-  public :: init_ELPA, end_ELPA, ELPA_zhegv
+  public :: init_ELPA, end_ELPA, ELPA_zhegv, ELPA_dsygv
 
 contains
 
@@ -65,5 +65,24 @@ contains
 
     return
   end subroutine ELPA_zhegv
+
+  subroutine ELPA_dsygv( mode, matrix_size, row_size, col_size, &
+       Hmat, Smat, Wvec, Zmat, info, is_already_decomposed )
+
+    implicit none
+
+    character(len=1), intent(in) :: mode
+    integer, intent(in) :: matrix_size, row_size, col_size
+    real(double), intent(inout) :: Hmat(row_size,col_size)
+    real(double), intent(inout) :: Smat(row_size,col_size)
+    real(double), intent(out)   :: Wvec(matrix_size)
+    real(double), intent(out)   :: Zmat(row_size,col_size)
+    integer, intent(out) :: info
+    logical, intent(in), optional :: is_already_decomposed
+
+    call cq_abort("ELPA_dsygv: CONQUEST should be compiled with ELPA")
+
+    return
+  end subroutine ELPA_dsygv
 
 end module ELPA_module

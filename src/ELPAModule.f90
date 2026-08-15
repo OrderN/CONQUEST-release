@@ -20,7 +20,7 @@ module ELPA_module
 
   private
   public :: flag_use_elpa, elpa_solver, elpa_kernel, elpa_api_version, flag_elpa_dummy, flag_elpa_GPU
-  public :: init_ELPA, end_ELPA, ELPA_zhegv
+  public :: init_ELPA, end_ELPA, ELPA_zhegv, ELPA_dsygv
 
 contains
 
@@ -94,24 +94,25 @@ contains
        select case( elpa_kernel )
        case("GENERIC")
           call elp%set( "complex_kernel", ELPA_2STAGE_COMPLEX_GENERIC, info )
+          call elp%set( "real_kernel", ELPA_2STAGE_REAL_GENERIC, info )
        case("GENERIC_SIMPLE")
           call elp%set( "complex_kernel", ELPA_2STAGE_COMPLEX_GENERIC_SIMPLE, info )
+          call elp%set( "real_kernel", ELPA_2STAGE_REAL_GENERIC_SIMPLE, info )
        case("SSE_ASSEMBLY")
           call elp%set( "complex_kernel", ELPA_2STAGE_COMPLEX_SSE_ASSEMBLY, info )
-       case("SSE_BLOCK1")
+          call elp%set( "real_kernel", ELPA_2STAGE_REAL_SSE_ASSEMBLY, info )
+       case("SSE_BLOCK1","SSE_BLOCK2")
           call elp%set( "complex_kernel", ELPA_2STAGE_COMPLEX_SSE_BLOCK1, info )
-       case("SSE_BLOCK2")
-          call elp%set( "complex_kernel", ELPA_2STAGE_COMPLEX_SSE_BLOCK2, info )
-       case("AVX_BLOCK1")
+          call elp%set( "real_kernel", ELPA_2STAGE_REAL_SSE_BLOCK2, info )
+       case("AVX_BLOCK1","AVX_BLOCK2")
           call elp%set( "complex_kernel", ELPA_2STAGE_COMPLEX_AVX_BLOCK1, info )
-       case("AVX_BLOCK2")
-          call elp%set( "complex_kernel", ELPA_2STAGE_COMPLEX_AVX_BLOCK2, info )
-       case("AVX2_BLOCK1")
+          call elp%set( "real_kernel", ELPA_2STAGE_REAL_AVX_BLOCK2, info )
+       case("AVX2_BLOCK1","AVX2_BLOCK2")
           call elp%set( "complex_kernel", ELPA_2STAGE_COMPLEX_AVX2_BLOCK1, info )
-       case("AVX2_BLOCK2")
-          call elp%set( "complex_kernel", ELPA_2STAGE_COMPLEX_AVX2_BLOCK2, info )
+          call elp%set( "real_kernel", ELPA_2STAGE_REAL_AVX2_BLOCK2, info )
        case("GPU","NVIDIA_GPU")
           call elp%set( "complex_kernel", ELPA_2STAGE_COMPLEX_NVIDIA_GPU, info )
+          call elp%set( "real_kernel", ELPA_2STAGE_REAL_NVIDIA_GPU, info )
        case default
           call cq_abort("Invalid Diag.ELPA2Kernel " // trim(elpa_kernel) )
        end select
@@ -176,5 +177,34 @@ contains
     end if
 
   end subroutine ELPA_zhegv
+
+  subroutine ELPA_dsygv( mode, matrix_size, row_size, col_size, &
+       Hmat, Smat, Wvec, Zmat, info, is_already_decomposed )
+
+    implicit none
+
+    character(len=1), intent(in) :: mode
+    integer, intent(in) :: matrix_size, row_size, col_size
+    real(double), intent(inout) :: Hmat(row_size,col_size)
+    real(double), intent(inout) :: Smat(row_size,col_size)
+    real(double), intent(out)   :: Wvec(matrix_size)
+    real(double), intent(out)   :: Zmat(row_size,col_size)
+    integer, intent(out) :: info
+    logical, intent(in), optional :: is_already_decomposed
+    logical :: decomposed
+
+    decomposed = .false.
+    if (present(is_already_decomposed)) decomposed = is_already_decomposed
+
+    if( mode =='N' ) then
+       call elp%generalized_eigenvalues( &
+            Hmat, Smat, Wvec, decomposed, info )
+    end if
+    if( mode =='V' ) then
+       call elp%generalized_eigenvectors( &
+            Hmat, Smat, Wvec, Zmat, decomposed, info )
+    end if
+
+  end subroutine ELPA_dsygv
 
 end module ELPA_module

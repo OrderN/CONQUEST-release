@@ -254,7 +254,11 @@ module DiagModule
   complex(double_cplx), dimension(:,:,:),   allocatable :: SCHmat
   complex(double_cplx), dimension(:,:,:,:), allocatable :: SCSmat ! (row_size, col_size, nkpoints_max, nspin)
   complex(double_cplx), dimension(:,:,:,:), allocatable :: z      ! (row_size, col_size, nkpoints_max, nspin)
+  real(double),         dimension(:,:,:),   allocatable :: SCHmat_r
+  real(double),         dimension(:,:,:,:), allocatable :: SCSmat_r
+  real(double),         dimension(:,:,:,:), allocatable :: z_r
   logical,              dimension(:,:),     allocatable :: flag_S_decomposed ! (nkpoints_max, nspin)
+  logical :: is_gamma_point = .false.
   ! Buffer for receiving data
   complex(double_cplx), dimension(:,:),   allocatable :: RecvBuffer
   ! Buffer for sending data
@@ -591,8 +595,8 @@ contains
     end do ! spin
     ! Allocate matrices to store band K matrices
     time1 = mtime()
-    if (iprint_DM + min_layer >= 2 .AND. myid == 0) &
-         write (io_lun, 2) myid, time1 - time0
+    if (iprint_DM >= 1 .AND. myid == 0) &
+         write (io_lun, 3) myid, time1 - time0
     ! If we are trying to localise a level, we do NOT want to excite just yet
     if(flag_DeltaSCF.AND.flag_excite.AND.flag_local_excitation) then
        flag_keepexcite = .true.
@@ -1105,6 +1109,7 @@ contains
     use GenComms,        only: my_barrier, cq_abort, myid
     use memory_module,   only: type_dbl, type_int, type_cplx,         &
          reg_alloc_mem, reg_dealloc_mem
+    use ELPA_module,     only: flag_use_elpa
 
     implicit none
 
@@ -1117,6 +1122,12 @@ contains
 
     if (allocated(SCHmat)) return ! Already initialized
 
+    if (allocated(kk)) then
+       is_gamma_point = (nkp == 1 .and. all(abs(kk(:,1)) < 1.0e-12_double))
+    else
+       is_gamma_point = (nkp == 1)
+    end if
+
     ! Allocate space for the distributed Scalapack matrices
     stat = 0
     allocate(SCHmat(row_size,col_size,nspin), STAT=stat)
@@ -1128,6 +1139,18 @@ contains
     allocate(flag_S_decomposed(nkpoints_max,nspin), STAT=stat)
     if (stat /= 0) call cq_abort("initDiag: failed to allocate flag_S_decomposed", stat)
     flag_S_decomposed = .false.
+
+    if (is_gamma_point .and. flag_use_elpa) then
+       allocate(SCHmat_r(row_size,col_size,nspin), STAT=stat)
+       if (stat /= 0) call cq_abort("initDiag: failed to allocate SCHmat_r", stat)
+       allocate(SCSmat_r(row_size,col_size,nkpoints_max,nspin), STAT=stat)
+       if (stat /= 0) call cq_abort("initDiag: failed to allocate SCSmat_r", stat)
+       allocate(z_r(row_size,col_size,nkpoints_max,nspin), STAT=stat)
+       if (stat /= 0) call cq_abort("initDiag: failed to allocate z_r", stat)
+       SCHmat_r = zero
+       SCSmat_r = zero
+       z_r = zero
+    end if
 
     call reg_alloc_mem(area_DM, (1 + 2 * nkpoints_max) * row_size * col_size * nspin, type_cplx)
     SCHmat = zero
@@ -1201,6 +1224,12 @@ contains
        deallocate(z, STAT=stat)
        deallocate(flag_S_decomposed, STAT=stat)
        call reg_dealloc_mem(area_DM, (1 + 2 * nkpoints_max) * row_size * col_size * nspin, type_cplx)
+    end if
+
+    if (allocated(SCHmat_r)) then
+       deallocate(SCHmat_r, STAT=stat)
+       deallocate(SCSmat_r, STAT=stat)
+       deallocate(z_r, STAT=stat)
     end if
 
     if (allocated(evals)) then
@@ -4031,8 +4060,8 @@ contains
     use ScalapackFormat, only: matrix_size, matrix_size_padH, proc_rows, proc_cols,     &
          block_size_r, block_size_c, blocks_r, blocks_c, procid, pgroup,&
          nkpoints_max, pgid, N_kpoints_in_pg, pg_kpoints, N_procs_in_pg, proc_groups
-    use GenComms,        only: cq_warn
-    use ELPA_module,     only: flag_use_elpa, ELPA_zhegv
+    use GenComms,        only: cq_warn, mtime
+    use ELPA_module,     only: flag_use_elpa, ELPA_zhegv, ELPA_dsygv
 
     implicit none
 
@@ -4044,7 +4073,7 @@ contains
     real(double), dimension(3), OPTIONAL :: kpassed
 
     ! Local
-    real(double) :: vl, vu, orfac, scale
+    real(double) :: vl, vu, orfac, scale, tsolve0, tsolve1
     integer :: il, iu, m, mz, info, spin_SF, iprint_store
     ! for padH
     integer :: num_elem_pad, ind_proc_row_pad, ind_proc_col_pad, i, j
@@ -4105,11 +4134,26 @@ contains
 
        ! Call the diagonalisation routine for generalised problem
        ! H.psi = E.S.psi
+       tsolve0 = mtime()
        if( flag_use_elpa ) then
-          call ELPA_zhegv(mode, matrix_size_padH, row_size, col_size, &
-               SCHmat(:,:,spin), SCSmat(:,:,index_kpoint,spin), local_evals(:,spin), &
-               z(:,:,index_kpoint,spin), info, &
-               is_already_decomposed=flag_S_decomposed(index_kpoint, spin) )
+          if (is_gamma_point) then
+             if (.not. flag_S_decomposed(index_kpoint, spin)) then
+                SCSmat_r(:,:,index_kpoint,spin) = real(SCSmat(:,:,index_kpoint,spin), double)
+             end if
+             SCHmat_r(:,:,spin) = real(SCHmat(:,:,spin), double)
+
+             call ELPA_dsygv(mode, matrix_size_padH, row_size, col_size, &
+                  SCHmat_r(:,:,spin), SCSmat_r(:,:,index_kpoint,spin), local_evals(:,spin), &
+                  z_r(:,:,index_kpoint,spin), info, &
+                  is_already_decomposed=flag_S_decomposed(index_kpoint, spin) )
+
+             z(:,:,index_kpoint,spin) = cmplx(z_r(:,:,index_kpoint,spin), zero, kind=double_cplx)
+          else
+             call ELPA_zhegv(mode, matrix_size_padH, row_size, col_size, &
+                  SCHmat(:,:,spin), SCSmat(:,:,index_kpoint,spin), local_evals(:,spin), &
+                  z(:,:,index_kpoint,spin), info, &
+                  is_already_decomposed=flag_S_decomposed(index_kpoint, spin) )
+          end if
           flag_S_decomposed(index_kpoint, spin) = .true.
        else
           call pzhegvx(1, mode, 'A', 'U', matrix_size_padH, SCHmat(:,:,spin), &
@@ -4119,6 +4163,9 @@ contains
                rwork, lrwork, iwork, liwork, ifail, iclustr,    &
                gap, info)
        endif
+       tsolve1 = mtime()
+       if (iprint_DM >= 1 .and. myid == 0) &
+          write(io_lun, '(10x,"Proc: ",i5," Time taken for pure solver diag: ",f20.8," ms")') myid, tsolve1 - tsolve0
 
        if (info /= 0) then
           if(info==2.OR.info==4) then ! These are safe to continue
