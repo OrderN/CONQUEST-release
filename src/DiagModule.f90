@@ -251,8 +251,10 @@ module DiagModule
 
 
   ! The matrix that holds the SC data - the HAMILTONIAN
-  complex(double_cplx), dimension(:,:,:), allocatable :: SCHmat, SCSmat
-  complex(double_cplx), dimension(:,:,:,:), allocatable :: z ! (row_size, col_size, nkpoints_max, nspin)
+  complex(double_cplx), dimension(:,:,:),   allocatable :: SCHmat
+  complex(double_cplx), dimension(:,:,:,:), allocatable :: SCSmat ! (row_size, col_size, nkpoints_max, nspin)
+  complex(double_cplx), dimension(:,:,:,:), allocatable :: z      ! (row_size, col_size, nkpoints_max, nspin)
+  logical,              dimension(:,:),     allocatable :: flag_S_decomposed ! (nkpoints_max, nspin)
   ! Buffer for receiving data
   complex(double_cplx), dimension(:,:),   allocatable :: RecvBuffer
   ! Buffer for sending data
@@ -1024,10 +1026,6 @@ contains
        if (stat /= 0) call cq_abort('FindEvals: failed to deallocacte expH_atomf', stat)
        call reg_dealloc_mem(area_DM, matrix_size * prim_size_atomf, type_cplx)
     end if
-    ! global
-    call endDiag
-    if(flag_use_elpa) call end_ELPA(info)
-
     min_layer = min_layer + 1
     return
 
@@ -1117,17 +1115,21 @@ contains
     complex(double) :: wo(1)
     integer         :: iwo(1)
 
-    ! First, work out how much data we're going to receive How many
-    ! rows and columns do we have ? only works if the rows are exact
-    ! integer multiples of block rows
+    if (allocated(SCHmat)) return ! Already initialized
 
     ! Allocate space for the distributed Scalapack matrices
     stat = 0
-    allocate(SCHmat(row_size,col_size,nspin), SCSmat(row_size,col_size,nspin), STAT=stat)
-    if (stat /= 0) call cq_abort("initDiag: failed to allocate SCHmat and SCSmat", stat)
+    allocate(SCHmat(row_size,col_size,nspin), STAT=stat)
+    if (stat /= 0) call cq_abort("initDiag: failed to allocate SCHmat", stat)
+    allocate(SCSmat(row_size,col_size,nkpoints_max,nspin), STAT=stat)
+    if (stat /= 0) call cq_abort("initDiag: failed to allocate SCSmat", stat)
     allocate(z(row_size,col_size,nkpoints_max,nspin), STAT=stat)
     if (stat /= 0) call cq_abort("initDiag: failed to allocate z", stat)
-    call reg_alloc_mem(area_DM, (2 + nkpoints_max) * row_size * col_size * nspin, type_cplx)
+    allocate(flag_S_decomposed(nkpoints_max,nspin), STAT=stat)
+    if (stat /= 0) call cq_abort("initDiag: failed to allocate flag_S_decomposed", stat)
+    flag_S_decomposed = .false.
+
+    call reg_alloc_mem(area_DM, (1 + 2 * nkpoints_max) * row_size * col_size * nspin, type_cplx)
     SCHmat = zero
     SCSmat = zero
     z = zero
@@ -1150,7 +1152,7 @@ contains
 
     ! the pzhegvx is only called here to get the optimal work array
     call pzhegvx(1, 'V', 'A', 'U', matrix_size_padH, SCHmat(:,:,1), 1, 1,  &
-         desca, SCSmat(:,:,1), 1, 1, descb, zero, zero, 0, 0, &
+         desca, SCSmat(:,:,1,1), 1, 1, descb, zero, zero, 0, 0, &
          1.0e-307_double, m, mz, local_evals(1,1), -one, z(:,:,1,1), 1, &
          1, descz, wo, -1, rwo, -1, iwo, -1, ifail, iclustr,  &
          gap, info)
@@ -1175,16 +1177,9 @@ contains
 
   !!****f* DiagModule/endDiag
   !! PURPOSE
-  !!   Dealloate arrays used for direct diagonalisation calculations
+  !!   Deallocate arrays used for direct diagonalisation calculations
   !! USAGE
   !!   call endDiag
-  !! AUTHOR
-  !!   L.Tong
-  !! CREATION DATE
-  !!   2012/03/08
-  !! MODIFICATION HISTORY
-  !!   2023/07/24 tsuyoshi
-  !!   - Change for padding H and S matrices
   !! SOURCE
   !!
   subroutine endDiag
@@ -1200,50 +1195,48 @@ contains
     integer :: i, j, k, stat
 
     ! Deallocate memory
+    if (allocated(SCHmat)) then
+       deallocate(SCHmat, STAT=stat)
+       deallocate(SCSmat, STAT=stat)
+       deallocate(z, STAT=stat)
+       deallocate(flag_S_decomposed, STAT=stat)
+       call reg_dealloc_mem(area_DM, (1 + 2 * nkpoints_max) * row_size * col_size * nspin, type_cplx)
+    end if
 
-    deallocate(SCHmat, SCSmat, z, STAT=stat)
-    if (stat /= 0) &
-         call cq_abort("endDiag: failed to deallocate SCHmat, SCSmat and z", stat)
-    call reg_dealloc_mem(area_DM, (2 + nkpoints_max) * row_size * col_size * nspin, type_cplx)
+    if (allocated(evals)) then
+       deallocate(evals, occ, STAT=stat)
+       call reg_dealloc_mem(area_DM, 2*matrix_size * nkp * nspin, type_dbl)
+    end if
 
-    deallocate(evals, occ, STAT=stat)
-    if (stat /= 0) call cq_abort('endDiag: failed to deallocate w and occ', stat)
-    call reg_dealloc_mem(area_DM, 2*matrix_size * nkp * nspin, type_dbl)
+    if (allocated(local_evals)) then
+       deallocate(local_evals, STAT=stat)
+       call reg_dealloc_mem(area_DM, matrix_size_padH * nspin, type_dbl)
+    end if
 
-    deallocate(local_evals, STAT=stat)
-    if (stat /= 0) call cq_abort('endDiag: failed to allocate local_evals', stat)
-    call reg_dealloc_mem(area_DM, matrix_size_padH * nspin, type_dbl)
+    if (allocated(work)) then
+       deallocate(work, rwork, STAT=stat)
+       call reg_dealloc_mem(area_DM, lwork + lrwork, type_cplx)
+       deallocate(iwork, STAT=stat)
+       call reg_dealloc_mem(area_DM, liwork, type_int)
+    end if
 
-    ! Shut down BLACS
+    if (allocated(ifail)) deallocate(ifail, iclustr, gap, STAT=stat)
 
-    !    if(me<proc_rows*proc_cols) then
-    !call blacs_gridexit(context) ! this is a BLACS library subroutine
-
-    deallocate(ifail, iclustr, STAT=stat)
-    if (stat /= 0) &
-         call cq_abort("endDiag: failed to deallocate ifail and iclustr", stat)
-    call reg_dealloc_mem(area_DM, matrix_size_padH + 2 * proc_rows * &
-         proc_cols, type_int)
-
-    deallocate(gap, STAT=stat)
-    if (stat /= 0) call cq_abort("endDiag: failed to deallocate gap", stat)
-    call reg_dealloc_mem(area_DM, proc_rows * proc_cols, type_dbl)
-
-    deallocate(work, rwork, STAT=stat)
-    if (stat /= 0) &
-         call cq_abort ('endDiag: failed to deallocate work and rwork', stat)
-    call reg_dealloc_mem(area_DM, lwork + lrwork, type_cplx)
-
-    deallocate(iwork, STAT=stat)
-    if (stat /= 0) call cq_abort('endDiag: failed to deallocate iwork', stat)
-    call reg_dealloc_mem(area_DM, liwork, type_int)
-    ! end if
-
-    ! deallocate ScalapackFormat arrays
-    !call deallocate_arrays
-
-    return
   end subroutine endDiag
+  !!***
+
+  subroutine reset_S_decomposition
+    implicit none
+    if (allocated(flag_S_decomposed)) flag_S_decomposed = .false.
+  end subroutine reset_S_decomposition
+
+  subroutine end_diagonalisation
+    use ELPA_module, only: flag_use_elpa, end_ELPA
+    implicit none
+    integer :: info
+    call endDiag
+    if (flag_use_elpa) call end_ELPA(info)
+  end subroutine end_diagonalisation
   !!*****
 
 
@@ -4070,13 +4063,19 @@ contains
     if (iprint_DM + min_layer > 3 .and. (inode == ionode)) &
          write (io_lun, fmt='(10x,i6,a)') myid, 'Calling DistributeCQ_to_SC for H'
     ! Form the Hamiltonian and overlap for this k-point and send them to appropriate processors
+    if (.not. flag_S_decomposed(index_kpoint, spin)) then
+       if(PRESENT(kpassed)) then
+          if(proc_groups>1) call cq_abort("Coding error: can't have more than one PG and pass k-point to distrib_and_diag")
+          call DistributeCQ_to_SC(DistribS, matS(spin_SF), index_kpoint, SCSmat(:,:,index_kpoint,spin),kpassed)
+       else
+          call DistributeCQ_to_SC(DistribS, matS(spin_SF), index_kpoint, SCSmat(:,:,index_kpoint,spin))
+       end if
+    end if
+
     if(PRESENT(kpassed)) then
-       if(proc_groups>1) call cq_abort("Coding error: can't have more than one PG and pass k-point to distrib_and_diag")
        call DistributeCQ_to_SC(DistribH, matH(spin), index_kpoint, SCHmat(:,:,spin),kpassed)
-       call DistributeCQ_to_SC(DistribS, matS(spin_SF), index_kpoint, SCSmat(:,:,spin),kpassed)
     else
        call DistributeCQ_to_SC(DistribH, matH(spin), index_kpoint, SCHmat(:,:,spin))
-       call DistributeCQ_to_SC(DistribS, matS(spin_SF), index_kpoint, SCSmat(:,:,spin))
     end if
     ! Now, if this processor is involved, do the diagonalisation
     if (iprint_DM + min_layer > 3 .and. inode == ionode) &
@@ -4094,10 +4093,10 @@ contains
              do j=col_size-num_elem_pad+1, col_size
                 if( mod(i,block_size_r)==mod(j,block_size_c) ) then
                    SCHmat(i,j,spin) = H_large_value
-                   SCSmat(i,j,spin) = one
+                   if (.not. flag_S_decomposed(index_kpoint, spin)) SCSmat(i,j,index_kpoint,spin) = one
                 else
                    SCHmat(i,j,spin) = zero
-                   SCSmat(i,j,spin) = zero
+                   if (.not. flag_S_decomposed(index_kpoint, spin)) SCSmat(i,j,index_kpoint,spin) = zero
                 end if
              end do
           end do
@@ -4108,10 +4107,13 @@ contains
        ! H.psi = E.S.psi
        if( flag_use_elpa ) then
           call ELPA_zhegv(mode, matrix_size_padH, row_size, col_size, &
-               SCHmat(:,:,spin), SCSmat(:,:,spin), local_evals(:,spin), z(:,:,index_kpoint,spin), info )
+               SCHmat(:,:,spin), SCSmat(:,:,index_kpoint,spin), local_evals(:,spin), &
+               z(:,:,index_kpoint,spin), info, &
+               is_already_decomposed=flag_S_decomposed(index_kpoint, spin) )
+          flag_S_decomposed(index_kpoint, spin) = .true.
        else
           call pzhegvx(1, mode, 'A', 'U', matrix_size_padH, SCHmat(:,:,spin), &
-               1, 1, desca, SCSmat(:,:,spin), 1, 1, descb,      &
+               1, 1, desca, SCSmat(:,:,index_kpoint,spin), 1, 1, descb,      &
                vl, vu, il, iu, abstol, m, mz, local_evals(:,spin),  &
                orfac, z(:,:,index_kpoint,spin), 1, 1, descz, work, lwork,    &
                rwork, lrwork, iwork, liwork, ifail, iclustr,    &

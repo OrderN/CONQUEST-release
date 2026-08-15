@@ -135,6 +135,7 @@ program Conquest
   call control_run(fixed_potential, vary_mu, total_energy)
 
   call compile_biblio
+  if (flag_diagonalisation) call end_diagonalisation()
   if(flag_warnings .AND. inode==ionode) &
        write(io_lun, fmt='(/4x,"Warnings written to file Conquest_warnings; please check")')
   call write_mem_use

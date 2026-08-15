@@ -59,6 +59,8 @@ contains
        call cq_abort("Diag.BlockSizeC should be less than or rqual to", (matrix_size-1)/numcols )
     end if
 
+    if (associated(elp)) return ! Already initialized
+
     info = elpa_init(elpa_api_version)
     if( info /= ELPA_OK ) call cq_abort("ELPA_Init: ELPA API version not supported")
 
@@ -120,8 +122,8 @@ contains
 !!$      call elp%set( "omp_threads", omp_get_max_threads(), info )
 
     if(flag_elpa_GPU) then
-       call elp%set("gpu", 1, info)
-       if( info /= ELPA_OK ) call elp%set("nvidia-gpu", 1, info)
+       call elp%set("nvidia-gpu", 1, info)
+       if( info /= ELPA_OK ) call elp%set("gpu", 1, info)
     end if
 
     info = elp%setup()
@@ -134,15 +136,19 @@ contains
 
     integer, intent(out) :: info
 
-    call elpa_deallocate( elp, info )
-    if( info /= ELPA_OK )  call cq_abort("end_ELPA: deallocation error")
-    call elpa_uninit( info )
-    if( info /= ELPA_OK )  call cq_abort("end_ELPA: uninit error")
+    if (associated(elp)) then
+       call elpa_deallocate(elp, info)
+       nullify(elp)
+       call elpa_uninit(info)
+    else
+       info = ELPA_OK
+    end if
+
     return
   end subroutine end_ELPA
 
   subroutine ELPA_zhegv( mode, matrix_size, row_size, col_size, &
-       Hmat, Smat, Wvec, Zmat, info )
+       Hmat, Smat, Wvec, Zmat, info, is_already_decomposed )
 
     implicit none
 
@@ -153,15 +159,20 @@ contains
     real(double),    intent(out)   :: Wvec(matrix_size)
     complex(double_cplx), intent(out)   :: Zmat(row_size,col_size)
     integer, intent(out) :: info
+    logical, intent(in), optional :: is_already_decomposed
+    logical :: decomposed
     integer :: i, j
+
+    decomposed = .false.
+    if (present(is_already_decomposed)) decomposed = is_already_decomposed
 
     if( mode =='N' ) then
        call elp%generalized_eigenvalues( &
-            Hmat, Smat, Wvec, .false., info )
+            Hmat, Smat, Wvec, decomposed, info )
     end if
     if( mode =='V' ) then
        call elp%generalized_eigenvectors( &
-            Hmat, Smat, Wvec, Zmat, .false., info )
+            Hmat, Smat, Wvec, Zmat, decomposed, info )
     end if
 
   end subroutine ELPA_zhegv

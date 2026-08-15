@@ -142,6 +142,7 @@ contains
                                            stop_print_timer,           &
                                            WITH_LEVEL
     use cdft_module,                 only: make_weights
+    use DiagModule,                  only: reset_S_decomposition
 
     implicit none
 
@@ -155,6 +156,8 @@ contains
     logical :: flag_build_Satomf, flag_do_SFtransform
     type(cq_timer) :: tmr_l_tmp1
     type(cq_timer) :: backtrace_timer
+
+    call reset_S_decomposition()
 
 
 !****lat<$

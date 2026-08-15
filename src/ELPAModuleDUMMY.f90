@@ -48,7 +48,7 @@ contains
   end subroutine end_ELPA
 
   subroutine ELPA_zhegv( mode, matrix_size, row_size, col_size, &
-       Hmat, Smat, Wvec, Zmat, info )
+       Hmat, Smat, Wvec, Zmat, info, is_already_decomposed )
 
     implicit none
 
@@ -59,6 +59,7 @@ contains
     real(double),    intent(out)   :: Wvec(matrix_size)
     complex(double_cplx), intent(out)   :: Zmat(row_size,col_size)
     integer, intent(out) :: info
+    logical, intent(in), optional :: is_already_decomposed
 
     call cq_abort("ELPA_zhev: CONQUEST should be compiled with ELPA")
 
