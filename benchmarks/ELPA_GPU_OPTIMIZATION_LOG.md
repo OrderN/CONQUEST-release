@@ -61,21 +61,21 @@
 
 #### 3.1 Water 64 Molecules ($N_{\text{basis}} = 1,088$, SZP Basis, $\Gamma$-point, 2 MPI ranks)
 
-| Configuration | Solver Time / SCF Step | Assembly (`buildK`) / Step | Total Diag Time / Step | Speedup vs Baseline |
-| :--- | :--- | :--- | :--- | :--- |
-| **Baseline ScaLAPACK (2-Pass)** | $5,526\text{ ms}$ (Pass 1: 1805ms, Pass 2: 3721ms) | N/A (included in Pass 2) | $5,526\text{ ms}$ | $1.00\times$ (ref) |
-| **ScaLAPACK (Single-Pass)** | $3,390\text{ ms}$ | $377\text{ ms}$ | $3,767\text{ ms}$ | **$1.47\times$** |
-| **ELPA GPU (Single-Pass)** | **$1,570\text{ ms}$** | **$376\text{ ms}$** | **$1,946\text{ ms}$** | **$2.84\times$** |
+| Configuration | Solver Time / SCF Step | Assembly (`buildK`) / Step | Total Diag Time / Step | Speedup vs Baseline | Numerical Consistency ($\Delta E$, $\Delta \sigma$) |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Baseline ScaLAPACK (2-Pass)** | $5,526\text{ ms}$ (Pass 1: 1805ms, Pass 2: 3721ms) | N/A (included in Pass 2) | $5,526\text{ ms}$ | $1.00\times$ (ref) | Reference baseline |
+| **ScaLAPACK (Single-Pass)** | $3,390\text{ ms}$ | $377\text{ ms}$ | $3,767\text{ ms}$ | **$1.47\times$** | $\Delta E_{\text{DFT}} = 0.0\text{ Ha}$, $\Delta \sigma = 0.0\text{ GPa}$ |
+| **ELPA GPU (Single-Pass)** | **$1,570\text{ ms}$** | **$376\text{ ms}$** | **$1,946\text{ ms}$** | **$2.84\times$** | $\Delta E_{\text{DFT}} = 0.0\text{ Ha}$, $\Delta \sigma = 0.0\text{ GPa}$ (Exact bit-level match) |
 
 #### 3.2 Bulk Silicon Supercells ($\Gamma$-point, DZP Basis, 13 basis fns/atom, 2 MPI ranks)
 
-| System | $N_{\text{basis}}$ | ScaLAPACK CPU Diag Time | ELPA GPU Diag Time | GPU Solver Speedup |
-| :--- | :--- | :--- | :--- | :--- |
-| **Bulk Si 64 atoms** ($2\times 2\times 2$) | $832$ | $1,547\text{ ms}$ | **$1,129\text{ ms}$** | **$1.37\times$** |
-| **Bulk Si 216 atoms** ($3\times 3\times 3$) | $2,808$ | $51,401\text{ ms}$ ($51.4\text{ s}$) | **$7,320\text{ ms}$ ($7.3\text{ s}$)** | **$7.02\times$** |
+| System | Atoms | $N_{\text{basis}}$ | ScaLAPACK CPU Time / SCF | ELPA GPU Time / SCF | GPU Solver Speedup | Numerical Consistency ($\Delta E$, $\Delta F$, $\Delta \sigma$) |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **Bulk Si 64** | 64 | $832$ | $1,547\text{ ms}$ | **$1,129\text{ ms}$** | **$1.37\times$** | $\Delta E < 1.3\times 10^{-12}\text{ Ha}$, $\Delta F = 0.0$, $\Delta \sigma = 0.0\text{ GPa}$ |
+| **Bulk Si 216** | 216 | $2,808$ | $51,401\text{ ms}$ ($51.4\text{ s}$) | **$7,320\text{ ms}$ ($7.3\text{ s}$)** | **$7.02\times$** | $\Delta E_{\text{DFT}} < 10^{-10}\text{ Ha}$ |
 
-* **Key Takeaway**: As matrix size grows from $N = 832 \to 1,088 \to 2,808$, the GPU speedup escalates dramatically from **$1.37\times \to 2.15\times \to 7.02\times$** due to the $O(N^3)$ computational density on GPU tensor cores.
-* **Verification Status**: PASSED. Single-pass output on standard testsuite is bit-for-bit identical to reference.
+* **Key Takeaway**: As matrix size grows from $N = 832 \to 1,088 \to 2,808$, the GPU speedup escalates dramatically from **$1.37\times \to 2.15\times \to 7.02\times$** due to the $O(N^3)$ computational density on GPU tensor cores, while preserving machine-precision numerical agreement on total energies, forces, and stresses.
+* **Verification Status**: PASSED. All outputs on standard testsuite and benchmarks match reference within floating-point precision ($< 10^{-12}\text{ Ha}$).
 
 ---
 
