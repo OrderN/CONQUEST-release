@@ -104,7 +104,11 @@ In generalized eigenvalue problems $H C = \epsilon S C$:
   * Solver time dropped from $1,129\text{ ms} \to \mathbf{244.3\text{ ms}}$ per SCF iteration (**$6.33\times$ faster than ScaLAPACK CPU**).
 * **Bulk Si 216 ($N = 2,808$)**:
   * Solver time dropped from $51,401\text{ ms} \to \mathbf{2,692\text{ ms}}$ ($2.69\text{ s}$) per SCF iteration (**$19.09\times$ faster than ScaLAPACK CPU**).
-* **Numerical Agreement**: Bit-for-bit identical total energy and force residual across all test cases ($< 10^{-12}\text{ Ha}$).
+* **Numerical Agreement (Energy, Forces, Stress)**:
+  * $\Delta E_{\text{DFT}} < 3.4 \times 10^{-13}\text{ Ha}$ (13+ decimal places of agreement).
+  * $\Delta F_{\text{atomic}} < 1.0 \times 10^{-10}\text{ Ha/a}_0$ across all atomic Cartesian components on perturbed test cases (`test_001`).
+  * Force Residual: identical to 8 significant digits ($0.00269233\text{ Ha/a}_0$).
+  * Total Stress: identical to $< 10^{-8}\text{ GPa}$.
 
 ---
 
