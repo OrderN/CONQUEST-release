@@ -251,7 +251,8 @@ module DiagModule
 
 
   ! The matrix that holds the SC data - the HAMILTONIAN
-  complex(double_cplx), dimension(:,:,:), allocatable :: SCHmat, SCSmat, z
+  complex(double_cplx), dimension(:,:,:), allocatable :: SCHmat, SCSmat
+  complex(double_cplx), dimension(:,:,:,:), allocatable :: z ! (row_size, col_size, nkpoints_max, nspin)
   ! Buffer for receiving data
   complex(double_cplx), dimension(:,:),   allocatable :: RecvBuffer
   ! Buffer for sending data
@@ -567,9 +568,8 @@ contains
     scale = one / real(N_procs_in_pg(pgid), double)
 
     ! ------------------------------------------------------------------------
-    ! Start diagonalisation
+    ! Start diagonalisation (Single pass for eigenvalues & eigenvectors)
     ! ------------------------------------------------------------------------
-    ! First diagonalisation - get eigenvalues only (so that we can find Efermi)
     time0 = mtime ()
 
     if (iprint_DM + min_layer >= 2 .and. (inode == ionode)) &
@@ -582,13 +582,9 @@ contains
 
     do spin = 1, nspin
        do i = 1, nkpoints_max ! Loop over the kpoints within each process group
-          call distrib_and_diag(spin,i,'N',.true.) ! Eigenvalues
-          !call my_barrier()
+          call distrib_and_diag(spin,i,'V',.true.) ! Eigenvalues & eigenvectors
        end do ! End do i = 1, nkpoints_max
-       ! sum the w on each node together to give the whole w on each
-       ! node, note that the repeating of the same eigenvalues in each
-       ! proc_group is taken care of by the additional factor
-       ! 1 / N_procs_in_pg
+       ! sum the evals on each node together to give the whole evals on each node
        call gsum(evals(:,:,spin), matrix_size, nkp)
     end do ! spin
     ! Allocate matrices to store band K matrices
@@ -643,17 +639,14 @@ contains
        end if
        flag_excite = .true.
        if(dscf_homo_limit/=0) then
-          ! Diagonalise
           spin = dscf_source_spin
           i = 1 ! Just use first k-point - local states should not show dispersion
-          call distrib_and_diag(spin,i,'V',.false.)
-          call my_barrier()
           ! Reverse the CQ to SC distribution so that eigenvector
           ! coefficients for atoms are on the appropriate processor.
           do ng = 1, proc_groups
              if (i <= N_kpoints_in_pg(ng)) then
                 kp = pg_kpoints(ng, i)
-                call DistributeSC_to_ref(DistribH, ng, z(:,:,spin), &
+                call DistributeSC_to_ref(DistribH, ng, z(:,:,1,spin), &
                      expH(:,:,spin))       ! Find local excitation
              end if
           end do
@@ -688,17 +681,15 @@ contains
              end if
           end do
        end if
-       if(dscf_source_spin/=dscf_target_spin.OR.dscf_homo_limit==0) then ! Need to re-diagonalise
-          ! Diagonalise
+       if(dscf_source_spin/=dscf_target_spin.OR.dscf_homo_limit==0) then
           spin = dscf_target_spin
           i = 1 ! Just use first k-point - local states should not show dispersion
-          call distrib_and_diag(spin,i,'V',.false.)
           ! Reverse the CQ to SC distribution so that eigenvector
           ! coefficients for atoms are on the appropriate processor.
           do ng = 1, proc_groups
              if (i <= N_kpoints_in_pg(ng)) then
                 kp = pg_kpoints(ng, i)
-                call DistributeSC_to_ref(DistribH, ng, z(:,:,spin), &
+                call DistributeSC_to_ref(DistribH, ng, z(:,:,1,spin), &
                      expH(:,:,spin))       ! Find local excitation
              end if
           end do
@@ -816,7 +807,7 @@ contains
        call matrix_scale(zero, matK(spin))
        call matrix_scale(zero, matM12(spin))
     end do
-    ! Second diagonalisation - get eigenvectors and build K
+    ! Build K and M12 from precomputed eigenvectors
     entropy = zero
     flag_pDOS_buildK = .false.
     flag_WFatomf_buildK = .false.
@@ -825,10 +816,6 @@ contains
     do spin = 1, nspin
        if (flag_SpinDependentSF) spin_SF = spin
        do i = 1, nkpoints_max
-          call distrib_and_diag(spin,i,'V',.false.)
-          if (iprint_DM >= 5 .and. inode == ionode) &
-               write (io_lun, *) myid, ' Calling barrier'
-          call my_barrier()
           if(iprint_DM >= 5 .AND. inode == ionode) &
                write (io_lun, *) myid, ' Calling DistributeSC_to_Ref'
           ! Reverse the CQ to SC distribution so that eigenvector
@@ -838,7 +825,7 @@ contains
           do ng = 1, proc_groups
              if (i <= N_kpoints_in_pg(ng)) then
                 kp = pg_kpoints(ng, i)
-                call DistributeSC_to_ref(DistribH, ng, z(:,:,spin), &
+                call DistributeSC_to_ref(DistribH, ng, z(:,:,i,spin), &
                      expH(:,:,spin))
                 ! Build K and K_dn from the eigenvectors
                 if (iprint_DM + min_layer >= 5 .and. inode == ionode) &
@@ -1115,7 +1102,7 @@ contains
   subroutine initDiag
 
     use numbers
-    use ScalapackFormat, only: proc_rows, proc_cols, matrix_size, matrix_size_padH
+    use ScalapackFormat, only: proc_rows, proc_cols, matrix_size, matrix_size_padH, nkpoints_max
     use global_module,   only: numprocs, nspin
     use GenComms,        only: my_barrier, cq_abort, myid
     use memory_module,   only: type_dbl, type_int, type_cplx,         &
@@ -1136,10 +1123,11 @@ contains
 
     ! Allocate space for the distributed Scalapack matrices
     stat = 0
-    allocate(SCHmat(row_size,col_size,nspin), SCSmat(row_size,col_size,nspin), &
-         z(row_size,col_size,nspin), STAT=stat)
-    if (stat /= 0) call cq_abort("initDiag: failed to allocate SCHmat, SCSmat and z", stat)
-    call reg_alloc_mem(area_DM, 3 * row_size * col_size * nspin, type_cplx)
+    allocate(SCHmat(row_size,col_size,nspin), SCSmat(row_size,col_size,nspin), STAT=stat)
+    if (stat /= 0) call cq_abort("initDiag: failed to allocate SCHmat and SCSmat", stat)
+    allocate(z(row_size,col_size,nkpoints_max,nspin), STAT=stat)
+    if (stat /= 0) call cq_abort("initDiag: failed to allocate z", stat)
+    call reg_alloc_mem(area_DM, (2 + nkpoints_max) * row_size * col_size * nspin, type_cplx)
     SCHmat = zero
     SCSmat = zero
     z = zero
@@ -1163,7 +1151,7 @@ contains
     ! the pzhegvx is only called here to get the optimal work array
     call pzhegvx(1, 'V', 'A', 'U', matrix_size_padH, SCHmat(:,:,1), 1, 1,  &
          desca, SCSmat(:,:,1), 1, 1, descb, zero, zero, 0, 0, &
-         1.0e-307_double, m, mz, local_evals(1,1), -one, z(:,:,1), 1, &
+         1.0e-307_double, m, mz, local_evals(1,1), -one, z(:,:,1,1), 1, &
          1, descz, wo, -1, rwo, -1, iwo, -1, ifail, iclustr,  &
          gap, info)
 
@@ -1205,7 +1193,7 @@ contains
          reg_dealloc_mem
     use global_module,   only: numprocs, nspin
     use ScalapackFormat, only: deallocate_arrays, proc_rows,  &
-         proc_cols, matrix_size, matrix_size_padH
+         proc_cols, matrix_size, matrix_size_padH, nkpoints_max
 
     implicit none
 
@@ -1216,7 +1204,7 @@ contains
     deallocate(SCHmat, SCSmat, z, STAT=stat)
     if (stat /= 0) &
          call cq_abort("endDiag: failed to deallocate SCHmat, SCSmat and z", stat)
-    call reg_dealloc_mem(area_DM, 3 * row_size * col_size * nspin, type_cplx)
+    call reg_dealloc_mem(area_DM, (2 + nkpoints_max) * row_size * col_size * nspin, type_cplx)
 
     deallocate(evals, occ, STAT=stat)
     if (stat /= 0) call cq_abort('endDiag: failed to deallocate w and occ', stat)
@@ -4120,12 +4108,12 @@ contains
        ! H.psi = E.S.psi
        if( flag_use_elpa ) then
           call ELPA_zhegv(mode, matrix_size_padH, row_size, col_size, &
-               SCHmat(:,:,spin), SCSmat(:,:,spin), local_evals(:,spin), z(:,:,spin), info )
+               SCHmat(:,:,spin), SCSmat(:,:,spin), local_evals(:,spin), z(:,:,index_kpoint,spin), info )
        else
           call pzhegvx(1, mode, 'A', 'U', matrix_size_padH, SCHmat(:,:,spin), &
                1, 1, desca, SCSmat(:,:,spin), 1, 1, descb,      &
                vl, vu, il, iu, abstol, m, mz, local_evals(:,spin),  &
-               orfac, z(:,:,spin), 1, 1, descz, work, lwork,    &
+               orfac, z(:,:,index_kpoint,spin), 1, 1, descz, work, lwork,    &
                rwork, lrwork, iwork, liwork, ifail, iclustr,    &
                gap, info)
        endif

@@ -73,7 +73,7 @@ deps.obj.inc: $(SRCS_NODS) $(SYSTEM_PATH)
 	$(ECHOSTR) "module datestamp" > datestamp.f90
 	$(ECHOSTR) "  implicit none" >> datestamp.f90
 	$(ECHOSTR) '  character(len=*), parameter :: datestr="'`date "+%Y/%m/%d at %H:%M %z"`'"' >> datestamp.f90
-	sed "s/BBB/"`git symbolic-ref HEAD | cut -b 12-`"/" $(COMMENT) | sed "s/RRR/"`git describe --tags`"/" >> datestamp.f90
+	sed "s|BBB|"`git symbolic-ref HEAD | cut -b 12-`"|" $(COMMENT) | sed "s|RRR|"`git describe --tags`"|" >> datestamp.f90
 	$(ECHOSTR) "end module datestamp" >> datestamp.f90
 	./makedeps makedeps.txt $^
 	sed /"^mpi.o"/D makedeps.txt > deps.obj.inc
