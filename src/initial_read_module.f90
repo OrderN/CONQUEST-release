@@ -3234,7 +3234,7 @@ contains
          type_dbl
     use species_module,  only: nsf_species
     use units, only: en_conv, en_units, energy_units
-    use ELPA_module, only: flag_use_elpa, elpa_solver, elpa_kernel, elpa_API, flag_elpa_dummy, &
+    use ELPA_module, only: flag_use_elpa, elpa_solver, elpa_kernel, elpa_api_version, flag_elpa_dummy, &
          flag_elpa_GPU
 
     implicit none
@@ -3390,7 +3390,7 @@ contains
 
     if( flag_use_elpa ) then
        if(flag_elpa_dummy) call cq_abort("Code compiled without ELPA! Set Diag.UseELPA F")
-       elpa_API = fdf_integer('Diag.ELPA_API',20181113)
+       elpa_api_version = fdf_integer('Diag.ELPA_API',20241105)
        elpa_solver = fdf_string(16,'Diag.ELPASolver','ELPA1')
        if(leqi(elpa_solver,'ELPA1')) then
           elpa_kernel = "NONE"
@@ -3401,7 +3401,8 @@ contains
                .OR.leqi(elpa_kernel,"SSE_ASSEMBLY").OR.leqi(elpa_kernel,"SSE_BLOCK1") &
                .OR.leqi(elpa_kernel,"SSE_BLOCK2").OR.leqi(elpa_kernel,"AVX_BLOCK1") &
                .OR.leqi(elpa_kernel,"AVX_BLOCK2").OR.leqi(elpa_kernel,"AVX2_BLOCK1") &
-               .OR.leqi(elpa_kernel,"AVX2_BLOCK2"))) then
+               .OR.leqi(elpa_kernel,"AVX2_BLOCK2").OR.leqi(elpa_kernel,"GPU") &
+               .OR.leqi(elpa_kernel,"NVIDIA_GPU"))) then
              call cq_abort("Invalid Diag.ELPA2Kernel " // elpa_kernel )
           endif
        else
