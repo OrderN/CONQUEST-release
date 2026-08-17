@@ -356,10 +356,10 @@ contains
                   euler_angles = euler_angles * (pi / 180.0)
             end if
             ! Wrap Euler angles in appropriate intervals to avoid unexpected behaviour
-            euler_angles(1,:) = modulo(euler_angles(1,:), 2.0*pi)   ! alpha: [0, 2pi]
-            euler_angles(2,:) = modulo(euler_angles(2,:), pi)         ! beta: [0, pi]
-            euler_angles(3,:) = modulo(euler_angles(3,:), 2.0*pi)   ! gamma: [0, 2pi]
-            write(*,fmt='(/2x, "Euler angles have been wrapped; alpha, gamma in [0, 2pi] and beta in [0,pi]")')
+            ! euler_angles(1,:) = modulo(euler_angles(1,:), 2.0*pi)   ! alpha: [0, 2pi]
+            ! euler_angles(2,:) = modulo(euler_angles(2,:), pi)         ! beta: [0, pi]
+            ! euler_angles(3,:) = modulo(euler_angles(3,:), 2.0*pi)   ! gamma: [0, 2pi]
+            ! write(*,fmt='(/2x, "Euler angles have been wrapped; alpha, gamma in [0, 2pi] and beta in [0,pi]")')
             call fdf_endblock
          else if(fdf_block('pDOSNeighbours') .and. flag_rotate_pdos_mode == 2) then
             if (rotate_pdos_natoms  .lt. 1) &

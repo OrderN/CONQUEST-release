@@ -660,8 +660,8 @@ contains
             write(*, fmt='(/2x,"New local axes for specified atoms: ", *(I0,1x))') &
                rotate_pdos_atoms_euler(i)
             call construct_EulerMatrices(E1, E2, i)
-            U1(:,:,i) = E1
-            U2(:,:,i) = E2
+            U1(:,:,i) = (E1)
+            U2(:,:,i) = (E2)
             ! We only explicitly construct wavefunction rotation matrices
             ! However can extrapolate new local axes using E1 since orbital basis is {y,z,x}
             write(*, fmt='(/4x,"Image of x,y,z under this active rotation, in standard basis x,y,z")', advance="no")
@@ -1244,6 +1244,7 @@ contains
       E2(1,3) = 0.5*sqrt(3.0)*c2a*sb*sb
       E2(1,4) = -sb*(c2a*cb*sg + s2a*cg)
       E2(1,5) = -cb*s2a*c2g -0.25*c2a*(3.0+c2b)*s2g
+
       E2(2,1) = sa*sb*s2g - 0.5*ca*c2g*s2b
       E2(2,2) = ca*c2b*cg - sa*cb*sg
       E2(2,3) = sqrt(3.0)*ca*sb*cb
@@ -1732,9 +1733,10 @@ contains
    subroutine nearest_neighbours(atomno, bond)
       use datatypes
       use dimens, ONLY: r_super_x, r_super_y, r_super_z
-      use local, ONLY: find_neighbours, nghbr_arr
+      use local, ONLY: find_neighbours, nghbr_arr, flag_rotate_pdos_debug
       use global_module, ONLY: ni_in_cell, atom_coord, species_glob
       use GenComms, ONLY: cq_abort
+      use species_module, ONLY: species_label
 
       implicit none
 
@@ -1747,7 +1749,7 @@ contains
       ! Local variables
       real(double), parameter :: err = 1e-5
       real(double) :: distances(1:ni_in_cell), temp(1:ni_in_cell)
-      real(double) ::cx, cy, cz, dist, dx, dy, dz, atomno_pos(3)
+      real(double) ::cx, cy, cz, dx, dy, dz, atomno_pos(3)
       integer :: i, j, min_idx, ibond_max_len, idx_direction
       ! Reset allocatables as this subroutine is called in a loop
       ! and populated with new data every time
@@ -1774,10 +1776,9 @@ contains
          dy = dy - r_super_y * nint(dy / r_super_y)
          dz = dz - r_super_z * nint(dz / r_super_z)
 
-         dist = dx*dx + dy*dy + dz*dz
-
-         distances(i) = dist
+         distances(i) =  dx*dx + dy*dy + dz*dz
       end do
+
       temp = distances
       ! Eliminate zeros - self-distance
       where (abs(temp) < err) temp = huge(1.0)
@@ -1797,7 +1798,7 @@ contains
 
       allocate(bond(3, size(nghbr_arr)))
 
-      atomno_pos = (/atom_coord(1, atomno), atom_coord(2, atomno), atom_coord(3, atomno)/)
+      atomno_pos = (/cx, cy, cz/)
       do i = 1, size(nghbr_arr)
          bond(1, i) = atom_coord(1, nghbr_arr(i)) - atomno_pos(1)
          bond(2, i) = atom_coord(2, nghbr_arr(i)) - atomno_pos(2)
@@ -1809,6 +1810,25 @@ contains
 
       end do
 
+       if (flag_rotate_pdos_debug) then
+         write(*, fmt='(/2x,"Unit cell dimensions (x,y,z)", 3(f10.5))', advance="no") &
+            r_super_x, r_super_y, r_super_z
+         write(*, fmt='(/2x,"Outputting cell-periodic distances ", &
+            "of all atoms relative to atom", I0)', advance="no") atomno
+         do i = 1, ni_in_cell
+            if (i /= atomno) then
+               write(*, fmt='(/4x, I0, A, f10.5)', advance="no") &
+                  i, " " // species_label(species_glob(i)), distances(i)
+            end if
+         end do
+         write(*, fmt='(/2x,"Outputting cell-periodic unnormalised bond lengths")')
+
+         do i = 1, size(nghbr_arr)
+            write(*, fmt='(/4x, I0, A, 3f10.5)', advance="no") &
+               nghbr_arr(i), " " // species_label(species_glob(nghbr_arr(i))), bond(:,i)
+         end do
+
+      end if
 
    end subroutine
    ! -----------------------------------------------------------------------------
