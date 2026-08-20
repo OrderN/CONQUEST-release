@@ -2892,7 +2892,7 @@ contains
        lowElec = spin_factor * sum(electrons(:))
        ! check if we indeed have a good lower bound
        if ((electrons_total - lowElec) < two) then
-          if (inode == ionode) write (io_lun, 8) lowElec
+          if (inode == ionode) write (io_lun, 7) myid, lowElec, NElec_less
           ! find the lowest energy and start from there
           lband = 1
           lkp = 1
@@ -2975,9 +2975,13 @@ contains
 4   format(10x, 'Proc: ', i5, ' findFermi_varspin: found upper bound ', f12.5)
 5   format(10x, 'Proc: ', i5, ' bracketed Ef: ', 2f12.5)
 6   format(10x, 'In findFermi, Warning! Diag.NElecLess >= total number &
-         &of electrons, setting it equal to number of electrons, but &
-         &this is slow and you may want to change it to something &
-         &smaller.')
+         &of electrons, setting it equal to number of electrons, '/12x, &
+         'but this is slow and you may want to change it to something smaller.')
+7   format(10x, 'Proc: ', i5, ' findFermi_varspin: Warning! the &
+         &calculated number of electrons (',f12.5, &
+         ') > '/12x,'electron_number - 2.0. May be you &
+         &should increase the value of Diag.NElecLess (at the moment =&
+         & ',f12.5,')')    
 8   format(10x, 'Fermi level is ', f12.5)
 
   end subroutine findFermi_varspin
