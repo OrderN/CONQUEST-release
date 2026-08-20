@@ -319,7 +319,7 @@ module DiagModule
   ! that Methfessel-Paxton approximation may casue the bracket search
   ! algorithm to fail.)
   integer :: max_brkt_iterations
-  real(double), parameter :: tolElec = 1.0e-8_double
+  real(double), parameter :: tolElec = 1.0e-6_double
   
 contains
 
@@ -2623,7 +2623,7 @@ contains
           ! Fill the bands for the first (electrons-NElec_less) electrons
           if (NElec_less >= electrons(spin)) then
              if (inode == ionode) write (io_lun, 7) myid, spin
-             NELec_less = electrons(spin)
+             NElec_less = electrons(spin)-one
           end if
           thisElec(spin) = zero
           band1: do iband = 1, nbands
@@ -2729,13 +2729,13 @@ contains
 5   format(10x, 'Proc: ', i5, ' findFermi_fixspin: level, Ne: ', 2f12.5)
 6   format(10x, 'Proc: ', i5, ' findFermi_fixspin: found upper bound', f12.5)
 7   format(10x, 'Proc: ', i5, ' findFermi_fixspin: Warning! Diag.NElecLess >= &
-         &total number of electrons for spin channel ', i2, &
-         ' setting it equal to number of electrons, but this is slow &
+         &total number of electrons for spin channel ', i2,/ &
+         12x,' setting it equal to number of electrons, but this is slow &
          &and you may want to change it to something smaller.')
 8   format(10x, 'Proc: ', i5, ' findFermi_fixspin: Warning! the &
          &calculated number of electrons (',f12.5, &
-         ') > electron_number (for spin ', i2, ' ) - 1.0. May be you &
-         &should increase the value of Diag.NElecLess (at the moment =&
+         ') >'/12x,'electron_number (for spin ', i2, ' ) - 1.0. May be you &
+         &should increase the value of Diag.NElecLess '/12x,'(at the moment =&
          & ',f12.5,')')
 10  format(10x, 'Fermi level is ', f12.5)
 11  format(10x, 'Fermi level for spin ', i2, ' is ', f12.5)
@@ -2874,7 +2874,7 @@ contains
        ! Fill the bands for the first (electrons_toal - NElec_less) electrons
        if (NElec_less >= electrons_total) then
           if (inode == ionode) write (io_lun, 6)
-          NELec_less = electrons_total
+          NELec_less = electrons_total - one
        end if
        thisElec = zero
        band1 : do iband = 1, nbands
@@ -2892,7 +2892,7 @@ contains
        lowElec = spin_factor * sum(electrons(:))
        ! check if we indeed have a good lower bound
        if ((electrons_total - lowElec) < two) then
-          if (inode == ionode) write (io_lun, 8) lowElec, NElec_less
+          if (inode == ionode) write (io_lun, 8) lowElec
           ! find the lowest energy and start from there
           lband = 1
           lkp = 1
@@ -3221,6 +3221,7 @@ contains
                 write(io_lun,fmt='(4x,"CBM is at ",3f8.4," (1/a0)")') kk(:,cbm_k(spin))
              end if
           end if
+          write(io_lun,fmt='(4x,"Fermi level= ",f12.5," ",a2)') en_conv*Efermi(spin),en_units(energy_units)
        end do
     end if
     return
