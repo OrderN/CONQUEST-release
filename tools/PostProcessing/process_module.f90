@@ -579,14 +579,8 @@ contains
                write(*, fmt='(/4x,"Rotation angle (rad/deg) [0, 2pi]: ",2(f10.5,1X))') &
                   angle, angle * 180/pi
                write(*, fmt='(/4x,"Rotation axis: ", 3(f10.5,1X))') axis
-               write(*, fmt= &
-               '(/2x,"Equivalent Euler angles. Using `Process.RotatePDOSMode 1`should give the same result.")')
-               write(*, fmt='(/4x,"alpha: ", (f10.5,1X))', advance="no") &
-                  180/pi*(datan2(axis(3)*tan(angle / 2),1.0) + datan2(axis(2), axis(1)) - (pi/2))
-               write(*, fmt='(/4x,"beta: ", (f10.5,1X))',  advance="no") &
-                  180/pi*2*asin(sin(acos(axis(3))) * sin(angle / 2))
-               write(*, fmt='(/4x,"gamma: ", (f10.5,1X))',  advance="no") &
-                  180/pi*(datan2(axis(3)*tan(angle / 2),1.0) - datan2(axis(2), axis(1)) + (pi/2))
+               call euler_from_axisangle(axis, angle)
+
                write(*, fmt='(/4x, "C1: ")')
                do j = 1, 3
                   write(*, fmt='(/6x,3(f10.5,1X))',  advance='no') C1(j,:)
@@ -765,14 +759,7 @@ contains
                write(*, fmt='(/4x,"Rotation angle (rad/deg) [0, 2pi]: ",2(f10.5,1X))') &
                   angle, angle * 180/pi
                write(*, fmt='(/4x,"Rotation axis: ", 3(f10.5,1X))') axis
-                write(*, fmt= &
-               '(/2x,"Equivalent Euler angles. Using `Process.RotatePDOSMode 1`should give the same result.")')
-               write(*, fmt='(/4x,"alpha: ", (f10.5,1X))', advance="no") &
-                  180/pi*(datan2(axis(3)*tan(angle / 2),1.0) + datan2(axis(2), axis(1)) - (pi/2))
-               write(*, fmt='(/4x,"beta: ", (f10.5,1X))',  advance="no") &
-                  180/pi*2*asin(sin(acos(axis(3))) * sin(angle / 2))
-               write(*, fmt='(/4x,"gamma: ", (f10.5,1X))',  advance="no") &
-                  180/pi*(datan2(axis(3)*tan(angle / 2),1.0) - datan2(axis(2), axis(1)) + (pi/2))
+               call euler_from_axisangle(axis, angle)
                write(*, fmt='(/4x, "C1: ")')
                do j = 1, 3
                   write(*, fmt='(/6x,3(f10.5,1X))',  advance='no') C1(j,:)
@@ -1140,6 +1127,23 @@ contains
       matrix(2, 3) = -vector(1)
       matrix(3, 1) = -vector(2)
       matrix(3, 2) = vector(1)
+   end subroutine
+
+   subroutine euler_from_axisangle(axis, angle)
+      use datatypes
+      use numbers, ONLY: pi
+      implicit none
+      real(double), intent(in) :: axis(3), angle
+      write(*, fmt= &
+         '(/2x,"Equivalent Euler angles (up to a sign). Using `Process.RotatePDOSMode 1`should give the same result.")')
+      write(*, fmt= &
+         '(/2x,"The rotation angle is typically defined between [0, pi], so signs may have to be adjusted.")')
+      write(*, fmt='(/4x,"alpha: ", (f10.5,1X))', advance="no") &
+         180/pi*(datan2(axis(3)*tan(angle / 2),1.0) + datan2(axis(2), axis(1)) - (pi/2))
+      write(*, fmt='(/4x,"beta: ", (f10.5,1X))',  advance="no") &
+         180/pi*2*asin(sqrt(axis(1)*axis(1) + axis(2)*axis(2)) * sin(angle / 2))
+      write(*, fmt='(/4x,"gamma: ", (f10.5,1X))',  advance="no") &
+         180/pi*(datan2(axis(3)*tan(angle / 2),1.0) - datan2(axis(2), axis(1)) + (pi/2))
    end subroutine
 
    ! -----------------------------------------------------------------------------
