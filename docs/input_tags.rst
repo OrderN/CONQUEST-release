@@ -738,6 +738,11 @@ Diag.IntegerOccs (*logical*)
 
     *default*: False
 
+Diag.AdjustEf (*logical*)
+    Turns off the automatic adjustment of Ef to be mid-gap (unlikely to be needed).
+
+    *default*: True
+
 Diag.MPOrder (*integer*)
     Order of Bessel function approximation to delta-function used in Methfessel-Paxton smearing
 

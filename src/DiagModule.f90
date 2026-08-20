@@ -265,6 +265,7 @@ module DiagModule
   integer, dimension(2) :: band_ef
   logical :: flag_integer_occ
   logical, dimension(2) :: flag_gap
+  logical :: flag_adjust_Ef
   
   ! K-point data - here so that reading of k-points can take place in
   ! different routine to FindEvals
@@ -618,7 +619,7 @@ contains
     if(flag_smear_type==0) then
        if(flag_fix_spin_population) then ! Separate fermi levels
           do spin=1,nspin
-             if(flag_gap(spin)) then
+             if(flag_gap(spin).and.flag_adjust_Ef) then
                 Efermi(spin) = half*(cbm(spin)+vbm(spin))
                 locc(spin) = electrons(spin)
                 if(inode==ionode.and.iprint_DM + min_layer >= 2) call write_gaps(spin_ch=spin)
@@ -626,10 +627,12 @@ contains
                 if(inode==ionode.and.iprint_DM + min_layer >= 2) &
                      write(io_lun,'(4x, "Adjusted Fermi level for spin ", i2, " is ", f12.5)') &
                      spin,Efermi(spin)
+             else if(flag_gap(spin)) then
+                if(inode==ionode.and.iprint_DM + min_layer >= 2) call write_gaps(spin_ch=spin)
              end if
           end do
        else
-          if(flag_gap(1) .or. flag_gap(2)) then ! Fermi levels should be same
+          if((flag_gap(1) .or. flag_gap(2)).and.flag_adjust_Ef) then ! Fermi levels should be same
              if(inode==ionode.and.iprint_DM + min_layer >= 2) call write_gaps
              ! Adjust Fermi level to lie at mid-gap and revisit occupancies
              do spin=1,nspin
@@ -640,9 +643,11 @@ contains
                      spin,Efermi(spin)
              end do
              call occupy(occ, evals, Efermi, locc, matrix_size, nkp)
+          else if(flag_gap(1).or.flag_gap(2)) then
+             if(inode==ionode.and.iprint_DM + min_layer >= 2) call write_gaps
           end if
        end if
-    else if(flag_integer_occ) then ! There has to be a gap!
+    else if(flag_integer_occ) then ! There has to be a gap; Ef set to mid-gap in occupy
        if(inode==ionode.and.iprint_DM + min_layer >= 2) call write_gaps
     end if
     ! Allocate space to expand eigenvectors into (i.e. when reversing

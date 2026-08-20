@@ -3231,7 +3231,7 @@ contains
     use DiagModule,      only: nkp, kk, wtk, kT, maxefermi,          &
          flag_smear_type, iMethfessel_Paxton,  &
          max_brkt_iterations, gaussian_height, &
-         finess, NElec_less, flag_integer_occ
+         finess, NElec_less, flag_integer_occ, flag_adjust_Ef
     use energy,          only: SmearingType, MPOrder
     use memory_module,   only: reg_alloc_mem, reg_dealloc_mem,       &
          type_dbl
@@ -3275,6 +3275,7 @@ contains
             call cq_abort("Cannot have free spin population with integer occupancies")
        flag_smear_type = -1
     end if
+    flag_adjust_Ef = fdf_boolean('Diag.AdjustEf',.true.)
     SmearingType = flag_smear_type
     iMethfessel_Paxton = fdf_integer('Diag.MPOrder',0)
     MPOrder = iMethfessel_Paxton
