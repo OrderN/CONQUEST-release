@@ -1048,9 +1048,8 @@ end subroutine
       implicit none
       real(double), intent(in) :: axis(3), angle
       write(*, fmt= &
-         '(/2x,"Equivalent Euler angles (up to a sign). Using `Process.RotatePDOSMode 1`should give the same result.")')
+         '(/2x,"Equivalent Euler angles. Using `Process.RotatePDOSMode 1`should give the same result.")')
       write(*, fmt= &
-         '(/2x,"The rotation angle is typically defined between [0, pi], so signs may have to be adjusted.")')
       write(*, fmt='(/4x,"alpha: ", (f10.5,1X))', advance="no") &
          180/pi*(datan2(axis(3)*tan(angle / 2),1.0) + datan2(axis(2), axis(1)) - (pi/2))
       write(*, fmt='(/4x,"beta: ", (f10.5,1X))',  advance="no") &
