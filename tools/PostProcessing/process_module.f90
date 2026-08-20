@@ -1041,20 +1041,19 @@ end subroutine
    !!  MODIFICATION HISTORY
    !!
    !!  SOURCE
-   !!
    subroutine euler_from_axisangle(axis, angle)
       use datatypes
-      use numbers, ONLY: pi
+      use numbers, ONLY: pi, one, two
       implicit none
       real(double), intent(in) :: axis(3), angle
       write(*, fmt= &
-         '(/2x,"Equivalent Euler angles (up to a sign). Using `Process.RotatePDOSMode 1`should give the same result.")')
+         '(/2x,"Equivalent Euler angles. Using `Process.RotatePDOSMode 1`should give the same result.")')
       write(*, fmt='(/4x,"alpha: ", (f10.5,1X))', advance="no") &
-         180/pi*(datan2(axis(3)*tan(angle / 2),1.0) + datan2(axis(2), axis(1)) - (pi/2))
+         180/pi*(datan2(axis(3)*tan(angle / two),one) + datan2(axis(2), axis(1)) - (pi/two))
       write(*, fmt='(/4x,"beta: ", (f10.5,1X))',  advance="no") &
-         180/pi*2*asin(sqrt(axis(1)*axis(1) + axis(2)*axis(2)) * sin(angle / 2))
+         180/pi*2*asin(sqrt(axis(1)*axis(1) + axis(2)*axis(2)) * sin(angle / two))
       write(*, fmt='(/4x,"gamma: ", (f10.5,1X))',  advance="no") &
-         180/pi*(datan2(axis(3)*tan(angle / 2),1.0) - datan2(axis(2), axis(1)) + (pi/2))
+         180/pi*(datan2(axis(3)*tan(angle/two),one) - datan2(axis(2), axis(1)) + (pi/two))
    end subroutine
 
    ! -----------------------------------------------------------------------------
@@ -1087,7 +1086,7 @@ end subroutine
    !!    Also see: Quantum Theory of Angular Momentum
    subroutine construct_EulerMatrices(E1, E2, atom_index)
       use datatypes
-      use numbers, ONLY: pi
+      use numbers, ONLY: pi, two
       use local, ONLY: euler_angles, flag_rotate_pdos_debug
       use GenComms, ONLY: cq_abort
 
@@ -1125,12 +1124,12 @@ end subroutine
       cg = cos(euler_gamma)
       sg = sin(euler_gamma)
 
-      c2a = cos(2.0 * euler_alpha)
-      s2a = sin(2.0 * euler_alpha)
-      c2b = cos(2.0 * euler_beta)
-      s2b = sin(2.0 * euler_beta)
-      c2g = cos(2.0 * euler_gamma)
-      s2g = sin(2.0 * euler_gamma)
+      c2a = cos(two*euler_alpha)
+      s2a = sin(two*euler_alpha)
+      c2b = cos(two*euler_beta)
+      s2b = sin(two*euler_beta)
+      c2g = cos(two*euler_gamma)
+      s2g = sin(two*euler_gamma)
 
       ! Rotation of l = 1 coefficients
       E1(1,1) = ca*cb*cg - sa*sg
