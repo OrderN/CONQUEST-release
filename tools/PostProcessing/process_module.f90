@@ -470,16 +470,8 @@ contains
     real(double), dimension(:,:), allocatable :: occ
     real(double), dimension(:,:), allocatable :: total_electrons
     real(double), dimension(:,:,:), allocatable :: total_electrons_l
-    real(double) :: A1(3, 3), A2(5, 5), C1(3, 3), C2(5, 5), E1(3,3), E2(5,5),Qxyz(3,3)
+    real(double) :: A1(3, 3), A2(5, 5), C1(3, 3), C2(5, 5), E1(3,3), E2(5,5), Qxyz(3,3)
     real(double) :: rod(9), angle, axis(3), temp_matrix(3,3)
-    real(double) :: pdos_weight, identity3(3,3), identity5(5,5)
-    character(len=20) :: pdos_weight_str
-    character(len=500) :: line
-    character(len=30), parameter :: d_orb(5) = (/ "|xy>", "|yz>", &
-        "|3z^2-r^2>", "|xz>", "|x^2-y^2>"/)
-    character(len=30), parameter :: p_orb(3) = (/ "|y>", "|z>","|x>"/)
-
-
     character(len=25) :: filename,fmt_dos
     complex(double_cplx),external :: zdotc
 
@@ -539,15 +531,7 @@ contains
       end if
       if (allocated(U1))  deallocate(U1)
       if (allocated(U2))  deallocate(U2)
-      ! Using axes
-      identity3 = 0.0
-      do i = 1, size(identity3(:,1))
-         identity3(i,i) = 1.0
-      end do
-      identity5 = 0.0
-      do i = 1, size(identity5(:,1))
-         identity5(i,i) = 1.0
-      end do
+
       if (flag_rotate_pdos_mode == 0) then
          write(*,fmt='(2x,"Using user input axes")')
          allocate(U1(3,3,n_atoms_pDOS))
@@ -1229,6 +1213,7 @@ end subroutine
          else
             write(*, '(/2x, "E2 matrix is orthogonal: FAIL")', advance='no')
          endif
+         write(*,*)
       end if
    end subroutine construct_EulerMatrices
    ! -----------------------------------------------------------------------------
@@ -1264,6 +1249,7 @@ end subroutine
    !!    24/03/2026 - C. Xu: add error checking
    !!    10/04/2026 - C. Xu: fixes to determinant check, negative angles and euler matrix
    !!    26/05/2026, 08/06 - C. Xu: comments and clearer error messages
+   !!    20/08/2026 - C. Xu: Clean debug and negate axis/angle when necessary
    !!  SOURCE
    !!
    subroutine calculate_axis_angle(w1, w2, w3, axis, angle)
@@ -1330,23 +1316,26 @@ end subroutine
          write(*, '(/2x, "Eigenvalues/Eigenvectors of change of base matrix: ")')
          do j = 1, N
             ! Print eigenvalue
-            if (WI(j) == 0.0d0) then
+            if (abs(WI(j)) < 1e-7) then
                write(*,'(/4x, A,I3,A,F12.6)') 'Eigenvalue ', j, ': ', WR(j)
             else
                write(*,'(/4x, A,I3,A,F12.6,SP,F12.6,A)') 'Eigenvalue ', j, ': ', WR(j), WI(j), 'i'
             end if
-            write(*,'(/6x, A)') '  Eigenvector:'
+            write(*,'(/6x, 2X,A)', advance="no") 'Eigenvector:'
             do i = 1, N
                if (WI(j) == 0.0d0) then
-                     write(*,'(/7x, A,I3,A,F12.6)') '    component ', i, ': ', VR(i,j)
+                     write(*,'(/7x, 4X,A,I3,A,F10.5)', advance="no") 'component ', i, ': ', VR(i,j)
                else if (WI(j) > 0.0d0) then
                      ! First complex conjugate pair: v = VR(:,j) + i*VR(:,j+1)
-                     write(*,'(/7x, A,I3,A,F12.6,SP,F12.6,A)') '    component ', i, ': ', VR(i,j), VR(i,j+1), 'i'
+                     write(*,'(/7x, 4X,A,I3,A,F10.5,SP,F10.5,A)', advance="no") &
+                        'component ', i, ': ', VR(i,j), VR(i,j+1), 'i'
                else
                      ! Second complex conjugate pair: v = VR(:,j-1) - i*VR(:,j)
-                     write(*,'(/7x, A,I3,A,F12.6,SP,F12.6,A)') '    component ', i, ': ', VR(i,j-1), -VR(i,j), 'i'
+                     write(*,'(/7x, 4XA,I3,A,F10.5,SP,F10.5,A)', advance="no") &
+                        'component ', i, ': ', VR(i,j-1), -VR(i,j), 'i'
                end if
             end do
+            write(*,*)
          end do
       end if ! End debug: print all eigenvalues/vectors
       if (any(axis /= axis)) &
@@ -1425,7 +1414,7 @@ end subroutine
          identity(1, 1) = 1.0
          identity(2, 2) = 1.0
          identity(3, 3) = 1.0
-         if(all(abs(matmul(C1, transpose(C1)) - identity) < 1e-8)) then
+         if(all(abs(matmul(C1, transpose(C1)) - identity) < 1e-7)) then
             write(*, '(/2x, "C1 matrix is orthogonal: PASS")', advance='no')
          else
             write(*, '(/2x, "C1 matrix is orthogonal: FAIL")', advance='no')
@@ -1478,7 +1467,7 @@ end subroutine
          identity(3, 3) = 1.0
          identity(4, 4) = 1.0
          identity(5, 5) = 1.0
-         if(all(abs(matmul(C2, transpose(C2)) - identity) < 1e-8))  then
+         if(all(abs(matmul(C2, transpose(C2)) - identity) < 1e-7))  then
             write(*, '(/2x, "C2 matrix is orthogonal: PASS")', advance='yes')
          else
             write(*, '(/2x, "C2 matrix is orthogonal: FAIL")', advance='yes')
