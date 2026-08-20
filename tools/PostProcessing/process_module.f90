@@ -575,12 +575,7 @@ contains
             U2(:,:,i) = transpose(U2(:,:,i))
 
             if (flag_rotate_pdos_debug) then
-
-               write(*, fmt='(/4x,"Rotation angle (rad/deg) [0, 2pi]: ",2(f10.5,1X))') &
-                  angle, angle * 180/pi
-               write(*, fmt='(/4x,"Rotation axis: ", 3(f10.5,1X))') axis
                call euler_from_axisangle(axis, angle)
-
                write(*, fmt='(/4x, "C1: ")')
                do j = 1, 3
                   write(*, fmt='(/6x,3(f10.5,1X))',  advance='no') C1(j,:)
@@ -589,56 +584,7 @@ contains
                do j = 1, 5
                   write(*, fmt='(/6x,5(f10.5,1X))',  advance='no') C2(j, :)
                end do
-               write(*, fmt='(/4x, "U1: ")')
-               do j = 1, 3
-                  write(*, fmt='(/6x,3(f10.5,1X))',  advance='no') U1(j,:,i)
-               end do
-               write(*, fmt='(/4x, "p-orbital weight decomposition")')
-               pdos_weight_str = ""
-               do k = 1, 3
-                  line = "Rotated " // trim(p_orb(k)) // " = "
-                  do j = 1, 3
-                     pdos_weight = U1(k,j,i)*U1(k,j,i)
-                     write(pdos_weight_str, '(F10.5)') pdos_weight
-                     if (j == 1) then
-                        line = trim(line) // trim(adjustl(pdos_weight_str)) // &
-                              trim(p_orb(j))
-                     else
-                        line = trim(line) // " + " // trim(adjustl(pdos_weight_str)) // &
-                              trim(p_orb(j))
-                     end if
-                  end do
-                  write(*, '(/6x,(A))') trim(line)
-               end do ! end printing l = 1 orbital weights
-
-               if(all(abs(matmul(U1(:,:,i), transpose(U1(:,:,i))) - identity3) < 1e-7)) then
-                  write(*, '(/2x, A)', advance='no') 'U1 matrix is orthogonal: PASS'
-               else
-                  write(*, '(/2x, A)', advance='no') 'U1 matrix is orthogonal: FAIL'
-               endif
-               write(*, fmt='(/4x, "U2: ")')
-               do j = 1, 5
-                  write(*, fmt='(/6x,5(f10.5,1X))', advance='no') U2(j,:,i)
-               end do
-               write(*, fmt='(/4x, "d-orbital weight decomposition")')
-               do k = 1, 5
-                  line = "Rotated " // trim(d_orb(k)) // " = "
-                  do j = 1, 5
-                     pdos_weight = U2(k,j,i)*U2(k,j,i)
-                     write(pdos_weight_str, '(F10.5)') pdos_weight
-                     if (j == 1) then
-                        line = trim(line) // trim(adjustl(pdos_weight_str)) // trim(d_orb(j))
-                     else
-                        line = trim(line) // " + " // trim(adjustl(pdos_weight_str)) // trim(d_orb(j))
-                     end if
-                  end do
-                  write(*, '(/6x,(A))') trim(line)
-               end do ! end printing l = 2 orbital weights
-               if(all(abs(matmul(U2(:,:,i), transpose(U2(:,:,i))) - identity5) < 1e-7)) then
-                  write(*, '(/2x, A)', advance='no') 'U2 matrix is orthogonal: PASS'
-               else
-                  write(*, '(/2x, A)', advance='no') 'U2 matrix is orthogonal: FAIL'
-               endif
+               call print_orbital_weights(i)
             end if ! end rotation debug output
           end do
 
@@ -677,57 +623,7 @@ contains
             if (flag_rotate_pdos_debug) then
                write(*, fmt='(/4x, "alpha(z) beta(y) gamma(z): ",3(f10.5,1X))') &
                   euler_angles(1,i), euler_angles(2,i),euler_angles(3,i)
-
-               write(*, fmt='(/4x, "U1: ")')
-               do j = 1, 3
-                  write(*, fmt='(/6x,3(f10.5,1X))',  advance='no') U1(j,:,i)
-               end do
-                write(*, fmt='(/4x, "p-orbital weight decomposition")')
-               pdos_weight_str = ""
-               do k = 1, 3
-                  line = "Rotated " // trim(p_orb(k)) // " = "
-                  do j = 1, 3
-                     pdos_weight = U1(k,j,i)*U1(k,j,i)
-                     write(pdos_weight_str, '(f10.5)') pdos_weight
-                     if (j == 1) then
-                        line = trim(line) // trim(adjustl(pdos_weight_str)) // &
-                              trim(p_orb(j))
-                     else
-                        line = trim(line) // " + " // trim(adjustl(pdos_weight_str)) // &
-                              trim(p_orb(j))
-                     end if
-                  end do
-                  write(*, '(/6x,(A))') trim(line)
-
-               end do ! end printing l = 1 orbital weights
-               if(all(abs(matmul(U1(:,:,i), transpose(U1(:,:,i))) - identity3) < 1e-7)) then
-                  write(*, '(/2x, A)', advance='no') 'U1 matrix is orthogonal: PASS'
-               else
-                  write(*, '(/2x, A)', advance='no') 'U1 matrix is orthogonal: FAIL'
-               endif
-               write(*, fmt='(/4x, "U2: ")')
-               do j = 1, 5
-                  write(*, fmt='(/6x,5(f10.5,1X))', advance='no') U2(j,:,i)
-               end do
-               write(*, fmt='(/4x, "d-orbital weight decomposition")')
-               do k = 1, 5
-                  line = "Rotated " // trim(d_orb(k)) // " = "
-                  do j = 1, 5
-                     pdos_weight = U2(k,j,i)*U2(k,j,i)
-                     write(pdos_weight_str, '(F10.5)') pdos_weight
-                     if (j == 1) then
-                        line = trim(line) // trim(adjustl(pdos_weight_str)) // trim(d_orb(j))
-                     else
-                        line = trim(line) // " + " // trim(adjustl(pdos_weight_str)) // trim(d_orb(j))
-                     end if
-                  end do
-                  write(*, '(/6x,(A))') trim(line)
-               end do ! end printing l = 2 orbital weights
-               if(all(abs(matmul(U2(:,:,i), transpose(U2(:,:,i))) - identity5) < 1e-7)) then
-                  write(*, '(/2x, A)', advance='no') 'U2 matrix is orthogonal: PASS'
-               else
-                  write(*, '(/2x, A)', advance='no') 'U2 matrix is orthogonal: FAIL'
-               endif
+               call print_orbital_weights(i)
             end if ! end rotation debug mode
          end do
       else if (flag_rotate_pdos_mode == 2) then
@@ -756,9 +652,6 @@ contains
             U1(:,:,i) = transpose(U1(:,:,i))
             U2(:,:,i) = transpose(U2(:,:,i))
             if (flag_rotate_pdos_debug) then
-               write(*, fmt='(/4x,"Rotation angle (rad/deg) [0, 2pi]: ",2(f10.5,1X))') &
-                  angle, angle * 180/pi
-               write(*, fmt='(/4x,"Rotation axis: ", 3(f10.5,1X))') axis
                call euler_from_axisangle(axis, angle)
                write(*, fmt='(/4x, "C1: ")')
                do j = 1, 3
@@ -768,55 +661,7 @@ contains
                do j = 1, 5
                   write(*, fmt='(/6x,5(f10.5,1X))',  advance='no') C2(j, :)
                end do
-               write(*, fmt='(/4x, "U1: ")')
-               do j = 1, 3
-                  write(*, fmt='(/6x,3(f10.5,1X))',  advance='no') U1(j,:,i)
-               end do
-               write(*, fmt='(/4x, "p-orbital weight decomposition")')
-               pdos_weight_str = ""
-               do k = 1, 3
-                  line = "Rotated " // trim(p_orb(k)) // " = "
-                  do j = 1, 3
-                     pdos_weight = U1(k,j,i)*U1(k,j,i)
-                     write(pdos_weight_str, '(F10.5)') pdos_weight
-                     if (j == 1) then
-                        line = trim(line) // trim(adjustl(pdos_weight_str)) // &
-                              trim(p_orb(j))
-                     else
-                        line = trim(line) // " + " // trim(adjustl(pdos_weight_str)) // &
-                              trim(p_orb(j))
-                     end if
-                  end do
-                  write(*, '(/6x,(A))') trim(line)
-               end do ! end printing l = 1 orbital weights
-               if(all(abs(matmul(U1(:,:,i), transpose(U1(:,:,i))) - identity3) < 1e-7)) then
-                  write(*, '(/2x, A)', advance='no') 'U1 matrix is orthogonal: PASS'
-               else
-                  write(*, '(/2x, A)', advance='no') 'U1 matrix is orthogonal: FAIL'
-               endif
-               write(*, fmt='(/4x, "U2: ")')
-               do j = 1, 5
-                  write(*, fmt='(/6x,5(f10.5,1X))', advance='no') U2(j,:,i)
-               end do
-               write(*, fmt='(/4x, "d-orbital weight decomposition")')
-               do k = 1, 5
-                  line = "Rotated " // trim(d_orb(k)) // " = "
-                  do j = 1, 5
-                     pdos_weight = U2(k,j,i)*U2(k,j,i)
-                     write(pdos_weight_str, '(f10.5)') pdos_weight
-                     if (j == 1) then
-                        line = trim(line) // trim(adjustl(pdos_weight_str)) // trim(d_orb(j))
-                     else
-                        line = trim(line) // " + " // trim(adjustl(pdos_weight_str)) // trim(d_orb(j))
-                     end if
-                  end do
-                  write(*, '(/6x,(A))') trim(line)
-               end do ! end printing l = 2 orbital weights
-               if(all(abs(matmul(U2(:,:,i), transpose(U2(:,:,i))) - identity5) < 1e-7)) then
-                  write(*, '(/2x, A)', advance='no') 'U2 matrix is orthogonal: PASS'
-               else
-                  write(*, '(/2x, A)', advance='no') 'U2 matrix is orthogonal: FAIL'
-               endif
+               call print_orbital_weights(i)
             end if ! end rotation debug output
          end do
       end if ! pdos rotation mode
@@ -1052,6 +897,65 @@ contains
     end do
     return
   end subroutine process_pdos
+
+  subroutine print_orbital_weights(atom_index)
+   use local, ONLY: U1, U2
+   implicit none
+
+   integer, intent(in) :: atom_index
+
+   integer :: i,j,k
+   real(double) :: pdos_weight, identity3(3,3), identity5(5,5)
+   character(len=30), parameter :: p_orb(3) = (/ "|y>", "|z>","|x>"/)
+   character(len=30), parameter :: d_orb(5) = (/ "|xy>      ", "|yz>      ", &
+     "|3z^2-r^2>", "|xz>      ", "|x^2-y^2> "/)
+   character(len=50) :: pdos_weight_str
+   character(len=100) :: line
+
+   write(*, fmt='(/4x, "U1: ")')
+   do j = 1, 3
+      write(*, fmt='(/6x,3(f10.5,1X))',  advance='no') U1(j,:,atom_index)
+   end do
+   write(*, fmt='(/4x, "p-orbital weight decomposition")')
+   write(*, '(/6x, A10, 5A10)') "", (trim(p_orb(j)), j = 1, 3)
+   do k = 1, 3
+      write(*, '(6x, A10, 5F10.5)') trim(p_orb(k)), &
+         (U1(k,j,atom_index)*U1(k,j,atom_index), j = 1, 3)
+   end do  ! end printing l = 2 orbital weights
+   write(*, fmt='(/4x, "U2: ")')
+   do j = 1, 5
+      write(*, fmt='(/6x,5(f10.5,1X))', advance='no') U2(j,:,atom_index)
+   end do
+   write(*, fmt='(/4x, "d-orbital weight decomposition")')
+
+   write(*, '(/6x, A10, 5A10)') "", (trim(d_orb(j)), j = 1, 5)
+   do k = 1, 5
+      write(*, '(6x, A10, 5F10.5)') trim(d_orb(k)), &
+         (U2(k,j,atom_index)*U2(k,j,atom_index), j = 1, 5)
+   end do  ! end printing l = 2 orbital weights
+
+   ! Orthogonality check
+   identity3 = 0.0
+   do i = 1, size(identity3(:,1))
+      identity3(i,i) = 1.0
+   end do
+   identity5 = 0.0
+   do i = 1, size(identity5(:,1))
+      identity5(i,i) = 1.0
+   end do
+   if(all(abs(matmul(U1(:,:,atom_index), transpose(U1(:,:,atom_index))) - identity3) < 1e-7)) then
+      write(*, '(/2x, A)', advance='no') 'U1 matrix is orthogonal: PASS'
+   else
+      write(*, '(/2x, A)', advance='no') 'U1 matrix is orthogonal: FAIL'
+   endif
+
+   if(all(abs(matmul(U2(:,:,atom_index), transpose(U2(:,:,atom_index))) - identity5) < 1e-7)) then
+      write(*, '(/2x, A)', advance='no') 'U2 matrix is orthogonal: PASS'
+   else
+      write(*, '(/2x, A)', advance='no') 'U2 matrix is orthogonal: FAIL'
+   endif
+   write(*,*)
+end subroutine
    ! -----------------------------------------------------------------------------
    ! Subroutine get_pdos_axes
    ! -----------------------------------------------------------------------------
@@ -1128,7 +1032,32 @@ contains
       matrix(3, 1) = -vector(2)
       matrix(3, 2) = vector(1)
    end subroutine
+   ! -----------------------------------------------------------------------------
+   ! Subroutine euler_from_axisangle
+   ! -----------------------------------------------------------------------------
 
+   !!****f* ProcModule/euler_from_axisangle *
+   !!
+   !!  NAME
+   !!   euler_from_axisangle
+   !!  USAGE
+   !!   euler_from_axisangle(axis, angle)
+   !!  PURPOSE
+   !!   Calculate Euler angles (alpha, beta, gamma) from a rotation axis and angle.
+   !!   The rotation axis is assumed to be in [0, pi]
+   !!  INPUTS
+   !!    real(double), intent(in) :: axis(3) - axis of rotation
+   !!    real(double), intent(in) :: angle   - rotation angle in [0, pi]
+   !!  USES
+   !!   datatypes, numbers
+   !!  AUTHOR
+   !!   C. Xu
+   !!  CREATION DATE
+   !!   20/08/2026
+   !!  MODIFICATION HISTORY
+   !!
+   !!  SOURCE
+   !!
    subroutine euler_from_axisangle(axis, angle)
       use datatypes
       use numbers, ONLY: pi
@@ -1222,15 +1151,6 @@ contains
       s2g = sin(2.0 * euler_gamma)
 
       ! Rotation of l = 1 coefficients
-      ! E1(1,1) = ca*cb*cg - sa*sg
-      ! E1(1,2) = ca*sb
-      ! E1(1,3) = -cg*sa - ca*cb*sg
-      ! E1(2,1) = -cg*sb
-      ! E1(2,2) = cb
-      ! E1(2,3) = sb*sg
-      ! E1(3,1) = cb*cg*sa + ca*sg
-      ! E1(3,2) = sa*sb
-      ! E1(3,3) = ca*cg - cb*sa*sg
       E1(1,1) = ca*cb*cg - sa*sg
       E1(1,2) = ca*sb
       E1(1,3) = -cg*sa - ca*cb*sg
@@ -1242,7 +1162,7 @@ contains
       E1(3,3) = ca*cg - cb*sa*sg
 
 
-      ! NEWW V2
+      ! Rotation of l = 2 coefficients
       E2(1,1) = 0.25*c2a*c2g*(3.0+c2b) - s2a*cb*s2g
       E2(1,2) = 0.5*c2a*s2b*cg - s2a*sb*sg
       E2(1,3) = 0.5*sqrt(3.0)*c2a*sb*sb
@@ -1429,10 +1349,9 @@ contains
             end do
          end do
       end if ! End debug: print all eigenvalues/vectors
-      ! print *, acos()
-      if (axis(1) /= axis(1) .or. axis(2) /= axis(2) .or. axis(3) /= axis(3)) &
+      if (any(axis /= axis)) &
          call cq_abort("calculate_axis_angle: NaN in rotation axis.")
-      if (abs(axis(1)) < tol .and. abs(axis(2)) < tol .and. abs(axis(3)) < tol) &
+      if (all(abs(axis) < tol)) &
          call cq_abort("calculate_axis_angle: Rotation axis was (0,0,0). Cannot perform rotation.")
       tra = basis_matrix(1,1) + basis_matrix(2,2) + basis_matrix(3,3)
       antisym_axis = 0.0
@@ -1444,17 +1363,21 @@ contains
       if (abs(sin_angle) < tol .and. abs(cos_angle) < tol) &
             call cq_abort("calculate_axis_angle: Both arguments to datan2 are zero.")
       angle = datan2(sin_angle, cos_angle)
-      !print *, "TESTING ANGLE = ACOS ONLY"
-      !angle = acos(cos_angle) ! |theta| <= pi
       if (angle /= angle) &
             call cq_abort("calculate_axis_angle: NaN rotation angle.")
       if (flag_rotate_pdos_debug) &
-               print *, '  Rotation angle in [-pi, pi]: ', angle, angle * 180/pi
+            write(*, fmt='(/4x,"Rotation angle (rad/deg) [-pi, pi]: ",2(f10.5,1X))') &
+                  angle, angle * 180/pi
+            write(*, fmt='(/4x,"Rotation axis from LAPACK : ",3(f10.5,1X))') &
+               axis
       if (angle < 0.0) then
-         angle = angle + 2.0 * pi
-         ! angle = -angle
-         ! axis = -axis !R(n, theta) = R(-n, -theta)
+         ! Keep angle between [0, pi] and negate both axis and angle
+         angle = -angle
+         axis = -axis !R(n, theta) = R(-n, -theta)
       end if
+      write(*, fmt='(/4x,"Rotation angle (rad/deg) [0, pi]: ",2(f10.5,1X))') &
+               angle, angle * 180/pi
+      write(*, fmt='(/4x,"Rotation axis: ", 3(f10.5,1X))') axis
    end subroutine calculate_axis_angle
    subroutine construct_rodrigues(axis, angle, matrix)
       use datatypes
