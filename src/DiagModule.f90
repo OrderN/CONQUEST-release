@@ -3086,7 +3086,7 @@ contains
                 occu(iband,ikp,ss) = wtk(ikp) * locc
                 ! Gap detection
                 ! Check for VBM and allow for degenerate states
-                if(locc-half>-very_small) then!locc>=half) then
+                if(locc-half>-tolElec) then!locc>=half) then
                    if(vbm(ss)<ebands(iband,ikp,ss)) then
                       vbm_k(ss) = ikp
                       vbm(ss) = ebands(iband,ikp,ss)
@@ -3094,7 +3094,7 @@ contains
                 end if
                 ! NB CBM check must be separate to VBM check
                 ! Check for CBM and allow for degenerate states
-                if(half-locc>-very_small) then!locc<=half) then
+                if(half-locc>-tolElec) then!locc<=half) then
                    if(cbm(ss)>ebands(iband,ikp,ss)) then
                       cbm_k(ss) = ikp
                       cbm(ss) = ebands(iband,ikp,ss)
