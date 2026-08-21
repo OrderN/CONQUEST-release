@@ -298,7 +298,8 @@ contains
     use local, ONLY: eigenvalues, n_bands_total, nkp, wtk, efermi, &
          flag_total_iDOS, flag_procwf_range_Ef, flag_expand_range
     use read, ONLY: read_eigenvalues, read_psi_coeffs
-    use global_module, ONLY: nspin, n_DOS, E_DOS_min, E_DOS_max, sigma_DOS
+    use global_module, ONLY: nspin, n_DOS, E_DOS_min, E_DOS_max, sigma_DOS, &
+         flag_fix_spin_population
     use units, ONLY: HaToeV
 
     implicit none
@@ -326,7 +327,13 @@ contains
     ! Offset for the energy range used for DOS display
     range_offset = zero
     do i_spin = 1, nspin
-       if(flag_procwf_range_Ef) range_offset(i_spin) = efermi(i_spin)
+       if(flag_procwf_range_Ef) then
+          if(nspin>1.and.flag_fix_spin_population) then
+             range_offset(i_spin) = efermi(1)
+          else
+             range_offset(i_spin) = efermi(i_spin)
+          end if
+       end if
     end do
     ! Set limits and broaden energy range if needed
     if(abs(E_DOS_min)<RD_ERR) then

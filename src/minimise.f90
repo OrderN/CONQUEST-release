@@ -167,7 +167,7 @@ contains
     use multisiteSF_module,only: flag_LFD_nonSCF, flag_mix_LFD_SCF
     use units
     use io_module,         only: return_prefix
-    use DiagModule,        only: nkp
+    use DiagModule,        only: nkp, write_gaps
     use H_matrix_module,   only: flag_write_locps, locps_output, get_H_matrix, get_occ_matrix
     use maxima_module,     only: maxngrid
     use polarisation,      only: get_polarisation
@@ -372,6 +372,9 @@ contains
 
     ! Get occupation matrix for output density matrix
     if(flag_DFTplusU) call get_occ_matrix
+    ! Output gap if appropriate
+    if(inode==ionode.and.iprint_minE + min_layer >= 0) call write_gaps
+
 !****lat<$
     call final_energy(nkp,backtrace_level)
 !****lat>$

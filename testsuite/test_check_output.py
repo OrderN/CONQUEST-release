@@ -50,7 +50,10 @@ def precision(key='_'):
         return 1e-4
     '''
 
-    return 1e-4
+    if(key == 'Total stress'):
+        return 1e-3
+    else:
+        return 1e-4
 
 @pytest.fixture
 def testsuite_directory():

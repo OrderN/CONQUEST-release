@@ -2988,6 +2988,8 @@ contains
        write(io_lun,fmt='(6x,"Solving for the K matrix using ",a16)') 'diagonalisation '
        if(iprint_init>0) then
           select case (flag_smear_type)
+          case(-1)
+             write(io_lun,'(6x,"Using integer occupancies")')
           case (0)
              write(io_lun,'(6x,"Using Fermi-Dirac smearing")')
           case (1)
@@ -3220,7 +3222,8 @@ contains
     use functions,       only: is_prime
     use global_module,   only: iprint_init, rcellx, rcelly, rcellz,  &
          area_general, ni_in_cell, numprocs,   &
-         species_glob, io_lun, io_ase, ase_file, write_ase, flag_calc_pol
+         species_glob, io_lun, io_ase, ase_file, write_ase, flag_calc_pol, &
+         flag_fix_spin_population, nspin
     use numbers,         only: zero, one, two, pi, RD_ERR, half
     use GenComms,        only: cq_abort, cq_warn, gcopy
     use input_module
@@ -3229,7 +3232,7 @@ contains
     use DiagModule,      only: nkp, kk, wtk, kT, maxefermi,          &
          flag_smear_type, iMethfessel_Paxton,  &
          max_brkt_iterations, gaussian_height, &
-         finess, NElec_less
+         finess, NElec_less, flag_integer_occ, flag_adjust_Ef
     use energy,          only: SmearingType, MPOrder
     use memory_module,   only: reg_alloc_mem, reg_dealloc_mem,       &
          type_dbl
@@ -3267,6 +3270,13 @@ contains
     kT = fdf_double('Diag.kT',0.001_double)
     ! Method to approximate step function for occupation number
     flag_smear_type = fdf_integer('Diag.SmearingType',0)
+    flag_integer_occ = fdf_boolean('Diag.IntegerOccs',.false.)
+    if(flag_integer_occ) then
+       if(nspin>1.and.(.not.flag_fix_spin_population)) &
+            call cq_abort("Cannot have free spin population with integer occupancies")
+       flag_smear_type = -1
+    end if
+    flag_adjust_Ef = fdf_boolean('Diag.AdjustEf',.true.)
     SmearingType = flag_smear_type
     iMethfessel_Paxton = fdf_integer('Diag.MPOrder',0)
     MPOrder = iMethfessel_Paxton
@@ -3761,7 +3771,7 @@ contains
 3   format(8x,'Proc grid (row, col): ',2i5)
 4   format(/8x,'***WARNING***',/,2x,&
          'No Kpoints block found - defaulting to Gamma point')
-51  format(/8x,i4,' symmetry inequivalent Kpoints in Cartesian form (1/A): ')
+51  format(/8x,i4,' symmetry inequivalent Kpoints in Cartesian form (1/a0): ')
 7   format(8x,' All ',i4,' Kpoints in fractional coordinates: ')
 9   format(/8x,'***WARNING***',/,8x,&
          'Specified Kpoint mesh shift in fractional coords >= 1.0.')
