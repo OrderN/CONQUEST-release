@@ -1,0 +1,44 @@
+
+CONQUEST charge density conversion and STM image simulation
+
+D. R. Bowler (UCL) and A. Nakata (NIMS)
+
+    This job was run on 2026/08/21 at 13:38
+
+
+    Code compiled on: Fri 21 Aug 2026 10:01:26 BST
+          Version comment: 
+      Git Branch: develop; tag, hash: v1.5-52-g1e09fd72
+
+
+  Creating projected density of states (pDOS); also generating DOS
+
+
+  Calculating density of states (DOS)
+    Fermi level:     -0.14398 Ha   (=    -3.918 eV)
+  Reading bands between   -0.100E+13Ha and    0.100E+13Ha
+  Bands     1 to    46 were written out by CONQUEST
+  Dividing DOS into 10001 bins of width     0.000080 Ha
+  Sigma is:     0.001000 Ha
+  DOS lower limit:     -0.54398 Ha
+  DOS upper limit:      0.25602 Ha
+  Fermi level:         -0.14398 Ha
+  Integration of DOS in terms of absolute energies
+  DOS between      -0.544 Ha and Ef integrates to       10.000 electrons
+  DOS between      -0.544 Ha and       0.256 Ha integrates to       22.000 electrons
+
+  Calculating projected density of states (DOS)
+    Resolving in l
+    Producing pDOS for all atoms in cell
+  Opening block file: hilbert_make_blk.dat                                                            
+  Original run on        1 processors
+  Integration of DOS in terms of absolute energies
+  Results of integrating pDOS between      -0.544 and Ef (electrons per atom).
+       Atom       Total        l=0        l=1        l=2
+          1       3.092      0.410      2.600      0.082
+          2       0.954      0.893      0.061      0.000
+          3       0.954      0.893      0.061      0.000
+          4       3.092      0.410      2.600      0.082
+          5       0.954      0.893      0.061      0.000
+          6       0.954      0.893      0.061      0.000
+  Integrated pDOS:      10.000 electrons

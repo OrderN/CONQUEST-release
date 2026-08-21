@@ -3,21 +3,15 @@ IO.Coordinates    coords.dat
 IO.Iprint 1 
 IO.FractionalAtomicCoords F
 IO.WriteOutToFile T
-IO.DumpChargeDensity T
-IO.min_wf_E -0.7
-IO.max_wf_E -0.1
-IO.writeDOS T
 IO.write_proj_DOS T
 
 Process.Job pdos
-Process.min_DOS_E         -0.700000000
-Process.max_DOS_E         -0.100000000
-# Sigma can be set automatically based on energy range and n_DOS
-#Process.sigma_DOS          0.001000000
-#Process.n_DOS              10001
+Process.min_DOS_E -0.4
+Process.max_DOS_E  0.4
+Process.WFRangeRelative T
+Process.n_DOS 10001
+Process.sigma_DOS          0.001000000
 Process.pDOS_l_resolved T
-Process.pDOS_lm_resolved T
-
 
 ## General Parameters
 General.NumberOfSpecies 2
