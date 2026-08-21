@@ -1,0 +1,309 @@
+    ________________________________________________________________________
+                                                                            
+                                    CONQUEST                                
+                                                                            
+                Concurrent Order N QUantum Electronic STructure             
+    ________________________________________________________________________
+                                                                            
+     Conquest lead developers:                                              
+      D.R.Bowler (UCL, NIMS), T.Miyazaki (NIMS), A.Nakata (NIMS),           
+      L. Truflandier (U. Bordeaux)                                          
+                                                                            
+     Developers:                                                            
+      M.Arita (NIMS), J.S.Baker (UCL), V.Brazdova (UCL), R.Choudhury (UCL), 
+      S.Y.Mujahed (UCL), J.T.Poulton (UCL), Z.Raza (NIMS), A.Sena (UCL),    
+      U.Terranova (UCL), L.Tong (UCL), A.Torralba (NIMS)                    
+                                                                            
+     Early development:                                                     
+      I.J.Bush (STFC), C.M.Goringe (Keele), E.H.Hernandez (Keele)           
+                                                                            
+     Original inspiration and project oversight:                            
+      M.J.Gillan (Keele, UCL)                                               
+    ________________________________________________________________________
+
+          Reading ion files
+
+          symbol = Cr
+          label = Cr                  
+          z =     24.00000
+          zval_int, zval =     14.00000
+          mass =      52.0000000000000    
+          self_energy =      0.00000000000000    
+          lmax_basis, n_orbnl =    2   7
+          lmax_projs, n_pjnl =    2   6
+          XC functional code =      101
+          PSEUDO_TM: i, l,n, ekb =   0  1    6.3041269450000001
+          PSEUDO_TM: i, l,n, ekb =   0  2   -1.3183333051999999
+          PSEUDO_TM: i, l,n, ekb =   1  1    1.2155431033999999
+          PSEUDO_TM: i, l,n, ekb =   1  2   -0.8246559153000000
+          PSEUDO_TM: i, l,n, ekb =   2  1   -6.2326896443999997
+          PSEUDO_TM: i, l,n, ekb =   2  2   -1.7203450027000000
+          symbol = Cr
+          label = Cr                  
+          z =     24.00000
+          zval_int, zval =     14.00000
+          mass =      52.0000000000000    
+          self_energy =      0.00000000000000    
+          lmax_basis, n_orbnl =    2   7
+          lmax_projs, n_pjnl =    2   6
+          XC functional code =      101
+          PSEUDO_TM: i, l,n, ekb =   0  1    6.3041269450000001
+          PSEUDO_TM: i, l,n, ekb =   0  2   -1.3183333051999999
+          PSEUDO_TM: i, l,n, ekb =   1  1    1.2155431033999999
+          PSEUDO_TM: i, l,n, ekb =   1  2   -0.8246559153000000
+          PSEUDO_TM: i, l,n, ekb =   2  1   -6.2326896443999997
+          PSEUDO_TM: i, l,n, ekb =   2  2   -1.7203450027000000
+
+    Simulation cell dimensions:            20.0000 a0 x            20.0000 a0 x            20.0000 a0
+
+    Simulation cell volume:            8000.000000 a0**3
+
+      Atomic coordinates (a0)
+         Atom         X         Y         Z  Species
+            1   12.0000   10.0000   10.0000        1
+            2    8.0000   10.0000   10.0000        2
+        Number of processor groups for k-point parallelisation:     1
+        Block size (row, col):    32   32
+        Proc grid (row, col):     1    1
+
+        Using Monkhorst-Pack Kpoint mesh
+
+
+
+         Monkhorst-Pack mesh:   1 x   1 x   1
+         Number of k-points:    1
+         Monkhorst-Pack mesh shift:     0.000000   0.000000   0.000000
+         All    1 Kpoints in fractional coordinates: 
+            1       0.000000       0.000000       0.000000       1.000
+
+           1 symmetry inequivalent Kpoints in fractional coordinates: 
+            1       0.000000       0.000000       0.000000       1.000
+          Value of kT used for smearing:   0.001000Ha
+          Partitioning method:  1
+          Partitioning using Hilbert curves
+          ---------------------------------
+
+          checking if total number of partitions >= number of procs...           PASS
+          checking if number of occupied partitions >= number of procs...           PASS
+          checking if total N atoms in partitions == N atoms in cell...           PASS
+          checking if total N support fns in partitions == N sf in cell...           PASS
+          checking if atoms are correctly assigned to partitions...           PASS
+
+          Detected system type: bulk
+
+
+    This calculation includes non-local pseudopotentials,
+    with a maximum core radius of      8.39601666
+        Matrix S   has range     17.50000000
+        Matrix L   has range      1.00000000
+        Matrix H   has range     17.50000000
+        Matrix AP  has range     17.14601666
+        Matrix LS  has range     18.50000000
+        Matrix LH  has range     18.50000000
+        Matrix LSL has range     19.50000000
+        Matrix SLS has range     36.00000000
+        Matrix T   has range     16.79203332
+        Matrix TS  has range     34.29203332
+        Matrix TH  has range     34.29203332
+        Matrix TL  has range     17.79203332
+        Matrix PA  has range     17.14601666
+        Matrix LT  has range      1.00000000
+        Matrix SL  has range     18.50000000
+        Matrix TT  has range     16.79203332
+        Matrix HL  has range     18.50000000
+        Matrix X   has range      2.00000000
+        Matrix SX  has range      2.00000000
+
+    This job was run on  2026/08/21 at 17:21 +0100
+    Code was compiled on 2026/08/21 at 10:00 +0100
+    Version comment: Git Branch: develop; tag, hash: v1.5-52-g1e09fd72
+
+    Job title:                                                                                 
+    Job to be run: static calculation
+
+    Ground state search:
+      Support functions represented with PAO basis
+      1:1 PAO to SF mapping
+      Spin-polarised electrons; population difference free
+      Solving for the K matrix using diagonalisation 
+      Using Fermi-Dirac smearing
+
+    Integration grid size:     96 x   96 x   96
+    Integration grid blocks:    4 x    4 x    4
+
+    Integration grid spacing:  0.208 a0 x 0.208 a0 x 0.208 a0
+
+    Number of species:  2
+    --------------------------------------------------------
+    |   #  mass (au)  Charge (e)  SF Rad (a0)  NSF  Label  |
+    --------------------------------------------------------
+    |   1     28.086      14.000        8.750   19  CrU    |
+    |   2     28.086      14.000        8.750   19  CrD    |
+    --------------------------------------------------------
+          SCF tolerance:                 0.00000100
+          SCF iterations:               300
+    Hamann (ONCVPSP) pseudopotential will be used. 
+
+    The calculation will be performed on     1 process
+
+    The calculation will be performed on    10 threads
+
+    Using the default matrix multiplication kernel
+
+    The functional used will be GGA PBE96      
+
+
+           radial cut-off to be used is taken to be max PAO cut-off radius for this species:    8.396017
+
+           greatest ang. mom. for making density from PAOs:  2
+
+           radial cut-off to be used is taken to be max PAO cut-off radius for this species:    8.396017
+
+           greatest ang. mom. for making density from PAOs:  2
+    Minimum blocs/proc is    13824. Maximum blocs/proc is    13824
+    set_atom_dens: In set_atomic_density, electrons (spin=1):      14.000000000000
+    set_atom_dens: In set_atomic_density, electrons (spin=2):      14.000000000000
+ matrix_size & matrix_size_padH =           38          64
+
+    Screened ion int: energy:    -145.387613887328 Ha
+
+    new_SC_potl: Starting.  Tolerance:  0.10000E-05
+
+    PulayMixSC: Starting Pulay mixing, A_up =  0.300 A_dn =  0.300
+    PulayMixSC: Spin populations are to be relaxed.
+          Harris-Foulkes Energy            :      -177.710664536333184 Ha
+          (TS=0 as O(N) or entropic contribution is negligible)
+          DFT Total Energy                 :      -177.684068392657593 Ha
+          Total number of electrons        :        27.999999999997719
+          Number of electrons spin up      :        13.999999999998803
+          Number of electrons spin down    :        13.999999999998918
+          Spin polarisation (NeUP - NeDN)  :        -0.000000000000115
+    PulayMixSC: Pulay iteration     1 residual:              0.91743E-02
+          Harris-Foulkes Energy            :      -177.705830583542593 Ha
+          (TS=0 as O(N) or entropic contribution is negligible)
+          DFT Total Energy                 :      -177.725300331586595 Ha
+          Total number of electrons        :        28.000012378506590
+          Number of electrons spin up      :        14.000006189253245
+          Number of electrons spin down    :        14.000006189253343
+          Spin polarisation (NeUP - NeDN)  :        -0.000000000000098
+    PulayMixSC: Pulay iteration     2 residual:              0.82347E-02
+          Harris-Foulkes Energy            :      -177.719329779164298 Ha
+          (TS=0 as O(N) or entropic contribution is negligible)
+          DFT Total Energy                 :      -177.739598236796610 Ha
+          Total number of electrons        :        28.000020927154928
+          Number of electrons spin up      :        14.000010463577484
+          Number of electrons spin down    :        14.000010463577444
+          Spin polarisation (NeUP - NeDN)  :         0.000000000000039
+    PulayMixSC: Pulay iteration     3 residual:              0.70724E-02
+          Harris-Foulkes Energy            :      -177.750464214221040 Ha
+          (TS=0 as O(N) or entropic contribution is negligible)
+          DFT Total Energy                 :      -177.752457644502755 Ha
+          Total number of electrons        :        28.000036097613872
+          Number of electrons spin up      :        14.000018048806945
+          Number of electrons spin down    :        14.000018048806929
+          Spin polarisation (NeUP - NeDN)  :         0.000000000000016
+    PulayMixSC: Pulay iteration     4 residual:              0.22704E-02
+          Harris-Foulkes Energy            :      -177.753345248057144 Ha
+          (TS=0 as O(N) or entropic contribution is negligible)
+          DFT Total Energy                 :      -177.753112220608102 Ha
+          Total number of electrons        :        28.000037274341850
+          Number of electrons spin up      :        14.000018637170776
+          Number of electrons spin down    :        14.000018637171072
+          Spin polarisation (NeUP - NeDN)  :        -0.000000000000297
+    PulayMixSC: Pulay iteration     5 residual:              0.67282E-03
+          Harris-Foulkes Energy            :      -177.753442460955284 Ha
+          (TS=0 as O(N) or entropic contribution is negligible)
+          DFT Total Energy                 :      -177.753440035931220 Ha
+          Total number of electrons        :        28.000037563986012
+          Number of electrons spin up      :        14.000018781992917
+          Number of electrons spin down    :        14.000018781993097
+          Spin polarisation (NeUP - NeDN)  :        -0.000000000000179
+    PulayMixSC: Pulay iteration     6 residual:              0.23652E-03
+          Harris-Foulkes Energy            :      -177.753445086978616 Ha
+          (TS=0 as O(N) or entropic contribution is negligible)
+          DFT Total Energy                 :      -177.753450432742227 Ha
+          Total number of electrons        :        28.000037310542410
+          Number of electrons spin up      :        14.000018655270836
+          Number of electrons spin down    :        14.000018655271573
+          Spin polarisation (NeUP - NeDN)  :        -0.000000000000737
+    PulayMixSC: Pulay iteration     7 residual:              0.72650E-04
+          Harris-Foulkes Energy            :      -177.753452342415812 Ha
+          (TS=0 as O(N) or entropic contribution is negligible)
+          DFT Total Energy                 :      -177.753453033196337 Ha
+          Total number of electrons        :        28.000037401330250
+          Number of electrons spin up      :        14.000018700664924
+          Number of electrons spin down    :        14.000018700665326
+          Spin polarisation (NeUP - NeDN)  :        -0.000000000000401
+    PulayMixSC: Pulay iteration     8 residual:              0.50421E-04
+          Harris-Foulkes Energy            :      -177.753452927176113 Ha
+          (TS=0 as O(N) or entropic contribution is negligible)
+          DFT Total Energy                 :      -177.753453158792183 Ha
+          Total number of electrons        :        28.000037390760404
+          Number of electrons spin up      :        14.000018695380579
+          Number of electrons spin down    :        14.000018695379827
+          Spin polarisation (NeUP - NeDN)  :         0.000000000000751
+    PulayMixSC: Pulay iteration     9 residual:              0.10906E-04
+          Harris-Foulkes Energy            :      -177.753453182181488 Ha
+          (TS=0 as O(N) or entropic contribution is negligible)
+          DFT Total Energy                 :      -177.753453213404896 Ha
+          Total number of electrons        :        28.000037420678321
+          Number of electrons spin up      :        14.000018710338749
+          Number of electrons spin down    :        14.000018710339573
+          Spin polarisation (NeUP - NeDN)  :        -0.000000000000824
+    PulayMixSC: Pulay iteration    10 residual:              0.53461E-05
+          Harris-Foulkes Energy            :      -177.753453223663058 Ha
+          (TS=0 as O(N) or entropic contribution is negligible)
+          DFT Total Energy                 :      -177.753453219151538 Ha
+          Total number of electrons        :        28.000037425957167
+          Number of electrons spin up      :        14.000018712978532
+          Number of electrons spin down    :        14.000018712978635
+          Spin polarisation (NeUP - NeDN)  :        -0.000000000000103
+    PulayMixSC: Pulay iteration    11 residual:              0.24387E-05
+          Harris-Foulkes Energy            :      -177.753453224036605 Ha
+          (TS=0 as O(N) or entropic contribution is negligible)
+          DFT Total Energy                 :      -177.753453223020358 Ha
+          Total number of electrons        :        28.000037420153642
+          Number of electrons spin up      :        14.000018710076853
+          Number of electrons spin down    :        14.000018710076789
+          Spin polarisation (NeUP - NeDN)  :         0.000000000000064
+    PulayMixSC: Pulay iteration    12 residual:              0.64772E-06
+    PulayMixSC: Reached SCF tolerance of  0.64772E-06 after     12 iterations
+    Spin 1 gap found.  VBM=    -0.14318 Ha CBM=    -0.07132 Ha Gap      0.07186 Ha
+    Direct gap found at   0.0000  0.0000  0.0000 (1/a0)
+    Fermi level=     -0.10725 Ha
+    Spin 2 gap found.  VBM=    -0.14318 Ha CBM=    -0.07132 Ha Gap      0.07186 Ha
+    Direct gap found at   0.0000  0.0000  0.0000 (1/a0)
+    Fermi level=     -0.10725 Ha
+      | Number of electrons (u/d)=        14.000019       14.000019
+      |* band energy as 2Tr[K.H] =       -32.253920567859154 Ha
+      |  screened ion-ion energy =      -145.387613887328001 Ha
+      |  Ha correction           =        -0.621956943254843 Ha
+      |  XC correction           =         0.510047276917626 Ha
+      |* Harris-Foulkes energy   =      -177.753453224036605 Ha
+      |* DFT total energy        =      -177.753453223020358 Ha
+      |  estimated accuracy      =        -0.000000001016247 Ha
+
+    force: Forces on atoms (Ha/a0)
+    force:  Atom   X              Y              Z
+    force:     1   0.0071965543   0.0000000000  -0.0000000000
+    force:     2  -0.0071964978  -0.0000000000  -0.0000000000
+
+    force: Maximum force :        0.00719655(Ha/a0) on atom         1 in x direction
+    force: Force Residual:        0.00719653 Ha/a0
+    force: Total stress:            -0.07457610       -0.03663131       -0.03663131 GPa
+    force: Average pressure:      0.04927957 GPa
+
+    force: Finished force
+    get_E_and_F: Change in energy during last step of electronic optimisation: -0.37355E-09
+
+    BIBLIOGRAPHY: Please consider citing the following references in the conquest.bib file
+
+    CONQUEST:         Bowler2002pt, Miyazaki2004, Nakata2020
+    Basis:            Bowler2019
+    DM:               Bowler:2006xr
+    Pseudopotentials: Hamann2013, Bowler2019
+    XC functional:    Perdew1996
+
+    Max total mem use is            791.179 MB
+
+    Total run time was:              20.937 seconds

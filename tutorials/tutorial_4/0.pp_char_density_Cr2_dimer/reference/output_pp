@@ -1,0 +1,22 @@
+
+CONQUEST charge density conversion and STM image simulation
+
+D. R. Bowler (UCL) and A. Nakata (NIMS)
+
+    This job was run on 2026/08/21 at 17:22
+
+
+    Code compiled on: Fri 21 Aug 2026 10:01:26 BST
+          Version comment: 
+      Git Branch: develop; tag, hash: v1.5-52-g1e09fd72
+
+
+  Converting charge density to cube format
+
+  Opening block file: hilbert_make_blk.dat                                                            
+    Blocks in x, y, z:    24   24   24
+    Block sizes in bohr:      0.83333     0.83333     0.83333
+    Points in user-specified area:    96   96   96
+  Original run on        1 processors
+ Number of electrons in active area:    14.000020666529469     
+ Number of electrons in active area:    14.000020649370512     
