@@ -7,7 +7,7 @@ Process.Job pdos
 Process.min_DOS_E -0.35
 Process.max_DOS_E  0.35
 Process.WFRangeRelative T
-#Process.n_DOS 10001
+Process.n_DOS 10001
 Process.pDOS_l_resolved T
 #Process.pDOS_lm_resolved T
 
@@ -15,14 +15,12 @@ AtomMove.TypeOfRun static
 
 minE.SelfConsistent T
 IO.Iprint 1
-IO.writeDOS T
 IO.write_proj_DOS T
 General.title TestMD
 
 IO.Coordinates coords.dat
 Grid.GridCutoff 100
 
-DM.L_range 1.0
 DM.SolutionMethod diagon
 Diag.MPMesh   T
 Diag.MPMeshX  5

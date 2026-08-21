@@ -1,0 +1,122 @@
+    ________________________________________________________________________
+                                                                            
+                                    CONQUEST                                
+                                                                            
+                Concurrent Order N QUantum Electronic STructure             
+    ________________________________________________________________________
+                                                                            
+     Conquest lead developers:                                              
+      D.R.Bowler (UCL, NIMS), T.Miyazaki (NIMS), A.Nakata (NIMS),           
+      L. Truflandier (U. Bordeaux)                                          
+                                                                            
+     Developers:                                                            
+      M.Arita (NIMS), J.S.Baker (UCL), V.Brazdova (UCL), R.Choudhury (UCL), 
+      S.Y.Mujahed (UCL), J.T.Poulton (UCL), Z.Raza (NIMS), A.Sena (UCL),    
+      U.Terranova (UCL), L.Tong (UCL), A.Torralba (NIMS)                    
+                                                                            
+     Early development:                                                     
+      I.J.Bush (STFC), C.M.Goringe (Keele), E.H.Hernandez (Keele)           
+                                                                            
+     Original inspiration and project oversight:                            
+      M.J.Gillan (Keele, UCL)                                               
+    ________________________________________________________________________
+
+    Simulation cell dimensions:             7.3800 a0 x             7.3800 a0 x             7.3800 a0
+
+    Simulation cell volume:             401.947272 a0**3
+
+      Atomic coordinates (a0)
+         Atom         X         Y         Z  Species
+            1    0.0000    0.0000    0.0000        1
+            2    3.6900    3.6900    3.6900        2
+            3    3.6900    3.6900    0.0000        3
+            4    3.6900    0.0000    3.6900        3
+            5    0.0000    3.6900    3.6900        3
+
+         Monkhorst-Pack mesh:   5 x   5 x   5
+         Monkhorst-Pack mesh shift:     0.000000   0.000000   0.000000
+
+    This calculation includes non-local pseudopotentials,
+    with a maximum core radius of     10.09830799
+
+    This job was run on  2026/08/21 at 10:09 +0100
+    Code was compiled on 2026/08/21 at 10:00 +0100
+    Version comment: Git Branch: develop; tag, hash: v1.5-52-g1e09fd72
+
+    Job title:                                                                                 
+    Job to be run: static calculation
+
+    Ground state search:
+      Support functions represented with PAO basis
+      1:1 PAO to SF mapping
+      Non-spin-polarised electrons
+      Solving for the K matrix using diagonalisation 
+      Using Fermi-Dirac smearing
+
+    Integration grid size:     36 x   36 x   36
+
+    Integration grid spacing:  0.205 a0 x 0.205 a0 x 0.205 a0
+
+    Number of species:  3
+    --------------------------------------------------------
+    |   #  mass (au)  Charge (e)  SF Rad (a0)  NSF  Label  |
+    --------------------------------------------------------
+    |   1     12.010      10.000       10.455   14  Sr     |
+    |   2     12.010      12.000        8.610   19  Ti     |
+    |   3     12.010       6.000        5.125   13  O      |
+    --------------------------------------------------------
+          SCF tolerance:                 0.00000100
+          SCF iterations:                50
+
+    The calculation will be performed on     1 process
+
+    The calculation will be performed on    10 threads
+
+    Using the default matrix multiplication kernel
+
+    The functional used will be GGA PBE96      
+
+    set_atom_dens: In set_atomic_density, electrons :      40.000000000000
+    PulayMixSC: Starting Pulay mixing, A_up =  0.500 A_dn =  0.500
+    PulayMixSC: Spin non-polarised calculation.
+          Harris-Foulkes Energy            :      -143.698735228760825 Ha
+    PulayMixSC: Pulay iteration     1 residual:              0.93240E-02
+          Harris-Foulkes Energy            :      -143.731051818699456 Ha
+          Free Energy (E-TS)               :      -143.731336612916834 Ha
+    PulayMixSC: Pulay iteration     2 residual:              0.14232E-01
+          Harris-Foulkes Energy            :      -143.535775131736216 Ha
+    PulayMixSC: Pulay iteration     3 residual:              0.32271E-02
+          Harris-Foulkes Energy            :      -143.514877207128080 Ha
+    PulayMixSC: Pulay iteration     4 residual:              0.18148E-02
+          Harris-Foulkes Energy            :      -143.509277134930414 Ha
+    PulayMixSC: Pulay iteration     5 residual:              0.96283E-03
+          Harris-Foulkes Energy            :      -143.507521285054708 Ha
+    PulayMixSC: Pulay iteration     6 residual:              0.81591E-04
+          Harris-Foulkes Energy            :      -143.507510435811184 Ha
+    PulayMixSC: Pulay iteration     7 residual:              0.24153E-04
+          Harris-Foulkes Energy            :      -143.507509180205005 Ha
+    PulayMixSC: Pulay iteration     8 residual:              0.21506E-05
+          Harris-Foulkes Energy            :      -143.507509172072275 Ha
+    PulayMixSC: Pulay iteration     9 residual:              0.47016E-06
+    PulayMixSC: Reached SCF tolerance of  0.47016E-06 after      9 iterations
+    Gap found.  VBM=    -0.34855 Ha CBM=    -0.27936 Ha Gap      0.06919 Ha
+    Indirect gap found; smallest direct gap is      0.07752 Ha at   0.00  0.00  0.00 (1/a0)
+    VBM is at   0.3406 -0.3406 -0.3406 (1/a0)
+    CBM is at   0.0000  0.0000  0.0000 (1/a0)
+    Fermi level=     -0.31396 Ha
+      | Number of electrons      =        39.999920
+      |* Harris-Foulkes energy   =      -143.507509172072275 Ha
+      |* DFT total energy        =      -143.507509172398386 Ha
+    get_E_and_F: Change in energy during last step of electronic optimisation:  0.81327E-08
+
+    BIBLIOGRAPHY: Please consider citing the following references in the conquest.bib file
+
+    CONQUEST:         Bowler2002pt, Miyazaki2004, Nakata2020
+    Basis:            Bowler2019
+    DM:               Bowler:2006xr
+    Pseudopotentials: Hamann2013, Bowler2019
+    XC functional:    Perdew1996
+
+    Max total mem use is            594.122 MB
+
+    Total run time was:              57.154 seconds
