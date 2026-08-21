@@ -1,0 +1,28 @@
+
+CONQUEST charge density conversion and STM image simulation
+
+D. R. Bowler (UCL) and A. Nakata (NIMS)
+
+    This job was run on 2026/08/21 at 16:04
+
+
+    Code compiled on: Fri 21 Aug 2026 10:01:26 BST
+          Version comment: 
+      Git Branch: develop; tag, hash: v1.5-52-g1e09fd72
+
+
+  Creating density of states (DOS)
+
+
+  Calculating density of states (DOS)
+    Reading k-points from eigenvalues file, not setting from input file
+    Fermi level:     -0.17872 Ha   (=    -4.863 eV)
+  Active bands: 
+  Dividing DOS into 10001 bins of width     0.000105 Ha
+  Sigma is:     0.003000 Ha
+  DOS lower limit:     -0.80130 Ha
+  DOS upper limit:      0.24728 Ha
+  Fermi level:         -0.17872 Ha
+  Integration of DOS in terms of absolute energies
+  DOS between      -0.801 Ha and Ef integrates to       32.000 electrons
+  DOS between      -0.801 Ha and       0.247 Ha integrates to       80.923 electrons

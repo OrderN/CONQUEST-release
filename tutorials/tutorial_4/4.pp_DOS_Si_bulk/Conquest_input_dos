@@ -1,0 +1,31 @@
+Process.Job dos
+#Process.min_DOS_E         -0.37
+Process.max_DOS_E          0.426
+Process.WFRangeRelative T
+Process.n_DOS              10001
+Process.sigma_DOS          0.003
+
+AtomMove.TypeOfRun static
+
+minE.SelfConsistent F
+IO.Iprint 1
+General.title TestMD
+General.LoadRho T
+
+IO.Coordinates coords.dat
+IO.DumpChargeDensity F
+Grid.GridCutoff 100
+
+DM.L_range 1.0
+DM.SolutionMethod diagon
+Diag.MPMesh   T
+Diag.MPMeshX  11
+Diag.MPMeshY  11
+Diag.MPMeshZ  11
+
+General.NumberOfSpecies  1
+General.PseudopotentialType hamann
+
+%block ChemicalSpeciesLabel
+ 1 12.01 Si
+%endblock
