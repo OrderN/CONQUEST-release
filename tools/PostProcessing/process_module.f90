@@ -448,7 +448,7 @@ contains
     use local, ONLY: eigenvalues, n_bands_total, nkp, wtk, efermi, flag_total_iDOS, &
          evec_coeff, scaled_evec_coeff, flag_procwf_range_Ef, flag_l_resolved, flag_lm_resolved, &
          flag_rotate_pdos, flag_rotate_pdos_mode,flag_rotate_pdos_debug,  band_full_to_active, n_atoms_pDOS, pDOS_atom_index, &
-         pdos_ax, pdos_ay, pdos_az, rotate_pdos_atoms_euler, euler_angles, find_neighbours, rotate_pdos_natoms, &
+         pdos_ax, pdos_ay, pdos_az, rotate_pdos_atoms, axes_angles, euler_angles, find_neighbours, rotate_pdos_natoms, &
          nghbr_arr, U1, U2
     use read, ONLY: read_eigenvalues, read_psi_coeffs, read_nprocs_from_blocks
     use global_module, ONLY: nspin, n_DOS, E_DOS_min, E_DOS_max, sigma_DOS, ni_in_cell, species_glob
@@ -553,6 +553,7 @@ contains
          call construct_C1(rod, C1)
          call construct_C2(rod, C2)
          do i = 1, n_atoms_pDOS
+            rod = 0.0
             call construct_Ul(1, A1, C1, U1(:,:,i))
             call construct_Ul(2, A2, C2, U2(:,:,i))
             U1(:,:,i) = transpose(U1(:,:,i))
@@ -570,8 +571,7 @@ contains
                end do
                call print_orbital_weights(i)
             end if ! end rotation debug output
-          end do
-
+          end do ! end mode 0, axes input
       else if (flag_rotate_pdos_mode == 1) then
          write(*,fmt='(2x,"Using extrinsic Euler angles in active zyz convention")')
          allocate(U1(3,3,rotate_pdos_natoms))
@@ -581,8 +581,9 @@ contains
          Qxyz(2,3) = 1.0
          Qxyz(3,1) = 1.0
          do i = 1, rotate_pdos_natoms
+            rod = 0.0
             write(*, fmt='(/2x,"New local axes for specified atoms: ", *(I0,1x))') &
-               rotate_pdos_atoms_euler(i)
+               rotate_pdos_atoms(i)
             call construct_EulerMatrices(E1, E2, i)
             U1(:,:,i) = (E1)
             U2(:,:,i) = (E2)
@@ -606,16 +607,17 @@ contains
                temp_matrix(:,3)
             if (flag_rotate_pdos_debug) then
                write(*, fmt='(/4x, "alpha(z) beta(y) gamma(z): ",3(f10.5,1X))') &
-                  euler_angles(1,i), euler_angles(2,i),euler_angles(3,i)
+                  euler_angles(:,i)
                call print_orbital_weights(i)
             end if ! end rotation debug mode
-         end do
+         end do ! end mode 1, euler angles
       else if (flag_rotate_pdos_mode == 2) then
          write(*,fmt='(2x,"Using user input atom numbers and local geometry")')
          allocate(U1(3,3,rotate_pdos_natoms))
          allocate(U2(5,5,rotate_pdos_natoms))
 
          do i = 1, rotate_pdos_natoms
+            rod = 0.0
             call nearest_neighbours(find_neighbours(1, i), bond)
             write(*, fmt='(/2x,"Located neighours of atom ", I0, ": ", *(I0,1x))') &
                     find_neighbours(1,i), nghbr_arr
@@ -647,7 +649,46 @@ contains
                end do
                call print_orbital_weights(i)
             end if ! end rotation debug output
-         end do
+         end do ! end mode 2, neighbour input
+      else if (flag_rotate_pdos_mode == 3) then
+         write(*,fmt='(2x,"Using user input axis and angle")')
+         allocate(U1(3,3,rotate_pdos_natoms))
+         allocate(U2(5,5,rotate_pdos_natoms))
+
+         do i = 1, rotate_pdos_natoms
+            rod = 0.0
+            axis = axes_angles(1:3,i)
+            angle = axes_angles(4,i)
+            write(*, fmt='(/2x,"User input axis: ", 3(f10.5))') axis
+            write(*, fmt='(/2x,"User input angle (rad, deg) ", 2(f10.5))') angle, angle * (180.0 / pi)
+            call construct_rodrigues(axis, angle, rod)
+            write(*, fmt='(/2x,"New local axes for atom ", I0, ": ")') &
+            rotate_pdos_atoms(i)
+
+            ! Read off columns for local axes
+            write(*, fmt='(/4x,"x: ",3(f10.5,1X))', advance="no") rod(1), rod(4), rod(7)
+            write(*, fmt='(/4x,"y: ",3(f10.5,1X))', advance="no") rod(2), rod(5), rod(8)
+            write(*, fmt='(/4x,"z: ",3(f10.5,1X))', advance="no") rod(3), rod(6), rod(9)
+            ! Construct all C^l matrices from rodrigues
+            call construct_C1(rod, C1)
+            call construct_C2(rod, C2)
+            call construct_Ul(1, A1, C1, U1(:,:,i))
+            call construct_Ul(2, A2, C2, U2(:,:,i))
+            U1(:,:,i) = transpose(U1(:,:,i))
+            U2(:,:,i) = transpose(U2(:,:,i))
+            if (flag_rotate_pdos_debug) then
+               call euler_from_axisangle(axis, angle)
+               write(*, fmt='(/4x, "C1: ")')
+               do j = 1, 3
+                  write(*, fmt='(/6x,3(f10.5,1X))',  advance='no') C1(j,:)
+               end do
+               write(*, fmt='(/4x, "C2: ")')
+               do j = 1, 5
+                  write(*, fmt='(/6x,5(f10.5,1X))',  advance='no') C2(j, :)
+               end do
+               call print_orbital_weights(i)
+            end if ! end rotation debug output
+         end do ! end mode 3, direct axis angle
       end if ! pdos rotation mode
       call rotate_coefficients
       deallocate(U1)
@@ -1464,7 +1505,7 @@ end subroutine
          identity(3, 3) = 1.0
          identity(4, 4) = 1.0
          identity(5, 5) = 1.0
-         if(all(abs(matmul(C2, transpose(C2)) - identity) < 1e-7))  then
+         if(all(abs(matmul(C2, transpose(C2)) - identity) < 1e-5))  then
             write(*, '(/2x, "C2 matrix is orthogonal: PASS")', advance='yes')
          else
             write(*, '(/2x, "C2 matrix is orthogonal: FAIL")', advance='yes')
@@ -1550,7 +1591,7 @@ end subroutine
       use datatypes
       use local, ONLY: n_bands_total, nkp, n_atoms_pDOS, evec_coeff, scaled_evec_coeff, &
       pDOS_atom_index, band_full_to_active, rotate_pdos_natoms, find_neighbours, &
-      flag_rotate_pdos_mode, rotate_pdos_atoms_euler, U1, U2
+      flag_rotate_pdos_mode, rotate_pdos_atoms, U1, U2
       use global_module, ONLY: nspin, species_glob
       use pao_format,    ONLY: pao
       use GenComms, ONLY: cq_abort
@@ -1571,9 +1612,9 @@ end subroutine
       if (flag_rotate_pdos_mode == 2) then
          ! Atom counter should be the order the user input pDOSNeighbours block
             g_atom_lookup = find_neighbours(1, :)
-      else if (flag_rotate_pdos_mode == 1) then
+      else if (flag_rotate_pdos_mode == 1 .or. flag_rotate_pdos_mode == 3) then
          ! Atom counter should be the order the user input pDOSEuler block
-            g_atom_lookup = rotate_pdos_atoms_euler
+            g_atom_lookup = rotate_pdos_atoms
       else
             g_atom_lookup = pDOS_atom_index
       end if

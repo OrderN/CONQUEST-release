@@ -348,9 +348,9 @@ contains
                   1+block_end-block_start,rotate_pdos_natoms)
          ! In each line, expect an integer followed by 3 floats
             allocate(euler_angles(3, rotate_pdos_natoms))
-            allocate(rotate_pdos_atoms_euler(rotate_pdos_natoms))
+            allocate(rotate_pdos_atoms(rotate_pdos_natoms))
             do i = 1, rotate_pdos_natoms
-               read (unit=input_array(block_start+i-1),fmt=*) rotate_pdos_atoms_euler(i), euler_angles(:,i)
+               read (unit=input_array(block_start+i-1),fmt=*) rotate_pdos_atoms(i), euler_angles(:,i)
             end do
              if (flag_rotate_pdos_units == "deg") then
                   euler_angles = euler_angles * (pi / 180.0)
@@ -379,6 +379,21 @@ contains
                   call cq_abort("Input for second axis must be 0 or neighbour in cell",&
                      1+block_end-block_start,4)
              end do
+            call fdf_endblock
+          else if (fdf_block('pDOSAxisAngle') .and. flag_rotate_pdos_mode == 3) then
+            if(1+block_end-block_start<rotate_pdos_natoms) &
+                  call cq_abort("Too few atoms provided in pDOSAxisAngle block: ",&
+                  1+block_end-block_start,rotate_pdos_natoms)
+         ! In each line, expect an integer followed by 4 floats
+            allocate(axes_angles(4, rotate_pdos_natoms))
+            allocate(rotate_pdos_atoms(rotate_pdos_natoms))
+            do i = 1, rotate_pdos_natoms
+               read (unit=input_array(block_start+i-1),fmt=*) rotate_pdos_atoms(i), axes_angles(:,i)
+               axes_angles(1:3,i) = axes_angles(1:3,i)  / norm2(axes_angles(1:3,i))
+            end do
+            if (flag_rotate_pdos_units == "deg") then
+               axes_angles(4,:) = axes_angles(4,:) * (pi / 180.0)
+            end if
             call fdf_endblock
          else
             call cq_abort("Unknown rotation input: ", flag_rotate_pdos_mode)
