@@ -367,6 +367,7 @@ contains
        allocate(set%ig_cover(set%mx_mcover),STAT=stat)
        if(stat/=0) call cq_abort('Error allocating ig_cover:',set%mx_mcover,stat)
        call reg_alloc_mem(area_index, 3*set%mx_mcover,type_dbl)
+       call reg_alloc_mem(area_index, set%mx_mcover, type_int)   ! ig_cover: INTEGER(mx_mcover)
        call stop_timer(tmr_std_allocation)
        do ind_cover=1,set%ng_cover
           nsx=nx_in_cover(ind_cover)
@@ -846,7 +847,7 @@ contains
     use basic_types
     use GenComms, ONLY: cq_abort
     use global_module, ONLY: area_index
-    use memory_module, ONLY: reg_dealloc_mem, type_int
+    use memory_module, ONLY: reg_dealloc_mem, type_int, type_dbl
 
     implicit none
 
@@ -872,6 +873,8 @@ contains
     if(members) then
        deallocate(set%ig_cover,set%zcover,set%ycover,set%xcover, set%icover_ibeg,set%n_ing_cover, STAT=stat)
        if(stat/=0) call cq_abort('deallocate_cs: error(3)')
+       call reg_dealloc_mem(area_index, 3*set%mx_mcover, type_dbl)
+       call reg_dealloc_mem(area_index, set%mx_mcover, type_int)
     endif
     call stop_timer(tmr_std_allocation)
     return
