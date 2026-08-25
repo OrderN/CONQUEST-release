@@ -836,6 +836,8 @@ contains
 !!   2018/09/06 10:35 dave
 !!    Tidying and bug fix: members was bracketing ALL variables and
 !!    stat wasn't initialised  
+!!   2026/08/25 Augustin Lu
+!!    Added deallocation of ig_cover
 !!  SOURCE
 !!
   subroutine deallocate_cs(set,members)
@@ -868,7 +870,7 @@ contains
     deallocate(set%ncover_rem, set%inv_lab_cover, set%lab_cover,set%lab_cell, STAT=stat)
     if(stat/=0) call cq_abort('deallocate_cs: error(2)')
     if(members) then
-       deallocate(set%zcover,set%ycover,set%xcover, set%icover_ibeg,set%n_ing_cover, STAT=stat)
+       deallocate(set%ig_cover,set%zcover,set%ycover,set%xcover, set%icover_ibeg,set%n_ing_cover, STAT=stat)
        if(stat/=0) call cq_abort('deallocate_cs: error(3)')
     endif
     call stop_timer(tmr_std_allocation)
