@@ -1,0 +1,26 @@
+
+CONQUEST charge density conversion and STM image simulation
+
+D. R. Bowler (UCL) and A. Nakata (NIMS)
+
+    This job was run on 2026/08/25 at 13:57
+
+
+    Code compiled on: Fri 21 Aug 10:07:46 BST 2026
+          Version comment: 
+      Git Branch: develop; tag, hash: v1.5-52-g1e09fd72
+
+
+  Creating Tersoff-Hamman simulated STM image in cube format
+
+  Opening block file: hilbert_make_blk.dat                                                            
+    Blocks in x, y, z:    18   18   45
+    Block sizes in bohr:      0.81435     0.81435     0.80196
+    Points in user-specified area:    72   72  180
+  Original run on        4 processors
+ Processing STM
+    Reading k-points from eigenvalues file, not setting from input file
+    Fermi level:     -0.17482 Ha   (=    -4.757 eV)
+  Reading bands between   -0.325E+00Ha and   -0.248E-01Ha
+  Bands    27 to    78 were written out by CONQUEST
+  Including bands between     -6.757 and     -4.757 eV
