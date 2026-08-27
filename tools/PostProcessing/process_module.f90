@@ -83,7 +83,6 @@ contains
           if(ispin==2) ci = TRIM(charge_stub)//"_dn"
        end if
        do proc = 1, nprocs
-       do proc = 1, nprocs
           call get_file_name(ci,nprocs,proc,filename)
           ! Open file
           open(unit=17,file=filename)
@@ -1886,8 +1885,7 @@ contains
          pdos_ay = proj_vector
          pdos_az = norm_bond(:, ibond_principal)
          pdos_ax = cross_product(pdos_ay, pdos_az)
-
-      end if
+      end select
       pdos_ax = pdos_ax / norm2(pdos_ax)
       pdos_ay = pdos_ay / norm2(pdos_ay)
       pdos_az = pdos_az / norm2(pdos_az)
