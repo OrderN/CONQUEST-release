@@ -1206,6 +1206,8 @@ contains
   !!    Adding dissociate_matrices and deallocation of mat for empty bundle fix
   !!   2024/06/12 18:00 nakata
   !!    Adding end_ops for SXrange and Xrange
+  !!   2026/08/26 Augustin Lu
+  !!    Added deallocation of S_X_SX (fix for memory leak)
   !!  SOURCE
   !!
   subroutine fmmi(prim)
@@ -1408,6 +1410,7 @@ contains
     call deallocate_comms_data(mult(T_H_TH)%comms)
     call deallocate_comms_data(mult(T_L_TL)%comms)
     call deallocate_comms_data(mult(TL_T_L)%comms)
+    call deallocate_comms_data(mult(S_X_SX)%comms)
     if (atomf.ne.sf) then
        call deallocate_comms_data(mult(aSa_sCaTr_aSs)%comms)
        call deallocate_comms_data(mult(sCa_aSs_sSs)%comms)
