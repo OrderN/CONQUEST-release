@@ -1551,6 +1551,7 @@ contains
    !!    14/04/2026 - C. Xu: loop over active bands only
    !!    03/05/2026 - C. Xu: correct g_atom_lookup
    !!    12/05/2026 - C. Xu: correct de/allocation behaviour. Edit desc
+   !!    27/08/2026 - C. Xu: Similarity transform on U2 to account for orbital basis
    !!  SOURCE
    !!
    subroutine rotate_coefficients
@@ -1579,7 +1580,7 @@ contains
          ! Atom counter should be the order the user input pDOSNeighbours block
             g_atom_lookup = find_neighbours(1, :)
       else if (flag_rotate_pdos_mode == 1 .or. flag_rotate_pdos_mode == 3) then
-         ! Atom counter should be the order the user input pDOSEuler block
+         ! Atom counter should be the order the user input other blocks
             g_atom_lookup = rotate_pdos_atoms
       else
             g_atom_lookup = pDOS_atom_index
