@@ -553,14 +553,13 @@ contains
          call construct_C1(rod, C1)
          call construct_C2(rod, C2)
          do i = 1, n_atoms_pDOS
-            rod = 0.0
             call construct_Ul(1, A1, C1, U1(:,:,i))
             call construct_Ul(2, A2, C2, U2(:,:,i))
             U1(:,:,i) = transpose(U1(:,:,i))
             U2(:,:,i) = transpose(U2(:,:,i))
 
             if (flag_rotate_pdos_debug) then
-               call euler_from_axisangle(axis, angle)
+               ! call euler_from_axisangle(axis, angle)
                write(*, fmt='(/4x, "C1: ")')
                do j = 1, 3
                   write(*, fmt='(/6x,3(f10.5,1X))',  advance='no') C1(j,:)
@@ -639,7 +638,7 @@ contains
             U1(:,:,i) = transpose(U1(:,:,i))
             U2(:,:,i) = transpose(U2(:,:,i))
             if (flag_rotate_pdos_debug) then
-               call euler_from_axisangle(axis, angle)
+               ! call euler_from_axisangle(axis, angle)
                write(*, fmt='(/4x, "C1: ")')
                do j = 1, 3
                   write(*, fmt='(/6x,3(f10.5,1X))',  advance='no') C1(j,:)
@@ -934,7 +933,7 @@ contains
       integer :: i,j,k
       real(double) :: pdos_weight, identity3(3,3), identity5(5,5)
       character(len=30), parameter :: p_orb(3) = (/ "|y>", "|z>","|x>"/)
-      character(len=30), parameter :: d_orb(5) = (/ "|xy>      ", "|yz>      ", &
+      character(len=30), parameter :: d_orb(5) = (/ "|-xy>      ", "|yz>      ", &
       "|3z^2-r^2>", "|xz>      ", "|x^2-y^2> "/)
       character(len=50) :: pdos_weight_str
       character(len=100) :: line
@@ -950,9 +949,13 @@ contains
             (U1(k,j,atom_index)*U1(k,j,atom_index), j = 1, 3)
       end do  ! end printing l = 2 orbital weights
       write(*, fmt='(/4x, "U2: ")')
-      do j = 1, 5
-         write(*, fmt='(/6x,5(f10.5,1X))', advance='no') U2(j,:,atom_index)
-      end do
+      ! Manual write because first row and column need to be negated
+      write(*, fmt='(/6x,5(f10.5,1X))', advance='no') U2(1,1,atom_index), -U2(1,2:,atom_index)
+      write(*, fmt='(/6x,5(f10.5,1X))', advance='no') -U2(2,1,atom_index), U2(2,2:,atom_index)
+      write(*, fmt='(/6x,5(f10.5,1X))', advance='no') -U2(3,1,atom_index), U2(3,2:,atom_index)
+      write(*, fmt='(/6x,5(f10.5,1X))', advance='no') -U2(4,1,atom_index), U2(4,2:,atom_index)
+      write(*, fmt='(/6x,5(f10.5,1X))', advance='no') -U2(5,1,atom_index), U2(5,2:,atom_index)
+
       write(*, fmt='(/4x, "d-orbital weight decomposition")')
 
       write(*, '(/6x, A10, 5A10)') "", (trim(d_orb(j)), j = 1, 5)
@@ -1220,14 +1223,15 @@ contains
       use numbers, ONLY: pi, one, two
       implicit none
       real(double), intent(in) :: axis(3), angle
+
       write(*, fmt= &
          '(/2x,"Equivalent Euler angles. Using `Process.RotatePDOSMode 1`should give the same result.")')
       write(*, fmt='(/4x,"alpha: ", (f10.5,1X))', advance="no") &
-         180/pi*(datan2(axis(3)*tan(angle / two),one) + datan2(axis(2), axis(1)) - (pi/two))
+         180/pi*(datan2(axis(3)*sin(angle / two),cos(angle / two)) + datan2(axis(2), axis(1)) - (pi/two))
       write(*, fmt='(/4x,"beta: ", (f10.5,1X))',  advance="no") &
          180/pi*2*asin(sqrt(axis(1)*axis(1) + axis(2)*axis(2)) * sin(angle / two))
       write(*, fmt='(/4x,"gamma: ", (f10.5,1X))',  advance="no") &
-         180/pi*(datan2(axis(3)*tan(angle/two),one) - datan2(axis(2), axis(1)) + (pi/two))
+         180/pi*(datan2(axis(3)*sin(angle/two),cos(angle/two)) - datan2(axis(2), axis(1)) + (pi/two))
    end subroutine
 
    ! -----------------------------------------------------------------------------
@@ -1302,7 +1306,7 @@ contains
       basis_matrix(:,2) = w2 / norm2(w2)
       basis_matrix(:,3) = w3 / norm2(w3)
       ! Make copy because DGEEV destroys matrix
-      basis_matrix = transpose(basis_matrix)
+      basis_matrix = (basis_matrix)
       A = basis_matrix
       ! If determinant flips sign, orientation of the coordinate system has changed
       det = A(1,1)*(A(2,2)*A(3,3) - A(2,3)*A(3,2)) &
@@ -1337,7 +1341,7 @@ contains
             end if
             write(*,'(/6x, 2X,A)', advance="no") 'Eigenvector:'
             do i = 1, N
-               if (WI(j) == 0.0d0) then
+               if (WI(j) == 0.0_double) then
                      write(*,'(/7x, 4X,A,I3,A,F10.5)', advance="no") 'component ', i, ': ', VR(i,j)
                else if (WI(j) > 0.0d0) then
                      ! First complex conjugate pair: v = VR(:,j) + i*VR(:,j+1)
@@ -1400,10 +1404,9 @@ contains
       call antisym_matrix(norm_axis, K)
 
       KT = transpose(K)
-      angle = -angle
       ! Rodrigues rotation matrix but with -angle
-      temp = identity + (sin(angle)*KT) + (1 - cos(angle))*matmul(KT, KT)
-      ! Use transpose to restore matrix order in maths 
+      temp = identity - (sin(angle)*KT) + (1 - cos(angle))*matmul(KT, KT)
+      ! Use transpose to restore matrix order in maths
       matrix = reshape(transpose(temp), shape=(/9/))
    end subroutine construct_rodrigues
 
@@ -1562,7 +1565,7 @@ contains
 
       implicit none
       ! Local variables
-      integer :: i_atom, i_spec, i_band, i_band_c, i_kp, i_spin, g_atom
+      integer :: i_atom, i_spec, i_band, i_band_c, i_kp, i_spin, g_atom, i
       integer :: i_l, i_z, nzeta, norbs, sf_offset, rotate_counter
       integer, dimension(:), allocatable :: g_atom_lookup
       ! Currently input axes depends on n_atoms_pDOS
@@ -1587,7 +1590,7 @@ contains
          U2(1,2:,i) = -U2(1,2:,i)
          U2(2:,1,i) = -U2(2:,1,i)
       end do
-           
+
       do i_spin = 1, nspin
          do i_kp = 1, nkp
             do i_band = 1, n_bands_total
@@ -1735,14 +1738,14 @@ contains
       end do
 
        if (flag_rotate_pdos_debug) then
-         write(*, fmt='(/2x,"Unit cell dimensions (x,y,z)", 3(f10.5))', advance="no") &
+         write(*, fmt='(/2x,"Unit cell dimensions in Bohr (x,y,z)", 3(f10.5))', advance="no") &
             r_super_x, r_super_y, r_super_z
-         write(*, fmt='(/2x,"Outputting cell-periodic distances ", &
-            "of all atoms relative to atom", I0)', advance="no") atomno
+         write(*, fmt='(/2x,"Outputting cell-periodic distances (Bohr)", &
+            "of all atoms relative to atom", 1X,I0)', advance="no") atomno
          do i = 1, ni_in_cell
             if (i /= atomno) then
                write(*, fmt='(/4x, I0, A, f10.5)', advance="no") &
-                  i, " " // species_label(species_glob(i)), distances(i)
+                  i, " " // species_label(species_glob(i)), sqrt(distances(i))
             end if
          end do
          write(*, fmt='(/2x,"Outputting cell-periodic unnormalised bond lengths")')
