@@ -332,75 +332,68 @@ contains
        flag_rotate_pdos_mode = fdf_integer('Process.RotatePDOSMode',0)
        rotate_pdos_natoms = fdf_integer('Process.RotatePDOS.NumAtoms',1)
        flag_rotate_pdos_units = fdf_string(7, 'Process.RotatePDOSAngle',"deg") ! deg or rad
-      if (flag_rotate_pDOS) then
-         if(fdf_block('pDOSAxes') .and. flag_rotate_pdos_mode == 0) then
-            if(1+block_end-block_start<3) &
-                     call cq_abort("Too few vectors in pDOS_axes: ",&
-                     1+block_end-block_start,3)
-            ! Expect exactly 3 vectors -> 3 reads
-            read (unit=input_array(block_start),fmt=*) pdos_ax
-            read (unit=input_array(block_start+1),fmt=*) pdos_ay
-            read (unit=input_array(block_start+2),fmt=*) pdos_az
-            call fdf_endblock
-         else if (fdf_block('pDOSEuler') .and. flag_rotate_pdos_mode == 1) then
-            if(1+block_end-block_start<rotate_pdos_natoms) &
+       if (flag_rotate_pDOS) then
+          if(fdf_block('pDOSAxes') .and. flag_rotate_pdos_mode == 0) then
+             if(1+block_end-block_start<3) &
+                  call cq_abort("Too few vectors in pDOS_axes: ",&
+                  1+block_end-block_start,3)
+             ! Expect exactly 3 vectors -> 3 reads
+             read (unit=input_array(block_start),fmt=*) pdos_ax
+             read (unit=input_array(block_start+1),fmt=*) pdos_ay
+             read (unit=input_array(block_start+2),fmt=*) pdos_az
+             call fdf_endblock
+          else if (fdf_block('pDOSEuler') .and. flag_rotate_pdos_mode == 1) then
+             if(1+block_end-block_start<rotate_pdos_natoms) &
                   call cq_abort("Too few atoms provided in pDOSEuler block: ",&
                   1+block_end-block_start,rotate_pdos_natoms)
-         ! In each line, expect an integer followed by 3 floats
-            allocate(euler_angles(3, rotate_pdos_natoms))
-            allocate(rotate_pdos_atoms(rotate_pdos_natoms))
-            do i = 1, rotate_pdos_natoms
-               read (unit=input_array(block_start+i-1),fmt=*) rotate_pdos_atoms(i), euler_angles(:,i)
-            end do
+             ! In each line, expect an integer followed by 3 floats
+             allocate(euler_angles(3, rotate_pdos_natoms))
+             allocate(rotate_pdos_atoms(rotate_pdos_natoms))
+             do i = 1, rotate_pdos_natoms
+                read (unit=input_array(block_start+i-1),fmt=*) rotate_pdos_atoms(i), euler_angles(:,i)
+             end do
              if (flag_rotate_pdos_units == "deg") then
-                  euler_angles = euler_angles * (pi / 180.0)
-            end if
-            ! Wrap Euler angles in appropriate intervals to avoid unexpected behaviour
-            ! euler_angles(1,:) = modulo(euler_angles(1,:), 2.0*pi)   ! alpha: [0, 2pi]
-            ! euler_angles(2,:) = modulo(euler_angles(2,:), pi)         ! beta: [0, pi]
-            ! euler_angles(3,:) = modulo(euler_angles(3,:), 2.0*pi)   ! gamma: [0, 2pi]
-            ! write(*,fmt='(/2x, "Euler angles have been wrapped; alpha, gamma in [0, 2pi] and beta in [0,pi]")')
-            call fdf_endblock
-         else if(fdf_block('pDOSNeighbours') .and. flag_rotate_pdos_mode == 2) then
-            if (rotate_pdos_natoms  .lt. 1) &
-               call cq_abort("Atoms to rotate about was not at least 1")
-            allocate(find_neighbours(4, rotate_pdos_natoms))
-            do i=1,rotate_pdos_natoms
-               read (unit=input_array(block_start+i-1),fmt=*) &
+                euler_angles = euler_angles * (pi / 180.0_double)
+             end if
+             call fdf_endblock
+          else if(fdf_block('pDOSNeighbours') .and. flag_rotate_pdos_mode == 2) then
+             if (rotate_pdos_natoms  .lt. 1) &
+                  call cq_abort("Atoms to rotate about was not at least 1")
+             allocate(find_neighbours(4, rotate_pdos_natoms))
+             do i=1,rotate_pdos_natoms
+                read (unit=input_array(block_start+i-1),fmt=*) &
                      find_neighbours(1,i), find_neighbours(2,i), find_neighbours(3,i), &
                      find_neighbours(4,i)
-               if (find_neighbours(2,i) < 0 .or. find_neighbours(2,i) > 2) &
-                  call cq_abort("Local geometry flag in block pDOSNeighbours was not 0 or 1: ",&
+                if (find_neighbours(2,i) < 0 .or. find_neighbours(2,i) > 2) &
+                     call cq_abort("Local geometry flag in block pDOSNeighbours was not 0 or 1: ",&
                      1+block_end-block_start,2)
-               if (find_neighbours(3,i) < -1 .or. find_neighbours(3,i) > ni_in_cell) &
-                  call cq_abort("Input for principal axis must be -1 (shortest bond), 0 (longest bond) or neighbour in cell",&
+                if (find_neighbours(3,i) < -1 .or. find_neighbours(3,i) > ni_in_cell) &
+                     call cq_abort("Input for principal axis must be -1 (shortest bond), 0 (longest bond) or neighbour in cell",&
                      1+block_end-block_start,3)
-               if (find_neighbours(4,i) < 0 .or. find_neighbours(4,i) > ni_in_cell) &
-                  call cq_abort("Input for second axis must be 0 or neighbour in cell",&
+                if (find_neighbours(4,i) < 0 .or. find_neighbours(4,i) > ni_in_cell) &
+                     call cq_abort("Input for second axis must be 0 or neighbour in cell",&
                      1+block_end-block_start,4)
              end do
-            call fdf_endblock
+             call fdf_endblock
           else if (fdf_block('pDOSAxisAngle') .and. flag_rotate_pdos_mode == 3) then
-            if(1+block_end-block_start<rotate_pdos_natoms) &
+             if(1+block_end-block_start<rotate_pdos_natoms) &
                   call cq_abort("Too few atoms provided in pDOSAxisAngle block: ",&
                   1+block_end-block_start,rotate_pdos_natoms)
-         ! In each line, expect an integer followed by 4 floats
-            allocate(axes_angles(4, rotate_pdos_natoms))
-            allocate(rotate_pdos_atoms(rotate_pdos_natoms))
-            do i = 1, rotate_pdos_natoms
-               read (unit=input_array(block_start+i-1),fmt=*) rotate_pdos_atoms(i), axes_angles(:,i)
-               axes_angles(1:3,i) = axes_angles(1:3,i)  / norm2(axes_angles(1:3,i))
-            end do
-            if (flag_rotate_pdos_units == "deg") then
-               axes_angles(4,:) = axes_angles(4,:) * (pi / 180.0)
-            end if
-            call fdf_endblock
-         else
-            call cq_abort("Unknown rotation input: ", flag_rotate_pdos_mode)
-         end if ! pDOS mode
-
+             ! In each line, expect an integer followed by 4 floats
+             allocate(axes_angles(4, rotate_pdos_natoms))
+             allocate(rotate_pdos_atoms(rotate_pdos_natoms))
+             do i = 1, rotate_pdos_natoms
+                read (unit=input_array(block_start+i-1),fmt=*) rotate_pdos_atoms(i), axes_angles(:,i)
+                axes_angles(1:3,i) = axes_angles(1:3,i)  / norm2(axes_angles(1:3,i))
+             end do
+             if (flag_rotate_pdos_units == "deg") then
+                axes_angles(4,:) = axes_angles(4,:) * (pi / 180.0_double)
+             end if
+             call fdf_endblock
+          else
+             call cq_abort("Unknown rotation input: ", flag_rotate_pdos_mode)
+          end if ! pDOS mode
        end if ! if rotate PDOS
-
     end if ! i_job 7
     ! Now read PS files for atomic information
     call allocate_species_vars
