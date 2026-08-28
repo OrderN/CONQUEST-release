@@ -3,9 +3,9 @@ module local
   use datatypes
 
   ! These give the number of blocks in x, y and z
-  integer :: nblockx, nblocky, nblockz 
+  integer :: nblockx, nblocky, nblockz
   real(double) :: block_size_x, block_size_y, block_size_z, grid_x, grid_y, grid_z
-  
+
   ! Processes used
   integer :: nprocs
 
@@ -17,14 +17,26 @@ module local
   integer, dimension(:,:,:), allocatable :: band_active_kp
   integer, dimension(:,:), allocatable   :: band_active_all
   real(double), dimension(:,:,:), allocatable :: current
+  ! pDOS rotation
+  logical :: flag_rotate_pdos, flag_rotate_pdos_debug
+  integer :: flag_rotate_pdos_mode, rotate_pdos_natoms
+  character(len=5) :: flag_rotate_pdos_units
+  real(double), dimension(:,:,:), allocatable :: U1, U2 ! Rotation matrices
+  real(double) :: pdos_ax(3), pdos_ay(3), pdos_az(3) ! axes to rotate pDOS into
+  real(double), dimension(:,:), allocatable :: euler_angles ! Euler angles to rotate pDOS by
+  real(double), dimension(:,:), allocatable :: axes_angles ! Axis angles to rotate pDOS by
+  integer, dimension(:), allocatable :: rotate_pdos_atoms ! Array of atoms to rotate (mode 1 or 3)
+  integer, dimension(:,:), allocatable :: find_neighbours ! mode 2
+  integer, dimension(:), allocatable :: nghbr_arr ! holds nearest neighbour atoms
+
 
   ! Store eigenvector coefficients
   complex(double_cplx), allocatable, dimension(:,:,:,:,:), save :: evec_coeff ! PAOs, atoms, bands, kpoints, spin
   complex(double_cplx), dimension(:,:,:,:,:), allocatable :: scaled_evec_coeff
 
-  
+
   character(len=50) :: root_file
-  
+
   real(double) :: stm_bias, fermi_offset, stm_z_min, stm_z_max, stm_x_min, stm_x_max, &
        stm_y_min, stm_y_max, stm_broad, gpv, E_wf_min, E_wf_max, E_procwf_min, E_procwf_max
   integer :: nptsx, nptsy, nptsz, nxmin, nymin, nzmin
