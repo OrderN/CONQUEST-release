@@ -1,0 +1,26 @@
+
+CONQUEST charge density conversion and STM image simulation
+
+D. R. Bowler (UCL) and A. Nakata (NIMS)
+
+    This job was run on 2026/08/25 at 13:46
+
+
+    Code compiled on: Fri 21 Aug 10:07:46 BST 2026
+          Version comment: 
+      Git Branch: develop; tag, hash: v1.5-52-g1e09fd72
+
+
+  Creating band-resolved charge densities in cube format
+
+  Opening block file: hilbert_make_blk.dat                                                            
+    Blocks in x, y, z:    24   24   24
+    Block sizes in bohr:      0.83333     0.83333     0.83333
+    Points in user-specified area:    96   96   96
+  Original run on        1 processors
+    Fermi level:     -0.14398 Ha   (=    -3.918 eV)
+  Reading bands between   -0.844E+00Ha and   -0.244E+00Ha
+  Bands     1 to     6 were written out by CONQUEST
+    Summing over k-points
+    Writing bands between  -0.8440E+00 and  -0.2440E+00Ha as specified in input file
+    Largest deviation of band integral from one is  0.00000
