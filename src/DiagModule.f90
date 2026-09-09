@@ -263,7 +263,7 @@ module DiagModule
   real(double), dimension(2) :: Efermi, vbm, cbm, gap_d
   integer, dimension(2) :: vbm_k, cbm_k, gap_k
   integer, dimension(2) :: band_ef
-  logical :: flag_integer_occ
+  logical :: flag_integer_occ, flag_check_gap
   logical, dimension(2) :: flag_gap
   logical :: flag_adjust_Ef
   
@@ -535,7 +535,7 @@ contains
     ! Local variables
     real(double)                   :: a, time0, time1, vl, vu, &
          orfac, scale, entropy_total,     &
-         bandE_total, coeff, setA, setB, Eband
+         bandE_total, coeff, setA, setB, Eband, vbm_occ_d, cbm_occ_d
     real(double), dimension(nspin) :: locc, bandE, entropy_local
     real(double), external         :: dlamch
     complex(double_cplx), dimension(:,:), allocatable :: scaledEig, expH_atomf
@@ -616,14 +616,33 @@ contains
     flag_gap = .false.
     call findFermi(electrons, evals, matrix_size, nkp, Efermi, occ)
     ! Test for gap
-    if(flag_smear_type==0) then
+    if(flag_smear_type==0.and.flag_check_gap) then
+       do spin=1,nspin
+          ! Find highest occupied band
+          band = nint(electrons(spin))
+          if(electrons(spin) - band < -half - tolElec) band = band - 1
+          vbm(spin) = maxval(evals(band,:,spin))
+          cbm(spin) = minval(evals(band+1,:,spin))
+          vbm_k(spin) = maxloc(evals(band,:,spin),dim=1)
+          cbm_k(spin) = minloc(evals(band+1,:,spin),dim=1)
+          ! How far from zero or one are the VBM and CBM?
+          vbm_occ_d = one - occ(band,vbm_k(spin),spin)/wtk(vbm_k(spin))
+          cbm_occ_d = occ(band+1,cbm_k(spin),spin)/wtk(cbm_k(spin))
+          if((vbm_occ_d<tolElec).and.(cbm_occ_d<tolElec)) then ! gap
+             flag_gap(spin) = .true.
+             do kp=1,nkp
+                if(evals(band+1,kp,spin) - evals(band,kp,spin)<gap_d(spin)) then
+                   gap_d(spin) = evals(band+1,kp,spin) - evals(band,kp,spin)
+                   gap_k(spin) = kp
+                end if
+             end do
+          end if
+       end do
        if(flag_fix_spin_population) then ! Separate fermi levels
           do spin=1,nspin
              if(flag_gap(spin).and.flag_adjust_Ef) then
                 Efermi(spin) = half*(cbm(spin)+vbm(spin))
-                locc(spin) = electrons(spin)
                 if(inode==ionode.and.iprint_DM + min_layer >= 2) call write_gaps(spin_ch=spin)
-                call occupy(occ, evals, Efermi, locc, matrix_size, nkp, spin=spin)
                 if(inode==ionode.and.iprint_DM + min_layer >= 2) &
                      write(io_lun,'(4x, "Adjusted Fermi level for spin ", i2, " is ", f12.5)') &
                      spin,Efermi(spin)
@@ -632,17 +651,26 @@ contains
              end if
           end do
        else
-          if((flag_gap(1) .or. flag_gap(2)).and.flag_adjust_Ef) then ! Fermi levels should be same
+          if(nspin==1) then
+             flag_gap(2) = flag_gap(1)
+          else
+             ! Find lowest gap
+             vbm_k(1) = vbm_k(maxloc(vbm,dim=1))
+             cbm_k(1) = cbm_k(minloc(cbm,dim=1))
+             vbm(1) = maxval(vbm)
+             cbm(1) = minval(cbm)
+             gap_k(1) = minloc(gap_d,dim=1)
+             gap_d(1) = minval(gap_d)
+          end if
+          if((flag_gap(1) .and. flag_gap(2)).and.flag_adjust_Ef) then ! Fermi levels should be same
              if(inode==ionode.and.iprint_DM + min_layer >= 2) call write_gaps
              ! Adjust Fermi level to lie at mid-gap and revisit occupancies
              do spin=1,nspin
                 Efermi(spin) = half*(minval(cbm)+maxval(vbm))
-                locc(spin) = electrons(spin)
                 if(inode==ionode.and.iprint_DM + min_layer >= 2) &
                      write(io_lun,'(4x, "Adjusted Fermi level for spin ", i2, " is ", f12.5)') &
                      spin,Efermi(spin)
              end do
-             call occupy(occ, evals, Efermi, locc, matrix_size, nkp)
           else if(flag_gap(1).or.flag_gap(2)) then
              if(inode==ionode.and.iprint_DM + min_layer >= 2) call write_gaps
           end if
@@ -683,10 +711,10 @@ contains
        ! Set band_ef: this works because with no spin a factor of two is normally applied
        if(nspin>1) then
           do spin=1,nspin
-             band_ef(spin) = int(electrons(spin))
+             band_ef(spin) = nint(electrons(spin))
           end do
        else
-          band_ef(:) = int(electrons(1))
+          band_ef(:) = nint(electrons(1))
        end if
        flag_excite = .true.
        if(dscf_homo_limit/=0) then
@@ -800,17 +828,17 @@ contains
                   write (io_lun, '(10x,"For spin = ",i1)') spin
              do j = 1, matrix_size, 3
                 if (j == matrix_size) then
-                   write (io_lun, 8) evals(j,i,spin), occ(j,i,spin)
+                   write (io_lun, 8) evals(j,i,spin), occ(j,i,spin)/wtk(i)
                    bandE(spin) = bandE(spin) + evals(j,i,spin) * occ(j,i,spin)
                 else if (j == matrix_size - 1) then
-                   write (io_lun, 9) evals(j,i,spin), occ(j,i,spin), &
-                        evals(j+1,i,spin), occ(j+1,i,spin)
+                   write (io_lun, 9) evals(j,i,spin), occ(j,i,spin)/wtk(i), &
+                        evals(j+1,i,spin), occ(j+1,i,spin)/wtk(i)
                    bandE(spin) = bandE(spin) + evals(j,i,spin) * occ(j,i,spin) + &
                         evals(j+1,i,spin) * occ(j+1,i,spin)
                 else
-                   write (io_lun, 10) evals(j,i,spin), occ(j,i,spin), &
-                        evals(j+1,i,spin), occ(j+1,i,spin), &
-                        evals(j+2,i,spin), occ(j+2,i,spin)
+                   write (io_lun, 10) evals(j,i,spin), occ(j,i,spin)/wtk(i), &
+                        evals(j+1,i,spin), occ(j+1,i,spin)/wtk(i), &
+                        evals(j+2,i,spin), occ(j+2,i,spin)/wtk(i)
                    bandE(spin) = bandE(spin) + evals(j,i,spin) * occ(j,i,spin) + &
                         evals(j+1,i,spin) * occ(j+1,i,spin) + &
                         evals(j+2,i,spin) * occ(j+2,i,spin)
@@ -837,7 +865,7 @@ contains
              if (nspin == 2) &
                   write (io_lun, '(10x,"For spin = ",i1)') spin
              do j = 1, matrix_size
-                write (io_lun, fmt='(10x,i5,f12.5,f6.3)') j, evals(j,i,spin), occ(j,i,spin)
+                write (io_lun, fmt='(10x,i5,f12.5,f6.3)') j, evals(j,i,spin), occ(j,i,spin)/wtk(i)
                 bandE(spin) = bandE(spin) + evals(j,i,spin) * occ(j,i,spin)
              end do ! j=matrix_size
              write (io_lun, &
@@ -855,6 +883,8 @@ contains
        end do ! do i = 1, nkp
     end if ! if(iprint_DM + min_layer>=1.AND.myid==0)
 
+    !------ output eigenvalues  --------
+    if(inode==ionode) call write_eigenvalues(evals,occ,matrix_size,nkp,nspin,kk,wtk,Efermi)
     if(inode==ionode .and. write_ase) call write_eigenvalues_format_ase(evals,occ,matrix_size,nkp,nspin,&
          kk,Efermi,io_ase,ase_file,7+n_species+2+nkp)
     
@@ -1013,8 +1043,6 @@ contains
           end do ! End do ng = 1, proc_groups
        end do ! End do i = 1, nkpoints_max
     end do ! spin
-    !------ output eigenvalues  --------
-    if(inode==ionode) call write_eigenvalues(evals,matrix_size,nkp,nspin,kk,wtk,Efermi)
     if (iprint_DM + min_layer > 3 .and. inode == ionode) &
          write (io_lun, fmt='(10x,a,2f16.6)') "Entropy, TS: ", entropy, kT * entropy
     ! store entropy as TS instead of S
@@ -2419,7 +2447,7 @@ contains
        occ = zero
        gap_d = BIG
        do spin=1,nspin
-          ne = int(electrons(spin))
+          ne = nint(electrons(spin))
           electrons_total = zero
           vbm(spin) = maxval(eig(ne,:,spin))
           cbm(spin) = minval(eig(ne+1,:,spin))
@@ -2431,7 +2459,6 @@ contains
                 gap_d(spin) = eig(ne+1,ikp,spin) - eig(ne,ikp,spin)
                 gap_k(spin) = ikp
              end if
-             !gap_d(spin) = min(gap_d(spin),eig(ne+1,ikp,spin) - eig(ne,ikp,spin))
           end do
           ! This is a sign that the system is not suited for integer occupancies
           if(cbm(spin)<vbm(spin)) then
@@ -2449,12 +2476,8 @@ contains
     end if
     if (flag_fix_spin_population .or. nspin == 1) then
        call findFermi_fixspin(electrons, eig, nbands, nkp, Ef, occ)
-       do spin=1,nspin
-          if((cbm(spin)-vbm(spin))>two*kT) flag_gap(spin) = .true.
-       end do
     else
        call findFermi_varspin(electrons_total, eig, nbands, nkp, Ef, occ)
-       if((cbm(1)-vbm(1))>two*kT.and.(cbm(nspin)-vbm(nspin)>two*kT)) flag_gap = .true.
     end if
     if(flag_DeltaSCF.AND.flag_excite) then
        if(nspin==1) then
@@ -2553,7 +2576,7 @@ contains
           ! Take first guess as double filling each band at first k
           ! point. Note that electrons(spin) stores number of electrons
           ! in each spin channel
-          ne(spin) = int(electrons(spin))
+          ne(spin) = nint(electrons(spin))
           if (ne(spin) < 1) ne(spin) = 1
           Ef(spin) = eig(ne(spin),1,spin)
 
@@ -2806,7 +2829,7 @@ contains
        if (iprint_DM + min_layer >= 2 .AND. inode == ionode) &
             write (io_lun, 1) myid, electrons_total
        ! Take first guess as double filling each band at first k point
-       ne = int(electrons_total / two)
+       ne = nint(electrons_total / two)
        if (ne < 1) ne = 1
        ! choose Ef to be the minimum of both spin channels
        ! Ef will be the same for all spin channels for variable spin
@@ -3071,7 +3094,7 @@ contains
     if(flag_integer_occ) then
        do ss=ss_start,ss_end
           occ(:,:,ss) = zero
-          ne = int(electrons(ss))
+          ne = nint(electrons(ss))
           do ikp=1,nkp
              occ(1:ne,ikp,ss) = wtk(ikp)
           end do
@@ -3080,51 +3103,15 @@ contains
     end if
     electrons = zero
     labspin: do ss = ss_start, ss_end
-       vbm(ss) = -BIG
-       cbm(ss) = BIG
-       gap_d(ss) = BIG
        kp: do ikp = 1, nkp
           band: do iband = 1, nbands
              select case (flag_smear_type)
              case (0) ! Fermi smearing
                 locc = fermi(ebands(iband,ikp,ss) - Ef(ss), kT)
                 occu(iband,ikp,ss) = wtk(ikp) * locc
-                ! Gap detection
-                ! Check for VBM and allow for degenerate states
-                if(locc-half>-tolElec) then!locc>=half) then
-                   if(vbm(ss)<ebands(iband,ikp,ss)) then
-                      vbm_k(ss) = ikp
-                      vbm(ss) = ebands(iband,ikp,ss)
-                   end if
-                end if
-                ! NB CBM check must be separate to VBM check
-                ! Check for CBM and allow for degenerate states
-                if(half-locc>-tolElec) then!locc<=half) then
-                   if(cbm(ss)>ebands(iband,ikp,ss)) then
-                      cbm_k(ss) = ikp
-                      cbm(ss) = ebands(iband,ikp,ss)
-                      if(ebands(iband,ikp,ss) - ebands(iband-1,ikp,ss)<gap_d(ss)) then
-                         gap_d(ss) = ebands(iband,ikp,ss) - ebands(iband-1,ikp,ss)
-                         gap_k(ss) = ikp
-                      end if
-                   end if
-                end if
              case (1) ! Methfessel Paxton smearing
                 locc = MP_step(ebands(iband,ikp,ss) - Ef(ss), iMethfessel_Paxton, kT)
                 occu(iband,ikp,ss) = wtk(ikp) * locc
-                ! It really doesn't make sense to look for vbm and cbm with MP but this is how we could
-                !if(locc>half) then
-                !   if(vbm(ss)<ebands(iband,ikp,ss)) then
-                !      vbm_k(ss) = ikp
-                !      vbm(ss) = ebands(iband,ikp,ss)
-                !   end if
-                !else if(locc<half) then
-                !   if(cbm(ss)>ebands(iband,ikp,ss)) then
-                !      cbm_k(ss) = ikp
-                !      cbm(ss) = ebands(iband,ikp,ss)
-                !      gap_d(ss) = min(gap_d(ss),ebands(iband,ikp,ss)-ebands(iband-1,ikp,ss))
-                !   end if
-                !end if
              case default
                 call cq_abort ("FindEvals: Smearing flag not recognised",&
                      flag_smear_type)
@@ -3189,7 +3176,7 @@ contains
   subroutine write_gaps(spin_ch)
 
     use units
-    use global_module,   only: nspin
+    use global_module,   only: nspin, flag_fix_spin_population
 
     implicit none
 
@@ -3202,14 +3189,17 @@ contains
     if(present(spin_ch)) then
        spin_st = spin_ch
        spin_end = spin_ch
-    else
+    else if(nspin>1.and.flag_fix_spin_population) then
        spin_st = 1
        spin_end = nspin
+    else
+       spin_st = 1
+       spin_end = 1
     end if
     if((flag_smear_type==0.or.flag_integer_occ).and.myid==0) then
        do spin=spin_st,spin_end
           if(flag_gap(spin)) then
-             if(nspin>1) then!spin_end-spin_st>0) then
+             if(nspin>1.and.flag_fix_spin_population) then!spin_end-spin_st>0) then
                 write(io_lun,fmt='(4x,"Spin ",i1," gap found.  VBM=",f12.5," ",a2," CBM=", &
                      f12.5," ",a2," Gap ",f12.5," ",a2)') &
                      spin,en_conv*vbm(spin),en_units(energy_units), &

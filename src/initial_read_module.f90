@@ -225,6 +225,7 @@ contains
     use XC,                     only: flag_functional_type, flag_different_functional
     use H_matrix_module, only:  num_plusUproj, info_plusUproj, plusUvalue, & ! 2024.05.20 nakata DFT+U
                                 flag_plusUproj_atom, w_plusUproj_pao, half_w_plusUproj_pao ! 2024.05.20 nakata DFT+U
+    use DiagModule, only: flag_check_gap, flag_adjust_Ef
 
 
     implicit none
@@ -578,6 +579,12 @@ contains
           ne_spin_in_cell(2) = ne_spin_in_cell(1) - ne_magn_in_cell
        end if
        !
+    else ! No spin and odd number of electrons
+       if(mod(nint(ne_in_cell),2)==1) then ! Odd number of electrons
+          flag_check_gap = .false.
+          flag_adjust_Ef = .false.
+          call cq_warn(sub_name,"Without spin, will not adjust Ef for an odd number of electrons: ",ne_in_cell)
+       end if
     end if
     !
     ! Calculate the number of electrons in the spin channels
@@ -3232,7 +3239,7 @@ contains
     use DiagModule,      only: nkp, kk, wtk, kT, maxefermi,          &
          flag_smear_type, iMethfessel_Paxton,  &
          max_brkt_iterations, gaussian_height, &
-         finess, NElec_less, flag_integer_occ, flag_adjust_Ef
+         finess, NElec_less, flag_integer_occ, flag_adjust_Ef, flag_check_gap
     use energy,          only: SmearingType, MPOrder
     use memory_module,   only: reg_alloc_mem, reg_dealloc_mem,       &
          type_dbl
@@ -3277,6 +3284,8 @@ contains
        flag_smear_type = -1
     end if
     flag_adjust_Ef = fdf_boolean('Diag.AdjustEf',.true.)
+    flag_check_gap = .true.
+    if(flag_smear_type==1) flag_check_gap = .false.
     SmearingType = flag_smear_type
     iMethfessel_Paxton = fdf_integer('Diag.MPOrder',0)
     MPOrder = iMethfessel_Paxton

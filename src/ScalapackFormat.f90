@@ -288,7 +288,7 @@ contains
        blocks_c = (matrix_size/block_size_c)
        matrix_size_padH = matrix_size
     endif
-    if(myid==0.AND.iprint_DM>1) write(io_lun,*) "matrix_size & matrix_size_padH = ",matrix_size, matrix_size_padH
+    if(myid==0.AND.iprint_DM>2) write(io_lun,fmt='(6x,"Matrix size: ",i10," Padded size: ",i10)') matrix_size, matrix_size_padH
     if(myid==0.AND.iprint_DM>3) write(io_lun,1) blocks_r,blocks_c
     maxrow = floor(real(blocks_r/proc_rows))+1
     maxcol = floor(real(blocks_c/proc_cols))+1
@@ -511,7 +511,7 @@ contains
 
     if(iprint_DM>3.AND.myid==0) write(io_lun,fmt='(8x,a)') 'Starting Ref To SC Blocks'
     ! Construct processor ids
-    if(iprint_DM>2.AND.myid==0) write(io_lun,fmt="(8x,'Scalapack Processor Grid')") 
+    if(iprint_DM>4.AND.myid==0) write(io_lun,fmt="(8x,'Scalapack Processor Grid')") 
     do ng = 1, proc_groups
        n = 1
        do i=1,proc_rows

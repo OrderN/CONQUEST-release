@@ -1474,9 +1474,11 @@ second:   do
   !! CREATION DATE 
   !!   2015/07/09 08:16
   !! MODIFICATION HISTORY
+  !!   2026/09/08 12:57 dave
+  !!    Added occupancy output
   !! SOURCE
   !!
-  subroutine write_eigenvalues(eval,n_evals,nkp,nspin,kk,wtk,Ef)
+  subroutine write_eigenvalues(eval,occ,n_evals,nkp,nspin,kk,wtk,Ef)
 
     use datatypes
     
@@ -1484,7 +1486,7 @@ second:   do
 
     ! Passed variables
     integer :: n_evals,nkp,nspin
-    real(double), dimension(n_evals,nkp,nspin) :: eval
+    real(double), dimension(n_evals,nkp,nspin) :: eval, occ
     real(double), dimension(3,nkp) :: kk
     real(double), dimension(nkp) :: wtk
     real(double), dimension(nspin) :: Ef
@@ -1500,12 +1502,12 @@ second:   do
     else
        write(lun,fmt='("# Ef: ",2f18.10)') Ef(1),Ef(2)
     end if
-    write(lun,fmt='("# Format: nk kx ky kz weight, followed by eigenvalues")')
+    write(lun,fmt='("# Format: nk kx ky kz weight, followed by eigenvalues and occupancies")')
     do sp = 1,nspin
        do kp = 1,nkp
           write(lun,fmt='(i6,3f12.5,f17.10)') kp,kk(1,kp),kk(2,kp),kk(3,kp),wtk(kp)
           do ev = 1,n_evals
-             write(lun,fmt='(i6,f18.10)') ev,eval(ev,kp,sp)
+             write(lun,fmt='(i6,f18.10,f9.4)') ev,eval(ev,kp,sp),occ(ev,kp,sp)/wtk(kp)
           end do
        end do
     end do
