@@ -273,7 +273,7 @@ contains
     ! DOS
     flag_wf_range_Ef = fdf_boolean('IO.WFRangeRelative',.true.)
     flag_procwf_range_Ef = fdf_boolean('Process.WFRangeRelative',flag_wf_range_Ef)
-    if(i_job==6.or.i_job==7) then
+    if(i_job==6.or.i_job==7.or.i_job==8) then
        ! Add flag for window relative to Fermi level
        E_DOS_min = fdf_double('Process.min_DOS_E',E_wf_min)
        E_DOS_max = fdf_double('Process.max_DOS_E',E_wf_max)
