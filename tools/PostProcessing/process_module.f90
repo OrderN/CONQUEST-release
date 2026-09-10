@@ -2001,13 +2001,13 @@ contains
        E_DOS_min = minval(eigenvalues(1,:,:))
        write(*,fmt='(2x,"Band structure lower limit set automatically: ",f12.5," Ha")') E_DOS_min
     else
-       write(*,fmt='(2x,"Band structure lower limit set by user: ",f12.5," Ha")') E_DOS_min
+       write(*,fmt='(2x,"Band structure lower limit set by user: ",e12.5," Ha")') E_DOS_min
     end if
     if(abs(E_DOS_max)<RD_ERR) then
        E_DOS_max = maxval(eigenvalues(n_bands_total,:,:))
        write(*,fmt='(2x,"Band structure upper limit set automatically: ",f12.5," Ha")') E_DOS_max
     else
-       write(*,fmt='(2x,"Band structure upper limit set by user: ",f12.5," Ha")') E_DOS_max
+       write(*,fmt='(2x,"Band structure upper limit set by user: ",e12.5," Ha")') E_DOS_max
     end if
     write(*,fmt='(2x,"Writing band structure files")')
     if(flag_proc_band_str==4) then
