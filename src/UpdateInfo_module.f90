@@ -1302,6 +1302,8 @@ contains
   !!    Added InfoGlob in dummy arguments, and removed glob2node_old
   !!   2026/02/10 10:45 dave
   !!    Bug fix: changed nreq to single integer (used in block receive)
+  !!   2026/09/10 TM
+  !!    Bug fix: changed the type of nreq
   !!  SOURCE
   !!
   subroutine alloc_recv_array(InfoGlob,irecv_array,irecv2_array,recv_array, &
@@ -1336,7 +1338,8 @@ contains
     logical :: flag_find_old
     ! -- process 2. -- !
     integer :: ind_nnd,ibeg,isize,inode_send
-    integer :: tag,ierr,nreq
+    integer :: tag,ierr
+    integer :: nreq(MPI_STATUS_SIZE)
     integer, allocatable :: isort_node(:),irecv_array(:)
     ! -- process 3. -- !
     integer :: iprim_remote,isize1,isize2,ia,nalpha,nj,njbeta,iglob_local
