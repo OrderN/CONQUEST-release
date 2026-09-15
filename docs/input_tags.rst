@@ -1121,8 +1121,9 @@ MD.tauT (*real*)
     *default*: 50 fs for SVR; 10 times ``AtomMove.Timestep`` for NHC
 
 MD.TDrag (*real*)
-    Add a drag coefficient to the thermostat. The thermostat velocities are
-    reduced by a factor :math:`1 - \tau/D_T` every step.
+    Dimensionless strength of ad hoc damping applied to the ionic
+    Nose-Hoover-chain velocities. The internal damping factor also depends on
+    the timestep, ``MD.tauT``, ``MD.nMTS`` and ``MD.nYoshida``.
 
     *default*: 0.0
 
@@ -1136,7 +1137,7 @@ MD.CellNHC (*boolean*)
 
     *default*: T
 
-MD.NHCMass (*blocks*)
+MD.NHCMass (*block*)
     :math:`<n1> <n2> <n3> \ldots`
     Masses of NHC heat baths
 
@@ -1161,9 +1162,10 @@ MD.tauP (*real*)
     *default*: 100 times ``AtomMove.Timestep``
 
 MD.PDrag (*real*)
-    Add a drag coefficient to the barostat. The barostat velocities are
-    reduced by a factor :math:`1 - \tau/D_P` every step. This is useful
-    when the lattice parameters are varying rapidly.
+    Dimensionless strength of ad hoc damping applied to the separate cell
+    Nose-Hoover-chain velocities when ``MD.CellNHC`` is true. The internal
+    damping factor also depends on the timestep, ``MD.tauP``, ``MD.nMTS`` and
+    ``MD.nYoshida``.
 
     *default*: 0.0
 
