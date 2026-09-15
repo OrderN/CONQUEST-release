@@ -1656,7 +1656,7 @@ IO.PdbAltLoc (*string*)
 IO.PdbOut (*boolean*)
     Format of the output coordinate file. Writes a PDB file if set to T. In that
     case, either the input must be in pdb format or a PDB “template” file needs to
-    be specified (keyword General.PdbTemplate)
+    be specified with ``IO.PdbTemplate``.
 
     *default*: F
 
@@ -1667,7 +1667,7 @@ IO.PdbTemplate (*string*)
     it will also be used as the template, although this can still be
     overwritten with this keyword
 
-    *default*: coordinate file
+    *default*: ``IO.Coordinates`` when ``IO.PdbIn`` is true; no template otherwise
 
 IO.AtomOutputThreshold (*integer*)
     Threshold below which atomic positions are output on
@@ -1692,7 +1692,7 @@ Basis.BasisSet (*string*)
 
     -  PAOs — Pseudo-atomic orbitals :cite:`e-Artacho1999`
 
-    -  blips (default) — B-splines :cite:`e-Hernandez1997`
+    -  blips — B-splines :cite:`e-Hernandez1997`
 
     *default*: PAOs
 
