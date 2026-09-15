@@ -166,11 +166,12 @@ the key output flag is given.  Further output flags are described in :ref:`input
 
   * Charge density
   * Band-resolved charge density (``IO.outputWF``)
-  * Density of states (``IO.writeDOS``)
+  * Density of states, obtained by post-processing ``eigenvalues.dat``
   * Atom-projected density of states (``IO.write_proj_DOS``)
   * Atomic charges, using the Mulliken approach (``IO.AtomChargeOutput``)
 
-The Kohn-Sham eigenvalues are output in the ``eigenvalues.dat`` file.
+For diagonalisation calculations, the Kohn-Sham eigenvalues are output in the
+``eigenvalues.dat`` file.
 The charge densities need post-processing to convert from the
 standard output format to a file compatible with visualisation
 (current supported formats include Gaussian CUBE file and OpenDX

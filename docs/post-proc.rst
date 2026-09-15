@@ -31,9 +31,9 @@ produced during the CONQUEST run are available for the post-processing
 flags from the CONQUEST run that generated the output, and some
 utility-specific flags that are detailed below.
 
-**Note also** that projected DOS, band density and STM simulation are
-not at present compatible with multi-site support functions (MSSF),
-though we hope to implement this soon.
+Projected DOS, band density and STM simulation are available for calculations
+using primitive PAOs or multi-site support functions (MSSFs), but not for
+calculations using blip functions.
 
 Go to :ref:`top <post-proc>`.
 
@@ -185,8 +185,8 @@ Density of states (DOS)
 +++++++++++++++++++++++
 
 Setting ``Process.Job dos`` will produce a total density of states
-(DOS) for the system, using the eigenvalues output by CONQUEST.  The
-following parameters can be set:
+(DOS) for the system, using the ``eigenvalues.dat`` file output by a
+CONQUEST diagonalisation calculation.  The following parameters can be set:
 
 ::
 
@@ -238,21 +238,17 @@ given state, :math:`n`, onto an atom :math:`i` can be written as
 S_{i\alpha,j\beta}c^{n\mathbf{k}}_{j\beta}`.  The projected DOS is
 constructed using these projections.
 
-If using :ref:`pseudo-atomic orbitals (PAOs) <basis_paos>` as the
-basis set, then the atom-projected DOS can be further resolved by
-angular momentum (either just :math:`l` or both :math:`l` and
-:math:`m`).  If using :ref:`pseudo-atomic orbitals (PAOs)
-<basis_paos>` with :ref:`multi-site support functions <basis_mssf>` or
-:ref:`blip functions <basis_blips>` then it is not possible to
-decompose the DOS any further (in future, it may be possible to
-resolve the MSSF coefficients into the individual PAOs, and hence
-decompose pDOS by angular momentum).  To output the necessary
-coefficients to produce atom-projected DOS, a CONQUEST run must be
-performed with the following parameters set:
+For calculations using :ref:`pseudo-atomic orbitals (PAOs) <basis_paos>`,
+either directly or through :ref:`multi-site support functions <basis_mssf>`,
+the atom-projected DOS can be further resolved by angular momentum (either
+just :math:`l` or both :math:`l` and :math:`m`).  For MSSF calculations,
+CONQUEST outputs the required coefficients in the underlying PAO basis.
+Projected-DOS post-processing is not available for calculations using
+:ref:`blip functions <basis_blips>`.  To output the necessary coefficients,
+a static diagonalisation calculation must be performed with:
 
 ::
 
-   IO.writeDOS T
    IO.write_proj_DOS T
 
 As for the DOS, very high Brillouin zone sampling is required for
@@ -287,10 +283,9 @@ following flags can be set:
    Process.pDOS_lm_resolved T
 
 Note that only one of these is needed, depending on what level of
-resolution is required.  At present, angular momentum resolution is
-only available for the PAO basis set (not MSSF or blips) though it
-is under development for the MSSF basis (by projection onto the
-underlying PAO basis).
+resolution is required.  Angular-momentum resolution is available for both
+primitive-PAO and MSSF calculations, but not for calculations using blip
+functions.
 
 The energy range for the projected DOS can
 also be specified:
