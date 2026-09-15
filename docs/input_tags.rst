@@ -735,10 +735,29 @@ Diag.Kpoints (*block*)
     *default*: absent (Gamma point only)
 
 Diag.MPMesh (*boolean*)
-    Switches on/off the Monkhorst-Pack mesh. When true, ``Diag.NumKpts`` and
-    the ``Diag.Kpoints`` block are ignored.
+    Switches on/off the Monkhorst-Pack mesh. When true, explicit k-points and
+    k-space lines are ignored.
 
     *default*: F
+
+Diag.KspaceLines (*boolean*)
+    Generates k-points along lines in reciprocal space. This option is used
+    only when ``Diag.MPMesh`` is false. See the
+    :ref:`band-structure procedure <pp_band_str>` for an example.
+
+    *default*: F
+
+Diag.NumKptLines (*integer*)
+    Number of k-space lines used when ``Diag.KspaceLines`` is true.
+
+    *default*: 1
+
+Diag.KpointLines (*block*)
+    Lists the start and end points of each k-space line in fractional
+    coordinates. The block must contain two entries for every line specified
+    by ``Diag.NumKptLines``.
+
+    *default*: none; required when ``Diag.KspaceLines`` is true
 
 Diag.MPMesh[X/Y/Z] (*integer*)
     Specifies the number n of k-points along the x(y,z) axis.
