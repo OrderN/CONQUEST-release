@@ -100,12 +100,6 @@ General.LoadBalance (*string*) partitions/atoms
 
     *default*: atoms
 
-General.ManyProcessors (*boolean*)
-    Applies to Hilbert above; chooses method for parallelising Hilbert curve work;
-    “many” processors here probably means more than two
-
-    *default*: T
-
 General.MaxAtomsPartition (*integer*)
     Applies to Hilbert above; specifies maximum number of atoms
     allowed in a partition; triggers extra level of recursion in
@@ -509,18 +503,6 @@ SC.MaxPulay (*integer*)
     Number of iterations stored and mixed during Pulay mixing
 
     *default*: 5
-
-SC.ReadAtomicDensityFile (*string*)
-    Filename for radial tables of atomic density (*rarely* used: normally generated from PAOs)
-
-    default:
-
-SC.AtomicDensityFlag (*string*)
-    values: pao/read
-
-    Flag determining how atomic densities should be found
-
-    *default*: pao
 
 SC.KerkerPreCondition (*boolean*)
     Flag determining if Kerker precondition is to be used.
@@ -1507,11 +1489,6 @@ General.EwaldAccuracy (*real*)
 
     *default*:1\ :math:`\times`\ 10\ :math:`^{-10}`
 
-General.CheckDFT (*boolean*)
-    Calculates DFT energy using output density
-
-    *default*: F
-
 General.AverageAtomicDiameter (*real*)
     Related to space-filling
 
@@ -1767,11 +1744,6 @@ Basis.TestBasisGrad\_S (*boolean*)
 
 Basis.TestBasisGrad\_H (*boolean*)
     Test H-derived gradient ?
-
-    *default*: F
-
-Basis.PAOs\_OneToOne (*boolean*)
-    Assign PAOs to individual support functions (implies no support function optimisation)
 
     *default*: F
 
