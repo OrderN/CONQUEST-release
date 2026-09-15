@@ -1058,41 +1058,39 @@ MD.Ensemble (*string*)
     *default*: nve
 
 MD.Thermostat (*string*)
-    values: none/nhc/berendsen/svr
+    values: none/nhc/svr
 
     Thermostat type
 
     ``none``
         No thermostat (used for calculating temperature only)
-    ``berendsen``
-        Berendsen weak coupling thermostat
+    ``nhc``
+        Nose-Hoover chain thermostat
     ``svr``
         Stochastic velocity rescaling
 
-    *default*: none
+    *default*: none for NVE; nhc for NVT and NPT
 
 MD.Barostat (*string*)
-    values: none/berendsen/iso-mttk/ortho-mttk/mttk
+    values: none/pr/mttk
 
-    Barostat type. The following are the only valid thermostat/barostat
-    combinations for the NPT ensemble: ``berendsen``/ ``berendsen``,
-    ``nhc``/ ``pr``, ``svr``/ ``pr``
+    Barostat type. ``pr`` selects the Parrinello-Rahman implementation;
+    ``mttk`` selects the Martyna-Tobias-Tuckerman-Klein implementation.
 
     ``none``
         No barostat (used for calculating pressure only)
-    ``berendsen``
-        Berendsen weak coupling barostat
     ``pr``
         Parrinello-Rahman (extended system) barostat
+    ``mttk``
+        Martyna-Tobias-Tuckerman-Klein extended-system barostat
 
-    *default*: none
+    *default*: none for NVE and NVT; pr for NPT
 
 MD.tauT (*real*)
-    Coupling time constant for thermostat. Required for Berendsen thermostat, or
-    if ``MD.CalculateXLMass = T``. Note that this number means different things
-    for the Berendsen and NHC thermostats.
+    Thermostat coupling time in fs. For SVR this is a relaxation timescale; for
+    NHC it sets the thermostat frequency when ``MD.CalculateXLMass`` is true.
 
-    *default*: 1.0
+    *default*: 50 fs for SVR; 10 times ``AtomMove.Timestep`` for NHC
 
 MD.TDrag (*real*)
     Add a drag coefficient to the thermostat. The thermostat velocities are
@@ -1123,17 +1121,16 @@ MD.CellNHCMass (*block*)
     *default*: 1 1 1 1 1
 
 MD.BulkModulusEst (*real*)
-    Bulk modulus estimate for system. Only necessary for Berendsen weak pressure
-    coupling (``MD.Barostat = berendsen`` or ``MD.BerendsenEquil > 0``)
+    Reserved bulk-modulus estimate. Version 1.6 reads and stores this value, but
+    the supported barostat algorithms do not use it.
 
     *default*: 100
 
 MD.tauP (*real*)
-    Coupling time constant for barostat. Required for Berendsen barostat, or if
-    MD.CalculateXLMass = T. Note that this number means different things for the
-    Berendsen and Parrinello-Rahman barostats.
+    Barostat coupling time in fs. It sets the barostat frequency when
+    ``MD.CalculateXLMass`` is true.
 
-    *default*: 10.0 (Berendsen) or 100.0 (MTTK)
+    *default*: 100 times ``AtomMove.Timestep``
 
 MD.PDrag (*real*)
     Add a drag coefficient to the barostat. The barostat velocities are
@@ -1164,11 +1161,6 @@ MD.nMTS (*integer*)
     Number of time steps in inner loop of MTS scheme
 
     *default*: 1
-
-MD.BerendsenEquil (*integer*)
-    Equilibrate the system for :math:`n` steps using Berendsen weak coupling
-
-    *default*: 0
 
 MD.TDEP (*boolean*)
     Dump data in a format readable by the Temperature Dependent Effective
