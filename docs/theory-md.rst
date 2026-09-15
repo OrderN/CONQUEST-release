@@ -192,7 +192,7 @@ expansion,
 
 This is recognisable as the velocity Verlet algorithm with extended Lagrangian
 integration which can be reduced to a single step, as described in
-:ref:`Extended Lagrangian Born-Oppenheimer MD (XL-BOMD)`, with a half time step
+:ref:`Extended Lagrangian Born-Oppenheimer MD (XL-BOMD) <th_md_xlbomd>`, with a half time step
 integration of the Nose-Hoover chain equations of motion before and after. For
 full details of the integration scheme, see Hirakawa *et al*.
 :cite:`t-Hirakawa2017`.

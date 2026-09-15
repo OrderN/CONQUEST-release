@@ -88,14 +88,14 @@ Compiler flags to enable OpenMP are dependent on the vendor, but should be speci
 
 On some systems, the default stack size for OpenMP is set to be rather small, and this can cause a segmentation fault when running with multiple threads.  We recommend testing the effect of the environment variable ``OMP_STACKSIZE`` (and suggest setting it to 50M or larger as a first test).
 
-Most OpenMP multi-threading in CONQUEST uses the ``runtime`` schedule. This means the type of scheduling of work to threads can be set by the user by setting the ``OMP_SCHEDULE`` `variable<https://www.openmp.org/spec-html/5.0/openmpse49.html>`_. If the variable is unset, OpenMP will use a default implementation defined schedule. 
+Most OpenMP multi-threading in CONQUEST uses the ``runtime`` schedule. This means the type of scheduling of work to threads can be set by the user by setting the ``OMP_SCHEDULE`` `variable <https://www.openmp.org/spec-html/5.0/openmpse49.html>`_. If the variable is unset, OpenMP will use a default implementation defined schedule.
 
 Go to :ref:`top <install>`
 
 .. _install_spack:
 
 Installing with Spack
------------
+---------------------
 
 CONQUEST and all of its dependencies can be installed with `Spack <https://spack.io/>`_.
 The CONQUEST package requires Spack v0.21 or later. If Spack isn't available or up to date on your
@@ -117,14 +117,14 @@ The build can be customized by adding options to the
 The CONQUEST package includes variants for OpenMP support and different matrix multiplication kernels; more details can be found in the `Spack CONQUEST package <https://packages.spack.io/package.html?name=conquest>`_.
 
 Installing on Ubuntu
------------
+--------------------
 
 CONQUEST can be compiled on Ubuntu after installing the required packages. The below instructions are given for Ubuntu 22.04 LTS and Ubuntu 24.04 LTS.
 The source files will be downloaded into the ``${USER}/local/src`` directory. The ${USER} variable will be automatically replaced by the current username.
 If compilation is successful, the executable file can be found in ``${USER}/local/src/conquest_master/bin``.
 
 Install needed packages
-~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: bash
 
@@ -218,7 +218,7 @@ Prepare makefile
     EOF
 
 Compile CONQUEST
-~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~
 
 .. code-block:: bash
 

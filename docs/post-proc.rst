@@ -413,7 +413,7 @@ For users interested in verbose output, set ``Process.RotatePDOSDebug T`` (defau
 
 Go to :ref:`top <post-proc>`.
 
-.. _pp_band_str
+.. _pp_band_str:
 
 Band structure
 ++++++++++++++

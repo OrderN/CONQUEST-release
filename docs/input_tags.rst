@@ -1474,8 +1474,8 @@ Advanced and obscure tags
 
 .. _advanced_general_tags:
 
-General
-*******
+General (advanced)
+******************
 
 General.LoadInvS (*boolean*)
     Selects loading of inverse S matrix from previous step (not
@@ -1539,8 +1539,8 @@ Go to :ref:`top <input_tags>`.
 
 .. _advanced_atomic_spec_tags:
 
-Atomic Specification
-********************
+Atomic Specification (advanced)
+*******************************
 
 Atom.ValenceCharge (*real*)
     Valence charge of species (e.g. 4 for carbon, 6 for oxygen)
@@ -1779,8 +1779,8 @@ Go to :ref:`top <input_tags>`.
 
 .. _advanced_grid_tags:
 
-Integration Grid
-****************
+Integration Grid (advanced)
+***************************
 
 Grid.PointsAlong[X/Y/Z] (*integer*)
     Grid points along x (y,z). Overwrites the values set by **Grid.GridCutoff**.
