@@ -739,7 +739,10 @@ Diag.IntegerOccs (*boolean*)
     *default*: False
 
 Diag.AdjustEf (*boolean*)
-    Turns off the automatic adjustment of Ef to be mid-gap (unlikely to be needed).
+    With Fermi-Dirac occupations, move the Fermi level to the middle of a
+    detected band gap. Set this false to disable the adjustment. This option
+    does not affect Methfessel-Paxton or integer occupations; integer
+    occupations always use the midgap Fermi level.
 
     *default*: True
 
