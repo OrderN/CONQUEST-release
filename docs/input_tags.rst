@@ -1247,7 +1247,8 @@ Spin.SpinPolarised (*boolean*)
     *default*: F
 
 Spin.FixSpin (*boolean*)
-    Determines if spin populations are to be fixed. Only read if **Spin.FixPolarised** is set.
+    Determines if spin populations are to be fixed. Only used if
+    ``Spin.SpinPolarised`` is true.
 
     *default*: F
 
@@ -1268,65 +1269,67 @@ Go to :ref:`top <input_tags>`.
 DeltaSCF
 --------
 
-flag\_DeltaSCF (*boolean*)
+minE.DeltaSCF (*boolean*)
     Selects delta SCF calculation
 
-    *default*:
+    *default*: F
 
 DeltaSCF.SourceLevel (*integer*)
     Eigenstate number to remove electron from (source)
 
-    *default*:
+    *default*: 0
 
 DeltaSCF.TargetLevel (*integer*)
     Eigenstate number to promote electron to (target)
 
-    *default*:
+    *default*: 0
 
 DeltaSCF.SourceChannel (*integer*)
     Spin channel for electron source
 
-    *default*:
+    *default*: 1
 
 DeltaSCF.TargetChannel (*integer*)
     Spin channel for electron target
 
-    *default*:
+    *default*: 1
 
 DeltaSCF.SourceNFold (*integer*)
     Allows selection of more than one level for excitation source (N-fold)
 
-    *default*:
+    *default*: 1
 
 DeltaSCF.TargetNFold (*integer*)
     Multiplicity of target (N-fold)
 
-    *default*:
+    *default*: 1
 
 DeltaSCF.LocalExcitation (*boolean*)
     Select an excitation localised on a group of atoms
 
-    *default*:
+    *default*: F
 
 DeltaSCF.HOMOLimit (*integer*)
     How many states down from HOMO to search for localised excitation
 
-    *default*:
+    *default*: 0
 
 DeltaSCF.LUMOLimit (*integer*)
     How many states up from LUMO to search for localised excitation
 
-    *default*:
+    *default*: 0
 
 DeltaSCF.HOMOThresh (*real*)
-    (*please fill in*)
+    Threshold for identifying a localised occupied source state (sum of the
+    squared moduli of coefficients on the selected atoms)
 
-    *default*:
+    *default*: 0.5
 
 DeltaSCF.LUMOThresh (*real*)
-    Threshold for identifying localised excitation (sum over square moduli of coefficients)
+    Threshold for identifying a localised unoccupied target state (sum of the
+    squared moduli of coefficients on the selected atoms)
 
-    *default*:
+    *default*: 0.5
 
 Go to :ref:`top <input_tags>`.
 
@@ -1338,34 +1341,34 @@ Constrained DFT (cDFT)
 cDFT.Perform\_cDFT (*boolean*)
     Selects cDFT operation
 
-    *default*:
+    *default*: F
 
 cDFT.Type (*integer*)
     values: 1 or 2
 
     Selects constraint to be for absolute charge on groups (1) or difference between two groups (2)
 
-    *default*:
+    *default*: 2
 
 cDFT.MaxIterations (*integer*)
     Maximum iterations permitted
 
-    *default*:
+    *default*: 50
 
 cDFT.Tolerance (*real*)
     Tolerance on charge
 
-    *default*:
+    *default*: 0.001
 
 cDFT.NumberAtomGroups (*integer*)
     Number of groups of atoms
 
-    *default*:
+    *default*: 1
 
 cDFT.AtomGroups (*block*)
-    Block with each line specifying: Number of atoms, target charge, label for
-    block. For each line, there should be a corresponding block with the appropriate
-    label; the block consists of a list of atom numbers for the atoms in the group
+    Each line specifies a group index, number of atoms, target charge and block
+    label. For each line, a block with that label must list the atom numbers in
+    the group.
 
 Go to :ref:`top <input_tags>`.
 
@@ -1410,10 +1413,10 @@ Go to :ref:`top <input_tags>`.
 vdW-DF
 ------
 
-vdWDFT.LDAFunctionalType (*string*)
+vdWDFT.LDAFunctionalType (*integer*)
     Selects LDA functional to use with vdW-DF
 
-    *default*:
+    *default*: 3
 
 Go to :ref:`top <input_tags>`.
 
@@ -1425,7 +1428,7 @@ DFT-D2
 DFT-D2\_range (*real*)
     DFT-D2 cutoff range (bohr)
 
-    *default*:
+    *default*: 23.0
 
 Go to :ref:`top <input_tags>`.
 
@@ -1452,7 +1455,7 @@ XL.PropagateL (*boolean*)
 XL.Dissipation (*boolean*)
     Selects the addition of dissipative force
 
-    *default*:
+    *default*: F
 
 XL.MaxDissipation (*integer*)
     Order of dissipative force term 
@@ -1523,6 +1526,8 @@ General.GapThreshold (*real*)
 
 General.only_Dispersion (*boolean*)
     Selects only DFT\_D2 calculation (no electronic structure etc)
+
+    *default*: F
 
 General.MixXCGGAInOut (*real*)
     For non-SCF calculations only, chooses how to mix the proportions of
