@@ -1216,6 +1216,26 @@ MD.Barostat (*string*)
 
     *default*: none for NVE and NVT; pr for NPT
 
+MD.CellConstraint (*string*)
+    values: fixed/volume/xyz
+
+    Controls the cell degrees of freedom used by the barostat. ``volume`` uses
+    one isotropic cell degree of freedom, preserving the cell shape. ``xyz``
+    allows the three orthorhombic cell lengths to change independently and is
+    implemented for the ``pr`` barostat. The ``mttk`` implementation is
+    isotropic and should be used with ``volume``. When no barostat is active,
+    CONQUEST sets the constraint to ``fixed``; use ``MD.Barostat none`` for
+    fixed-cell dynamics.
+
+    *default*: volume; changed to fixed when no barostat is active
+
+MD.EquilSteps (*integer*)
+    Number of initial equilibration steps. A positive value is retained only
+    when ``MD.Thermostat`` is ``svr``; otherwise CONQUEST issues a warning and
+    resets it to zero.
+
+    *default*: 0
+
 MD.tauT (*real*)
     Thermostat coupling time in fs. For SVR this is a relaxation timescale; for
     NHC it sets the thermostat frequency when ``MD.CalculateXLMass`` is true.
