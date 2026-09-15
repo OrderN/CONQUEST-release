@@ -832,7 +832,7 @@ AtomMove.NumSteps (*integer*)
 
 AtomMove.MaxForceTol (*real*)
     The structure optimisation will stop when the maximum force component is less
-    than **MD.MaxForceTol**
+    than ``AtomMove.MaxForceTol``.
 
     *default*: 0.0005 Ha/bohr
 
@@ -869,31 +869,37 @@ AtomMove.AppendCoords (*boolean*)
     *default*: T
 
 AtomMove.OutputFreq (*integer*)
-    Frequency of output of information. *Not properly implemented*
+    Frequency, in ionic steps, for writing MD frames to ``md.frames`` and, when
+    ``MD.TDEP`` is true, TDEP-compatible lattice-dynamics files. It also
+    supplies the default MD frequency for the XSF and extended-XYZ trajectory
+    files.
 
     *default*: 50
 
 AtomMove.WriteXSF (*boolean*)
-    Write atomic coordinates to ``trajectory.xsf`` for ``AtomMove.TypeOfRun = md`` or ``cg``,
-    every ``AtomMove.XsfFreq`` steps
+    Write atomic coordinates to ``trajectory.xsf``. During MD, frames are
+    written every ``AtomMove.XsfFreq`` steps. Structure-relaxation methods write
+    a frame after every ionic step.
 
     *default*: T
 
 AtomMove.XsfFreq (*integer*)
-    Frequency of output of atomic coordinates to ``trajectory.xsf``
+    Frequency, in MD steps, of atomic-coordinate output to ``trajectory.xsf``.
+    This setting is not used by structure-relaxation methods.
 
     *default*: same as ``AtomMove.OutputFreq``
 
-AtomMove.WriteXYZ (*boolean*)
-    Write atomic coordinates to ``trajectory.xyz`` for ``AtomMove.TypeOfRun = md``,
-    every ``AtomMove.XyzFreq`` steps
+AtomMove.WriteExtXYZ (*boolean*)
+    Write coordinates, lattice vectors, energy, forces and stress in extended
+    XYZ format to ``trajectory.xyz``. Moving-atom runs write frames every
+    ``AtomMove.XyzFreq`` steps; a static run writes one frame.
 
-    *default*: T
+    *default*: F
 
 AtomMove.XyzFreq (*integer*)
-    Frequency of output of atomic coordinates to ``trajectory.xyz``
+    Frequency of output to ``trajectory.xyz`` during moving-atom runs.
 
-    *default*: same as ``AtomMove.OutputFreq``
+    *default*: same as ``AtomMove.OutputFreq`` for MD; 1 for other run types
 
 AtomMove.TestForces (*boolean*)
     Flag for testing forces with comparison of analytic and numerical calculations.
@@ -904,7 +910,7 @@ AtomMove.TestForces (*boolean*)
 AtomMove.TestAllForces (*boolean*)
     Switch to test *all* force contributions or not
 
-    *default*: F
+    *default*: T
 
 AtomMove.CalcStress (*boolean*)
     Toggle calculation of the stress tensor. Switching off can improve performance.
@@ -986,6 +992,8 @@ AtomMove.OptCell.Constraint (*string*)
     ``volume``: minimize the total energy by scaling each simulation cell dimension by
     the same global scaling factor. Search directions are set by the mean stress.
 
+    *default*: none
+
 AtomMove.TestSpecificForce (*integer*)
     Label for which force contribution to test. Note that for PAOs non-local Pulay
     and Hellman-Feynman forces are found together as part of the HF calculation;
@@ -1052,7 +1060,7 @@ AtomMove.SkipEarlyDM (*boolean*)
 AtomMove.McWeenyFreq (*integer*)
     McWeeny step is applied every N steps (with “AtomMove.ReuseDM T”)
 
-    *default*:
+    *default*: 0 (disabled)
 
 AtomMove.ExtendedLagrangian (*boolean*)
     Selects XL-BOMD (with “AtomMove.ReuseDM T”)
@@ -1062,7 +1070,8 @@ AtomMove.ExtendedLagrangian (*boolean*)
 AtomMove.FixCentreOfMass (*boolean*)
     Remove the centre of mass velocity at every time step
 
-    *default*: T
+    *default*: T for MD, except F for FIRE; disabled when any atomic coordinate
+    is fixed and unused for other run types
 
 Go to :ref:`top <input_tags>`.
 

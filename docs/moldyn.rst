@@ -91,8 +91,9 @@ Visualising the trajectory
 --------------------------
 
 Setting the flag ``AtomMove.WriteXSF T`` dumps the coordinates to the file
-``trajectory.xsf`` every ``AtomMove.OutputFreq`` steps. The .xsf file can be
-read using `VMD <https://www.ks.uiuc.edu/Research/vmd/>`_. A small VMD script,
+``trajectory.xsf`` every ``AtomMove.XsfFreq`` steps (which defaults to
+``AtomMove.OutputFreq``). The .xsf file can be read using
+`VMD <https://www.ks.uiuc.edu/Research/vmd/>`_. A small VMD script,
 ``view.vmd`` is included with the code, and can be invoked using,
 
 ``vmd -e view.vmd``
