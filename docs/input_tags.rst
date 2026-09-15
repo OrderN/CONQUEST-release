@@ -21,13 +21,14 @@ General
 General.NumberOfSpecies (*integer*)
     Number of species in cell
 
-    *default*: none
+    *default*: 1
 
-General.PseudopotentialType (*string*) siesta/hamann
+General.PseudopotentialType (*string*)
     Type of pseudopotential (in practice, this defines how the local
-    part of the pseudopotential is handled)
+    part of the pseudopotential is handled). The normal values are
+    ``hamann`` for ONCVPSP-derived data and ``siesta`` for SIESTA ion files.
 
-    *default*: hamann (read from ion file)
+    *default*: hamann
 
 General.NeutralAtom (*boolean*)
     Use neutral atom potential or not (removes need for Ewald sum)
@@ -40,7 +41,10 @@ General.FunctionalType (*integer*)
     parameterisations of the LDA available, as well as three variants
     of the PBE GGA functional, with numbers given below.
 
-    *default*: read from ion file (same as pseudopotentials)
+    *default*: 0 (take the functional from the ion files)
+
+    If a nonzero value differs from the functional stored in the ion files,
+    ``General.DifferentFunctional`` must be true or CONQUEST will stop.
 
     =========================================  ======= =======================
     Functional                                 Keyword Ref
@@ -94,9 +98,10 @@ General.PartitionMethod (*string*) File/Hilbert
        guaranteed
     -  File — Reads a file (NOT recommended)
 
-General.LoadBalance (*string*) partitions/atoms
+General.LoadBalance (*string*) atoms/partitions/supportfunctions
     Applies to Hilbert above; chooses whether to distribute atoms or partitions
-    evenly between processors (you are *strongly* recommended to use atoms)
+    evenly between processors, or to balance the number of support functions
+    (you are *strongly* recommended to use atoms)
 
     *default*: atoms
 
@@ -122,7 +127,7 @@ General.LoadDM (*boolean*)
     Specifies whether to load a previous density matrix (K or L depending on
     whether diagonalisation or linear scaling are selected) from files
 
-    *default*: F
+    *default*: T when ``AtomMove.RestartRun`` is true; F otherwise
 
 General.LoadRho (*boolean*)
     Specifies whether to load a previous charge density from files
@@ -209,7 +214,7 @@ Atom.LFDRange (*real*)
     overlap matrix elements from all atoms within this range will be
     included in the cluster diagonalisation)
 
-    *default*: 0.0
+    *default*: value of ``Atom.MultisiteRange``
 
 Go to :ref:`top <input_tags>`.
 
