@@ -152,7 +152,7 @@ contains
     use force_module,         only: tot_force, stress
     use minimise,             only: get_E_and_F
     use global_module,        only: runtype, flag_self_consistent, &
-                                    flag_out_wf, flag_write_DOS, wf_self_con, &
+                                    flag_out_wf, flag_write_projected_DOS, wf_self_con, &
                                     flag_opt_cell, optcell_method, min_layer, flag_DM_converged
     use input_module,         only: leqi
     use store_matrix,         only: dump_pos_and_matrices
@@ -180,12 +180,10 @@ contains
 !****lat>$
     flag_DM_converged = .false.
     if ( leqi(runtype,'static') ) then
-       !if(.NOT.flag_self_consistent.AND.(flag_out_wf.OR.flag_write_DOS)) return
        flag_ff = .true.
        flag_wf = .true.
-       if (flag_out_wf.OR.flag_write_DOS) then
+       if (flag_out_wf.OR.flag_write_projected_DOS) then
           ! This is done within get_E_and_F
-          !wf_self_con=.true.
           flag_ff = .false.
           flag_wf = .false.
        endif
@@ -2245,6 +2243,8 @@ contains
   !!  MODIFICATION HISTORY
   !!   2022/08/17 15:18 dave
   !!    Introduced scaling to improve conditioning in arxiv/2206.07339
+  !!   2026/08/13 Augustin Lu
+  !!    Set a wider format and user-selected units for simulation cell volume output.
   !!  SOURCE
   !!
   subroutine cell_sqnm(fixed_potential, vary_mu, total_energy)
@@ -2584,7 +2584,8 @@ contains
                iter, max_stress*volume, enthalpy1, en_conv*dH
           if (iprint_MD > 1) then
              write(io_lun,'(4x,"Maximum stress         ",e14.6," Ha/Bohr**3")') max_stress
-             write(io_lun,'(4x,"Simulation cell volume ",e14.6," Bohr**3")') volume
+             write(io_lun,'(4x,"Simulation cell volume ",f18.6,1x,a2,a3)') &
+                  volume * dist_conv**3, d_units(dist_units), '**3'
              write(io_lun,'(4x,"Maximum stress         ",f14.6," GPa")') &
                   max_stress*HaBohr3ToGPa
              write(io_lun,'(4x,"Stress tolerance:      ",f14.6," GPa")') &
@@ -3766,6 +3767,8 @@ contains
   ! alternating full ionic and full cell optimisation (full_cg_run_double_loop)
   ! and full ionic with single line minimisation cell optimisation (this routine)
   ! Use cell optimisation method 4 for this
+  ! 2026/08/13 Augustin Lu
+  !  Set a wider format and user-selected units for simulation cell volume output.
   subroutine full_cg_run_double_loop_alt(fixed_potential, vary_mu, total_energy)
 
     ! Module usage
@@ -4061,7 +4064,8 @@ contains
           write(io_lun,'(4x,"Force tolerance:       ",f19.8)') MDcgtol
           write(io_lun,'(4x,"Maximum stress         ",e14.6," Ha/Bohr**3")') &
             max_stress
-          write(io_lun,'(4x,"Simulation cell volume ",e14.6," Bohr**3")') volume
+          write(io_lun,'(4x,"Simulation cell volume ",f18.6,1x,a2,a3)') &
+            volume * dist_conv**3, d_units(dist_units), '**3'
           write(io_lun,'(4x,"Maximum stress         ",f14.6," GPa")') &
                max_stress*HaBohr3ToGPa
           write(io_lun,'(4x,"Stress tolerance: ",f14.6," GPa")') &

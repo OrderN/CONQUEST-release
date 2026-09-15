@@ -78,6 +78,8 @@
 !!    they don't exist
 !!   2019/11/04 11:36 dave
 !!    Removed redundant code (old SFC routines)
+!!   2026/08/13 Augstin Lu
+!!    Removed unused flag_coords_xyz
 module io_module
 
   use datatypes,              only: double
@@ -114,7 +116,6 @@ module io_module
   ! Moved here from read_and_write so that it can be used for extended XYZ output
   ! Moved here from initial_read_module to slove the dependence problem
   character(len=80), save :: titles
-  logical          :: flag_coords_xyz
 
 !!***
 
@@ -1473,9 +1474,11 @@ second:   do
   !! CREATION DATE 
   !!   2015/07/09 08:16
   !! MODIFICATION HISTORY
+  !!   2026/09/08 12:57 dave
+  !!    Added occupancy output
   !! SOURCE
   !!
-  subroutine write_eigenvalues(eval,n_evals,nkp,nspin,kk,wtk,Ef)
+  subroutine write_eigenvalues(eval,occ,n_evals,nkp,nspin,kk,wtk,Ef)
 
     use datatypes
     
@@ -1483,7 +1486,7 @@ second:   do
 
     ! Passed variables
     integer :: n_evals,nkp,nspin
-    real(double), dimension(n_evals,nkp,nspin) :: eval
+    real(double), dimension(n_evals,nkp,nspin) :: eval, occ
     real(double), dimension(3,nkp) :: kk
     real(double), dimension(nkp) :: wtk
     real(double), dimension(nspin) :: Ef
@@ -1499,12 +1502,12 @@ second:   do
     else
        write(lun,fmt='("# Ef: ",2f18.10)') Ef(1),Ef(2)
     end if
-    write(lun,fmt='("# Format: nk kx ky kz weight, followed by eigenvalues")')
+    write(lun,fmt='("# Format: nk kx ky kz weight, followed by eigenvalues and occupancies")')
     do sp = 1,nspin
        do kp = 1,nkp
           write(lun,fmt='(i6,3f12.5,f17.10)') kp,kk(1,kp),kk(2,kp),kk(3,kp),wtk(kp)
           do ev = 1,n_evals
-             write(lun,fmt='(i6,f18.10)') ev,eval(ev,kp,sp)
+             write(lun,fmt='(i6,f18.10,f9.4)') ev,eval(ev,kp,sp),occ(ev,kp,sp)/wtk(kp)
           end do
        end do
     end do
@@ -3271,50 +3274,38 @@ second:   do
   !!  CREATION DATE
   !!   2020/03/11
   !!  MODIFICATION HISTORY
+  !!   2026/08/13 Augustin Lu
+  !!    Set a wider format and user-selected units for cell output
+  !!    Convert printed atomic coordinates to the selected distance units
+  !!    Remove the obsolete IO.AtomCoordsXYZ output mode.
   !!
   !!  SOURCE
   !!
   subroutine print_atomic_positions
 
-    use global_module, only: atom_coord, iprint_MD, ni_in_cell, species_glob
-    use dimens,         only: r_super_x, r_super_y, r_super_z, atomicnum, volume
+    use global_module, only: atom_coord, ni_in_cell, species_glob
+    use dimens,         only: r_super_x, r_super_y, r_super_z, volume
     use GenComms, only: inode, ionode
-    use units, only: dist_conv, d_units, dist_units, BohrToAng, bohr
-    use periodic_table, only: pte
-    use pseudo_tm_info, only: pseudo
+    use units, only: dist_conv, d_units, dist_units
 
     implicit none
 
     integer :: i
 
-    if(inode==ionode) then
-       write(io_lun,fmt='(/4x,"Simulation cell dimensions: ",f10.4,a3," x ",f10.4,a3," x ",f10.4,a3)') &
-            r_super_x*dist_conv, d_units(dist_units), r_super_y*dist_conv, d_units(dist_units), &
-            r_super_z*dist_conv, d_units(dist_units)
-       write(io_lun,fmt='(/4x,"Simulation cell volume:     ",f10.4,a3,a3)') &
-            volume*dist_conv*dist_conv*dist_conv, d_units(dist_units),'**3'
-       if(flag_coords_xyz) then
-          write(io_lun,fmt='(6x,"           X         Y         Z")')
-          if(dist_units==bohr) then
-             write(io_lun,fmt='(/6x,"Atomic coordinates in XYZ format (",a2,")")') "A "
-             do i = 1, ni_in_cell
-                write (io_lun,fmt='(4x, a2, 3f10.4)') pte(atomicnum(species_glob(i))), atom_coord(1:3,i)*BohrToAng
-             end do
-             write(io_lun,fmt='(8x,"N.B. units above converted to Angstroms for xyz output")')
-          else
-             write(io_lun,fmt='(/6x,"Atomic coordinates (",a2,")")') d_units(dist_units)
-             do i = 1, ni_in_cell
-                write (io_lun,fmt='(4x, a2, 3f10.4)') pte(atomicnum(species_glob(i))), atom_coord(1:3,i)
-             end do
-          end if
-       else
-          write(io_lun,fmt='(/6x,"Atomic coordinates (",a2,")")') d_units(dist_units)
-          write(io_lun,fmt='(6x,"   Atom         X         Y         Z  Species")')
-          do i = 1, ni_in_cell
-             write (io_lun,fmt='(6x, i7, 3f10.4, 6x, i3)') i,atom_coord(1:3,i), species_glob(i)
-          end do
-       end if
+  if(inode==ionode) then
+       write(io_lun,fmt='(/4x,"Simulation cell dimensions: ",f18.4,1x,a2," x ",f18.4,1x,a2," x ",f18.4,1x,a2)') &
+            r_super_x * dist_conv, d_units(dist_units), r_super_y * dist_conv, d_units(dist_units), &
+            r_super_z * dist_conv, d_units(dist_units)
+       write(io_lun,fmt='(/4x,"Simulation cell volume:     ",f18.6,1x,a2,a3)') &
+            volume * dist_conv * dist_conv * dist_conv, d_units(dist_units),'**3'
+       write(io_lun,fmt='(/6x,"Atomic coordinates (",a2,")")') d_units(dist_units)
+       write(io_lun,fmt='(6x,"   Atom         X         Y         Z  Species")')
+       do i = 1, ni_in_cell
+            write (io_lun,fmt='(6x, i7, 3f10.4, 6x, i3)') i, atom_coord(1:3,i) * dist_conv, &
+            species_glob(i)
+       end do
     end if
+
     return
     
   end subroutine print_atomic_positions
