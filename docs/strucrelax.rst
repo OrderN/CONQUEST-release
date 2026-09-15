@@ -82,12 +82,12 @@ For large initial forces or problematic cases where the relaxation algorithms fa
 downhill search direction, it may be worth trying quenched molecular dynamics,
 which propagates the equations of motion following a simple NVE
 approach, but resets the velocities to zero when the dot product of
-force and velocity is zero.
+force and velocity becomes negative.
 
 ::
 
    AtomMove.TypeOfRun md
-   AtomMove.QuenchedMD T
+   AtomMove.QuenchMD T
    AtomMove.MaxForceTol 5e-4
    AtomMove.ReuseDM T
 
