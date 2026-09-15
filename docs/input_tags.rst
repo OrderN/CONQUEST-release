@@ -1162,10 +1162,10 @@ MD.tauP (*real*)
     *default*: 100 times ``AtomMove.Timestep``
 
 MD.PDrag (*real*)
-    Dimensionless strength of ad hoc damping applied to the separate cell
-    Nose-Hoover-chain velocities when ``MD.CellNHC`` is true. The internal
-    damping factor also depends on the timestep, ``MD.tauP``, ``MD.nMTS`` and
-    ``MD.nYoshida``.
+    Dimensionless strength of ad hoc damping applied to the cell/barostat
+    velocities and, when ``MD.CellNHC`` is true, the separate cell
+    Nose-Hoover-chain velocities. The internal damping factor also depends on
+    the timestep, ``MD.tauP``, ``MD.nMTS`` and ``MD.nYoshida``.
 
     *default*: 0.0
 

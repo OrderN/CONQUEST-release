@@ -222,11 +222,18 @@ NHC tend to be more severe due to coupling of the cell and atomic motions. They
 are dependent on the system, so it is advised that you find a combination of
 these parameters that gives the best energy conservation. The cell is
 thermostatted using a separate Nose-Hoover chain to the atoms by default, but
-they can be controlled with the same chain by setting ``MD.CellNHC F``. An *ad
-hoc* drag factor specified by ``MD.PDrag`` reduces the thermostat and cell
-velocities at every timestep to damp out the ringing fluctuations. In this case,
-they are reduced by :math:`10/200 \simeq 5\%`, which strictly speaking breaks the NPT
-dynamics, but not significantly, and the stability is significantly improved.
+they can be controlled with the same chain by setting ``MD.CellNHC F``. The
+*ad hoc* damping controlled by ``MD.PDrag`` acts on the cell/barostat velocities
+and, when present, the separate cell-thermostat velocities. Each application
+uses the factor
+
+.. math::
+
+   1 - \frac{D_P\,\Delta t}{\tau_P n_{\mathrm{MTS}} n_{\mathrm{YS}}},
+
+where :math:`D_P` is ``MD.PDrag``. This factor is applied within the integration
+substeps, potentially more than once per full MD timestep. A nonzero drag
+perturbs the formal NPT dynamics, but can help damp ringing fluctuations.
 
 Note that the NPT ensemble can also be generated correctly by thermostatting
 using the SVR thermostat, although the meaning of the parameter ``MD.tauT`` is
