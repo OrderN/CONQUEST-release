@@ -270,6 +270,61 @@ IO.Dump[Har|XC|PS|ES|Tot]Pot (*boolean*)
     with XC, PS, ES and Tot)
 
     *default*: F
+
+IO.outputWF (*boolean*)
+    Writes wavefunction coefficients for post-processing.  This output is
+    available only for static diagonalisation calculations; CONQUEST disables
+    it with a warning for O(N) or non-static calculations.  Bands must be
+    selected either with ``IO.maxnoWF`` and a ``WaveFunctionsOut`` block or
+    with the ``IO.min_wf_E`` and ``IO.max_wf_E`` energy limits.
+
+    *default*: F
+
+IO.maxnoWF (*integer*)
+    Number of explicitly selected bands whose wavefunction coefficients are
+    written.  A positive value requires a ``WaveFunctionsOut`` block and takes
+    precedence over energy-range selection.
+
+    *default*: 0
+
+WaveFunctionsOut (*block*)
+    Lists the band numbers to output when ``IO.maxnoWF`` is positive.  The
+    block must contain at least ``IO.maxnoWF`` entries, one band number per
+    entry.
+
+    *default*: none; required when ``IO.maxnoWF`` is positive
+
+IO.min_wf_E (*real*)
+    Lower energy limit, in Hartree, for wavefunction output when no explicit
+    band list is active.  For ordinary ``IO.outputWF`` output, the default is
+    zero.  When ``IO.write_proj_DOS`` is true, an omitted limit instead extends
+    to the bottom of the eigenspectrum.
+
+    *default*: 0, or the bottom of the eigenspectrum for projected-DOS output
+
+IO.max_wf_E (*real*)
+    Upper energy limit, in Hartree, for wavefunction output when no explicit
+    band list is active.  For ordinary ``IO.outputWF`` output, the default is
+    zero.  When ``IO.write_proj_DOS`` is true, an omitted limit instead extends
+    to the top of the eigenspectrum.
+
+    *default*: 0, or the top of the eigenspectrum for projected-DOS output
+
+IO.WFRangeRelative (*boolean*)
+    Interprets ``IO.min_wf_E`` and ``IO.max_wf_E`` relative to the Fermi level
+    when true, and as absolute energies when false.  If ordinary
+    ``IO.outputWF`` is requested without an explicit band list and both limits
+    remain zero, the default relative range selects no range and CONQUEST
+    disables wavefunction output with a warning.
+
+    *default*: T
+
+IO.write_proj_DOS (*boolean*)
+    Writes the ordinary and overlap-scaled wavefunction coefficients required
+    for projected-DOS post-processing.  This option also enables wavefunction
+    output and is available only for static diagonalisation calculations.
+
+    *default*: F
     
 IO.TimingOn (*boolean*)
     Whether time information will be measured and written to output
