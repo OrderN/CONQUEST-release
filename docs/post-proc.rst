@@ -450,3 +450,10 @@ with ``Process.min_DOS_E`` and ``Process.max_DOS_E``.
 
 Go to :ref:`top <post-proc>`.
 
+.. bibliography:: references.bib
+    :cited:
+    :labelprefix: PP
+    :keyprefix: pp-
+    :style: unsrt
+
+Go to :ref:`top <post-proc>`.
