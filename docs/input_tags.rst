@@ -448,19 +448,19 @@ minE.SCTolerance (*real*)
 minE.SupportVariations (*integer*)
     Maximum number of support-function iterations
 
-    *default*: 20
+    *default*: 10
 
 minE.PreconditionBlips (*boolean*)
     Should blip variation be pre-conditioned? Pre-conditioning is (at present)
     more memory-intensive than it should be, but is efficient
 
-    *default*: F
+    *default*: T when ``minE.VaryBasis`` is true; otherwise disabled
 
 minE.GlobalTolerance (*boolean*)
     Are the convergence criteria applied to minimisation summed over the whole
     system, or per atom?
 
-    *default*: T
+    *default*: T for molecular dynamics; F for other run types
 
 Go to :ref:`top <input_tags>`.
 
@@ -487,7 +487,7 @@ SC.LinearMixingFactor\_SpinDown (*real*)
 SC.LinearMixingEnd (*real*)
     Tolerance for end of Pulay mixing
 
-    *default*: self-consistency tolerance
+    *default*: ``minE.SCTolerance`` multiplied by :math:`10^{-4}`
 
 SC.LateStageReset (*integer*)
     If using GR-Pulay, how often is residual calculated fully (rather than interpolated) ?
@@ -534,7 +534,9 @@ SC.MetricFactor (*real*)
 SC.MakeInitialChargeFromK (*boolean*)
     Flag determining whether initial charge is made from the density matrix
 
-    *default*: T
+    This option is disabled if ``General.LoadDM`` is false.
+
+    *default*: T when ``General.LoadDM`` is true; F otherwise
     
 Go to :ref:`top <input_tags>`.
 
