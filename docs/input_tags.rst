@@ -1051,7 +1051,7 @@ Molecular Dynamics
 ------------------
 
 MD.Ensemble (*string*)
-    values: nve/nvt/npt/nph
+    values: nve/nvt/npt
 
     The molecular dynamics ensemble
 
