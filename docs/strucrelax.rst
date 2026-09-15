@@ -14,7 +14,7 @@ conjugate gradients at present, though L-BFGS will be implemented.
 
 Setting ``AtomMove.WriteXSF T`` for all flavours of optimisation will dump the
 trajectory to the file ``trajectory.xsf``, which can be visualised using `VMD
-<https://www.ks.uiuc.edu/Research/vmd/>`_ and `XCrysDen <http://http://www.xcrysden.org>`_.
+<https://www.ks.uiuc.edu/Research/vmd/>`_ and `XCrySDen <http://http://www.xcrysden.org>`_.
 Setting ``AtomMove.AppendCoords T``
 will append the structure at each step to ``UpdatedAtoms.dat`` in the format of a
 CONQUEST structure input.

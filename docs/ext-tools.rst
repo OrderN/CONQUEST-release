@@ -199,7 +199,7 @@ atomistic simulations. ASE contains a CONQUEST interface, also
 called *Calculator* so that it can be used to calculate ``energies``, ``forces`` 
 and ``stresses`` as inputs to other calculations such as `Phonon <https://wiki.fysik.dtu.dk/ase/ase/phonons.html#module-ase.phonons>`_ 
 or `NEB <https://wiki.fysik.dtu.dk/ase/ase/neb.html#module-ase.neb>`_ that 
-are not implemented in CONQUEST. ASE is a versatil tool to manage CONQUEST
+are not implemented in CONQUEST. ASE is a versatile tool to manage CONQUEST
 calculations without pain either: 
 
 * in a **direct** way where pre-processing, calculation and post-processing are managed on-the-fly by ASE, 

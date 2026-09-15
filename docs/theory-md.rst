@@ -73,12 +73,12 @@ Go to :ref:`top <theory-md>`.
 Extended Lagrangian Born-Oppenheimer MD (XL-BOMD)
 -------------------------------------------------
 
-If the electronic density from the previous ionic step is used as an initila
+If the electronic density from the previous ionic step is used as an initial
 guess for the next SCF cycle, a problem arises because this process breaks the
 time-reversibility of the dynamics. This is manifested as a gradual drift in the
 total energy in the case of a NVE simulation, or the conserved quantity in the
 case of non-Hamiltonian dynamics. The solution proposed by Niklasson
-:cite:`t-Niklasson2008,t-Niklasson2014` is to introduce auxilliary electronic
+:cite:`t-Niklasson2008,t-Niklasson2014` is to introduce auxiliary electronic
 degrees of freedom into the Lagrangian, which can be propagated via
 time-reversible integrators.
 
@@ -138,7 +138,7 @@ model such systems by positing a set of equations of *non-Hamiltonian* equations
 of motion, and proving that they generate the correct statistical ensemble
 :cite:`t-Tuckerman2010`. This is the extended system approach: we modify the
 Hamiltonian to include the thermostat and/or barostat degrees of freedom, derive
-the (pseudo-) Hamiltonian equations of motion, and demostrate that the correct
+the (pseudo-) Hamiltonian equations of motion, and demonstrate that the correct
 phase space distribution for the ensemble is recovered.
 
 Go to :ref:`top <theory-md>`.
@@ -204,11 +204,11 @@ Go to :ref:`top <theory-md>`.
 Isobaric-Isothermal (NPT) ensemble
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The Parinello-Rahman equations of motion :cite:`t-Parrinello1981` extend the
+The Parrinello-Rahman equations of motion :cite:`t-Parrinello1981` extend the
 fixed cell equations of motion to include the cell degrees of freedom in the
 extended system approach. We use the Martyna-Tobias-Tuckerman-Klein modification
 :cite:`t-Martyna1996`, which couples the variable cell equations of motion to a
-Nose-Hoover chain the themrostat the system, recovering the isobaric-isothermal
+Nose-Hoover chain to thermostat the system, recovering the isobaric-isothermal
 (NPT) ensemble. For an unconstrained cell (i.e. the lattice vectors can change
 freely), the equations of motion are,
 
@@ -281,17 +281,17 @@ Weak coupling thermostat/barostat
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Instead of modifying the Hamiltonian, the Berendsen-type weak coupling method
-:cite:`t-Berendsen1984` involves coupling the ionic degrees of freedom to a an
+:cite:`t-Berendsen1984` involves coupling the ionic degrees of freedom to an
 external temperature and/or pressure bath via "the principle of least local
 perturbation consistent with the required global coupling." Thermostatting is
-acheived via a Langevin-type equation of motion, in which the system is globally
+achieved via a Langevin-type equation of motion, in which the system is globally
 coupled to a heat bath and subjected to random noise:
 
 .. math::
     m_i\ddot{\mathbf{r}}_i = \mathbf{F}_i + m_i \gamma\left(\frac{T_0}{T}-1\right)\dot{\mathbf{r}}_i,
 
 where :math:`\gamma` is a global friction constant chosen to be the same for all
-particles. This can be acheived in practice by rescaling the velocities
+particles. This can be achieved in practice by rescaling the velocities
 :math:`\mathbf{v}_i \rightarrow \lambda\mathbf{v}_i`, where :math:`\lambda` is,
 
 .. math::
@@ -306,13 +306,14 @@ be expressed,
 
 i.e. the fractional coordinates are scaled by a factor determined by the
 difference between the internal and external pressures, the isothermal
-compressibility :math:`\beta` and a pressure coupling time constant $\tau_P$.
+compressibility :math:`\beta` and a pressure coupling time constant
+:math:`\tau_P`.
 In the isotropic case, the cell scaling factor :math:`\mu` can be expressed,
 
 .. math::
     \mu = \left[ 1 - \frac{\Delta t}{\tau_P}(P_0 - P)\right]^{\frac{1}{3}},
 
-where the compressibility is absorbed into the time time constant
+where the compressibility is absorbed into the time constant
 :math:`\tau_P`. Allowing for fluctuations of all cell degrees of freedom, the
 scaling factor becomes,
 
@@ -350,7 +351,7 @@ process. Practically, the particle velocities are rescaled by a factor of
 
 Where :math:`R_i` is a set of :math:`N_f` normally distributed random numbers
 with unitary variance. This method can be applied to thermostat the NPT ensemble
-by barostatting the system with the Parinello-Rahman method, and using the above
+by barostatting the system with the Parrinello-Rahman method, and using the above
 expressions, but with additional :math:`R_i`'s for the cell degrees of freedom,
 and thermostatting the cell velocities as well as the particle velocities
 :cite:`t-Bussi2009`.

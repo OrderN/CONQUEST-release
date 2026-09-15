@@ -26,7 +26,7 @@ conserved quantity of the dynamics. Although the molecular dynamics
 integrators used in CONQUEST are time reversible, *the SCF procedure
 is not*. Therefore tight convergence (``minE.SCTolerance`` for
 diagonalisation, ``minE.LTolerance`` for linear scaling) is
-necessary. In the case of diagonalisation, SCF tolerance of ``1E-6`` is
+necessary. In the case of diagonalisation, an SCF tolerance of ``1E-6`` is
 typically enough to negate the drift. However, extended-Lagrangian
 Born-Oppenheimer MD (XL-BOMD) :cite:`md-Niklasson2008`, currently only
 implemented for O(N), essentially makes the SCF component of the MD
@@ -34,7 +34,7 @@ time-reversible by adding the electronic degrees of freedom to the
 Lagrangian, relaxing the constraint on ``minE.LTolerance`` ---
 although it is still somewhat dependent on the ensemble.  In the NVE
 and NVT ensembles, a L-tolerance of ``1E-5`` has been found to be
-sufficient to give good energy conservations, decreasing to ``1E-6``
+sufficient to give good energy conservation, decreasing to ``1E-6``
 in the NPT ensemble. The following flags are required for XL-BOMD:
 
 ::
@@ -106,7 +106,7 @@ Go to :ref:`top <moldyn>`.
 TDEP output
 -----------
 
-CONQUEST molecular dynamics data can be used to perform lattice dyanmical
+CONQUEST molecular dynamics data can be used to perform lattice dynamical
 calculations using the `Temperature Dependent Effective Potential (TDEP)
 <https://ollehellman.github.io/index.html>`_ code. Setting the flag ``MD.TDEP
 T`` will make conquest dump configurations, forces and metadata in a format

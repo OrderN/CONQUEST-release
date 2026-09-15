@@ -324,7 +324,7 @@ Rotated pDOS
 
 CONQUEST, by default, projects the orbitals along the simulation cell axes. Sometimes it is convenient to be able to project onto a coordinate system defined by an atom's local environment, e.g. bonds, to facilitate chemical analysis. CONQUEST supports rotating the wavefunction coefficients either by inputting the basis of the final coordinate system, using the algorithm implemented by Maintz *et al* and Romanowski *et al* [:cite:`pp-maintz2016`, :cite:`pp-romanowski2008`] or active Euler angles in the extrinsic :math:`zyz` convention.
 
-There are 4 operating modes that are possible:
+There are four operating modes:
 
 #. Supply a set of axes to apply to a set of (or all) atoms (mode 0)
 #. Supply 3 Euler angles to apply to a set of (or all) atoms (mode 1)
@@ -365,7 +365,15 @@ If Euler angles are desired, set ``Process.RotatePDOSMode 1`` and in ``Conquest_
    %endblock pDOSEuler
 
 
-Here, ``A``: the atom number to assign the Euler angles to. The default angle units is in degrees: ``Process.RotatePDOSAngle deg`` and units cannot be mixed. In the extrinsic :math:`zyz` convention, 3 consecutive rotations happen about a fixed set of coordinates, i.e. the CONQUEST cell simulation axes (as CONQUEST only supports orthorhombic cells), first about the :math:`z`-axis by :math:`\gamma` , then :math:`y`-axis by :math:`\beta` and then about :math:`z`-axis by :math:`\alpha` in a right-handed sense (i.e., looking down any of the axes towards the origin will mean the positive direction of rotation is anticlockwise).
+Here, ``A`` is the atom number to assign the Euler angles to. The default angle
+unit is degrees (``Process.RotatePDOSAngle deg``), and units cannot be mixed. In
+the extrinsic :math:`zyz` convention, three consecutive rotations happen about
+a fixed set of coordinates, i.e. the CONQUEST simulation-cell axes (CONQUEST
+only supports orthorhombic cells): first about the :math:`z` axis by
+:math:`\gamma`, then the :math:`y` axis by :math:`\beta`, and then the
+:math:`z` axis by :math:`\alpha`, in a right-handed sense (looking down any of
+the axes towards the origin, the positive direction of rotation is
+anticlockwise).
 
 Determining local axes is possible depending on local geometries.
 
@@ -381,7 +389,7 @@ Determining local axes is possible depending on local geometries.
 where ``A``, ``B``, ``C``, ``D`` are integers with different conditions:
 
 * ``A``: the atom number to perform the rotation for
-* ``B``: if it is ``0``, assume square planar geometry, if ``1`` assume octahedral. This controls nearest-neighbour searching. This wil search for the nearest 4 or 6 neighbours respectively.
+* ``B``: if it is ``0``, assume square planar geometry; if ``1``, assume octahedral. This controls nearest-neighbour searching for the nearest four or six neighbours, respectively.
 * ``C``: if ``-1``, set the principal direction along the shortest bond. If ``0``, set along the longest bond. If it is a positive integer, it is interpreted as an atom number which must be a neighbour of the atom specified in ``A``. All runs will output the atom neighbours, so setting this to ``0`` or ``-1`` as a first run is recommended unless the neighbours are known beforehand
 * ``D``: if ``0``, the second direction is chosen by the bond which changes the least under projection to the plane defined by the bond vector calculated from the neighbour specified in ``C``. If  ``D`` is a positive integer, then it is interpreted as an atom number which must be a neighbour of the atom specified in ``A``. The code will error out if it is the same as ``C``. A warning will be displayed if the direction towards neighbour ``D`` is determined to deviate significantly away from orthogonal.
 
@@ -449,4 +457,3 @@ on the energies to select the bands produced can be set
 with ``Process.min_DOS_E`` and ``Process.max_DOS_E``.
 
 Go to :ref:`top <post-proc>`.
-

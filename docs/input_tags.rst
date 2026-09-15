@@ -72,7 +72,7 @@ General.EnergyUnits (*string*) Ha/Ry/eV
     *default*: Ha
 
 General.DistanceUnits (*string*) a0/bohr/A
-    **Output only** Chooses units for distance (Bohr: a0/bohr or Ångströms: A
+    **Output only** Chooses units for distance (Bohr: a0/bohr or Ångströms: A).
 
     *default*: a0
 
@@ -451,7 +451,7 @@ minE.SupportVariations (*integer*)
 
     *default*: 20
 
-minE.PreconditionBlips(*boolean*)
+minE.PreconditionBlips (*boolean*)
     Should blip variation be pre-conditioned? Pre-conditioning is (at present)
     more memory-intensive than it should be, but is efficient
 
@@ -904,7 +904,7 @@ AtomMove.TestAllForces (*boolean*)
     *default*: F
 
 AtomMove.CalcStress (*boolean*)
-    Toggle calculation of the stress tensor. Switching off can improve performace.
+    Toggle calculation of the stress tensor. Switching off can improve performance.
 
     *default*: T
 
@@ -1220,12 +1220,12 @@ MD.VariableTemperatureRate (*real*)
 
     *default*: 0.0
 
-MD.InitialTemperature(*real*)
+MD.InitialTemperature (*real*)
     Initial temperature.
 
     *default*: same as AtomMove.IonTemperature
 
-MD.FinalTemperature(*real*)
+MD.FinalTemperature (*real*)
     Final temperature.
 
     *default*: same as AtomMove.IonTemperature
@@ -1810,4 +1810,3 @@ Go to :ref:`top <input_tags>`.
     :style: unsrt
 
 Go to :ref:`top <input_tags>`.
-
