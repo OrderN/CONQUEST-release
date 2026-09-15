@@ -7,7 +7,8 @@ Input tags
 We have broken down the input tags based on the areas of the code
 where they apply.  For each tag, a default is given.  Types of value
 are specified as: *integer*;
-*real*; *boolean*; or *string* (optA/optB are given for string options).
+*real*; *boolean*; *string* (optA/optB are given for string options); or
+*presence flag* (enabled whenever the tag occurs, regardless of its value).
 
 .. contents:: Areas
    :depth: 1
@@ -617,11 +618,12 @@ DM.InvSDeltaOmegaTolerance (*real*)
 
     *default*: 0.0001
 
-DM.ConstantMu (*boolean*)
-    Switches between fixed Fermi level (T) and fixed number of electrons (F). You
-     are *strongly* recommended to leave at default
+DM.ConstantMu (*presence flag*)
+    Fix the chemical potential at ``DM.mu``. Any occurrence of this tag,
+    including ``DM.ConstantMu F``, enables fixed-chemical-potential mode. Omit
+    the tag for the normal fixed-electron-number mode.
 
-    *default*: F
+    *default*: absent (fixed number of electrons)
 
 DM.mu (*real*)
     Value of Fermi level for fixed Fermi level calculations
