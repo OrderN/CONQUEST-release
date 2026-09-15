@@ -638,22 +638,24 @@ Diagonalisation
 ---------------
 
 Diag.NumKpts (*integer*)
-    Number of all k-points. No symmetry is applied.
+    Number of explicitly listed k-points, or the number of generated points on
+    each line when ``Diag.KspaceLines`` is true. No symmetry is applied.
 
-    *default*:
+    *default*: 1 for explicit points; 2 points per line
 
-Diag.Kpoints (*block*) 
-    Lists fractional coordinates and weights of all k-points: ``x_fract y_fract z_fract weight``
-    Generates the Monkhorst-Pack mesh, an equally spaced mesh of k-points.
+Diag.Kpoints (*block*)
+    Lists fractional coordinates and weights of explicit k-points as
+    ``x_fract y_fract z_fract weight``. If this block is absent and neither a
+    Monkhorst-Pack mesh nor k-space lines are requested, CONQUEST uses the
+    Gamma point with unit weight.
 
-    *default*:
+    *default*: absent (Gamma point only)
 
 Diag.MPMesh (*boolean*)
-    Switches on/off the Monkhorst-Pack mesh. Note: if this keyword is present in
-    the input file, the keyword **Diag.NumKpts** and the block **Kpoints** will
-    be ignored.
+    Switches on/off the Monkhorst-Pack mesh. When true, ``Diag.NumKpts`` and
+    the ``Diag.Kpoints`` block are ignored.
 
-    *default*:
+    *default*: F
 
 Diag.MPMesh[X/Y/Z] (*integer*)
     Specifies the number n of k-points along the x(y,z) axis.
@@ -683,11 +685,13 @@ Diag.PaddingHmatrix (*boolean*)
 
 Diag.BlockSizeR (*integer*)
     Block size for rows (See next).
-    From v1.4, the default value is 32 when Diag.PaddingHmatrix is true.
+    The default value is 32 when ``Diag.PaddingHmatrix`` is true. When padding
+    is disabled and this keyword is omitted, the value is determined
+    automatically.
     It is recommended to check the efficiency (CPU time) on your platform by changing this value.
     Usually 20-40 is appropriate.
 
-    *default*: 32 or Determined automatically (if Diag.PaddingHmatrix= true) 
+    *default*: 32 with padding; otherwise determined automatically
 
 Diag.BlockSizeC (*integer*)
     R ... rows, C ... columns
@@ -700,7 +704,12 @@ Diag.BlockSizeC (*integer*)
     If Diag.PaddingHmatrix is set to true then the block sizes can take any value,
     but BlockSizeR and BlockSizeC must be the same.
 
-    *default*: Determined automatically
+    With padding disabled, omitting ``Diag.BlockSizeR`` causes both block sizes
+    to be determined automatically. If ``Diag.BlockSizeR`` is specified,
+    ``Diag.BlockSizeC`` is read separately and defaults to 1 if omitted.
+
+    *default*: equal to ``Diag.BlockSizeR`` with padding; otherwise as described
+    above
 
 Diag.MPShift[X/Y/Z] (*real*)
     Specifies the shift *s* of k-points along the x(y,z) axis, in fractional
@@ -724,12 +733,12 @@ Diag.kT (*real*)
 
     *default*: 0.001
 
-Diag.IntegerOccs (*logical*)
+Diag.IntegerOccs (*boolean*)
     Specifies integer occupation of eigenstates (overrides ``Diag.SmearingType``)
 
     *default*: False
 
-Diag.AdjustEf (*logical*)
+Diag.AdjustEf (*boolean*)
     Turns off the automatic adjustment of Ef to be mid-gap (unlikely to be needed).
 
     *default*: True
