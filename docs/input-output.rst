@@ -86,8 +86,7 @@ ion file generation are:
     ``large``.
 
 These are all included in the default input files.
-Further fine-grained control can be applied to the basis functions;
-this will be documented after the pre-release of CONQUEST.
+Further fine-grained control can be applied to the basis functions.
 
 .. _ONCVPSP: http://http://www.mat-simresearch.com
 .. _PseudoDojo: https://www.pseudo-dojo.org/

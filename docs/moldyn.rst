@@ -188,10 +188,7 @@ Isobaric-Isothermal (NPT) ensemble
 ++++++++++++++++++++++++++++++++++
 
 There is one implemented barostat at present, the extended
-system, Parrinello-Rahman :cite:`md-Parrinello1981`. At present the
-barostat should be treated as a beta-version implementation, which
-will be fully characterised and made robust for the full release of
-the code. 
+system, Parrinello-Rahman :cite:`md-Parrinello1981`.
 
 1. Parrinello-Rahman
 
