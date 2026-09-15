@@ -459,7 +459,7 @@ the first K/L matrix, then adding the following keywords to the calculator:
 
 ::
 
-  other_keywords = {"General.LoadL": True,
+  other_keywords = {"General.LoadDM": True,
                     "SC.MakeInitialChargeFromK": True}
 
 These keywords respectively cause the K or L matrix to be loaded from file(s)

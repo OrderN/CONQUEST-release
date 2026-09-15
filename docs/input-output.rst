@@ -213,7 +213,7 @@ files:
     parameters, atomic positions, velocities, forces, stress).
   * ``md.checkpoint`` --- data required for MD restart, namely atomic velocities
     and extended system variables.
-  * ``md.positions`` --- Atomic coordinates saved at the moment of checkpointing
+  * ``md.position`` --- atomic coordinates saved at the moment of checkpointing
   * ``trajectory.xsf`` --- atomic coordinates save in .xsf format, which can be
     visualised using (for example) VMD, if ``AtomMove.WriteXSF`` is true..
 

@@ -58,18 +58,24 @@ setting,
 
 This will do several things: it will read the atomic coordinates from
 ``md.position`` and read the ``md.checkpoint`` file, which contains the
-velocities and extended system (Nose-Hoover chain and cell) variables. Depending
+velocities and extended-system (Nose-Hoover chain and cell) variables. Depending
 on the value of ``DM.SolutionMethod``, it will read the K-matrix files
-(``diagon``) or the L-matrix files (``ordern``), and if XL-BOMD is being used,
-the X-matrix files. Finally, it will *append* new data to the ``md.stats`` and
-``md.frames`` files, but it will overwrite all other files, including
-``Conquest_out``. Note that this flag is equivalent to setting the following:
+(``diagon``) or the L-matrix files (``ordern``). Finally, it will *append* new
+data to the ``md.stats`` and ``md.frames`` files, but it will overwrite all
+other files, including ``Conquest_out``.
+
+Unless explicitly overridden, ``AtomMove.RestartRun T`` changes the defaults of
+the following keywords to ``T``:
 
 ::
 
-   General.LoadL T
+   General.LoadDM T
    SC.MakeInitialChargeFromK T
-   XL.LoadL T
+   AtomMove.ReadVelocity T
+
+For XL-BOMD it also defaults ``XL.LoadX`` to ``T``. For MSSF and blip-basis
+calculations it defaults ``Basis.LoadCoeffs`` to ``T``, so that the saved
+support-function coefficients are loaded.
 
 In addition to the files mentioned above, CONQUEST will try to read the K-matrix
 from ``Kmatrix2.i00.*`` when using diagonalisation or the L-matrix from
@@ -77,11 +83,11 @@ from ``Kmatrix2.i00.*`` when using diagonalisation or the L-matrix from
 extended-Lagrangian formalism is used. Note that metadata for these files is
 stored in ``InfoGlobal.i00.dat`` which is also required when restarting. If the
 calculation ended by hitting the walltime limit, the writing of these matrix
-files may have been interrupted, rendering them unusable. In this case, the
-calculation can be restarted by setting the above flags to ``F`` *after* setting
-``AtomMove.RestartRun T``. Setting the flag ``General.MaxTime`` to some number
-of seconds less (say 30 minutes) than the calculation wall time limit will force
-the calculation to stop gracefully, preventing the aforementioned situation.
+files may have been interrupted, rendering them unusable. In this case, set
+``General.LoadDM F`` and, for XL-BOMD, ``XL.LoadX F`` *after* setting
+``AtomMove.RestartRun T``. Setting ``General.MaxTime`` to some number of seconds
+less (say 30 minutes) than the calculation wall time limit will force the
+calculation to stop gracefully, preventing the aforementioned situation.
 
 Go to :ref:`top <moldyn>`.
 

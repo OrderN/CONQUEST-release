@@ -854,13 +854,10 @@ AtomMove.IonTemperature (*real*)
     *default*: 300 K for MD, 0 for Quench MD or FIRE
 
 AtomMove.ReadVelocity (*boolean*)
-    Read velocity from file ``md.checkpoint`` (when ``AtomMove.RestartRun T``)
+    Read velocities from ``md.checkpoint`` during an MD restart, or from
+    ``velocity.dat`` otherwise
 
-                           or  ``velocity.dat``  (when ``AtomMove.RestartRun F``, very rare)
-
-    *default*: F (when ``AtomMove.RestartRun F``) 
-
-            or T (when ``AtomMove.RestartRun T``)
+    *default*: T when ``AtomMove.RestartRun`` is true; F otherwise
 
 AtomMove.AppendCoords (*boolean*)
     Chooses whether to append coordinates to ``UpdatedAtoms.dat`` during atomic
@@ -1027,11 +1024,12 @@ AtomMove.TestForceDelta (*real*)
     *default*: 10\ :math:`^{-5}` bohr
 
 AtomMove.RestartRun (*boolean*)
-    Restart a MD run. Note that this will set ``General.LoadL T``,
-    ``AtomMove.MakeInitialChargeFromSC T`` and ``XL.LoadX T`` if using the
-    extended Lagrangian. The atomic coordinates will be read from
-    ``md.positions`` and the velocities and extended system variables from
-    ``md.checkpoint``.
+    Restart an MD run. Unless explicitly overridden, this defaults
+    ``General.LoadDM``, ``SC.MakeInitialChargeFromK`` and
+    ``AtomMove.ReadVelocity`` to T. It also defaults ``XL.LoadX`` to T for
+    XL-BOMD, and ``Basis.LoadCoeffs`` to T for MSSF and blip-basis calculations.
+    Atomic coordinates are read from ``md.position``; velocities and extended-
+    system variables are read from ``md.checkpoint``.
 
     *default*: F
 
