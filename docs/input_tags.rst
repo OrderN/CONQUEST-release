@@ -1669,19 +1669,12 @@ Basis.BasisSet (*string*)
 
     *default*: PAOs
 
-Basis.LoadBlip (*boolean*)
-    Load blip or PAO coefficients from file. If set to T, for blips the code will
-    look for a set of files containing blip coefficients, which is taken to be
-    ``blip_coeffs.nnn``, where ``nnn`` is processor number (padded with zeroes);
-    for PAOs, the code will look for a *single* file which is ``supp_pao.dat``
-    by default, but can be set with ``Basis.SupportPaoFile``
+Basis.LoadCoeffs (*boolean*)
+    Load existing support-function coefficients. Blip calculations read the
+    per-process ``blip_coeffs`` files; MSSF calculations read the dumped
+    ``SFcoeff`` matrix files.
 
-    *default*: F
-
-Basis.SupportPaoFile (*string*)
-    Specifies filename for PAO coefficients
-
-    *default*: ``supp_pao.dat``
+    *default*: F, or T when ``AtomMove.RestartRun`` is true (for blips and MSSF)
 
 Basis.UsePulayForPAOs (*boolean*)
     Determines whether to use Pulay DIIS for minimisation of PAO basis coefficients
