@@ -556,6 +556,34 @@ DM.SolutionMethod (*string*)
 
     *default*: diagon
 
+DM.DFTplusU (*boolean*)
+    Enables the DFT+U correction.  A ``DFTplusU`` block is required when this
+    option is enabled.  DFT+U is not available with a blip basis; CONQUEST
+    disables it with a warning in that case.
+
+    *default*: F
+
+DM.WriteOccMat (*boolean*)
+    Prints the DFT+U occupation matrices in the main output.  This option is
+    read only when ``DM.DFTplusU`` is true.
+
+    *default*: T when ``DM.DFTplusU`` is true
+
+DFTplusU (*block*)
+    Defines the PAO projector and Hubbard U value for each corrected species.
+    Each line has the form:
+
+    ::
+
+       species  n  l  zeta  U
+
+    ``species`` is the species number, ``n`` and ``l`` are the principal and
+    angular-momentum quantum numbers, ``zeta`` selects the zeta function, and
+    ``U`` is given in Hartree.  The current implementation stores one projector
+    definition per species, so each corrected species should be listed once.
+
+    *default*: none; required when ``DM.DFTplusU`` is true
+
 DM.L\_range (*real*)
     Cutoff applied to L matrix (total energy will converge with increasing range;
     suggested minimum for O(N) calculations is twice largest support function range;
