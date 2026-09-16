@@ -31,9 +31,9 @@ produced during the CONQUEST run are available for the post-processing
 flags from the CONQUEST run that generated the output, and some
 utility-specific flags that are detailed below.
 
-**Note also** that projected DOS, band density and STM simulation are
-not at present compatible with multi-site support functions (MSSF),
-though we hope to implement this soon.
+Projected DOS, band density and STM simulation are available for calculations
+using primitive PAOs or multi-site support functions (MSSFs), but not for
+calculations using blip functions.
 
 Go to :ref:`top <post-proc>`.
 
@@ -185,8 +185,8 @@ Density of states (DOS)
 +++++++++++++++++++++++
 
 Setting ``Process.Job dos`` will produce a total density of states
-(DOS) for the system, using the eigenvalues output by CONQUEST.  The
-following parameters can be set:
+(DOS) for the system, using the ``eigenvalues.dat`` file output by a
+CONQUEST diagonalisation calculation.  The following parameters can be set:
 
 ::
 
@@ -238,21 +238,17 @@ given state, :math:`n`, onto an atom :math:`i` can be written as
 S_{i\alpha,j\beta}c^{n\mathbf{k}}_{j\beta}`.  The projected DOS is
 constructed using these projections.
 
-If using :ref:`pseudo-atomic orbitals (PAOs) <basis_paos>` as the
-basis set, then the atom-projected DOS can be further resolved by
-angular momentum (either just :math:`l` or both :math:`l` and
-:math:`m`).  If using :ref:`pseudo-atomic orbitals (PAOs)
-<basis_paos>` with :ref:`multi-site support functions <basis_mssf>` or
-:ref:`blip functions <basis_blips>` then it is not possible to
-decompose the DOS any further (in future, it may be possible to
-resolve the MSSF coefficients into the individual PAOs, and hence
-decompose pDOS by angular momentum).  To output the necessary
-coefficients to produce atom-projected DOS, a CONQUEST run must be
-performed with the following parameters set:
+For calculations using :ref:`pseudo-atomic orbitals (PAOs) <basis_paos>`,
+either directly or through :ref:`multi-site support functions <basis_mssf>`,
+the atom-projected DOS can be further resolved by angular momentum (either
+just :math:`l` or both :math:`l` and :math:`m`).  For MSSF calculations,
+CONQUEST outputs the required coefficients in the underlying PAO basis.
+Projected-DOS post-processing is not available for calculations using
+:ref:`blip functions <basis_blips>`.  To output the necessary coefficients,
+a static diagonalisation calculation must be performed with:
 
 ::
 
-   IO.writeDOS T
    IO.write_proj_DOS T
 
 As for the DOS, very high Brillouin zone sampling is required for
@@ -287,10 +283,9 @@ following flags can be set:
    Process.pDOS_lm_resolved T
 
 Note that only one of these is needed, depending on what level of
-resolution is required.  At present, angular momentum resolution is
-only available for the PAO basis set (not MSSF or blips) though it
-is under development for the MSSF basis (by projection onto the
-underlying PAO basis).
+resolution is required.  Angular-momentum resolution is available for both
+primitive-PAO and MSSF calculations, but not for calculations using blip
+functions.
 
 The energy range for the projected DOS can
 also be specified:
@@ -322,9 +317,9 @@ Go to :ref:`top <post-proc>`.
 Rotated pDOS
 ------------
 
-CONQUEST, by default, projects the orbitals along the simulation cell axes. Sometimes it is convenient to be able to project onto a coordinate system defined by an atom's local environment, e.g. bonds, to facilitate chemical analysis. CONQUEST supports rotating the wavefunction coefficients either by inputting the basis of the final coordinate system, using the algorithm implemented by Maintz *et al* and Romanowski *et al* [:cite:`pp-maintz2016`, :cite:`pp-romanowski2008`] or active Euler angles in the extrinsic :math:`zyz` convention.
+CONQUEST, by default, projects the orbitals along the simulation cell axes. Sometimes it is convenient to be able to project onto a coordinate system defined by an atom's local environment, e.g. bonds, to facilitate chemical analysis. CONQUEST supports rotating the wavefunction coefficients either by inputting the basis of the final coordinate system, using the algorithms described by Maintz *et al.* and Romanowski *et al.* :cite:`pp-maintz2016,pp-romanowski2008`, or by supplying active Euler angles in the extrinsic :math:`zyz` convention.
 
-There are 4 operating modes that are possible:
+There are four operating modes:
 
 #. Supply a set of axes to apply to a set of (or all) atoms (mode 0)
 #. Supply 3 Euler angles to apply to a set of (or all) atoms (mode 1)
@@ -365,7 +360,15 @@ If Euler angles are desired, set ``Process.RotatePDOSMode 1`` and in ``Conquest_
    %endblock pDOSEuler
 
 
-Here, ``A``: the atom number to assign the Euler angles to. The default angle units is in degrees: ``Process.RotatePDOSAngle deg`` and units cannot be mixed. In the extrinsic :math:`zyz` convention, 3 consecutive rotations happen about a fixed set of coordinates, i.e. the CONQUEST cell simulation axes (as CONQUEST only supports orthorhombic cells), first about the :math:`z`-axis by :math:`\gamma` , then :math:`y`-axis by :math:`\beta` and then about :math:`z`-axis by :math:`\alpha` in a right-handed sense (i.e., looking down any of the axes towards the origin will mean the positive direction of rotation is anticlockwise).
+Here, ``A`` is the atom number to assign the Euler angles to. The default angle
+unit is degrees (``Process.RotatePDOSAngle deg``), and units cannot be mixed. In
+the extrinsic :math:`zyz` convention, three consecutive rotations happen about
+a fixed set of coordinates, i.e. the CONQUEST simulation-cell axes (CONQUEST
+only supports orthorhombic cells): first about the :math:`z` axis by
+:math:`\gamma`, then the :math:`y` axis by :math:`\beta`, and then the
+:math:`z` axis by :math:`\alpha`, in a right-handed sense (looking down any of
+the axes towards the origin, the positive direction of rotation is
+anticlockwise).
 
 Determining local axes is possible depending on local geometries.
 
@@ -381,9 +384,9 @@ Determining local axes is possible depending on local geometries.
 where ``A``, ``B``, ``C``, ``D`` are integers with different conditions:
 
 * ``A``: the atom number to perform the rotation for
-* ``B``: if it is ``0``, assume square planar geometry, if ``1`` assume octahedral. This controls nearest-neighbour searching. This wil search for the nearest 4 or 6 neighbours respectively.
+* ``B``: if it is ``0``, assume square planar geometry; if ``1``, assume octahedral. This controls nearest-neighbour searching for the nearest four or six neighbours, respectively.
 * ``C``: if ``-1``, set the principal direction along the shortest bond. If ``0``, set along the longest bond. If it is a positive integer, it is interpreted as an atom number which must be a neighbour of the atom specified in ``A``. All runs will output the atom neighbours, so setting this to ``0`` or ``-1`` as a first run is recommended unless the neighbours are known beforehand
-* ``D``: if ``0``, the second direction is chosen by the bond which changes the least under projection to the plane defined by the bond vector calculated from the neighbour specified in ``C``. If  ``D`` is a positive integer, then it is interpreted as an atom number which must be a neighbour of the atom specified in ``A``. The code will error out if it is the same as ``C``. A warning will be displayed if the direction towards neighbour ``D`` is determined to deviate significantly away from orthogonal.
+* ``D``: if ``0``, the second direction is chosen by the bond which changes the least under projection to the plane defined by the bond vector calculated from the neighbour specified in ``C``. If  ``D`` is a positive integer, then it is interpreted as an atom number which must be a neighbour of the atom specified in ``A``. A warning will be displayed if the direction towards neighbour ``D`` is determined to deviate significantly away from orthogonal.
 
 
 If the rotation axis and angle are known beforehand, using mode 3 can be convenient.
@@ -405,7 +408,7 @@ For users interested in verbose output, set ``Process.RotatePDOSDebug T`` (defau
 
 Go to :ref:`top <post-proc>`.
 
-.. _pp_band_str
+.. _pp_band_str:
 
 Band structure
 ++++++++++++++
@@ -414,8 +417,8 @@ The band structure of a material can be generated by CONQUEST by performing
 a non-self-consistent calculation, after reading a well-converged charge density:
 set ``minE.SelfConsistent F`` and ``General.LoadRho T`` (remember that to write
 a converged charge density from CONQUEST you set ``IO.DumpChargeDensity T``).
-The k-points required can be specified as lines of points in k-space;
-setting ``Diag.KspaceLines T`` enables this (replacing the usual MP mesh), while the number of lines
+The k-points required can be specified as lines of points in k-space. With
+``Diag.MPMesh F``, setting ``Diag.KspaceLines T`` enables this, while the number of lines
 (e.g. Gamma to L; L to X; would be two lines) is set with ``Diag.NumKptLines``
 and the number of points along a line with ``Diag.NumKpts``.  The k-point lines
 themselves are set with a block labelled ``Diag.KpointLines`` which should have
@@ -455,5 +458,3 @@ Go to :ref:`top <post-proc>`.
     :labelprefix: PP
     :keyprefix: pp-
     :style: unsrt
-
-Go to :ref:`top <post-proc>`.
