@@ -284,8 +284,8 @@ Instead of modifying the Hamiltonian, the Berendsen-type weak coupling method
 :cite:`t-Berendsen1984` involves coupling the ionic degrees of freedom to an
 external temperature and/or pressure bath via "the principle of least local
 perturbation consistent with the required global coupling." Thermostatting is
-achieved via a Langevin-type equation of motion, in which the system is globally
-coupled to a heat bath and subjected to random noise:
+achieved through deterministic global feedback from the instantaneous
+temperature; unlike Langevin dynamics, no random force is applied:
 
 .. math::
     m_i\ddot{\mathbf{r}}_i = \mathbf{F}_i + m_i \gamma\left(\frac{T_0}{T}-1\right)\dot{\mathbf{r}}_i,
