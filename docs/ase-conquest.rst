@@ -273,7 +273,7 @@ keyword                          type       default value    description
 ``IO.WriteOutToASEFile``         ``bool``   True             write ASE output file ; **must always be True when using ASE for post-processing**
 ``IO.Iprint``                    ``int``    1                verbose for the output ; **must always be 1 when using ASE for post-processing**
 ``DM.SolutionMethod``            ``str``    'diagon'         'diagon' stands for diagonalisation other is 'ordern' (base on density matrix)
-``General.PseudopotentialType``  ``str``    'Hamann'         kind of pseudopotential other type are 'siesta' and 'abinit'
+``General.PseudopotentialType``  ``str``    'Hamann'         pseudopotential type; accepted values are 'Hamann', 'plato' and 'siesta'
 ``SC.MaxIters``                  ``int``    50               maximum number SCF cycles
 ``AtomMove.TypeOfRun``           ``str``    'static'         'static' stands for single (non)SCF other are 'md' or optimisation algorithms.
 ``Diag.SmearingType``            ``int``    1                1 for Methfessel-Paxton ; 0 for Fermi-Dirac
