@@ -218,7 +218,7 @@ freely), the equations of motion are,
   \mathbf{\dot{h}} &= \frac{\mathbf{p}_g\mathbf{h}}{W_g} \\
   \mathbf{\dot{p}_g} &= V(\mathbf{P}_\mathrm{int}-\mathbf{I}P_\mathrm{ext}) + \left[\frac{1}{N_f}\sum_{i=1}^N\frac{\mathbf{p}_i^2}{m_i}\right]\mathbf{I} - \frac{p_\xi}{Q}\mathbf{p}_g \\
   \dot{\xi} &= \frac{p_\xi}{Q} \\
-  \mathbf{\dot{p}}_g &= \sum_{i=1}^N\frac{\mathbf{p}_i^2}{m_i} + \frac{1}{W_g}\mathrm{Tr}[\mathbf{p}_g^T\mathbf{p}_g] - (N_f + d^2)kT
+  \dot{p}_\xi &= \sum_{i=1}^N\frac{\mathbf{p}_i^2}{m_i} + \frac{1}{W_g}\mathrm{Tr}[\mathbf{p}_g^T\mathbf{p}_g] - (N_f + d^2)kT
    
 Here, :math:`\mathbf{r}_i`, :math:`\mathbf{p}_i` and :math:`m_i` are the
 position, momentum and mass of particle :math:`i` respectively, :math:`\xi`,
