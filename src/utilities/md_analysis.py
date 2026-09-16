@@ -117,7 +117,7 @@ parser.add_argument('-c', '--compare', action='store_true', default=False,
                     in directories specified by -d')
 parser.add_argument('-d', '--dirs', nargs='+', default=['.',], dest='dirs',
                     action='store', help='Directories to compare')
-parser.add_argument('--description', nargs='+', default='', dest='desc',
+parser.add_argument('--description', nargs='+', default=[], dest='desc',
                     action='store', help='Description of graph for legend \
                     (only if using --compare)')
 parser.add_argument('-f', '--frames', action='store', dest='framesfile',
@@ -249,38 +249,40 @@ else:
   # If we're comparing statistics in several directories, use a simplified plot
   fig1, (ax1, ax2, ax3) = plt.subplots(nrows=3, ncols=1, sharex=True, figsize=(7,7))
   ax1a = ax1.twinx()
+  labels = opts.desc if opts.desc else opts.dirs
+  if len(labels) != len(opts.dirs):
+    parser.error('--description must provide one label per comparison directory')
+  time_limits = []
   for ind, d in enumerate(opts.dirs):
     path = os.path.join(d, cq_input_file)
     cq_params = parse_cq_input(path)
-    path = os.path.join(d, cq_params['IO.Coordinates'])
-    init_config = parse_init_config(path)
-    natoms = init_config['natoms']
     dt = float(cq_params['AtomMove.Timestep'])
-    species = cq_params['species']
   
     path = os.path.join(d, opts.statfile)
     nsteps, data = read_stats(path,opts.nstop)
     time = [float(s)*dt for s in data['step']]
     data['time'] = np.array(time)
+    time_limits.append((data['time'][opts.nskip], data['time'][-1]))
 
     ax1.plot(data['time'][opts.nskip:], data['H\''][opts.nskip:],
-             linewidth=0.5, label=opts.desc[ind])
-    y1,y2 = ax1.get_ylim()
-    ax1a.set_ylim(y1*ha2k,y2*ha2k)
+             linewidth=0.5, label=labels[ind])
     ax2.plot(data['time'][opts.nskip:], data['T'][opts.nskip:],
-             linewidth=0.5, label=opts.desc[ind])
+             linewidth=0.5, label=labels[ind])
     ax3.plot(data['time'][opts.nskip:], data['P'][opts.nskip:],
-             linewidth=0.5, label=opts.desc[ind])
+             linewidth=0.5, label=labels[ind])
 
-    ax1.set_ylabel("H$'$ (Ha)")
-    ax1a.set_ylabel("H$'$ (K)")
-    ax2.set_ylabel("T (K)")
-    ax3.set_ylabel("P (GPa)")
-    ax3.set_xlabel("time (fs)")
-    ax1.legend()
-    plt.xlim((opts.nskip,data['time'][-1]))
-    fig1.subplots_adjust(hspace=0)
-    fig1.savefig("stats.pdf", bbox_inches='tight')
+  y1,y2 = ax1.get_ylim()
+  ax1a.set_ylim(y1*ha2k,y2*ha2k)
+  ax1.set_ylabel("H$'$ (Ha)")
+  ax1a.set_ylabel("H$'$ (K)")
+  ax2.set_ylabel("T (K)")
+  ax3.set_ylabel("P (GPa)")
+  ax3.set_xlabel("time (fs)")
+  ax1.legend()
+  plt.xlim((min(limit[0] for limit in time_limits),
+            max(limit[1] for limit in time_limits)))
+  fig1.subplots_adjust(hspace=0)
+  fig1.savefig("stats.pdf", bbox_inches='tight')
 
 # Plot MSER
 if opts.mser_var:
