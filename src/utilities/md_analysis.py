@@ -83,14 +83,10 @@ def parse_init_config(conf_filename):
   return data
 
 def read_stats(stats_file, nstop):
-  nstep = 0
   data = {}
   header = True
   with open(stats_file, 'r') as statfile:
     for line in statfile:
-      if nstop != -1:
-        if nstep > nstop:
-          break
       if header:
         col_id = line.strip().split()
         for col in col_id:
@@ -98,16 +94,18 @@ def read_stats(stats_file, nstop):
         header = False
       else:
         bits = line.strip().split()
+        step = int(bits[0])
+        if nstop != -1 and step > nstop:
+          break
         for i, bit in enumerate(bits):
           if i==0:
-            info = int(bit)
+            info = step
           else:
             info = float(bit)
           data[col_id[i]].append(info)
-      nstep += 1
     for key in data:
       data[key] = np.array(data[key])
-  return nstep, data
+  return len(data['step']), data
 
 # Command line arguments
 parser = argparse.ArgumentParser(description='Analyse a Conquest MD \
@@ -190,10 +188,14 @@ if not opts.compare:
   std = {}
   for key in data:
     data[key] = np.array(data[key])
-    avg[key] = np.mean(data[key][opts.nequil:])
-    std[key] = np.std(data[key][opts.nequil:])
   time = [float(s)*dt for s in data['step']]
   data['time'] = np.array(time)
+  plot_mask = data['step'] >= opts.nskip
+  equil_mask = data['step'] >= opts.nequil
+  for key in data:
+    avg[key] = np.mean(data[key][equil_mask])
+    std[key] = np.std(data[key][equil_mask])
+  plot_start = data['time'][plot_mask][0]
 
   # Plot the statistics
   if opts.landscape:
@@ -202,31 +204,31 @@ if not opts.compare:
   else:
     fig1, (ax1, ax2, ax3, ax4) = plt.subplots(nrows=4, ncols=1, sharex=True, figsize=(7,10))
 
-  ax1.plot(data['time'][opts.nskip:], data['pe'][opts.nskip:], 'r-', label='Potential energy')
+  ax1.plot(data['time'][plot_mask], data['pe'][plot_mask], 'r-', label='Potential energy')
   ax1a = ax1.twinx()
-  ax1a.plot(data['time'][opts.nskip:], data['ke'][opts.nskip:], 'b-', label='Kinetic energy')
+  ax1a.plot(data['time'][plot_mask], data['ke'][plot_mask], 'b-', label='Kinetic energy')
   if cq_params['MD.Ensemble'][2] == 't':
     if cq_params['MD.Thermostat'] == 'nhc':
-      ax1a.plot(data['time'][opts.nskip:], data['thermostat'][opts.nskip:], 'g-', label='Thermostat energy')
+      ax1a.plot(data['time'][plot_mask], data['thermostat'][plot_mask], 'g-', label='Thermostat energy')
     if cq_params['MD.Thermostat'] == 'svr':
-      ax1a.plot(data['time'][opts.nskip:], data['thermostat'][opts.nskip:], 'g-', label='Thermostat energy')
+      ax1a.plot(data['time'][plot_mask], data['thermostat'][plot_mask], 'g-', label='Thermostat energy')
   if cq_params['MD.Ensemble'][1] == 'p':
     if 'barostat' in data:
-      ax1a.plot(data['time'][opts.nskip:], data['barostat'][opts.nskip:], 'c-', label='Barostat energy')
-    ax1a.plot(data['time'][opts.nskip:], data['pV'][opts.nskip:], 'm-', label='pV')
-  ax2.plot(data['time'][opts.nskip:], data['H\''][opts.nskip:])
-  ax2.plot((data['time'][opts.nskip],data['time'][-1]), (avg['H\''],avg['H\'']), '-',
+      ax1a.plot(data['time'][plot_mask], data['barostat'][plot_mask], 'c-', label='Barostat energy')
+    ax1a.plot(data['time'][plot_mask], data['pV'][plot_mask], 'm-', label='pV')
+  ax2.plot(data['time'][plot_mask], data['H\''][plot_mask])
+  ax2.plot((plot_start,data['time'][-1]), (avg['H\''],avg['H\'']), '-',
         label=r'$\langle H\' \rangle$ = {0:>12.4f} $\pm$ {1:<12.4f}'.format(avg['H\''], std['H\'']))
-  ax3.plot(data['time'][opts.nskip:], data['T'][opts.nskip:])
-  ax3.plot((data['time'][opts.nskip],data['time'][-1]), (avg['T'],avg['T']), '-',
+  ax3.plot(data['time'][plot_mask], data['T'][plot_mask])
+  ax3.plot((plot_start,data['time'][-1]), (avg['T'],avg['T']), '-',
         label=r'$\langle T \rangle$ = {0:>12.4f} $\pm$ {1:<12.4f}'.format(avg['T'], std['T']))
-  ax4.plot(data['time'][opts.nskip:], data['P'][opts.nskip:], 'b-')
-  ax4.plot((data['time'][opts.nskip],data['time'][-1]), (avg['P'],avg['P']), 'b--',
+  ax4.plot(data['time'][plot_mask], data['P'][plot_mask], 'b-')
+  ax4.plot((plot_start,data['time'][-1]), (avg['P'],avg['P']), 'b--',
         label=r'$\langle P \rangle$ = {0:>12.4f} $\pm$ {1:<12.4f}'.format(avg['P'], std['P']))
   if cq_params['MD.Ensemble'][1] == 'p':
     ax4a = ax4.twinx()
-    ax4a.plot(data['time'][opts.nskip:], data['V'][opts.nskip:], 'r-')
-    ax4a.plot((data['time'][opts.nskip],data['time'][-1]), (avg['V'],avg['V']), 'r--',
+    ax4a.plot(data['time'][plot_mask], data['V'][plot_mask], 'r-')
+    ax4a.plot((plot_start,data['time'][-1]), (avg['V'],avg['V']), 'r--',
               label=r'$\langle V \rangle$ = {0:>12.4f} $\pm$ {1:<12.4f}'.format(avg['V'], std['V']))
   ax1.set_ylabel("E (Ha)")
   ax2.set_ylabel("H$'$ (Ha)")
@@ -242,7 +244,7 @@ if not opts.compare:
   ax4.legend(loc="upper left")
   if cq_params['MD.Ensemble'][1] == 'p':
     ax4a.legend(loc="lower right")
-  plt.xlim((data['time'][opts.nskip],data['time'][-1]))
+  plt.xlim((plot_start,data['time'][-1]))
   fig1.subplots_adjust(hspace=0)
   fig1.savefig("stats.pdf", bbox_inches='tight')
 else:
@@ -262,13 +264,14 @@ else:
     nsteps, data = read_stats(path,opts.nstop)
     time = [float(s)*dt for s in data['step']]
     data['time'] = np.array(time)
-    time_limits.append((data['time'][opts.nskip], data['time'][-1]))
+    plot_mask = data['step'] >= opts.nskip
+    time_limits.append((data['time'][plot_mask][0], data['time'][-1]))
 
-    ax1.plot(data['time'][opts.nskip:], data['H\''][opts.nskip:],
+    ax1.plot(data['time'][plot_mask], data['H\''][plot_mask],
              linewidth=0.5, label=labels[ind])
-    ax2.plot(data['time'][opts.nskip:], data['T'][opts.nskip:],
+    ax2.plot(data['time'][plot_mask], data['T'][plot_mask],
              linewidth=0.5, label=labels[ind])
-    ax3.plot(data['time'][opts.nskip:], data['P'][opts.nskip:],
+    ax3.plot(data['time'][plot_mask], data['P'][plot_mask],
              linewidth=0.5, label=labels[ind])
 
   y1,y2 = ax1.get_ylim()
@@ -364,15 +367,14 @@ if read_frames:
             continue
           else:
             done = True
-        if n <= opts.nskip:
+        if n < opts.nskip:
           continue
         elif n%opts.stride != 0:
           continue
-        else:
-          nframes += 1
-        if opts.nstop != -1:
-          if n > opts.nstop:
-            done = True
+        if opts.nstop != -1 and n > opts.nstop:
+          done = True
+          continue
+        nframes += 1
         sys.stdout.write("Processing frame {}\r".format(n))
         if first_frame:
           first_frame = False
@@ -408,7 +410,7 @@ if read_frames:
       else:
         buf += line
 
-  time = data['time']
+  time = np.array(time)
   time = time - time[0]
   print()
   print("Analysing {} frames...".format(nframes))

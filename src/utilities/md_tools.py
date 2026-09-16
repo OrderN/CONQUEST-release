@@ -280,7 +280,7 @@ class VACF:
 
   def norm_vacf(self):
     self.vacf = np.array(self.vacf)/self.nat
-    self.time = np.array(self.steps, dtype='float')*self.dt
+    self.time = (np.array(self.steps, dtype='float') - self.steps[0])*self.dt
 
   def plot_vacf(self):
     filename = "vacf.pdf"
@@ -330,7 +330,7 @@ class MSD:
 
   def norm_msd(self):
     self.msd = np.array(self.msd)/self.nat
-    self.time = np.array(self.steps, dtype='float')*self.dt
+    self.time = (np.array(self.steps, dtype='float') - self.steps[0])*self.dt
 
   def plot_msd(self):
     filename = "msd.pdf"
