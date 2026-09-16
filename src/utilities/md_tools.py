@@ -234,36 +234,36 @@ class MSER:
   --- K P White, Simulation 69, 323 (1997)"""
 
   def __init__(self, nframes, varname, var_traj):
-    self.n_j = nframes-1
     self.propname = varname
-    self.traj = var_traj
+    self.traj = np.asarray(var_traj)
+    self.n_j = len(self.traj)
+    if self.n_j < 2:
+      raise ValueError('MSER requires at least two trajectory samples')
     self.mser = np.zeros(self.n_j, dtype='float')
     # stop before the end otherwise the MSER becomes very noisy
-    self.mser_cut = 200
+    self.mser_cut = min(200, max(1, self.n_j//2))
+    self.n_candidates = self.n_j-self.mser_cut
 
   def get_point(self, d_j):
-    prefac = 1.0/(self.n_j-d_j)**2
-    ybar_ij = np.mean(self.traj[d_j:])
-    variance = 0.0
-    for i in range(d_j+1,self.n_j):
-      variance += (self.traj[i] - ybar_ij)**2
-    return prefac*variance
+    sample = self.traj[d_j:]
+    return np.sum((sample-np.mean(sample))**2)/len(sample)**2
 
   def get_mser(self):
     for i in range(self.n_j):
       self.mser[i] = self.get_point(i)
 
   def mser_min(self):
-    return np.argmin(self.mser[:-self.mser_cut])
+    return np.argmin(self.mser[:self.n_candidates])
 
   def plot_mser(self, steps):
     plt.figure("{} MSER".format(self.propname))
     plt.xlabel("step")
     plt.ylabel("MSER ({})".format(self.propname))
-    plt.plot(steps[:-200], self.mser[:-200], 'k-')
+    plt.plot(steps[:self.n_candidates], self.mser[:self.n_candidates], 'k-')
     mser_min = self.mser_min()
-    lab = "Minimum at step {}".format(mser_min)
-    plt.axvline(x=mser_min, label=lab)
+    minimum_step = steps[mser_min]
+    lab = "Minimum at step {}".format(minimum_step)
+    plt.axvline(x=minimum_step, label=lab)
     plt.legend(loc="upper left")
     plt.savefig("mser.pdf", bbox_inches='tight')
 
