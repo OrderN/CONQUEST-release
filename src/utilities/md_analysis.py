@@ -11,6 +11,7 @@ from md_tools import Pairdist, MSER, VACF, MSD, autocorr
 
 ha2ev = 27.211399
 ha2k = 3.15737513e5
+ha_bohr3_to_gpa = 29421.01549104606
 
 # Regular expressions
 frame_re = re.compile('frame')
@@ -417,28 +418,22 @@ if read_frames:
 
 # Plot the stress
   if opts.stress:
-    stress = np.array(stress)
+    stress = np.array(stress)*ha_bohr3_to_gpa
     lat = np.array(lat)
-    mean_stress = np.zeros((3,3))
-    mean_lat = np.zeros((3,3))
-    for i in range(3):
-      for j in range(3):
-        mean_stress[i,j] = np.mean(stress[:,i,j])
-        mean_lat[i,j] = np.mean(lat[:,i,j])
-    plt.figure("Stress")
+    mean_stress = np.mean(stress, axis=0)
+    mean_lat = np.mean(lat, axis=0)
+    variable_cell = cq_params['MD.Ensemble'][1] == "p"
 
-    if cq_params['MD.Ensemble'][1] == "p":
+    if variable_cell:
       fig2, (ax1, ax2) = plt.subplots(nrows=2, ncols=1, sharex=True)
     else:
-      fig2, (ax1,) = plt.subplots(nrows=1, ncols=1)
+      fig2, ax1 = plt.subplots(nrows=1, ncols=1)
 
-    plt.xlabel("t (fs)")
     ax1.set_ylabel("Stress (GPa)")
-    ax2.set_ylabel("Cell dimension ($a_0$)")
-    plt.xlim((time[opts.nskip], time[-1]))
-    ax1.plot(time[opts.nskip:], stress[:,0,0], 'r-', label='xx', linewidth=1.0)
-    ax1.plot(time[opts.nskip:], stress[:,1,1], 'g-', label='yy', linewidth=1.0)
-    ax1.plot(time[opts.nskip:], stress[:,2,2], 'b-', label='zz', linewidth=1.0)
+    ax1.set_xlim((time[0], time[-1]))
+    ax1.plot(time, stress[:,0,0], 'r-', label='xx', linewidth=1.0)
+    ax1.plot(time, stress[:,1,1], 'g-', label='yy', linewidth=1.0)
+    ax1.plot(time, stress[:,2,2], 'b-', label='zz', linewidth=1.0)
     ax1.plot((time[0],time[-1]), (mean_stress[0,0], mean_stress[0,0]), 'r-',
             label=r'$\langle S_{{xx}} \rangle$ = {0:<10.4f}'.format(mean_stress[0,0]))
     ax1.plot((time[0],time[-1]), (mean_stress[1,1], mean_stress[1,1]), 'g-',
@@ -446,21 +441,24 @@ if read_frames:
     ax1.plot((time[0],time[-1]), (mean_stress[2,2], mean_stress[2,2]), 'b-',
             label=r'$\langle S_{{zz}} \rangle$ = {0:<10.4f}'.format(mean_stress[2,2]))
 
-    if cq_params['MD.Ensemble'][1] == "p":
-      ax2.plot(time[opts.nskip:], lat[:,0,0], 'r-', label='a', linewidth=1.0)
-      ax2.plot(time[opts.nskip:], lat[:,1,1], 'g-', label='b', linewidth=1.0)
-      ax2.plot(time[opts.nskip:], lat[:,2,2], 'b-', label='c', linewidth=1.0)
+    ax1.legend(bbox_to_anchor=(1.05,1), loc=2, borderaxespad=0.)
+    if variable_cell:
+      ax2.set_ylabel("Cell dimension ($a_0$)")
+      ax2.set_xlabel("t (fs)")
+      ax2.plot(time, lat[:,0,0], 'r-', label='a', linewidth=1.0)
+      ax2.plot(time, lat[:,1,1], 'g-', label='b', linewidth=1.0)
+      ax2.plot(time, lat[:,2,2], 'b-', label='c', linewidth=1.0)
       ax2.plot((time[0],time[-1]), (mean_lat[0,0], mean_lat[0,0]), 'r-',
               label=r'$\langle a \rangle$ = {0:<10.4f}'.format(mean_lat[0,0]))
       ax2.plot((time[0],time[-1]), (mean_lat[1,1], mean_lat[1,1]), 'g-',
               label=r'$\langle b \rangle$ = {0:<10.4f}'.format(mean_lat[1,1]))
       ax2.plot((time[0],time[-1]), (mean_lat[2,2], mean_lat[2,2]), 'b-',
               label=r'$\langle c \rangle$ = {0:<10.4f}'.format(mean_lat[2,2]))
-      ax1.legend(bbox_to_anchor=(1.05,1), loc=2, borderaxespad=0.)
       ax2.legend(bbox_to_anchor=(1.05,1), loc=2, borderaxespad=0.)
       fig2.subplots_adjust(hspace=0)
-      plt.setp([a.get_xticklabels() for a in fig1.axes[:-1]], visible=False)
-      fig2.savefig("stress.pdf", bbox_inches='tight')
+    else:
+      ax1.set_xlabel("t (fs)")
+    fig2.savefig("stress.pdf", bbox_inches='tight')
 
   # Plot the rdf
   if opts.rdf:
