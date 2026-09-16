@@ -1427,7 +1427,11 @@ DeltaSCF.TargetNFold (*integer*)
     *default*: 1
 
 DeltaSCF.LocalExcitation (*boolean*)
-    Select an excitation localised on a group of atoms
+    Select an excitation localised on a group of atoms. When enabled, the
+    ``cDFT.AtomGroups`` block and every atom-group block named within it are
+    required; CONQUEST stops if any of these blocks is absent. At least one of
+    ``DeltaSCF.HOMOLimit`` and ``DeltaSCF.LUMOLimit`` must be nonzero for the
+    localised-excitation analysis to remain enabled.
 
     *default*: F
 
