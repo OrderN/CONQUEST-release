@@ -168,6 +168,9 @@ parser.add_argument('--mser', action='store', dest='mser_var', default=None,
                     type=str, help='Compute MSER for the given property')
 
 opts = parser.parse_args()
+if opts.pub:
+  plt.rcParams.update({'font.size': 14, 'axes.labelsize': 14,
+                       'legend.fontsize': 12})
 if (opts.vacf or opts.msd or opts.stress or opts.rdf):
   read_frames = True
 else:
@@ -186,71 +189,77 @@ if not opts.compare:
   natoms = init_config['natoms']
   dt = float(cq_params['AtomMove.Timestep'])
   species = cq_params['species']
-  # Parse the statistics file
-  nsteps, data = read_stats(opts.statfile,opts.nstop)
-  avg = {}
-  std = {}
-  for key in data:
-    data[key] = np.array(data[key])
-  time = [float(s)*dt for s in data['step']]
-  data['time'] = np.array(time)
-  plot_mask = data['step'] >= opts.nskip
-  equil_mask = data['step'] >= opts.nequil
-  for key in data:
-    avg[key] = np.mean(data[key][equil_mask])
-    std[key] = np.std(data[key][equil_mask])
-  plot_start = data['time'][plot_mask][0]
+  other_analysis = (opts.vacf or opts.hfacf or opts.msd or opts.rdf or
+                    opts.stress or opts.mser_var)
+  plot_statistics = opts.stats or not other_analysis
+  needs_statistics = plot_statistics or opts.mser_var
+  if needs_statistics:
+    # Parse the statistics file
+    nsteps, data = read_stats(opts.statfile,opts.nstop)
+    avg = {}
+    std = {}
+    for key in data:
+      data[key] = np.array(data[key])
+    time = [float(s)*dt for s in data['step']]
+    data['time'] = np.array(time)
+    plot_mask = data['step'] >= opts.nskip
+    equil_mask = data['step'] >= opts.nequil
+    for key in data:
+      avg[key] = np.mean(data[key][equil_mask])
+      std[key] = np.std(data[key][equil_mask])
+    plot_start = data['time'][plot_mask][0]
 
-  # Plot the statistics
-  if opts.landscape:
-    fig1, ((ax1, ax2), (ax3, ax4)) = plt.subplots(nrows=2, ncols=2, sharex=True, figsize=(11,7))
-    plt.tight_layout(pad=6.5)
-  else:
-    fig1, (ax1, ax2, ax3, ax4) = plt.subplots(nrows=4, ncols=1, sharex=True, figsize=(7,10))
+    if plot_statistics:
+      # Plot the statistics
+      if opts.landscape:
+        fig1, ((ax1, ax2), (ax3, ax4)) = plt.subplots(nrows=2, ncols=2, sharex=True, figsize=(11,7))
+        plt.tight_layout(pad=6.5)
+      else:
+        fig1, (ax1, ax2, ax3, ax4) = plt.subplots(nrows=4, ncols=1, sharex=True, figsize=(7,10))
 
-  ax1.plot(data['time'][plot_mask], data['pe'][plot_mask], 'r-', label='Potential energy')
-  ax1a = ax1.twinx()
-  ax1a.plot(data['time'][plot_mask], data['ke'][plot_mask], 'b-', label='Kinetic energy')
-  if cq_params['MD.Ensemble'][2] == 't':
-    if cq_params['MD.Thermostat'] == 'nhc':
-      ax1a.plot(data['time'][plot_mask], data['thermostat'][plot_mask], 'g-', label='Thermostat energy')
-    if cq_params['MD.Thermostat'] == 'svr':
-      ax1a.plot(data['time'][plot_mask], data['thermostat'][plot_mask], 'g-', label='Thermostat energy')
-  if cq_params['MD.Ensemble'][1] == 'p':
-    if 'barostat' in data:
-      ax1a.plot(data['time'][plot_mask], data['barostat'][plot_mask], 'c-', label='Barostat energy')
-    ax1a.plot(data['time'][plot_mask], data['pV'][plot_mask], 'm-', label='pV')
-  ax2.plot(data['time'][plot_mask], data['H\''][plot_mask])
-  ax2.plot((plot_start,data['time'][-1]), (avg['H\''],avg['H\'']), '-',
-        label=r'$\langle H\' \rangle$ = {0:>12.4f} $\pm$ {1:<12.4f}'.format(avg['H\''], std['H\'']))
-  ax3.plot(data['time'][plot_mask], data['T'][plot_mask])
-  ax3.plot((plot_start,data['time'][-1]), (avg['T'],avg['T']), '-',
-        label=r'$\langle T \rangle$ = {0:>12.4f} $\pm$ {1:<12.4f}'.format(avg['T'], std['T']))
-  ax4.plot(data['time'][plot_mask], data['P'][plot_mask], 'b-')
-  ax4.plot((plot_start,data['time'][-1]), (avg['P'],avg['P']), 'b--',
-        label=r'$\langle P \rangle$ = {0:>12.4f} $\pm$ {1:<12.4f}'.format(avg['P'], std['P']))
-  if cq_params['MD.Ensemble'][1] == 'p':
-    ax4a = ax4.twinx()
-    ax4a.plot(data['time'][plot_mask], data['V'][plot_mask], 'r-')
-    ax4a.plot((plot_start,data['time'][-1]), (avg['V'],avg['V']), 'r--',
-              label=r'$\langle V \rangle$ = {0:>12.4f} $\pm$ {1:<12.4f}'.format(avg['V'], std['V']))
-  ax1.set_ylabel("E (Ha)")
-  ax2.set_ylabel("H$'$ (Ha)")
-  ax3.set_ylabel("T (K)")
-  ax4.set_ylabel("P (GPa)", color='b')
-  if cq_params['MD.Ensemble'][1] == 'p':
-    ax4a.set_ylabel("V ($a_0^3$)", color='r')
-  ax4.set_xlabel("time (fs)")
-  ax1.legend(loc="upper left")
-  ax1a.legend(loc="lower right")
-  ax2.legend()
-  ax3.legend()
-  ax4.legend(loc="upper left")
-  if cq_params['MD.Ensemble'][1] == 'p':
-    ax4a.legend(loc="lower right")
-  plt.xlim((plot_start,data['time'][-1]))
-  fig1.subplots_adjust(hspace=0)
-  fig1.savefig("stats.pdf", bbox_inches='tight')
+      ax1.plot(data['time'][plot_mask], data['pe'][plot_mask], 'r-', label='Potential energy')
+      ax1a = ax1.twinx()
+      ax1a.plot(data['time'][plot_mask], data['ke'][plot_mask], 'b-', label='Kinetic energy')
+      if cq_params['MD.Ensemble'][2] == 't':
+        if cq_params['MD.Thermostat'] == 'nhc':
+          ax1a.plot(data['time'][plot_mask], data['thermostat'][plot_mask], 'g-', label='Thermostat energy')
+        if cq_params['MD.Thermostat'] == 'svr':
+          ax1a.plot(data['time'][plot_mask], data['thermostat'][plot_mask], 'g-', label='Thermostat energy')
+      if cq_params['MD.Ensemble'][1] == 'p':
+        if 'barostat' in data:
+          ax1a.plot(data['time'][plot_mask], data['barostat'][plot_mask], 'c-', label='Barostat energy')
+        ax1a.plot(data['time'][plot_mask], data['pV'][plot_mask], 'm-', label='pV')
+      ax2.plot(data['time'][plot_mask], data['H\''][plot_mask])
+      ax2.plot((plot_start,data['time'][-1]), (avg['H\''],avg['H\'']), '-',
+            label=r'$\langle H\' \rangle$ = {0:>12.4f} $\pm$ {1:<12.4f}'.format(avg['H\''], std['H\'']))
+      ax3.plot(data['time'][plot_mask], data['T'][plot_mask])
+      ax3.plot((plot_start,data['time'][-1]), (avg['T'],avg['T']), '-',
+            label=r'$\langle T \rangle$ = {0:>12.4f} $\pm$ {1:<12.4f}'.format(avg['T'], std['T']))
+      ax4.plot(data['time'][plot_mask], data['P'][plot_mask], 'b-')
+      ax4.plot((plot_start,data['time'][-1]), (avg['P'],avg['P']), 'b--',
+            label=r'$\langle P \rangle$ = {0:>12.4f} $\pm$ {1:<12.4f}'.format(avg['P'], std['P']))
+      if cq_params['MD.Ensemble'][1] == 'p':
+        ax4a = ax4.twinx()
+        ax4a.plot(data['time'][plot_mask], data['V'][plot_mask], 'r-')
+        ax4a.plot((plot_start,data['time'][-1]), (avg['V'],avg['V']), 'r--',
+                  label=r'$\langle V \rangle$ = {0:>12.4f} $\pm$ {1:<12.4f}'.format(avg['V'], std['V']))
+      ax1.set_ylabel("E (Ha)")
+      ax2.set_ylabel("H$'$ (Ha)")
+      ax3.set_ylabel("T (K)")
+      ax4.set_ylabel("P (GPa)", color='b')
+      if cq_params['MD.Ensemble'][1] == 'p':
+        ax4a.set_ylabel("V ($a_0^3$)", color='r')
+      ax4.set_xlabel("time (fs)")
+      ax1.legend(loc="upper left")
+      ax1a.legend(loc="lower right")
+      ax2.legend()
+      ax3.legend()
+      ax4.legend(loc="upper left")
+      if cq_params['MD.Ensemble'][1] == 'p':
+        ax4a.legend(loc="lower right")
+      plt.xlim((plot_start,data['time'][-1]))
+      fig1.subplots_adjust(hspace=0)
+      fig1.savefig("stats.pdf", bbox_inches='tight')
 else:
   # If we're comparing statistics in several directories, use a simplified plot
   fig1, (ax1, ax2, ax3) = plt.subplots(nrows=3, ncols=1, sharex=True, figsize=(7,7))
