@@ -121,9 +121,11 @@ parser.add_argument('--description', nargs='+', default='', dest='desc',
                     action='store', help='Description of graph for legend \
                     (only if using --compare)')
 parser.add_argument('-f', '--frames', action='store', dest='framesfile',
-                    default='Frames', help='MD frames file')
+                    default='md.frames', help='MD frames file')
 parser.add_argument('-s', '--stats-file', action='store', dest='statfile',
-                    default='Stats', help='MD statistics file')
+                    default='md.stats', help='MD statistics file')
+parser.add_argument('--heatflux-file', action='store', dest='heatfluxfile',
+                    default='md.heatflux', help='MD heat-flux file')
 parser.add_argument('--skip', action='store', dest='nskip', default=0,
                     type=int, help='Number of equilibration steps to skip')
 parser.add_argument('--stride', action='store', dest='stride', default=1,
@@ -182,30 +184,14 @@ if not opts.compare:
   natoms = init_config['natoms']
   dt = float(cq_params['AtomMove.Timestep'])
   species = cq_params['species']
-  extended_system = False
-  if 'MD.Thermostat' in cq_params.keys():
-    if cq_params['MD.Thermostat'] == 'nhc':
-      extended_system = True
-    if cq_params['MD.Thermostat'] == 'ssm':
-      extended_system = True
-    if cq_params['MD.Thermostat'] == 'svr':
-      extended_system = False
-  if 'MD.Barostat' in cq_params.keys():
-    if cq_params['MD.Barostat'] == 'iso-ssm':
-      extended_system = True
-    if cq_params['MD.Barostat'] == 'ortho-ssm':
-      extended_system = True
-    if cq_params['MD.Barostat'] == 'iso-mttk':
-      extended_system = True
-
   # Parse the statistics file
   nsteps, data = read_stats(opts.statfile,opts.nstop)
   avg = {}
   std = {}
   for key in data:
     data[key] = np.array(data[key])
-    avg[key] = np.mean(data[key][opts.nequil:-1])
-    std[key] = np.std(data[key][opts.nequil:-1])
+    avg[key] = np.mean(data[key][opts.nequil:])
+    std[key] = np.std(data[key][opts.nequil:])
   time = [float(s)*dt for s in data['step']]
   data['time'] = np.array(time)
 
@@ -225,22 +211,22 @@ if not opts.compare:
     if cq_params['MD.Thermostat'] == 'svr':
       ax1a.plot(data['time'][opts.nskip:], data['thermostat'][opts.nskip:], 'g-', label='Thermostat energy')
   if cq_params['MD.Ensemble'][1] == 'p':
-    if extended_system:
-      ax1a.plot(data['time'][opts.nskip:], data['box'][opts.nskip:], 'c-', label='Barostat energy')
+    if 'barostat' in data:
+      ax1a.plot(data['time'][opts.nskip:], data['barostat'][opts.nskip:], 'c-', label='Barostat energy')
     ax1a.plot(data['time'][opts.nskip:], data['pV'][opts.nskip:], 'm-', label='pV')
   ax2.plot(data['time'][opts.nskip:], data['H\''][opts.nskip:])
-  ax2.plot((opts.nskip,data['time'][-1]), (avg['H\''],avg['H\'']), '-',
+  ax2.plot((data['time'][opts.nskip],data['time'][-1]), (avg['H\''],avg['H\'']), '-',
         label=r'$\langle H\' \rangle$ = {0:>12.4f} $\pm$ {1:<12.4f}'.format(avg['H\''], std['H\'']))
   ax3.plot(data['time'][opts.nskip:], data['T'][opts.nskip:])
-  ax3.plot((opts.nskip,data['time'][-1]), (avg['T'],avg['T']), '-',
+  ax3.plot((data['time'][opts.nskip],data['time'][-1]), (avg['T'],avg['T']), '-',
         label=r'$\langle T \rangle$ = {0:>12.4f} $\pm$ {1:<12.4f}'.format(avg['T'], std['T']))
   ax4.plot(data['time'][opts.nskip:], data['P'][opts.nskip:], 'b-')
-  ax4.plot((opts.nskip,data['time'][-1]), (avg['P'],avg['P']), 'b--',
+  ax4.plot((data['time'][opts.nskip],data['time'][-1]), (avg['P'],avg['P']), 'b--',
         label=r'$\langle P \rangle$ = {0:>12.4f} $\pm$ {1:<12.4f}'.format(avg['P'], std['P']))
   if cq_params['MD.Ensemble'][1] == 'p':
     ax4a = ax4.twinx()
     ax4a.plot(data['time'][opts.nskip:], data['V'][opts.nskip:], 'r-')
-    ax4a.plot((opts.nskip,data['time'][-1]), (avg['V'],avg['V']), 'r--',
+    ax4a.plot((data['time'][opts.nskip],data['time'][-1]), (avg['V'],avg['V']), 'r--',
               label=r'$\langle V \rangle$ = {0:>12.4f} $\pm$ {1:<12.4f}'.format(avg['V'], std['V']))
   ax1.set_ylabel("E (Ha)")
   ax2.set_ylabel("H$'$ (Ha)")
@@ -256,7 +242,7 @@ if not opts.compare:
   ax4.legend(loc="upper left")
   if cq_params['MD.Ensemble'][1] == 'p':
     ax4a.legend(loc="lower right")
-  plt.xlim((opts.nskip,data['time'][-1]))
+  plt.xlim((data['time'][opts.nskip],data['time'][-1]))
   fig1.subplots_adjust(hspace=0)
   fig1.savefig("stats.pdf", bbox_inches='tight')
 else:
@@ -311,7 +297,7 @@ if opts.hfacf:
   time = np.array([float(i)*dt for i in range(window)])
   nruns = 0
   for ind, d in enumerate(opts.dirs):
-    path = os.path.join(d, heatfluxfile)
+    path = os.path.join(d, opts.heatfluxfile)
 
     J = []
     t = []
