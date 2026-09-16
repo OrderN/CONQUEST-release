@@ -1,13 +1,10 @@
 #!/usr/local/bin/python3
 
-import scipy as sp
+import numpy as np
 import matplotlib.pyplot as plt
-from scipy.linalg import norm
-from scipy.integrate import cumtrapz
+from scipy.integrate import cumulative_trapezoid
 from scipy.signal import correlate
 from math import ceil, pi
-from frame import Frame
-from pdb import set_trace
 
 bohr2ang = 0.529177249
 small = 1.0e-3
@@ -49,18 +46,18 @@ class Pairdist:
     self.bins = []
     for i in range(self.nbins):
       self.bins.append((float(i)*binwidth + binwidth/2.))
-    self.bins = sp.array(self.bins)
-    self.dt = sp.zeros((self.nat,self.nat), dtype='float')
-    self.freq_total = sp.zeros(self.nbins, dtype='int')
-    self.freq = sp.zeros((self.nbins,self.nspec,self.nspec), dtype='int')
-    self.nfac_total = sp.zeros(self.nbins, dtype='float')
-    self.nfac = sp.zeros((self.nbins,self.nspec,self.nspec), dtype='float')
-    self.gr_total = sp.zeros(self.nbins, dtype='float')
-    self.gr = sp.zeros((self.nbins,self.nspec,self.nspec), dtype='float')
+    self.bins = np.array(self.bins)
+    self.dt = np.zeros((self.nat,self.nat), dtype='float')
+    self.freq_total = np.zeros(self.nbins, dtype='int')
+    self.freq = np.zeros((self.nbins,self.nspec,self.nspec), dtype='int')
+    self.nfac_total = np.zeros(self.nbins, dtype='float')
+    self.nfac = np.zeros((self.nbins,self.nspec,self.nspec), dtype='float')
+    self.gr_total = np.zeros(self.nbins, dtype='float')
+    self.gr = np.zeros((self.nbins,self.nspec,self.nspec), dtype='float')
 
   def update_rdf(self, frame):
     self.nframes += 1
-    cell = sp.zeros(3)
+    cell = np.zeros(3)
     for i in range(3):
       cell[i] = frame.lat[i,i]
 
@@ -70,8 +67,8 @@ class Pairdist:
     for i in range(self.nat):
       for j in range(i+1, self.nat):
         diff = diff_mic(frame.r[i,:], frame.r[j,:], cell)*bohr2ang
-        self.dt[i,j] = norm(diff)
-        self.dt[j,i] = norm(diff)
+        self.dt[i,j] = np.linalg.norm(diff)
+        self.dt[j,i] = np.linalg.norm(diff)
         if self.dt[i,j] < self.rcut:
           ind = int(round((self.dt[i,j]+self.binwidth)/self.binwidth))-1
           self.freq_total[ind] += 2
@@ -100,15 +97,15 @@ class Pairdist:
   def get_coordination(self):
     """Compute coordination"""
     gxrsq = self.gr_total*self.bins**2
-    self.coord_total = sp.zeros(self.nbins, dtype='float')
-    self.coord_total[1:] = cumtrapz(gxrsq,self.bins)
+    self.coord_total = np.zeros(self.nbins, dtype='float')
+    self.coord_total[1:] = cumulative_trapezoid(gxrsq,self.bins)
     self.coord_total *= 4.*pi*self.rho
     if self.nspec > 1:
-      self.coord = sp.zeros((self.nbins,self.nspec,self.nspec), dtype='float')
+      self.coord = np.zeros((self.nbins,self.nspec,self.nspec), dtype='float')
       for ispec in range(self.nspec):
         for jspec in range(ispec,self.nspec):
           gxrsq = self.gr[:,ispec,jspec]*self.bins**2
-          self.coord[1:,ispec,jspec] = cumtrapz(gxrsq[:], self.bins)
+          self.coord[1:,ispec,jspec] = cumulative_trapezoid(gxrsq[:], self.bins)
           self.coord *= 4.*pi*self.rho # check this
 
   def plot_gr(self):
@@ -179,12 +176,12 @@ class Pairdist:
 
   def get_bondlength(self, bondcut, frame, printall):
 
-    bond_tot = sp.zeros((self.nspec, self.nspec), dtype=float)
-    bondsq_tot = sp.zeros((self.nspec, self.nspec), dtype=float)
-    bond_avg = sp.zeros((self.nspec, self.nspec), dtype=float)
-    bond_sd = sp.zeros((self.nspec, self.nspec), dtype=float)
-    bond_min = sp.zeros((self.nspec, self.nspec), dtype=float)
-    nbonds = sp.zeros((self.nspec, self.nspec), dtype=int)
+    bond_tot = np.zeros((self.nspec, self.nspec), dtype=float)
+    bondsq_tot = np.zeros((self.nspec, self.nspec), dtype=float)
+    bond_avg = np.zeros((self.nspec, self.nspec), dtype=float)
+    bond_sd = np.zeros((self.nspec, self.nspec), dtype=float)
+    bond_min = np.zeros((self.nspec, self.nspec), dtype=float)
+    nbonds = np.zeros((self.nspec, self.nspec), dtype=int)
 
     bond_min = bondcut
     for i in range(self.nat):
@@ -208,7 +205,7 @@ class Pairdist:
       for j in range(i,self.nspec):
         if nbonds[i,j] > 0:
           bond_avg[i,j] = bond_tot[i,j]/float(nbonds[i,j])
-          bond_sd[i,j] = sp.sqrt(bondsq_tot[i,j]/nbonds[i,j] - bond_avg[i,j]**2)
+          bond_sd[i,j] = np.sqrt(bondsq_tot[i,j]/nbonds[i,j] - bond_avg[i,j]**2)
           pair = "{}-{}".format(self.species[i+1], self.species[j+1])
           print(f'{pair}: {bond_avg[i,j]:>8.4f} +/- {bond_sd[i,j]:>8.4f}')
 
@@ -226,13 +223,13 @@ class MSER:
     self.n_j = nframes-1
     self.propname = varname
     self.traj = var_traj
-    self.mser = sp.zeros(self.n_j, dtype='float')
+    self.mser = np.zeros(self.n_j, dtype='float')
     # stop before the end otherwise the MSER becomes very noisy
     self.mser_cut = 200
 
   def get_point(self, d_j):
     prefac = 1.0/(self.n_j-d_j)**2
-    ybar_ij = sp.mean(self.traj[d_j:])
+    ybar_ij = np.mean(self.traj[d_j:])
     variance = 0.0
     for i in range(d_j+1,self.n_j):
       variance += (self.traj[i] - ybar_ij)**2
@@ -243,7 +240,7 @@ class MSER:
       self.mser[i] = self.get_point(i)
 
   def mser_min(self):
-    return sp.argmin(self.mser[:-self.mser_cut])
+    return np.argmin(self.mser[:-self.mser_cut])
 
   def plot_mser(self, steps):
     plt.figure("{} MSER".format(self.propname))
@@ -279,11 +276,11 @@ class VACF:
     self.steps.append(step)
     self.vacf.append(0.0)
     for i in range(self.nat):
-      self.vacf[-1] += sp.dot(self.init_v[i,:], frame.v[i,:])
+      self.vacf[-1] += np.dot(self.init_v[i,:], frame.v[i,:])
 
   def norm_vacf(self):
-    self.vacf = sp.array(self.vacf)/self.nat
-    self.time = sp.array(self.steps, dtype='float')*self.dt
+    self.vacf = np.array(self.vacf)/self.nat
+    self.time = np.array(self.steps, dtype='float')*self.dt
 
   def plot_vacf(self):
     filename = "vacf.pdf"
@@ -310,30 +307,30 @@ class MSD:
     self.nat = nat
     self.dt = dt
     self.init_r = init_frame.r
-    self.r_prev = sp.copy(self.init_r)
+    self.r_prev = np.copy(self.init_r)
     self.msd = []
     self.steps = []
-    self.init_cell = sp.zeros(3, dtype='float')
-    self.r_diff = sp.zeros((self.nat,3), dtype='float')
+    self.init_cell = np.zeros(3, dtype='float')
+    self.r_diff = np.zeros((self.nat,3), dtype='float')
     for i in range(3):
       self.init_cell[i] = init_frame.lat[i,i]
 
   def update_msd(self, step, frame):
     self.steps.append(step)
     self.nframes += 1
-    cell = sp.zeros(3, dtype='float')
+    cell = np.zeros(3, dtype='float')
     for i in range(3):
       cell[i] = frame.lat[i,i]
     self.msd.append(0.0)
     for i in range(self.nat):
       diff = diff_mic(frame.r[i,:], self.r_prev[i,:], cell) # is this right?
       self.r_diff[i,:] += diff
-      self.msd[-1] += sp.sum(self.r_diff[i,:]**2)
-    self.r_prev = sp.copy(frame.r)
+      self.msd[-1] += np.sum(self.r_diff[i,:]**2)
+    self.r_prev = np.copy(frame.r)
 
   def norm_msd(self):
-    self.msd = sp.array(self.msd)/self.nat
-    self.time = sp.array(self.steps, dtype='float')*self.dt
+    self.msd = np.array(self.msd)/self.nat
+    self.time = np.array(self.steps, dtype='float')*self.dt
 
   def plot_msd(self):
     filename = "msd.pdf"

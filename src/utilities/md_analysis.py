@@ -4,11 +4,10 @@ import argparse
 import sys
 import re
 import os.path
-import scipy as sp
+import numpy as np
 import matplotlib.pyplot as plt
 from frame import Frame
 from md_tools import Pairdist, MSER, VACF, MSD, autocorr
-from pdb import set_trace
 
 ha2ev = 27.211399
 ha2k = 3.15737513e5
@@ -61,7 +60,7 @@ def parse_init_config(conf_filename):
     a = [float(bit) for bit in infile.readline().strip().split()]
     b = [float(bit) for bit in infile.readline().strip().split()]
     c = [float(bit) for bit in infile.readline().strip().split()]
-    data['latvec'] = sp.array([a,b,c])
+    data['latvec'] = np.array([a,b,c])
     natoms = int(infile.readline().strip())
     data['natoms'] = natoms
     coords = []
@@ -70,8 +69,8 @@ def parse_init_config(conf_filename):
       x, y, z, spec, cx, cy, cz = infile.readline().strip().split()
       coords.append([float(x), float(y), float(z)])
       species.append(int(spec))
-    data['coords'] = sp.array(coords)
-    data['species'] = sp.array(species)
+    data['coords'] = np.array(coords)
+    data['species'] = np.array(species)
     scount = {}
     for i in range(natoms):
       if data['species'][i] in scount.keys():
@@ -107,7 +106,7 @@ def read_stats(stats_file, nstop):
           data[col_id[i]].append(info)
       nstep += 1
     for key in data:
-      data[key] = sp.array(data[key])
+      data[key] = np.array(data[key])
   return nstep, data
 
 # Command line arguments
@@ -204,11 +203,11 @@ if not opts.compare:
   avg = {}
   std = {}
   for key in data:
-    data[key] = sp.array(data[key])
-    avg[key] = sp.mean(data[key][opts.nequil:-1])
-    std[key] = sp.std(data[key][opts.nequil:-1])
+    data[key] = np.array(data[key])
+    avg[key] = np.mean(data[key][opts.nequil:-1])
+    std[key] = np.std(data[key][opts.nequil:-1])
   time = [float(s)*dt for s in data['step']]
-  data['time'] = sp.array(time)
+  data['time'] = np.array(time)
 
   # Plot the statistics
   if opts.landscape:
@@ -276,7 +275,7 @@ else:
     path = os.path.join(d, opts.statfile)
     nsteps, data = read_stats(path,opts.nstop)
     time = [float(s)*dt for s in data['step']]
-    data['time'] = sp.array(time)
+    data['time'] = np.array(time)
 
     ax1.plot(data['time'][opts.nskip:], data['H\''][opts.nskip:],
              linewidth=0.5, label=opts.desc[ind])
@@ -308,8 +307,8 @@ if opts.mser_var:
 # Plot heat flux autocorrelation function
 if opts.hfacf:
   window = int(opts.acfwindow // dt)
-  G = sp.zeros((3,3,window))
-  time = sp.array([float(i)*dt for i in range(window)])
+  G = np.zeros((3,3,window))
+  time = np.array([float(i)*dt for i in range(window)])
   nruns = 0
   for ind, d in enumerate(opts.dirs):
     path = os.path.join(d, heatfluxfile)
@@ -327,8 +326,8 @@ if opts.hfacf:
         J.append([Jx, Jy, Jz])
         t.append(step*dt)
         nsteps += 1
-    J = sp.array(J)
-    t = sp.array(t)
+    J = np.array(J)
+    t = np.array(t)
 
     nwindows = int((nsteps - opts.nskip) // window)
     for i in range(3):
@@ -428,14 +427,14 @@ if read_frames:
 
 # Plot the stress
   if opts.stress:
-    stress = sp.array(stress)
-    lat = sp.array(lat)
-    mean_stress = sp.zeros((3,3))
-    mean_lat = sp.zeros((3,3))
+    stress = np.array(stress)
+    lat = np.array(lat)
+    mean_stress = np.zeros((3,3))
+    mean_lat = np.zeros((3,3))
     for i in range(3):
       for j in range(3):
-        mean_stress[i,j] = sp.mean(stress[:,i,j])
-        mean_lat[i,j] = sp.mean(lat[:,i,j])
+        mean_stress[i,j] = np.mean(stress[:,i,j])
+        mean_lat[i,j] = np.mean(lat[:,i,j])
     plt.figure("Stress")
 
     if cq_params['MD.Ensemble'][1] == "p":
