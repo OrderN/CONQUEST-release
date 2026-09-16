@@ -239,6 +239,12 @@ Note that the NPT ensemble can also be generated correctly by thermostatting
 using the SVR thermostat, although the meaning of the parameter ``MD.tauT`` is
 different in this case, as in NVT dynamics.
 
+Postprocessing tools
+--------------------
+
+The Python utility supplied for analysing CONQUEST molecular-dynamics output is
+described in :ref:`et_md_scripts`.
+
 Go to :ref:`top <moldyn>`.
 
 .. bibliography:: references.bib
