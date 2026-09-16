@@ -123,7 +123,7 @@ parser.add_argument('--description', nargs='+', default='', dest='desc',
                     (only if using --compare)')
 parser.add_argument('-f', '--frames', action='store', dest='framesfile',
                     default='Frames', help='MD frames file')
-parser.add_argument('-s', '--stats', action='store', dest='statfile',
+parser.add_argument('-s', '--stats-file', action='store', dest='statfile',
                     default='Stats', help='MD statistics file')
 parser.add_argument('--skip', action='store', dest='nskip', default=0,
                     type=int, help='Number of equilibration steps to skip')
@@ -278,14 +278,14 @@ else:
     time = [float(s)*dt for s in data['step']]
     data['time'] = sp.array(time)
 
-      ax1.plot(data['time'][opts.nskip:], data['H\''][opts.nskip:],
-               linewidth=0.5, label=opts.desc[ind])
-      y1,y2 = ax1.get_ylim()
-      ax1a.set_ylim(y1*ha2k,y2*ha2k)
-      ax2.plot(data['time'][opts.nskip:], data['T'][opts.nskip:],
-               linewidth=0.5, label=opts.desc[ind])
-      ax3.plot(data['time'][opts.nskip:], data['P'][opts.nskip:],
-               linewidth=0.5, label=opts.desc[ind])
+    ax1.plot(data['time'][opts.nskip:], data['H\''][opts.nskip:],
+             linewidth=0.5, label=opts.desc[ind])
+    y1,y2 = ax1.get_ylim()
+    ax1a.set_ylim(y1*ha2k,y2*ha2k)
+    ax2.plot(data['time'][opts.nskip:], data['T'][opts.nskip:],
+             linewidth=0.5, label=opts.desc[ind])
+    ax3.plot(data['time'][opts.nskip:], data['P'][opts.nskip:],
+             linewidth=0.5, label=opts.desc[ind])
 
     ax1.set_ylabel("H$'$ (Ha)")
     ax1a.set_ylabel("H$'$ (K)")

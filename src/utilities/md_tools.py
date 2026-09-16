@@ -5,7 +5,6 @@ import matplotlib.pyplot as plt
 from scipy.linalg import norm
 from scipy.integrate import cumtrapz
 from scipy.signal import correlate
-from scipy import histogram
 from math import ceil, pi
 from frame import Frame
 from pdb import set_trace
