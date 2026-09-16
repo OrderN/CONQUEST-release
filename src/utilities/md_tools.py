@@ -10,12 +10,13 @@ bohr2ang = 0.529177249
 small = 1.0e-3
 
 def autocorr(x, y=None):
-  """Autocorrelation function"""
-  if y.any():
-    result = correlate(x, y, mode='full')
-  else:
-    result = correlate(x, x, mode='full')
-  return result[result.size // 2:]
+  """Return an unbiased positive-lag auto- or cross-correlation."""
+  if y is None:
+    y = x
+  if len(x) != len(y):
+    raise ValueError('correlation inputs must have the same length')
+  result = correlate(x, y, mode='full')[len(x)-1:]
+  return result/np.arange(len(x), 0, -1)
 
 def diff_mic(pos1, pos2, cell):
   """Minimum image convention relative vector (orthorhombic cell only)"""

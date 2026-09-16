@@ -298,38 +298,51 @@ if opts.mser_var:
 
 # Plot heat flux autocorrelation function
 if opts.hfacf:
-  window = int(opts.acfwindow // dt)
-  G = np.zeros((3,3,window))
-  time = np.array([float(i)*dt for i in range(window)])
-  nruns = 0
-  for ind, d in enumerate(opts.dirs):
+  flux_runs = []
+  flux_dt = None
+  for d in opts.dirs:
+    run_params = parse_cq_input(os.path.join(d, cq_input_file))
+    run_dt = float(run_params['AtomMove.Timestep'])
+    if flux_dt is None:
+      flux_dt = run_dt
+    elif not np.isclose(run_dt, flux_dt):
+      parser.error('all heat-flux trajectories must use the same timestep')
     path = os.path.join(d, opts.heatfluxfile)
-
     J = []
-    t = []
-    nsteps = 0
     with open(path, 'r') as infile:
       for line in infile:
         step, Jx, Jy, Jz = line.split()
         step = int(step)
-        Jx = float(Jx)
-        Jy = float(Jy)
-        Jz = float(Jz)
-        J.append([Jx, Jy, Jz])
-        t.append(step*dt)
-        nsteps += 1
-    J = np.array(J)
-    t = np.array(t)
+        if step < opts.nskip:
+          continue
+        if opts.nstop != -1 and step > opts.nstop:
+          break
+        J.append([float(Jx), float(Jy), float(Jz)])
+    if J:
+      flux_runs.append(np.array(J))
 
-    nwindows = int((nsteps - opts.nskip) // window)
-    for i in range(3):
-      for j in range(3):
-        for k in range(nwindows):
-          nruns += 1
-          start = opts.nskip + k*window
-          finish = opts.nskip + k*window + window
-          G += autocorr(J[start:finish,i],J[start:finish,j])
-  G = G / float(nruns)
+  if not flux_runs:
+    parser.error('no heat-flux samples remain after step selection')
+  if opts.acfwindow > 0.0:
+    window = int(opts.acfwindow // flux_dt)
+  else:
+    window = min(len(run) for run in flux_runs)
+  if window < 1 or any(len(run) < window for run in flux_runs):
+    parser.error('autocorrelation window exceeds the available heat-flux data')
+
+  G = np.zeros((3,3,window))
+  nruns = 0
+  for J in flux_runs:
+    for start in range(0, len(J)-window+1, window):
+      sample = J[start:start+window]
+      for i in range(3):
+        for j in range(3):
+          G[i,j,:] += autocorr(sample[:,i], sample[:,j])
+      nruns += 1
+  if nruns == 0:
+    parser.error('heat-flux data do not contain a complete correlation window')
+  G /= float(nruns)
+  time = np.arange(window, dtype=float)*flux_dt
   plt.figure("HFACF")
   plt.xlabel("t (fs)")
   plt.ylabel("HFACF")
