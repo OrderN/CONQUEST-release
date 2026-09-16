@@ -44,10 +44,10 @@ class Pairdist:
     self.nbins = ceil(rcut/binwidth)
     self.spec_count = species_count
     self.species = species
-    self.bins = []
-    for i in range(self.nbins):
-      self.bins.append((float(i)*binwidth + binwidth/2.))
-    self.bins = np.array(self.bins)
+    self.edges = np.minimum(np.arange(self.nbins+1)*binwidth, rcut)
+    self.edges[-1] = rcut
+    self.bins = 0.5*(self.edges[:-1] + self.edges[1:])
+    self.inv_volume_sum = 0.0
     self.dt = np.zeros((self.nat,self.nat), dtype='float')
     self.freq_total = np.zeros(self.nbins, dtype='int')
     self.freq = np.zeros((self.nbins,self.nspec,self.nspec), dtype='int')
@@ -62,8 +62,9 @@ class Pairdist:
     for i in range(3):
       cell[i] = frame.lat[i,i]
 
-    self.volume = cell[0]*cell[1]*cell[2]*bohr2ang**3
+    self.volume = abs(np.linalg.det(frame.lat))*bohr2ang**3
     self.rho = float(self.nat)/self.volume
+    self.inv_volume_sum += 1.0/self.volume
 
     for i in range(self.nat):
       for j in range(i+1, self.nat):
@@ -71,43 +72,55 @@ class Pairdist:
         self.dt[i,j] = np.linalg.norm(diff)
         self.dt[j,i] = np.linalg.norm(diff)
         if self.dt[i,j] < self.rcut:
-          ind = min(int(self.dt[i,j]/self.binwidth), self.nbins-1)
+          ind = np.searchsorted(self.edges, self.dt[i,j], side='right')-1
           self.freq_total[ind] += 2
           if self.nspec > 1:
-            for ispec in range(self.nspec):
-              for jspec in range(ispec, self.nspec):
-                if (ispec == frame.species[i]-1 and jspec == frame.species[j]-1):
-                  self.freq[ind, ispec, jspec] += 2
+            ispec, jspec = sorted((int(frame.species[i])-1,
+                                   int(frame.species[j])-1))
+            if ispec == jspec:
+              self.freq[ind, ispec, jspec] += 2
+            else:
+              self.freq[ind, ispec, jspec] += 1
 
   def norm_rdf(self):
     """Normalise the RDF"""
-    const1 = 4.0*pi*(self.binwidth**3)/3.0
-    const2 = self.rho*self.nat*self.nframes
     for i in range(self.nbins):
-      vshell = (float(i+1)**3 - float(i)**3)*const1
-      self.nfac_total[i] = vshell*const2
+      vshell = 4.0*pi*(self.edges[i+1]**3-self.edges[i]**3)/3.0
+      self.nfac_total[i] = (vshell*self.nat*(self.nat-1)*
+                            self.inv_volume_sum)
       if self.nspec > 1:
         for ispec in range(self.nspec):
           for jspec in range(self.nspec):
-            const3 = self.rho*self.spec_count[ispec+1]*self.spec_count[jspec+1]/self.nat
-            self.nfac[i,ispec,jspec] = vshell*const3*self.nframes
-    self.gr_total = self.freq_total.astype(float)/self.nfac_total
+            ni = self.spec_count[ispec+1]
+            nj = self.spec_count[jspec+1]
+            npairs = ni*(ni-1) if ispec == jspec else ni*nj
+            self.nfac[i,ispec,jspec] = (vshell*npairs*
+                                        self.inv_volume_sum)
+    self.gr_total = np.divide(self.freq_total, self.nfac_total,
+                              out=np.zeros_like(self.nfac_total),
+                              where=self.nfac_total > 0)
     if self.nspec > 1:
-      self.gr = self.freq.astype(float)/self.nfac
+      self.gr = np.divide(self.freq, self.nfac,
+                          out=np.zeros_like(self.nfac),
+                          where=self.nfac > 0)
 
   def get_coordination(self):
     """Compute coordination"""
     gxrsq = self.gr_total*self.bins**2
     self.coord_total = np.zeros(self.nbins, dtype='float')
     self.coord_total[1:] = cumulative_trapezoid(gxrsq,self.bins)
-    self.coord_total *= 4.*pi*self.rho
+    mean_inv_volume = self.inv_volume_sum/self.nframes
+    self.coord_total *= 4.*pi*(self.nat-1)*mean_inv_volume
     if self.nspec > 1:
       self.coord = np.zeros((self.nbins,self.nspec,self.nspec), dtype='float')
       for ispec in range(self.nspec):
         for jspec in range(ispec,self.nspec):
           gxrsq = self.gr[:,ispec,jspec]*self.bins**2
           self.coord[1:,ispec,jspec] = cumulative_trapezoid(gxrsq[:], self.bins)
-          self.coord *= 4.*pi*self.rho # check this
+          nneighbours = self.spec_count[jspec+1]
+          if ispec == jspec:
+            nneighbours -= 1
+          self.coord[:,ispec,jspec] *= 4.*pi*nneighbours*mean_inv_volume
 
   def plot_gr(self):
     plt.figure("RDF")
@@ -117,9 +130,9 @@ class Pairdist:
     else:
       fig3, axl = plt.subplots()
     axl.minorticks_on()
-    axl.grid(b=True, which='major', axis='x', color='gray', linestyle='-')
-    axl.grid(b=True, which='minor', axis='x', color='gray', linestyle='--')
-    axl.grid(b=True, which='major', axis='y', color='gray', linestyle='-')
+    axl.grid(visible=True, which='major', axis='x', color='gray', linestyle='-')
+    axl.grid(visible=True, which='minor', axis='x', color='gray', linestyle='--')
+    axl.grid(visible=True, which='major', axis='y', color='gray', linestyle='-')
     # axl.grid(b=True, which='minor', axis='y', color='gray', linestyle='--')
     axr = axl.twinx()
     axl.set_ylabel("g(r)", color='b')
@@ -131,9 +144,9 @@ class Pairdist:
     axr.set_ylim(bottom=axl.get_ylim()[0], top=axl.get_ylim()[1]*10.0)
     if self.nspec > 1:
       ax2.minorticks_on()
-      ax2.grid(b=True, which='major', axis='x', color='gray', linestyle='-')
-      ax2.grid(b=True, which='minor', axis='x', color='gray', linestyle='--')
-      ax2.grid(b=True, which='major', axis='y', color='gray', linestyle='-')
+      ax2.grid(visible=True, which='major', axis='x', color='gray', linestyle='-')
+      ax2.grid(visible=True, which='minor', axis='x', color='gray', linestyle='--')
+      ax2.grid(visible=True, which='major', axis='y', color='gray', linestyle='-')
       # ax2.grid(b=True, which='minor', axis='y', color='gray', linestyle='--')
       for ispec in range(self.nspec):
         for jspec in range(ispec,self.nspec):
