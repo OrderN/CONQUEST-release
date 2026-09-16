@@ -194,8 +194,9 @@ Go to :ref:`top <moldyn>`.
 Isobaric-Isothermal (NPT) ensemble
 ++++++++++++++++++++++++++++++++++
 
-There is one implemented barostat at present, the extended
-system, Parrinello-Rahman :cite:`md-Parrinello1981`.
+Two extended-system barostats are implemented: Parrinello-Rahman
+:cite:`md-Parrinello1981` and Martyna-Tobias-Tuckerman-Klein (MTTK)
+:cite:`t-Martyna1996`.
 
 1. Parrinello-Rahman
 
@@ -238,6 +239,25 @@ perturbs the formal NPT dynamics, but can help damp ringing fluctuations.
 Note that the NPT ensemble can also be generated correctly by thermostatting
 using the SVR thermostat, although the meaning of the parameter ``MD.tauT`` is
 different in this case, as in NVT dynamics.
+
+2. Martyna-Tobias-Tuckerman-Klein
+
+The MTTK barostat is implemented for isotropic volume fluctuations and is
+coupled to the Nose-Hoover-chain thermostat:
+
+::
+
+   AtomMove.IonTemperature 300.0
+   AtomMove.TargetPressure 10.0
+   MD.Ensemble npt
+   MD.Thermostat nhc
+   MD.Barostat mttk
+   MD.CellConstraint volume
+   MD.tauT 100
+   MD.tauP 200
+
+Use the Parrinello-Rahman barostat instead when the three orthorhombic cell
+lengths must vary independently with ``MD.CellConstraint xyz``.
 
 Postprocessing tools
 --------------------
