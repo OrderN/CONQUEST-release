@@ -153,11 +153,14 @@ parser.add_argument('--landscape', action='store_true', dest='landscape',
                     help='Generate plot with landscape orientation')
 parser.add_argument('--pub', action='store_true', dest='pub', 
                     help='Publication text size')
-parser.add_argument('--nbins', action='store', dest='nbins', default=100,
-                    help='Number of histogram bins')
-parser.add_argument('--rdfwidth', action='store', dest='rdfwidth',
-                    default=0.05, help='RDF histogram bin width (A)')
+rdf_bins = parser.add_mutually_exclusive_group()
+rdf_bins.add_argument('--nbins', action='store', dest='nbins', default=100,
+                      type=int, help='Number of RDF histogram bins')
+rdf_bins.add_argument('--rdfwidth', action='store', dest='rdfwidth',
+                      default=None, type=float,
+                      help='RDF histogram bin width (A)')
 parser.add_argument('--rdfcut', action='store', dest='rdfcut', default=10.0,
+                    type=float,
                     help='Distance cutoff for RDF')
 parser.add_argument('--dump', action='store_true', dest='dump', 
                     help='Dump secondary data used to generate plots')
@@ -395,8 +398,12 @@ if read_frames:
           f1 = Frame(natoms,n)
           f1.parse_frame(buf)
           if opts.rdf:
+            if opts.rdfwidth is None:
+              rdfwidth = opts.rdfcut/opts.nbins
+            else:
+              rdfwidth = opts.rdfwidth
             pairdist = Pairdist(natoms, init_config['nspecies'],
-                                float(opts.rdfcut), float(opts.rdfwidth),
+                                opts.rdfcut, rdfwidth,
                                 cq_params['species'],
                                 init_config['species_count'])
           if opts.vacf:

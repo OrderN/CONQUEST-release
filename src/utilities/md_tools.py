@@ -41,7 +41,7 @@ class Pairdist:
     self.nspec = nspec
     self.rcut = rcut
     self.binwidth = binwidth
-    self.nbins = ceil(rcut/binwidth)+1
+    self.nbins = ceil(rcut/binwidth)
     self.spec_count = species_count
     self.species = species
     self.bins = []
@@ -71,7 +71,7 @@ class Pairdist:
         self.dt[i,j] = np.linalg.norm(diff)
         self.dt[j,i] = np.linalg.norm(diff)
         if self.dt[i,j] < self.rcut:
-          ind = int(round((self.dt[i,j]+self.binwidth)/self.binwidth))-1
+          ind = min(int(self.dt[i,j]/self.binwidth), self.nbins-1)
           self.freq_total[ind] += 2
           if self.nspec > 1:
             for ispec in range(self.nspec):
