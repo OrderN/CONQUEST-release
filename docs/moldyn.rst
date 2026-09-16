@@ -81,7 +81,7 @@ In addition to the files mentioned above, CONQUEST will try to read the K-matrix
 from ``Kmatrix2.i00.*`` when using diagonalisation or the L-matrix from
 ``Lmatrix2.i00.*`` when using O(N), and ``Xmatrix2.i0*.*`` if the
 extended-Lagrangian formalism is used. Note that metadata for these files is
-stored in ``InfoGlobal.i00.dat`` which is also required when restarting. If the
+stored in ``InfoGlobal.i00`` which is also required when restarting. If the
 calculation ended by hitting the walltime limit, the writing of these matrix
 files may have been interrupted, rendering them unusable. In this case, set
 ``General.LoadDM F`` and, for XL-BOMD, ``XL.LoadX F`` *after* setting

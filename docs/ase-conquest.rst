@@ -462,11 +462,12 @@ the first K/L matrix, then adding the following keywords to the calculator:
   other_keywords = {"General.LoadDM": True,
                     "SC.MakeInitialChargeFromK": True}
 
-These keywords respectively cause the K or L matrix to be loaded from file(s)
-``Kmatrix.i**.p*****``, and the initial charge density to be constructed from
-this matrix. In all subsequent calculations, the K or L matrix will be written
-at the end of the calculation and used as the initial guess for the subsequent
-ionic step.
+These keywords respectively cause the K or L matrix to be loaded from files
+``Kmatrix2.i**.p******`` or ``Lmatrix2.i**.p******``, together with the
+corresponding ``InfoGlobal.i**`` metadata file, and the initial charge density
+to be constructed from this matrix. In all subsequent calculations, the K or L
+matrix will be written at the end of the calculation and used as the initial
+guess for the subsequent ionic step.
 
 Go to :ref:`top <ext-tools>`.
 
