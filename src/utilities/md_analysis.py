@@ -425,8 +425,8 @@ if read_frames:
 
         time.append(n*dt)
         if opts.stress:
-          stress.append(f.stress)
           lat.append(f.lat)
+          stress.append(f.stress/(f.lat[0,0]*f.lat[1,1]*f.lat[2,2]))
         if opts.rdf:
           pairdist.update_rdf(f)
         if opts.vacf:
