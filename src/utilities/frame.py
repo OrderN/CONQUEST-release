@@ -1,11 +1,9 @@
 import re
-import scipy as sp
-from pdb import set_trace
+import numpy as np
 
 # Regular expressions
 cell_re = re.compile('cell_vectors(.*?)end cell_vectors', re.M | re.S)
 stress_re = re.compile('stress_tensor(.*?)end stress_tensor', re.M | re.S)
-position_re = re.compile('positions(.*?)end positions', re.M | re.S)
 position_re = re.compile('positions(.*?)end positions', re.M | re.S)
 velocity_re = re.compile('velocities(.*?)end velocities', re.M | re.S)
 force_re = re.compile('forces(.*?)end forces', re.M | re.S)
@@ -16,12 +14,12 @@ class Frame:
   def __init__(self, nat, step):
     self.step = step
     self.nat = nat
-    self.species = sp.zeros(nat)
-    self.r = sp.zeros((nat, 3), dtype='float')
-    self.v = sp.zeros((nat, 3), dtype='float')
-    self.f = sp.zeros((nat, 3), dtype='float')
-    self.lat = sp.zeros((3, 3), dtype='float')
-    self.stress = sp.zeros((3, 3), dtype='float')
+    self.species = np.zeros(nat)
+    self.r = np.zeros((nat, 3), dtype='float')
+    self.v = np.zeros((nat, 3), dtype='float')
+    self.f = np.zeros((nat, 3), dtype='float')
+    self.lat = np.zeros((3, 3), dtype='float')
+    self.stress = np.zeros((3, 3), dtype='float')
     self.ke = 0.
     self.pe = 0.
     self.E = 0.
