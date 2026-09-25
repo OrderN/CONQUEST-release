@@ -29,7 +29,7 @@ functions or small PAO basis sets are also possible.
 
 CONQUEST reads pseudopotentials produced by Don Hamann's
 [ONCVPSP](http://www.mat-simresearch.com) code, and is fully
-compatible with the the [PseudoDojo](http://www.pseudo-dojo.org) 
+compatible with the [PseudoDojo](http://www.pseudo-dojo.org)
 and [SG15](http://www.quantum-simulation.org/potentials/sg15_oncv/)
 databases. It can also read the .ion
 files produced by Siesta, using both the pseudopotentials and
@@ -38,7 +38,7 @@ pseudo-atomic orbitals (PAOs) in those files.  CONQUEST integrates with
 
 The manual is provided with the release (see the ``docs`` directory)
 but is also available on
-[ReadTheDocs](https://conquest.readthedocs.io/en/latest/). 
+[ReadTheDocs](https://conquest.readthedocs.io/en/latest/).
 
 ## DOI
 
@@ -50,4 +50,4 @@ DOI for the specific version you have used in any given study.
 
 ## Version number
 
-CONQUEST is now at version 1.5 (tag:v1.5)
+CONQUEST is now at version 1.6 (tag:v1.6)

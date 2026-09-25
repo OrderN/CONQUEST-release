@@ -4,26 +4,27 @@ module read
   implicit none
 
   character(len=80) :: block_file
-  
+
 contains
 
   ! Read Conquest_input file for parameters from simulation, output parameters and coordinates
   subroutine read_input
 
     use global_module, ONLY: flag_assign_blocks, flag_fractional_atomic_coords, nspin, &
-         flag_wf_range_Ef, E_DOS_min, E_DOS_max, sigma_DOS, n_DOS, ni_in_cell
+         flag_wf_range_Ef, E_DOS_min, E_DOS_max, sigma_DOS, n_DOS, ni_in_cell, flag_fix_spin_population
     use local
     use input_module
     use numbers
     use io_module, ONLY: pdb_format, pdb_template, read_atomic_positions, flag_MatrixFile_BinaryFormat
     use dimens, ONLY: r_super_x, r_super_y, r_super_z, GridCutoff
-    use species_module, ONLY: n_species, species_label, species_file, mass, type_species, charge, nsf_species
+    use species_module, ONLY: n_species, species_label, species_file, mass, type_species, charge, nsf_species,&
+         species_from_files
     use units, ONLY: HaToeV, dist_units, dist_conv, ang, bohr, BohrToAng
     use block_module, only: n_pts_in_block, in_block_x,in_block_y,in_block_z, blocks_raster, blocks_hilbert
     use pseudo_tm_info, only: setup_pseudo_info
     use GenComms,       only: cq_abort
     use pseudopotential_common, only: pseudo_type, ABINIT, OLDPS, SIESTA
-    
+
     implicit none
 
     character(len=80) :: input_string, proc_coords, tmp
@@ -51,10 +52,11 @@ contains
     flag_spin_polarisation   = fdf_boolean('Spin.SpinPolarised', .false.)
     nspin = 1
     if(flag_spin_polarisation) nspin = 2
+    flag_fix_spin_population = fdf_boolean('Spin.FixSpin',.false.)
     ! Grid spacing
     n_grid_x   = fdf_integer('Grid.PointsAlongX',0)
     n_grid_y   = fdf_integer('Grid.PointsAlongY',0)
-    n_grid_z   = fdf_integer('Grid.PointsAlongZ',0)    
+    n_grid_z   = fdf_integer('Grid.PointsAlongZ',0)
     if(n_grid_x>0.AND.n_grid_y>0.AND.n_grid_z>0) then
        dk = pi/min(n_grid_x, n_grid_y, n_grid_z)
        GridCutoff = half*dk*dk
@@ -148,7 +150,7 @@ contains
           flag_proc_band_str = 4
        end if
     end if
-    ! 
+    !
     charge_stub = fdf_string(80,'Process.ChargeStub','chden')
     ! STM parameters
     ! NB Bias will be in volts
@@ -231,7 +233,7 @@ contains
        E_procwf_min = fdf_double('Process.min_wf_E',E_wf_min)
        E_procwf_max = fdf_double('Process.max_wf_E',E_wf_max)
        ! Is the range relative to Ef (T) or absolute (F)
-       flag_procwf_range_Ef = fdf_boolean('Process.WFRangeRelative',.true.)
+       flag_procwf_range_Ef = fdf_boolean('Process.WFRangeRelative',flag_wf_range_Ef)
        n_bands_process = fdf_integer('Process.noWF',0)
        if(n_bands_process>0) then
           allocate(band_proc_no(n_bands_process))
@@ -269,12 +271,29 @@ contains
     flag_outputWF_real = .false.
     if (leqi(job,'ban')) flag_outputWF_real = fdf_boolean('Process.outputWF_real',.false.)
     ! DOS
-    ! Add flag for window relative to Fermi level
-    E_DOS_min = fdf_double('Process.min_DOS_E',E_wf_min)
-    E_DOS_max = fdf_double('Process.max_DOS_E',E_wf_max)
-    sigma_DOS = fdf_double('Process.sigma_DOS',0.001_double) ! Better than adaptive
-    n_DOS = fdf_integer('Process.n_DOS',1001)
-    flag_total_iDOS = fdf_boolean('Process.TotalIntegratedDOS',.false.)
+    flag_wf_range_Ef = fdf_boolean('IO.WFRangeRelative',.true.)
+    flag_procwf_range_Ef = fdf_boolean('Process.WFRangeRelative',flag_wf_range_Ef)
+    if(i_job==6.or.i_job==7.or.i_job==8) then
+       ! Add flag for window relative to Fermi level
+       E_DOS_min = fdf_double('Process.min_DOS_E',E_wf_min)
+       E_DOS_max = fdf_double('Process.max_DOS_E',E_wf_max)
+       ! ExpandRange allows for the broadening of peaks in energy range
+       ! If user did not set limits, default to expanding range
+       if(((abs(E_DOS_min-E_wf_min)>1e-8_double).or.(abs(E_DOS_max-E_wf_max)>1e-8_double)).or. &
+            (abs(E_wf_min)>1e-8_double.or.abs(E_wf_max)>1e-8_double)) then ! At least one set
+          flag_expand_range = fdf_boolean('Process.ExpandRange',.false.)
+          flag_wf_range_Ef = fdf_boolean('IO.WFRangeRelative',.true.)
+          flag_procwf_range_Ef = fdf_boolean('Process.WFRangeRelative',flag_wf_range_Ef)
+       else ! Defaults used
+          flag_expand_range = fdf_boolean('Process.ExpandRange',.true.)
+          ! If the limits are set automatically then don't treat limits as relative
+          flag_wf_range_Ef = fdf_boolean('IO.WFRangeRelative',.false.)
+          flag_procwf_range_Ef = fdf_boolean('Process.WFRangeRelative',flag_wf_range_Ef)
+       end if
+       sigma_DOS = fdf_double('Process.sigma_DOS',0.001_double) ! Better than adaptive
+       n_DOS = fdf_integer('Process.n_DOS',1001)
+       flag_total_iDOS = fdf_boolean('Process.TotalIntegratedDOS',.false.)
+    end if
     if(i_job==7) then
        ! If no limits specified, cover whole range
        if(abs(E_wf_max-E_wf_min)<1e-8_double) then
@@ -282,8 +301,6 @@ contains
           E_wf_max =  BIG
        end if
        flag_wf_range = .true.
-       flag_wf_range_Ef = fdf_boolean('IO.WFRangeRelative',.true.)
-       flag_procwf_range_Ef = fdf_boolean('Process.WFRangeRelative',.false.)
        flag_l_resolved = fdf_boolean('Process.pDOS_l_resolved',.false.)
        flag_lm_resolved = fdf_boolean('Process.pDOS_lm_resolved',.false.)
        if(flag_lm_resolved .and. (.not.flag_l_resolved)) flag_l_resolved = .true.
@@ -298,7 +315,7 @@ contains
        else
           allocate(pDOS_atom_index(n_atoms_pDOS))
           if(fdf_block('pDOS_atoms')) then
-             if(1+block_end-block_start<n_atoms_pDOS) & 
+             if(1+block_end-block_start<n_atoms_pDOS) &
                   call cq_abort("Too few atoms in pDOS_atoms: ",&
                   1+block_end-block_start,n_atoms_pDOS)
              do i=1,n_atoms_pDOS
@@ -309,10 +326,78 @@ contains
              call cq_abort("Specified n_atoms_pDOS but no pDOS_atoms block")
           end if
        end if
-    end if
+       ! Define pDOS rotation input
+       flag_rotate_pdos = fdf_boolean('Process.RotatePDOS',.false.)
+       flag_rotate_pdos_debug = fdf_boolean('Process.RotatePDOSDebug',.false.)
+       flag_rotate_pdos_mode = fdf_integer('Process.RotatePDOSMode',0)
+       rotate_pdos_natoms = fdf_integer('Process.RotatePDOS.NumAtoms',1)
+       flag_rotate_pdos_units = fdf_string(7, 'Process.RotatePDOSAngle',"deg") ! deg or rad
+       if (flag_rotate_pDOS) then
+          if(fdf_block('pDOSAxes') .and. flag_rotate_pdos_mode == 0) then
+             if(1+block_end-block_start<3) &
+                  call cq_abort("Too few vectors in pDOS_axes: ",&
+                  1+block_end-block_start,3)
+             ! Expect exactly 3 vectors -> 3 reads
+             read (unit=input_array(block_start),fmt=*) pdos_ax
+             read (unit=input_array(block_start+1),fmt=*) pdos_ay
+             read (unit=input_array(block_start+2),fmt=*) pdos_az
+             call fdf_endblock
+          else if (fdf_block('pDOSEuler') .and. flag_rotate_pdos_mode == 1) then
+             if(1+block_end-block_start<rotate_pdos_natoms) &
+                  call cq_abort("Too few atoms provided in pDOSEuler block: ",&
+                  1+block_end-block_start,rotate_pdos_natoms)
+             ! In each line, expect an integer followed by 3 floats
+             allocate(euler_angles(3, rotate_pdos_natoms))
+             allocate(rotate_pdos_atoms(rotate_pdos_natoms))
+             do i = 1, rotate_pdos_natoms
+                read (unit=input_array(block_start+i-1),fmt=*) rotate_pdos_atoms(i), euler_angles(:,i)
+             end do
+             if (flag_rotate_pdos_units == "deg") then
+                euler_angles = euler_angles * (pi / 180.0_double)
+             end if
+             call fdf_endblock
+          else if(fdf_block('pDOSNeighbours') .and. flag_rotate_pdos_mode == 2) then
+             if (rotate_pdos_natoms  .lt. 1) &
+                  call cq_abort("Atoms to rotate about was not at least 1")
+             allocate(find_neighbours(4, rotate_pdos_natoms))
+             do i=1,rotate_pdos_natoms
+                read (unit=input_array(block_start+i-1),fmt=*) &
+                     find_neighbours(1,i), find_neighbours(2,i), find_neighbours(3,i), &
+                     find_neighbours(4,i)
+                if (find_neighbours(2,i) < 0 .or. find_neighbours(2,i) > 2) &
+                     call cq_abort("Local geometry flag in block pDOSNeighbours was not 0 or 1: ",&
+                     1+block_end-block_start,2)
+                if (find_neighbours(3,i) < -1 .or. find_neighbours(3,i) > ni_in_cell) &
+                     call cq_abort("Input for principal axis must be -1 (shortest bond), 0 (longest bond) or neighbour in cell",&
+                     1+block_end-block_start,3)
+                if (find_neighbours(4,i) < 0 .or. find_neighbours(4,i) > ni_in_cell) &
+                     call cq_abort("Input for second axis must be 0 or neighbour in cell",&
+                     1+block_end-block_start,4)
+             end do
+             call fdf_endblock
+          else if (fdf_block('pDOSAxisAngle') .and. flag_rotate_pdos_mode == 3) then
+             if(1+block_end-block_start<rotate_pdos_natoms) &
+                  call cq_abort("Too few atoms provided in pDOSAxisAngle block: ",&
+                  1+block_end-block_start,rotate_pdos_natoms)
+             ! In each line, expect an integer followed by 4 floats
+             allocate(axes_angles(4, rotate_pdos_natoms))
+             allocate(rotate_pdos_atoms(rotate_pdos_natoms))
+             do i = 1, rotate_pdos_natoms
+                read (unit=input_array(block_start+i-1),fmt=*) rotate_pdos_atoms(i), axes_angles(:,i)
+                axes_angles(1:3,i) = axes_angles(1:3,i)  / norm2(axes_angles(1:3,i))
+             end do
+             if (flag_rotate_pdos_units == "deg") then
+                axes_angles(4,:) = axes_angles(4,:) * (pi / 180.0_double)
+             end if
+             call fdf_endblock
+          else
+             call cq_abort("Unknown rotation input: ", flag_rotate_pdos_mode)
+          end if ! pDOS mode
+       end if ! if rotate PDOS
+    end if ! i_job 7
     ! Now read PS files for atomic information
     call allocate_species_vars
-    ps_type = fdf_string(5,'General.PseudopotentialType','haman') 
+    ps_type = fdf_string(5,'General.PseudopotentialType','haman')
     if(leqi(ps_type,'siest')) then
        pseudo_type = SIESTA
     else if(leqi(ps_type,'plato').OR.leqi(ps_type,'haman')) then
@@ -320,14 +405,23 @@ contains
     else
        pseudo_type = OLDPS
     endif
+    species_from_files = fdf_boolean('General.PAOFromFiles',.false.)
     if(fdf_block('ChemicalSpeciesLabel')) then
-       if(1+block_end-block_start<n_species) & 
+       if(1+block_end-block_start<n_species) &
             call cq_abort("Too few species in ChemicalSpeciesLabel: ",&
             1+block_end-block_start,n_species)
        do i=1,n_species
-          read (unit=input_array(block_start+i-1),fmt=*) &
-               j, mass(j),       &
-               species_label(j)
+          ! **<lat>** Added the optional filename
+          if ( species_from_files ) then
+             read (unit=input_array(block_start+i-1),fmt=*) &
+                  j, mass(j),       &
+                  species_label(j), &
+                  species_file(j)
+          else
+             read (unit=input_array(block_start+i-1),fmt=*) &
+                  j, mass(j),       &
+                  species_label(j)
+          end if
           type_species(j)=j
        end do
        call fdf_endblock
@@ -355,7 +449,7 @@ contains
     use dimens, ONLY: r_super_x, r_super_y, r_super_z, volume
     use block_module, only: n_pts_in_block, in_block_x,in_block_y,in_block_z
     !use units, ONLY: BohrToAng
-    
+
     implicit none
 
     integer :: proc, idum, idum2, iblock, blocks_on_proc, ind_group
@@ -425,7 +519,7 @@ contains
 
     use datatypes
     use local, ONLY: nprocs
-    
+
     implicit none
 
     integer :: proc, idum, idum2, iblock, blocks_on_proc, ind_group, nblockx,nblocky,nblockz
@@ -439,7 +533,7 @@ contains
     close(unit=17)
     return
   end subroutine read_nprocs_from_blocks
-  
+
   subroutine read_eigenvalues
 
     use datatypes
@@ -450,7 +544,7 @@ contains
          band_full_to_active, i_job
     use units, ONLY: HaToeV
     use global_module, only: flag_wf_range_Ef, nspin
-    
+
     implicit none
 
     ! Local variables
@@ -460,7 +554,7 @@ contains
     integer, dimension(:), allocatable :: active_bands
     real(double), dimension(:,:),allocatable :: tmp_evals ! Read and store
     character(len=80) :: str, str2
-    
+
     open(unit=17,file='eigenvalues.dat')
     read(17,*) str,n_evals,str2,idum
     n_bands_total = n_evals
@@ -630,7 +724,7 @@ contains
        end do ! i_spin = nspin
     end if ! Binary format
   end subroutine read_psi_coeffs
- 
+
   subroutine allocate_species_vars
 
     use numbers
@@ -671,5 +765,5 @@ contains
     if(stat/=0) call cq_abort("Error allocating species_file in allocate_species_vars: ",            n_species,stat)
     return
   end subroutine allocate_species_vars
-  
+
 end module read

@@ -260,9 +260,13 @@ module DiagModule
   type(DistributeData) :: DistribH, DistribS
 
   ! Fermi Energy
-  real(double), dimension(2) :: Efermi
+  real(double), dimension(2) :: Efermi, vbm, cbm, gap_d
+  integer, dimension(2) :: vbm_k, cbm_k, gap_k
   integer, dimension(2) :: band_ef
-
+  logical :: flag_integer_occ, flag_check_gap
+  logical, dimension(2) :: flag_gap
+  logical :: flag_adjust_Ef
+  
   ! K-point data - here so that reading of k-points can take place in
   ! different routine to FindEvals
   integer :: nkp
@@ -316,6 +320,7 @@ module DiagModule
   ! that Methfessel-Paxton approximation may casue the bracket search
   ! algorithm to fail.)
   integer :: max_brkt_iterations
+  real(double), parameter :: tolElec = 1.0e-6_double
   
 contains
 
@@ -530,7 +535,7 @@ contains
     ! Local variables
     real(double)                   :: a, time0, time1, vl, vu, &
          orfac, scale, entropy_total,     &
-         bandE_total, coeff, setA, setB, Eband
+         bandE_total, coeff, setA, setB, Eband, vbm_occ_d, cbm_occ_d
     real(double), dimension(nspin) :: locc, bandE, entropy_local
     real(double), external         :: dlamch
     complex(double_cplx), dimension(:,:), allocatable :: scaledEig, expH_atomf
@@ -602,7 +607,77 @@ contains
     end if
     ! Find Fermi level, given the eigenvalues at all k-points (in w)
     ! if (me < proc_rows*proc_cols) then
+    vbm = -BIG
+    cbm = BIG
+    vbm_k = 0
+    cbm_k = 0
+    gap_k = 0
+    gap_d = BIG
+    flag_gap = .false.
     call findFermi(electrons, evals, matrix_size, nkp, Efermi, occ)
+    ! Test for gap
+    if(flag_smear_type==0.and.flag_check_gap) then
+       do spin=1,nspin
+          ! Find highest occupied band
+          band = nint(electrons(spin))
+          if(electrons(spin) - band < -half - tolElec) band = band - 1
+          vbm(spin) = maxval(evals(band,:,spin))
+          cbm(spin) = minval(evals(band+1,:,spin))
+          vbm_k(spin) = maxloc(evals(band,:,spin),dim=1)
+          cbm_k(spin) = minloc(evals(band+1,:,spin),dim=1)
+          ! How far from zero or one are the VBM and CBM?
+          vbm_occ_d = one - occ(band,vbm_k(spin),spin)/wtk(vbm_k(spin))
+          cbm_occ_d = occ(band+1,cbm_k(spin),spin)/wtk(cbm_k(spin))
+          if((vbm_occ_d<tolElec).and.(cbm_occ_d<tolElec)) then ! gap
+             flag_gap(spin) = .true.
+             do kp=1,nkp
+                if(evals(band+1,kp,spin) - evals(band,kp,spin)<gap_d(spin)) then
+                   gap_d(spin) = evals(band+1,kp,spin) - evals(band,kp,spin)
+                   gap_k(spin) = kp
+                end if
+             end do
+          end if
+       end do
+       if(flag_fix_spin_population) then ! Separate fermi levels
+          do spin=1,nspin
+             if(flag_gap(spin).and.flag_adjust_Ef) then
+                Efermi(spin) = half*(cbm(spin)+vbm(spin))
+                if(inode==ionode.and.iprint_DM + min_layer >= 2) call write_gaps(spin_ch=spin)
+                if(inode==ionode.and.iprint_DM + min_layer >= 2) &
+                     write(io_lun,'(4x, "Adjusted Fermi level for spin ", i2, " is ", f12.5)') &
+                     spin,Efermi(spin)
+             else if(flag_gap(spin)) then
+                if(inode==ionode.and.iprint_DM + min_layer >= 2) call write_gaps(spin_ch=spin)
+             end if
+          end do
+       else
+          if(nspin==1) then
+             flag_gap(2) = flag_gap(1)
+          else
+             ! Find lowest gap
+             vbm_k(1) = vbm_k(maxloc(vbm,dim=1))
+             cbm_k(1) = cbm_k(minloc(cbm,dim=1))
+             vbm(1) = maxval(vbm)
+             cbm(1) = minval(cbm)
+             gap_k(1) = minloc(gap_d,dim=1)
+             gap_d(1) = minval(gap_d)
+          end if
+          if((flag_gap(1) .and. flag_gap(2)).and.flag_adjust_Ef) then ! Fermi levels should be same
+             if(inode==ionode.and.iprint_DM + min_layer >= 2) call write_gaps
+             ! Adjust Fermi level to lie at mid-gap and revisit occupancies
+             do spin=1,nspin
+                Efermi(spin) = half*(minval(cbm)+maxval(vbm))
+                if(inode==ionode.and.iprint_DM + min_layer >= 2) &
+                     write(io_lun,'(4x, "Adjusted Fermi level for spin ", i2, " is ", f12.5)') &
+                     spin,Efermi(spin)
+             end do
+          else if(flag_gap(1).or.flag_gap(2)) then
+             if(inode==ionode.and.iprint_DM + min_layer >= 2) call write_gaps
+          end if
+       end if
+    else if(flag_integer_occ) then ! There has to be a gap; Ef set to mid-gap in occupy
+       if(inode==ionode.and.iprint_DM + min_layer >= 2) call write_gaps
+    end if
     ! Allocate space to expand eigenvectors into (i.e. when reversing
     ! ScaLAPACK distribution)
     allocate(expH(matrix_size,prim_size,nspin), STAT=stat)
@@ -636,10 +711,10 @@ contains
        ! Set band_ef: this works because with no spin a factor of two is normally applied
        if(nspin>1) then
           do spin=1,nspin
-             band_ef(spin) = int(electrons(spin))
+             band_ef(spin) = nint(electrons(spin))
           end do
        else
-          band_ef(:) = int(electrons(1))
+          band_ef(:) = nint(electrons(1))
        end if
        flag_excite = .true.
        if(dscf_homo_limit/=0) then
@@ -753,17 +828,17 @@ contains
                   write (io_lun, '(10x,"For spin = ",i1)') spin
              do j = 1, matrix_size, 3
                 if (j == matrix_size) then
-                   write (io_lun, 8) evals(j,i,spin), occ(j,i,spin)
+                   write (io_lun, 8) evals(j,i,spin), occ(j,i,spin)/wtk(i)
                    bandE(spin) = bandE(spin) + evals(j,i,spin) * occ(j,i,spin)
                 else if (j == matrix_size - 1) then
-                   write (io_lun, 9) evals(j,i,spin), occ(j,i,spin), &
-                        evals(j+1,i,spin), occ(j+1,i,spin)
+                   write (io_lun, 9) evals(j,i,spin), occ(j,i,spin)/wtk(i), &
+                        evals(j+1,i,spin), occ(j+1,i,spin)/wtk(i)
                    bandE(spin) = bandE(spin) + evals(j,i,spin) * occ(j,i,spin) + &
                         evals(j+1,i,spin) * occ(j+1,i,spin)
                 else
-                   write (io_lun, 10) evals(j,i,spin), occ(j,i,spin), &
-                        evals(j+1,i,spin), occ(j+1,i,spin), &
-                        evals(j+2,i,spin), occ(j+2,i,spin)
+                   write (io_lun, 10) evals(j,i,spin), occ(j,i,spin)/wtk(i), &
+                        evals(j+1,i,spin), occ(j+1,i,spin)/wtk(i), &
+                        evals(j+2,i,spin), occ(j+2,i,spin)/wtk(i)
                    bandE(spin) = bandE(spin) + evals(j,i,spin) * occ(j,i,spin) + &
                         evals(j+1,i,spin) * occ(j+1,i,spin) + &
                         evals(j+2,i,spin) * occ(j+2,i,spin)
@@ -790,7 +865,7 @@ contains
              if (nspin == 2) &
                   write (io_lun, '(10x,"For spin = ",i1)') spin
              do j = 1, matrix_size
-                write (io_lun, fmt='(10x,i5,f12.5,f6.3)') j, evals(j,i,spin), occ(j,i,spin)
+                write (io_lun, fmt='(10x,i5,f12.5,f6.3)') j, evals(j,i,spin), occ(j,i,spin)/wtk(i)
                 bandE(spin) = bandE(spin) + evals(j,i,spin) * occ(j,i,spin)
              end do ! j=matrix_size
              write (io_lun, &
@@ -808,6 +883,8 @@ contains
        end do ! do i = 1, nkp
     end if ! if(iprint_DM + min_layer>=1.AND.myid==0)
 
+    !------ output eigenvalues  --------
+    if(inode==ionode) call write_eigenvalues(evals,occ,matrix_size,nkp,nspin,kk,wtk,Efermi)
     if(inode==ionode .and. write_ase) call write_eigenvalues_format_ase(evals,occ,matrix_size,nkp,nspin,&
          kk,Efermi,io_ase,ase_file,7+n_species+2+nkp)
     
@@ -928,6 +1005,8 @@ contains
                 do j = 1, matrix_size
                    ! Calculate entropic contribution to electronic energy
                    select case (flag_smear_type)
+                   case (-1) ! Integer occupancies
+                      entropy = zero
                    case (0) ! Fermi smearing
                       if (occ(j,kp,spin) > RD_ERR .and. &
                            (wtk(kp) - occ(j,kp,spin)) > RD_ERR) then
@@ -964,8 +1043,6 @@ contains
           end do ! End do ng = 1, proc_groups
        end do ! End do i = 1, nkpoints_max
     end do ! spin
-    !------ output eigenvalues  --------
-    if(inode==ionode) call write_eigenvalues(evals,matrix_size,nkp,nspin,kk,wtk,Efermi)
     if (iprint_DM + min_layer > 3 .and. inode == ionode) &
          write (io_lun, fmt='(10x,a,2f16.6)') "Entropy, TS: ", entropy, kT * entropy
     ! store entropy as TS instead of S
@@ -2362,10 +2439,36 @@ contains
 
     ! local variables
     real(double)            :: electrons_total
-    real(double), parameter :: tolElec = 1.0e-6_double
     real(double) :: locals_occ, localt_occ
-    integer :: ikp, i, ispin
+    integer :: ikp, i, spin, ne
 
+    ! For integer occupancies
+    if(flag_integer_occ) then
+       occ = zero
+       gap_d = BIG
+       do spin=1,nspin
+          ne = nint(electrons(spin))
+          electrons_total = zero
+          vbm(spin) = maxval(eig(ne,:,spin))
+          cbm(spin) = minval(eig(ne+1,:,spin))
+          vbm_k(spin) = maxloc(eig(ne,:,spin),dim=1)
+          cbm_k(spin) = minloc(eig(ne+1,:,spin),dim=1)
+          do ikp=1,nkp
+             occ(1:ne,ikp,spin) = wtk(ikp)
+             if(eig(ne+1,ikp,spin) - eig(ne,ikp,spin)<gap_d(spin)) then
+                gap_d(spin) = eig(ne+1,ikp,spin) - eig(ne,ikp,spin)
+                gap_k(spin) = ikp
+             end if
+          end do
+          ! This is a sign that the system is not suited for integer occupancies
+          if(cbm(spin)<vbm(spin)) then
+             call cq_warn("findFermi"," System may not have integer occupancies: vbm and cbm are ",vbm(spin),cbm(spin))
+          end if
+          Ef(spin) = half*(vbm(spin) + cbm(spin))
+       end do
+       if((cbm(1)-vbm(1))>two*kT.and.(cbm(nspin)-vbm(nspin)>two*kT)) flag_gap = .true.
+       return
+    end if ! Integer occupations
     if (nspin == 2) then
        electrons_total = electrons(1) + electrons(2)
     else
@@ -2446,7 +2549,6 @@ contains
     integer,      dimension(nspin) :: ne
     real(double) :: electrons_total, gaussian_width
     integer      :: counter, ibrkt, lband, lkp, iband, ikp, spin
-    real(double), parameter :: tolElec = 1.0e-6_double
 
     if (nspin == 2) then
        electrons_total = electrons(1) + electrons(2)
@@ -2474,7 +2576,7 @@ contains
           ! Take first guess as double filling each band at first k
           ! point. Note that electrons(spin) stores number of electrons
           ! in each spin channel
-          ne(spin) = int(electrons(spin))
+          ne(spin) = nint(electrons(spin))
           if (ne(spin) < 1) ne(spin) = 1
           Ef(spin) = eig(ne(spin),1,spin)
 
@@ -2549,7 +2651,7 @@ contains
           ! Fill the bands for the first (electrons-NElec_less) electrons
           if (NElec_less >= electrons(spin)) then
              if (inode == ionode) write (io_lun, 7) myid, spin
-             NELec_less = electrons(spin)
+             NElec_less = electrons(spin)-one
           end if
           thisElec(spin) = zero
           band1: do iband = 1, nbands
@@ -2655,13 +2757,13 @@ contains
 5   format(10x, 'Proc: ', i5, ' findFermi_fixspin: level, Ne: ', 2f12.5)
 6   format(10x, 'Proc: ', i5, ' findFermi_fixspin: found upper bound', f12.5)
 7   format(10x, 'Proc: ', i5, ' findFermi_fixspin: Warning! Diag.NElecLess >= &
-         &total number of electrons for spin channel ', i2, &
-         ' setting it equal to number of electrons, but this is slow &
+         &total number of electrons for spin channel ', i2,/ &
+         12x,' setting it equal to number of electrons, but this is slow &
          &and you may want to change it to something smaller.')
 8   format(10x, 'Proc: ', i5, ' findFermi_fixspin: Warning! the &
          &calculated number of electrons (',f12.5, &
-         ') > electron_number (for spin ', i2, ' ) - 1.0. May be you &
-         &should increase the value of Diag.NElecLess (at the moment =&
+         ') >'/12x,'electron_number (for spin ', i2, ' ) - 1.0. May be you &
+         &should increase the value of Diag.NElecLess '/12x,'(at the moment =&
          & ',f12.5,')')
 10  format(10x, 'Fermi level is ', f12.5)
 11  format(10x, 'Fermi level for spin ', i2, ' is ', f12.5)
@@ -2718,7 +2820,6 @@ contains
     real(double), dimension(nspin) :: lowEf, highEf, incEf
     real(double) :: gaussian_width, thisElec, lowElec, highElec
     integer      :: counter, ne, ibrkt, lband, lkp, iband, ikp, spin, lspin
-    real(double), parameter :: tolElec = 1.0e-6_double
 
     ! Finding the correct bracket trapping Ef
     select case (flag_smear_type)
@@ -2728,7 +2829,7 @@ contains
        if (iprint_DM + min_layer >= 2 .AND. inode == ionode) &
             write (io_lun, 1) myid, electrons_total
        ! Take first guess as double filling each band at first k point
-       ne = int(electrons_total / two)
+       ne = nint(electrons_total / two)
        if (ne < 1) ne = 1
        ! choose Ef to be the minimum of both spin channels
        ! Ef will be the same for all spin channels for variable spin
@@ -2801,7 +2902,7 @@ contains
        ! Fill the bands for the first (electrons_toal - NElec_less) electrons
        if (NElec_less >= electrons_total) then
           if (inode == ionode) write (io_lun, 6)
-          NELec_less = electrons_total
+          NELec_less = electrons_total - one
        end if
        thisElec = zero
        band1 : do iband = 1, nbands
@@ -2819,7 +2920,7 @@ contains
        lowElec = spin_factor * sum(electrons(:))
        ! check if we indeed have a good lower bound
        if ((electrons_total - lowElec) < two) then
-          if (inode == ionode) write (io_lun, 8) lowElec, NElec_less
+          if (inode == ionode) write (io_lun, 7) myid, lowElec, NElec_less
           ! find the lowest energy and start from there
           lband = 1
           lkp = 1
@@ -2902,9 +3003,13 @@ contains
 4   format(10x, 'Proc: ', i5, ' findFermi_varspin: found upper bound ', f12.5)
 5   format(10x, 'Proc: ', i5, ' bracketed Ef: ', 2f12.5)
 6   format(10x, 'In findFermi, Warning! Diag.NElecLess >= total number &
-         &of electrons, setting it equal to number of electrons, but &
-         &this is slow and you may want to change it to something &
-         &smaller.')
+         &of electrons, setting it equal to number of electrons, '/12x, &
+         'but this is slow and you may want to change it to something smaller.')
+7   format(10x, 'Proc: ', i5, ' findFermi_varspin: Warning! the &
+         &calculated number of electrons (',f12.5, &
+         ') > '/12x,'electron_number - 2.0. May be you &
+         &should increase the value of Diag.NElecLess (at the moment =&
+         & ',f12.5,')')    
 8   format(10x, 'Fermi level is ', f12.5)
 
   end subroutine findFermi_varspin
@@ -2975,8 +3080,9 @@ contains
     integer,      optional,         intent(in)  :: spin
 
     ! local variables
-    integer :: ikp, iband, ss
+    integer :: ikp, iband, ss, ne
     integer :: ss_start, ss_end
+    real(double) :: locc
 
     if (nspin == 2 .and. present(spin)) then
        ss_start = spin
@@ -2985,19 +3091,27 @@ contains
        ss_start = 1
        ss_end = nspin
     end if
-
+    if(flag_integer_occ) then
+       do ss=ss_start,ss_end
+          occ(:,:,ss) = zero
+          ne = nint(electrons(ss))
+          do ikp=1,nkp
+             occ(1:ne,ikp,ss) = wtk(ikp)
+          end do
+       end do
+       return
+    end if
     electrons = zero
     labspin: do ss = ss_start, ss_end
        kp: do ikp = 1, nkp
           band: do iband = 1, nbands
              select case (flag_smear_type)
              case (0) ! Fermi smearing
-                occu(iband,ikp,ss) = &
-                     wtk(ikp) * fermi(ebands(iband,ikp,ss) - Ef(ss), kT)
+                locc = fermi(ebands(iband,ikp,ss) - Ef(ss), kT)
+                occu(iband,ikp,ss) = wtk(ikp) * locc
              case (1) ! Methfessel Paxton smearing
-                occu(iband,ikp,ss) = &
-                     wtk(ikp) * MP_step(ebands(iband,ikp,ss) - Ef(ss), &
-                     iMethfessel_Paxton, kT)
+                locc = MP_step(ebands(iband,ikp,ss) - Ef(ss), iMethfessel_Paxton, kT)
+                occu(iband,ikp,ss) = wtk(ikp) * locc
              case default
                 call cq_abort ("FindEvals: Smearing flag not recognised",&
                      flag_smear_type)
@@ -3034,6 +3148,89 @@ contains
   end subroutine occupy
   !!***
 
+
+  ! -----------------------------------------------------------------------------
+  ! Subroutine write_gaps
+  ! -----------------------------------------------------------------------------
+
+  !!****f* DiagModule/write_gaps *
+  !!
+  !!  NAME
+  !!   write_gaps
+  !!  USAGE
+  !!   write_gaps
+  !!  PURPOSE
+  !!   Writes out gaps (when there is one)
+  !!
+  !!  INPUTS
+  !!
+  !!  USES
+  !!   units, global
+  !!  AUTHOR
+  !!   D.R.Bowler
+  !!  CREATION DATE
+  !!   31/07/2026
+  !!  MODIFICATION HISTORY
+  !!   2026/09/15 16:03 dave
+  !!    Added Fermi level output for linear scaling
+  !!  SOURCE
+  subroutine write_gaps(spin_ch)
+
+    use units
+    use global_module,   only: nspin, flag_fix_spin_population, flag_diagonalisation, mu_DMM
+
+    implicit none
+
+    ! Passed variables
+    integer, optional :: spin_ch
+
+    ! Local variables
+    integer :: spin, spin_st, spin_end
+
+    if(present(spin_ch)) then
+       spin_st = spin_ch
+       spin_end = spin_ch
+    else if(nspin>1.and.flag_fix_spin_population) then
+       spin_st = 1
+       spin_end = nspin
+    else
+       spin_st = 1
+       spin_end = 1
+    end if
+    if(flag_diagonalisation.and.(flag_smear_type==0.or.flag_integer_occ).and.myid==0) then
+       do spin=spin_st,spin_end
+          if(flag_gap(spin)) then
+             if(nspin>1.and.flag_fix_spin_population) then!spin_end-spin_st>0) then
+                write(io_lun,fmt='(4x,"Spin ",i1," gap found.  VBM=",f12.5," ",a2," CBM=", &
+                     f12.5," ",a2," Gap ",f12.5," ",a2)') &
+                     spin,en_conv*vbm(spin),en_units(energy_units), &
+                     en_conv*cbm(spin),en_units(energy_units),&
+                     en_conv*(cbm(spin)-vbm(spin)),en_units(energy_units)
+             else
+                write(io_lun,fmt='(4x,"Gap found.  VBM=",f12.5," ",a2," CBM=",f12.5," ",a2," Gap ",f12.5," ",a2)') &
+                     en_conv*vbm(spin),en_units(energy_units),&
+                     en_conv*cbm(spin),en_units(energy_units),&
+                     en_conv*(cbm(spin)-vbm(spin)),en_units(energy_units)
+             end if
+             if(vbm_k(spin)==cbm_k(spin)) then
+                write(io_lun,fmt='(4x,"Direct gap found at ",3f8.4," (1/a0)")') kk(:,gap_k(spin))
+             else
+                write(io_lun,fmt='(4x,"Indirect gap found; smallest direct gap is ",f12.5," ",a2," at ",3f6.2," (1/a0)")') &
+                     en_conv*gap_d(spin),en_units(energy_units),kk(:,gap_k(spin))
+                write(io_lun,fmt='(4x,"VBM is at ",3f8.4," (1/a0)")') kk(:,vbm_k(spin))
+                write(io_lun,fmt='(4x,"CBM is at ",3f8.4," (1/a0)")') kk(:,cbm_k(spin))
+             end if
+          end if
+          write(io_lun,fmt='(4x,"Fermi level= ",f12.5," ",a2)') en_conv*Efermi(spin),en_units(energy_units)
+       end do
+    else if(.not.flag_diagonalisation.and.myid==0) then
+       do spin=spin_st,spin_end
+          write(io_lun,fmt='(4x,"Fermi level= ",f12.5," ",a2)') en_conv*mu_DMM(spin),en_units(energy_units)
+       end do
+    end if
+    return
+  end subroutine write_gaps
+  !!***
 
   ! -----------------------------------------------------------------------------
   ! Function fermi
@@ -3796,288 +3993,6 @@ contains
 4   format(10x,'Proc: ',i5,' Prim, send_prim, num_send: ',3i5)
   end subroutine buildK
   !!***
-
-  !!****f*  DiagModule/accumulate_DOS
-  !!
-  !!  NAME 
-  !!   accumulate_DOS
-  !!  USAGE
-  !! 
-  !!  PURPOSE
-  !!   Accumulates DOS
-  !!  INPUTS
-  !! 
-  !!  USES
-  !! 
-  !!  AUTHOR
-  !!   D. R. Bowler
-  !!  CREATION DATE
-  !!   2016 ?
-  !!  MODIFICATION HISTORY
-  !!   2017/11/01 18:00 nakata
-  !!    Introduced PDOS with MSSFs, projecting on neighbor atoms with global ID.
-  !!    Added spinSF to specify the spin of the MSSF coefficients.
-  !!    SpinSF is not used for primitive PAOs.
-  !!   2017/11/13 18:15 nakata
-  !!    Introduced the normalization of each eigenstate of PDOS.
-  !!    Added optional argument weight_pDOS, the normalisation weight.
-  !!   2018/09/19 18:30 nakata
-  !!    Introduced orbital angular momentum resolved DOS.
-  !!    Added optional projDOS_angmom, l-projected PDOS.
-  !!   2018/10/22 14:18 dave & jsb
-  !!    Adding (l,m) projection for pDOS
-  !!   2018/10/30 11:43 dave
-  !!    Implementing semi-core exclusion given right flags
-  !!    (NB at present, semi-core states are not flagged but will be !)
-  !!   2018/11/02 16:30 nakata
-  !!    Bug fix: changed atom_spec to neigh_species for semicore of neighbour atoms
-  !!  SOURCE
-  !!
-!**!   subroutine accumulate_DOS(weight,eval,evec,DOS,spinSF,projDOS,projDOS_angmom,weight_pDOS)
-!**! 
-!**!     use datatypes
-!**!     use numbers,         only: half, zero
-!**!     use global_module,   only: n_DOS, E_DOS_max, E_DOS_min, flag_write_DOS, sigma_DOS, flag_write_projected_DOS, &
-!**!                                sf, atomf, id_glob, species_glob, flag_normalise_pDOS, flag_pDOS_angmom, flag_pDOS_lm, &
-!**!                                flag_SpinDependentSF
-!**!     use ScalapackFormat, only: matrix_size
-!**!     use species_module,  only: nsf_species, natomf_species
-!**!     use group_module,    only: parts
-!**!     use primary_module,  only: bundle
-!**!     use cover_module,    only: BCS_parts
-!**!     use matrix_data,     only: mat, halo, SFcoeff_range
-!**!     use mult_module,     only: matSFcoeff, matrix_pos, mat_p
-!**!     use GenComms,        only: cq_abort
-!**!     use pao_format
-!**!     
-!**!     implicit none
-!**! 
-!**!     ! Passed variables
-!**!     real(double) :: weight
-!**!     complex(double_cplx), dimension(:,:), intent(in) :: evec
-!**!     real(double), dimension(:) :: eval
-!**!     real(double), dimension(n_DOS) :: DOS
-!**!     integer, intent(in) :: spinSF ! used only if atomf/=sf
-!**!     real(double), OPTIONAL, dimension(:,:) :: projDOS
-!**!     real(double), OPTIONAL, dimension(:,:,:,:) :: projDOS_angmom ! Dimensions are bin, atom, l, m
-!**!     real(double), OPTIONAL, dimension(:) :: weight_pDOS
-!**! 
-!**!     ! Local variables
-!**!     integer :: iwf, n_band, n_min, n_max, i, acc, spin_SF, &
-!**!                atom, isf1, nsf1, atom_spec, l1, nacz1, m1, &
-!**!                neigh_global_num, iatomf2, natomf2, neigh_species, l2, nacz2, m2, &
-!**!                atom_num, gcspart, neigh_global_part, j_in_halo, wheremat
-!**!     integer :: iprim, part, memb, neigh, ist
-!**!     real(double) :: Ebin, a, fac, fac1, fac2, val
-!**!     real(double), dimension(6,13) :: fac_angmom, fac2_angmom ! up to h-orbital and 2l+1
-!**!     real(double), dimension(n_DOS) :: tmp
-!**! 
-!**!     if(present(projDOS).AND.(.NOT.flag_write_projected_DOS)) call cq_abort("Called pDOS without flag")
-!**!     if(present(projDOS_angmom).AND.(.NOT.flag_pDOS_angmom))  call cq_abort("Called pDOS_angmom without flag")
-!**!     if(present(weight_pDOS) .AND.(.NOT.flag_normalise_pDOS)) call cq_abort("Normalised pDOS without flag")
-!**!     ! ---------------
-!**!     ! DOS calculation
-!**!     ! ---------------
-!**!     ! Now accumulate DOS for this band
-!**!     do iwf=1,matrix_size ! Effectively all bands
-!**!        tmp = zero
-!**!        n_band = floor((eval(iwf) - E_DOS_min)/dE_DOS) + 1
-!**!        n_min = n_band - n_DOS_wid
-!**!        if(n_min<1) n_min = 1
-!**!        n_max = n_band + n_DOS_wid
-!**!        if(n_max>n_DOS) n_max = n_DOS
-!**!        do i = n_min, n_max
-!**!           Ebin = real(i-1,double)*dE_DOS + E_DOS_min
-!**!           a = (Ebin-eval(iwf))/sigma_DOS
-!**!           tmp(i) = weight*pf_DOS*exp(-half*a*a)
-!**!           DOS(i) = DOS(i) + tmp(i)
-!**!        end do
-!**! 
-!**!        ! Having found DOS, we now project onto atoms
-!**!        if(flag_write_projected_DOS) then
-!**!           if (atomf == sf) then
-!**!              acc = 0
-!**!              do atom=1,bundle%n_prim
-!**!                 atom_spec = bundle%species(atom)
-!**!                 fac = zero
-!**!                 if (.not.flag_pDOS_angmom) then
-!**!                    do isf1 = 1,nsf_species(atom_spec)
-!**!                       fac = fac + real(evec(iwf,acc+isf1)*conjg(evec(iwf,acc+isf1)),double)
-!**!                    end do
-!**!                 else if(flag_pDOS_lm) then
-!**!                    fac_angmom(:,:) = zero
-!**!                    isf1 = 0
-!**!                    do l1 = 0, pao(atom_spec)%greatest_angmom
-!**!                       do nacz1 = 1, pao(atom_spec)%angmom(l1)%n_zeta_in_angmom
-!**!                          if((pao(atom_spec)%angmom(l1)%semicore(nacz1)==0) .OR. &
-!**!                               (flag_pDOS_include_semicore)) then
-!**!                             do m1 = -l1,l1
-!**!                                isf1 = isf1 + 1
-!**!                                fac = fac + real(evec(iwf,acc+isf1)*conjg(evec(iwf,acc+isf1)),double)
-!**!                                ! l, m so shift m1 by l1+1 so it runs from 1 to 2*l1+1
-!**!                                fac_angmom(l1+1,m1+l1+1) = fac_angmom(l1+1,m1+l1+1) + &
-!**!                                     real(evec(iwf,acc+isf1)*conjg(evec(iwf,acc+isf1)),double)
-!**!                             enddo
-!**!                          end if
-!**!                       enddo
-!**!                    enddo
-!**!                 else
-!**!                    fac_angmom(:,:) = zero
-!**!                    isf1 = 0
-!**!                    do l1 = 0, pao(atom_spec)%greatest_angmom
-!**!                       do nacz1 = 1, pao(atom_spec)%angmom(l1)%n_zeta_in_angmom
-!**!                          if((pao(atom_spec)%angmom(l1)%semicore(nacz1)==0) .OR. &
-!**!                               (flag_pDOS_include_semicore)) then
-!**!                             do m1 = -l1,l1
-!**!                                isf1 = isf1 + 1
-!**!                                fac = fac + real(evec(iwf,acc+isf1)*conjg(evec(iwf,acc+isf1)),double)
-!**!                                fac_angmom(l1+1,1) = fac_angmom(l1+1,1) &
-!**!                                     + real(evec(iwf,acc+isf1)*conjg(evec(iwf,acc+isf1)),double)
-!**!                             enddo
-!**!                          end if
-!**!                       enddo
-!**!                    enddo
-!**!                    if (isf1.ne.nsf_species(atom_spec)) call cq_abort("Error in NSF in the PDOS calculation.")
-!**!                 endif
-!**!                 if (flag_normalise_pDOS) then
-!**!                    fac = fac / weight_pDOS(iwf)
-!**!                    if (flag_pDOS_angmom) fac_angmom(:,:) = fac_angmom(:,:) / weight_pDOS(iwf)
-!**!                 endif
-!**!                 do i=n_min,n_max
-!**!                    projDOS(i,atom) = projDOS(i,atom) + tmp(i)*fac
-!**!                 end do
-!**!                 if (flag_pDOS_angmom) then
-!**!                    if(flag_pDOS_lm) then
-!**!                       do l1 = 0, pao(atom_spec)%greatest_angmom
-!**!                          do m1=-l1,l1
-!**!                             do i=n_min,n_max
-!**!                                projDOS_angmom(i,atom,l1+1,m1+l1+1) = projDOS_angmom(i,atom,l1+1,m1+l1+1) + &
-!**!                                     tmp(i)*fac_angmom(l1+1,m1+l1+1)
-!**!                             end do
-!**!                          end do
-!**!                       end do
-!**!                    else
-!**!                       do l1 = 0, pao(atom_spec)%greatest_angmom
-!**!                          do i=n_min,n_max
-!**!                             projDOS_angmom(i,atom,l1+1,1) = projDOS_angmom(i,atom,l1+1,1) + tmp(i)*fac_angmom(l1+1,1)
-!**!                          end do
-!**!                       end do
-!**!                    end if
-!**!                 endif
-!**!                 acc = acc + nsf_species(atom_spec)
-!**!              end do ! atom
-!**!           else
-!**!              spin_SF = 1
-!**!              if (flag_SpinDependentSF) spin_SF = spinSF
-!**!              acc = 0 
-!**!              iprim = 0
-!**!              do part = 1,bundle%groups_on_node ! Loop over primary set partitions
-!**!                 if(bundle%nm_nodgroup(part)>0) then ! If there are atoms in partition
-!**!                    do memb = 1,bundle%nm_nodgroup(part) ! Loop over primary atoms
-!**!                       atom_num = bundle%nm_nodbeg(part)+memb-1
-!**!                       iprim=iprim+1
-!**!                       nsf1 = nsf_species(bundle%species(atom_num)) ! = mat(part,SFcoeff_range)%ndimi(memb)
-!**!                       do neigh = 1, mat(part,SFcoeff_range)%n_nab(memb) ! Loop over neighbours of atom
-!**!                          fac = zero
-!**!                          if (flag_pDOS_angmom) fac_angmom(:,:) = zero
-!**!                          ist = mat(part,SFcoeff_range)%i_acc(memb)+neigh-1
-!**!                          gcspart = BCS_parts%icover_ibeg(mat(part,SFcoeff_range)%i_part(ist))+ &
-!**!                                    mat(part,SFcoeff_range)%i_seq(ist)-1
-!**!                          neigh_global_part = BCS_parts%lab_cell(mat(part,SFcoeff_range)%i_part(ist))
-!**!                          neigh_global_num  = id_glob(parts%icell_beg(neigh_global_part)+ &
-!**!                                              mat(part,SFcoeff_range)%i_seq(ist)-1)
-!**!                          neigh_species = species_glob(neigh_global_num)
-!**!                          j_in_halo = halo(SFcoeff_range)%i_halo(gcspart)
-!**!                          natomf2 =  natomf_species(neigh_species)
-!**!                          ! Now loop over support functions and atomf (basically PAOs)
-!**!                          do isf1 = 1, nsf1
-!**!                             fac1 = real(evec(iwf,acc+isf1)*conjg(evec(iwf,acc+isf1)),double)
-!**!                             fac2 = zero
-!**!                             if (.not.flag_pDOS_angmom) then
-!**!                                do iatomf2 = 1, natomf2
-!**!                                   wheremat = matrix_pos(matSFcoeff(spin_SF),iprim,j_in_halo,isf1,iatomf2)
-!**!                                   val = mat_p(matSFcoeff(spin_SF))%matrix(wheremat)
-!**!                                   fac2 = fac2 + val*val
-!**!                                enddo
-!**!                                fac = fac + fac1 * fac2
-!**!                             else if(flag_pDOS_lm) then ! m and l resolved
-!**!                                fac2_angmom(:,:) = zero
-!**!                                iatomf2 = 0
-!**!                                do l2 = 0, pao(neigh_species)%greatest_angmom
-!**!                                   do nacz2 = 1, pao(neigh_species)%angmom(l2)%n_zeta_in_angmom
-!**!                                      if((pao(neigh_species)%angmom(l2)%semicore(nacz2)==0) .OR. &
-!**!                                           (flag_pDOS_include_semicore)) then
-!**!                                         do m2 = -l2,l2
-!**!                                            iatomf2 = iatomf2 + 1
-!**!                                            wheremat = matrix_pos(matSFcoeff(spin_SF),iprim,j_in_halo,isf1,iatomf2)
-!**!                                            val = mat_p(matSFcoeff(spin_SF))%matrix(wheremat)
-!**!                                            fac2 = fac2 + val*val
-!**!                                            fac2_angmom(l2+1,m2+l2+1) = fac2_angmom(l2+1,m2+l2+1) + val*val
-!**!                                         enddo ! m2
-!**!                                      end if
-!**!                                   enddo ! nacz2
-!**!                                enddo ! l2
-!**!                                fac = fac + fac1 * fac2
-!**!                                fac_angmom(:,:) = fac_angmom(:,:) + fac1 * fac2_angmom(:,:)
-!**!                             else ! NOT m resolved
-!**!                                fac2_angmom(:,:) = zero
-!**!                                iatomf2 = 0
-!**!                                do l2 = 0, pao(neigh_species)%greatest_angmom
-!**!                                   do nacz2 = 1, pao(neigh_species)%angmom(l2)%n_zeta_in_angmom
-!**!                                      if((pao(neigh_species)%angmom(l2)%semicore(nacz2)==0) .OR. &
-!**!                                           (flag_pDOS_include_semicore)) then
-!**!                                         do m2 = -l2,l2
-!**!                                            iatomf2 = iatomf2 + 1
-!**!                                            wheremat = matrix_pos(matSFcoeff(spin_SF),iprim,j_in_halo,isf1,iatomf2)
-!**!                                            val = mat_p(matSFcoeff(spin_SF))%matrix(wheremat)
-!**!                                            fac2 = fac2 + val*val
-!**!                                            fac2_angmom(l2+1,1) = fac2_angmom(l2+1,1) + val*val
-!**!                                         enddo ! m2
-!**!                                      end if
-!**!                                   enddo ! nacz2
-!**!                                enddo ! l2
-!**!                                fac = fac + fac1 * fac2
-!**!                                fac_angmom(:,1) = fac_angmom(:,1) + fac1 * fac2_angmom(:,1)
-!**!                                if (iatomf2.ne.natomf2) call cq_abort("Error in NATOMF in the PDOS calculation.")
-!**!                             endif ! flag_pDOS_angmom
-!**!                          enddo ! isf1
-!**!                          if (flag_normalise_pDOS) then
-!**!                             fac = fac / weight_pDOS(iwf)
-!**!                             if (flag_pDOS_angmom) fac_angmom(:,:) = fac_angmom(:,:) / weight_pDOS(iwf)
-!**!                          endif
-!**!                          ! project on the neighbour atom 
-!**!                          do i=n_min,n_max
-!**!                             projDOS(i,neigh_global_num) = projDOS(i,neigh_global_num) + tmp(i)*fac
-!**!                          end do
-!**!                          if (flag_pDOS_angmom) then
-!**!                             if(flag_pDOS_lm) then ! (l,m) resolved
-!**!                                do l2 = 0, pao(neigh_species)%greatest_angmom
-!**!                                   do m2 = -l2,l2
-!**!                                      do i=n_min,n_max
-!**!                                         projDOS_angmom(i,neigh_global_num,l2+1,m2+l2+1) = &
-!**!                                              projDOS_angmom(i,neigh_global_num,l2+1,m2+l2+1) + tmp(i)*fac_angmom(l2+1,l2+m2+1)
-!**!                                      end do ! i
-!**!                                   end do ! m2
-!**!                                end do ! l2
-!**!                             else ! l resolved only
-!**!                                do l2 = 0, pao(neigh_species)%greatest_angmom
-!**!                                   do i=n_min,n_max
-!**!                                      projDOS_angmom(i,neigh_global_num,l2+1,1) = projDOS_angmom(i,neigh_global_num,l2+1,1) &
-!**!                                           + tmp(i)*fac_angmom(l2+1,1)
-!**!                                   end do ! i
-!**!                                end do ! l2
-!**!                             end if
-!**!                          endif ! flag_pDOS_angmom
-!**!                       end do ! neigh
-!**!                       acc = acc + nsf1
-!**!                    end do ! memb
-!**!                 end if ! nm_nodgroup
-!**!              end do ! part
-!**!           endif ! atomf
-!**!        end if ! flag_write_projected_DOS
-!**!     end do ! iwf
-!**!   end subroutine accumulate_DOS
-!**!   !!***
 
   !!****f*  DiagModule/write_wavefn_coeffs
   !!

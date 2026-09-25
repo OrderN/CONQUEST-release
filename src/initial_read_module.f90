@@ -13,7 +13,7 @@
 !!   Holds the initial read routines
 !!  USES
 !!   atoms, construct_module, datatypes, DiagModule, dimens, fdf, GenComms, global_module,
-!!   group_module, io_module, maxima_module, numbers, parse, primary_module, 
+!!   group_module, io_module, maxima_module, numbers, parse, primary_module,
 !!   pseudopotential_data, species_module
 !!  AUTHOR
 !!   D.R.Bowler
@@ -24,11 +24,11 @@
 !!    Bug fix (from TM) for read_and_write
 !!   17/06/2002 dave
 !!    Added read to find solution method - order N or exact diagonalisation
-!!   15:55, 25/09/2002 mjg & drb 
+!!   15:55, 25/09/2002 mjg & drb
 !!    Added flag for initial charge from initial K
-!!   10:41, 06/03/2003 drb 
+!!   10:41, 06/03/2003 drb
 !!    Added tags for linear mixing for self-consistency in read_input
-!!   11:02, 24/03/2003 drb 
+!!   11:02, 24/03/2003 drb
 !!    Simplified read_and_write
 !!   14:51, 2003/06/09 dave
 !!    Added new way of reading atomic coordinates, independent of make_prt
@@ -53,9 +53,9 @@
 !!   2015/06/11 16:30 lat
 !!    Added possibility of user to define filename for PAO/pseudo *ion
 !!    Fixed EXX variable definitions
-!!    Try to make blocks of variables clearer 
+!!    Try to make blocks of variables clearer
 !!    Added experimental backtrace
-!!   
+!!
 !!  SOURCE
 !!
 module initial_read
@@ -76,13 +76,13 @@ contains
   ! ------------------------------------------------------------------------------
   ! Subroutine read_and_write
   ! ------------------------------------------------------------------------------
-  
+
   !!****f* initial_read/read_and_write *
   !!
-  !!  NAME 
+  !!  NAME
   !!   read_and_write
   !!  USAGE
-  !! 
+  !!
   !!  PURPOSE
   !!   Reads the input data and writes out the parameters for the run
   !!  INPUTS
@@ -108,11 +108,11 @@ contains
   !!   31/05/2002 dave
   !!    Bug fix (TM) - changed np to ind_part in loop to build atom
   !!    positions from make_prt.dat
-  !!   11:02, 24/03/2003 drb 
+  !!   11:02, 24/03/2003 drb
   !!    Removed variables associated with old phi initialisation
   !!   14:52, 2003/06/09 dave
   !!    Removed atomic coordinate fiddling
-  !!   14:59, 02/05/2005 dave 
+  !!   14:59, 02/05/2005 dave
   !!    Added calculation of number of electrons in cell
   !!   2007/05/08 17:00 dave
   !!    Added net charge on cell to number_of_bands for consistency
@@ -128,7 +128,7 @@ contains
   !!   - Changed spin implementation
   !!   2014/02/04 M.Arita
   !!   - Added call for initial_read_aux for constraint-MD
-  !!   2015/05/11 lat 
+  !!   2015/05/11 lat
   !!   - Added optional total spin magnetization
   !!   2015/06/08 lat
   !!    - Added experimental backtrace
@@ -185,6 +185,7 @@ contains
          atomf, sf, paof,                 &
          flag_SpinDependentSF, nspin_SF,  &
          flag_Multisite,                  &
+         flag_DFTplusU, & ! 2024.05.20 nakata DFT+U
          flag_cdft_atom, flag_local_excitation, &
          flag_diagonalisation, flag_vary_basis, &
          flag_MDcontinue, flag_SFcoeffReuse,    &
@@ -194,8 +195,8 @@ contains
     use read_gto_info, only: read_gto_new
     !use gto_format,    only: gto
     use gto_format_new,    only: gto
-    
-    use cdft_data, only: cDFT_NAtoms, & 
+
+    use cdft_data, only: cDFT_NAtoms, &
          cDFT_NumberAtomGroups, cDFT_AtomList
     use memory_module,          only: reg_alloc_mem, type_dbl
     use primary_module,         only: bundle, make_prim
@@ -222,6 +223,10 @@ contains
     use md_control,             only: md_position_file
     use pao_format
     use XC,                     only: flag_functional_type, flag_different_functional
+    use H_matrix_module, only:  num_plusUproj, info_plusUproj, plusUvalue, & ! 2024.05.20 nakata DFT+U
+                                flag_plusUproj_atom, w_plusUproj_pao, half_w_plusUproj_pao ! 2024.05.20 nakata DFT+U
+    use DiagModule, only: flag_check_gap, flag_adjust_Ef
+
 
     implicit none
 
@@ -248,6 +253,11 @@ contains
     ! for checking the sum of electrons of spin channels
     real(double) :: sum_elecN_spin
     real(double) :: charge_tmp
+
+    ! PlusU
+    integer           :: inum_plusUproj, &
+                         n_plusUproj, l_plusUproj, z_plusUproj, &
+                         max_npao, z_temp, ipao, i_ang, i_zeta, i_m
 
     !****lat<$
     call start_backtrace(t=backtrace_timer,who='read_and_write',where=1,level=1)
@@ -281,7 +291,7 @@ contains
           if(flag_functional_type/=pseudo(i_species)%functional) then
              if(flag_different_functional) then
                 call cq_warn(sub_name, "Functional in input file differs to pseudopotential but proceeding: ",&
-                     flag_functional_type, pseudo(i_species)%functional)                
+                     flag_functional_type, pseudo(i_species)%functional)
              else
                 call cq_abort("Functional in input file differs to pseudopotential: ",&
                      flag_functional_type, pseudo(i_species)%functional)
@@ -298,7 +308,7 @@ contains
        !
        allocate(gto_file(n_species),STAT=stat)
        if(stat /= 0) call cq_abort("Error allocating gto_file in read_and_write: ",n_species,stat)
-       allocate(gto(n_species),STAT=stat)       
+       allocate(gto(n_species),STAT=stat)
        if(stat /= 0) call cq_abort ("Error allocating gto in read_and_write",stat)
        !
        call read_gto_new(inode,ionode,n_species)
@@ -432,8 +442,8 @@ contains
                 ! multi-site SFs (MSSFs) are symmetry-breaking usually.
                 ! The default of the number of the MSSFs is SingleZeta-size.
                 ! SZP-size MSSFs with flag_MSSF_nonminimal is also available.
-                ! If the user wants to use the other number of MSSFs, 
-                ! the user must provide the initial SFcoeffmatrix or the trial vectors for the LFD method. 
+                ! If the user wants to use the other number of MSSFs,
+                ! the user must provide the initial SFcoeffmatrix or the trial vectors for the LFD method.
                 if (nsf_species(i).eq.count_SZ) then
                    MSSF_nonminimal_species(i) = 1   ! SZ-size MSSF
                 else
@@ -463,7 +473,7 @@ contains
                       endif
                    endif
                 endif
-             else 
+             else
                 ! If number of support functions is less than total number of ang. mom. components (ignoring
                 ! for now multiple zetas) then there is a formal problem with basis set: we require the user
                 ! to set an additional flag to assert that this is really desired
@@ -500,6 +510,56 @@ contains
           write(io_lun,fmt='(6x,"Primitive atom functions are the pseudo-atomic orbitals"/)')
        endif
     end if
+    ! Find DFT+U projectors
+    if(flag_DFTplusU) then
+       ! set w_plusUproj: U parameter values
+       max_npao = maxval(npao_species)
+       allocate(w_plusUproj_pao(n_species,max_npao))
+       allocate(half_w_plusUproj_pao(n_species,max_npao))
+
+       !flag_plusUproj_atom(:) =.false.
+       w_plusUproj_pao(:,:) = zero
+       half_w_plusUproj_pao(:,:) = zero
+
+       do i_species = 1, n_species
+          ipao = 0
+          n_plusUproj = info_plusUproj(i_species,1)
+          l_plusUproj = info_plusUproj(i_species,2)
+          z_plusUproj = info_plusUproj(i_species,3)
+          if(flag_plusUproj_atom(i_species)) then
+             do i_ang = 0, pao(i_species)%greatest_angmom
+                if(pao(i_species)%angmom(i_ang)%n_zeta_in_angmom>0) then
+                   if (i_ang.eq.l_plusUproj) then
+                      ! set U parameters for PAO with (n_plusUproj,l_plusUproj,z_plusUproj)
+                      z_temp = 0
+                      do i_zeta = 1, pao(i_species)%angmom(i_ang)%n_zeta_in_angmom
+                         prncpl = pao(i_species)%angmom(i_ang)%prncpl(i_zeta)
+                         if (prncpl/=n_plusUproj) then
+                            ipao = ipao + 2*i_ang + 1
+                         else if (prncpl==n_plusUproj) then
+                            z_temp = z_temp + 1
+                            ! This line below selects one zeta
+                            if (z_temp==z_plusUproj) then
+                               do i_m = -i_ang,i_ang
+                                  ipao = ipao + 1
+                                  w_plusUproj_pao(i_species,ipao) = plusUvalue(i_species)
+                                  half_w_plusUproj_pao(i_species,ipao) = half * plusUvalue(i_species)
+                               enddo ! m
+                            else
+                               ipao = ipao + 2*i_ang + 1
+                            endif
+                         endif
+                      enddo ! z
+                   else
+                      ipao = ipao + pao(i_species)%angmom(i_ang)%n_zeta_in_angmom*(2*i_ang + 1)
+                   endif
+                endif
+             enddo ! anglar momentum
+             if (ipao.ne.npao_species(i_species)) &
+                  call cq_abort("Error in counting PAOs when setting DFT+U parameters.")
+          end if ! flag_plusUproj
+       enddo ! n_plusUproj
+    end if
     !
     !
     !
@@ -519,6 +579,12 @@ contains
           ne_spin_in_cell(2) = ne_spin_in_cell(1) - ne_magn_in_cell
        end if
        !
+    else ! No spin and odd number of electrons
+       if(mod(nint(ne_in_cell),2)==1) then ! Odd number of electrons
+          flag_check_gap = .false.
+          flag_adjust_Ef = .false.
+          call cq_warn(sub_name,"Without spin, will not adjust Ef for an odd number of electrons: ",ne_in_cell)
+       end if
     end if
     !
     ! Calculate the number of electrons in the spin channels
@@ -540,7 +606,7 @@ contains
     if(flag_InitialAtomicSpin) then
       do i = 1, n_species
        charge_tmp = charge_up(i) + charge_dn(i)
-       if(charge_tmp < RD_ERR) then   ! 
+       if(charge_tmp < RD_ERR) then   !
          charge_up(i) = half*charge(i)
          charge_dn(i) = half*charge(i)
          !if(inode .eq. ionode) write(io_lun,fmt='(6x,a,i3,a,2f15.8)') &
@@ -555,12 +621,12 @@ contains
      end do
      !if(inode .eq. ionode) write(io_lun,fmt='(6x,a,2f15.8)') 'ne_spin_in_cell(1:2) = ',ne_spin_in_cell(1),ne_spin_in_cell(2)
     endif
-    ! 
+    !
     !
     ! Set up various lengths, volumes, reciprocals etc. for convenient use
     call set_dimensions(inode, ionode,HNL_fac, non_local, n_species, &
          non_local_species, core_radius)
-    ! 
+    !
     ! write out some information on the run
     if (inode == ionode) &
          call write_info(titles, mu, vary_mu, HNL_fac, numprocs)
@@ -582,18 +648,18 @@ contains
   ! ------------------------------------------------------------------------------
   ! Subroutine read_input
   ! ------------------------------------------------------------------------------
-  
+
   !!****f* initial_read/read_input *
   !!
-  !!  NAME 
+  !!  NAME
   !!   read_input
   !!  USAGE
-  !! 
+  !!
   !!  PURPOSE
   !!   reads the input file
   !!  INPUTS
-  !! 
-  !! 
+  !!
+  !!
   !!  USES
   !!   datatypes, global_module, atoms, dimens, species_module,
   !!   pseudopotential_data, GenComms, fdf, parse
@@ -614,27 +680,27 @@ contains
   !!    Incorporated into initial_read module
   !!   29/05/2002 dave
   !!    Added scan for SolutionMethod tag
-  !!   15:54, 25/09/2002 mjg & drb 
+  !!   15:54, 25/09/2002 mjg & drb
   !!    Added scan for make_initial_charge_from_K (which sets find_chdens)
   !!   16:31, 2003/02/03 dave
   !!    Added scans for type of run (e.g. MD, CG etc)
   !!   07:49, 2003/02/04 dave
   !!    Added boolean variables to control run (vary blips, self-consistency)
-  !!   10:41, 06/03/2003 drb 
+  !!   10:41, 06/03/2003 drb
   !!    Added tags for linear mixing in self-consistency
-  !!   10:09, 12/03/2003 drb 
+  !!   10:09, 12/03/2003 drb
   !!    Added an end tag
   !!   14:52, 2003/06/09 dave
   !!    Added new way to read atomic coordinates and preconditioning flag
   !!   08:31, 2003/10/01 dave
   !!    Changed flag_vary_blips to flag_vary_basis
-  !!   13:15, 03/10/2003 drb 
+  !!   13:15, 03/10/2003 drb
   !!    Bug fix - missing .
   !!   2004/10/29 drb
   !!    Added various new flags for self consistency
-  !!   14:59, 02/05/2005 dave 
+  !!   14:59, 02/05/2005 dave
   !!    Added call to check for net charge - initialises ne_in_cell
-  !!   09:14, 11/05/2005 dave 
+  !!   09:14, 11/05/2005 dave
   !!    Store max_L_iterations in global variable
   !!   13:34, 2006/07/09 ast
   !!    Added flag for functional
@@ -646,22 +712,22 @@ contains
   !!    Added keyword MaxEfIter to stop infinite loop in findFermi
   !!   2008/01/24 Veronika
   !!    Changed the default of General.ManyProcessors to .true.
-  !!   12:18, 14/02/2008 drb 
+  !!   12:18, 14/02/2008 drb
   !!    Added options for buffer around primary and covering sets
   !!   2008/07/16 ast
   !!    New keywords for timers
   !!   2009/07/08 16:47 dave
   !!    Added keyword for one-to-one PAO to SF assigment
   !!   2009/07/23 ast
-  !!    More general routine to name timer files, so that they are not 
+  !!    More general routine to name timer files, so that they are not
   !!    to a maximum number of processes, as it was the case before,
   !!    with only three figures (max. 999 processes)
   !!   2010/06/18 lt
   !!    Added control flags for Methfessel-Paxton smearing method
   !!   2010/07/22 15.53 Lianheng
-  !!    Moved control flags associated with Diagonalisation method from 
-  !!    here to readDiagInfo() subroutine. Added Methfessel-Paxton 
-  !!    smearing and related control flags. Changed SC.MaxEfIter to 
+  !!    Moved control flags associated with Diagonalisation method from
+  !!    here to readDiagInfo() subroutine. Added Methfessel-Paxton
+  !!    smearing and related control flags. Changed SC.MaxEfIter to
   !!    Diag.MaxEfIter (moved to readDiagInfo()) for greater consistency
   !!   2011/07/21 16:50 dave
   !!    Added input flags for cDFT
@@ -795,7 +861,7 @@ contains
   !!     AtomMove.ReuseL => AtomMove.ReuseLorK => AtomMove.ReuseDM
   !!   2020/01/06 15:43 dave
   !!    Keywords for equilibration
-  !!   2020/01/07 tsuyoshi 
+  !!   2020/01/07 tsuyoshi
   !!     Default setting of MakeInitialChargeFromK has been changed
   !!   2020/12/14 lionel
   !!     EXX: added filtering option for EXX and cleaning
@@ -807,10 +873,16 @@ contains
   !!     Added ASE output file setup ; default is F
   !!   2022/12/14 10:01 dave and tsuyoshi
   !!     Update test for solution method (diagon vs ordern) following issue #47
+  !!   2024/05/22 14:40 nakata
+  !!     Added DFT+U related input and output
   !!   2024/12/03 lionel
   !!     Added grid specification of EXX coarse/standard/fine
   !!   2025/02/03 nakata
   !!     Set flag_out_wf = .true. expricitly when flag_write_projected_DOS is .true.
+  !!   2026/07/03 09:47 dave
+  !!     Turn off WF and/or pDOS output except for static, diagonalisation runs
+  !!   2026/08/13 Augustin Lu
+  !!     Remove the obsolete IO.AtomCoordsXYZ input option.
   !!  TODO
   !!  SOURCE
   !!
@@ -865,9 +937,10 @@ contains
          flag_propagateL,flag_dissipation,integratorXL, flag_FixCOM,   &
          flag_exx, exx_alpha, exx_scf, exx_scf_tol, exx_siter, exx_cutoff, &
          flag_out_wf,max_wf,out_wf,wf_self_con, flag_fire_qMD, &
-         flag_write_DOS, flag_write_projected_DOS, &
+         flag_write_projected_DOS, &
          E_wf_min, E_wf_max, flag_wf_range_Ef, &
          mx_temp_matrices, flag_neutral_atom, flag_diagonalisation, &
+         flag_DFTplusU, flag_first_diag, flag_write_occ_mat, &
          flag_SpinDependentSF, flag_Multisite, flag_LFD, flag_SFcoeffReuse, &
          flag_opt_cell, cell_constraint_flag, flag_variable_cell, &
          cell_en_tol, optcell_method, cell_stress_tol, &
@@ -885,7 +958,7 @@ contains
     use species_module, only: species_label, charge, mass, n_species,  &
          charge, charge_up, charge_dn,            &
          ps_file,     &
-         nsf_species, &
+         nsf_species, npao_species, &
          non_local_species, type_species,         &
          species_file, species_from_files
     use GenComms,   only: gcopy, my_barrier, cq_abort, inode, ionode, cq_warn
@@ -916,7 +989,7 @@ contains
          n_support_iterations, L_tolerance, &
          sc_tolerance, energy_tolerance,    &
          expected_reduction
-    use pao_format,          only: kcut, del_k
+    use pao_format
     use support_spec_format, only: flag_paos_atoms_in_cell,          &
          read_option, symmetry_breaking,   &
          support_pao_file, TestBasisGrads, &
@@ -931,10 +1004,12 @@ contains
          pdb_output, banner, get_file_name, time_max, &
          flag_MatrixFile_RankFromZero, flag_MatrixFile_BinaryFormat, &
          flag_MatrixFile_BinaryFormat_Grab, flag_MatrixFile_BinaryFormat_Dump, &
-         flag_MatrixFile_BinaryFormat_Dump_END, atom_output_threshold, flag_coords_xyz
+         flag_MatrixFile_BinaryFormat_Dump_END, atom_output_threshold
 
     use group_module,     only: part_method, HILBERT, PYTHON
-    use H_matrix_module,  only: flag_write_locps, flag_dump_locps
+    use H_matrix_module,  only: flag_write_locps, flag_dump_locps, &
+                                num_plusUproj, info_plusUproj, plusUvalue, & ! 2024.05.20 nakata DFT+U
+                                flag_plusUproj_atom, w_plusUproj_pao, half_w_plusUproj_pao ! 2024.05.20 nakata DFT+U
     use pao_minimisation, only: InitStep_paomin
     use timer_module,     only: time_threshold,lun_tmr, TimingOn, &
          TimersWriteOut, BackTraceOn
@@ -1011,6 +1086,11 @@ contains
     character(len=5)  :: ps_type !To find which pseudo we use
     character(len=8)  :: tmp
     logical :: flag_ghost, find_species, test_ase
+!!! 2024.05.20 nakata DFT+U
+    integer           :: i_species, inum_plusUproj, prncpl, &
+                         n_plusUproj, l_plusUproj, z_plusUproj, & !plusUvalue, &
+                         max_npao, z_temp, ipao, i_ang, i_zeta, i_m
+!!! nakata DFT+U end
 
     ! spin polarisation
     logical :: flag_spin_polarisation
@@ -1048,19 +1128,19 @@ contains
     else
        io_lun = 6
     end if
-    ! 
+    !
     if (fdf_boolean('IO.WriteOutToASEFile',.false.)) then
        !call io_assign(io_ase) ! Reserve this unit on all processes
        !write_ase = .false.
        if (inode == ionode) then
           write_ase = .true.
-          call io_assign(io_ase) 
+          call io_assign(io_ase)
           open(unit=io_ase,file=ase_file,iostat=stat)
           if (stat /= 0) &
                call cq_abort("Failed to open ASE Conquest output file", stat)
        end if
     else
-       if (inode == ionode) write_ase = .false.       
+       if (inode == ionode) write_ase = .false.
     end if
 !!$
 !!$
@@ -1069,7 +1149,7 @@ contains
 !!$
 !!$
 !!$
-    BackTraceOn = fdf_boolean('IO.BackTraceOn',.false.)                         
+    BackTraceOn = fdf_boolean('IO.BackTraceOn',.false.)
     ! Where will the timers will be written?
     TimingOn = fdf_boolean('IO.TimingOn',.false.)                          ! tmr_rmv001
     if(TimingOn) then                                                      ! tmr_rmv001
@@ -1096,10 +1176,10 @@ contains
           end if ! ionode switch                                           ! tmr_rmv001
        end if                                                              ! tmr_rmv001
     end if                                                                 ! tmr_rmv001
-!!$ 
-!!$ **<lat>** 
+!!$
+!!$ **<lat>**
 !!$ I think we may need (std) output file to be open before this point
-!!$ at the very beginning in the main.f90 
+!!$ at the very beginning in the main.f90
 !!$
 !!$
 !!$
@@ -1172,7 +1252,7 @@ contains
     restart_T      = fdf_boolean('General.LoadInvS',.false.)
     ! Is there a net charge on the cell ?
     ne_in_cell     = fdf_double('General.NetCharge',zero)
-    ! Read coordinates file 
+    ! Read coordinates file
     flag_fractional_atomic_coords = &
          fdf_boolean('IO.FractionalAtomicCoords',.true.)
     flag_check_init_atomic_coords = &
@@ -1182,13 +1262,12 @@ contains
        InitAtomicDistance_min = fdf_double('IO.InitAtomicDistance_min',  0.5_double)
     end if
     atom_output_threshold = fdf_integer('IO.AtomOutputThreshold',200)
-    flag_coords_xyz = fdf_boolean('IO.AtomCoordsXYZ',.false.)
     call my_barrier()
     !
     !
     ! Spin polarised calculation
     ! - if we are doing spin polarised calculations or not
-    flag_spin_polarisation   = fdf_boolean('Spin.SpinPolarised', .false.) 
+    flag_spin_polarisation   = fdf_boolean('Spin.SpinPolarised', .false.)
     flag_fix_spin_population = fdf_boolean('Spin.FixSpin',       .false.)
     if (flag_spin_polarisation) then
        nspin       = 2
@@ -1242,13 +1321,13 @@ contains
     in_block_y = fdf_integer('Grid.InBlockY',4)
     in_block_z = fdf_integer('Grid.InBlockZ',4)
     ! Solution method - O(N) or diagonalisation - diagonalisation default
-    method = fdf_string(6,'DM.SolutionMethod','diagon') 
+    method = fdf_string(6,'DM.SolutionMethod','diagon')
     if(leqi(method,'ordern')) then
        flag_diagonalisation = .false.
        flag_check_Diag = .false.
     else
        flag_diagonalisation = .true.
-       flag_check_Diag = .true. 
+       flag_check_Diag = .true.
     end if
     ! Read basis set
     basis_string = fdf_string(10,'Basis.BasisSet','PAOs')
@@ -1278,7 +1357,7 @@ contains
 !!$
 !!$
     ! Hamann is default to fit with Conquest ion file generator
-    ps_type = fdf_string(5,'General.PseudopotentialType','haman') 
+    ps_type = fdf_string(5,'General.PseudopotentialType','haman')
     ! Write out pseudopotential type
     if(leqi(ps_type,'siest')) then
        !if(inode==ionode.AND.iprint_init>0) &
@@ -1298,7 +1377,7 @@ contains
          inode==ionode) then
        write(io_lun,&
             fmt='(10x,"Setting FlagNewAngular to T for Siesta/&
-            &Abinit pseudopotentials")') 
+            &Abinit pseudopotentials")')
        flag_angular_new = .true.
     end if
     ! Should we use neutral atom potential ?
@@ -1326,6 +1405,15 @@ contains
     else
        flag_neutral_atom_projector = .false.
     end if
+!!! 2024.05.20 nakata DFT+U
+    flag_DFTplusU = fdf_boolean('DM.DFTplusU', .false.)
+    if(flag_DFTplusU) flag_first_diag = .true.
+    if(flag_DFTplusU.and.flag_basis_set == blips) then
+       call cq_warn(sub_name,"DFT+U not available with blips: turning off DFT+U")
+       flag_DFTplusU = .false.
+    end if
+
+!!! nakata DFT+U end
 !!$
 !!$
 !!$
@@ -1346,7 +1434,7 @@ contains
     species_from_files = fdf_boolean('General.PAOFromFiles',.false.)
     flag_ghost=.false.
     if(fdf_block('ChemicalSpeciesLabel')) then
-       if(1+block_end-block_start<n_species) & 
+       if(1+block_end-block_start<n_species) &
             call cq_abort("Too few species in ChemicalSpeciesLabel: ",&
             1+block_end-block_start,n_species)
        do i=1,n_species
@@ -1367,7 +1455,7 @@ contains
        call fdf_endblock
     end if
     ! I (TM) now assume we will use type_species(j) = 0
-    ! for vacancy sites.   Nov. 14, 2007 
+    ! for vacancy sites.   Nov. 14, 2007
     if(flag_ghost) then
        do i=1, n_species
           if(mass(i) < -RD_ERR) then
@@ -1379,7 +1467,7 @@ contains
                    exit
                 endif
              enddo
-             if(.not.find_species) then 
+             if(.not.find_species) then
                 type_species(i) = -i
              endif
           elseif(mass(i) > RD_ERR) then
@@ -1416,6 +1504,7 @@ contains
        RadiusLD(i)       = zero
        NonLocalFactor(i) = zero
        InvSRange(i)      = zero
+!       RadiusPlusUproj(i) = zero ! 2024.05.20 nakata DFT+U
        blip_info(i)%SupportGridSpacing = zero
        if(pseudo_type==SIESTA.OR.pseudo_type==ABINIT) non_local_species(i) = .true.
        ! This is new-style fdf_block
@@ -1500,7 +1589,7 @@ contains
        ! At present, we cannot use neutral atom potential for ghost atoms.
        !    2018/Sep/26   Tsuyoshi Miyazaki
        ! Fixed for Neutral Atom Potential  2018/Nov/16  TM
-       !   but not for neutral atom projectors ...   
+       !   but not for neutral atom projectors ...
        if(flag_neutral_atom_projector) then
           if(inode==ionode) write(io_lun,'(10x,A)') &
                'Now, we cannot use neutral atom projector for ghost atoms. Please set General.NeutralAtomProjector as false.'
@@ -1523,11 +1612,11 @@ contains
            ! enddo
            !endif
           endif
-!!$        
-!!$        
-!!$        
-!!$        
-!!$        
+!!$
+!!$
+!!$
+!!$
+!!$
     ! Set variables for multisite support functions
     if (flag_Multisite) then
        flag_MSSF_nonminimal = fdf_boolean('Multisite.nonminimal', .false.) !nonmin_mssf
@@ -1598,7 +1687,7 @@ contains
 !!$
 !!$
 !!$
-!!$ 
+!!$
     !blip_width = support_grid_spacing *
     !             fdf_double('blip_width_over_support_grid_spacing',four)
     if (leqi(runtype,'md')) then
@@ -1655,7 +1744,7 @@ contains
     flag_vary_basis       = fdf_boolean('minE.VaryBasis', .false.)
     if(.NOT.flag_vary_basis) then
        flag_precondition_blips = .false.
-    else 
+    else
        flag_precondition_blips = fdf_boolean('minE.PreconditionBlips',.true.)
     end if
     InitStep_paomin      = fdf_double ('minE.InitStep_paomin',  5.0_double)
@@ -1664,7 +1753,7 @@ contains
     ! DRB 2018/02/26 turn off mixed L-SCF with diagonalisation
     if(flag_mix_L_SC_min .and. flag_diagonalisation) then
        flag_mix_L_SC_min = .false.
-    else if(flag_mix_L_SC_min .and. flag_self_consistent) then 
+    else if(flag_mix_L_SC_min .and. flag_self_consistent) then
        flag_self_consistent = .false.
     end if
     ! Tweak 2007/03/23 DRB Make Pulay mixing default
@@ -1687,8 +1776,8 @@ contains
     ! New residual flags jtlp 08/2019
     flag_newresidual = fdf_boolean('SC.AbsResidual', .false.)
     flag_newresid_abs = fdf_boolean('SC.AbsResidual.Fractional', .true.)
-    ! When constructing charge density from K matrix at last step, we check the total 
-    ! number of electrons. If the error of electron number (per total electron number) 
+    ! When constructing charge density from K matrix at last step, we check the total
+    ! number of electrons. If the error of electron number (per total electron number)
     ! is larger than the following value, we use atomic charge density. (in update_H)
     threshold_resetCD     = fdf_double('SC.Threshold.Reset',0.1_double)
     ! Surface dipole correction parameters
@@ -1777,32 +1866,25 @@ contains
              if(flag_wf_range_Ef.AND.abs(E_wf_min)<very_small.AND.abs(E_wf_max)<very_small) then
                 flag_out_wf = .false.
                 flag_wf_range_Ef = .false.
-                if(inode==ionode) write(io_lun,'(2x,"Setting IO.outputWF F as no bands range given")')
+                call cq_warn(sub_name,"Setting IO.outputWF F as no bands range given")
              end if
           end if
        else
-          call cq_abort("Won't output WFs for Order(N) or non-static runs")
+          call cq_warn(sub_name,"Cannot output WFs for O(N) or non-static runs; setting IO.outputWF F")
+          flag_out_wf = .false.
        end if
     end if
-    ! DOS output
-    flag_write_DOS = fdf_boolean('IO.writeDOS',.false.)
-    if(flag_write_DOS) then
-       if(flag_diagonalisation) then
-          flag_write_projected_DOS = fdf_boolean('IO.write_proj_DOS',.false.)
-          if(flag_write_projected_DOS) then
-             flag_out_wf = .true.
-             E_wf_min = fdf_double('IO.min_wf_E',-BIG)
-             E_wf_max = fdf_double('IO.max_wf_E',BIG)
-          end if
-          ! Possibly needed to decide if MSSF needs dealing with
-          !flag_pDOS_angmom = fdf_boolean('IO.PDOS_Angmom',.false.)
-          !if (flag_pDOS_angmom .and. flag_basis_set==blips) then
-          !   flag_pDOS_angmom = .false.
-          !   if(inode==ionode) write(io_lun,'(2x,"Setting IO.PDOS_Angmom F as using blips")')
-          !endif
+    ! pDOS output
+    flag_write_projected_DOS = fdf_boolean('IO.write_proj_DOS',.false.)
+    if(flag_write_projected_DOS) then
+       if(flag_diagonalisation .and. leqi(runtype,'static')) then
+          flag_out_wf = .true.
+          E_wf_min = fdf_double('IO.min_wf_E',-BIG)
+          E_wf_max = fdf_double('IO.max_wf_E',BIG)
+          flag_wf_range_Ef = fdf_boolean('IO.WFRangeRelative',.true.)
        else
-          flag_write_DOS = .false.
-          if(inode==ionode) write(io_lun,'(2x,"Setting IO.writeDOS F as solving O(N)")')
+          call cq_warn(sub_name,"Cannot output pDOS for O(N) or non-static runs; setting IO.write_proj_DOS F")
+          flag_write_projected_DOS = .false.
        end if
     end if
 !!$
@@ -1849,7 +1931,7 @@ contains
     end if
 !!$
 !!$
-!!$  D e l t a - S C F 
+!!$  D e l t a - S C F
 !!$
 !!$
     ! DeltaSCF flags
@@ -1900,6 +1982,38 @@ contains
           end do
        end if
     end if
+!!! 2024.05.20 nakata DFT+U
+!!$
+!!$
+!!$  DFT+U (DFT plus U)
+!!$
+!!$
+    if (flag_DFTplusU) then
+       flag_write_occ_mat = fdf_boolean('DM.WriteOccMat',.true.)
+       if (fdf_block('DFTplusU')) then
+          num_plusUproj = 1 + block_end - block_start
+          !if(inode==ionode) write(io_lun,*) 'num_plusUproj =',num_plusUproj ! nakata 2024 debug
+          !allocate(info_plusUproj(num_plusUproj,5))
+          allocate(info_plusUproj(n_species,3))
+          allocate(flag_plusUproj_atom(n_species))
+          allocate(plusUvalue(n_species))
+          plusUvalue = zero
+          flag_plusUproj_atom(:) = .false.
+          do inum_plusUproj=1,num_plusUproj
+             z_plusUproj = 1
+             read(unit=input_array(block_start+inum_plusUproj-1),fmt=*) &
+                i_species, n_plusUproj, l_plusUproj, z_plusUproj, plusUvalue(i_species)
+             info_plusUproj(i_species,1) = n_plusUproj
+             info_plusUproj(i_species,2) = l_plusUproj
+             info_plusUproj(i_species,3) = z_plusUproj
+             flag_plusUproj_atom(i_species) = .true.
+          enddo ! n_plusUproj
+          call fdf_endblock
+       else
+          call cq_abort("No DFTplusU parameter is given in the input file.")
+       endif
+    endif ! flag_DFTplusU
+!!! nakata DFT+U end
 !!$
 !!$
 !!$
@@ -1996,9 +2110,9 @@ contains
     flag_test_all_forces    = fdf_boolean('AtomMove.TestAllForces',.true. )
     if(.NOT.flag_test_all_forces) then ! Test one force component
        flag_which_force = fdf_integer('AtomMove.TestSpecificForce',1)
-       if(flag_which_force>10.OR.flag_which_force<0.AND.inode==ionode) then
+       if(flag_which_force>11.OR.flag_which_force<0.AND.inode==ionode) then
           call cq_warn(sub_name,&
-               "AtomMove.TestSpecificForce must lie between 1 and 10 (setting to 1): ",&
+               "AtomMove.TestSpecificForce must lie between 1 and 11 (setting to 1): ",&
                flag_which_force)
           flag_which_force = 1
        end if
@@ -2014,13 +2128,13 @@ contains
 !!$
 !!$
 !!$
-!!$       
+!!$
     flag_functional_type = fdf_integer('General.FunctionalType', 0)   ! Read from pseudopotentials
     flag_different_functional = fdf_boolean('General.DifferentFunctional',.false.) ! Use different functional to ion files
 !!$
 !!$
-!!$  E X X 
-!!$ 
+!!$  E X X
+!!$
 !!$
     if ( flag_functional_type == functional_hyb_pbe0 ) then
        flag_exx = .true.
@@ -2035,12 +2149,12 @@ contains
        r_exx    = fdf_double ('EXX.Xrange', zero)
        !
     else
-       ! don't touch we need it because matX is setup in set_dimensions 
+       ! don't touch we need it because matX is setup in set_dimensions
        ! whatever is flag_exx
        flag_exx = .false.
        exx_scf  =  fdf_integer('EXX.MethodSCF', -1)
-       r_exx    =  one 
-       !             
+       r_exx    =  one
+       !
     end if
     !
     if ( flag_exx ) then
@@ -2065,7 +2179,7 @@ contains
        exx_grid   = fdf_string (20,'EXX.Grid','standard')
        exx_hgrid  = fdf_double ('EXX.GridSpacing',zero)
        exx_radius = fdf_double ('EXX.IntegRadius',zero)
-       exx_scheme = fdf_integer('EXX.Scheme',       1 ) 
+       exx_scheme = fdf_integer('EXX.Scheme',       1 )
        exx_debug  = fdf_boolean('EXX.Debug',  .false. )
        exx_overlap= fdf_boolean('EXX.Overlap',.true.  )
        !
@@ -2082,7 +2196,7 @@ contains
           exx_pscheme   = fdf_string (20,'EXX.FFTWSolver','ewald')
           if(exx_pscheme == 'ewald') then
              ewald_alpha = fdf_double('EXX.FFTWEwaldAlpha',3.0_double)
-          end if          
+          end if
        end if
        !exx_mem = 1
     end if
@@ -2163,7 +2277,7 @@ contains
     !
 !!$
 !!$
-!!$  
+!!$
 !!$
 !!$
     append_coords = fdf_boolean('AtomMove.AppendCoords',.true.)
@@ -2213,7 +2327,7 @@ contains
     !    DensityMatrix = 0; AtomicCharge = 1; LastStep = 2
     method_UpdateChargeDensity = fdf_integer('AtomMove.InitialChargeDensity',DensityMatrix)
 
-    !  The keywords ( SC.ResetDensOnAtomMove and Multisite.LFD.UpdateWithAtomicDensity ) 
+    !  The keywords ( SC.ResetDensOnAtomMove and Multisite.LFD.UpdateWithAtomicDensity )
     !  should be removed in the near future.
     flag_reset_dens_on_atom_move = fdf_boolean('SC.ResetDensOnAtomMove',.false.)
     if(flag_reset_dens_on_atom_move) then
@@ -2243,7 +2357,7 @@ contains
     flag_XLBOMD       = fdf_boolean('AtomMove.ExtendedLagrangian',.false.)
 
     ! zamaan 2018/03/03 I can't imagine a case where you would want to
-    ! restart a MD run without loading the various matrices, so I'm 
+    ! restart a MD run without loading the various matrices, so I'm
     ! Defaulting some flags to true. Calling fdf to ensure that input.log
     ! remains consistent
     if (flag_MDcontinue) then
@@ -2255,8 +2369,10 @@ contains
     else
        flag_read_velocity = fdf_boolean('AtomMove.ReadVelocity',.false.)
        restart_DM         = fdf_boolean('General.LoadDM', .false.)
-       if(restart_DM) then                                             
-          find_chdens    = fdf_boolean('SC.MakeInitialChargeFromK',.true.) 
+       if(restart_DM) then
+          find_chdens    = fdf_boolean('SC.MakeInitialChargeFromK',.true.)
+          ! Allow DFT+U Hamiltonian with DM we have just loaded
+          if(flag_DFTplusU) flag_first_diag = .false.
        else
           find_chdens    = fdf_boolean('SC.MakeInitialChargeFromK',.false.)
        endif
@@ -2332,7 +2448,7 @@ contains
             &positive integer:', constraints%n_grp)
        allocate (constraints%grp_name(constraints%n_grp)      , &
             constraints%n_atom_in_grp(constraints%n_grp) , &
-            constraints%n_subgrp(constraints%n_grp))     
+            constraints%n_subgrp(constraints%n_grp))
        do i = 1, constraints%n_grp
           if (fdf_block('RigidBondsGroups')) then
              read (unit=input_array(block_start+i-1),fmt=*) &
@@ -2355,7 +2471,7 @@ contains
     case('nve')
        md_thermo_type     = fdf_string(20, 'MD.Thermostat', 'none')
        md_baro_type       = fdf_string(20, 'MD.Barostat', 'none')
-    case('nvt') 
+    case('nvt')
        md_thermo_type     = fdf_string(20, 'MD.Thermostat', 'nhc')
        md_baro_type       = fdf_string(20, 'MD.Barostat', 'none')
     case('npt')
@@ -2365,14 +2481,14 @@ contains
     end select
     md_tau_T           = fdf_double('MD.tauT', -one)
     md_tau_T_equil     = fdf_double('MD.tauTEquil', one)
-    md_n_nhc           = fdf_integer('MD.nNHC', 5) 
+    md_n_nhc           = fdf_integer('MD.nNHC', 5)
     md_n_ys            = fdf_integer('MD.nYoshida', 1)
     md_n_mts           = fdf_integer('MD.nMTS', 1)
     flag_thermoDebug   = fdf_boolean('MD.ThermoDebug',.false.)
     md_t_drag          = fdf_double('MD.TDrag', zero)
     if (leqi(md_thermo_type, 'nhc')) then
-       allocate(md_nhc_mass(md_n_nhc)) 
-       allocate(md_nhc_cell_mass(md_n_nhc)) 
+       allocate(md_nhc_mass(md_n_nhc))
+       allocate(md_nhc_cell_mass(md_n_nhc))
        md_nhc_mass = one
        md_nhc_cell_mass = one
        if (fdf_block('MD.NHCMass')) then
@@ -2479,7 +2595,7 @@ contains
   !!  AUTHOR
   !!   T. Miyazaki
   !!  CREATION DATE
-  !!   2017/11/03 
+  !!   2017/11/03
   !!  MODIFICATION HISTORY
   !!   2020/07/30 tsuyoshi
   !!    - Moved from read_input
@@ -2489,10 +2605,10 @@ contains
 
     ! this subroutine checks the compatibility between keywords defined in read_input
     !       2017.11(Nov).03   Tsuyoshi Miyazaki
-    ! 
+    !
     ! we don't need to worry about which parameter is defined first.
     !
-    subroutine check_compatibility 
+    subroutine check_compatibility
       use global_module, only: flag_move_atom, ni_in_cell, &
                                runtype, flag_XLBOMD, flag_diagonalisation, &
                                flag_LmatrixReuse, flag_SFcoeffReuse, flag_DumpMatrices, &
@@ -2500,7 +2616,7 @@ contains
       use input_module,  only: leqi
       use density_module,only: method_UpdateChargeDensity,DensityMatrix,AtomicCharge
       use GenComms,      only: cq_warn
-      
+
       implicit none
       logical :: flag_FixedAtoms
       integer :: ig, k
@@ -2527,7 +2643,7 @@ contains
               'AtomMove.InitialChargeDensity is changed to AtomicCharge, since AtomMove.ReuseDM is false')
       endif
 
-      !flag_DumpMatrices : at present, we need matrix files to reuse the previous matrix data 
+      !flag_DumpMatrices : at present, we need matrix files to reuse the previous matrix data
       if(.not.flag_DumpMatrices) then
          if(flag_SFcoeffReuse .or. flag_LmatrixReuse) then
             flag_DumpMatrices = .true.
@@ -2558,20 +2674,20 @@ contains
   ! ------------------------------------------------------------------------------
   ! Subroutine allocate_species_vars
   ! ------------------------------------------------------------------------------
-  
+
   !!****f* initial_read/allocate_species_vars *
   !!
-  !!  NAME 
+  !!  NAME
   !!   allocate_species_vars
   !!  USAGE
-  !!   
+  !!
   !!  PURPOSE
   !!   Allocates variables which depend on number of species
   !!  INPUTS
-  !! 
-  !! 
+  !!
+  !!
   !!  USES
-  !!   
+  !!
   !!  AUTHOR
   !!   D. R. Bowler
   !!  CREATION DATE
@@ -2591,6 +2707,8 @@ contains
   !!    - Added charge_up and charge_dn
   !!   2019/06/06 18:00 nakata
   !!    - Added MSSF_nonminimal_species
+  !!   2024/05/28 17:00 nakata
+  !!    - Added RadiusPlusUproj for DFT+U
   !!  SOURCE
   !!
   subroutine allocate_species_vars
@@ -2600,7 +2718,7 @@ contains
     use memory_module,      only: reg_alloc_mem, type_dbl
     use species_module,     only: n_species, nsf_species, nlpf_species, npao_species, natomf_species, &
          charge, charge_up, charge_dn
-    use species_module,     only: mass, non_local_species, ps_file, ch_file, phi_file 
+    use species_module,     only: mass, non_local_species, ps_file, ch_file, phi_file
     use species_module,     only: species_label, species_file, type_species
     use global_module,      only: area_general
     use GenComms,           only: cq_abort
@@ -2699,13 +2817,13 @@ contains
   ! ------------------------------------------------------------------------------
   ! Subroutine write_info
   ! ------------------------------------------------------------------------------
-  
+
   !!****f* initial_read/write_info *
   !!
-  !!  NAME 
+  !!  NAME
   !!   write_info
   !!  USAGE
-  !! 
+  !!
   !!  PURPOSE
   !!   Writes out information about the run
   !!  INPUTS
@@ -2717,7 +2835,7 @@ contains
   !!  CREATION DATE
   !!   9/11/93 (!)
   !!  MODIFICATION HISTORY
-  !!   10/8/01 DRB 
+  !!   10/8/01 DRB
   !!    Changed to F90 format and tidied
   !!   10/05/2002 dave
   !!    Changed titles to be a single line
@@ -2761,7 +2879,8 @@ contains
          flag_Multisite, flag_diagonalisation, flag_neutral_atom, temp_ion, &
          flag_self_consistent, flag_vary_basis, iprint_init, flag_pcc_global, &
          nspin, flag_SpinDependentSF, flag_fix_spin_population, ne_spin_in_cell, flag_XLBOMD,&
-         ase_file
+         ase_file, flag_DFTplusU   ! 2024.05.20 nakata DFT+U
+    use H_matrix_module,      only: num_plusUproj, info_plusUproj, plusUvalue, flag_plusUproj_atom
     use SelfCon,              only: maxitersSC
     use GenComms,             only: cq_abort
     use minimise,             only: energy_tolerance, L_tolerance,     &
@@ -2847,10 +2966,10 @@ contains
     end if
     ! Ground state search details
     write(io_lun,fmt='(/4x,"Ground state search:")')
-    if(flag_basis_set==blips) then 
+    if(flag_basis_set==blips) then
        write(io_lun,'(6x,"Support functions represented with blip basis")')
     else
-       write(io_lun,'(6x,"Support functions represented with PAO basis")') 
+       write(io_lun,'(6x,"Support functions represented with PAO basis")')
        if(flag_Multisite) then
           if(flag_LFD) then
              write(io_lun,'(6x,"Multi-site SFs used with local filter diagonalisation")')
@@ -2876,6 +2995,8 @@ contains
        write(io_lun,fmt='(6x,"Solving for the K matrix using ",a16)') 'diagonalisation '
        if(iprint_init>0) then
           select case (flag_smear_type)
+          case(-1)
+             write(io_lun,'(6x,"Using integer occupancies")')
           case (0)
              write(io_lun,'(6x,"Using Fermi-Dirac smearing")')
           case (1)
@@ -2885,7 +3006,7 @@ contains
           end select
        end if
     else
-       write(io_lun,fmt='(6x,"Solving for the K matrix using ",a16)') 'order N with LNV'   
+       write(io_lun,fmt='(6x,"Solving for the K matrix using ",a16)') 'order N with LNV'
     end if
     if(iprint_init>0) write(io_lun,fmt='(/4x,"Integration grid size:   ",i4," x ",i4," x ",i4)') &
          n_grid_x, n_grid_y, n_grid_z
@@ -2894,10 +3015,10 @@ contains
          in_block_x, in_block_y, in_block_z
 
     write(io_lun,fmt='(/4x,"Integration grid spacing: ",f6.3,a3," x",f6.3,a3," x",f6.3,a3)') &
-         dist_conv*(r_super_x/n_grid_x), d_units(dist_units), & 
+         dist_conv*(r_super_x/n_grid_x), d_units(dist_units), &
          dist_conv*(r_super_y/n_grid_y), d_units(dist_units), &
          dist_conv*(r_super_z/n_grid_z), d_units(dist_units)
-    
+
     ! print in Conquest output
     write(io_lun,fmt='(/4x,"Number of species: ",i2)') n_species
     write(io_lun,fmt='(4x,a56)') '--------------------------------------------------------'
@@ -2910,7 +3031,7 @@ contains
             n, mass(n), charge(n), dist_conv*RadiusSupport(n), nsf_species(n), species_label(n)
     end do
     write(io_lun,fmt='(4x,a56)') '--------------------------------------------------------'
-    
+
     !
     ! BEGIN %%%% ASE printing %%%%
     !
@@ -2923,7 +3044,7 @@ contains
        write(io_ase,fmt='(4x,"|   #  mass (au)  Charge (e)  SF Rad (",a2,")  NSF  Label  |")') &
             d_units(dist_units)
        write(io_ase,fmt='(4x,a56)') '--------------------------------------------------------'
-       
+
        do n=1, n_species
           write(io_ase,fmt='(4x,"|",i4,2x,f9.3,3x,f9.3,4x,f9.3,2x,i3,2x,a7,"|")') &
                n, mass(n), charge(n), dist_conv*RadiusSupport(n), nsf_species(n), species_label(n)
@@ -2940,15 +3061,15 @@ contains
 
     if(iprint_init>0) then
        if(flag_vary_basis) then
-          write(io_lun,fmt='(10x,"Support function tolerance:  ",f12.8)') energy_tolerance
+          write(io_lun,fmt='(10x,"Support function tolerance:  ",e10.3)') energy_tolerance
           write(io_lun,fmt='(10x,"Support function iterations: ",i4)') n_support_iterations
        end if
        if(flag_self_consistent) then
-          write(io_lun,fmt='(10x,"SCF tolerance:               ",f12.8)') sc_tolerance
+          write(io_lun,fmt='(10x,"SCF tolerance:               ",e10.3)') sc_tolerance
           write(io_lun,fmt='(10x,"SCF iterations:              ",i4)') maxitersSC
        end if
        if(.not.flag_diagonalisation) then
-          write(io_lun,fmt='(10x,"O(N) tolerance:              ",f12.8)') L_tolerance
+          write(io_lun,fmt='(10x,"O(N) tolerance:              ",e10.3)') L_tolerance
           write(io_lun,fmt='(10x,"O(N) iterations:             ",i4)') n_L_iterations
        end if
     end if
@@ -2999,6 +3120,26 @@ contains
          write(io_lun,fmt='(10x,"Density Matrix range  = ",f7.4,1x,a2)') &
          dist_conv*r_c, d_units(dist_units)
 
+!!! 2024.05.20 nakata DFT+U
+    if(flag_DFTplusU) then
+       write(io_lun,fmt='(10x,"DFT+U calculation will be performed")')
+
+       write(io_lun,fmt='(/4x,"Number of DFT-U projectors: ",i2)') num_plusUproj
+
+       write(io_lun,fmt='(4x,a)') '---------------------------------'
+       write(io_lun,fmt='(4x,a)') '| species     n  l  zeta U (Ha) |'
+       write(io_lun,fmt='(4x,a)') '---------------------------------'
+       do n=1, n_species
+          if(flag_plusUproj_atom(n)) then
+             write(io_lun,fmt='(4x,"|",i2,2x,a5,4x,i1,2x,i1,2x,i1,4x,f5.3,2x,"|")') &
+                  n, species_label(n), &
+                  info_plusUproj(n,1), info_plusUproj(n,2), info_plusUproj(n,3), plusUvalue(n)
+          end if
+       end do
+       write(io_lun,fmt='(4x,a)') '---------------------------------'
+    endif
+!!! nakata DFT+U end
+
     return
   end subroutine write_info
   !!***
@@ -3008,10 +3149,10 @@ contains
   ! -----------------------------------------------------------------------------
   ! Subroutine readDiagInfo
   ! -----------------------------------------------------------------------------
-  
+
   !!****f* DiagModule/readDiagInfo *
   !!
-  !!  NAME 
+  !!  NAME
   !!   readDiagInfo
   !!  USAGE
   !!   readDiagInfo(Number of Kpts, proc grid rows, proc grid cols,
@@ -3050,7 +3191,7 @@ contains
   !!    must contain the same number of processes.
   !!   2011/09/02 L.Tong
   !!    Corrected Conquest default values for ScaLAPACK processor grid
-  !!    definitions when k-point parallelisation is on. 
+  !!    definitions when k-point parallelisation is on.
   !!    Added local variable proc_per_group
   !!   2011/09/05 L.Tong
   !!    Added print out input information for k-point parallelisation
@@ -3088,7 +3229,8 @@ contains
     use functions,       only: is_prime
     use global_module,   only: iprint_init, rcellx, rcelly, rcellz,  &
          area_general, ni_in_cell, numprocs,   &
-         species_glob, io_lun, io_ase, ase_file, write_ase, flag_calc_pol
+         species_glob, io_lun, io_ase, ase_file, write_ase, flag_calc_pol, &
+         flag_fix_spin_population, nspin
     use numbers,         only: zero, one, two, pi, RD_ERR, half
     use GenComms,        only: cq_abort, cq_warn, gcopy
     use input_module
@@ -3097,7 +3239,7 @@ contains
     use DiagModule,      only: nkp, kk, wtk, kT, maxefermi,          &
          flag_smear_type, iMethfessel_Paxton,  &
          max_brkt_iterations, gaussian_height, &
-         finess, NElec_less
+         finess, NElec_less, flag_integer_occ, flag_adjust_Ef, flag_check_gap
     use energy,          only: SmearingType, MPOrder
     use memory_module,   only: reg_alloc_mem, reg_dealloc_mem,       &
          type_dbl
@@ -3115,7 +3257,7 @@ contains
     real(double)   :: a, sum, dkx, dky, dkz, dk
     integer        :: proc_per_group
     logical        :: ms_is_prime
-    
+
     ! k-point mesh type
     logical        :: mp_mesh, done, flag_lines_kpoints, flag_gamma, test_ase
     integer,      dimension(1:3)              :: mp
@@ -3126,7 +3268,7 @@ contains
     integer :: counter
     character(len=2) :: suffix
 
-    !****lat<$    
+    !****lat<$
     call start_backtrace(t=backtrace_timer,who='readDiagInfo',where=1,level=2)
     !****lat>$
 
@@ -3135,6 +3277,15 @@ contains
     kT = fdf_double('Diag.kT',0.001_double)
     ! Method to approximate step function for occupation number
     flag_smear_type = fdf_integer('Diag.SmearingType',0)
+    flag_integer_occ = fdf_boolean('Diag.IntegerOccs',.false.)
+    if(flag_integer_occ) then
+       if(nspin>1.and.(.not.flag_fix_spin_population)) &
+            call cq_abort("Cannot have free spin population with integer occupancies")
+       flag_smear_type = -1
+    end if
+    flag_adjust_Ef = fdf_boolean('Diag.AdjustEf',.true.)
+    flag_check_gap = .true.
+    if(flag_smear_type==1) flag_check_gap = .false.
     SmearingType = flag_smear_type
     iMethfessel_Paxton = fdf_integer('Diag.MPOrder',0)
     MPOrder = iMethfessel_Paxton
@@ -3150,7 +3301,7 @@ contains
        proc_groups = 1
     end if
 
-    if (iprint_init > 1 .AND. inode==ionode) write (io_lun, 11) proc_groups 
+    if (iprint_init > 1 .AND. inode==ionode) write (io_lun, 11) proc_groups
     ! Read/choose ScaLAPACK processor grid dimensions
     if(fdf_defined('Diag.ProcRows')) then
        proc_rows = fdf_integer('Diag.ProcRows',0)
@@ -3163,7 +3314,7 @@ contains
        proc_per_group = numprocs / proc_groups
        if(proc_rows*proc_cols > proc_per_group) &
             call cq_abort('Diag: proc grid product is too large: ', &
-            proc_rows*proc_cols, proc_per_group) 
+            proc_rows*proc_cols, proc_per_group)
     else
        ! default values
        if(numprocs<9) then ! Recommended by ScaLapack User Guide
@@ -3176,7 +3327,7 @@ contains
           proc_per_group = numprocs / proc_groups
           a = sqrt(real(proc_per_group, double))
           proc_rows = floor(a)+1
-          do while(.NOT.done.AND.proc_rows>1) 
+          do while(.NOT.done.AND.proc_rows>1)
              proc_rows = proc_rows - 1
              proc_cols = floor(real(proc_per_group,double) / &
                   real(proc_rows,double))
@@ -3190,12 +3341,12 @@ contains
     do i=1,ni_in_cell
        matrix_size = matrix_size + nsf_species(species_glob(i))
     end do
-    
+
     ! Test if matrix_size is a prime number
     ms_is_prime = is_prime(matrix_size)
     if ( ms_is_prime ) call cq_warn(sub_name,'matrix size is a prime number', matrix_size)
-    
-    ! padH or not  :temporary?   
+
+    ! padH or not  :temporary?
     flag_padH = fdf_boolean('Diag.PaddingHmatrix',.true.)
 
     if(flag_padH) then
@@ -3212,7 +3363,7 @@ contains
           flag_padH = .false.
        endif
     endif
-  
+
     if(.not.flag_padH) then
      if(fdf_defined('Diag.BlockSizeR')) then
        block_size_r = fdf_integer('Diag.BlockSizeR',1)
@@ -3230,10 +3381,10 @@ contains
        block_size_c = block_size_r
        call cq_warn(sub_name,'Use of PaddingHmatrix is recommended.')
        call cq_warn(sub_name,'prime: set block_size_c = block_size_r = 1 ')
-     else   ! 
+     else   !
        done = .false.
        block_size_r = matrix_size/max(proc_rows,proc_cols)+1
-       do while(.NOT.done) 
+       do while(.NOT.done)
           block_size_r = block_size_r - 1
           a = real(matrix_size)/real(block_size_r)
           if(a - real(floor(a))<1e-8_double) done = .true.
@@ -3253,7 +3404,7 @@ contains
        write(io_lun,2) block_size_r, block_size_c
        write(io_lun,3) proc_rows, proc_cols
     end if
- 
+
     !Using ELPA or not
     flag_use_elpa = fdf_boolean('Diag.UseELPA',.false.)
 
@@ -3422,7 +3573,7 @@ contains
        end if
     else
        ! Read Monkhorst-Pack mesh coefficients
-       ! Default is Gamma point only 
+       ! Default is Gamma point only
        if(iprint_init>1.AND.inode==ionode) &
             write(io_lun,fmt='(/8x,"Using Monkhorst-Pack Kpoint mesh"//)')
        flag_gamma = fdf_boolean('Diag.GammaCentred',.false.)
@@ -3494,7 +3645,7 @@ contains
        wtk_tmp(1:nkp_tmp) = one
        ! Generate fractional k-point coordinates plus shift
        ! Assume orthorhombic cell for now
-       do i = 1, mp(1)       ! x axis 
+       do i = 1, mp(1)       ! x axis
           do j = 1, mp(2)    ! y axis
              do k = 1, mp(3) ! z axis
                 counter = k + (j-1) * mp(3) + (i-1) * mp(2) * mp(3)
@@ -3532,13 +3683,13 @@ contains
           end if
        end do
 
-       ! How many k-points are now left? 
+       ! How many k-points are now left?
        nkp = 0
-       ! DRB fix 
+       ! DRB fix
        sum = zero
        do i = 1, nkp_tmp
           if (wtk_tmp(i) > RD_ERR ) then
-             nkp = nkp + 1 
+             nkp = nkp + 1
              sum = sum + wtk_tmp(i)
           end if
        end do
@@ -3575,7 +3726,7 @@ contains
        else if(iprint_init>1.AND.inode==ionode) then
           write(io_lun,fmt='(8x,i4,a)') nkp, ' symmetry inequivalent Kpoints'
        end if
-       
+
        do i = 1, nkp
           kk(1,i) = two * pi * kk(1,i) / rcellx
           kk(2,i) = two * pi * kk(2,i) / rcelly
@@ -3591,9 +3742,9 @@ contains
     ! BEGIN %%%% ASE printing %%%%
     !
     if (inode==ionode .and. write_ase ) then
-       inquire(io_ase, opened=test_ase) 
+       inquire(io_ase, opened=test_ase)
        if ( .not. test_ase ) open(io_ase,file=ase_file, status='old', action='write',&
-            iostat=stat, position='append')                       
+            iostat=stat, position='append')
        write(io_ase,*)
        write(io_ase,10) nkp
        do i=1,nkp
@@ -3605,7 +3756,7 @@ contains
     end if
     !
     ! END %%%% ASE printing %%%%
-    !    
+    !
     ! Write out k-points
     if(inode==ionode.AND.iprint_init>2) then
        write(io_lun,51) nkp
@@ -3619,7 +3770,7 @@ contains
          write (io_lun,'(10x,"Value of kT used for smearing: ",f10.6, a2)') &
          en_conv * kT, en_units(energy_units)
 
-    !****lat<$    
+    !****lat<$
     call stop_backtrace(t=backtrace_timer,who='readDiagInfo')
     !****lat>$
 
@@ -3629,7 +3780,7 @@ contains
 3   format(8x,'Proc grid (row, col): ',2i5)
 4   format(/8x,'***WARNING***',/,2x,&
          'No Kpoints block found - defaulting to Gamma point')
-51  format(/8x,i4,' symmetry inequivalent Kpoints in Cartesian form (1/A): ')
+51  format(/8x,i4,' symmetry inequivalent Kpoints in Cartesian form (1/a0): ')
 7   format(8x,' All ',i4,' Kpoints in fractional coordinates: ')
 9   format(/8x,'***WARNING***',/,8x,&
          'Specified Kpoint mesh shift in fractional coords >= 1.0.')
@@ -3642,9 +3793,9 @@ contains
   ! ------------------------------------------------------------------------------
   ! Subroutine read_input_aux
   ! ------------------------------------------------------------------------------
-  
+
   !!****f* initial_read/read_input_aux *
-  !!  NAME 
+  !!  NAME
   !!   read_input_aux
   !!  USAGE
   !!   call read_input_aux(aux)
