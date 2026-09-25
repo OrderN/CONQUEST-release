@@ -187,14 +187,6 @@ tuning values.
    sensible before increasing the limit.  Mixing and convergence controls are
    discussed in :ref:`conv_scf` and :ref:`gs_scf`.
 
-**Messages:** ``earlyDM: too many L iterations`` or
-``lateDM: too many L iterations``
-
-Linear-scaling density-matrix minimisation exceeded ``DM.LVariations``.
-Inspect the minimisation history and test the density matrix range and
-convergence parameters as described in :ref:`conv_on` and :ref:`gs_on`;
-increasing the iteration limit alone may only postpone the same failure.
-
 Atomic movement and restart files
 ---------------------------------
 
