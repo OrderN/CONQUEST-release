@@ -26,7 +26,7 @@ conserved quantity of the dynamics. Although the molecular dynamics
 integrators used in CONQUEST are time reversible, *the SCF procedure
 is not*. Therefore tight convergence (``minE.SCTolerance`` for
 diagonalisation, ``minE.LTolerance`` for linear scaling) is
-necessary. In the case of diagonalisation, SCF tolerance of ``1E-6`` is
+necessary. In the case of diagonalisation, an SCF tolerance of ``1E-6`` is
 typically enough to negate the drift. However, extended-Lagrangian
 Born-Oppenheimer MD (XL-BOMD) :cite:`md-Niklasson2008`, currently only
 implemented for O(N), essentially makes the SCF component of the MD
@@ -34,7 +34,7 @@ time-reversible by adding the electronic degrees of freedom to the
 Lagrangian, relaxing the constraint on ``minE.LTolerance`` ---
 although it is still somewhat dependent on the ensemble.  In the NVE
 and NVT ensembles, a L-tolerance of ``1E-5`` has been found to be
-sufficient to give good energy conservations, decreasing to ``1E-6``
+sufficient to give good energy conservation, decreasing to ``1E-6``
 in the NPT ensemble. The following flags are required for XL-BOMD:
 
 ::
@@ -58,30 +58,36 @@ setting,
 
 This will do several things: it will read the atomic coordinates from
 ``md.position`` and read the ``md.checkpoint`` file, which contains the
-velocities and extended system (Nose-Hoover chain and cell) variables. Depending
+velocities and extended-system (Nose-Hoover chain and cell) variables. Depending
 on the value of ``DM.SolutionMethod``, it will read the K-matrix files
-(``diagon``) or the L-matrix files (``ordern``), and if XL-BOMD is being used,
-the X-matrix files. Finally, it will *append* new data to the ``md.stats`` and
-``md.frames`` files, but it will overwrite all other files, including
-``Conquest_out``. Note that this flag is equivalent to setting the following:
+(``diagon``) or the L-matrix files (``ordern``). Finally, it will *append* new
+data to the ``md.stats`` and ``md.frames`` files, but it will overwrite all
+other files, including ``Conquest_out``.
+
+Unless explicitly overridden, ``AtomMove.RestartRun T`` changes the defaults of
+the following keywords to ``T``:
 
 ::
 
-   General.LoadL T
+   General.LoadDM T
    SC.MakeInitialChargeFromK T
-   XL.LoadL T
+   AtomMove.ReadVelocity T
+
+For XL-BOMD it also defaults ``XL.LoadX`` to ``T``. For MSSF and blip-basis
+calculations it defaults ``Basis.LoadCoeffs`` to ``T``, so that the saved
+support-function coefficients are loaded.
 
 In addition to the files mentioned above, CONQUEST will try to read the K-matrix
 from ``Kmatrix2.i00.*`` when using diagonalisation or the L-matrix from
 ``Lmatrix2.i00.*`` when using O(N), and ``Xmatrix2.i0*.*`` if the
 extended-Lagrangian formalism is used. Note that metadata for these files is
-stored in ``InfoGlobal.i00.dat`` which is also required when restarting. If the
+stored in ``InfoGlobal.i00`` which is also required when restarting. If the
 calculation ended by hitting the walltime limit, the writing of these matrix
-files may have been interrupted, rendering them unusable. In this case, the
-calculation can be restarted by setting the above flags to ``F`` *after* setting
-``AtomMove.RestartRun T``. Setting the flag ``General.MaxTime`` to some number
-of seconds less (say 30 minutes) than the calculation wall time limit will force
-the calculation to stop gracefully, preventing the aforementioned situation.
+files may have been interrupted, rendering them unusable. In this case, set
+``General.LoadDM F`` and, for XL-BOMD, ``XL.LoadX F`` *after* setting
+``AtomMove.RestartRun T``. Setting ``General.MaxTime`` to some number of seconds
+less (say 30 minutes) than the calculation wall time limit will force the
+calculation to stop gracefully, preventing the aforementioned situation.
 
 Go to :ref:`top <moldyn>`.
 
@@ -91,8 +97,9 @@ Visualising the trajectory
 --------------------------
 
 Setting the flag ``AtomMove.WriteXSF T`` dumps the coordinates to the file
-``trajectory.xsf`` every ``AtomMove.OutputFreq`` steps. The .xsf file can be
-read using `VMD <https://www.ks.uiuc.edu/Research/vmd/>`_. A small VMD script,
+``trajectory.xsf`` every ``AtomMove.XsfFreq`` steps (which defaults to
+``AtomMove.OutputFreq``). The .xsf file can be read using
+`VMD <https://www.ks.uiuc.edu/Research/vmd/>`_. A small VMD script,
 ``view.vmd`` is included with the code, and can be invoked using,
 
 ``vmd -e view.vmd``
@@ -106,7 +113,7 @@ Go to :ref:`top <moldyn>`.
 TDEP output
 -----------
 
-CONQUEST molecular dynamics data can be used to perform lattice dyanmical
+CONQUEST molecular dynamics data can be used to perform lattice dynamical
 calculations using the `Temperature Dependent Effective Potential (TDEP)
 <https://ollehellman.github.io/index.html>`_ code. Setting the flag ``MD.TDEP
 T`` will make conquest dump configurations, forces and metadata in a format
@@ -187,11 +194,9 @@ Go to :ref:`top <moldyn>`.
 Isobaric-Isothermal (NPT) ensemble
 ++++++++++++++++++++++++++++++++++
 
-There is one implemented barostat at present, the extended
-system, Parrinello-Rahman :cite:`md-Parrinello1981`. At present the
-barostat should be treated as a beta-version implementation, which
-will be fully characterised and made robust for the full release of
-the code. 
+Two extended-system barostats are implemented: Parrinello-Rahman
+:cite:`md-Parrinello1981` and Martyna-Tobias-Tuckerman-Klein (MTTK)
+:cite:`t-Martyna1996`.
 
 1. Parrinello-Rahman
 
@@ -218,20 +223,47 @@ NHC tend to be more severe due to coupling of the cell and atomic motions. They
 are dependent on the system, so it is advised that you find a combination of
 these parameters that gives the best energy conservation. The cell is
 thermostatted using a separate Nose-Hoover chain to the atoms by default, but
-they can be controlled with the same chain by setting ``MD.CellNHC F``. An *ad
-hoc* drag factor specified by ``MD.PDrag`` reduces the thermostat and cell
-velocities at every timestep to damp out the ringing fluctuations. In this case,
-they are reduced by :math:`10/200 \simeq 5\%`, which strictly speaking breaks the NPT
-dynamics, but not significantly, and the stability is significantly improved.
+they can be controlled with the same chain by setting ``MD.CellNHC F``. The
+*ad hoc* damping controlled by ``MD.PDrag`` acts on the cell/barostat velocities
+and, when present, the separate cell-thermostat velocities. Each application
+uses the factor
+
+.. math::
+
+   1 - \frac{D_P\,\Delta t}{\tau_P n_{\mathrm{MTS}} n_{\mathrm{YS}}},
+
+where :math:`D_P` is ``MD.PDrag``. This factor is applied within the integration
+substeps, potentially more than once per full MD timestep. A nonzero drag
+perturbs the formal NPT dynamics, but can help damp ringing fluctuations.
 
 Note that the NPT ensemble can also be generated correctly by thermostatting
 using the SVR thermostat, although the meaning of the parameter ``MD.tauT`` is
 different in this case, as in NVT dynamics.
 
+2. Martyna-Tobias-Tuckerman-Klein
+
+The MTTK barostat is implemented for isotropic volume fluctuations and is
+coupled to the Nose-Hoover-chain thermostat:
+
+::
+
+   AtomMove.IonTemperature 300.0
+   AtomMove.TargetPressure 10.0
+   MD.Ensemble npt
+   MD.Thermostat nhc
+   MD.Barostat mttk
+   MD.CellConstraint volume
+   MD.tauT 100
+   MD.tauP 200
+
+Use the Parrinello-Rahman barostat instead when the three orthorhombic cell
+lengths must vary independently with ``MD.CellConstraint xyz``.
+
 Postprocessing tools
 --------------------
 
-Details of Python post-processing tools for CONQUEST can be found in :ref:`et_md_scripts`.
+The Python utility supplied for analysing CONQUEST molecular-dynamics output is
+described in :ref:`et_md_scripts`.
 
 Go to :ref:`top <moldyn>`.
 

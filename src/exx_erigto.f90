@@ -666,6 +666,8 @@ contains
     
     real(double), dimension(5) :: F
 
+    eri_gto = zero
+
     i_nt = trim(gto( i_nsp )%sf( i )%nt)
     j_nt = trim(gto( j_nsp )%sf( j )%nt)
     k_nt = trim(gto( k_nsp )%sf( k )%nt)

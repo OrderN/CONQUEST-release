@@ -277,9 +277,6 @@ We recommend that you work through, in order, the tutorials included
 in the distribution in the ``tutorials/`` directory
 to become familiar with the modes of operation of the code.
 
-**NOTE** In the initial pre-release of CONQUEST (January 2020) we have
-not included the tutorials; they will be added over the coming months.
-
 Go to :ref:`top <examples>`.
 
 .. _ex_next:

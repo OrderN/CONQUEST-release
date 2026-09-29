@@ -86,8 +86,7 @@ ion file generation are:
     ``large``.
 
 These are all included in the default input files.
-Further fine-grained control can be applied to the basis functions;
-this will be documented after the pre-release of CONQUEST.
+Further fine-grained control can be applied to the basis functions.
 
 .. _ONCVPSP: http://http://www.mat-simresearch.com
 .. _PseudoDojo: https://www.pseudo-dojo.org/
@@ -167,11 +166,12 @@ the key output flag is given.  Further output flags are described in :ref:`input
 
   * Charge density
   * Band-resolved charge density (``IO.outputWF``)
-  * Density of states (``IO.writeDOS``)
+  * Density of states, obtained by post-processing ``eigenvalues.dat``
   * Atom-projected density of states (``IO.write_proj_DOS``)
   * Atomic charges, using the Mulliken approach (``IO.AtomChargeOutput``)
 
-The Kohn-Sham eigenvalues are output in the ``eigenvalues.dat`` file.
+For diagonalisation calculations, the Kohn-Sham eigenvalues and their
+occupancies are output in the ``eigenvalues.dat`` file.
 The charge densities need post-processing to convert from the
 standard output format to a file compatible with visualisation
 (current supported formats include Gaussian CUBE file and OpenDX
@@ -214,7 +214,7 @@ files:
     parameters, atomic positions, velocities, forces, stress).
   * ``md.checkpoint`` --- data required for MD restart, namely atomic velocities
     and extended system variables.
-  * ``md.positions`` --- Atomic coordinates saved at the moment of checkpointing
+  * ``md.position`` --- atomic coordinates saved at the moment of checkpointing
   * ``trajectory.xsf`` --- atomic coordinates save in .xsf format, which can be
     visualised using (for example) VMD, if ``AtomMove.WriteXSF`` is true..
 
