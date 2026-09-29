@@ -1,25 +1,22 @@
 #!/usr/local/bin/python3
 
-import scipy as sp
+import numpy as np
 import matplotlib.pyplot as plt
-from scipy.linalg import norm
-from scipy.integrate import cumtrapz
+from scipy.integrate import cumulative_trapezoid
 from scipy.signal import correlate
-from scipy import histogram
 from math import ceil, pi
-from frame import Frame
-from pdb import set_trace
 
 bohr2ang = 0.529177249
 small = 1.0e-3
 
 def autocorr(x, y=None):
-  """Autocorrelation function"""
-  if y.any():
-    result = correlate(x, y, mode='full')
-  else:
-    result = correlate(x, x, mode='full')
-  return result[result.size // 2:]
+  """Return an unbiased positive-lag auto- or cross-correlation."""
+  if y is None:
+    y = x
+  if len(x) != len(y):
+    raise ValueError('correlation inputs must have the same length')
+  result = correlate(x, y, mode='full')[len(x)-1:]
+  return result/np.arange(len(x), 0, -1)
 
 def diff_mic(pos1, pos2, cell):
   """Minimum image convention relative vector (orthorhombic cell only)"""
@@ -44,73 +41,86 @@ class Pairdist:
     self.nspec = nspec
     self.rcut = rcut
     self.binwidth = binwidth
-    self.nbins = ceil(rcut/binwidth)+1
+    self.nbins = ceil(rcut/binwidth)
     self.spec_count = species_count
     self.species = species
-    self.bins = []
-    for i in range(self.nbins):
-      self.bins.append((float(i)*binwidth + binwidth/2.))
-    self.bins = sp.array(self.bins)
-    self.dt = sp.zeros((self.nat,self.nat), dtype='float')
-    self.freq_total = sp.zeros(self.nbins, dtype='int')
-    self.freq = sp.zeros((self.nbins,self.nspec,self.nspec), dtype='int')
-    self.nfac_total = sp.zeros(self.nbins, dtype='float')
-    self.nfac = sp.zeros((self.nbins,self.nspec,self.nspec), dtype='float')
-    self.gr_total = sp.zeros(self.nbins, dtype='float')
-    self.gr = sp.zeros((self.nbins,self.nspec,self.nspec), dtype='float')
+    self.edges = np.minimum(np.arange(self.nbins+1)*binwidth, rcut)
+    self.edges[-1] = rcut
+    self.bins = 0.5*(self.edges[:-1] + self.edges[1:])
+    self.inv_volume_sum = 0.0
+    self.dt = np.zeros((self.nat,self.nat), dtype='float')
+    self.freq_total = np.zeros(self.nbins, dtype='int')
+    self.freq = np.zeros((self.nbins,self.nspec,self.nspec), dtype='int')
+    self.nfac_total = np.zeros(self.nbins, dtype='float')
+    self.nfac = np.zeros((self.nbins,self.nspec,self.nspec), dtype='float')
+    self.gr_total = np.zeros(self.nbins, dtype='float')
+    self.gr = np.zeros((self.nbins,self.nspec,self.nspec), dtype='float')
 
   def update_rdf(self, frame):
     self.nframes += 1
-    cell = sp.zeros(3)
+    cell = np.zeros(3)
     for i in range(3):
       cell[i] = frame.lat[i,i]
 
-    self.volume = cell[0]*cell[1]*cell[2]*bohr2ang**3
+    self.volume = abs(np.linalg.det(frame.lat))*bohr2ang**3
     self.rho = float(self.nat)/self.volume
+    self.inv_volume_sum += 1.0/self.volume
 
     for i in range(self.nat):
       for j in range(i+1, self.nat):
         diff = diff_mic(frame.r[i,:], frame.r[j,:], cell)*bohr2ang
-        self.dt[i,j] = norm(diff)
-        self.dt[j,i] = norm(diff)
+        self.dt[i,j] = np.linalg.norm(diff)
+        self.dt[j,i] = np.linalg.norm(diff)
         if self.dt[i,j] < self.rcut:
-          ind = int(round((self.dt[i,j]+self.binwidth)/self.binwidth))-1
+          ind = np.searchsorted(self.edges, self.dt[i,j], side='right')-1
           self.freq_total[ind] += 2
           if self.nspec > 1:
-            for ispec in range(self.nspec):
-              for jspec in range(ispec, self.nspec):
-                if (ispec == frame.species[i]-1 and jspec == frame.species[j]-1):
-                  self.freq[ind, ispec, jspec] += 2
+            ispec, jspec = sorted((int(frame.species[i])-1,
+                                   int(frame.species[j])-1))
+            if ispec == jspec:
+              self.freq[ind, ispec, jspec] += 2
+            else:
+              self.freq[ind, ispec, jspec] += 1
 
   def norm_rdf(self):
     """Normalise the RDF"""
-    const1 = 4.0*pi*(self.binwidth**3)/3.0
-    const2 = self.rho*self.nat*self.nframes
     for i in range(self.nbins):
-      vshell = (float(i+1)**3 - float(i)**3)*const1
-      self.nfac_total[i] = vshell*const2
+      vshell = 4.0*pi*(self.edges[i+1]**3-self.edges[i]**3)/3.0
+      self.nfac_total[i] = (vshell*self.nat*(self.nat-1)*
+                            self.inv_volume_sum)
       if self.nspec > 1:
         for ispec in range(self.nspec):
           for jspec in range(self.nspec):
-            const3 = self.rho*self.spec_count[ispec+1]*self.spec_count[jspec+1]/self.nat
-            self.nfac[i,ispec,jspec] = vshell*const3*self.nframes
-    self.gr_total = self.freq_total.astype(float)/self.nfac_total
+            ni = self.spec_count[ispec+1]
+            nj = self.spec_count[jspec+1]
+            npairs = ni*(ni-1) if ispec == jspec else ni*nj
+            self.nfac[i,ispec,jspec] = (vshell*npairs*
+                                        self.inv_volume_sum)
+    self.gr_total = np.divide(self.freq_total, self.nfac_total,
+                              out=np.zeros_like(self.nfac_total),
+                              where=self.nfac_total > 0)
     if self.nspec > 1:
-      self.gr = self.freq.astype(float)/self.nfac
+      self.gr = np.divide(self.freq, self.nfac,
+                          out=np.zeros_like(self.nfac),
+                          where=self.nfac > 0)
 
   def get_coordination(self):
     """Compute coordination"""
     gxrsq = self.gr_total*self.bins**2
-    self.coord_total = sp.zeros(self.nbins, dtype='float')
-    self.coord_total[1:] = cumtrapz(gxrsq,self.bins)
-    self.coord_total *= 4.*pi*self.rho
+    self.coord_total = np.zeros(self.nbins, dtype='float')
+    self.coord_total[1:] = cumulative_trapezoid(gxrsq,self.bins)
+    mean_inv_volume = self.inv_volume_sum/self.nframes
+    self.coord_total *= 4.*pi*(self.nat-1)*mean_inv_volume
     if self.nspec > 1:
-      self.coord = sp.zeros((self.nbins,self.nspec,self.nspec), dtype='float')
+      self.coord = np.zeros((self.nbins,self.nspec,self.nspec), dtype='float')
       for ispec in range(self.nspec):
         for jspec in range(ispec,self.nspec):
           gxrsq = self.gr[:,ispec,jspec]*self.bins**2
-          self.coord[1:,ispec,jspec] = cumtrapz(gxrsq[:], self.bins)
-          self.coord *= 4.*pi*self.rho # check this
+          self.coord[1:,ispec,jspec] = cumulative_trapezoid(gxrsq[:], self.bins)
+          nneighbours = self.spec_count[jspec+1]
+          if ispec == jspec:
+            nneighbours -= 1
+          self.coord[:,ispec,jspec] *= 4.*pi*nneighbours*mean_inv_volume
 
   def plot_gr(self):
     plt.figure("RDF")
@@ -120,9 +130,9 @@ class Pairdist:
     else:
       fig3, axl = plt.subplots()
     axl.minorticks_on()
-    axl.grid(b=True, which='major', axis='x', color='gray', linestyle='-')
-    axl.grid(b=True, which='minor', axis='x', color='gray', linestyle='--')
-    axl.grid(b=True, which='major', axis='y', color='gray', linestyle='-')
+    axl.grid(visible=True, which='major', axis='x', color='gray', linestyle='-')
+    axl.grid(visible=True, which='minor', axis='x', color='gray', linestyle='--')
+    axl.grid(visible=True, which='major', axis='y', color='gray', linestyle='-')
     # axl.grid(b=True, which='minor', axis='y', color='gray', linestyle='--')
     axr = axl.twinx()
     axl.set_ylabel("g(r)", color='b')
@@ -134,9 +144,9 @@ class Pairdist:
     axr.set_ylim(bottom=axl.get_ylim()[0], top=axl.get_ylim()[1]*10.0)
     if self.nspec > 1:
       ax2.minorticks_on()
-      ax2.grid(b=True, which='major', axis='x', color='gray', linestyle='-')
-      ax2.grid(b=True, which='minor', axis='x', color='gray', linestyle='--')
-      ax2.grid(b=True, which='major', axis='y', color='gray', linestyle='-')
+      ax2.grid(visible=True, which='major', axis='x', color='gray', linestyle='-')
+      ax2.grid(visible=True, which='minor', axis='x', color='gray', linestyle='--')
+      ax2.grid(visible=True, which='major', axis='y', color='gray', linestyle='-')
       # ax2.grid(b=True, which='minor', axis='y', color='gray', linestyle='--')
       for ispec in range(self.nspec):
         for jspec in range(ispec,self.nspec):
@@ -180,12 +190,12 @@ class Pairdist:
 
   def get_bondlength(self, bondcut, frame, printall):
 
-    bond_tot = sp.zeros((self.nspec, self.nspec), dtype=float)
-    bondsq_tot = sp.zeros((self.nspec, self.nspec), dtype=float)
-    bond_avg = sp.zeros((self.nspec, self.nspec), dtype=float)
-    bond_sd = sp.zeros((self.nspec, self.nspec), dtype=float)
-    bond_min = sp.zeros((self.nspec, self.nspec), dtype=float)
-    nbonds = sp.zeros((self.nspec, self.nspec), dtype=int)
+    bond_tot = np.zeros((self.nspec, self.nspec), dtype=float)
+    bondsq_tot = np.zeros((self.nspec, self.nspec), dtype=float)
+    bond_avg = np.zeros((self.nspec, self.nspec), dtype=float)
+    bond_sd = np.zeros((self.nspec, self.nspec), dtype=float)
+    bond_min = np.zeros((self.nspec, self.nspec), dtype=float)
+    nbonds = np.zeros((self.nspec, self.nspec), dtype=int)
 
     bond_min = bondcut
     for i in range(self.nat):
@@ -209,7 +219,7 @@ class Pairdist:
       for j in range(i,self.nspec):
         if nbonds[i,j] > 0:
           bond_avg[i,j] = bond_tot[i,j]/float(nbonds[i,j])
-          bond_sd[i,j] = sp.sqrt(bondsq_tot[i,j]/nbonds[i,j] - bond_avg[i,j]**2)
+          bond_sd[i,j] = np.sqrt(bondsq_tot[i,j]/nbonds[i,j] - bond_avg[i,j]**2)
           pair = "{}-{}".format(self.species[i+1], self.species[j+1])
           print(f'{pair}: {bond_avg[i,j]:>8.4f} +/- {bond_sd[i,j]:>8.4f}')
 
@@ -224,36 +234,36 @@ class MSER:
   --- K P White, Simulation 69, 323 (1997)"""
 
   def __init__(self, nframes, varname, var_traj):
-    self.n_j = nframes-1
     self.propname = varname
-    self.traj = var_traj
-    self.mser = sp.zeros(self.n_j, dtype='float')
+    self.traj = np.asarray(var_traj)
+    self.n_j = len(self.traj)
+    if self.n_j < 2:
+      raise ValueError('MSER requires at least two trajectory samples')
+    self.mser = np.zeros(self.n_j, dtype='float')
     # stop before the end otherwise the MSER becomes very noisy
-    self.mser_cut = 200
+    self.mser_cut = min(200, max(1, self.n_j//2))
+    self.n_candidates = self.n_j-self.mser_cut
 
   def get_point(self, d_j):
-    prefac = 1.0/(self.n_j-d_j)**2
-    ybar_ij = sp.mean(self.traj[d_j:])
-    variance = 0.0
-    for i in range(d_j+1,self.n_j):
-      variance += (self.traj[i] - ybar_ij)**2
-    return prefac*variance
+    sample = self.traj[d_j:]
+    return np.sum((sample-np.mean(sample))**2)/len(sample)**2
 
   def get_mser(self):
     for i in range(self.n_j):
       self.mser[i] = self.get_point(i)
 
   def mser_min(self):
-    return sp.argmin(self.mser[:-self.mser_cut])
+    return np.argmin(self.mser[:self.n_candidates])
 
   def plot_mser(self, steps):
     plt.figure("{} MSER".format(self.propname))
     plt.xlabel("step")
     plt.ylabel("MSER ({})".format(self.propname))
-    plt.plot(steps[:-200], self.mser[:-200], 'k-')
+    plt.plot(steps[:self.n_candidates], self.mser[:self.n_candidates], 'k-')
     mser_min = self.mser_min()
-    lab = "Minimum at step {}".format(mser_min)
-    plt.axvline(x=mser_min, label=lab)
+    minimum_step = steps[mser_min]
+    lab = "Minimum at step {}".format(minimum_step)
+    plt.axvline(x=minimum_step, label=lab)
     plt.legend(loc="upper left")
     plt.savefig("mser.pdf", bbox_inches='tight')
 
@@ -280,11 +290,11 @@ class VACF:
     self.steps.append(step)
     self.vacf.append(0.0)
     for i in range(self.nat):
-      self.vacf[-1] += sp.dot(self.init_v[i,:], frame.v[i,:])
+      self.vacf[-1] += np.dot(self.init_v[i,:], frame.v[i,:])
 
   def norm_vacf(self):
-    self.vacf = sp.array(self.vacf)/self.nat
-    self.time = sp.array(self.steps, dtype='float')*self.dt
+    self.vacf = np.array(self.vacf)/self.nat
+    self.time = (np.array(self.steps, dtype='float') - self.steps[0])*self.dt
 
   def plot_vacf(self):
     filename = "vacf.pdf"
@@ -311,30 +321,30 @@ class MSD:
     self.nat = nat
     self.dt = dt
     self.init_r = init_frame.r
-    self.r_prev = sp.copy(self.init_r)
+    self.r_prev = np.copy(self.init_r)
     self.msd = []
     self.steps = []
-    self.init_cell = sp.zeros(3, dtype='float')
-    self.r_diff = sp.zeros((self.nat,3), dtype='float')
+    self.init_cell = np.zeros(3, dtype='float')
+    self.r_diff = np.zeros((self.nat,3), dtype='float')
     for i in range(3):
       self.init_cell[i] = init_frame.lat[i,i]
 
   def update_msd(self, step, frame):
     self.steps.append(step)
     self.nframes += 1
-    cell = sp.zeros(3, dtype='float')
+    cell = np.zeros(3, dtype='float')
     for i in range(3):
       cell[i] = frame.lat[i,i]
     self.msd.append(0.0)
     for i in range(self.nat):
       diff = diff_mic(frame.r[i,:], self.r_prev[i,:], cell) # is this right?
       self.r_diff[i,:] += diff
-      self.msd[-1] += sp.sum(self.r_diff[i,:]**2)
-    self.r_prev = sp.copy(frame.r)
+      self.msd[-1] += np.sum(self.r_diff[i,:]**2)
+    self.r_prev = np.copy(frame.r)
 
   def norm_msd(self):
-    self.msd = sp.array(self.msd)/self.nat
-    self.time = sp.array(self.steps, dtype='float')*self.dt
+    self.msd = np.array(self.msd)/self.nat
+    self.time = (np.array(self.steps, dtype='float') - self.steps[0])*self.dt
 
   def plot_msd(self):
     filename = "msd.pdf"

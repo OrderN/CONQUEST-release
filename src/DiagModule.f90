@@ -3171,12 +3171,13 @@ contains
   !!  CREATION DATE
   !!   31/07/2026
   !!  MODIFICATION HISTORY
-  !!
+  !!   2026/09/15 16:03 dave
+  !!    Added Fermi level output for linear scaling
   !!  SOURCE
   subroutine write_gaps(spin_ch)
 
     use units
-    use global_module,   only: nspin, flag_fix_spin_population
+    use global_module,   only: nspin, flag_fix_spin_population, flag_diagonalisation, mu_DMM
 
     implicit none
 
@@ -3196,7 +3197,7 @@ contains
        spin_st = 1
        spin_end = 1
     end if
-    if((flag_smear_type==0.or.flag_integer_occ).and.myid==0) then
+    if(flag_diagonalisation.and.(flag_smear_type==0.or.flag_integer_occ).and.myid==0) then
        do spin=spin_st,spin_end
           if(flag_gap(spin)) then
              if(nspin>1.and.flag_fix_spin_population) then!spin_end-spin_st>0) then
@@ -3221,6 +3222,10 @@ contains
              end if
           end if
           write(io_lun,fmt='(4x,"Fermi level= ",f12.5," ",a2)') en_conv*Efermi(spin),en_units(energy_units)
+       end do
+    else if(.not.flag_diagonalisation.and.myid==0) then
+       do spin=spin_st,spin_end
+          write(io_lun,fmt='(4x,"Fermi level= ",f12.5," ",a2)') en_conv*mu_DMM(spin),en_units(energy_units)
        end do
     end if
     return

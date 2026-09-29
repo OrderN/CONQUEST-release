@@ -7,7 +7,8 @@ Input tags
 We have broken down the input tags based on the areas of the code
 where they apply.  For each tag, a default is given.  Types of value
 are specified as: *integer*;
-*real*; *boolean*; or *string* (optA/optB are given for string options).
+*real*; *boolean*; *string* (optA/optB are given for string options); or
+*presence flag* (enabled whenever the tag occurs, regardless of its value).
 
 .. contents:: Areas
    :depth: 1
@@ -21,13 +22,14 @@ General
 General.NumberOfSpecies (*integer*)
     Number of species in cell
 
-    *default*: none
+    *default*: 1
 
-General.PseudopotentialType (*string*) siesta/hamann
+General.PseudopotentialType (*string*)
     Type of pseudopotential (in practice, this defines how the local
-    part of the pseudopotential is handled)
+    part of the pseudopotential is handled). The normal values are
+    ``hamann`` for ONCVPSP-derived data and ``siesta`` for SIESTA ion files.
 
-    *default*: hamann (read from ion file)
+    *default*: hamann
 
 General.NeutralAtom (*boolean*)
     Use neutral atom potential or not (removes need for Ewald sum)
@@ -40,7 +42,10 @@ General.FunctionalType (*integer*)
     parameterisations of the LDA available, as well as three variants
     of the PBE GGA functional, with numbers given below.
 
-    *default*: read from ion file (same as pseudopotentials)
+    *default*: 0 (take the functional from the ion files)
+
+    If a nonzero value differs from the functional stored in the ion files,
+    ``General.DifferentFunctional`` must be true or CONQUEST will stop.
 
     =========================================  ======= =======================
     Functional                                 Keyword Ref
@@ -72,7 +77,7 @@ General.EnergyUnits (*string*) Ha/Ry/eV
     *default*: Ha
 
 General.DistanceUnits (*string*) a0/bohr/A
-    **Output only** Chooses units for distance (Bohr: a0/bohr or Ångströms: A
+    **Output only** Chooses units for distance (Bohr: a0/bohr or Ångströms: A).
 
     *default*: a0
 
@@ -94,17 +99,12 @@ General.PartitionMethod (*string*) File/Hilbert
        guaranteed
     -  File — Reads a file (NOT recommended)
 
-General.LoadBalance (*string*) partitions/atoms
+General.LoadBalance (*string*) atoms/partitions/supportfunctions
     Applies to Hilbert above; chooses whether to distribute atoms or partitions
-    evenly between processors (you are *strongly* recommended to use atoms)
+    evenly between processors, or to balance the number of support functions
+    (you are *strongly* recommended to use atoms)
 
     *default*: atoms
-
-General.ManyProcessors (*boolean*)
-    Applies to Hilbert above; chooses method for parallelising Hilbert curve work;
-    “many” processors here probably means more than two
-
-    *default*: T
 
 General.MaxAtomsPartition (*integer*)
     Applies to Hilbert above; specifies maximum number of atoms
@@ -128,7 +128,7 @@ General.LoadDM (*boolean*)
     Specifies whether to load a previous density matrix (K or L depending on
     whether diagonalisation or linear scaling are selected) from files
 
-    *default*: F
+    *default*: T when ``AtomMove.RestartRun`` is true; F otherwise
 
 General.LoadRho (*boolean*)
     Specifies whether to load a previous charge density from files
@@ -215,7 +215,7 @@ Atom.LFDRange (*real*)
     overlap matrix elements from all atoms within this range will be
     included in the cluster diagonalisation)
 
-    *default*: 0.0
+    *default*: value of ``Atom.MultisiteRange``
 
 Go to :ref:`top <input_tags>`.
 
@@ -268,6 +268,61 @@ IO.Dump[Har|XC|PS|ES|Tot]Pot (*boolean*)
     such as ``IO.DumpHarPot T`` etc.)  Files can be converted to cube format as for charge density by setting
     ``Process.ChargeStub`` appropriately (e.g. ``locpsHar`` with other files replacing Har
     with XC, PS, ES and Tot)
+
+    *default*: F
+
+IO.outputWF (*boolean*)
+    Writes wavefunction coefficients for post-processing.  This output is
+    available only for static diagonalisation calculations; CONQUEST disables
+    it with a warning for O(N) or non-static calculations.  Bands must be
+    selected either with ``IO.maxnoWF`` and a ``WaveFunctionsOut`` block or
+    with the ``IO.min_wf_E`` and ``IO.max_wf_E`` energy limits.
+
+    *default*: F
+
+IO.maxnoWF (*integer*)
+    Number of explicitly selected bands whose wavefunction coefficients are
+    written.  A positive value requires a ``WaveFunctionsOut`` block and takes
+    precedence over energy-range selection.
+
+    *default*: 0
+
+WaveFunctionsOut (*block*)
+    Lists the band numbers to output when ``IO.maxnoWF`` is positive.  The
+    block must contain at least ``IO.maxnoWF`` entries, one band number per
+    entry.
+
+    *default*: none; required when ``IO.maxnoWF`` is positive
+
+IO.min_wf_E (*real*)
+    Lower energy limit, in Hartree, for wavefunction output when no explicit
+    band list is active.  For ordinary ``IO.outputWF`` output, the default is
+    zero.  When ``IO.write_proj_DOS`` is true, an omitted limit instead extends
+    to the bottom of the eigenspectrum.
+
+    *default*: 0, or the bottom of the eigenspectrum for projected-DOS output
+
+IO.max_wf_E (*real*)
+    Upper energy limit, in Hartree, for wavefunction output when no explicit
+    band list is active.  For ordinary ``IO.outputWF`` output, the default is
+    zero.  When ``IO.write_proj_DOS`` is true, an omitted limit instead extends
+    to the top of the eigenspectrum.
+
+    *default*: 0, or the top of the eigenspectrum for projected-DOS output
+
+IO.WFRangeRelative (*boolean*)
+    Interprets ``IO.min_wf_E`` and ``IO.max_wf_E`` relative to the Fermi level
+    when true, and as absolute energies when false.  If ordinary
+    ``IO.outputWF`` is requested without an explicit band list and both limits
+    remain zero, the default relative range selects no range and CONQUEST
+    disables wavefunction output with a warning.
+
+    *default*: T
+
+IO.write_proj_DOS (*boolean*)
+    Writes the ordinary and overlap-scaled wavefunction coefficients required
+    for projected-DOS post-processing.  This option also enables wavefunction
+    output and is available only for static diagonalisation calculations.
 
     *default*: F
     
@@ -449,19 +504,19 @@ minE.SCTolerance (*real*)
 minE.SupportVariations (*integer*)
     Maximum number of support-function iterations
 
-    *default*: 20
+    *default*: 10
 
-minE.PreconditionBlips(*boolean*)
+minE.PreconditionBlips (*boolean*)
     Should blip variation be pre-conditioned? Pre-conditioning is (at present)
     more memory-intensive than it should be, but is efficient
 
-    *default*: F
+    *default*: T when ``minE.VaryBasis`` is true; otherwise disabled
 
 minE.GlobalTolerance (*boolean*)
     Are the convergence criteria applied to minimisation summed over the whole
     system, or per atom?
 
-    *default*: T
+    *default*: T for molecular dynamics; F for other run types
 
 Go to :ref:`top <input_tags>`.
 
@@ -488,7 +543,7 @@ SC.LinearMixingFactor\_SpinDown (*real*)
 SC.LinearMixingEnd (*real*)
     Tolerance for end of Pulay mixing
 
-    *default*: self-consistency tolerance
+    *default*: ``minE.SCTolerance`` multiplied by :math:`10^{-4}`
 
 SC.LateStageReset (*integer*)
     If using GR-Pulay, how often is residual calculated fully (rather than interpolated) ?
@@ -509,18 +564,6 @@ SC.MaxPulay (*integer*)
     Number of iterations stored and mixed during Pulay mixing
 
     *default*: 5
-
-SC.ReadAtomicDensityFile (*string*)
-    Filename for radial tables of atomic density (*rarely* used: normally generated from PAOs)
-
-    default:
-
-SC.AtomicDensityFlag (*string*)
-    values: pao/read
-
-    Flag determining how atomic densities should be found
-
-    *default*: pao
 
 SC.KerkerPreCondition (*boolean*)
     Flag determining if Kerker precondition is to be used.
@@ -547,7 +590,9 @@ SC.MetricFactor (*real*)
 SC.MakeInitialChargeFromK (*boolean*)
     Flag determining whether initial charge is made from the density matrix
 
-    *default*: T
+    This option is disabled if ``General.LoadDM`` is false.
+
+    *default*: T when ``General.LoadDM`` is true; F otherwise
     
 Go to :ref:`top <input_tags>`.
 
@@ -565,6 +610,34 @@ DM.SolutionMethod (*string*)
     techniques of Li et al. :cite:`e-Li1993` and Palser and Manolopoulos :cite:`e-Palser1998`.)
 
     *default*: diagon
+
+DM.DFTplusU (*boolean*)
+    Enables the DFT+U correction.  A ``DFTplusU`` block is required when this
+    option is enabled.  DFT+U is not available with a blip basis; CONQUEST
+    disables it with a warning in that case.
+
+    *default*: F
+
+DM.WriteOccMat (*boolean*)
+    Prints the DFT+U occupation matrices in the main output.  This option is
+    read only when ``DM.DFTplusU`` is true.
+
+    *default*: T when ``DM.DFTplusU`` is true
+
+DFTplusU (*block*)
+    Defines the PAO projector and Hubbard U value for each corrected species.
+    Each line has the form:
+
+    ::
+
+       species  n  l  zeta  U
+
+    ``species`` is the species number, ``n`` and ``l`` are the principal and
+    angular-momentum quantum numbers, ``zeta`` selects the zeta function, and
+    ``U`` is given in Hartree.  The current implementation stores one projector
+    definition per species, so each corrected species should be listed once.
+
+    *default*: none; required when ``DM.DFTplusU`` is true
 
 DM.L\_range (*real*)
     Cutoff applied to L matrix (total energy will converge with increasing range;
@@ -628,11 +701,12 @@ DM.InvSDeltaOmegaTolerance (*real*)
 
     *default*: 0.0001
 
-DM.ConstantMu (*boolean*)
-    Switches between fixed Fermi level (T) and fixed number of electrons (F). You
-     are *strongly* recommended to leave at default
+DM.ConstantMu (*presence flag*)
+    Fix the chemical potential at ``DM.mu``. Any occurrence of this tag,
+    including ``DM.ConstantMu F``, enables fixed-chemical-potential mode. Omit
+    the tag for the normal fixed-electron-number mode.
 
-    *default*: F
+    *default*: absent (fixed number of electrons)
 
 DM.mu (*real*)
     Value of Fermi level for fixed Fermi level calculations
@@ -647,22 +721,43 @@ Diagonalisation
 ---------------
 
 Diag.NumKpts (*integer*)
-    Number of all k-points. No symmetry is applied.
+    Number of explicitly listed k-points, or the number of generated points on
+    each line when ``Diag.KspaceLines`` is true. No symmetry is applied.
 
-    *default*:
+    *default*: 1 for explicit points; 2 points per line
 
-Diag.Kpoints (*block*) 
-    Lists fractional coordinates and weights of all k-points: ``x_fract y_fract z_fract weight``
-    Generates the Monkhorst-Pack mesh, an equally spaced mesh of k-points.
+Diag.Kpoints (*block*)
+    Lists fractional coordinates and weights of explicit k-points as
+    ``x_fract y_fract z_fract weight``. If this block is absent and neither a
+    Monkhorst-Pack mesh nor k-space lines are requested, CONQUEST uses the
+    Gamma point with unit weight.
 
-    *default*:
+    *default*: absent (Gamma point only)
 
 Diag.MPMesh (*boolean*)
-    Switches on/off the Monkhorst-Pack mesh. Note: if this keyword is present in
-    the input file, the keyword **Diag.NumKpts** and the block **Kpoints** will
-    be ignored.
+    Switches on/off the Monkhorst-Pack mesh. When true, explicit k-points and
+    k-space lines are ignored.
 
-    *default*:
+    *default*: F
+
+Diag.KspaceLines (*boolean*)
+    Generates k-points along lines in reciprocal space. This option is used
+    only when ``Diag.MPMesh`` is false. See the
+    :ref:`band-structure procedure <pp_band_str>` for an example.
+
+    *default*: F
+
+Diag.NumKptLines (*integer*)
+    Number of k-space lines used when ``Diag.KspaceLines`` is true.
+
+    *default*: 1
+
+Diag.KpointLines (*block*)
+    Lists the start and end points of each k-space line in fractional
+    coordinates. The block must contain two entries for every line specified
+    by ``Diag.NumKptLines``.
+
+    *default*: none; required when ``Diag.KspaceLines`` is true
 
 Diag.MPMesh[X/Y/Z] (*integer*)
     Specifies the number n of k-points along the x(y,z) axis.
@@ -692,11 +787,13 @@ Diag.PaddingHmatrix (*boolean*)
 
 Diag.BlockSizeR (*integer*)
     Block size for rows (See next).
-    From v1.4, the default value is 32 when Diag.PaddingHmatrix is true.
+    The default value is 32 when ``Diag.PaddingHmatrix`` is true. When padding
+    is disabled and this keyword is omitted, the value is determined
+    automatically.
     It is recommended to check the efficiency (CPU time) on your platform by changing this value.
     Usually 20-40 is appropriate.
 
-    *default*: 32 or Determined automatically (if Diag.PaddingHmatrix= true) 
+    *default*: 32 with padding; otherwise determined automatically
 
 Diag.BlockSizeC (*integer*)
     R ... rows, C ... columns
@@ -709,7 +806,12 @@ Diag.BlockSizeC (*integer*)
     If Diag.PaddingHmatrix is set to true then the block sizes can take any value,
     but BlockSizeR and BlockSizeC must be the same.
 
-    *default*: Determined automatically
+    With padding disabled, omitting ``Diag.BlockSizeR`` causes both block sizes
+    to be determined automatically. If ``Diag.BlockSizeR`` is specified,
+    ``Diag.BlockSizeC`` is read separately and defaults to 1 if omitted.
+
+    *default*: equal to ``Diag.BlockSizeR`` with padding; otherwise as described
+    above
 
 Diag.MPShift[X/Y/Z] (*real*)
     Specifies the shift *s* of k-points along the x(y,z) axis, in fractional
@@ -733,13 +835,16 @@ Diag.kT (*real*)
 
     *default*: 0.001
 
-Diag.IntegerOccs (*logical*)
+Diag.IntegerOccs (*boolean*)
     Specifies integer occupation of eigenstates (overrides ``Diag.SmearingType``)
 
     *default*: False
 
-Diag.AdjustEf (*logical*)
-    Turns off the automatic adjustment of Ef to be mid-gap (unlikely to be needed).
+Diag.AdjustEf (*boolean*)
+    With Fermi-Dirac occupations, move the Fermi level to the middle of a
+    detected band gap. Set this false to disable the adjustment. This option
+    does not affect Methfessel-Paxton or integer occupations; integer
+    occupations always use the midgap Fermi level.
 
     *default*: True
 
@@ -829,7 +934,7 @@ AtomMove.NumSteps (*integer*)
 
 AtomMove.MaxForceTol (*real*)
     The structure optimisation will stop when the maximum force component is less
-    than **MD.MaxForceTol**
+    than ``AtomMove.MaxForceTol``.
 
     *default*: 0.0005 Ha/bohr
 
@@ -851,13 +956,10 @@ AtomMove.IonTemperature (*real*)
     *default*: 300 K for MD, 0 for Quench MD or FIRE
 
 AtomMove.ReadVelocity (*boolean*)
-    Read velocity from file ``md.checkpoint`` (when ``AtomMove.RestartRun T``)
+    Read velocities from ``md.checkpoint`` during an MD restart, or from
+    ``velocity.dat`` otherwise
 
-                           or  ``velocity.dat``  (when ``AtomMove.RestartRun F``, very rare)
-
-    *default*: F (when ``AtomMove.RestartRun F``) 
-
-            or T (when ``AtomMove.RestartRun T``)
+    *default*: T when ``AtomMove.RestartRun`` is true; F otherwise
 
 AtomMove.AppendCoords (*boolean*)
     Chooses whether to append coordinates to ``UpdatedAtoms.dat`` during atomic
@@ -866,31 +968,37 @@ AtomMove.AppendCoords (*boolean*)
     *default*: T
 
 AtomMove.OutputFreq (*integer*)
-    Frequency of output of information. *Not properly implemented*
+    Frequency, in ionic steps, for writing MD frames to ``md.frames`` and, when
+    ``MD.TDEP`` is true, TDEP-compatible lattice-dynamics files. It also
+    supplies the default MD frequency for the XSF and extended-XYZ trajectory
+    files.
 
     *default*: 50
 
 AtomMove.WriteXSF (*boolean*)
-    Write atomic coordinates to ``trajectory.xsf`` for ``AtomMove.TypeOfRun = md`` or ``cg``,
-    every ``AtomMove.XsfFreq`` steps
+    Write atomic coordinates to ``trajectory.xsf``. During MD, frames are
+    written every ``AtomMove.XsfFreq`` steps. Structure-relaxation methods write
+    a frame after every ionic step.
 
     *default*: T
 
 AtomMove.XsfFreq (*integer*)
-    Frequency of output of atomic coordinates to ``trajectory.xsf``
+    Frequency, in MD steps, of atomic-coordinate output to ``trajectory.xsf``.
+    This setting is not used by structure-relaxation methods.
 
     *default*: same as ``AtomMove.OutputFreq``
 
-AtomMove.WriteXYZ (*boolean*)
-    Write atomic coordinates to ``trajectory.xyz`` for ``AtomMove.TypeOfRun = md``,
-    every ``AtomMove.XyzFreq`` steps
+AtomMove.WriteExtXYZ (*boolean*)
+    Write coordinates, lattice vectors, energy, forces and stress in extended
+    XYZ format to ``trajectory.xyz``. Moving-atom runs write frames every
+    ``AtomMove.XyzFreq`` steps; a static run writes one frame.
 
-    *default*: T
+    *default*: F
 
 AtomMove.XyzFreq (*integer*)
-    Frequency of output of atomic coordinates to ``trajectory.xyz``
+    Frequency of output to ``trajectory.xyz`` during moving-atom runs.
 
-    *default*: same as ``AtomMove.OutputFreq``
+    *default*: same as ``AtomMove.OutputFreq`` for MD; 1 for other run types
 
 AtomMove.TestForces (*boolean*)
     Flag for testing forces with comparison of analytic and numerical calculations.
@@ -901,10 +1009,10 @@ AtomMove.TestForces (*boolean*)
 AtomMove.TestAllForces (*boolean*)
     Switch to test *all* force contributions or not
 
-    *default*: F
+    *default*: T
 
 AtomMove.CalcStress (*boolean*)
-    Toggle calculation of the stress tensor. Switching off can improve performace.
+    Toggle calculation of the stress tensor. Switching off can improve performance.
 
     *default*: T
 
@@ -983,6 +1091,8 @@ AtomMove.OptCell.Constraint (*string*)
     ``volume``: minimize the total energy by scaling each simulation cell dimension by
     the same global scaling factor. Search directions are set by the mean stress.
 
+    *default*: none
+
 AtomMove.TestSpecificForce (*integer*)
     Label for which force contribution to test. Note that for PAOs non-local Pulay
     and Hellman-Feynman forces are found together as part of the HF calculation;
@@ -1016,11 +1126,12 @@ AtomMove.TestForceDelta (*real*)
     *default*: 10\ :math:`^{-5}` bohr
 
 AtomMove.RestartRun (*boolean*)
-    Restart a MD run. Note that this will set ``General.LoadL T``,
-    ``AtomMove.MakeInitialChargeFromSC T`` and ``XL.LoadX T`` if using the
-    extended Lagrangian. The atomic coordinates will be read from
-    ``md.positions`` and the velocities and extended system variables from
-    ``md.checkpoint``.
+    Restart an MD run. Unless explicitly overridden, this defaults
+    ``General.LoadDM``, ``SC.MakeInitialChargeFromK`` and
+    ``AtomMove.ReadVelocity`` to T. It also defaults ``XL.LoadX`` to T for
+    XL-BOMD, and ``Basis.LoadCoeffs`` to T for MSSF and blip-basis calculations.
+    Atomic coordinates are read from ``md.position``; velocities and extended-
+    system variables are read from ``md.checkpoint``.
 
     *default*: F
 
@@ -1049,7 +1160,7 @@ AtomMove.SkipEarlyDM (*boolean*)
 AtomMove.McWeenyFreq (*integer*)
     McWeeny step is applied every N steps (with “AtomMove.ReuseDM T”)
 
-    *default*:
+    *default*: 0 (disabled)
 
 AtomMove.ExtendedLagrangian (*boolean*)
     Selects XL-BOMD (with “AtomMove.ReuseDM T”)
@@ -1059,7 +1170,8 @@ AtomMove.ExtendedLagrangian (*boolean*)
 AtomMove.FixCentreOfMass (*boolean*)
     Remove the centre of mass velocity at every time step
 
-    *default*: T
+    *default*: T for MD, except F for FIRE; disabled when any atomic coordinate
+    is fixed and unused for other run types
 
 Go to :ref:`top <input_tags>`.
 
@@ -1069,52 +1181,71 @@ Molecular Dynamics
 ------------------
 
 MD.Ensemble (*string*)
-    values: nve/nvt/npt/nph
+    values: nve/nvt/npt
 
     The molecular dynamics ensemble
 
     *default*: nve
 
 MD.Thermostat (*string*)
-    values: none/nhc/berendsen/svr
+    values: none/nhc/svr
 
     Thermostat type
 
     ``none``
         No thermostat (used for calculating temperature only)
-    ``berendsen``
-        Berendsen weak coupling thermostat
+    ``nhc``
+        Nose-Hoover chain thermostat
     ``svr``
         Stochastic velocity rescaling
 
-    *default*: none
+    *default*: none for NVE; nhc for NVT and NPT
 
 MD.Barostat (*string*)
-    values: none/berendsen/iso-mttk/ortho-mttk/mttk
+    values: none/pr/mttk
 
-    Barostat type. The following are the only valid thermostat/barostat
-    combinations for the NPT ensemble: ``berendsen``/ ``berendsen``,
-    ``nhc``/ ``pr``, ``svr``/ ``pr``
+    Barostat type. ``pr`` selects the Parrinello-Rahman implementation;
+    ``mttk`` selects the Martyna-Tobias-Tuckerman-Klein implementation.
 
     ``none``
         No barostat (used for calculating pressure only)
-    ``berendsen``
-        Berendsen weak coupling barostat
     ``pr``
         Parrinello-Rahman (extended system) barostat
+    ``mttk``
+        Martyna-Tobias-Tuckerman-Klein extended-system barostat
 
-    *default*: none
+    *default*: none for NVE and NVT; pr for NPT
+
+MD.CellConstraint (*string*)
+    values: fixed/volume/xyz
+
+    Controls the cell degrees of freedom used by the barostat. ``volume`` uses
+    one isotropic cell degree of freedom, preserving the cell shape. ``xyz``
+    allows the three orthorhombic cell lengths to change independently and is
+    implemented for the ``pr`` barostat. The ``mttk`` implementation is
+    isotropic and should be used with ``volume``. When no barostat is active,
+    CONQUEST sets the constraint to ``fixed``; use ``MD.Barostat none`` for
+    fixed-cell dynamics.
+
+    *default*: volume; changed to fixed when no barostat is active
+
+MD.EquilSteps (*integer*)
+    Number of initial equilibration steps. A positive value is retained only
+    when ``MD.Thermostat`` is ``svr``; otherwise CONQUEST issues a warning and
+    resets it to zero.
+
+    *default*: 0
 
 MD.tauT (*real*)
-    Coupling time constant for thermostat. Required for Berendsen thermostat, or
-    if ``MD.CalculateXLMass = T``. Note that this number means different things
-    for the Berendsen and NHC thermostats.
+    Thermostat coupling time in fs. For SVR this is a relaxation timescale; for
+    NHC it sets the thermostat frequency when ``MD.CalculateXLMass`` is true.
 
-    *default*: 1.0
+    *default*: 50 fs for SVR; 10 times ``AtomMove.Timestep`` for NHC
 
 MD.TDrag (*real*)
-    Add a drag coefficient to the thermostat. The thermostat velocities are
-    reduced by a factor :math:`1 - \tau/D_T` every step.
+    Dimensionless strength of ad hoc damping applied to the ionic
+    Nose-Hoover-chain velocities. The internal damping factor also depends on
+    the timestep, ``MD.tauT``, ``MD.nMTS`` and ``MD.nYoshida``.
 
     *default*: 0.0
 
@@ -1128,7 +1259,7 @@ MD.CellNHC (*boolean*)
 
     *default*: T
 
-MD.NHCMass (*blocks*)
+MD.NHCMass (*block*)
     :math:`<n1> <n2> <n3> \ldots`
     Masses of NHC heat baths
 
@@ -1141,22 +1272,22 @@ MD.CellNHCMass (*block*)
     *default*: 1 1 1 1 1
 
 MD.BulkModulusEst (*real*)
-    Bulk modulus estimate for system. Only necessary for Berendsen weak pressure
-    coupling (``MD.Barostat = berendsen`` or ``MD.BerendsenEquil > 0``)
+    Reserved bulk-modulus estimate. Version 1.6 reads and stores this value, but
+    the supported barostat algorithms do not use it.
 
     *default*: 100
 
 MD.tauP (*real*)
-    Coupling time constant for barostat. Required for Berendsen barostat, or if
-    MD.CalculateXLMass = T. Note that this number means different things for the
-    Berendsen and Parrinello-Rahman barostats.
+    Barostat coupling time in fs. It sets the barostat frequency when
+    ``MD.CalculateXLMass`` is true.
 
-    *default*: 10.0 (Berendsen) or 100.0 (MTTK)
+    *default*: 100 times ``AtomMove.Timestep``
 
 MD.PDrag (*real*)
-    Add a drag coefficient to the barostat. The barostat velocities are
-    reduced by a factor :math:`1 - \tau/D_P` every step. This is useful
-    when the lattice parameters are varying rapidly.
+    Dimensionless strength of ad hoc damping applied to the cell/barostat
+    velocities and, when ``MD.CellNHC`` is true, the separate cell
+    Nose-Hoover-chain velocities. The internal damping factor also depends on
+    the timestep, ``MD.tauP``, ``MD.nMTS`` and ``MD.nYoshida``.
 
     *default*: 0.0
 
@@ -1182,11 +1313,6 @@ MD.nMTS (*integer*)
     Number of time steps in inner loop of MTS scheme
 
     *default*: 1
-
-MD.BerendsenEquil (*integer*)
-    Equilibrate the system for :math:`n` steps using Berendsen weak coupling
-
-    *default*: 0
 
 MD.TDEP (*boolean*)
     Dump data in a format readable by the Temperature Dependent Effective
@@ -1220,12 +1346,12 @@ MD.VariableTemperatureRate (*real*)
 
     *default*: 0.0
 
-MD.InitialTemperature(*real*)
+MD.InitialTemperature (*real*)
     Initial temperature.
 
     *default*: same as AtomMove.IonTemperature
 
-MD.FinalTemperature(*real*)
+MD.FinalTemperature (*real*)
     Final temperature.
 
     *default*: same as AtomMove.IonTemperature
@@ -1243,7 +1369,8 @@ Spin.SpinPolarised (*boolean*)
     *default*: F
 
 Spin.FixSpin (*boolean*)
-    Determines if spin populations are to be fixed. Only read if **Spin.FixPolarised** is set.
+    Determines if spin populations are to be fixed. Only used if
+    ``Spin.SpinPolarised`` is true.
 
     *default*: F
 
@@ -1264,65 +1391,71 @@ Go to :ref:`top <input_tags>`.
 DeltaSCF
 --------
 
-flag\_DeltaSCF (*boolean*)
+minE.DeltaSCF (*boolean*)
     Selects delta SCF calculation
 
-    *default*:
+    *default*: F
 
 DeltaSCF.SourceLevel (*integer*)
     Eigenstate number to remove electron from (source)
 
-    *default*:
+    *default*: 0
 
 DeltaSCF.TargetLevel (*integer*)
     Eigenstate number to promote electron to (target)
 
-    *default*:
+    *default*: 0
 
 DeltaSCF.SourceChannel (*integer*)
     Spin channel for electron source
 
-    *default*:
+    *default*: 1
 
 DeltaSCF.TargetChannel (*integer*)
     Spin channel for electron target
 
-    *default*:
+    *default*: 1
 
 DeltaSCF.SourceNFold (*integer*)
     Allows selection of more than one level for excitation source (N-fold)
 
-    *default*:
+    *default*: 1
 
 DeltaSCF.TargetNFold (*integer*)
     Multiplicity of target (N-fold)
 
-    *default*:
+    *default*: 1
 
 DeltaSCF.LocalExcitation (*boolean*)
-    Select an excitation localised on a group of atoms
+    Select an excitation localised on a group of atoms. When enabled, the
+    ``cDFT.AtomGroups`` block and every atom-group block named within it are
+    required; CONQUEST stops if any of these blocks is absent. At least one of
+    ``DeltaSCF.HOMOLimit`` and ``DeltaSCF.LUMOLimit`` must be nonzero for the
+    localised-excitation analysis to remain enabled.
 
-    *default*:
+    *default*: F
 
 DeltaSCF.HOMOLimit (*integer*)
     How many states down from HOMO to search for localised excitation
 
-    *default*:
+    *default*: 0
 
 DeltaSCF.LUMOLimit (*integer*)
     How many states up from LUMO to search for localised excitation
 
-    *default*:
+    *default*: 0
 
 DeltaSCF.HOMOThresh (*real*)
-    (*please fill in*)
+    Threshold for identifying a localised occupied source state (sum of the
+    squared moduli of coefficients on the selected atoms)
 
-    *default*:
+    *default*: 0.5
 
 DeltaSCF.LUMOThresh (*real*)
-    Threshold for identifying localised excitation (sum over square moduli of coefficients)
+    Threshold for identifying a localised unoccupied target state (sum of the
+    squared moduli of coefficients on the selected atoms)
 
-    *default*:
+    *default*: 0.5
 
 Go to :ref:`top <input_tags>`.
 
@@ -1334,34 +1467,34 @@ Constrained DFT (cDFT)
 cDFT.Perform\_cDFT (*boolean*)
     Selects cDFT operation
 
-    *default*:
+    *default*: F
 
 cDFT.Type (*integer*)
     values: 1 or 2
 
     Selects constraint to be for absolute charge on groups (1) or difference between two groups (2)
 
-    *default*:
+    *default*: 2
 
 cDFT.MaxIterations (*integer*)
     Maximum iterations permitted
 
-    *default*:
+    *default*: 50
 
 cDFT.Tolerance (*real*)
     Tolerance on charge
 
-    *default*:
+    *default*: 0.001
 
 cDFT.NumberAtomGroups (*integer*)
     Number of groups of atoms
 
-    *default*:
+    *default*: 1
 
 cDFT.AtomGroups (*block*)
-    Block with each line specifying: Number of atoms, target charge, label for
-    block. For each line, there should be a corresponding block with the appropriate
-    label; the block consists of a list of atom numbers for the atoms in the group
+    Each line specifies a group index, number of atoms, target charge and block
+    label. For each line, a block with that label must list the atom numbers in
+    the group.
 
 Go to :ref:`top <input_tags>`.
 
@@ -1406,10 +1539,10 @@ Go to :ref:`top <input_tags>`.
 vdW-DF
 ------
 
-vdWDFT.LDAFunctionalType (*string*)
+vdWDFT.LDAFunctionalType (*integer*)
     Selects LDA functional to use with vdW-DF
 
-    *default*:
+    *default*: 3
 
 Go to :ref:`top <input_tags>`.
 
@@ -1421,7 +1554,7 @@ DFT-D2
 DFT-D2\_range (*real*)
     DFT-D2 cutoff range (bohr)
 
-    *default*:
+    *default*: 23.0
 
 Go to :ref:`top <input_tags>`.
 
@@ -1448,7 +1581,7 @@ XL.PropagateL (*boolean*)
 XL.Dissipation (*boolean*)
     Selects the addition of dissipative force
 
-    *default*:
+    *default*: F
 
 XL.MaxDissipation (*integer*)
     Order of dissipative force term 
@@ -1474,8 +1607,8 @@ Advanced and obscure tags
 
 .. _advanced_general_tags:
 
-General
-*******
+General (advanced)
+******************
 
 General.LoadInvS (*boolean*)
     Selects loading of inverse S matrix from previous step (not
@@ -1507,11 +1640,6 @@ General.EwaldAccuracy (*real*)
 
     *default*:1\ :math:`\times`\ 10\ :math:`^{-10}`
 
-General.CheckDFT (*boolean*)
-    Calculates DFT energy using output density
-
-    *default*: F
-
 General.AverageAtomicDiameter (*real*)
     Related to space-filling
 
@@ -1524,6 +1652,8 @@ General.GapThreshold (*real*)
 
 General.only_Dispersion (*boolean*)
     Selects only DFT\_D2 calculation (no electronic structure etc)
+
+    *default*: F
 
 General.MixXCGGAInOut (*real*)
     For non-SCF calculations only, chooses how to mix the proportions of
@@ -1539,8 +1669,8 @@ Go to :ref:`top <input_tags>`.
 
 .. _advanced_atomic_spec_tags:
 
-Atomic Specification
-********************
+Atomic Specification (advanced)
+*******************************
 
 Atom.ValenceCharge (*real*)
     Valence charge of species (e.g. 4 for carbon, 6 for oxygen)
@@ -1652,7 +1782,7 @@ IO.PdbAltLoc (*string*)
 IO.PdbOut (*boolean*)
     Format of the output coordinate file. Writes a PDB file if set to T. In that
     case, either the input must be in pdb format or a PDB “template” file needs to
-    be specified (keyword General.PdbTemplate)
+    be specified with ``IO.PdbTemplate``.
 
     *default*: F
 
@@ -1663,7 +1793,7 @@ IO.PdbTemplate (*string*)
     it will also be used as the template, although this can still be
     overwritten with this keyword
 
-    *default*: coordinate file
+    *default*: ``IO.Coordinates`` when ``IO.PdbIn`` is true; no template otherwise
 
 IO.AtomOutputThreshold (*integer*)
     Threshold below which atomic positions are output on
@@ -1688,23 +1818,16 @@ Basis.BasisSet (*string*)
 
     -  PAOs — Pseudo-atomic orbitals :cite:`e-Artacho1999`
 
-    -  blips (default) — B-splines :cite:`e-Hernandez1997`
+    -  blips — B-splines :cite:`e-Hernandez1997`
 
     *default*: PAOs
 
-Basis.LoadBlip (*boolean*)
-    Load blip or PAO coefficients from file. If set to T, for blips the code will
-    look for a set of files containing blip coefficients, which is taken to be
-    ``blip_coeffs.nnn``, where ``nnn`` is processor number (padded with zeroes);
-    for PAOs, the code will look for a *single* file which is ``supp_pao.dat``
-    by default, but can be set with ``Basis.SupportPaoFile``
+Basis.LoadCoeffs (*boolean*)
+    Load existing support-function coefficients. Blip calculations read the
+    per-process ``blip_coeffs`` files; MSSF calculations read the dumped
+    ``SFcoeff`` matrix files.
 
-    *default*: F
-
-Basis.SupportPaoFile (*string*)
-    Specifies filename for PAO coefficients
-
-    *default*: ``supp_pao.dat``
+    *default*: F, or T when ``AtomMove.RestartRun`` is true (for blips and MSSF)
 
 Basis.UsePulayForPAOs (*boolean*)
     Determines whether to use Pulay DIIS for minimisation of PAO basis coefficients
@@ -1770,17 +1893,12 @@ Basis.TestBasisGrad\_H (*boolean*)
 
     *default*: F
 
-Basis.PAOs\_OneToOne (*boolean*)
-    Assign PAOs to individual support functions (implies no support function optimisation)
-
-    *default*: F
-
 Go to :ref:`top <input_tags>`.
 
 .. _advanced_grid_tags:
 
-Integration Grid
-****************
+Integration Grid (advanced)
+***************************
 
 Grid.PointsAlong[X/Y/Z] (*integer*)
     Grid points along x (y,z). Overwrites the values set by **Grid.GridCutoff**.
@@ -1810,4 +1928,3 @@ Go to :ref:`top <input_tags>`.
     :style: unsrt
 
 Go to :ref:`top <input_tags>`.
-
