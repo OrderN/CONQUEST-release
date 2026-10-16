@@ -3442,8 +3442,8 @@ contains
           nkp_lines = fdf_integer('Diag.NumKptLines',1)
           if(iprint_init>1.AND.inode==ionode) then
              write(io_lun,fmt='(8x,"Number of Kpoint lines: ",i4)') nkp_lines
-          else
-             write(io_lun,fmt='(4x,"Using ",i3," lines of k-points specified by user")')
+          else if(inode==ionode) then
+             write(io_lun,fmt='(4x,"Using ",i3," lines of k-points specified by user")') nkp_lines
           end if
           if(nkp_lines<1) call cq_abort("Need to specify how many kpoint lines !",nkp_lines)
           nkp_in_line = fdf_integer('Diag.NumKpts',2)
