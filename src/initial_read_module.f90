@@ -3443,7 +3443,7 @@ contains
           if(iprint_init>1.AND.inode==ionode) then
              write(io_lun,fmt='(8x,"Number of Kpoint lines: ",i4)') nkp_lines
           else if(inode==ionode) then
-             write(io_lun,fmt='(4x,"Using ",i3," lines of k-points specified by user")') nkp_lines
+             write(io_lun,fmt='(8x,"Using ",i3," lines of k-points specified by user")') nkp_lines
           end if
           if(nkp_lines<1) call cq_abort("Need to specify how many kpoint lines !",nkp_lines)
           nkp_in_line = fdf_integer('Diag.NumKpts',2)
@@ -3483,7 +3483,7 @@ contains
              dky = (kk_tmp(2,i+1) - kk_tmp(2,i))/real(nkp_in_line-1,double)
              dkz = (kk_tmp(3,i+1) - kk_tmp(3,i))/real(nkp_in_line-1,double)
              if(iprint_init>1.AND.inode==ionode) &
-                  write(io_lun,fmt='(2x,"K-point spacing along line : ",i3,3f7.3)') i,dkx,dky,dkz
+                  write(io_lun,fmt='(8x,"K-point spacing along line : ",i3,3f7.3)') (i+1)/2,dkx,dky,dkz
              ! Number of points in line
              inc = nkp_in_line
              if(i<2*nkp_lines-1) then ! If last point is the same as first point of next line, ignore
