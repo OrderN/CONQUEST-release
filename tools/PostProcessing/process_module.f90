@@ -98,7 +98,7 @@ contains
 
     use datatypes
     use numbers
-    use local, ONLY: nkp, efermi, current, nptsx, nptsy, nptsz, eigenvalues, flag_by_kpoint, &
+    use local, ONLY: nkp, efermi, nptsx, nptsy, nptsz, eigenvalues, flag_by_kpoint, &
          n_bands_total, band_active_kp, flag_proc_range, band_full_to_active, evec_coeff,&
          E_procwf_min, E_procwf_max, flag_procwf_range_Ef, band_proc_no, n_bands_process, &
          grid_x, grid_y, grid_z, wtk, flag_outputWF_real
@@ -114,10 +114,12 @@ contains
     implicit none
 
     integer :: proc, band, nk, idum1, idum2, kp, ispin, i, j, k, ipao, jpao
+    integer :: itask, n_task
     real(double) :: weight, rbx, rby, rbz, sq, test, gpv, integral
     real(double), dimension(2) :: Emin, Emax
     character(len=50) :: filename, ci
     complex(double_cplx), dimension(:,:,:), allocatable :: psi
+    real(double), dimension(:,:,:), allocatable :: den
     integer :: i_atom, i_spec, i_l, i_zeta,i_m,j_atom,j_spec,j_l,j_zeta,j_m
     integer :: i_band, i_pao, j_pao
     real(double), parameter :: band_integral_tol = 1e-3_double
@@ -132,13 +134,15 @@ contains
     call read_eigenvalues
     ! Read eigenvector coefficients
     call read_psi_coeffs("Process")
-    allocate(current(nptsx,nptsy,nptsz))
-    allocate(psi(nptsx,nptsy,nptsz))
+    ! Work arrays are private to each thread (see parallel regions below)
     max_band_integral_deviation = zero
 
     if (flag_outputWF_real .and. (nkp.ne.1)) &
        call cq_abort("OutputWF_real is available only for Gamma-point calculations.")
 
+    ! Every (spin, band) pair is independent and writes its own cube file, so the
+    ! loops over spin and band are flattened into one loop of tasks which is
+    ! shared between OpenMP threads (dynamic schedule: cost per band varies).
     if(flag_proc_range) then
        Emin = E_procwf_min
        Emax = E_procwf_max
@@ -153,72 +157,76 @@ contains
        end if
        write(*,fmt='(4x,"Writing bands between ",e12.4," and ",e12.4,"Ha as specified in input file")') &
             Emin(1),Emax(1)
-       do ispin=1,nspin
+       n_task = nspin*n_bands_total
+!$omp parallel default(shared) private(psi, den, itask, ispin, band, kp, idum1, integral, integral_deviation, ci)
+       allocate(psi(nptsx,nptsy,nptsz), den(nptsx,nptsy,nptsz))
+!$omp do schedule(dynamic) reduction(max:max_band_integral_deviation)
+       do itask = 0, n_task-1
+          ispin = itask/n_bands_total + 1
+          band = mod(itask,n_bands_total) + 1
           if(flag_by_kpoint) then ! Separate bands by k-point
-             do band=1,n_bands_total
-                current = zero
-                do kp = 1,nkp
-                   if(eigenvalues(band,kp,ispin) >= Emin(ispin) .and. &
-                        eigenvalues(band,kp,ispin) <= Emax(ispin) .and. &
-                        band_active_kp(band,kp,ispin)==1) then
-                      psi = zero
-                      current = zero
-                      call pao_to_grid(band_full_to_active(band), kp, ispin, psi)
-                      if (.not.flag_outputWF_real) then
-                         current = psi*conjg(psi)   ! band density
-                      else
-                         current = real(psi)        ! only real-part of WF
-                      endif
-                      write(ci,'("Band",I0.6,"den_kp",I0.3,"S",I0.1)') band, kp, ispin
-                      call write_cube(current,ci)
-                      integral = gpv*sum(current)
-                      integral_deviation = abs(integral - one)
-                      max_band_integral_deviation = max(integral_deviation, max_band_integral_deviation)
-                      ! Check for problems with band integral
-                      if(integral_deviation>band_integral_tol) &
-                           write(*,fmt='(4x,"Integral of band ",i5," with energy ",f17.10," is ",f17.10)') &
-                           band,eigenvalues(band,kp,ispin),integral
-                   end if
-                end do ! kp
-             end do ! bands = 1, n_bands_total
-          else ! Sum over k-points
-             do band=1,n_bands_total
-                current = zero
-                idum1=0
-                do kp = 1,nkp
-                   if(eigenvalues(band,kp,ispin) >= Emin(ispin) .and. &
-                        eigenvalues(band,kp,ispin) <= Emax(ispin) .and. &
-                        band_active_kp(band,kp,ispin)==1) then
-                      call pao_to_grid(band_full_to_active(band), kp, ispin, psi)
-                      integral = gpv*sum(psi*conjg(psi))
-                      integral_deviation = abs(integral - one)
-                      max_band_integral_deviation = max(integral_deviation, max_band_integral_deviation)
-                      ! Check for problems with band integral
-                      if(integral_deviation>band_integral_tol) &
-                           write(*,fmt='(4x,"Integral of band ",i5," at kp ",i5," is ",f17.10)') &
-                           band,kp,integral
-                      if (.not.flag_outputWF_real) then
-                         current = current + psi*conjg(psi)*wtk(kp)   ! band density
-                      else
-                         current = current + real(psi)*wtk(kp)        ! only real-part of WF
-                      endif
-                      idum1 = 1
-                   end if
-                end do ! kp
-                if(idum1==1) then
-                   write(ci,'("Band",I0.6,"den_totS",I0.1)') band, ispin
-                   call write_cube(current,ci)
-                   integral = gpv*sum(current)
+             do kp = 1,nkp
+                if(eigenvalues(band,kp,ispin) >= Emin(ispin) .and. &
+                     eigenvalues(band,kp,ispin) <= Emax(ispin) .and. &
+                     band_active_kp(band,kp,ispin)==1) then
+                   psi = zero
+                   den = zero
+                   call pao_to_grid(band_full_to_active(band), kp, ispin, psi)
+                   if (.not.flag_outputWF_real) then
+                      den = real(psi)**2 + aimag(psi)**2   ! band density
+                   else
+                      den = real(psi)        ! only real-part of WF
+                   endif
+                   write(ci,'("Band",I0.6,"den_kp",I0.3,"S",I0.1)') band, kp, ispin
+                   call write_cube(den,ci)
+                   integral = gpv*sum(den)
                    integral_deviation = abs(integral - one)
                    max_band_integral_deviation = max(integral_deviation, max_band_integral_deviation)
                    ! Check for problems with band integral
                    if(integral_deviation>band_integral_tol) &
-                        write(*,fmt='(4x,"Integral of band ",i5," is ",f17.10)') &
-                        band,integral
+                        write(*,fmt='(4x,"Integral of band ",i5," with energy ",f17.10," is ",f17.10)') &
+                        band,eigenvalues(band,kp,ispin),integral
                 end if
-             end do ! bands
+             end do ! kp
+          else ! Sum over k-points
+             den = zero
+             idum1=0
+             do kp = 1,nkp
+                if(eigenvalues(band,kp,ispin) >= Emin(ispin) .and. &
+                     eigenvalues(band,kp,ispin) <= Emax(ispin) .and. &
+                     band_active_kp(band,kp,ispin)==1) then
+                   call pao_to_grid(band_full_to_active(band), kp, ispin, psi)
+                   integral = gpv*sum(real(psi)**2 + aimag(psi)**2)
+                   integral_deviation = abs(integral - one)
+                   max_band_integral_deviation = max(integral_deviation, max_band_integral_deviation)
+                   ! Check for problems with band integral
+                   if(integral_deviation>band_integral_tol) &
+                        write(*,fmt='(4x,"Integral of band ",i5," at kp ",i5," is ",f17.10)') &
+                        band,kp,integral
+                   if (.not.flag_outputWF_real) then
+                      den = den + (real(psi)**2 + aimag(psi)**2)*wtk(kp)   ! band density
+                   else
+                      den = den + real(psi)*wtk(kp)        ! only real-part of WF
+                   endif
+                   idum1 = 1
+                end if
+             end do ! kp
+             if(idum1==1) then
+                write(ci,'("Band",I0.6,"den_totS",I0.1)') band, ispin
+                call write_cube(den,ci)
+                integral = gpv*sum(den)
+                integral_deviation = abs(integral - one)
+                max_band_integral_deviation = max(integral_deviation, max_band_integral_deviation)
+                ! Check for problems with band integral
+                if(integral_deviation>band_integral_tol) &
+                     write(*,fmt='(4x,"Integral of band ",i5," is ",f17.10)') &
+                     band,integral
+             end if
           end if
-       end do
+       end do ! spin, bands
+!$omp end do
+       deallocate(psi, den)
+!$omp end parallel
     else ! User has provided list of bands
        write(*,fmt='(4x,"Writing ",i4," bands specified in input file")') n_bands_process
        if(flag_by_kpoint) then
@@ -226,66 +234,70 @@ contains
        else
           write(*,fmt='(4x,"Summing over k-points")')
        end if
-       do ispin=1,nspin
+       n_task = nspin*n_bands_process
+!$omp parallel default(shared) private(psi, den, itask, ispin, band, kp, integral, integral_deviation, ci)
+       allocate(psi(nptsx,nptsy,nptsz), den(nptsx,nptsy,nptsz))
+!$omp do schedule(dynamic) reduction(max:max_band_integral_deviation)
+       do itask = 0, n_task-1
+          ispin = itask/n_bands_process + 1
+          band = mod(itask,n_bands_process) + 1
           if(flag_by_kpoint) then ! Separate bands by k-point
-             do band=1,n_bands_process
-                current = zero
-                do kp = 1,nkp
-                   ! This clause is needed in case the user chose an energy range that only selects some k-points
-                   if(band_active_kp(band_proc_no(band),kp,ispin)==1) then
-                      psi = zero
-                      current = zero
-                      call pao_to_grid(band_full_to_active(band_proc_no(band)), kp, ispin, psi)
-                      if (.not.flag_outputWF_real) then
-                         current = psi*conjg(psi)   ! band density
-                      else
-                         current = real(psi)        ! only real-part of WF
-                      endif
-                      write(ci,'("Band",I0.6,"den_kp",I0.3,"S",I0.1)') band_proc_no(band), kp, ispin
-                      call write_cube(current,ci)
-                      integral = gpv*sum(current)
-                      integral_deviation = abs(integral - one)
-                      max_band_integral_deviation = max(integral_deviation, max_band_integral_deviation)
-                      ! Check for problems with band integral
-                      if(integral_deviation>band_integral_tol) &
-                           write(*,fmt='(4x,"Integral of psi squared ",i5," with energy ",f17.10," is ",f17.10)') &
-                           band,eigenvalues(band,kp,ispin),integral
-                   end if
-                end do ! kp
-             end do ! bands = 1, n_bands_total
+             do kp = 1,nkp
+                ! This clause is needed in case the user chose an energy range that only selects some k-points
+                if(band_active_kp(band_proc_no(band),kp,ispin)==1) then
+                   psi = zero
+                   den = zero
+                   call pao_to_grid(band_full_to_active(band_proc_no(band)), kp, ispin, psi)
+                   if (.not.flag_outputWF_real) then
+                      den = real(psi)**2 + aimag(psi)**2   ! band density
+                   else
+                      den = real(psi)        ! only real-part of WF
+                   endif
+                   write(ci,'("Band",I0.6,"den_kp",I0.3,"S",I0.1)') band_proc_no(band), kp, ispin
+                   call write_cube(den,ci)
+                   integral = gpv*sum(den)
+                   integral_deviation = abs(integral - one)
+                   max_band_integral_deviation = max(integral_deviation, max_band_integral_deviation)
+                   ! Check for problems with band integral
+                   if(integral_deviation>band_integral_tol) &
+                        write(*,fmt='(4x,"Integral of psi squared ",i5," with energy ",f17.10," is ",f17.10)') &
+                        band,eigenvalues(band,kp,ispin),integral
+                end if
+             end do ! kp
           else ! Sum over k-points
-             do band=1,n_bands_process
-                current = zero
-                do kp = 1,nkp
-                   ! This clause is needed in case the user chose an energy range that only selects some k-points
-                   if(band_active_kp(band_proc_no(band),kp,ispin)==1) then
-                      call pao_to_grid(band_full_to_active(band_proc_no(band)), kp, ispin, psi)
-                      integral = gpv*sum(psi*conjg(psi))
-                      integral_deviation = abs(integral - one)
-                      max_band_integral_deviation = max(integral_deviation, max_band_integral_deviation)
-                      ! Check for problems with band integral
-                      if(integral_deviation>band_integral_tol) &
-                           write(*,fmt='(4x,"Integral of band ",i5," at kp ",i5," is ",f17.10)') &
-                           band,kp,integral
-                      if (.not.flag_outputWF_real) then
-                         current = current + psi*conjg(psi)*wtk(kp)   ! band density
-                      else
-                         current = current + real(psi)*wtk(kp)        ! only real-part of WF
-                      endif
-                   end if
-                end do ! kp
-                write(ci,'("Band",I0.6,"den_totS",I0.1)') band_proc_no(band), ispin
-                call write_cube(current,ci)
-                integral = gpv*sum(current)
-                integral_deviation = abs(integral - one)
-                max_band_integral_deviation = max(integral_deviation, max_band_integral_deviation)
-                ! Check for problems with band integral
-                if(integral_deviation>band_integral_tol) &
-                     write(*,fmt='(4x,"Integral of band ",i5," is ",f17.10)') &
-                     band,integral
-             end do ! bands
+             den = zero
+             do kp = 1,nkp
+                ! This clause is needed in case the user chose an energy range that only selects some k-points
+                if(band_active_kp(band_proc_no(band),kp,ispin)==1) then
+                   call pao_to_grid(band_full_to_active(band_proc_no(band)), kp, ispin, psi)
+                   integral = gpv*sum(real(psi)**2 + aimag(psi)**2)
+                   integral_deviation = abs(integral - one)
+                   max_band_integral_deviation = max(integral_deviation, max_band_integral_deviation)
+                   ! Check for problems with band integral
+                   if(integral_deviation>band_integral_tol) &
+                        write(*,fmt='(4x,"Integral of band ",i5," at kp ",i5," is ",f17.10)') &
+                        band,kp,integral
+                   if (.not.flag_outputWF_real) then
+                      den = den + (real(psi)**2 + aimag(psi)**2)*wtk(kp)   ! band density
+                   else
+                      den = den + real(psi)*wtk(kp)        ! only real-part of WF
+                   endif
+                end if
+             end do ! kp
+             write(ci,'("Band",I0.6,"den_totS",I0.1)') band_proc_no(band), ispin
+             call write_cube(den,ci)
+             integral = gpv*sum(den)
+             integral_deviation = abs(integral - one)
+             max_band_integral_deviation = max(integral_deviation, max_band_integral_deviation)
+             ! Check for problems with band integral
+             if(integral_deviation>band_integral_tol) &
+                  write(*,fmt='(4x,"Integral of band ",i5," is ",f17.10)') &
+                  band,integral
           end if
-       end do
+       end do ! spin, bands
+!$omp end do
+       deallocate(psi, den)
+!$omp end parallel
     end if
     write(*,fmt='(4x,"Largest deviation of band integral from one is ",f8.5)') max_band_integral_deviation
     return

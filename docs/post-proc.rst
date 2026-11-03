@@ -152,6 +152,17 @@ output by CONQUEST.  The bands can be output summed over k-points, or
 at individual k-points, by setting ``Process.outputWF_by_kpoint`` to
 ``F`` or ``T`` respectively.
 
+Band densities for different spins and bands are independent, so
+``PostProcessCQ`` can compute them in parallel with OpenMP threads.  To
+use this, compile ``PostProcessCQ`` with OpenMP enabled in the system
+makefile (``OMPFLAGS= -fopenmp``) and set ``OMP_NUM_THREADS`` before
+running.  Each thread works on one spin and band at a time and needs
+memory for two copies of the grid, so reduce the number of threads if
+memory is limited.  The output files are identical to those from a
+serial run.  If you launch ``PostProcessCQ`` with ``mpirun``, check that
+the MPI library is not binding the process to a single core (for
+example, use ``--bind-to none`` with Open MPI).
+
 Go to :ref:`top <post-proc>`.
 
 .. _pp_STM:
