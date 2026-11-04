@@ -285,6 +285,15 @@ bins and smearing of the peaks can be set using:
    Process.sigma_DOS 0.002
    Process.n_DOS 10001
 
+Projections onto different atoms are independent, so ``PostProcessCQ``
+can compute them in parallel with OpenMP threads.  To use this, compile
+``PostProcessCQ`` with OpenMP enabled in the system makefile
+(``OMPFLAGS= -fopenmp``) and set ``OMP_NUM_THREADS`` before running.
+The output files are identical to those from a serial run.  If you
+launch ``PostProcessCQ`` with ``mpirun``, check that the MPI library is
+not binding the process to a single core (for example, use
+``--bind-to none`` with Open MPI).
+
 To resolve the DOS by angular momentum as well as by atom, then the
 following flags can be set:
 

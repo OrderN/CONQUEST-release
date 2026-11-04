@@ -474,13 +474,18 @@ contains
     ! Local variables
     integer :: i_band, i_kp, i_spin, n_DOS_wid, n_band, n_min, n_max, i, j, i_atom,max_nsf, i_spec, &
          i_l, nzeta, sf_offset, max_l, norbs, i_m, i_band_c, i_z
-    real(double) :: Ebin, dE_DOS, a, pf_DOS, spin_fac, coeff, check_electrons, peak_width
+    real(double) :: Ebin, dE_DOS, a, gauss, pf_DOS, spin_fac, coeff, check_electrons, peak_width
     real(double), dimension(:,:,:), allocatable :: pDOS
     real(double), dimension(:,:,:,:), allocatable :: pDOS_l
     real(double), dimension(:,:,:,:,:), allocatable :: pDOS_lm
-    real(double), dimension(:,:), allocatable :: occ
+    real(double), dimension(:,:,:), allocatable :: occ
     real(double), dimension(:,:), allocatable :: total_electrons
     real(double), dimension(:,:,:), allocatable :: total_electrons_l
+    ! pDOS of one atom, accumulated by one thread
+    real(double), dimension(:), allocatable :: atom_el
+    real(double), dimension(:,:), allocatable :: atom_DOS, atom_el_l
+    real(double), dimension(:,:,:), allocatable :: atom_DOS_l
+    real(double), dimension(:,:,:,:), allocatable :: atom_DOS_lm
     ! pDOS rotation variables
     real(double) :: A1(3, 3), A2(5, 5), C1(3, 3), C2(5, 5), E1(3,3), E2(5,5), Qxyz(3,3)
     real(double) :: rod(9), angle, axis(3), temp_matrix(3,3)
@@ -521,7 +526,7 @@ contains
     deallocate(evec_coeff)
     ! Read eigenvector coefficients
     call read_psi_coeffs("Process")
-    allocate(occ(n_bands_total,nkp))
+    allocate(occ(n_bands_total,nkp,nspin))
 
      ! Call pDOS rotation subroutines if desired. Also includes debug output
     if (flag_rotate_pdos) then
@@ -736,25 +741,44 @@ contains
     dE_DOS = (E_DOS_max - E_DOS_min)/real(n_DOS-1,double)
     n_DOS_wid = floor(peak_width/dE_DOS) ! How many bins either side of state we consider
     pf_DOS = one/(sigma_DOS*sqrt(twopi))
-    ! Accumulate DOS over bands and k-points for each spin
+    occ = zero
     do i_spin = 1, nspin
-       occ = zero
-       call occupy(occ,eigenvalues,efermi,i_spin)
-       do i_kp = 1, nkp
-          do i_band=1,n_bands_total ! All bands
-             if(eigenvalues(i_band, i_kp, i_spin)>E_DOS_min + range_offset(i_spin) .and. &
-                  eigenvalues(i_band, i_kp, i_spin)<E_DOS_max + range_offset(i_spin)) then
-                i_band_c = band_full_to_active(i_band)
-                n_band = floor((eigenvalues(i_band, i_kp, i_spin) - (E_DOS_min + range_offset(i_spin)))/dE_DOS) + 1
-                n_min = n_band - n_DOS_wid
-                if(n_min<1) n_min = 1
-                n_max = n_band + n_DOS_wid
-                if(n_max>n_DOS) n_max = n_DOS
-                do i = n_min, n_max
-                   Ebin = real(i-1,double)*dE_DOS + E_DOS_min + range_offset(i_spin)
-                   a = (Ebin-eigenvalues(i_band, i_kp, i_spin))/sigma_DOS
-                   do i_atom = 1, n_atoms_pDOS
-                      i_spec = species_glob(pDOS_atom_index(i_atom))
+       call occupy(occ(:,:,i_spin),eigenvalues,efermi,i_spin)
+    end do
+    ! Accumulate DOS over bands and k-points for each atom.  Atoms are independent, so the
+    ! loop over atoms is shared between OpenMP threads: each thread sums one atom at a time
+    ! into its own arrays, in the same order as a serial run, and then copies them out.
+!$omp parallel default(shared) private(i_atom, i_spec, i_spin, i_kp, i_band, i_band_c, n_band, &
+!$omp   n_min, n_max, i, Ebin, a, gauss, sf_offset, i_l, nzeta, i_z, i_m, norbs, coeff, &
+!$omp   atom_DOS, atom_DOS_l, atom_DOS_lm, atom_el, atom_el_l)
+    allocate(atom_DOS(n_DOS,nspin), atom_el(nspin))
+    if(flag_l_resolved) allocate(atom_DOS_l(0:max_l,n_DOS,nspin), atom_el_l(0:max_l,nspin))
+    if(flag_l_resolved .and. flag_lm_resolved) allocate(atom_DOS_lm(-max_l:max_l,0:max_l,n_DOS,nspin))
+!$omp do schedule(dynamic)
+    do i_atom = 1, n_atoms_pDOS
+       i_spec = species_glob(pDOS_atom_index(i_atom))
+       atom_DOS = zero
+       atom_el = zero
+       if(flag_l_resolved) then
+          atom_DOS_l = zero
+          atom_el_l = zero
+       end if
+       if(flag_l_resolved .and. flag_lm_resolved) atom_DOS_lm = zero
+       do i_spin = 1, nspin
+          do i_kp = 1, nkp
+             do i_band=1,n_bands_total ! All bands
+                if(eigenvalues(i_band, i_kp, i_spin)>E_DOS_min + range_offset(i_spin) .and. &
+                     eigenvalues(i_band, i_kp, i_spin)<E_DOS_max + range_offset(i_spin)) then
+                   i_band_c = band_full_to_active(i_band)
+                   n_band = floor((eigenvalues(i_band, i_kp, i_spin) - (E_DOS_min + range_offset(i_spin)))/dE_DOS) + 1
+                   n_min = n_band - n_DOS_wid
+                   if(n_min<1) n_min = 1
+                   n_max = n_band + n_DOS_wid
+                   if(n_max>n_DOS) n_max = n_DOS
+                   do i = n_min, n_max
+                      Ebin = real(i-1,double)*dE_DOS + E_DOS_min + range_offset(i_spin)
+                      a = (Ebin-eigenvalues(i_band, i_kp, i_spin))/sigma_DOS
+                      gauss = exp(-half*a*a)
                       if(flag_l_resolved .and. flag_lm_resolved) then
                          sf_offset = 1
                          do i_l = 0, pao(i_spec)%greatest_angmom
@@ -763,14 +787,11 @@ contains
                                do i_m = -i_l,i_l
                                   coeff = conjg(evec_coeff(sf_offset,pDOS_atom_index(i_atom), i_band_c,i_kp,i_spin)) * &
                                        scaled_evec_coeff(sf_offset,pDOS_atom_index(i_atom), i_band_c,i_kp,i_spin)
-                                  pDOS_lm(i_m,i_l,i_atom,i,i_spin) = &
-                                       pDOS_lm(i_m,i_l,i_atom,i,i_spin) + &
-                                       wtk(i_kp)*pf_DOS*exp(-half*a*a)*coeff
-                                  pDOS(i_atom,i,i_spin) = pDOS(i_atom,i,i_spin) + &
-                                       wtk(i_kp)*pf_DOS*exp(-half*a*a)*coeff
-                                  total_electrons_l(i_l,i_atom, i_spin) = &
-                                       total_electrons_l(i_l,i_atom, i_spin) + &
-                                       occ(i_band,i_kp)*wtk(i_kp)*pf_DOS*exp(-half*a*a)*coeff
+                                  atom_DOS_lm(i_m,i_l,i,i_spin) = atom_DOS_lm(i_m,i_l,i,i_spin) + &
+                                       wtk(i_kp)*pf_DOS*gauss*coeff
+                                  atom_DOS(i,i_spin) = atom_DOS(i,i_spin) + wtk(i_kp)*pf_DOS*gauss*coeff
+                                  atom_el_l(i_l,i_spin) = atom_el_l(i_l,i_spin) + &
+                                       occ(i_band,i_kp,i_spin)*wtk(i_kp)*pf_DOS*gauss*coeff
                                   sf_offset = sf_offset + 1
                                end do
                             end do
@@ -784,11 +805,10 @@ contains
                                  i_band_c,i_kp,i_spin),1, &
                                  scaled_evec_coeff(sf_offset+1:sf_offset+norbs,pDOS_atom_index(i_atom), &
                                  i_band_c,i_kp,i_spin),1)
-                            pDOS_l(i_l,i_atom,i,i_spin) = pDOS_l(i_l,i_atom,i,i_spin) + &
-                                 wtk(i_kp)*pf_DOS*exp(-half*a*a)*coeff
-                            pDOS(i_atom,i,i_spin) = pDOS(i_atom,i,i_spin) + wtk(i_kp)*pf_DOS*exp(-half*a*a)*coeff
-                            total_electrons_l(i_l,i_atom, i_spin) = total_electrons_l(i_l,i_atom, i_spin) + &
-                                 occ(i_band,i_kp)*wtk(i_kp)*pf_DOS*exp(-half*a*a)*coeff
+                            atom_DOS_l(i_l,i,i_spin) = atom_DOS_l(i_l,i,i_spin) + wtk(i_kp)*pf_DOS*gauss*coeff
+                            atom_DOS(i,i_spin) = atom_DOS(i,i_spin) + wtk(i_kp)*pf_DOS*gauss*coeff
+                            atom_el_l(i_l,i_spin) = atom_el_l(i_l,i_spin) + &
+                                 occ(i_band,i_kp,i_spin)*wtk(i_kp)*pf_DOS*gauss*coeff
                             sf_offset = sf_offset + norbs
                          end do
                       else
@@ -796,16 +816,30 @@ contains
                               pDOS_atom_index(i_atom),i_band_c,i_kp,i_spin),1, &
                               scaled_evec_coeff(1:npao_species(i_spec), &
                               pDOS_atom_index(i_atom),i_band_c,i_kp,i_spin),1)
-                         pDOS(i_atom,i,i_spin) = pDOS(i_atom,i,i_spin) + wtk(i_kp)*pf_DOS*exp(-half*a*a)*coeff
-                         total_electrons(i_atom, i_spin) = total_electrons(i_atom, i_spin) + &
-                              occ(i_band,i_kp)*wtk(i_kp)*pf_DOS*exp(-half*a*a)*coeff
+                         atom_DOS(i,i_spin) = atom_DOS(i,i_spin) + wtk(i_kp)*pf_DOS*gauss*coeff
+                         atom_el(i_spin) = atom_el(i_spin) + occ(i_band,i_kp,i_spin)*wtk(i_kp)*pf_DOS*gauss*coeff
                       end if
                    end do
-                end do
-             end if
+                end if
+             end do
           end do
-       end do
-    end do ! do i_spin = 1, n_spin
+       end do ! i_spin
+       pDOS(i_atom,:,:) = atom_DOS
+       if(flag_l_resolved .and. flag_lm_resolved) then
+          pDOS_lm(:,:,i_atom,:,:) = atom_DOS_lm
+          total_electrons_l(:,i_atom,:) = atom_el_l
+       else if(flag_l_resolved) then
+          pDOS_l(:,i_atom,:,:) = atom_DOS_l
+          total_electrons_l(:,i_atom,:) = atom_el_l
+       else
+          total_electrons(i_atom,:) = atom_el
+       end if
+    end do ! i_atom
+!$omp end do
+    deallocate(atom_DOS, atom_el)
+    if(allocated(atom_DOS_l)) deallocate(atom_DOS_l, atom_el_l)
+    if(allocated(atom_DOS_lm)) deallocate(atom_DOS_lm)
+!$omp end parallel
     ! Include spin factor and convert Ha to eV
     if(flag_l_resolved .and. flag_lm_resolved) then
        pDOS_lm = pDOS_lm*spin_fac/HaToeV
