@@ -93,7 +93,7 @@ Band density
 
 Setting ``Process.Job`` to ``ban`` produces band densities from wave
 function coefficients output by CONQUEST. The non-self-consistent,
-dense k-mesh run should read in a well-converged charge density and
+dense k-mesh run must read in a well-converged charge density and
 must have the following tag set:
 
 ::
