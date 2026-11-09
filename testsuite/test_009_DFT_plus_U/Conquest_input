@@ -29,7 +29,7 @@ DM.DFTplusU T
 
 General.NumberOfSpecies  1
 %block ChemicalSpeciesLabel
- 1 28.086 Fe
+ 1 55.850 Fe
 %endblock
 
 %block Fe
