@@ -92,15 +92,17 @@ Band density
 ++++++++++++
 
 Setting ``Process.Job`` to ``ban`` produces band densities from wave
-function coefficients output by CONQUEST.  The CONQUEST run must have
-the following tags set:
+function coefficients output by CONQUEST. The non-self-consistent,
+dense k-mesh run must read in a well-converged charge density and
+must have the following tag set:
 
 ::
 
    IO.outputWF T
 
-A set of bands whose coefficients are output are specified either with
-an energy range (the default is to produce *all* bands):
+By default, *all* bands will be produced. Restricting the set of 
+bands whose coefficients are output can be done with 
+either an energy range:
 
 ::
 
@@ -151,6 +153,11 @@ Note that the bands to be processed must be a subset of the bands
 output by CONQUEST.  The bands can be output summed over k-points, or
 at individual k-points, by setting ``Process.outputWF_by_kpoint`` to
 ``F`` or ``T`` respectively.
+
+The output log from post-processing will contain lines of the form 
+``"Integral of band n with energy E, is <float>"`` (``Process.outputWF_by_kpoint T``)
+or ``"Integral of band n at kp N is <float>"``. 
+A sufficiently converged integral will be around 1.00 for every k-point and band.
 
 Go to :ref:`top <post-proc>`.
 
