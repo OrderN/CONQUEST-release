@@ -372,7 +372,7 @@ contains
 
     implicit none
 
-    type(rad_func), intent(out)    :: func
+    type(rad_func), intent(inout)  :: func
     integer, intent(in)        :: n
     integer :: stat
 
