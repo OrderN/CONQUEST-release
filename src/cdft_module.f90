@@ -73,6 +73,9 @@ contains
     implicit none
 
     integer :: i, j, stat, spin
+    character(len=10) :: k_str
+    character(len=10) :: ni_in_cell_str
+    logical, dimension(:), allocatable :: cDFT_AtomMask
 
     if (cDFT_NumberAtomGroups > 2) then
        call cq_abort("Maximum of two groups permitted for cDFT (for &
@@ -98,15 +101,32 @@ contains
                        ni_in_cell)
     flag_cdft_atom = 0
     allocate(bwgrid(maxngrid, cDFT_NumberAtomGroups), STAT=stat)
+    allocate(cDFT_AtomMask(ni_in_cell))
+    cDFT_AtomMask = .false.
     do i = 1, cDFT_NumberAtomGroups
        if (inode == ionode .AND. iprint_SC >= 0) &
             write (io_lun, fmt='(6x,"cDFT Atom Group ",i4," Target: ",f12.5)') &
                   i, cDFT_Target(i)
        do j = 1, cDFT_NAtoms(i)
           flag_cdft_atom(cDFT_AtomList(i)%Numbers(j)) = i
-          if (inode == ionode .AND. iprint_SC > 1) &
-               write (io_lun, fmt='(4x,"Atom ",2i8)') &
-                      j, cDFT_AtomList(i)%Numbers(j)
+          if (inode == ionode .AND. iprint_SC > 1) then
+             cDFT_k = cDFT_AtomList(i)%Numbers(j)
+             write (io_lun, fmt='(4x,"Atom ",2i8)') j, cDFT_k  
+             if (cDFT_k > ni_in_cell) then
+                write (unit=k_str, fmt='(I10)') cDFT_k
+                write (unit=ni_in_cell_str, fmt='(I10)') ni_in_cell
+                call cq_abort('Atom index ' // trim(adjustl(k_str)) // &
+                              ' has exceeded total atoms (' // & 
+                              trim(adjustl(ni_in_cell_str)) // ').')
+             end if
+             if (cDFT_AtomMask(cDFT_k)) then
+                write (io_lun, fmt='(2x, "Duplicate atom index found:", i6)') &
+                       cDFT_k
+                call cq_abort('Duplicate atom index detected.')
+             else
+                cDFT_AtomMask(cDFT_k) = .true.
+             end if
+          end if
        enddo
     end do
     allocate(matHzero(nspin), STAT=stat)

@@ -47,6 +47,13 @@ module cdft_data
   end type atom_list
   type(atom_list), dimension(:), allocatable :: cDFT_AtomList
 
+  character(len=80) :: cDFT_AtomIndexFile
+  character(len=80) :: cDFT_block_line
+  integer :: io_cDFT
+  integer :: cDFT_current_atom_idx
+  integer :: cDFT_k
+  integer :: cDFT_dash_pos, cDFT_num_start, cDFT_num_end  
+
 !!***
 
 
