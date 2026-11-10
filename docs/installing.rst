@@ -228,6 +228,112 @@ Compile CONQUEST
 
 Go to :ref:`top <install>`
 
+.. _install_windows:
+
+Installing on Windows
+---------------------
+
+CONQUEST can be compiled natively on Windows 10 and 11 using `MSYS2 <https://www.msys2.org>`_
+(UCRT64 environment) and `Microsoft MPI <https://learn.microsoft.com/en-us/message-passing-interface/microsoft-mpi>`_.
+No changes to the source code are needed: the system file ``src/system/system.msys2.make`` is provided.
+The resulting ``Conquest.exe`` is a native Windows executable (not emulated).
+Alternatively, the Ubuntu instructions above can be followed inside the
+Windows Subsystem for Linux (WSL).
+
+The instructions below were tested on Windows 11 with gfortran 16.2, MS-MPI 10.1, OpenBLAS 0.3.34,
+ScaLAPACK 2.2.3, FFTW 3.3.11 and LibXC 7.1.2.
+
+Install MSYS2 and Microsoft MPI
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+In PowerShell:
+
+.. code-block:: powershell
+
+    winget install --id MSYS2.MSYS2 -e --source winget      # Unix-like build environment, installed in C:\msys64
+    winget install --id Microsoft.msmpi -e --source winget  # MPI runtime (mpiexec)
+
+All following commands must be typed in the **MSYS2 UCRT64** shell: open it from the Start menu
+(type ``UCRT64``) or run ``C:\msys64\ucrt64.exe``. Other MSYS2 environments (MSYS, MINGW64, CLANG64)
+will not work with the instructions below. If you use conda, run ``conda deactivate`` before
+starting MSYS2 from a terminal.
+
+Install needed packages
+~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: bash
+
+    echo $MSYSTEM          # Must print UCRT64
+    pacman -Syu            # Repeat (reopening the UCRT64 shell) until there is nothing left to update
+
+    pacman -S --needed make git                                             # Build tools
+    pacman -S --needed mingw-w64-ucrt-x86_64-gcc-fortran                    # GCC and gfortran
+    pacman -S --needed mingw-w64-ucrt-x86_64-msmpi                          # MPI headers, libraries and mpifort
+    pacman -S --needed mingw-w64-ucrt-x86_64-fftw                           # FFT
+    pacman -S --needed mingw-w64-ucrt-x86_64-{openblas,scalapack}           # Linear algebra
+    pacman -S --needed mingw-w64-ucrt-x86_64-libxc                          # LibXC
+
+If ``pacman`` fails with ``SSL certificate ... unable to get local issuer certificate``,
+your antivirus (e.g. Avast or AVG "HTTPS scanning") or a proxy is intercepting HTTPS connections.
+Either disable HTTPS scanning while installing the packages, or add the antivirus root certificate to MSYS2
+(in PowerShell; adjust the certificate name to your antivirus):
+
+.. code-block:: powershell
+
+    $c = Get-ChildItem Cert:\LocalMachine\Root | Where-Object Subject -like '*Avast Web/Mail Shield Root*' | Select-Object -First 1
+    "-----BEGIN CERTIFICATE-----`n" + [Convert]::ToBase64String($c.RawData, 'InsertLineBreaks') + "`n-----END CERTIFICATE-----" | Set-Content -Encoding ascii C:\msys64\etc\pki\ca-trust\source\anchors\antivirus-root.pem
+    C:\msys64\usr\bin\bash.exe -lc "update-ca-trust"
+
+Download CONQUEST
+~~~~~~~~~~~~~~~~~
+
+Windows drives are found under ``/c``, ``/d``, ... in MSYS2. Avoid spaces in the path.
+Clone with the MSYS2 ``git`` installed above: Git for Windows converts line endings to CRLF by default,
+which breaks ``makedeps`` and the shell scripts (use ``git clone -c core.autocrlf=false`` if you
+use Git for Windows).
+
+.. code-block:: bash
+
+    mkdir -p /c/local/src
+    cd /c/local/src
+    git clone https://github.com/OrderN/CONQUEST-release.git conquest_master
+    cd conquest_master/src
+
+Compile CONQUEST
+~~~~~~~~~~~~~~~~
+
+.. code-block:: bash
+
+    make SYSTEM=msys2 -j4     # Uses src/system/system.msys2.make; -j4 compiles with 4 cores
+
+The executable is ``bin/Conquest.exe``. OpenMP is enabled by default in ``system.msys2.make``.
+
+Run CONQUEST
+~~~~~~~~~~~~
+
+The MS-MPI ``mpiexec`` is not on the MSYS2 path by default:
+
+.. code-block:: bash
+
+    export PATH="/c/Program Files/Microsoft MPI/Bin:$PATH"    # Add to ~/.bashrc to make it permanent
+    export OMP_NUM_THREADS=1 OMP_STACKSIZE=100M OPENBLAS_NUM_THREADS=1
+    mpiexec -n 4 /c/local/src/conquest_master/bin/Conquest.exe
+
+To run ``Conquest.exe`` from PowerShell or cmd instead, add ``C:\msys64\ucrt64\bin`` and
+``C:\Program Files\Microsoft MPI\Bin`` to the Windows ``PATH``, otherwise DLLs such as
+``libgfortran-5.dll`` are not found.
+
+The test suite can be run with MPI and OpenMP (here in the four modes 1x1, 4x1, 1x4 and 2x2,
+written as *MPI processes* x *OpenMP threads*) with:
+
+.. code-block:: bash
+
+    pacman -S --needed mingw-w64-ucrt-x86_64-python-{numpy,pytest}
+    cd ../testsuite
+    ./run_conquest_tests_windows.sh 1x1 4x1 1x4 2x2
+
+Go to :ref:`top <install>`
+
 .. bibliography:: references.bib
     :cited:
     :labelprefix: I
