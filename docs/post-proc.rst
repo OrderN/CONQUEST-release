@@ -155,8 +155,8 @@ at individual k-points, by setting ``Process.outputWF_by_kpoint`` to
 ``F`` or ``T`` respectively.
 
 The output log from post-processing will contain lines of the form 
-``"Integral of band n with energy E, is <float>"`` (``Process.outputWF_by_kpoint T``)
-or ``"Integral of band n at kp N is <float>"``. 
+``"Integral of band n spin s with energy E, is <float>"`` (``Process.outputWF_by_kpoint T``)
+or ``"Integral of band n spin s at kp N is <float>"``. 
 A sufficiently converged integral will be around 1.00 for every k-point and band.
 
 Band densities for different spins and bands are independent, so
