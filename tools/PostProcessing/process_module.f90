@@ -98,7 +98,7 @@ contains
 
     use datatypes
     use numbers
-    use local, ONLY: nkp, efermi, current, nptsx, nptsy, nptsz, eigenvalues, flag_by_kpoint, &
+    use local, ONLY: nkp, efermi, nptsx, nptsy, nptsz, eigenvalues, flag_by_kpoint, &
          n_bands_total, band_active_kp, flag_proc_range, band_full_to_active, evec_coeff,&
          E_procwf_min, E_procwf_max, flag_procwf_range_Ef, band_proc_no, n_bands_process, &
          grid_x, grid_y, grid_z, wtk, flag_outputWF_real
@@ -114,10 +114,12 @@ contains
     implicit none
 
     integer :: proc, band, nk, idum1, idum2, kp, ispin, i, j, k, ipao, jpao
+    integer :: itask, n_task
     real(double) :: weight, rbx, rby, rbz, sq, test, gpv, integral
     real(double), dimension(2) :: Emin, Emax
     character(len=50) :: filename, ci
     complex(double_cplx), dimension(:,:,:), allocatable :: psi
+    real(double), dimension(:,:,:), allocatable :: den
     integer :: i_atom, i_spec, i_l, i_zeta,i_m,j_atom,j_spec,j_l,j_zeta,j_m
     integer :: i_band, i_pao, j_pao
     real(double), parameter :: band_integral_tol = 1e-3_double
@@ -132,13 +134,15 @@ contains
     call read_eigenvalues
     ! Read eigenvector coefficients
     call read_psi_coeffs("Process")
-    allocate(current(nptsx,nptsy,nptsz))
-    allocate(psi(nptsx,nptsy,nptsz))
+    ! Work arrays are private to each thread (see parallel regions below)
     max_band_integral_deviation = zero
 
     if (flag_outputWF_real .and. (nkp.ne.1)) &
        call cq_abort("OutputWF_real is available only for Gamma-point calculations.")
 
+    ! Every (spin, band) pair is independent and writes its own cube file, so the
+    ! loops over spin and band are flattened into one loop of tasks which is
+    ! shared between OpenMP threads (dynamic schedule: cost per band varies).
     if(flag_proc_range) then
        Emin = E_procwf_min
        Emax = E_procwf_max
@@ -153,72 +157,76 @@ contains
        end if
        write(*,fmt='(4x,"Writing bands between ",e12.4," and ",e12.4,"Ha as specified in input file")') &
             Emin(1),Emax(1)
-       do ispin=1,nspin
+       n_task = nspin*n_bands_total
+!$omp parallel default(shared) private(psi, den, itask, ispin, band, kp, idum1, integral, integral_deviation, ci)
+       allocate(psi(nptsx,nptsy,nptsz), den(nptsx,nptsy,nptsz))
+!$omp do schedule(dynamic) reduction(max:max_band_integral_deviation)
+       do itask = 0, n_task-1
+          ispin = itask/n_bands_total + 1
+          band = mod(itask,n_bands_total) + 1
           if(flag_by_kpoint) then ! Separate bands by k-point
-             do band=1,n_bands_total
-                current = zero
-                do kp = 1,nkp
-                   if(eigenvalues(band,kp,ispin) >= Emin(ispin) .and. &
-                        eigenvalues(band,kp,ispin) <= Emax(ispin) .and. &
-                        band_active_kp(band,kp,ispin)==1) then
-                      psi = zero
-                      current = zero
-                      call pao_to_grid(band_full_to_active(band), kp, ispin, psi)
-                      if (.not.flag_outputWF_real) then
-                         current = psi*conjg(psi)   ! band density
-                      else
-                         current = real(psi)        ! only real-part of WF
-                      endif
-                      write(ci,'("Band",I0.6,"den_kp",I0.3,"S",I0.1)') band, kp, ispin
-                      call write_cube(current,ci)
-                      integral = gpv*sum(current)
-                      integral_deviation = abs(integral - one)
-                      max_band_integral_deviation = max(integral_deviation, max_band_integral_deviation)
-                      ! Check for problems with band integral
-                      if(integral_deviation>band_integral_tol) &
-                           write(*,fmt='(4x,"Integral of band ",i5," with energy ",f17.10," is ",f17.10)') &
-                           band,eigenvalues(band,kp,ispin),integral
-                   end if
-                end do ! kp
-             end do ! bands = 1, n_bands_total
-          else ! Sum over k-points
-             do band=1,n_bands_total
-                current = zero
-                idum1=0
-                do kp = 1,nkp
-                   if(eigenvalues(band,kp,ispin) >= Emin(ispin) .and. &
-                        eigenvalues(band,kp,ispin) <= Emax(ispin) .and. &
-                        band_active_kp(band,kp,ispin)==1) then
-                      call pao_to_grid(band_full_to_active(band), kp, ispin, psi)
-                      integral = gpv*sum(psi*conjg(psi))
-                      integral_deviation = abs(integral - one)
-                      max_band_integral_deviation = max(integral_deviation, max_band_integral_deviation)
-                      ! Check for problems with band integral
-                      if(integral_deviation>band_integral_tol) &
-                           write(*,fmt='(4x,"Integral of band ",i5," at kp ",i5," is ",f17.10)') &
-                           band,kp,integral
-                      if (.not.flag_outputWF_real) then
-                         current = current + psi*conjg(psi)*wtk(kp)   ! band density
-                      else
-                         current = current + real(psi)*wtk(kp)        ! only real-part of WF
-                      endif
-                      idum1 = 1
-                   end if
-                end do ! kp
-                if(idum1==1) then
-                   write(ci,'("Band",I0.6,"den_totS",I0.1)') band, ispin
-                   call write_cube(current,ci)
-                   integral = gpv*sum(current)
+             do kp = 1,nkp
+                if(eigenvalues(band,kp,ispin) >= Emin(ispin) .and. &
+                     eigenvalues(band,kp,ispin) <= Emax(ispin) .and. &
+                     band_active_kp(band,kp,ispin)==1) then
+                   psi = zero
+                   den = zero
+                   call pao_to_grid(band_full_to_active(band), kp, ispin, psi)
+                   if (.not.flag_outputWF_real) then
+                      den = real(psi)**2 + aimag(psi)**2   ! band density
+                   else
+                      den = real(psi)        ! only real-part of WF
+                   endif
+                   write(ci,'("Band",I0.6,"den_kp",I0.3,"S",I0.1)') band, kp, ispin
+                   call write_cube(den,ci)
+                   integral = gpv*sum(den)
                    integral_deviation = abs(integral - one)
                    max_band_integral_deviation = max(integral_deviation, max_band_integral_deviation)
                    ! Check for problems with band integral
                    if(integral_deviation>band_integral_tol) &
-                        write(*,fmt='(4x,"Integral of band ",i5," is ",f17.10)') &
-                        band,integral
+                        write(*,fmt='(4x,"Integral of band ",i5," spin ",i1," with energy ",f17.10," is ",f17.10)') &
+                        band,ispin,eigenvalues(band,kp,ispin),integral
                 end if
-             end do ! bands
+             end do ! kp
+          else ! Sum over k-points
+             den = zero
+             idum1=0
+             do kp = 1,nkp
+                if(eigenvalues(band,kp,ispin) >= Emin(ispin) .and. &
+                     eigenvalues(band,kp,ispin) <= Emax(ispin) .and. &
+                     band_active_kp(band,kp,ispin)==1) then
+                   call pao_to_grid(band_full_to_active(band), kp, ispin, psi)
+                   integral = gpv*sum(real(psi)**2 + aimag(psi)**2)
+                   integral_deviation = abs(integral - one)
+                   max_band_integral_deviation = max(integral_deviation, max_band_integral_deviation)
+                   ! Check for problems with band integral
+                   if(integral_deviation>band_integral_tol) &
+                        write(*,fmt='(4x,"Integral of band ",i5," spin ",i1," at kp ",i5," is ",f17.10)') &
+                        band,ispin,kp,integral
+                   if (.not.flag_outputWF_real) then
+                      den = den + (real(psi)**2 + aimag(psi)**2)*wtk(kp)   ! band density
+                   else
+                      den = den + real(psi)*wtk(kp)        ! only real-part of WF
+                   endif
+                   idum1 = 1
+                end if
+             end do ! kp
+             if(idum1==1) then
+                write(ci,'("Band",I0.6,"den_totS",I0.1)') band, ispin
+                call write_cube(den,ci)
+                integral = gpv*sum(den)
+                integral_deviation = abs(integral - one)
+                max_band_integral_deviation = max(integral_deviation, max_band_integral_deviation)
+                ! Check for problems with band integral
+                if(integral_deviation>band_integral_tol) &
+                     write(*,fmt='(4x,"Integral of band ",i5," spin ",i1," is ",f17.10)') &
+                     band,ispin,integral
+             end if
           end if
-       end do
+       end do ! spin, bands
+!$omp end do
+       deallocate(psi, den)
+!$omp end parallel
     else ! User has provided list of bands
        write(*,fmt='(4x,"Writing ",i4," bands specified in input file")') n_bands_process
        if(flag_by_kpoint) then
@@ -226,66 +234,70 @@ contains
        else
           write(*,fmt='(4x,"Summing over k-points")')
        end if
-       do ispin=1,nspin
+       n_task = nspin*n_bands_process
+!$omp parallel default(shared) private(psi, den, itask, ispin, band, kp, integral, integral_deviation, ci)
+       allocate(psi(nptsx,nptsy,nptsz), den(nptsx,nptsy,nptsz))
+!$omp do schedule(dynamic) reduction(max:max_band_integral_deviation)
+       do itask = 0, n_task-1
+          ispin = itask/n_bands_process + 1
+          band = mod(itask,n_bands_process) + 1
           if(flag_by_kpoint) then ! Separate bands by k-point
-             do band=1,n_bands_process
-                current = zero
-                do kp = 1,nkp
-                   ! This clause is needed in case the user chose an energy range that only selects some k-points
-                   if(band_active_kp(band_proc_no(band),kp,ispin)==1) then
-                      psi = zero
-                      current = zero
-                      call pao_to_grid(band_full_to_active(band_proc_no(band)), kp, ispin, psi)
-                      if (.not.flag_outputWF_real) then
-                         current = psi*conjg(psi)   ! band density
-                      else
-                         current = real(psi)        ! only real-part of WF
-                      endif
-                      write(ci,'("Band",I0.6,"den_kp",I0.3,"S",I0.1)') band_proc_no(band), kp, ispin
-                      call write_cube(current,ci)
-                      integral = gpv*sum(current)
-                      integral_deviation = abs(integral - one)
-                      max_band_integral_deviation = max(integral_deviation, max_band_integral_deviation)
-                      ! Check for problems with band integral
-                      if(integral_deviation>band_integral_tol) &
-                           write(*,fmt='(4x,"Integral of psi squared ",i5," with energy ",f17.10," is ",f17.10)') &
-                           band,eigenvalues(band,kp,ispin),integral
-                   end if
-                end do ! kp
-             end do ! bands = 1, n_bands_total
+             do kp = 1,nkp
+                ! This clause is needed in case the user chose an energy range that only selects some k-points
+                if(band_active_kp(band_proc_no(band),kp,ispin)==1) then
+                   psi = zero
+                   den = zero
+                   call pao_to_grid(band_full_to_active(band_proc_no(band)), kp, ispin, psi)
+                   if (.not.flag_outputWF_real) then
+                      den = real(psi)**2 + aimag(psi)**2   ! band density
+                   else
+                      den = real(psi)        ! only real-part of WF
+                   endif
+                   write(ci,'("Band",I0.6,"den_kp",I0.3,"S",I0.1)') band_proc_no(band), kp, ispin
+                   call write_cube(den,ci)
+                   integral = gpv*sum(den)
+                   integral_deviation = abs(integral - one)
+                   max_band_integral_deviation = max(integral_deviation, max_band_integral_deviation)
+                   ! Check for problems with band integral
+                   if(integral_deviation>band_integral_tol) &
+                        write(*,fmt='(4x,"Integral of band ",i5," spin ",i1," with energy ",f17.10," is ",f17.10)') &
+                        band_proc_no(band),ispin,eigenvalues(band_proc_no(band),kp,ispin),integral
+                end if
+             end do ! kp
           else ! Sum over k-points
-             do band=1,n_bands_process
-                current = zero
-                do kp = 1,nkp
-                   ! This clause is needed in case the user chose an energy range that only selects some k-points
-                   if(band_active_kp(band_proc_no(band),kp,ispin)==1) then
-                      call pao_to_grid(band_full_to_active(band_proc_no(band)), kp, ispin, psi)
-                      integral = gpv*sum(psi*conjg(psi))
-                      integral_deviation = abs(integral - one)
-                      max_band_integral_deviation = max(integral_deviation, max_band_integral_deviation)
-                      ! Check for problems with band integral
-                      if(integral_deviation>band_integral_tol) &
-                           write(*,fmt='(4x,"Integral of band ",i5," at kp ",i5," is ",f17.10)') &
-                           band,kp,integral
-                      if (.not.flag_outputWF_real) then
-                         current = current + psi*conjg(psi)*wtk(kp)   ! band density
-                      else
-                         current = current + real(psi)*wtk(kp)        ! only real-part of WF
-                      endif
-                   end if
-                end do ! kp
-                write(ci,'("Band",I0.6,"den_totS",I0.1)') band_proc_no(band), ispin
-                call write_cube(current,ci)
-                integral = gpv*sum(current)
-                integral_deviation = abs(integral - one)
-                max_band_integral_deviation = max(integral_deviation, max_band_integral_deviation)
-                ! Check for problems with band integral
-                if(integral_deviation>band_integral_tol) &
-                     write(*,fmt='(4x,"Integral of band ",i5," is ",f17.10)') &
-                     band,integral
-             end do ! bands
+             den = zero
+             do kp = 1,nkp
+                ! This clause is needed in case the user chose an energy range that only selects some k-points
+                if(band_active_kp(band_proc_no(band),kp,ispin)==1) then
+                   call pao_to_grid(band_full_to_active(band_proc_no(band)), kp, ispin, psi)
+                   integral = gpv*sum(real(psi)**2 + aimag(psi)**2)
+                   integral_deviation = abs(integral - one)
+                   max_band_integral_deviation = max(integral_deviation, max_band_integral_deviation)
+                   ! Check for problems with band integral
+                   if(integral_deviation>band_integral_tol) &
+                        write(*,fmt='(4x,"Integral of band ",i5," spin ",i1," at kp ",i5," is ",f17.10)') &
+                        band_proc_no(band),ispin,kp,integral
+                   if (.not.flag_outputWF_real) then
+                      den = den + (real(psi)**2 + aimag(psi)**2)*wtk(kp)   ! band density
+                   else
+                      den = den + real(psi)*wtk(kp)        ! only real-part of WF
+                   endif
+                end if
+             end do ! kp
+             write(ci,'("Band",I0.6,"den_totS",I0.1)') band_proc_no(band), ispin
+             call write_cube(den,ci)
+             integral = gpv*sum(den)
+             integral_deviation = abs(integral - one)
+             max_band_integral_deviation = max(integral_deviation, max_band_integral_deviation)
+             ! Check for problems with band integral
+             if(integral_deviation>band_integral_tol) &
+                  write(*,fmt='(4x,"Integral of band ",i5," spin ",i1," is ",f17.10)') &
+                  band_proc_no(band),ispin,integral
           end if
-       end do
+       end do ! spin, bands
+!$omp end do
+       deallocate(psi, den)
+!$omp end parallel
     end if
     write(*,fmt='(4x,"Largest deviation of band integral from one is ",f8.5)') max_band_integral_deviation
     return
@@ -462,13 +474,18 @@ contains
     ! Local variables
     integer :: i_band, i_kp, i_spin, n_DOS_wid, n_band, n_min, n_max, i, j, i_atom,max_nsf, i_spec, &
          i_l, nzeta, sf_offset, max_l, norbs, i_m, i_band_c, i_z
-    real(double) :: Ebin, dE_DOS, a, pf_DOS, spin_fac, coeff, check_electrons, peak_width
+    real(double) :: Ebin, dE_DOS, a, gauss, pf_DOS, spin_fac, coeff, check_electrons, peak_width
     real(double), dimension(:,:,:), allocatable :: pDOS
     real(double), dimension(:,:,:,:), allocatable :: pDOS_l
     real(double), dimension(:,:,:,:,:), allocatable :: pDOS_lm
-    real(double), dimension(:,:), allocatable :: occ
+    real(double), dimension(:,:,:), allocatable :: occ
     real(double), dimension(:,:), allocatable :: total_electrons
     real(double), dimension(:,:,:), allocatable :: total_electrons_l
+    ! pDOS of one atom, accumulated by one thread
+    real(double), dimension(:), allocatable :: atom_el
+    real(double), dimension(:,:), allocatable :: atom_DOS, atom_el_l
+    real(double), dimension(:,:,:), allocatable :: atom_DOS_l
+    real(double), dimension(:,:,:,:), allocatable :: atom_DOS_lm
     ! pDOS rotation variables
     real(double) :: A1(3, 3), A2(5, 5), C1(3, 3), C2(5, 5), E1(3,3), E2(5,5), Qxyz(3,3)
     real(double) :: rod(9), angle, axis(3), temp_matrix(3,3)
@@ -509,7 +526,7 @@ contains
     deallocate(evec_coeff)
     ! Read eigenvector coefficients
     call read_psi_coeffs("Process")
-    allocate(occ(n_bands_total,nkp))
+    allocate(occ(n_bands_total,nkp,nspin))
 
      ! Call pDOS rotation subroutines if desired. Also includes debug output
     if (flag_rotate_pdos) then
@@ -724,25 +741,44 @@ contains
     dE_DOS = (E_DOS_max - E_DOS_min)/real(n_DOS-1,double)
     n_DOS_wid = floor(peak_width/dE_DOS) ! How many bins either side of state we consider
     pf_DOS = one/(sigma_DOS*sqrt(twopi))
-    ! Accumulate DOS over bands and k-points for each spin
+    occ = zero
     do i_spin = 1, nspin
-       occ = zero
-       call occupy(occ,eigenvalues,efermi,i_spin)
-       do i_kp = 1, nkp
-          do i_band=1,n_bands_total ! All bands
-             if(eigenvalues(i_band, i_kp, i_spin)>E_DOS_min + range_offset(i_spin) .and. &
-                  eigenvalues(i_band, i_kp, i_spin)<E_DOS_max + range_offset(i_spin)) then
-                i_band_c = band_full_to_active(i_band)
-                n_band = floor((eigenvalues(i_band, i_kp, i_spin) - (E_DOS_min + range_offset(i_spin)))/dE_DOS) + 1
-                n_min = n_band - n_DOS_wid
-                if(n_min<1) n_min = 1
-                n_max = n_band + n_DOS_wid
-                if(n_max>n_DOS) n_max = n_DOS
-                do i = n_min, n_max
-                   Ebin = real(i-1,double)*dE_DOS + E_DOS_min + range_offset(i_spin)
-                   a = (Ebin-eigenvalues(i_band, i_kp, i_spin))/sigma_DOS
-                   do i_atom = 1, n_atoms_pDOS
-                      i_spec = species_glob(pDOS_atom_index(i_atom))
+       call occupy(occ(:,:,i_spin),eigenvalues,efermi,i_spin)
+    end do
+    ! Accumulate DOS over bands and k-points for each atom.  Atoms are independent, so the
+    ! loop over atoms is shared between OpenMP threads: each thread sums one atom at a time
+    ! into its own arrays, in the same order as a serial run, and then copies them out.
+!$omp parallel default(shared) private(i_atom, i_spec, i_spin, i_kp, i_band, i_band_c, n_band, &
+!$omp   n_min, n_max, i, Ebin, a, gauss, sf_offset, i_l, nzeta, i_z, i_m, norbs, coeff, &
+!$omp   atom_DOS, atom_DOS_l, atom_DOS_lm, atom_el, atom_el_l)
+    allocate(atom_DOS(n_DOS,nspin), atom_el(nspin))
+    if(flag_l_resolved) allocate(atom_DOS_l(0:max_l,n_DOS,nspin), atom_el_l(0:max_l,nspin))
+    if(flag_l_resolved .and. flag_lm_resolved) allocate(atom_DOS_lm(-max_l:max_l,0:max_l,n_DOS,nspin))
+!$omp do schedule(dynamic)
+    do i_atom = 1, n_atoms_pDOS
+       i_spec = species_glob(pDOS_atom_index(i_atom))
+       atom_DOS = zero
+       atom_el = zero
+       if(flag_l_resolved) then
+          atom_DOS_l = zero
+          atom_el_l = zero
+       end if
+       if(flag_l_resolved .and. flag_lm_resolved) atom_DOS_lm = zero
+       do i_spin = 1, nspin
+          do i_kp = 1, nkp
+             do i_band=1,n_bands_total ! All bands
+                if(eigenvalues(i_band, i_kp, i_spin)>E_DOS_min + range_offset(i_spin) .and. &
+                     eigenvalues(i_band, i_kp, i_spin)<E_DOS_max + range_offset(i_spin)) then
+                   i_band_c = band_full_to_active(i_band)
+                   n_band = floor((eigenvalues(i_band, i_kp, i_spin) - (E_DOS_min + range_offset(i_spin)))/dE_DOS) + 1
+                   n_min = n_band - n_DOS_wid
+                   if(n_min<1) n_min = 1
+                   n_max = n_band + n_DOS_wid
+                   if(n_max>n_DOS) n_max = n_DOS
+                   do i = n_min, n_max
+                      Ebin = real(i-1,double)*dE_DOS + E_DOS_min + range_offset(i_spin)
+                      a = (Ebin-eigenvalues(i_band, i_kp, i_spin))/sigma_DOS
+                      gauss = exp(-half*a*a)
                       if(flag_l_resolved .and. flag_lm_resolved) then
                          sf_offset = 1
                          do i_l = 0, pao(i_spec)%greatest_angmom
@@ -751,14 +787,11 @@ contains
                                do i_m = -i_l,i_l
                                   coeff = conjg(evec_coeff(sf_offset,pDOS_atom_index(i_atom), i_band_c,i_kp,i_spin)) * &
                                        scaled_evec_coeff(sf_offset,pDOS_atom_index(i_atom), i_band_c,i_kp,i_spin)
-                                  pDOS_lm(i_m,i_l,i_atom,i,i_spin) = &
-                                       pDOS_lm(i_m,i_l,i_atom,i,i_spin) + &
-                                       wtk(i_kp)*pf_DOS*exp(-half*a*a)*coeff
-                                  pDOS(i_atom,i,i_spin) = pDOS(i_atom,i,i_spin) + &
-                                       wtk(i_kp)*pf_DOS*exp(-half*a*a)*coeff
-                                  total_electrons_l(i_l,i_atom, i_spin) = &
-                                       total_electrons_l(i_l,i_atom, i_spin) + &
-                                       occ(i_band,i_kp)*wtk(i_kp)*pf_DOS*exp(-half*a*a)*coeff
+                                  atom_DOS_lm(i_m,i_l,i,i_spin) = atom_DOS_lm(i_m,i_l,i,i_spin) + &
+                                       wtk(i_kp)*pf_DOS*gauss*coeff
+                                  atom_DOS(i,i_spin) = atom_DOS(i,i_spin) + wtk(i_kp)*pf_DOS*gauss*coeff
+                                  atom_el_l(i_l,i_spin) = atom_el_l(i_l,i_spin) + &
+                                       occ(i_band,i_kp,i_spin)*wtk(i_kp)*pf_DOS*gauss*coeff
                                   sf_offset = sf_offset + 1
                                end do
                             end do
@@ -772,11 +805,10 @@ contains
                                  i_band_c,i_kp,i_spin),1, &
                                  scaled_evec_coeff(sf_offset+1:sf_offset+norbs,pDOS_atom_index(i_atom), &
                                  i_band_c,i_kp,i_spin),1)
-                            pDOS_l(i_l,i_atom,i,i_spin) = pDOS_l(i_l,i_atom,i,i_spin) + &
-                                 wtk(i_kp)*pf_DOS*exp(-half*a*a)*coeff
-                            pDOS(i_atom,i,i_spin) = pDOS(i_atom,i,i_spin) + wtk(i_kp)*pf_DOS*exp(-half*a*a)*coeff
-                            total_electrons_l(i_l,i_atom, i_spin) = total_electrons_l(i_l,i_atom, i_spin) + &
-                                 occ(i_band,i_kp)*wtk(i_kp)*pf_DOS*exp(-half*a*a)*coeff
+                            atom_DOS_l(i_l,i,i_spin) = atom_DOS_l(i_l,i,i_spin) + wtk(i_kp)*pf_DOS*gauss*coeff
+                            atom_DOS(i,i_spin) = atom_DOS(i,i_spin) + wtk(i_kp)*pf_DOS*gauss*coeff
+                            atom_el_l(i_l,i_spin) = atom_el_l(i_l,i_spin) + &
+                                 occ(i_band,i_kp,i_spin)*wtk(i_kp)*pf_DOS*gauss*coeff
                             sf_offset = sf_offset + norbs
                          end do
                       else
@@ -784,16 +816,30 @@ contains
                               pDOS_atom_index(i_atom),i_band_c,i_kp,i_spin),1, &
                               scaled_evec_coeff(1:npao_species(i_spec), &
                               pDOS_atom_index(i_atom),i_band_c,i_kp,i_spin),1)
-                         pDOS(i_atom,i,i_spin) = pDOS(i_atom,i,i_spin) + wtk(i_kp)*pf_DOS*exp(-half*a*a)*coeff
-                         total_electrons(i_atom, i_spin) = total_electrons(i_atom, i_spin) + &
-                              occ(i_band,i_kp)*wtk(i_kp)*pf_DOS*exp(-half*a*a)*coeff
+                         atom_DOS(i,i_spin) = atom_DOS(i,i_spin) + wtk(i_kp)*pf_DOS*gauss*coeff
+                         atom_el(i_spin) = atom_el(i_spin) + occ(i_band,i_kp,i_spin)*wtk(i_kp)*pf_DOS*gauss*coeff
                       end if
                    end do
-                end do
-             end if
+                end if
+             end do
           end do
-       end do
-    end do ! do i_spin = 1, n_spin
+       end do ! i_spin
+       pDOS(i_atom,:,:) = atom_DOS
+       if(flag_l_resolved .and. flag_lm_resolved) then
+          pDOS_lm(:,:,i_atom,:,:) = atom_DOS_lm
+          total_electrons_l(:,i_atom,:) = atom_el_l
+       else if(flag_l_resolved) then
+          pDOS_l(:,i_atom,:,:) = atom_DOS_l
+          total_electrons_l(:,i_atom,:) = atom_el_l
+       else
+          total_electrons(i_atom,:) = atom_el
+       end if
+    end do ! i_atom
+!$omp end do
+    deallocate(atom_DOS, atom_el)
+    if(allocated(atom_DOS_l)) deallocate(atom_DOS_l, atom_el_l)
+    if(allocated(atom_DOS_lm)) deallocate(atom_DOS_lm)
+!$omp end parallel
     ! Include spin factor and convert Ha to eV
     if(flag_l_resolved .and. flag_lm_resolved) then
        pDOS_lm = pDOS_lm*spin_fac/HaToeV
