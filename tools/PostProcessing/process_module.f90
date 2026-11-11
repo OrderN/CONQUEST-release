@@ -260,8 +260,8 @@ contains
                    max_band_integral_deviation = max(integral_deviation, max_band_integral_deviation)
                    ! Check for problems with band integral
                    if(integral_deviation>band_integral_tol) &
-                        write(*,fmt='(4x,"Integral of psi squared ",i5," spin ",i1," with energy ",f17.10," is ",f17.10)') &
-                        band,ispin,eigenvalues(band,kp,ispin),integral
+                        write(*,fmt='(4x,"Integral of band ",i5," spin ",i1," with energy ",f17.10," is ",f17.10)') &
+                        band_proc_no(band),ispin,eigenvalues(band_proc_no(band),kp,ispin),integral
                 end if
              end do ! kp
           else ! Sum over k-points
@@ -276,7 +276,7 @@ contains
                    ! Check for problems with band integral
                    if(integral_deviation>band_integral_tol) &
                         write(*,fmt='(4x,"Integral of band ",i5," spin ",i1," at kp ",i5," is ",f17.10)') &
-                        band,ispin,kp,integral
+                        band_proc_no(band),ispin,kp,integral
                    if (.not.flag_outputWF_real) then
                       den = den + (real(psi)**2 + aimag(psi)**2)*wtk(kp)   ! band density
                    else
@@ -292,7 +292,7 @@ contains
              ! Check for problems with band integral
              if(integral_deviation>band_integral_tol) &
                   write(*,fmt='(4x,"Integral of band ",i5," spin ",i1," is ",f17.10)') &
-                  band,ispin,integral
+                  band_proc_no(band),ispin,integral
           end if
        end do ! spin, bands
 !$omp end do
