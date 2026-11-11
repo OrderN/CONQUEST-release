@@ -37,6 +37,42 @@ calculations using blip functions.
 
 Go to :ref:`top <post-proc>`.
 
+.. _pp_threads:
+
+Running with OpenMP threads
++++++++++++++++++++++++++++
+
+Band densities and projected DOS can be computed in parallel with
+OpenMP threads (see :ref:`pp_band_dens` and :ref:`pp_pDOS`).
+``PostProcessCQ`` runs as a single process, so threads are the only
+parallelism it uses.  Compile it with OpenMP enabled in the system
+makefile (``OMPFLAGS= -fopenmp``), set ``OMP_NUM_THREADS`` to the
+number of physical cores, and run the program directly:
+
+::
+
+   export OMP_NUM_THREADS=16
+   PostProcessCQ
+
+``mpirun`` is not needed.  If you do use it, the binding option must
+come **before** the program name; anything after the program name is
+passed to ``PostProcessCQ``, which ignores it:
+
+::
+
+   mpirun --bind-to none -np 1 PostProcessCQ    # correct (Open MPI)
+   mpirun -np 1 PostProcessCQ --bind-to none    # wrong: option ignored
+
+Without ``--bind-to none``, Open MPI binds a single process to one
+core, so all threads share that core and the run is no faster than a
+serial one, with no warning.  Other MPI libraries have their own
+binding options.  To check where the threads run, set
+``OMP_DISPLAY_AFFINITY=TRUE``: each thread then prints the cores it may
+use when the program starts.  Under a batch system, request the cores
+for the single task (for example ``--cpus-per-task`` with Slurm).
+
+Go to :ref:`top <post-proc>`.
+
 .. _pp_coord:
 
 Coordinate conversion
@@ -166,9 +202,7 @@ makefile (``OMPFLAGS= -fopenmp``) and set ``OMP_NUM_THREADS`` before
 running.  Each thread works on one spin and band at a time and needs
 memory for two copies of the grid, so reduce the number of threads if
 memory is limited.  The output files are identical to those from a
-serial run.  If you launch ``PostProcessCQ`` with ``mpirun``, check that
-the MPI library is not binding the process to a single core (for
-example, use ``--bind-to none`` with Open MPI).
+serial run.  See :ref:`pp_threads` for how to launch it.
 
 Go to :ref:`top <post-proc>`.
 
@@ -296,10 +330,8 @@ Projections onto different atoms are independent, so ``PostProcessCQ``
 can compute them in parallel with OpenMP threads.  To use this, compile
 ``PostProcessCQ`` with OpenMP enabled in the system makefile
 (``OMPFLAGS= -fopenmp``) and set ``OMP_NUM_THREADS`` before running.
-The output files are identical to those from a serial run.  If you
-launch ``PostProcessCQ`` with ``mpirun``, check that the MPI library is
-not binding the process to a single core (for example, use
-``--bind-to none`` with Open MPI).
+The output files are identical to those from a serial run.  See
+:ref:`pp_threads` for how to launch it.
 
 To resolve the DOS by angular momentum as well as by atom, then the
 following flags can be set:
