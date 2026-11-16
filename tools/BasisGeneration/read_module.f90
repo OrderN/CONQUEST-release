@@ -134,9 +134,9 @@ contains
     integer :: species
 
     ! Local variables
-    character(len=80) :: input_string
+    character(len=80) :: input_string, basis_block_name
     integer :: i
-    logical :: flag_default
+    logical :: flag_default, flag_basis_block
     
     if(fdf_block(species_label(species))) then
        !
@@ -243,37 +243,41 @@ contains
           call cq_abort("Error ! Unknown Atom.BasisSize specification: "//input_string(1:7))
        end if
        !
-       ! Basis block
+       ! Basis block: name and number of shells
        !
-       input_string = fdf_string(80,'Atom.BasisBlock','none')
-       if(.NOT.(leqi(input_string(1:4),'none'))) then !.AND.paos%flag_cutoff==3)) then
+       basis_block_name = fdf_string(80,'Atom.BasisBlock','none')
+       flag_basis_block = .NOT.(leqi(basis_block_name(1:4),'none'))
+       if(flag_basis_block) then
           paos%n_shells = fdf_integer("Atom.PAO_N_Shells",0)
           if(paos%n_shells==0) call cq_abort("Number of PAO shells not specified in atom block")
           if(val%n_occ>paos%n_shells) &
                call cq_abort("More valence shells in PP than in Atom.BasisBlock ",val%n_occ,paos%n_shells)
-          ! Close species block
-          call fdf_endblock
-          call read_basis_block(input_string)
-          flag_default_cutoffs = .false.
        else
-          ! Close species block
-          call fdf_endblock
-          flag_default_cutoffs = .true.
+          paos%n_shells = 0
        end if
        !
        ! Polarisation
+       !
+       ! These keywords must be read while the species block is still open:
+       ! once it is closed, fdf searches the whole file and returns the first
+       ! match, which may belong to another species.  The basis block itself
+       ! is read after fdf_endblock, as it is a separate block.
        !
        flag_default = .true.
        ! If there are no polarisation orbitals, change default
        if(basis_size == minimal .or. paos%n_shells==val%n_occ) flag_default = .false.
        paos%flag_perturb_polarise = fdf_boolean("Atom.Perturbative_Polarised",flag_default)
+       ! Reset values that could otherwise be left over from a previous species
+       flag_use_Vl = flag_gen_use_Vl
+       paos%polarised_n = 0
+       paos%polarised_l = -1
+       paos%polarised_shell = 0
        if(paos%flag_perturb_polarise .and. flag_default) then
           ! This is for compatibility but should be false
           flag_use_Vl = fdf_boolean('Atom.UseVl',flag_gen_use_Vl)
           ! Do we have state to polarise? 
           paos%polarised_n = fdf_integer("Atom.PolarisedN",0)
           paos%polarised_l = fdf_integer("Atom.PolarisedL",-1)
-          paos%polarised_shell = 0
           !
           ! Default to outer shell (or previous if outer shell has l=2)
           !
@@ -292,6 +296,16 @@ contains
           end if
        else if(paos%flag_perturb_polarise .and. (.not.flag_default)) then
           call cq_abort("Can't set Atom.Perturbative_Polarised T with no polarisation orbitals")
+       end if
+       !
+       ! Close species block, then read the basis block (if any)
+       !
+       call fdf_endblock
+       if(flag_basis_block) then
+          call read_basis_block(basis_block_name)
+          flag_default_cutoffs = .false.
+       else
+          flag_default_cutoffs = .true.
        end if
     else
        call cq_abort("Can't find species block for label "//species_label(species))
@@ -324,13 +338,11 @@ contains
        maxl = 0
        n_paos = 0
        !
-       ! Set number of shells to read
+       ! Set number of shells to read: the block lists every shell, including
+       ! the polarisation shell when perturbative polarisation is used (see
+       ! docs/generating_paos.rst)
        !
-       if(paos%flag_perturb_polarise) then
-          n_shells_read = paos%n_shells-1
-       else
-          n_shells_read = paos%n_shells
-       end if
+       n_shells_read = paos%n_shells
        !
        ! Read zetas for each shell
        !
@@ -340,10 +352,6 @@ contains
           if(paos%nzeta(j)>maxl) maxl = paos%nzeta(j)
           n_paos = n_paos + paos%nzeta(j)
        end do
-       if(paos%flag_perturb_polarise) then
-          call set_polarisation
-          paos%nzeta(paos%n_shells) = paos%nzeta(paos%polarised_shell)
-       end if
        !
        ! Allocate
        !
@@ -374,10 +382,6 @@ contains
           end if
           if(ios/=0) call line_read_error(basis_block_string,ios,j)
        end do
-       if(paos%flag_perturb_polarise) then
-          paos%cutoff(:,paos%n_shells) = paos%cutoff(:,paos%polarised_shell)
-          paos%energy(:,paos%n_shells) = paos%energy(:,paos%polarised_shell)
-       end if
        !
        ! Check for confinement potentials
        !
@@ -387,10 +391,6 @@ contains
                   paos%width(j),paos%prefac(j)
           if(ios/=0) call line_read_error(basis_block_string,ios,j)
           end do
-          if(paos%flag_perturb_polarise) then
-             paos%width(paos%n_shells) = paos%width(paos%polarised_shell)
-             paos%prefac(paos%n_shells) = paos%prefac(paos%polarised_shell)
-          end if
        end if
        !
        ! Sort the energies/cutoffs so that largest is first
