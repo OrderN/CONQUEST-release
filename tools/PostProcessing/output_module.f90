@@ -334,10 +334,11 @@ contains
     
     character(len=50) :: filename
 
-    integer :: i, j, icount, nrx, nry, nrz, nx, ny, nz, isym, nz_total
+    integer :: iunit, i, j, icount, nrx, nry, nrz, nx, ny, nz, isym, nz_total
     logical :: SymSamp
     character(len=3), dimension(7) :: asymm = (/'X  ','Y  ','XY ','Z  ','XZ ','YZ ','XYZ'/)
     real(double) :: shiftx, shifty, shiftz
+    real(double), dimension(:), allocatable :: zline
 
     ! Check sampling points are symmetric or not
     SymSamp = .true.
@@ -355,20 +356,21 @@ contains
     else
        filename = trim(root_file)//".cube"
     end if
-    open(unit=17,file=filename)
+    ! newunit: write_cube is called concurrently from OpenMP threads
+    open(newunit=iunit,file=filename)
     ! Header - improve this later
-    write(17,fmt='("Conquest charge")')
+    write(iunit,fmt='("Conquest charge")')
     if(SymSamp) then
-       write(17,fmt='("Sampling points symmetric")')
+       write(iunit,fmt='("Sampling points symmetric")')
     else
-       write(17,fmt='("Sampling points asymmetric in directions ",a2)') asymm(isym)
+       write(iunit,fmt='("Sampling points asymmetric in directions ",a2)') asymm(isym)
     end if
     ! Atoms, origin location
-    write(17,fmt='(i5,3f12.6,i5)') ni_in_cell*nrptx*nrpty*nrptz, zero, zero, zero, 1
+    write(iunit,fmt='(i5,3f12.6,i5)') ni_in_cell*nrptx*nrpty*nrptz, zero, zero, zero, 1
     ! Numbers of grid points, grid increment (i.e. spacing)
-    write(17,fmt='(i5,3f12.6)') nptsx*nrptx/nsampx,grid_x,zero,zero
-    write(17,fmt='(i5,3f12.6)') nptsy*nrpty/nsampy,zero,grid_y,zero
-    write(17,fmt='(i5,3f12.6)') nptsz*nrptz/nsampz,zero,zero,grid_z
+    write(iunit,fmt='(i5,3f12.6)') nptsx*nrptx/nsampx,grid_x,zero,zero
+    write(iunit,fmt='(i5,3f12.6)') nptsy*nrpty/nsampy,zero,grid_y,zero
+    write(iunit,fmt='(i5,3f12.6)') nptsz*nrptz/nsampz,zero,zero,grid_z
     ! Atomic coordinates
     do nrx = 1,nrptx
        shiftx = real(nrx-1,double)*r_super_x
@@ -377,17 +379,23 @@ contains
           do nrz = 1,nrptz
              shiftz = real(nrz-1,double)*r_super_z
              do i=1,ni_in_cell
-                write(17,fmt='(i5,4f12.6)') atomicnum(species_glob(i)),real(atomicnum(species_glob(i)),double),&
+                write(iunit,fmt='(i5,4f12.6)') atomicnum(species_glob(i)),real(atomicnum(species_glob(i)),double),&
                      atom_coord(1,i)-stm_x_min + shiftx, &
                      atom_coord(2,i)-stm_y_min + shifty, &
                      atom_coord(3,i)-stm_z_min + shiftz
-                !write(17,fmt='(i5,4f12.6)') species_glob(i),zero,(atom_coord(j,i)*BohrToAng,j=1,3)
+                !write(iunit,fmt='(i5,4f12.6)') species_glob(i),zero,(atom_coord(j,i)*BohrToAng,j=1,3)
              end do
           end do
        end do
     end do
     ! Charge density, z fastest
-    nz_total = nptsz*nrptz/nsampz
+    ! Each z-line is gathered and written with a single statement (six values
+    ! per record): a write per value is very slow when several OpenMP threads
+    ! write cube files at once, because of contention on the I/O library locks.
+    ! nz_total is the number of points the loop over nrz and nz visits; it is larger
+    ! than nptsz*nrptz/nsampz when nsampz does not divide nptsz
+    nz_total = nrptz*((nptsz-1)/nsampz + 1)
+    allocate(zline(nz_total))
     do nrx=1,nrptx
        do nx=1,nptsx,nsampx
           do nry=1,nrpty
@@ -396,18 +404,16 @@ contains
                 do nrz=1,nrptz
                    do nz=1,nptsz,nsampz
                       icount = icount + 1
-                      if ((icount==nz_total).or.(mod(icount,6)==0)) then
-                         write(17,fmt='(e13.5)') data(nx,ny,nz)!/gpv
-                      else
-                         write(17,fmt='(e13.5)',advance='no') data(nx,ny,nz)!/gpv
-                      endif
+                      zline(icount) = data(nx,ny,nz)!/gpv
                    end do
                 end do
+                write(iunit,fmt='(6e13.5)') zline(1:nz_total)
              end do
           end do
        end do
     end do
-    close(unit=17)
+    deallocate(zline)
+    close(unit=iunit)
   end subroutine write_cube
 
   ! Taken from density_module.f90
