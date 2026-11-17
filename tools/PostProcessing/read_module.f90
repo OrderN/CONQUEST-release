@@ -28,7 +28,7 @@ contains
     implicit none
 
     character(len=80) :: input_string, proc_coords, tmp
-    integer :: i, j, n_grid_x, n_grid_y, n_grid_z
+    integer :: i, j, n_grid_x, n_grid_y, n_grid_z, n_unique
     integer :: n_kp_lines
     logical :: flag_kp_lines, flag_spin_polarisation, flag_Multisite
     real(double) :: dk
@@ -246,6 +246,19 @@ contains
                 read(unit=input_array(block_start+i-1),fmt=*) band_proc_no(i)
              end do
              call fdf_endblock
+             ! Keep each band once: the band-density tasks run in parallel, and two tasks
+             ! for the same band would write the same cube file at the same time
+             n_unique = 0
+             do i=1,n_bands_process
+                if(any(band_proc_no(1:n_unique)==band_proc_no(i))) then
+                   write(*,fmt='(4x,"Band ",i6," is listed more than once; it is processed once")') &
+                        band_proc_no(i)
+                else
+                   n_unique = n_unique + 1
+                   band_proc_no(n_unique) = band_proc_no(i)
+                end if
+             end do
+             n_bands_process = n_unique
           end if
           flag_proc_range = .false.
        else

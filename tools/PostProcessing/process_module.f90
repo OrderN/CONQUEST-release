@@ -139,6 +139,11 @@ contains
 
     if (flag_outputWF_real .and. (nkp.ne.1)) &
        call cq_abort("OutputWF_real is available only for Gamma-point calculations.")
+    ! evaluate_pao stops the program for angular momentum above 3; check here, before the
+    ! threads start, so that cq_abort (and MPI_Abort) is not called from a worker thread
+    if(maxval(pao(1:n_species)%greatest_angmom)>3) &
+       call cq_abort("Band densities need PAOs with l <= 3; largest l is ", &
+                     maxval(pao(1:n_species)%greatest_angmom))
 
     ! Every (spin, band) pair is independent and writes its own cube file, so the
     ! loops over spin and band are flattened into one loop of tasks which is
@@ -159,9 +164,11 @@ contains
             Emin(1),Emax(1)
        n_task = nspin*n_bands_total
 !$omp parallel default(shared) private(psi, den, itask, ispin, band, kp, idum1, integral, integral_deviation, ci)
-       allocate(psi(nptsx,nptsy,nptsz), den(nptsx,nptsy,nptsz))
 !$omp do schedule(dynamic) reduction(max:max_band_integral_deviation)
        do itask = 0, n_task-1
+          ! Grids are allocated by a thread when it gets its first task, so that threads
+          ! without work (more threads than tasks) do not hold 24 bytes per grid point
+          if(.not.allocated(psi)) allocate(psi(nptsx,nptsy,nptsz), den(nptsx,nptsy,nptsz))
           ispin = itask/n_bands_total + 1
           band = mod(itask,n_bands_total) + 1
           if(flag_by_kpoint) then ! Separate bands by k-point
@@ -225,7 +232,7 @@ contains
           end if
        end do ! spin, bands
 !$omp end do
-       deallocate(psi, den)
+       if(allocated(psi)) deallocate(psi, den)
 !$omp end parallel
     else ! User has provided list of bands
        write(*,fmt='(4x,"Writing ",i4," bands specified in input file")') n_bands_process
@@ -236,9 +243,9 @@ contains
        end if
        n_task = nspin*n_bands_process
 !$omp parallel default(shared) private(psi, den, itask, ispin, band, kp, integral, integral_deviation, ci)
-       allocate(psi(nptsx,nptsy,nptsz), den(nptsx,nptsy,nptsz))
 !$omp do schedule(dynamic) reduction(max:max_band_integral_deviation)
        do itask = 0, n_task-1
+          if(.not.allocated(psi)) allocate(psi(nptsx,nptsy,nptsz), den(nptsx,nptsy,nptsz))
           ispin = itask/n_bands_process + 1
           band = mod(itask,n_bands_process) + 1
           if(flag_by_kpoint) then ! Separate bands by k-point
@@ -296,7 +303,7 @@ contains
           end if
        end do ! spin, bands
 !$omp end do
-       deallocate(psi, den)
+       if(allocated(psi)) deallocate(psi, den)
 !$omp end parallel
     end if
     write(*,fmt='(4x,"Largest deviation of band integral from one is ",f8.5)') max_band_integral_deviation
