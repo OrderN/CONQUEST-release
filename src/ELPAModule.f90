@@ -3,7 +3,13 @@ module ELPA_module
   use datatypes
   use mpi
 !!$   use omp
-  use elpa
+  use elpa, only: elpa_t, elpa_init, elpa_allocate, elpa_deallocate, elpa_uninit, &
+       ELPA_OK, ELPA_SOLVER_1STAGE, ELPA_SOLVER_2STAGE, &
+       ELPA_2STAGE_COMPLEX_GENERIC, ELPA_2STAGE_COMPLEX_GENERIC_SIMPLE, &
+       ELPA_2STAGE_COMPLEX_SSE_ASSEMBLY, ELPA_2STAGE_COMPLEX_SSE_BLOCK1, &
+       ELPA_2STAGE_COMPLEX_SSE_BLOCK2, ELPA_2STAGE_COMPLEX_AVX_BLOCK1, &
+       ELPA_2STAGE_COMPLEX_AVX_BLOCK2, ELPA_2STAGE_COMPLEX_AVX2_BLOCK1, &
+       ELPA_2STAGE_COMPLEX_AVX2_BLOCK2
   use GenComms, ONLY: cq_abort, cq_warn, myid
 
   implicit none
@@ -24,12 +30,13 @@ module ELPA_module
 
 contains
 
-  subroutine init_ELPA (matrix_size, row_size, col_size, desc, info)
+  subroutine init_ELPA (matrix_size, row_size, col_size, desc, mpi_comm, info)
 
     implicit none
 
     integer, intent(in) :: matrix_size, row_size, col_size
     integer, intent(in) :: desc(9)
+    integer, intent(in) :: mpi_comm
     integer, intent(out) :: info
 
     integer :: context, block_size_r, block_size_c
@@ -74,14 +81,14 @@ contains
     if( info /= ELPA_OK ) call cq_abort("ELPA_Init: Could not set parameter local_ncols")
     call elp%set( "nblk", block_size_r, info )
     if( info /= ELPA_OK ) call cq_abort("ELPA_Init: Could not set parameter nblk")
-    call elp%set( "mpi_comm_parent", MPI_COMM_WORLD, info )
+    call elp%set( "mpi_comm_parent", mpi_comm, info )
     if( info /= ELPA_OK ) call cq_abort("ELPA_Init: Could not set parameter mpi_comm_parent")
     call elp%set( "process_row", merow, info )
     if( info /= ELPA_OK ) call cq_abort("ELPA_Init: Could not set parameter process_row")
     call elp%set( "process_col", mecol, info )
     if( info /= ELPA_OK ) call cq_abort("ELPA_Init: Could not set parameter process_col")
     call elp%set( "blacs_context", context, info )
-    if( info /= ELPA_OK ) call cq_abort("ELPA_Init: Could not set parameter blacs_cotext")
+    if( info /= ELPA_OK ) call cq_abort("ELPA_Init: Could not set parameter blacs_context")
 
     if(flag_elpa_GPU) info = elp%setup()
     select case( elpa_solver )
