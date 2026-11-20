@@ -19,12 +19,13 @@ module ELPA_module
 
 contains
 
-  subroutine init_ELPA (matrix_size, row_size, col_size, desc, info)
+  subroutine init_ELPA (matrix_size, row_size, col_size, desc, mpi_comm, info)
 
     implicit none
 
     integer, intent(in) :: matrix_size, row_size, col_size
     integer, intent(in) :: desc(9)
+    integer, intent(in) :: mpi_comm
     integer, intent(out) :: info
 
     if(flag_use_elpa) then

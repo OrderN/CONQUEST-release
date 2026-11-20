@@ -149,6 +149,7 @@
 module DiagModule
 
   use datatypes
+  use mpi,                    only: MPI_COMM_NULL
   use global_module,          only: io_lun, area_DM, iprint_DM, min_layer, flag_diagonalisation
   use GenComms,               only: cq_abort, inode, ionode, myid, cq_warn
   use timer_module,           only: start_timer, stop_timer
@@ -302,6 +303,7 @@ module DiagModule
   ! BLACS variables
   integer :: me
   integer :: context
+  integer :: comm_pg = MPI_COMM_NULL
   integer, dimension(50) :: desca, descz, descb
   real(double) :: abstol = 1e-30_double ! pdlamch (context,'U')
 
@@ -566,7 +568,7 @@ contains
     ! Initialise - start BLACS, sort out matrices, allocate memory
     call initDiag
     if(flag_use_elpa) then
-       call init_ELPA(matrix_size_padH, row_size, col_size, desca, info )
+       call init_ELPA(matrix_size_padH, row_size, col_size, desca, comm_pg, info )
     endif
 
     scale = one / real(N_procs_in_pg(pgid), double)
@@ -4373,13 +4375,14 @@ contains
   !!
   subroutine init_blacs_pg
 
+    use mpi
     use global_module,   only: numprocs
     use GenComms,        only: my_barrier, cq_abort, myid
     use memory_module,   only: type_dbl, type_int, type_cplx,         &
          reg_alloc_mem, reg_dealloc_mem
     use ScalapackFormat, only: allocate_arrays, pg_initialise, ref_to_SC_blocks, make_maps, &
          block_size_r, block_size_c, proc_rows, &
-         proc_cols, matrix_size_padH, pgid, procid, proc_start
+         proc_cols, matrix_size_padH, pgid, procid, proc_start, proc_groups
     
     implicit none
 
@@ -4387,12 +4390,22 @@ contains
 
     ! Local
     integer, dimension(:,:), allocatable :: imap
-    integer :: nump, merow, mecol, numrows, numcols, info, stat
+    integer :: nump, merow, mecol, numrows, numcols, info, stat, ierr
     
     call allocate_arrays(nkp)
     call pg_initialise(nkp) ! defined the process group parameters
     call ref_to_SC_blocks
     call make_maps
+    if (comm_pg /= MPI_COMM_NULL .and. comm_pg /= MPI_COMM_WORLD) then
+       call MPI_Comm_free(comm_pg, ierr)
+       if (ierr /= MPI_SUCCESS) call cq_abort('init_blacs_pg: MPI_Comm_free failed', ierr)
+    end if
+    if (proc_groups > 1) then
+       call MPI_Comm_split(MPI_COMM_WORLD, pgid, myid, comm_pg, ierr)
+       if (ierr /= MPI_SUCCESS) call cq_abort('init_blacs_pg: MPI_Comm_split failed', ierr)
+    else
+       comm_pg = MPI_COMM_WORLD
+    end if
     ! Start up BLACS
     ! First check if there are enough process nodes
     call blacs_pinfo(me, nump)  ! get the total number of nodes
