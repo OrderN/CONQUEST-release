@@ -1708,12 +1708,6 @@ contains
              if (inode == ionode) write (io_lun, *) 'HLS time: ', t1 - t0
              t0 = t1
           end if
-          call matrix_product(matHL(ss), matS(ss_SF), matHLS(ss), mult(HL_S_LSL))
-          if (iprint_mat > 4) then
-             t1 = mtime()
-             if (inode == ionode) write (io_lun, *) 'HLS time: ', t1 - t0
-             t0 = t1
-          end if
           call matrix_transpose(matHLS(ss), matSLH(ss))
           if (iprint_mat > 4) then
              t1 = mtime()
