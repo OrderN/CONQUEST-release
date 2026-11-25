@@ -15,6 +15,7 @@ module ELPA_module
   character(len=16) :: elpa_kernel = "GENERIC"
   integer :: elpa_API = 20241105
   integer :: merow, mecol
+  integer :: comm_elpa = MPI_COMM_NULL ! parent communicator of this k-point process group
 
   class(elpa_t), pointer :: elp
 
@@ -26,6 +27,8 @@ contains
 
   subroutine init_ELPA (matrix_size, row_size, col_size, desc, info)
 
+    use ScalapackFormat, only: pgid
+
     implicit none
 
     integer, intent(in) :: matrix_size, row_size, col_size
@@ -34,6 +37,7 @@ contains
 
     integer :: context, block_size_r, block_size_c
     integer :: numrows, numcols, merow, mecol  ! numrows= proc_rows, numcols=proc_cols
+    integer :: ierr
     character(len=12) :: subname = "init_ELPA:  "
 
     context      = desc(2)
@@ -74,14 +78,18 @@ contains
     if( info /= ELPA_OK ) call cq_abort("ELPA_Init: Could not set parameter local_ncols")
     call elp%set( "nblk", block_size_r, info )
     if( info /= ELPA_OK ) call cq_abort("ELPA_Init: Could not set parameter nblk")
-    call elp%set( "mpi_comm_parent", MPI_COMM_WORLD, info )
+    ! With Diag.KProcGroups > 1 the BLACS grid covers one process group only,
+    ! so ELPA's parent communicator must hold exactly the ranks of that group
+    call MPI_Comm_split( MPI_COMM_WORLD, pgid, myid, comm_elpa, ierr )
+    if( ierr /= MPI_SUCCESS ) call cq_abort("ELPA_Init: MPI_Comm_split failed", ierr)
+    call elp%set( "mpi_comm_parent", comm_elpa, info )
     if( info /= ELPA_OK ) call cq_abort("ELPA_Init: Could not set parameter mpi_comm_parent")
     call elp%set( "process_row", merow, info )
     if( info /= ELPA_OK ) call cq_abort("ELPA_Init: Could not set parameter process_row")
     call elp%set( "process_col", mecol, info )
     if( info /= ELPA_OK ) call cq_abort("ELPA_Init: Could not set parameter process_col")
     call elp%set( "blacs_context", context, info )
-    if( info /= ELPA_OK ) call cq_abort("ELPA_Init: Could not set parameter blacs_cotext")
+    if( info /= ELPA_OK ) call cq_abort("ELPA_Init: Could not set parameter blacs_context")
 
     if(flag_elpa_GPU) info = elp%setup()
     select case( elpa_solver )
@@ -133,9 +141,12 @@ contains
     implicit none
 
     integer, intent(out) :: info
+    integer :: ierr
 
     call elpa_deallocate( elp, info )
     if( info /= ELPA_OK )  call cq_abort("end_ELPA: deallocation error")
+    call MPI_Comm_free( comm_elpa, ierr )
+    if( ierr /= MPI_SUCCESS ) call cq_abort("end_ELPA: MPI_Comm_free failed", ierr)
     call elpa_uninit( info )
     if( info /= ELPA_OK )  call cq_abort("end_ELPA: uninit error")
     return
