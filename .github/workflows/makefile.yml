@@ -1,159 +1,565 @@
+# Self-contained replacement for .github/workflows/makefile.yml on f-windows-msys2.
+# Dependency installation and Linux timing code are embedded: no new helper files.
+# Push tests default and ompGemm_m with OpenBLAS; dispatch can compare libraries or diagnose hybrid failures.
 name: Makefile CI
 
 on:
   push:
-    branches: [ "develop", "f-exx-opt" ]
+    branches: [ "develop", "f-exx-opt", "f-windows-msys2" ]
   pull_request:
     branches: [ "develop", "f-exx-opt" ]
-  # Manual dispatch for including all multiply kernels in matrix.
-  # We don't want this to run on every commit, but it's useful
-  # to be able to launch it manually
   workflow_dispatch:
     inputs:
       multiply_kernel_test:
-        description: 'test all multiply kernels, instead of default only'
-        required: false
+        description: 'Test all eight kernels (routine runs test default and ompGemm_m)'
+        type: boolean
         default: false
+      blas_backend:
+        description: 'Numerical library (compare runs both with identical test coverage)'
+        type: choice
+        options: [openblas, reference, compare]
+        default: openblas
+      hybrid_diagnostics:
+        description: 'Diagnose tests 003/009: two MPI ranks, two threads, both libraries, three attempts'
+        type: boolean
+        default: false
+      mpi_binding:
+        description: 'MPI binding: none uses all available CPUs; legacy reproduces old launcher defaults'
+        type: choice
+        options: [none, legacy]
+        default: none
+      build_jobs:
+        description: 'Compiler workers: auto uses nproc; use 1 to measure serial compilation'
+        type: string
+        default: auto
+
+permissions:
+  contents: read
 
 jobs:
   build:
-    name: ${{matrix.fc}} -- ${{matrix.os}} -- ${{matrix.multiply_kernel}} multiply kernel -- ${{matrix.np}} processes -- ${{matrix.threads}} threads
-    runs-on: ${{matrix.os}}
+    name: Build -- ${{ matrix.multiply_kernel }} -- ${{ matrix.blas }}
+    runs-on: ubuntu-22.04
     env:
-      FC: ${{matrix.fc}}
-      F77: mpif77
-      OMP_NUM_THREADS: ${{matrix.threads}}
+      FC: mpifort
+      OMP_NUM_THREADS: 1
       OPENBLAS_NUM_THREADS: 1
-      OMP_STACKSIZE: 100M
     strategy:
       fail-fast: false
       matrix:
-        os:
-          # We could add ubuntu-latest but until 2024 it will be the same as 22.04
-          - ubuntu-22.04
-        fc:
-          # TODO: We could also build with `intel-oneapi-compiler-fortran`, it is available
-          #       for installation from Intel through their apt repository.
-          - mpifort
+        # Routine runs preserve default and ompGemm_m coverage; diagnostics isolate default.
+        multiply_kernel: ${{ fromJSON(inputs.hybrid_diagnostics && '["default"]' || inputs.multiply_kernel_test && '["default","gemm","ompDoii","ompDoik","ompDoji","ompDojk","ompGemm","ompGemm_m"]' || '["default","ompGemm_m"]') }}
+        blas: ${{ fromJSON((inputs.hybrid_diagnostics || inputs.blas_backend == 'compare') && '["reference","openblas"]' || inputs.blas_backend == 'reference' && '["reference"]' || '["openblas"]') }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The Makefile records git describe and the branch in datestamp.f90.
+          fetch-depth: 0
+      - name: Install dependencies
+        run: |
+          set -euo pipefail
+          backend="${BLAS_BACKEND:-openblas}"
+          case "$backend" in
+            openblas) provider=openblas-pthread ;;
+            reference) provider=reference ;;
+            *) echo "Unknown BLAS backend: $backend" >&2; exit 2 ;;
+          esac
+
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            gfortran openmpi-bin libopenmpi-dev libfftw3-dev \
+            libblas-dev liblapack-dev libopenblas-pthread-dev \
+            libscalapack-openmpi-dev libxc-dev
+
+          # Pin the runtime provider, including ScaLAPACK's transitive BLAS/LAPACK calls.
+          # Merely installing OpenBLAS does not prove which provider libblas.so.3 uses.
+          libdir=/usr/lib/x86_64-linux-gnu
+          if [[ "$provider" == reference ]]; then
+            blas_path="$libdir/blas/libblas.so.3"
+            lapack_path="$libdir/lapack/liblapack.so.3"
+          else
+            blas_path="$libdir/$provider/libblas.so.3"
+            lapack_path="$libdir/$provider/liblapack.so.3"
+          fi
+          sudo update-alternatives --set libblas.so.3-x86_64-linux-gnu "$blas_path"
+          sudo update-alternatives --set liblapack.so.3-x86_64-linux-gnu "$lapack_path"
+          sudo update-alternatives --set libblas.so-x86_64-linux-gnu "${blas_path%.3}"
+          sudo update-alternatives --set liblapack.so-x86_64-linux-gnu "${lapack_path%.3}"
+          echo "BLAS: $(readlink -f "$libdir/libblas.so.3")"
+          echo "LAPACK: $(readlink -f "$libdir/liblapack.so.3")"
+        env:
+          BLAS_BACKEND: ${{ matrix.blas }}
+      - name: Record toolchain and hardware
+        run: |
+          mpifort --version
+          mpirun --version
+          {
+            echo "Runner OS: $RUNNER_OS; architecture: $RUNNER_ARCH"
+            echo "Image: ${ImageOS:-unknown}; version: ${ImageVersion:-unknown}"
+            echo "Available compiler workers: $(nproc)"
+            lscpu
+            free -h
+            df -h "$GITHUB_WORKSPACE"
+            if [[ -r /sys/fs/cgroup/cpu.max ]]; then
+              echo 'Cgroup CPU quota (quota/period, or max):'
+              cat /sys/fs/cgroup/cpu.max
+            fi
+          } | tee runner-hardware.txt
+          {
+            echo '### Ubuntu runner hardware'
+            echo '```text'
+            cat runner-hardware.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          dpkg-query -W gfortran libopenblas-pthread-dev libblas-dev liblapack-dev libscalapack-openmpi-dev libxc-dev
+      - name: Build once for all MPI and OpenMP configurations
+        working-directory: src
+        env:
+          BUILD_JOBS: ${{ inputs.build_jobs || 'auto' }}
+          MULT_KERN: ${{ matrix.multiply_kernel }}
+          BLAS_BACKEND: ${{ matrix.blas }}
+        run: |
+          jobs="$BUILD_JOBS"
+          if [[ "$jobs" == auto ]]; then jobs=$(nproc); fi
+          [[ "$jobs" =~ ^[1-9][0-9]*$ ]] || { echo 'build_jobs must be auto or a positive integer'; exit 2; }
+          blas='-lopenblas'
+          if [[ "$BLAS_BACKEND" == reference ]]; then blas='-llapack -lblas'; fi
+          /usr/bin/time -f '%e' -o ../build-seconds.txt \
+            make -j "$jobs" SYSTEM=gha MULT_KERN="$MULT_KERN" BLAS="$blas"
+          {
+            ldd ../bin/Conquest
+            echo "Resolved BLAS: $(readlink -f /usr/lib/x86_64-linux-gnu/libblas.so.3)"
+            echo "Resolved LAPACK: $(readlink -f /usr/lib/x86_64-linux-gnu/liblapack.so.3)"
+          } | tee ../linked-libraries.txt
+          echo "Build ($MULT_KERN, $BLAS_BACKEND, $jobs workers): $(cat ../build-seconds.txt) seconds" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: conquest-ubuntu-${{ matrix.multiply_kernel }}-${{ matrix.blas }}
+          path: |
+            bin/Conquest
+            build-seconds.txt
+            linked-libraries.txt
+            runner-hardware.txt
+          if-no-files-found: error
+          retention-days: 7
+
+  test:
+    name: Test -- ${{ matrix.multiply_kernel }} -- ${{ matrix.blas }} -- ${{ matrix.np }} processes -- ${{ matrix.threads }} threads -- ${{ inputs.mpi_binding || 'none' }} binding
+    needs: build
+    # A failed kernel build should not suppress checks for binaries that built.
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        np: ${{ fromJSON(inputs.hybrid_diagnostics && '[2]' || '[1,2]') }}
+        threads: ${{ fromJSON(inputs.hybrid_diagnostics && '[2]' || '[1,2]') }}
+        multiply_kernel: ${{ fromJSON(inputs.hybrid_diagnostics && '["default"]' || inputs.multiply_kernel_test && '["default","gemm","ompDoii","ompDoik","ompDoji","ompDojk","ompGemm","ompGemm_m"]' || '["default","ompGemm_m"]') }}
+        blas: ${{ fromJSON((inputs.hybrid_diagnostics || inputs.blas_backend == 'compare') && '["reference","openblas"]' || inputs.blas_backend == 'reference' && '["reference"]' || '["openblas"]') }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          set -euo pipefail
+          backend="${BLAS_BACKEND:-openblas}"
+          case "$backend" in
+            openblas) provider=openblas-pthread ;;
+            reference) provider=reference ;;
+            *) echo "Unknown BLAS backend: $backend" >&2; exit 2 ;;
+          esac
+
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            gfortran openmpi-bin libopenmpi-dev libfftw3-dev \
+            libblas-dev liblapack-dev libopenblas-pthread-dev \
+            libscalapack-openmpi-dev libxc-dev
+
+          # Pin the runtime provider, including ScaLAPACK's transitive BLAS/LAPACK calls.
+          # Merely installing OpenBLAS does not prove which provider libblas.so.3 uses.
+          libdir=/usr/lib/x86_64-linux-gnu
+          if [[ "$provider" == reference ]]; then
+            blas_path="$libdir/blas/libblas.so.3"
+            lapack_path="$libdir/lapack/liblapack.so.3"
+          else
+            blas_path="$libdir/$provider/libblas.so.3"
+            lapack_path="$libdir/$provider/liblapack.so.3"
+          fi
+          sudo update-alternatives --set libblas.so.3-x86_64-linux-gnu "$blas_path"
+          sudo update-alternatives --set liblapack.so.3-x86_64-linux-gnu "$lapack_path"
+          sudo update-alternatives --set libblas.so-x86_64-linux-gnu "${blas_path%.3}"
+          sudo update-alternatives --set liblapack.so-x86_64-linux-gnu "${lapack_path%.3}"
+          echo "BLAS: $(readlink -f "$libdir/libblas.so.3")"
+          echo "LAPACK: $(readlink -f "$libdir/liblapack.so.3")"
+        env:
+          BLAS_BACKEND: ${{ matrix.blas }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: pip
+          cache-dependency-path: .github/workflows/makefile.yml
+      - name: Install Python utilities
+        run: python -m pip install "numpy>=1.23,<3" "pytest>=7,<9"
+      - uses: actions/download-artifact@v4
+        with:
+          name: conquest-ubuntu-${{ matrix.multiply_kernel }}-${{ matrix.blas }}
+          path: .
+      - name: Record runtime environment
+        run: |
+          chmod +x bin/Conquest
+          {
+            echo "Runner OS: $RUNNER_OS; architecture: $RUNNER_ARCH"
+            echo "Image: ${ImageOS:-unknown}; version: ${ImageVersion:-unknown}"
+            echo "Available compiler workers: $(nproc)"
+            lscpu
+            free -h
+            df -h "$GITHUB_WORKSPACE"
+            if [[ -r /sys/fs/cgroup/cpu.max ]]; then
+              echo 'Cgroup CPU quota (quota/period, or max):'
+              cat /sys/fs/cgroup/cpu.max
+            fi
+          } | tee runner-hardware.txt
+          {
+            echo '### Ubuntu runner hardware'
+            echo '```text'
+            cat runner-hardware.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          {
+            ldd bin/Conquest
+            echo "Resolved BLAS: $(readlink -f /usr/lib/x86_64-linux-gnu/libblas.so.3)"
+            echo "Resolved LAPACK: $(readlink -f /usr/lib/x86_64-linux-gnu/liblapack.so.3)"
+          } | tee runtime-libraries.txt
+          python -m pip freeze > python-packages.txt
+      - name: Run and validate numerical regression tests
+        env:
+          MPI_PROCESSES: ${{ matrix.np }}
+          OMP_THREADS: ${{ matrix.threads }}
+          HYBRID_DIAGNOSTICS: ${{ inputs.hybrid_diagnostics && 'true' || 'false' }}
+          MPI_BINDING: ${{ inputs.mpi_binding || 'none' }}
+        run: |
+          python - <<'PYTHON'
+          import csv
+          import os
+          from pathlib import Path
+          import subprocess
+          import sys
+          import time
+
+          suite = Path("testsuite").resolve()
+          executable = Path("bin/Conquest").resolve()
+          np = int(os.environ["MPI_PROCESSES"])
+          threads = int(os.environ["OMP_THREADS"])
+          diagnostic = os.environ.get("HYBRID_DIAGNOSTICS", "false") == "true"
+          binding = os.environ.get("MPI_BINDING", "none")
+          env = os.environ.copy()
+          env.update(OMP_NUM_THREADS=str(threads), OMP_STACKSIZE="100M",
+                     OPENBLAS_NUM_THREADS="1")
+          rows = []
+          failures = []
+
+          def run(name, command, cwd):
+              print(f"\n{name}: {' '.join(command)}", flush=True)
+              started = time.perf_counter()
+              try:
+                  status = subprocess.run(command, cwd=cwd, env=env, check=False).returncode
+              except OSError as error:
+                  print(error, file=sys.stderr)
+                  status = 127
+              seconds = time.perf_counter() - started
+              rows.append((name, np, threads, f"{seconds:.3f}", status))
+              print(f"{name}: {seconds:.3f} seconds, exit {status}", flush=True)
+              if status:
+                  failures.append(status)
+                  if not diagnostic:
+                      raise SystemExit(status)
+
+          try:
+              if not executable.is_file():
+                  raise SystemExit(f"Missing executable: {executable}")
+              tests = sorted(p for p in suite.glob("test_[0-9][0-9][0-9]_*") if p.is_dir())
+              if diagnostic:
+                  tests = [p for p in tests if p.name.startswith(("test_003_", "test_009_"))]
+                  if len(tests) != 2:
+                      raise SystemExit("Diagnostic mode requires tests 003 and 009")
+              elif not tests:
+                  raise SystemExit("No regression test directories found")
+              launcher = ["mpirun", "--report-bindings"]
+              if binding == "none":
+                  launcher.extend(["--bind-to", "none"])
+              elif binding != "legacy":
+                  raise SystemExit(f"Unknown MPI binding: {binding}")
+              launcher.extend(["-np", str(np), str(executable)])
+              for attempt in range(1, (3 if diagnostic else 1) + 1):
+                  for test in tests:
+                      (test / "Conquest_out").unlink(missing_ok=True)
+                      name = f"{test.name}/attempt_{attempt}" if diagnostic else test.name
+                      run(name, launcher, test)
+                      # Keep each diagnostic attempt even when later attempts pass.
+                      if diagnostic and (test / "Conquest_out").exists():
+                          (test / f"Conquest_out.attempt_{attempt}").write_bytes((test / "Conquest_out").read_bytes())
+                  command = [sys.executable, "-m", "pytest", "-v", "test_check_output.py"]
+                  if diagnostic:
+                      command.extend(["-k", "test_003 or test_009", f"--junitxml=results-attempt-{attempt}.xml"])
+                  else:
+                      command.append("--junitxml=results.xml")
+                  run(f"check_results/attempt_{attempt}" if diagnostic else "check_results", command, suite)
+              if failures:
+                  raise SystemExit(1)
+          finally:
+              with (suite / "timings.csv").open("w", newline="") as stream:
+                  writer = csv.writer(stream)
+                  writer.writerow(("stage", "np", "threads", "seconds", "exit_code"))
+                  writer.writerows(rows)
+              with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as stream:
+                  stream.write(f"\n### Timings: {np} MPI ranks, {threads} OpenMP threads; binding={binding}\n\n")
+                  stream.write("| Stage | Seconds | Exit code |\n| --- | ---: | ---: |\n")
+                  for name, _, _, seconds, status in rows:
+                      stream.write(f"| {name} | {seconds} | {status} |\n")
+          PYTHON
+      - name: Save timings and outputs (including failures)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: results-${{ matrix.multiply_kernel }}-${{ matrix.blas }}-np${{ matrix.np }}-omp${{ matrix.threads }}
+          path: |
+            testsuite/timings.csv
+            testsuite/results*.xml
+            testsuite/test_*/Conquest_out*
+            testsuite/test_*/Conquest_warnings
+            runner-hardware.txt
+            runtime-libraries.txt
+            python-packages.txt
+          retention-days: 7
+
+  # Native Windows job from the supplied workflow.
+  windows-msys2:
+    # Focused diagnostics investigate Linux hybrid failures only.
+    if: ${{ !inputs.hybrid_diagnostics }}
+    name: Windows MSYS2 -- ${{matrix.np}} processes -- ${{matrix.threads}} threads
+    runs-on: windows-latest
+
+    env:
+      OMP_NUM_THREADS: ${{matrix.threads}}
+      OPENBLAS_NUM_THREADS: 1
+      OMP_STACKSIZE: 100M
+
+    strategy:
+      fail-fast: false
+
+      matrix:
         np:
           - 1
           - 2
+
         threads:
           - 1
           - 2
-        # TODO: Could be worth testing on `mpich` in addition to `openmpi-bin`. Both are
-        #       available in apt
-        multiply_kernel:
-          - default
-          - gemm
-          - ompDoii
-          - ompDoik
-          - ompDoji
-          - ompDojk
-          - ompGemm
-          - ompGemm_m
-        # As a work-around, copy the multiply_kernel_test variable to the matrix and
-        # exclude non-default multiply kernels when it's false
-        # https://github.com/orgs/community/discussions/26253#discussioncomment-3250989
-        test_all_multiply_kernels:
-          - ${{github.event.inputs.multiply_kernel_test}}
-        exclude:
-          - test_all_multiply_kernels: false
-            multiply_kernel: gemm
-          - test_all_multiply_kernels: false
-            multiply_kernel: ompDoii
-          - test_all_multiply_kernels: false
-            multiply_kernel: ompDoik
-          - test_all_multiply_kernels: false
-            multiply_kernel: ompDoji
-          - test_all_multiply_kernels: false
-            multiply_kernel: ompDojk
-          - test_all_multiply_kernels: false
-            multiply_kernel: ompGemm
 
     steps:
+
+    # Prevent Git from converting shell scripts and other text files to CRLF.
+    - name: Disable automatic CRLF conversion
+      shell: pwsh
+      run: git config --global core.autocrlf input
+
     - uses: actions/checkout@v4
       with:
         fetch-depth: '0'
 
-    - name: Install Dependencies
+    - name: Record Windows runner hardware
+      shell: pwsh
       run: |
-        sudo apt update
-        sudo apt install openmpi-bin libopenmpi-dev libfftw3-dev libblas3 liblapack3 libscalapack-openmpi-dev libxc-dev
+        $cpu = Get-CimInstance Win32_Processor
+        $system = Get-CimInstance Win32_ComputerSystem
+        $os = Get-CimInstance Win32_OperatingSystem
+        $report = [ordered]@{
+          RunnerOS = $env:RUNNER_OS
+          RunnerArchitecture = $env:RUNNER_ARCH
+          ImageOS = $env:ImageOS
+          ImageVersion = $env:ImageVersion
+          OS = $os.Caption
+          CPU = @($cpu | Select-Object Name, NumberOfCores, NumberOfLogicalProcessors, MaxClockSpeed)
+          AvailableLogicalProcessors = [Environment]::ProcessorCount
+          MemoryGiB = [Math]::Round($system.TotalPhysicalMemory / 1GB, 2)
+          Disks = @(Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3" | Select-Object DeviceID, Size, FreeSpace)
+        }
+        $json = $report | ConvertTo-Json -Depth 5
+        $json | Tee-Object -FilePath runner-hardware-windows.json
+        $summary = "### Windows runner hardware`n`n``````json`n$json`n```````n"
+        Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value $summary
 
-    - name: Set up Python
-      uses: actions/setup-python@v5
+    # Install the native Microsoft MPI runtime.
+    - name: Install Microsoft MPI
+      uses: mpi4py/setup-mpi@v1
       with:
-        python-version: '3.10'
+        mpi: msmpi
 
-    - name: Install python utilities
+    # Set up the UCRT64 environment used by system.msys2.make.
+    - name: Set up MSYS2 UCRT64
+      uses: msys2/setup-msys2@v2
+      with:
+        msystem: UCRT64
+        update: true
+
+        # Allow the Microsoft MPI runtime installed in Windows
+        # to be visible inside the MSYS2 environment.
+        path-type: inherit
+
+        install: >-
+          make
+          git
+          mingw-w64-ucrt-x86_64-gcc-fortran
+          mingw-w64-ucrt-x86_64-msmpi
+          mingw-w64-ucrt-x86_64-openblas
+          mingw-w64-ucrt-x86_64-scalapack
+          mingw-w64-ucrt-x86_64-fftw
+          mingw-w64-ucrt-x86_64-libxc
+          mingw-w64-ucrt-x86_64-python
+          mingw-w64-ucrt-x86_64-python-pytest
+          mingw-w64-ucrt-x86_64-python-numpy
+
+    - name: Check Windows toolchain
+      shell: msys2 {0}
       run: |
-        python -m pip install --upgrade pip
-        pip install pytest
-        pip install numpy
-
-    - name: Check compiler version
-      run: ${{matrix.fc}} --version
+        echo "MSYSTEM=$MSYSTEM"
+        echo "OMP_NUM_THREADS=$OMP_NUM_THREADS"
+        echo "Fortran compiler:"
+        mpifort --version
+        echo "MPI launcher:"
+        which mpiexec
+        echo "Python:"
+        python --version
 
     - name: Build
+      shell: msys2 {0}
       working-directory: ${{github.workspace}}/src
       run: |
-        make -j ${{matrix.np}} SYSTEM=gha MULT_KERN=${{matrix.multiply_kernel}}
+        printf 'stage,seconds\n' > ../windows-timings.csv
+        started=$SECONDS
+        make -j ${{matrix.np}} SYSTEM=msys2
+        elapsed=$((SECONDS - started))
+        printf 'build,%s\n' "$elapsed" >> ../windows-timings.csv
+        echo "Build: $elapsed seconds" >> "$GITHUB_STEP_SUMMARY"
+        test -f ../bin/Conquest.exe
+        ls -lh ../bin/Conquest.exe
 
     - name: Run test 001
+      shell: msys2 {0}
       working-directory: ${{github.workspace}}/testsuite/test_001_bulk_Si_1proc_Diag
       run: |
-        mpirun -np ${{matrix.np}} ../../bin/Conquest
+        started=$SECONDS
+        mpiexec -n ${{matrix.np}} ../../bin/Conquest.exe
+        elapsed=$((SECONDS - started))
+        printf 'test_001,%s\n' "$elapsed" >> ../../windows-timings.csv
+        echo "test_001: $elapsed seconds" >> "$GITHUB_STEP_SUMMARY"
         cat Conquest_out
 
     - name: Run test 002
+      shell: msys2 {0}
       working-directory: ${{github.workspace}}/testsuite/test_002_bulk_Si_1proc_OrderN
       run: |
-        mpirun -np ${{matrix.np}} ../../bin/Conquest
+        started=$SECONDS
+        mpiexec -n ${{matrix.np}} ../../bin/Conquest.exe
+        elapsed=$((SECONDS - started))
+        printf 'test_002,%s\n' "$elapsed" >> ../../windows-timings.csv
+        echo "test_002: $elapsed seconds" >> "$GITHUB_STEP_SUMMARY"
         cat Conquest_out
 
     - name: Run test 003
+      shell: msys2 {0}
       working-directory: ${{github.workspace}}/testsuite/test_003_bulk_BTO_polarisation
       run: |
-        mpirun -np ${{matrix.np}} ../../bin/Conquest
+        started=$SECONDS
+        mpiexec -n ${{matrix.np}} ../../bin/Conquest.exe
+        elapsed=$((SECONDS - started))
+        printf 'test_003,%s\n' "$elapsed" >> ../../windows-timings.csv
+        echo "test_003: $elapsed seconds" >> "$GITHUB_STEP_SUMMARY"
         cat Conquest_out
 
     - name: Run test 004
+      shell: msys2 {0}
       working-directory: ${{github.workspace}}/testsuite/test_004_isol_C2H4_4proc_PBE0CRI
       run: |
-        mpirun -np ${{matrix.np}} ../../bin/Conquest
+        started=$SECONDS
+        mpiexec -n ${{matrix.np}} ../../bin/Conquest.exe
+        elapsed=$((SECONDS - started))
+        printf 'test_004,%s\n' "$elapsed" >> ../../windows-timings.csv
+        echo "test_004: $elapsed seconds" >> "$GITHUB_STEP_SUMMARY"
         cat Conquest_out
 
     - name: Run test 005
+      shell: msys2 {0}
       working-directory: ${{github.workspace}}/testsuite/test_005_isol_C2H4_4proc_PBE0GTO
       run: |
-        mpirun -np ${{matrix.np}} ../../bin/Conquest
+        started=$SECONDS
+        mpiexec -n ${{matrix.np}} ../../bin/Conquest.exe
+        elapsed=$((SECONDS - started))
+        printf 'test_005,%s\n' "$elapsed" >> ../../windows-timings.csv
+        echo "test_005: $elapsed seconds" >> "$GITHUB_STEP_SUMMARY"
         cat Conquest_out
-    
+
     - name: Run test 006
+      shell: msys2 {0}
       working-directory: ${{github.workspace}}/testsuite/test_006_isol_C2H4_4proc_PBE0ERI
       run: |
-        mpirun -np ${{matrix.np}} ../../bin/Conquest
+        started=$SECONDS
+        mpiexec -n ${{matrix.np}} ../../bin/Conquest.exe
+        elapsed=$((SECONDS - started))
+        printf 'test_006,%s\n' "$elapsed" >> ../../windows-timings.csv
+        echo "test_006: $elapsed seconds" >> "$GITHUB_STEP_SUMMARY"
         cat Conquest_out
 
     - name: Run test 007
+      shell: msys2 {0}
       working-directory: ${{github.workspace}}/testsuite/test_007_isol_CH_spinpol_1proc_PBE0CRI
       run: |
-        mpirun -np ${{matrix.np}} ../../bin/Conquest
+        started=$SECONDS
+        mpiexec -n ${{matrix.np}} ../../bin/Conquest.exe
+        elapsed=$((SECONDS - started))
+        printf 'test_007,%s\n' "$elapsed" >> ../../windows-timings.csv
+        echo "test_007: $elapsed seconds" >> "$GITHUB_STEP_SUMMARY"
         cat Conquest_out
 
     - name: Run test 008
+      shell: msys2 {0}
       working-directory: ${{github.workspace}}/testsuite/test_008_surface_dipole
       run: |
-        mpirun -np ${{matrix.np}} ../../bin/Conquest
+        started=$SECONDS
+        mpiexec -n ${{matrix.np}} ../../bin/Conquest.exe
+        elapsed=$((SECONDS - started))
+        printf 'test_008,%s\n' "$elapsed" >> ../../windows-timings.csv
+        echo "test_008: $elapsed seconds" >> "$GITHUB_STEP_SUMMARY"
         cat Conquest_out
 
     - name: Run test 009
+      shell: msys2 {0}
       working-directory: ${{github.workspace}}/testsuite/test_009_DFT_plus_U
       run: |
-        mpirun -np ${{matrix.np}} ../../bin/Conquest
+        started=$SECONDS
+        mpiexec -n ${{matrix.np}} ../../bin/Conquest.exe
+        elapsed=$((SECONDS - started))
+        printf 'test_009,%s\n' "$elapsed" >> ../../windows-timings.csv
+        echo "test_009: $elapsed seconds" >> "$GITHUB_STEP_SUMMARY"
         cat Conquest_out
 
     - name: Check test results
+      shell: msys2 {0}
       working-directory: ${{github.workspace}}/testsuite
-      run: pytest test_check_output.py
+      run: |
+        started=$SECONDS
+        pytest test_check_output.py --junitxml=results-windows.xml
+        elapsed=$((SECONDS - started))
+        printf 'check_results,%s\n' "$elapsed" >> ../windows-timings.csv
+        echo "Check results: $elapsed seconds" >> "$GITHUB_STEP_SUMMARY"
+
+    - name: Save Windows timings, hardware and outputs
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: windows-results-np${{ matrix.np }}-omp${{ matrix.threads }}
+        path: |
+          windows-timings.csv
+          runner-hardware-windows.json
+          testsuite/results-windows.xml
+          testsuite/test_*/Conquest_out
+        retention-days: 7
