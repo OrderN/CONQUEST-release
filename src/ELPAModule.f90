@@ -13,7 +13,7 @@ module ELPA_module
   logical :: flag_elpa_GPU = .false.  ! Should ELPA use GPUs?
   character(len=16) :: elpa_solver = "ELPA1" ! ELPA1 or ELPA2
   character(len=16) :: elpa_kernel = "GENERIC"
-  integer :: elpa_API_version = 202600202
+  integer :: elpa_API_version = 20260202
   integer :: merow, mecol
   integer :: comm_elpa = MPI_COMM_NULL ! parent communicator of this k-point process group
 
