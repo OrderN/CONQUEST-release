@@ -3,13 +3,7 @@ module ELPA_module
   use datatypes
   use mpi
 !!$   use omp
-  use elpa, only: elpa_t, elpa_init, elpa_allocate, elpa_deallocate, elpa_uninit, &
-       ELPA_OK, ELPA_SOLVER_1STAGE, ELPA_SOLVER_2STAGE, &
-       ELPA_2STAGE_COMPLEX_GENERIC, ELPA_2STAGE_COMPLEX_GENERIC_SIMPLE, &
-       ELPA_2STAGE_COMPLEX_SSE_ASSEMBLY, ELPA_2STAGE_COMPLEX_SSE_BLOCK1, &
-       ELPA_2STAGE_COMPLEX_SSE_BLOCK2, ELPA_2STAGE_COMPLEX_AVX_BLOCK1, &
-       ELPA_2STAGE_COMPLEX_AVX_BLOCK2, ELPA_2STAGE_COMPLEX_AVX2_BLOCK1, &
-       ELPA_2STAGE_COMPLEX_AVX2_BLOCK2
+  use elpa
   use GenComms, ONLY: cq_abort, cq_warn, myid
 
   implicit none
@@ -21,6 +15,7 @@ module ELPA_module
   character(len=16) :: elpa_kernel = "GENERIC"
   integer :: elpa_API = 20241105
   integer :: merow, mecol
+  integer :: comm_elpa = MPI_COMM_NULL ! parent communicator of this k-point process group
 
   class(elpa_t), pointer :: elp
 
@@ -30,17 +25,19 @@ module ELPA_module
 
 contains
 
-  subroutine init_ELPA (matrix_size, row_size, col_size, desc, mpi_comm, info)
+  subroutine init_ELPA (matrix_size, row_size, col_size, desc, info)
+
+    use ScalapackFormat, only: pgid
 
     implicit none
 
     integer, intent(in) :: matrix_size, row_size, col_size
     integer, intent(in) :: desc(9)
-    integer, intent(in) :: mpi_comm
     integer, intent(out) :: info
 
     integer :: context, block_size_r, block_size_c
     integer :: numrows, numcols, merow, mecol  ! numrows= proc_rows, numcols=proc_cols
+    integer :: ierr
     character(len=12) :: subname = "init_ELPA:  "
 
     context      = desc(2)
@@ -81,7 +78,11 @@ contains
     if( info /= ELPA_OK ) call cq_abort("ELPA_Init: Could not set parameter local_ncols")
     call elp%set( "nblk", block_size_r, info )
     if( info /= ELPA_OK ) call cq_abort("ELPA_Init: Could not set parameter nblk")
-    call elp%set( "mpi_comm_parent", mpi_comm, info )
+    ! With Diag.KProcGroups > 1 the BLACS grid covers one process group only,
+    ! so ELPA's parent communicator must hold exactly the ranks of that group
+    call MPI_Comm_split( MPI_COMM_WORLD, pgid, myid, comm_elpa, ierr )
+    if( ierr /= MPI_SUCCESS ) call cq_abort("ELPA_Init: MPI_Comm_split failed", ierr)
+    call elp%set( "mpi_comm_parent", comm_elpa, info )
     if( info /= ELPA_OK ) call cq_abort("ELPA_Init: Could not set parameter mpi_comm_parent")
     call elp%set( "process_row", merow, info )
     if( info /= ELPA_OK ) call cq_abort("ELPA_Init: Could not set parameter process_row")
@@ -140,9 +141,12 @@ contains
     implicit none
 
     integer, intent(out) :: info
+    integer :: ierr
 
     call elpa_deallocate( elp, info )
     if( info /= ELPA_OK )  call cq_abort("end_ELPA: deallocation error")
+    call MPI_Comm_free( comm_elpa, ierr )
+    if( ierr /= MPI_SUCCESS ) call cq_abort("end_ELPA: MPI_Comm_free failed", ierr)
     call elpa_uninit( info )
     if( info /= ELPA_OK )  call cq_abort("end_ELPA: uninit error")
     return
