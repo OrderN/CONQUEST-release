@@ -3410,7 +3410,7 @@ contains
 
     if( flag_use_elpa ) then
        if(flag_elpa_dummy) call cq_abort("Code compiled without ELPA! Set Diag.UseELPA F")
-       elpa_API_version = fdf_integer('Diag.ELPA_API',20181113)
+       elpa_API_version = fdf_integer('Diag.ELPA_API',202600202)
        elpa_solver = fdf_string(16,'Diag.ELPASolver','ELPA1')
        if(leqi(elpa_solver,'ELPA1')) then
           elpa_kernel = "NONE"
