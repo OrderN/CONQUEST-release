@@ -13,14 +13,14 @@ module ELPA_module
   logical :: flag_elpa_GPU = .false.  ! Should ELPA use GPUs?
   character(len=16) :: elpa_solver = "ELPA1" ! ELPA1 or ELPA2
   character(len=16) :: elpa_kernel = "GENERIC"
-  integer :: elpa_API = 20241105
+  integer :: elpa_API_version = 20232311
   integer :: merow, mecol
   integer :: comm_elpa = MPI_COMM_NULL ! parent communicator of this k-point process group
 
   class(elpa_t), pointer :: elp
 
   private
-  public :: flag_use_elpa, elpa_solver, elpa_kernel, elpa_API, flag_elpa_dummy, flag_elpa_GPU
+  public :: flag_use_elpa, elpa_solver, elpa_kernel, elpa_API_version, flag_elpa_dummy, flag_elpa_GPU
   public :: init_ELPA, end_ELPA, ELPA_zhegv
 
 contains
@@ -63,7 +63,7 @@ contains
        call cq_abort("Diag.BlockSizeC should be less than or rqual to", (matrix_size-1)/numcols )
     end if
 
-    info = elpa_init(elpa_API)
+    info = elpa_init(elpa_API_version)
     if( info /= ELPA_OK ) call cq_abort("ELPA_Init: ELPA API version not supported")
 
     elp => elpa_allocate(info)
