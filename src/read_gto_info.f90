@@ -747,7 +747,7 @@ contains
           case(-2) ! f_{xyz} = (x*y*z)
              size  = 1
              nx(1) = 1; ny(1) = 1; nz(1) = 1
-             c (1) = 1.0d0
+             c (1) =-1.0d0 ! Match the phase of re_sph_hrmnc.
              name  = 'D_{xyz}'             
              if (verbose) write(io_lun,'(12x,"(nx, ny, nz) = (",I2,x,I2,x,I2,") =",x,A12)') &
                   nx(1), ny(1), nz(1), name

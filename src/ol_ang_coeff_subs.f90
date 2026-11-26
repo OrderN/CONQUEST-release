@@ -2193,7 +2193,7 @@ contains
        case(-1 ) ! f_{yz2}             
           norm = f1_norm !(5*z*z - r*r)*y
        case(-2 ) ! f_{xyz}             
-          norm = f2_norm !x*y*z
+          norm = two*f2_norm ! The sin(2*phi) term gives a factor of two for x*y*z.
        case(-3 ) ! f_{3yx2-y3}             
           norm = f3_norm !(3*x*x - y*y)*y
        case default
@@ -2313,7 +2313,7 @@ contains
           case(-1 ) ! f_{yz2}             
              y_val = (5*z*z - r*r)*y             
           case(-2 ) ! f_{xyz}             
-             y_val = x*y*z
+             y_val = -(x*y*z) ! Match the phase of re_sph_hrmnc.
           case(-3 ) ! f_{3yx2-y3}             
              y_val = (3*x*x - y*y)*y
           case default
