@@ -3410,7 +3410,7 @@ contains
 
     if( flag_use_elpa ) then
        if(flag_elpa_dummy) call cq_abort("Code compiled without ELPA! Set Diag.UseELPA F")
-       elpa_API_version = fdf_integer('Diag.ELPA_API',20260202)
+       elpa_API_version = fdf_integer('Diag.ELPA_API', elpa_API_version)
        elpa_solver = fdf_string(16,'Diag.ELPASolver','ELPA1')
        if(leqi(elpa_solver,'ELPA1')) then
           elpa_kernel = "NONE"
@@ -3428,6 +3428,9 @@ contains
           call cq_abort("Invalid Diag.ELPASolver " // elpa_solver )
        endif
        flag_elpa_GPU = fdf_boolean('Diag.ELPA_GPU',.false.)
+       if (flag_elpa_GPU .and. elpa_API_version < 20232311) &
+          call cq_abort("GPU support with ELPA requires minimum API version 20232311, &
+                  which comes with ELPA 2023.11.001")
     else
        elpa_solver = "NONE"
        elpa_kernel = "NONE"
